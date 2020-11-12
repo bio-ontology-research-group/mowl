@@ -1,13 +1,12 @@
+
 class Model(object):
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, dataset):
         # TODO: initialize parameters
         pass
 
     def train(self):
-        # TODO: start training the model here
-        pass
-
+        raise NotImplementedError()
+    
     def evaluate(self):
-        # TODO: evaluate the model here
-        pass
+        raise NotImplementedError()
