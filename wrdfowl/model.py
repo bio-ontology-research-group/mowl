@@ -4,7 +4,6 @@ class WRDFOWL(Model):
 
     def __init__(self, *args, **kwargs):
         super(WRDFOWL, self).__init__(*args, **kwargs)
-        # TODO: initialize parameters
         pass
 
     def train(self):

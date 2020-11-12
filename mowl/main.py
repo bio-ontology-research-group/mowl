@@ -15,6 +15,7 @@ from rdflib import Graph
 @ck.option('--data-root', '-dr', default='data/', help='Data root folder', required=True)
 def main(data_root):
     # TODO: tool entrypoint starts here
+    pass
     
 
 if __name__ == '__main__':
