@@ -1,2 +1,5 @@
 *~
 *.pyc
+venv/
+gateway/build/
+gateway/.gradle/
