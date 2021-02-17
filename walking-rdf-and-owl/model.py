@@ -9,16 +9,16 @@ import click as ck
     '--input', '-i', default='data/bio-knowledge-graph.nt',
     help='input RDF file')
 @ck.option(
-    '--output', '-o', default='edgelist.txt',
+    '--output', '-o', default='data/edgelist.txt',
     help='output file to use as input in DeepWalk algorithm')
 @ck.option(
-    '--mapping', '-m', default='mappingFile.txt',
+    '--mapping', '-m', default='data/mappingFile.txt',
     help='Output mapping file. Contains numerical ids for all entities')
 @ck.option(
     '--undirected', '-u', default=False,
     help='Build undirected graph (default: false)')
 @ck.option(
-    '--classify', '-c', default=True,
+    '--classify', '-c', default=False,
     help= 'Wse an OWL reasoner to classify the RDF dataset (must be in RDF/XML) before graph generation (default: false)')
 @ck.option( 
     '--format', '-f', default= 'RDF/XML',
@@ -42,8 +42,8 @@ def main(input, output, mapping, undirected, classify, format, ontology_director
         ontology_set_files = os.listdir(ontology_directory)
         ont_hash_set = gateway.jvm.java.util.LinkedHashSet()
         for file in ontology_set_files:
-            ont_hash_set.add(ont_manager.loadOntologyFromOntologyDocument(gateway.jvm.java.io.File(ontology_directory+file)))
-        ont_hash_set.add(ont_manager.loadOntologyFromOntologyDocument(gateway.jvm.java.io.File(input)))
+            ont_hash_set.add(ont_manager.loadOntologyFromOntologyDocument(gateway.jvm.java.io.File(os.getcwd()+'/'+ontology_directory+file)))
+        ont_hash_set.add(ont_manager.loadOntologyFromOntologyDocument(gateway.jvm.java.io.File(os.getcwd()+'/'+input)))
 
         ontology = ont_manager.createOntology(gateway.jvm.org.semanticweb.owlapi.model.IRI.create("http://aber-owl.net/rdfwalker/t.owl"), ont_hash_set)
 
@@ -55,7 +55,7 @@ def main(input, output, mapping, undirected, classify, format, ontology_director
         reasoner_factory = gateway.jvm.org.semanticweb.elk.owlapi.ElkReasonerFactory()
         reasoner = reasoner_factory.createReasoner(ontology,config)
 
-        inferred_axioms = gateway.jvm.orgorg.semanticweb.owlapi.util.InferredClassAssertionAxiomGenerator.createAxioms(factory, reasoner)
+        inferred_axioms = gateway.jvm.org.semanticweb.owlapi.util.InferredClassAssertionAxiomGenerator().createAxioms(factory, reasoner)
         counter = 0
         for axiom in inferred_axioms:
             ont_manager.addAxiom(ontology, axiom)
@@ -63,6 +63,8 @@ def main(input, output, mapping, undirected, classify, format, ontology_director
         
         ont_manager.saveOntology(ontology, gateway.jvm.org.semanticweb.owlapi.model.IRI.create(tmp_data_file))
     
+
+        print(str(counter) + " axioms inferred.")
 
     if classify:
         filename = tmp_data_file
@@ -73,7 +75,7 @@ def main(input, output, mapping, undirected, classify, format, ontology_director
     model = gateway.jvm.org.apache.jena.rdf.model.ModelFactory().createDefaultModel()
     infile = gateway.jvm.org.apache.jena.util.FileManager.get().open( filename.toString())
 
-    model.read(input, None, format)
+    model.read(infile, None, format)
 
     counter = 1
     dict = {} # maps IRIs to ints; for input to deepwalk
@@ -103,11 +105,11 @@ def main(input, output, mapping, undirected, classify, format, ontology_director
             objid = dict[obj]
             
             # generate three nodes and directed edges
-            output.write(str(subjid)+"\t"+str(objid)+"\t"+predid+"\n")
+            out_file.write(str(subjid)+"\t"+str(objid)+"\t"+predid+"\n")
             
             # add reverse edges for undirected graph; need to double the walk length!
             if (undirected):
-                output.write(str(objid)+"\t"+str(subjid)+"\t"+predid+"\n")
+                out_file.write(str(objid)+"\t"+str(subjid)+"\t"+predid+"\n")
             
 
     map_file = open(mapping, 'w')
