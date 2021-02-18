@@ -1,5 +1,7 @@
 from py4j.java_gateway import JavaGateway
 from py4j.java_gateway import java_import
+from pathlib import Path
+
 
 import os
 import click as ck
@@ -15,10 +17,10 @@ import click as ck
     '--mapping', '-m', default='data/mappingFile.txt',
     help='Output mapping file. Contains numerical ids for all entities')
 @ck.option(
-    '--undirected', '-u', default=False,
+    '--undirected/--directed', '-u/-d', default=False,
     help='Build undirected graph (default: false)')
 @ck.option(
-    '--classify', '-c', default=False,
+    '--classify/--no-classify', '-c/-nc', default=False,
     help= 'Wse an OWL reasoner to classify the RDF dataset (must be in RDF/XML) before graph generation (default: false)')
 @ck.option( 
     '--format', '-f', default= 'RDF/XML',
@@ -33,7 +35,7 @@ def main(input, output, mapping, undirected, classify, format, ontology_director
     gateway = JavaGateway()
     java_import(gateway.jvm, 'org.semanticweb')
 
-    tmp_data_file = 'data/temp_file.tmp'
+    tmp_data_file = gateway.jvm.java.io.File.createTempFile(os.getcwd() + '/data/temp_file', '.tmp')
 
     if classify:
   
@@ -60,20 +62,21 @@ def main(input, output, mapping, undirected, classify, format, ontology_director
         for axiom in inferred_axioms:
             ont_manager.addAxiom(ontology, axiom)
             counter += 1
-        
-        ont_manager.saveOntology(ontology, gateway.jvm.org.semanticweb.owlapi.model.IRI.create(tmp_data_file))
+           
+        ont_manager.saveOntology(ontology, gateway.jvm.org.semanticweb.owlapi.model.IRI.create(tmp_data_file.toURI()))
     
 
         print(str(counter) + " axioms inferred.")
 
     if classify:
-        filename = tmp_data_file
+        filename = tmp_data_file.toURI()
     else:
-        filename = input
-
-
-    model = gateway.jvm.org.apache.jena.rdf.model.ModelFactory().createDefaultModel()
-    infile = gateway.jvm.org.apache.jena.util.FileManager.get().open( filename.toString())
+        filename = tmp_data_file.toURI()
+        print(filename)
+        filename = os.getcwd() + '/' + input #gateway.jvm.java.io.File(os.getcwd() + '/' + input).toURI()
+        print(filename)
+    model = gateway.jvm.org.apache.jena.rdf.model.ModelFactory.createDefaultModel()
+    infile = gateway.jvm.org.apache.jena.util.FileManager.get().open(filename.toString())
 
     model.read(infile, None, format)
 
@@ -88,15 +91,15 @@ def main(input, output, mapping, undirected, classify, format, ontology_director
 
         if (subj.isURIResource() and obj.isURIResource()):
         
-            if (dict[pred] == None):
+            if not pred in dict:
                 dict[pred] = counter
                 counter += 1
             
-            if (dict[subj] == None):
+            if not subj in dict:
                 dict[subj] = counter
                 counter += 1
         
-            if (dict[obj] == None):
+            if not obj in dict:
                 dict[obj] = counter
                 counter += 1
             
@@ -105,17 +108,20 @@ def main(input, output, mapping, undirected, classify, format, ontology_director
             objid = dict[obj]
             
             # generate three nodes and directed edges
-            out_file.write(str(subjid)+"\t"+str(objid)+"\t"+predid+"\n")
+            out_file.write(str(subjid)+"\t"+str(objid)+"\t"+str(predid)+"\n")
             
             # add reverse edges for undirected graph; need to double the walk length!
             if (undirected):
-                out_file.write(str(objid)+"\t"+str(subjid)+"\t"+predid+"\n")
+                out_file.write(str(objid)+"\t"+str(subjid)+"\t"+str(predid)+"\n")
             
 
     map_file = open(mapping, 'w')
 
     for key, val in dict.items():
         map_file.write(str(key)+'\t'+str(val)+'\n')
+
+def URI(path):
+    return "file:" + path
 
 if __name__ == '__main__':
     main()
