@@ -7,7 +7,6 @@
  */
 
 
-
 // Apply the java plugin to add support for Java
 apply plugin: 'java'
 apply plugin: 'application'
@@ -41,7 +40,10 @@ dependencies {
     testCompile 'junit:junit:4.12'
 }
 
+<<<<<<< HEAD
 
+=======
+>>>>>>> aaa00f87aa354fc77071f07c9ca6fed9d8897851
 run {
     if (project.hasProperty("appArgs")) {
         args Eval.me(appArgs)
@@ -49,5 +51,8 @@ run {
 }
 
 mainClassName = "Main"
+<<<<<<< HEAD
 
 
+=======
+>>>>>>> aaa00f87aa354fc77071f07c9ca6fed9d8897851
