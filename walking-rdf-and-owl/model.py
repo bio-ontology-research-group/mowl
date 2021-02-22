@@ -1,10 +1,23 @@
-from py4j.java_gateway import JavaGateway
-from py4j.java_gateway import java_import
 from pathlib import Path
-
-
+from jpype import *
+import jpype.imports
 import os
 import click as ck
+
+
+jars_dir = "../gateway/build/distributions/gateway/lib/"
+jars = f'{str.join(":", [jars_dir+name for name in os.listdir(jars_dir)])}'
+startJVM(getDefaultJVMPath(), "-ea",  "-Djava.class.path=" + jars,  convertStrings=False)
+
+
+from org.semanticweb.owlapi.apibinding import OWLManager
+from org.semanticweb.owlapi.model import IRI
+from org.semanticweb.owlapi.reasoner import ConsoleProgressMonitor
+from org.semanticweb.owlapi.reasoner import SimpleConfiguration
+from org.semanticweb.elk.owlapi import ElkReasonerFactory
+from org.semanticweb.owlapi.util import InferredClassAssertionAxiomGenerator
+from org.apache.jena.rdf.model import ModelFactory
+from org.apache.jena.util import FileManager
 
 @ck.command()
 @ck.option(
@@ -20,7 +33,7 @@ import click as ck
     '--undirected/--directed', '-u/-d', default=False,
     help='Build undirected graph (default: false)')
 @ck.option(
-    '--classify/--no-classify', '-c/-nc', default=False,
+    '--classify/--no-classify', '-c/-nc', default=True,
     help= 'Wse an OWL reasoner to classify the RDF dataset (must be in RDF/XML) before graph generation (default: false)')
 @ck.option( 
     '--format', '-f', default= 'RDF/XML',
@@ -32,38 +45,35 @@ import click as ck
 
 def main(input, output, mapping, undirected, classify, format, ontology_directory):
 
-    gateway = JavaGateway()
-    java_import(gateway.jvm, 'org.semanticweb')
 
-    tmp_data_file = gateway.jvm.java.io.File.createTempFile(os.getcwd() + '/data/temp_file', '.tmp')
+    tmp_data_file = java.io.File.createTempFile(os.getcwd() + '/data/temp_file', '.tmp')
 
     if classify:
-  
-        ont_manager = gateway.jvm.org.semanticweb.owlapi.apibinding.OWLManager.createOWLOntologyManager()
+        ont_manager = OWLManager.createOWLOntologyManager()
 
         ontology_set_files = os.listdir(ontology_directory)
-        ont_hash_set = gateway.jvm.java.util.LinkedHashSet()
+        ont_hash_set = java.util.LinkedHashSet()
         for file in ontology_set_files:
-            ont_hash_set.add(ont_manager.loadOntologyFromOntologyDocument(gateway.jvm.java.io.File(os.getcwd()+'/'+ontology_directory+file)))
-        ont_hash_set.add(ont_manager.loadOntologyFromOntologyDocument(gateway.jvm.java.io.File(os.getcwd()+'/'+input)))
+            ont_hash_set.add(ont_manager.loadOntologyFromOntologyDocument(java.io.File(os.getcwd()+'/'+ontology_directory+file)))
+        ont_hash_set.add(ont_manager.loadOntologyFromOntologyDocument(java.io.File(os.getcwd()+'/'+input)))
 
-        ontology = ont_manager.createOntology(gateway.jvm.org.semanticweb.owlapi.model.IRI.create("http://aber-owl.net/rdfwalker/t.owl"), ont_hash_set)
+        ontology = ont_manager.createOntology(IRI.create("http://aber-owl.net/rdfwalker/t.owl"), ont_hash_set)
 
         factory =  ont_manager.getOWLDataFactory()
 
-        progressMonitor = gateway.jvm.org.semanticweb.owlapi.reasoner.ConsoleProgressMonitor()
-        config = gateway.jvm.org.semanticweb.owlapi.reasoner.SimpleConfiguration(progressMonitor)
+        progressMonitor = ConsoleProgressMonitor()
+        config = SimpleConfiguration(progressMonitor)
         
-        reasoner_factory = gateway.jvm.org.semanticweb.elk.owlapi.ElkReasonerFactory()
+        reasoner_factory = ElkReasonerFactory()
         reasoner = reasoner_factory.createReasoner(ontology,config)
 
-        inferred_axioms = gateway.jvm.org.semanticweb.owlapi.util.InferredClassAssertionAxiomGenerator().createAxioms(factory, reasoner)
+        inferred_axioms = InferredClassAssertionAxiomGenerator().createAxioms(factory, reasoner)
         counter = 0
         for axiom in inferred_axioms:
             ont_manager.addAxiom(ontology, axiom)
             counter += 1
            
-        ont_manager.saveOntology(ontology, gateway.jvm.org.semanticweb.owlapi.model.IRI.create(tmp_data_file.toURI()))
+        ont_manager.saveOntology(ontology, IRI.create(tmp_data_file.toURI()))
     
 
         print(str(counter) + " axioms inferred.")
@@ -73,10 +83,10 @@ def main(input, output, mapping, undirected, classify, format, ontology_director
     else:
         filename = tmp_data_file.toURI()
         print(filename)
-        filename = os.getcwd() + '/' + input #gateway.jvm.java.io.File(os.getcwd() + '/' + input).toURI()
+        filename = os.getcwd() + '/' + input
         print(filename)
-    model = gateway.jvm.org.apache.jena.rdf.model.ModelFactory.createDefaultModel()
-    infile = gateway.jvm.org.apache.jena.util.FileManager.get().open(filename.toString())
+    model = ModelFactory.createDefaultModel()
+    infile = FileManager.get().open(filename.toString())
 
     model.read(infile, None, format)
 
@@ -124,4 +134,7 @@ def URI(path):
     return "file:" + path
 
 if __name__ == '__main__':
+
     main()
+    shutdownJVM()
+ 
