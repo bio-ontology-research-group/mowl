@@ -23,7 +23,6 @@ dependencies {
     // The production code uses the SLF4J logging API at compile time
     compile 'org.slf4j:slf4j-api:1.7.25'
     compile 'org.slf4j:slf4j-simple:1.7.25'
-    compile 'net.sf.py4j:py4j:0.10.9.1'
     compile 'com.beust:jcommander:1.72'
     compile 'org.semanticweb.elk:elk-owlapi:0.4.3'
     compile 'net.sourceforge.owlapi:owlapi-api:4.5.19'

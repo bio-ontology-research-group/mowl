@@ -21,33 +21,18 @@ import org.semanticweb.owlapi.vocab.OWLRDFVocabulary;
 import org.semanticweb.elk.owlapi.ElkReasonerFactory;
 import org.semanticweb.elk.owlapi.ElkReasonerConfiguration;
 
-import py4j.GatewayServer;
-
 
 public class Main {
 
     Logger logger;
 
-    @Parameter(names={"--port", "-p"}, required=false)
-    int port = 25333;
-
-    @Parameter(names={"--connection-timeout", "-ct"}, required=false)
-    int connectionTimeout = 0;
-
-    @Parameter(names={"--read-timeout", "-rt"}, required=false)
-    int readTimeout = 0;
 
     public Main() {
 	logger = LoggerFactory.getLogger(Main.class);
     }
 
     public void run() throws Exception{
-
 	logger.info("Run function is excecuted");
-	
-	GatewayServer server = new GatewayServer(
-            this, this.port, this.connectionTimeout, this.readTimeout);
-        server.start();
     }
 
     public static void main(String[] args) {
