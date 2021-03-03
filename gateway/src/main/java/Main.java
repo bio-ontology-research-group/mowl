@@ -20,6 +20,7 @@ import org.semanticweb.owlapi.reasoner.structural.StructuralReasoner;
 import org.semanticweb.owlapi.vocab.OWLRDFVocabulary;
 import org.semanticweb.elk.owlapi.ElkReasonerFactory;
 import org.semanticweb.elk.owlapi.ElkReasonerConfiguration;
+import org.mowl.Onto2VecShortFormProvider;
 
 
 public class Main {

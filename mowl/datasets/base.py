@@ -1,8 +1,18 @@
 import numpy as np
-from org.semanticweb.owlapi.model import OWLOntology
-from org.semanticweb.owlapi.apibinding import OWLManager
 import tarfile
 import pathlib
+
+# OWLAPI imports
+from org.semanticweb.owlapi.model import OWLOntology
+from org.semanticweb.owlapi.apibinding import OWLManager
+from org.semanticweb.owlapi.reasoner import ConsoleProgressMonitor
+from org.semanticweb.owlapi.reasoner import SimpleConfiguration
+from org.semanticweb.owlapi.reasoner import InferenceType
+from org.semanticweb.elk.owlapi import ElkReasonerFactory
+from org.semanticweb.owlapi.util import InferredClassAssertionAxiomGenerator
+from org.semanticweb.owlapi.util import InferredEquivalentClassAxiomGenerator
+from org.semanticweb.owlapi.util import InferredSubClassAxiomGenerator
+
 
 Triples = np.ndarray
 
@@ -38,6 +48,7 @@ class PathDataset(Dataset):
         self.validation_path = validation_path
         self.testing_path = testing_path
         self.ont_manager = OWLManager.createOWLOntologyManager()
+        self.data_factory = self.ont_manager.getOWLDataFactory()
         self._loaded = False
         
     @property
@@ -66,6 +77,26 @@ class PathDataset(Dataset):
         self._validation = load_triples(self.validation_path)
         self._testing = load_triples(self.testing_path)
 
+    def _create_reasoner(self):
+        progressMonitor = ConsoleProgressMonitor()
+        config = SimpleConfiguration(progressMonitor)
+        reasoner_factory = ElkReasonerFactory()
+        self.reasoner = reasoner_factory.createReasoner(self.ontology, config)
+        self.reasoner.precomputeInferences(InferenceType.CLASS_HIERARCHY)
+
+    def infer_axioms(self):
+        if not self.reasoner:
+            self._create_reasoner()
+        assertion_axioms = InferredClassAssertionAxiomGenerator().createAxioms(
+            self.data_factory, self.reasoner)
+        self.ont_manager.addAxioms(self.ontology, assertion_axioms)
+        equivalent_axioms = InferredEquivalentClassAxiomGenerator().createAxioms(
+            self.data_factory, self.reasoner)
+        self.ont_manager.addAxioms(self.ontology, equivalent_axioms)
+        subclass_axioms = InferredSubClassAxiomGenerator().createAxioms(
+            self.data_factory, self.reasoner)
+        self.ont_manager.addAxioms(self.ontology, subclass_axioms)
+        
 
 class TarFileDataset(PathDataset):
     tarfile_path: str
