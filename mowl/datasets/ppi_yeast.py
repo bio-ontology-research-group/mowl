@@ -1,4 +1,4 @@
-from datasets.base import RemoteDataset
+from .base import RemoteDataset
 import math
 import random
 import numpy as np

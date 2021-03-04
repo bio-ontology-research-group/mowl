@@ -1,6 +1,10 @@
 import numpy as np
 import tarfile
 import pathlib
+import os
+from jpype import *
+import jpype.imports
+
 
 # OWLAPI imports
 from org.semanticweb.owlapi.model import OWLOntology
@@ -49,6 +53,7 @@ class PathDataset(Dataset):
         self.testing_path = testing_path
         self.ont_manager = OWLManager.createOWLOntologyManager()
         self.data_factory = self.ont_manager.getOWLDataFactory()
+        self.reasoner = None
         self._loaded = False
         
     @property
@@ -76,6 +81,7 @@ class PathDataset(Dataset):
             java.io.File(self.ontology_path))
         self._validation = load_triples(self.validation_path)
         self._testing = load_triples(self.testing_path)
+        self._loaded = True
 
     def _create_reasoner(self):
         progressMonitor = ConsoleProgressMonitor()
@@ -124,7 +130,7 @@ class TarFileDataset(PathDataset):
         testing_exists = os.path.exists(self.testing_path)
         if ontology_exists and validation_exists and testing_exists:
             return
-        with tarfile.open(fileobj=self.tarfile_path) as tf:
+        with tarfile.open(self.tarfile_path) as tf:
             tf.extractall(path=self.data_root)
         
         
@@ -134,6 +140,7 @@ class RemoteDataset(TarFileDataset):
     data_root: str
     
     def __init__(self, url: str, data_root='data/'):
+        self.url = url
         self.data_root = data_root
         tarfile_path = self._download()
         super().__init__(tarfile_path)

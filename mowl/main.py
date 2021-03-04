@@ -9,8 +9,10 @@ import os
 import sys
 import logging
 
+sys.path.insert(0, '')
+
 from datasets import PPIYeastDataset
-from onto2vec.models import Onto2Vec
+from onto2vec.model import Onto2Vec
 
 
 @ck.command()
