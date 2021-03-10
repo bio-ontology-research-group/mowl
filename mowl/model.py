@@ -2,8 +2,7 @@
 class Model(object):
 
     def __init__(self, dataset):
-        # TODO: initialize parameters
-        pass
+        self.dataset = dataset
 
     def train(self):
         raise NotImplementedError()
