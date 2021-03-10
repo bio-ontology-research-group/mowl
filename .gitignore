@@ -6,3 +6,6 @@ gateway/.gradle/
 
 
 **/data
+**/test_data
+**/boost
+*.class
