@@ -21,13 +21,13 @@ from org.apache.jena.util import FileManager
 
 @ck.command()
 @ck.option(
-    '--input', '-i', default='data/bio-knowledge-graph.nt',
+    '--input', '-i', default='test_data/bio-knowledge-graph.nt',
     help='input RDF file')
 @ck.option(
-    '--output', '-o', default='data/edgelist.txt',
+    '--output', '-o', default='test_data/edgelist.txt',
     help='output file to use as input in DeepWalk algorithm')
 @ck.option(
-    '--mapping', '-m', default='data/mappingFile.txt',
+    '--mapping', '-m', default='test_data/mappingFile.txt',
     help='Output mapping file. Contains numerical ids for all entities')
 @ck.option(
     '--undirected/--directed', '-u/-d', default=False,
@@ -39,7 +39,7 @@ from org.apache.jena.util import FileManager
     '--format', '-f', default= 'RDF/XML',
     help= 'RDF format; values are "RDF/XML", "N-TRIPLE", "TURTLE" and "N3" (default: RDF/XML)')
 @ck.option(
-    '--ontology-directory', '-ont-dir', default='data/ontology-dir/',
+    '--ontology-directory', '-ont-dir', default='test_data/ontology-dir/',
     help='Directory with ontologies to use for reasoning')
 
 
@@ -48,43 +48,37 @@ def main(input, output, mapping, undirected, classify, format, ontology_director
 
     tmp_data_file = java.io.File.createTempFile(os.getcwd() + '/data/temp_file', '.tmp')
 
-    if classify:
-        ont_manager = OWLManager.createOWLOntologyManager()
+    ont_manager = OWLManager.createOWLOntologyManager()
 
-        ontology_set_files = os.listdir(ontology_directory)
-        ont_hash_set = java.util.LinkedHashSet()
-        for file in ontology_set_files:
-            ont_hash_set.add(ont_manager.loadOntologyFromOntologyDocument(java.io.File(os.getcwd()+'/'+ontology_directory+file)))
-        ont_hash_set.add(ont_manager.loadOntologyFromOntologyDocument(java.io.File(os.getcwd()+'/'+input)))
+    ontology_set_files = os.listdir(ontology_directory)
+    ont_hash_set = java.util.LinkedHashSet()
+    for file in ontology_set_files:
+        ont_hash_set.add(ont_manager.loadOntologyFromOntologyDocument(java.io.File(os.getcwd()+'/'+ontology_directory+file)))
+    ont_hash_set.add(ont_manager.loadOntologyFromOntologyDocument(java.io.File(os.getcwd()+'/'+input)))
 
-        ontology = ont_manager.createOntology(IRI.create("http://aber-owl.net/rdfwalker/t.owl"), ont_hash_set)
+    ontology = ont_manager.createOntology(IRI.create("http://aber-owl.net/rdfwalker/t.owl"), ont_hash_set)
 
-        factory =  ont_manager.getOWLDataFactory()
+    factory =  ont_manager.getOWLDataFactory()
 
-        progressMonitor = ConsoleProgressMonitor()
-        config = SimpleConfiguration(progressMonitor)
-        
-        reasoner_factory = ElkReasonerFactory()
-        reasoner = reasoner_factory.createReasoner(ontology,config)
-
-        inferred_axioms = InferredClassAssertionAxiomGenerator().createAxioms(factory, reasoner)
-        counter = 0
-        for axiom in inferred_axioms:
-            ont_manager.addAxiom(ontology, axiom)
-            counter += 1
-           
-        ont_manager.saveOntology(ontology, IRI.create(tmp_data_file.toURI()))
+    progressMonitor = ConsoleProgressMonitor()
+    config = SimpleConfiguration(progressMonitor)
     
+    reasoner_factory = ElkReasonerFactory()
+    reasoner = reasoner_factory.createReasoner(ontology,config)
 
-        print(str(counter) + " axioms inferred.")
+    inferred_axioms = InferredClassAssertionAxiomGenerator().createAxioms(factory, reasoner)
+    counter = 0
+    for axiom in inferred_axioms:
+        ont_manager.addAxiom(ontology, axiom)
+        counter += 1
+        
+    ont_manager.saveOntology(ontology, IRI.create(tmp_data_file.toURI()))
 
-    if classify:
-        filename = tmp_data_file.toURI()
-    else:
-        filename = tmp_data_file.toURI()
-        print(filename)
-        filename = os.getcwd() + '/' + input
-        print(filename)
+
+    print(str(counter) + " axioms inferred.")
+
+    
+    filename = tmp_data_file.toURI()
     model = ModelFactory.createDefaultModel()
     infile = FileManager.get().open(filename.toString())
 
