@@ -25,11 +25,9 @@ dependencies {
     compile 'org.slf4j:slf4j-simple:1.7.25'
     compile 'com.beust:jcommander:1.72'
     compile 'org.semanticweb.elk:elk-owlapi:0.4.3'
-    compile 'net.sourceforge.owlapi:owlapi-api:4.5.19'
-    compile 'net.sourceforge.owlapi:owlapi-apibinding:4.5.19'
-    compile 'net.sourceforge.owlapi:owlapi-impl:4.5.19'
-    compile 'net.sourceforge.owlapi:owlapi-parsers:4.5.19'
     compile 'org.apache.jena:apache-jena-libs:3.17.0'
+    compile 'de.tu-dresden.inf.lat.jcel:jcel-owlapi:0.24.1'
+    
     
 
     // Declare the dependency for your favourite test framework you want to use in your tests.

@@ -3,7 +3,7 @@
 venv/
 gateway/build/
 gateway/.gradle/
-
+.gradle/
 
 **/data
 **/test_data

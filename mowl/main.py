@@ -11,14 +11,14 @@ import logging
 
 sys.path.insert(0, '')
 
-from datasets import PPIYeastDataset
-from onto2vec.model import Onto2Vec
-
+from mowl.datasets import PPIYeastDataset
+from mowl.onto2vec.model import Onto2Vec
+from mowl.elembeddings.model import ELEmbeddings
 
 @ck.command()
 def main():
     ds = PPIYeastDataset()
-    model = Onto2Vec(ds)
+    model = ELEmbeddings(ds)
     model.train()
 
 
