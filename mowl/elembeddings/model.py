@@ -9,11 +9,11 @@ from de.tudresden.inf.lat.jcel.owlapi.translator import ReverseAxiomTranslator
 from org.semanticweb.owlapi.model import OWLAxiom
 from java.util import HashSet
 
+import numpy as np
 import tensorflow as tf
 from tensorflow.python.framework import function
 import re
 import math
-import matplotlib.pyplot as plt
 import logging
 from tensorflow.keras.layers import (
     Input,
@@ -23,12 +23,6 @@ from tensorflow.keras import constraints
 from tensorflow.keras.callbacks import ModelCheckpoint, EarlyStopping, CSVLogger
 from tensorflow.keras import backend as K
 from scipy.stats import rankdata
-
-
-config = tf.ConfigProto(allow_soft_placement=True)
-config.gpu_options.allow_growth = True
-session = tf.Session(config=config)
-K.set_session(session)
 
     
 
@@ -74,8 +68,20 @@ class ELEmbeddings(Model):
                 except Exception as e:
                     print(f'Ignoring {ax}', e)
 
-    def train(self):
-        data, cls2id, rel2id = load_data(self.normal_forms_filepath)
+    def get_valid_data(self, cls2id, rel2id):
+        data = []
+        for it in self.dataset.validation:
+            id1 = it[0]
+            rel = it[1]
+            id2 = it[2]
+            if id1 not in cls2id or id2 not in cls2id or rel not in rel2id:
+                continue
+            data.append((cls2id[id1], rel2id[rel], cls2id[id2]))
+        return data
+
+
+    def train(self, batch_size=32):
+        train_data, cls2id, rel2id = load_data(self.normal_forms_filepath)
         valid_data = self.get_valid_data(cls2id, rel2id)
         nb_classes = len(cls2id)
         nb_relations = len(rel2id)
