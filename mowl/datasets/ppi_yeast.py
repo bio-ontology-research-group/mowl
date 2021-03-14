@@ -12,3 +12,12 @@ class PPIYeastDataset(RemoteDataset):
 
     def __init__(self, *args, **kwargs):
         super().__init__(url=DATA_URL)
+
+    def eval_classes(self, classes):
+        """Classes that are used in evaluation
+        """
+        res = {}
+        for k, v in classes.items():
+            if k.startswith('<http://4932.'):
+                res[k] = v
+        return res

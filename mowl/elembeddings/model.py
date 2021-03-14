@@ -9,6 +9,7 @@ from de.tudresden.inf.lat.jcel.owlapi.translator import ReverseAxiomTranslator
 from org.semanticweb.owlapi.model import OWLAxiom
 from java.util import HashSet
 
+import pandas as pd
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.framework import function
@@ -80,8 +81,9 @@ class ELEmbeddings(Model):
         return data
 
 
-    def train(self, batch_size=32):
-        train_data, cls2id, rel2id = load_data(self.normal_forms_filepath)
+    def train(self, embedding_size=50, batch_size=32, margin=0,
+              reg_norm=1, learning_rate=0.001, epochs=100):
+        train_data, cls2id, rel2id = self.load_data()
         valid_data = self.get_valid_data(cls2id, rel2id)
         nb_classes = len(cls2id)
         nb_relations = len(rel2id)
@@ -91,15 +93,15 @@ class ELEmbeddings(Model):
         train_steps = int(math.ceil(nb_train_data / (1.0 * batch_size)))
         train_generator = Generator(train_data, batch_size, steps=train_steps)
 
-        id2cls = {v: k for k, v in classes.items()}
-        id2rel = {v: k for k, v in relations.items()}
+        id2cls = {v: k for k, v in cls2id.items()}
+        id2rel = {v: k for k, v in rel2id.items()}
         
         cls_list = []
         rel_list = []
         for i in range(nb_classes):
-            cls_list.append(cls_dict[i])
+            cls_list.append(id2cls[i])
         for i in range(nb_relations):
-            rel_list.append(rel_dict[i])
+            rel_list.append(id2rel[i])
 
         nf1 = Input(shape=(2,), dtype=np.int32)
         nf2 = Input(shape=(3,), dtype=np.int32)
@@ -108,25 +110,31 @@ class ELEmbeddings(Model):
         dis = Input(shape=(3,), dtype=np.int32)
         top = Input(shape=(1,), dtype=np.int32)
         nf3_neg = Input(shape=(3,), dtype=np.int32)
-        el_model = ELModel(nb_classes, nb_relations, embedding_size, batch_size, margin, reg_norm)
+        el_model = ELModel(
+            nb_classes, nb_relations, embedding_size,
+            batch_size, margin, reg_norm)
         out = el_model([nf1, nf2, nf3, nf4, dis, top, nf3_neg])
         model = tf.keras.Model(inputs=[nf1, nf2, nf3, nf4, dis, top, nf3_neg], outputs=out)
         optimizer = optimizers.Adam(lr=learning_rate)
         model.compile(optimizer=optimizer, loss='mse')
 
         # TOP Embedding
-        top = classes.get('owl:Thing', None)
+        top = cls2id.get('owl:Thing', None)
+        out_classes_file = os.path.join(
+            self.dataset.data_root, self.dataset.dataset_name, 'el_cls_emb.pkl')
+        out_relations_file = os.path.join(
+            self.dataset.data_root, self.dataset.dataset_name, 'el_rel_emb.pkl')
+        
         checkpointer = MyModelCheckpoint(
             out_classes_file=out_classes_file,
             out_relations_file=out_relations_file,
             cls_list=cls_list,
             rel_list=rel_list,
             valid_data=valid_data,
-            proteins=proteins,
-            monitor='loss')
+            eval_classes=self.dataset.eval_classes(cls2id),
+            monitor='loss',
+            save_weights_only=True)
         
-        logger = CSVLogger(loss_history_file)
-
         # Save initial embeddings
         cls_embeddings = el_model.cls_embeddings.get_weights()[0]
         rel_embeddings = el_model.rel_embeddings.get_weights()[0]
@@ -150,7 +158,127 @@ class ELEmbeddings(Model):
             steps_per_epoch=train_steps,
             epochs=epochs,
             workers=12,
-            callbacks=[logger, checkpointer])
+            callbacks=[checkpointer,])
+
+
+    def load_data(self):
+        classes = {}
+        relations = {}
+        data = {'nf1': [], 'nf2': [], 'nf3': [], 'nf4': [], 'disjoint': []}
+        with open(self.normal_forms_filepath) as f:
+            for line in f:
+                # Ignore SubObjectPropertyOf
+                if line.startswith('SubObjectPropertyOf'):
+                    continue
+                # Ignore SubClassOf()
+                line = line.strip()[11:-1]
+                if not line:
+                    continue
+                if line.startswith('ObjectIntersectionOf('):
+                    # C and D SubClassOf E
+                    it = line.split(' ')
+                    c = it[0][21:]
+                    d = it[1][:-1]
+                    e = it[2]
+                    if c not in classes:
+                        classes[c] = len(classes)
+                    if d not in classes:
+                        classes[d] = len(classes)
+                    if e not in classes:
+                        classes[e] = len(classes)
+                    form = 'nf2'
+                    if e == 'owl:Nothing':
+                        form = 'disjoint'
+                    data[form].append((classes[c], classes[d], classes[e]))
+
+                elif line.startswith('ObjectSomeValuesFrom('):
+                    # R some C SubClassOf D
+                    it = line.split(' ')
+                    r = it[0][21:]
+                    c = it[1][:-1]
+                    d = it[2]
+                    if c not in classes:
+                        classes[c] = len(classes)
+                    if d not in classes:
+                        classes[d] = len(classes)
+                    if r not in relations:
+                        relations[r] = len(relations)
+                    data['nf4'].append((relations[r], classes[c], classes[d]))
+                elif line.find('ObjectSomeValuesFrom') != -1:
+                    # C SubClassOf R some D
+                    it = line.split(' ')
+                    c = it[0]
+                    r = it[1][21:]
+                    d = it[2][:-1]
+                    if c not in classes:
+                        classes[c] = len(classes)
+                    if d not in classes:
+                        classes[d] = len(classes)
+                    if r not in relations:
+                        relations[r] = len(relations)
+                    data['nf3'].append((classes[c], relations[r], classes[d]))
+                else:
+                    # C SubClassOf D
+                    it = line.split(' ')
+                    c = it[0]
+                    d = it[1]
+                    if c not in classes:
+                        classes[c] = len(classes)
+                    if d not in classes:
+                        classes[d] = len(classes)
+                    data['nf1'].append((classes[c], classes[d]))
+
+        # Check if TOP in classes and insert if it is not there
+        if 'owl:Thing' not in classes:
+            classes['owl:Thing'] = len(classes)
+        if 'owl:Nothing' not in classes:
+            classes['owl:Nothing'] = len(classes)
+
+        prot_ids = []
+        for k, v in classes.items():
+            if not k.startswith('<http://purl.obolibrary.org/obo/GO_'):
+                prot_ids.append(v)
+        prot_ids = np.array(prot_ids)
+
+        # Add at least one disjointness axiom if there is 0
+        if len(data['disjoint']) == 0:
+            nothing = classes['owl:Nothing']
+            n_prots = len(prot_ids)
+            for i in range(10):
+                it = np.random.choice(n_prots, 2)
+                if it[0] != it[1]:
+                    data['disjoint'].append(
+                        (prot_ids[it[0]], prot_ids[it[1]], nothing))
+                    break
+
+        # Add corrupted triples for nf3
+        n_classes = len(classes)
+        data['nf3_neg'] = []
+        inter_ind = 0
+        for k, v in relations.items():
+            if k == '<http://interacts_with>':
+                inter_ind = v
+        for c, r, d in data['nf3']:
+            if r != inter_ind:
+                continue
+            data['nf3_neg'].append((c, r, np.random.choice(prot_ids)))
+            data['nf3_neg'].append((np.random.choice(prot_ids), r, d))
+
+        data['nf1'] = np.array(data['nf1'])
+        data['nf2'] = np.array(data['nf2'])
+        data['nf3'] = np.array(data['nf3'])
+        data['nf4'] = np.array(data['nf4'])
+        data['disjoint'] = np.array(data['disjoint'])
+        data['top'] = np.array([classes['owl:Thing'],])
+        data['nf3_neg'] = np.array(data['nf3_neg'])
+
+        for key, val in data.items():
+            index = np.arange(len(data[key]))
+            np.random.seed(seed=100)
+            np.random.shuffle(index)
+            data[key] = val[index]
+
+        return data, classes, relations
 
 
 class ELModel(tf.keras.Model):
@@ -340,18 +468,19 @@ class ELModel(tf.keras.Model):
 class MyModelCheckpoint(ModelCheckpoint):
 
     def __init__(self, *args, **kwargs):
-        super(ModelCheckpoint, self).__init__()
+        super().__init__(filepath='/tmp/checkpoint')
         self.out_classes_file = kwargs.pop('out_classes_file')
         self.out_relations_file = kwargs.pop('out_relations_file')
         self.monitor = kwargs.pop('monitor')
         self.cls_list = kwargs.pop('cls_list')
         self.rel_list = kwargs.pop('rel_list')
         self.valid_data = kwargs.pop('valid_data')
-        self.proteins = kwargs.pop('proteins')
-        self.prot_index = list(self.proteins.values())
-        self.prot_dict = {v: k for k, v in enumerate(self.prot_index)}
-    
+        self.eval_classes = kwargs.pop('eval_classes')
+        self.eval_index = list(self.eval_classes.values())
+        self.eval_dict = {v: k for k, v in enumerate(self.eval_index)}
         self.best_rank = 100000
+        self.save_weights_only = kwargs.pop('save_weights_only', False)
+        self.load_weights_on_restart = kwargs.pop('load_weights_on_restart', False)
         
     def on_epoch_end(self, epoch, logs=None):
         # Save embeddings every 10 epochs
@@ -364,9 +493,9 @@ class MyModelCheckpoint(ModelCheckpoint):
         cls_embeddings = el_model.cls_embeddings.get_weights()[0]
         rel_embeddings = el_model.rel_embeddings.get_weights()[0]
 
-        prot_embeds = cls_embeddings[self.prot_index]
-        prot_rs = prot_embeds[:, -1].reshape(-1, 1)
-        prot_embeds = prot_embeds[:, :-1]
+        eval_embeds = cls_embeddings[self.eval_index]
+        eval_rs = eval_embeds[:, -1].reshape(-1, 1)
+        eval_embeds = eval_embeds[:, :-1]
 
         cls_file = self.out_classes_file + '_test.pkl'
         rel_file = self.out_relations_file + '_test.pkl'
@@ -380,25 +509,25 @@ class MyModelCheckpoint(ModelCheckpoint):
         df = pd.DataFrame(
             {'relations': self.rel_list, 'embeddings': list(rel_embeddings)})
         df.to_pickle(rel_file)
-        prot_embeds = prot_embeds / np.linalg.norm(prot_embeds, axis=1).reshape(-1, 1)
+        eval_embeds = eval_embeds / np.linalg.norm(eval_embeds, axis=1).reshape(-1, 1)
         
         mean_rank = 0
         n = len(self.valid_data)
         
         for c, r, d in self.valid_data:
-            c, r, d = self.prot_dict[c], r, self.prot_dict[d]
-            ec = prot_embeds[c, :]
-            rc = prot_rs[c, :]
+            c, r, d = self.eval_dict[c], r, self.eval_dict[d]
+            ec = eval_embeds[c, :]
+            rc = eval_rs[c, :]
             er = rel_embeddings[r, :]
             ec += er
 
-            dst = np.linalg.norm(prot_embeds - ec.reshape(1, -1), axis=1)
+            dst = np.linalg.norm(eval_embeds - ec.reshape(1, -1), axis=1)
             dst = dst.reshape(-1, 1)
             # if rc > 0:
             #     overlap = np.maximum(0, (2 * rc - np.maximum(dst + rc - prot_rs - el_model.margin, 0)) / (2 * rc))
             # else:
             #     overlap = (np.maximum(dst - prot_rs - el_model.margin, 0) == 0).astype('float32')
-            res = np.maximum(0, dst - rc - prot_rs - el_model.margin)
+            res = np.maximum(0, dst - rc - eval_rs - el_model.margin)
             # res = (overlap + 1 / np.exp(edst)) / 2
             res = res.flatten()
             index = rankdata(res, method='average')
@@ -480,137 +609,3 @@ class Generator(object):
             self.reset()
 
 
-def load_data(filename):
-    classes = {}
-    relations = {}
-    data = {'nf1': [], 'nf2': [], 'nf3': [], 'nf4': [], 'disjoint': []}
-    with open(filename) as f:
-        for line in f:
-            # Ignore SubObjectPropertyOf
-            if line.startswith('SubObjectPropertyOf'):
-                continue
-            # Ignore SubClassOf()
-            line = line.strip()[11:-1]
-            if not line:
-                continue
-            if line.startswith('ObjectIntersectionOf('):
-                # C and D SubClassOf E
-                it = line.split(' ')
-                c = it[0][21:]
-                d = it[1][:-1]
-                e = it[2]
-                if c not in classes:
-                    classes[c] = len(classes)
-                if d not in classes:
-                    classes[d] = len(classes)
-                if e not in classes:
-                    classes[e] = len(classes)
-                form = 'nf2'
-                if e == 'owl:Nothing':
-                    form = 'disjoint'
-                data[form].append((classes[c], classes[d], classes[e]))
-                
-            elif line.startswith('ObjectSomeValuesFrom('):
-                # R some C SubClassOf D
-                it = line.split(' ')
-                r = it[0][21:]
-                c = it[1][:-1]
-                d = it[2]
-                if c not in classes:
-                    classes[c] = len(classes)
-                if d not in classes:
-                    classes[d] = len(classes)
-                if r not in relations:
-                    relations[r] = len(relations)
-                data['nf4'].append((relations[r], classes[c], classes[d]))
-            elif line.find('ObjectSomeValuesFrom') != -1:
-                # C SubClassOf R some D
-                it = line.split(' ')
-                c = it[0]
-                r = it[1][21:]
-                d = it[2][:-1]
-                if c not in classes:
-                    classes[c] = len(classes)
-                if d not in classes:
-                    classes[d] = len(classes)
-                if r not in relations:
-                    relations[r] = len(relations)
-                data['nf3'].append((classes[c], relations[r], classes[d]))
-            else:
-                # C SubClassOf D
-                it = line.split(' ')
-                c = it[0]
-                d = it[1]
-                if c not in classes:
-                    classes[c] = len(classes)
-                if d not in classes:
-                    classes[d] = len(classes)
-                data['nf1'].append((classes[c], classes[d]))
-                
-    # Check if TOP in classes and insert if it is not there
-    if 'owl:Thing' not in classes:
-        classes['owl:Thing'] = len(classes)
-    if 'owl:Nothing' not in classes:
-        classes['owl:Nothing'] = len(classes)
-
-    prot_ids = []
-    for k, v in classes.items():
-        if not k.startswith('<http://purl.obolibrary.org/obo/GO_'):
-            prot_ids.append(v)
-    prot_ids = np.array(prot_ids)
-    
-    # Add at least one disjointness axiom if there is 0
-    if len(data['disjoint']) == 0:
-        nothing = classes['owl:Nothing']
-        n_prots = len(prot_ids)
-        for i in range(10):
-            it = np.random.choice(n_prots, 2)
-            if it[0] != it[1]:
-                data['disjoint'].append(
-                    (prot_ids[it[0]], prot_ids[it[1]], nothing))
-                break
-        
-    # Add corrupted triples for nf3
-    n_classes = len(classes)
-    data['nf3_neg'] = []
-    inter_ind = 0
-    for k, v in relations.items():
-        if k == '<http://interacts>':
-            inter_ind = v
-    for c, r, d in data['nf3']:
-        if r != inter_ind:
-            continue
-        data['nf3_neg'].append((c, r, np.random.choice(prot_ids)))
-        data['nf3_neg'].append((np.random.choice(prot_ids), r, d))
-
-    data['nf1'] = np.array(data['nf1'])
-    data['nf2'] = np.array(data['nf2'])
-    data['nf3'] = np.array(data['nf3'])
-    data['nf4'] = np.array(data['nf4'])
-    data['disjoint'] = np.array(data['disjoint'])
-    data['top'] = np.array([classes['owl:Thing'],])
-    data['nf3_neg'] = np.array(data['nf3_neg'])
-                            
-    for key, val in data.items():
-        index = np.arange(len(data[key]))
-        np.random.seed(seed=100)
-        np.random.shuffle(index)
-        data[key] = val[index]
-    
-    return data, classes, relations
-
-def load_valid_data(valid_data_file, classes, relations):
-    data = []
-    rel = f'<http://interacts>'
-    with open(valid_data_file, 'r') as f:
-        for line in f:
-            it = line.strip().split()
-            id1 = f'<http://{it[0]}>'
-            id2 = f'<http://{it[1]}>'
-            if id1 not in classes or id2 not in classes or rel not in relations:
-                continue
-            data.append((classes[id1], relations[rel], classes[id2]))
-    return data
-
-
-                    
