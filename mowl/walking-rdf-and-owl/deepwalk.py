@@ -10,16 +10,18 @@ import multiprocessing
 
 from concurrent import futures
 
-from time import sleep
+from time import sleep, time
 
 # Obtain jar files.
-jars_dir = "../gateway/build/distributions/gateway/lib/"
+jars_dir = "../../gateway/build/distributions/gateway/lib/"
 jars = f'{str.join(":", [jars_dir+name for name in os.listdir(jars_dir)])}'
-jars += ':worker.jar' 
+#jars += ':worker.jar' 
 
 #Start JVM
 startJVM(getDefaultJVMPath(), "-ea",  "-Djava.class.path=" + jars,  convertStrings=False)
 
+
+from org.mowl import WorkerThread
 
 from java.util.concurrent import ExecutorService  
 from java.util.concurrent import Executors  
@@ -53,14 +55,14 @@ def main(input, output, number_walks, length_walk):
 
 
 def build_graph(filepath):
+    start  = time()
     edge_list = HashMap()
     
     with open(filepath, 'r') as f:
         count = 1
         for line in f:
-
-            # TODO: optimize the following line, casting takes too much time ().
-            node1, node2, edge = tuple(map (lambda x: (jpype.JObject(int(x), JClass("java.lang.Integer"))), line.rstrip('\n').split('\t')))
+           
+            node1, node2, edge = tuple(map(int, line.rstrip('\n').split('\t')))
 
             neighbor = ArrayList()
             neighbor.add(edge)
@@ -75,6 +77,10 @@ def build_graph(filepath):
                 neighbors.add(neighbor)
                 edge_list.put(node1, ArrayList(neighbors))
             count += 1
+    
+    end = time()
+
+    print("Time elapsed in build_graph is {}".format(end-start))
     return edge_list
 
 
@@ -94,7 +100,7 @@ def generate_corpus(out_file, graph, number_walks, length_walk):
 
     with jpype.synchronized(graph):
         for i in range(len(sources)):
-            worker = JClass("WorkerThread")(out_file_j, graph, number_walks, length_walk, sources[i])
+            worker = WorkerThread(out_file_j, graph, number_walks, length_walk, sources[i])
             executor.execute(worker)
             
         executor.shutdown()

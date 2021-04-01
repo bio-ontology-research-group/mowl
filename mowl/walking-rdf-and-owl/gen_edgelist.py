@@ -5,13 +5,13 @@ import os
 import click as ck
 
 
-jars_dir = "../gateway/build/distributions/gateway/lib/"
+jars_dir = "../../gateway/build/distributions/gateway/lib/"
 jars = f'{str.join(":", [jars_dir+name for name in os.listdir(jars_dir)])}'
 startJVM(getDefaultJVMPath(), "-ea",  "-Djava.class.path=" + jars,  convertStrings=False)
 
 
 from org.semanticweb.owlapi.apibinding import OWLManager
-from org.semanticweb.owlapi.model import IRI
+from org.semanticweb.owlapi.model import IRI, OWLOntology
 from org.semanticweb.owlapi.reasoner import ConsoleProgressMonitor
 from org.semanticweb.owlapi.reasoner import SimpleConfiguration
 from org.semanticweb.elk.owlapi import ElkReasonerFactory
@@ -19,32 +19,14 @@ from org.semanticweb.owlapi.util import InferredClassAssertionAxiomGenerator
 from org.apache.jena.rdf.model import ModelFactory
 from org.apache.jena.util import FileManager
 
-@ck.command()
-@ck.option(
-    '--input', '-i', default='test_data/bio-knowledge-graph.nt',
-    help='input RDF file')
-@ck.option(
-    '--output', '-o', default='test_data/edgelist.txt',
-    help='output file to use as input in DeepWalk algorithm')
-@ck.option(
-    '--mapping', '-m', default='test_data/mappingFile.txt',
-    help='Output mapping file. Contains numerical ids for all entities')
-@ck.option(
-    '--undirected/--directed', '-u/-d', default=False,
-    help='Build undirected graph (default: false)')
-@ck.option(
-    '--classify/--no-classify', '-c/-nc', default=True,
-    help= 'Wse an OWL reasoner to classify the RDF dataset (must be in RDF/XML) before graph generation (default: false)')
-@ck.option( 
-    '--format', '-f', default= 'RDF/XML',
-    help= 'RDF format; values are "RDF/XML", "N-TRIPLE", "TURTLE" and "N3" (default: RDF/XML)')
-@ck.option(
-    '--ontology-directory', '-ont-dir', default='test_data/ontology-dir/',
-    help='Directory with ontologies to use for reasoning')
 
 
-def main(input, output, mapping, undirected, classify, format, ontology_directory):
 
+
+
+def main(input, output, mapping, undirected, format, ontology_directory):
+
+    withMap = False
 
     tmp_data_file = java.io.File.createTempFile(os.getcwd() + '/data/temp_file', '.tmp')
 
@@ -93,36 +75,49 @@ def main(input, output, mapping, undirected, classify, format, ontology_director
         subj = stmt.getSubject()
         obj = stmt.getObject()
 
-        if (subj.isURIResource() and obj.isURIResource()):
         
-            if not pred in dict:
-                dict[pred] = counter
-                counter += 1
+        if withMap:
+
+            if (subj.isURIResource() and obj.isURIResource()):
             
-            if not subj in dict:
-                dict[subj] = counter
-                counter += 1
-        
-            if not obj in dict:
-                dict[obj] = counter
-                counter += 1
+                if not pred in dict:
+                    dict[pred] = counter
+                    counter += 1
+                
+                if not subj in dict:
+                    dict[subj] = counter
+                    counter += 1
             
-            predid = dict[pred]
-            subjid = dict[subj]
-            objid = dict[obj]
-            
-            # generate three nodes and directed edges
-            out_file.write(str(subjid)+"\t"+str(objid)+"\t"+str(predid)+"\n")
-            
-            # add reverse edges for undirected graph; need to double the walk length!
-            if (undirected):
-                out_file.write(str(objid)+"\t"+str(subjid)+"\t"+str(predid)+"\n")
-            
+                if not obj in dict:
+                    dict[obj] = counter
+                    counter += 1
+                
+                predid = dict[pred]
+                subjid = dict[subj]
+                objid = dict[obj]
+                
+                # generate three nodes and directed edges
+                out_file.write(str(subjid)+"\t"+str(objid)+"\t"+str(predid)+"\n")
+                
+                # add reverse edges for undirected graph; need to double the walk length!
+                if (undirected):
+                    out_file.write(str(objid)+"\t"+str(subjid)+"\t"+str(predid)+"\n")
+
+        else:
+             if (subj.isURIResource() and obj.isURIResource()):
+                
+                # generate three nodes and directed edges
+                out_file.write(subj+"\t"+obj+"\t"+pred+"\n")
+                
+                # add reverse edges for undirected graph; need to double the walk length!
+                if (undirected):
+                    out_file.write(obj+"\t"+subj+"\t"+pred+"\n")                        
 
     map_file = open(mapping, 'w')
 
-    for key, val in dict.items():
-        map_file.write(str(key)+'\t'+str(val)+'\n')
+    if (withMap):
+        for key, val in dict.items():
+            map_file.write(str(key)+'\t'+str(val)+'\n')
 
 def URI(path):
     return "file:" + path

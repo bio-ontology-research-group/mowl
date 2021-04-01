@@ -1,5 +1,4 @@
-//package com.worker;
-
+package org.mowl;
 
 import java.util.HashMap;
 import java.util.ArrayList;
@@ -13,14 +12,16 @@ public class WorkerThread implements Runnable{
 
     public static void main(String[] args){}
 
+    // Long has been used instead of Integer because Jpype transforms Python int into Java Long. Casting Python int into Java Integer in Python side is too slow (almost 3x slower). 
     String out_file;
-    HashMap<Integer, ArrayList<ArrayList<Integer>>> graph;
+    HashMap<Long, ArrayList<ArrayList<Long>>> graph;
     int number_walks;
     int length_walk;
-    Integer source;    
+    Long source;    
 
 
-    public WorkerThread(String out_file, HashMap<Integer, ArrayList<ArrayList<Integer>>> graph, int number_walks, int length_walk, Integer source){
+    public WorkerThread(String out_file, HashMap<Long, ArrayList<ArrayList<Long>>> graph, int number_walks, int length_walk, Long source){
+        
         this.out_file = out_file;
         this.graph = graph;
         this.number_walks = number_walks;
@@ -34,29 +35,28 @@ public class WorkerThread implements Runnable{
     public void run(){
         String to_print = "";
 
-        HashMap<Integer, ArrayList<Integer>> walks = new HashMap<Integer, ArrayList<Integer>>();
-        
+        HashMap<Long, ArrayList<Long>> walks = new HashMap<Long, ArrayList<Long>>();
         int source_size = this.graph.get(this.source).size();
         if (source_size > 0){ // if there are outgoing edges at all
-            for (int i = 0; i < this.number_walks; i++){
-                int count = this.length_walk;
-                int current = this.source;
+            for (long i = 0; i < this.number_walks; i++){
+                long count = this.length_walk;
+                long current = this.source;
                 
-                ArrayList<Integer> walk = new ArrayList<Integer>();
+                ArrayList<Long> walk = new ArrayList<Long>();
                 walk.add(this.source);
                 walks.put(i, walk);
                 while(count > 0){
                     int curr_node_length = this.graph.get(current).size();
                     if(curr_node_length > 0){ // # if there are outgoing edges
                         int random_val = getRandomNumber(0, curr_node_length);
-                        ArrayList<Integer> neighbor = this.graph.get(current).get(random_val);
-                        Integer edge = neighbor.get(0);
-                        Integer target = neighbor.get(1);
+                        ArrayList<Long> neighbor = this.graph.get(current).get(random_val);
+                        Long edge = neighbor.get(0);
+                        Long target = neighbor.get(1);
                         walks.get(i).add(edge);
                         walks.get(i).add(target);
                         current = target;
                     }else{
-                        Integer edge = Integer.MAX_VALUE;
+                        Long edge = Long.MAX_VALUE;
                         walks.get(i).add(edge);
                         walks.get(i).add(this.source);
                     }
@@ -65,8 +65,8 @@ public class WorkerThread implements Runnable{
             }
         }
 
-        for(int i = 0; i < walks.size(); i++){
-            ArrayList<Integer> walk = walks.get(i);
+        for(long i = 0; i < walks.size(); i++){
+            ArrayList<Long> walk = walks.get(i);
 
             String walkString = walk.stream().map(Object::toString).collect(Collectors.joining(" "));
 
