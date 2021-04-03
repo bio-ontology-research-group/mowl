@@ -21,11 +21,11 @@ from mowl.walking_rdf_and_owl.model import WalkRdfOwl
 @ck.command()
 def main():
     ds = PPIYeastDataset()
-    model = WalkRdfOwl(ds)
+    model = WalkRdfOwl(ds, 'data/walk_rdf.tsv', 100, 20)
 #    model = ELEmbeddings(ds)
 #    model.train()
 
-    model.gen_graph(True, False, True)
+    model.train()
 
 if __name__ == '__main__':
     main()
