@@ -4,6 +4,7 @@ import pathlib
 import os
 from jpype import *
 import jpype.imports
+import requests
 
 
 # OWLAPI imports
