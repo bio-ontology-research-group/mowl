@@ -104,12 +104,6 @@ class PathDataset(Dataset):
             self.data_factory, self.reasoner)
         self.ont_manager.addAxioms(self.ontology, subclass_axioms)
 
-        ass = len(assertion_axioms)
-        equ = len(assertion_axioms)
-        sub = len(subclass_axioms)
-        print(f"Assertion axioms: {ass}. Equi axioms: {equ}. Subclass Axioms: {sub}. Inferred Axioms: {ass+equ+sub}")
-        
-
 class TarFileDataset(PathDataset):
     tarfile_path: str
     dataset_name: str
