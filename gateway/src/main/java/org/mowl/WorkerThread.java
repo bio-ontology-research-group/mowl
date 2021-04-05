@@ -84,6 +84,13 @@ public class WorkerThread implements Runnable{
     private static Object lock = new Object(); // the object for locks does not have to be anything special.
 
     public static void writeToFile(String to_print, String out_file) throws IOException{
+
+        // File f = new File("out.gz");
+        // OutputStream os = new GZIPOutputStream(new FileOutputStream(f, true)); // true for append
+        // PrintWriter w = new PrintWriter(new OutputStreamWriter(os));
+        // w.println("log message");
+
+
         BufferedWriter writer = new BufferedWriter(new FileWriter(out_file, true));
         synchronized (lock){
             writer.append(to_print);
