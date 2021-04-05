@@ -21,7 +21,7 @@ from mowl.walking_rdf_and_owl.model import WalkRdfOwl
 @ck.command()
 def main():
     ds = PPIYeastDataset()
-    model = WalkRdfOwl(ds, 'data/walk_rdf_corpus.gz', 'data/walk_rdf_embeddings.txt', 100, 20, embedding_size=20, window=3, min_count=5)
+    model = WalkRdfOwl(ds, 'data/walk_rdf_corpus.txt', 'data/walk_rdf_embeddings.txt', 100, 20, embedding_size=20, window=3, min_count=5)
 #    model = ELEmbeddings(ds)
 #    model.train()
 

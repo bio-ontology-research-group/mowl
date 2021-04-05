@@ -4,7 +4,7 @@ import os
 import time
 import numpy as np
 import gzip
-
+import subprocess
 
 import jpype
 import jpype.imports
@@ -124,7 +124,7 @@ class WalkRdfOwl(Model):
         executor =  Executors.newFixedThreadPool(n_cores)
 
         #Just to clear the file before writing again on it.
-        f = open(self.corpus_file_path, 'wb')
+        f = open(self.corpus_file_path, 'w')
         f.close()
 
         sources = ArrayList(graph.keySet())
@@ -187,17 +187,23 @@ class WalkRdfOwl(Model):
         # EVALUATION FUNCTIONS
 ##########################################
 
-    # def generate_predictions(self):
+    def generate_predictions(self):
         
-    #     corpus = self.load_corpus
+        corpus = self.load_corpus
         
-    #     words = reduce(, corpus, [])
-    #     # list words
+        words = set(reduce(lambda a,b: a + b, corpus, []))
 
-    #     # for each word compute similarity against all other words.
+        preds = []
+        for word1 in words:
+            for word2 in words:
+                if word1 != word2:
+                    similarity = model.similarity(word1, word2)
+        # list words
+                    preds.append((word1, word2, score))
+        # for each word compute similarity against all other words.
 
-    #     # save predictions
-    #     return 0
+        # save predictions
+        return preds
 
 
     def compute_metrics(gt_file, pred_file, k):
