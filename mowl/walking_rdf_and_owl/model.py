@@ -37,7 +37,17 @@ if not jpype.isJVMStarted():
         convertStrings=False)
 
 class WalkRdfOwl(Model):
-    def __init__(self, dataset, corpus_file_path, embeddings_file_path, number_walks, length_walk, undirected=True, embedding_size=100, window=3, min_count = 5):
+    def __init__(self, 
+                    dataset, 
+                    corpus_file_path, 
+                    embeddings_file_path, 
+                    number_walks, 
+                    length_walk, 
+                    undirected=True, 
+                    embedding_size=100, 
+                    window=3, 
+                    min_count = 5):
+
         super().__init__(dataset)    
         self.corpus_file_path = corpus_file_path
         self.embeddings_file_path = embeddings_file_path
@@ -70,19 +80,18 @@ class WalkRdfOwl(Model):
 
         
         count = 0
-
         print("Generating graph...")
         for stmt in model.listStatements():
             
+            if count >100:
+                break
+            count+=1
            
             pred = stmt.getPredicate()
             subj = stmt.getSubject()
             obj =  stmt.getObject()
 
             if (subj.isURIResource() and obj.isURIResource()):
-                if count > 100:
-                    break
-                count +=1
                 pred = str(stmt.getPredicate())
                 subj = str(stmt.getSubject())
                 obj =  str(stmt.getObject())
@@ -115,9 +124,9 @@ class WalkRdfOwl(Model):
         return edge_list
 
 
-    def generate_corpus(self, graph):
+    def generate_corpus_and_embeddings(self, graph):
         
-        print("Starting walking...")
+        print("Started walking...")
         start = time.time()
         n_cores = os.cpu_count()
 
@@ -143,17 +152,12 @@ class WalkRdfOwl(Model):
 
         if (executor.isTerminated()):
 
-            # f_in = open(self.corpus_file_path, 'rb')
-            # f_out = gzip.open(self.corpus_file_path + '.gz', 'wb')
-            # f_out.writelines(f_in)
-            # f_out.close()
-            # f_in.close()
-
-
             end = time.time()
             print(f"Time spent generating walks was: {end-start}")
             start = time.time()
 
+            
+            #Generation of embeddings:
             self.gen_embeddings()
             
             end = time.time()
@@ -172,13 +176,16 @@ class WalkRdfOwl(Model):
         workers = os.cpu_count()
         model = Word2Vec(corpus, size=self.embedding_size, window=self.window, min_count=self.min_count, sg=1, hs=1, workers=workers)
 
+        # word_vectors = model.wv
+# 
+        # word_vectors.save("data/embeddings.wordvectors")
+
         model.wv.save_word2vec_format(self.embeddings_file_path)
 
     def train(self):
 
         graph = self.gen_graph()
-        self.generate_corpus(graph)
-      #  self.gen_embeddings()
+        self.generate_corpus_and_embeddings(graph)
 
 
 
@@ -189,21 +196,26 @@ class WalkRdfOwl(Model):
 
     def generate_predictions(self):
         
-        corpus = self.load_corpus
+        embeddings = self.load_embeddings()
         
-        words = set(reduce(lambda a,b: a + b, corpus, []))
 
-        preds = []
-        for word1 in words:
-            for word2 in words:
-                if word1 != word2:
-                    similarity = model.similarity(word1, word2)
-        # list words
-                    preds.append((word1, word2, score))
+        words = embeddings.get_normed_vectors()
+
+        distances = distances(words)
+
+        # words = set(reduce(lambda a,b: a + b, corpus, []))
+
+        # preds = []
+        # for word1 in words:
+        #     for word2 in words:
+        #         if word1 != word2:
+        #             similarity = model.similarity(word1, word2)
+        # # list words
+        #             preds.append((word1, word2, score))
         # for each word compute similarity against all other words.
 
         # save predictions
-        return preds
+        return distances
 
 
     def compute_metrics(gt_file, pred_file, k):
