@@ -5,11 +5,15 @@ import time
 import numpy as np
 import gzip
 import subprocess
+from functools import reduce
+import operator
+from scipy.stats import rankdata
+from collections import Counter
 
 import jpype
 import jpype.imports
 
-from gensim.models import Word2Vec
+from gensim.models import Word2Vec, KeyedVectors
 from gensim.models.word2vec import LineSentence
 
 from java.lang import Runnable, Thread
@@ -82,10 +86,6 @@ class WalkRdfOwl(Model):
         count = 0
         print("Generating graph...")
         for stmt in model.listStatements():
-            
-            if count >100:
-                break
-            count+=1
            
             pred = stmt.getPredicate()
             subj = stmt.getSubject()
@@ -174,13 +174,12 @@ class WalkRdfOwl(Model):
         corpus = LineSentence(self.corpus_file_path)
      
         workers = os.cpu_count()
-        model = Word2Vec(corpus, size=self.embedding_size, window=self.window, min_count=self.min_count, sg=1, hs=1, workers=workers)
+        model = Word2Vec(corpus, vector_size=self.embedding_size, window=self.window, min_count=self.min_count, sg=1, hs=1, workers=workers)
 
-        # word_vectors = model.wv
-# 
-        # word_vectors.save("data/embeddings.wordvectors")
+        word_vectors = model.wv
+        word_vectors.save_word2vec_format("data/embeddings_readable.txt")
+        word_vectors.save(self.embeddings_file_path)
 
-        model.wv.save_word2vec_format(self.embeddings_file_path)
 
     def train(self):
 
@@ -194,62 +193,87 @@ class WalkRdfOwl(Model):
         # EVALUATION FUNCTIONS
 ##########################################
 
+    class Pair():
+        
+        def __init__(self, node1, node2, score = 0):
+            self.node1 = node1
+            self.node2 = node2
+            self.score = float(score)
+
+        def __repr__(self):
+            return '\t'.join((self.node1, self.node2, str(self.score)))
+
+        def __eq__(self, other):
+            on_node1 = self.node1 == other.node1
+            on_node2 = self.node2 == other.node2
+
+            return on_node1 and on_node2
+
+        def __key(self):
+            return (self.node1, self.node2)
+
+        def __hash__(self):
+            return hash(self.__key())
+
     def generate_predictions(self):
+
+        embeddings = KeyedVectors.load(self.embeddings_file_path)
+        vocab = embeddings.index_to_key
         
-        embeddings = self.load_embeddings()
-        
+        preds = []
+        for i in range(len(vocab)):
+            word1 = vocab[i]
+            for j in range(len(vocab)):
+                word2 = vocab[j]
+                if word1 != word2:
+                    preds.append(self.Pair(word1, word2, 0))
 
-        words = embeddings.get_normed_vectors()
-
-        distances = distances(words)
-
-        # words = set(reduce(lambda a,b: a + b, corpus, []))
-
-        # preds = []
-        # for word1 in words:
-        #     for word2 in words:
-        #         if word1 != word2:
-        #             similarity = model.similarity(word1, word2)
-        # # list words
-        #             preds.append((word1, word2, score))
-        # for each word compute similarity against all other words.
-
-        # save predictions
-        return distances
+        return preds
 
 
-    def compute_metrics(gt_file, pred_file, k):
+    def format_test_set(self):
+        test_set = self.dataset.testing
+
+        test_set = np.delete(test_set, 1, 1)
+        test_set = np.insert(test_set, 2, values=0, axis=1)
+        test_set = map(lambda x: self.Pair(x[0], x[1], x[2]), test_set)
+        return list(test_set)
+
+
+    def compute_metrics(self, k):
         #Computes hits@k and AUC
 
-        # Read test file (ground truth) and submission file (predictions).
-        triplets_gt   = read_triplets_file(gt_file)
-        triplets_pred = read_triplets_file(pred_file)
+        preds = self.generate_predictions() # list (node 1, node 2, score)
 
-        entities = set([t.entity_1 for t in triplets_gt] + [t.entity_2 for t in triplets_gt] + [t.entity_1 for t in triplets_pred] + [t.entity_2 for t in triplets_pred])
+        ground_truth = self.format_test_set() # list (node 1, node 2, score)
 
-        ent1_rels = {}
+        
+        entities = set([pair.node1 for pair in preds] + [pair.node2 for pair in preds] + [pair.node1 for pair in ground_truth] + [pair.node2 for pair in ground_truth])
+       
+        entities_1 = {}
 
-        for triplet_gt in triplets_gt:
-            ent1, rel = triplet_gt.entity_1, triplet_gt.relation
-
-            if (ent1, rel) in ent1_rels:
+#        for triplet_gt in triplets_gt:
+        for pair in ground_truth:
+            #ent1, rel = triplet_gt.entity_1, triplet_gt.relation
+            node1 = pair.node1
+            if node1 in entities_1:
                 continue
 
-            #Extract triplets with fixed entity 1 and relation
-            grouped_triplets_gt   = set(filter(lambda x: x.entity_1 == ent1 and x.relation == rel, triplets_gt))
-            grouped_triplets_pred = set(filter(lambda x: x.entity_1 == ent1 and x.relation == rel, triplets_pred))
+            #Extract triplets with fixed entity 1
+            grouped_pairs_gt   = set(filter(lambda x: x.node1 == node1 , ground_truth))
+            grouped_pairs_pred = set(filter(lambda x: x.node1 == node1 , preds))
 
-            all_triplets = ({Triplet(ent1, rel, ent2, score = 0) for ent2 in entities} - grouped_triplets_pred).union(grouped_triplets_pred)
-            all_triplets = list(all_triplets)
+            all_pairs = ({self.Pair(node1, ent2, 0) for ent2 in entities} - grouped_pairs_pred).union(grouped_pairs_pred)
+            all_pairs = list(all_pairs)
 
-            scores = [-x.score for x in all_triplets]   
+            scores = [-x.score for x in all_pairs]   
             ranking = rankdata(scores, method='average')
 
             hits = 0
             ranks = {}
             
-            for grouped_triplet in list(grouped_triplets_gt):
-                idx = all_triplets.index(grouped_triplet)
+            for grouped_pair in list(grouped_pairs_gt):
+                idx = all_pairs.index(grouped_pair)
                 rank = ranking[idx]
 
                 if rank <= k:
@@ -258,24 +282,24 @@ class WalkRdfOwl(Model):
                     ranks[rank] = 0
                 ranks[rank] += 1
 
-            ent1_rels[(ent1, rel)] = (hits, ranks)
+            entities_1[node1] = (hits, ranks)
 
 
-        hits = map(lambda x: x[0], ent1_rels.values())
+        hits = map(lambda x: x[0], entities_1.values())
         hits =  reduce(lambda x,y: x+y, hits)
 
-        ranks = map(lambda x: x[1], ent1_rels.values())
+        ranks = map(lambda x: x[1], entities_1.values())
         ranks = list(map(lambda x: Counter(x), ranks))
         ranks = dict(reduce(lambda x,y: x+y, ranks))
 
-        result = hits/len(triplets_pred)
+        result = hits/len(preds)
 
-        rank_auc = compute_rank_roc(ranks,len(entities))
+        rank_auc = self.compute_rank_roc(ranks,len(entities))
 
         return result, rank_auc
 
 
-    def compute_rank_roc(ranks, n_entities):
+    def compute_rank_roc(self, ranks, n_entities):
 
         auc_x = list(ranks.keys())
         auc_x.sort()
@@ -289,3 +313,7 @@ class WalkRdfOwl(Model):
         auc_y.append(1)
         auc = np.trapz(auc_y, auc_x) 
         return auc/n_entities
+
+
+    def evaluate(self):
+        print(self.compute_metrics(3))
