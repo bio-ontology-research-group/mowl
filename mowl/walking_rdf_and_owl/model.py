@@ -223,10 +223,13 @@ class WalkRdfOwl(Model):
         preds = []
         for i in range(len(vocab)):
             word1 = vocab[i]
-            for j in range(len(vocab)):
-                word2 = vocab[j]
-                if word1 != word2:
-                    preds.append(self.Pair(word1, word2, 0))
+            if 'http://4932.' in word1:
+                for j in range(len(vocab)):
+                    word2 = vocab[j]
+                    if word1 != word2 and 'http://4932.' in word2:
+                       
+                        similarity = embeddings.similarity(word1, word2)
+                        preds.append(self.Pair(word1, word2, similarity))
 
         return preds
 
@@ -234,8 +237,8 @@ class WalkRdfOwl(Model):
     def format_test_set(self):
         test_set = self.dataset.testing
 
-        test_set = np.delete(test_set, 1, 1)
-        test_set = np.insert(test_set, 2, values=0, axis=1)
+        test_set = np.delete(test_set, 1, 1) # remove column with index 1. This column corresponds to the relation
+        test_set = np.insert(test_set, 2, values=0, axis=1) # insert column with scores
         test_set = map(lambda x: self.Pair(x[0], x[1], x[2]), test_set)
         return list(test_set)
 
@@ -313,7 +316,6 @@ class WalkRdfOwl(Model):
         auc_y.append(1)
         auc = np.trapz(auc_y, auc_x) 
         return auc/n_entities
-
 
     def evaluate(self):
         print(self.compute_metrics(3))

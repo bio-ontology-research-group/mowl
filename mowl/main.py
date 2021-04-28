@@ -26,9 +26,9 @@ def main():
                         length_walk = 20, 
                         embedding_size=20)
 #    model = ELEmbeddings(ds)
-    model.train()
+   # model.train()
 
-    #model.evaluate()
+    model.evaluate()
 
 if __name__ == '__main__':
     main()
