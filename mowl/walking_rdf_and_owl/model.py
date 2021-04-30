@@ -216,32 +216,34 @@ class WalkRdfOwl(Model):
             return hash(self.__key())
 
     def generate_predictions(self):
-
+        print("Generating predictions...")
+        num = 1000
         embeddings = KeyedVectors.load(self.embeddings_file_path)
         vocab = embeddings.index_to_key
-        
         preds = []
         for i in range(len(vocab)):
             word1 = vocab[i]
-            if 'http://4932.' in word1:
+            if 'http://4932.' in word1 and num >0:
+                num -=1
                 for j in range(len(vocab)):
                     word2 = vocab[j]
                     if word1 != word2 and 'http://4932.' in word2:
-                       
                         similarity = embeddings.similarity(word1, word2)
                         preds.append(self.Pair(word1, word2, similarity))
-
+            elif num <= 0:
+                break
         return preds
 
 
     def format_test_set(self):
+        print("Formatting ground truth data set...")
         test_set = self.dataset.testing
 
         test_set = np.delete(test_set, 1, 1) # remove column with index 1. This column corresponds to the relation
-        test_set = np.insert(test_set, 2, values=0, axis=1) # insert column with scores
-        test_set = map(lambda x: self.Pair(x[0], x[1], x[2]), test_set)
+#        test_set = np.insert(test_set, 2, values=0, axis=1) # insert column with scores
+        test_set = map(lambda x: self.Pair(x[0][1:-1], x[1][1:-1]), test_set)
         return list(test_set)
-
+ 
 
     def compute_metrics(self, k):
         #Computes hits@k and AUC
@@ -249,6 +251,7 @@ class WalkRdfOwl(Model):
         preds = self.generate_predictions() # list (node 1, node 2, score)
 
         ground_truth = self.format_test_set() # list (node 1, node 2, score)
+        print("GROUND TRUTH: ", ground_truth[0])
 
         
         entities = set([pair.node1 for pair in preds] + [pair.node2 for pair in preds] + [pair.node1 for pair in ground_truth] + [pair.node2 for pair in ground_truth])
@@ -263,9 +266,11 @@ class WalkRdfOwl(Model):
                 continue
 
             #Extract triplets with fixed entity 1
-            grouped_pairs_gt   = set(filter(lambda x: x.node1 == node1 , ground_truth))
-            grouped_pairs_pred = set(filter(lambda x: x.node1 == node1 , preds))
+            grouped_pairs_gt   = {x for x in ground_truth if x.node1 == node1} #set(filter(lambda x: x.node1 == node1 , ground_truth))
+            grouped_pairs_pred = {x for x in preds if x.node1 == node1} #set(filter(lambda x: x.node1 == node1 , preds))
+        
 
+           # print(f"Length preds: {len(grouped_pairs_pred)}")
             all_pairs = ({self.Pair(node1, ent2, 0) for ent2 in entities} - grouped_pairs_pred).union(grouped_pairs_pred)
             all_pairs = list(all_pairs)
 
@@ -278,7 +283,8 @@ class WalkRdfOwl(Model):
             for grouped_pair in list(grouped_pairs_gt):
                 idx = all_pairs.index(grouped_pair)
                 rank = ranking[idx]
-
+                if(scores[idx] > 0):
+                    print(f"Rank is {rank}. Score is {scores[idx]}")
                 if rank <= k:
                     hits+=1
                 if not rank in ranks:
