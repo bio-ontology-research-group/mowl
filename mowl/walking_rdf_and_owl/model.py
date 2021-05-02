@@ -5,10 +5,12 @@ import time
 import numpy as np
 import gzip
 import subprocess
+import multiprocessing as mp
 from functools import reduce
 import operator
 from scipy.stats import rankdata
 from collections import Counter
+from functools import partial
 
 import jpype
 import jpype.imports
@@ -215,23 +217,49 @@ class WalkRdfOwl(Model):
         def __hash__(self):
             return hash(self.__key())
 
+
+  
+
     def generate_predictions(self):
         print("Generating predictions...")
-        num = 1000
+        start = time.time()
+        num = 10
         embeddings = KeyedVectors.load(self.embeddings_file_path)
         vocab = embeddings.index_to_key
-        preds = ArrayList()
-        for i in range(len(vocab)):
-            word1 = vocab[i]
-            if 'http://4932.' in word1 and num >0:
-                num -=1
-                for j in range(len(vocab)):
-                    word2 = vocab[j]
-                    if word1 != word2 and 'http://4932.' in word2:
-                        similarity = embeddings.similarity(word1, word2)
-                        preds.add(ArrayList([word1, word2, str(similarity)]))
-            elif num <= 0:
-                break
+        preds = ArrayList
+
+        n_cores = os.cpu_count()
+
+
+        p = mp.Pool(initializer=init_worker, initargs=(embeddings))
+
+        for _ in p.imap_unordered(gen_pred, vocab):
+            pass
+        p.close()
+        p.join()
+
+
+        # with Pool(n_cores) as p:
+        #     preds_list = p.map(partial(gen_pred, embeddings), vocab)
+        # for i in range(len(vocab)):
+        #     word1 = vocab[i]
+        #     if 'http://4932.' in word1 and num >0:
+        #         #num -=1
+        #         for j in range(len(vocab)):
+        #             word2 = vocab[j]
+        #             if word1 != word2 and 'http://4932.' in word2:
+        #                 similarity = embeddings.similarity(word1, word2)
+        #                 preds.add(ArrayList([word1, word2, str(similarity)]))
+        #     elif num <= 0:
+        #         break
+
+        for p in preds_list:
+            p = [ArrayList(pair) for pair in p]
+            preds.addAll(p)
+
+
+        end = time.time()
+        print(f"Predictions generated in {end-start} seconds")
         return preds
 
 
@@ -255,12 +283,12 @@ class WalkRdfOwl(Model):
         preds = self.generate_predictions() # list (node 1, node 2, score)
 
         ground_truth = self.format_test_set() # list (node 1, node 2, score)
-        print("GROUND TRUTH: ", len(preds))
+        print("Predictions: ", len(preds))
         print("GROUND TRUTH: ", len(ground_truth))
 
         
         entities = ArrayList()
-        entities_ = set([pair[0] for pair in preds] + [pair[1] for pair in preds] + [pair[0] for pair in ground_truth] + [pair[1] for pair in ground_truth])
+        entities_ = {pair[0] for pair in preds + ground_truth}.union({pair[1] for pair in preds + ground_truth})
         for node in entities_:
             entities.add(node)
 
@@ -359,3 +387,23 @@ class WalkRdfOwl(Model):
 
     def evaluate(self):
         print(self.compute_metrics(3))
+
+def init_worker(embedds):
+    global embeddings
+
+    print( "process initializing", mp.current_process())
+    embeddings = embedds
+
+
+def gen_pred(word1):
+    preds = []
+    if 'http://4932.' in word1:
+        #num -=1
+        vocab = embeddings.index_to_key
+        for j in range(len(vocab)):
+            word2 = vocab[j]
+            if word1 != word2 and 'http://4932.' in word2:
+                similarity = embeddings.similarity(word1, word2)
+                preds.append([word1, word2, str(similarity)])
+    
+    return preds

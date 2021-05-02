@@ -71,12 +71,14 @@ public class WROEval implements Runnable{
         @Override
         public boolean equals(Object o) {
             if (this == o) return true;
-    
-            if (o == null || getClass() != o.getClass()) return false;
-    
+            if (o == null || getClass() != o.getClass()) return false;    
             Pair other = (Pair) o;
-    
             return subj.equals(other.subj) && obj.equals(other.obj);
+        }
+
+        @Override
+        public int hashCode(){
+            return (int) subj.hashCode() * obj.hashCode();
         }
     }
 
@@ -89,25 +91,37 @@ public class WROEval implements Runnable{
 
         //Extract triplets with fixed subj
         Set<Pair> grouped_pairs_gt = groundTruth.stream()
-                                                .filter(x -> x.get(0) == subj)
+                                                .filter(x -> x.get(0).equals(subj))
                                                 .map(x -> new Pair(x))
                                                 .collect(Collectors.toSet());
 
         Set<Pair> grouped_pairs_pred = predictions.stream()
-                                                .filter(x -> x.get(0) == subj)
+                                                .filter(x -> x.get(0).equals(subj))
                                                 .map(x -> new Pair(x.get(0), x.get(1), x.get(2)))
                                                 .collect(Collectors.toSet());
+        
+        // predictions.stream().forEach((x) -> {
+        //     System.out.println(x);
+        // });
 
-        // Set<Pair> grouped_pairs_pred_aux = grouped_pairs_pred.stream()
-        //                                         .map(x -> new Pair(x.subj, x.obj, 0))
-        //                                         .collect(Collectors.toSet());
+        //System.out.println(subj +" " + predictions.get(0).get(0) + "\n");
+        Set<Pair> grouped_pairs_pred_aux = grouped_pairs_pred.stream()
+                                                .map(x -> new Pair(x.subj, x.obj, 0))
+                                                .collect(Collectors.toSet());
 
         HashSet<Pair> all_pairs = new HashSet<>();
         for(int i=0; i<subjects.size(); i++){
             all_pairs.add(new Pair(subj, subjects.get(i), 0));
         }
-        all_pairs.removeAll(grouped_pairs_pred);
+        //System.out.println("Total number of pairs: " + all_pairs.size());
+       // System.out.println("Total number of pairs pred: " + grouped_pairs_pred.size());
+
+        all_pairs.removeAll(grouped_pairs_pred_aux);
+        //System.out.println("Total number of pairs (no pred): " + all_pairs.size());
         all_pairs.addAll(grouped_pairs_pred);
+        //System.out.println("Total number of pairs (pred): " + all_pairs.size());
+        //System.out.println();
+
 
 
         List<Pair> grouped_pairs_gt_list = new ArrayList<Pair>(grouped_pairs_gt);
@@ -116,6 +130,9 @@ public class WROEval implements Runnable{
         List<Float> scores = all_pairs.stream()
         .map(x -> -x.score).
         collect(Collectors.toList());
+
+
+//        System.out.println("Sum of scores: " + scores.stream().reduce((float) 0, (acc, elem) -> acc + elem));
 
         float[] ranking = rankify(scores, scores.size());
         // for (int i = 0; i < scores.size(); i++)
@@ -127,10 +144,12 @@ public class WROEval implements Runnable{
             Pair grouped_pair = grouped_pairs_gt_list.get(i);
             
             int idx = all_pairs_list.indexOf(grouped_pair);
-            System.out.println("Index is " + idx + "\t\tScore is " + scores.get(idx) + "\t\tRank is " + ranking[idx]);
+            //System.out.println("Index is " + idx + "\t\tScore is " + scores.get(idx) + "\t\tRank is " + ranking[idx]);
                
             float rank = ranking[idx];
             if(rank <= k){
+                //System.out.println("Index is " + idx + "\t\tScore is " + scores.get(idx) + "\t\tRank is " + ranking[idx]);
+            
                 hits++;
             }
             if(! ranks.containsKey(rank))
