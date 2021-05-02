@@ -27,7 +27,7 @@ from java.util import HashMap, ArrayList
 from java.util.concurrent import ExecutorService  
 from java.util.concurrent import Executors  
 
-from org.mowl import WorkerThread
+from org.mowl import WorkerThread, WROEval
 
 
 jars_dir = "../gateway/build/distributions/gateway/lib/"
@@ -195,10 +195,10 @@ class WalkRdfOwl(Model):
 
     class Pair():
         
-        def __init__(self, node1, node2, score = 0):
+        def __init__(self, node1, node2, score = "0"):
             self.node1 = node1
             self.node2 = node2
-            self.score = float(score)
+            self.score = score
 
         def __repr__(self):
             return '\t'.join((self.node1, self.node2, str(self.score)))
@@ -220,7 +220,7 @@ class WalkRdfOwl(Model):
         num = 1000
         embeddings = KeyedVectors.load(self.embeddings_file_path)
         vocab = embeddings.index_to_key
-        preds = []
+        preds = ArrayList()
         for i in range(len(vocab)):
             word1 = vocab[i]
             if 'http://4932.' in word1 and num >0:
@@ -229,7 +229,7 @@ class WalkRdfOwl(Model):
                     word2 = vocab[j]
                     if word1 != word2 and 'http://4932.' in word2:
                         similarity = embeddings.similarity(word1, word2)
-                        preds.append(self.Pair(word1, word2, similarity))
+                        preds.add(ArrayList([word1, word2, str(similarity)]))
             elif num <= 0:
                 break
         return preds
@@ -240,9 +240,13 @@ class WalkRdfOwl(Model):
         test_set = self.dataset.testing
 
         test_set = np.delete(test_set, 1, 1) # remove column with index 1. This column corresponds to the relation
-#        test_set = np.insert(test_set, 2, values=0, axis=1) # insert column with scores
-        test_set = map(lambda x: self.Pair(x[0][1:-1], x[1][1:-1]), test_set)
-        return list(test_set)
+        test_set = [[x[0][1:-1], x[1][1:-1], "0"] for x in test_set]
+        _test_set = ArrayList()
+        
+        for x in test_set:
+            _test_set.add(ArrayList(x))
+        #_test_set.add(ArrayList(["a", "b", "0"]))
+        return _test_set
  
 
     def compute_metrics(self, k):
@@ -251,53 +255,83 @@ class WalkRdfOwl(Model):
         preds = self.generate_predictions() # list (node 1, node 2, score)
 
         ground_truth = self.format_test_set() # list (node 1, node 2, score)
-        print("GROUND TRUTH: ", ground_truth[0])
+        print("GROUND TRUTH: ", len(preds))
+        print("GROUND TRUTH: ", len(ground_truth))
 
         
-        entities = set([pair.node1 for pair in preds] + [pair.node2 for pair in preds] + [pair.node1 for pair in ground_truth] + [pair.node2 for pair in ground_truth])
-       
-        entities_1 = {}
+        entities = ArrayList()
+        entities_ = set([pair[0] for pair in preds] + [pair[1] for pair in preds] + [pair[0] for pair in ground_truth] + [pair[1] for pair in ground_truth])
+        for node in entities_:
+            entities.add(node)
+
+        dict_subj_hits = HashMap()
+        dict_subj_ranks = HashMap()
+
+        print("Started evaluation...")
+        start = time.time()
+        n_cores = os.cpu_count()
+
+        executor =  Executors.newFixedThreadPool(n_cores)
+
+        with jpype.synchronized(ground_truth):
+            with jpype.synchronized(preds):
+                with jpype.synchronized(entities):
+                    with jpype.synchronized(dict_subj_hits): 
+                        with jpype.synchronized(dict_subj_ranks):
+                            for pair in ground_truth:
+                                worker = WROEval(pair, k, ground_truth, preds, entities, dict_subj_hits, dict_subj_ranks)
+                                executor.execute(worker)
+                                
+                            executor.shutdown()
+
+        while not executor.isTerminated():
+            continue
+
+        if (executor.isTerminated()):
+            end = time.time()
+            print(f"Evaluation finished in {end-start} seconds")
+            # do smthng
 
 #        for triplet_gt in triplets_gt:
-        for pair in ground_truth:
-            #ent1, rel = triplet_gt.entity_1, triplet_gt.relation
-            node1 = pair.node1
-            if node1 in entities_1:
-                continue
+        # for pair in ground_truth:
+        #     #ent1, rel = triplet_gt.entity_1, triplet_gt.relation
+        #     node1 = pair.node1
+        #     if node1 in entities_1:
+        #         continue
 
-            #Extract triplets with fixed entity 1
-            grouped_pairs_gt   = {x for x in ground_truth if x.node1 == node1} #set(filter(lambda x: x.node1 == node1 , ground_truth))
-            grouped_pairs_pred = {x for x in preds if x.node1 == node1} #set(filter(lambda x: x.node1 == node1 , preds))
+        #     #Extract triplets with fixed entity 1
+        #     grouped_pairs_gt   = {x for x in ground_truth if x.node1 == node1} #set(filter(lambda x: x.node1 == node1 , ground_truth))
+        #     grouped_pairs_pred = {x for x in preds if x.node1 == node1} #set(filter(lambda x: x.node1 == node1 , preds))
         
 
-           # print(f"Length preds: {len(grouped_pairs_pred)}")
-            all_pairs = ({self.Pair(node1, ent2, 0) for ent2 in entities} - grouped_pairs_pred).union(grouped_pairs_pred)
-            all_pairs = list(all_pairs)
+        #    # print(f"Length preds: {len(grouped_pairs_pred)}")
+        #     all_pairs = ({self.Pair(node1, ent2, 0) for ent2 in entities} - grouped_pairs_pred).union(grouped_pairs_pred)
+        #     all_pairs = list(all_pairs)
 
-            scores = [-x.score for x in all_pairs]   
-            ranking = rankdata(scores, method='average')
+        #     scores = [-x.score for x in all_pairs]   
+        #     ranking = rankdata(scores, method='average')
 
-            hits = 0
-            ranks = {}
+        #     hits = 0
+        #     ranks = {}
             
-            for grouped_pair in list(grouped_pairs_gt):
-                idx = all_pairs.index(grouped_pair)
-                rank = ranking[idx]
-                if(scores[idx] > 0):
-                    print(f"Rank is {rank}. Score is {scores[idx]}")
-                if rank <= k:
-                    hits+=1
-                if not rank in ranks:
-                    ranks[rank] = 0
-                ranks[rank] += 1
+        #     for grouped_pair in list(grouped_pairs_gt):
+        #         idx = all_pairs.index(grouped_pair)
+        #         rank = ranking[idx]
+        #         if(scores[idx] > 0):
+        #             print(f"Rank is {rank}. Score is {scores[idx]}")
+        #         if rank <= k:
+        #             hits+=1
+        #         if not rank in ranks:
+        #             ranks[rank] = 0
+        #         ranks[rank] += 1
 
-            entities_1[node1] = (hits, ranks)
+        #     entities_1[node1] = (hits, ranks)
 
 
-        hits = map(lambda x: x[0], entities_1.values())
+        hits = dict_subj_hits.values()
         hits =  reduce(lambda x,y: x+y, hits)
 
-        ranks = map(lambda x: x[1], entities_1.values())
+        ranks = dict_subj_ranks.values()
         ranks = list(map(lambda x: Counter(x), ranks))
         ranks = dict(reduce(lambda x,y: x+y, ranks))
 
