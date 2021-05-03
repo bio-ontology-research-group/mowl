@@ -18,7 +18,7 @@ import jpype.imports
 from gensim.models import Word2Vec, KeyedVectors
 from gensim.models.word2vec import LineSentence
 
-from java.lang import Runnable, Thread
+from java.lang import Runnable, Thread, Object
 from java.io import PipedInputStream, PipedOutputStream, File
 
 from org.semanticweb.owlapi.model import IRI
@@ -218,7 +218,28 @@ class WalkRdfOwl(Model):
             return hash(self.__key())
 
 
-  
+    @jpype.JImplements(Runnable)
+    class GenPred():
+
+        def __init__(self, word1, vocab, dict_vocab, preds):
+            self.word1 = word1
+            self.vocab = vocab
+            self.dict_vocab = dict_vocab
+
+        @jpype.JOverride
+        def run():
+            if 'http://4932.' in word1 and num >0:
+                #num -=1
+                for j in range(len(vocab)):
+                    word2 = vocab[j]
+                    if word1 != word2 and 'http://4932.' in word2:
+                        similarity = similarity(dict_vocab.get(word1), dict_vocab(word2))
+                        with synchronized(lock):
+                            preds.add(ArrayList([word1, word2, str(similarity)]))        
+        lock = Object()
+
+    def similarity(vec1, vec2):
+        return np.dot(a, b)/(np.linalg.norm(a)*np.linalg.norm(b))
 
     def generate_predictions(self):
         print("Generating predictions...")
@@ -226,22 +247,14 @@ class WalkRdfOwl(Model):
         num = 10
         embeddings = KeyedVectors.load(self.embeddings_file_path)
         vocab = embeddings.index_to_key
-        preds = ArrayList
+        dict_vocab = HashMap()
+        
+        for word in vocab:
+            dict_vocab.put(word, ArrayList(list(embeddings.get_vector(word))))
 
-        n_cores = os.cpu_count()
+        preds = ArrayList()
 
-
-        p = mp.Pool(initializer=init_worker, initargs=(embeddings))
-
-        for _ in p.imap_unordered(gen_pred, vocab):
-            pass
-        p.close()
-        p.join()
-
-
-        # with Pool(n_cores) as p:
-        #     preds_list = p.map(partial(gen_pred, embeddings), vocab)
-        # for i in range(len(vocab)):
+                # for i in range(len(vocab)):
         #     word1 = vocab[i]
         #     if 'http://4932.' in word1 and num >0:
         #         #num -=1
@@ -252,6 +265,28 @@ class WalkRdfOwl(Model):
         #                 preds.add(ArrayList([word1, word2, str(similarity)]))
         #     elif num <= 0:
         #         break
+
+        n_cores = os.cpu_count()
+
+        executor =  Executors.newFixedThreadPool(n_cores)
+
+        with jpype.synchronized(preds):
+            with jpype.synchronized(dict_vocab):
+                for word1 in vocab:
+                    worker = self.GenPred(word1, vocab, dict_vocab, preds)
+                    executor.execute(worker)
+                    
+                executor.shutdown()
+
+        while not executor.isTerminated():
+            continue
+
+        if (executor.isTerminated()):
+            end = time.time()
+            print(f"Prediction generated in {end-start} seconds")
+            # do smthng
+
+
 
         for p in preds_list:
             p = [ArrayList(pair) for pair in p]
@@ -388,22 +423,3 @@ class WalkRdfOwl(Model):
     def evaluate(self):
         print(self.compute_metrics(3))
 
-def init_worker(embedds):
-    global embeddings
-
-    print( "process initializing", mp.current_process())
-    embeddings = embedds
-
-
-def gen_pred(word1):
-    preds = []
-    if 'http://4932.' in word1:
-        #num -=1
-        vocab = embeddings.index_to_key
-        for j in range(len(vocab)):
-            word2 = vocab[j]
-            if word1 != word2 and 'http://4932.' in word2:
-                similarity = embeddings.similarity(word1, word2)
-                preds.append([word1, word2, str(similarity)])
-    
-    return preds
