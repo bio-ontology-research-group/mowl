@@ -29,7 +29,7 @@ from java.util import HashMap, ArrayList
 from java.util.concurrent import ExecutorService  
 from java.util.concurrent import Executors  
 
-from org.mowl import WorkerThread, WROEval
+from org.mowl import WorkerThread, WROEval, GenPred
 
 
 jars_dir = "../gateway/build/distributions/gateway/lib/"
@@ -218,28 +218,6 @@ class WalkRdfOwl(Model):
             return hash(self.__key())
 
 
-    @jpype.JImplements(Runnable)
-    class GenPred():
-
-        def __init__(self, word1, vocab, dict_vocab, preds):
-            self.word1 = word1
-            self.vocab = vocab
-            self.dict_vocab = dict_vocab
-
-        @jpype.JOverride
-        def run():
-            if 'http://4932.' in word1 and num >0:
-                #num -=1
-                for j in range(len(vocab)):
-                    word2 = vocab[j]
-                    if word1 != word2 and 'http://4932.' in word2:
-                        similarity = similarity(dict_vocab.get(word1), dict_vocab(word2))
-                        with synchronized(lock):
-                            preds.add(ArrayList([word1, word2, str(similarity)]))        
-        lock = Object()
-
-    def similarity(vec1, vec2):
-        return np.dot(a, b)/(np.linalg.norm(a)*np.linalg.norm(b))
 
     def generate_predictions(self):
         print("Generating predictions...")
@@ -273,7 +251,7 @@ class WalkRdfOwl(Model):
         with jpype.synchronized(preds):
             with jpype.synchronized(dict_vocab):
                 for word1 in vocab:
-                    worker = self.GenPred(word1, vocab, dict_vocab, preds)
+                    worker = GenPred(word1, dict_vocab, preds)
                     executor.execute(worker)
                     
                 executor.shutdown()
@@ -281,16 +259,16 @@ class WalkRdfOwl(Model):
         while not executor.isTerminated():
             continue
 
-        if (executor.isTerminated()):
-            end = time.time()
-            print(f"Prediction generated in {end-start} seconds")
-            # do smthng
+        # if (executor.isTerminated()):
+        #     end = time.time()
+        #     print(f"Predictions generated in {end-start} seconds")
+        #     # do smthng
 
 
 
-        for p in preds_list:
-            p = [ArrayList(pair) for pair in p]
-            preds.addAll(p)
+        preds_concat = ArrayList()
+        for p in preds:
+            preds_concat.addAll(p)
 
 
         end = time.time()
@@ -319,9 +297,11 @@ class WalkRdfOwl(Model):
 
         ground_truth = self.format_test_set() # list (node 1, node 2, score)
         print("Predictions: ", len(preds))
-        print("GROUND TRUTH: ", len(ground_truth))
+        print("Ground truth: ", len(ground_truth))
 
         
+        #### BOTTLENECK
+        start = time.time()
         entities = ArrayList()
         entities_ = {pair[0] for pair in preds + ground_truth}.union({pair[1] for pair in preds + ground_truth})
         for node in entities_:
@@ -329,6 +309,10 @@ class WalkRdfOwl(Model):
 
         dict_subj_hits = HashMap()
         dict_subj_ranks = HashMap()
+        end = time.time()
+        print(f"Time in bottleneck is {end-start}")
+        ############
+
 
         print("Started evaluation...")
         start = time.time()
