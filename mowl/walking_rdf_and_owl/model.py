@@ -49,10 +49,11 @@ class WalkRdfOwl(Model):
                     embeddings_file_path, 
                     number_walks, 
                     length_walk, 
-                    undirected=True, 
-                    embedding_size=100, 
-                    window=3, 
-                    min_count = 5):
+                    embedding_size, 
+                    window, 
+                    min_count,
+                    undirected=False
+):
 
         super().__init__(dataset)    
         self.corpus_file_path = corpus_file_path
@@ -94,9 +95,9 @@ class WalkRdfOwl(Model):
             obj =  stmt.getObject()
 
             if (subj.isURIResource() and obj.isURIResource()):
-                pred = str(stmt.getPredicate())
-                subj = str(stmt.getSubject())
-                obj =  str(stmt.getObject())
+                pred = str(pred)
+                subj = str(subj)
+                obj =  str(obj)
 
                 neighbor = ArrayList()
                 neighbor.add(pred)
@@ -248,6 +249,7 @@ class WalkRdfOwl(Model):
 
         executor =  Executors.newFixedThreadPool(n_cores)
 
+        print("\tStarting parallel tasks...")
         with jpype.synchronized(preds):
             with jpype.synchronized(dict_vocab):
                 for word1 in vocab:
@@ -405,5 +407,5 @@ class WalkRdfOwl(Model):
         return auc/n_entities
 
     def evaluate(self):
-        print(self.compute_metrics(3))
+        print(self.compute_metrics(10))
 

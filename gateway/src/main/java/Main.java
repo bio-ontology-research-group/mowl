@@ -23,6 +23,7 @@ import org.semanticweb.elk.owlapi.ElkReasonerConfiguration;
 import org.mowl.Onto2VecShortFormProvider;
 import org.mowl.WorkerThread;
 import org.mowl.WROEval;
+import org.mowl.GenPred;
 
 
 public class Main {

@@ -51,8 +51,9 @@ public class WorkerThread implements Runnable{
                 walk.add(this.source);
                 walks.put(i, walk);
                 while(count > 0){
-                    int curr_node_length = this.graph.get(current).size();
-                    if(curr_node_length > 0){ // # if there are outgoing edges
+                    if(this.graph.get(current) != null && this.graph.get(current).size() > 0){ // # if there are outgoing edges
+                        int curr_node_length = this.graph.get(current).size();
+
                         int random_val = getRandomNumber(0, curr_node_length);
                         ArrayList<String> neighbor = this.graph.get(current).get(random_val);
                         String edge = neighbor.get(0);
