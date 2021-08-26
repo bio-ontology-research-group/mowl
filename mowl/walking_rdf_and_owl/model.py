@@ -26,8 +26,7 @@ from org.apache.jena.rdf.model import ModelFactory
 from org.apache.jena.util import FileManager
 
 from java.util import HashMap, ArrayList
-from java.util.concurrent import ExecutorService  
-from java.util.concurrent import Executors  
+from java.util.concurrent import ExecutorService, Executors
 
 from org.mowl import WorkerThread, WROEval, GenPred
 
@@ -223,29 +222,16 @@ class WalkRdfOwl(Model):
     def generate_predictions(self):
         print("Generating predictions...")
         start = time.time()
-        num = 10
+        num = 10            
+        n_cores = os.cpu_count()
         embeddings = KeyedVectors.load(self.embeddings_file_path)
         vocab = embeddings.index_to_key
-        dict_vocab = HashMap()
+        dict_vocab = HashMap() #n_cores, 0.75, n_cores)
         
         for word in vocab:
             dict_vocab.put(word, ArrayList(list(embeddings.get_vector(word))))
 
         preds = ArrayList()
-
-                # for i in range(len(vocab)):
-        #     word1 = vocab[i]
-        #     if 'http://4932.' in word1 and num >0:
-        #         #num -=1
-        #         for j in range(len(vocab)):
-        #             word2 = vocab[j]
-        #             if word1 != word2 and 'http://4932.' in word2:
-        #                 similarity = embeddings.similarity(word1, word2)
-        #                 preds.add(ArrayList([word1, word2, str(similarity)]))
-        #     elif num <= 0:
-        #         break
-
-        n_cores = os.cpu_count()
 
         executor =  Executors.newFixedThreadPool(n_cores)
 

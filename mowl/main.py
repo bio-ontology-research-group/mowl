@@ -22,17 +22,16 @@ from mowl.walking_rdf_and_owl.model import WalkRdfOwl
 def main():
     ds = PPIYeastDataset()
     model = WalkRdfOwl(ds, 'data/walk_rdf_corpus.txt', 'data/walk_rdf_embeddings.wordvectors', 
-                        number_walks = 100,#500, 
-                        length_walk = 20,#40, 
-                        embedding_size= 50,##256,
+                        number_walks = 10, #500, 
+                        length_walk = 5,# 40, 
+                        embedding_size= 10, #256,
                         window = 5,
                         min_count = 5)
 #    model = ELEmbeddings(ds)
-    #model.train()
+    model.train()
 
-    model.evaluate()
-#    n_cores = os.cpu_count()
-#    print("Number of cores ", n_cores)
+    #model.evaluate()
+
 
 if __name__ == '__main__':
     main()

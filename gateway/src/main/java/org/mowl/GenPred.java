@@ -41,7 +41,7 @@ public class GenPred implements Runnable{
                     synchronized(lock){
                         preds.add(triple);
                         try{
-                            writeToFile(word1+ ", " + word2 + ", " + String.valueOf(distance) + "\n", "Predictions.txt");
+                            writeToFile(word1+ ", " + word2 + ", " + String.valueOf(distance) + "\n", "data/Predictions.txt");
                         }catch(IOException e) {
                             e.printStackTrace();
                         }
@@ -65,7 +65,7 @@ public class GenPred implements Runnable{
 
         BufferedWriter writer = new BufferedWriter(new FileWriter(out_file, true));
         writer.append(to_print);
-        writer.close();    
+        writer.close();   
     }
 
 
