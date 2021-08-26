@@ -9,3 +9,6 @@ gateway/.gradle/
 **/test_data
 **/boost
 *.class
+
+*.err
+*.out
