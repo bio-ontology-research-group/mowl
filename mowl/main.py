@@ -28,9 +28,9 @@ def main():
                         window = 5,
                         min_count = 5)
 #    model = ELEmbeddings(ds)
-    model.train()
+    #model.train()
 
-    #model.evaluate()
+    model.evaluate()
 
 
 if __name__ == '__main__':

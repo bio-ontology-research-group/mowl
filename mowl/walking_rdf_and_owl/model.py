@@ -235,6 +235,7 @@ class WalkRdfOwl(Model):
 
         executor =  Executors.newFixedThreadPool(n_cores)
 
+
         print("\tStarting parallel tasks...")
         with jpype.synchronized(preds):
             with jpype.synchronized(dict_vocab):
@@ -246,13 +247,6 @@ class WalkRdfOwl(Model):
 
         while not executor.isTerminated():
             continue
-
-        # if (executor.isTerminated()):
-        #     end = time.time()
-        #     print(f"Predictions generated in {end-start} seconds")
-        #     # do smthng
-
-
 
         preds_concat = ArrayList()
         for p in preds:
@@ -327,40 +321,6 @@ class WalkRdfOwl(Model):
             print(f"Evaluation finished in {end-start} seconds")
             # do smthng
 
-#        for triplet_gt in triplets_gt:
-        # for pair in ground_truth:
-        #     #ent1, rel = triplet_gt.entity_1, triplet_gt.relation
-        #     node1 = pair.node1
-        #     if node1 in entities_1:
-        #         continue
-
-        #     #Extract triplets with fixed entity 1
-        #     grouped_pairs_gt   = {x for x in ground_truth if x.node1 == node1} #set(filter(lambda x: x.node1 == node1 , ground_truth))
-        #     grouped_pairs_pred = {x for x in preds if x.node1 == node1} #set(filter(lambda x: x.node1 == node1 , preds))
-        
-
-        #    # print(f"Length preds: {len(grouped_pairs_pred)}")
-        #     all_pairs = ({self.Pair(node1, ent2, 0) for ent2 in entities} - grouped_pairs_pred).union(grouped_pairs_pred)
-        #     all_pairs = list(all_pairs)
-
-        #     scores = [-x.score for x in all_pairs]   
-        #     ranking = rankdata(scores, method='average')
-
-        #     hits = 0
-        #     ranks = {}
-            
-        #     for grouped_pair in list(grouped_pairs_gt):
-        #         idx = all_pairs.index(grouped_pair)
-        #         rank = ranking[idx]
-        #         if(scores[idx] > 0):
-        #             print(f"Rank is {rank}. Score is {scores[idx]}")
-        #         if rank <= k:
-        #             hits+=1
-        #         if not rank in ranks:
-        #             ranks[rank] = 0
-        #         ranks[rank] += 1
-
-        #     entities_1[node1] = (hits, ranks)
 
 
         hits = dict_subj_hits.values()
