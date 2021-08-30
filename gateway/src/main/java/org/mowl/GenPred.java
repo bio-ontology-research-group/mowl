@@ -14,13 +14,15 @@ public class GenPred implements Runnable{
     
     String word1;
     ArrayList<String> vocab;
+    ArrayList<String> relations;
     HashMap<String, ArrayList<Float>> dict_vocab;
     ArrayList<ArrayList<String>> preds;
 
-    public GenPred(String word1, HashMap<String, ArrayList<Float>> dict_vocab, ArrayList<ArrayList<String>> preds){
+    public GenPred(String word1, HashMap<String, ArrayList<Float>> dict_vocab, ArrayList<String> relations, ArrayList<ArrayList<String>> preds){
         this.word1 = word1;
         this.vocab = new ArrayList<>(dict_vocab.keySet());
         this.dict_vocab = dict_vocab;
+	this.relations = relations;
         this.preds = preds;
     }
         

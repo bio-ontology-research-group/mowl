@@ -25,6 +25,7 @@ import org.mowl.WorkerThread;
 import org.mowl.WROEval;
 import org.mowl.GenPred;
 
+import org.mowl.Hello;
 
 public class Main {
 
@@ -40,6 +41,9 @@ public class Main {
     }
 
     public static void main(String[] args) {
+
+	Hello h = new Hello();
+	h.printHello();
 	Main main = new Main();
 	JCommander jcom = JCommander.newBuilder()
             .addObject(main)
