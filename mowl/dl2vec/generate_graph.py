@@ -181,7 +181,7 @@ def convert_graph(data):
         return new_result
 
 
-def generate_graph(annotation,ontology_file, format='networkx'):
+def generate_graph(annotation_file ,ontology_file, format='networkx'):
 
     ont = Ont(ontology_file, "elk")
     ont.processOntology()
@@ -206,7 +206,7 @@ def generate_graph(annotation,ontology_file, format='networkx'):
             G.nodes[entities[0].strip()]["val"] = False
             G.nodes[entities[2].strip()]["val"] = False
 
-    with open(annotation, "r") as f:
+    with open(annotation_file, "r") as f:
         for line in f.readlines():
             entities = line.split()
             G.add_edge(entities[0].strip(), entities[1].strip())
