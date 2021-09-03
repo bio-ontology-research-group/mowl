@@ -21,8 +21,8 @@ class GNNSim(Model):
                  num_bases,
                  batch_size,
                  epochs,
-                 graph_generation_method = "tax", #Default: generate graph taxonomy
-                 method_file_params = None #Dictionary of data file paths corresponding to the graph generation method (NEEDS REFACTORING)
+                 graph_generation_method = "taxonomy", #Default: generate graph taxonomy
+                 file_params = None #Dictionary of data file paths corresponding to the graph generation method (NEEDS REFACTORING)
                  ):
         self.n_hidden = n_hidden
         self.dropout = dropout
@@ -31,7 +31,7 @@ class GNNSim(Model):
         self.batch_size = batch_size
         self.epochs = epochs
         self.graph_generation_method = graph_generation_method
-        self.file_params = method_file_params
+        self.file_params = file_params
 
 
 
@@ -290,11 +290,11 @@ class GNNSim(Model):
         test_df = test_df.iloc[index[:2000]]
         return train_df, test_df
 
-    def load_graph_data(file_params):
-        graph_file = file_params["graph_file"]
-        nodes_file = file_params["nodes_file"]
-        data_file = file_params["data_file"]
+    def load_graph_data(self, file_params):
 
+        parser = gen_factory(self.graph_generation_method)
+        g = parser.parse(format='dgl')
+        
         graphs, data_dict = dgl.load_graphs(graph_file)
         g = graphs[0]
 
