@@ -1,4 +1,4 @@
-package org.mowl;
+package org.mowl.WRO;
 
 import java.util.HashMap;
 import java.util.ArrayList;

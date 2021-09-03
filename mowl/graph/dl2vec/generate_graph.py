@@ -181,7 +181,7 @@ def convert_graph(data):
         return new_result
 
 
-def generate_graph(annotation_file ,ontology_file, format='networkx'):
+def parse(,ontology_file, format='networkx'):
 
     ont = Ont(ontology_file, "elk")
     ont.processOntology()

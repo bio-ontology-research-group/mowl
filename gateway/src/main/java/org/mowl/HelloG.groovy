@@ -1,6 +1,7 @@
 package org.mowl
 
-class Hello {
+class HelloG {
+
       String hello
 
       def printHello() {

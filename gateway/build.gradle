@@ -11,6 +11,7 @@
 apply plugin: 'java'
 apply plugin: 'application'
 apply plugin: 'groovy'
+apply plugin: 'scala'
 
 
 sourceSets {
@@ -18,13 +19,20 @@ sourceSets {
         groovy {
             srcDirs = ['src/main/java']
         }
-        java {
-            srcDirs = []
+        scala {
+            srcDirs = ['src/main/java']
         }
+       java {
+            srcDirs = []
+	}
     }
    
 }
 
+//compileScala {
+  //  classpath = classpath.plus(files(compileGroovy.destinationDir))
+ //   dependsOn compileGroovy
+//}
 
 // In this section you declare where to find the dependencies of your project
 repositories {
@@ -45,11 +53,10 @@ dependencies {
     implementation 'net.sourceforge.owlapi:org.semanticweb.hermit:1.3.8.413'
     
     implementation 'org.codehaus.groovy:groovy-all:2.4.15'
+    implementation 'org.scala-lang:scala-library:2.11.12'
 
-    // Declare the dependency for your favourite test framework you want to use in your tests.
-    // TestNG is also supported by the Gradle Test task. Just change the
-    // testCompile dependency to testCompile 'org.testng:testng:6.8.1' and add
-    // 'test.useTestNG()' to your build script.
+    testImplementation 'org.scalatest:scalatest_2.11:3.0.0'
+    testImplementation 'org.codehaus.groovy:groovy-all:2.4.15'
     testImplementation 'junit:junit:4.12'
 }
 
