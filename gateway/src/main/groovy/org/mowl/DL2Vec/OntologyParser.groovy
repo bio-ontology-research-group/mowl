@@ -34,7 +34,7 @@ import org.semanticweb.owlapi.reasoner.OWLReasonerConfiguration;
 
 
 
-class Ont {
+class OntologyParser {
 
     String ontologyName
     String chosenReasoner
@@ -44,21 +44,19 @@ class Ont {
 	
     
 
-    Ont(ontologyName, chosenReasoner){
-	this.ontologyName = ontologyName
+    OntologyParser(ontology, chosenReasoner){
+	this.ontology = ontology
 	this.chosenReasoner = chosenReasoner.toLowerCase()
 
 	this.axioms_orig = new ArrayList<>()
 	this.axioms_inf = new ArrayList<>()
-	this.classes = new ArrayList<>()
-	
+	this.classes = new ArrayList<>()	
     }
     
 
     OWLOntologyManager outputManager = OWLManager.createOWLOntologyManager();
     OWLOntologyManager manager = OWLManager.createOWLOntologyManager();
     String prefreasoner =args[1];
-    OWLOntology ont = manager.loadOntologyFromOntologyDocument(new File(this.ontologyName));
     
     public class SimpleShortFormProvider1 implements ShortFormProvider, Serializable {
 
@@ -75,7 +73,7 @@ class Ont {
 
     
 
-    def processOntology(){
+    def parse(){
 
 
 	if (chosenReasoner.equals("elk")){
@@ -114,18 +112,18 @@ class Ont {
 	    Set<OWLClass> classeso=ont.getClassesInSignature();
 
 	    
-	    for (OWLClass classo : classeso)
-		{
+	    for (OWLClass classo : classeso){
+		
 		Set<OWLClassAxiom> ontoaxioms=ont.getAxioms (classo);
-		for (OWLClassAxiom claxiom: ontoaxioms)
-		    {
+		for (OWLClassAxiom claxiom: ontoaxioms) {
 		    // classess=renderer.render(class1);
 		    classaxiom=renderer.render (claxiom);
 		    //out1.println (classess);
 		    this.axioms_orig.add(classaxiom.replaceAll("\n"," ").replaceAll(","," "));
 		}
 	    }
-	} else {
+
+	}else {
 	    OWLReasonerFactory reasonerFactory = new Reasoner.ReasonerFactory();
 	    OWLReasoner reasoner =reasonerFactory.createReasoner(ont);
 	    OWLDataFactory factory=manager.getOWLDataFactory();
@@ -138,11 +136,9 @@ class Ont {
 	    Set<OWLClass> classes=ont.getClassesInSignature();
 
 
-	    for (OWLClass class1 : classes)
-		{
+	    for (OWLClass class1 : classes){
 		Set<OWLClassAxiom> ontoaxioms=ont.getAxioms (class1);
-		for (OWLClassAxiom claxiom: ontoaxioms)
-		    {
+		for (OWLClassAxiom claxiom: ontoaxioms){
 		    classess=renderer.render(class1);
 		    classaxiom=renderer.render (claxiom);
 		    this.classes.add(classess);

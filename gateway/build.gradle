@@ -14,20 +14,20 @@ apply plugin: 'groovy'
 apply plugin: 'scala'
 
 
-sourceSets {
-    main {
-        groovy {
-            srcDirs = ['src/main/java']
-        }
-        scala {
-            srcDirs = ['src/main/java']
-        }
-       java {
-            srcDirs = []
-	}
-    }
+// sourceSets {
+//     main {
+//         groovy {
+//             srcDirs = ['src/main/java']
+//         }
+//         scala {
+//             srcDirs = ['src/main/java']
+//         }
+//        java {
+//             srcDirs = []
+// 	}
+//     }
    
-}
+// }
 
 //compileScala {
   //  classpath = classpath.plus(files(compileGroovy.destinationDir))

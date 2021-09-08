@@ -1,7 +1,3 @@
-from org.mowl.
-
-
-
 class Model(object):
 
     def __init__(self, dataset):

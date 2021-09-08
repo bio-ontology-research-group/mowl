@@ -28,18 +28,7 @@ from org.apache.jena.util import FileManager
 from java.util import HashMap, ArrayList
 from java.util.concurrent import ExecutorService, Executors
 
-from org.mowl import WorkerThread, WROEval, GenPred
-
-
-jars_dir = "../gateway/build/distributions/gateway/lib/"
-jars = f'{str.join(":", [jars_dir + name for name in os.listdir(jars_dir)])}'
-
-
-if not jpype.isJVMStarted():
-    jpype.startJVM(
-        jpype.getDefaultJVMPath(), "-ea",
-        "-Djava.class.path=" + jars,
-        convertStrings=False)
+from org.mowl.WRO import WorkerThread, WROEval, GenPred
 
 class WalkRdfOwl(Model):
     def __init__(self, 
@@ -51,24 +40,26 @@ class WalkRdfOwl(Model):
                     embedding_size, 
                     window, 
                     min_count,
-                    undirected=False
+                    undirected=False,
+                    data_root = "."
 ):
 
         super().__init__(dataset)    
-        self.corpus_file_path = corpus_file_path
-        self.embeddings_file_path = embeddings_file_path
+        self.data_root = data_root
+        self.corpus_file_path = f"{self.data_root}/{corpus_file_path}"
+        self.embeddings_file_path = f"{self.data_root}/{embeddings_file_path}"
         self.number_walks = number_walks
         self.length_walk = length_walk
         self.undirected = undirected
-
         # Skip-gram params
         self.embedding_size = embedding_size
         self.window = window
         self.min_count = min_count
+        
 
     def gen_graph(self, format= "RDF/XML"):
 
-        tmp_data_file = File.createTempFile(os.getcwd() + '/data/temp_file', '.tmp')
+        tmp_data_file = File.createTempFile(f"{self.data_root}/temp_file", '.tmp')
     
 
         self.dataset.infer_axioms()
@@ -179,7 +170,7 @@ class WalkRdfOwl(Model):
         model = Word2Vec(corpus, vector_size=self.embedding_size, window=self.window, min_count=self.min_count, sg=1, hs=1, workers=workers)
 
         word_vectors = model.wv
-        word_vectors.save_word2vec_format("data/embeddings_readable.txt")
+        word_vectors.save_word2vec_format(f"{self.data_root}/embeddings_readable.txt")
         word_vectors.save(self.embeddings_file_path)
 
 

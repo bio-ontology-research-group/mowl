@@ -139,7 +139,7 @@ class RemoteDataset(TarFileDataset):
     url: str
     data_root: str
     
-    def __init__(self, url: str, data_root='data/'):
+    def __init__(self, url: str, data_root='../data/'):
         self.url = url
         self.data_root = data_root
         tarfile_path = self._download()

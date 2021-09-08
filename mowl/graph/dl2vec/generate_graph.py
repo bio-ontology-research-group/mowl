@@ -181,10 +181,11 @@ def convert_graph(data):
         return new_result
 
 
-def parse(,ontology_file, format='networkx'):
+def parseOWL(ontology):
 
-    ont = Ont(ontology_file, "elk")
-    ont.processOntology()
+    parser = DL2VecParser(ontology, "elk")
+
+    edges = parser.parseOWL()
     
     G = nx.Graph()
 
