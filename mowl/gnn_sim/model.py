@@ -131,12 +131,12 @@ class GNNSim(Model):
                     th.save(model.state_dict(), self.file_params["output_model"])
                 print(f'Epoch {epoch}: Loss - {epoch_loss}, \tVal loss - {val_loss}, \tAUC - {roc_auc}')
 
-                if tuning:
-                    with tune.checkpoint_dir(epoch) as checkpoint_dir:
-                        path = os.path.join(checkpoint_dir, "checkpoint")
-                        th.save((model.state_dict(), optimizer.state_dict()), path)
+            else:
+                with tune.checkpoint_dir(epoch) as checkpoint_dir:
+                    path = os.path.join(checkpoint_dir, "checkpoint")
+                    th.save((model.state_dict(), optimizer.state_dict()), path)
 
-                    tune.report(loss=(val_loss), auc=roc_auc)
+                tune.report(loss=(val_loss), auc=roc_auc)
         print("Finished Training")
 
 

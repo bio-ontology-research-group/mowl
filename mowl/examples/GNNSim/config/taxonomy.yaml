@@ -1,0 +1,19 @@
+graph-generation:
+	ontology: yeast
+	method: taxonomy
+
+rgcn-params:
+	lr: 0.004
+	n-hidden: 1
+	batch-size: 32
+	epochs: 32
+	dropout: 0.1
+	num-bases: -1
+	normalization: false
+	self-loops=false
+
+files:
+	train_inter_file: "data/4932.train_interactions.pkl"
+	test_inter_file: "data/4932.test_interactions.pkl"
+	data_file: "data/swissprot.pkl"
+	output_model: "data/tax_yeast_model.pt"

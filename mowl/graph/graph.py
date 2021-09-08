@@ -7,5 +7,7 @@ class GraphGenModel(Model):
     def parseOWL(self):
         raise NotImplementedError()
 
+    def addAnnotations(self):
+        raise NotImplementedError()
 
     
