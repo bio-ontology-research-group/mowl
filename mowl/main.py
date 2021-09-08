@@ -9,6 +9,8 @@ import os
 import sys
 import logging
 
+logging.basicConfig(level=logging.INFO)
+
 sys.path.insert(0, '')
 sys.path.append('../')
 
@@ -20,17 +22,18 @@ from mowl.walking_rdf_and_owl.model import WalkRdfOwl
 
 @ck.command()
 def main():
+    logging.info(f"Number of cores detected: {os.cpu_count()}")
     ds = PPIYeastDataset()
     model = WalkRdfOwl(ds, 'data/walk_rdf_corpus.txt', 'data/walk_rdf_embeddings.wordvectors', 
-                        number_walks = 10, #500, 
-                        length_walk = 5,# 40, 
-                        embedding_size= 10, #256,
+                        number_walks = 500, 
+                        length_walk =  40, 
+                        embedding_size= 256,
                         window = 5,
                         min_count = 5)
 #    model = ELEmbeddings(ds)
-    #model.train()
+    model.train()
 
-    model.evaluate()
+    #model.evaluate()
 
 
 if __name__ == '__main__':
