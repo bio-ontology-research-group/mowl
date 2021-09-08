@@ -1,4 +1,4 @@
-package org.mowl;
+package org.mowl.Onto2Vec;
 
 import org.semanticweb.owlapi.util.ShortFormProvider;
 import org.semanticweb.owlapi.model.OWLEntity;

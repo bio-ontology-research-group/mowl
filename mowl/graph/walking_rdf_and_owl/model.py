@@ -28,18 +28,7 @@ from org.apache.jena.util import FileManager
 from java.util import HashMap, ArrayList
 from java.util.concurrent import ExecutorService, Executors
 
-from org.mowl import WorkerThread, WROEval, GenPred
-
-
-jars_dir = "../gateway/build/distributions/gateway/lib/"
-jars = f'{str.join(":", [jars_dir + name for name in os.listdir(jars_dir)])}'
-
-
-if not jpype.isJVMStarted():
-    jpype.startJVM(
-        jpype.getDefaultJVMPath(), "-ea",
-        "-Djava.class.path=" + jars,
-        convertStrings=False)
+from org.mowl.WRO import WorkerThread, WROEval, GenPred
 
 class WalkRdfOwl(Model):
     def __init__(self, 
@@ -51,24 +40,26 @@ class WalkRdfOwl(Model):
                     embedding_size, 
                     window, 
                     min_count,
-                    undirected=False
+                    undirected=False,
+                    data_root = "."
 ):
 
         super().__init__(dataset)    
-        self.corpus_file_path = corpus_file_path
-        self.embeddings_file_path = embeddings_file_path
+        self.data_root = data_root
+        self.corpus_file_path = f"{self.data_root}/{corpus_file_path}"
+        self.embeddings_file_path = f"{self.data_root}/{embeddings_file_path}"
         self.number_walks = number_walks
         self.length_walk = length_walk
         self.undirected = undirected
-
         # Skip-gram params
         self.embedding_size = embedding_size
         self.window = window
         self.min_count = min_count
+        
 
     def gen_graph(self, format= "RDF/XML"):
 
-        tmp_data_file = File.createTempFile(os.getcwd() + '/data/temp_file', '.tmp')
+        tmp_data_file = File.createTempFile(f"{self.data_root}/temp_file", '.tmp')
     
 
         self.dataset.infer_axioms()
@@ -179,7 +170,7 @@ class WalkRdfOwl(Model):
         model = Word2Vec(corpus, vector_size=self.embedding_size, window=self.window, min_count=self.min_count, sg=1, hs=1, workers=workers)
 
         word_vectors = model.wv
-        word_vectors.save_word2vec_format("data/embeddings_readable.txt")
+        word_vectors.save_word2vec_format(f"{self.data_root}/embeddings_readable.txt")
         word_vectors.save(self.embeddings_file_path)
 
 
@@ -219,10 +210,9 @@ class WalkRdfOwl(Model):
 
 
 
-    def generate_predictions(self):
+    def generate_predictions(self, relations):
         print("Generating predictions...")
         start = time.time()
-        num = 10            
         n_cores = os.cpu_count()
         embeddings = KeyedVectors.load(self.embeddings_file_path)
         vocab = embeddings.index_to_key
@@ -240,7 +230,7 @@ class WalkRdfOwl(Model):
         with jpype.synchronized(preds):
             with jpype.synchronized(dict_vocab):
                 for word1 in vocab:
-                    worker = GenPred(word1, dict_vocab, preds)
+                    worker = GenPred(word1, dict_vocab, relations ,preds)
                     executor.execute(worker)
                     
                 executor.shutdown()
@@ -262,7 +252,6 @@ class WalkRdfOwl(Model):
         print("Formatting ground truth data set...")
         test_set = self.dataset.testing
 
-        test_set = np.delete(test_set, 1, 1) # remove column with index 1. This column corresponds to the relation
         test_set = [[x[0][1:-1], x[1][1:-1], "0"] for x in test_set]
         _test_set = ArrayList()
         
@@ -272,12 +261,16 @@ class WalkRdfOwl(Model):
         return _test_set
  
 
-    def compute_metrics(self, k):
+    def compute_metrics(self, k, relations):
         #Computes hits@k and AUC
+        #Input
+        #    * k: value at which the rank is computed
+        #    * relations: list of relations to compute the metrics. (The metrics are computed relation-wise)
+        
 
-        preds = self.generate_predictions() # list (node 1, node 2, score)
+        preds = self.generate_predictions(relations) # list (node 1, rel, node 2, score)
 
-        ground_truth = self.format_test_set() # list (node 1, node 2, score)
+        ground_truth = self.format_test_set() # list (node 1, rel, node 2, score)
         print("Predictions: ", len(preds))
         print("Ground truth: ", len(ground_truth))
 
@@ -308,7 +301,7 @@ class WalkRdfOwl(Model):
                     with jpype.synchronized(dict_subj_hits): 
                         with jpype.synchronized(dict_subj_ranks):
                             for pair in ground_truth:
-                                worker = WROEval(pair, k, ground_truth, preds, entities, dict_subj_hits, dict_subj_ranks)
+                                worker = WROEval(pair, k, relations, ground_truth, preds, entities, dict_subj_hits, dict_subj_ranks)
                                 executor.execute(worker)
                                 
                             executor.shutdown()
@@ -322,19 +315,23 @@ class WalkRdfOwl(Model):
             # do smthng
 
 
+        results = {}
 
-        hits = dict_subj_hits.values()
-        hits =  reduce(lambda x,y: x+y, hits)
+        for rel in relations:
 
-        ranks = dict_subj_ranks.values()
-        ranks = list(map(lambda x: Counter(x), ranks))
-        ranks = dict(reduce(lambda x,y: x+y, ranks))
+            hits = dict_subj_hits[rel].values()
+            hits =  reduce(lambda x,y: x+y, hits)
 
-        result = hits/len(preds)
+            ranks = dict_subj_ranks[rel].values()
+            ranks = list(map(lambda x: Counter(x), ranks))
+            ranks = dict(reduce(lambda x,y: x+y, ranks))
 
-        rank_auc = self.compute_rank_roc(ranks,len(entities))
-
-        return result, rank_auc
+            preds_rel = [(n1, curr_rel , n2) for (n1, curr_rel, n2) in preds if rel==curr_rel]
+           
+            rank_auc = self.compute_rank_roc(ranks,len(entities))
+            results[rel] = {f"hits_{k}": hits/len(preds_rel), "rank_auc": rank_auc}
+            
+        return results
 
 
     def compute_rank_roc(self, ranks, n_entities):
@@ -352,6 +349,6 @@ class WalkRdfOwl(Model):
         auc = np.trapz(auc_y, auc_x) 
         return auc/n_entities
 
-    def evaluate(self):
-        print(self.compute_metrics(10))
+    def evaluate(self, relations):
+        print(self.compute_metrics(10, relations))
 

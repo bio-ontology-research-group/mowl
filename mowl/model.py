@@ -1,4 +1,3 @@
-
 class Model(object):
 
     def __init__(self, dataset):
@@ -9,3 +8,5 @@ class Model(object):
     
     def evaluate(self):
         raise NotImplementedError()
+
+

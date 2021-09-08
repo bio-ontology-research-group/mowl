@@ -20,11 +20,8 @@ import org.semanticweb.owlapi.reasoner.structural.StructuralReasoner;
 import org.semanticweb.owlapi.vocab.OWLRDFVocabulary;
 import org.semanticweb.elk.owlapi.ElkReasonerFactory;
 import org.semanticweb.elk.owlapi.ElkReasonerConfiguration;
-import org.mowl.Onto2VecShortFormProvider;
-import org.mowl.WorkerThread;
-import org.mowl.WROEval;
-import org.mowl.GenPred;
 
+//import org.mowl.BasicParser.SimpleParser;
 
 public class Main {
 
@@ -40,6 +37,8 @@ public class Main {
     }
 
     public static void main(String[] args) {
+
+
 	Main main = new Main();
 	JCommander jcom = JCommander.newBuilder()
             .addObject(main)
