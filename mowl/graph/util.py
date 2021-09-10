@@ -1,13 +1,18 @@
 from mowl.graph.taxonomy.model import TaxonomyParser
+from mowl.graph.dl2vec.model import DL2VecParser
 
 def gen_factory(method_name, dataset):
     methods = [
         "taxonomy",
-        "taxonomy_rels"
+        "taxonomy_rels",
+        "dl2vec"
     ]
+    
     if method_name == "taxonomy":
         return TaxonomyParser(dataset, subclass=True, relations=False)
     elif method_name == "taxonomy_rels":
         return TaxonomyParser(dataset, subclass = True, relations=True)
+    elif method_name == "dl2vec":
+        return DL2VecParser(dataset)
     else:
         raise Exception(f"Graph generation method unrecognized. Recognized methods are: {methods}")

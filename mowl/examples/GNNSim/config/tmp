@@ -1,0 +1,9 @@
+TAX RELS
+Edges in graph:
+ {
+ ('node', 'is_a', 'node'): 161, ('node', 'part_of', 'node'): 55, ('node', 'has_part', 'node'): 24, ('node', 'occurs_in', 'node'): 5, ('node', 'regulates', 'node'): 8, ('node', 'negatively_regulates', 'node'): 1, ('node', 'positively_regulates', 'node'): 2, ('node', 'id', 'node'): 164
+
+
+DL2VEC
+Edges in graph:
+ {('node', 'SubClassOf', 'node'): 161, ('node', '<http://purl.obolibrary.org/obo/BFO_0000050>', 'node'): 55, ('node', '<http://purl.obolibrary.org/obo/BFO_0000051>', 'node'): 24, ('node', '<http://purl.obolibrary.org/obo/BFO_0000066>', 'node'): 5, ('node', '', 'node'): 1, ('node', '<http://purl.obolibrary.org/obo/RO_0002211>', 'node'): 8, ('node', '<http://purl.obolibrary.org/obo/RO_0002212>', 'node'): 1, ('node', '<http://purl.obolibrary.org/obo/RO_0002213>', 'node'): 2, ('node', 'id', 'node'): 164}

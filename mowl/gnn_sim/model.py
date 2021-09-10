@@ -29,26 +29,41 @@ class GNNSim(Model):
                  batch_size,
                  epochs,
                  graph_generation_method = "taxonomy", #Default: generate graph taxonomy
+                 normalize = False,
+                 self_loop = False,
+                 seed = -1,
                  file_params = None #Dictionary of data file paths corresponding to the graph generation method (NEEDS REFACTORING)
                  ):
         super().__init__(dataset)
         self.n_hidden = n_hidden
         self.dropout = dropout
         self.learning_rate = learning_rate
-        self.num_bases = num_bases
+        self.num_bases = None if num_bases < 0 else num_bases
         self.batch_size = batch_size
         self.epochs = epochs
         self.graph_generation_method = graph_generation_method
+        self.normalize = normalize
+        self.self_loop = self_loop
         self.file_params = file_params
-    
+
+        if seed>=0:
+            th.manual_seed(seed)
+            np.random.seed(seed)
+            random.seed(seed)
+
+        
 
     def train(self, checkpoint_dir = None, tuning= False):
 
         g, annots, prot_idx = self.load_graph_data()
     
         print(f"Num nodes: {g.number_of_nodes()}")
+        print(f"Num edges: {g.number_of_edges()}")
     
         num_rels = len(g.canonical_etypes)
+
+        if self.num_bases is None:
+            self.num_bases = num_rels
 
         g = dgl.to_homogeneous(g)
 
@@ -151,6 +166,9 @@ class GNNSim(Model):
         annots = th.FloatTensor(annots).to(device)
         num_rels = len(g.canonical_etypes)
 
+        if self.num_bases is None:
+            self.num_bases = num_rels
+
         g = dgl.to_homogeneous(g)
 
         feat_dim = 2
@@ -166,7 +184,7 @@ class GNNSim(Model):
 
         if model == None:
             model = PPIModel(feat_dim, num_rels, self.num_bases, num_nodes, self.n_hidden, self.dropout)
-            model.load_state_dict(th.load('data/model_rel.pt'))
+            model.load_state_dict(th.load(self.file_params["output_model"]))
         model.to(device)
         model.eval()
         test_loss = 0
@@ -241,7 +259,6 @@ class GNNSim(Model):
 
         nodes = list({str(e.src()) for e in edges}.union({str(e.dst()) for e in edges}))
         node_idx = {v: k for k, v in enumerate(nodes)}
-
         g = {}
 
         for edge in edges:
@@ -249,6 +266,8 @@ class GNNSim(Model):
             rel = str(edge.rel())
             go_class_2 = edge.dst()
 
+        #    if rel == "":
+         #       continue
             key = ("node", rel, "node")
 
             if not key in g:
@@ -260,15 +279,25 @@ class GNNSim(Model):
             g[key].add((node1, node2))
 
 
+            
+        if self.self_loop:
+            key = ("node", "id", "node")
+            g[key] = set()
+            
+            for n in node_idx.values():
+                g[key].add((n,n))
+
+        
+
         g = {k: list(v) for k, v in g.items()}
 
-
+        rels = {k:len(v) for k, v in g.items()}
+        print("Edges in graph:\n", rels)
         g = dgl.heterograph(g)
 
         
         num_nodes = g.number_of_nodes()
         
-        #g = dgl.add_self_loop(g, 'id')
             
         df = pd.read_pickle(data_file)
         df = df[df['orgs'] == '559292']
@@ -277,13 +306,16 @@ class GNNSim(Model):
         annotations = np.zeros((num_nodes, len(df)), dtype=np.float32)
 
         prot_idx = {}
+
         for i, row in enumerate(df.itertuples()):
             prot_id = row.accessions.split(';')[0]
             prot_idx[prot_id] = i
             for go_id in row.prop_annotations:
-                if go_id in node_idx:   
+                if go_id in node_idx:
                     annotations[node_idx[go_id], i] = 1
         return g, annotations, prot_idx
+
+
     
 class RGCN(BaseRGCN):
 

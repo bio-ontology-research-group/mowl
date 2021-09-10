@@ -18,9 +18,13 @@ ORGS = set(['HUMAN', 'MOUSE', ])
 @ck.option(
     '--out-file', '-o', default='data/swissprot.pkl',
     help='Result file with a list of proteins, sequences and annotations')
-def main(swissprot_file, out_file):
+@ck.option(
+    '--org-id', '-org', default='',
+    help='Organism NCBI taxonomy ID. If absent then it will consider all the organisms')
+
+def main(swissprot_file, out_file, org_id):
     go = Ontology('data/go.obo', with_rels=True)
-    proteins, accessions, sequences, annotations, string_ids, orgs = load_data(swissprot_file)
+    proteins, accessions, sequences, annotations, string_ids, orgs = load_data(swissprot_file, org_id)
     df = pd.DataFrame({
         'proteins': proteins,
         'accessions': accessions,
@@ -70,7 +74,7 @@ def main(swissprot_file, out_file):
     df.to_pickle(out_file)
     logging.info('Successfully saved %d proteins' % (len(df),) )
     
-def load_data(swissprot_file):
+def load_data(swissprot_file, org_id):
     proteins = list()
     accessions = list()
     sequences = list()
@@ -87,7 +91,7 @@ def load_data(swissprot_file):
         for line in f:
             items = line.strip().split('   ')
             if items[0] == 'ID' and len(items) > 1:
-                if prot_id != '':
+                if prot_id != '' and (org_id == "" or org == org_id):
                     proteins.append(prot_id)
                     accessions.append(prot_ac)
                     sequences.append(seq)
@@ -125,13 +129,13 @@ def load_data(swissprot_file):
                     else:
                         seq += sq
 
-
-        proteins.append(prot_id)
-        accessions.append(prot_ac)
-        sequences.append(seq)
-        annotations.append(annots)
-        string_ids.append(strs)
-        orgs.append(org)
+        if org_id == "" or org == org_id:
+            proteins.append(prot_id)
+            accessions.append(prot_ac)
+            sequences.append(seq)
+            annotations.append(annots)
+            string_ids.append(strs)
+            orgs.append(org)
     return proteins, accessions, sequences, annotations, string_ids, orgs
 
 

@@ -1,9 +1,9 @@
+from org.mowl.BasicParser import SimpleParser
 
 import sys
 
 from mowl.graph.graph import GraphGenModel
 
-from org.mowl.BasicParser import SimpleParser
 
 class TaxonomyParser(GraphGenModel):
     def __init__(self, dataset, subclass = True, relations = False):

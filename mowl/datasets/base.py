@@ -2,6 +2,7 @@ import numpy as np
 import tarfile
 import pathlib
 import os
+from typing import Optional
 from jpype import *
 import jpype.imports
 import requests
@@ -22,20 +23,23 @@ from org.semanticweb.owlapi.util import InferredSubClassAxiomGenerator
 Triples = np.ndarray
 
 def load_triples(filepath, delimiter='\t', encoding=None):
-    return np.loadtxt(
-        fname=filepath,
-        dtype=str,
-        comments='@Comment@ Head Relation Tail',
-        delimiter=delimiter,
-        encoding=encoding,
-    )
+    if filepath == "":
+        return None
+    else:
+        return np.loadtxt(
+            fname=filepath,
+            dtype=str,
+            comments='@Comment@ Head Relation Tail',
+            delimiter=delimiter,
+            encoding=encoding,
+        )
 
 
 class Dataset(object):
 
     ontology: OWLOntology
-    validation: Triples
-    testing: Triples
+    validation: Optional[Triples]
+    testing: Optional[Triples]
 
 
 

@@ -1,7 +1,8 @@
 general:
   ontology: data/go.owl
-  graph-gen-method: taxonomy
-
+  graph-gen-method: dl2vec
+  species: yeast
+  
 rgcn-params:
   lr: 0.004
   n-hidden: 2
@@ -17,4 +18,4 @@ files:
   train_inter_file: "data/4932.train_interactions.pkl"
   test_inter_file: "data/4932.test_interactions.pkl"
   data_file: "data/swissprot.pkl"
-  output_model: "data/tax_yeast_model.pt"
+  output_model: "data/dl2vec_yeast_model.pt"

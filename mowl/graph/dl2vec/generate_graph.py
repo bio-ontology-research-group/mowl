@@ -3,15 +3,16 @@ import pickle as pkl
 import json
 import sys
 import dgl
-from tree import Stack
+from mowl.graph.dl2vec.tree import Stack
 
-from org.mowl.DL2Vec import Ont
+from org.mowl.DL2Vec import AxiomsFromOnt
 
 
 
 def split_sentence(sentence):
     new_sentence=""
     for d in sentence:
+        d = str(d)
         if d=="(":
             new_sentence+="( "
         elif d==")":
@@ -183,41 +184,57 @@ def convert_graph(data):
 
 def parseOWL(ontology):
 
-    parser = DL2VecParser(ontology, "elk")
+    parser = AxiomsFromOnt(ontology, "elk")
 
-    edges = parser.parseOWL()
+    edges = parser.processOntology()
     
-    G = nx.Graph()
-
-
     # the restriction are min,max,exactly,some,only
 
     # there are conjunction or disjunction
-    axiom_orig = ont.axiom_orig
+    axiom_orig = parser.getAxioms()
 
+    edges = []
     
     for line in axiom_orig:
         result = convert_graph(line.strip())
 
         # print("-"*40)
         for entities in result:
-                
-            G.add_edge(entities[0].strip(), entities[2].strip())
-            G.edges[entities[0].strip(), entities[2].strip()]["type"] = entities[1].strip()
-            G.nodes[entities[0].strip()]["val"] = False
-            G.nodes[entities[2].strip()]["val"] = False
+            new_edge = Edge(entities[0].strip(), entities[1].strip(), entities[2].strip())
+            edges.append(new_edge)
 
-    with open(annotation_file, "r") as f:
-        for line in f.readlines():
-            entities = line.split()
-            G.add_edge(entities[0].strip(), entities[1].strip())
-            G.edges[entities[0].strip(), entities[1].strip()]["type"] = "HasAssociation"
-            G.nodes[entities[0].strip()]["val"] = False
-            G.nodes[entities[1].strip()]["val"] = False
 
-    if format=='dgl':
-        G = dgl.from_networkx(G)
-    elif format!='networkx':
-        raise Exception("Graph formats only support DGL and Networkx")
+    rels = {e.rel() for e in edges}
+    print(rels)
+    return edges
 
-    return G
+class Edge:
+    def __init__(self, src, rel, dst):
+        self.src_ = self.prettyFormat(src)
+        self.rel_ = rel
+        self.dst_ = self.prettyFormat(dst)
+
+
+    def src(self):
+        return self.src_
+
+    def rel(self):
+        return self.rel_
+
+    def dst(self):
+        return self.dst_
+
+
+    def prettyFormat(self, string):
+        #if string is of the form <http://purl.obolibrary.org/obo/GO_0071554> this function returns GO:0071554
+
+        if string[0] == "<" and string[-1] == ">":
+            string = string[1:-1]
+            string = string.split("/")[-1]
+            string = string.replace("_", ":")
+        elif string.startsWith("GO:"):
+            pass
+        else:
+            raise Exception("prettyFormat: unrecognized string format")
+
+        return string

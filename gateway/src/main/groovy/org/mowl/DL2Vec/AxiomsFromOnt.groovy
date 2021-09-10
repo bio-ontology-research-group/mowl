@@ -33,10 +33,9 @@ import org.semanticweb.HermiT.Reasoner;
 import org.semanticweb.owlapi.reasoner.OWLReasonerConfiguration;
 
 
+class AxiomsFromOnt {
 
-class OntologyParser {
-
-    String ontologyName
+    OWLOntology ontology
     String chosenReasoner
     ArrayList<String> axioms_orig
     ArrayList<String> axioms_inf
@@ -44,7 +43,7 @@ class OntologyParser {
 	
     
 
-    OntologyParser(ontology, chosenReasoner){
+    AxiomsFromOnt(ontology, chosenReasoner){
 	this.ontology = ontology
 	this.chosenReasoner = chosenReasoner.toLowerCase()
 
@@ -54,9 +53,12 @@ class OntologyParser {
     }
     
 
+    def getAxioms(){
+	return this.axioms_orig
+    }
+    
     OWLOntologyManager outputManager = OWLManager.createOWLOntologyManager();
     OWLOntologyManager manager = OWLManager.createOWLOntologyManager();
-    String prefreasoner =args[1];
     
     public class SimpleShortFormProvider1 implements ShortFormProvider, Serializable {
 
@@ -73,7 +75,7 @@ class OntologyParser {
 
     
 
-    def parse(){
+    def processOntology(){
 
 
 	if (chosenReasoner.equals("elk")){
@@ -86,7 +88,7 @@ class OntologyParser {
 
 
 	    ElkReasonerFactory f1 = new ElkReasonerFactory()
-	    OWLReasoner reasoner = f1.createReasoner(ont, config)
+	    OWLReasoner reasoner = f1.createReasoner(this.ontology, config)
 	    reasoner.precomputeInferences(InferenceType.CLASS_HIERARCHY)
 
 	    List<InferredAxiomGenerator<? extends OWLAxiom>> gens = new ArrayList<InferredAxiomGenerator<? extends OWLAxiom>>();
@@ -109,44 +111,46 @@ class OntologyParser {
 
 	    //display original axioms
 	    //int numaxiom1= Ont.getAxiomCount();
-	    Set<OWLClass> classeso=ont.getClassesInSignature();
+	    Set<OWLClass> classeso=this.ontology.getClassesInSignature();
 
 	    
 	    for (OWLClass classo : classeso){
 		
-		Set<OWLClassAxiom> ontoaxioms=ont.getAxioms (classo);
+		Set<OWLClassAxiom> ontoaxioms=this.ontology.getAxioms (classo);
 		for (OWLClassAxiom claxiom: ontoaxioms) {
 		    // classess=renderer.render(class1);
-		    classaxiom=renderer.render (claxiom);
+		    String classaxiom=renderer.render (claxiom);
 		    //out1.println (classess);
 		    this.axioms_orig.add(classaxiom.replaceAll("\n"," ").replaceAll(","," "));
 		}
 	    }
+	    
 
 	}else {
 	    OWLReasonerFactory reasonerFactory = new Reasoner.ReasonerFactory();
-	    OWLReasoner reasoner =reasonerFactory.createReasoner(ont);
+	    OWLReasoner reasoner =reasonerFactory.createReasoner(this.ontology);
 	    OWLDataFactory factory=manager.getOWLDataFactory();
 	    reasoner.precomputeInferences();
 	    InferredSubClassAxiomGenerator generator = new InferredSubClassAxiomGenerator();
 	    Set<OWLAxiom> axioms = generator.createAxioms(factory, reasoner);
-	    manager.addAxioms(ont,axioms);
+	    manager.addAxioms(this.ontology,axioms);
 	    OWLObjectRenderer renderer =new ManchesterOWLSyntaxOWLObjectRendererImpl ();
 	    renderer.setShortFormProvider(new SimpleShortFormProvider1());
-	    Set<OWLClass> classes=ont.getClassesInSignature();
+	    Set<OWLClass> classes=this.ontology.getClassesInSignature();
 
 
 	    for (OWLClass class1 : classes){
-		Set<OWLClassAxiom> ontoaxioms=ont.getAxioms (class1);
+		Set<OWLClassAxiom> ontoaxioms=this.ontology.getAxioms (class1);
 		for (OWLClassAxiom claxiom: ontoaxioms){
 		    classess=renderer.render(class1);
-		    classaxiom=renderer.render (claxiom);
+		    String classaxiom=renderer.render (claxiom);
 		    this.classes.add(classess);
 		    this.axioms_inf.add(classaxiom.replaceAll("\n"," ").replaceAll(","," "));
 		}
 	    }
 
 	}
+
 
     }
 }
