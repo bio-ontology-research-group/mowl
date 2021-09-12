@@ -196,7 +196,7 @@ def parseOWL(ontology):
     edges = []
     
     for line in axiom_orig:
-        result = convert_graph(line.strip())
+        result = convert_graph(str(line).strip())
 
         # print("-"*40)
         for entities in result:
