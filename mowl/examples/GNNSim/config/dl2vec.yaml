@@ -8,9 +8,10 @@ rgcn-params:
   batch-size: 32
   epochs: 64
   dropout: 0.3
-  num-bases: 11
+  num-bases: -1
   normalization: False
   self-loop: True
+  min_edges: 1
   seed: 0
 
 files:

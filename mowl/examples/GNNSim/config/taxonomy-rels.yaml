@@ -11,6 +11,7 @@ rgcn-params:
   num-bases: -1
   normalization: False
   self-loop: True
+  min_edges: 1
   seed: 0
 
 files:

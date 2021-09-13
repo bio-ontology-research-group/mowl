@@ -31,6 +31,7 @@ class GNNSim(Model):
                  graph_generation_method = "taxonomy", #Default: generate graph taxonomy
                  normalize = False,
                  self_loop = False,
+                 min_edges = 0, #Only takes the relation types in which the number of triples is greater than min_edges. If 0 then takes all the relation types
                  seed = -1,
                  file_params = None #Dictionary of data file paths corresponding to the graph generation method (NEEDS REFACTORING)
                  ):
@@ -44,8 +45,9 @@ class GNNSim(Model):
         self.graph_generation_method = graph_generation_method
         self.normalize = normalize
         self.self_loop = self_loop
+        self.min_edges = min_edges
         self.file_params = file_params
-
+        
         if seed>=0:
             th.manual_seed(seed)
             np.random.seed(seed)
@@ -289,7 +291,7 @@ class GNNSim(Model):
 
         
 
-        g = {k: list(v) for k, v in g.items()}
+        g = {k: list(v) for k, v in g.items() if len(v) > self.min_edges}
 
         rels = {k:len(v) for k, v in g.items()}
         print("Edges in graph:\n", rels)

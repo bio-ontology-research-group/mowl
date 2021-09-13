@@ -41,7 +41,7 @@ def main(config):
     normalize =  params["rgcn-params"]["normalization"]
     self_loop =  params["rgcn-params"]["self-loop"]
     seed =  params["rgcn-params"]["seed"]
-    
+    min_edges = params["rgcn-params"]["min-edges"]
     file_params = params["files"]
 
 
@@ -57,6 +57,7 @@ def main(config):
                    graph_generation_method = graph_method,
                    normalize = normalize,
                    self_loop = self_loop,
+                   min_edges = min_edges,
                    seed = seed,
                    file_params = file_params
                    )
