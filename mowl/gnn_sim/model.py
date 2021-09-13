@@ -86,7 +86,7 @@ class GNNSim(Model):
 
 
         model.to(device)
-        optimizer = optim.Adam(model.parameters(), lr=self.learning_rate)
+        optimizer = optim.Adam(model.parameters(), lr=self.learning_rate, weight_decay=1e-2)
 
         if checkpoint_dir:
             model_state, optimizer_state = th.load(

@@ -1,6 +1,6 @@
-package org.mowl
+package org.ogcn.parse
 
-class HelloS {
+class Hello {
     def main(args: Array[String]) {
         println("Hello world from Scala!")
     }

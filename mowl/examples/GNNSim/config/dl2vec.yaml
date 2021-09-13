@@ -1,17 +1,16 @@
 general:
   ontology: data/go.owl
   graph-gen-method: dl2vec
-  species: yeast
   
 rgcn-params:
-  lr: 0.004
-  n-hidden: 2
+  lr: 0.00001
+  n-hidden: 1
   batch-size: 32
-  epochs: 32
-  dropout: 0.1
-  num-bases: -1
+  epochs: 64
+  dropout: 0.3
+  num-bases: 11
   normalization: False
-  self-loop: False
+  self-loop: True
   seed: 0
 
 files:
