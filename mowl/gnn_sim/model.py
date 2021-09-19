@@ -57,7 +57,7 @@ class GNNSim(Model):
 
     def train(self, checkpoint_dir = None, tuning= False):
 
-        g, annots, prot_idx = self.load_graph_data()
+        g, annots, prot_idx, norm = self.load_graph_data()
     
         print(f"Num nodes: {g.number_of_nodes()}")
         print(f"Num edges: {g.number_of_edges()}")
@@ -68,6 +68,9 @@ class GNNSim(Model):
             self.num_bases = num_rels
 
         g = dgl.to_homogeneous(g)
+        
+        edge_type = g.edata[dgl.ETYPE].long()
+
 
         num_nodes = g.number_of_nodes()
     
@@ -113,7 +116,7 @@ class GNNSim(Model):
 
             with ck.progressbar(train_set_batches) as bar:
                 for iter, (batch_g, batch_feat, batch_labels) in enumerate(bar):
-                    logits = model(batch_g.to(device), batch_feat)
+                    logits = model(batch_g.to(device), batch_feat, edge_type, norm)
 
                     labels = batch_labels.unsqueeze(1).to(device)
                     loss = loss_func(logits, labels)
@@ -160,7 +163,7 @@ class GNNSim(Model):
     def evaluate(self, model=None):
 
         device = "cpu"
-        g, annots, prot_idx = self.load_graph_data()
+        g, annots, prot_idx, norm = self.load_graph_data()
     
         num_nodes = g.number_of_nodes()
         print(f"Num nodes: {g.number_of_nodes()}")
@@ -172,6 +175,7 @@ class GNNSim(Model):
             self.num_bases = num_rels
 
         g = dgl.to_homogeneous(g)
+        edge_type = g.edata[dgl.ETYPE].long()
 
         feat_dim = 2
         loss_func = nn.BCELoss()
@@ -195,7 +199,7 @@ class GNNSim(Model):
         with th.no_grad():
             with ck.progressbar(test_set_batches) as bar:
                 for iter, (batch_g, batch_feat, batch_labels) in enumerate(bar):
-                    logits = model(batch_g.to(device), batch_feat)
+                    logits = model(batch_g.to(device), batch_feat, edge_type, norm)
                     labels = batch_labels.unsqueeze(1).to(device)
                     loss = loss_func(logits, labels)
                     test_loss += loss.detach().item()
@@ -260,6 +264,25 @@ class GNNSim(Model):
         edges = parser.parseOWL()
 
         nodes = list({str(e.src()) for e in edges}.union({str(e.dst()) for e in edges}))
+        if self.self_loop:
+            edges += [Edge(node, "id", node) for node in nodes]
+
+
+        if self.normalize:
+            node_edge = {}
+            for edge in edges:
+                rel = str(edge.rel())
+                dst = edge.dst()
+                if (rel, dst) not in node_edge:
+                    node_edge[(rel, dst)] = 0
+                node_edge[(rel, dst)] += 1
+
+            node_edge = {k: 1/v for k, v in node_edge.items()}
+
+            norm = [node_edge[(str(edge.rel()), edge.dst())] for edge in edges]
+        else:
+            norm = None
+
         node_idx = {v: k for k, v in enumerate(nodes)}
         g = {}
 
@@ -268,8 +291,6 @@ class GNNSim(Model):
             rel = str(edge.rel())
             go_class_2 = edge.dst()
 
-        #    if rel == "":
-         #       continue
             key = ("node", rel, "node")
 
             if not key in g:
@@ -280,17 +301,7 @@ class GNNSim(Model):
 
             g[key].add((node1, node2))
 
-
-            
-        if self.self_loop:
-            key = ("node", "id", "node")
-            g[key] = set()
-            
-            for n in node_idx.values():
-                g[key].add((n,n))
-
         
-
         g = {k: list(v) for k, v in g.items() if len(v) > self.min_edges}
 
         rels = {k:len(v) for k, v in g.items()}
@@ -315,7 +326,7 @@ class GNNSim(Model):
             for go_id in row.prop_annotations:
                 if go_id in node_idx:
                     annotations[node_idx[go_id], i] = 1
-        return g, annotations, prot_idx
+        return g, annotations, prot_idx, norm
 
 
     
@@ -355,10 +366,10 @@ class PPIModel(nn.Module):
 
         self.fc = nn.Linear(self.num_nodes*self.h_dim, 1) 
 
-    def forward(self, g, features):
+    def forward(self, g, features, edge_type, norm):
+        norm = None
         edge_type = g.edata[dgl.ETYPE].long()
-
-        x = self.rgcn(g, features, edge_type, None)
+        x = self.rgcn(g, features, edge_type, norm)
 
         x = th.flatten(x).view(-1, self.num_nodes*self.h_dim)
         return th.sigmoid(self.fc(x))
@@ -392,3 +403,12 @@ class GraphDataset(IterableDataset):
 
     def __len__(self):
         return len(self.df)
+
+
+
+def node_norm_to_edge_norm(g, node_norm):
+    g = g.local_var()
+    # convert to edge norm
+    g.ndata['norm'] = node_norm
+    g.apply_edges(lambda edges : {'norm' : edges.dst['norm']})
+    return g.edata['norm']

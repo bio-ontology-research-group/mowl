@@ -25,7 +25,7 @@ class OWL2VecParser(GraphGenModel):
         man.saveOntology(self.dataset.ontology, OWLXMLDocumentFormat(), FileOutputStream(fileout))
     
 
-        parser = o2v.OntologyProjection(path, include_literals=False)
+        parser = o2v.OntologyProjection(path, bidirectional_taxonomy = True, include_literals=False)
 
         os.remove(path)
 

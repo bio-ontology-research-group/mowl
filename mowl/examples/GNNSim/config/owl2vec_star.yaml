@@ -9,13 +9,13 @@ rgcn-params:
   epochs: 64
   dropout: 0.3
   num-bases: -1
-  normalization: False
+  normalization: True
   self-loop: False
-  min_edges: 1
+  min-edges: 1
   seed: 0
 
 files:
   train_inter_file: "data/4932.train_interactions.pkl"
   test_inter_file: "data/4932.test_interactions.pkl"
   data_file: "data/swissprot.pkl"
-  output_model: "data/dl2vec_yeast_model.pt"
+  output_model: "data/owl2vec_yeast_model.pt"
