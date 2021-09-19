@@ -40,7 +40,7 @@ class GNNSim(Model):
         self.dropout = dropout
         self.learning_rate = learning_rate
         self.num_bases = None if num_bases < 0 else num_bases
-        self.batch_size = batch_size
+        self.batch_size =  batch_size
         self.epochs = epochs
         self.graph_generation_method = graph_generation_method
         self.normalize = normalize
@@ -58,7 +58,9 @@ class GNNSim(Model):
     def train(self, checkpoint_dir = None, tuning= False):
 
         g, annots, prot_idx, norm = self.load_graph_data()
-    
+
+        norm = norm.repeat(1, self.batch_size).reshape(-1).view(-1,1)
+
         print(f"Num nodes: {g.number_of_nodes()}")
         print(f"Num edges: {g.number_of_edges()}")
     
@@ -69,9 +71,6 @@ class GNNSim(Model):
 
         g = dgl.to_homogeneous(g)
         
-        edge_type = g.edata[dgl.ETYPE].long()
-
-
         num_nodes = g.number_of_nodes()
     
         feat_dim = 2
@@ -88,6 +87,7 @@ class GNNSim(Model):
                 model = nn.DataParallel(model)
             
         annots = th.FloatTensor(annots).to(device)
+        norm = norm.to(device)
 
 
         model.to(device)
@@ -116,7 +116,7 @@ class GNNSim(Model):
 
             with ck.progressbar(train_set_batches) as bar:
                 for iter, (batch_g, batch_feat, batch_labels) in enumerate(bar):
-                    logits = model(batch_g.to(device), batch_feat, edge_type, norm)
+                    logits = model(batch_g.to(device), batch_feat, norm)
 
                     labels = batch_labels.unsqueeze(1).to(device)
                     loss = loss_func(logits, labels)
@@ -136,7 +136,7 @@ class GNNSim(Model):
                 with ck.progressbar(val_set_batches) as bar:
                     for iter, (batch_g, batch_feat, batch_labels) in enumerate(bar):
                         
-                        logits = model(batch_g.to(device), batch_feat)
+                        logits = model(batch_g.to(device), batch_feat, norm)
                         lbls = batch_labels.unsqueeze(1).to(device)
                         loss = loss_func(logits, lbls)
                         val_loss += loss.detach().item()
@@ -164,7 +164,9 @@ class GNNSim(Model):
 
         device = "cpu"
         g, annots, prot_idx, norm = self.load_graph_data()
-    
+        norm = norm.repeat(1, self.batch_size).reshape(-1).view(-1,1)
+
+        
         num_nodes = g.number_of_nodes()
         print(f"Num nodes: {g.number_of_nodes()}")
     
@@ -175,7 +177,6 @@ class GNNSim(Model):
             self.num_bases = num_rels
 
         g = dgl.to_homogeneous(g)
-        edge_type = g.edata[dgl.ETYPE].long()
 
         feat_dim = 2
         loss_func = nn.BCELoss()
@@ -196,18 +197,19 @@ class GNNSim(Model):
         test_loss = 0
 
         preds = []
+        all_labels = []
         with th.no_grad():
             with ck.progressbar(test_set_batches) as bar:
                 for iter, (batch_g, batch_feat, batch_labels) in enumerate(bar):
-                    logits = model(batch_g.to(device), batch_feat, edge_type, norm)
+                    logits = model(batch_g.to(device), batch_feat, norm)
                     labels = batch_labels.unsqueeze(1).to(device)
                     loss = loss_func(logits, labels)
                     test_loss += loss.detach().item()
                     preds = np.append(preds, logits.cpu())
+                    all_labels = np.append(all_labels, labels.cpu())
                 test_loss /= (iter+1)
 
-        labels = test_df['labels'].values
-        roc_auc = self.compute_roc(labels, preds)
+        roc_auc = self.compute_roc(all_labels, preds)
         print(f'Test loss - {test_loss}, \tAUC - {roc_auc}')
 
         return test_loss, roc_auc
@@ -220,7 +222,7 @@ class GNNSim(Model):
         return roc_auc
 
     def get_batches(self, dataset, batch_size):
-        return DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=self.collate)
+        return DataLoader(dataset, batch_size=batch_size, shuffle=False, collate_fn=self.collate, drop_last=True)
     
     def collate(self, samples):
         # The input `samples` is a list of pairs
@@ -280,6 +282,8 @@ class GNNSim(Model):
             node_edge = {k: 1/v for k, v in node_edge.items()}
 
             norm = [node_edge[(str(edge.rel()), edge.dst())] for edge in edges]
+
+            norm = th.Tensor(norm).view(-1, 1)
         else:
             norm = None
 
@@ -366,9 +370,10 @@ class PPIModel(nn.Module):
 
         self.fc = nn.Linear(self.num_nodes*self.h_dim, 1) 
 
-    def forward(self, g, features, edge_type, norm):
-        norm = None
+    def forward(self, g, features, norm):
+
         edge_type = g.edata[dgl.ETYPE].long()
+
         x = self.rgcn(g, features, edge_type, norm)
 
         x = th.flatten(x).view(-1, self.num_nodes*self.h_dim)
