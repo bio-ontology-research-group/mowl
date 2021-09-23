@@ -16,6 +16,7 @@ rgcn-params:
 
 files:
   train_inter_file: "data/4932.train_interactions.pkl"
+  valid_inter_file: "data/4932.valid_interactions.pkl"
   test_inter_file: "data/4932.test_interactions.pkl"
-  data_file: "data/swissprot.pkl"
+  data_file: "data/4932.annotations.tsv"
   output_model: "data/dl2vec_yeast_model.pt"

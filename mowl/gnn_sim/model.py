@@ -59,7 +59,12 @@ class GNNSim(Model):
 
         g, annots, prot_idx, norm = self.load_graph_data()
 
-        norm = norm.repeat(1, self.batch_size).reshape(-1).view(-1,1)
+        device = "cpu"
+
+
+        if not norm == None:
+            norm = norm.repeat(1, self.batch_size).reshape(-1).view(-1,1)
+            norm = norm.to(device)
 
         print(f"Num nodes: {g.number_of_nodes()}")
         print(f"Num edges: {g.number_of_edges()}")
@@ -80,14 +85,12 @@ class GNNSim(Model):
 
         model = PPIModel(feat_dim, num_rels, self.num_bases, num_nodes, self.n_hidden, self.dropout)
 
-        device = "cpu"
         if th.cuda.is_available():
             device = "cuda:0"
             if th.cuda.device_count() > 1:
                 model = nn.DataParallel(model)
             
         annots = th.FloatTensor(annots).to(device)
-        norm = norm.to(device)
 
 
         model.to(device)
@@ -164,8 +167,10 @@ class GNNSim(Model):
 
         device = "cpu"
         g, annots, prot_idx, norm = self.load_graph_data()
-        norm = norm.repeat(1, self.batch_size).reshape(-1).view(-1,1)
 
+        if not norm == None:
+            norm = norm.repeat(1, self.batch_size).reshape(-1).view(-1,1)
+            norm = norm.to(device)
         
         num_nodes = g.number_of_nodes()
         print(f"Num nodes: {g.number_of_nodes()}")
@@ -234,13 +239,7 @@ class GNNSim(Model):
 
 
     def load_data(self):
-         train_df, test_df = self.load_ppi_data()
-    
-         split = int(len(test_df) * 0.5)
-         index = np.arange(len(test_df))
-         val_df = test_df.iloc[index[split:]]
-         test_df = test_df.iloc[index[:split]]
-         
+         train_df, val_df, test_df = self.load_ppi_data()
          return train_df, val_df, test_df
 
     def load_ppi_data(self):
@@ -249,13 +248,19 @@ class GNNSim(Model):
         np.random.seed(seed=0)
         np.random.shuffle(index)
         train_df = train_df.iloc[index[:10000]]
+
+        valid_df = pd.read_pickle(self.file_params["valid_inter_file"])
+        index = np.arange(len(valid_df))
+        np.random.seed(seed=0)
+        np.random.shuffle(index)
+        valid_df = valid_df.iloc[index[:1000]]
         
         test_df = pd.read_pickle(self.file_params["test_inter_file"])
         index = np.arange(len(test_df))
         np.random.seed(seed=0)
         np.random.shuffle(index)
-        test_df = test_df.iloc[index[:2000]]
-        return train_df, test_df
+        test_df = test_df.iloc[index[:1000]]
+        return train_df, valid_df, test_df
 
     def load_graph_data(self):
 
@@ -314,22 +319,22 @@ class GNNSim(Model):
 
         
         num_nodes = g.number_of_nodes()
+          
+
         
-            
-        df = pd.read_pickle(data_file)
-        df = df[df['orgs'] == '559292']
-  
-
-        annotations = np.zeros((num_nodes, len(df)), dtype=np.float32)
-
         prot_idx = {}
 
-        for i, row in enumerate(df.itertuples()):
-            prot_id = row.accessions.split(';')[0]
-            prot_idx[prot_id] = i
-            for go_id in row.prop_annotations:
-                if go_id in node_idx:
-                    annotations[node_idx[go_id], i] = 1
+        with open(data_file, 'r') as f:
+            rows = [line.strip('\n').split('\t') for line in f.readlines()]
+            
+            annotations = np.zeros((num_nodes, len(rows)), dtype=np.float32)
+            
+            for i, row  in enumerate(rows):
+                prot_id = row[0]
+                prot_idx[prot_id] = i
+                for go_id in row[1:]:
+                    if go_id in node_idx:
+                        annotations[node_idx[go_id], i] = 1
         return g, annotations, prot_idx, norm
 
 
