@@ -9,7 +9,7 @@ rgcn-params:
   epochs: 64
   dropout: 0.3
   num-bases: -1
-  normalization: True
+  normalization: False
   self-loop: False
   min-edges: 1
   seed: 0
