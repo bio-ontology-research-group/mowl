@@ -3,14 +3,14 @@ general:
   graph-gen-method: taxonomy
 
 rgcn-params:
-  lr: 0.00001
-  n-hidden: 1
+  lr: 0.001
+  n-hidden: 3
   batch-size: 32
   epochs: 64
   dropout: 0.3
   num-bases: -1
-  normalization: False
-  self-loop: False
+  normalization: True
+  self-loop: True
   min-edges: 1
   seed: 0
 
