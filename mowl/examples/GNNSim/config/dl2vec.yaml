@@ -3,15 +3,15 @@ general:
   graph-gen-method: dl2vec
   
 rgcn-params:
-  lr: 0.00001
+  lr: 0.0001
   n-hidden: 1
   batch-size: 32
   epochs: 64
-  dropout: 0.3
+  dropout: 0.2
   num-bases: -1
-  normalization: False
-  self-loop: False
-  min-edges: 1
+  normalization: True
+  self-loop: True
+  min-edges: 100
   seed: 0
 
 files:
