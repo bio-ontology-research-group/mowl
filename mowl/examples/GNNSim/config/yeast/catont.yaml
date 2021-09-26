@@ -1,16 +1,17 @@
 general:
   ontology: data/go.owl
-  graph-gen-method: dl2vec
-  
+  graph-gen-method: categorical
+
 rgcn-params:
   lr: 0.0001
-  n-hidden: 1
+  n-hidden: 3
   batch-size: 32
-  epochs: 64
+  epochs: 32
   dropout: 0.2
+  regularization: 0
   num-bases: -1
-  normalization: True
-  self-loop: True
+  normalization: False
+  self-loop: False
   min-edges: 100
   seed: 0
 
@@ -19,4 +20,4 @@ files:
   valid_inter_file: "data/4932.valid_interactions.pkl"
   test_inter_file: "data/4932.test_interactions.pkl"
   data_file: "data/4932.annotations.tsv"
-  output_model: "data/dl2vec_yeast_model.pt"
+  output_model: "data/catont_yeast_model.pt"

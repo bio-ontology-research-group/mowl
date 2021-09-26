@@ -39,6 +39,7 @@ def main(config):
     batch_size = params["rgcn-params"]["batch-size"]
     epochs = params["rgcn-params"]["epochs"]
     normalize =  params["rgcn-params"]["normalization"]
+    regularization = params["rgcn-params"]["regularization"]
     self_loop =  params["rgcn-params"]["self-loop"]
     seed =  params["rgcn-params"]["seed"]
     min_edges = params["rgcn-params"]["min-edges"]
@@ -56,6 +57,7 @@ def main(config):
                    epochs,
                    graph_generation_method = graph_method,
                    normalize = normalize,
+                   regularization = regularization,
                    self_loop = self_loop,
                    min_edges = min_edges,
                    seed = seed,

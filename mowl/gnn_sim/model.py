@@ -8,6 +8,7 @@ import dgl
 from dgl import nn as dglnn
 import torch as th
 import numpy as np
+from math import floor
 from torch import nn
 from torch.nn import functional as F
 from torch import optim
@@ -15,6 +16,9 @@ from .baseRGCN import BaseRGCN
 from sklearn.metrics import roc_curve, auc, matthews_corrcoef
 from torch.utils.data import DataLoader, IterableDataset
 from dgl.nn.pytorch import RelGraphConv
+
+from mowl.graph.edge import Edge
+
 import random
 from ray import tune
 
@@ -30,6 +34,7 @@ class GNNSim(Model):
                  epochs,
                  graph_generation_method = "taxonomy", #Default: generate graph taxonomy
                  normalize = False,
+                 regularization = 0,
                  self_loop = False,
                  min_edges = 0, #Only takes the relation types in which the number of triples is greater than min_edges. If 0 then takes all the relation types
                  seed = -1,
@@ -44,6 +49,7 @@ class GNNSim(Model):
         self.epochs = epochs
         self.graph_generation_method = graph_generation_method
         self.normalize = normalize
+        self.regularization = regularization
         self.self_loop = self_loop
         self.min_edges = min_edges
         self.file_params = file_params
@@ -57,24 +63,16 @@ class GNNSim(Model):
 
     def train(self, checkpoint_dir = None, tuning= False):
 
-        g, annots, prot_idx, norm = self.load_graph_data()
+        g, annots, prot_idx, num_rels = self.load_graph_data()
 
         device = "cpu"
-
-
-        if not norm == None:
-            norm = norm.repeat(1, self.batch_size).reshape(-1).view(-1,1)
-            norm = norm.to(device)
-
+            
         print(f"Num nodes: {g.number_of_nodes()}")
         print(f"Num edges: {g.number_of_edges()}")
     
-        num_rels = len(g.canonical_etypes)
-
+        
         if self.num_bases is None:
             self.num_bases = num_rels
-
-        g = dgl.to_homogeneous(g)
         
         num_nodes = g.number_of_nodes()
     
@@ -94,7 +92,7 @@ class GNNSim(Model):
 
 
         model.to(device)
-        optimizer = optim.Adam(model.parameters(), lr=self.learning_rate, weight_decay=1e-2)
+        optimizer = optim.Adam(model.parameters(), lr=self.learning_rate, weight_decay=self.regularization)
 
         if checkpoint_dir:
             model_state, optimizer_state = th.load(
@@ -119,7 +117,7 @@ class GNNSim(Model):
 
             with ck.progressbar(train_set_batches) as bar:
                 for iter, (batch_g, batch_feat, batch_labels) in enumerate(bar):
-                    logits = model(batch_g.to(device), batch_feat, norm)
+                    logits = model(batch_g.to(device), batch_feat)
 
                     labels = batch_labels.unsqueeze(1).to(device)
                     loss = loss_func(logits, labels)
@@ -139,7 +137,7 @@ class GNNSim(Model):
                 with ck.progressbar(val_set_batches) as bar:
                     for iter, (batch_g, batch_feat, batch_labels) in enumerate(bar):
                         
-                        logits = model(batch_g.to(device), batch_feat, norm)
+                        logits = model(batch_g.to(device), batch_feat)
                         lbls = batch_labels.unsqueeze(1).to(device)
                         loss = loss_func(logits, lbls)
                         val_loss += loss.detach().item()
@@ -166,22 +164,15 @@ class GNNSim(Model):
     def evaluate(self, model=None):
 
         device = "cpu"
-        g, annots, prot_idx, norm = self.load_graph_data()
+        g, annots, prot_idx, num_rels  = self.load_graph_data()
 
-        if not norm == None:
-            norm = norm.repeat(1, self.batch_size).reshape(-1).view(-1,1)
-            norm = norm.to(device)
-        
         num_nodes = g.number_of_nodes()
         print(f"Num nodes: {g.number_of_nodes()}")
     
         annots = th.FloatTensor(annots).to(device)
-        num_rels = len(g.canonical_etypes)
 
         if self.num_bases is None:
             self.num_bases = num_rels
-
-        g = dgl.to_homogeneous(g)
 
         feat_dim = 2
         loss_func = nn.BCELoss()
@@ -206,7 +197,7 @@ class GNNSim(Model):
         with th.no_grad():
             with ck.progressbar(test_set_batches) as bar:
                 for iter, (batch_g, batch_feat, batch_labels) in enumerate(bar):
-                    logits = model(batch_g.to(device), batch_feat, norm)
+                    logits = model(batch_g.to(device), batch_feat)
                     labels = batch_labels.unsqueeze(1).to(device)
                     loss = loss_func(logits, labels)
                     test_loss += loss.detach().item()
@@ -270,52 +261,72 @@ class GNNSim(Model):
 
         edges = parser.parseOWL()
 
-        nodes = list({str(e.src()) for e in edges}.union({str(e.dst()) for e in edges}))
-        if self.self_loop:
-            edges += [Edge(node, "id", node) for node in nodes]
+        srcs = [str(e.src()) for e in edges]
+        rels = [str(e.rel()) for e in edges]
+        dsts = [str(e.dst()) for e in edges]
 
+        
+        
+        nodes = list(set(srcs).union(set(dsts)))
+        node_idx = {v: k for k, v in enumerate(nodes)}
+        
+        if self.self_loop:
+            srcs += nodes
+            dsts += nodes
+            rels += ["id" for _ in range(len(nodes))]
+
+            
+        srcs = [node_idx[s] for s in srcs]
+        dsts = [node_idx[d] for d in dsts]
+        
+        edges_per_rel = {}
+        for rel in rels:
+            if not rel in edges_per_rel:
+                edges_per_rel[rel] = 0
+            edges_per_rel[rel] += 1
+
+            
 
         if self.normalize:
-            node_edge = {}
-            for edge in edges:
-                rel = str(edge.rel())
-                dst = edge.dst()
-                if (rel, dst) not in node_edge:
-                    node_edge[(rel, dst)] = 0
-                node_edge[(rel, dst)] += 1
+            edge_node = {}
+            rels_dst = list(zip(rels, dsts))
 
-            node_edge = {k: 1/v for k, v in node_edge.items()}
+            for rel, dst in rels_dst:
+                if (rel, dst) not in edge_node:
+                    edge_node[(rel, dst)] = 0
+                edge_node[(rel, dst)] += 1
+            
+            edge_node = {k: 1/v for k, v in edge_node.items()}
+            
+            norm = [edge_node[i] for i in rels_dst]
 
-            norm = [node_edge[(str(edge.rel()), edge.dst())] for edge in edges]
+
+            zipped_data = list(zip(srcs, dsts, rels, norm))
+            srcs, dsts, rels, norm = zip(*[(s, d, r, n) for s, d, r, n in zipped_data if edges_per_rel[r] > self.min_edges])
 
             norm = th.Tensor(norm).view(-1, 1)
+
+            
         else:
             norm = None
 
-        node_idx = {v: k for k, v in enumerate(nodes)}
-        g = {}
+            zipped_data = list(zip(srcs, dsts, rels))
+            srcs, dsts, rels = zip(*[(s, d, r) for s, d, r in zipped_data if edges_per_rel[r] > self.min_edges])
 
-        for edge in edges:
-            go_class_1 = edge.src()
-            rel = str(edge.rel())
-            go_class_2 = edge.dst()
-
-            key = ("node", rel, "node")
-
-            if not key in g:
-                g[key] = set()
-
-            node1 = node_idx[go_class_1]
-            node2 = node_idx[go_class_2]
-
-            g[key].add((node1, node2))
+            
+        rels_idx = {v: k for k, v in enumerate(set(rels))}
+        rels = [rels_idx[r] for r in rels]
+        num_rels = len(rels_idx)
+        rels = th.Tensor(rels)
 
         
-        g = {k: list(v) for k, v in g.items() if len(v) > self.min_edges}
+        print("Edges in graph:\n", edges_per_rel)
+        g = dgl.graph((srcs, dsts))
 
-        rels = {k:len(v) for k, v in g.items()}
-        print("Edges in graph:\n", rels)
-        g = dgl.heterograph(g)
+        
+        g.edata.update({'rel_type': rels})
+        if norm != None:
+            g.edata.update({'norm': norm})
 
         
         num_nodes = g.number_of_nodes()
@@ -335,7 +346,7 @@ class GNNSim(Model):
                 for go_id in row[1:]:
                     if go_id in node_idx:
                         annotations[node_idx[go_id], i] = 1
-        return g, annotations, prot_idx, norm
+        return g, annotations, prot_idx, num_rels
 
 
     
@@ -373,16 +384,21 @@ class PPIModel(nn.Module):
                               )
 
 
-        self.fc = nn.Linear(self.num_nodes*self.h_dim, 1) 
+        self.fc1 = nn.Linear(self.num_nodes*self.h_dim, 1) 
+#        self.fc2 = nn.Linear(floor(self.num_nodes/2), 1) 
 
-    def forward(self, g, features, norm):
 
-        edge_type = g.edata[dgl.ETYPE].long()
+    def forward(self, g, features):
+
+        edge_type = g.edata['rel_type'].long()
+
+        norm = None if not 'norm' in g.edata else g.edata['norm']
 
         x = self.rgcn(g, features, edge_type, norm)
 
         x = th.flatten(x).view(-1, self.num_nodes*self.h_dim)
-        return th.sigmoid(self.fc(x))
+#        x = th.relu(self.fc1(x))
+        return th.sigmoid(self.fc1(x))
 
 
     

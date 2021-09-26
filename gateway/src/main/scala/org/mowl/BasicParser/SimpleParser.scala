@@ -54,7 +54,7 @@ class SimpleParser(var ontology: OWLOntology, var subclass: Boolean = true, var 
     axiomType match {
       case "SubClassOf" => {
 	var ax = axiom.asInstanceOf[OWLSubClassOfAxiom]
-	parseSubClassAxiom(ax.getSubClass.asInstanceOf[OWLClass], ax.getSuperClass) :: Nil
+	parseSubClassAxiom(ax.getSubClass.asInstanceOf[OWLClass], ax.getSuperClass)
       }
 
       case _ => Nil
@@ -62,7 +62,7 @@ class SimpleParser(var ontology: OWLOntology, var subclass: Boolean = true, var 
   }
 
 
-  def parseSubClassAxiom(go_class: OWLClass, superClass: OWLClassExpression): Option[Edge] = {
+  def parseSubClassAxiom(go_class: OWLClass, superClass: OWLClassExpression): List[Option[Edge]] = {
 
     val superClass_type = superClass.getClassExpressionType().getName()
 
@@ -79,21 +79,21 @@ class SimpleParser(var ontology: OWLOntology, var subclass: Boolean = true, var 
 	  dst_type match {
 	    case "Class" => {
 	      val dst = dst_class.asInstanceOf[OWLClass]
-	      Some (new Edge(go_class, rel, dst))
+	      Some (new Edge(go_class, rel, dst)) :: Nil
 	    }
-	    case _ => None
+	    case _ => Nil
 	  }
 	}else{
-	  None
+	  Nil
 	}
 
       }
 
       case "Class" => {
 	val dst = superClass.asInstanceOf[OWLClass]
-	Some(new Edge(go_class, "is_a", dst))
+	Some(new Edge(go_class, "subClassOf", dst)) :: Some(new Edge(dst, "superClassOf", go_class)) :: Nil
       }
-      case _ => None
+      case _ => Nil
 
     }
 
