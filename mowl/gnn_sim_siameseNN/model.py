@@ -387,22 +387,20 @@ class PPIModel(nn.Module):
                               )
 
 
-        self.fc1 = nn.Linear(self.num_nodes*self.h_dim, 1) 
+#        self.fc1 = nn.Linear(self.num_nodes*self.h_dim, 1) 
 #        self.fc2 = nn.Linear(floor(self.num_nodes/2), 1) 
 
-    def forward_each(self, g, features, edge_type, norm):
-        print("features: ", features.shape)
-        x = self.rgcn(g, features, edge_type, norm)
-        x = th.flatten(x).view(-1, self.num_nodes*self.h_dim)
-        return x
         
     def forward(self, g, features1, features2):
 
         edge_type = g.edata['rel_type'].long()
         norm = None if not 'norm' in g.edata else g.edata['norm']
 
-        x1 = self.forward_each(g, features1, edge_type, norm)
-        x2 = self.forward_each(g, features2, edge_type, norm)
+        x1 = self.rgcn(g, features1, edge_type, norm)
+        x1 = th.flatten(x1).view(-1, self.num_nodes*self.h_dim)
+
+        x2 = self.rgcn(g, features2, edge_type, norm)
+        x2 = th.flatten(x2).view(-1, self.num_nodes*self.h_dim)
 
         x = th.dot(x1, x2)
 #        x = th.relu(self.fc1(x))

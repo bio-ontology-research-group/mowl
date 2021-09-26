@@ -10,8 +10,8 @@ rgcn-params:
   dropout: 0.2
   regularization: 0
   num-bases: -1
-  normalization: False
-  self-loop: False
+  normalization: True
+  self-loop: True
   min-edges: 100
   seed: 0
 
