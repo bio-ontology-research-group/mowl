@@ -396,6 +396,12 @@ class PPIModel(nn.Module):
 
         norm = None if not 'norm' in g.edata else g.edata['norm']
 
+
+        print("#########################")
+        print(features.shape)
+        print(edge_type.shape)
+        print(norm.shape)
+
         x = self.rgcn(g, features, edge_type, norm)
 
         x = th.flatten(x).view(-1, self.num_nodes*self.h_dim)
