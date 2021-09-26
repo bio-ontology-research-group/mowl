@@ -76,7 +76,7 @@ class GNNSim(Model):
         
         num_nodes = g.number_of_nodes()
     
-        feat_dim = 1
+        feat_dim = 2
         loss_func = nn.BCELoss()
 
         train_df, val_df, _ = self.load_data()
@@ -88,7 +88,7 @@ class GNNSim(Model):
             if th.cuda.device_count() > 1:
                 model = nn.DataParallel(model)
             
-        annots = th.FloatTensor(annots).to(device)
+        annots = th.FloatTensor(annots) #.to(device)
 
 
         model.to(device)
@@ -116,9 +116,9 @@ class GNNSim(Model):
             model.train()
 
             with ck.progressbar(train_set_batches) as bar:
-                for iter, (batch_g, batch_feat1, batch_feat2, batch_labels) in enumerate(bar):
-                    logits = model(batch_g.to(device), batch_feat1, batch_feat2)
-
+                for iter, (batch_g, batch_labels) in enumerate(bar):
+                    logits  = model(batch_g.to(device))
+                    
                     labels = batch_labels.unsqueeze(1).to(device)
                     loss = loss_func(logits, labels)
                     optimizer.zero_grad()
@@ -135,9 +135,11 @@ class GNNSim(Model):
             with th.no_grad():
                 optimizer.zero_grad()
                 with ck.progressbar(val_set_batches) as bar:
-                    for iter, (batch_g, batch_feat1, batch_feat2, batch_labels) in enumerate(bar):
-                        
-                        logits = model(batch_g.to(device), batch_feat1, batch_feat2)
+                    for iter, (batch_g, batch_labels) in enumerate(bar):
+
+                        logits = model(batch_g.to(device))
+
+
                         lbls = batch_labels.unsqueeze(1).to(device)
                         loss = loss_func(logits, lbls)
                         val_loss += loss.detach().item()
@@ -174,7 +176,7 @@ class GNNSim(Model):
         if self.num_bases is None:
             self.num_bases = num_rels
 
-        feat_dim = 1
+        feat_dim = 2
         loss_func = nn.BCELoss()
 
 
@@ -196,8 +198,9 @@ class GNNSim(Model):
         all_labels = []
         with th.no_grad():
             with ck.progressbar(test_set_batches) as bar:
-                for iter, (batch_g, batch_feat1, batch_feat2, batch_labels) in enumerate(bar):
-                    logits = model(batch_g.to(device), batch_feat1, batch_feat2)
+                for iter, (batch_g, batch_labels) in enumerate(bar):
+                    logits = model(batch_g.to(device))
+
                     labels = batch_labels.unsqueeze(1).to(device)
                     loss = loss_func(logits, labels)
                     test_loss += loss.detach().item()
@@ -223,9 +226,9 @@ class GNNSim(Model):
     def collate(self, samples):
         # The input `samples` is a list of pairs
         #  (graph, label).
-        graphs, features1, features2, labels = map(list, zip(*samples))
+        graphs, labels = map(list, zip(*samples))
         batched_graph = dgl.batch(graphs)
-        return batched_graph, th.cat(features1, dim=0), th.cat(features2, dim=0), th.tensor(labels)
+        return batched_graph, th.tensor(labels)
 
 
 
@@ -390,20 +393,25 @@ class PPIModel(nn.Module):
 #        self.fc1 = nn.Linear(self.num_nodes*self.h_dim, 1) 
 #        self.fc2 = nn.Linear(floor(self.num_nodes/2), 1) 
 
+    def forward_each(self, g, features, edge_type, norm):
+        x = self.rgcn(g, features, edge_type, norm)
+        x = th.flatten(x).view(-1, self.num_nodes*self.h_dim)
+        return x
         
-    def forward(self, g, features1, features2):
+    def forward(self, g):
 
         edge_type = g.edata['rel_type'].long()
         norm = None if not 'norm' in g.edata else g.edata['norm']
 
-        x1 = self.rgcn(g, features1, edge_type, norm)
-        x1 = th.flatten(x1).view(-1, self.num_nodes*self.h_dim)
+        x1 = self.forward_each(g, g.ndata['feat1'], edge_type, norm)
+        x2 = self.forward_each(g, g.ndata['feat2'], edge_type, norm)
 
-        x2 = self.rgcn(g, features2, edge_type, norm)
-        x2 = th.flatten(x2).view(-1, self.num_nodes*self.h_dim)
-
-        x = th.dot(x1, x2)
-#        x = th.relu(self.fc1(x))
+        
+        x1 = x1.unsqueeze(1)
+        x2 = x2.unsqueeze(2)
+    
+        x = th.bmm(x1, x2).view(-1, 1)
+    
         return th.sigmoid(x)
 
 
@@ -426,9 +434,12 @@ class GraphDataset(IterableDataset):
                 continue
             pi1, pi2 = self.prot_idx[p1], self.prot_idx[p2]
 
-            feat1 = self.annots[:, [pi1]]
-            feat2 = self.annots[:, [pi2]]
-            yield (self.graph, feat1, feat2, label)
+            feat1 = self.annots[:, [pi1, pi1]]
+            feat2 = self.annots[:, [pi2, pi2]]
+
+            self.graph.ndata['feat1'] = feat1
+            self.graph.ndata['feat2'] = feat2
+            yield (self.graph, label)
 
     def __iter__(self):
         return self.get_data()
