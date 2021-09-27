@@ -41,12 +41,12 @@ class GNNSim(Model):
                  file_params = None #Dictionary of data file paths corresponding to the graph generation method (NEEDS REFACTORING)
                  ):
         super().__init__(dataset)
-        self.n_hidden = n_hidden
+        self.n_hidden = 2 #n_hidden
         self.dropout = dropout
         self.learning_rate = learning_rate
         self.num_bases = None if num_bases < 0 else num_bases
         self.batch_size =  batch_size
-        self.epochs = epochs
+        self.epochs = 2 #epochs
         self.graph_generation_method = graph_generation_method
         self.normalize = normalize
         self.regularization = regularization
@@ -77,7 +77,7 @@ class GNNSim(Model):
         num_nodes = g.number_of_nodes()
     
         feat_dim = 2
-        loss_func = ContrastiveLoss()  #nn.BCELoss()
+        loss_func = nn.BCELoss()
 
         train_df, val_df, _ = self.load_data()
 
@@ -118,11 +118,10 @@ class GNNSim(Model):
             with ck.progressbar(train_set_batches) as bar:
                 for iter, (batch_g, batch_labels) in enumerate(bar):
 
-                    out1, out2  = model(batch_g.to(device))
+                    logits  = model(batch_g.to(device))
                     
-
                     labels = batch_labels.unsqueeze(1).to(device)
-                    loss = loss_func(out1, out2, labels)
+                    loss = loss_func(logits, labels)
                     optimizer.zero_grad()
                     loss.backward()
                     optimizer.step()
@@ -138,13 +137,11 @@ class GNNSim(Model):
                 optimizer.zero_grad()
                 with ck.progressbar(val_set_batches) as bar:
                     for iter, (batch_g, batch_labels) in enumerate(bar):
-
                         
-                        out1, out2 = model(batch_g.to(device))
-
+                        logits = model(batch_g.to(device))
 
                         lbls = batch_labels.unsqueeze(1).to(device)
-                        loss = loss_func(out1, out2, lbls)
+                        loss = loss_func(logits, lbls)
                         val_loss += loss.detach().item()
                         labels = np.append(labels, lbls.cpu())
                         preds = np.append(preds, logits.cpu())
@@ -180,7 +177,7 @@ class GNNSim(Model):
             self.num_bases = num_rels
 
         feat_dim = 2
-        loss_func = ContrastiveLoss() #nn.BCELoss()
+        loss_func = nn.BCELoss()
 
 
         _,_, test_df = self.load_data()
@@ -202,10 +199,10 @@ class GNNSim(Model):
         with th.no_grad():
             with ck.progressbar(test_set_batches) as bar:
                 for iter, (batch_g, batch_labels) in enumerate(bar):
-                    out1, out2 = model(batch_g.to(device))
+                    logits = model(batch_g.to(device))
 
                     labels = batch_labels.unsqueeze(1).to(device)
-                    loss = loss_func(out1, out2, labels)
+                    loss = loss_func(logits, labels)
                     test_loss += loss.detach().item()
                     preds = np.append(preds, logits.cpu())
                     all_labels = np.append(all_labels, labels.cpu())
@@ -392,6 +389,7 @@ class PPIModel(nn.Module):
                               use_cuda=True
                               )
 
+        self.dot = nn.CosineSimilarity()
 #        self.fc = nn.Linear(2*self.num_nodes*self.h_dim, 1)
 
 
@@ -414,8 +412,9 @@ class PPIModel(nn.Module):
 #        x2 = x2.unsqueeze(2)
     
 #        x = th.bmm(x1, x2).view(-1, 1)
+        x = self.dot(x1, x2).view(-1,1)
 
-        return x1, x2
+        return x
 
 
 class ContrastiveLoss(nn.Module):
@@ -431,7 +430,7 @@ class ContrastiveLoss(nn.Module):
     def forward(self, output1, output2, label):
         euclidean_distance = F.pairwise_distance(output1, output2)
         loss_contrastive = th.mean((label) * th.pow(euclidean_distance, 2) +
-                                      (1-label) * th.pow(torch.clamp(self.margin - euclidean_distance, min=0.0), 2))
+                                      (1-label) * th.pow(th.clamp(self.margin - euclidean_distance, min=0.0), 2))
 
 
         return loss_contrastive    
