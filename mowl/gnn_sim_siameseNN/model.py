@@ -407,15 +407,15 @@ class PPIModel(nn.Module):
         x1 = self.forward_each(g, g.ndata['feat1'], edge_type, norm)
         x2 = self.forward_each(g, g.ndata['feat2'], edge_type, norm)
 
-        
+        x = self.cos_sim(x1, x2).view(-1,1)
 #        x = th.cat((x1, x2), 1)
 
 #        x1 = x1.unsqueeze(1)
 #        x2 = x2.unsqueeze(2)
     
 #        x = th.bmm(x1, x2).view(-1, 1)
-    
-        return self.cos_sim(x1, x2)
+
+        return x
 
 
     
