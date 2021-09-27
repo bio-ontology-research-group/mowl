@@ -137,6 +137,7 @@ class GNNSim(Model):
                 with ck.progressbar(val_set_batches) as bar:
                     for iter, (batch_g, batch_labels) in enumerate(bar):
 
+                        
                         logits = model(batch_g.to(device))
 
 
@@ -389,14 +390,14 @@ class PPIModel(nn.Module):
                               use_cuda=True
                               )
 
+#        self.fc = nn.Linear(2*self.num_nodes*self.h_dim, 1)
+        self.cos_sim = nn.CosineSimilarity()
 
-#        self.fc1 = nn.Linear(self.num_nodes*self.h_dim, 1) 
-#        self.fc2 = nn.Linear(floor(self.num_nodes/2), 1) 
 
     def forward_each(self, g, features, edge_type, norm):
         x = self.rgcn(g, features, edge_type, norm)
         x = th.flatten(x).view(-1, self.num_nodes*self.h_dim)
-        return x
+        return th.relu(x)
         
     def forward(self, g):
 
@@ -407,12 +408,14 @@ class PPIModel(nn.Module):
         x2 = self.forward_each(g, g.ndata['feat2'], edge_type, norm)
 
         
-        x1 = x1.unsqueeze(1)
-        x2 = x2.unsqueeze(2)
+#        x = th.cat((x1, x2), 1)
+
+#        x1 = x1.unsqueeze(1)
+#        x2 = x2.unsqueeze(2)
     
-        x = th.bmm(x1, x2).view(-1, 1)
+#        x = th.bmm(x1, x2).view(-1, 1)
     
-        return th.sigmoid(x)
+        return self.cos_sim(x1, x2)
 
 
     
