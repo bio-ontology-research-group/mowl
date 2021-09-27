@@ -77,7 +77,7 @@ class GNNSim(Model):
         num_nodes = g.number_of_nodes()
     
         feat_dim = 2
-        loss_func = nn.BCELoss()
+        loss_func = ContrastiveLoss()  #nn.BCELoss()
 
         train_df, val_df, _ = self.load_data()
 
@@ -117,10 +117,12 @@ class GNNSim(Model):
 
             with ck.progressbar(train_set_batches) as bar:
                 for iter, (batch_g, batch_labels) in enumerate(bar):
-                    logits  = model(batch_g.to(device))
+
+                    out1, out2  = model(batch_g.to(device))
                     
+
                     labels = batch_labels.unsqueeze(1).to(device)
-                    loss = loss_func(logits, labels)
+                    loss = loss_func(out1, out2, labels)
                     optimizer.zero_grad()
                     loss.backward()
                     optimizer.step()
@@ -138,11 +140,11 @@ class GNNSim(Model):
                     for iter, (batch_g, batch_labels) in enumerate(bar):
 
                         
-                        logits = model(batch_g.to(device))
+                        out1, out2 = model(batch_g.to(device))
 
 
                         lbls = batch_labels.unsqueeze(1).to(device)
-                        loss = loss_func(logits, lbls)
+                        loss = loss_func(out1, out2, lbls)
                         val_loss += loss.detach().item()
                         labels = np.append(labels, lbls.cpu())
                         preds = np.append(preds, logits.cpu())
@@ -178,7 +180,7 @@ class GNNSim(Model):
             self.num_bases = num_rels
 
         feat_dim = 2
-        loss_func = nn.BCELoss()
+        loss_func = ContrastiveLoss() #nn.BCELoss()
 
 
         _,_, test_df = self.load_data()
@@ -200,10 +202,10 @@ class GNNSim(Model):
         with th.no_grad():
             with ck.progressbar(test_set_batches) as bar:
                 for iter, (batch_g, batch_labels) in enumerate(bar):
-                    logits = model(batch_g.to(device))
+                    out1, out2 = model(batch_g.to(device))
 
                     labels = batch_labels.unsqueeze(1).to(device)
-                    loss = loss_func(logits, labels)
+                    loss = loss_func(out1, out2, labels)
                     test_loss += loss.detach().item()
                     preds = np.append(preds, logits.cpu())
                     all_labels = np.append(all_labels, labels.cpu())
@@ -391,7 +393,6 @@ class PPIModel(nn.Module):
                               )
 
 #        self.fc = nn.Linear(2*self.num_nodes*self.h_dim, 1)
-        self.cos_sim = nn.CosineSimilarity()
 
 
     def forward_each(self, g, features, edge_type, norm):
@@ -407,7 +408,6 @@ class PPIModel(nn.Module):
         x1 = self.forward_each(g, g.ndata['feat1'], edge_type, norm)
         x2 = self.forward_each(g, g.ndata['feat2'], edge_type, norm)
 
-        x = self.cos_sim(x1, x2).view(-1,1)
 #        x = th.cat((x1, x2), 1)
 
 #        x1 = x1.unsqueeze(1)
@@ -415,10 +415,26 @@ class PPIModel(nn.Module):
     
 #        x = th.bmm(x1, x2).view(-1, 1)
 
-        return x
+        return x1, x2
 
 
-    
+class ContrastiveLoss(nn.Module):
+    """
+    Contrastive loss function.
+    Based on: http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
+    """
+
+    def __init__(self, margin=2.0):
+        super(ContrastiveLoss, self).__init__()
+        self.margin = margin
+
+    def forward(self, output1, output2, label):
+        euclidean_distance = F.pairwise_distance(output1, output2)
+        loss_contrastive = th.mean((label) * th.pow(euclidean_distance, 2) +
+                                      (1-label) * th.pow(torch.clamp(self.margin - euclidean_distance, min=0.0), 2))
+
+
+        return loss_contrastive    
 
 class GraphDataset(IterableDataset):
 
