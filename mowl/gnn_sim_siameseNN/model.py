@@ -414,7 +414,7 @@ class PPIModel(nn.Module):
 #        x = th.bmm(x1, x2).view(-1, 1)
         x = self.dot(x1, x2).view(-1,1)
 
-        return x
+        return th.div(th.add(x,1), 2)
 
 
 class ContrastiveLoss(nn.Module):
