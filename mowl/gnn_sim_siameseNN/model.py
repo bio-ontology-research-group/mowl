@@ -15,9 +15,10 @@ from torch import optim
 from .baseRGCN import BaseRGCN
 from sklearn.metrics import roc_curve, auc, matthews_corrcoef
 from torch.utils.data import DataLoader, IterableDataset
-from dgl.nn.pytorch import RelGraphConv
-
+#from dgl.nn.pytorch import RelGraphConv
+from .relgraphconv import RelGraphConv
 from mowl.graph.edge import Edge
+
 
 import random
 from ray import tune
@@ -119,8 +120,8 @@ class GNNSim(Model):
                 for iter, (batch_g, batch_labels) in enumerate(bar):
 
                     logits  = model(batch_g.to(device))
-                    
-                    labels = batch_labels.unsqueeze(1).to(device)
+#                    print(logits)
+                    labels = batch_labels.to(device)
                     loss = loss_func(logits, labels)
                     optimizer.zero_grad()
                     loss.backward()
@@ -140,7 +141,7 @@ class GNNSim(Model):
                         
                         logits = model(batch_g.to(device))
 
-                        lbls = batch_labels.unsqueeze(1).to(device)
+                        lbls = batch_labels.to(device)
                         loss = loss_func(logits, lbls)
                         val_loss += loss.detach().item()
                         labels = np.append(labels, lbls.cpu())
@@ -389,25 +390,46 @@ class PPIModel(nn.Module):
                               use_cuda=True
                               )
 
-#        self.fc = nn.Linear(2*self.num_nodes*self.h_dim, 1)
+        self.fc = nn.Linear(self.num_nodes*self.h_dim, 1024)
+        self.dropout = nn.Dropout()
+        self.cosSim = nn.CosineSimilarity()
 
-
+        
     def forward_each(self, g, features, edge_type, norm):
         x = self.rgcn(g, features, edge_type, norm)
         x = th.flatten(x).view(-1, self.num_nodes*self.h_dim)
-        return th.relu(x)
+        x = self.fc(x)
+        x = self.dropout(x)
+        
+        return x
         
     def forward(self, g):
 
-        edge_type = g.edata['rel_type'].long()
-        norm = None if not 'norm' in g.edata else g.edata['norm']
+        # edge_type = g.edata['rel_type'].long()
+        # norm = None if not 'norm' in g.edata else g.edata['norm']
 
-        x1 = self.forward_each(g, g.ndata['feat1'], edge_type, norm)
-        x2 = self.forward_each(g, g.ndata['feat2'], edge_type, norm)
+        # feat1 = g.ndata['feat1']
+        # feat2 = g.ndata['feat2']
+        # del g.ndata['feat1']
+        # del g.ndata['feat2']
 
 
+        # x1 = self.forward_each(g, feat1, edge_type, norm)
+        # x2 = self.forward_each(g, feat2, edge_type, norm)
+        feat1 = g.ndata['feat1'].view(32, -1)
+        feat2 = g.ndata['feat2'].view(32, -1)
+
+#        print("feat1: ", feat1.shape)
+        
+        x1 = self.dropout(self.fc(feat1))#.squeeze())
+        x2 = self.dropout(self.fc(feat2))#.squeeze())
+
+  #      print("x1: ", x1.shape)
+        
         x = th.sum(x1 * x2, dim=1, keepdims=True)
-        return th.sigmoid(x)
+#        x = self.cosSim(x1, x2)
+        #print(x)
+        return th.sigmoid(x).squeeze()
 
 
 class ContrastiveLoss(nn.Module):
@@ -420,7 +442,8 @@ class ContrastiveLoss(nn.Module):
         super(ContrastiveLoss, self).__init__()
         self.margin = margin
 
-    def forward(self, output1, output2, label):
+    def forward(self, outputs, label):
+        output1, output2 = outputs
         euclidean_distance = F.pairwise_distance(output1, output2)
         loss_contrastive = th.mean((label) * th.pow(euclidean_distance, 2) +
                                       (1-label) * th.pow(th.clamp(self.margin - euclidean_distance, min=0.0), 2))
@@ -448,8 +471,9 @@ class GraphDataset(IterableDataset):
             feat1 = self.annots[:, [pi1]]
             feat2 = self.annots[:, [pi2]]
 
-            self.graph.ndata['feat1'] = feat1
-            self.graph.ndata['feat2'] = feat2
+            
+            self.graph.ndata['feat1'] = th.Tensor(feat1)
+            self.graph.ndata['feat2'] = th.Tensor(feat2)
             yield (self.graph, label)
 
     def __iter__(self):
