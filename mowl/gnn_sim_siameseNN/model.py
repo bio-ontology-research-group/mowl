@@ -41,12 +41,12 @@ class GNNSim(Model):
                  file_params = None #Dictionary of data file paths corresponding to the graph generation method (NEEDS REFACTORING)
                  ):
         super().__init__(dataset)
-        self.n_hidden = 2 #n_hidden
+        self.n_hidden = n_hidden
         self.dropout = dropout
         self.learning_rate = learning_rate
         self.num_bases = None if num_bases < 0 else num_bases
         self.batch_size =  batch_size
-        self.epochs = 2 #epochs
+        self.epochs = epochs
         self.graph_generation_method = graph_generation_method
         self.normalize = normalize
         self.regularization = regularization
@@ -76,7 +76,7 @@ class GNNSim(Model):
         
         num_nodes = g.number_of_nodes()
     
-        feat_dim = 2
+        feat_dim = 1
         loss_func = nn.BCELoss()
 
         train_df, val_df, _ = self.load_data()
@@ -176,7 +176,7 @@ class GNNSim(Model):
         if self.num_bases is None:
             self.num_bases = num_rels
 
-        feat_dim = 2
+        feat_dim = 1
         loss_func = nn.BCELoss()
 
 
@@ -389,7 +389,6 @@ class PPIModel(nn.Module):
                               use_cuda=True
                               )
 
-        self.dot = nn.CosineSimilarity()
 #        self.fc = nn.Linear(2*self.num_nodes*self.h_dim, 1)
 
 
@@ -406,15 +405,9 @@ class PPIModel(nn.Module):
         x1 = self.forward_each(g, g.ndata['feat1'], edge_type, norm)
         x2 = self.forward_each(g, g.ndata['feat2'], edge_type, norm)
 
-#        x = th.cat((x1, x2), 1)
 
-#        x1 = x1.unsqueeze(1)
-#        x2 = x2.unsqueeze(2)
-    
-#        x = th.bmm(x1, x2).view(-1, 1)
-        x = self.dot(x1, x2).view(-1,1)
-
-        return th.div(th.add(x,1), 2)
+        x = th.sum(x1 * x2, dim=1, keepdims=True)
+        return th.sigmoid(x)
 
 
 class ContrastiveLoss(nn.Module):
@@ -452,8 +445,8 @@ class GraphDataset(IterableDataset):
                 continue
             pi1, pi2 = self.prot_idx[p1], self.prot_idx[p2]
 
-            feat1 = self.annots[:, [pi1, pi1]]
-            feat2 = self.annots[:, [pi2, pi2]]
+            feat1 = self.annots[:, [pi1]]
+            feat2 = self.annots[:, [pi2]]
 
             self.graph.ndata['feat1'] = feat1
             self.graph.ndata['feat2'] = feat2

@@ -6,7 +6,7 @@ rgcn-params:
   lr: 0.0001
   n-hidden: 3
   batch-size: 32
-  epochs: 4
+  epochs: 32
   dropout: 0.2
   regularization: 0
   num-bases: -1
