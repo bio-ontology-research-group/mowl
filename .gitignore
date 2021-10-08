@@ -1,2 +1,14 @@
 *~
 *.pyc
+venv/
+gateway/build/
+gateway/.gradle/
+.gradle/
+
+**/data
+**/test_data
+**/boost
+*.class
+
+*.err
+*.out
