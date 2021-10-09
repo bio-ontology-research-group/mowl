@@ -7,8 +7,8 @@ rgcn-params:
   n-hidden: 3
   batch-size: 32
   epochs: 32
-  dropout: 0.2
-  regularization: 0.001
+  dropout: 0.3
+  regularization: 0.01
   num-bases: -1
   normalization: True
   self-loop: True

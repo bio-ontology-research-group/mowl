@@ -16,17 +16,18 @@ from ray.tune.schedulers import ASHAScheduler
 import logging
 import sys
 
+import os
+curr_path = os.path.dirname(os.path.abspath(__file__))
+
 logging.basicConfig(level=logging.INFO)   
 sys.path.insert(0, '')
-sys.path.append('../../../')
+sys.path.append("/ibex/scratch/zhapacfp/mowl/")
 
-from mowl.datasets.base  import PathDataset
-from mowl.gnn_sim.model import GNNSim
+#from mowl.datasets.base  import PathDataset
+#from mowl.gnn_sim.model import GNNSim
 
 import yaml
 
-import os
-curr_path = os.path.dirname(os.path.abspath(__file__))
 
 
 
@@ -34,7 +35,7 @@ curr_path = os.path.dirname(os.path.abspath(__file__))
 @ck.option(
     '--config', '-c', help="Configuration file in config/")
 @ck.option(
-    '--num-samples', '-ns', help="Number of samples", default=100)
+    '--num-samples', '-ns', help="Number of samples", default=1)
 @ck.option(
     '--max-num-epochs', '-e', help="Max number of epochs", default=10)
 @ck.option(
@@ -94,6 +95,8 @@ def train_tune(config, params=None, checkpoint_dir = None):
     model.train(tuning = True)
 
 
+
+
 def tuning(params, num_samples, max_num_epochs, gpus_per_trial, feat_dim):
 
     
@@ -131,20 +134,41 @@ def tuning(params, num_samples, max_num_epochs, gpus_per_trial, feat_dim):
     print("Best trial final validation auc: {}".format(
         best_trial.last_result["auc"]))
 
-    best_trained_model = PPIModel(feat_dim, num_rels, best_trial.config["num_bases"], num_nodes, best_trial.config["n_hid"], best_trial.config["dropout"])
-    device = "cpu"
-    if th.cuda.is_available():
-        device = "cuda:0"
-        if gpus_per_trial > 1:
-            best_trained_model = nn.DataParallel(best_trained_model)
-    best_trained_model.to(device)
+
+
+    
+    ontology = params["general"]["ontology"]
+    ds = PathDataset(ontology, "", "")
+    num_bases = params["rgcn-params"]["num-bases"]
+    epochs = params["rgcn-params"]["epochs"]
+    graph_method = params["general"]["graph-gen-method"]
+    min_edges = params["rgcn-params"]["min-edges"]
+    seed =  params["rgcn-params"]["seed"]
+    file_params = params["files"]
+
+
+
+    best_trained_model = GNNSim(ds, # dataset
+                                best_trial.config["n_hid"],
+                                best_trial.config["dropout"],
+                                best_trial.config["lr"],
+                                num_bases,
+                                best_trial.config["batch_size"],
+                                epochs,
+                                graph_generation_method = graph_method,
+                                normalize = best_trial.config["norm"],
+                                regularization = best_trial.config["reg"],
+                                self_loop = best_trial.config["loop"],
+                                min_edges = min_edges,
+                                seed = seed,
+                                file_params = file_params
+                   )
+
 
     best_checkpoint_dir = best_trial.checkpoint.value
-    model_state, optimizer_state = th.load(os.path.join(
-        best_checkpoint_dir, "checkpoint"))
-    best_trained_model.load_state_dict(model_state)
+ 
+    test_loss, test_auc = best_trained_model.evaluate(tuning=True, best_checkpoint_dir = best_checkpoint_dir)
 
-    test_loss, test_auc = test(best_trial.config["n_hid"], best_trial.config["dropout"], best_trial.config["num_bases"], best_trial.config["batch_size"], file_params, model = best_trained_model)
     print("Best trial test set loss: {}".format(test_loss))
     print("Best trial test set auc: {}".format(test_auc))
    

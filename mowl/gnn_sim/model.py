@@ -161,7 +161,7 @@ class GNNSim(Model):
         print("Finished Training")
 
 
-    def evaluate(self, model=None):
+    def evaluate(self, tuning=False, best_checkpoint_dir=None):
 
         device = "cpu"
         g, annots, prot_idx, num_rels  = self.load_graph_data()
@@ -185,9 +185,15 @@ class GNNSim(Model):
     
         test_set_batches = self.get_batches(test_data, self.batch_size)
 
-        if model == None:
-            model = PPIModel(feat_dim, num_rels, self.num_bases, num_nodes, self.n_hidden, self.dropout)
+        model = PPIModel(feat_dim, num_rels, self.num_bases, num_nodes, self.n_hidden, self.dropout)
+
+        if tuning:
+            model_state, optimizer_state = th.load(os.path.join(best_checkpoint_dir, "checkpoint"))
+            model.load_state_dict(model_state)
+ 
+        else:
             model.load_state_dict(th.load(self.file_params["output_model"]))
+        
         model.to(device)
         model.eval()
         test_loss = 0
@@ -396,11 +402,6 @@ class PPIModel(nn.Module):
 
         norm = None if not 'norm' in g.edata else g.edata['norm']
 
-
-        print("#########################")
-        print(features.shape)
-        print(edge_type.shape)
-        print(norm.shape)
 
         x = self.rgcn(g, features, edge_type, norm)
 
