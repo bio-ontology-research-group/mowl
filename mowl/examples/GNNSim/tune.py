@@ -21,10 +21,11 @@ curr_path = os.path.dirname(os.path.abspath(__file__))
 
 logging.basicConfig(level=logging.INFO)   
 sys.path.insert(0, '')
-sys.path.append("/ibex/scratch/zhapacfp/mowl/")
+#sys.path.append("/ibex/scratch/zhapacfp/mowl/")
+#sys.path.append("../../../")
 
-#from mowl.datasets.base  import PathDataset
-#from mowl.gnn_sim.model import GNNSim
+from mowl.datasets.base  import PathDataset
+from mowl.gnn_sim.model import GNNSim
 
 import yaml
 
