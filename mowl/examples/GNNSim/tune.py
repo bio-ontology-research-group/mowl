@@ -21,12 +21,9 @@ curr_path = os.path.dirname(os.path.abspath(__file__))
 
 logging.basicConfig(level=logging.INFO)   
 sys.path.insert(0, '')
-#sys.path.append("/ibex/scratch/zhapacfp/mowl/")
-#sys.path.append("../../../")
 
-from mowl.datasets.base  import PathDataset
-from mowl.gnn_sim.model import GNNSim
-
+path = os.path.abspath(os.getcwd())
+sys.path.append(path + "/../../../")
 import yaml
 
 
@@ -59,6 +56,18 @@ def parseYAML(yaml_path):
 
     
 def train_tune(config, params=None, checkpoint_dir = None):
+
+    sys.path.append(path + '/')
+    sys.path.append(path + "/../../../")
+
+    print("path in tune:", sys.path)
+
+    from mowl.datasets.base  import PathDataset
+    from mowl.gnn_sim.model import GNNSim
+
+
+
+    
     batch_size = config["batch_size"]
     n_hidden = config["n_hid"]
     dropout = config["dropout"]
@@ -68,14 +77,16 @@ def train_tune(config, params=None, checkpoint_dir = None):
     self_loop = config["loop"]
     
     
-    ontology = params["general"]["ontology"]
-    ds = PathDataset(ontology, "", "")
+    ontology =  params["general"]["ontology"]
+    ds = PathDataset(path + '/' + ontology, "", "")
     num_bases = params["rgcn-params"]["num-bases"]
     epochs = params["rgcn-params"]["epochs"]
     graph_method = params["general"]["graph-gen-method"]
     min_edges = params["rgcn-params"]["min-edges"]
     seed =  params["rgcn-params"]["seed"]
     file_params = params["files"]
+
+    file_params = {k: path + '/' + v for k, v in file_params.items()}
     
     model = GNNSim(ds, # dataset
                    n_hidden,
@@ -100,7 +111,7 @@ def train_tune(config, params=None, checkpoint_dir = None):
 
 def tuning(params, num_samples, max_num_epochs, gpus_per_trial, feat_dim):
 
-    
+
     config = {
         "n_hid": tune.choice([2, 3, 4]),
         "dropout": tune.choice([x/10 for x in range(1,6)]),
@@ -137,16 +148,25 @@ def tuning(params, num_samples, max_num_epochs, gpus_per_trial, feat_dim):
 
 
 
-    
-    ontology = params["general"]["ontology"]
-    ds = PathDataset(ontology, "", "")
+    sys.path.append(path + '/')
+    sys.path.append(path + "/../../../")
+
+
+    from mowl.datasets.base  import PathDataset
+    from mowl.gnn_sim.model import GNNSim
+
+
+
+    ontology =  params["general"]["ontology"]
+    ds = PathDataset(path + '/' + ontology, "", "")
     num_bases = params["rgcn-params"]["num-bases"]
     epochs = params["rgcn-params"]["epochs"]
     graph_method = params["general"]["graph-gen-method"]
     min_edges = params["rgcn-params"]["min-edges"]
     seed =  params["rgcn-params"]["seed"]
     file_params = params["files"]
-
+    
+    file_params = {k: path + '/' + v for k, v in file_params.items()}
 
 
     best_trained_model = GNNSim(ds, # dataset
@@ -164,7 +184,6 @@ def tuning(params, num_samples, max_num_epochs, gpus_per_trial, feat_dim):
                                 seed = seed,
                                 file_params = file_params
                    )
-
 
     best_checkpoint_dir = best_trial.checkpoint.value
  
