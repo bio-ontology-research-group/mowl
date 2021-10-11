@@ -15,9 +15,10 @@ from torch import optim
 from .baseRGCN import BaseRGCN
 from sklearn.metrics import roc_curve, auc, matthews_corrcoef
 from torch.utils.data import DataLoader, IterableDataset
-from dgl.nn.pytorch import RelGraphConv
-from mowl.graph.edge import Edge
+#from dgl.nn.pytorch import RelGraphConv
+from .rgcnConv import RelGraphConv
 
+from mowl.graph.edge import Edge
 
 import random
 from ray import tune
@@ -88,7 +89,7 @@ class GNNSim(Model):
             if th.cuda.device_count() > 1:
                 model = nn.DataParallel(model)
             
-        annots = th.FloatTensor(annots) #.to(device)
+        annots = th.FloatTensor(annots)
 
 
         model.to(device)
@@ -117,10 +118,9 @@ class GNNSim(Model):
 
             with ck.progressbar(train_set_batches) as bar:
                 for iter, (batch_g, batch_labels) in enumerate(bar):
+                    logits = model(batch_g.to(device))
 
-                    logits  = model(batch_g.to(device))
-#                    print(logits)
-                    labels = batch_labels.to(device)
+                    labels = batch_labels.unsqueeze(1).to(device)
                     loss = loss_func(logits, labels)
                     optimizer.zero_grad()
                     loss.backward()
@@ -139,8 +139,7 @@ class GNNSim(Model):
                     for iter, (batch_g, batch_labels) in enumerate(bar):
                         
                         logits = model(batch_g.to(device))
-
-                        lbls = batch_labels.to(device)
+                        lbls = batch_labels.unsqueeze(1).to(device)
                         loss = loss_func(logits, lbls)
                         val_loss += loss.detach().item()
                         labels = np.append(labels, lbls.cpu())
@@ -163,7 +162,7 @@ class GNNSim(Model):
         print("Finished Training")
 
 
-    def evaluate(self, model=None):
+    def evaluate(self, tuning=False, best_checkpoint_dir=None):
 
         device = "cpu"
         g, annots, prot_idx, num_rels  = self.load_graph_data()
@@ -187,9 +186,15 @@ class GNNSim(Model):
     
         test_set_batches = self.get_batches(test_data, self.batch_size)
 
-        if model == None:
-            model = PPIModel(feat_dim, num_rels, self.num_bases, num_nodes, self.n_hidden, self.dropout)
+        model = PPIModel(feat_dim, num_rels, self.num_bases, num_nodes, self.n_hidden, self.dropout)
+
+        if tuning:
+            model_state, optimizer_state = th.load(os.path.join(best_checkpoint_dir, "checkpoint"))
+            model.load_state_dict(model_state)
+ 
+        else:
             model.load_state_dict(th.load(self.file_params["output_model"]))
+        
         model.to(device)
         model.eval()
         test_loss = 0
@@ -200,7 +205,6 @@ class GNNSim(Model):
             with ck.progressbar(test_set_batches) as bar:
                 for iter, (batch_g, batch_labels) in enumerate(bar):
                     logits = model(batch_g.to(device))
-
                     labels = batch_labels.unsqueeze(1).to(device)
                     loss = loss_func(logits, labels)
                     test_loss += loss.detach().item()
@@ -259,32 +263,21 @@ class GNNSim(Model):
     def load_graph_data(self):
 
         data_file = self.file_params["data_file"]
-        terms_file = self.file_params["terms_file"]
-        
+
         parser = gen_factory(self.graph_generation_method, self.dataset)
 
         edges = parser.parseOWL()
 
-        
-        with open(terms_file) as f:
-            terms = f.read().splitlines()
-
-        edges = [(str(e.src()), str(e.rel()), str(e.dst())) for e in edges if (str(e.src()) in terms) and (str(e.dst()) in terms) ]
-        
-        srcs, rels, dsts  = tuple(map(list, zip(*edges)))
+        srcs = [str(e.src()) for e in edges]
+        rels = [str(e.rel()) for e in edges]
+        dsts = [str(e.dst()) for e in edges]
 
         
-        
+
         g = dgl.DGLGraph()
-        
         nodes = list(set(srcs).union(set(dsts)))
-
-
-            
         g.add_nodes(len(nodes))
-
         node_idx = {v: k for k, v in enumerate(nodes)}
-
         
         if self.self_loop:
             srcs += nodes
@@ -362,13 +355,6 @@ class GNNSim(Model):
                 for go_id in row[1:]:
                     if go_id in node_idx:
                         annotations[node_idx[go_id], i] = 1
-
-            print("aaaaooooo ", annotations.shape)
-            
-            idx = np.argwhere(np.all(annotations[..., :] == 0, axis=0))
-            annotations = annotations[:,~np.all(annotations==0, axis=0)]
-            #annotations = np.all(annotations == 0, axis = 0)
-            print("neuouo ", annotations.shape)
         return g, annotations, prot_idx, num_rels
 
 
@@ -406,49 +392,33 @@ class PPIModel(nn.Module):
                               use_cuda=True
                               )
 
-        dim1 = self.num_nodes
-        dim2 = floor(self.num_nodes/20)
-        self.fc = nn.Linear(dim1, dim2)
-        self.fc2 = nn.Linear(dim2,1024)
-        self.dropout = nn.Dropout()
-        self.cosSim = nn.CosineSimilarity()
 
-        self.net = nn.Sequential(
-            self.fc,
-#            nn.ReLU(),
-            self.dropout
- #           self.fc2,
- #           self.dropout
-        )
-        
+        self.fc1 = nn.Linear(self.num_nodes*self.h_dim, 1) 
+#        self.fc2 = nn.Linear(floor(self.num_nodes/2), 1) 
+
+    def forward_each(self, g, features, edge_type, norm):
+        x = self.rgcn(g, features, edge_type, norm)
+        x = th.flatten(x).view(-1, self.num_nodes*self.h_dim)
+        return x
+
     def forward(self, g):
 
-        # edge_type = g.edata['rel_type'].long()
-        # norm = None if not 'norm' in g.edata else g.edata['norm']
+        edge_type = g.edata['rel_type'].long()
 
-        # feat1 = g.ndata['feat1']
-        # feat2 = g.ndata['feat2']
-        # del g.ndata['feat1']
-        # del g.ndata['feat2']
+        norm = None if not 'norm' in g.edata else g.edata['norm']
 
+        feat1 = g.ndata['feat1']
+        feat2 = g.ndata['feat2']
 
-        # x1 = self.forward_each(g, feat1, edge_type, norm)
-        # x2 = self.forward_each(g, feat2, edge_type, norm)
-        feat1 = g.ndata['feat1'].view(32, -1)
-        feat2 = g.ndata['feat2'].view(32, -1)
+        x1 = self.forward_each(g, feat1, edge_type, norm)
+        x2 = self.forward_each(g, feat2, edge_type, norm)
 
-        x1 = self.net(feat1)#.squeeze())
-        x2 = self.net(feat2)#.squeeze())
-
-  #      print("x1: ", x1.shape)
-        
+        #x = th # th.flatten(x).view(-1, self.num_nodes*self.h_dim)
         x = th.sum(x1 * x2, dim=1, keepdims=True)
-#        x = self.cosSim(x1, x2)
-        #print(x)
-        return th.sigmoid(x).squeeze()
+        return th.sigmoid(x)
 
 
-   
+    
 
 class GraphDataset(IterableDataset):
 
@@ -467,12 +437,12 @@ class GraphDataset(IterableDataset):
                 continue
             pi1, pi2 = self.prot_idx[p1], self.prot_idx[p2]
 
-            feat1 = self.annots[:, pi1]
-            feat2 = self.annots[:, pi2]
+            feat1 = self.annots[:, [pi1]]
+            feat2 = self.annots[:, [pi2]]
 
+            self.graph.ndata['feat1'] = feat1
+            self.graph.ndata['feat2'] = feat2
             
-            self.graph.ndata['feat1'] = th.Tensor(feat1)
-            self.graph.ndata['feat2'] = th.Tensor(feat2)
             yield (self.graph, label)
 
     def __iter__(self):

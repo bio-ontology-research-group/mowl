@@ -20,5 +20,4 @@ files:
   valid_inter_file: "data/4932.valid_interactions.pkl"
   test_inter_file: "data/4932.test_interactions.pkl"
   data_file: "data/4932.annotations.tsv"
-  terms_file: "data/4932.terms.tsv"
   output_model: "data/tax_yeast_model.pt"
