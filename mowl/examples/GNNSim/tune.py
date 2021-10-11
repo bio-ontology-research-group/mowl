@@ -21,10 +21,9 @@ curr_path = os.path.dirname(os.path.abspath(__file__))
 
 logging.basicConfig(level=logging.INFO)   
 sys.path.insert(0, '')
-#sys.path.append("/ibex/scratch/zhapacfp/mowl/")
+
 path = os.path.abspath(os.getcwd())
 sys.path.append(path + "/../../../")
-
 import yaml
 
 
