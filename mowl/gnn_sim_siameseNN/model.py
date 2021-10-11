@@ -15,8 +15,7 @@ from torch import optim
 from .baseRGCN import BaseRGCN
 from sklearn.metrics import roc_curve, auc, matthews_corrcoef
 from torch.utils.data import DataLoader, IterableDataset
-#from dgl.nn.pytorch import RelGraphConv
-from .relgraphconv import RelGraphConv
+from dgl.nn.pytorch import RelGraphConv
 from mowl.graph.edge import Edge
 
 
@@ -260,22 +259,32 @@ class GNNSim(Model):
     def load_graph_data(self):
 
         data_file = self.file_params["data_file"]
-
+        terms_file = self.file_params["terms_file"]
+        
         parser = gen_factory(self.graph_generation_method, self.dataset)
 
         edges = parser.parseOWL()
 
-        srcs = [str(e.src()) for e in edges]
-        rels = [str(e.rel()) for e in edges]
-        dsts = [str(e.dst()) for e in edges]
+        
+        with open(terms_file) as f:
+            terms = f.read().splitlines()
 
+        edges = [(str(e.src()), str(e.rel()), str(e.dst())) for e in edges if (str(e.src()) in terms) and (str(e.dst()) in terms) ]
+        
+        srcs, rels, dsts  = tuple(map(list, zip(*edges)))
+
+        
         
         g = dgl.DGLGraph()
         
         nodes = list(set(srcs).union(set(dsts)))
+
+
+            
         g.add_nodes(len(nodes))
 
         node_idx = {v: k for k, v in enumerate(nodes)}
+
         
         if self.self_loop:
             srcs += nodes
@@ -353,6 +362,13 @@ class GNNSim(Model):
                 for go_id in row[1:]:
                     if go_id in node_idx:
                         annotations[node_idx[go_id], i] = 1
+
+            print("aaaaooooo ", annotations.shape)
+            
+            idx = np.argwhere(np.all(annotations[..., :] == 0, axis=0))
+            annotations = annotations[:,~np.all(annotations==0, axis=0)]
+            #annotations = np.all(annotations == 0, axis = 0)
+            print("neuouo ", annotations.shape)
         return g, annotations, prot_idx, num_rels
 
 
@@ -390,18 +406,20 @@ class PPIModel(nn.Module):
                               use_cuda=True
                               )
 
-        self.fc = nn.Linear(self.num_nodes*self.h_dim, 1024)
+        dim1 = self.num_nodes
+        dim2 = floor(self.num_nodes/20)
+        self.fc = nn.Linear(dim1, dim2)
+        self.fc2 = nn.Linear(dim2,1024)
         self.dropout = nn.Dropout()
         self.cosSim = nn.CosineSimilarity()
 
-        
-    def forward_each(self, g, features, edge_type, norm):
-        x = self.rgcn(g, features, edge_type, norm)
-        x = th.flatten(x).view(-1, self.num_nodes*self.h_dim)
-        x = self.fc(x)
-        x = self.dropout(x)
-        
-        return x
+        self.net = nn.Sequential(
+            self.fc,
+#            nn.ReLU(),
+            self.dropout
+ #           self.fc2,
+ #           self.dropout
+        )
         
     def forward(self, g):
 
@@ -419,10 +437,8 @@ class PPIModel(nn.Module):
         feat1 = g.ndata['feat1'].view(32, -1)
         feat2 = g.ndata['feat2'].view(32, -1)
 
-#        print("feat1: ", feat1.shape)
-        
-        x1 = self.dropout(self.fc(feat1))#.squeeze())
-        x2 = self.dropout(self.fc(feat2))#.squeeze())
+        x1 = self.net(feat1)#.squeeze())
+        x2 = self.net(feat2)#.squeeze())
 
   #      print("x1: ", x1.shape)
         
@@ -432,24 +448,7 @@ class PPIModel(nn.Module):
         return th.sigmoid(x).squeeze()
 
 
-class ContrastiveLoss(nn.Module):
-    """
-    Contrastive loss function.
-    Based on: http://yann.lecun.com/exdb/publis/pdf/hadsell-chopra-lecun-06.pdf
-    """
-
-    def __init__(self, margin=2.0):
-        super(ContrastiveLoss, self).__init__()
-        self.margin = margin
-
-    def forward(self, outputs, label):
-        output1, output2 = outputs
-        euclidean_distance = F.pairwise_distance(output1, output2)
-        loss_contrastive = th.mean((label) * th.pow(euclidean_distance, 2) +
-                                      (1-label) * th.pow(th.clamp(self.margin - euclidean_distance, min=0.0), 2))
-
-
-        return loss_contrastive    
+   
 
 class GraphDataset(IterableDataset):
 
@@ -468,8 +467,8 @@ class GraphDataset(IterableDataset):
                 continue
             pi1, pi2 = self.prot_idx[p1], self.prot_idx[p2]
 
-            feat1 = self.annots[:, [pi1]]
-            feat2 = self.annots[:, [pi2]]
+            feat1 = self.annots[:, pi1]
+            feat2 = self.annots[:, pi2]
 
             
             self.graph.ndata['feat1'] = th.Tensor(feat1)
