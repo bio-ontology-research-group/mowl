@@ -4,8 +4,12 @@ package org.mowl.BasicParser
 import org.semanticweb.owlapi.model._
 import org.semanticweb.owlapi.apibinding.OWLManager
 import org.semanticweb.owlapi.model.parameters.Imports
-import uk.ac.manchester.cs.owl.owlapi.OWLObjectSomeValuesFromImpl
+import uk.ac.manchester.cs.owl.owlapi._ //OWLObjectSomeValuesFromImpl
 
+
+import org.semanticweb.owlapi.reasoner.OWLReasoner;
+import org.semanticweb.owlapi.reasoner.OWLReasonerFactory;
+import org.semanticweb.HermiT.ReasonerFactory;
 
 // Java imports
 import java.io.File
@@ -27,10 +31,33 @@ class SimpleParser(var ontology: OWLOntology, var subclass: Boolean = true, var 
   def parse = {
            
     val axioms = ontology.getAxioms()
-    val imports = Imports.fromBoolean(false)
+    val imports = Imports.fromBoolean(true)
 
     val go_classes = ontology.getClassesInSignature(imports).asScala.toList
 
+
+    val transitive_closure = true
+    if (transitive_closure) {
+
+      val reasonerFactory = new ReasonerFactory();
+      val reasoner = reasonerFactory.createReasoner(ontology);
+
+      val superClasses = (cl:OWLClass) => (cl, reasoner.getSuperClasses(cl, false).getFlattened.asScala.toList)
+      val transitiveAxioms = (tuple: (OWLClass, List[OWLClass])) => {
+        val subclass = tuple._1
+        val superClasses = tuple._2
+        superClasses.map((sup) => new OWLSubClassOfAxiomImpl(subclass, sup, Nil.asJava))
+      }
+      val newAxioms = go_classes flatMap (transitiveAxioms compose  superClasses)
+
+      ontology.addAxioms(newAxioms.asJava)
+
+      // go_classes.foreach{
+      //   (cl:OWLClass) => reasoner.getSuperClasses(cl, false).asScala.toList.foreach{
+      //     (sup:OWLClass) => ontology.addAxiom(new OWLSubClassOfAxiomImpl(cl, sup, Nil.asJava))
+      //   }
+      // }
+    }
 
     println(s"INFO: Number of GO classes: ${go_classes.length}")
        

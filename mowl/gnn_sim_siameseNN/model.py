@@ -263,14 +263,20 @@ class GNNSim(Model):
     def load_graph_data(self):
 
         data_file = self.file_params["data_file"]
+        terms_file = self.file_params["terms_file"]
 
+        with open(terms_file) as f:
+            terms = f.read().splitlines()
+        
         parser = gen_factory(self.graph_generation_method, self.dataset)
-
         edges = parser.parseOWL()
 
-        srcs = [str(e.src()) for e in edges]
-        rels = [str(e.rel()) for e in edges]
-        dsts = [str(e.dst()) for e in edges]
+        edges = [(s, str(e.rel()), d) for e in edges if (s := str(e.src())) in terms and  (d := str(e.dst())) in terms]
+
+        srcs, rels, dsts = tuple(map(list, zip(*edges)))
+#        srcs = [str(e.src()) for e in edges]
+#        rels = [str(e.rel()) for e in edges]
+#        dsts = [str(e.dst()) for e in edges]
 
         
 
