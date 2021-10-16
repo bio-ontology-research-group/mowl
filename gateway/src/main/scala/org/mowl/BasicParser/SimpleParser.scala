@@ -36,7 +36,7 @@ class SimpleParser(var ontology: OWLOntology, var subclass: Boolean = true, var 
     val go_classes = ontology.getClassesInSignature(imports).asScala.toList
 
 
-    val transitive_closure = true
+    val transitive_closure = false
     if (transitive_closure) {
 
       val reasonerFactory = new ReasonerFactory();

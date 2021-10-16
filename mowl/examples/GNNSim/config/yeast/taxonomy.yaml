@@ -4,14 +4,14 @@ general:
 
 rgcn-params:
   lr: 0.0001
-  n-hidden: 3
+  n-hidden: 1
   batch-size: 32
   epochs: 32
   dropout: 0.3
   regularization: 0
   num-bases: -1
   normalization: True
-  self-loop: True
+  self-loop: False
   min-edges: 100
   seed: 0
 

@@ -118,6 +118,8 @@ class GNNSim(Model):
 
             with ck.progressbar(train_set_batches) as bar:
                 for iter, (batch_g, batch_labels, feats1, feats2) in enumerate(bar):
+                    feats1 = annots[feats1].view(-1,1)
+                    feats2 = annots[feats2].view(-1,1)
                     logits = model(batch_g.to(device), feats1.to(device), feats2.to(device))
 
                     labels = batch_labels.unsqueeze(1).to(device)
@@ -137,6 +139,8 @@ class GNNSim(Model):
                 optimizer.zero_grad()
                 with ck.progressbar(val_set_batches) as bar:
                     for iter, (batch_g, batch_labels, feats1, feats2) in enumerate(bar):
+                        feats1 = annots[feats1].view(-1,1)
+                        feats2 = annots[feats2].view(-1,1)
                         
                         logits = model(batch_g.to(device), feats1.to(device), feats2.to(device))
                         lbls = batch_labels.unsqueeze(1).to(device)
@@ -204,6 +208,9 @@ class GNNSim(Model):
         with th.no_grad():
             with ck.progressbar(test_set_batches) as bar:
                 for iter, (batch_g, batch_labels, feats1, feats2) in enumerate(bar):
+                    feats1 = annots[feats1].view(-1,1)
+                    feats2 = annots[feats2].view(-1,1)
+
                     logits = model(batch_g.to(device), feats1.to(device), feats2.to(device))
                     labels = batch_labels.unsqueeze(1).to(device)
                     loss = loss_func(logits, labels)
@@ -230,9 +237,9 @@ class GNNSim(Model):
     def collate(self, samples):
         # The input `samples` is a list of pairs
         #  (graph, label).
-        graphs, labels, feats1, feats2 = map(list, zip(*samples))
+        graphs, labels, prots1, prots2 = map(list, zip(*samples))
         batched_graph = dgl.batch(graphs)
-        return batched_graph, th.tensor(labels), th.cat(feats1, dim=0), th.cat(feats2, dim=0)
+        return batched_graph, th.tensor(labels), prots1, prots2 #th.cat(feats1, dim=0), th.cat(feats2, dim=0)
 
 
 
@@ -265,8 +272,8 @@ class GNNSim(Model):
         data_file = self.file_params["data_file"]
         terms_file = self.file_params["terms_file"]
 
-#        with open(terms_file) as f:
-#            terms = f.read().splitlines()
+        with open(terms_file) as f:
+            terms = f.read().splitlines()
         
         parser = gen_factory(self.graph_generation_method, self.dataset)
         edges_path = f"data/edges_{self.graph_generation_method}.pkl"
@@ -359,14 +366,14 @@ class GNNSim(Model):
         with open(data_file, 'r') as f:
             rows = [line.strip('\n').split('\t') for line in f.readlines()]
             
-            annotations = np.zeros((num_nodes, len(rows)), dtype=np.float32)
+            annotations = np.zeros((len(rows), num_nodes), dtype=np.float32)
 
             for i, row  in enumerate(rows):
                 prot_id = row[0]
                 prot_idx[prot_id] = i
                 for go_id in row[1:]:
                     if go_id in node_idx:
-                        annotations[node_idx[go_id], i] = 1
+                        annotations[i, node_idx[go_id]] = 1
         return g, annotations, prot_idx, num_rels
 
 
@@ -398,7 +405,7 @@ class PPIModel(nn.Module):
                               self.h_dim, 
                               self.num_rels, 
                               self.num_bases,
-                              num_hidden_layers= 1,#n_hid, 
+                              num_hidden_layers= n_hid, 
                               dropout=dropout,
                               use_self_loop=False, 
                               use_cuda=True
@@ -450,7 +457,7 @@ class GraphDataset(IterableDataset):
             feat1 = self.annots[:, [pi1]]
             feat2 = self.annots[:, [pi2]]
 
-            yield (self.graph, label, feat1,feat2)
+            yield (self.graph, label, pi1, pi2)
 
     def __iter__(self):
         return self.get_data()
