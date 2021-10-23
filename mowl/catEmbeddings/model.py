@@ -2,6 +2,7 @@ import click as ck
 import torch as th
 import torch.nn as nn
 from torch import optim
+from torch.linalg import matrix_norm
 from torch.utils.data import IterableDataset, DataLoader
 import numpy as np
 from sklearn.model_selection import train_test_split
@@ -113,35 +114,34 @@ class CatModel(nn.Module):
             nn.Linear(dim1, dim2)
         )
 
-        self.net_morphism = nn.Sequential(
-            nn.Embedding(7, embedding_size),
-            nn.Linear(dim0, dim1),
-            nn.Linear(dim1, dim2)
-        )
+        self.proj_up_exp = nn.Linear(dim2, dim2)
+        self.proj_up_ant = nn.Linear(dim2, dim2)
+        self.proj_down_exp = nn.Linear(dim2, dim2)
+        self.proj_down_ant = nn.Linear(dim2, dim2)
+        self.prod_up_down = nn.Linear(dim2, dim2)
+        self.prod_up_cons = nn.Linear(dim2, dim2)
+        self.prod_down_cons = nn.Linear(dim2, dim2)
         
     def compute_loss(self, objects, morphisms):
 
         objects = map(lambda x: x.unsqueeze(1), objects)
         prod_up, prod_down, exponential, antecedent, consequent = map(self.net_object, objects)
 
-        morphisms = map(lambda x: x.unsqueeze(1), morphisms)
-        proj_up_exp, proj_up_ant, proj_down_exp, proj_down_ant, prod_up_down, prod_up_cons, prod_down_cons = map(self.net_morphism, morphisms)
 
 
-        loss1 = abs(exponential - prod_up - proj_up_exp)
-
-        loss2 = abs(antecedent - prod_up - proj_up_ant)
+        loss1 = abs(exponential - self.proj_up_exp(prod_up))
+        loss2 = abs(antecedent - self.proj_up_ant(prod_up))
         
-        loss3 = abs(exponential - prod_down - proj_down_exp)
-        loss4 = abs(antecedent - prod_down - proj_down_ant)
+        loss3 = abs(exponential - self.proj_down_exp(prod_down))
+        loss4 = abs(antecedent - self.proj_down_ant(prod_down))
 
-        loss5 = abs(prod_down - prod_up - prod_up_down)
-        loss6 = abs(consequent - prod_down - prod_down_cons)
-        loss7 = abs(consequent - prod_up - prod_up_cons)
+        loss5 = abs(prod_down - self.prod_up_down(prod_up))
+        loss6 = abs(consequent - self.prod_down_cons(prod_down))
+        loss7 = abs(consequent - self.prod_up_cons(prod_up))
 
-        path_loss1 = abs(proj_up_exp - proj_down_exp - prod_up_down)
-        path_loss2 = abs(proj_up_ant - proj_down_ant - prod_up_down)
-        path_loss3 = abs(prod_up_cons - prod_down_cons - prod_up_down)
+        path_loss1 = matrix_norm(self.proj_up_exp.weight - self.prod_up_down.weight@self.proj_down_exp.weight)
+        path_loss2 = matrix_norm(self.proj_up_ant.weight - self.prod_up_down.weight@self.proj_down_ant.weight)
+        path_loss3 = matrix_norm(self.prod_up_cons.weight - self.prod_up_down.weight@self.prod_down_cons.weight)
 
         return sum([loss1, loss2, loss3, loss4, loss5, loss6, loss7, path_loss1, path_loss2, path_loss3])
 

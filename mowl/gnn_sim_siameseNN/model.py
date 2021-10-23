@@ -111,7 +111,8 @@ class GNNSim(Model):
         val_set_batches = self.get_batches(val_data, self.batch_size)
     
         best_roc_auc = 0
-
+        early_stopping_limit = 3
+        best_loss = float("inf")
         for epoch in range(self.epochs):
             epoch_loss = 0
             model.train()
@@ -150,11 +151,16 @@ class GNNSim(Model):
 
             roc_auc = self.compute_roc(labels, preds)
             if not tuning:
-                if roc_auc > best_roc_auc:
-                    best_roc_auc = roc_auc
+                if val_loss <= best_loss:
+                    best_loss = val_loss
                     th.save(model.state_dict(), self.file_params["output_model"])
+                else:
+                    early_stopping_limit-=1
                 print(f'Epoch {epoch}: Loss - {epoch_loss}, \tVal loss - {val_loss}, \tAUC - {roc_auc}')
 
+                if early_stopping_limit == 0:
+                    print("Finished training by early stopping")
+                    break
             else:
                 with tune.checkpoint_dir(epoch) as checkpoint_dir:
                     path = os.path.join(checkpoint_dir, "checkpoint")
