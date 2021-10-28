@@ -4,12 +4,16 @@ package org.mowl.BasicParser
 import org.semanticweb.owlapi.model._
 import org.semanticweb.owlapi.apibinding.OWLManager
 import org.semanticweb.owlapi.model.parameters.Imports
-import uk.ac.manchester.cs.owl.owlapi.OWLObjectSomeValuesFromImpl
+import org.semanticweb.owlapi.reasoner.OWLReasonerFactory
+import uk.ac.manchester.cs.owl.owlapi._ //OWLObjectSomeValuesFromImpl
 
-
+import org.semanticweb.owlapi.reasoner.OWLReasoner
+import org.semanticweb.owlapi.reasoner.OWLReasonerFactory
+import org.semanticweb.HermiT.ReasonerFactory
+import org.semanticweb.owlapi.formats.OWLXMLDocumentFormat
 // Java imports
 import java.io.File
-
+import java.io.FileOutputStream
 
 import collection.JavaConverters._
 
@@ -137,5 +141,28 @@ class SimpleParser(var ontology: OWLOntology, var subclass: Boolean = true, var 
   }
 
     ///////////////////////////////////////
+
+  def transitiveClosureToFile(out_file: String) = {
+
+    val imports = Imports.fromBoolean(false)
+    val go_classes = ontology.getClassesInSignature(imports).asScala.toList
+
+    val reasonerFactory = new ReasonerFactory();
+    val reasoner = reasonerFactory.createReasoner(ontology);
+
+    val superClasses = (cl:OWLClass) => (cl, reasoner.getSuperClasses(cl, false).getFlattened.asScala.toList)
+    val transitiveAxioms = (tuple: (OWLClass, List[OWLClass])) => {
+      val subclass = tuple._1
+      val superClasses = tuple._2
+      superClasses.map((sup) => (new OWLSubClassOfAxiomImpl(subclass, sup, Nil.asJava)).asInstanceOf[OWLAxiom])
+    }
+    val newAxioms = go_classes flatMap (transitiveAxioms compose  superClasses)
+
+
+    val out_ontology = ont_manager.createOntology(newAxioms.asJava) 
+
+    val fileout = new File(out_file);
+    ont_manager.saveOntology(out_ontology, new OWLXMLDocumentFormat(), new FileOutputStream(fileout))
+  }
 
 }

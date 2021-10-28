@@ -38,8 +38,8 @@ def load_triples(filepath, delimiter='\t', encoding=None):
 class Dataset(object):
 
     ontology: OWLOntology
-    validation: Optional[Triples]
-    testing: Optional[Triples]
+    validation: Optional[OWLOntology]
+    testing: Optional[OWLOntology]
 
 
 
@@ -49,8 +49,8 @@ class PathDataset(Dataset):
     validation_path: str
     testing_path: str
     _ontology: OWLOntology
-    _validation: Triples
-    _testing: Triples
+    _validation: OWLOntology
+    _testing: OWLOntology
     
     def __init__(self, ontology_path: str, validation_path: str, testing_path: str):
         self.ontology_path = ontology_path
@@ -84,7 +84,8 @@ class PathDataset(Dataset):
         
         self._ontology = self.ont_manager.loadOntologyFromOntologyDocument(
             java.io.File(self.ontology_path))
-        self._validation = load_triples(self.validation_path)
+        self._validation = None if self.validation_path == "" else self.ont_manager.loadOntologyFromOntologyDocument(
+            java.io.File(self.validation_path))
         self._testing = load_triples(self.testing_path)
         self._loaded = True
 

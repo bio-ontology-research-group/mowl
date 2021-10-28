@@ -25,10 +25,12 @@ def main(config):
 
 
     ontology = "data/goslim_yeast.owl"
+    val = "data/trans_yeast.owl"
     
-    ds = PathDataset(ontology, "", "")
+    
+    ds = PathDataset(ontology, val, "")
         
-    model = CatEmbeddings(ds)
+    model = CatEmbeddings(ds, 64)
 
     model.train()
     model.evaluate()
