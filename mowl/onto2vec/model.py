@@ -2,8 +2,8 @@ import os
 from mowl.model import Model
 from jpype.types import *
 
-from org.mowl import Onto2VecShortFormProvider
 from org.semanticweb.owlapi.manchestersyntax.renderer import ManchesterOWLSyntaxOWLObjectRendererImpl
+from org.mowl.Onto2Vec import Onto2VecShortFormProvider
 
 import gensim
 import logging
