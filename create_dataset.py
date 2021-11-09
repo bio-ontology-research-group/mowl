@@ -25,6 +25,11 @@ from org.semanticweb.owlapi.util import InferredClassAssertionAxiomGenerator
 from org.apache.jena.rdf.model import ModelFactory
 from org.apache.jena.util import FileManager
 
+
+# current directory is the mowl project root
+# example parameters: --ont-file=../data/ppi_yeast_localtest/goslim_yeast.owl --data-file=../data/ppi_yeast_localtest/4932.protein.physical.links.v11.5.txt.gz --go-annots-file=../data/ppi_yeast_localtest/sgd.gaf.short --out-dir=../data/ppi_yeast_localtest
+
+
 @ck.command()
 @ck.option(
     '--ont-file', '-ont', default='data/go.owl',
@@ -34,11 +39,14 @@ from org.apache.jena.util import FileManager
     help='STRING PPI file')
 @ck.option(
     '--annots-file', '-af', default='data/annotations.tsv',
-    help='Annotations file extracted from Uniprot')
+    help='Annotations file extracted from Uniprot (using uni2pandas.py and annotations.py)')
+@ck.option(
+    '--go-annots-file', '-gf',
+    help='as an alternative to --annots-file, specify the sdf.gaf from http://current.geneontology.org/products/pages/downloads.html, mapping uniprot proteins to GO annotations')
 @ck.option(
     '--out-dir', '-od', default='datasets/ppi_yeast',
     help='Dataset directory')
-def main(ont_file, data_file, annots_file, out_dir):
+def main(ont_file, data_file, annots_file, go_annots_file, out_dir):
     train, valid, test = load_and_split_interactions(data_file)
     manager = OWLManager.createOWLOntologyManager()
     ont = manager.loadOntologyFromOntologyDocument(java.io.File(ont_file))
@@ -49,23 +57,42 @@ def main(ont_file, data_file, annots_file, out_dir):
         IRI.create("http://has_function"))
 
     # Add annotations to the ontology
-    with open(annots_file) as f:
-        for line in f:
-            items = line.strip().split('\t')
-            p_id = items[0]
-            protein = factory.getOWLClass(IRI.create(f'http://{p_id}'))
-            for go_id in items[1:]:
-                go_id = go_id.replace(':', '_')
-                go_class = factory.getOWLClass(
-                    IRI.create(f'http://purl.obolibrary.org/obo/{go_id}'))
-                axiom = factory.getOWLSubClassOfAxiom(
-                    protein, factory.getOWLObjectSomeValuesFrom(
-                        has_function_rel, go_class))
-                manager.addAxiom(ont, axiom)
+    if go_annots_file:
+        with open(go_annots_file) as f:
+            for line in f:
+                if not line.startswith('!'):
+                    try:
+                        items = line.strip().split('\t')
+                        p_id = '4932.' + items[10] # e.g. '4932.YKL020C'
+                        protein = factory.getOWLClass(IRI.create(f'http://{p_id}'))
+                        go_id = items[4].replace(':', '_')
+                        go_class = factory.getOWLClass(
+                            IRI.create(f'http://purl.obolibrary.org/obo/{go_id}'))
+                        axiom = factory.getOWLSubClassOfAxiom(
+                            protein, factory.getOWLObjectSomeValuesFrom(
+                                has_function_rel, go_class))
+                        manager.addAxiom(ont, axiom)
+                    except IndexError:
+                        pass
+
+    else:
+        with open(annots_file) as f:
+            for line in f:
+                items = line.strip().split('\t')
+                p_id = items[0]
+                protein = factory.getOWLClass(IRI.create(f'http://{p_id}'))
+                for go_id in items[1:]:
+                    go_id = go_id.replace(':', '_')
+                    go_class = factory.getOWLClass(
+                        IRI.create(f'http://purl.obolibrary.org/obo/{go_id}'))
+                    axiom = factory.getOWLSubClassOfAxiom(
+                        protein, factory.getOWLObjectSomeValuesFrom(
+                            has_function_rel, go_class))
+                    manager.addAxiom(ont, axiom)
 
     # Add training set interactions to the ontology
     for inters in train:
-        p1, p2 = inters[0], inters[1]
+        p1, p2 = inters[0], inters[1]  # e.g. 4932.YLR117C  and 4932.YPR101W
         protein1 = factory.getOWLClass(IRI.create(f'http://{p1}'))
         protein2 = factory.getOWLClass(IRI.create(f'http://{p2}'))
         axiom = factory.getOWLSubClassOfAxiom(
