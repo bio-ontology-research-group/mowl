@@ -29,7 +29,6 @@ import org.semanticweb.owlapi.util.InferredSubClassAxiomGenerator;
 import org.semanticweb.owlapi.util.InferredEquivalentClassAxiomGenerator;
 import org.semanticweb.owlapi.reasoner.OWLReasonerFactory;
 import org.semanticweb.owlapi.reasoner.OWLReasoner;
-import org.semanticweb.HermiT.Reasoner;
 import org.semanticweb.owlapi.reasoner.OWLReasonerConfiguration;
 
 
@@ -126,31 +125,7 @@ class AxiomsFromOnt {
 	    }
 	    
 
-	}else {
-	    OWLReasonerFactory reasonerFactory = new Reasoner.ReasonerFactory();
-	    OWLReasoner reasoner =reasonerFactory.createReasoner(this.ontology);
-	    OWLDataFactory factory=manager.getOWLDataFactory();
-	    reasoner.precomputeInferences();
-	    InferredSubClassAxiomGenerator generator = new InferredSubClassAxiomGenerator();
-	    Set<OWLAxiom> axioms = generator.createAxioms(factory, reasoner);
-	    manager.addAxioms(this.ontology,axioms);
-	    OWLObjectRenderer renderer =new ManchesterOWLSyntaxOWLObjectRendererImpl ();
-	    renderer.setShortFormProvider(new SimpleShortFormProvider1());
-	    Set<OWLClass> classes=this.ontology.getClassesInSignature();
-
-
-	    for (OWLClass class1 : classes){
-		Set<OWLClassAxiom> ontoaxioms=this.ontology.getAxioms (class1);
-		for (OWLClassAxiom claxiom: ontoaxioms){
-		    classess=renderer.render(class1);
-		    String classaxiom=renderer.render (claxiom);
-		    this.classes.add(classess);
-		    this.axioms_inf.add(classaxiom.replaceAll("\n"," ").replaceAll(","," "));
-		}
-	    }
-
 	}
-
 
     }
 }
