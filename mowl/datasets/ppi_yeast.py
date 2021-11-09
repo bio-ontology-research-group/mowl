@@ -1,4 +1,6 @@
-from .base import RemoteDataset
+import pathlib
+
+from .base import RemoteDataset, PathDataset
 import math
 import random
 import numpy as np
@@ -27,6 +29,26 @@ class PPIYeastSlimDataset(RemoteDataset):
 
     def __init__(self, *args, **kwargs):
         super().__init__(url=SLIM_DATA_URL)
+
+    def eval_classes(self, classes):
+        """Classes that are used in evaluation
+        """
+        res = {}
+        for k, v in classes.items():
+            if k.startswith('<http://4932.'):
+                res[k] = v
+        return res
+
+class PPIYeastLocalTestDataset(PathDataset):
+
+    def __init__(self, *args, **kwargs):
+        dataset_root = pathlib.Path('../data/ppi_yeast_localtest')
+        self.data_root = pathlib.Path('../data/')
+        self.dataset_name = 'ppi_yeast_localtest'
+        super().__init__(
+            os.path.join(dataset_root, 'ontology.owl'),
+            os.path.join(dataset_root, 'valid.owl'),
+            os.path.join(dataset_root, 'test.owl'))
 
     def eval_classes(self, classes):
         """Classes that are used in evaluation
