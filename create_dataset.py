@@ -30,7 +30,7 @@ from org.apache.jena.util import FileManager
     '--ont-file', '-ont', default='data/go.owl',
     help='Ontology file (GO by default)')
 @ck.option(
-    '--data-file', '-df', default='data/4932.protein.links.detailed.v11.0.txt.gz',
+    '--data-file', '-df', default='data/4932.protein.links.v11.5.txt.gz',
     help='STRING PPI file')
 @ck.option(
     '--annots-file', '-af', default='data/annotations.tsv',
@@ -81,23 +81,40 @@ def main(ont_file, data_file, annots_file, out_dir):
     new_ont_file = os.path.join(out_dir, 'ontology.owl')
     manager.saveOntology(ont, IRI.create('file:' + os.path.abspath(new_ont_file)))
 
-    with open(os.path.join(out_dir, 'valid.tsv'), 'w') as f:
-        for inters in valid:
-            p1_iri = f'<http://{inters[0]}>'
-            p2_iri = f'<http://{inters[1]}>'
-            rel_iri = interacts_rel.toString()
-            f.write(f'{p1_iri}\t{rel_iri}\t{p2_iri}\n')
-            f.write(f'{p2_iri}\t{rel_iri}\t{p1_iri}\n')
+    valid_ont = manager.createOntology()
+    for inters in valid:
+        p1, p2 = inters[0], inters[1]
+        protein1 = factory.getOWLClass(IRI.create(f'http://{p1}'))
+        protein2 = factory.getOWLClass(IRI.create(f'http://{p2}'))
+        axiom = factory.getOWLSubClassOfAxiom(
+            protein1, factory.getOWLObjectSomeValuesFrom(
+                interacts_rel, protein2))
+        manager.addAxiom(valid_ont, axiom)
+        axiom = factory.getOWLSubClassOfAxiom(
+            protein2, factory.getOWLObjectSomeValuesFrom(
+                interacts_rel, protein1))
+        manager.addAxiom(valid_ont, axiom)
+        
+    valid_ont_file = os.path.join(out_dir, 'valid.owl')
+    manager.saveOntology(valid_ont, IRI.create('file:' + os.path.abspath(valid_ont_file)))
 
-    with open(os.path.join(out_dir, 'test.tsv'), 'w') as f:
-        for inters in test:
-            p1_iri = f'<http://{inters[0]}>'
-            p2_iri = f'<http://{inters[1]}>'
-            rel_iri = interacts_rel.toString()
-            f.write(f'{p1_iri}\t{rel_iri}\t{p2_iri}\n')
-            f.write(f'{p2_iri}\t{rel_iri}\t{p1_iri}\n')
-    
-    
+    test_ont = manager.createOntology()
+    for inters in test:
+        p1, p2 = inters[0], inters[1]
+        protein1 = factory.getOWLClass(IRI.create(f'http://{p1}'))
+        protein2 = factory.getOWLClass(IRI.create(f'http://{p2}'))
+        axiom = factory.getOWLSubClassOfAxiom(
+            protein1, factory.getOWLObjectSomeValuesFrom(
+                interacts_rel, protein2))
+        manager.addAxiom(test_ont, axiom)
+        axiom = factory.getOWLSubClassOfAxiom(
+            protein2, factory.getOWLObjectSomeValuesFrom(
+                interacts_rel, protein1))
+        manager.addAxiom(test_ont, axiom)
+
+    test_ont_file = os.path.join(out_dir, 'test.owl')
+    manager.saveOntology(test_ont, IRI.create('file:' + os.path.abspath(test_ont_file)))
+
 
 def load_and_split_interactions(data_file, ratio=(0.9, 0.05, 0.05)):
     inter_set = set()
@@ -107,8 +124,8 @@ def load_and_split_interactions(data_file, ratio=(0.9, 0.05, 0.05)):
             it = line.strip().split(' ')
             p1 = it[0]
             p2 = it[1]
-            exp_score = float(it[6])
-            if exp_score == 0:
+            score = float(it[2])
+            if score < 700:
                 continue
             if (p2, p1) not in inter_set and (p1, p2) not in inter_set:
                 inter_set.add((p1, p2))

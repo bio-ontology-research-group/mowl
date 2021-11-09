@@ -20,21 +20,6 @@ from org.semanticweb.owlapi.util import InferredEquivalentClassAxiomGenerator
 from org.semanticweb.owlapi.util import InferredSubClassAxiomGenerator
 
 
-Triples = np.ndarray
-
-def load_triples(filepath, delimiter='\t', encoding=None):
-    if filepath == "":
-        return None
-    else:
-        return np.loadtxt(
-            fname=filepath,
-            dtype=str,
-            comments='@Comment@ Head Relation Tail',
-            delimiter=delimiter,
-            encoding=encoding,
-        )
-
-
 class Dataset(object):
 
     ontology: OWLOntology
@@ -49,8 +34,8 @@ class PathDataset(Dataset):
     validation_path: str
     testing_path: str
     _ontology: OWLOntology
-    _validation: Triples
-    _testing: Triples
+    _validation: OWLOntology
+    _testing: OWLOntology
     
     def __init__(self, ontology_path: str, validation_path: str, testing_path: str):
         self.ontology_path = ontology_path
@@ -84,8 +69,10 @@ class PathDataset(Dataset):
         
         self._ontology = self.ont_manager.loadOntologyFromOntologyDocument(
             java.io.File(self.ontology_path))
-        self._validation = load_triples(self.validation_path)
-        self._testing = load_triples(self.testing_path)
+        self._validation =  self.ont_manager.loadOntologyFromOntologyDocument(
+            java.io.File(self.validation_path)
+        self._testing =  self.ont_manager.loadOntologyFromOntologyDocument(
+            java.io.File(self.testing_path)
         self._loaded = True
 
     def _create_reasoner(self):
@@ -123,8 +110,8 @@ class TarFileDataset(PathDataset):
         dataset_root = os.path.join(self.data_root, self.dataset_name)
         super().__init__(
             os.path.join(dataset_root, 'ontology.owl'),
-            os.path.join(dataset_root, 'valid.tsv'),
-            os.path.join(dataset_root, 'test.tsv'))
+            os.path.join(dataset_root, 'valid.owl'),
+            os.path.join(dataset_root, 'test.owl'))
         self._extract()
         
 
