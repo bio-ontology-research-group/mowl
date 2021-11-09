@@ -47,6 +47,8 @@ class Onto2Vec(Model):
             self.dataset.infer_axioms()
             self._create_axioms_corpus()
 
+        print(self.axioms_filepath)
+
         sentences = CorpusGenerator(self.axioms_filepath)
         self.w2v_model = gensim.models.Word2Vec(
             sentences=sentences, **self.w2v_params)
