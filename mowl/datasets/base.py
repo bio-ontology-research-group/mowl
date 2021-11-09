@@ -14,11 +14,10 @@ from org.semanticweb.owlapi.apibinding import OWLManager
 from org.semanticweb.owlapi.reasoner import ConsoleProgressMonitor
 from org.semanticweb.owlapi.reasoner import SimpleConfiguration
 from org.semanticweb.owlapi.reasoner import InferenceType
-from org.semanticweb.elk.owlapi import ElkReasonerFactory
 from org.semanticweb.owlapi.util import InferredClassAssertionAxiomGenerator
 from org.semanticweb.owlapi.util import InferredEquivalentClassAxiomGenerator
 from org.semanticweb.owlapi.util import InferredSubClassAxiomGenerator
-
+from org.semanticweb.HermiT import ReasonerFactory
 
 class Dataset(object):
 
@@ -78,9 +77,10 @@ class PathDataset(Dataset):
     def _create_reasoner(self):
         progressMonitor = ConsoleProgressMonitor()
         config = SimpleConfiguration(progressMonitor)
-        reasoner_factory = ElkReasonerFactory()
+        reasoner_factory = ReasonerFactory()
         self.reasoner = reasoner_factory.createReasoner(self.ontology, config)
         self.reasoner.precomputeInferences(InferenceType.CLASS_HIERARCHY)
+
 
     def infer_axioms(self):
         if not self.reasoner:

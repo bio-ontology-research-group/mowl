@@ -47,7 +47,6 @@ dependencies {
     implementation 'org.slf4j:slf4j-api:1.7.25'
     implementation 'org.slf4j:slf4j-simple:1.7.25'
     implementation 'com.beust:jcommander:1.72'
-    implementation 'org.semanticweb.elk:elk-owlapi:0.4.3'
     implementation 'net.sourceforge.owlapi:owlapi-distribution:5.1.0'
     implementation 'org.apache.jena:apache-jena-libs:3.17.0'
     implementation 'de.tu-dresden.inf.lat.jcel:jcel-owlapi:0.24.1'
