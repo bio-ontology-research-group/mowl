@@ -23,8 +23,8 @@ from org.semanticweb.owlapi.util import InferredSubClassAxiomGenerator
 class Dataset(object):
 
     ontology: OWLOntology
-    validation: Optional[Triples]
-    testing: Optional[Triples]
+    validation: OWLOntology
+    testing: OWLOntology
 
 
 
@@ -70,9 +70,9 @@ class PathDataset(Dataset):
         self._ontology = self.ont_manager.loadOntologyFromOntologyDocument(
             java.io.File(self.ontology_path))
         self._validation =  self.ont_manager.loadOntologyFromOntologyDocument(
-            java.io.File(self.validation_path)
+            java.io.File(self.validation_path))
         self._testing =  self.ont_manager.loadOntologyFromOntologyDocument(
-            java.io.File(self.testing_path)
+            java.io.File(self.testing_path))
         self._loaded = True
 
     def _create_reasoner(self):
