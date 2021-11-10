@@ -56,7 +56,7 @@ def main(ont_file, data_file, annots_file, go_annots_file, out_dir):
     has_function_rel = factory.getOWLObjectProperty(
         IRI.create("http://has_function"))
 
-    # Add annotations to the ontology
+    # Add GO protein annotations to the GO ontology
     if go_annots_file:
         with open(go_annots_file) as f:
             for line in f:
@@ -166,7 +166,7 @@ def load_and_split_interactions(data_file, ratio=(0.9, 0.05, 0.05)):
     valid_n = int(n * ratio[1])
     train = inters[index[:train_n]]
     valid = inters[index[train_n: train_n + valid_n]]
-    test = inters[train_n + valid_n:]
+    test = inters[index[train_n + valid_n:]]
     return train, valid, test
     
 if __name__ == '__main__':
