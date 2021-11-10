@@ -4,7 +4,7 @@ from jpype.types import *
 
 from org.semanticweb.owlapi.manchestersyntax.renderer import ManchesterOWLSyntaxOWLObjectRendererImpl
 from org.mowl.Onto2Vec import Onto2VecShortFormProvider
-
+from org.semanticweb.owlapi.model import AxiomType
 import gensim
 import logging
 
@@ -16,7 +16,7 @@ class CorpusGenerator(object):
     def __iter__(self):
         with open(self.filepath) as f:
             for line in f:
-                yield gensim.utils.simple_preprocess(line)
+                yield line.strip().split(' ')
 
 class Onto2Vec(Model):
 
@@ -47,19 +47,26 @@ class Onto2Vec(Model):
             self.dataset.infer_axioms()
             self._create_axioms_corpus()
 
-        print(self.axioms_filepath)
-
         sentences = CorpusGenerator(self.axioms_filepath)
         self.w2v_model = gensim.models.Word2Vec(
             sentences=sentences, **self.w2v_params)
         self.w2v_model.save(self.model_filepath)
 
 
-    def evaluate(self):
+    def evaluate_ppi(self):
         if not os.path.exists(self.model_filepath):
             self.train()
         if not self.w2v_model:
             self.w2v_model = gensim.models.Word2Vec.load(
                 self.model_filepath)
+        classes = self.dataset.get_evaluation_classes()
+        classes = [str(cls.toString()) for cls in classes]
+        for axiom in self.dataset.testing.getAxioms():
+            if axiom.getAxiomType() != AxiomType.SUBCLASS_OF:
+                continue
+            cls1 = axiom.getSubClass()
+            cls2 = axiom.getSuperClass().getFiller()
+            cls1, cls2 = str(cls1), str(cls2)
+            print(cls1, cls2)
         
     

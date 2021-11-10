@@ -6,7 +6,7 @@ import random
 import numpy as np
 import gzip
 import os
-
+from java.util import HashSet
 
 DATA_URL = 'https://bio2vec.cbrc.kaust.edu.sa/data/mowl/ppi_yeast.tar.gz'
 SLIM_DATA_URL = 'https://bio2vec.cbrc.kaust.edu.sa/data/mowl/ppi_yeast_slim.tar.gz'
@@ -16,28 +16,21 @@ class PPIYeastDataset(RemoteDataset):
     def __init__(self, *args, **kwargs):
         super().__init__(url=DATA_URL)
 
-    def eval_classes(self, classes):
+    def get_evaluation_classes(self):
         """Classes that are used in evaluation
         """
-        res = {}
-        for k, v in classes.items():
-            if k.startswith('<http://4932.'):
-                res[k] = v
-        return res
+        classes = super().get_evaluation_classes()
+        eval_classes = HashSet()
+        for owl_cls in classes:
+            if owl_cls.toString().startsWith("<http://4932"):
+                eval_classes.add(owl_cls)
+        return eval_classes
 
-class PPIYeastSlimDataset(RemoteDataset):
+class PPIYeastSlimDataset(PPIYeastDataset):
 
     def __init__(self, *args, **kwargs):
         super().__init__(url=SLIM_DATA_URL)
 
-    def eval_classes(self, classes):
-        """Classes that are used in evaluation
-        """
-        res = {}
-        for k, v in classes.items():
-            if k.startswith('<http://4932.'):
-                res[k] = v
-        return res
 
 class PPIYeastLocalTestDataset(PathDataset):
 
@@ -50,11 +43,12 @@ class PPIYeastLocalTestDataset(PathDataset):
             os.path.join(dataset_root, 'valid.owl'),
             os.path.join(dataset_root, 'test.owl'))
 
-    def eval_classes(self, classes):
+    def get_evaluation_classes(self):
         """Classes that are used in evaluation
         """
-        res = {}
-        for k, v in classes.items():
-            if k.startswith('<http://4932.'):
-                res[k] = v
-        return res
+        classes = super().get_evaluation_classes()
+        eval_classes = HashSet()
+        for owl_cls in classes:
+            if owl_cls.toString().startsWith("<http://4932"):
+                eval_classes.add(owl_cls)
+        return eval_classes

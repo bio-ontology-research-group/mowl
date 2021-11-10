@@ -95,6 +95,9 @@ class PathDataset(Dataset):
             self.data_factory, self.reasoner)
         self.ont_manager.addAxioms(self.ontology, subclass_axioms)
 
+    def get_evaluation_classes(self):
+        return self.ontology.getClassesInSignature()
+
 class TarFileDataset(PathDataset):
     tarfile_path: str
     dataset_name: str

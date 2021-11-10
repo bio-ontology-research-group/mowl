@@ -19,7 +19,8 @@ from mowl.onto2vec.model import Onto2Vec
 def main(model, dataset):
     dataset = PPIYeastSlimDataset()
     model = Onto2Vec(dataset)
-    model.train()
+    # model.train()
+    model.evaluate_ppi()
 
 if __name__ == '__main__':
     main()
