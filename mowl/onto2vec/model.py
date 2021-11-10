@@ -13,6 +13,8 @@ from sklearn.metrics import pairwise_distances
 import gensim
 import logging
 
+MAX_FLOAT = np.finfo(np.float32).max
+
 class CorpusGenerator(object):
 
     def __init__(self, filepath):
@@ -129,9 +131,9 @@ class Onto2Vec(Model):
                     # disregard the protein-protein interactions which came naturally from the training set
                     exclude_ids_set = training_pairs_exclude_indexes.get(i1, set())
                     for exclude_i2 in exclude_ids_set:
-                        class_distances[exclude_i2] = 10.0
+                        class_distances[exclude_i2] = MAX_FLOAT
                     # disregard the similarity of protein with itself
-                    class_distances[i1] = 10.0
+                    class_distances[i1] = MAX_FLOAT
 
                     # For each protein, it is ranked how similar (per the model) it is to the current i1.
                     # The lower the rank, the higher the protein similarity.
