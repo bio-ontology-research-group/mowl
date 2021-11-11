@@ -206,7 +206,7 @@ def parseOWL(ontology):
 
 
     rels = {e.rel() for e in edges}
-    print(rels)
+    #print(rels)
     return edges
 
 
