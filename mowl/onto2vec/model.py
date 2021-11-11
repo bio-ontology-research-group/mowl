@@ -55,6 +55,9 @@ class Onto2Vec(Model):
             self._create_axioms_corpus()
 
         sentences = CorpusGenerator(self.axioms_filepath)
+
+        # TODO some hook to load a pre-trained model (pubmed)
+
         self.w2v_model = gensim.models.Word2Vec(
             sentences=sentences, **self.w2v_params)
         self.w2v_model.save(self.model_filepath)
