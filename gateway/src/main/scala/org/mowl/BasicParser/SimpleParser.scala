@@ -9,7 +9,7 @@ import uk.ac.manchester.cs.owl.owlapi._ //OWLObjectSomeValuesFromImpl
 
 import org.semanticweb.owlapi.reasoner.OWLReasoner;
 import org.semanticweb.owlapi.reasoner.OWLReasonerFactory;
-import org.semanticweb.HermiT.ReasonerFactory;
+import org.semanticweb.elk.owlapi.ElkReasonerFactory;
 
 // Java imports
 import java.io.File
@@ -32,14 +32,14 @@ class SimpleParser(var ontology: OWLOntology, var subclass: Boolean = true, var 
            
     val axioms = ontology.getAxioms()
     val imports = Imports.fromBoolean(true)
-
+    
     val go_classes = ontology.getClassesInSignature(imports).asScala.toList
 
 
     val transitive_closure = false
     if (transitive_closure) {
 
-      val reasonerFactory = new ReasonerFactory();
+      val reasonerFactory = new ElkReasonerFactory();
       val reasoner = reasonerFactory.createReasoner(ontology);
 
       val superClasses = (cl:OWLClass) => (cl, reasoner.getSuperClasses(cl, false).getFlattened.asScala.toList)
@@ -50,7 +50,7 @@ class SimpleParser(var ontology: OWLOntology, var subclass: Boolean = true, var 
       }
       val newAxioms = go_classes flatMap (transitiveAxioms compose  superClasses)
 
-      ontology.addAxioms(newAxioms.asJava)
+      ont_manager.addAxioms(ontology, newAxioms.toSet.asJava)
 
       // go_classes.foreach{
       //   (cl:OWLClass) => reasoner.getSuperClasses(cl, false).asScala.toList.foreach{

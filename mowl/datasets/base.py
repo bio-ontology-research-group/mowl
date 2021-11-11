@@ -17,7 +17,7 @@ from org.semanticweb.owlapi.reasoner import InferenceType
 from org.semanticweb.owlapi.util import InferredClassAssertionAxiomGenerator
 from org.semanticweb.owlapi.util import InferredEquivalentClassAxiomGenerator
 from org.semanticweb.owlapi.util import InferredSubClassAxiomGenerator
-from org.semanticweb.HermiT import ReasonerFactory
+from org.semanticweb.elk.owlapi import ElkReasonerFactory
 
 class Dataset(object):
 
@@ -77,7 +77,7 @@ class PathDataset(Dataset):
     def _create_reasoner(self):
         progressMonitor = ConsoleProgressMonitor()
         config = SimpleConfiguration(progressMonitor)
-        reasoner_factory = ReasonerFactory()
+        reasoner_factory = ElkReasonerFactory()
         self.reasoner = reasoner_factory.createReasoner(self.ontology, config)
         self.reasoner.precomputeInferences(InferenceType.CLASS_HIERARCHY)
 
@@ -94,6 +94,9 @@ class PathDataset(Dataset):
         subclass_axioms = InferredSubClassAxiomGenerator().createAxioms(
             self.data_factory, self.reasoner)
         self.ont_manager.addAxioms(self.ontology, subclass_axioms)
+
+    def get_evaluation_classes(self):
+        return self.ontology.getClassesInSignature()
 
 class TarFileDataset(PathDataset):
     tarfile_path: str
@@ -130,7 +133,7 @@ class RemoteDataset(TarFileDataset):
     url: str
     data_root: str
     
-    def __init__(self, url: str, data_root='../data/'):
+    def __init__(self, url: str, data_root='./'):
         self.url = url
         self.data_root = data_root
         tarfile_path = self._download()
