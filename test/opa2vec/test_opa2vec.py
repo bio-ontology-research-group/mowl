@@ -1,3 +1,5 @@
+import pandas as pd
+
 from mowl.datasets.ppi_yeast import PPIYeastSlimDataset
 from mowl.opa2vec.model import OPA2Vec
 
@@ -22,3 +24,38 @@ def test_opa2vec_yeast():
     # rank_1 = {int64: ()} 520
     # rank_10 = {int64: ()} 2819
     # rank_100 = {int64: ()} 7273
+
+
+def _most_similar_proteins(m, protein):
+    def matching_proteins_in_pairs(pairs, protein):
+        interacting_proteins = [p[1] for p in pairs if p[0] == protein]
+        interacting_proteins.extend([p[0] for p in pairs if p[1] == protein])
+        return set(interacting_proteins)
+
+    similar = m.w2v_model.wv.most_similar(positive=[protein], topn=100)
+    _, training_classes_pairs = m.get_classes_pairs_from_axioms(m.dataset.ontology,
+                                                                ['<http://interacts_with>'])
+    _, testing_classes_pairs = m.get_classes_pairs_from_axioms(m.dataset.testing,
+                                                                ['<http://interacts_with>'])
+    interacting_proteins_trained = matching_proteins_in_pairs(training_classes_pairs, protein)
+    interacting_proteins_testing = matching_proteins_in_pairs(testing_classes_pairs, protein)
+    df = pd.DataFrame(similar, columns=['protein', 'similarity'])
+    df['training_data'] = df.apply( lambda r: r['protein'] in interacting_proteins_trained,  axis=1)
+    df['testing_data'] = df.apply( lambda r: r['protein'] in interacting_proteins_testing,  axis=1)
+    df.head()
+
+
+def test_opa2vec_infer_example():
+    dataset = PPIYeastSlimDataset()
+    m = OPA2Vec(dataset, '../data/ppi_yeast_localtest/goslim_yeast.owl',
+                '../data/opa2vec_pubmed/RepresentationModel_pubmed.txt')
+    m.train_or_load_model()
+    # Trying to match a real-world example of protein-protein interaction to the model predictions:
+    # "Yeast α-tubulin suppressor Ats1/Kti13 relates to the Elongator complex and interacts with Elongator partner protein Kti11"
+    # YAL020C - Ats1/Kti13
+    # YBL071W-A - KTI11
+    # present in the training data, and most similar in the result list.
+    # 2nd hit: YIL064W - EMF4 - "May play a role in intracellular transport."
+    _most_similar_proteins(m, '<http://4932.YAL020C>')
+
+
