@@ -4,7 +4,7 @@
   <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
 
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Installation guide &mdash; MOWL 0.1 documentation</title><link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+  <title>Installation and Setup &mdash; MOWL 0.1 documentation</title><link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
     <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
   <!--[if lt IE 9]>
     <script src="../_static/js/html5shiv.min.js"></script>
@@ -42,12 +42,26 @@
         </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
               <p><span class="caption-text">Get Started</span></p>
 <ul class="current">
-<li class="toctree-l1 current"><a class="current reference internal" href="#">Installation guide</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">Installation and Setup</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#system-requirements">System requirements</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#install-from-conda">Install from Conda</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#install-from-source">Install from source</a><ul>
+<li class="toctree-l3"><a class="reference internal" href="#linux">Linux</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#windows">Windows</a></li>
+<li class="toctree-l3"><a class="reference internal" href="#macos">macOS</a></li>
+</ul>
+</li>
+</ul>
+</li>
 <li class="toctree-l1"><a class="reference internal" href="../tutorials/index.html">Tutorials</a></li>
 </ul>
 <p><span class="caption-text">API</span></p>
 <ul>
+<li class="toctree-l1"><a class="reference internal" href="../api/mowl.datasets.html">mowl.datasets package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../api/mowl.elembeddings.html">mowl.elembeddings package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../api/mowl.gnn_sim.html">mowl.gnn_sim package</a></li>
 <li class="toctree-l1"><a class="reference internal" href="../api/mowl.graph.html">mowl.graph</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../api/mowl.test.html">mowl.test package</a></li>
 </ul>
 
         </div>
@@ -64,7 +78,7 @@
           <div role="navigation" aria-label="Page navigation">
   <ul class="wy-breadcrumbs">
       <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
-      <li>Installation guide</li>
+      <li>Installation and Setup</li>
       <li class="wy-breadcrumbs-aside">
             <a href="../_sources/install/index.rst.txt" rel="nofollow"> View page source</a>
       </li>
@@ -74,8 +88,43 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
            <div itemprop="articleBody">
              
-  <section id="installation-guide">
-<h1>Installation guide<a class="headerlink" href="#installation-guide" title="Permalink to this headline">¶</a></h1>
+  <section id="installation-and-setup">
+<h1>Installation and Setup<a class="headerlink" href="#installation-and-setup" title="Permalink to this headline">¶</a></h1>
+<section id="system-requirements">
+<h2>System requirements<a class="headerlink" href="#system-requirements" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li><p>Ubuntu 16.04</p></li>
+<li><p>&gt; Python version 3.8</p></li>
+</ul>
+</section>
+<section id="install-from-conda">
+<h2>Install from Conda<a class="headerlink" href="#install-from-conda" title="Permalink to this headline">¶</a></h2>
+<p>We recommend installation through <code class="docutils literal notranslate"><span class="pre">conda</span></code>.</p>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>conda env create -f environment.yml
+conda activate mowl
+
+mkdir -p ../data
+
+<span class="nb">cd</span> mowl
+./rebuild.sh
+</pre></div>
+</div>
+</section>
+<section id="install-from-source">
+<h2>Install from source<a class="headerlink" href="#install-from-source" title="Permalink to this headline">¶</a></h2>
+<div class="highlight-bash notranslate"><div class="highlight"><pre><span></span>git clone https://github.com/bio-ontology-research-group/mowl.git
+</pre></div>
+</div>
+<section id="linux">
+<h3>Linux<a class="headerlink" href="#linux" title="Permalink to this headline">¶</a></h3>
+</section>
+<section id="windows">
+<h3>Windows<a class="headerlink" href="#windows" title="Permalink to this headline">¶</a></h3>
+</section>
+<section id="macos">
+<h3>macOS<a class="headerlink" href="#macos" title="Permalink to this headline">¶</a></h3>
+</section>
+</section>
 </section>
 
 

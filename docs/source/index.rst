@@ -30,4 +30,8 @@ how to :ref:`install\index` the project.
    :hidden:
    :glob:
 
+   api/mowl.datasets
+   api/mowl.elembeddings
+   api/mowl.gnn_sim 
    api/mowl.graph
+   api/mowl.test

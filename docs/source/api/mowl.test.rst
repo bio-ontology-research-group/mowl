@@ -7,7 +7,7 @@ Submodules
 mowl.test.testClassForDocumentation module
 ------------------------------------------
 
-.. autoclass:: mowl.test.testClassForDocumentation
+.. automodule:: mowl.test.testClassForDocumentation
    :members:
    :undoc-members:
    :show-inheritance:

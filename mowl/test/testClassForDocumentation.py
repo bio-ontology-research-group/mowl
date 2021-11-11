@@ -1,4 +1,4 @@
-class TestClassForDoc(object):
+class TestClassForDocumentation(object):
     """This is a conceptual class representation of a simple BLE device
     (GATT Server). It is essentially an extended combination of the
     :class:`bluepy.btle.Peripheral` and :class:`bluepy.btle.ScanEntry` classes
