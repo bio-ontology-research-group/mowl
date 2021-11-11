@@ -8,6 +8,31 @@ class Node2Vec():
 	'''
 	Reference implementation of node2vec. 
 
+	:param input: supported input format is an edgelist of format: node1_id_int node2_id_int <weight_float, optional>
+	:type input: edgelist
+	:param p: Return hyperparameter. Default is 1.
+	:type p: float
+	:param q: Inout hyperparameter. Default is 1.
+	:type p: float
+	:param num_walks: Number of walks per source. Default is 10.
+	:type num_walks: int
+	:param walk_length: Length of walk per source. Default is 80.
+	:type walk_length: int
+	:param embeddings_file_path: output file
+	:type embeddings_file_path: str
+	:param dimensions: Number of dimensions in embedding. Default is 128.
+	:type dimensions: int
+	:param window_size: Context size for optimization. Default is 10.
+	:type window_size: int
+	:param workers: Number of parallel workers. Default is 8.
+	:type workers: int
+	:param iter: Number of epochs in Steepest Gradient Descent (SGD). 
+	:type iter: int
+	:param is_directed: Whether Graph is directed. Default is undirected (False).
+	:type is_directed: boolean
+	:param is_weighted: Whether graph is weighted. Defual is unweighted (False)
+	:type is_weighted: boolean
+
 	Original author: Aditya Grover
 
 	For more details, refer to the paper:
@@ -51,6 +76,8 @@ class Node2Vec():
 	def read_graph(self):
 		'''
 		Reads the input network in networkx.
+
+		Returns the network graph
 		'''
 
 		if self.is_weighted:
