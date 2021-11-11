@@ -49,6 +49,9 @@ class Onto2Vec(Model):
                     rax = rax.replaceAll(JString("[\\r\\n|\\r|\\n()]"), JString(""))
                     f.write(f'{rax}\n')
 
+    def _load_pretrained_model(self):
+        return None
+
     def train(self):
         if not os.path.exists(self.axioms_filepath):
             self.dataset.infer_axioms()
@@ -56,10 +59,15 @@ class Onto2Vec(Model):
 
         sentences = CorpusGenerator(self.axioms_filepath)
 
-        # TODO some hook to load a pre-trained model (pubmed)
-
-        self.w2v_model = gensim.models.Word2Vec(
-            sentences=sentences, **self.w2v_params)
+        self.w2v_model = self._load_pretrained_model()
+        if not self.w2v_model:
+            self.w2v_model = gensim.models.Word2Vec(
+                sentences=sentences, **self.w2v_params)
+        else:
+            # retrain the pretrained model with our axioms
+            self.w2v_model.build_vocab(sentences, update=True)
+            self.w2v_model.train(sentences, total_examples=self.w2v_model.corpus_count, epochs=100, **self.w2v_params)
+            # (following example from: https://github.com/bio-ontology-research-group/opa2vec/blob/master/runWord2Vec.py )
         self.w2v_model.save(self.model_filepath)
 
 

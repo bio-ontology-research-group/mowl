@@ -4,12 +4,13 @@ from jpype import java
 from org.semanticweb.owlapi.apibinding import OWLManager
 from org.semanticweb.owlapi.model import OWLOntology, OWLLiteral
 from org.semanticweb.owlapi.search import EntitySearcher
+import gensim
 
 
 class OPA2Vec(Onto2Vec):
     annotations_ontology: OWLOntology
 
-    def __init__(self, dataset, annotations_owl_filename, w2v_params={}):
+    def __init__(self, dataset, annotations_owl_filepath, pretrained_w2v_model_filepath, w2v_params={}):
         """
         Ontologies Plus Annotations to Vectors: OPA2Vec
 
@@ -20,14 +21,17 @@ class OPA2Vec(Onto2Vec):
         :param w2v_params: optional word2vec parameters
         """
         super().__init__(dataset, w2v_params)
+        # Currently, models store their files next to the dataset files. Override the Onto2Vec paths
+        # so that OPA2Vec can use its own axioms and word2vec model.
         self.axioms_filepath = os.path.join(
             dataset.data_root, dataset.dataset_name, 'opa2vec_axioms.o2v')
         self.model_filepath = os.path.join(
             dataset.data_root, dataset.dataset_name, 'opa2vec_w2v.model')
 
+        self.pretrained_w2v_model_filepath = pretrained_w2v_model_filepath
         self.ont_manager = OWLManager.createOWLOntologyManager()
         self.annotations_ontology = self.ont_manager.loadOntologyFromOntologyDocument(
-            java.io.File(annotations_owl_filename))
+            java.io.File(annotations_owl_filepath))
 
     def _create_axioms_corpus(self):
         super()._create_axioms_corpus()
@@ -43,3 +47,6 @@ class OPA2Vec(Onto2Vec):
                         # could filter on property
                         value = str(annotation.getValue().getLiteral()).replace("\n", " ")
                         f.write(f'{cls} {property} {value}\n')
+
+    def _load_pretrained_model(self):
+        return gensim.models.Word2Vec.load(self.pretrained_w2v_model_filepath)
