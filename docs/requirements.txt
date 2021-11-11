@@ -3,11 +3,11 @@
 #certifi==2020.11.8
 #cffi==1.14.6
 #chardet==3.0.4
-#click==8.0.1
+click==8.0.1
 #cryptography==2.1.4
 #cycler==0.10.0
-#decorator==4.1.2
-#dgl==0.6.1
+decorator==4.1.2
+dgl==0.6.1
 ##dgl-cu100==0.5.3
 #filelock==3.0.12
 #grpcio==1.40.0
