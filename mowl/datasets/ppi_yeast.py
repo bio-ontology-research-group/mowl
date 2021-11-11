@@ -13,8 +13,8 @@ SLIM_DATA_URL = 'https://bio2vec.cbrc.kaust.edu.sa/data/mowl/ppi_yeast_slim.tar.
 
 class PPIYeastDataset(RemoteDataset):
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(url=DATA_URL)
+    def __init__(self, url):
+        super().__init__(url=DATA_URL if not url else url)
 
     def get_evaluation_classes(self):
         """Classes that are used in evaluation
