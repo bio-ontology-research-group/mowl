@@ -8,7 +8,7 @@ cryptography==2.1.4
 cycler==0.10.0
 decorator==4.1.2
 dgl==0.6.1
-dgl-cu100==0.5.3
+#dgl-cu100==0.5.3
 filelock==3.0.12
 grpcio==1.40.0
 idna==2.6
