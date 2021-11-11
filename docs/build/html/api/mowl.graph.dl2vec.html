@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>mowl.graph.dl2vec package &mdash; MOWL 0.1 documentation</title><link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  <script id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/language_data.js"></script>
+        <script async="async" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.7/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="mowl.graph.node2vec" href="mowl.graph.node2vec.html" />
+    <link rel="prev" title="mowl.graph.catont package" href="mowl.graph.catont.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../index.html" class="icon icon-home"> MOWL
+          </a>
+              <div class="version">
+                0.1.0
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p><span class="caption-text">Get Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../install/index.html">Installation guide</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/index.html">Tutorials</a></li>
+</ul>
+<p><span class="caption-text">API</span></p>
+<ul class="current">
+<li class="toctree-l1 current"><a class="reference internal" href="mowl.graph.html">mowl.graph</a><ul class="current">
+<li class="toctree-l2 current"><a class="reference internal" href="mowl.graph.html#subpackages">Subpackages</a><ul class="current">
+<li class="toctree-l3"><a class="reference internal" href="mowl.graph.catont.html">mowl.graph.catont package</a></li>
+<li class="toctree-l3 current"><a class="current reference internal" href="#">mowl.graph.dl2vec package</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#submodules">Submodules</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#module-mowl.graph.dl2vec.generate_graph">mowl.graph.dl2vec.generate_graph module</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#module-mowl.graph.dl2vec.model">mowl.graph.dl2vec.model module</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#module-mowl.graph.dl2vec.tree">mowl.graph.dl2vec.tree module</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#module-mowl.graph.dl2vec">Module contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="mowl.graph.node2vec.html">mowl.graph.node2vec</a></li>
+<li class="toctree-l3"><a class="reference internal" href="mowl.graph.owl2vec_star.html">mowl.graph.owl2vec_star package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="mowl.graph.taxonomy.html">mowl.graph.taxonomy package</a></li>
+<li class="toctree-l3"><a class="reference internal" href="mowl.graph.walking_rdf_and_owl.html">mowl.graph.walking_rdf_and_owl package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="mowl.graph.html#embedding-graphs-1">Embedding graphs 1</a></li>
+<li class="toctree-l2 current"><a class="reference internal" href="mowl.graph.html#embedding-graphs-2">Embedding graphs 2</a><ul class="current">
+<li class="toctree-l3 current"><a class="current reference internal" href="#">mowl.graph.dl2vec package</a><ul>
+<li class="toctree-l4"><a class="reference internal" href="#submodules">Submodules</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#module-mowl.graph.dl2vec.generate_graph">mowl.graph.dl2vec.generate_graph module</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#module-mowl.graph.dl2vec.model">mowl.graph.dl2vec.model module</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#module-mowl.graph.dl2vec.tree">mowl.graph.dl2vec.tree module</a></li>
+<li class="toctree-l4"><a class="reference internal" href="#module-mowl.graph.dl2vec">Module contents</a></li>
+</ul>
+</li>
+<li class="toctree-l3"><a class="reference internal" href="mowl.graph.owl2vec_star.html">mowl.graph.owl2vec_star package</a></li>
+</ul>
+</li>
+<li class="toctree-l2"><a class="reference internal" href="mowl.graph.html#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mowl.graph.html#module-mowl.graph.edge">mowl.graph.edge module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mowl.graph.html#module-mowl.graph.graph">mowl.graph.graph module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mowl.graph.html#mowl-graph-util-module">mowl.graph.util module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="mowl.graph.html#module-0">Module contents</a></li>
+</ul>
+</li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">MOWL</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+          <li><a href="mowl.graph.html">mowl.graph</a> &raquo;</li>
+      <li>mowl.graph.dl2vec package</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/api/mowl.graph.dl2vec.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="mowl-graph-dl2vec-package">
+<h1>mowl.graph.dl2vec package<a class="headerlink" href="#mowl-graph-dl2vec-package" title="Permalink to this headline">¶</a></h1>
+<section id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this headline">¶</a></h2>
+</section>
+<section id="module-mowl.graph.dl2vec.generate_graph">
+<span id="mowl-graph-dl2vec-generate-graph-module"></span><h2>mowl.graph.dl2vec.generate_graph module<a class="headerlink" href="#module-mowl.graph.dl2vec.generate_graph" title="Permalink to this headline">¶</a></h2>
+<dl class="py function">
+<dt id="mowl.graph.dl2vec.generate_graph.convert_graph">
+<code class="sig-prename descclassname">mowl.graph.dl2vec.generate_graph.</code><code class="sig-name descname">convert_graph</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">data</span></em><span class="sig-paren">)</span><a class="headerlink" href="#mowl.graph.dl2vec.generate_graph.convert_graph" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt id="mowl.graph.dl2vec.generate_graph.convert_triple">
+<code class="sig-prename descclassname">mowl.graph.dl2vec.generate_graph.</code><code class="sig-name descname">convert_triple</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">data</span></em><span class="sig-paren">)</span><a class="headerlink" href="#mowl.graph.dl2vec.generate_graph.convert_triple" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt id="mowl.graph.dl2vec.generate_graph.judge_condition">
+<code class="sig-prename descclassname">mowl.graph.dl2vec.generate_graph.</code><code class="sig-name descname">judge_condition</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">stack</span></em><span class="sig-paren">)</span><a class="headerlink" href="#mowl.graph.dl2vec.generate_graph.judge_condition" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt id="mowl.graph.dl2vec.generate_graph.judge_or_and_inside">
+<code class="sig-prename descclassname">mowl.graph.dl2vec.generate_graph.</code><code class="sig-name descname">judge_or_and_inside</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">data</span></em><span class="sig-paren">)</span><a class="headerlink" href="#mowl.graph.dl2vec.generate_graph.judge_or_and_inside" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt id="mowl.graph.dl2vec.generate_graph.judge_restrictions">
+<code class="sig-prename descclassname">mowl.graph.dl2vec.generate_graph.</code><code class="sig-name descname">judge_restrictions</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">data</span></em><span class="sig-paren">)</span><a class="headerlink" href="#mowl.graph.dl2vec.generate_graph.judge_restrictions" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt id="mowl.graph.dl2vec.generate_graph.parseOWL">
+<code class="sig-prename descclassname">mowl.graph.dl2vec.generate_graph.</code><code class="sig-name descname">parseOWL</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">ontology</span></em><span class="sig-paren">)</span><a class="headerlink" href="#mowl.graph.dl2vec.generate_graph.parseOWL" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt id="mowl.graph.dl2vec.generate_graph.split_sentence">
+<code class="sig-prename descclassname">mowl.graph.dl2vec.generate_graph.</code><code class="sig-name descname">split_sentence</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">sentence</span></em><span class="sig-paren">)</span><a class="headerlink" href="#mowl.graph.dl2vec.generate_graph.split_sentence" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py function">
+<dt id="mowl.graph.dl2vec.generate_graph.test_stack">
+<code class="sig-prename descclassname">mowl.graph.dl2vec.generate_graph.</code><code class="sig-name descname">test_stack</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">sentence</span></em><span class="sig-paren">)</span><a class="headerlink" href="#mowl.graph.dl2vec.generate_graph.test_stack" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</section>
+<section id="module-mowl.graph.dl2vec.model">
+<span id="mowl-graph-dl2vec-model-module"></span><h2>mowl.graph.dl2vec.model module<a class="headerlink" href="#module-mowl.graph.dl2vec.model" title="Permalink to this headline">¶</a></h2>
+<dl class="py class">
+<dt id="mowl.graph.dl2vec.model.DL2VecParser">
+<em class="property">class </em><code class="sig-prename descclassname">mowl.graph.dl2vec.model.</code><code class="sig-name descname">DL2VecParser</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">dataset</span></em>, <em class="sig-param"><span class="n">pref_reasoner</span><span class="o">=</span><span class="default_value">'elk'</span></em><span class="sig-paren">)</span><a class="headerlink" href="#mowl.graph.dl2vec.model.DL2VecParser" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference internal" href="mowl.graph.html#mowl.graph.graph.GraphGenModel" title="mowl.graph.graph.GraphGenModel"><code class="xref py py-class docutils literal notranslate"><span class="pre">mowl.graph.graph.GraphGenModel</span></code></a></p>
+<dl class="py method">
+<dt id="mowl.graph.dl2vec.model.DL2VecParser.parseOWL">
+<code class="sig-name descname">parseOWL</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#mowl.graph.dl2vec.model.DL2VecParser.parseOWL" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-mowl.graph.dl2vec.tree">
+<span id="mowl-graph-dl2vec-tree-module"></span><h2>mowl.graph.dl2vec.tree module<a class="headerlink" href="#module-mowl.graph.dl2vec.tree" title="Permalink to this headline">¶</a></h2>
+<dl class="py class">
+<dt id="mowl.graph.dl2vec.tree.Stack">
+<em class="property">class </em><code class="sig-prename descclassname">mowl.graph.dl2vec.tree.</code><code class="sig-name descname">Stack</code><a class="headerlink" href="#mowl.graph.dl2vec.tree.Stack" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
+<dl class="py method">
+<dt id="mowl.graph.dl2vec.tree.Stack.is_empty">
+<code class="sig-name descname">is_empty</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#mowl.graph.dl2vec.tree.Stack.is_empty" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt id="mowl.graph.dl2vec.tree.Stack.peak">
+<code class="sig-name descname">peak</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#mowl.graph.dl2vec.tree.Stack.peak" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt id="mowl.graph.dl2vec.tree.Stack.pop">
+<code class="sig-name descname">pop</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#mowl.graph.dl2vec.tree.Stack.pop" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt id="mowl.graph.dl2vec.tree.Stack.push">
+<code class="sig-name descname">push</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">item</span></em><span class="sig-paren">)</span><a class="headerlink" href="#mowl.graph.dl2vec.tree.Stack.push" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt id="mowl.graph.dl2vec.tree.Stack.size">
+<code class="sig-name descname">size</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#mowl.graph.dl2vec.tree.Stack.size" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+</section>
+<section id="module-mowl.graph.dl2vec">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-mowl.graph.dl2vec" title="Permalink to this headline">¶</a></h2>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="mowl.graph.catont.html" class="btn btn-neutral float-left" title="mowl.graph.catont package" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="mowl.graph.node2vec.html" class="btn btn-neutral float-right" title="mowl.graph.node2vec" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2021, me.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
