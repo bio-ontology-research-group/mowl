@@ -112,6 +112,24 @@
 <em class="property">class </em><code class="sig-prename descclassname">mowl.graph.node2vec.model.</code><code class="sig-name descname">Node2Vec</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">edgelist</span></em>, <em class="sig-param"><span class="n">p</span></em>, <em class="sig-param"><span class="n">q</span></em>, <em class="sig-param"><span class="n">num_walks</span></em>, <em class="sig-param"><span class="n">walk_length</span></em>, <em class="sig-param"><span class="n">embeddings_file_path</span></em>, <em class="sig-param"><span class="n">dimensions</span><span class="o">=</span><span class="default_value">128</span></em>, <em class="sig-param"><span class="n">window_size</span><span class="o">=</span><span class="default_value">10</span></em>, <em class="sig-param"><span class="n">workers</span><span class="o">=</span><span class="default_value">8</span></em>, <em class="sig-param"><span class="n">iter</span><span class="o">=</span><span class="default_value">1</span></em>, <em class="sig-param"><span class="n">is_directed</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">is_weighted</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">data_root</span><span class="o">=</span><span class="default_value">'.'</span></em><span class="sig-paren">)</span><a class="headerlink" href="#mowl.graph.node2vec.model.Node2Vec" title="Permalink to this definition">¶</a></dt>
 <dd><p>Bases: <a class="reference external" href="https://docs.python.org/3/library/functions.html#object" title="(in Python v3.10)"><code class="xref py py-class docutils literal notranslate"><span class="pre">object</span></code></a></p>
 <p>Reference implementation of node2vec.</p>
+<dl class="field-list simple">
+<dt class="field-odd">Parameters</dt>
+<dd class="field-odd"><ul class="simple">
+<li><p><strong>input</strong> (<em>edgelist</em>) – supported input format is an edgelist of format: node1_id_int node2_id_int &lt;weight_float, optional&gt;</p></li>
+<li><p><strong>p</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#float" title="(in Python v3.10)"><em>float</em></a>) – Return hyperparameter. Default is 1.</p></li>
+<li><p><strong>q</strong> – Inout hyperparameter. Default is 1.</p></li>
+<li><p><strong>num_walks</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><em>int</em></a>) – Number of walks per source. Default is 10.</p></li>
+<li><p><strong>walk_length</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><em>int</em></a>) – Length of walk per source. Default is 80.</p></li>
+<li><p><strong>embeddings_file_path</strong> (<a class="reference external" href="https://docs.python.org/3/library/stdtypes.html#str" title="(in Python v3.10)"><em>str</em></a>) – output file</p></li>
+<li><p><strong>dimensions</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><em>int</em></a>) – Number of dimensions in embedding. Default is 128.</p></li>
+<li><p><strong>window_size</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><em>int</em></a>) – Context size for optimization. Default is 10.</p></li>
+<li><p><strong>workers</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><em>int</em></a>) – Number of parallel workers. Default is 8.</p></li>
+<li><p><strong>iter</strong> (<a class="reference external" href="https://docs.python.org/3/library/functions.html#int" title="(in Python v3.10)"><em>int</em></a>) – Number of epochs in Steepest Gradient Descent (SGD).</p></li>
+<li><p><strong>is_directed</strong> (<em>boolean</em>) – Whether Graph is directed. Default is undirected (False).</p></li>
+<li><p><strong>is_weighted</strong> (<em>boolean</em>) – Whether graph is weighted. Defual is unweighted (False)</p></li>
+</ul>
+</dd>
+</dl>
 <p>Original author: Aditya Grover</p>
 <p>For more details, refer to the paper:
 node2vec: Scalable Feature Learning for Networks
@@ -160,6 +178,7 @@ for details</p>
 <dt id="mowl.graph.node2vec.model.Node2Vec.read_graph">
 <code class="sig-name descname">read_graph</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#mowl.graph.node2vec.model.Node2Vec.read_graph" title="Permalink to this definition">¶</a></dt>
 <dd><p>Reads the input network in networkx.</p>
+<p>Returns the network graph</p>
 </dd></dl>
 
 <dl class="py method">
