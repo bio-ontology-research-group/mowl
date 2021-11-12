@@ -9,3 +9,4 @@
 * Not including inferences of the type: $A \equiv B \sqcap \exists R. C \vdash A \sqsubseteq \exists R. C $
 * Not including `disjoint_with` axioms.
 * Not including axioms with GO classes as relations. In case of `GO`: `GO:0007303`, `GO:0005248`.
+<img src="https://render.githubusercontent.com/render/math?math=e^{i \pi} = -1">
