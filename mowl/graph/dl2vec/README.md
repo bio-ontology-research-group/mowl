@@ -1,4 +1,4 @@
-# Dl2Vec: [Predictingl candidate genes from phenotypes, functions and anatomical site of expression](https://academic.oup.com/bioinformatics/article/37/6/853/5922810)
+# DL2Vec: [Predicting candidate genes from phenotypes, functions and anatomical site of expression](https://academic.oup.com/bioinformatics/article/37/6/853/5922810)
 
 ## Original implementation: <https://github.com/bio-ontology-research-group/DL2Vec>
 
