@@ -26,7 +26,7 @@ if __name__ == "__main__":
                 "<http://purl.obolibrary.org/obo/go_0007303>": "GO:0007303",
                 }
 
-    dataset = PathDataset("data/go.owl", "", "")
+    dataset = PathDataset("data/go.owl", None, None)
 
     edgesOld = {(e.src(), str(rel_dict[e.rel().lower()]), e.dst()) for e in gen.parseOWL(dataset.ontology)}
     edgesNew = DL2VecParser(dataset.ontology, False).parse()

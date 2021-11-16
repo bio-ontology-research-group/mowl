@@ -68,10 +68,14 @@ class PathDataset(Dataset):
         
         self._ontology = self.ont_manager.loadOntologyFromOntologyDocument(
             java.io.File(self.ontology_path))
-        self._validation =  self.ont_manager.loadOntologyFromOntologyDocument(
-            java.io.File(self.validation_path))
-        self._testing =  self.ont_manager.loadOntologyFromOntologyDocument(
-            java.io.File(self.testing_path))
+
+        if not self.validation_path is None:
+            self._validation =  self.ont_manager.loadOntologyFromOntologyDocument(
+                java.io.File(self.validation_path))
+
+        if not self.testing_path is None:
+            self._testing =  self.ont_manager.loadOntologyFromOntologyDocument(
+                java.io.File(self.testing_path))
         self._loaded = True
 
     def _create_reasoner(self):
