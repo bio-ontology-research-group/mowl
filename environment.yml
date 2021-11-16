@@ -24,4 +24,3 @@ dependencies:
   - openjdk
   - gradle
   - pip
-#  - pip:
