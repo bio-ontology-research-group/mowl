@@ -15,7 +15,7 @@ ORGS = set(['HUMAN', 'MOUSE', ])
 @ck.option(
     '--swissprot-file', '-sf', default='data/uniprot_sprot.dat.gz',
     help='UniProt/SwissProt knowledgebase file in text format (archived)')
-@ck.option(
+ck.option(
     '--out-file', '-o', default='data/swissprot.pkl',
     help='Result file with a list of proteins, sequences and annotations')
 @ck.option(
@@ -62,14 +62,6 @@ def main(swissprot_file, out_file, org_id):
         annots = list(annot_set)
         prop_annotations.append(annots)
     df['prop_annotations'] = prop_annotations
-
-    cafa_target = []
-    for i, row in enumerate(df.itertuples()):
-        if is_cafa_target(row.orgs):
-            cafa_target.append(True)
-        else:
-            cafa_target.append(False)
-    df['cafa_target'] = cafa_target
     
     df.to_pickle(out_file)
     logging.info('Successfully saved %d proteins' % (len(df),) )

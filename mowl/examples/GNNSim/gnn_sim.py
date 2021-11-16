@@ -16,6 +16,9 @@ logging.basicConfig(level=logging.INFO)
 sys.path.insert(0, '')
 sys.path.append('../../../')
 
+print("path in gnn:", sys.path)
+
+
 from mowl.datasets.base  import PathDataset
 from mowl.gnn_sim.model import GNNSim
 
@@ -30,7 +33,7 @@ def main(config):
     params = parseYAML(config)
 
     graph_method = params["general"]["graph-gen-method"]
-    ontology = params["general"]["ontology"]
+    ontology =  params["general"]["ontology"]
     
     n_hidden = params["rgcn-params"]["n-hidden"]
     dropout = params["rgcn-params"]["dropout"]

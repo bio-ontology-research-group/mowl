@@ -15,7 +15,8 @@ from torch import optim
 from .baseRGCN import BaseRGCN
 from sklearn.metrics import roc_curve, auc, matthews_corrcoef
 from torch.utils.data import DataLoader, IterableDataset
-from dgl.nn.pytorch import RelGraphConv
+#from dgl.nn.pytorch import RelGraphConv
+from .rgcnConv import RelGraphConv
 
 from mowl.graph.edge import Edge
 

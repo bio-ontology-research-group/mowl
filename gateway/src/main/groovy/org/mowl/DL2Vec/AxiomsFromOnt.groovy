@@ -122,6 +122,5 @@ class AxiomsFromOnt {
 	}
 	   
 
-
     }
 }
