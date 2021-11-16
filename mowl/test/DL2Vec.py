@@ -7,7 +7,7 @@ from mowl.graph.graph import GraphGenModel
 import mowl.graph.dl2vec.generate_graph as gen
 from mowl.graph.edge import Edge
 from org.mowl.Parsers import DL2VecParser
-
+import pickle as pkl
 
 if __name__ == "__main__":
 
@@ -31,6 +31,13 @@ if __name__ == "__main__":
     edgesOld = {(e.src(), str(rel_dict[e.rel().lower()]), e.dst()) for e in gen.parseOWL(dataset.ontology)}
     edgesNew = DL2VecParser(dataset.ontology, False).parse()
     edgesNew = {(str(e.src()), str(e.rel()).lower(), str(e.dst())) for e in edgesNew}
+
+    print("Length old, new: ", len(edgesOld), len(edgesNew))
+    
+    edges_old_file = open("data/edges_old.pkl", "wb")
+    edges_new_file = open("data/edges_new.pkl", "wb")
+    pkl.dump(edgesOld, edges_old_file)
+    pkl.dump(edgesNew, edges_new_file)
 
     diff_edges1 = {(s,r,d) for (s,r,d) in edgesOld-edgesNew} # if not r in  ["equivalentTo"] 
     diff_edges2 = {(s,r,d) for (s,r,d) in edgesNew-edgesOld}
