@@ -20,7 +20,7 @@ import collection.JavaConverters._
 import org.mowl.Types._
 
 
-class SimpleParser(var ontology: OWLOntology, var subclass: Boolean = true, var relations: Boolean=false) {
+class SimpleParser(var ontology: OWLOntology, var subclass: Boolean = true, var relations: Boolean=false, var bidirectional:Boolean=false) {
 
   private val ont_manager = OWLManager.createOWLOntologyManager()
   private val data_factory = ont_manager.getOWLDataFactory()
@@ -95,7 +95,11 @@ class SimpleParser(var ontology: OWLOntology, var subclass: Boolean = true, var 
 
       case "Class" => {
 	val dst = superClass.asInstanceOf[OWLClass]
-	Some(new Edge(go_class, "subClassOf", dst)) :: Some(new Edge(dst, "superClassOf", go_class)) :: Nil
+        if (bidirectional){
+	  Some(new Edge(go_class, "subClassOf", dst)) :: Some(new Edge(dst, "superClassOf", go_class)) :: Nil
+        }else{
+           Some(new Edge(go_class, "subClassOf", dst)) :: Nil
+        }
       }
       case _ => Nil
 

@@ -6,11 +6,11 @@ from mowl.graph.graph import GraphGenModel
 
 
 class TaxonomyParser(GraphGenModel):
-    def __init__(self, dataset, subclass = True, relations = False):
+    def __init__(self, dataset, subclass = True, relations = False, bidirectional = False):
         super().__init__(dataset)
 
-        self.parserTrainSet = SimpleParser(dataset.ontology, subclass, relations)
-        self.parserValSet = SimpleParser(dataset.validation, subclass, relations)
+        self.parserTrainSet = SimpleParser(dataset.ontology, subclass, relations, bidirectional)
+        self.parserValSet = SimpleParser(dataset.validation, subclass, relations, bidirectional)
 
     def parseOWL(self, data = "train"):
 
