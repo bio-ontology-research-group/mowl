@@ -14,37 +14,24 @@ import org.mowl.Types._
 trait AbstractParser{
 
   def ontology:OWLOntology
-  def bidirectional:Boolean
-  def transitiveClosure:String //Expect to support: "subclass", "relations", "full"(subclass and relations)
 
   val ontManager = OWLManager.createOWLOntologyManager()
   val dataFactory = ontManager.getOWLDataFactory()
 
   def parse = {
-
-    val axioms = ontology.getAxioms()
-    val imports = Imports.fromBoolean(false)
+    val imports = Imports.fromBoolean(true)
 
     val goClasses = ontology.getClassesInSignature(imports).asScala.toList
-    println("INFO: Number of ontology classes: ${goClasses.length}")
-
-
-    if (transitiveClosure != ""){
-        getTransitiveClosure(goClasses)
-    }
+    printf("INFO: Number of ontology classes: %d\n", goClasses.length)
 
     val edges = goClasses.foldLeft(List[Edge]()){(acc, x) => acc ::: processOntClass(x)}
 
     edges.asJava
-
   }
 
   //Abstract methods
   def parseAxiom(ontClass: OWLClass, axiom: OWLClassAxiom): List[Edge]
-  def getTransitiveClosure(goClasses:List[OWLClass])
   //////////////////////
-
-
 
   def processOntClass(ontClass: OWLClass): List[Edge] = {
     val axioms = ontology.getAxioms(ontClass).asScala.toList
@@ -52,8 +39,5 @@ trait AbstractParser{
     edges
   }
 
-
-
- 
 
 }

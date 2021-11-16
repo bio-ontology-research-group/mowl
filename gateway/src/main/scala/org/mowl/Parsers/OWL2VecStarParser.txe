@@ -17,9 +17,26 @@ import collection.JavaConverters._
 import org.mowl.Types._
 
 
-class DL2VecParser(var ontology: OWLOntology, var bidirectional_taxonomy: Boolean = false) extends AbstractParser{
+class OWL2VecStarParser(
+  var ontology: OWLOntology,
+  var bidirectional_taxonomy: Boolean = false,
+  var only_taxonomy: Boolean = false,
+  var include_literals: Boolean = true,
+  var avoid_properties: Set[] = Set(),
+  var additional_preferred_labels_annotations: Set[] = Set(),
+  var additional_synonyms_annotations: Set[] = Set(),
+  var memory_reasoner: String = 10240
+) extends AbstractParser{
 
-  var relCounter = 0
+  override def parse = {
+
+    val goClasses = ontology.getClassesInSignature().asScala.toList
+    printf("INFO: Number of ontology classes: %d", goClasses.length)
+
+    val edges = goClasses.foldLeft(List[Edge]()){(acc, x) => acc ::: processOntClass(x)}
+
+    edges.asJava
+  }
 
   def parseAxiom(goClass: OWLClass, axiom: OWLClassAxiom): List[Edge] = {
 
@@ -37,6 +54,8 @@ class DL2VecParser(var ontology: OWLOntology, var bidirectional_taxonomy: Boolea
         val rightSide = ax.tail
 	parseSubClassOrEquivAxiom(goClass, new OWLObjectIntersectionOfImpl(rightSide.toSet.asJava), "equivalentTo")
       }
+
+      
 
       case _ => Nil
     }
@@ -60,35 +79,39 @@ class DL2VecParser(var ontology: OWLOntology, var bidirectional_taxonomy: Boolea
 
       case "ObjectSomeValuesFrom" => {
 
-	val superClass_ = superClass.asInstanceOf[OWLObjectSomeValuesFrom]                
+	val superClass_ = superClass.asInstanceOf[OWLObjectSomeValuesFrom]
+                
 	val (relations, dstClass) = parseQuantifiedExpression(Existential(superClass_), Nil)
+
         val dstClasses = splitClass(dstClass)
+
 
         for (
           rel <- relations;
           dst <- dstClasses
         ) yield new Edge(goClass, rel, dst)
+
       }
 
       case "Class" => {
 	val dst = superClass.asInstanceOf[OWLClass]
-        if (bidirectional_taxonomy){
+        if (bidirectional){
 	  new Edge(goClass, relName, dst) :: new Edge(dst, invRelName, goClass) :: Nil
         }else{
           new Edge(goClass, relName, dst) :: Nil
-       
         }
-      }
 
+      }
       case _ => Nil
+
     }
 
    }
 
   def parseQuantifiedExpression(expr:QuantifiedExpression, relations:List[String]): (List[String], OWLClassExpression) = {
     val rel = expr.getProperty.asInstanceOf[OWLObjectProperty]
-    val relName = rel.toString
-    val filler = expr.getFiller
+    val relName = rel.getIRI.toString
+    var filler = expr.getFiller
 
     val fillerType = filler.getClassExpressionType.getName
 
@@ -145,19 +168,4 @@ class DL2VecParser(var ontology: OWLOntology, var bidirectional_taxonomy: Boolea
     }
   }
 
-
-  def getRelationName(relation: OWLObjectProperty) = {
-        
-    val rel_annots = ontology.getAnnotationAssertionAxioms(relation.getIRI()).asScala.toList
-
-    val rel = rel_annots find (x => x.getProperty() == dataFactory.getRDFSLabel()) match {
-      case Some(r) => r.getValue().toString.replace("\"", "").replace(" ", "_")
-      case None => {
-        relCounter = relCounter + 1
-        "rel" + (relCounter)
-      }
-    }
-
-    rel
-  }
 }

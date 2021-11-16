@@ -9,4 +9,3 @@
 * Not including inferences of the type: $A \equiv B \sqcap \exists R. C \vdash A \sqsubseteq \exists R. C $
 * Not including `disjoint_with` axioms.
 * Not including axioms with GO classes as relations. In case of `GO`: `GO:0007303`, `GO:0005248`.
-Lens: [] 0

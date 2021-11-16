@@ -6,9 +6,6 @@ import org.semanticweb.owlapi.apibinding.OWLManager
 import org.semanticweb.owlapi.model.parameters.Imports
 import uk.ac.manchester.cs.owl.owlapi._ 
 
-import org.semanticweb.elk.owlapi.ElkReasonerFactory;
-
-
 // Java imports
 import java.io.File
 
@@ -17,9 +14,7 @@ import collection.JavaConverters._
 import org.mowl.Types._
 
 
-class TaxonomyParserWithRels(var ontology: OWLOntology, var bidirectional: Boolean=false, var transitiveClosure: String="") extends AbstractParser{
-
-  var relCounter = 0
+class TaxonomyParserWithRels(var ontology: OWLOntology, var bidirectional_taxonomy: Boolean=false) extends AbstractParser{
 
   def parseAxiom(goClass: OWLClass, axiom: OWLClassAxiom): List[Edge] = {
     val axiomType = axiom.getAxiomType().getName()
@@ -53,8 +48,8 @@ class TaxonomyParserWithRels(var ontology: OWLOntology, var bidirectional: Boole
 	  case "Class" => {
 	    val dst = dstClass.asInstanceOf[OWLClass]
 
-            if (bidirectional) {
-	      new Edge(goClass, rel, dst) :: new Edge(dst, "inv_"+rel, goClass) :: Nil
+            if (bidirectional_taxonomy) {
+	      new Edge(goClass, rel, dst) :: new Edge(dst, "INVERSE_OF_"+rel, goClass) :: Nil
             }else{
 	      new Edge(goClass, rel, dst) :: Nil
 	    }
@@ -66,7 +61,7 @@ class TaxonomyParserWithRels(var ontology: OWLOntology, var bidirectional: Boole
 
       case "Class" => {
 	val dst = superClass.asInstanceOf[OWLClass]
-        if (bidirectional){
+        if (bidirectional_taxonomy){
 	  new Edge(goClass, "subClassOf", dst) :: new Edge(dst, "superClassOf", goClass) :: Nil
         }else{
           new Edge(goClass, "subClassOf", dst) :: Nil
@@ -83,75 +78,12 @@ class TaxonomyParserWithRels(var ontology: OWLOntology, var bidirectional: Boole
   def parseQuantifiedExpression(expr: QuantifiedExpression) = {
         
     var relation = expr.getProperty.asInstanceOf[OWLObjectProperty]
-
-    val rel = getRelationName(relation)
-
+    val rel = relation.getIRI().toString
     val dstClass = expr.getFiller
 
     (rel, dstClass)
         
   }
 
-  def getRelationName(relation: OWLObjectProperty) = {
-        
-    val rel_annots = ontology.getAnnotationAssertionAxioms(relation.getIRI()).asScala.toList
-
-    val rel = rel_annots find (x => x.getProperty() == dataFactory.getRDFSLabel()) match {
-      case Some(r) => r.getValue().toString.replace("\"", "").replace(" ", "_")
-      case None => {
-        relCounter = relCounter + 1
-        "rel" + (relCounter)
-      }
-    }
-
-    rel
-  }
-
-    ///////////////////////////////////////
-
-
-  def getTransitiveClosure(goClasses:List[OWLClass]){
-
-    val reasonerFactory = new ElkReasonerFactory();
-    val reasoner = reasonerFactory.createReasoner(ontology);
-
-    //aux axioms
-    val superClasses = (cl:OWLClass) => (cl, reasoner.getSuperClasses(cl, false).getFlattened.asScala.toList)
-
-    //aux function
-    val transitiveAxioms = (tuple: (OWLClass, List[OWLClass])) => {
-      val subclass = tuple._1
-      val superClasses = tuple._2
-      superClasses.map((sup) => new OWLSubClassOfAxiomImpl(subclass, sup, Nil.asJava))
-    }
-
-    transitiveClosure match {
-
-      case "subclass" => {
-
-        //compose aux functions
-        val newAxioms = goClasses flatMap (transitiveAxioms compose  superClasses)
-
-        ontManager.addAxioms(ontology, newAxioms.toSet.asJava)
-      }
-
-      case "relations" => {
-        //TODO
-      }
-
-      case "full" => {
-        val newAxioms = goClasses flatMap (transitiveAxioms compose  superClasses)
-
-        //TODO
-
-        ontManager.addAxioms(ontology, newAxioms.toSet.asJava)
-
-
-      }
-
-
-    }
-
-  }
 
 }
