@@ -27,6 +27,6 @@ class Edge:
         elif string.startswith("GO:"):
             pass
         else:
-            raise Exception("prettyFormat: unrecognized string format")
+            raise Exception("prettyFormat: unrecognized string format: %s", string)
 
         return string
