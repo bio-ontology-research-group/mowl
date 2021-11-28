@@ -50,7 +50,7 @@ class CatEmbeddings(Model):
             epoch_loss = 0
 
             model.train()
-
+            print("trrroutosuntahesuhta: ", len(train_data_loader))
             with ck.progressbar(train_data_loader) as bar:
                 for i, (batch_objects_pos, batch_objects_neg1, batch_objects_neg2) in enumerate(bar):
                     cat_loss, logits = model(batch_objects_pos, batch_objects_neg1, batch_objects_neg2)
@@ -58,7 +58,6 @@ class CatEmbeddings(Model):
                     batch_size = len(batch_objects_pos[0])
 
                     lbls = th.cat([th.ones(batch_size), th.zeros(batch_size)], 0)
-                    
                     classif_loss = criterion2(logits.squeeze(), lbls.float())
                     print(cat_loss.detach(), classif_loss.detach())
                     loss = cat_loss + classif_loss
@@ -161,8 +160,8 @@ class CatEmbeddings(Model):
             dst = str(edge[2])
 
             if mode == "train":
-                objects |= {("", "", src), ("", "", dst), ("up", src, dst)}
-                objects |= {("up", dst, src)}
+                objects |= {("", "", src), ("", "", dst), ("up", src, dst), ("down", src, dst), ("exp", src, dst)}
+                objects |= {("up", dst, src), ("down", dst, src), ("exp", dst, src)}
 
             elif mode in ["val", "test"]:
                 objects |= {("", "", src), ("", "", dst)}
@@ -176,7 +175,7 @@ class CatEmbeddings(Model):
                 if ("up", src_neg, dst_neg) in objects:
                     print("Already: ", ("up", src_neg,dst_neg))
 
-                objects |= {("", "", src_neg), ("", "", dst_neg), ("up", src_neg, dst_neg)}
+                objects |= {("", "", src_neg), ("", "", dst_neg), ("up", src_neg, dst_neg), ("down", src_neg, dst_neg), ("exp", src_neg, dst_neg)}
 
                 
             elif mode in ["val", "test"]:
@@ -194,8 +193,8 @@ class CatEmbeddings(Model):
         dsts = [e[2] for e in edges]
         classes = list(set(srcs).union(set(dsts)))
         if mode == "train":
-            print(len(objects), len(classes) + 2*len(edges) + len(negatives) +1)
-            assert  len(objects) == len(classes)+ 2*len(edges) + len(negatives) + 1
+            print(len(objects), len(classes) + 6*len(edges) + 3*len(negatives) +1)
+            assert  len(objects) == len(classes)+ 6*len(edges) + 3*len(negatives) + 1
         
         data_set = CatDataset(edges, negatives, objects_idx, mode)
         print("len data_set: ", len(data_set))
@@ -304,24 +303,38 @@ class CatModel(nn.Module):
         )
 
         
-        self.proj_up_exp = nn.Linear(dim2, dim2)
-        self.proj_up_ant = nn.Linear(dim2, dim2)
-        self.proj_down_exp = nn.Linear(dim2, dim2)
-        self.proj_down_ant = nn.Linear(dim2, dim2)
-        self.prod_up_down = nn.Linear(dim2, dim2)
-        self.prod_up_cons = nn.Linear(dim2, dim2)
-        self.prod_down_cons = nn.Linear(dim2, dim2)
-        self.sim = nn.Linear(dim2, dim2)
+        self.proj_up_exp = nn.Sequential(nn.Linear(dim2, dim2),
+                                         nn.ReLU(),
+                                         nn.Linear(dim2, floor(dim2)))
+        self.proj_up_ant = nn.Sequential(nn.Linear(dim2, dim2),
+                                         nn.ReLU(),
+                                         nn.Linear(dim2, floor(dim2)))
+        self.proj_down_exp = nn.Sequential(nn.Linear(dim2, dim2),
+                                         nn.ReLU(),
+                                         nn.Linear(dim2, floor(dim2)))
+        self.proj_down_ant = nn.Sequential(nn.Linear(dim2, dim2),
+                                         nn.ReLU(),
+                                         nn.Linear(dim2, floor(dim2)))
+        self.prod_up_down = nn.Sequential(nn.Linear(dim2, dim2),
+                                         nn.ReLU(),
+                                         nn.Linear(dim2, floor(dim2)))
+        self.prod_up_cons = nn.Sequential(nn.Linear(dim2, dim2),
+                                         nn.ReLU(),
+                                         nn.Linear(dim2, floor(dim2)))
+        self.prod_down_cons = nn.Sequential(nn.Linear(dim2, dim2),
+                                         nn.ReLU(),
+                                         nn.Linear(dim2, floor(dim2)))
+        self.sim = nn.Sequential(nn.Linear(dim2, dim2),
+                                         nn.ReLU(),
+                                         nn.Linear(dim2, floor(dim2)))
 
         self.classif = nn.Linear(dim2,1)
         self.dropout = nn.Dropout()
         
     def compute_loss_train(self, objects):
 
-        prod_up, antecedent, consequent = map(self.net_object, objects)
-        exponential = consequent * antecedent
-        prod_down = exponential * antecedent
-        
+        prod_up, prod_down, exponential, antecedent, consequent = map(self.net_object, objects)
+
         full = True
         if full:
             loss1 = abs(exponential - self.proj_up_exp(prod_up))
@@ -345,7 +358,7 @@ class CatModel(nn.Module):
         if not full:
             return th.empty(1), logit
         else:
-            return sum([loss1, loss2, loss3, loss4, loss5, loss6, loss7, path_loss1, path_loss2, path_loss3, sim_loss]), logit
+            return sum([loss1, loss2, loss3, loss4, loss5, loss6, loss7, path_loss1, path_loss2, path_loss3, sim_loss])/11, logit
 
     def compute_loss_test(self, objects):
 
@@ -363,15 +376,15 @@ class CatModel(nn.Module):
             loss_pos, logit_pos = self.compute_loss_train(positive)
             neg = random.choice([negative1, negative2])
             loss_neg, logit_neg = self.compute_loss_train(neg)
-            logits = th.cat([logit_pos, logit_neg], 0)
+            logits = th.cat([logit_neg, logit_pos], 0)
 
             cat_loss = F.relu(loss_pos - loss_neg) 
-            return cat_loss, logits
+            return 15*cat_loss, logits
         else:
             loss_pos = self.compute_loss_test(positive)
             neg = random.choice([negative1, negative2])
             loss_neg = self.compute_loss_test(neg)
-            logits = th.cat([loss_pos, loss_neg], 0)
+            logits = th.cat([loss_neg, loss_pos], 0)
             return logits
 
         
@@ -415,8 +428,10 @@ class CatDataset(IterableDataset):
 
         if self.mode == "train":
             prod_up = self.object_dict[("up", antecedent, consequent)]
+            prod_down = self.object_dict[("down", antecedent, consequent)]
+            exponential = self.object_dict[("exp", antecedent, consequent)]
 
-            return prod_up, antecedent_, consequent_
+            return prod_up, prod_down, exponential, antecedent_, consequent_
 
         elif self.mode in ["val", "test"]:
             return antecedent_, consequent_

@@ -9,7 +9,7 @@ import os
 import sys
 import logging
 
-logging.basicConfig(level=logging.INFO)   
+logging.basicConfig(level=logging.DEBUG)   
 sys.path.insert(0, '')
 sys.path.append('../../../')
 
@@ -27,10 +27,12 @@ def main(config):
     ontology = "data/goslim_yeast.owl"
     val = "data/trans_yeast.owl"
     
-    
+#    ontology = "data/go.owl"
+#    val = "data/trans.owl"
+   
     ds = PathDataset(ontology, val, "")
         
-    model = CatEmbeddings(ds, 64)
+    model = CatEmbeddings(ds, 32)
 
     model.train()
     model.evaluate()
