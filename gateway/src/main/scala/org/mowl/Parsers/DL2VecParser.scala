@@ -15,11 +15,15 @@ import java.io.File
 
 import collection.JavaConverters._
 import org.mowl.Types._
-
+import org.mowl.Utils._
 
 class DL2VecParser(var ontology: OWLOntology, var bidirectional_taxonomy: Boolean = false) extends AbstractParser{
 
   var relCounter = 0
+
+  val quantityModifiers = List("ObjectSomeValuesFrom", "ObjectAllValuesFrom", "ObjectMaxCardinality", "ObjectMinCardinality")
+
+  val collectors = List("ObjectIntersectionOf", "ObjectUnionOf")
 
   def parseAxiom(goClass: OWLClass, axiom: OWLClassAxiom): List[Edge] = {
 
@@ -33,9 +37,13 @@ class DL2VecParser(var ontology: OWLOntology, var bidirectional_taxonomy: Boolea
       }
       case "EquivalentClasses" => {
 	var ax = axiom.asInstanceOf[OWLEquivalentClassesAxiom].getClassExpressionsAsList.asScala
+        
         assert(goClass == ax.head)
         val rightSide = ax.tail
-	parseSubClassOrEquivAxiom(goClass, new OWLObjectIntersectionOfImpl(rightSide.toSet.asJava), "equivalentTo")
+        
+	rightSide.toList.flatMap(parseSubClassOrEquivAxiom(goClass, _:OWLClassExpression, "subClassOf"))
+
+//        parseSubClassOrEquivAxiom(goClass, new OWLObjectIntersectionOfImpl(rightSide.toSet.asJava), "equivalentTo")
       }
 
       case _ => Nil
@@ -44,7 +52,8 @@ class DL2VecParser(var ontology: OWLOntology, var bidirectional_taxonomy: Boolea
 
 
 
-   def parseSubClassOrEquivAxiom(goClass: OWLClass, superClass: OWLClassExpression, relName: String): List[Edge] = {
+  def parseSubClassOrEquivAxiom(goClass: OWLClass, superClass: OWLClassExpression, relName: String): List[Edge] = {
+
      var invRelName = ""
 
      if (relName == "subClassOf"){
@@ -58,16 +67,24 @@ class DL2VecParser(var ontology: OWLOntology, var bidirectional_taxonomy: Boolea
 
     superClassType match {
 
-      case "ObjectSomeValuesFrom" => {
+      case m if (quantityModifiers contains m) => {
 
-	val superClass_ = superClass.asInstanceOf[OWLObjectSomeValuesFrom]                
-	val (relations, dstClass) = parseQuantifiedExpression(Existential(superClass_), Nil)
+        val superClass_ = lift2QuantifiedExpression(superClass)
+
+        val (relations, dstClass) = parseQuantifiedExpression(superClass_, Nil)
         val dstClasses = splitClass(dstClass)
 
         for (
           rel <- relations;
-          dst <- dstClasses
+          dst <- dstClasses.filter(_.getClassExpressionType.getName == "Class").map(_.asInstanceOf[OWLClass])
         ) yield new Edge(goClass, rel, dst)
+         
+      }
+
+      case c if (collectors contains c) => {
+        val dstClasses = splitClass(superClass)
+
+        dstClasses.flatMap(parseSubClassOrEquivAxiom(goClass, _:OWLClassExpression, "subClassOf"))
       }
 
       case "Class" => {
@@ -88,39 +105,24 @@ class DL2VecParser(var ontology: OWLOntology, var bidirectional_taxonomy: Boolea
   def parseQuantifiedExpression(expr:QuantifiedExpression, relations:List[String]): (List[String], OWLClassExpression) = {
     val rel = expr.getProperty.asInstanceOf[OWLObjectProperty]
     val relName = rel.toString
-    val filler = expr.getFiller
+    var filler = expr.getFiller
 
-    val fillerType = filler.getClassExpressionType.getName
+    defineQuantifiedExpression(filler) match {
 
-    fillerType match {
-      case "ObjectSomeValuesFrom" => {
-        val fillerSome = filler.asInstanceOf[OWLObjectSomeValuesFrom]
-        parseQuantifiedExpression(Existential(fillerSome), relName::relations)
-      }
-      case "ObjectAllValuesFrom" => {
-        val fillerAll = filler.asInstanceOf[OWLObjectAllValuesFrom]
-        parseQuantifiedExpression(Universal(fillerAll), relName::relations)
-      }
-      case "ObjectMinCardinality" => {
-        val fillerMin = filler.asInstanceOf[OWLObjectMinCardinality]
-        parseQuantifiedExpression(MinCardinality(fillerMin), relName::relations)
-      }
-      case "ObjectMaxCardinality" => {
-        val fillerMax = filler.asInstanceOf[OWLObjectMaxCardinality]
-        parseQuantifiedExpression(MaxCardinality(fillerMax), relName::relations)
-      }
-      case _ => {
-        (relName::relations, filler)
-      }
+      case Some(expr) => parseQuantifiedExpression(expr, relName::relations)
+
+      case None => (relName::relations, filler)
     }
 
   }
 
-  def splitClass(classExpr:OWLClassExpression): List[OWLClass] = {
+  def splitClass(classExpr:OWLClassExpression): List[OWLClassExpression] = {
     val exprType = classExpr.getClassExpressionType.getName
 
     exprType match {
       case "Class" => classExpr.asInstanceOf[OWLClass] :: Nil
+
+      case m if (quantityModifiers contains m) => classExpr :: Nil    
 
       case "ObjectIntersectionOf" => {
         val classExprInt = classExpr.asInstanceOf[OWLObjectIntersectionOf]

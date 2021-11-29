@@ -15,7 +15,7 @@ if __name__ == "__main__":
                 "<http://purl.obolibrary.org/obo/bfo_0000050>": "<http://purl.obolibrary.org/obo/bfo_0000050>",
                 "<http://purl.obolibrary.org/obo/bfo_0000051>": "<http://purl.obolibrary.org/obo/bfo_0000051>",
                 "<http://purl.obolibrary.org/obo/bfo_0000066>": "<http://purl.obolibrary.org/obo/bfo_0000066>",
-                "": "equivalentTo",
+                "": "subclassof",
                 "<http://purl.obolibrary.org/obo/ro_0002211>": "<http://purl.obolibrary.org/obo/ro_0002211>",
                 "<http://purl.obolibrary.org/obo/ro_0002212>": "<http://purl.obolibrary.org/obo/ro_0002212>",
                 "<http://purl.obolibrary.org/obo/ro_0002213>": "<http://purl.obolibrary.org/obo/ro_0002213>",
@@ -26,18 +26,18 @@ if __name__ == "__main__":
                 "<http://purl.obolibrary.org/obo/go_0007303>": "GO:0007303",
                 }
 
-    dataset = PathDataset("data/go.owl", None, None)
+    dataset = PathDataset("data/goslim_yeast.owl", None, None)
 
-    edgesOld = {(e.src(), str(rel_dict[e.rel().lower()]), e.dst()) for e in gen.parseOWL(dataset.ontology)}
+    edgesOld = {(e.src(), str(rel_dict[e.rel().lower()]), e.dst()) for e in gen.parseOWL(dataset.ontology) if not str(e.rel()) in ["a"]}
     edgesNew = DL2VecParser(dataset.ontology, False).parse()
     edgesNew = {(str(e.src()), str(e.rel()).lower(), str(e.dst())) for e in edgesNew}
 
     print("Length old, new: ", len(edgesOld), len(edgesNew))
     
-    edges_old_file = open("data/edges_old.pkl", "wb")
-    edges_new_file = open("data/edges_new.pkl", "wb")
-    pkl.dump(edgesOld, edges_old_file)
-    pkl.dump(edgesNew, edges_new_file)
+    # edges_old_file = open("data/edges_old.pkl", "wb")
+    # edges_new_file = open("data/edges_new.pkl", "wb")
+    # pkl.dump(edgesOld, edges_old_file)
+    # pkl.dump(edgesNew, edges_new_file)
 
     diff_edges1 = {(s,r,d) for (s,r,d) in edgesOld-edgesNew} # if not r in  ["equivalentTo"] 
     diff_edges2 = {(s,r,d) for (s,r,d) in edgesNew-edgesOld}

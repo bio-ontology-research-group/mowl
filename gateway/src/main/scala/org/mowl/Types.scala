@@ -18,25 +18,31 @@ object Types {
 
     sealed trait QuantifiedExpression {
         def getProperty(): OWLObjectPropertyExpression
-        def getFiller(): OWLClassExpression 
+      def getFiller(): OWLClassExpression
+      def unlift():OWLClassExpression
     }
    
     case class Universal(val expression: OWLObjectAllValuesFrom) extends QuantifiedExpression{
         def getProperty() = expression.getProperty
-        def getFiller() = expression.getFiller
+      def getFiller() = expression.getFiller
+      def unlift() = expression.asInstanceOf[OWLClassExpression]
     }
     case class Existential(val expression: OWLObjectSomeValuesFrom) extends QuantifiedExpression{
         def getProperty() = expression.getProperty
         def getFiller() = expression.getFiller
+        def unlift() = expression.asInstanceOf[OWLClassExpression]
+
     }
     case class MinCardinality(val expression: OWLObjectMinCardinality) extends QuantifiedExpression{
         def getProperty() = expression.getProperty
         def getFiller() = expression.getFiller
+        def unlift() = expression.asInstanceOf[OWLClassExpression]
     }
    case class MaxCardinality(val expression: OWLObjectMaxCardinality) extends QuantifiedExpression{
         def getProperty() = expression.getProperty
         def getFiller() = expression.getFiller
-    }
+        def unlift() = expression.asInstanceOf[OWLClassExpression]
+   }
 
 
     sealed trait Expression
