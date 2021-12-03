@@ -12,8 +12,9 @@ import pickle as pkl
 from java.lang import String
 from java.util import HashSet
 
-if __name__ == "__main__":
 
+def transformString(string):
+    
     rel_dict = {"http://www.w3.org/2000/01/rdf-schema#subclassof": "subclassof",
                 "http://www.semanticweb.org/owl2vec#superclassof": "superclassof",
                 "http://purl.obolibrary.org/obo/bfo_0000050": "http://purl.obolibrary.org/obo/bfo_0000050",
@@ -26,16 +27,30 @@ if __name__ == "__main__":
                 "http://purl.obolibrary.org/obo/ro_0002093": "http://purl.obolibrary.org/obo/ro_0002093",
                 }
 
+
+    if string in rel_dict:
+        string = rel_dict[string]
+
+    return string
+
+
+if __name__ == "__main__":
+
     dataset = PathDataset("data/goslim_yeast.owl", None, None)
 
-    edgesNew = OWL2VecStarParser(dataset.ontology, True, True, True, HashSet(), HashSet(), HashSet(), String("10240")).parse()
+    bd = False
+    ot = False
+    il = False
+
+    
+    parserOld = OWL2VecParser(dataset, bidirectional_taxonomy = bd, only_taxonomy = ot, include_literals = il)
+    edgesOld = {(e.src(), transformString(e.rel().lower()), e.dst()) for e in parserOld.parseOWL()}
+
+    edgesNew = OWL2VecStarParser(dataset.ontology, bd, ot, il, HashSet(), HashSet(), HashSet(), String("10240")).parse()
     edgesNew = {(str(e.src()), str(e.rel()).lower(), str(e.dst())) for e in edgesNew}
 
-    parserOld = OWL2VecParser(dataset)
-    edgesOld = {(e.src(), str(rel_dict[e.rel().lower()]), e.dst()) for e in parserOld.parseOWL()}
-    
 
-    print("Length old, new: ", len(edgesOld), len(edgesNew))
+#    print("Length old, new: ", len(edgesOld), len(edgesNew))
     
 #    edges_old_file = open("data/edges_old.pkl", "wb")
 #    edges_new_file = open("data/edges_new.pkl", "wb")
@@ -46,14 +61,21 @@ if __name__ == "__main__":
     diff_edges2 = {(s,r,d) for (s,r,d) in edgesNew-edgesOld}
 
 
-    print(f"Lens: {list(diff_edges1)[:10]} {len(diff_edges1)}")
-    print(f"Lens: {list(diff_edges2)[:10]} {len(diff_edges2)}")
+    testListOld = [(s,r,d) for (s,r,d) in edgesOld if r == "http://www.geneontology.org/formats/oboinowl#hasdbxref"]
 
-    
-    print(len(edgesOld))
-    print(len(edgesNew))
+    testListNew = [(s,r,d) for (s,r,d) in edgesNew if r == "http://www.geneontology.org/formats/oboinowl#hasdbxref"]
+
+    print(f"Diff old-new:\n{list(diff_edges1)}")
+    print(f"Diff new-old:\n{list(diff_edges2)}")
+    print(f"Lengths: {len(diff_edges1)}, {len(diff_edges2)}")
+
+    print("Num edges Old: ", len(edgesOld))
+    print("Num edges New: ", len(edgesNew))
 
     ex1 = [(s,r,d) for (s,r,d) in edgesOld if s == "GO:0015171" and d== "GO:0003333"]
     ex2 = [(s,r,d) for (s,r,d) in edgesNew if s == "GO:0015171" and d== "GO:0003333"]
 
 
+   # print(testListOld)
+
+  #  print(testListNew)

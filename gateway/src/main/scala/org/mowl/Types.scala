@@ -55,12 +55,29 @@ object Types {
 
 
     class Edge(val src:GOClass, val rel:Relation, val dst:GOClass){
-        def this(src: OWLClass, rel: Relation, dst: OWLClass) = this(goClassToStr(src), rel, goClassToStr(dst))
-        def this(src: String, rel: Relation, dst: OWLClass) = this(src, rel, goClassToStr(dst))
-        def this(src: OWLClass, rel: Relation, dst: String) = this(goClassToStr(src), rel, dst)
+      def this(src: OWLClass, rel: Relation, dst: OWLClass) = this(goClassToStr(src), rel, goClassToStr(dst))
+      def this(src: String, rel: Relation, dst: OWLClass) = this(src, rel, goClassToStr(dst))
+      def this(src: OWLClass, rel: Relation, dst: String) = this(goClassToStr(src), rel, dst)
+      def this(src: OWLAnnotationSubject, rel: Relation, dst: String) = this(annotationSubject2Str(src), rel, dst)
     }
 
-    def goClassToStr(goClass: OWLClass) = goClass.toStringID.split("/").last.replace("_", ":")
+  def goClassToStr(goClass: OWLClass) = goClass.toStringID.split("/").last.replace("_", ":")
+
+  def annotationSubject2Str(subject: OWLAnnotationSubject): String = {
+
+    val annotStr = subject.toString
+
+    if (annotStr.length > 4) {
+      annotStr.slice(0,4) match {
+        case "http" => annotStr.split("/").last.replace("_", ":")
+        case _ => annotStr
+      }
+    }else{
+      annotStr
+    }
+
+
+  }
 
     def getNodes(edges: List[Edge]) = {
         
