@@ -659,6 +659,7 @@ class OntologyProjection(object):
                     try:
                         #Keep labels in English or not specified
                         if row[1].language=="en" or row[1].language==None:
+#                            print(row)
                             self.__addTriple__(row[0], URIRef(ann_prop_uri), row[1])
                             #print(dir(row[1]))
                             #print(row[1].value)
@@ -1467,7 +1468,7 @@ class OntologyProjection(object):
                 try:
                     #Keep labels in English or not specified
                     if row[1].language=="en" or row[1].language==None:
-
+                        
                         if not str(row[0]) in dictionary:
                             dictionary[str(row[0])]=set()
                         dictionary[str(row[0])].add(row[1].value)

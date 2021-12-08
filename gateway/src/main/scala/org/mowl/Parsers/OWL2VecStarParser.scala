@@ -9,6 +9,7 @@ import uk.ac.manchester.cs.owl.owlapi._
 import org.semanticweb.owlapi.reasoner.InferenceType
 
 import org.semanticweb.owlapi.util._
+import org.semanticweb.owlapi.search._
 // Java imports
 import java.io.File
 import java.util
@@ -31,25 +32,49 @@ class OWL2VecStarParser(
 
   val inverseRelations = scala.collection.mutable.Map[String, Option[String]]()
 
+//  val dataFactory = OWLManager.createOWLOntologyManager().getOWLDataFactory()
+
+  val searcher = new EntitySearcher()
+
+
+
   override def parse = {
 
     var edgesFromObjectProperties = List[Edge]()
+
+//    println(ontology.getAxioms(imports).asScala.toList)
+
 
     val goClasses = ontology.getClassesInSignature().asScala.toList
     printf("INFO: Number of ontology classes: %d", goClasses.length)
     val edgesFromClasses = goClasses.foldLeft(List[Edge]()){(acc, x) => acc ::: processOntClass(x)}
 
-    if (!only_taxonomy) { //TODO: Check if this condition is doing something
+    if (include_literals) {
 
       val objectProperties = ontology.getObjectPropertiesInSignature().asScala.toList.filter(o => !(avoid_properties contains o))
 
-      edgesFromObjectProperties = objectProperties.foldLeft(List[Edge]()){(acc, x) => acc ::: processObjectProperty(x)}
+      val edgesFromObjectProperties = objectProperties.foldLeft(List[Edge]()){(acc, x) => acc ::: processObjectProperty(x)}
+
+      val annotationProperties = dataFactory.getRDFSLabel ::  ontology.getAnnotationPropertiesInSignature.asScala.toList
+      val edgesFromAnnotationProperties = annotationProperties.foldLeft(List[Edge]()){(acc, x) => acc ::: processAnnotationProperty(x)}
+
+      println("ANNOTATIONS")
+      println(ontology.getAnnotations.asScala.toList)
+
+      (edgesFromClasses ::: edgesFromObjectProperties  ::: edgesFromAnnotationProperties).asJava
+
+    }else {
+      (edgesFromClasses ::: edgesFromObjectProperties).asJava
 
     }
 
- 
-    (edgesFromClasses ::: edgesFromObjectProperties).asJava
+
+    //println(ontology.getRBoxAxioms(imports))
+
   }
+
+   
+
 
 
 
@@ -62,11 +87,13 @@ class OWL2VecStarParser(
     var annotationEdges = List[Edge]()
 
     if (include_literals){ //ANNOTATION PROCESSSING
+      val annotProperties = ontClass.getAnnotationPropertiesInSignature.asScala.toList
+
       val annotationAxioms = ontology.getAnnotationAssertionAxioms(ontClass.getIRI).asScala.toList
       annotationEdges = annotationAxioms.map(annotationAxiom2Edge).flatten
     }
 
-    val axioms = ontology.getAxioms(ontClass).asScala.toList
+    val axioms = ontology.getAxioms(ontClass, imports).asScala.toList
     val edges = axioms.flatMap(parseAxiom(ontClass, _: OWLClassAxiom))
     edges ::: annotationEdges
   }
@@ -197,7 +224,6 @@ class OWL2VecStarParser(
 
   def processObjectProperty(property: OWLObjectProperty): List[Edge] = {
 
-    println(ontology.getObjectPropertyDomainAxioms(property))
 
     Nil
 
@@ -214,7 +240,16 @@ class OWL2VecStarParser(
 
       if (!rels.isEmpty){
         println(relation, rels.head.getFirstProperty, rels.head.getSecondProperty)
-        val inverseRelName = stripBracket(rels.head.getSecondProperty) //TODO: remove head and modify the code to deal with lists
+
+        val firstProperty = stripBracket(rels.head.getFirstProperty)
+        val secondProperty = stripBracket(rels.head.getSecondProperty) //TODO: remove head and modify the code to deal with lists
+
+        var inverseRelName = secondProperty
+        if (secondProperty == relName){
+          inverseRelName = firstProperty
+        }
+
+
         inverseRelations += (relName -> Some(inverseRelName))
         (relName, Some(inverseRelName))
       }else{
@@ -240,7 +275,56 @@ class OWL2VecStarParser(
   //ANNOTATION PROPERTIES PROCESSING
 
 
-  val excludedAnnotationProperties = List("rdfs:comment", "http://www.w3.org/2000/01/rdf-schema#comment")
+  val mainLabelURIs = List(
+    "http://www.w3.org/2000/01/rdf-schema#label",
+    "http://www.w3.org/2004/02/skos/core#prefLabel",
+    "http://purl.obolibrary.org/obo/IAO_0000111",
+    "http://purl.obolibrary.org/obo/IAO_0000589"
+  )
+  
+  val synonymLabelURIs = List(
+    "http://www.geneontology.org/formats/oboInOwl#hasRelatedSynonym",
+    "http://www.geneontology.org/formats/oboInOwl#hasExactSynonym",
+    "http://www.geneontology.org/formats/oboInOWL#hasExactSynonym",
+    "http://www.geneontology.org/formats/oboInOwl#hasRelatedSynonym",
+    "http://purl.bioontology.org/ontology/SYN#synonym",
+    "http://scai.fraunhofer.de/CSEO#Synonym",
+    "http://purl.obolibrary.org/obo/synonym",
+    "http://ncicb.nci.nih.gov/xml/owl/EVS/Thesaurus.owl#FULL_SYN",
+    "http://www.ebi.ac.uk/efo/alternative_term",
+    "http://ncicb.nci.nih.gov/xml/owl/EVS/Thesaurus.owl#Synonym",
+    "http://bioontology.org/projects/ontologies/fma/fmaOwlDlComponent_2_0#Synonym",
+    "http://www.geneontology.org/formats/oboInOwl#hasDefinition",
+    "http://bioontology.org/projects/ontologies/birnlex#preferred_label",
+    "http://bioontology.org/projects/ontologies/birnlex#synonyms",
+    "http://www.w3.org/2004/02/skos/core#altLabel",
+    "https://cfpub.epa.gov/ecotox#latinName",
+    "https://cfpub.epa.gov/ecotox#commonName",
+    "https://www.ncbi.nlm.nih.gov/taxonomy#scientific_name",
+    "https://www.ncbi.nlm.nih.gov/taxonomy#synonym",
+    "https://www.ncbi.nlm.nih.gov/taxonomy#equivalent_name",
+    "https://www.ncbi.nlm.nih.gov/taxonomy#genbank_synonym",
+    "https://www.ncbi.nlm.nih.gov/taxonomy#common_name",
+    "http://purl.obolibrary.org/obo/IAO_0000118"
+  )
+
+  val lexicalAnnotationURIs = mainLabelURIs ::: synonymLabelURIs :::  List(    
+    "http://www.w3.org/2000/01/rdf-schema#comment",
+    "http://www.geneontology.org/formats/oboInOwl#hasDbXref",
+    "http://purl.org/dc/elements/1.1/description",
+    "http://purl.org/dc/terms/description",
+    "http://purl.org/dc/elements/1.1/title",
+    "http://purl.org/dc/terms/title",    
+    "http://purl.obolibrary.org/obo/IAO_0000115",        
+    "http://purl.obolibrary.org/obo/IAO_0000600",        
+    "http://purl.obolibrary.org/obo/IAO_0000602",
+    "http://purl.obolibrary.org/obo/IAO_0000601",
+    "http://www.geneontology.org/formats/oboInOwl#hasOBONamespace"
+  )
+
+
+
+  val excludedAnnotationProperties = List("http://www.geneontology.org/formats/oboInOwl#inSubset", "'http://www.geneontology.org/formats/oboInOwl#id", "http://www.geneontology.org/formats/oboInOwl#hasAlternativeId") //List("rdfs:comment", "http://www.w3.org/2000/01/rdf-schema#comment")
 
   def annotationAxiom2Edge(annotationAxiom: OWLAnnotationAssertionAxiom): Option[Edge] = {
 
@@ -248,12 +332,16 @@ class OWL2VecStarParser(
 
     property match {
 
-      case m if excludedAnnotationProperties contains m => None
-      case _ => {
+      case m if true || (lexicalAnnotationURIs contains m) =>  {
         val subject = annotationAxiom.getSubject
         val value = annotationAxiom.getValue
+//        println("N ", property)
         
-        Some(new Edge(subject, property, stripValue(value)))
+        Some(new Edge(subject, m, stripValue(value)))
+      }
+      case _ => {
+  //      println("C ",property)
+        None
       }
     }
   }
@@ -267,4 +355,40 @@ class OWL2VecStarParser(
     }
 
   }
+
+  def processAnnotationProperty(annotProperty: OWLAnnotationProperty): List[Edge] = {
+
+//    println("Annotation Property: ")
+//    println(ontology.getAxioms(annotProperty))
+
+    val annotations = EntitySearcher.getAnnotations(annotProperty, ontology).asScala.toList
+
+    println(annotations)
+
+    println(dataFactory.getRDFSLabel)
+  //    val deepAnnotations = annotations.flatMap(a => a.getAnnotations.asScala.toList)
+
+    val property = annotProperty.toStringID.toString
+
+    property match {
+      case m if true || (lexicalAnnotationURIs contains m) => {
+        val axioms = ontology.getAnnotationAssertionAxioms(annotProperty.getIRI).asScala.toList
+        println(property, " ", axioms.length)
+//        println(axioms)
+        val axx = axioms.map(annotationAxiom2Edge).flatten
+//        println(property, " ", axx.length)
+        axx
+//        Nil
+      }
+
+      case _ => {
+        println(property)
+        Nil
+      }
+    }
+//    println(ontology.getAnnotationAssertionAxioms(annotProperty.getIRI))
+
+  //  Nil
+  }
+
 }

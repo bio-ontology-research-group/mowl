@@ -10,6 +10,7 @@ import requests
 
 # OWLAPI imports
 from org.semanticweb.owlapi.model import OWLOntology
+from org.semanticweb.owlapi.model import OWLOntologyLoaderConfiguration
 from org.semanticweb.owlapi.apibinding import OWLManager
 from org.semanticweb.owlapi.reasoner import ConsoleProgressMonitor
 from org.semanticweb.owlapi.reasoner import SimpleConfiguration

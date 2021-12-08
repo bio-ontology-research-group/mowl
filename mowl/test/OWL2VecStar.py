@@ -15,8 +15,8 @@ from java.util import HashSet
 
 def transformString(string):
     
-    rel_dict = {"http://www.w3.org/2000/01/rdf-schema#subclassof": "subclassof",
-                "http://www.semanticweb.org/owl2vec#superclassof": "superclassof",
+    rel_dict = {"http://www.w3.org/2000/01/rdf-schema#subClassOf": "subClassOf",
+                "http://www.semanticweb.org/owl2vec#superClassOf": "superClassOf",
                 "http://purl.obolibrary.org/obo/bfo_0000050": "http://purl.obolibrary.org/obo/bfo_0000050",
                 "http://purl.obolibrary.org/obo/bfo_0000051": "http://purl.obolibrary.org/obo/bfo_0000051",
                 "http://purl.obolibrary.org/obo/bfo_0000066": "http://purl.obolibrary.org/obo/bfo_0000066",
@@ -39,15 +39,15 @@ if __name__ == "__main__":
     dataset = PathDataset("data/goslim_yeast.owl", None, None)
 
     bd = False
-    ot = False
-    il = False
+    ot = True
+    il = True
 
     
     parserOld = OWL2VecParser(dataset, bidirectional_taxonomy = bd, only_taxonomy = ot, include_literals = il)
-    edgesOld = {(e.src(), transformString(e.rel().lower()), e.dst()) for e in parserOld.parseOWL()}
+    edgesOld = {(e.src(), transformString(e.rel()), e.dst()) for e in parserOld.parseOWL()}
 
     edgesNew = OWL2VecStarParser(dataset.ontology, bd, ot, il, HashSet(), HashSet(), HashSet(), String("10240")).parse()
-    edgesNew = {(str(e.src()), str(e.rel()).lower(), str(e.dst())) for e in edgesNew}
+    edgesNew = {(str(e.src()), str(e.rel()), str(e.dst())) for e in edgesNew}
 
 
 #    print("Length old, new: ", len(edgesOld), len(edgesNew))
@@ -65,8 +65,24 @@ if __name__ == "__main__":
 
     testListNew = [(s,r,d) for (s,r,d) in edgesNew if r == "http://www.geneontology.org/formats/oboinowl#hasdbxref"]
 
-    print(f"Diff old-new:\n{list(diff_edges1)}")
-    print(f"Diff new-old:\n{list(diff_edges2)}")
+    #print(f"Diff old-new:\n{list(diff_edges1)}")
+#    print(f"Diff new-old:\n{list(diff_edges2)}")
+
+    with open("diffold.txt", "w") as f:
+        f.write(str(list(diff_edges1)))
+
+    with open("diffnew.txt", "w") as f:
+        f.write(str(list(diff_edges2)))
+
+    with open("old.txt", "w") as f:
+        f.write(str(list(edgesOld)))
+
+    with open("new.txt", "w") as f:
+        f.write(str(list(edgesNew)))
+
+    
+        
+
     print(f"Lengths: {len(diff_edges1)}, {len(diff_edges2)}")
 
     print("Num edges Old: ", len(edgesOld))
@@ -76,6 +92,6 @@ if __name__ == "__main__":
     ex2 = [(s,r,d) for (s,r,d) in edgesNew if s == "GO:0015171" and d== "GO:0003333"]
 
 
-   # print(testListOld)
+  #  print(testListOld)
 
-  #  print(testListNew)
+   # print(testListNew)
