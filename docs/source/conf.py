@@ -46,6 +46,8 @@ html_theme = 'sphinx_rtd_theme'
 # -- Options for EPUB output
 epub_show_urls = 'footnote'
 
+htms_logo = 'mowl-logo.jpg'
+
 
 # The suffix(es) of source filenames.
 # You can specify multiple suffix as a list of string:

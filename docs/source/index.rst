@@ -3,8 +3,6 @@ Welcome to mOWL's documentation!
 
 **mOWL** is a Python library for Machine Learning with Ontologies
 
-.. image:: mowl-logo.jpg
-
 Getting started
 ----------------
 
