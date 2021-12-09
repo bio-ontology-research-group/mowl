@@ -24,7 +24,7 @@ class CatEmbeddings(Model):
     def __init__(self, dataset, batch_size, file_params = None, seed = 0):
         super().__init__(dataset)
         self.file_params = file_params
-        self.batch_size = batch_size
+        self.batch_size = 16 # batch_size
 
         if seed>=0:
             th.manual_seed(seed)
@@ -37,15 +37,17 @@ class CatEmbeddings(Model):
 
         train_data_loader, val_data_loader, num_classes, num_edges, num_objects = self.load_data()
         
-        model = CatModel(num_classes, num_edges, num_objects, 128)
+        model = CatModel(num_classes, num_edges, num_objects,256)
         paramss = sum(p.numel() for p in model.parameters())
         logging.debug("Model created")
-        optimizer = optim.Adam(model.parameters(), lr = 0.000001, weight_decay=0.01)
+        lr = 1e-6
+        optimizer = optim.Adam(model.parameters(), lr = lr, weight_decay=0.0)
 
 
         criterion = lambda x: th.mean(x)
         criterion2 = nn.BCELoss()
         best_roc_auc = 0
+        best_roc_auc_inv = 1
         for epoch in range(1000):
 
             epoch_loss = 0
@@ -62,7 +64,7 @@ class CatEmbeddings(Model):
                     
                     classif_loss = criterion2(logits.squeeze(), lbls.float())
 #                    print(cat_loss.detach(), classif_loss.detach())
-                    loss = classif_loss
+                    loss = classif_loss + cat_loss
                     optimizer.zero_grad()
                     loss.backward()
                     optimizer.step()
@@ -74,6 +76,8 @@ class CatEmbeddings(Model):
 
             model.eval()
             val_loss = 0
+            val_loss_pred = 0
+            val_loss_cat = 0
             preds = []
             labels = []
         
@@ -88,17 +92,21 @@ class CatEmbeddings(Model):
 
                         labels = np.append(labels, lbls.cpu())
                         preds = np.append(preds, logits.cpu())
-                        loss = criterion2(logits.squeeze(), lbls)# + cat_loss
+                        loss = criterion2(logits.squeeze(), lbls) #+ cat_loss
                         val_loss += loss.detach().item()
-
+                        val_loss_cat += cat_loss
                     val_loss /= (i+1)
+                    cat_loss /= (i+1)
 
             roc_auc = compute_roc(labels, preds)
             if roc_auc > best_roc_auc:
                 best_roc_auc = roc_auc
                 best_epoch = epoch
+            if roc_auc < best_roc_auc_inv:
+                best_roc_auc_inv = roc_auc
+                best_epoch_inv = epoch
 #                th.save(model.state_dict(), self.file_params["output_model"])
-            print(f'Epoch {epoch}: Loss - {epoch_loss}, \tVal loss - {val_loss}, \tAUC - {roc_auc}, \tBest({best_epoch}) - {best_roc_auc}')
+            print(f'Epoch {epoch}: Loss - {epoch_loss}, \tVal loss - {val_loss}, \tCat loss - {cat_loss}, \tAUC - {roc_auc}, \tBest({best_epoch}) - {best_roc_auc}, \tBestInv{best_epoch_inv} - {best_roc_auc_inv}')
 #            print(f'Epoch {epoch}: Loss - {epoch_loss}, \tVal AUC - {roc_auc}')
 
  #           print(f'Epoch {epoch}: Loss - {epoch_loss}') #, \tVal loss - {val_loss}, \tAUC - {roc_auc}')
@@ -349,6 +357,7 @@ class CatModel2(nn.Module):
 
             path_loss1 = matrix_norm(self.inj_exp_max.weight - self.coprod_morphism.weight@self.inj_exp_cop.weight)
             path_loss2 = matrix_norm(self.inj_cons_max.weight - self.coprod_morphism.weight@self.inj_cons_cop.weight )
+
             
         sim_loss  = abs(consequent - self.sim(antecedent))
 
@@ -397,7 +406,7 @@ class CatModel(nn.Module):
 
         dim0 = embedding_size
         dim1 = floor(dim0/2)
-        dim2 = floor(dim1/2)
+        dim2 = dim1 #floor(dim1/2)
         self.net_object = nn.Sequential(
             nn.Embedding(num_obj, embedding_size),
             nn.Linear(dim0, dim1),
@@ -412,7 +421,7 @@ class CatModel(nn.Module):
         )
         
         self.prod_up_repr = nn.Sequential(
-            nn.Linear(dim2, 1024),
+            nn.Linear(2*dim2, 1024),
             nn.ReLU(),
             nn.Dropout(),
             nn.Linear(1024, dim2)
@@ -426,7 +435,7 @@ class CatModel(nn.Module):
         )
 
         self.similarity = nn.Sequential(
-            nn.Linear(5*dim2, 1024),
+            nn.Linear(7*dim2, 1024),
             nn.ReLU(),
             nn.Dropout(),
             nn.Linear(1024, 1)
@@ -455,49 +464,74 @@ class CatModel(nn.Module):
 
         antecedent, consequent = map(self.net_object, objects)
 
-        prod_up = self.prod_up_repr(antecedent)
+        prod_up = self.prod_up_repr(th.cat([antecedent, consequent], dim = 1))
         exponential = self.exp_repr(th.cat([antecedent, consequent], dim = 1))
         prod_down = self.prod_down_repr(th.cat([exponential, antecedent], dim=1))
         
         full = True
-        if not full:
-#            prod_down2 = self.prod_up_down(prod_up)
-#            print("w: ", th.max(self.prod_up_down.weight), th.min(self.prod_up_down.weight) )
-#            cat_loss = th.norm(prod_down-prod_down2)
- #           loss1 = abs(exponential - self.proj_up_exp(prod_up))
- #           loss2 = abs(antecedent - self.proj_up_ant(prod_up))
+        if full:
+           #           print("w: ", th.max(self.prod_up_down.weight), th.min(self.prod_up_down.weight) )
 
- #           loss3 = abs(exponential - self.proj_down_exp(prod_down))
- #           loss4 = abs(antecedent - self.proj_down_ant(prod_down))
+            estim_prod_down = self.prod_up_down(prod_up)
 
- #           loss5 = abs(prod_down - self.prod_up_down(prod_up))
- #           loss6 = abs(consequent - self.prod_down_cons(prod_down))
- #           loss7 = abs(consequent - self.prod_up_cons(prod_up))
+            estim_exponential_up = self.proj_up_exp(prod_up)
+            estim_exponential_down = self.proj_down_exp(prod_down)
+            estim_antecedent_up = self.proj_up_ant(prod_up)
+            estim_antecedent_down = self.proj_down_ant(prod_down)
 
-#            path_loss1 = matrix_norm(self.proj_up_exp.weight - self.prod_up_down.weight@self.proj_down_exp.weight)
-#            path_loss2 = matrix_norm(self.proj_up_ant.weight - self.prod_up_down.weight@self.proj_down_ant.weight)
-#            path_loss3 = matrix_norm(self.prod_up_cons.weight - self.prod_up_down.weight@self.prod_down_cons.weight)
-            sim_loss  = self.similarity_simple(th.cat([antecedent, consequent], dim=1))  #abs(consequent - s            
+            estim_consequent_up = self.prod_up_cons(prod_up)
+            estim_consequent_down = self.prod_down_cons(prod_down)
+            
+            estim_cons_ant = self.sim(antecedent)
+            
+            loss1 = th.sum(estim_exponential_down * estim_exponential_up, dim=1, keepdims = True)
+            loss2 = th.sum(estim_antecedent_down * estim_antecedent_up, dim=1, keepdims = True)
+
+            #loss3 = abs(exponential - estim_exponential_down)
+            #loss4 = abs(antecedent - estim_antecedent_down)
+
+#            loss5 = abs(prod_down - estim_prod_down)
+            loss6 = th.sum(estim_consequent_up * estim_consequent_down, dim=1, keepdims = True)
+#            loss7 = abs(consequent - estim_consequent_up)
+
+            loss8 = th.sum(consequent * estim_cons_ant, dim=1, keepdims = True)
+            
+            #           path_loss1 = matrix_norm(self.proj_up_exp.weight - self.prod_up_down.weight@self.proj_down_exp.weight)
+            #           path_loss2 = matrix_norm(self.proj_up_ant.weight - self.prod_up_down.weight@self.proj_down_ant.weight)
+            #           path_loss3 = matrix_norm(self.prod_up_cons.weight - self.prod_up_down.weight@self.prod_down_cons.weight)
+            path_loss1 = abs(estim_exponential_up - self.proj_down_exp(estim_prod_down))
+            path_loss2 = abs(estim_antecedent_up - self.proj_down_ant(estim_prod_down))
+            path_loss3 = abs(estim_consequent_up - self.prod_down_cons(estim_prod_down))
+
+            path_loss4 = th.sum(estim_consequent_down * self.sim(estim_antecedent_down), dim=1, keepdims = True)
+            #sim_loss  = self.similarity(th.cat([estim_antecedent_up, estim_antecedent_down, estim_consequent_up, estim_consequent_down, estim_exponential_up, estim_exponential_down, estim_prod_down], dim=1))  #abs(consequent - self.sim(antecedent))
+            #sim_loss  = abs(consequent - self.sim(antecedent)) + abs(estim_consequent_down - self.sim(estim_antecedent_down)) + abs(estim_consequent_up - self.sim(estim_antecedent_up))
+            sim_loss  = th.sum(estim_consequent_down * estim_antecedent_down * estim_exponential_down, dim = 1, keepdims = True)
+
         else:
-            sim_loss  = self.similarity(th.cat([antecedent, consequent, exponential, prod_up, prod_down], dim=1))  #abs(consequent - self.sim(antecedent))
+            sim_loss  = th.sum(consequent * self.sim(antecedent), dim = 1, keepdims = True)
 
+            #            sim_loss  = self.similarity_simple(th.cat([antecedent, consequent], dim=1))  #abs(consequent - s            
+
+#        logit = 
         logit = th.sigmoid(sim_loss) #th.sigmoid(self.classif(sim_loss))
 
         if not full:
-            return th.zeros(antecedent.shape[0]), logit
+            return th.zeros(antecedent.shape), logit
         else:
-            return th.zeros(antecedent.shape[0]), logit
+            return sum([loss1, loss2, loss6, loss8, path_loss4, sim_loss]), logit
 
         
         
     def forward(self, positive, negative1, negative2):
         loss_pos, logit_pos = self.compute_loss(positive)
-        neg = random.choice([negative1, negative2])
-        #            neg = negative1
+        #neg = random.choice([negative1, negative2])
+        neg = negative1
         loss_neg, logit_neg = self.compute_loss(neg)
         logits = th.cat([logit_pos, logit_neg], 0)
-        margin = 0.1
-        cat_loss = F.relu(loss_pos - loss_neg + margin) 
+        margin = 0.01
+        cat_loss = F.relu(-th.mean(loss_pos,dim=1) + th.mean(loss_neg, dim=1) - margin)
+        #print(cat_loss.shape)
         return cat_loss, logits
         
         

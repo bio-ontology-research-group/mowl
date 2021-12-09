@@ -32,7 +32,7 @@ def main(config):
    
     ds = PathDataset(ontology, val, "")
         
-    model = CatEmbeddings(ds, 32)
+    model = CatEmbeddings(ds, 128)
 
     model.train()
     model.evaluate()
