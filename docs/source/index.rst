@@ -1,14 +1,28 @@
-Welcome to MOWL's documentation!
+Welcome to mOWL's documentation!
 ===================================
 
-**MOWL** is a Python library
+**mOWL** is a Python library for Machine Learning with Ontologies
 
+.. image:: mowl-logo.jpg
 
 Getting started
 ----------------
 
 Check out the :doc:`usage` section for further information, including
 how to :ref:`install\index` the project.
+
+
+   
+Authors
+----------
+
+`BORG <https://cemse.kaust.edu.sa/borg>_`
+
+License
+---------------
+
+The package is released under the `DEFINE LICENSE`__.
+
 
 .. note::
 
@@ -29,11 +43,13 @@ how to :ref:`install\index` the project.
    :caption: API
    :hidden:
    :glob:
-
-   mowl
       
    api/mowl.datasets
    api/mowl.elembeddings
    api/mowl.gnn_sim 
    api/mowl.graph
    api/mowl.test
+
+
+
+
