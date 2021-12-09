@@ -1,0 +1,249 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+  <meta charset="utf-8" /><meta name="generator" content="Docutils 0.17.1: http://docutils.sourceforge.net/" />
+
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>mowl.gnn_sim package &mdash; MOWL 0.1 documentation</title><link rel="stylesheet" href="../_static/css/theme.css" type="text/css" />
+    <link rel="stylesheet" href="../_static/pygments.css" type="text/css" />
+  <!--[if lt IE 9]>
+    <script src="../_static/js/html5shiv.min.js"></script>
+  <![endif]-->
+  <script id="documentation_options" data-url_root="../" src="../_static/documentation_options.js"></script>
+        <script src="../_static/jquery.js"></script>
+        <script src="../_static/underscore.js"></script>
+        <script src="../_static/doctools.js"></script>
+        <script src="../_static/language_data.js"></script>
+        <script async="async" src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.7/latest.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script src="../_static/js/theme.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="next" title="mowl.graph" href="mowl.graph.html" />
+    <link rel="prev" title="mowl.elembeddings package" href="mowl.elembeddings.html" /> 
+</head>
+
+<body class="wy-body-for-nav"> 
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side">
+      <div class="wy-side-scroll">
+        <div class="wy-side-nav-search" >
+            <a href="../index.html" class="icon icon-home"> MOWL
+          </a>
+              <div class="version">
+                0.1.0
+              </div>
+<div role="search">
+  <form id="rtd-search-form" class="wy-form" action="../search.html" method="get">
+    <input type="text" name="q" placeholder="Search docs" />
+    <input type="hidden" name="check_keywords" value="yes" />
+    <input type="hidden" name="area" value="default" />
+  </form>
+</div>
+        </div><div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p><span class="caption-text">Get Started</span></p>
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="../install/index.html">Installation and Setup</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../tutorials/index.html">Tutorials</a></li>
+</ul>
+<p><span class="caption-text">API</span></p>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="mowl.datasets.html">mowl.datasets package</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mowl.elembeddings.html">mowl.elembeddings package</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">mowl.gnn_sim package</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="#submodules">Submodules</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#module-mowl.gnn_sim.baseRGCN">mowl.gnn_sim.baseRGCN module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#mowl-gnn-sim-model-module">mowl.gnn_sim.model module</a></li>
+<li class="toctree-l2"><a class="reference internal" href="#module-mowl.gnn_sim">Module contents</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="mowl.graph.html">mowl.graph</a></li>
+<li class="toctree-l1"><a class="reference internal" href="mowl.test.html">mowl.test package</a></li>
+</ul>
+
+        </div>
+      </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap"><nav class="wy-nav-top" aria-label="Mobile navigation menu" >
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../index.html">MOWL</a>
+      </nav>
+
+      <div class="wy-nav-content">
+        <div class="rst-content">
+          <div role="navigation" aria-label="Page navigation">
+  <ul class="wy-breadcrumbs">
+      <li><a href="../index.html" class="icon icon-home"></a> &raquo;</li>
+      <li>mowl.gnn_sim package</li>
+      <li class="wy-breadcrumbs-aside">
+            <a href="../_sources/api/mowl.gnn_sim.rst.txt" rel="nofollow"> View page source</a>
+      </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+           <div itemprop="articleBody">
+             
+  <section id="mowl-gnn-sim-package">
+<h1>mowl.gnn_sim package<a class="headerlink" href="#mowl-gnn-sim-package" title="Permalink to this headline">¶</a></h1>
+<section id="submodules">
+<h2>Submodules<a class="headerlink" href="#submodules" title="Permalink to this headline">¶</a></h2>
+</section>
+<section id="module-mowl.gnn_sim.baseRGCN">
+<span id="mowl-gnn-sim-basergcn-module"></span><h2>mowl.gnn_sim.baseRGCN module<a class="headerlink" href="#module-mowl.gnn_sim.baseRGCN" title="Permalink to this headline">¶</a></h2>
+<dl class="py class">
+<dt id="mowl.gnn_sim.baseRGCN.BaseRGCN">
+<em class="property">class </em><code class="sig-prename descclassname">mowl.gnn_sim.baseRGCN.</code><code class="sig-name descname">BaseRGCN</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">num_nodes</span></em>, <em class="sig-param"><span class="n">h_dim</span></em>, <em class="sig-param"><span class="n">out_dim</span></em>, <em class="sig-param"><span class="n">num_rels</span></em>, <em class="sig-param"><span class="n">num_bases</span></em>, <em class="sig-param"><span class="n">num_hidden_layers</span><span class="o">=</span><span class="default_value">1</span></em>, <em class="sig-param"><span class="n">dropout</span><span class="o">=</span><span class="default_value">0</span></em>, <em class="sig-param"><span class="n">use_self_loop</span><span class="o">=</span><span class="default_value">False</span></em>, <em class="sig-param"><span class="n">use_cuda</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#mowl.gnn_sim.baseRGCN.BaseRGCN" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.modules.module.Module</span></code></p>
+<dl class="py method">
+<dt id="mowl.gnn_sim.baseRGCN.BaseRGCN.build_hidden_layer">
+<code class="sig-name descname">build_hidden_layer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">idx</span></em><span class="sig-paren">)</span><a class="headerlink" href="#mowl.gnn_sim.baseRGCN.BaseRGCN.build_hidden_layer" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt id="mowl.gnn_sim.baseRGCN.BaseRGCN.build_input_layer">
+<code class="sig-name descname">build_input_layer</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#mowl.gnn_sim.baseRGCN.BaseRGCN.build_input_layer" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt id="mowl.gnn_sim.baseRGCN.BaseRGCN.build_model">
+<code class="sig-name descname">build_model</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#mowl.gnn_sim.baseRGCN.BaseRGCN.build_model" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt id="mowl.gnn_sim.baseRGCN.BaseRGCN.build_output_layer">
+<code class="sig-name descname">build_output_layer</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="headerlink" href="#mowl.gnn_sim.baseRGCN.BaseRGCN.build_output_layer" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt id="mowl.gnn_sim.baseRGCN.BaseRGCN.forward">
+<code class="sig-name descname">forward</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">g</span></em>, <em class="sig-param"><span class="n">h</span></em>, <em class="sig-param"><span class="n">r</span></em>, <em class="sig-param"><span class="n">norm</span></em><span class="sig-paren">)</span><a class="headerlink" href="#mowl.gnn_sim.baseRGCN.BaseRGCN.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Defines the computation performed at every call.</p>
+<p>Should be overridden by all subclasses.</p>
+<div class="admonition note">
+<p class="admonition-title">Note</p>
+<p>Although the recipe for forward pass needs to be defined within
+this function, one should call the <code class="xref py py-class docutils literal notranslate"><span class="pre">Module</span></code> instance afterwards
+instead of this since the former takes care of running the
+registered hooks while the latter silently ignores them.</p>
+</div>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="mowl.gnn_sim.baseRGCN.BaseRGCN.training">
+<code class="sig-name descname">training</code><em class="property">: <a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.10)">bool</a></em><a class="headerlink" href="#mowl.gnn_sim.baseRGCN.BaseRGCN.training" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py class">
+<dt id="mowl.gnn_sim.baseRGCN.RelGraphEmbedLayer">
+<em class="property">class </em><code class="sig-prename descclassname">mowl.gnn_sim.baseRGCN.</code><code class="sig-name descname">RelGraphEmbedLayer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">storage_dev_id</span></em>, <em class="sig-param"><span class="n">out_dev_id</span></em>, <em class="sig-param"><span class="n">num_nodes</span></em>, <em class="sig-param"><span class="n">node_tids</span></em>, <em class="sig-param"><span class="n">num_of_ntype</span></em>, <em class="sig-param"><span class="n">input_size</span></em>, <em class="sig-param"><span class="n">embed_size</span></em>, <em class="sig-param"><span class="n">dgl_sparse</span><span class="o">=</span><span class="default_value">False</span></em><span class="sig-paren">)</span><a class="headerlink" href="#mowl.gnn_sim.baseRGCN.RelGraphEmbedLayer" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal notranslate"><span class="pre">torch.nn.modules.module.Module</span></code></p>
+<p>Embedding layer for featureless heterograph.
+Parameters
+———-
+storage_dev_id : int</p>
+<blockquote>
+<div><p>The device to store the weights of the layer.</p>
+</div></blockquote>
+<dl class="simple">
+<dt>out_dev_id<span class="classifier">int</span></dt><dd><p>Device to return the output embeddings on.</p>
+</dd>
+<dt>num_nodes<span class="classifier">int</span></dt><dd><p>Number of nodes.</p>
+</dd>
+<dt>node_tides<span class="classifier">tensor</span></dt><dd><p>Storing the node type id for each node starting from 0</p>
+</dd>
+<dt>num_of_ntype<span class="classifier">int</span></dt><dd><p>Number of node types</p>
+</dd>
+<dt>input_size<span class="classifier">list of int</span></dt><dd><p>A list of input feature size for each node type. If None, we then
+treat certain input feature as an one-hot encoding feature.</p>
+</dd>
+<dt>embed_size<span class="classifier">int</span></dt><dd><p>Output embed size</p>
+</dd>
+<dt>dgl_sparse<span class="classifier">bool, optional</span></dt><dd><p>If true, use dgl.nn.NodeEmbedding otherwise use torch.nn.Embedding</p>
+</dd>
+</dl>
+<dl class="py method">
+<dt id="mowl.gnn_sim.baseRGCN.RelGraphEmbedLayer.dgl_emb">
+<em class="property">property </em><code class="sig-name descname">dgl_emb</code><a class="headerlink" href="#mowl.gnn_sim.baseRGCN.RelGraphEmbedLayer.dgl_emb" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="py method">
+<dt id="mowl.gnn_sim.baseRGCN.RelGraphEmbedLayer.forward">
+<code class="sig-name descname">forward</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">node_ids</span></em>, <em class="sig-param"><span class="n">node_tids</span></em>, <em class="sig-param"><span class="n">type_ids</span></em>, <em class="sig-param"><span class="n">features</span></em><span class="sig-paren">)</span><a class="headerlink" href="#mowl.gnn_sim.baseRGCN.RelGraphEmbedLayer.forward" title="Permalink to this definition">¶</a></dt>
+<dd><p>Forward computation
+Parameters
+———-
+node_ids : tensor</p>
+<blockquote>
+<div><p>node ids to generate embedding for.</p>
+</div></blockquote>
+<dl class="simple">
+<dt>node_ids<span class="classifier">tensor</span></dt><dd><p>node type ids</p>
+</dd>
+<dt>features<span class="classifier">list of features</span></dt><dd><p>list of initial features for nodes belong to different node type.
+If None, the corresponding features is an one-hot encoding feature,
+else use the features directly as input feature and matmul a
+projection matrix.</p>
+</dd>
+</dl>
+<dl class="simple">
+<dt>tensor</dt><dd><p>embeddings as the input of the next layer</p>
+</dd>
+</dl>
+</dd></dl>
+
+<dl class="py attribute">
+<dt id="mowl.gnn_sim.baseRGCN.RelGraphEmbedLayer.training">
+<code class="sig-name descname">training</code><em class="property">: <a class="reference external" href="https://docs.python.org/3/library/functions.html#bool" title="(in Python v3.10)">bool</a></em><a class="headerlink" href="#mowl.gnn_sim.baseRGCN.RelGraphEmbedLayer.training" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</dd></dl>
+
+<dl class="py function">
+<dt id="mowl.gnn_sim.baseRGCN.initializer">
+<code class="sig-prename descclassname">mowl.gnn_sim.baseRGCN.</code><code class="sig-name descname">initializer</code><span class="sig-paren">(</span><em class="sig-param"><span class="n">emb</span></em><span class="sig-paren">)</span><a class="headerlink" href="#mowl.gnn_sim.baseRGCN.initializer" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</section>
+<section id="mowl-gnn-sim-model-module">
+<h2>mowl.gnn_sim.model module<a class="headerlink" href="#mowl-gnn-sim-model-module" title="Permalink to this headline">¶</a></h2>
+</section>
+<section id="module-mowl.gnn_sim">
+<span id="module-contents"></span><h2>Module contents<a class="headerlink" href="#module-mowl.gnn_sim" title="Permalink to this headline">¶</a></h2>
+</section>
+</section>
+
+
+           </div>
+          </div>
+          <footer><div class="rst-footer-buttons" role="navigation" aria-label="Footer">
+        <a href="mowl.elembeddings.html" class="btn btn-neutral float-left" title="mowl.elembeddings package" accesskey="p" rel="prev"><span class="fa fa-arrow-circle-left" aria-hidden="true"></span> Previous</a>
+        <a href="mowl.graph.html" class="btn btn-neutral float-right" title="mowl.graph" accesskey="n" rel="next">Next <span class="fa fa-arrow-circle-right" aria-hidden="true"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <p>&#169; Copyright 2021, me.</p>
+  </div>
+
+  Built with <a href="https://www.sphinx-doc.org/">Sphinx</a> using a
+    <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a>
+    provided by <a href="https://readthedocs.org">Read the Docs</a>.
+   
+
+</footer>
+        </div>
+      </div>
+    </section>
+  </div>
+  <script>
+      jQuery(function () {
+          SphinxRtdTheme.Navigation.enable(true);
+      });
+  </script> 
+
+</body>
+</html>
