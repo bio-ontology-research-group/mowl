@@ -14,7 +14,7 @@ how to :ref:`install\index` the project.
 Authors
 ----------
 
-`BORG <https://cemse.kaust.edu.sa/borg>_`
+`BORG <https://cemse.kaust.edu.sa/borg>`_
 
 License
 ---------------
@@ -41,12 +41,11 @@ The package is released under the `DEFINE LICENSE`__.
    :caption: API
    :hidden:
    :glob:
-      
+
+   api/graph/index
    api/mowl.datasets
    api/mowl.elembeddings
-   api/mowl.gnn_sim 
    api/mowl.graph
-   api/mowl.test
 
 
 
