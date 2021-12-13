@@ -1,10 +1,7 @@
-mowl.datasets package
+Datasets
 =====================
 
-Submodules
-----------
-
-mowl.datasets.base module
+Base dataset
 -------------------------
 
 .. automodule:: mowl.datasets.base
@@ -12,7 +9,7 @@ mowl.datasets.base module
    :undoc-members:
    :show-inheritance:
 
-mowl.datasets.ppi\_string module
+PPI String dataset
 --------------------------------
 
 .. automodule:: mowl.datasets.ppi_string
@@ -20,18 +17,10 @@ mowl.datasets.ppi\_string module
    :undoc-members:
    :show-inheritance:
 
-mowl.datasets.ppi\_yeast module
+PPI Yeast dataset
 -------------------------------
 
 .. automodule:: mowl.datasets.ppi_yeast
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
-Module contents
----------------
-
-.. automodule:: mowl.datasets
    :members:
    :undoc-members:
    :show-inheritance:

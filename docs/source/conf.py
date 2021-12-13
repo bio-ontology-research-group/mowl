@@ -11,7 +11,7 @@ import sys
 sys.path.insert(0, os.path.abspath('../../..'))
 sys.path.insert(0, os.path.abspath('../..'))
 sys.path.insert(0, os.path.abspath('../../mowl'))
-
+sys.path.insert(0, os.path.abspath('../../gateway/src/main/scala/org'))
 # -- Project information
 
 project = 'MOWL'
@@ -29,6 +29,8 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.autosummary',
     'sphinx.ext.intersphinx',
+    'nbsphinx',
+    'sphinx_gallery.load_style'
 ]
 
 intersphinx_mapping = {

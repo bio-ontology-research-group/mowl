@@ -1,4 +1,4 @@
-mowl.elembeddings package
+ELEmbeddings
 =========================
 
 Submodules
@@ -12,10 +12,9 @@ mowl.elembeddings.model module
    :undoc-members:
    :show-inheritance:
 
-Module contents
+
+Example of use
 ---------------
 
-.. automodule:: mowl.elembeddings
-   :members:
-   :undoc-members:
-   :show-inheritance:
+An example can be found at :doc:`../../../tutorials/elembedding`
+

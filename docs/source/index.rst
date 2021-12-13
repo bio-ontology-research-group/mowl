@@ -7,7 +7,7 @@ Getting started
 ----------------
 
 Check out the :doc:`usage` section for further information, including
-how to :ref:`install\index` the project.
+how to :doc:`install/index` the project.
 
 
    
@@ -37,15 +37,14 @@ The package is released under the `DEFINE LICENSE`__.
    tutorials/index
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 3
    :caption: API
    :hidden:
    :glob:
 
+   api/datasets/index
    api/graph/index
-   api/mowl.datasets
-   api/mowl.elembeddings
-   api/mowl.graph
+   api/embedding/index
 
 
 
