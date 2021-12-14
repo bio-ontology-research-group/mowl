@@ -4,4 +4,4 @@ dependencies:
   - pip
   - pip:
     - nbsphinx
-    - nbsphinx-gallery
+    - sphinx-gallery
