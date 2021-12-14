@@ -64,4 +64,4 @@ master_doc = 'index'
 
 
 
-autodoc_mock_imports = ['org', 'java', 'numpy', 'jpype', 'de']
+autodoc_mock_imports = ['org', 'java', 'numpy', 'jpype', 'de', 'pandas', 'scipy', 'sklearn', 'owlready2']
