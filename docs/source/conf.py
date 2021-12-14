@@ -64,4 +64,4 @@ master_doc = 'index'
 
 
 
-autodoc_mock_imports = ['org.semanticweb.owlapi.model', 'org.mowl.Parsers']
+autodoc_mock_imports = ['org']
