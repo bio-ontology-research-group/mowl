@@ -1,28 +1,6 @@
-name: mowl
 channels:
   - conda-forge
 dependencies:
-  - python=3.9
-  - cairo
-  - dglteam::dgl
-  - numpy
-  - networkx
-  - click
-  - grpcio
-  - JPype1
-  - owlready2
-  - pandas
-  - protobuf
-  - pytest
-  - pyyaml
-  - requests
-  - scipy
-  - scikit-learn
-  - urllib3
-  - pytorch
-  - gensim
-  - openjdk
-  - gradle
   - pip
   - pip:
     - nbsphinx
