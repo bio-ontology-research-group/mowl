@@ -1,4 +1,6 @@
-from org.mowl.BasicParser import SimpleParser
+from org.mowl.Parsers import TaxonomyParser as Parser
+from org.semanticweb.owlapi.model import OWLOntology
+
 
 import sys
 
@@ -6,13 +8,12 @@ from mowl.graph.graph import GraphGenModel
 
 
 class TaxonomyParser(GraphGenModel):
-    def __init__(self, dataset, subclass = True, relations = False):
-        super().__init__(dataset)
+    def __init__(self, ontology: OWLOntology, bidirectional_taxonomy: bool = False):
+        super().__init__(ontology)
 
-        self.parser = SimpleParser(dataset.ontology, subclass, relations)
+        self.parser = Parser(ontology, bidirectional_taxonomy)
 
-    def parseOWL(self):
+    def parse(self):
 
         edges = self.parser.parse()
-
         return edges

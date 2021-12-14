@@ -4,7 +4,7 @@ ELEmbeddings
 Submodules
 ----------
 
-mowl.elembeddings.model module
+ELEmbeddings module
 ------------------------------
 
 .. automodule:: mowl.elembeddings.model

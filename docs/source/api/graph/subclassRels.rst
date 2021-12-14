@@ -1,7 +1,7 @@
 Subclass Hierarchy With Relations
 =====================
 
-.. automodule:: org.mowl.Parsers.TaxonomyParserWithRels
+.. automodule:: mowl.graph.taxonomyRels.model
    :members:
    :undoc-members:
    :show-inheritance:
