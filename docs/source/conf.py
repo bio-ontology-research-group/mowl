@@ -8,6 +8,8 @@
 #
 import os
 import sys
+import mock
+
 sys.path.insert(0, os.path.abspath('../../..'))
 sys.path.insert(0, os.path.abspath('../..'))
 sys.path.insert(0, os.path.abspath('../../mowl'))
@@ -58,3 +60,8 @@ source_suffix = ['.rst', '.md']
 
 # The master toctree document.
 master_doc = 'index'
+
+
+
+
+autodoc_mock_imports = ['org.semanticweb.owlapi.model', 'org.mowl.Parsers']
