@@ -62,6 +62,4 @@ source_suffix = ['.rst', '.md']
 master_doc = 'index'
 
 
-
-
 autodoc_mock_imports = ['org', 'java', 'numpy', 'jpype', 'de', 'pandas', 'scipy', 'sklearn', 'owlready2', 'gensim']
