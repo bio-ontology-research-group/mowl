@@ -44,6 +44,7 @@ The package is released under the `DEFINE LICENSE`__.
 
    api/datasets/index
    api/graph/index
+   api/walking/index
    api/embedding/index
 
 
