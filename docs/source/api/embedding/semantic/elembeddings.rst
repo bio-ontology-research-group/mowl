@@ -7,7 +7,7 @@ Submodules
 ELEmbeddings module
 ------------------------------
 
-.. automodule:: mowl.elembeddings.model
+.. automodule:: mowl.embeddings.elembeddings.model
    :members:
    :undoc-members:
    :show-inheritance:

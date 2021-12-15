@@ -5,3 +5,4 @@ dependencies:
   - pip:
     - nbsphinx
     - sphinx-gallery
+    - ipython

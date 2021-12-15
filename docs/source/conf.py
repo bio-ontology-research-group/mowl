@@ -32,7 +32,8 @@ extensions = [
     'sphinx.ext.autosummary',
     'sphinx.ext.intersphinx',
     'nbsphinx',
-    'sphinx_gallery.load_style'
+    'sphinx_gallery.load_style',
+#    'IPython.sphinxext.ipython_console_highlighting'
 ]
 
 intersphinx_mapping = {
@@ -50,7 +51,9 @@ html_theme = 'sphinx_rtd_theme'
 # -- Options for EPUB output
 epub_show_urls = 'footnote'
 
-html_logo = 'mowl-logo.jpg'
+#html_logo = 'mowl-logo.jpg'
+html_logo = 'mowl_white_background_colors_2048x2048px.png'
+#html_logo = 'mowl_black_background_colors_2048x2048px.png'
 
 
 # The suffix(es) of source filenames.

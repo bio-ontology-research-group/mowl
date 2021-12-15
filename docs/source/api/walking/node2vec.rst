@@ -1,7 +1,7 @@
-﻿mowl.graph.node2vec
+﻿Node2Vec
 ===================
 
-.. automodule:: mowl.graph.node2vec
+.. automodule:: mowl.walking.node2vec.model
 
    
    

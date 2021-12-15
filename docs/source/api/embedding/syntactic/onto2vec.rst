@@ -1,13 +1,10 @@
-mowl.onto2vec package
+Onto2Vec
 =====================
 
-Submodules
-----------
-
-mowl.onto2vec.model module
+Onto2Vec
 --------------------------
 
-.. automodule:: mowl.onto2vec.model
+.. automodule:: mowl.embeddings.onto2vec.model
    :members:
    :undoc-members:
    :show-inheritance:
@@ -15,7 +12,7 @@ mowl.onto2vec.model module
 Module contents
 ---------------
 
-.. automodule:: mowl.onto2vec
+.. automodule:: mowl.embeddings.onto2vec
    :members:
    :undoc-members:
    :show-inheritance:
