@@ -22,3 +22,11 @@ In this module we provide different methods for projecting an ontology into a gr
    subclassRels
    dl2vec
    owl2vec
+
+
+.. toctree::
+   :maxdepth: 1
+   :hidden:
+   :glob:
+
+   edge

@@ -15,8 +15,9 @@ class Edge:
         return self.dst_
 
     def prettyFormat(self, string):
-    #if string is of the form <http://purl.obolibrary.org/obo/GO_0071554> this function returns GO:0071554
-
+        '''
+        If string is of the form <http://purl.obolibrary.org/obo/GO_0071554> this function returns GO:0071554
+        '''
         if string[0] == "<" and string[-1] == ">":
             string = string[1:-1]
             string = string.split("/")[-1]
