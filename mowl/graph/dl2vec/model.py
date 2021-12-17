@@ -20,7 +20,7 @@ class DL2VecParser(GraphGenModel):
         Performs the ontology parsing.
 
         :returns: A list of triples where each triple is of the form :math:`(head, relation, tail)`
-        :rtype: List of Edge
+        :rtype: List of :class:`mowl.graph.edge.Edge`
         '''
 
         edges = self.parser.parse()
