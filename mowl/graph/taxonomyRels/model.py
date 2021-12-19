@@ -1,4 +1,4 @@
-from org.mowl.Parsers import TaxonomyParserWithRels as Parser
+from org.mowl.Parsers import TaxonomyWithRelsParser as Parser
 from org.semanticweb.owlapi.model import OWLOntology
 from mowl.graph.edge import Edge
 

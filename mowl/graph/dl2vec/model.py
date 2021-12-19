@@ -1,9 +1,10 @@
-from org.mowl.Porsers import DL2VecParser
+
 from mowl.graph.graph import GraphGenModel
 
 from org.mowl.Parsers import DL2VecParser as Parser
 from org.semanticweb.owlapi.model import OWLOntology
 from mowl.graph.edge import Edge
+import logging
 
 class DL2VecParser(GraphGenModel):
 
@@ -13,7 +14,8 @@ class DL2VecParser(GraphGenModel):
     '''
     def __init__(self, ontology: OWLOntology, bidirectional_taxonomy: bool = False):
         super().__init__(ontology)
-
+        
+        logging.debug("BID IS: %s", str(bidirectional_taxonomy))
         self.parser = Parser(ontology, bidirectional_taxonomy)
         
     def parse(self):

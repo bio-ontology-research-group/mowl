@@ -1,10 +1,10 @@
-from org.mowl.Parsers import TaxonomyParser
-from org.mowl.Parsers import TaxonomyWithRelsParser
-from org.mowl.Parsers import DL2VecParser
+from mowl.graph.taxonomy.model import TaxonomyParser
+from mowl.graph.taxonomyRels.model import TaxonomyWithRelsParser
+from mowl.graph.dl2vec.model import DL2VecParser
 
 from mowl.graph.owl2vec_star.model import OWL2VecParser
 
-def parser_factory(method_name, dataset, bidirectional_taxonomy=False): #TODO include parameters for OWL2Vec*
+def parser_factory(method_name, dataset, bidirectional_taxonomy): #TODO include parameters for OWL2Vec*
     methods = [
         "taxonomy",
         "taxonomy_rels",
@@ -15,7 +15,7 @@ def parser_factory(method_name, dataset, bidirectional_taxonomy=False): #TODO in
     if method_name == "taxonomy":
         return TaxonomyParser(dataset, bidirectional_taxonomy=bidirectional_taxonomy)
     elif method_name == "taxonomy_rels":
-        return TaxonomyParser(dataset, bidirectional_taxonomy=bidirectional_taxonomy)
+        return TaxonomyWithRelsParser(dataset, bidirectional_taxonomy=bidirectional_taxonomy)
     elif method_name == "dl2vec":
         return DL2VecParser(dataset, bidirectional_taxonomy= bidirectional_taxonomy)
     elif method_name == "owl2vec_star":
