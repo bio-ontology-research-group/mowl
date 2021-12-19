@@ -3,7 +3,7 @@ from mowl.graph.dl2vec.model import DL2VecParser
 from mowl.graph.owl2vec_star.model import OWL2VecParser
 from mowl.graph.catont.model import CatOnt
 
-def parser_factory(method_name, dataset):
+def parser_factory(method_name, dataset, bidirectional_taxonomy=False): #TODO include parameters for OWL2Vec*
     methods = [
         "taxonomy",
         "taxonomy_rels",
@@ -12,12 +12,12 @@ def parser_factory(method_name, dataset):
     ]
     
     if method_name == "taxonomy":
-        return TaxonomyParser(dataset, subclass=True, relations=False)
+        return TaxonomyParser(dataset, bidirectional_taxonomy=bidirectional_taxonomy)
     elif method_name == "taxonomy_rels":
-        return TaxonomyParser(dataset, subclass = True, relations=True)
+        return TaxonomyParser(dataset, bidirectional_taxonomy=bidirectional_taxonomy)
     elif method_name == "dl2vec":
-        return DL2VecParser(dataset)
+        return DL2VecParser(dataset, bidirectional_taxonomy= bidirectional_taxonomy)
     elif method_name == "owl2vec_star":
-        return OWL2VecParser(dataset)
+        return OWL2VecParser(dataset, bidirectional_taxonomy=bidirectional_taxonomy)
     else:
         raise Exception(f"Graph generation method unrecognized. Recognized methods are: {methods}")

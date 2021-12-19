@@ -36,5 +36,5 @@ class TaxonomyWithRelsParser(GraphGenModel):
 
         
         edges = self.parser.parse()
-        edges = [Edge(e.src(), e.rel(), e.dst()) for e in edges]
+        edges = [Edge(str(e.src()), str(e.rel()), str(e.dst())) for e in edges]
         return edges

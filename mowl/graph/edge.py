@@ -48,7 +48,7 @@ class Edge:
         relations = set()
 
         for edge in edges:
-            entities |= {edge.src, edge.dst}
-            relations |= {edge.rel}
+            entities |= {edge.src(), edge.dst()}
+            relations |= {edge.rel()}
 
         return (entities, relations)
