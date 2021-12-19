@@ -1,13 +1,9 @@
-from mowl.model import Model
 
-class GraphGenModel(Model):
-    def __init__(self, dataset):
-        super().__init__(dataset)
+class GraphGenModel():
+    
+    def __init__(self, ontology):
+        self.ontology = ontology
 
-    def parseOWL(self):
+    def parse(self):
         raise NotImplementedError()
-
-    def addAnnotations(self):
-        raise NotImplementedError()
-
     

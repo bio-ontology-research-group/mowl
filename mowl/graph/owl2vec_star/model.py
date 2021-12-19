@@ -19,12 +19,18 @@ class OWL2VecParser(GraphGenModel):
         
     def parse(self):
 
+        '''
+        Performs the ontology parsing.
+
+        :returns: A list of triples where each triple is of the form :math:`(head, relation, tail)`
+        :rtype: List of :class:`mowl.graph.edge.Edge`
+        '''
+
         path = "temp.owl"
         man = OWLManager.createOWLOntologyManager()
         fileout = File(path)
         man.saveOntology(self.dataset, OWLXMLDocumentFormat(), FileOutputStream(fileout))
     
-
         parser = o2v.OntologyProjection(path, bidirectional_taxonomy = True, include_literals=False)
 
         os.remove(path)
@@ -33,7 +39,6 @@ class OWL2VecParser(GraphGenModel):
 
         graph = parser.getProjectionGraph()
 
-#        edges = [Edge(s, r, d) for s, r, d in graph]
         edges = []
 
         for s, r, d in graph:

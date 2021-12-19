@@ -1,0 +1,7 @@
+Tutorials
+===================================
+
+
+.. nbgallery::
+   elembedding
+
