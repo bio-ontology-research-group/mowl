@@ -264,7 +264,7 @@ class GNNSim(Model):
 
         data_file = self.file_params["data_file"]
 
-        parser = gen_factory(self.graph_generation_method, self.dataset)
+        parser = parser_factory(self.graph_generation_method, self.dataset)
 
         edges = parser.parseOWL()
 
