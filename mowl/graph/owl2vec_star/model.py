@@ -17,12 +17,12 @@ class OWL2VecParser(GraphGenModel):
     def __init__(self, dataset):
         super().__init__(dataset)
         
-    def parseOWL(self):
+    def parse(self):
 
         path = "temp.owl"
         man = OWLManager.createOWLOntologyManager()
         fileout = File(path)
-        man.saveOntology(self.dataset.ontology, OWLXMLDocumentFormat(), FileOutputStream(fileout))
+        man.saveOntology(self.dataset, OWLXMLDocumentFormat(), FileOutputStream(fileout))
     
 
         parser = o2v.OntologyProjection(path, bidirectional_taxonomy = True, include_literals=False)

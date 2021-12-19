@@ -14,7 +14,7 @@ import collection.JavaConverters._
 import org.mowl.Types._
 
 
-class TaxonomyParserWithRels(var ontology: OWLOntology, var bidirectional_taxonomy: Boolean=false) extends AbstractParser{
+class TaxonomyWithRelsParser(var ontology: OWLOntology, var bidirectional_taxonomy: Boolean=false) extends AbstractParser{
 
   def parseAxiom(goClass: OWLClass, axiom: OWLClassAxiom): List[Edge] = {
     val axiomType = axiom.getAxiomType().getName()

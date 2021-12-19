@@ -4,14 +4,14 @@ general:
   
 rgcn-params:
   lr: 0.0001
-  n-hidden: 3
+  n-hidden: 2
   batch-size: 32
   epochs: 32
-  dropout: 0.2
-  regularization: 0.001
+  dropout: 0
+  regularization: 0.0001
   num-bases: -1
   normalization: True
-  self-loop: True
+  self-loop: False
   min-edges: 100
   seed: 0
 
@@ -20,4 +20,6 @@ files:
   valid_inter_file: "data/9606.valid_interactions.pkl"
   test_inter_file: "data/9606.test_interactions.pkl"
   data_file: "data/9606.annotations.tsv"
+  terms_file: "data/9606.terms.tsv"
+  precomputed_edges_file: "data/9606.edges_dl2vec.pkl"
   output_model: "data/dl2vec_human_model.pt"

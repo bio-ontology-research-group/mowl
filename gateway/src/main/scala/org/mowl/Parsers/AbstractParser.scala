@@ -19,7 +19,7 @@ trait AbstractParser{
   val dataFactory = ontManager.getOWLDataFactory()
 
   def parse = {
-    val imports = Imports.fromBoolean(true)
+    val imports = Imports.fromBoolean(false)
 
     val goClasses = ontology.getClassesInSignature(imports).asScala.toList
     printf("INFO: Number of ontology classes: %d\n", goClasses.length)

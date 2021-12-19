@@ -1,7 +1,8 @@
-from mowl.graph.taxonomy.model import TaxonomyParser
-from mowl.graph.dl2vec.model import DL2VecParser
+from org.mowl.Parsers import TaxonomyParser
+from org.mowl.Parsers import TaxonomyWithRelsParser
+from org.mowl.Parsers import DL2VecParser
+
 from mowl.graph.owl2vec_star.model import OWL2VecParser
-from mowl.graph.catont.model import CatOnt
 
 def gen_factory(method_name, dataset):
     methods = [
@@ -13,14 +14,12 @@ def gen_factory(method_name, dataset):
     ]
     
     if method_name == "taxonomy":
-        return TaxonomyParser(dataset, subclass=True, relations=False)
+        return TaxonomyParser(dataset, True)
     elif method_name == "taxonomy_rels":
-        return TaxonomyParser(dataset, subclass = True, relations=True)
+        return TaxonomyParser(dataset, True)
     elif method_name == "dl2vec":
-        return DL2VecParser(dataset)
+        return DL2VecParser(dataset, True)
     elif method_name == "owl2vec_star":
         return OWL2VecParser(dataset)
-    elif method_name == "categorical":
-        return CatOnt(dataset)
     else:
         raise Exception(f"Graph generation method unrecognized. Recognized methods are: {methods}")

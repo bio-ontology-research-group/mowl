@@ -1,11 +1,10 @@
-
+from org.mowl.Porsers import DL2VecParser
 from mowl.graph.graph import GraphGenModel
-import mowl.graph.dl2vec.generate_graph as gen
 
 
 class DL2VecParser(GraphGenModel):
     
-    def __init__(self, dataset, pref_reasoner='elk'):
+    def __init__(self, dataset, bidirectionalTaxonomy = False):
         super().__init__(dataset)
         
     def parseOWL(self):
