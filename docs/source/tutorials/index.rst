@@ -1,7 +1,6 @@
 Tutorials
 ===================================
 
-
 .. nbgallery::
    elembedding
-
+   TransE
