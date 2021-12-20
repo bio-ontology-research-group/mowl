@@ -41,7 +41,7 @@ class Edge:
         :type edges: :class:`Edge`
 
         :returns: Returns a 2-tuple containing the list of entities (heads and tails) and the list of relations
-        :rtype: ([str], [str])
+        :rtype: (Set of str, Set of str)
         '''
 
 

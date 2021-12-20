@@ -1,6 +1,8 @@
 
 from mowl.model import Model
 from mowl.graph.util import parser_factory
+from mowl.graph.edge import Edge
+
 import numpy as np
 import random
 import json
@@ -14,6 +16,7 @@ import multiprocessing as mp
 from threading import Lock
 import pickle as pkl
 import logging
+from threading import Lock
 
 
 class DL2Vec(Model):
@@ -22,19 +25,19 @@ class DL2Vec(Model):
     :param dataset: Dataset in OWL format corresponding
     :type dataset: :class:`mowl.datasets.base.Dataset`
     :param outfile: Path to save the final model
-    :type outfile: (str)
+    :type outfile: str
     :param bidirectional_taxonomy: If true, the ontology projection into a graph will add inverse edges per each subclass axiom
-    :type bidirectional_taxonomy: (bool)
+    :type bidirectional_taxonomy: bool
     :param walk_length: Length of the walk performed for each node
-    :type walk_length: (int)
+    :type walk_length: int
     :param num_walks: Number of walks performed per node
-    :type num_walks: (int)
+    :type num_walks: int
     :param vector_size: Dimensionality of the word vectors. Same as :class:`gensim.models.word2vec.Word2Vec`
-    :type vector_size: (int)
+    :type vector_size: int
     :param window: Maximum distance between the current and predicted word within a sentence. Same as :class:`gensim.models.word2vec.Word2Vec`
-    :type window: (int)
+    :type window: int
     :param num_procs: Number of threads to use for the random walks and the Word2Vec model.
-    :type num_procs: (int)
+    :type num_procs: int
     '''
 
     
@@ -53,11 +56,13 @@ class DL2Vec(Model):
         self.parserTrain = parser_factory("dl2vec", self.dataset.ontology, bidirectional_taxonomy)
         self.parserTest = parser_factory("dl2vec", self.dataset.testing, bidirectional_taxonomy)
 
+        self.lock = Lock()
 
     def train(self):
 
         edges = self.parserTrain.parse()
         entities, _ = Edge.getEntitiesAndRelations(edges)
+        entities = list(entities)
 
         G = nx.Graph()
 
@@ -66,8 +71,8 @@ class DL2Vec(Model):
             
             G.add_edge(src, dst)
             G.edges[src,dst]["type"] = rel
-            G.nodes[src] = False
-            G.nodes[dst] = False
+            G.nodes[src]["val"] = False
+            G.nodes[dst]["val"] = False
 
 
         self.run_walk(entities, G)
@@ -110,14 +115,14 @@ class DL2Vec(Model):
             if count % 1000 == 0:
                 print("Done walks for", count, "nodes")
 
-        return walks
+        self.write_file(walks)
 
 
-    def run_walk(nodes,G):
+    def run_walk(self, nodes,G):
         length = len(nodes) // self.num_procs
 
-        processes = [mp.Process(target=run_random_walks, args=(G, nodes[(index) * length:(index + 1) * length])) for index in range(self.num_procs-1)]
-        processes.append(mp.Process(target=run_random_walks, args=(G, nodes[(self.num_procs-1) * length:len(nodes) - 1])))
+        processes = [mp.Process(target=self.run_random_walks, args=(G, nodes[(index) * length:(index + 1) * length])) for index in range(self.num_procs-1)]
+        processes.append(mp.Process(target=self.run_random_walks, args=(G, nodes[(self.num_procs-1) * length:len(nodes) - 1])))
 
         for p in processes:
             p.start()
@@ -127,8 +132,8 @@ class DL2Vec(Model):
 
 
     
-    def write_file(pair):
-        with lock:
+    def write_file(self, pair):
+        with self.lock:
             with open("tmp_walks.txt", "a") as fp:
                 for p in pair:
                     for sub_p in p:
