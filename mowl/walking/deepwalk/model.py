@@ -16,11 +16,20 @@ class DeepWalk(WalkingModel):
     Implementation of DeepWalk based on <https://github.com/phanein/deepwalk/blob/master/deepwalk/graph.py>
     '''
     
-    def __init__(self, edges, num_paths, path_length, alpha, num_workers=1, seed = 0, outfile=None):
-        super().__init__(edges, num_paths, path_length, alpha, num_workers, outfile)
+    def __init__(self,
+                 edges,
+                 num_walks,
+                 walk_length,
+                 alpha,
+                 num_workers=1,
+                 seed = 0,
+                 outfile=None):
+
+        super().__init__(edges, num_walks, walk_length, alpha, num_workers, outfile)
 
         self.graph = nx.Graph()
         self.rand = random.Random(seed)
+        self.alpha = alpha
         
         for edge in edges:
             src, rel, dst = edge.src(), edge.rel(), edge.dst()
@@ -40,27 +49,14 @@ class DeepWalk(WalkingModel):
         Implementation of parallelizable DeepWalk.
         '''
 
-        if self.num_paths <= self.num_workers:
-            paths_per_worker = [1 for x in range(self.num_paths)]
-        else:
-            remainder = self.num_paths % self.num_workers
-            aux = self.num_workers - remainder
-            paths_per_worker = [int((self.num_paths+aux)/self.num_workers) for i in range(self.num_workers)]
-            i = 0
-            while aux > 0:
-                paths_per_worker[i%self.num_workers] -= 1
-                i += 1
-                aux -= 1
-
-            logging.debug("PATHS PER WORKER %s", str(paths_per_worker))
-
+        paths_per_worker = self.num_paths_per_worker()       
 
         file_names = [f"tmpfile_{i}.txt" for i in range(self.num_workers)]
         logging.debug("FILENAMES %s", str(file_names))
 
         args_list = []
         for i in range(self.num_workers):
-            args_list.append((paths_per_worker[i], self.path_length, self.alpha, random.Random(self.rand.randint(0, 2**31)), file_names[i]))
+            args_list.append((paths_per_worker[i], self.walk_length, random.Random(self.rand.randint(0, 2**31)), file_names[i]))
 
         files = []
 
@@ -70,9 +66,6 @@ class DeepWalk(WalkingModel):
             res = pool.map(self.write_walks_to_disk, args_list)
 
         
-#        with ProcessPoolExecutor(max_workers=self.num_workers) as executor:
-#            executor.map(self.write_walks_to_disk, args_list)
-            #    files.append(file_)
         #combine_files
         with open(self.outfile, 'w') as finalout:
             for file_ in file_names:
@@ -85,32 +78,30 @@ class DeepWalk(WalkingModel):
 
     def write_walks_to_disk(self, args):
         
-        current_graph = deepcopy(self.graph)
-
-        num_paths, path_length, alpha, rand, out_file = args
+        num_walks, walk_length, rand, out_file = args
         
         with open(out_file, 'w')  as fout:
-            for walk in self.build_deepwalk_corpus(current_graph, num_paths, path_length, alpha, rand):
+            for walk in self.build_deepwalk_corpus(num_walks, walk_length, rand):
                 fout.write(u"{}\n".format(u" ".join(v for v in walk)))
 
         return out_file
         
 
             
-    def build_deepwalk_corpus(self, graph, num_paths, path_length, alpha, rand=random.Random(0)):
-        nodes = list(graph.nodes)
+    def build_deepwalk_corpus(self, num_walks, walk_length, rand=random.Random(0)):
+        nodes = self.nodes[:]
 
-        for i in range(num_paths):
+        for i in range(num_walks):
             rand.shuffle(nodes)
             for node in nodes:
-                yield(self.random_walk(path_length, rand=rand, alpha=alpha, start=node))
+                yield(self.random_walk(walk_length, rand=rand, start=node))
 
 
-    def random_walk(self, path_length, alpha=0, rand = random.Random(), start=None):
+    def random_walk(self, walk_length, rand = random.Random(), start=None):
 
         '''
         
-        :param path_length: Length of the random walk.
+        :param walk_length: Length of the random walk.
         :param alpha: probability of restarts.
         :param start: the start node of the random walk.
 
@@ -120,19 +111,19 @@ class DeepWalk(WalkingModel):
         graph = self.graph
 
         if start:
-            path = [start]
+            walk = [start]
         else:
-            path = [rand.choice(self.nodes)]
+            walk = [rand.choice(self.nodes)]
 
-        while len(path) < path_length:
-            currNode = path[-1]
+        while len(walk) < walk_length:
+            currNode = walk[-1]
             neighbors = list(graph.neighbors(currNode))
             if len(neighbors) > 0:
-                if rand.random() >= alpha:
-                    path.append(rand.choice(neighbors))
+                if rand.random() >= self.alpha:
+                    walk.append(rand.choice(neighbors))
                 else:
-                    path.append(path[0])
+                    walk.append(walk[0])
             else:
                 break
 
-        return [str(node) for node in path]
+        return [str(node) for node in walk]
