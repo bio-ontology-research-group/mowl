@@ -1,9 +1,9 @@
 class Edge:
-    def __init__(self, src, rel, dst):
+    def __init__(self, src, rel, dst, weight = 1):
         self.src_ = self.prettyFormat(src)
         self.rel_ = rel
         self.dst_ = self.prettyFormat(dst)
-
+        self.weight_ = weight
 
     def src(self):
         return self.src_
@@ -13,6 +13,10 @@ class Edge:
 
     def dst(self):
         return self.dst_
+
+    def weight(self):
+        return self.weight_
+    
 
     def prettyFormat(self, string):
         '''
