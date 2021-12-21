@@ -1,6 +1,7 @@
 Random Walks
 ======================
 
+* :doc:`deepwalk`
 * :doc:`node2vec`
 
 
@@ -9,4 +10,5 @@ Random Walks
    :hidden:
    :glob:
 
+   deepwalk
    node2vec
