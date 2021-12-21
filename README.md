@@ -1,5 +1,4 @@
-![](docs/source/mowl_black_background_colors_2048x2048px.png){ width=50% }
-
+<img src="docs/source/mowl_black_background_colors_2048x2048px.png" width="200"/>
 # Machine Learning with Ontologies
 ## Library and tool for machine learning with OWL ontologies
 
