@@ -2,6 +2,7 @@
 import networkx as nx
 from mowl.walking.walking import WalkingModel
 import random
+import os
 from concurrent.futures import ProcessPoolExecutor
 from multiprocessing import Pool, get_context
 import logging
@@ -25,9 +26,9 @@ class DeepWalk(WalkingModel):
                  seed = 0,
                  outfile=None):
 
-        super().__init__(edges, num_walks, walk_length, alpha, num_workers, outfile)
+        super().__init__(edges, num_walks, walk_length, num_workers, outfile)
 
-        self.graph = nx.Graph()
+        self.graph = nx.DiGraph()
         self.rand = random.Random(seed)
         self.alpha = alpha
         
@@ -73,7 +74,8 @@ class DeepWalk(WalkingModel):
                     for line in f:
                         finalout.write(f"{line}\n")
 
-
+        for f in file_names:
+            os.remove(f)
                 
 
     def write_walks_to_disk(self, args):

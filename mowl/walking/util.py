@@ -1,5 +1,5 @@
 from mowl.walking.deepwalk.model import DeepWalk
-
+from mowl.walking.node2vec.model import Node2Vec
 
 
 def walking_factory(method_name, edges, num_walks, walk_length, alpha, num_workers = 1, seed=0, outfile=None, p = 1, q=1):

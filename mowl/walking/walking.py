@@ -20,6 +20,7 @@ class WalkingModel():
     def num_paths_per_worker(self):
         
         if self.num_walks <= self.num_workers:
+            self.num_workers = self.num_walks
             paths_per_worker = [1 for x in range(self.num_walks)]
         else:
             remainder = self.num_walks % self.num_workers

@@ -2,6 +2,7 @@ from mowl.walking.walking import WalkingModel
 import networkx as nx
 import numpy as np
 import random
+import os
 import logging
 from multiprocessing import Pool, get_context
 
@@ -45,7 +46,7 @@ class Node2Vec(WalkingModel):
 	# self.is_weighted = is_weighted
 	# self.embeddings_file_path=f"{self.data_root}/{embeddings_file_path}"
 
-        self.graph = nx.Graph()
+        self.graph = nx.DiGraph()
         
         for edge in edges:
             src, rel, dst, weight = edge.src(), edge.rel(), edge.dst(), edge.weight()
@@ -55,13 +56,22 @@ class Node2Vec(WalkingModel):
 
         self.nodes = list(self.graph.nodes())
 
+        with open("edges.txt", 'w') as f:
+            for a in self.graph.edges:
+                f.write(f"{a}\n")
 
+        
     def walk(self):
                 
         paths_per_worker = self.num_paths_per_worker()
 
-        self.preprocess_transition_probs(G)
-    
+        logging.info("Preprocessing transition probs...")
+        self.preprocess_transition_probs()
+        logging.info("Finished preprocessing")
+
+
+
+
         file_names = [f"tmpfile_{i}.txt" for i in range(self.num_workers)]
         logging.debug("FILENAMES %s", str(file_names))
 
@@ -82,6 +92,9 @@ class Node2Vec(WalkingModel):
                 with open(file_, 'r') as f:
                     for line in f:
                         finalout.write(f"{line}\n")
+
+        for f in file_names:
+            os.remove(f)
 
 
 
@@ -143,7 +156,7 @@ class Node2Vec(WalkingModel):
 
         alias_nodes = {}
         for node in self.nodes:
-            unnormalized_probs = [self.graph[node][nbr]['weight'] for nbr in sorted(G.neighbors(node))]
+            unnormalized_probs = [self.graph[node][nbr]['weight'] for nbr in sorted(self.graph.neighbors(node))]
             norm_const = sum(unnormalized_probs)
             normalized_probs =  [float(u_prob)/norm_const for u_prob in unnormalized_probs]
             alias_nodes[node] = self.alias_setup(normalized_probs)
@@ -151,14 +164,9 @@ class Node2Vec(WalkingModel):
         alias_edges = {}
         triads = {}
 
-        if self.is_directed:
-            for edge in self.graph.edges():
-                alias_edges[edge] = self.get_alias_edge(self.graph, edge[0], edge[1])
-        else:
-            for edge in self.graph.edges():
-                alias_edges[edge] = self.get_alias_edge(self.graph, edge[0], edge[1])
-                alias_edges[(edge[1], edge[0])] = self.get_alias_edge(self.graph, edge[1], edge[0])
-
+        for edge in self.graph.edges:
+            alias_edges[edge] = self.get_alias_edge(self.graph, edge[0], edge[1])
+        
         self.alias_nodes = alias_nodes
         self.alias_edges = alias_edges
 
