@@ -36,6 +36,8 @@ extensions = [
 #    'IPython.sphinxext.ipython_console_highlighting'
 ]
 
+autodoc_member_order = 'bysource'
+
 
 intersphinx_mapping = {
     'python': ('https://docs.python.org/3/', None),
