@@ -13,8 +13,8 @@ class Node2Vec(WalkingModel):
 
     :param p: Return hyperparameter. Default is 1.
     :type p: float
-    :param q: Input hyperparameter. Default is 1.
-    :type p: float
+    :param q: In-out hyperparameter. Default is 1.
+    :type q: float
 
     Original author: Aditya Grover
 
@@ -62,11 +62,15 @@ class Node2Vec(WalkingModel):
 
         
     def walk(self):
+        '''
+        Implementation of parallelizable DeepWalk.
+        '''
+
                 
         paths_per_worker = self.num_paths_per_worker()
 
         logging.info("Preprocessing transition probs...")
-        self.preprocess_transition_probs()
+        self._preprocess_transition_probs()
         logging.info("Finished preprocessing")
 
 
@@ -83,7 +87,7 @@ class Node2Vec(WalkingModel):
         logging.debug("Starting Pool")
 
         with get_context('spawn').Pool(processes=self.num_workers) as pool:
-            res = pool.map(self.write_walks_to_disk, args_list)
+            res = pool.map(self._write_walks_to_disk, args_list)
 
         
         #combine_files
@@ -98,12 +102,12 @@ class Node2Vec(WalkingModel):
 
 
 
-    def write_walks_to_disk(self, args):
+    def _write_walks_to_disk(self, args):
     
         num_walks, walk_length, out_file = args
         
         with open(out_file, 'w')  as fout:
-            for walk in self.simulate_walks(num_walks, walk_length):
+            for walk in self._simulate_walks(num_walks, walk_length):
                 fout.write(u"{}\n".format(u" ".join(v for v in walk)))
 
         return out_file
@@ -111,7 +115,7 @@ class Node2Vec(WalkingModel):
                 
 	
 
-    def simulate_walks(self, num_walks, walk_length):
+    def _simulate_walks(self, num_walks, walk_length):
         '''
         Repeatedly simulate random walks from each node.
         '''
@@ -120,11 +124,11 @@ class Node2Vec(WalkingModel):
         for i in range(num_walks):
             random.shuffle(nodes)
             for node in nodes:
-                yield(self.node2vec_walk(walk_length=walk_length, start_node=node))
+                yield(self._node2vec_walk(walk_length=walk_length, start_node=node))
 
 
     
-    def node2vec_walk(self, walk_length, start_node):
+    def _node2vec_walk(self, walk_length, start_node):
         '''
         Simulate a random walk starting from start node.
         '''
@@ -138,10 +142,10 @@ class Node2Vec(WalkingModel):
             cur_nbrs = sorted(self.graph.neighbors(cur))
             if len(cur_nbrs) > 0:
                 if len(walk) == 1:
-                    walk.append(cur_nbrs[self.alias_draw(alias_nodes[cur][0], alias_nodes[cur][1])])
+                    walk.append(cur_nbrs[self._alias_draw(alias_nodes[cur][0], alias_nodes[cur][1])])
                 else:
                     prev = walk[-2]
-                    next_ = cur_nbrs[self.alias_draw(alias_edges[(prev, cur)][0], alias_edges[(prev, cur)][1])]
+                    next_ = cur_nbrs[self._alias_draw(alias_edges[(prev, cur)][0], alias_edges[(prev, cur)][1])]
                     walk.append(next_)
             else:
                 break
@@ -149,7 +153,7 @@ class Node2Vec(WalkingModel):
         return [str(node) for node in walk]
 
 
-    def preprocess_transition_probs(self):
+    def _preprocess_transition_probs(self):
         '''
         Preprocessing of transition probabilities for guiding the random walks.
         '''
@@ -159,13 +163,13 @@ class Node2Vec(WalkingModel):
             unnormalized_probs = [self.graph[node][nbr]['weight'] for nbr in sorted(self.graph.neighbors(node))]
             norm_const = sum(unnormalized_probs)
             normalized_probs =  [float(u_prob)/norm_const for u_prob in unnormalized_probs]
-            alias_nodes[node] = self.alias_setup(normalized_probs)
+            alias_nodes[node] = self._alias_setup(normalized_probs)
 
         alias_edges = {}
         triads = {}
 
         for edge in self.graph.edges:
-            alias_edges[edge] = self.get_alias_edge(self.graph, edge[0], edge[1])
+            alias_edges[edge] = self._get_alias_edge(self.graph, edge[0], edge[1])
         
         self.alias_nodes = alias_nodes
         self.alias_edges = alias_edges
@@ -173,7 +177,7 @@ class Node2Vec(WalkingModel):
         return
 
 
-    def alias_setup(self, probs):
+    def _alias_setup(self, probs):
         '''
         Compute utility lists for non-uniform sampling from discrete distributions.
         Refer to https://hips.seas.harvard.edu/blog/2013/03/03/the-alias-method-efficient-sampling-with-many-discrete-outcomes/
@@ -206,7 +210,7 @@ class Node2Vec(WalkingModel):
         return J, q
 
 
-    def get_alias_edge(self, G, src, dst):
+    def _get_alias_edge(self, G, src, dst):
         '''
         Get the alias edge setup lists for a given edge.
         '''
@@ -222,9 +226,9 @@ class Node2Vec(WalkingModel):
         norm_const = sum(unnormalized_probs)
         normalized_probs =  [float(u_prob)/norm_const for u_prob in unnormalized_probs]
         
-        return self.alias_setup(normalized_probs)
+        return self._alias_setup(normalized_probs)
 
-    def alias_draw(self, J, q):
+    def _alias_draw(self, J, q):
         '''
         Draw sample from a non-uniform discrete distribution using alias sampling.
         '''

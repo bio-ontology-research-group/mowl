@@ -1,15 +1,32 @@
 Graph-based embeddings
 =======================
 
-* :doc:`dl2vec`
-* :doc:`transE`
+
+      
+DL2Vec
+--------
+
+.. automodule:: mowl.embeddings.graph_based.dl2vec.model
+   :members:
+   :undoc-members:
+   :show-inheritance:
 
 
-.. toctree::
-   :maxdepth: 1
-   :hidden:
-   :glob:
+Example of use
+^^^^^^^^^^^^^^^
+An example of use can be found at :doc:`../../../tutorials/DL2Vec`
 
-   dl2vec
-   transE
 
+
+TransE
+----------
+
+.. automodule:: mowl.embeddings.graph_based.transE.model
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+
+Example of use
+^^^^^^^^^^^^^^^
+An example can be found at :doc:`../../../tutorials/TransE`

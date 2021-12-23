@@ -2,7 +2,16 @@
 class WalkingModel():
 
     '''
-    :param edges: List of :class:`mowl.graph.edge.Edge`
+    :param edges: List of edges
+    :type edges: mowl.graph.edge.Edge
+    :param num_walks: Number of walks per node
+    :type num_walks: int
+    :param walk_length: Length of each walk
+    :type walk_length: int
+    :param num_workers: Number of threads to be used for computing the walks
+    :type num_workers: int
+    :param outfile: Outfile path where the walks will be stored
+    :type outfile: str
     '''
     def __init__(self, edges, num_walks, walk_length, num_workers, outfile):    
         self.edges = edges

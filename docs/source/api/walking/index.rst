@@ -1,14 +1,24 @@
 Random Walks
 ======================
 
-* :doc:`deepwalk`
-* :doc:`node2vec`
+Walking
+---------
 
+.. automodule:: mowl.walking.walking
+   :members:
+   :show-inheritance:
 
-.. toctree::
-   :maxdepth: 1
-   :hidden:
-   :glob:
+DeepWalk
+----------
 
-   deepwalk
-   node2vec
+.. automodule:: mowl.walking.deepwalk.model
+   :members:
+   :show-inheritance:
+
+Node2Vec
+----------
+
+.. automodule:: mowl.walking.node2vec.model
+   :members:
+   :show-inheritance:
+

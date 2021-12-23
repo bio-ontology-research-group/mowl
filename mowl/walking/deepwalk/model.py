@@ -15,6 +15,9 @@ class DeepWalk(WalkingModel):
 
     '''
     Implementation of DeepWalk based on <https://github.com/phanein/deepwalk/blob/master/deepwalk/graph.py>
+
+    :param alpha: Probability of restart
+    :type alpha: float
     '''
     
     def __init__(self,
@@ -96,10 +99,10 @@ class DeepWalk(WalkingModel):
         for i in range(num_walks):
             rand.shuffle(nodes)
             for node in nodes:
-                yield(self.random_walk(walk_length, rand=rand, start=node))
+                yield(self._random_walk(walk_length, rand=rand, start=node))
 
 
-    def random_walk(self, walk_length, rand = random.Random(), start=None):
+    def _random_walk(self, walk_length, rand = random.Random(), start=None):
 
         '''
         

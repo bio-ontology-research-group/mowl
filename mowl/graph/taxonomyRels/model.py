@@ -25,16 +25,7 @@ class TaxonomyWithRelsParser(GraphGenModel):
 
         self.parser = Parser(ontology, bidirectional_taxonomy)
 
-    def parse(self):
-
-        '''
-        Performs the ontology parsing.
-
-        :returns: A list of triples where each triple is of the form :math:`(head, relation, tail)`
-        :rtype: List of :class:`mowl.graph.edge.Edge`
-        '''
-
-        
+    def parse(self):        
         edges = self.parser.parse()
         edges = [Edge(str(e.src()), str(e.rel()), str(e.dst())) for e in edges]
         return edges
