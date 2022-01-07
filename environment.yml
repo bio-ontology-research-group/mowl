@@ -24,4 +24,5 @@ dependencies:
   - openjdk
   - gradle
   - pip
-#  - pip:
+  - pip:
+    - pykeen

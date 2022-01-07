@@ -49,7 +49,7 @@ def main(config):
     file_params = params["files"]
 
 
-    ds = PathDataset(ontology, "", "")
+    ds = PathDataset(ontology, None, None)
         
     model = GNNSim(ds, # dataset
                    n_hidden,

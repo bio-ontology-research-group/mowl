@@ -62,7 +62,7 @@ class WalkRdfOwl(Model):
         tmp_data_file = File.createTempFile(f"{self.data_root}/temp_file", '.tmp')
     
 
-        self.dataset.infer_axioms()
+        #self.dataset.infer_axioms()
         self.dataset.ont_manager.saveOntology(self.dataset.ontology, IRI.create(tmp_data_file.toURI()))
 
 
@@ -177,7 +177,8 @@ class WalkRdfOwl(Model):
     def train(self):
 
         graph = self.gen_graph()
-        self.generate_corpus_and_embeddings(graph)
+        return graph
+        #self.generate_corpus_and_embeddings(graph)
 
 
 
