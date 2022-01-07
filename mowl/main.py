@@ -4,7 +4,7 @@ import click as ck
 import sys
 import os
 sys.path.append('')
-from mowl.datasets.ppi_yeast import PPIYeastSlimDataset
+from mowl.datasets.ppi_yeast import PPIYeastSlimDataset, PPIYeastDataset
 from mowl.onto2vec.model import Onto2Vec
 from mowl.elembeddings.model import ELEmbeddings
 
@@ -17,10 +17,10 @@ from mowl.elembeddings.model import ELEmbeddings
     '--dataset', '-d', default='ppi_yeast',
     help='Dataset name')
 def main(model, dataset):
-    dataset = PPIYeastSlimDataset()
+    dataset = PPIYeastDataset()
     model = ELEmbeddings(dataset)
     # model.train()
-    model.evaluate()
+    model.evaluate_ppi()
 
 if __name__ == '__main__':
     main()
