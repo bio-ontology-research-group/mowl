@@ -1,4 +1,3 @@
-
 from mowl.model import Model
 from mowl.graph.util import parser_factory
 from mowl.walking.util import walking_factory
@@ -24,7 +23,7 @@ logging.basicConfig(level=logging.INFO)
 class DL2Vec(Model):
 
     '''
-    :param dataset: Dataset in OWL format corresponding
+    :param dataset: Dataset composed by training, validation and testing sets, each of which are in OWL format.
     :type dataset: :class:`mowl.datasets.base.Dataset`
     :param outfile: Path to save the final model
     :type outfile: str
