@@ -44,7 +44,7 @@ class DL2Vec(Model):
     '''
 
     
-    def __init__(self, dataset, outfile, bidirectional_taxonomy=False, walking_method = "deepwalk", walk_length = 30, alpha = 0, num_walks = 100, vector_size = 100, window = 5, num_procs = 1):
+    def __init__(self, dataset, outfile, bidirectional_taxonomy=False, walking_method = "deepwalk", walk_length = 30, alpha = 0, num_walks = 100, vector_size = 100, window = 5, num_procs = 1, p = 1, q=1):
 
         super().__init__(dataset)
 
@@ -52,6 +52,8 @@ class DL2Vec(Model):
         self.walk_length = walk_length
         self.num_walks = num_walks
         self.alpha = alpha
+        self.p = p
+        self.q = q
         self.num_procs = num_procs
         self.vector_size = vector_size
         self.window = window
@@ -67,12 +69,12 @@ class DL2Vec(Model):
         logging.info("Generating graph from ontology...")
         edges = self.parserTrain.parse()
         entities, _ = Edge.getEntitiesAndRelations(edges)
-        entities = list(entities)
+        self.entities = list(entities)
         logging.info("Finished graph generation")
 
         logging.info("Generating random walks...")
         walks_outfile = "data/walks.txt"
-        walker = walking_factory(self.walking_method, edges, self.num_walks, self.walk_length, self.alpha, num_workers = self.num_procs, outfile=walks_outfile)
+        walker = walking_factory(self.walking_method, edges, self.num_walks, self.walk_length, self.alpha, num_workers = self.num_procs, outfile=walks_outfile, p = self.p, q= self.q)
         walker.walk()
         logging.info("Walks generated")
 

@@ -3,8 +3,8 @@ class GraphGenModel():
     """
     Abstract class for Ontology projection into a graph
 
-    :param ontology:
-    :type ontology: org.semanticweb.owlapi.model.OWLOntology
+    :param ontology: The ontology to be processed.
+    :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
     """
     
     def __init__(self, ontology):

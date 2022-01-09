@@ -22,6 +22,10 @@ class TranslationalOnt(Model):
     :type dataset: :class:`mowl.datasets.base.Dataset`
     :param parsing_method: Method to generate the graph. The methods correspond to subclasses of :class:`mowl.graph.graph.GraphGenModel`. Choices are: "taxonomy", "taxonomy_rels", "dl2vec", "owl2vec_star"
     :type parsing_method: str
+    :param edges_train: List of precomputed edges of the training set. This will replace the parsing method.
+    :type edges_train: List of :class:`mowl.graph.edge.Edge`
+    :param edges_test: List of precomputed edges of the testing set. This will replace the parsing method.
+    :type edges_test: List of :class:`mowl.graph.edge.Edge`
     :param trans_method: Translational model. Choices are: "transE", "transH", "transR", "transD".
     :type trans_method: str
     :param embedding_dim: Dimension of embedding for each node
@@ -33,8 +37,10 @@ class TranslationalOnt(Model):
     '''
     
     def __init__(self,
-                 dataset,
+                 dataset = None,
                  parsing_method="taxonomy",
+                 edges_train = None,
+                 edges_test = None,
                  trans_method="transE",
                  embedding_dim = 50,
                  epochs = 5,
@@ -44,23 +50,29 @@ class TranslationalOnt(Model):
         super().__init__(dataset)
 
         self.parsing_method = parsing_method
+        self.edges_train = edges_train
+        self.edges_test = edges_test
         self.trans_method = trans_method
         self.embedding_dim = embedding_dim
         self.epochs = epochs
         self.batch_size = batch_size
-        
-        self.parserTrain = parser_factory(self.parsing_method, self.dataset.ontology, bidirectional_taxonomy)
-        self.parserTest = parser_factory(self.parsing_method, self.dataset.testing, bidirectional_taxonomy)
+
+        if not dataset is None: 
+            self.parserTrain = parser_factory(self.parsing_method, self.dataset.ontology, bidirectional_taxonomy)
+            self.parserTest = parser_factory(self.parsing_method, self.dataset.testing, bidirectional_taxonomy)
 
         self.model = None
         
     def train(self):
 
-        edges = self.parserTrain.parse()
-        entities, relations = Edge.getEntitiesAndRelations(edges)
+        if self.edges_train is None:
+            self.edges_train = self.parserTrain.parse()
 
-        edges_test = self.parserTest.parse()
-        entities_test, relations_test = Edge.getEntitiesAndRelations(edges_test)
+        entities, relations = Edge.getEntitiesAndRelations(self.edges_train)
+
+        if self.edges_test is None:
+            self.edges_test = self.parserTest.parse()
+        entities_test, relations_test = Edge.getEntitiesAndRelations(self.edges_test)
 
         total_entities = entities.union(entities_test)
         total_relations = relations.union(relations_test)
@@ -70,7 +82,7 @@ class TranslationalOnt(Model):
         self.entities_idx = {ent: idx for idx, ent in enumerate(total_entities)}
         self.relations_idx = {rel: idx for idx, rel in enumerate(total_relations)}
 
-        mapped_triples = [(self.entities_idx[e.src()], self.relations_idx[e.rel()], self.entities_idx[e.dst()]) for e in edges]
+        mapped_triples = [(self.entities_idx[e.src()], self.relations_idx[e.rel()], self.entities_idx[e.dst()]) for e in self.edges_train]
 
 
         mapped_triples = th.tensor(mapped_triples).long()
@@ -91,9 +103,10 @@ class TranslationalOnt(Model):
         if self.model is None:
             raise ValueError("Train a model first.")
 
-        edges = self.parserTest.parse()
+        if self.edges_test is None:
+            self.edges_test = self.parserTest.parse()
 
-        mapped_triples = [(self.entities_idx[e.src()], self.relations_idx[e.rel()], self.entities_idx[e.dst()]) for e in edges]
+        mapped_triples = [(self.entities_idx[e.src()], self.relations_idx[e.rel()], self.entities_idx[e.dst()]) for e in self.edges_test]
 
         logging.debug("LEN OF TEST TRIPLES: %d", len(mapped_triples))
         mapped_triples = th.tensor(mapped_triples).long()
