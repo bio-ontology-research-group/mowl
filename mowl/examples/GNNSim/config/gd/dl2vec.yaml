@@ -1,0 +1,25 @@
+general:
+  ontology: data/go.owl
+  graph-gen-method: dl2vec
+  
+rgcn-params:
+  lr: 0.0001
+  n-hidden: 2
+  batch-size: 32
+  epochs: 32
+  dropout: 0
+  regularization: 0.0001
+  num-bases: -1
+  normalization: True
+  self-loop: False
+  min-edges: 100
+  seed: 0
+
+files:
+  train_inter_file: "data/4932.train_interactions.pkl"
+  valid_inter_file: "data/4932.valid_interactions.pkl"
+  test_inter_file: "data/4932.test_interactions.pkl"
+  data_file: "data/4932.annotations.tsv"
+  terms_file: "data/4932.terms.tsv"
+  precomputed_edges_file: "data/4932.edges_dl2vec.pkl"
+  output_model: "data/dl2vec_yeast_model.pt"

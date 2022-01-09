@@ -14,43 +14,47 @@ from org.semanticweb.owlapi.apibinding import OWLManager
 from org.semanticweb.owlapi.reasoner import ConsoleProgressMonitor
 from org.semanticweb.owlapi.reasoner import SimpleConfiguration
 from org.semanticweb.owlapi.reasoner import InferenceType
-from org.semanticweb.elk.owlapi import ElkReasonerFactory
 from org.semanticweb.owlapi.util import InferredClassAssertionAxiomGenerator
 from org.semanticweb.owlapi.util import InferredEquivalentClassAxiomGenerator
 from org.semanticweb.owlapi.util import InferredSubClassAxiomGenerator
-
-
-Triples = np.ndarray
-
-def load_triples(filepath, delimiter='\t', encoding=None):
-    if filepath == "":
-        return None
-    else:
-        return np.loadtxt(
-            fname=filepath,
-            dtype=str,
-            comments='@Comment@ Head Relation Tail',
-            delimiter=delimiter,
-            encoding=encoding,
-        )
-
+from org.semanticweb.elk.owlapi import ElkReasonerFactory
 
 class Dataset(object):
 
+    """This class provide training, validation and testing datasets encoded as OWL ontologies.
+
+    :param ontology: Training dataset
+    :type ontology: org.semanticweb.owlapi.model.OWLOntology
+    :param validation: Validation dataset
+    :type validation: org.semanticweb.owlapi.model.OWLOntology
+    :param testing: Testing dataset
+    :type testing: org.semanticweb.owlapi.model.OWLOntology
+    """
+    
     ontology: OWLOntology
-    validation: Optional[Triples]
-    testing: Optional[Triples]
+    validation: OWLOntology
+    testing: OWLOntology
 
 
 
 class PathDataset(Dataset):
+    """Loads the dataset from ontology documents.
+
+    :param ontology_path: Training dataset
+    :type ontology_path: str
+    :param validation_path: Validation dataset
+    :type validation_path: str
+    :param testing_path: Testing dataset
+    :type testing_path: str
+
+    """
 
     ontology_path: str
     validation_path: str
     testing_path: str
     _ontology: OWLOntology
-    _validation: Triples
-    _testing: Triples
+    _validation: OWLOntology
+    _testing: OWLOntology
     
     def __init__(self, ontology_path: str, validation_path: str, testing_path: str):
         self.ontology_path = ontology_path
@@ -84,8 +88,14 @@ class PathDataset(Dataset):
         
         self._ontology = self.ont_manager.loadOntologyFromOntologyDocument(
             java.io.File(self.ontology_path))
-        self._validation = load_triples(self.validation_path)
-        self._testing = load_triples(self.testing_path)
+
+        if not self.validation_path is None:
+            self._validation =  self.ont_manager.loadOntologyFromOntologyDocument(
+                java.io.File(self.validation_path))
+
+        if not self.testing_path is None:
+            self._testing =  self.ont_manager.loadOntologyFromOntologyDocument(
+                java.io.File(self.testing_path))
         self._loaded = True
 
     def _create_reasoner(self):
@@ -94,6 +104,7 @@ class PathDataset(Dataset):
         reasoner_factory = ElkReasonerFactory()
         self.reasoner = reasoner_factory.createReasoner(self.ontology, config)
         self.reasoner.precomputeInferences(InferenceType.CLASS_HIERARCHY)
+
 
     def infer_axioms(self):
         if not self.reasoner:
@@ -108,7 +119,23 @@ class PathDataset(Dataset):
             self.data_factory, self.reasoner)
         self.ont_manager.addAxioms(self.ontology, subclass_axioms)
 
+    def get_evaluation_classes(self):
+        return self.ontology.getClassesInSignature()
+
 class TarFileDataset(PathDataset):
+    """Loads the dataset from a `tar` file.
+
+    :param tarfile_path: Location of the `tar` file
+    :type tarfile_path: str
+
+    :param \**kwargs:
+        See below
+    :Keyword Arguments:
+        * **dataset_name** (str): Name of the dataset
+    """
+
+
+    
     tarfile_path: str
     dataset_name: str
     data_root: str
@@ -123,8 +150,8 @@ class TarFileDataset(PathDataset):
         dataset_root = os.path.join(self.data_root, self.dataset_name)
         super().__init__(
             os.path.join(dataset_root, 'ontology.owl'),
-            os.path.join(dataset_root, 'valid.tsv'),
-            os.path.join(dataset_root, 'test.tsv'))
+            os.path.join(dataset_root, 'valid.owl'),
+            os.path.join(dataset_root, 'test.owl'))
         self._extract()
         
 
@@ -139,11 +166,18 @@ class TarFileDataset(PathDataset):
         
         
 class RemoteDataset(TarFileDataset):
+    """Loads the dataset from a remote URL.
+
+    :param url: URL location of the dataset
+    :type url: str
+    :param data_root: Root directory
+    :type data_root: str
+    """
 
     url: str
     data_root: str
     
-    def __init__(self, url: str, data_root='../data/'):
+    def __init__(self, url: str, data_root='./'):
         self.url = url
         self.data_root = data_root
         tarfile_path = self._download()
