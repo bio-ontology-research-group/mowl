@@ -18,10 +18,10 @@ An example of use can be found at :doc:`../../../tutorials/DL2Vec`
 
 
 
-TransE
+Translational Embeddings
 ----------
 
-.. automodule:: mowl.embeddings.graph_based.transE.model
+.. automodule:: mowl.embeddings.graph_based.translational.model
    :members:
    :undoc-members:
    :show-inheritance:
@@ -29,4 +29,4 @@ TransE
 
 Example of use
 ^^^^^^^^^^^^^^^
-An example can be found at :doc:`../../../tutorials/TransE`
+An example can be found at :doc:`../../../tutorials/Translational`
