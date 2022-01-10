@@ -181,6 +181,15 @@ class ELEmbeddings(Model):
         model.eval()
         test_loss = model(self.test_nfs).detach().item()
         print('Test Loss:', test_loss)
+        
+    def get_embeddings(self):
+        self.load_data()
+        self.load_data()
+        model = ELModel(len(self.classes), len(self.relations), self.device).to(self.device)
+        print('Load the best model', self.model_filepath)
+        model.load_state_dict(th.load(self.model_filepath))
+        model.eval()
+        return self.classes, model.go_embed.weight.detach().numpy()
 
     def evaluate_ppi(self):
         self.load_data()
