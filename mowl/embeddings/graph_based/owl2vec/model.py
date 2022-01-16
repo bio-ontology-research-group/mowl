@@ -29,6 +29,10 @@ class OWL2Vec(Model):
     :type outfile: str
     :param bidirectional_taxonomy: If true, the ontology projection into a graph will add inverse edges per each subclass axiom
     :type bidirectional_taxonomy: bool
+    :param include_literals: If true the graph will also include triples involving data property assertions and annotations. Default is False.
+    :type include_literals: bool
+    :param only_taxonomy: If true, the projection will only include subClass edges
+    :type only_taxonomy: bool
     :param walk_length: Length of the walk performed for each node
     :type walk_length: int
     :param num_walks: Number of walks performed per node
@@ -44,11 +48,13 @@ class OWL2Vec(Model):
     '''
 
     
-    def __init__(self, dataset, outfile, bidirectional_taxonomy=False, walking_method = "deepwalk", walk_length = 30, alpha = 0, num_walks = 100, vector_size = 100, window = 5, num_procs = 1, p = 1, q=1):
+    def __init__(self, dataset, outfile, bidirectional_taxonomy=False, include_literals = False, only_taxonomy = False, walking_method = "deepwalk", walk_length = 30, alpha = 0, num_walks = 100, vector_size = 100, window = 5, num_procs = 1, p = 1, q=1):
 
         super().__init__(dataset)
 
         self.bidirectional_taxonomy = bidirectional_taxonomy
+        self.include_literals = include_literals
+        self.only_taxonomy = only_taxonomy
         self.walk_length = walk_length
         self.num_walks = num_walks
         self.alpha = alpha
@@ -59,8 +65,8 @@ class OWL2Vec(Model):
         self.window = window
         self.outfile = outfile
         self.walking_method = walking_method
-        self.parserTrain = parser_factory("owl2vec_star", self.dataset.ontology, bidirectional_taxonomy)
-        self.parserTest = parser_factory("owl2vec_star", self.dataset.testing, bidirectional_taxonomy)
+        self.parserTrain = parser_factory("owl2vec_star", self.dataset.ontology, bidirectional_taxonomy = self.bidirectional_taxonomy, include_literals = self.include_literals, only_taxonomy = self.only_taxonomy)
+        self.parserTest = parser_factory("owl2vec_star", self.dataset.testing, bidirectional_taxonomy = self.bidirectional_taxonomy, include_literals = self.include_literals, only_taxonomy = self.only_taxonomy)
 
         self.lock = Lock()
 

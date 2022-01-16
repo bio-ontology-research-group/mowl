@@ -21,13 +21,16 @@ class OWL2VecParser(GraphGenModel):
     :type bidirectional_taxonomy: bool
     :param include_literals: If true the graph will also include triples involving data property assertions and annotations. Default is False.
     :type include_literals: bool
+    :param only_taxonomy: If true, the projection will only include subClass edges
+    :type only_taxonomy: bool
     '''
 
     
-    def __init__(self, ontology, bidirectional_taxonomy = False, include_literals = False):
+    def __init__(self, ontology, bidirectional_taxonomy = False, include_literals = False, only_taxonomy = False):
         super().__init__(ontology)
         self.bidirectional_taxonomy = bidirectional_taxonomy
         self.include_literals = include_literals
+        self.only_taxonomy = only_taxonomy
         
     def parse(self):
         
@@ -36,7 +39,7 @@ class OWL2VecParser(GraphGenModel):
         fileout = File(path)
         man.saveOntology(self.ontology, OWLXMLDocumentFormat(), FileOutputStream(fileout))
     
-        parser = o2v.OntologyProjection(path, self.bidirectional_taxonomy, self.include_literals)
+        parser = o2v.OntologyProjection(path, bidirectional_taxonomy = self.bidirectional_taxonomy, include_literals = self.include_literals, only_taxonomy = self.only_taxonomy )
 
         os.remove(path)
 
