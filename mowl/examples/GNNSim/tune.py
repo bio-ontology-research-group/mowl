@@ -33,7 +33,7 @@ import yaml
 @ck.option(
     '--config', '-c', help="Configuration file in config/")
 @ck.option(
-    '--num-samples', '-ns', help="Number of samples", default=1)
+    '--num-samples', '-ns', help="Number of samples", default=15)
 @ck.option(
     '--max-num-epochs', '-e', help="Max number of epochs", default=10)
 @ck.option(
@@ -63,7 +63,7 @@ def train_tune(config, params=None, checkpoint_dir = None):
     print("path in tune:", sys.path)
 
     from mowl.datasets.base  import PathDataset
-    from mowl.gnn_sim.model import GNNSim
+    from mowl.gnn_sim_siameseNN.model import GNNSim
 
 
 
@@ -72,9 +72,9 @@ def train_tune(config, params=None, checkpoint_dir = None):
     n_hidden = config["n_hid"]
     dropout = config["dropout"]
     lr = config["lr"]
-    normalize = config["norm"]
+ #   normalize = config["norm"]
     regularization = config["reg"]
-    self_loop = config["loop"]
+ #   self_loop = config["loop"]
     
     
     ontology =  params["general"]["ontology"]
@@ -83,6 +83,8 @@ def train_tune(config, params=None, checkpoint_dir = None):
     epochs = params["rgcn-params"]["epochs"]
     graph_method = params["general"]["graph-gen-method"]
     min_edges = params["rgcn-params"]["min-edges"]
+    normalize = params["rgcn-params"]["normalization"]
+    self_loop = params["rgcn-params"]["self-loop"]
     seed =  params["rgcn-params"]["seed"]
     file_params = params["files"]
 
@@ -113,17 +115,17 @@ def tuning(params, num_samples, max_num_epochs, gpus_per_trial, feat_dim):
 
 
     config = {
-        "n_hid": tune.choice([2, 3, 4]),
+        "n_hid": tune.choice([1,2]),
         "dropout": tune.choice([x/10 for x in range(1,6)]),
         "lr": tune.loguniform(1e-4, 1e-1),
-        "batch_size": tune.choice([8, 16, 32]),
-        "norm": tune.choice([True, False]),
+        "batch_size": tune.choice([16,32]),
+#        "norm": tune.choice([True, False]),
         "reg": tune.loguniform(1e-6, 1e-2),
-        "loop": tune.choice([True, False])
+#        "loop": tune.choice([True, False])
     }
     scheduler = ASHAScheduler(
-        metric="auc",
-        mode="max",
+        metric="loss",
+        mode="min",
         max_t=max_num_epochs,
         grace_period=10,
         reduction_factor=2)
@@ -153,7 +155,7 @@ def tuning(params, num_samples, max_num_epochs, gpus_per_trial, feat_dim):
 
 
     from mowl.datasets.base  import PathDataset
-    from mowl.gnn_sim.model import GNNSim
+    from mowl.gnn_sim_siameseNN.model import GNNSim
 
 
 

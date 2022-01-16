@@ -29,7 +29,6 @@ import org.semanticweb.owlapi.util.InferredSubClassAxiomGenerator;
 import org.semanticweb.owlapi.util.InferredEquivalentClassAxiomGenerator;
 import org.semanticweb.owlapi.reasoner.OWLReasonerFactory;
 import org.semanticweb.owlapi.reasoner.OWLReasoner;
-import org.semanticweb.HermiT.Reasoner;
 import org.semanticweb.owlapi.reasoner.OWLReasonerConfiguration;
 
 
@@ -77,80 +76,51 @@ class AxiomsFromOnt {
 
     def processOntology(){
 
+	OWLDataFactory dataFactory = manager.getOWLDataFactory()
+	OWLDataFactory fac = manager.getOWLDataFactory()
 
-	if (chosenReasoner.equals("elk")){
-
-	    OWLDataFactory dataFactory = manager.getOWLDataFactory()
-	    OWLDataFactory fac = manager.getOWLDataFactory()
-
-	    ConsoleProgressMonitor progressMonitor = new ConsoleProgressMonitor()
-	    OWLReasonerConfiguration config = new SimpleConfiguration(progressMonitor)
+	ConsoleProgressMonitor progressMonitor = new ConsoleProgressMonitor()
+	OWLReasonerConfiguration config = new SimpleConfiguration(progressMonitor)
 
 
-	    ElkReasonerFactory f1 = new ElkReasonerFactory()
-	    OWLReasoner reasoner = f1.createReasoner(this.ontology, config)
-	    reasoner.precomputeInferences(InferenceType.CLASS_HIERARCHY)
+//	ElkReasonerFactory f1 = new ElkReasonerFactory()
+//	OWLReasoner reasoner = f1.createReasoner(this.ontology, config)
+	//reasoner.precomputeInferences(InferenceType.CLASS_HIERARCHY)
 
-	    List<InferredAxiomGenerator<? extends OWLAxiom>> gens = new ArrayList<InferredAxiomGenerator<? extends OWLAxiom>>();
-	    gens.add(new InferredSubClassAxiomGenerator());
-	    gens.add(new InferredEquivalentClassAxiomGenerator());
-	    OWLOntology infOnt = outputManager.createOntology();
+//	List<InferredAxiomGenerator<? extends OWLAxiom>> gens = new ArrayList<InferredAxiomGenerator<? extends OWLAxiom>>();
+//	gens.add(new InferredSubClassAxiomGenerator());
+//	gens.add(new InferredEquivalentClassAxiomGenerator());
+//	OWLOntology infOnt = outputManager.createOntology();
 
 
-	    InferredOntologyGenerator iog = new InferredOntologyGenerator(reasoner,gens);
-	    iog.fillOntology(outputManager.getOWLDataFactory(), infOnt);
+//	InferredOntologyGenerator iog = new InferredOntologyGenerator(reasoner,gens);
+//	iog.fillOntology(outputManager.getOWLDataFactory(), infOnt);
 
-	    // Save the inferred ontology.
-	    //outputManager.saveOntology(infOnt,IRI.create((new File("inferredontologygo2.owl").toURI())));
+	// Save the inferred ontology.
+	//outputManager.saveOntology(infOnt,IRI.create((new File("inferredontologygo2.owl").toURI())));
 
-	    // Display Axioms
-	    OWLObjectRenderer renderer =new ManchesterOWLSyntaxOWLObjectRendererImpl ();
-	    renderer.setShortFormProvider(new SimpleShortFormProvider1());
-	    int numaxiom1= infOnt.getAxiomCount();
-	    Set<OWLClass> classes=infOnt.getClassesInSignature();
-
-	    //display original axioms
-	    //int numaxiom1= Ont.getAxiomCount();
-	    Set<OWLClass> classeso=this.ontology.getClassesInSignature();
-
+	// Display Axioms
+	OWLObjectRenderer renderer =new ManchesterOWLSyntaxOWLObjectRendererImpl ();
+	renderer.setShortFormProvider(new SimpleShortFormProvider1());
+//	int numaxiom1= infOnt.getAxiomCount();
+//	Set<OWLClass> classes=infOnt.getClassesInSignature();
+	
+	//display original axioms
+	//int numaxiom1= Ont.getAxiomCount();
+	Set<OWLClass> classeso=this.ontology.getClassesInSignature();
+	
+	
+	for (OWLClass classo : classeso){
 	    
-	    for (OWLClass classo : classeso){
-		
-		Set<OWLClassAxiom> ontoaxioms=this.ontology.getAxioms (classo);
-		for (OWLClassAxiom claxiom: ontoaxioms) {
-		    // classess=renderer.render(class1);
-		    String classaxiom=renderer.render (claxiom);
-		    //out1.println (classess);
-		    this.axioms_orig.add(classaxiom.replaceAll("\n"," ").replaceAll(","," "));
-		}
+	    Set<OWLClassAxiom> ontoaxioms=this.ontology.getAxioms (classo);
+	    for (OWLClassAxiom claxiom: ontoaxioms) {
+		// classess=renderer.render(class1);
+		String classaxiom=renderer.render (claxiom);
+		//out1.println (classess);
+		this.axioms_orig.add(classaxiom.replaceAll("\n"," ").replaceAll(","," "));
 	    }
-	    
-
-	}else {
-	    OWLReasonerFactory reasonerFactory = new Reasoner.ReasonerFactory();
-	    OWLReasoner reasoner =reasonerFactory.createReasoner(this.ontology);
-	    OWLDataFactory factory=manager.getOWLDataFactory();
-	    reasoner.precomputeInferences();
-	    InferredSubClassAxiomGenerator generator = new InferredSubClassAxiomGenerator();
-	    Set<OWLAxiom> axioms = generator.createAxioms(factory, reasoner);
-	    manager.addAxioms(this.ontology,axioms);
-	    OWLObjectRenderer renderer =new ManchesterOWLSyntaxOWLObjectRendererImpl ();
-	    renderer.setShortFormProvider(new SimpleShortFormProvider1());
-	    Set<OWLClass> classes=this.ontology.getClassesInSignature();
-
-
-	    for (OWLClass class1 : classes){
-		Set<OWLClassAxiom> ontoaxioms=this.ontology.getAxioms (class1);
-		for (OWLClassAxiom claxiom: ontoaxioms){
-		    classess=renderer.render(class1);
-		    String classaxiom=renderer.render (claxiom);
-		    this.classes.add(classess);
-		    this.axioms_inf.add(classaxiom.replaceAll("\n"," ").replaceAll(","," "));
-		}
-	    }
-
 	}
-
+	   
 
     }
 }

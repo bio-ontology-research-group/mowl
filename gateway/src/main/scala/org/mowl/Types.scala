@@ -33,6 +33,10 @@ object Types {
         def getProperty() = expression.getProperty
         def getFiller() = expression.getFiller
     }
+   case class MaxCardinality(val expression: OWLObjectMaxCardinality) extends QuantifiedExpression{
+        def getProperty() = expression.getProperty
+        def getFiller() = expression.getFiller
+    }
 
 
     sealed trait Expression

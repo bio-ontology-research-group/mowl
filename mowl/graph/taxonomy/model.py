@@ -1,4 +1,6 @@
-from org.mowl.BasicParser import SimpleParser
+from org.mowl.Parsers import TaxonomyParser as Parser
+from org.semanticweb.owlapi.model import OWLOntology
+from mowl.graph.edge import Edge
 
 import sys
 
@@ -6,20 +8,20 @@ from mowl.graph.graph import GraphGenModel
 
 
 class TaxonomyParser(GraphGenModel):
-    def __init__(self, dataset, subclass = True, relations = False, bidirectional = False):
-        super().__init__(dataset)
 
-        self.parserTrainSet = SimpleParser(dataset.ontology, subclass, relations, bidirectional)
-        self.parserValSet = SimpleParser(dataset.validation, subclass, relations, bidirectional)
+    '''
+    This class will project the ontology considering only the axioms of the form :math:`A \sqsubseteq B` where A and B are ontology classes.
+    
+    :param ontology: The ontology to be processed.
+    :param bidirectional_taxonomy: If true then per each SubClass edge one SuperClass edge will be generated.
+    '''
+    
+    def __init__(self, ontology: OWLOntology, bidirectional_taxonomy: bool = False):
+        super().__init__(ontology)
 
-    def parseOWL(self, data = "train"):
+        self.parser = Parser(ontology, bidirectional_taxonomy)
 
-        if data == "train":
-            edges = self.parserTrainSet.parse()
-        elif data == "val":
-            edges = self.parserValSet.parse()
-        elif data == "test":
-            NotImplementedError()
-        else:
-            ValueError()
+    def parse(self):        
+        edges = self.parser.parse()
+        edges = [Edge(str(e.src()), str(e.rel()), str(e.dst())) for e in edges]
         return edges

@@ -4,9 +4,13 @@ class Model(object):
         self.dataset = dataset
 
     def train(self):
+        '''Trains the model
+        '''
         raise NotImplementedError()
     
     def evaluate(self):
+        '''Evaluates the model
+        '''
         raise NotImplementedError()
 
 
