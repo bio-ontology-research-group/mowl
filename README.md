@@ -18,3 +18,7 @@ cd mowl
 ./rebuild.sh
 
 ```
+
+## Documentation
+
+To read our docs please click [here](https://mowl.readthedocs.io/en/latest/index.html)

@@ -1,5 +1,5 @@
 import os
-from mowl.onto2vec.model import Onto2Vec
+from mowl.embeddings.onto2vec.model import Onto2Vec
 from jpype import java
 from org.semanticweb.owlapi.apibinding import OWLManager
 from org.semanticweb.owlapi.model import OWLOntology, OWLLiteral
@@ -10,7 +10,7 @@ import gensim
 class OPA2Vec(Onto2Vec):
     annotations_ontology: OWLOntology
 
-    def __init__(self, dataset, annotations_owl_filepath, pretrained_w2v_model_filepath, w2v_params={}):
+    def __init__(self, dataset, pretrained_w2v_model_filepath=None, w2v_params={}):
         """
         Ontologies Plus Annotations to Vectors: OPA2Vec
 
@@ -30,8 +30,7 @@ class OPA2Vec(Onto2Vec):
 
         self.pretrained_w2v_model_filepath = pretrained_w2v_model_filepath
         self.ont_manager = OWLManager.createOWLOntologyManager()
-        self.annotations_ontology = self.ont_manager.loadOntologyFromOntologyDocument(
-            java.io.File(annotations_owl_filepath))
+        self.annotations_ontology = dataset.ontology
 
     def _create_axioms_corpus(self):
         super()._create_axioms_corpus()
@@ -49,4 +48,6 @@ class OPA2Vec(Onto2Vec):
                         f.write(f'{cls} {property} {value}\n')
 
     def _load_pretrained_model(self):
-        return gensim.models.Word2Vec.load(self.pretrained_w2v_model_filepath)
+        if self.pretrained_w2v_model_filepath:
+            return gensim.models.Word2Vec.load(self.pretrained_w2v_model_filepath)
+        return None
