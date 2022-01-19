@@ -1,4 +1,3 @@
-
 import networkx as nx
 from mowl.walking.walking import WalkingModel
 import random
@@ -6,6 +5,7 @@ import os
 from concurrent.futures import ProcessPoolExecutor
 from multiprocessing import Pool, get_context
 import logging
+import numpy as np
 from copy import deepcopy
 
 logging.basicConfig(level=logging.INFO)
@@ -25,11 +25,11 @@ class DeepWalk(WalkingModel):
                  num_walks,
                  walk_length,
                  alpha,
-                 num_workers=1,
-                 seed = 0,
-                 outfile=None):
+                 workers=1,
+                 seed = 0
+                 ):
 
-        super().__init__(edges, num_walks, walk_length, num_workers, outfile)
+        super().__init__(edges, num_walks, walk_length, workers)
 
         self.graph = nx.DiGraph()
         self.rand = random.Random(seed)
@@ -55,28 +55,31 @@ class DeepWalk(WalkingModel):
 
         paths_per_worker = self.num_paths_per_worker()       
 
-        file_names = [f"tmpfile_{i}.txt" for i in range(self.num_workers)]
+        file_names = [f"tmpfile_{i}.txt" for i in range(self.workers)]
         logging.debug("FILENAMES %s", str(file_names))
 
         args_list = []
-        for i in range(self.num_workers):
+        for i in range(self.workers):
             args_list.append((paths_per_worker[i], self.walk_length, random.Random(self.rand.randint(0, 2**31)), file_names[i]))
 
         files = []
 
         logging.debug("Starting Pool")
 
-        with get_context('spawn').Pool(processes=self.num_workers) as pool:
+        with get_context('spawn').Pool(processes=self.workers) as pool:
             res = pool.map(self.write_walks_to_disk, args_list)
 
         
         #combine_files
-        with open(self.outfile, 'w') as finalout:
-            for file_ in file_names:
-                with open(file_, 'r') as f:
-                    for line in f:
-                        finalout.write(f"{line}\n")
+        walks = []
+        for file_ in file_names:
+            with open(file_, "r") as f:
+                for line in f:
+                    line = line.strip().split(" ")
+                    walks.append(line)
 
+        self.walks = walks
+            
         for f in file_names:
             os.remove(f)
                 
@@ -104,8 +107,7 @@ class DeepWalk(WalkingModel):
 
     def _random_walk(self, walk_length, rand = random.Random(), start=None):
 
-        '''
-        
+        '''        
         :param walk_length: Length of the random walk.
         :param alpha: probability of restarts.
         :param start: the start node of the random walk.

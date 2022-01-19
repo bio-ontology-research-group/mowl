@@ -54,7 +54,6 @@ class Edge:
         return (entities, relations)
 
 
-
     def prettyFormat(self, text):
         """If text is of the form <http://purl.obolibrary.org/obo/GO_0071554> this function returns GO:0071554
         
