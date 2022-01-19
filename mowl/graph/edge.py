@@ -33,6 +33,11 @@ class Edge:
         """
         return self._weight
 
+    def astuple(self):
+        return tuple(map(str, (self.src(), self.rel(), self.dst())))
+
+
+    
     @staticmethod
     def getEntitiesAndRelations(edges):
         '''
@@ -53,8 +58,7 @@ class Edge:
 
         return (entities, relations)
 
-
-
+    
     def prettyFormat(self, text):
         """If text is of the form <http://purl.obolibrary.org/obo/GO_0071554> this function returns GO:0071554
         

@@ -14,7 +14,8 @@ sys.path.insert(0, '')
 sys.path.append('../../../')
 
 from mowl.datasets.base  import PathDataset
-from mowl.catEmbeddings.model import CatEmbeddings
+#from mowl.develop.catEmbeddings.modelWithFeats import CatEmbeddings
+from mowl.develop.catEmbeddings.model import CatEmbeddings
 
 @ck.command()
 @ck.option(
@@ -30,8 +31,8 @@ def main(config):
 #    ontology = "data/go.owl"
 #    val = "data/trans.owl"
    
-    ds = PathDataset(ontology, val, "")
-        
+    ds = PathDataset(ontology, val, None)
+
     model = CatEmbeddings(ds, 128)
 
     model.train()

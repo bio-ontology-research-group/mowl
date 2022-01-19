@@ -14,9 +14,11 @@ import logging
 import pickle as pkl
 import time
 from itertools import chain
+import math
 
 from mowl.model import Model
-from org.mowl.Parsers import TaxonomyParser
+from mowl.graph.taxonomy.model import TaxonomyParser
+from mowl.graph.edge import Edge
 
 logging.basicConfig(level=logging.DEBUG)
 
@@ -24,7 +26,7 @@ class CatEmbeddings(Model):
     def __init__(self, dataset, batch_size, file_params = None, seed = 0):
         super().__init__(dataset)
         self.file_params = file_params
-        self.batch_size = 16 # batch_size
+        self.batch_size = 32 # batch_size
 
         if seed>=0:
             th.manual_seed(seed)
@@ -37,21 +39,22 @@ class CatEmbeddings(Model):
 
         train_data_loader, val_data_loader, num_classes, num_edges, num_objects = self.load_data()
         
-        model = CatModel(num_classes, num_edges, num_objects,256)
+        model = CatModel(num_classes, num_edges, num_objects,1024)
         paramss = sum(p.numel() for p in model.parameters())
+        logging.info("Number of parameters: %d", paramss)
         logging.debug("Model created")
-        lr = 1e-6
-        optimizer = optim.Adam(model.parameters(), lr = lr, weight_decay=0.0)
+        lr = 1e-1
+        optimizer = optim.SGD(model.parameters(), lr = lr, weight_decay=1e-3)
 
 
-        criterion = lambda x: th.mean(x)
+        criterion = lambda x: x
         criterion2 = nn.BCELoss()
         best_roc_auc = 0
         best_roc_auc_inv = 1
-        for epoch in range(1000):
+        for epoch in range(128):
 
             epoch_loss = 0
-
+            train_cat_loss = 0
             model.train()
 
             with ck.progressbar(train_data_loader) as bar:
@@ -60,20 +63,19 @@ class CatEmbeddings(Model):
                     cat_loss = criterion(cat_loss)
                     batch_size = len(batch_objects_pos[0])
 
-                    lbls = th.cat([th.ones(batch_size), th.zeros(batch_size)], 0)
-                    
-                    classif_loss = criterion2(logits.squeeze(), lbls.float())
-#                    print(cat_loss.detach(), classif_loss.detach())
+                    lbls = th.cat([th.ones(batch_size), th.zeros(batch_size), th.zeros(batch_size)], 0)
+                    classif_loss = criterion2(logits.squeeze(), lbls)
+                    #                    print(cat_loss.detach(), classif_loss.detach())
                     loss = classif_loss + cat_loss
                     optimizer.zero_grad()
                     loss.backward()
                     optimizer.step()
 
                     epoch_loss += loss.detach().item()
-
+                    train_cat_loss += cat_loss.detach().item()
                 epoch_loss /= (i+1)
-
-
+                train_cat_loss /= (i+1)
+                
             model.eval()
             val_loss = 0
             val_loss_pred = 0
@@ -88,15 +90,14 @@ class CatEmbeddings(Model):
                         cat_loss, logits = model(batch_objects_pos, batch_objects_neg1, batch_objects_neg2)
                         cat_loss = criterion(cat_loss)
                         batch_size = len(batch_objects_pos[0])
-                        lbls = th.cat([th.ones(batch_size), th.zeros(batch_size)], 0)
-
+                        lbls = th.cat([th.ones(batch_size), th.zeros(batch_size), th.zeros(batch_size)], 0)
                         labels = np.append(labels, lbls.cpu())
                         preds = np.append(preds, logits.cpu())
-                        loss = criterion2(logits.squeeze(), lbls) #+ cat_loss
+                        loss = criterion2(logits.squeeze(), lbls) + cat_loss
                         val_loss += loss.detach().item()
                         val_loss_cat += cat_loss
                     val_loss /= (i+1)
-                    cat_loss /= (i+1)
+                    val_loss_cat /= (i+1)
 
             roc_auc = compute_roc(labels, preds)
             if roc_auc > best_roc_auc:
@@ -105,8 +106,9 @@ class CatEmbeddings(Model):
             if roc_auc < best_roc_auc_inv:
                 best_roc_auc_inv = roc_auc
                 best_epoch_inv = epoch
-#                th.save(model.state_dict(), self.file_params["output_model"])
-            print(f'Epoch {epoch}: Loss - {epoch_loss}, \tVal loss - {val_loss}, \tCat loss - {cat_loss}, \tAUC - {roc_auc}, \tBest({best_epoch}) - {best_roc_auc}, \tBestInv{best_epoch_inv} - {best_roc_auc_inv}')
+                #                th.save(model.state_dict(), self.file_params["output_model"])
+
+            print(f'Epoch {epoch}: Loss - {epoch_loss:.6}, \t TCatLoss - {train_cat_loss:.6}, \tVal loss - {val_loss:.6}, \tCat loss - {float(val_loss_cat):.6}, \tAUC - {roc_auc:.6}')
 #            print(f'Epoch {epoch}: Loss - {epoch_loss}, \tVal AUC - {roc_auc}')
 
  #           print(f'Epoch {epoch}: Loss - {epoch_loss}') #, \tVal loss - {val_loss}, \tAUC - {roc_auc}')
@@ -120,30 +122,29 @@ class CatEmbeddings(Model):
         try:
             logging.debug("In try")
             infile_train = open(train_set_path, 'rb')
-            train_set = pkl.load(infile_train)
+            edges_train_set = pkl.load(infile_train)
             infile_val = open(val_set_path, 'rb')
-            val_set = pkl.load(infile_val)
+            edges_val_set = pkl.load(infile_val)
         except:
             logging.debug("In except")
-            parser = TaxonomyParser(self.dataset, subclass=True, relations = False)
 
-            train_set = set(parser.parseOWL(data = "train"))
-            val_set = set(parser.parseOWL(data = "val"))
-            val_set = val_set - train_set
+            train_parser = TaxonomyParser(self.dataset.ontology, bidirectional_taxonomy = False)
+            edges_train_set = train_parser.parse()
 
-
-            train_set = [(str(e.src()), str(e.rel()), str(e.dst())) for e in train_set]
-            val_set = [(str(e.src()), str(e.rel()), str(e.dst())) for e in val_set]
-
-
-            random.shuffle(train_set)
-            random.shuffle(val_set)
+            val_parser = TaxonomyParser(self.dataset.validation, bidirectional_taxonomy = False)
+            edges_val_set = val_parser.parse()
+            edges_val_set = list(set(edges_val_set) - set(edges_train_set))
 
             outfile_train = open(train_set_path, 'wb')
-            pkl.dump(train_set, outfile_train)
+            pkl.dump(edges_train_set, outfile_train)
             outfile_val = open(val_set_path, 'wb')
-            pkl.dump(val_set, outfile_val)
+            pkl.dump(edges_val_set, outfile_val)
 
+        train_set = list( map(lambda x: x.astuple(), edges_train_set))
+        val_set = list(map(lambda x: x.astuple(), edges_val_set))
+
+        _, relations = Edge.getEntitiesAndRelations(edges_train_set)
+        logging.info("Relations are: %s", str(relations))
 
         random.shuffle(train_set)
         random.shuffle(val_set)
@@ -164,36 +165,31 @@ class CatEmbeddings(Model):
         return train_loader, val_loader, num_classes, num_edges, len(objects_idx)
 
     def getDataLoader(self, edges, negatives, objects_idx=None, mode = "train"):
-        objects = {("", "", "owl#Thing")}
+        objects = {"owl#Thing"}
         
         for edge in edges:
             src = str(edge[0])
             dst = str(edge[2])
 
-            if mode == "train":
-                objects |= {("", "", src), ("", "", dst), ("up", src, dst)}
-                objects |= {("up", dst, src)}
+            objects |= {src, dst}
 
-            elif mode in ["val", "test"]:
-                objects |= {("", "", src), ("", "", dst)}
+        # for s, neg in negatives.items():
 
-        for s, neg in negatives.items():
+        #     if mode == "train":
+        #         src_neg = str(neg[0])
+        #         dst_neg = str(neg[2])
 
-            if mode == "train":
-                src_neg = str(neg[0])
-                dst_neg = str(neg[2])
+        #         if ("up", src_neg, dst_neg) in objects:
+        #             print("Already: ", ("up", src_neg,dst_neg))
 
-                if ("up", src_neg, dst_neg) in objects:
-                    print("Already: ", ("up", src_neg,dst_neg))
-
-                objects |= {("", "", src_neg), ("", "", dst_neg), ("up", src_neg, dst_neg)}
+        #         objects |= {("", "", src_neg), ("", "", dst_neg), ("up", src_neg, dst_neg)}
 
                 
-            elif mode in ["val", "test"]:
+        #     elif mode in ["val", "test"]:
                 
-                src = str(neg[0])
-                dst = str(neg[2])
-                objects |= {("", "", src), ("", "", dst)}
+        #         src = str(neg[0])
+        #         dst = str(neg[2])
+        #         objects |= {("", "", src), ("", "", dst)}
 
                 
 #        if objects_idx is None:
@@ -205,7 +201,7 @@ class CatEmbeddings(Model):
         classes = list(set(srcs).union(set(dsts)))
         if mode == "train":
             print(len(objects), len(classes) + 2*len(edges) + len(negatives) +1)
-            assert  len(objects) == len(classes)+ 2*len(edges) + len(negatives) + 1
+            assert  len(objects) == len(classes) + 1
         
         data_set = CatDataset(edges, negatives, objects_idx, mode)
         print("len data_set: ", len(data_set))
@@ -294,108 +290,18 @@ def generate_negatives(train_set, val_set):
     assert len(train_neg) == len(srcs_train)
 
     val_neg = {k:v for k,v in val_neg.items() if k in srcs_val}
-    print("VALLLLL: ", len(srcs_val), len(val_neg))
     return train_neg, val_neg
 
-class CatModel2(nn.Module):
 
-    def __init__(self, num_classses, num_axioms, num_objects, embedding_size):
-        super(CatModel, self).__init__()
-
-        num_obj = num_objects 
-
-        dim0 = embedding_size
-        dim1 = floor(dim0/2)
-        dim2 = floor(dim1/2)
-        self.net_object = nn.Sequential(
-            nn.Embedding(num_obj, embedding_size),
-            nn.Linear(dim0, dim1),
-            nn.Linear(dim1, dim2)
-        )
-
-        #Diagram 1
-        self.proj_down_exp = nn.Linear(dim2, dim2)
-        self.proj_down_ant = nn.Linear(dim2, dim2)
-
-        #Diagram 2
-        self.inj_exp_cop = nn.Linear(dim2, dim2)
-        self.inj_cons_cop = nn.Linear(dim2, dim2)
-        self.inj_exp_max = nn.Linear(dim2, dim2)
-        self.inj_cons_max = nn.Linear(dim2, dim2)
-        self.coprod_morphism = nn.Linear(dim2, dim2)
+class RMSELoss(nn.Module):
+    def __init__(self, reduction = "mean", eps=1e-6):
+        super().__init__()
+        self.mse = nn.MSELoss(reduction = reduction)
+        self.eps = eps
         
-        self.sim = nn.Linear(dim2, dim2)
-
-        self.classif = nn.Linear(dim2,1)
-        self.dropout = nn.Dropout()
-        
-    def compute_loss_train(self, objects):
-
-        #Diagram 1
-        _, antecedent, consequent = map(self.net_object, objects)
-        initial = th.ones(antecedent.shape)
-        
-        exponential = initial
-        maximum = initial
-        prod_down = exponential * antecedent
-
-        #Diagram 2
-        coproduct = initial + consequent
-        
-        full = False
-        if full:
-            #Diagram 1
-            loss1 = abs(exponential - self.proj_down_exp(prod_down))
-            loss2 = abs(antecedent - self.proj_down_ant(prod_down))
-
-            #Diagram 2
-            loss3 = abs(coproduct - self.inj_exp_cop(exponential) )
-            loss4 = abs(coproduct - self.inj_cons_cop(consequent) )
-            loss5 = abs(maximum - self.inj_exp_max(exponential) )
-            loss6 = abs(maximum - self.inj_cons_max(consequent) )
-            loss7 = abs(maximum - self.coprod_morphism(coproduct) )
-
-            path_loss1 = matrix_norm(self.inj_exp_max.weight - self.coprod_morphism.weight@self.inj_exp_cop.weight)
-            path_loss2 = matrix_norm(self.inj_cons_max.weight - self.coprod_morphism.weight@self.inj_cons_cop.weight )
-
-            
-        sim_loss  = abs(consequent - self.sim(antecedent))
-
-        logit = th.sigmoid(self.classif(sim_loss))
-
-        if not full:
-            return th.empty(1), logit
-        else:
-            return sum([loss1, loss2, loss3, loss4, loss5, loss6, loss7, path_loss1, path_loss2, sim_loss]), logit
-
-    def compute_loss_test(self, objects):
-
-        antecedent, consequent = map(self.net_object, objects)
-
-        sim_loss  = abs(consequent - self.sim(antecedent))
-        logit = th.sigmoid(self.classif(sim_loss))
-        
-        return logit
-
-        
-        
-    def forward(self, positive, negative1, negative2):
-        if self.training:
-            loss_pos, logit_pos = self.compute_loss_train(positive)
-            neg = random.choice([negative1, negative2])
-            loss_neg, logit_neg = self.compute_loss_train(neg)
-            logits = th.cat([logit_pos, logit_neg], 0)
-
-            cat_loss = F.relu(loss_pos - loss_neg) 
-            return cat_loss, logits
-        else:
-            loss_pos = self.compute_loss_test(positive)
-            neg = random.choice([negative1, negative2])
-            loss_neg = self.compute_loss_test(neg)
-            logits = th.cat([loss_pos, loss_neg], 0)
-            return logits
-
-        
+    def forward(self,yhat,y):
+        loss = th.sqrt(self.mse(yhat,y) + self.eps)
+        return loss
         
 class CatModel(nn.Module):
 
@@ -404,133 +310,205 @@ class CatModel(nn.Module):
 
         num_obj = num_objects 
 
-        dim0 = embedding_size
-        dim1 = floor(dim0/2)
-        dim2 = dim1 #floor(dim1/2)
+        self.dropout = nn.Dropout(0.4)
+
+        self.embed = nn.Embedding(num_obj, embedding_size)
+        k = math.sqrt(1 / embedding_size)
+        nn.init.uniform_(self.embed.weight, -0, 1)
+        
         self.net_object = nn.Sequential(
-            nn.Embedding(num_obj, embedding_size),
-            nn.Linear(dim0, dim1),
-            nn.Linear(dim1, dim2)
+            self.embed,
+            self.dropout,
+            nn.ReLU(),
+            nn.Linear(embedding_size, embedding_size),
+            nn.Sigmoid()
         )
 
-        self.exp_repr = nn.Sequential(
-            nn.Linear(2*dim2, 1024),
+        self.emb_exp = nn.Sequential(
+            nn.Linear(2*embedding_size, embedding_size),
+            self.dropout,
             nn.ReLU(),
-            nn.Dropout(),
-            nn.Linear(1024, dim2)
+            nn.Linear(embedding_size, embedding_size),
+            nn.Sigmoid()
         )
         
-        self.prod_up_repr = nn.Sequential(
-            nn.Linear(2*dim2, 1024),
+        self.emb_up = nn.Sequential(
+            nn.Linear(2*embedding_size, embedding_size),
+            self.dropout,
             nn.ReLU(),
-            nn.Dropout(),
-            nn.Linear(1024, dim2)
+            nn.Linear(embedding_size, embedding_size),
+            nn.Sigmoid()
+#            nn.Linear(1024, dim2)
         )
 
-        self.prod_down_repr = nn.Sequential(
-            nn.Linear(2*dim2, 1024),
+        self.emb_down = nn.Sequential(
+            nn.Linear(3*embedding_size, 2*embedding_size),
+            self.dropout,
             nn.ReLU(),
-            nn.Dropout(),
-            nn.Linear(1024, dim2)
+            nn.Linear(2*embedding_size, embedding_size),
+            nn.Sigmoid()
         )
 
-        self.similarity = nn.Sequential(
-            nn.Linear(7*dim2, 1024),
-            nn.ReLU(),
-            nn.Dropout(),
-            nn.Linear(1024, 1)
+        self.up2exp = nn.Sequential(
+            nn.Linear(embedding_size, embedding_size),
+            self.dropout
+        )
+        
+        self.up2ant = nn.Sequential(
+            nn.Linear(embedding_size, embedding_size),
+            self.dropout
         )
 
-        self.similarity_simple = nn.Sequential(
-            nn.Linear(2*dim2, 1024),
-            nn.ReLU(),
-            nn.Dropout(),
-            nn.Linear(1024, 1)
+        self.down2exp = nn.Sequential(
+            nn.Linear(embedding_size, embedding_size),
+            self.dropout
         )
 
-        self.proj_up_exp = nn.Linear(dim2, dim2)
-        self.proj_up_ant = nn.Linear(dim2, dim2)
-        self.proj_down_exp = nn.Linear(dim2, dim2)
-        self.proj_down_ant = nn.Linear(dim2, dim2)
-        self.prod_up_down = nn.Linear(dim2, dim2)
-        self.prod_up_cons = nn.Linear(dim2, dim2)
-        self.prod_down_cons = nn.Linear(dim2, dim2)
-        self.sim = nn.Linear(dim2, dim2)
-
-        self.classif = nn.Linear(dim2,1)
-        self.dropout = nn.Dropout()
+        self.down2ant = nn.Sequential(
+            nn.Linear(embedding_size, embedding_size),
+            self.dropout
+        )
+        
+        self.up2down = nn.Sequential(
+            nn.Linear(embedding_size, embedding_size),
+            self.dropout
+        )
+        self.up2cons = nn.Sequential(
+            nn.Linear(embedding_size, embedding_size),
+            self.dropout
+        )
+        
+        self.down2cons = nn.Sequential(
+            nn.Linear(embedding_size, embedding_size),
+            self.dropout
+        )
         
     def compute_loss(self, objects):
 
+        rmse = RMSELoss()
+        rmseNR = RMSELoss(reduction = "none")
         antecedent, consequent = map(self.net_object, objects)
-
-        prod_up = self.prod_up_repr(th.cat([antecedent, consequent], dim = 1))
-        exponential = self.exp_repr(th.cat([antecedent, consequent], dim = 1))
-        prod_down = self.prod_down_repr(th.cat([exponential, antecedent], dim=1))
         
+        
+        up = self.emb_up(th.cat([antecedent, consequent], dim = 1))
+#        exponential = consequent/(antecedent + 1e-6)
+#        exponential = exponential.where(exponential > 1, th.tensor(1.0))
+        
+        exponential = self.emb_exp(th.cat([antecedent, consequent], dim = 1))
+#        down = exponential + antecedent
+        down = self.emb_down(th.cat([antecedent, consequent, exponential], dim =1))
         full = True
+        
         if full:
-           #           print("w: ", th.max(self.prod_up_down.weight), th.min(self.prod_up_down.weight) )
 
-            estim_prod_down = self.prod_up_down(prod_up)
+            estim_downFromUp = self.up2down(up)
 
-            estim_exponential_up = self.proj_up_exp(prod_up)
-            estim_exponential_down = self.proj_down_exp(prod_down)
-            estim_antecedent_up = self.proj_up_ant(prod_up)
-            estim_antecedent_down = self.proj_down_ant(prod_down)
+            estim_expFromUp = self.up2exp(up)
 
-            estim_consequent_up = self.prod_up_cons(prod_up)
-            estim_consequent_down = self.prod_down_cons(prod_down)
+            estim_expFromdown = self.down2exp(down)
+            estim_expFromDownChained = self.down2exp(estim_downFromUp)
             
-            estim_cons_ant = self.sim(antecedent)
+            estim_antFromUp = self.up2ant(up)
+
+            estim_antFromDown = self.down2ant(down)
+            estim_antFromDownChained = self.down2ant(estim_downFromUp)
             
-            loss1 = th.sum(estim_exponential_down * estim_exponential_up, dim=1, keepdims = True)
-            loss2 = th.sum(estim_antecedent_down * estim_antecedent_up, dim=1, keepdims = True)
-
-            #loss3 = abs(exponential - estim_exponential_down)
-            #loss4 = abs(antecedent - estim_antecedent_down)
-
-#            loss5 = abs(prod_down - estim_prod_down)
-            loss6 = th.sum(estim_consequent_up * estim_consequent_down, dim=1, keepdims = True)
-#            loss7 = abs(consequent - estim_consequent_up)
-
-            loss8 = th.sum(consequent * estim_cons_ant, dim=1, keepdims = True)
+            estim_consFromUp = self.up2cons(up)
+            estim_consFromDown = self.down2cons(down)
+            estim_consFromDownChained = self.down2cons(estim_downFromUp)
             
-            #           path_loss1 = matrix_norm(self.proj_up_exp.weight - self.prod_up_down.weight@self.proj_down_exp.weight)
-            #           path_loss2 = matrix_norm(self.proj_up_ant.weight - self.prod_up_down.weight@self.proj_down_ant.weight)
-            #           path_loss3 = matrix_norm(self.prod_up_cons.weight - self.prod_up_down.weight@self.prod_down_cons.weight)
-            path_loss1 = abs(estim_exponential_up - self.proj_down_exp(estim_prod_down))
-            path_loss2 = abs(estim_antecedent_up - self.proj_down_ant(estim_prod_down))
-            path_loss3 = abs(estim_consequent_up - self.prod_down_cons(estim_prod_down))
+#            estim_consFromAnt = self.sim(antecedent)
 
-            path_loss4 = th.sum(estim_consequent_down * self.sim(estim_antecedent_down), dim=1, keepdims = True)
+            margin = 1
+            loss1 = rmseNR(estim_expFromUp, exponential) #th.sum(th.relu(estim_expFromUp - exponential + margin))
+            loss1 = th.mean(loss1, dim=1)
+            loss2 = rmseNR(estim_antFromUp, antecedent) # th.sum(th.relu(estim_antFromUp - antecedent + margin))
+            loss2 = th.mean(loss2, dim=1)
+            
+            loss3 = rmseNR(estim_expFromdown, exponential) #th.sum(th.relu(exponential - estim_expFromdown + margin))
+            loss3 = th.mean(loss3, dim=1)
+            loss4 = rmseNR(estim_antFromDown, antecedent) #th.sum(th.relu(antecedent - estim_antFromDown + margin))
+            loss4 = th.mean(loss4, dim=1)
+            
+            loss5 = rmseNR(estim_downFromUp, down) #th.sum(th.relu(down - estim_downFromUp + margin))
+            loss5 = th.mean(loss5, dim=1)
+            loss6 = rmseNR(estim_consFromDown, consequent) #th.sum(th.relu(consequent - estim_consFromDown + margin))
+            loss6 = th.mean(loss6, dim=1)
+            loss7 = rmseNR(estim_consFromUp, consequent) #th.sum(th.relu(consequent - estim_consFromUp + margin))
+            loss7 = th.mean(loss7, dim=1)
+
+            #            loss8 = th.sum(consequent * estim_cons_ant, dim=1, keepdims = True)
+
+            
+
+            path_loss1 = rmseNR(estim_expFromDownChained, exponential)
+            path_loss1 = th.mean(path_loss1, dim=1)
+            
+            path_loss2 = rmseNR(estim_antFromDownChained, antecedent)
+            path_loss2 = th.mean(path_loss2, dim=1)
+            
+            path_loss3 = rmseNR(estim_consFromDownChained, consequent)
+            path_loss3 = th.mean(path_loss3, dim =1)
+#            path_loss4 = th.sum(estim_consequent_down * self.sim(estim_antecedent_down), dim=1, keepdims = True)
             #sim_loss  = self.similarity(th.cat([estim_antecedent_up, estim_antecedent_down, estim_consequent_up, estim_consequent_down, estim_exponential_up, estim_exponential_down, estim_prod_down], dim=1))  #abs(consequent - self.sim(antecedent))
             #sim_loss  = abs(consequent - self.sim(antecedent)) + abs(estim_consequent_down - self.sim(estim_antecedent_down)) + abs(estim_consequent_up - self.sim(estim_antecedent_up))
-            sim_loss  = th.sum(estim_consequent_down * estim_antecedent_down * estim_exponential_down, dim = 1, keepdims = True)
+#            sim_loss  = th.sum(estim_consequent_down * estim_antecedent_down * estim_exponential_down, dim = 1, keepdims = True)
+#            sim_loss1  = rmseNR(estim_consFromDown, estim_antFromDown + estim_expFromdown)
+#            sim_loss2  = rmseNR(estim_consFromUp, estim_antFromUp + estim_expFromUp)
+            sim_loss1  = rmseNR(estim_consFromDown, antecedent + exponential)
+            sim_loss1 = th.mean(sim_loss1, dim=1)
+            sim_loss2  = rmseNR(estim_consFromUp, antecedent + exponential)
+            sim_loss2  = th.mean(sim_loss2, dim=1)
+            sim_loss3  = rmseNR(consequent, antecedent + exponential)
+            sim_loss3 = th.mean(sim_loss3, dim=1)
+            
+            sim_loss = sim_loss1 + sim_loss2 + sim_loss3
 
+            assert loss1.shape == loss2.shape
+            assert loss2.shape == loss3.shape
+            assert loss3.shape == loss4.shape
+            assert loss4.shape == loss5.shape
+            assert loss5.shape == sim_loss.shape
+            assert loss6.shape == sim_loss.shape
+            assert loss7.shape == sim_loss.shape
+            assert path_loss3.shape == sim_loss.shape
+            assert path_loss1.shape == path_loss2.shape
+            assert path_loss2.shape == path_loss3.shape
+            sim_loss = loss5 + loss6+ loss7 + path_loss3 + sim_loss + loss1 +loss2 +loss3 + loss4 + path_loss1 + path_loss2
         else:
-            sim_loss  = th.sum(consequent * self.sim(antecedent), dim = 1, keepdims = True)
+            sim_loss  = th.abs(consequent - self.sim(antecedent))
 
             #            sim_loss  = self.similarity_simple(th.cat([antecedent, consequent], dim=1))  #abs(consequent - s            
 
 #        logit = 
-        logit = th.sigmoid(sim_loss) #th.sigmoid(self.classif(sim_loss))
+        #logit = th.sigmoid(sim_loss) #
+        logit = 1 - 2*(th.sigmoid(sim_loss) - 0.5)
 
         if not full:
             return th.zeros(antecedent.shape), logit
         else:
-            return sum([loss1, loss2, loss6, loss8, path_loss4, sim_loss]), logit
-
+            losses = [loss5, loss6, loss7]
+#            losses = [loss1, loss2, loss3, loss4, loss5,  loss6, loss7, 10*th.sum(sim_loss), path_loss1, path_loss2, path_loss3]
+            return th.sum(th.stack(losses))/len(losses), logit
+ #           return 0, logit
+ 
         
         
     def forward(self, positive, negative1, negative2):
         loss_pos, logit_pos = self.compute_loss(positive)
-        #neg = random.choice([negative1, negative2])
-        neg = negative1
-        loss_neg, logit_neg = self.compute_loss(neg)
-        logits = th.cat([logit_pos, logit_neg], 0)
-        margin = 0.01
-        cat_loss = F.relu(-th.mean(loss_pos,dim=1) + th.mean(loss_neg, dim=1) - margin)
+        if False and self.training:
+            neg = negative1
+        else:
+#            neg = negative1
+            neg1 = negative1 # random.choice([negative1, negative2])
+            neg2 = negative2 #random.choice([negative1, negative2])
+   
+        loss_neg1, logit_neg1 = self.compute_loss(neg1)
+        loss_neg2, logit_neg2 = self.compute_loss(neg2)
+        logits = th.cat([logit_pos, logit_neg1, logit_neg2], 0)
+        margin = 0
+        cat_loss = th.tensor(0.0, requires_grad = True) # th.relu(2*loss_pos -loss_neg1- loss_neg2 + margin)
+
         #print(cat_loss.shape)
         return cat_loss, logits
         
@@ -569,8 +547,8 @@ class CatDataset(IterableDataset):
 
     def generate_objects(self, antecedent, consequent):
  
-        antecedent_ = self.object_dict[("", "", antecedent)]
-        consequent_ = self.object_dict[("", "", consequent)]
+        antecedent_ = self.object_dict[antecedent]
+        consequent_ = self.object_dict[consequent]
 
         return antecedent_, consequent_
                             

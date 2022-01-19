@@ -4,7 +4,7 @@ from mowl.graph.dl2vec.model import DL2VecParser
 
 from mowl.graph.owl2vec_star.model import OWL2VecParser
 
-def parser_factory(method_name, dataset, bidirectional_taxonomy, include_literals = False, only_taxonomy = False): #TODO include parameters for OWL2Vec*
+def parser_factory(method_name, dataset, bidirectional_taxonomy, include_literals = False, only_taxonomy = False): 
     methods = [
         "taxonomy",
         "taxonomy_rels",
