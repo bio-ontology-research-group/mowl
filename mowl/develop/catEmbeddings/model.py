@@ -43,8 +43,8 @@ class CatEmbeddings(Model):
         paramss = sum(p.numel() for p in model.parameters())
         logging.info("Number of parameters: %d", paramss)
         logging.debug("Model created")
-        lr = 1e-1
-        optimizer = optim.SGD(model.parameters(), lr = lr, weight_decay=1e-3)
+        lr = 5e-2
+        optimizer = optim.SGD(model.parameters(), lr = lr, weight_decay=1e-4)
 
 
         criterion = lambda x: x
@@ -225,7 +225,7 @@ def generate_negatives(train_set, val_set):
     
     try:
         logging.debug("Try to load training negatives")
-        infile_neg_train = open(neg_train_file, 'rb')
+#        infile_neg_train = open(neg_train_file, 'rb')
         train_neg = pkl.load(infile_neg_train)
         logging.debug("training set loaded")
     except:
@@ -256,7 +256,7 @@ def generate_negatives(train_set, val_set):
     
     try:
         logging.debug("Try to load validation negatives")
-        infile_neg_val = open(neg_val_file, 'rb')
+ #       infile_neg_val = open(neg_val_file, 'rb')
         val_neg = pkl.load(infile_neg_val)
         logging.debug("validation set loaded")
 
@@ -382,6 +382,8 @@ class CatModel(nn.Module):
             nn.Linear(embedding_size, embedding_size),
             self.dropout
         )
+
+
         
     def compute_loss(self, objects):
 
@@ -391,13 +393,13 @@ class CatModel(nn.Module):
         
         
         up = self.emb_up(th.cat([antecedent, consequent], dim = 1))
-#        exponential = consequent/(antecedent + 1e-6)
-#        exponential = exponential.where(exponential > 1, th.tensor(1.0))
+        exponential = consequent/(antecedent + 1e-6)
+        exponential = exponential.where(exponential > 1, th.tensor(1.0))
         
-        exponential = self.emb_exp(th.cat([antecedent, consequent], dim = 1))
-#        down = exponential + antecedent
-        down = self.emb_down(th.cat([antecedent, consequent, exponential], dim =1))
-        full = True
+#        exponential = self.emb_exp(th.cat([antecedent, consequent], dim = 1))
+        down = exponential * antecedent
+#        down = self.emb_down(th.cat([antecedent, consequent, exponential], dim =1))
+        full =True
         
         if full:
 
@@ -419,7 +421,6 @@ class CatModel(nn.Module):
             
 #            estim_consFromAnt = self.sim(antecedent)
 
-            margin = 1
             loss1 = rmseNR(estim_expFromUp, exponential) #th.sum(th.relu(estim_expFromUp - exponential + margin))
             loss1 = th.mean(loss1, dim=1)
             loss2 = rmseNR(estim_antFromUp, antecedent) # th.sum(th.relu(estim_antFromUp - antecedent + margin))
@@ -474,9 +475,10 @@ class CatModel(nn.Module):
             assert path_loss3.shape == sim_loss.shape
             assert path_loss1.shape == path_loss2.shape
             assert path_loss2.shape == path_loss3.shape
-            sim_loss = loss5 + loss6+ loss7 + path_loss3 + sim_loss + loss1 +loss2 +loss3 + loss4 + path_loss1 + path_loss2
+            sim_loss = loss5 + loss6+ loss7 + path_loss3 + loss1 +loss2 +loss3 + loss4 + path_loss1 + path_loss2
         else:
-            sim_loss  = th.abs(consequent - self.sim(antecedent))
+            sim_loss  = rmseNR(consequent, antecedent)
+            sim_loss = th.mean(sim_loss, dim = 1)
 
             #            sim_loss  = self.similarity_simple(th.cat([antecedent, consequent], dim=1))  #abs(consequent - s            
 
@@ -496,8 +498,9 @@ class CatModel(nn.Module):
         
     def forward(self, positive, negative1, negative2):
         loss_pos, logit_pos = self.compute_loss(positive)
-        if False and self.training:
-            neg = negative1
+        if  self.training:
+            neg1 = negative1
+            neg2 = negative2
         else:
 #            neg = negative1
             neg1 = negative1 # random.choice([negative1, negative2])
@@ -511,11 +514,6 @@ class CatModel(nn.Module):
 
         #print(cat_loss.shape)
         return cat_loss, logits
-        
-        
-
-
-    
 
     
 class CatDataset(IterableDataset):
