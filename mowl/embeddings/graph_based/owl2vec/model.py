@@ -79,15 +79,14 @@ class OWL2Vec(Model):
         logging.info("Finished graph generation")
 
         logging.info("Generating random walks...")
-        walks_outfile = "data/walks.txt"
-        walker = walking_factory(self.walking_method, edges, self.num_walks, self.walk_length, self.alpha, num_workers = self.num_procs, outfile=walks_outfile, p = self.p, q= self.q)
+        walker = walking_factory(self.walking_method, edges, self.num_walks, self.walk_length, self.alpha, workers = self.num_procs, p = self.p, q= self.q)
         walker.walk()
         logging.info("Walks generated")
 
         logging.info("Starting to train the Word2Vec model")
 
-        sentences = gensim.models.word2vec.LineSentence(walks_outfile)
-        model = gensim.models.Word2Vec(sentences, sg=1, min_count=1, vector_size=self.vector_size, window = self.window, epochs = self.num_walks, workers = self.num_procs)
+        sentences = walker.walks
+        model = gensim.models.Word2Vec(sentences, sg=1, min_count=1, size=self.vector_size, window = self.window, iter = self.num_walks, workers = self.num_procs)
         logging.info("Word2Vec training finished")
         logging.info(f"Saving model at {self.outfile}")
         model.save(self.outfile)

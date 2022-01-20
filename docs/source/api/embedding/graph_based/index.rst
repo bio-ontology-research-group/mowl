@@ -19,7 +19,7 @@ An example of use can be found at :doc:`../../../tutorials/DL2Vec`
 
 
 Translational Embeddings
-----------
+-------------------------
 
 .. automodule:: mowl.embeddings.graph_based.translational.model
    :members:
