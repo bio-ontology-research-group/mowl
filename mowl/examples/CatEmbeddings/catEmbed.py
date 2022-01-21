@@ -25,11 +25,11 @@ def main(config):
     logging.info(f"Number of cores detected: {os.cpu_count()}")
 
 
-    ontology = "data/goslim_yeast.owl"
-    val = "data/trans_yeast.owl"
+#    ontology = "data/goslim_yeast.owl"
+#    val = "data/trans_yeast.owl"
     
-#    ontology = "data/go.owl"
-#    val = "data/trans.owl"
+    ontology = "data/go.owl"
+    val = "data/trans.owl"
    
     ds = PathDataset(ontology, val, None)
 

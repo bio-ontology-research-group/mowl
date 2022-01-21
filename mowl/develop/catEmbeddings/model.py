@@ -26,7 +26,7 @@ class CatEmbeddings(Model):
     def __init__(self, dataset, batch_size, file_params = None, seed = 0):
         super().__init__(dataset)
         self.file_params = file_params
-        self.batch_size = 32 # batch_size
+        self.batch_size = 256 # batch_size
 
         if seed>=0:
             th.manual_seed(seed)
@@ -94,8 +94,10 @@ class CatEmbeddings(Model):
 
     def load_data(self):
 
-        train_set_path = "data/train_set_go_slim.pkl"
-        val_set_path = "data/val_set_go_slim.pkl"
+        # train_set_path = "data/train_set_go_slim.pkl"
+        # val_set_path = "data/val_set_go_slim.pkl"
+        train_set_path = "data/train_set_go.pkl"
+        val_set_path = "data/val_set_go.pkl"
         
         try:
             logging.debug("In try")
@@ -121,7 +123,11 @@ class CatEmbeddings(Model):
         train_set = list( map(lambda x: x.astuple(), edges_train_set))
         val_set = list(map(lambda x: x.astuple(), edges_val_set))
 
-        _, relations = Edge.getEntitiesAndRelations(edges_train_set)
+        entitiesTrain, relations = Edge.getEntitiesAndRelations(edges_train_set)
+        entitiesVal, _ = Edge.getEntitiesAndRelations(edges_val_set)
+
+        
+        assert len(entitiesTrain) == len(entitiesVal), f"Train entities: {len(entitiesTrain)}. Val entities: {len(entitiesVal)}"
         logging.info("Relations are: %s", str(relations))
 
         random.shuffle(train_set)
@@ -129,8 +135,8 @@ class CatEmbeddings(Model):
         print("Total traininig data size: ", len(train_set))
         print("Total validation data size: ", len(val_set))
 
-#        train_set = train_set[:30000]
-#        val_set = val_set[:40000]
+#        train_set = train_set[:60000]
+        val_set = val_set[:100000]
         logging.debug("Train and val sets loaded")
         neg_train, neg_val = generate_negatives(train_set, val_set)
 
@@ -143,15 +149,16 @@ class CatEmbeddings(Model):
         return train_loader, val_loader, num_classes, num_edges, len(objects_idx)
 
     def getDataLoader(self, edges, negatives, objects_idx=None, mode = "train"):
-        objects = {"owl#Thing"}
+        if objects_idx is None:
+            objects = {"owl#Thing"}
         
-        for edge in edges:
-            src = str(edge[0])
-            dst = str(edge[2])
+            for edge in edges:
+                src = str(edge[0])
+                dst = str(edge[2])
+                
+                objects |= {src, dst}
 
-            objects |= {src, dst}
-
-        objects_idx = {obj: i for i, obj in enumerate(objects)}
+            objects_idx = {obj: i for i, obj in enumerate(objects)}
 
         #Sanity check
         srcs = [e[0] for e in edges]
@@ -163,15 +170,17 @@ class CatEmbeddings(Model):
         
         data_set = CatDataset(edges, negatives, objects_idx, mode)
         print("len data_set: ", len(data_set))
-        data_loader = DataLoader(data_set, batch_size = self.batch_size, drop_last=True)
+        data_loader = DataLoader(data_set, batch_size = self.batch_size, drop_last=False)
         print("len_dataloeadet: ", len(data_loader))
         return data_loader, objects_idx, len(classes), len(edges)
 
 
 def generate_negatives(train_set, val_set):
 
-    neg_train_file = "data/neg_train_go_slim.pkl2"
-    neg_val_file = "data/neg_val_go_slim.pkl2"
+    # neg_train_file = "data/neg_train_go_slim.pkl2"
+    # neg_val_file = "data/neg_val_go_slim.pkl2"
+    neg_train_file = "data/neg_train_go.pkl2"
+    neg_val_file = "data/neg_val_go.pkl2"
 
     srcs_train = {s for (s, _, _) in train_set}
     r = train_set[0][1]
@@ -183,7 +192,7 @@ def generate_negatives(train_set, val_set):
     
     try:
         logging.debug("Try to load training negatives")
-#        infile_neg_train = open(neg_train_file, 'rb')
+        infile_neg_train = open(neg_train_file, 'rb')
         train_neg = pkl.load(infile_neg_train)
         logging.debug("training set loaded")
     except:
@@ -214,7 +223,7 @@ def generate_negatives(train_set, val_set):
     
     try:
         logging.debug("Try to load validation negatives")
- #       infile_neg_val = open(neg_val_file, 'rb')
+        infile_neg_val = open(neg_val_file, 'rb')
         val_neg = pkl.load(infile_neg_val)
         logging.debug("validation set loaded")
 
@@ -354,7 +363,7 @@ class CatModel(nn.Module):
         exponential = exponential.where(exponential > 1, th.tensor(1.0))
         
 #        exponential = self.emb_exp(th.cat([antecedent, consequent], dim = 1))
-        down = exponential * antecedent
+        down = (exponential + antecedent)/2
 #        down = self.emb_down(th.cat([antecedent, consequent, exponential], dim =1))
         full =True
         
@@ -478,7 +487,8 @@ class CatDataset(IterableDataset):
         consequent_ = self.object_dict[consequent]
 
         return antecedent_, consequent_
-                            
+
+    
 def compute_roc(labels, preds):
     # Compute ROC curve and ROC area for each class
     fpr, tpr, _ = roc_curve(labels.flatten(), preds.flatten())
