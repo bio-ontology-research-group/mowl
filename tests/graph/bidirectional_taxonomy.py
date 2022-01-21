@@ -14,8 +14,6 @@ from util import download
 
 class TestingBT(TestCase):
 
-    def __init_(self):
-        self.ds = None
     
     def setUp(self):
 
