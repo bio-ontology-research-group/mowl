@@ -44,7 +44,8 @@ class CatEmbeddings(Model):
         logging.info("Number of parameters: %d", paramss)
         logging.debug("Model created")
 
-        lr = 5e-2
+        #lr = 5e-2 #go_slim
+        lr = 1e-0
         optimizer = optim.SGD(model.parameters(), lr = lr, weight_decay=1e-4)
         criterion = nn.BCELoss()
         for epoch in range(128):
@@ -126,8 +127,10 @@ class CatEmbeddings(Model):
         entitiesTrain, relations = Edge.getEntitiesAndRelations(edges_train_set)
         entitiesVal, _ = Edge.getEntitiesAndRelations(edges_val_set)
 
+        allEntities = list(set(entitiesTrain) | set(entitiesVal) | {"owlThing"})
+        objects_idx = {o: i for i, o in enumerate(allEntities)}
+        num_classes = len(list(objects_idx.keys()))
         
-        assert len(entitiesTrain) == len(entitiesVal), f"Train entities: {len(entitiesTrain)}. Val entities: {len(entitiesVal)}"
         logging.info("Relations are: %s", str(relations))
 
         random.shuffle(train_set)
@@ -142,37 +145,19 @@ class CatEmbeddings(Model):
 
         logging.debug("Negatives generated")
         
-        train_loader, objects_idx, num_classes, num_edges  = self.getDataLoader(train_set, neg_train)
-        val_loader, _, _, _ = self.getDataLoader(val_set, neg_val, objects_idx, mode = "val")
+        train_loader, num_edges  = self.getDataLoader(train_set, neg_train, objects_idx)
+        val_loader, _ = self.getDataLoader(val_set, neg_val, objects_idx, mode = "val")
 
         logging.debug("Finished loading data")
         return train_loader, val_loader, num_classes, num_edges, len(objects_idx)
 
-    def getDataLoader(self, edges, negatives, objects_idx=None, mode = "train"):
-        if objects_idx is None:
-            objects = {"owl#Thing"}
-        
-            for edge in edges:
-                src = str(edge[0])
-                dst = str(edge[2])
-                
-                objects |= {src, dst}
+    def getDataLoader(self, edges, negatives, objects_idx, mode = "train"):
 
-            objects_idx = {obj: i for i, obj in enumerate(objects)}
-
-        #Sanity check
-        srcs = [e[0] for e in edges]
-        dsts = [e[2] for e in edges]
-        classes = list(set(srcs).union(set(dsts)))
-        if mode == "train":
-            print(len(objects), len(classes) + 2*len(edges) + len(negatives) +1)
-            assert  len(objects) == len(classes) + 1
-        
         data_set = CatDataset(edges, negatives, objects_idx, mode)
         print("len data_set: ", len(data_set))
         data_loader = DataLoader(data_set, batch_size = self.batch_size, drop_last=False)
         print("len_dataloeadet: ", len(data_loader))
-        return data_loader, objects_idx, len(classes), len(edges)
+        return data_loader, len(edges)
 
 
 def generate_negatives(train_set, val_set):
