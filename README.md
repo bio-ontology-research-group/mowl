@@ -10,7 +10,7 @@ mainly in Python, but we have integrated the functionalities of [OWLAPI](https:/
 
 ## Table of contents
   - [Installation](#installation)
-  - [Usage](#usage)
+  - [Examples of use](#examples-of-use)
   - [List of contributors](#list-of-contributors)
 
 
@@ -32,7 +32,54 @@ cd mowl
 
 The last line will generate the necessary `jar` files to bind Python with the code that runs in the JVM
 
-## Usage
+## Examples of use
+
+### Basic example
+
+In this example we use the training data (which is an OWL ontology) from the built-in dataset [PPIYeasSlimDataset](https://mowl.readthedocs.io/en/latest/api/datasets/index.html#mowl.datasets.ppi_yeast.PPIYeastSlimDataset) to build a graph representation using the _subClassOf_ axioms.
+
+```python
+from mowl.datasets.ppi_yeast import PPIYeastSlimDataset
+from mowl.graph.taxonomy.model import TaxonomyParser
+
+dataset = PPIYeastSlimDataset()
+parser = TaxonomyParser(dataset.ontology, bidirectional_taxonomy = True)
+edges = parser.parse()
+```
+The projected `edges` is an edge list of a graph. One use of this may be to generate random walks:
+
+```python
+from mowl.walking.deepwalk.model import DeepWalk
+walker = DeepWalk(edges,
+	              100, # number of walks
+				  20, # length of each walk
+				  0.2, # probability of restart
+				  workers = 4, # number of usable CPUs
+				  )
+
+walker.walk()
+walks = walker.walks
+```
+
+### Ontology to graph
+
+In the previous example we called the class `TaxonomyParser` to perform the graph projection. However, there are more ways to perform the projection. We include the following four:
+
+* [TaxonomyParser](https://mowl.readthedocs.io/en/latest/api/graph/index.html#subclass-hierarchy): "taxonomy"
+* [TaxonomyWithRelsParser](https://mowl.readthedocs.io/en/latest/api/graph/index.html#subclass-hierarchy-with-relations): "taxonomy_rels"
+* [DL2VecParser](https://mowl.readthedocs.io/en/latest/api/graph/index.html#dl2vec-graph): "dl2vec"
+* [OWL2VecParser](https://mowl.readthedocs.io/en/latest/api/graph/index.html#dl2vec-graph): "owl2vec_star"
+
+Instead of instantianting each of them separately, there is the following _factory_ method:
+```python
+from mowl.graph.factory import parser_factory
+
+parser = parser_factory("taxonomy_rels", dataset.ontology, bidirectional_taxonomy = True)
+```
+Now `parser` will be an instance of the `TaxonomyWithRelsParser` class. The string parameters for each method are listed above.
+
+For the random walks method we have a similar factory method that can be found in `mowl.walking.factory` and is called `walking_factory`.
+
 
 ## List of contributors
 
