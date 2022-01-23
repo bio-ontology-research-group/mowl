@@ -66,7 +66,7 @@ class DeepWalk(WalkingModel):
 
         logging.debug("Starting Pool")
 
-        with get_context('spawn').Pool(processes=self.workers) as pool:
+        with get_context('fork').Pool(processes=self.workers) as pool:
             res = pool.map(self.write_walks_to_disk, args_list)
 
         
