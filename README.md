@@ -19,6 +19,15 @@ cd mowl
 
 ```
 
+## Docker
+
+```bash
+docker build --tag mowl .
+docker
+docker run --mount type=bind,source="$(pwd)"/,target=/home/mowl -it -p 8888:8888 --name mowl mowlconda
+jupyter notebook --ip 0.0.0.0 --port 8888 --allow-root
+```
+
 ## Documentation
 
 To read our docs please click [here](https://mowl.readthedocs.io/en/latest/index.html)

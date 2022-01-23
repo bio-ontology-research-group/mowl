@@ -2,7 +2,7 @@ name: mowldev
 channels:
   - conda-forge
 dependencies:
-  - python=3.7
+  - python=3.9
   - cairo
   - dglteam::dgl
   - numpy
@@ -20,13 +20,13 @@ dependencies:
   - scikit-learn
   - urllib3
   - pytorch
-  - gensim
+  - gensim=3.8.3
   - openjdk
   - gradle
   - rdflib
   - pip
   - pip:
     - pykeen
-    - https://github.com/thibaudmartinez/node2vec/releases/download/v0.2.0/node2vec-0.1.0-cp37-cp37m-linux_x86_64.whl
+    - https://github.com/thibaudmartinez/node2vec/releases/download/v0.2.0/node2vec-0.1.0-cp39-cp39-linux_x86_64.whl
   - jupyter
   - ipykernel
