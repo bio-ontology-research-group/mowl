@@ -5,7 +5,7 @@ import random
 import os
 import logging
 from multiprocessing import Pool, get_context
-import time
+
 class Node2Vec(WalkingModel):
     
     '''
@@ -63,7 +63,7 @@ class Node2Vec(WalkingModel):
         
     def walk(self):
         '''
-        Implementation of parallelizable walking.
+        Implementation of parallelizable DeepWalk.
         '''
 
                 
@@ -71,7 +71,6 @@ class Node2Vec(WalkingModel):
 
         logging.info("Preprocessing transition probs...")
         self._preprocess_transition_probs()
-        
         logging.info("Finished preprocessing")
 
 
@@ -159,25 +158,19 @@ class Node2Vec(WalkingModel):
         Preprocessing of transition probabilities for guiding the random walks.
         '''
 
-        print("iterating over nodes")
-        start = time.time()
         alias_nodes = {}
         for node in self.nodes:
             unnormalized_probs = [self.graph[node][nbr]['weight'] for nbr in sorted(self.graph.neighbors(node))]
             norm_const = sum(unnormalized_probs)
             normalized_probs =  [float(u_prob)/norm_const for u_prob in unnormalized_probs]
             alias_nodes[node] = self._alias_setup(normalized_probs)
-        end = time.time()
-        print("iteration done in {end - start}")
+
         alias_edges = {}
         triads = {}
 
-        print("iteration over edges")
-        start = time.time()
         for edge in self.graph.edges:
             alias_edges[edge] = self._get_alias_edge(self.graph, edge[0], edge[1])
-        end = time.time()
-        print("iteration done in {end - start}")
+        
         self.alias_nodes = alias_nodes
         self.alias_edges = alias_edges
 
