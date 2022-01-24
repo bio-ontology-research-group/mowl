@@ -60,7 +60,7 @@ class DeepWalk(WalkingModel):
 
         args_list = []
         for i in range(self.num_workers):
-            args_list.append((paths_per_worker[i], self.walk_length, random.Random(self.rand.randint(0, 2**31)), file_names[i]))
+            args_list.append((paths_per_worker[i], self.walk_length, self.alpha, file_names[i]))
 
         files = []
 

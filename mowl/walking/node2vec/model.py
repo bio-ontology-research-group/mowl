@@ -135,12 +135,14 @@ class Node2Vec(WalkingModel):
         '''
         alias_nodes = self.alias_nodes
         alias_edges = self.alias_edges
+        graph = self.graph
 
         walk = [start_node]
         
         while len(walk) < walk_length:
             cur = walk[-1]
-            cur_nbrs = sorted(self.graph.neighbors(cur))
+            #            cur_nbrs = sorted(self.graph.neighbors(cur))
+            cur_nbrs = list(graph.neighbors(cur))
             if len(cur_nbrs) > 0:
                 if len(walk) == 1:
                     walk.append(cur_nbrs[self._alias_draw(alias_nodes[cur][0], alias_nodes[cur][1])])
@@ -168,7 +170,7 @@ class Node2Vec(WalkingModel):
             normalized_probs =  [float(u_prob)/norm_const for u_prob in unnormalized_probs]
             alias_nodes[node] = self._alias_setup(normalized_probs)
         end = time.time()
-        print("iteration done in {end - start}")
+        print(f"iteration done in {end - start}")
         alias_edges = {}
         triads = {}
 
@@ -177,7 +179,7 @@ class Node2Vec(WalkingModel):
         for edge in self.graph.edges:
             alias_edges[edge] = self._get_alias_edge(self.graph, edge[0], edge[1])
         end = time.time()
-        print("iteration done in {end - start}")
+        print(f"iteration done in {end - start}")
         self.alias_nodes = alias_nodes
         self.alias_edges = alias_edges
 
