@@ -33,7 +33,7 @@ class CatEmbeddings(Model):
             np.random.seed(seed)
             random.seed(seed)
 
-    
+        self.go_slim = False
 
     def train(self):
 
@@ -44,8 +44,10 @@ class CatEmbeddings(Model):
         logging.info("Number of parameters: %d", paramss)
         logging.debug("Model created")
 
-        #lr = 5e-2 #go_slim
-        lr = 1e-0
+        if self.go_slim:
+            lr = 5e-2 #go_slim
+        else:
+            lr = 1e-0 #go
         optimizer = optim.SGD(model.parameters(), lr = lr, weight_decay=1e-4)
         criterion = nn.BCELoss()
         for epoch in range(128):
@@ -95,10 +97,12 @@ class CatEmbeddings(Model):
 
     def load_data(self):
 
-        # train_set_path = "data/train_set_go_slim.pkl"
-        # val_set_path = "data/val_set_go_slim.pkl"
-        train_set_path = "data/train_set_go.pkl"
-        val_set_path = "data/val_set_go.pkl"
+        if self.go_slim:
+            train_set_path = "data/train_set_go_slim.pkl"
+            val_set_path = "data/val_set_go_slim.pkl"
+        else:
+            train_set_path = "data/train_set_go.pkl"
+            val_set_path = "data/val_set_go.pkl"
         
         try:
             logging.debug("In try")
@@ -138,10 +142,11 @@ class CatEmbeddings(Model):
         print("Total traininig data size: ", len(train_set))
         print("Total validation data size: ", len(val_set))
 
-#        train_set = train_set[:60000]
-        val_set = val_set[:100000]
+        if not self.go_slim:
+            train_set = train_set[:60000]
+            #val_set = val_set[:100000]
         logging.debug("Train and val sets loaded")
-        neg_train, neg_val = generate_negatives(train_set, val_set)
+        neg_train, neg_val = generate_negatives(train_set, val_set, self.go_slim)
 
         logging.debug("Negatives generated")
         
@@ -160,12 +165,14 @@ class CatEmbeddings(Model):
         return data_loader, len(edges)
 
 
-def generate_negatives(train_set, val_set):
+def generate_negatives(train_set, val_set, go_slim = True):
 
-    # neg_train_file = "data/neg_train_go_slim.pkl2"
-    # neg_val_file = "data/neg_val_go_slim.pkl2"
-    neg_train_file = "data/neg_train_go.pkl2"
-    neg_val_file = "data/neg_val_go.pkl2"
+    if go_slim:
+        neg_train_file = "data/neg_train_go_slim.pkl2"
+        neg_val_file = "data/neg_val_go_slim.pkl2"
+    else:
+        neg_train_file = "data/neg_train_go.pkl2"
+        neg_val_file = "data/neg_val_go.pkl2"
 
     srcs_train = {s for (s, _, _) in train_set}
     r = train_set[0][1]
@@ -334,7 +341,10 @@ class CatModel(nn.Module):
             self.dropout
         )
 
-
+        self.fc = nn.Sequential(
+            nn.Linear(embedding_size, embedding_size),
+            self.dropout
+        )
         
     def compute_loss(self, objects):
 
@@ -350,7 +360,7 @@ class CatModel(nn.Module):
 #        exponential = self.emb_exp(th.cat([antecedent, consequent], dim = 1))
         down = (exponential + antecedent)/2
 #        down = self.emb_down(th.cat([antecedent, consequent, exponential], dim =1))
-        full =True
+        full = False
         
         if full:
 
@@ -414,8 +424,10 @@ class CatModel(nn.Module):
 
             sim_loss = loss5 + loss6+ loss7 + path_loss3 + loss1 +loss2 +loss3 + loss4 + path_loss1 + path_loss2
         else:
-            sim_loss  = rmseNR(consequent, antecedent)
-            sim_loss = th.mean(sim_loss, dim = 1)
+
+            estimCons = self.fc(antecedent)
+            sim_loss = rmseNR(estimCons, consequent)
+            sim_loss = th.mean(sim_loss, dim=1)
 
         logit = 1 - 2*(th.sigmoid(sim_loss) - 0.5)
 

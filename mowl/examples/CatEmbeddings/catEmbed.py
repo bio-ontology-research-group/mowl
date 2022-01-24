@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-
 import click as ck
 import numpy as np
 import pandas as pd
@@ -25,11 +24,14 @@ def main(config):
     logging.info(f"Number of cores detected: {os.cpu_count()}")
 
 
-#    ontology = "data/goslim_yeast.owl"
-#    val = "data/trans_yeast.owl"
-    
-    ontology = "data/go.owl"
-    val = "data/trans.owl"
+    go_slim = False
+
+    if go_slim:
+        ontology = "data/goslim_yeast.owl"
+        val = "data/trans_yeast.owl"
+    else:
+        ontology = "data/go.owl"
+        val = "data/trans.owl"
    
     ds = PathDataset(ontology, val, None)
 
