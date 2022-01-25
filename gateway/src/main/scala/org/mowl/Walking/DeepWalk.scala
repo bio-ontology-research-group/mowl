@@ -6,15 +6,12 @@ import java.util.{HashMap, ArrayList}
 import scala.collection.mutable.{MutableList, ListBuffer}
 import util.control.Breaks._
 import java.util.concurrent.{ExecutorService, Executors}
-import scala.concurrent.duration.DurationLong
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.Duration
 import scala.concurrent.{ Await, Future }
-import scala.concurrent.Future
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService}
-import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
-import scala.io.Source
+
 
 class DeepWalk (
   var edges: HashMap[String, ArrayList[String]],
