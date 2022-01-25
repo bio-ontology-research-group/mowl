@@ -8,7 +8,7 @@ from multiprocessing import Pool, get_context
 import logging
 from copy import deepcopy
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 
 
 class DeepWalk(WalkingModel):
