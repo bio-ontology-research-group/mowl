@@ -24,16 +24,16 @@ trait AbstractParser{
     val goClasses = ontology.getClassesInSignature(imports).asScala.toList
     printf("INFO: Number of ontology classes: %d\n", goClasses.length)
 
-    val edges = goClasses.foldLeft(List[Edge]()){(acc, x) => acc ::: processOntClass(x)}
+    val edges = goClasses.foldLeft(List[Triple]()){(acc, x) => acc ::: processOntClass(x)}
 
     edges.asJava
   }
 
   //Abstract methods
-  def parseAxiom(ontClass: OWLClass, axiom: OWLClassAxiom): List[Edge]
+  def parseAxiom(ontClass: OWLClass, axiom: OWLClassAxiom): List[Triple]
   //////////////////////
 
-  def processOntClass(ontClass: OWLClass): List[Edge] = {
+  def processOntClass(ontClass: OWLClass): List[Triple] = {
     val axioms = ontology.getAxioms(ontClass).asScala.toList
     val edges = axioms.flatMap(parseAxiom(ontClass, _: OWLClassAxiom))
     edges
