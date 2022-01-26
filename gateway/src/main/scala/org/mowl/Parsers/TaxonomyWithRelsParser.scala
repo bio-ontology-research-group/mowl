@@ -16,7 +16,7 @@ import org.mowl.Types._
 
 class TaxonomyWithRelsParser(var ontology: OWLOntology, var bidirectional_taxonomy: Boolean=false) extends AbstractParser{
 
-  def parseAxiom(goClass: OWLClass, axiom: OWLClassAxiom): List[Edge] = {
+  def parseAxiom(goClass: OWLClass, axiom: OWLClassAxiom): List[Triple] = {
     val axiomType = axiom.getAxiomType().getName()
     axiomType match {
 
@@ -30,7 +30,7 @@ class TaxonomyWithRelsParser(var ontology: OWLOntology, var bidirectional_taxono
   }
 
 
-  def parseSubClassAxiom(goClass: OWLClass, superClass: OWLClassExpression): List[Edge] = {
+  def parseSubClassAxiom(goClass: OWLClass, superClass: OWLClassExpression): List[Triple] = {
 
     val superClass_type = superClass.getClassExpressionType().getName()
 
@@ -49,9 +49,9 @@ class TaxonomyWithRelsParser(var ontology: OWLOntology, var bidirectional_taxono
 	    val dst = dstClass.asInstanceOf[OWLClass]
 
             if (bidirectional_taxonomy) {
-	      new Edge(goClass, rel, dst) :: new Edge(dst, "INVERSE_OF_"+rel, goClass) :: Nil
+	      new Triple(goClass, rel, dst) :: new Triple(dst, "INVERSE_OF_"+rel, goClass) :: Nil
             }else{
-	      new Edge(goClass, rel, dst) :: Nil
+	      new Triple(goClass, rel, dst) :: Nil
 	    }
           }
 	  case _ => Nil
@@ -62,9 +62,9 @@ class TaxonomyWithRelsParser(var ontology: OWLOntology, var bidirectional_taxono
       case "Class" => {
 	val dst = superClass.asInstanceOf[OWLClass]
         if (bidirectional_taxonomy){
-	  new Edge(goClass, "subClassOf", dst) :: new Edge(dst, "superClassOf", goClass) :: Nil
+	  new Triple(goClass, "subClassOf", dst) :: new Triple(dst, "superClassOf", goClass) :: Nil
         }else{
-          new Edge(goClass, "subClassOf", dst) :: Nil
+          new Triple(goClass, "subClassOf", dst) :: Nil
         }
 
       }

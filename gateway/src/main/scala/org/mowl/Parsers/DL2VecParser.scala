@@ -21,7 +21,7 @@ class DL2VecParser(var ontology: OWLOntology, var bidirectional_taxonomy: Boolea
 
   var relCounter = 0
 
-  def parseAxiom(goClass: OWLClass, axiom: OWLClassAxiom): List[Edge] = {
+  def parseAxiom(goClass: OWLClass, axiom: OWLClassAxiom): List[Triple] = {
 
     val axiomType = axiom.getAxiomType().getName()
 
@@ -44,7 +44,7 @@ class DL2VecParser(var ontology: OWLOntology, var bidirectional_taxonomy: Boolea
 
 
 
-   def parseSubClassOrEquivAxiom(goClass: OWLClass, superClass: OWLClassExpression, relName: String): List[Edge] = {
+   def parseSubClassOrEquivAxiom(goClass: OWLClass, superClass: OWLClassExpression, relName: String): List[Triple] = {
      var invRelName = ""
 
      if (relName == "subClassOf"){
@@ -67,15 +67,15 @@ class DL2VecParser(var ontology: OWLOntology, var bidirectional_taxonomy: Boolea
         for (
           rel <- relations;
           dst <- dstClasses
-        ) yield new Edge(goClass, rel, dst)
+        ) yield new Triple(goClass, rel, dst)
       }
 
       case "Class" => {
 	val dst = superClass.asInstanceOf[OWLClass]
         if (bidirectional_taxonomy){
-	  new Edge(goClass, relName, dst) :: new Edge(dst, invRelName, goClass) :: Nil
+	  new Triple(goClass, relName, dst) :: new Triple(dst, invRelName, goClass) :: Nil
         }else{
-          new Edge(goClass, relName, dst) :: Nil
+          new Triple(goClass, relName, dst) :: Nil
        
         }
       }

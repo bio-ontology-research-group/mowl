@@ -4,8 +4,10 @@ import os
 import logging
 
 from org.mowl.Walking import DeepWalk as DW
+from scala.collection.immutable import List as ScalaList
 from java.util import HashMap
 from java.util import ArrayList
+from org.mowl import Edge
 logging.basicConfig(level=logging.INFO)
 
 
@@ -24,29 +26,21 @@ class DeepWalk(WalkingModel):
                  walk_length,
                  alpha,
                  num_workers=1,
-                 seed = 0,
                  outfile=None):
 
         super().__init__(edges, num_walks, walk_length, num_workers, outfile)
-        self.edges = edges
-        self.num_walks = num_walks
-        self.walk_length = walk_length
-        self.alpha = alpha
-        self.num_workers = num_workers
-        self.seed = seed
-        self.outfile = outfile
 
+        self.alpha = alpha
+        
 
     def walk(self):
 
-        graph = HashMap()
+        edgesJ = ArrayList()
 
         for edge in self.edges:
-            newEdge = edge.dst()
-            if not edge.src() in graph:
-                graph[edge.src()] = ArrayList()
-            graph[edge.src()].add(newEdge)
+            newEdge = Edge(edge.src(), edge.dst())
+            edgesJ.add(newEdge)
 
-        walker = DW(graph, self.num_walks, self.walk_length, self.alpha, self.num_workers, self.seed, self.outfile)
+        walker = DW(edgesJ, self.num_walks, self.walk_length, self.alpha, self.num_workers, self.outfile)
 
         walker.walk()
