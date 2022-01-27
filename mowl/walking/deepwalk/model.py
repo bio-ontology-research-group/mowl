@@ -4,7 +4,6 @@ import os
 import logging
 
 from org.mowl.Walking import DeepWalk as DW
-from scala.collection.immutable import List as ScalaList
 from java.util import HashMap
 from java.util import ArrayList
 from org.mowl import Edge
