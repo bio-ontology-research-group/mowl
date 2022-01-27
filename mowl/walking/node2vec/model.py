@@ -13,16 +13,17 @@ class Node2Vec(WalkingModel):
     :param q: In-out hyperparameter. Default is 1.
     :type q: float
     '''
-    def __init__(self, 
-                  edges, 
-		              num_walks, 
-		              walk_length, 
-		              p, 
-		              q,
-                  num_workers=1,
-        	        outfile = None): 
+    def __init__(self,
+                 edges,
+		 num_walks,
+		 walk_length,
+		 p,
+		 q,
+                 outfile,
+                 workers=1
+                 ):
         
-        super().__init__(edges, num_walks, walk_length, num_workers, outfile) 
+        super().__init__(edges, num_walks, walk_length, outfile, workers) 
 
         self.p = p
         self.q = q
@@ -36,7 +37,7 @@ class Node2Vec(WalkingModel):
 
             edgesJ.add(newEdge)
 
-        walker = N2V(edgesJ, self.num_walks, self.walk_length, self.p, self.q, self.num_workers, self.outfile)
+        walker = N2V(edgesJ, self.num_walks, self.walk_length, self.p, self.q, self.workers, self.outfile)
 
         walker.walk()
             

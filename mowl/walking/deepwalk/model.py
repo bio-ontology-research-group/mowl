@@ -25,13 +25,13 @@ class DeepWalk(WalkingModel):
                  num_walks,
                  walk_length,
                  alpha,
-                 num_workers=1,
-                 outfile=None):
+                 outfile,
+                 workers=1,
+):
 
-        super().__init__(edges, num_walks, walk_length, workers)
+        super().__init__(edges, num_walks, walk_length, outfile, workers)
 
         self.alpha = alpha
-        
 
     def walk(self):
 
@@ -40,6 +40,6 @@ class DeepWalk(WalkingModel):
             newEdge = Edge(edge.src(), edge.dst())
             edgesJ.add(newEdge)
 
-        walker = DW(edgesJ, self.num_walks, self.walk_length, self.alpha, self.num_workers, self.outfile)
+        walker = DW(edgesJ, self.num_walks, self.walk_length, self.alpha, self.workers, self.outfile)
 
         walker.walk()
