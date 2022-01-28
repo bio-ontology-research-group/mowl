@@ -54,6 +54,9 @@ dependencies {
     implementation 'org.codehaus.groovy:groovy-all:2.4.15'
     implementation 'org.scala-lang:scala-library:2.11.12'
 
+    implementation 'com.github.sharispe:slib-sml:0.9.1'
+
+
     testImplementation 'org.scalatest:scalatest_2.11:3.0.0'
     testImplementation 'org.codehaus.groovy:groovy-all:2.4.15'
     testImplementation 'junit:junit:4.12'

@@ -20,7 +20,7 @@ print("path in gnn:", sys.path)
 
 
 from mowl.datasets.base  import PathDataset
-from mowl.gnn_sim.model import GNNSim
+from mowl.develop.gnn_sim.model_ppi import GNNSimPPI
 
 @ck.command()
 @ck.option(
@@ -33,8 +33,9 @@ def main(config):
     params = parseYAML(config)
 
     graph_method = params["general"]["graph-gen-method"]
-    ontology =  params["general"]["ontology"]
-    
+    ontology = params["general"]["ontology"]
+    use_case = params["general"]["use-case"]
+   
     n_hidden = params["rgcn-params"]["n-hidden"]
     dropout = params["rgcn-params"]["dropout"]
     lr = params["rgcn-params"]["lr"]
@@ -51,21 +52,42 @@ def main(config):
 
     ds = PathDataset(ontology, None, None)
         
-    model = GNNSim(ds, # dataset
-                   n_hidden,
-                   dropout,
-                   lr,
-                   num_bases,
-                   batch_size,
-                   epochs,
-                   graph_generation_method = graph_method,
-                   normalize = normalize,
-                   regularization = regularization,
-                   self_loop = self_loop,
-                   min_edges = min_edges,
-                   seed = seed,
-                   file_params = file_params
+    if use_case == "ppi":
+        model = GNNSimPPI(ds, # dataset
+                       n_hidden,
+                       dropout,
+                       lr,
+                       num_bases,
+                       batch_size,
+                       epochs,
+                       use_case,
+                       graph_generation_method = graph_method,
+                       normalize = normalize,
+                       regularization = regularization,
+                       self_loop = self_loop,
+                       min_edges = min_edges,
+                       seed = seed,
+                       file_params = file_params
                    )
+
+    elif use_case == "gd":
+        model = GNNSimGD(ds, # dataset
+                       n_hidden,
+                       dropout,
+                       lr,
+                       num_bases,
+                       batch_size,
+                       epochs,
+                       use_case,
+                       graph_generation_method = graph_method,
+                       normalize = normalize,
+                       regularization = regularization,
+                       self_loop = self_loop,
+                       min_edges = min_edges,
+                       seed = seed,
+                       file_params = file_params
+                   )
+
 
 
     model.train()

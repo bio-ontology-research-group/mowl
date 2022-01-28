@@ -17,8 +17,8 @@ sys.path.insert(0, '')
 sys.path.append('../../../')
 
 from mowl.datasets.base  import PathDataset
-from mowl.gnn_sim_siameseNN.model_ppi import GNNSimPPI
-from mowl.gnn_sim_siameseNN.model_gd import GNNSimGD
+from mowl.develop.gnn_sim_siameseNN.model_ppi import GNNSimPPI
+#from mowl.gnn_sim_siameseNN.model_gd import GNNSimGD
 
 @ck.command()
 @ck.option(

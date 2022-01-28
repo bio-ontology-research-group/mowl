@@ -6,14 +6,15 @@ import org.semanticweb.owlapi.apibinding.OWLManager
 import org.semanticweb.owlapi.model.parameters.Imports
 
 
-// Java imports
 import collection.JavaConverters._
+import collection.mutable._
 
 import org.mowl.Types._
 
+
 trait AbstractParser{
 
-  def ontology:OWLOntology
+  def ontology: OWLOntology
 
   val ontManager = OWLManager.createOWLOntologyManager()
   val dataFactory = ontManager.getOWLDataFactory()
@@ -33,11 +34,16 @@ trait AbstractParser{
   def parseAxiom(ontClass: OWLClass, axiom: OWLClassAxiom): List[Edge]
   //////////////////////
 
+  //Non-abstract methods
   def processOntClass(ontClass: OWLClass): List[Edge] = {
     val axioms = ontology.getAxioms(ontClass).asScala.toList
     val edges = axioms.flatMap(parseAxiom(ontClass, _: OWLClassAxiom))
     edges
   }
+
+
+
+
 
 
 }

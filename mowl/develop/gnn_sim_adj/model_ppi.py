@@ -1,5 +1,5 @@
 from mowl.model import Model
-from mowl.graph.util import gen_factory
+from mowl.graph.util import parser_factory
 import pandas as pd
 import click as ck
 import os
@@ -25,8 +25,7 @@ from mowl.graph.edge import Edge
 import random
 from ray import tune
 
-
-class GNNSim(Model):
+class GNNSimPPI(Model):
     def __init__(self,
                  dataset,
                  n_hidden,
@@ -35,6 +34,7 @@ class GNNSim(Model):
                  num_bases,
                  batch_size,
                  epochs,
+                 use_case,
                  graph_generation_method = "taxonomy", #Default: generate graph taxonomy
                  normalize = False,
                  regularization = 0,
@@ -50,6 +50,7 @@ class GNNSim(Model):
         self.num_bases = None if num_bases < 0 else num_bases
         self.batch_size =  batch_size
         self.epochs = epochs
+        self.use_case = use_case
         self.graph_generation_method = graph_generation_method
         self.normalize = normalize
         self.regularization = regularization
@@ -67,44 +68,46 @@ class GNNSim(Model):
         self.annots = None
         self.prot_idx = None
         self.num_rels = None
-        
+        self.adj_mat = None
 
     def train(self, checkpoint_dir = None, tuning= False):
-
+        
         logging.info("Loading graph data...")
-        g, annots, prot_idx, num_rels = self.load_graph_data()
+        g, annots, prot_idx, num_rels, adj_mat = self.load_graph_data()
+        
         logging.info(f"PPI use case: Num nodes: {g.number_of_nodes()}")
         logging.info(f"PPI use case: Num edges: {g.number_of_edges()}")
         train_df, val_df, test_df = self.load_ppi_data()
 
         annots = th.FloatTensor(annots)
-            
+
         self.test_df = test_df
         self.g = g
         self.annots = annots
         self.prot_idx = prot_idx
         self.num_rels = num_rels
+        self.adj_mat = th.tensor(adj_mat, device = "cuda")
 
         train_labels = th.FloatTensor(train_df['labels'].values)
         val_labels = th.FloatTensor(val_df['labels'].values)
     
-        train_data = GraphDataset(g, train_df, train_labels, annots, prot_idx)
-        val_data = GraphDataset(g, val_df, val_labels, annots, prot_idx)
+        train_data = GraphDatasetPPI(g, train_df, train_labels, annots, prot_idx)
+        val_data = GraphDatasetPPI(g, val_df, val_labels, annots, prot_idx)
 
         train_dataloader = GraphDataLoader(train_data, batch_size = self.batch_size, drop_last = True)
         val_dataloader = GraphDataLoader(val_data, batch_size = self.batch_size, drop_last = True)
-    
+
         if self.num_bases is None:
             self.num_bases = num_rels
         
         num_nodes = g.number_of_nodes()
 
         device = "cuda"
-        model = PPIModel(num_rels, self.num_bases, num_nodes, self.n_hidden, self.dropout).to(device)
+        model = PPIModel(num_rels, self.num_bases, num_nodes, self.n_hidden, self.dropout, self.adj_mat).to(device)
         print(model)
 
         optimizer = optim.Adam(model.parameters(), lr=self.learning_rate, weight_decay=self.regularization)
-
+        
         if checkpoint_dir:
             model_state, optimizer_state = th.load(
                 os.path.join(checkpoint_dir, "checkpoint"))
@@ -123,13 +126,18 @@ class GNNSim(Model):
             model.train()
 
             with ck.progressbar(train_dataloader) as bar:
-                for i, (batch_g, batch_features, batch_labels) in enumerate(bar):
+            
+                for i, (batch_g, batch_labels, feats1, feats2) in enumerate(bar):
 
-                    logits = model(batch_g.to(device), batch_features.to(device)).squeeze()
+                    feats1 = annots[feats1]#.view(-1,1)
+                    #print("Feature size ", feats1.shape)
                     
-                    labels = batch_labels.to(device).squeeze()
-        
-                    loss = loss_func(logits, labels)
+                    feats2 = annots[feats2]#.view(-1,1)
+                    
+                    logits = model(batch_g.to(device), feats1.to(device), feats2.to(device)).squeeze()
+
+                    labels = batch_labels.squeeze().to(device)
+                    loss = loss_func(logits, labels.float())
                     optimizer.zero_grad()
                     loss.backward()
                     optimizer.step()
@@ -144,11 +152,14 @@ class GNNSim(Model):
             with th.no_grad():
                 optimizer.zero_grad()
                 with ck.progressbar(val_dataloader) as bar:
-                    for i, (batch_g, batch_feat, batch_labels) in enumerate(bar):
+                    for i, (batch_g, batch_labels, feats1, feats2) in enumerate(bar):
                         
-                        logits = model(batch_g.to(device), batch_feat.to(device)).squeeze()
+                        feats1 = annots[feats1]#.view(-1,1)
+                        feats2 = annots[feats2]#.view(-1,1)
+                        
+                        logits = model(batch_g.to(device), feats1.to(device), feats2.to(device)).squeeze()
                         lbls = batch_labels.squeeze().to(device)
-                        loss = loss_func(logits, lbls)
+                        loss = loss_func(logits, lbls.float())
                         val_loss += loss.detach().item()
                         labels = np.append(labels, lbls.cpu())
                         preds = np.append(preds, logits.cpu())
@@ -156,19 +167,19 @@ class GNNSim(Model):
 
             roc_auc = self.compute_roc(labels, preds)
             if not tuning:
-                if roc_auc > best_roc_auc:
+                if best_roc_auc < roc_auc:
                     best_roc_auc = roc_auc
                     th.save(model.state_dict(), self.file_params["output_model"])
-                if best_loss > val_loss:
+                if val_loss < best_loss:
                     best_loss = val_loss
                     early_stopping = early_stopping_limit
                 else:
                     early_stopping -= 1
                 print(f'Epoch {epoch}: Loss - {epoch_loss}, \tVal loss - {val_loss}, \tAUC - {roc_auc}')
+                
                 if early_stopping == 0:
                     print("Finished training (early stopping)")
                     break
-
             else:
                 with tune.checkpoint_dir(epoch) as checkpoint_dir:
                     path = os.path.join(checkpoint_dir, "checkpoint")
@@ -176,7 +187,7 @@ class GNNSim(Model):
 
                 tune.report(loss=(val_loss), auc=roc_auc)
         print("Finished Training")
-
+        
 
     def evaluate(self, tuning=False, best_checkpoint_dir=None):
 
@@ -193,19 +204,18 @@ class GNNSim(Model):
         
         test_labels = th.FloatTensor(test_df['labels'].values)
             
-        test_data = GraphDataset(g, test_df, test_labels, annots, prot_idx)
+        test_data = GraphDatasetPPI(g, test_df, test_labels, annots, prot_idx)
 
         test_dataloader = GraphDataLoader(test_data, batch_size = self.batch_size, drop_last = True)
 
-
         num_nodes = g.number_of_nodes()
-    
+
         if self.num_bases is None:
             self.num_bases = num_rels
 
         loss_func = nn.BCELoss()
 
-        model = PPIModel(num_rels, self.num_bases, num_nodes, self.n_hidden, self.dropout)
+        model = PPIModel(num_rels, self.num_bases, num_nodes, self.n_hidden, self.dropout, self.adj_mat.cpu())
 
         if tuning:
             model_state, optimizer_state = th.load(os.path.join(best_checkpoint_dir, "checkpoint"))
@@ -222,10 +232,13 @@ class GNNSim(Model):
         all_labels = []
         with th.no_grad():
             with ck.progressbar(test_dataloader) as bar:
-                for iter, (batch_g, batch_features, batch_labels) in enumerate(bar):
-                    logits = model(batch_g.to(device), batch_features.to(device)).squeeze()
+                for iter, (batch_g, batch_labels, feats1, feats2) in enumerate(bar):
+                    feats1 = annots[feats1]#.view(-1,1)
+                    feats2 = annots[feats2]#.view(-1,1)
+                    
+                    logits = model(batch_g.to(device), feats1.to(device), feats2.to(device)).squeeze()
                     labels = batch_labels.squeeze().to(device)
-                    loss = loss_func(logits, labels)
+                    loss = loss_func(logits, labels.float())
                     test_loss += loss.detach().item()
                     preds = np.append(preds, logits.cpu())
                     all_labels = np.append(all_labels, labels.cpu())
@@ -252,7 +265,7 @@ class GNNSim(Model):
         index = np.arange(len(train_df))
         np.random.seed(seed=0)
         np.random.shuffle(index)
-        train_df = train_df.iloc[index]#[:50000]]
+        train_df = train_df.iloc[index]#[:20000]]
 
         index = np.arange(len(valid_df))
         np.random.seed(seed=0)
@@ -269,14 +282,19 @@ class GNNSim(Model):
 
     def load_graph_data(self):
 
-        parser = parser_factory(self.graph_generation_method, self.dataset)
-        edges_path = f"data/edges_{self.graph_generation_method}.pkl"
-
+        logging.debug("Creating graph generation method...")
+        parser = parser_factory(self.graph_generation_method, self.dataset.ontology, bidirectional_taxonomy = True)
+        edges_path = f"data/edges_{self.use_case}_{self.graph_generation_method}.pkl"
+        logging.debug("Created")
         try:
+            logging.debug("try")
             infile = open(edges_path, 'rb')
             edges = pkl.load(infile)
         except:
+            logging.debug("except")
+            logging.debug("Parsing ontology...")
             edges = parser.parse()
+            logging.info("Finished parsing ontology")
             edges = [(str(e.src()), str(e.rel()), str(e.dst())) for e in edges]
             outfile = open(edges_path, 'wb')
             pkl.dump(edges, outfile)
@@ -288,9 +306,9 @@ class GNNSim(Model):
             edges = [(s, r, d) for s,r,d in edges if s in terms and  d in terms]
         
 
-
         srcs, rels, dsts = tuple(map(list, zip(*edges)))
         
+
         g = dgl.DGLGraph()
         nodes = list(set(srcs).union(set(dsts)))
         g.add_nodes(len(nodes))
@@ -349,7 +367,7 @@ class GNNSim(Model):
         print("Edges in graph:\n", edges_per_rel)
         g.add_edges(srcs, dsts)
 
-        
+
         g.edata.update({'rel_type': rels})
         if norm != None:
             g.edata.update({'norm': norm})
@@ -357,6 +375,9 @@ class GNNSim(Model):
         
         num_nodes = g.number_of_nodes()
           
+        adj_mat = g.adj(scipy_fmt="csr").toarray()
+        print(adj_mat.shape, num_nodes)
+        assert adj_mat.shape == (num_nodes, num_nodes)
 
         
         data_file = self.file_params["data_file"]
@@ -364,16 +385,17 @@ class GNNSim(Model):
         prot_idx = {}
         with open(data_file, 'r') as f:
             rows = [line.strip('\n').split('\t') for line in f.readlines()]
-            
-            annotations = np.zeros((num_nodes, len(rows)), dtype=np.float32)
-            
+
+            annotations = np.zeros((len(rows), num_nodes), dtype=np.float32)
+
             for i, row  in enumerate(rows):
                 prot_id = row[0]
                 prot_idx[prot_id] = i
                 for go_id in row[1:]:
                     if go_id in node_idx:
-                        annotations[node_idx[go_id], i] = 1
-        return g, annotations, prot_idx, num_rels
+                        annotations[i, node_idx[go_id]] = 1
+        return g, annotations, prot_idx, num_rels, adj_mat
+
 
 
     
@@ -385,104 +407,87 @@ class RGCN(BaseRGCN):
                 self.num_bases, activation=act, self_loop=True,
                 dropout=self.dropout)
 
-         
-# class PPIModel(nn.Module):
 
-#     def __init__(self, num_rels, num_bases, num_nodes, n_hid, dropout):
-#         super().__init__()
+class FLinear(nn.Module):
 
-#         self.h_dim = 2
-#         self.num_rels = num_rels
-#         self.num_bases = None if num_bases < 0 else num_bases
-#         self.num_nodes = num_nodes
-#         self.n_hid = n_hid
-#         print(f"Num rels: {self.num_rels}")
-#         print(f"Num bases: {self.num_bases}")
-
-#         self.rgcn_layers = nn.ModuleList()
-#         for i in range(n_hid):
-#             act = F.relu if i < n_hid - 1 else None
-#             newLayer = RelGraphConv(self.h_dim, self.h_dim, self.num_rels, "basis", self.num_bases, activation = act, self_loop = False, dropout = dropout)
-#             self.rgcn_layers.append(newLayer)
-
+    def __init__(self, in_dim, out_dim):
+        super().__init__()
         
-#         dim1 = self.num_nodes
+        self.fc = nn.Linear(in_dim, out_dim)
 
-#         self.mlp = nn.Sequential(
-#             nn.Linear(2*dim1, 1)
-#         )
-
-#     def forward(self, g, features):
-
-#         features = features.reshape(-1, self.h_dim)
-#         edge_type = g.edata['rel_type'].long()
-#         norm = None if not 'norm' in g.edata else g.edata['norm']
-
-#         skip = features 
-#         x = features
-#         for i, l in enumerate(self.rgcn_layers):
-#             x = l(g, x, edge_type, norm)
-#             if i % 2 == 1:
-#                 x += skip
-#                 skip = x
-            
-#         x = th.flatten(x).view(-1, self.num_nodes*self.h_dim)
-#         x = self.mlp(x)
-#         return th.sigmoid(x)
-
-
-
+    def forward(self, x, adj_mat):
+        x = th.matmul(x, th.mul(self.fc.weight, adj_mat)) + self.fc.bias
+        return x
+         
 class PPIModel(nn.Module):
 
-    def __init__(self, num_rels, num_bases, num_nodes, n_hid, dropout):
+    def __init__(self, num_rels, num_bases, num_nodes, n_hid, dropout, adj_mat):
         super().__init__()
 
-        self.h_dim = 2
+        self.h_dim = 1
         self.num_rels = num_rels
         self.num_bases = None if num_bases < 0 else num_bases
         self.num_nodes = num_nodes
-        self.n_hid = n_hid
+        self.adj_mat = adj_mat.repeat((2,2))
+
         print(f"Num rels: {self.num_rels}")
         print(f"Num bases: {self.num_bases}")
 
-        self.rgcn_layers = nn.ModuleList()
-        for i in range(n_hid):
-            act = F.relu if i < n_hid - 1 else None
-            newLayer = RelGraphConv(self.h_dim, self.h_dim, self.num_rels, "basis", self.num_bases, activation = act, self_loop = False, dropout = dropout)
-            self.rgcn_layers.append(newLayer)
 
-        
+        dim = 2*num_nodes
+        self.fc1 = FLinear(dim, dim)
+        self.fc2 = FLinear(dim, dim)
+        self.fc3 = FLinear(dim, dim)
+        #self.fc2 = nn.Linear(2*num_nodes, 2*num_nodes)
+        self.out = nn.Linear(dim, 1)
+        self.dropout = nn.Dropout()
         dim1 = self.num_nodes
+        dim2 = floor(self.num_nodes/2)
 
-        self.mlp = nn.Sequential(
-            nn.Linear(2*dim1, 1)
+        self.net = nn.Sequential(
+            nn.Linear(dim1, 1024)
+#            nn.Dropout(),
+#            nn.Linear(dim2, 1024),
+#            nn.Dropout()
         )
 
-    def forward(self, g, features):
+    def forward_each(self, g, features, edge_type, norm):
+        initial = features
+        
+        #        print("features: ", features.shape, self.fc.weight.shape, self.adj_mat.shape)
+       
+        #        x = th.matmul(features, th.mul(self.fc.weight, self.adj_mat)) + self.fc.bias
+        #        x = self.fc(features)
+        x = self.fc1(features, self.adj_mat)
+        x = F.relu(x)
+        x = self.fc2(features, self.adj_mat)
+        return self.dropout(x)
 
-        features = features.reshape(-1, self.h_dim)
+    def forward(self, g, feat1, feat2):
+
         edge_type = g.edata['rel_type'].long()
-        norm = None if not 'norm' in g.edata else g.edata['norm']
 
-        skip = features 
-        x = features
-        for i, l in enumerate(self.rgcn_layers):
-            x = l(g, x, edge_type, norm)
-            if i % 2 == 1:
-                x += skip
-                skip = x
-            
-        x = th.flatten(x).view(-1, self.num_nodes*self.h_dim)
-        x = self.mlp(x)
+        norm = None if not 'norm' in g.edata else g.edata['norm']
+        
+        # x1 = self.forward_each(g, feat1, edge_type, norm)
+        # x2 = self.forward_each(g, feat2, edge_type, norm)
+        feats = th.cat([feat1, feat2], dim=1)
+ 
+        x = self.fc1(feats, self.adj_mat)
+        x = F.relu(x)
+        x = self.out(x)
+
+#        x = th.sum(x1 * x2, dim=1, keepdims=True)
+#        x = th.cat([x1, x2]).view(-1,2048)
         return th.sigmoid(x)
 
 
     
 
-class GraphDataset(IterableDataset):
+class GraphDatasetPPI(IterableDataset):
 
-    def __init__(self, graph, df, labels, annots, prot_idx):
-        self.graph = graph
+    def __init__(self, g, df, labels, annots, prot_idx):
+        self.graph = g
         self.annots = annots
         self.labels = labels
         self.df = df
@@ -496,9 +501,10 @@ class GraphDataset(IterableDataset):
                 continue
             pi1, pi2 = self.prot_idx[p1], self.prot_idx[p2]
 
-            feat = self.annots[:, [pi1, pi2]]
+            feat1 = self.annots[:, pi1]
+            feat2 = self.annots[:, pi2]
 
-            yield (self.graph, feat, label)
+            yield (self.graph, label, pi1, pi2)
 
     def __iter__(self):
         return self.get_data()
@@ -507,116 +513,9 @@ class GraphDataset(IterableDataset):
         return len(self.df)
 
 
-
 def node_norm_to_edge_norm(g, node_norm):
     g = g.local_var()
     # convert to edge norm
     g.ndata['norm'] = node_norm
     g.apply_edges(lambda edges : {'norm' : edges.dst['norm']})
     return g.edata['norm']
-
-
-
-
-class GATLayer(nn.Module):
-    def __init__(self, in_dim, out_dim):
-        super(GATLayer, self).__init__()
-        self.out_dim = out_dim
-        # equation (1)
-        self.fc = nn.Linear(in_dim, out_dim, bias=False)
-        # equation (2)
-        self.attn_fc = nn.Linear(2 * out_dim, 1, bias=False)
-        self.reset_parameters()
-
-    def reset_parameters(self):
-        """Reinitialize learnable parameters."""
-        gain = nn.init.calculate_gain('relu')
-        nn.init.xavier_normal_(self.fc.weight, gain=gain)
-        nn.init.xavier_normal_(self.attn_fc.weight, gain=gain)
-
-    def edge_attention(self, edges):
-        # edge UDF for equation (2)
-        z2 = th.cat([edges.src['z'], edges.dst['z']], dim=1)
-        a = self.attn_fc(z2)
-        return {'e': F.leaky_relu(a)}
-
-    def message_func(self, edges):
-        # message UDF for equation (3) & (4)
-        return {'z': edges.src['z'], 'e': edges.data['e']}
-
-    def reduce_func(self, nodes):
-        # reduce UDF for equation (3) & (4)
-        # equation (3)
-        alpha = F.softmax(nodes.mailbox['e'], dim=1)
-        # equation (4)
-        h = th.sum(alpha * nodes.mailbox['z'], dim=1)
-        return {'h': h}
-
-    def forward(self, g, h):
-        # equation (1)
-        z = self.fc(h)
-        
-        g.ndata['z'] = z.view(-1, self.out_dim)
-        # equation (2)
-        g.apply_edges(self.edge_attention)
-        # equation (3) & (4)
-        g.update_all(self.message_func, self.reduce_func)
-        return g.ndata.pop('h')
-
-
-
-class MultiHeadGATLayer(nn.Module):
-    def __init__(self, in_dim, out_dim, num_heads, merge='cat'):
-        super(MultiHeadGATLayer, self).__init__()
-        self.heads = nn.ModuleList()
-        for i in range(num_heads):
-            self.heads.append(GATLayer(in_dim, out_dim))
-        self.merge = merge
-
-    def forward(self, g, h):
-        head_outs = [attn_head(g, h) for attn_head in self.heads]
-        if self.merge == 'cat':
-            # concat on the output feature dimension (dim=1)
-            return th.cat(head_outs, dim=1)
-        else:
-            # merge using average
-            return th.mean(th.stack(head_outs))
-
-
-
-class PPIModel2(nn.Module):
-    def __init__(self, num_rels, num_bases, num_nodes, n_hid, dropout):
-        super(PPIModel, self).__init__()
-
-        self.h_dim = 2
-        self.num_nodes = num_nodes
-
-
-        in_dim = 2
-        hidden_dim = 16
-        out_dim = 2
-        num_heads = 2
-        self.layer1 = MultiHeadGATLayer(in_dim, hidden_dim, num_heads)
-        # Be aware that the input dimension is hidden_dim*num_heads since
-        # multiple head outputs are concatenated together. Also, only
-        # one attention head in the output layer.
-        self.layer2 = MultiHeadGATLayer(hidden_dim * num_heads, out_dim, 1)
-
-        dim1 = num_nodes
-
-        self.mlp = nn.Linear(2*dim1, 1)
-
-
-    def forward(self, g, h):
-        h = self.layer1(g, h)
-        h = F.elu(h)
-        h = self.layer2(g, h)
-        
-
-        h = th.flatten(h).view(-1, self.num_nodes*self.h_dim)
-        h = self.mlp(h)
-        
-        
-
-        return th.sigmoid(h)
-

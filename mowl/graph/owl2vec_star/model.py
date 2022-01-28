@@ -14,8 +14,9 @@ import mowl.graph.owl2vec_star.Onto_Projection as o2v
 
 class OWL2VecParser(GraphGenModel):
     
-    def __init__(self, dataset):
+    def __init__(self, dataset, bidirectional_taxonomy):
         super().__init__(dataset)
+        self.bidirectional_taxonomy = bidirectional_taxonomy
         
     def parse(self):
 
@@ -31,7 +32,7 @@ class OWL2VecParser(GraphGenModel):
         fileout = File(path)
         man.saveOntology(self.dataset, OWLXMLDocumentFormat(), FileOutputStream(fileout))
     
-        parser = o2v.OntologyProjection(path, bidirectional_taxonomy = True, include_literals=False)
+        parser = o2v.OntologyProjection(path, bidirectional_taxonomy = self.bidirectional_taxonomy, include_literals=False)
 
         os.remove(path)
 
