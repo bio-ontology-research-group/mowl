@@ -6,8 +6,7 @@ Welcome to mOWL's documentation!
 Getting started
 ----------------
 
-Check out the :doc:`usage` section for further information, including
-how to :doc:`install/index` the project.
+Check out the how to :doc:`install/index` section of the project.
 
 
    
@@ -19,7 +18,7 @@ Authors
 License
 ---------------
 
-The package is released under the `DEFINE LICENSE`__.
+The package is released under the `DEFINE LICENSE`.
 
 
 .. note::

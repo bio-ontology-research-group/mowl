@@ -9,6 +9,7 @@ from de.tudresden.inf.lat.jcel.owlapi.translator import ReverseAxiomTranslator
 from org.semanticweb.owlapi.model import OWLAxiom
 from org.semanticweb.owlapi.manchestersyntax.renderer import ManchesterOWLSyntaxOWLObjectRendererImpl
 from java.util import HashSet
+from org.semanticweb.owlapi.util import SimpleShortFormProvider
 
 import pandas as pd
 import numpy as np
@@ -39,6 +40,7 @@ class ELEmbeddings(Model):
         self.create_normal_forms(self.dataset.validation, self.validation_filepath)
         self.create_normal_forms(self.dataset.testing, self.testing_filepath)
         self._loaded = False
+        self.short_form_provider = SimpleShortFormProvider()
         
     def create_normal_forms(self, ontology, normal_forms_filepath):
         if os.path.exists(normal_forms_filepath):
@@ -78,7 +80,7 @@ class ELEmbeddings(Model):
         print(filepath)
         with open(filepath) as f:
             for line in f:
-                line = line.strip().replace('_', ':')
+                line = line.strip()
                 if line.find('SubClassOf') == -1:
                     continue
                 left, right = line.split(' SubClassOf ')
@@ -143,6 +145,7 @@ class ELEmbeddings(Model):
         valid_nfs, classes, relations = self.load_normal_forms(self.validation_filepath, classes, relations)
         test_nfs, classes, relations = self.load_normal_forms(self.testing_filepath, classes, relations)
         self.classes = classes
+        self.class_dict = {v: k for k, v in classes.items()}
         self.relations = relations
         self.train_nfs = self.nfs_to_tensors(train_nfs, self.device)
         self.valid_nfs = self.nfs_to_tensors(valid_nfs, self.device)
@@ -179,6 +182,68 @@ class ELEmbeddings(Model):
         test_loss = model(self.test_nfs).detach().item()
         print('Test Loss:', test_loss)
         
+    def get_embeddings(self):
+        self.load_data()
+        self.load_data()
+        model = ELModel(len(self.classes), len(self.relations), self.device).to(self.device)
+        print('Load the best model', self.model_filepath)
+        model.load_state_dict(th.load(self.model_filepath))
+        model.eval()
+        return self.classes, model.go_embed.weight.detach().numpy()
+
+    def evaluate_ppi(self):
+        self.load_data()
+        model = ELModel(len(self.classes), len(self.relations), self.device).to(self.device)
+        print('Load the best model', self.model_filepath)
+        model.load_state_dict(th.load(self.model_filepath))
+        model.eval()
+        
+        proteins = self.dataset.get_evaluation_classes()
+        proteins = [str(self.short_form_provider.getShortForm(cls)) for cls in proteins]
+        proteins = [self.classes[p_id] for p_id in proteins]
+        prot_dict = {v:k for k, v in enumerate(proteins)}
+        train_ppis = {}
+        _, _, _, nf4 = self.train_nfs
+        for c, r, d in nf4:
+            c, r, d = c.item(), r.item(), d.item()
+            if r != 0:
+                continue
+            if c not in train_ppis:
+                train_ppis[c] = []
+            train_ppis[c].append(d)
+        _, _, _, nf4 = self.valid_nfs
+        for c, r, d in nf4:
+            c, r, d = c.item(), r.item(), d.item()
+            if r != 0:
+                continue
+            if c not in train_ppis:
+                train_ppis[c] = []
+            train_ppis[c].append(d)
+        
+        proteins = th.LongTensor(proteins)
+        nf1, nf2, nf3, nf4 = self.test_nfs
+        mean_rank = 0
+        for it in nf4:
+            c, r, d = it
+            c, r, d = c.item(), r.item(), d.item()
+            if c not in prot_dict or d not in prot_dict:
+                continue
+            n = len(proteins)
+            data = th.zeros(n, 3, dtype=th.long)
+            data[:, 0] = c
+            data[:, 1] = r
+            data[:, 2] = proteins
+            scores = model.nf4_loss(data).detach().cpu().numpy()
+            scores = scores.flatten()
+            for td in train_ppis[c]:
+                if td in prot_dict:
+                    scores[prot_dict[td]] = 1000.0
+            index = rankdata(scores, method='average')
+            rank = index[prot_dict[d]]
+            mean_rank += rank
+        mean_rank /= len(nf4)
+        print(mean_rank)
+        
             
     
 class ELModel(nn.Module):
@@ -207,13 +272,13 @@ class ELModel(nn.Module):
         nf1, nf2, nf3, nf4 = go_normal_forms
         loss = 0
         if len(nf1) > 0:
-            loss += self.nf1_loss(nf1)
+            loss += th.mean(self.nf1_loss(nf1))
         if len(nf2) > 0:
-            loss += self.nf2_loss(nf2)
+            loss += th.mean(self.nf2_loss(nf2))
         if len(nf3) > 0:
-            loss += self.nf3_loss(nf3)
+            loss += th.mean(self.nf3_loss(nf3))
         if len(nf4) > 0:
-            loss += self.nf4_loss(nf4)
+            loss += th.mean(self.nf4_loss(nf4))
         return loss
 
     def class_dist(self, data):
@@ -226,7 +291,7 @@ class ELModel(nn.Module):
         
     def nf1_loss(self, data):
         pos_dist = self.class_dist(data)
-        loss = th.mean(th.relu(pos_dist - self.margin))
+        loss = th.relu(pos_dist - self.margin)
         return loss
 
     def nf2_loss(self, data):
@@ -241,7 +306,7 @@ class ELModel(nn.Module):
         dst = th.linalg.norm(c - d, dim=1, keepdim=True)
         dst2 = th.linalg.norm(e - c, dim=1, keepdim=True)
         dst3 = th.linalg.norm(e - d, dim=1, keepdim=True)
-        loss = th.mean(th.relu(dst - sr - self.margin)
+        loss = (th.relu(dst - sr - self.margin)
                     + th.relu(dst2 - rc - self.margin)
                     + th.relu(dst3 - rd - self.margin))
 
@@ -258,7 +323,7 @@ class ELModel(nn.Module):
         
         rSomeC = c + rE
         euc = th.linalg.norm(rSomeC - d, dim=1, keepdim=True)
-        loss = th.mean(th.relu(euc + rc - rd - self.margin))
+        loss = th.relu(euc + rc - rd - self.margin)
         return loss
 
 
@@ -275,5 +340,5 @@ class ELModel(nn.Module):
         # c should intersect with d + r
         rSomeD = d + rE
         dst = th.linalg.norm(c - rSomeD, dim=1, keepdim=True)
-        loss = th.mean(th.relu(dst - sr - self.margin))
+        loss = th.relu(dst - sr - self.margin)
         return loss

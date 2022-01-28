@@ -1,5 +1,5 @@
 DL2Vec Graph
-=====================
+-------------
 
 The DL2Vec graph follows the rules described in the paper `Predicting candidate genes from phenotypes, functions, and anatomical site of expression (2020) <https://academic.oup.com/bioinformatics/advance-article/doi/10.1093/bioinformatics/btaa879/5922810>`__. The parsing rules are shown in the table below:
 
@@ -24,5 +24,5 @@ The DL2Vec graph follows the rules described in the paper `Predicting candidate 
 
 .. automodule:: mowl.graph.dl2vec.model
    :members:
-   :undoc-members:
+   :noindex:
    :show-inheritance:

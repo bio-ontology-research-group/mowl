@@ -1,7 +1,8 @@
 Subclass Hierarchy
-=====================
+---------------------
 
-.. automodule:: mowl.graph.taxonomy.model
+.. autoclass:: mowl.graph.taxonomy.model.TaxonomyParser
    :members:
-   :undoc-members:
+   :no-inherited-members:
+   :noindex:
    :show-inheritance:

@@ -1,12 +1,11 @@
 Syntactic Embeddings
 ====================
 
-* :doc:`onto2vec`
+Onto2Vec
+--------------------------
 
-.. toctree::
-   :maxdepth: 1
-   :hidden:
-   :glob:
+.. automodule:: mowl.embeddings.onto2vec.model
+   :members:
+   :undoc-members:
+   :show-inheritance:
 
-   onto2vec
-     

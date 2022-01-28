@@ -1,7 +1,8 @@
 Edge
-======
+-----
 
-.. automodule:: mowl.graph.edge
+.. autoclass:: mowl.graph.edge.Edge
+   :private-members:
    :members:
-   :undoc-members:
+   :noindex:
    :show-inheritance:

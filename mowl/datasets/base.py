@@ -21,6 +21,16 @@ from org.semanticweb.elk.owlapi import ElkReasonerFactory
 
 class Dataset(object):
 
+    """This class provide training, validation and testing datasets encoded as OWL ontologies.
+
+    :param ontology: Training dataset
+    :type ontology: org.semanticweb.owlapi.model.OWLOntology
+    :param validation: Validation dataset
+    :type validation: org.semanticweb.owlapi.model.OWLOntology
+    :param testing: Testing dataset
+    :type testing: org.semanticweb.owlapi.model.OWLOntology
+    """
+    
     ontology: OWLOntology
     validation: OWLOntology
     testing: OWLOntology
@@ -28,6 +38,16 @@ class Dataset(object):
 
 
 class PathDataset(Dataset):
+    """Loads the dataset from ontology documents.
+
+    :param ontology_path: Training dataset
+    :type ontology_path: str
+    :param validation_path: Validation dataset
+    :type validation_path: str
+    :param testing_path: Testing dataset
+    :type testing_path: str
+
+    """
 
     ontology_path: str
     validation_path: str
@@ -103,6 +123,19 @@ class PathDataset(Dataset):
         return self.ontology.getClassesInSignature()
 
 class TarFileDataset(PathDataset):
+    """Loads the dataset from a `tar` file.
+
+    :param tarfile_path: Location of the `tar` file
+    :type tarfile_path: str
+
+    :param \**kwargs:
+        See below
+    :Keyword Arguments:
+        * **dataset_name** (str): Name of the dataset
+    """
+
+
+    
     tarfile_path: str
     dataset_name: str
     data_root: str
@@ -133,6 +166,13 @@ class TarFileDataset(PathDataset):
         
         
 class RemoteDataset(TarFileDataset):
+    """Loads the dataset from a remote URL.
+
+    :param url: URL location of the dataset
+    :type url: str
+    :param data_root: Root directory
+    :type data_root: str
+    """
 
     url: str
     data_root: str

@@ -3,30 +3,21 @@ Ontology to graph
 
 In this module we provide different methods for projecting an ontology into a graph: The methods we provide are:
 
-* :doc:`subclass`
 
-* :doc:`subclassRels`
+Ontology Projection
+------------------------------------
 
-* :doc:`dl2vec`
+.. automodule:: mowl.graph.graph
+   :members:
+   :show-inheritance:
 
-* :doc:`owl2vec`
 
+All the methods will return a list of edges corresponding to the **Edge** class:
 
+.. include:: edge.rst
 
-.. toctree::
-   :maxdepth: 1
-   :hidden:
-   :glob:
       
-   subclass
-   subclassRels
-   dl2vec
-   owl2vec
-
-
-.. toctree::
-   :maxdepth: 1
-   :hidden:
-   :glob:
-
-   edge
+.. include:: subclass.rst
+.. include:: subclassRels.rst
+.. include:: dl2vec.rst
+.. include:: owl2vec.rst

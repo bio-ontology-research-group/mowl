@@ -36,6 +36,9 @@ extensions = [
 #    'IPython.sphinxext.ipython_console_highlighting'
 ]
 
+autodoc_member_order = 'bysource'
+
+
 intersphinx_mapping = {
     'python': ('https://docs.python.org/3/', None),
     'sphinx': ('https://www.sphinx-doc.org/en/master/', None),
@@ -64,4 +67,4 @@ source_suffix = ['.rst', '.md']
 # The master toctree document.
 master_doc = 'index'
 
-autodoc_mock_imports = ['org', 'java', 'numpy', 'jpype', 'de', 'pandas', 'scipy', 'sklearn', 'owlready2', 'gensim', 'torch', 'rdflib', 'networkx']
+autodoc_mock_imports = ['org', 'java', 'numpy', 'jpype', 'de', 'pandas', 'scipy', 'sklearn', 'owlready2', 'gensim', 'torch', 'rdflib', 'networkx', 'pykeen', 'node2vec']

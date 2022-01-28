@@ -16,7 +16,7 @@ import org.mowl.Types._
 
 class TaxonomyParser(var ontology: OWLOntology, var bidirectional_taxonomy: Boolean = false) extends AbstractParser{
 
-  def parseAxiom(go_class: OWLClass, axiom: OWLClassAxiom): List[Edge] = {
+  def parseAxiom(go_class: OWLClass, axiom: OWLClassAxiom): List[Triple] = {
     val axiomType = axiom.getAxiomType().getName()
     axiomType match {
       case "SubClassOf" => {
@@ -28,7 +28,7 @@ class TaxonomyParser(var ontology: OWLOntology, var bidirectional_taxonomy: Bool
   }
 
 
-  def parseSubClassAxiom(go_class: OWLClass, superClass: OWLClassExpression): List[Edge] = {
+  def parseSubClassAxiom(go_class: OWLClass, superClass: OWLClassExpression): List[Triple] = {
 
     val superClass_type = superClass.getClassExpressionType().getName()
 
@@ -37,9 +37,9 @@ class TaxonomyParser(var ontology: OWLOntology, var bidirectional_taxonomy: Bool
       case "Class" => {
 	val dst = superClass.asInstanceOf[OWLClass]
         if (bidirectional_taxonomy){
-	  new Edge(go_class, "subClassOf", dst) :: new Edge(dst, "superClassOf", go_class) :: Nil
+	  new Triple(go_class, "subClassOf", dst) :: new Triple(dst, "superClassOf", go_class) :: Nil
         }else{
-          new Edge(go_class, "subClassOf", dst) :: Nil
+          new Triple(go_class, "subClassOf", dst) :: Nil
         }
       }
       case _ => Nil

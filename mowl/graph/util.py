@@ -4,7 +4,7 @@ from mowl.graph.dl2vec.model import DL2VecParser
 
 from mowl.graph.owl2vec_star.model import OWL2VecParser
 
-def parser_factory(method_name, dataset, bidirectional_taxonomy): #TODO include parameters for OWL2Vec*
+def parser_factory(method_name, dataset, bidirectional_taxonomy, include_literals = False, only_taxonomy = False): #TODO include parameters for OWL2Vec*
     methods = [
         "taxonomy",
         "taxonomy_rels",
@@ -19,6 +19,6 @@ def parser_factory(method_name, dataset, bidirectional_taxonomy): #TODO include 
     elif method_name == "dl2vec":
         return DL2VecParser(dataset, bidirectional_taxonomy= bidirectional_taxonomy)
     elif method_name == "owl2vec_star":
-        return OWL2VecParser(dataset, bidirectional_taxonomy=bidirectional_taxonomy)
+        return OWL2VecParser(dataset, bidirectional_taxonomy=bidirectional_taxonomy, include_literals = include_literals, only_taxonomy = only_taxonomy)
     else:
         raise Exception(f"Graph generation method unrecognized. Recognized methods are: {methods}")
