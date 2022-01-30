@@ -1,4 +1,4 @@
-name: mowl39
+name: mowldev
 channels:
   - conda-forge
 dependencies:
