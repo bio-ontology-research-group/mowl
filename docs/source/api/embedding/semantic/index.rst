@@ -13,5 +13,5 @@ ELEmbeddings
 
 Example of use
 ^^^^^^^^^^^^^^^
-An example can be found at :doc:`../../../tutorials/elembedding`
+An example can be found at :doc:`../../../tutorials/ELEmbeddings`
 
