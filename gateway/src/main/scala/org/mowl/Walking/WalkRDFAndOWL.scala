@@ -3,63 +3,72 @@ package org.mowl.Walking
 import collection.JavaConverters._
 import java.io._
 import java.util.{HashMap, ArrayList}
-import scala.collection.mutable.{MutableList, ListBuffer}
+import scala.collection.mutable.{MutableList, ListBuffer, Map}
 import util.control.Breaks._
 import java.util.concurrent.{ExecutorService, Executors}
-import scala.concurrent.duration.DurationLong
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.Duration
 import scala.concurrent.{ Await, Future }
-import scala.concurrent.Future
 import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService}
-import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
-import scala.io.Source
+import org.mowl.Edge
 
-class DeepWalk (
-  var edges: HashMap[String, ArrayList[String]],
+class WalkRDFAndOWL (
+  var edges: ArrayList[Edge],
   var numWalks: Int,
   var walkLength: Int,
-  var alpha: Float,
   var workers: Int,
-  var seed: Int,
   var outfile: String) {
+
+
+  val edgesSc = edges.asScala.map(x => (x.src, x.rel, x.dst))
+  val entities = edgesSc.map(x => List(x._1, x._2, x._3)).flatten.toSet
+  val mapEntsIdx = entities.zip(Range(0, entities.size, 1)).toMap
+  val mapIdxEnts = Range(0, entities.size, 1).zip(nodes).toMap
+  val entsIdx = entities.map(mapEntsIdx(_))
+  val nodes = edgesSc.map(x => List(x._1, x._3)).flatten.toSet
+  val nodesIdx = nodes.map(mapEntsIdx(_))
+  val graph = processEdges()
+
+  val (pathsPerWorker, newWorkers) = numPathsPerWorker
 
   private[this] val lock = new Object()
 
   val walksFile = new File(outfile)
   val bw = new BufferedWriter(new FileWriter(walksFile))
-  val (pathsPerWorker, newWorkers) = numPathsPerWorker()
 
-  val graph = edges.asScala.mapValues(_.asScala.toList)
+  def processEdges() = {
+    val graph: Map[Int, ListBuffer[(Int, Int)]] = Map()
 
-  val nodes = graph.keySet
-  val nodes_idx  = nodes.zip(Range(0, nodes.length, 1)).toMap
+    for ((src, rel, dst) <- edgesSc){
+      val srcIdx = mapEntsIdx(src)
+      val relIdx = mapEntsIdx(rel)
+      val dstIdx = mapEntsIdx(dst)
 
-  val graphIndexed = graph.map( kv => (nodes_idx(kv._1), kv._2.map(x => nodes_idx(x))) )
+      if (!graph.contains(srcIdx)){
+        graph(srcIdx) = ListBuffer()
+      }else{
+        graph(srcIdx) += ((relIdx, dstIdx))
+      }
 
-  def walk(){
-    val argsList = for (
-      i <- Range(0, newWorkers, 1)
-    ) yield (i, pathsPerWorker(i), walkLength, alpha)
+    }
 
-
-    performWalks(argsList.toList)
+    graph
   }
 
-  def performWalks(argsList: List[(Int, Int, Int, Float)]) = {
+
+  def walk() = {
+
+    val argsList = for (
+      i <- Range(0, newWorkers, 1)
+    ) yield (i, pathsPerWorker(i), walkLength)
 
     print("Starting pool...")
 
-
     val executor: ExecutorService = Executors.newFixedThreadPool(newWorkers)
-
     implicit val executionContext: ExecutionContextExecutorService = ExecutionContext.fromExecutorService(executor)
 
-   
-
     val fut = Future.traverse(argsList)(writeWalksToDisk)
-
     Await.ready(fut, Duration.Inf)
 
     fut.onComplete {
@@ -69,43 +78,34 @@ class DeepWalk (
         bw.close
     }
 
-
-
   }
 
+  def writeWalksToDisk(params: (Int, Int, Int))(implicit ec: ExecutionContext): Future[Unit] = Future {
+    val (index, numWalks, walkLength) = params
+    println(s"+ started processing $index")
 
-   def writeWalksToDisk(params: (Int, Int, Int, Float))(implicit ec: ExecutionContext): Future[Unit] = Future {
-     val (index, numWalks, walkLength, alpha) = params
-     println(s"+ started processing $index")
-     val start = System.nanoTime() / 1000000
-
-
-     val r = scala.util.Random
+    val start = System.nanoTime() / 1000000
+    val r = scala.util.Random
 
 
      for (i <- 0 until numWalks){
-       val nodesR = r.shuffle(nodes)
+       val nodesR = r.shuffle(nodesIdx)
        for (n <- nodesR){
-         randomWalk(walkLength, alpha, n)
+         randomWalk(walkLength, n)
        }
 
      }
      
      val end = System.nanoTime() / 1000000
-     val duration = (end - start).millis
+     val duration = (end - start)
      println(s"- finished processing $index after $duration")
-     
   }
 
-
-
-  def randomWalk(walkLength: Int, alpha: Float, start: String ) ={
-
+  def randomWalk(walkLength: Int, start: Int) = {
     var walk = MutableList(start)
 
     breakable {
-      while (walk.length < walkLength){
-
+      while(walk.length < 2*walkLength){
         var curNode = walk.last
 
         val lenNeighb = graph.contains(curNode) match {
@@ -115,31 +115,25 @@ class DeepWalk (
 
         val r = scala.util.Random
 
-        if (lenNeighb > 0){
-          if (r.nextFloat >= alpha){
-            val idx = r.nextInt(lenNeighb)
-            val next = graph(curNode)(idx)(1)
-            walk += next
-          }else{
-            walk += walk.head
-          }
+        if (lenNeighb >0){
+          val idx = r.nextInt(lenNeighb)
+          val (nextRel, nextDst) = graph(curNode)(idx)
+          walk += nextRel
+          walk += nextDst
         }else{
           break
         }
-
       }
-
     }
 
-    lock.synchronized {
-      bw.write(walk.toList.mkString(" ") + "\n") 
-
+    val toWrite = walk.toList.map(x => mapIdxEnts(x).mkString(" ")) + "\n"
+    lock.synchronized{
+      bw.write(toWrite)
     }
-
   }
 
 
-  def numPathsPerWorker(): (List[Int], Int) = {
+    def numPathsPerWorker(): (List[Int], Int) = {
 
     if (numWalks <= workers) {
       val newWorkers = numWalks
@@ -173,5 +167,6 @@ class DeepWalk (
       (pathsPerWorker.toList, newWorkers)
     }
   }
+
 
 }
