@@ -24,7 +24,7 @@ class WalkRDFAndOWL (
   val edgesSc = edges.asScala.map(x => (x.src, x.rel, x.dst))
   val entities = edgesSc.map(x => List(x._1, x._2, x._3)).flatten.toSet
   val mapEntsIdx = entities.zip(Range(0, entities.size, 1)).toMap
-  val mapIdxEnts = Range(0, entities.size, 1).zip(nodes).toMap
+  val mapIdxEnts = Range(0, entities.size, 1).zip(entities).toMap
   val entsIdx = entities.map(mapEntsIdx(_))
   val nodes = edgesSc.map(x => List(x._1, x._3)).flatten.toSet
   val nodesIdx = nodes.map(mapEntsIdx(_))
@@ -126,7 +126,7 @@ class WalkRDFAndOWL (
       }
     }
 
-    val toWrite = walk.toList.map(x => mapIdxEnts(x).mkString(" ")) + "\n"
+    val toWrite = walk.toList.map(x => mapIdxEnts(x)).mkString(" ") + "\n"
     lock.synchronized{
       bw.write(toWrite)
     }
