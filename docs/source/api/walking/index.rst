@@ -22,3 +22,10 @@ Node2Vec
    :members:
    :show-inheritance:
 
+
+Walk RDF and OWL
+------------------
+
+.. automodule:: mowl.walking.walkRdfAndOwl.model
+   :members:
+   :show-inheritance:

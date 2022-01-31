@@ -36,11 +36,11 @@ class CatParser(var ontology: OWLOntology) {
         println(s"INFO: Number of GO classes: ${go_classes.length}")
        
         
-        val edges = go_classes.foldLeft(List[Edge]()){(acc, x) => acc ::: processGOClass(x)}
+        val edges = go_classes.foldLeft(List[Triple]()){(acc, x) => acc ::: processGOClass(x)}
 
         val nodes = getNodes(edges)
 
-        val id_edges = nodes.map((x) => new Edge(x, "id", x)).toList
+        val id_edges = nodes.map((x) => new Triple(x, "id", x)).toList
 
 
         (id_edges ::: edges).asJava
@@ -50,14 +50,14 @@ class CatParser(var ontology: OWLOntology) {
 
    
     
-    def processGOClass(go_class: OWLClass): List[Edge] = {
+    def processGOClass(go_class: OWLClass): List[Triple] = {
         val axioms = ontology.getAxioms(go_class).asScala.toList
 
         val edges = axioms.flatMap(parseAxiom(go_class, _: OWLClassAxiom))
         edges
     }
 
-    def parseAxiom(go_class: OWLClass, axiom: OWLClassAxiom): List[Edge] = {
+    def parseAxiom(go_class: OWLClass, axiom: OWLClassAxiom): List[Triple] = {
         val axiomType = axiom.getAxiomType().getName()
         axiomType match {
             case "EquivalentClasses" => {
@@ -78,7 +78,7 @@ class CatParser(var ontology: OWLOntology) {
 
 
     /////////////////////////////////////////////
-    def parseEquivClassAxiom(go_class: OWLClass, rightSideExpr: OWLClassExpression, prevRel: Option[String] = None, origin: String = "Not specified"): List[Edge] =  {
+    def parseEquivClassAxiom(go_class: OWLClass, rightSideExpr: OWLClassExpression, prevRel: Option[String] = None, origin: String = "Not specified"): List[Triple] =  {
         val exprType = rightSideExpr.getClassExpressionType().getName()
 
         exprType match {
@@ -124,11 +124,11 @@ class CatParser(var ontology: OWLOntology) {
         left_proj :: right_proj
     }
 
-    def parseSubClassAxiom(go_class: OWLClass, superClass: OWLClassExpression): List[Edge] = {
+    def parseSubClassAxiom(go_class: OWLClass, superClass: OWLClassExpression): List[Triple] = {
 
         val neg_sub = negationMorphism(go_class)
 
-        val injection_sub = parseUnion(Top, go_class, origin="SubClass") // new Edge(go_class, "injects", "Top")
+        val injection_sub = parseUnion(Top, go_class, origin="SubClass") // new Triple(go_class, "injects", "Top")
 
         val injections_super = parseUnion(Top, superClass, origin="SubClass")
 
@@ -138,7 +138,7 @@ class CatParser(var ontology: OWLOntology) {
 
 
     /////////////////////////////////////////////
-    def parseIntersection(go_class: OWLClass, projected_expr: OWLClassExpression, prevRel: Option[String] = None, origin: String = "Equiv") : List[Edge] = {
+    def parseIntersection(go_class: OWLClass, projected_expr: OWLClassExpression, prevRel: Option[String] = None, origin: String = "Equiv") : List[Triple] = {
         val exprType = projected_expr.getClassExpressionType.getName
 
         exprType match {
@@ -235,7 +235,7 @@ class CatParser(var ontology: OWLOntology) {
 
     }
 
-    def parseUnion(go_class: OWLClass, injected_expr: OWLClassExpression, prevRel: Option[String] = None, origin: String = "Union"): List[Edge] = {
+    def parseUnion(go_class: OWLClass, injected_expr: OWLClassExpression, prevRel: Option[String] = None, origin: String = "Union"): List[Triple] = {
         val exprType = injected_expr.getClassExpressionType.getName
 
         exprType match {
@@ -416,15 +416,15 @@ class CatParser(var ontology: OWLOntology) {
 
     def negationMorphism(go_class: OWLClassExpression) = {
         val go_class_OWLClass = go_class.asInstanceOf[OWLClass]
-        new Edge(s"Not_${goClassToStr(go_class_OWLClass)}", "negate", go_class_OWLClass)
+        new Triple(s"Not_${goClassToStr(go_class_OWLClass)}", "negate", go_class_OWLClass)
     }
 
     def injectionMorphism(src: OWLClassExpression, dst: OWLClassExpression, rel: Option[String] = None) = {
         val src_OWLClass = src.asInstanceOf[OWLClass]
         val dst_OWLClass = dst.asInstanceOf[OWLClass]
         rel match {
-            case Some(r) => new Edge(src_OWLClass, "injects_" + r, dst_OWLClass)
-            case None => new Edge(src_OWLClass, "injects", dst_OWLClass)
+            case Some(r) => new Triple(src_OWLClass, "injects_" + r, dst_OWLClass)
+            case None => new Triple(src_OWLClass, "injects", dst_OWLClass)
         }
     }
 
@@ -432,8 +432,8 @@ class CatParser(var ontology: OWLOntology) {
         val src_OWLClass = src.asInstanceOf[OWLClass]
         val dst_OWLClass = dst.asInstanceOf[OWLClass]
         rel match {
-            case Some(r) => new Edge(src_OWLClass, "projects_" + r, dst_OWLClass)
-            case None => new Edge(src_OWLClass, "projects", dst_OWLClass)
+            case Some(r) => new Triple(src_OWLClass, "projects_" + r, dst_OWLClass)
+            case None => new Triple(src_OWLClass, "projects", dst_OWLClass)
         }
     }
 }

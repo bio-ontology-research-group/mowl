@@ -1,3 +1,4 @@
+from mowl.graph.edge import Edge
 
 class GraphGenModel():
     """
@@ -19,4 +20,31 @@ class GraphGenModel():
         '''
 
         raise NotImplementedError()
+
+
+
+
+class Graph():
+
+    '''
+    Stores a graph in the form of an edgelist in which each edge is an instance of the class :class:`mowl.graph.edge.Edge`
+
+    :param edges: A list of edges
+    :type edges: :class:`mowl.graph.edge.Edge`
+    '''
     
+    def __init__(self, edges):
+        self.edges = edges
+        self.srcs_idx = None
+        self.dsts_idx = None
+        self.node_dict = None
+        
+    def index_edge_list(self):
+        if self.node_dict is None:
+            nodes, _ = Edge.getEntitiesAndRelations(self.edges)
+            self.node_dict = {node:idx for idx, node in enumerate(nodes)}
+
+        srcs = list(map(lambda x: self.node_dict[x.src()], self.edges))
+        dsts = list(map(lambda x: self.node_dict[x.dst()], self.edges))
+
+        return srcs, dsts
