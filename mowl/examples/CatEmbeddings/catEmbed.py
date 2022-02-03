@@ -24,7 +24,7 @@ def main(config):
     logging.info(f"Number of cores detected: {os.cpu_count()}")
 
 
-    go_slim = False
+    go_slim = True
 
     if go_slim:
         ontology = "data/goslim_yeast.owl"

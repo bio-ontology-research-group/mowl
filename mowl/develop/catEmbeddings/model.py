@@ -33,7 +33,7 @@ class CatEmbeddings(Model):
             np.random.seed(seed)
             random.seed(seed)
 
-        self.go_slim = False
+        self.go_slim = True
 
     def train(self):
 
@@ -341,6 +341,11 @@ class CatModel(nn.Module):
             self.dropout
         )
 
+        self.cons2exp = nn.Sequential(
+            nn.Linear(embedding_size, embedding_size),
+            self.dropout
+        )
+
         self.fc = nn.Sequential(
             nn.Linear(embedding_size, embedding_size),
             self.dropout
@@ -360,7 +365,7 @@ class CatModel(nn.Module):
 #        exponential = self.emb_exp(th.cat([antecedent, consequent], dim = 1))
         down = (exponential + antecedent)/2
 #        down = self.emb_down(th.cat([antecedent, consequent, exponential], dim =1))
-        full = False
+        full = True
         
         if full:
 
@@ -380,29 +385,30 @@ class CatModel(nn.Module):
             estim_consFromDown = self.down2cons(down)
             estim_consFromDownChained = self.down2cons(estim_downFromUp)
             
-#            estim_consFromAnt = self.sim(antecedent)
-
-            loss1 = rmseNR(estim_expFromUp, exponential) #th.sum(th.relu(estim_expFromUp - exponential + margin))
+            loss1 = rmseNR(estim_expFromUp, exponential)
             loss1 = th.mean(loss1, dim=1)
-            loss2 = rmseNR(estim_antFromUp, antecedent) # th.sum(th.relu(estim_antFromUp - antecedent + margin))
+            loss2 = rmseNR(estim_antFromUp, antecedent) 
             loss2 = th.mean(loss2, dim=1)
+
+
             
-            loss3 = rmseNR(estim_expFromdown, exponential) #th.sum(th.relu(exponential - estim_expFromdown + margin))
+            loss3 = rmseNR(estim_expFromdown, exponential) 
             loss3 = th.mean(loss3, dim=1)
-            loss4 = rmseNR(estim_antFromDown, antecedent) #th.sum(th.relu(antecedent - estim_antFromDown + margin))
+            loss4 = rmseNR(estim_antFromDown, antecedent) 
             loss4 = th.mean(loss4, dim=1)
             
-            loss5 = rmseNR(estim_downFromUp, down) #th.sum(th.relu(down - estim_downFromUp + margin))
+            loss5 = rmseNR(estim_downFromUp, down) 
             loss5 = th.mean(loss5, dim=1)
-            loss6 = rmseNR(estim_consFromDown, consequent) #th.sum(th.relu(consequent - estim_consFromDown + margin))
+            loss6 = rmseNR(estim_consFromDown, consequent) 
             loss6 = th.mean(loss6, dim=1)
-            loss7 = rmseNR(estim_consFromUp, consequent) #th.sum(th.relu(consequent - estim_consFromUp + margin))
+            loss7 = rmseNR(estim_consFromUp, consequent) 
             loss7 = th.mean(loss7, dim=1)
 
-            #            loss8 = th.sum(consequent * estim_cons_ant, dim=1, keepdims = True)
-
+            #Using the negation form
+            exp_sum = self.cons2exp(consequent)
+            loss8 = rmseNR(exp_sum, exponential)
+            loss8 = th.mean(loss8, dim=1)
             
-
             path_loss1 = rmseNR(estim_expFromDownChained, exponential)
             path_loss1 = th.mean(path_loss1, dim=1)
             
@@ -411,6 +417,9 @@ class CatModel(nn.Module):
             
             path_loss3 = rmseNR(estim_consFromDownChained, consequent)
             path_loss3 = th.mean(path_loss3, dim =1)
+
+            path_loss4 = rmseNR(self.cons2exp(estim_consFromDown), exponential)
+            path_loss4 = th.mean(path_loss4, dim=1)
             
             assert loss1.shape == loss2.shape
             assert loss2.shape == loss3.shape
@@ -421,8 +430,10 @@ class CatModel(nn.Module):
             assert loss7.shape == path_loss1.shape
             assert path_loss1.shape == path_loss2.shape
             assert path_loss2.shape == path_loss3.shape
-
-            sim_loss = loss5 + loss6+ loss7 + path_loss3 + loss1 +loss2 +loss3 + loss4 + path_loss1 + path_loss2
+            assert path_loss3.shape == path_loss4.shape
+            assert path_loss4.shape == loss8.shape
+            
+            sim_loss = loss5 + loss6+ loss7 + path_loss3 + loss1 +loss2 +loss3 + loss4 + path_loss1 + path_loss2 + loss8 + path_loss4
         else:
 
             estimCons = self.fc(antecedent)
@@ -437,15 +448,9 @@ class CatModel(nn.Module):
         
     def forward(self, positive, negative1, negative2):
         logit_pos = self.compute_loss(positive)
-        if  self.training:
-            neg1 = negative1
-            neg2 = negative2
-        else:
-            neg1 = negative1 
-            neg2 = negative2
-   
-        logit_neg1 = self.compute_loss(neg1)
-        logit_neg2 = self.compute_loss(neg2)
+        
+        logit_neg1 = self.compute_loss(negative1)
+        logit_neg2 = self.compute_loss(negative2)
         logits = th.cat([logit_pos, logit_neg1, logit_neg2], 0)
         
         return logits
