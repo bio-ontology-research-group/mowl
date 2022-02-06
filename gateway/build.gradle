@@ -38,7 +38,8 @@ apply plugin: 'scala'
 repositories {
     // Use 'jcenter' for resolving your dependencies.
     // You can declare any Maven/Ivy/file repository here.
-    jcenter()
+//    jcenter()
+    mavenCentral()
 }
 
 // In this section you declare the dependencies for your production and test code

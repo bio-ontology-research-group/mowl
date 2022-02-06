@@ -1,4 +1,3 @@
-
 from mowl.graph.graph import GraphGenModel
 
 from org.mowl.Parsers import DL2VecParser as Parser

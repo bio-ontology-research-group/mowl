@@ -6,6 +6,10 @@ import org.semanticweb.owlapi.apibinding.OWLManager
 import org.semanticweb.owlapi.model.parameters.Imports
 import uk.ac.manchester.cs.owl.owlapi._
 
+//import org.semanticweb.owlapi.reasoner.InferenceType
+
+//import org.semanticweb.owlapi.util._
+
 // Java imports
 import java.io.File
 
