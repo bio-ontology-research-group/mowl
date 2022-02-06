@@ -17,6 +17,8 @@ trait AbstractParser{
 
   val ontManager = OWLManager.createOWLOntologyManager()
   val dataFactory = ontManager.getOWLDataFactory()
+  val imports = Imports.fromBoolean(true)
+
 
   def parse = {
     val imports = Imports.fromBoolean(false)
@@ -33,8 +35,8 @@ trait AbstractParser{
   def parseAxiom(ontClass: OWLClass, axiom: OWLClassAxiom): List[Triple]
   //////////////////////
 
-  def processOntClass(ontClass: OWLClass): List[Triple] = {
-    val axioms = ontology.getAxioms(ontClass).asScala.toList
+  def processOntClass(ontClass: OWLClass): List[Edge] = {
+    val axioms = ontology.getAxioms(ontClass, imports).asScala.toList
     val edges = axioms.flatMap(parseAxiom(ontClass, _: OWLClassAxiom))
     edges
   }

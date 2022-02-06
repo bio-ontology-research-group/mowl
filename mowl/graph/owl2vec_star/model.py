@@ -32,8 +32,7 @@ class OWL2VecParser(GraphGenModel):
         self.include_literals = include_literals
         self.only_taxonomy = only_taxonomy
         
-    def parse(self):
-        
+    def parse(self):        
         path = "temp.owl"
         man = OWLManager.createOWLOntologyManager()
         fileout = File(path)
