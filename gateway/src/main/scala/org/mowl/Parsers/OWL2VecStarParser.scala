@@ -13,7 +13,7 @@ import org.semanticweb.owlapi.search._
 // Java imports
 import java.io.File
 import java.util
-
+import scala.collection.mutable.ListBuffer
 import collection.JavaConverters._
 import org.mowl.Types._
 import org.mowl.Utils._
@@ -22,11 +22,11 @@ class OWL2VecStarParser(
   var ontology: OWLOntology,
   var bidirectional_taxonomy: Boolean,
   var only_taxonomy: Boolean,
-  var include_literals: Boolean,
-  var avoid_properties: java.util.HashSet[String],
-  var additional_preferred_labels_annotations: java.util.HashSet[String],
-  var additional_synonyms_annotations: java.util.HashSet[String],
-  var memory_reasoner: String = "10240"
+  var include_literals: Boolean
+  // var avoid_properties: java.util.HashSet[String],
+  // var additional_preferred_labels_annotations: java.util.HashSet[String],
+  // var additional_synonyms_annotations: java.util.HashSet[String],
+  // var memory_reasoner: String = "10240"
 ) extends AbstractParser{
 
 
@@ -40,37 +40,58 @@ class OWL2VecStarParser(
 
   override def parse = {
 
-    var edgesFromObjectProperties = List[Edge]()
+    var edgesFromObjectProperties = List[Triple]()
 
 //    println(ontology.getAxioms(imports).asScala.toList)
 
+    val axioms = ontology.getAxioms(imports).asScala.toList
 
-    val goClasses = ontology.getClassesInSignature().asScala.toList
-    printf("INFO: Number of ontology classes: %d", goClasses.length)
-    val edgesFromClasses = goClasses.foldLeft(List[Edge]()){(acc, x) => acc ::: processOntClass(x)}
+    var subClassOfAxioms = ListBuffer[OWLSubClassOfAxiom]()
+    var annotationAxioms = ListBuffer[OWLAnnotationAssertionAxiom]()
+    var otherAxioms = ListBuffer[OWLAxiom]()
 
-    if (include_literals) {
+    for (axiom <- axioms){
 
-      val objectProperties = ontology.getObjectPropertiesInSignature().asScala.toList.filter(o => !(avoid_properties contains o))
-
-      val edgesFromObjectProperties = objectProperties.foldLeft(List[Edge]()){(acc, x) => acc ::: processObjectProperty(x)}
-
-      val annotationProperties = dataFactory.getRDFSLabel ::  ontology.getAnnotationPropertiesInSignature.asScala.toList
-      val edgesFromAnnotationProperties = annotationProperties.foldLeft(List[Edge]()){(acc, x) => acc ::: processAnnotationProperty(x)}
-
-      println("ANNOTATIONS")
-      println(ontology.getAnnotations.asScala.toList)
-
-      (edgesFromClasses ::: edgesFromObjectProperties  ::: edgesFromAnnotationProperties).asJava
-
-    }else {
-      (edgesFromClasses ::: edgesFromObjectProperties).asJava
-
+      axiom.getAxiomType.getName match {
+        case "SubClassOf" => subClassOfAxioms += axiom.asInstanceOf[OWLSubClassOfAxiom]
+        case "AnnotationAssertion" => annotationAxioms += axiom.asInstanceOf[OWLAnnotationAssertionAxiom]
+        case _ => {
+          println(axiom)
+          otherAxioms += axiom
+        }
+      }
     }
 
+    otherAxioms.map(println(_))
+
+    val subClassOfTriples = subClassOfAxioms.flatMap(processSubClassAxiom(_))
+    val annotationTriples = annotationAxioms.map(processAnnotationAxiom(_)).flatten
+    //val goClasses = ontology.getClassesInSignature().asScala.toList
+    //printf("INFO: Number of ontology classes: %d", goClasses.length)
+    //val edgesFromClasses = goClasses.foldLeft(List[Triple]()){(acc, x) => acc ::: processOntClass(x)}
+
+    // if (include_literals) {
+
+    //   val objectProperties = ontology.getObjectPropertiesInSignature().asScala.toList//.filter(o => !(avoid_properties contains o))
+
+    //   val edgesFromObjectProperties = objectProperties.foldLeft(List[Triple]()){(acc, x) => acc ::: processObjectProperty(x)}
+
+    //   val annotationProperties = dataFactory.getRDFSLabel ::  ontology.getAnnotationPropertiesInSignature.asScala.toList
+    //   val edgesFromAnnotationProperties = annotationProperties.foldLeft(List[Triple]()){(acc, x) => acc ::: processAnnotationProperty(x)}
+
+    //   println("ANNOTATIONS")
+    //   println(ontology.getAnnotations.asScala.toList)
+
+    //   (edgesFromClasses ::: edgesFromObjectProperties  ::: edgesFromAnnotationProperties).asJava
+
+    // }else {
+    //   (edgesFromClasses ::: edgesFromObjectProperties).asJava
+
+    // }
 
     //println(ontology.getRBoxAxioms(imports))
 
+    (subClassOfTriples.toList ::: annotationTriples.toList).asJava
   }
 
    
@@ -82,9 +103,9 @@ class OWL2VecStarParser(
 
   // CLASSES PROCESSING
 
-  override def processOntClass(ontClass: OWLClass): List[Edge] = {
+  override def processOntClass(ontClass: OWLClass): List[Triple] = {
 
-    var annotationEdges = List[Edge]()
+    var annotationEdges = List[Triple]()
 
     if (include_literals){ //ANNOTATION PROCESSSING
       val annotProperties = ontClass.getAnnotationPropertiesInSignature.asScala.toList
@@ -100,7 +121,7 @@ class OWL2VecStarParser(
 
 
 
-  def parseAxiom(goClass: OWLClass, axiom: OWLClassAxiom): List[Edge] = {
+  def parseAxiom(goClass: OWLClass, axiom: OWLClassAxiom): List[Triple] = {
 
     val axiomType = axiom.getAxiomType().getName()
 
@@ -121,8 +142,77 @@ class OWL2VecStarParser(
     }
   }
 
+  def processSubClassAxiom(axiom: OWLSubClassOfAxiom): List[Triple] = {
 
-   def parseSubClassOrEquivAxiom(goClass: OWLClass, superClass: OWLClassExpression): List[Edge] = {
+    val quantityModifiers = List("ObjectSomeValuesFrom", "ObjectAllValuesFrom", "ObjectMaxCardinality", "ObjectMinCardinality")
+
+    val subClass = axiom.getSubClass.asInstanceOf[OWLClass]
+    val superClass = axiom.getSuperClass
+
+    val superClassType = superClass.getClassExpressionType.getName
+
+    superClassType match {
+
+      case m if (quantityModifiers contains m) && !only_taxonomy => {
+
+	val superClass_ = lift2QuantifiedExpression(superClass)
+
+        parseQuantifiedExpression(superClass_) match {
+
+          case Some((rel, Some(inverseRel), dstClass)) => {
+            val dstClasses = splitClass(dstClass)
+
+            val outputEdges = for (dst <- dstClasses)
+            yield List(new Triple(subClass, rel, dst), new Triple(dst, inverseRel, subClass))
+
+            outputEdges.flatten
+          }
+
+          case Some((rel, None, dstClass)) => {
+            val dstClasses = splitClass(dstClass)
+
+            for (dst <- dstClasses) yield new Triple(subClass, rel, dst)
+
+          }
+
+          case None => Nil
+        }
+      }
+
+      case "Class" => {
+	val dst = superClass.asInstanceOf[OWLClass]
+        if (bidirectional_taxonomy){
+	  new Triple(subClass, "subClassOf", dst) :: new Triple(dst, "superClassOf", subClass) :: Nil
+        }else{
+          new Triple(subClass, "subClassOf", dst) :: Nil
+        }
+
+      }
+      case _ => Nil
+
+    }
+
+  }
+
+  def processAnnotationAxiom(axiom: OWLAnnotationAssertionAxiom): Option[Triple]= {
+    val property = stripValue(axiom.getProperty.toString)
+
+    property match {
+      case m if (lexicalAnnotationURIs contains m) => {
+        val subject = axiom.getSubject.toString
+        val value = stripValue(axiom.getValue.toString)
+        Some(new Triple(subject, m, value))
+      }
+
+      case _ => {
+        println("C ",property)
+        None
+      }
+    }
+
+  }
+
+  def parseSubClassOrEquivAxiom(goClass: OWLClass, superClass: OWLClassExpression): List[Triple] = {
 
      val quantityModifiers = List("ObjectSomeValuesFrom", "ObjectAllValuesFrom", "ObjectMaxCardinality", "ObjectMinCardinality")
 
@@ -140,7 +230,7 @@ class OWL2VecStarParser(
             val dstClasses = splitClass(dstClass)
 
             val outputEdges = for (dst <- dstClasses)
-            yield List(new Edge(goClass, rel, dst), new Edge(dst, inverseRel, goClass))
+            yield List(new Triple(goClass, rel, dst), new Triple(dst, inverseRel, goClass))
 
             outputEdges.flatten
           }
@@ -148,7 +238,7 @@ class OWL2VecStarParser(
           case Some((rel, None, dstClass)) => {
             val dstClasses = splitClass(dstClass)
 
-            for (dst <- dstClasses) yield new Edge(goClass, rel, dst)
+            for (dst <- dstClasses) yield new Triple(goClass, rel, dst)
 
           }
 
@@ -159,9 +249,9 @@ class OWL2VecStarParser(
       case "Class" => {
 	val dst = superClass.asInstanceOf[OWLClass]
         if (bidirectional_taxonomy){
-	  new Edge(goClass, "subClassOf", dst) :: new Edge(dst, "superClassOf", goClass) :: Nil
+	  new Triple(goClass, "subClassOf", dst) :: new Triple(dst, "superClassOf", goClass) :: Nil
         }else{
-          new Edge(goClass, "subClassOf", dst) :: Nil
+          new Triple(goClass, "subClassOf", dst) :: Nil
         }
 
       }
@@ -222,7 +312,7 @@ class OWL2VecStarParser(
 
   //OBJECT PROPERTIES PROCESSING
 
-  def processObjectProperty(property: OWLObjectProperty): List[Edge] = {
+  def processObjectProperty(property: OWLObjectProperty): List[Triple] = {
 
 
     Nil
@@ -278,6 +368,8 @@ class OWL2VecStarParser(
   val mainLabelURIs = List(
     "http://www.w3.org/2000/01/rdf-schema#label",
     "http://www.w3.org/2004/02/skos/core#prefLabel",
+    "rdfs:label",
+    "rdfs:comment",
     "http://purl.obolibrary.org/obo/IAO_0000111",
     "http://purl.obolibrary.org/obo/IAO_0000589"
   )
@@ -326,37 +418,38 @@ class OWL2VecStarParser(
 
   val excludedAnnotationProperties = List("http://www.geneontology.org/formats/oboInOwl#inSubset", "'http://www.geneontology.org/formats/oboInOwl#id", "http://www.geneontology.org/formats/oboInOwl#hasAlternativeId") //List("rdfs:comment", "http://www.w3.org/2000/01/rdf-schema#comment")
 
-  def annotationAxiom2Edge(annotationAxiom: OWLAnnotationAssertionAxiom): Option[Edge] = {
+  def annotationAxiom2Edge(annotationAxiom: OWLAnnotationAssertionAxiom): Option[Triple] = {
 
     val property = annotationAxiom.getProperty.toStringID.toString
 
     property match {
 
       case m if true || (lexicalAnnotationURIs contains m) =>  {
-        val subject = annotationAxiom.getSubject
+        val subject = annotationAxiom.getSubject.toString
         val value = annotationAxiom.getValue
 //        println("N ", property)
         
-        Some(new Edge(subject, m, stripValue(value)))
+        Some(new Triple(subject, m, stripValue(value.toString)))
       }
       case _ => {
-  //      println("C ",property)
+        println("C ",property)
         None
       }
     }
   }
 
-  def stripValue(value: OWLAnnotationValue) = {
+  def stripValue(value: String) = {
     val valueStr = value.toString
 
     valueStr.head match {
       case '"' => valueStr.tail.init
+      case '<' => valueStr.tail.init
       case _ => valueStr
     }
 
   }
 
-  def processAnnotationProperty(annotProperty: OWLAnnotationProperty): List[Edge] = {
+  def processAnnotationProperty(annotProperty: OWLAnnotationProperty): List[Triple] = {
 
 //    println("Annotation Property: ")
 //    println(ontology.getAxioms(annotProperty))

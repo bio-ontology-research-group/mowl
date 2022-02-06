@@ -35,7 +35,7 @@ trait AbstractParser{
   def parseAxiom(ontClass: OWLClass, axiom: OWLClassAxiom): List[Triple]
   //////////////////////
 
-  def processOntClass(ontClass: OWLClass): List[Edge] = {
+  def processOntClass(ontClass: OWLClass): List[Triple] = {
     val axioms = ontology.getAxioms(ontClass, imports).asScala.toList
     val edges = axioms.flatMap(parseAxiom(ontClass, _: OWLClassAxiom))
     edges

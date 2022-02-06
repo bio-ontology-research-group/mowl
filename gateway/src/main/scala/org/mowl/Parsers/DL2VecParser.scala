@@ -25,7 +25,7 @@ class DL2VecParser(var ontology: OWLOntology, var bidirectional_taxonomy: Boolea
 
   val collectors = List("ObjectIntersectionOf", "ObjectUnionOf")
 
-  def parseAxiom(goClass: OWLClass, axiom: OWLClassAxiom): List[Edge] = {
+  def parseAxiom(goClass: OWLClass, axiom: OWLClassAxiom): List[Triple] = {
 
     val axiomType = axiom.getAxiomType().getName()
 
