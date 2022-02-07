@@ -47,6 +47,7 @@ class OWL2VecStarParser(
     val axioms = ontology.getAxioms(imports).asScala.toList
 
     var subClassOfAxioms = ListBuffer[OWLSubClassOfAxiom]()
+    var equivalenceAxioms = ListBuffer[OWLEquivalentClassesAxiom]()
     var annotationAxioms = ListBuffer[OWLAnnotationAssertionAxiom]()
     var otherAxioms = ListBuffer[OWLAxiom]()
 
@@ -54,18 +55,38 @@ class OWL2VecStarParser(
 
       axiom.getAxiomType.getName match {
         case "SubClassOf" => subClassOfAxioms += axiom.asInstanceOf[OWLSubClassOfAxiom]
-        case "AnnotationAssertion" => annotationAxioms += axiom.asInstanceOf[OWLAnnotationAssertionAxiom]
+        case "AnnotationAssertion" => {
+          if (include_literals)
+          annotationAxioms += axiom.asInstanceOf[OWLAnnotationAssertionAxiom]
+        }
+        case "EquivalentClasses" => equivalenceAxioms += axiom.asInstanceOf[OWLEquivalentClassesAxiom]
+          
+        
         case _ => {
-          println(axiom)
+//          println(axiom)
           otherAxioms += axiom
         }
       }
     }
 
-    otherAxioms.map(println(_))
+//    otherAxioms.map(println(_))
 
-    val subClassOfTriples = subClassOfAxioms.flatMap(processSubClassAxiom(_))
+    val subClassOfTriples = subClassOfAxioms.flatMap(x => processSubClassAxiom(x.getSubClass.asInstanceOf[OWLClass], x.getSuperClass))
+    val equivalenceTriples = equivalenceAxioms.flatMap(
+      x => {
+        val subClass::superClass::rest= x.getClassExpressionsAsList.asScala.toList
+
+        
+        superClass.getClassExpressionType.getName match{
+          case "ObjectIntersectionOf" => superClass.asInstanceOf[OWLObjectIntersectionOf].getOperands.asScala.toList.flatMap(processSubClassAxiom(subClass.asInstanceOf[OWLClass], _))
+
+          case _ => Nil
+        }
+
+      }
+    )
     val annotationTriples = annotationAxioms.map(processAnnotationAxiom(_)).flatten
+    
     //val goClasses = ontology.getClassesInSignature().asScala.toList
     //printf("INFO: Number of ontology classes: %d", goClasses.length)
     //val edgesFromClasses = goClasses.foldLeft(List[Triple]()){(acc, x) => acc ::: processOntClass(x)}
@@ -91,7 +112,7 @@ class OWL2VecStarParser(
 
     //println(ontology.getRBoxAxioms(imports))
 
-    (subClassOfTriples.toList ::: annotationTriples.toList).asJava
+    (subClassOfTriples.toList ::: equivalenceTriples.toList ::: annotationTriples.toList).asJava
   }
 
    
@@ -142,12 +163,9 @@ class OWL2VecStarParser(
     }
   }
 
-  def processSubClassAxiom(axiom: OWLSubClassOfAxiom): List[Triple] = {
+  def processSubClassAxiom(subClass: OWLClass, superClass: OWLClassExpression): List[Triple] = {
 
     val quantityModifiers = List("ObjectSomeValuesFrom", "ObjectAllValuesFrom", "ObjectMaxCardinality", "ObjectMinCardinality")
-
-    val subClass = axiom.getSubClass.asInstanceOf[OWLClass]
-    val superClass = axiom.getSuperClass
 
     val superClassType = superClass.getClassExpressionType.getName
 
@@ -200,12 +218,30 @@ class OWL2VecStarParser(
     property match {
       case m if (lexicalAnnotationURIs contains m) => {
         val subject = axiom.getSubject.toString
-        val value = stripValue(axiom.getValue.toString)
-        Some(new Triple(subject, m, value))
+        val value = axiom.getValue
+       
+        val valueStr = value.isLiteral match {
+          case true => {
+            val datatype = value.asLiteral.get.getDatatype
+
+            if (datatype.isString) value.asInstanceOf[OWLLiteralImplString].getLiteral
+            else if(datatype.isRDFPlainLiteral) value.asInstanceOf[OWLLiteralImplPlain].getLiteral
+            else {
+              println("Warning: datatype not detected: ", datatype)
+              stripValue(axiom.getValue.toString)
+            } 
+          }
+          case false => stripValue(axiom.getValue.toString)
+
+        }
+
+
+
+        Some(new Triple(subject, m, valueStr))
       }
 
       case _ => {
-        println("C ",property)
+        //println("C ",property)
         None
       }
     }
@@ -255,6 +291,7 @@ class OWL2VecStarParser(
         }
 
       }
+
       case _ => Nil
 
     }
@@ -329,7 +366,7 @@ class OWL2VecStarParser(
       val rels = ontology.getInverseObjectPropertyAxioms(relation).asScala.toList
 
       if (!rels.isEmpty){
-        println(relation, rels.head.getFirstProperty, rels.head.getSecondProperty)
+       // println(relation, rels.head.getFirstProperty, rels.head.getSecondProperty)
 
         val firstProperty = stripBracket(rels.head.getFirstProperty)
         val secondProperty = stripBracket(rels.head.getSecondProperty) //TODO: remove head and modify the code to deal with lists
@@ -438,13 +475,13 @@ class OWL2VecStarParser(
     }
   }
 
-  def stripValue(value: String) = {
-    val valueStr = value.toString
+  def stripValue(valueStr: String) = {
 
-    valueStr.head match {
-      case '"' => valueStr.tail.init
-      case '<' => valueStr.tail.init
-      case _ => valueStr
+    val value = valueStr.replaceAll("\\\\", "")
+    value.head match {
+      case '"' => value.tail.init
+      case '<' => value.tail.init
+      case _ => value
     }
 
   }

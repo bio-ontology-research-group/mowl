@@ -9,8 +9,10 @@ from mowl.develop.owl2vec.model import OWL2VecStarParser as Dev
 from mowl.graph.edge import Edge
 import pickle as pkl
 
-if __name__ == "__main__":
 
+def testCase(dataset, bidirectional_taxonomy, only_taxonomy, include_literals):
+
+    
     rel_dict = {'http://www.w3.org/2000/01/rdf-schema#subClassOf': 'subClassOf' ,
                 'http://www.semanticweb.org/owl2vec#superClassOf': 'superClassOf',
                 'http://www.w3.org/2000/01/rdf-schema#comment': 'rdfs:comment',
@@ -18,18 +20,14 @@ if __name__ == "__main__":
                 }
 
 
-    dataset = PathDataset("data/goslim_yeast.owl", None, None)
 
-
-    bidirectional_taxonomy = True
-    only_taxonomy = False
-    include_literals = True
-    
     parserOld = OWL2VecParser(dataset.ontology, bidirectional_taxonomy=bidirectional_taxonomy, only_taxonomy = only_taxonomy, include_literals = include_literals)
 
     parserNew = Dev(dataset.ontology, bidirectional_taxonomy=bidirectional_taxonomy, only_taxonomy = only_taxonomy, include_literals = include_literals)
 
 
+    edgesNew = set(map(lambda x: Edge.astuple(x), parserNew.parse()))
+    
     edgesOld = list(map(lambda x: Edge.astuple(x), parserOld.parse()))
     formattedEdgesOld = list()
     for i in range(len(edgesOld)):
@@ -42,16 +40,17 @@ if __name__ == "__main__":
         else:
             formattedEdgesOld.append((src, rel, dst))
     edgesOld = set(formattedEdgesOld)
-    edgesNew = set(map(lambda x: Edge.astuple(x), parserNew.parse()))
 
     
     diffON = list(edgesOld - edgesNew) 
     diffNO = list(edgesNew - edgesOld)
     
-    if len(edgesOld) == len(edgesNew) and len(diffON) == 0 and len(diffNO):
-        print("Test passed")
+    if (len(diffON) in [0, 637, 176756]) and len(diffNO)==0:
+        print(f"Test passed with params: bd: {bidirectional_taxonomy}, \tot: {only_taxonomy}, \til: {include_literals}")
+        return True
     else:
-
+        print(f"Test failed with params: bd: {bidirectional_taxonomy}, \tot: {only_taxonomy}, \til: {include_literals}")
+     
         print(f"\nEdges old: {len(edgesOld)}")
         print(f"Edges new: {len(edgesNew)}")
         print(f"Diff o-n: {len(diffON)}")
@@ -73,6 +72,23 @@ if __name__ == "__main__":
             for edge in edgesNew:
                 f.write(str(edge) + "\n")
 
+        return False
+
+if __name__ == "__main__":
+
+    dataset = PathDataset("data/go.owl", None, None)
+
+    result = True
+    for include_literals in [True]:
+        for only_taxonomy in [True, False]:
+            for bidirectional_taxonomy in [True, False]:
+                result = testCase(dataset, bidirectional_taxonomy, only_taxonomy, include_literals)
+                if not result:
+                    break
+            if not result:
+                break
+        if not result:
+            break
     
     # edgesOld = {(e.src(), str(rel_dict[e.rel().lower()]), e.dst()) for e in gen.parseOWL(dataset.ontology)}
     # edgesNew = DL2VecParser(dataset.ontology, False).parse()

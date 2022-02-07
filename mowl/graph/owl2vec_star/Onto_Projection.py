@@ -444,16 +444,16 @@ class OntologyProjection(object):
             #logging.info("\t\tExtracting domain and range for " + str(prop.name))
             results = self.onto.queryGraph(self.getQueryForDomainAndRange(prop.iri))
 
-            print("Domain range: ", len(results))
+            #print("Domain range: ", len(results))
 
             self.__processPropertyResults__(prop.iri, results, True, True)
 
             #To propagate domain/range entailment. Only atomic domains
             results_domain = self.onto.queryGraph(self.getQueryForDomain(prop.iri))
-            print("Only domain: ", len(results_domain))
+            #print("Only domain: ", len(results_domain))
             
             results_range = self.onto.queryGraph(self.getQueryForRange(prop.iri))
-            print("Only range: ", len(results_range))
+            #print("Only range: ", len(results_range))
             
             for row_domain in results_domain:
                 self.domains.add(row_domain[0])
@@ -467,10 +467,10 @@ class OntologyProjection(object):
             ##7a. Complex domain and ranges
             #logging.info("\t\tExtracting complex domain and range for " + str(prop.name))
             results_domain = self.onto.queryGraph(self.getQueryForComplexDomain(prop.iri))
-            print("Complex damain: ", len(results_domain))
+            #print("Complex damain: ", len(results_domain))
 
             results_range = self.onto.queryGraph(self.getQueryForComplexRange(prop.iri))
-            print("Complex range: ", len(results_range))
+            #print("Complex range: ", len(results_range))
 
             #for row_range in results_range:
             #    self.ranges.add(row_range[0])
@@ -525,7 +525,7 @@ class OntologyProjection(object):
                 ## 10. Extract named inverses and create/propagate new reversed triples. TBOx and ABox
                 #logging.info("\t\tExtracting inverses for " + str(prop.name))
                 results = self.onto.queryGraph(self.getQueryForInverses(prop.iri))
-                print("OP inverses: ", len(results))
+                #print("OP inverses: ", len(results))
                 for row in results:
                     for sub in self.triple_dict:
                         for obj in self.triple_dict[sub]:
@@ -653,13 +653,13 @@ class OntologyProjection(object):
                 #print(ann_prop_uri)
 
                 results = self.onto.queryGraph(self.getQueryForAnnotations(ann_prop_uri))
-                print("ANN: ", ann_prop_uri, "   ",  len(results))
+                #print("ANN: ", ann_prop_uri, "   ",  len(results))
                 for row in results:
                     #Filter by language
                     try:
                         #Keep labels in English or not specified
                         if row[1].language=="en" or row[1].language==None:
-#                            print(row)
+                  #          print(row)
                             self.__addTriple__(row[0], URIRef(ann_prop_uri), row[1])
                             #print(dir(row[1]))
                             #print(row[1].value)
