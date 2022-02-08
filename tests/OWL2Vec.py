@@ -76,7 +76,7 @@ def testCase(dataset, bidirectional_taxonomy, only_taxonomy, include_literals):
 
 if __name__ == "__main__":
 
-    dataset = PathDataset("data/go.owl", None, None)
+    dataset = PathDataset("data/goslim_yeast.owl", None, None)
 
     result = True
     for include_literals in [True]:

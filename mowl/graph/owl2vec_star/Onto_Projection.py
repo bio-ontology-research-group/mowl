@@ -51,7 +51,7 @@ class OntologyProjection(object):
     def __init__(self, urionto, reasoner=Reasoner.NONE, only_taxonomy=False, bidirectional_taxonomy=False, include_literals=True, avoid_properties=set(), additional_preferred_labels_annotations=set(), additional_synonyms_annotations=set(), memory_reasoner='10240'):
 
         try:
-            logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.DEBUG)
+            logging.basicConfig(format='%(levelname)s: %(message)s', level=logging.INFO)
 
             #owlready2.reasoning.JAVA_MEMORY='15360'
 
@@ -64,7 +64,7 @@ class OntologyProjection(object):
             # - Additional annotation properties to consider (in addition to standard annotation properties, e.g. rdfs:label, skos:prefLabel, etc.). Expected a set of (string) URIs, e.g., "http://www.semanticweb.org/myonto#ann_prop1")
             # - Optional memory for the reasoner (10240Mb=10Gb by default)
 
-#            self.urionto = urionto
+            self.urionto = urionto
 
             self.only_taxonomy = only_taxonomy
             self.bidirectional_taxonomy = bidirectional_taxonomy
@@ -79,7 +79,6 @@ class OntologyProjection(object):
 
 
             ## 1. Create ontology using ontology_access
-
             self.onto = OntologyAccess(urionto)
             self.onto.loadOntology(reasoner, memory_reasoner)
 
@@ -88,6 +87,7 @@ class OntologyProjection(object):
             self.annotation_uris = AnnotationURIs()
             self.entityToPreferredLabels = {}
             self.entityToSynonyms = {}
+            self.entityToPrefLabelsAndSynonyms = {}
             self.entityToAllLexicalLabels = {}
 
 
@@ -443,18 +443,11 @@ class OntologyProjection(object):
             #print(self.getQueryForDomainAndRange(prop.iri))
             #logging.info("\t\tExtracting domain and range for " + str(prop.name))
             results = self.onto.queryGraph(self.getQueryForDomainAndRange(prop.iri))
-
-            #print("Domain range: ", len(results))
-
             self.__processPropertyResults__(prop.iri, results, True, True)
 
             #To propagate domain/range entailment. Only atomic domains
             results_domain = self.onto.queryGraph(self.getQueryForDomain(prop.iri))
-            #print("Only domain: ", len(results_domain))
-            
             results_range = self.onto.queryGraph(self.getQueryForRange(prop.iri))
-            #print("Only range: ", len(results_range))
-            
             for row_domain in results_domain:
                 self.domains.add(row_domain[0])
                 self.domains_dict[prop.iri].add(row_domain[0])
@@ -467,11 +460,7 @@ class OntologyProjection(object):
             ##7a. Complex domain and ranges
             #logging.info("\t\tExtracting complex domain and range for " + str(prop.name))
             results_domain = self.onto.queryGraph(self.getQueryForComplexDomain(prop.iri))
-            #print("Complex damain: ", len(results_domain))
-
             results_range = self.onto.queryGraph(self.getQueryForComplexRange(prop.iri))
-            #print("Complex range: ", len(results_range))
-
             #for row_range in results_range:
             #    self.ranges.add(row_range[0])
             for row_domain in results_domain:
@@ -525,7 +514,6 @@ class OntologyProjection(object):
                 ## 10. Extract named inverses and create/propagate new reversed triples. TBOx and ABox
                 #logging.info("\t\tExtracting inverses for " + str(prop.name))
                 results = self.onto.queryGraph(self.getQueryForInverses(prop.iri))
-                #print("OP inverses: ", len(results))
                 for row in results:
                     for sub in self.triple_dict:
                         for obj in self.triple_dict[sub]:
@@ -536,7 +524,6 @@ class OntologyProjection(object):
                 ## 11. Propagate property equivalences only not subproperties (object). TBOx and ABox
                 #logging.info("\t\tExtracting equivalences for " + str(prop.name))
                 results = self.onto.queryGraph(self.getQueryForAtomicEquivalentObjectProperties(prop.iri))
-                
                 for row in results:
                     #print("\t" + row[0])
                     for sub in self.triple_dict:
@@ -583,7 +570,6 @@ class OntologyProjection(object):
 
             ## 12a. Domain
             results_domain = self.onto.queryGraph(self.getQueryForDomain(prop.iri))
-            print("DP Domain: ", len(results_domain))
             for row_domain in results_domain:
                 self.domains.add(row_domain[0])
                 self.domains_dict[prop.iri].add(row_domain[0])
@@ -598,7 +584,6 @@ class OntologyProjection(object):
 
             ## 12c. Extract triples for role assertions (data)
             results = self.onto.queryGraph(self.getQueryDataRoleAssertions(prop.iri))
-            print("DP data role assert: ", len(results))
             self.__processPropertyResults__(prop.iri, results, False, self.include_literals)
 
 
@@ -653,13 +638,11 @@ class OntologyProjection(object):
                 #print(ann_prop_uri)
 
                 results = self.onto.queryGraph(self.getQueryForAnnotations(ann_prop_uri))
-                #print("ANN: ", ann_prop_uri, "   ",  len(results))
                 for row in results:
                     #Filter by language
                     try:
                         #Keep labels in English or not specified
                         if row[1].language=="en" or row[1].language==None:
-                  #          print(row)
                             self.__addTriple__(row[0], URIRef(ann_prop_uri), row[1])
                             #print(dir(row[1]))
                             #print(row[1].value)
@@ -1410,11 +1393,18 @@ class OntologyProjection(object):
     #?s <http://www.w3.org/1999/02/22-rdf-syntax-ns#type> <http://www.w3.org/2002/07/owl#Class> .
 
 
-
+    #Covers annotations where they appear associated to an (anonymous) individual like in anatomy track
     def getQueryForAnnotations(self, ann_prop_uri):
 
         return """SELECT DISTINCT ?s ?o WHERE {{
+        {{
         ?s <{ann_prop}> ?o .
+        }}
+        UNION
+        {{
+        ?s <{ann_prop}> ?i .
+        ?i <http://www.w3.org/2000/01/rdf-schema#label> ?o .
+        }}
         }}""".format(ann_prop=ann_prop_uri)
 
 
@@ -1439,6 +1429,10 @@ class OntologyProjection(object):
         synonyms_annotation_uris.update(self.additional_synonyms_annotations)
         synonyms_annotation_uris.update(self.annotation_uris.getAnnotationURIsForSymnonyms())
 
+        #pref_label_and_synonyms_annotation_uris = set()
+        #pref_label_and_synonyms_annotation_uris.update(synonyms_annotation_uris)
+        #pref_label_and_synonyms_annotation_uris.update(pref_label_annotation_uris)
+
 
         all_annotation_uris = set()
         all_annotation_uris.update(self.annotation_uris.getAnnotationURIsForLexicalAnnotations())
@@ -1446,12 +1440,11 @@ class OntologyProjection(object):
         all_annotation_uris.update(self.additional_synonyms_annotations)
 
 
-
-
         self.__populateDictionary__(pref_label_annotation_uris, self.entityToPreferredLabels)
         self.__populateDictionary__(synonyms_annotation_uris, self.entityToSynonyms)
         self.__populateDictionary__(all_annotation_uris, self.entityToAllLexicalLabels)
 
+        #self.__populateDictionary__(pref_label_and_synonyms_annotation_uris, self.entityToPrefLabelsAndSynonyms)
 
 
 
@@ -1468,7 +1461,7 @@ class OntologyProjection(object):
                 try:
                     #Keep labels in English or not specified
                     if row[1].language=="en" or row[1].language==None:
-                        
+
                         if not str(row[0]) in dictionary:
                             dictionary[str(row[0])]=set()
                         dictionary[str(row[0])].add(row[1].value)
@@ -1485,8 +1478,12 @@ class OntologyProjection(object):
     def getSynonymLabelsForEntity(self, entity_uri):
         return self.entityToSynonyms[entity_uri]
 
-    def getAllAnnotationsForEntity(self, entity_uri):
-        return self.entityToAllLexicalLabels[entity_uri]
+    def getPreferredAndSynonymLabelsForEntity(self, entity_uri):
+        return self.entityToPrefLabelsAndSynonyms[entity_uri]
+
+
+    #def getAllAnnotationsForEntity(self, entity_uri):
+    #    return self.entityToAllLexicalLabels[entity_uri]
 
 
 
@@ -1524,6 +1521,12 @@ if __name__ == '__main__':
     #path="/home/ernesto/Documents/OWL2Vec_star/OWL2Vec-Star-master/Version_0.1/"
     #path = "/home/ernesto/Documents/Datasets/LargeBio/"
     #path = "/home/ernesto/Documents/Datasets/conference/"
+    path= "/home/ernesto/Documents/Datasets/anatomy/"
+
+    uri_onto = path + "human.owl"
+    file_projection  = path + "human.ttl"
+    #uri_onto = path + "mouse.owl"
+    #file_projection = path + "mouse.ttl"
 
     #uri_onto = path + "helis_v1.00.origin.owl"
     #file_projection  = path + "helis_v1.00.projection.ttl"
@@ -1591,6 +1594,10 @@ if __name__ == '__main__':
 
         #for e in projection.entityToPreferredLabels:
         #    print(e, projection.entityToPreferredLabels[e])
+
+        for e in projection.entityToPrefLabelsAndSynonyms:
+            print(e, projection.entityToPrefLabelsAndSynonyms[e])
+
         #print("")
         #for e in projection.entityToSynonyms:
         #    print(e, projection.entityToSynonyms[e])
