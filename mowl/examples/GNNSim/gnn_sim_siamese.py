@@ -17,7 +17,7 @@ sys.path.insert(0, '')
 sys.path.append('../../../')
 
 from mowl.datasets.base  import PathDataset
-from mowl.develop.gnn_sim_siameseNN.model_ppi import GNNSimPPI
+from mowl.develop.GNNSim.gnn_sim_siameseNN.model_ppi import GNNSimPPI
 #from mowl.gnn_sim_siameseNN.model_gd import GNNSimGD
 
 @ck.command()
@@ -55,11 +55,9 @@ def main(config):
                        n_hidden,
                        dropout,
                        lr,
-                       num_bases,
                        batch_size,
                        epochs,
-                       use_case,
-                       graph_generation_method = graph_method,
+                       parser = graph_method,
                        normalize = normalize,
                        regularization = regularization,
                        self_loop = self_loop,

@@ -1,73 +1,56 @@
 from mowl.model import Model
-from mowl.graph.util import parser_factory
-import pandas as pd
+from mowl.graph.factory import parser_factory
 import click as ck
-import os
-import pickle as pkl
-import logging
-import dgl
-from dgl import nn as dglnn
-from dgl.dataloading import GraphDataLoader
-import torch as th
 import numpy as np
-from math import floor
-from torch import nn
-from torch.nn import functional as F
-from torch import optim
+import torch as th
+import random
+import pandas as pd
+import logging
 from .baseRGCN import BaseRGCN
+import pickle as pkl
 from sklearn.metrics import roc_curve, auc, matthews_corrcoef
-from torch.utils.data import DataLoader, IterableDataset
-#from dgl.nn.pytorch import RelGraphConv
-from .rgcnConv import RelGraphConv
 
-from mowl.graph.edge import Edge
-
-#JPype
-from jpype import JObject
+import dgl
+from dgl.dataloading import GraphDataLoader
+from torch import optim
+from torch import nn
+# JPype imports
 from java.util import HashMap
 from java.util import ArrayList
 from org.mowl.IC import IC
 
-import random
-from ray import tune
-
-class GNNSimPPI(Model):
+class AbsGNNSimPPI(Model):
     def __init__(self,
                  dataset,
-                 n_hidden,
-                 dropout,
-                 learning_rate,
-                 num_bases,
-                 batch_size,
                  epochs,
-                 use_case,
-                 graph_generation_method = "taxonomy", #Default: generate graph taxonomy
-                 normalize = False,
-                 regularization = 0,
-                 self_loop = False,
-                 min_edges = 0, #Only takes the relation types in which the number of triples is greater than min_edges. If 0 then takes all the relation types
+                 bs,
+                 lr,
+                 regularization,
+                 parser,
+                 normalization,
+                 min_edges,
+                 self_loop,
                  seed = -1,
-                 file_params = None #Dictionary of data file paths corresponding to the graph generation method (NEEDS REFACTORING)
+                 ppi_model_params = None,
+                 data_params = None,
+                 file_params = None
                  ):
+
         super().__init__(dataset)
-        self.n_hidden = n_hidden
-        self.dropout = dropout
-        self.learning_rate = learning_rate
-        self.num_bases = None if num_bases < 0 else num_bases
-        self.batch_size =  batch_size
-        self.epochs = epochs
-        self.use_case = use_case
-        self.graph_generation_method = graph_generation_method
-        self.normalize = normalize
-        self.regularization = regularization
-        self.self_loop = self_loop
-        self.min_edges = min_edges
+        self.ppi_model_params = ppi_model_params
         self.file_params = file_params
+        self.data_params = data_params
         
-        if seed>=0:
-            th.manual_seed(seed)
-            np.random.seed(seed)
-            random.seed(seed)
+        self.lr = lr
+        self.parser = parser
+        self.bs = bs
+        self.epochs = epochs
+        self.min_edges = min_edges
+        self.regularization = regularization
+        self.normalization = normalization
+        self.self_loop = self_loop
+        self.seed = seed 
+
 
         self.train_df = None
         self.test_df = None
@@ -76,6 +59,8 @@ class GNNSimPPI(Model):
         self.prot_idx = None
         self.num_rels = None
 
+
+    
 
     def train(self, checkpoint_dir = None, tuning= False):
         
@@ -94,26 +79,26 @@ class GNNSimPPI(Model):
         self.annots = annots
         self.prot_idx = prot_idx
         self.num_rels = num_rels
+        self.ppi_model_params["num-rels"] = num_rels
             
         train_labels = th.FloatTensor(train_df['labels'].values)
         val_labels = th.FloatTensor(val_df['labels'].values)
     
-        train_data = GraphDatasetPPI(g, train_df, train_labels, annots, prot_idx)
-        val_data = GraphDatasetPPI(g, val_df, val_labels, annots, prot_idx)
+        train_data = self.GraphDatasetPPI(g, train_df, train_labels, annots, prot_idx)
+        val_data = self.GraphDatasetPPI(g, val_df, val_labels, annots, prot_idx)
 
-        train_dataloader = GraphDataLoader(train_data, batch_size = self.batch_size, drop_last = True)
-        val_dataloader = GraphDataLoader(val_data, batch_size = self.batch_size, drop_last = True)
+        train_dataloader = GraphDataLoader(train_data, batch_size = self.bs, drop_last = True)
+        val_dataloader = GraphDataLoader(val_data, batch_size = self.bs, drop_last = True)
 
-        if self.num_bases is None:
-            self.num_bases = num_rels
+        self.num_bases = num_rels
         
         num_nodes = g.number_of_nodes()
 
-        device = "cuda"
-        model = PPIModel(num_rels, self.num_bases, num_nodes, self.n_hidden, self.dropout).to(device)
+        self.ppi_model_params["num-nodes"] = num_nodes
+        model = self.PPIModel(self.ppi_model_params)
         print(model)
 
-        optimizer = optim.Adam(model.parameters(), lr=self.learning_rate, weight_decay=self.regularization)
+        optimizer = optim.Adam(model.parameters(), lr=self.lr, weight_decay=self.regularization)
         
         if checkpoint_dir:
             model_state, optimizer_state = th.load(
@@ -129,6 +114,8 @@ class GNNSimPPI(Model):
         best_roc_auc = 0
 
         for epoch in range(self.epochs):
+            device = "cuda"
+            model = model.to(device)
             epoch_loss = 0
             model.train()
 
@@ -150,7 +137,10 @@ class GNNSimPPI(Model):
 
                 epoch_loss /= (i+1)
         
+            device = "cuda"
+            model = model.to(device)
             model.eval()
+
             val_loss = 0
             preds = []
             labels = []
@@ -196,7 +186,7 @@ class GNNSimPPI(Model):
 
     def evaluate(self, tuning=False, best_checkpoint_dir=None):
 
-        device = "cpu"
+        device = "cuda"
 
         if self.test_df is None:
             _, _, test_df = self.load_ppi_data()
@@ -209,18 +199,18 @@ class GNNSimPPI(Model):
         
         test_labels = th.FloatTensor(test_df['labels'].values)
             
-        test_data = GraphDatasetPPI(g, test_df, test_labels, annots, prot_idx)
+        test_data = self.GraphDatasetPPI(g, test_df, test_labels, annots, prot_idx)
 
-        test_dataloader = GraphDataLoader(test_data, batch_size = self.batch_size, drop_last = True)
+        test_dataloader = GraphDataLoader(test_data, batch_size = self.bs, drop_last = True)
 
         num_nodes = g.number_of_nodes()
 
-        if self.num_bases is None:
-            self.num_bases = num_rels
+        self.num_bases = num_rels
 
         loss_func = nn.BCELoss()
 
-        model = PPIModel(num_rels, self.num_bases, num_nodes, self.n_hidden, self.dropout)
+        model = self.PPIModel(self.ppi_model_params).to(device)
+        
 
         if tuning:
             model_state, optimizer_state = th.load(os.path.join(best_checkpoint_dir, "checkpoint"))
@@ -254,6 +244,8 @@ class GNNSimPPI(Model):
 
         return test_loss, roc_auc
 
+
+
     def compute_roc(self, labels, preds):
     # Compute ROC curve and ROC area for each class
         fpr, tpr, _ = roc_curve(labels.flatten(), preds.flatten())
@@ -262,6 +254,11 @@ class GNNSimPPI(Model):
         return roc_auc
 
     def load_ppi_data(self):
+
+        train_size = self.data_params["train-size"]
+        valid_size = self.data_params["val-size"]
+        test_size = self.data_params["test-size"]
+
         train_df = pd.read_pickle(self.file_params["train_inter_file"])
         valid_df = pd.read_pickle(self.file_params["valid_inter_file"])
         test_df = pd.read_pickle(self.file_params["test_inter_file"])
@@ -270,26 +267,40 @@ class GNNSimPPI(Model):
         index = np.arange(len(train_df))
         np.random.seed(seed=0)
         np.random.shuffle(index)
-        train_df = train_df.iloc[index]#[:1000]]
+        if train_size == -1:
+            train_df = train_df.iloc[index]
+        else:
+            train_df = train_df.iloc[index[:train_size]]
 
         index = np.arange(len(valid_df))
         np.random.seed(seed=0)
         np.random.shuffle(index)
-        valid_df = valid_df.iloc[index]#[:800]]
+
+        if valid_size == -1:
+            valid_df = valid_df.iloc[index]
+        else:
+            valid_df = valid_df.iloc[index[:valid_size]]
         
         index = np.arange(len(test_df))
         np.random.seed(seed=0)
         np.random.shuffle(index)
-        test_df = test_df.iloc[index]#[:800]]
+
+        if test_size == -1:
+            test_df = test_df.iloc[index]
+        else:
+            test_df = test_df.iloc[index[:test_size]]
+
 
         logging.info("Used data sizes: Train %d, Val %d, Test %d", len(train_df), len(valid_df), len(test_df))
         return train_df, valid_df, test_df
 
+
+
     def load_graph_data(self):
 
         logging.debug("Creating graph generation method...")
-        parser = parser_factory(self.graph_generation_method, self.dataset.ontology, bidirectional_taxonomy = True)
-        edges_path = f"data/edges_{self.use_case}_{self.graph_generation_method}.pkl"
+        parser = parser_factory(self.parser, self.dataset.ontology, bidirectional_taxonomy = True)
+        edges_path = f"data/edges_ppi_{self.parser}.pkl"
         logging.debug("Created")
         
 
@@ -302,7 +313,7 @@ class GNNSimPPI(Model):
 
         annots_dict = self.getAnnotsDict(training_prots)
         ics = IC.computeIC(self.dataset.ontology, annots_dict)
-        ics = {format(str(k)): v for k, v in ics.items()}
+        ics = {self.format(str(k)): v for k, v in ics.items()}
         logging.info("ICS for GO:0005575: %s", ics["GO:0005575"])
 
 
@@ -322,10 +333,10 @@ class GNNSimPPI(Model):
         terms_file = self.file_params["terms_file"]
 
         with open(terms_file) as f:
-#            removed_classes = {'GO:0005575', 'GO:0110165'}
-            removed_classes = set()
-            terms = list(set(f.read().splitlines()) - removed_classes)
-            edges = [(s, r, d) for s,r,d in edges if s in terms and  d in terms and ics[s] > 0.3 and ics[d] > 0.3]
+             #            removed_classes = {'GO:0005575', 'GO:0110165'}
+        #     removed_classes = set()
+            terms = list(f.read().splitlines())
+            edges = [(s, r, d) for s,r,d in edges if s in terms and  d in terms]# and ics[s] > 0.3 and ics[d]>0.3]
         
 
         srcs, rels, dsts = tuple(map(list, zip(*edges)))
@@ -360,10 +371,10 @@ class GNNSimPPI(Model):
 
 
 
-        prot_idx, annotations = self.getAnnotations(g.number_of_nodes, node_idx)
+        prot_idx, annotations = self.getAnnotations(g.number_of_nodes, node_idx, ics)
 
 
-        if self.normalize:
+        if self.normalization:
         
             edge_node = {}
             rels_dst = list(zip(rels, dsts))
@@ -380,10 +391,11 @@ class GNNSimPPI(Model):
 
             
             norm = [edge_node[i] for i in rels_dst_idx]
+            
             norm_ics = [ics[item[1]] for item in rels_dst]
-#            print(ics)
+            norm_comp = [x*y for x, y in zip(norm,norm_ics)]
 
-            zipped_data = list(zip(srcs_idx, dsts_idx, rels, norm))
+            zipped_data = list(zip(srcs_idx, dsts_idx, rels, norm_comp))
             srcs, dsts, rels, norm = zip(*[(s, d, r, n) for s, d, r, n in zipped_data if edges_per_rel[r] > self.min_edges])
 
             norm = th.Tensor(norm).view(-1, 1)
@@ -420,6 +432,7 @@ class GNNSimPPI(Model):
         return g, annotations, prot_idx, num_rels
 
 
+
     def getAnnotsDict(self, training_prots):
         data_file = self.file_params["data_file"]
         
@@ -445,7 +458,7 @@ class GNNSimPPI(Model):
         return annots_dict
 
 
-    def getAnnotations(self, num_nodes, node_idx):
+    def getAnnotations(self, num_nodes, node_idx, ics):
         data_file = self.file_params["data_file"]
         prot_idx = {}
         with open(data_file, 'r') as f:
@@ -459,127 +472,49 @@ class GNNSimPPI(Model):
                 prot_idx[prot_id] = i
                 for go_id in row[1:]:
                     if go_id in node_idx:
-                        annotations[i, node_idx[go_id]] = 1
+                        annotations[i, node_idx[go_id]] = ics[go_id]
         logging.info("Finished processing annotations")
  
         return prot_idx, annotations
        #######
 
-        
 
+
+    class RGCN(BaseRGCN):
     
-class RGCN(BaseRGCN):
-
          def build_hidden_layer(self, idx):
              act = F.relu if idx < self.num_hidden_layers - 1 else None
              return RelGraphConv(self.h_dim, self.h_dim, self.num_rels, "basis",
                 self.num_bases, activation=act, self_loop=True,
                 dropout=self.dropout)
 
-         
-class PPIModel(nn.Module):
 
-    def __init__(self, num_rels, num_bases, num_nodes, n_hid, dropout):
-        super().__init__()
-
-        self.h_dim = 1
-        self.num_rels = num_rels
-        self.num_bases = None if num_bases < 0 else num_bases
-        self.num_nodes = num_nodes
-
-        print(f"Num rels: {self.num_rels}")
-        print(f"Num bases: {self.num_bases}")
+    def node_norm_to_edge_norm(g, node_norm):
+        g = g.local_var()
+        # convert to edge norm
+        g.ndata['norm'] = node_norm
+        g.apply_edges(lambda edges : {'norm' : edges.dst['norm']})
+        return g.edata['norm']
 
 
-        self.rgcn_layers = nn.ModuleList()
 
-        for i in range(n_hid):
-            act = F.relu if i < n_hid - 1 else None
-            newLayer = RelGraphConv(self.h_dim, self.h_dim, self.num_rels, "basis", self.num_bases, activation = act, self_loop = False, dropout = dropout)
-            self.rgcn_layers.append(newLayer)
+            
+    def format(self, string):
+        '''
+        Transforms URIs comming from IC computation
+        '''
+        identifier = string.split('/')[-1].replace("_", ":")
+            
+        return identifier
 
+    
         
-        dim1 = self.num_nodes
-        dim2 = floor(self.num_nodes/2)
-
-        self.net = nn.Sequential(
-            nn.Linear(dim1, 1024)
-#            nn.Dropout(),
-#            nn.Linear(dim2, 1024),
-#            nn.Dropout()
-        )
-
-    def forward_each(self, g, features, edge_type, norm):
-        initial = features
-        x = features 
-
-        for l in self.rgcn_layers:
-            x = l(g, x, edge_type, norm)
-#            x += initial
-
-        x = th.flatten(x).view(-1, self.num_nodes*self.h_dim)
-        x = self.net(x)
-        return x
-
-    def forward(self, g, feat1, feat2):
-
-        edge_type = g.edata['rel_type'].long()
-
-        norm = None if not 'norm' in g.edata else g.edata['norm']
-
-        x1 = self.forward_each(g, feat1, edge_type, norm)
-        x2 = self.forward_each(g, feat2, edge_type, norm)
-
-        x = th.sum(x1 * x2, dim=1, keepdims=True)
-#        x = th.cat([x1, x2]).view(-1,2048)
-        return th.sigmoid(x)
+    class PPIModel():
+        def __init__(self, num_rels = None, num_bases = None, num_nodes = None, n_hid = None, dropout = 0):
+            raise NotImplementedError()
 
 
     
-
-class GraphDatasetPPI(IterableDataset):
-
-    def __init__(self, g, df, labels, annots, prot_idx):
-        self.graph = g
-        self.annots = annots
-        self.labels = labels
-        self.df = df
-        self.prot_idx = prot_idx
-
-    def get_data(self):
-        for i, row in enumerate(self.df.itertuples()):
-            p1, p2 = row.interactions
-            label = self.labels[i].view(1, 1)
-            if p1 not in self.prot_idx or p2 not in self.prot_idx:
-                continue
-            pi1, pi2 = self.prot_idx[p1], self.prot_idx[p2]
-
-            feat1 = self.annots[:, pi1]
-            feat2 = self.annots[:, pi2]
-
-            yield (self.graph, label, pi1, pi2)
-
-    def __iter__(self):
-        return self.get_data()
-
-    def __len__(self):
-        return len(self.df)
-
-
-def node_norm_to_edge_norm(g, node_norm):
-    g = g.local_var()
-    # convert to edge norm
-    g.ndata['norm'] = node_norm
-    g.apply_edges(lambda edges : {'norm' : edges.dst['norm']})
-    return g.edata['norm']
-
-
-
-
-def format(string):
-    '''
-    Transforms URIs comming from IC computation
-    '''
-    identifier = string.split('/')[-1].replace("_", ":")
-
-    return identifier
+    class GraphDatasetPPI():
+        def __init__(self):
+            raise NotImplementedError()

@@ -1,10 +1,12 @@
-name: mowl39
+name: mowl
 channels:
+  - pytorch
   - conda-forge
+  - anaconda
 dependencies:
   - python=3.9
   - cairo
-  - dglteam::dgl
+  - dglteam::dgl-cuda11.3
   - numpy
   - networkx
   - click
@@ -13,6 +15,8 @@ dependencies:
   - owlready2
   - pandas
   - protobuf
+  - cudnn
+  - cudatoolkit=11.3.*
   - pytest
   - pyyaml
   - requests
