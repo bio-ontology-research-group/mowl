@@ -19,7 +19,7 @@ import math
 from mowl.model import Model
 from mowl.graph.taxonomy.model import TaxonomyParser
 from mowl.graph.edge import Edge
-
+import mowl.develop.catEmbeddings.losses as L
 logging.basicConfig(level=logging.DEBUG)
 
 class CatEmbeddings(Model):
@@ -95,6 +95,7 @@ class CatEmbeddings(Model):
             print(f'Epoch {epoch}: Loss - {epoch_loss:.6}, \tVal loss - {val_loss:.6}, \tAUC - {roc_auc:.6}')
 
 
+            
     def load_data(self):
 
         if self.go_slim:
@@ -350,8 +351,12 @@ class CatModel(nn.Module):
             nn.Linear(embedding_size, embedding_size),
             self.dropout
         )
+
+
+        self.exponential_morphisms = (self.up2down, self.up2exp, self.down2exp, self.up2ant, self.down2ant, self.up2cons, self.down2cons, self.fc)
+
         
-    def compute_loss(self, objects):
+    def compute_loss2(self, objects):
 
         rmse = RMSELoss()
         rmseNR = RMSELoss(reduction = "none")
@@ -447,10 +452,19 @@ class CatModel(nn.Module):
         
         
     def forward(self, positive, negative1, negative2):
-        logit_pos = self.compute_loss(positive)
-        
-        logit_neg1 = self.compute_loss(negative1)
-        logit_neg2 = self.compute_loss(negative2)
+        positive = th.vstack(positive).transpose(0,1)
+        negative1 = th.vstack(negative1).transpose(0,1)
+        negative2 = th.vstack(negative2).transpose(0,1)
+#        print(positive.shape)
+        logit_pos = L.nf1_loss(positive, self.exponential_morphisms, (self.net_object, self.emb_up)) # self.compute_loss(positive)
+        logit_pos = 1 - 2*(th.sigmoid(logit_pos) - 0.5)
+
+        logit_neg1 = L.nf1_loss(negative1, self.exponential_morphisms, (self.net_object, self.emb_up)) #self.compute_loss(negative1)
+        logit_neg1 = 1 - 2*(th.sigmoid(logit_neg1) - 0.5)
+
+        logit_neg2 = L.nf1_loss(negative2, self.exponential_morphisms, (self.net_object, self.emb_up)) #self.compute_loss(negative2)
+        logit_neg2 = 1 - 2*(th.sigmoid(logit_neg2) - 0.5)
+
         logits = th.cat([logit_pos, logit_neg1, logit_neg2], 0)
         
         return logits
@@ -488,7 +502,7 @@ class CatDataset(IterableDataset):
         antecedent_ = self.object_dict[antecedent]
         consequent_ = self.object_dict[consequent]
 
-        return antecedent_, consequent_
+        return [antecedent_, consequent_]
 
     
 def compute_roc(labels, preds):
