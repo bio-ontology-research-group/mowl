@@ -8,7 +8,9 @@ from mowl.graph.owl2vec_star.model import OWL2VecParser
 from mowl.develop.owl2vec.model import OWL2VecStarParser as Dev
 from mowl.graph.edge import Edge
 import pickle as pkl
+import time
 
+logfile = "times.txt"
 
 def testCase(dataset, bidirectional_taxonomy, only_taxonomy, include_literals):
 
@@ -26,9 +28,19 @@ def testCase(dataset, bidirectional_taxonomy, only_taxonomy, include_literals):
     parserNew = Dev(dataset.ontology, bidirectional_taxonomy=bidirectional_taxonomy, only_taxonomy = only_taxonomy, include_literals = include_literals)
 
 
+    start = time.time()
     edgesNew = set(map(lambda x: Edge.astuple(x), parserNew.parse()))
-    
+    end = time.time()
+    newTime = end - start
+
+    start = time.time()
     edgesOld = list(map(lambda x: Edge.astuple(x), parserOld.parse()))
+    end = time.time()
+    oldTime = end - start
+
+    with open(logfile, "a") as f:
+        f.write(f"BD: {bidirectional_taxonomy}, OT: {only_taxonomy}, IC = {include_literals}, oldTime: {oldTime}, newTime: {newTime}\n")
+    
     formattedEdgesOld = list()
     for i in range(len(edgesOld)):
         src = edgesOld[i][0]
@@ -76,10 +88,10 @@ def testCase(dataset, bidirectional_taxonomy, only_taxonomy, include_literals):
 
 if __name__ == "__main__":
 
-    dataset = PathDataset("data/goslim_yeast.owl", None, None)
+    dataset = PathDataset("data/go.owl", None, None)
 
     result = True
-    for include_literals in [True]:
+    for include_literals in [False, True]:
         for only_taxonomy in [True, False]:
             for bidirectional_taxonomy in [True, False]:
                 result = testCase(dataset, bidirectional_taxonomy, only_taxonomy, include_literals)
