@@ -4,12 +4,13 @@ from scipy.stats import rankdata
 import torch as th
 from torch.utils.data import DataLoader
 
-def evalNF4Loss(model, test_nf4, prot_dict, prot_index, trlabels, num_prots, device = 'cpu'):
+def evalNF4Loss(model, test_nf4, prot_dict, prot_index, trlabels, num_prots, device = 'cpu', show = False):
 
     model = model.to(device)
     top1 = 0
     top10 = 0
     top100 = 0
+    top1000 = 0
     mean_rank = 0
     ftop1 = 0
     ftop10 = 0
@@ -22,12 +23,13 @@ def evalNF4Loss(model, test_nf4, prot_dict, prot_index, trlabels, num_prots, dev
     eval_data = test_nf4
 
     cs = {c for c,r,d in eval_data}
-    print("Lengths: ", len(eval_data), len(cs))
             
     n = len(eval_data)
 
     with ck.progressbar(eval_data) as prog_data:
         for c, r, d in prog_data:
+            c_emb = c
+            r_emb = r
             c, r, d = c.detach().item(), r.detach().item(), d.detach().item()
             c, d = prot_dict[c], prot_dict[d]
 
@@ -38,14 +40,16 @@ def evalNF4Loss(model, test_nf4, prot_dict, prot_index, trlabels, num_prots, dev
             
             labels[r][c, d] = 1
 
-            data = th.tensor([[c,r,x] for x in prot_index]).to(device)
+            data = th.tensor([[c_emb, r_emb, x] for x in prot_index]).to(device)
+
+            res = model.nf4_loss(data).cpu().detach().numpy()
             
-            batched_data = DataLoader(data, batch_size = 5000)
-            res = []
-            for i, batch in enumerate(batched_data):
-                batch_res = model.nf4_loss(batch).cpu().detach().numpy()
-                res = np.append(res, batch_res)
-            print(res.shape, len(prot_index))
+            
+            # batched_data = DataLoader(data, batch_size = len(prot_index))
+            # res = []
+            # for i, batch in enumerate(batched_data):
+            #     batch_res = model.nf4_loss(batch).cpu().detach().numpy()
+            #     res = np.append(res, batch_res)
             
             # res = np.reshape((np.linalg.norm(
             #     np.maximum(euc - rd + rr , np.zeros(euc.shape)), axis=1)),
@@ -59,7 +63,7 @@ def evalNF4Loss(model, test_nf4, prot_dict, prot_index, trlabels, num_prots, dev
             first = np.where(index == 1)[0]
             last = np.where(index == len(prot_index))[0]
 
-#            print(f" ({rank},{res[d]}), ({index[first]}, {res[first]}), ({index[last]}, {res[last]}) ")
+            print(f" ({rank},{res[d]}), ({index[first]}, {res[first]}), ({index[last]}, {res[last]}) ")
 
             # print(1 / 0)
             
@@ -69,6 +73,9 @@ def evalNF4Loss(model, test_nf4, prot_dict, prot_index, trlabels, num_prots, dev
                 top10 += 1
             if rank <= 100:
                 top100 += 1
+            if rank <= 1000:
+                top1000 += 1
+                
             mean_rank += rank
             if rank not in ranks:
                 ranks[rank] = 0
@@ -102,6 +109,7 @@ def evalNF4Loss(model, test_nf4, prot_dict, prot_index, trlabels, num_prots, dev
         top1 /= n
         top10 /= n
         top100 /= n
+        top1000 /= n
         mean_rank /= n
         ftop1 /= n
         ftop10 /= n
@@ -111,9 +119,12 @@ def evalNF4Loss(model, test_nf4, prot_dict, prot_index, trlabels, num_prots, dev
     rank_auc = compute_rank_roc(ranks, num_prots)
     frank_auc = compute_rank_roc(franks, num_prots)
 
-    return top1, top10, top100, mean_rank, ftop1, ftop10, ftop100, fmean_rank
-    #print(f'{org} {embedding_size} {top10:.2f} {top100:.2f} {mean_rank:.2f} {rank_auc:.2f}')
-    #print(f'{org} {embedding_size} {ftop10:.2f} {ftop100:.2f} {fmean_rank:.2f} {frank_auc:.2f}')
+    if show:
+        print(f'{top10:.2f} {top100:.2f} {mean_rank:.2f} {rank_auc:.2f}')
+        print(f'{ftop10:.2f} {ftop100:.2f} {fmean_rank:.2f} {frank_auc:.2f}')
+
+    return top1, top10, top100, top1000, mean_rank, ftop1, ftop10, ftop100, fmean_rank
+
 
 
 def compute_rank_roc(ranks, n_prots):

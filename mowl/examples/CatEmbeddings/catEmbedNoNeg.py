@@ -27,8 +27,7 @@ def main(config):
    
     ds = PPIYeastDataset()
     
-    model = CatEmbeddings(ds, 512, embedding_size = 1024)
-
+    model = CatEmbeddings(ds, 4096*4, embedding_size = 1024)
     model.train()
 #    model.evaluate()
 #    model.evaluate_ppi()

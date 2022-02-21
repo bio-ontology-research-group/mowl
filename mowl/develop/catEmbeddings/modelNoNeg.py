@@ -64,17 +64,16 @@ class CatEmbeddings(Model):
         self.model = None
         ### For eval ppi
         
-        self.load_data(device = 'cpu')
+        self.load_data(device = 'cuda')
         _, _, _, train_nf4 = self.train_nfs
         proteins = {}
         for k, v in self.classes.items():
-            if not k.startswith('<http://purl.obolibrary.org/obo/GO_'):
+            if not k.startswith('<http://purl.obolibrary.org/obo/GO_') and not k.startswith("GO_"):
                 proteins[k] = v
-
         self.prot_index = proteins.values()
         self.prot_dict = {v: k for k, v in enumerate(self.prot_index)}
 
-        print("prot dict created")
+        print(f"prot dict created. Number of proteins: {len(self.prot_index)}")
         self.trlabels = {}
         
         for c,r,d in train_nf4:
@@ -96,10 +95,12 @@ class CatEmbeddings(Model):
         
 
     def train(self):
-        self._loaded = False
-
-        self.load_data(device="cuda")
+ #       self._loaded = False
         device = "cuda"
+        self.load_data(device="cuda")
+        self.create_dataloaders(device = device)
+        self.train_nfs = tuple(map(lambda x: x.to(device), self.train_nfs))
+        
         num_classes = len(self.classes)
         num_rels = len(self.relations)
         
@@ -109,130 +110,177 @@ class CatEmbeddings(Model):
         logging.info("Number of parameters: %d", paramss)
         logging.debug("Model created")
 
-        lr = 0.1
-        self.model = self.model.to(self.device)
+        lr = 0.001
+        self.model = self.model.to(device)
         
-        self.optimizer = optim.SGD(self.model.parameters(), lr = lr, weight_decay=0)
+        self.optimizer = optim.Adam(self.model.parameters(), lr = lr, weight_decay=0)
+#        self.scheduler = optim.lr_scheduler.ExponentialLR(self.optimizer, 0.9)
+        self.scheduler = optim.lr_scheduler.MultiStepLR(self.optimizer, [300], gamma = 0.3)
 
-        best_loss = float("inf")
+        best_mean_rank = float("inf")
+        best_val_loss = float("inf")
 
         nf1, nf2, nf3, nf4 = self.train_nfs
         criterion = nn.BCELoss()
-        for epoch in range(128):
+        for epoch in range(1024):
 
             batch = self.batch_size
             self.model.train()
             self.model = self.model.to(device)
             
-            rand_index = np.random.choice(len(nf1), size=batch)
-            nf1_batch = nf1[rand_index].to(self.device)
-            nf1_logits = self.model(nf1_batch, 1, neg=True)
-            labels = th.cat([th.ones(batch), th.zeros(batch)], 0).to(self.device)
-#            print(labels.shape, nf1_logits.shape)
-            nf1_loss = criterion(nf1_logits.squeeze(), labels)      
-
-            rand_index = np.random.choice(len(nf2), size=batch)
-            nf2_batch = nf2[rand_index].to(self.device)
-            nf2_loss = self.model(nf2_batch, 2)
-
-            rand_index = np.random.choice(len(nf3), size=batch)
-            nf3_batch = nf3[rand_index].to(self.device)
-            nf3_loss = self.model(nf3_batch, 3)
-
-#            rand_index = np.random.choice(len(nf4), size=batch)
-            nf4_batch = nf4[rand_index].to(self.device)
-            nf4_loss = self.model(nf4_batch, 4, neg = False)
-#            nf4_loss = criterion(nf4_loss, labels)
+            # rand_index = np.random.choice(len(nf1), size=batch, replace = False)
+            # nf1_batch = nf1[rand_index].to(self.device)
+            # nf1_loss_pos = self.model(nf1_batch, 1)
+            # nf1_loss_neg = self.model(nf1_batch, 1, neg=True, margin = 1)
+            # diff_nf1_loss = th.relu(nf1_loss_pos - nf1_loss_neg + 1)
             
-            print(f"nf1: {nf1_loss}")
-            print(f"nf2: {nf2_loss}")
-            print(f"nf3: {nf3_loss}")
-            print(f"nf4: {nf4_loss}")
-            train_loss = nf1_loss + nf2_loss + nf3_loss + nf4_loss
-            train_loss.backward()
-            self.optimizer.step()
+            # rand_index = np.random.choice(len(nf2), size=batch, replace = True)
+            # nf2_batch = nf2[rand_index].to(self.device)
+            # nf2_loss = self.model(nf2_batch, 2)
+            # #nf2_loss_neg = self.model(nf2_batch, 2, neg = True, margin = 7)
 
-            #train_loss = self.forward_step(self.train_dl)
+            # rand_index = np.random.choice(len(nf3), size=batch, replace = True)
+            # nf3_batch = nf3[rand_index].to(self.device)
+            # nf3_loss = self.model(nf3_batch, 3)
+            # #nf3_loss_neg = self.model(nf3_batch, 3, neg = True, margin = 7)
 
+#            rand_index = np.random.choice(len(nf4), size=batch, replace = False)
+#            nf4_batch = nf4[rand_index].to(device)
+#            nf4_loss_pos = th.mean(self.model(nf4_batch, 4))
+            #            nf4_loss = criterion(nf4_loss, labels)
+            
+#            nf4_loss_neg = self.model(nf4_batch, 4, neg = True, margin = 10)
+#            diff_nf4_loss = th.mean(th.relu(nf4_loss_pos - nf4_loss_neg + 10))
+
+
+#            print(f"nf1: {diff_nf1_loss}, \tnf1p: {nf1_loss_pos}, \tnf1n: {nf1_loss_neg}")
+     #       print(f"nf2: {nf2_loss}")#, \tnf2n: {nf2_loss_neg}")
+     #       print(f"nf3: {nf3_loss}")#, \tnf3n: {nf3_loss_neg}")
+#            print(f"nf4: {diff_nf4_loss}, \tnf4p: {nf4_loss_pos}, \tnf4n: {nf4_loss_neg}")
+            #print(f"nf4: {nf4_loss_pos}")
+      #      train_loss = nf4_loss_pos +  diff_nf4_loss# + nf1_loss_pos + diff_nf1_loss# +  nf2_loss + nf3_loss #+ nf1_loss_neg + nf4_loss_neg #+ nf2_loss_neg + nf3_loss_neg
+      #      train_loss.backward()
+      #      self.optimizer.step()
+
+            train_loss = self.forward_step(self.train_dl, nf1 = True, nf2 = False, nf3 = False,  nf4 = True)
     
             self.model.eval()
+            top1, top10, top100, top1000, mean_rank, ftop1, ftop10, ftop100, fmean_rank = self.evaluate_ppi_valid()
 
             with th.no_grad():
                 self.optimizer.zero_grad()
-                val_loss  = self.forward_step(self.val_dl, train = False)
-                if best_loss > val_loss:
-                    best_loss = val_loss
-                    th.save(self.model.state_dict(), self.model_filepath)
-            top1, top10, top100, mean_rank, ftop1, ftop10, ftop100, fmean_rank = self.evaluate_ppi_valid()
-            print(f'Epoch {epoch}: Loss - {train_loss:.6}, \tVal loss - {val_loss:.6}, \tMR - {mean_rank}, \tFMR - {fmean_rank}, \tT100 - {ftop100}')
+                val_loss  = self.forward_step(self.val_dl, train = False, device = device, nf4 = True)
 
+            if best_mean_rank > mean_rank and best_val_loss > val_loss:
+                best_val_loss = val_loss
+                best_mean_rank = mean_rank
+                th.save(self.model.state_dict(), self.model_filepath)
+            print(f'Epoch {epoch}: Loss - {train_loss:.6}, \tVal loss - {val_loss:.6}')
+            print(f' MR - {mean_rank}, \tT10 - {top10},\tT100 - {top100}, \tT1000 - {top1000}')
+            print(f'FMR - {fmean_rank}, \tT10 - {ftop10},\tT100 - {ftop100}')
+            print("\n\n")
+            self.scheduler.step()
 
-    def forward_step(self, dataloaders, train=True):
+    def forward_step(self, dataloaders, train=True, device = "cpu", nf1 = False, nf2 = False, nf3 = False, nf4 = False):
         train_nf1, train_nf2, train_nf3, train_nf4 = dataloaders
-        nf1_loss = 0
-        nf2_loss = 0
+        nf1_loss_pos = 0
+        nf1_loss_neg = 0
+        nf1_diff_loss = 0
+        nf2_loss_pos = 0
+        nf2_loss_neg = 0
+        nf2_diff_loss = 0
         nf3_loss = 0
-        nf4_loss = 0
+        nf4_loss_pos = 0
+        nf4_loss_neg = 0
+        nf4_diff_loss = 0
 
-
-        with ck.progressbar(train_nf1) as bar:
+        if nf1:
             i = 0
-            for i, batch_nf in enumerate(bar):
-                step_loss = self.model(batch_nf, 1)
+            for i, batch_nf1 in enumerate(train_nf1):
+                pos_loss = self.model(batch_nf1, 1)
                 if train:
+#                    neg_loss = self.model(batch_nf1, 1, neg = True)
+#                    diff_loss = th.mean(th.relu(pos_loss - neg_loss + 1))
+                    step_loss = th.mean(pos_loss) #+ diff_loss
                     self.optimizer.zero_grad()
                     step_loss.backward()
                     self.optimizer.step()
 
-                nf1_loss += step_loss.detach().item()
-            nf1_loss /= (i+1)
+                nf1_loss_pos += th.mean(pos_loss).detach().item()
+#                if train:
+#                    nf1_loss_neg += th.mean(neg_loss).detach().item()
+#                    nf1_diff_loss += diff_loss.detach().item()
 
-        with ck.progressbar(train_nf2) as bar:
+            nf1_loss_pos /= (i+1)
+            nf1_loss_neg /= (i+1)
+            nf1_diff_loss /= (i+1)
+
+        if nf2:
             i=0
-            for i, batch_nf in enumerate(bar):
-                step_loss = self.model(batch_nf, 2)
+            for i, batch_nf2 in enumerate(train_nf2):
+                pos_loss = self.model(batch_nf2, 2)
                 if train:
+                    neg_loss = self.model(batch_nf2, 2, neg = True)
+                    diff_loss = th.mean(th.relu(pos_loss - neg_loss + 1))
+                    step_loss = th.mean(pos_loss) + diff_loss
                     self.optimizer.zero_grad()
                     step_loss.backward()
                     self.optimizer.step()
 
-                nf2_loss += step_loss.detach().item()
-            nf2_loss /= (i+1)
+                nf2_loss_pos += th.mean(pos_loss).detach().item()
+                if train:
+                    nf2_loss_neg += th.mean(neg_loss).detach().item()
+                    nf2_diff_loss += diff_loss.detach().item()
+            nf2_loss_pos /= (i+1)
+            nf2_loss_neg /= (i+1)
+            nf2_diff_loss /= (i+1)
 
-        with ck.progressbar(train_nf3) as bar:
+        if nf3:
             i=0
-            for i, batch_nf in enumerate(bar):
-                step_loss = self.model(batch_nf, 3)
+            for i, batch_nf in enumerate(train_nf3):
+                step_loss = th.mean(self.model(batch_nf, 3))
                 if train:
                     self.optimizer.zero_grad()
                     step_loss.backward()
                     self.optimizer.step()
-                            
+
                 nf3_loss += step_loss.detach().item()
             nf3_loss /= (i+1)
 
-        with ck.progressbar(train_nf4) as bar:
+
+        if nf4:
             i=0
-            for i, batch_nf in enumerate(bar):
-                step_loss = self.model(batch_nf, 4)
+            for i, batch_nf in enumerate(train_nf4):
+                pos_loss = self.model(batch_nf, 4)
+
                 if train:
+                    neg_loss = self.model(batch_nf, 4, neg = True)
+                    assert pos_loss.shape == neg_loss.shape, f"{pos_loss.shape}, {neg_loss.shape}"
+                    diff_loss = th.mean(th.relu(pos_loss - neg_loss + 10))
+                    step_loss = th.mean(pos_loss) + diff_loss
+
                     self.optimizer.zero_grad()
                     step_loss.backward()
                     self.optimizer.step()
 
-                nf4_loss += step_loss.detach().item()
-            nf4_loss /= (i+1)
-
-        print(f"nf1: {nf1_loss}")
-        print(f"nf2: {nf2_loss}")
+                nf4_loss_pos += th.mean(pos_loss).detach().item()
+                if train:
+                    nf4_loss_neg += th.mean(neg_loss.detach()).item()
+                    nf4_diff_loss += diff_loss.detach().item()
+            nf4_loss_pos /= (i+1)
+            nf4_loss_neg /= (i+1)
+            nf4_diff_loss /= (i+1)
+        print(f"nf1: {nf1_diff_loss}, \tnf1p: {nf1_loss_pos}, \tnf1n: {nf1_loss_neg}")
+        print(f"nf2: {nf2_diff_loss}, \tnf2p: {nf2_loss_pos}, \tnf2n: {nf2_loss_neg}")
         print(f"nf3: {nf3_loss}")
-        print(f"nf4: {nf4_loss}")
-        return nf1_loss + nf2_loss + nf3_loss + nf4_loss
+        print(f"nf4: {nf4_diff_loss}, \tnf4p: {nf4_loss_pos}, \tnf4n: {nf4_loss_neg}")
+      
+        return nf1_loss_pos + nf4_diff_loss + nf2_loss_pos + nf2_diff_loss + nf3_loss + nf4_loss_pos + nf4_diff_loss
 
 
 
     def evaluate(self):
-        self.load_data()
+#        self.load_data()
         self.model = CatModel(len(self.classes), len(self.relations), 1024).to(self.device)
         print('Load the best model', self.model_filepath)
         self.model.load_state_dict(th.load(self.model_filepath))
@@ -243,21 +291,26 @@ class CatEmbeddings(Model):
     def evaluate_ppi_valid(self):
         self.model.eval()
         _, _, _, valid_nf4 = self.valid_nfs
-        index = np.random.choice(len(valid_nf4), size = 10)
+        index = np.random.choice(len(valid_nf4), size = 10, replace = False)
+        index = list(range(20))
         valid_nfs = valid_nf4[index]
-        mean_rank = evalNF4Loss(self.model, valid_nfs, self.prot_dict, self.prot_index, self.trlabels, len(self.prot_index), device= 'cpu')
+        results = evalNF4Loss(self.model, valid_nfs, self.prot_dict, self.prot_index, self.trlabels, len(self.prot_index), device= 'cuda')
 
-        return mean_rank
+        return results
 
     def evaluate_ppi(self):
-        self.load_data(device = "cuda")
-        
+        #self.load_data(device = "cuda")
+        #self.device = "cuda"
         self.model = CatModel(len(self.classes), len(self.relations), self.embedding_size).to(self.device)
-        print('Load the best model', self.model_filepath)
+        #print('Load the best model', self.model_filepath)
         self.model.load_state_dict(th.load(self.model_filepath))
         self.model.eval()
         print(self.device)
-        evalNF4Loss(self.model, self.classes, self.relations, self.train_nfs, self.test_nfs, device= self.device)
+        _, _, _, valid_nf4 = self.valid_nfs
+        index = np.random.choice(len(valid_nf4), size = 1000, replace = False)
+        valid_nfs = valid_nf4[index]
+
+        evalNF4Loss(self.model, valid_nfs, self.prot_dict, self.prot_index, self.trlabels, len(self.prot_index), device= self.device, show = True)
         
     #########################################
     ### Borrowed code from ELEmbeddings
@@ -377,20 +430,23 @@ class CatEmbeddings(Model):
         self.valid_nfs = self.nfs_to_tensors(valid_nfs, self.device)
         self.test_nfs = self.nfs_to_tensors(test_nfs, self.device)
 
-
-        train_ds = map(lambda x: NFDataset(x), self.train_nfs)
-        self.train_dl = tuple(map(lambda x: DataLoader(x, batch_size = self.batch_size), train_ds))
-
-        val_ds = map(lambda x: NFDataset(x), self.valid_nfs)
-        self.val_dl = tuple(map(lambda x: DataLoader(x, batch_size = self.batch_size), val_ds))
-
-        test_ds = map(lambda x: NFDataset(x), self.test_nfs)
-        self.test_dl = tuple(map(lambda x: DataLoader(x, batch_size = self.batch_size), test_ds))
-
         self._loaded = True
 
 
+    def create_dataloaders(self, device):
+        train_nfs = tuple(map(lambda x: x.to(device), self.train_nfs))
+        valid_nfs = tuple(map(lambda x: x.to(device), self.valid_nfs))
+        test_nfs = tuple(map(lambda x: x.to(device), self.test_nfs))
 
+        train_ds = map(lambda x: NFDataset(x), train_nfs)
+        self.train_dl = tuple(map(lambda x: DataLoader(x, batch_size = self.batch_size), train_ds))
+
+        val_ds = map(lambda x: NFDataset(x), valid_nfs)
+        self.val_dl = tuple(map(lambda x: DataLoader(x, batch_size = self.batch_size), val_ds))
+
+        test_ds = map(lambda x: NFDataset(x), test_nfs)
+        self.test_dl = tuple(map(lambda x: DataLoader(x, batch_size = self.batch_size), test_ds))
+        
 class CatModel(nn.Module):
 
     def __init__(self, num_objects, num_rels, embedding_size):
@@ -429,15 +485,7 @@ class CatModel(nn.Module):
 
         # Embedding network for left part of 3rd normal form
         self.embed_ex = nn.Sequential(
-            nn.Linear(2*embedding_size, embedding_size),
-            self.dropout,
-            nn.ReLU(),
-            nn.Linear(embedding_size, embedding_size),
-            nn.Sigmoid()
-        )
-        # Embedding network for right part of 2nd normal form
-        self.embed_snd = nn.Sequential(
-            nn.Linear(2*embedding_size, embedding_size),
+            nn.Linear(3*embedding_size, embedding_size),
             self.dropout,
             nn.ReLU(),
             nn.Linear(embedding_size, embedding_size),
@@ -491,7 +539,7 @@ class CatModel(nn.Module):
 
     
     def nf4_loss(self, data):
-        embed_nets = (self.net_object, self.net_rel, self.embed_snd, self.embed_up, self.embed_bigger_prod)
+        embed_nets = (self.net_object, self.net_rel, self.embed_ex, self.embed_up, self.embed_bigger_prod)
         return L.nf4_loss(data, self.product_morphisms, self.exponential_morphisms, embed_nets)
     def create_morphism(self):
         fc = nn.Sequential(
@@ -501,7 +549,7 @@ class CatModel(nn.Module):
         return fc
 
         
-    def forward(self, normal_form, idx, neg = False):
+    def forward(self, normal_form, idx, neg = False, margin = 0):
 #        nf1, nf2, nf3, nf4 = normal_forms
 
         # logging.debug(f"NF1: {len(nf1)}")
@@ -513,23 +561,31 @@ class CatModel(nn.Module):
         if idx == 1:
             embed_nets = (self.net_object, self.embed_up)
             if neg:
-                logits = L.nf1_loss(normal_form, self. exponential_morphisms, embed_nets, neg = True)
-                return logits
+                neg_loss = L.nf1_loss(normal_form, self. exponential_morphisms, embed_nets, neg = True, margin = margin)
+                loss += neg_loss
             else:
-                loss += th.mean(L.nf1_loss(normal_form, self. exponential_morphisms, embed_nets, neg = False))
+                loss += L.nf1_loss(normal_form, self. exponential_morphisms, embed_nets, neg = False)
         elif idx == 2:
             embed_nets = (self.net_object, self.embed_up, self.embed_bigger_prod)
-            loss += th.mean(L.nf2_loss(normal_form, self.product_morphisms, self.exponential_morphisms, embed_nets))
+            if neg:
+                neg_loss = L.nf2_loss(normal_form, self.product_morphisms, self.exponential_morphisms, embed_nets, neg = True)
+                loss += neg_loss
+            else:
+                loss += L.nf2_loss(normal_form, self.product_morphisms, self.exponential_morphisms, embed_nets)
         elif idx == 3:
             embed_nets = (self.net_object, self.net_rel, self.embed_ex, self.embed_up, self.embed_bigger_prod)
-            loss += th.mean(L.nf3_loss(normal_form, self.product_morphisms, self.exponential_morphisms, embed_nets))
+            if neg:
+                neg_loss = L.nf3_loss(normal_form, self.product_morphisms, self.exponential_morphisms, embed_nets, neg = True, margin = margin)
+                loss += neg_loss
+            else:
+                loss += th.mean(L.nf3_loss(normal_form, self.product_morphisms, self.exponential_morphisms, embed_nets))
         elif idx == 4:
             embed_nets = (self.net_object, self.net_rel, self.embed_ex, self.embed_up, self.embed_bigger_prod)
             if neg == True:
-                logits = L.nf4_loss(normal_form, self.exponential_morphisms, embed_nets, neg = True, num_objects = self.num_obj)
-                return logits
+                neg_loss = L.nf4_loss(normal_form, self.product_morphisms,  self.exponential_morphisms, embed_nets, neg = True, num_objects = self.num_obj, margin = margin)
+                loss += neg_loss
             else:
-                loss += th.mean(L.nf4_loss(normal_form, self.product_morphisms, self.exponential_morphisms, embed_nets))
+                loss += L.nf4_loss(normal_form, self.product_morphisms, self.exponential_morphisms, embed_nets)
         else:
             raise ValueError("Invalid index")
         
