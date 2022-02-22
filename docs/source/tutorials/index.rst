@@ -3,5 +3,6 @@ Tutorials
 
 .. nbgallery::
    DL2Vec
-   elembedding
+   Walking
+   ELEmbeddings
    Translational

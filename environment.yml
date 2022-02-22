@@ -23,6 +23,7 @@ dependencies:
   - gensim
   - openjdk
   - gradle
+  - rdflib
   - pip
   - pip:
     - pykeen

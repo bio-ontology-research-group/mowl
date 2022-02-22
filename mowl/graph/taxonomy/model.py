@@ -1,11 +1,8 @@
+from mowl.graph.graph import GraphGenModel
+
 from org.mowl.Parsers import TaxonomyParser as Parser
 from org.semanticweb.owlapi.model import OWLOntology
 from mowl.graph.edge import Edge
-
-import sys
-
-from mowl.graph.graph import GraphGenModel
-
 
 class TaxonomyParser(GraphGenModel):
 

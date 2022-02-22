@@ -8,37 +8,21 @@ class WalkingModel():
     :type num_walks: int
     :param walk_length: Length of each walk
     :type walk_length: int
-    :param num_workers: Number of threads to be used for computing the walks
-    :type num_workers: int
-    :param outfile: Outfile path where the walks will be stored
-    :type outfile: str
+    :param workers: Number of threads to be used for computing the walks. Default is 1'
+    :type workers: int
     '''
-    def __init__(self, edges, num_walks, walk_length, num_workers, outfile):    
+    def __init__(self, edges, num_walks, walk_length, outfile, workers=1):    
         self.edges = edges
         self.num_walks = num_walks
         self.walk_length = walk_length
-        self.num_workers = num_workers
+        self.workers = workers
         self.outfile = outfile
-
     # Abstract methods
     def walk(self):
+
+        '''
+        This method will generate the walks which can be accessed from the attribute `walks`.
+        '''
+        
         raise NotImplementedError()
 
-
-    # Non abstract method
-    def num_paths_per_worker(self):
-        
-        if self.num_walks <= self.num_workers:
-            self.num_workers = self.num_walks
-            paths_per_worker = [1 for x in range(self.num_walks)]
-        else:
-            remainder = self.num_walks % self.num_workers
-            aux = self.num_workers - remainder
-            paths_per_worker = [int((self.num_walks+aux)/self.num_workers) for i in range(self.num_workers)]
-            i = 0
-            while aux > 0:
-                paths_per_worker[i%self.num_workers] -= 1
-                i += 1
-                aux -= 1
-
-        return paths_per_worker
