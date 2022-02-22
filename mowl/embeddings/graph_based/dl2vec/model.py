@@ -29,12 +29,18 @@ class DL2Vec(Model):
     :type outfile: str
     :param bidirectional_taxonomy: If true, the ontology projection into a graph will add inverse edges per each subclass axiom
     :type bidirectional_taxonomy: bool
+    :param walking_method: Method for generating the walks. Choices are: deepwalk (default), node2vec, walkrdfowl.
+    :type walking_method: str
     :param walk_length: Length of the walk performed for each node
     :type walk_length: int
     :param num_walks: Number of walks performed per node
     :type num_walks: int
-    :param alpha: Probability of restart in the walking phase
+    :param alpha: Probability of restart in the walking phase. Applicable with DeepWalk
     :type alpha: float
+    :param p: Return hyperparameter. Default is 1. Applicable with Node2Vec
+    :type p: float
+    :param q: In-out hyperparameter. Default is 1. Applicable with Node2Vec.
+    :type q: float
     :param vector_size: Dimensionality of the word vectors. Same as :class:`gensim.models.word2vec.Word2Vec`
     :type vector_size: int
     :param wv_epochs: Number of epochs for the Word2Vec model

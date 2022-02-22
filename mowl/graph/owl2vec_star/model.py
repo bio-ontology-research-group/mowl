@@ -1,18 +1,10 @@
 import os
-import tempfile
 
-from java.io import File
-from org.semanticweb.owlapi.apibinding import OWLManager
-from org.semanticweb.owlapi.formats import OWLXMLDocumentFormat
-from java.io import FileOutputStream
 from mowl.graph.graph import GraphGenModel
 from mowl.graph.edge import Edge
-
-
-import mowl.graph.owl2vec_star.Onto_Projection as o2v
-
-
-class OWL2VecParser(GraphGenModel):
+from org.mowl.Parsers import OWL2VecStarParser as Parser
+from org.semanticweb.owlapi.model import OWLOntology
+class OWL2VecStarParser(GraphGenModel):
 
     '''
     :param ontology: The ontology to be processed.
@@ -26,30 +18,17 @@ class OWL2VecParser(GraphGenModel):
     '''
 
     
-    def __init__(self, ontology, bidirectional_taxonomy = False, include_literals = False, only_taxonomy = False):
+    def __init__(self, ontology: OWLOntology, bidirectional_taxonomy = False, only_taxonomy = False, include_literals = False):
         super().__init__(ontology)
         self.bidirectional_taxonomy = bidirectional_taxonomy
         self.include_literals = include_literals
         self.only_taxonomy = only_taxonomy
+        self.parser = Parser(ontology, self.bidirectional_taxonomy, self.only_taxonomy, self.include_literals)
         
-    def parse(self):        
-        path = "temp.owl"
-        man = OWLManager.createOWLOntologyManager()
-        fileout = File(path)
-        man.saveOntology(self.ontology, OWLXMLDocumentFormat(), FileOutputStream(fileout))
-    
-        parser = o2v.OntologyProjection(path, bidirectional_taxonomy = self.bidirectional_taxonomy, include_literals = self.include_literals, only_taxonomy = self.only_taxonomy )
+        
+    def parse(self):
+        edges = self.parser.parse()
 
-        os.remove(path)
-
-        parser.extractProjection()
-
-        graph = parser.getProjectionGraph()
-
-        edges = []
-
-        for s, r, d in graph:
-            edges.append(Edge(str(s), str(r), str(d)))
-    
-
+        edges =[Edge(str(e.src()), str(e.rel()), str(e.dst())) for e in edges]
+        
         return edges
