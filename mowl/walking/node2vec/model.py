@@ -1,7 +1,10 @@
 from mowl.walking.walking import WalkingModel
-from node2vec.model import Node2Vec as N2V
-from mowl.graph.graph import Graph
-import numpy as np
+import logging
+
+from java.util import ArrayList
+from org.mowl import Edge
+from org.mowl.Walking import Node2Vec as N2V
+
 class Node2Vec(WalkingModel):
 
     '''
@@ -10,46 +13,34 @@ class Node2Vec(WalkingModel):
     :param q: In-out hyperparameter. Default is 1.
     :type q: float
     '''
-    
     def __init__(self,
                  edges,
-                 num_walks,
-                 walk_length,
-                 p=1,
-                 q=1,
+		 num_walks,
+		 walk_length,
+		 p,
+		 q,
+                 outfile,
                  workers=1
                  ):
+        
+        super().__init__(edges, num_walks, walk_length, outfile, workers) 
 
-        self.walk_length = walk_length
-        self.num_walks = num_walks
         self.p = p
         self.q = q
-        self.workers = workers
-        
-        
-        self.graph = Graph(edges)
-        self.srcs, self.dsts = self.graph.index_edge_list()
-        self.srcs = np.array(self.srcs, dtype = np.int32)
-        self.dsts = np.array(self.dsts, dtype = np.int32)
-        self.model = N2V(self.srcs, self.dsts, graph_is_directed = True)
-        
+
     def walk(self):
-        self.model.simulate_walks(
-            walk_length = self.walk_length,
-            n_walks = self.num_walks,
-            p = self.p,
-            q = self.q,
-            workers = self.workers
-        )
 
-        nodes = list(self.graph.node_dict.keys())
+        edgesJ = ArrayList()
 
-        walks_list = []
-        for row in self.model.walks:
-            sentence = []
-            for idx in row:
-                sentence.append(nodes[idx])
+        for edge in self.edges:
+            newEdge = Edge(edge.src(), edge.dst(), edge.weight())
 
-            walks_list.append(sentence)
+            edgesJ.add(newEdge)
 
-        self.walks = walks_list
+        walker = N2V(edgesJ, self.num_walks, self.walk_length, self.p, self.q, self.workers, self.outfile)
+
+        walker.walk()
+            
+        
+
+        

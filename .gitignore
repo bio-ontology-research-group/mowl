@@ -12,6 +12,7 @@ gateway/.gradle/
 
 *.err
 *.out
+*.jar
 ppi_yeast_slim/
 .ipynb_checkpoints/
 *.tar.gz

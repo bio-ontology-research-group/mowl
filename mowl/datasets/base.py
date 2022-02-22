@@ -10,6 +10,7 @@ import requests
 
 # OWLAPI imports
 from org.semanticweb.owlapi.model import OWLOntology
+from org.semanticweb.owlapi.model import OWLOntologyLoaderConfiguration
 from org.semanticweb.owlapi.apibinding import OWLManager
 from org.semanticweb.owlapi.reasoner import ConsoleProgressMonitor
 from org.semanticweb.owlapi.reasoner import SimpleConfiguration
@@ -34,8 +35,6 @@ class Dataset(object):
     ontology: OWLOntology
     validation: OWLOntology
     testing: OWLOntology
-
-
 
 class PathDataset(Dataset):
     """Loads the dataset from ontology documents.
@@ -85,10 +84,9 @@ class PathDataset(Dataset):
         return self._testing
 
     def _load(self):
-        
+
         self._ontology = self.ont_manager.loadOntologyFromOntologyDocument(
             java.io.File(self.ontology_path))
-
         if not self.validation_path is None:
             self._validation =  self.ont_manager.loadOntologyFromOntologyDocument(
                 java.io.File(self.validation_path))
