@@ -3,7 +3,7 @@ package org.mowl.Walking
 import collection.JavaConverters._
 import java.io._
 import java.util.{HashMap, ArrayList}
-import scala.collection.mutable.{MutableList, ListBuffer, Map}
+import scala.collection.mutable.{MutableList, ListBuffer, Map, ArrayBuffer}
 import util.control.Breaks._
 import java.util.concurrent.{ExecutorService, Executors}
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -30,6 +30,7 @@ class WalkRDFAndOWL (
   val nodesIdx = nodes.map(mapEntsIdx(_))
   val graph = processEdges()
 
+  val rand = scala.util.Random
   val (pathsPerWorker, newWorkers) = numPathsPerWorker
 
   private[this] val lock = new Object()
@@ -38,7 +39,7 @@ class WalkRDFAndOWL (
   val bw = new BufferedWriter(new FileWriter(walksFile))
 
   def processEdges() = {
-    val graph: Map[Int, ListBuffer[(Int, Int)]] = Map()
+    val graph: Map[Int, ArrayBuffer[(Int, Int)]] = Map()
 
     for ((src, rel, dst) <- edgesSc){
       val srcIdx = mapEntsIdx(src)
@@ -46,14 +47,14 @@ class WalkRDFAndOWL (
       val dstIdx = mapEntsIdx(dst)
 
       if (!graph.contains(srcIdx)){
-        graph(srcIdx) = ListBuffer()
+        graph(srcIdx) = ArrayBuffer((relIdx, dstIdx))
       }else{
         graph(srcIdx) += ((relIdx, dstIdx))
       }
 
     }
 
-    graph
+    graph.mapValues(_.toArray)
   }
 
 
@@ -85,11 +86,9 @@ class WalkRDFAndOWL (
     println(s"+ started processing $index")
 
     val start = System.nanoTime() / 1000000
-    val r = scala.util.Random
-
 
      for (i <- 0 until numWalks){
-       val nodesR = r.shuffle(nodesIdx)
+       val nodesR = rand.shuffle(nodesIdx)
        for (n <- nodesR){
          randomWalk(walkLength, n)
        }
@@ -102,24 +101,27 @@ class WalkRDFAndOWL (
   }
 
   def randomWalk(walkLength: Int, start: Int) = {
-    var walk = MutableList(start)
+    val walk = Array.fill(2*walkLength-1){-1}
+    walk(0) = start
 
     breakable {
-      while(walk.length < 2*walkLength){
-        var curNode = walk.last
+
+      var i:Int = 1
+      while(i < 2*walkLength-1){
+        val curNode = walk(i-1)
 
         val lenNeighb = graph.contains(curNode) match {
           case true => graph(curNode).length
           case false => 0
         }
 
-        val r = scala.util.Random
-
         if (lenNeighb >0){
-          val idx = r.nextInt(lenNeighb)
+          val idx = rand.nextInt(lenNeighb)
           val (nextRel, nextDst) = graph(curNode)(idx)
-          walk += nextRel
-          walk += nextDst
+          walk(i) = nextRel
+          walk(i+1) = nextDst
+
+          i += 2
         }else{
           break
         }

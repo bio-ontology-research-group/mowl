@@ -2,8 +2,8 @@ package org.mowl.Walking
 
 import collection.JavaConverters._
 import java.io._
-import java.util.{HashMap, ArrayList}
-import scala.collection.mutable.{MutableList, ListBuffer, Stack, Map}
+import java.util.{ArrayList}
+import scala.collection.mutable.{MutableList, ListBuffer, Stack, Map, HashMap, ArrayBuffer}
 import util.control.Breaks._
 import java.util.concurrent.{ExecutorService, Executors}
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -32,10 +32,12 @@ class Node2Vec (
   val nodesSrcIdx = nodesSrc.map(mapNodesIdx(_))
   val (graph, weights) = processEdges()
 
+  val rand = scala.util.Random
+
   val (pathsPerWorker, newWorkers) = numPathsPerWorker()
 
-  var aliasNodes = Map[Int, (List[Int], List[Float])]()
-  var aliasEdges = Map[(Int, Int), (List[Int], List[Float])]()
+  var aliasNodes = Map[Int, (Array[Int], Array[Float])]()
+  var aliasEdges = Map[(Int, Int), (Array[Int], Array[Float])]()
 
   private[this] val lock = new Object()
 
@@ -44,14 +46,14 @@ class Node2Vec (
 
 
   def processEdges() = {
-    val graph: Map[Int, ListBuffer[Int]] = Map()
-    val weights: Map[(Int, Int), Float] = Map()
+    val graph: Map[Int, ArrayBuffer[Int]] = Map()
+    val weights: HashMap[(Int, Int), Float] = HashMap()
     for ((src, dst, weight) <- edgesSc){
       val srcIdx = mapNodesIdx(src)
       val dstIdx = mapNodesIdx(dst)
 
       if (!graph.contains(srcIdx)){
-        graph(srcIdx) = ListBuffer()
+        graph(srcIdx) = ArrayBuffer(dstIdx)
       }else{
         graph(srcIdx) += dstIdx
       }
@@ -60,7 +62,7 @@ class Node2Vec (
     }
 
 
-    (graph, weights)
+    (graph.mapValues(_.sorted.toArray), weights)
   }
 
   def walk() = {
@@ -74,7 +76,7 @@ class Node2Vec (
 
     print("Starting pool...")
 
-    val executor: ExecutorService = Executors.newFixedThreadPool(newWorkers)
+    val executor: ExecutorService = Executors.newFixedThreadPool(workers)
     implicit val executionContext: ExecutionContextExecutorService = ExecutionContext.fromExecutorService(executor)
 
 
@@ -92,8 +94,8 @@ class Node2Vec (
     Await.ready(futNodes, Duration.Inf)
 
     futNodes.onComplete {
-      case result =>
-        println("* processing nodes is over")
+      case Success(msg) => println("* processing nodes is over")
+      case Failure(t) => println("An error has ocurred in preprocessing nodes: " + t.getMessage + " - " + t.printStackTrace)
     }
 
     var listsE: ListBuffer[ListBuffer[(Int, Int)]] = ListBuffer.fill(newWorkers)(ListBuffer())
@@ -107,8 +109,8 @@ class Node2Vec (
     Await.ready(futEdges, Duration.Inf)
 
     futEdges.onComplete {
-      case result =>
-        println("* processing edges is over")
+      case Success(msg) => println("* processing edges is over")
+      case Failure(t) => println("An error has ocurred in preprocessing edges: " + t.getMessage + " - " + t.printStackTrace)
     }
 
 
@@ -122,10 +124,17 @@ class Node2Vec (
     Await.ready(futWalks, Duration.Inf)
 
     futWalks.onComplete {
-      case result =>
+      case Success(msg) => {
         println("* processing is over, shutting down the executor")
         executionContext.shutdown()
         bw.close
+      }
+      case Failure(t) =>
+        {
+          println("An error has ocurred in preprocessing generating random walks: " + t.getMessage + " - " + t.printStackTrace)
+          executionContext.shutdown()
+          bw.close
+        }
     }
   }
 
@@ -138,10 +147,10 @@ class Node2Vec (
     val start = System.nanoTime() / 1000000
 
 
-    val r = scala.util.Random
-
+    
+    
     for (i <- 0 until numWalks){
-      val nodesR = r.shuffle(nodesIdx)
+      val nodesR = rand.shuffle(nodesIdx)
       for (n <- nodesR){
         randomWalk(walkLength, p, q, n)
       }
@@ -157,30 +166,35 @@ class Node2Vec (
 
   def randomWalk(walkLength: Int, p: Float, q: Float, start: Int ) = {
 
-    var walk = MutableList(start)
+    val walk = Array.fill(walkLength){-1}
 
+    walk(0) = start
     breakable {
 
-      while(walk.length < walkLength){
-        val curNode = walk.last
+      
+      for (i <- 1 until walkLength){
+        
+        val curNode = walk(i-1)
 
         val curNbrs = graph.contains(curNode) match {
-          case true => graph(curNode).sorted
-          case false => Nil
+          
+          case true => graph(curNode)
+          case false => Array()
         }
 
-        if (curNbrs.length > 0) {
+        if (curNbrs.size > 0) {
 
-          if (walk.length == 1){
+          if (walk(1) == -1){
             val (idx1, idx2) = aliasNodes(curNode)
-            walk += curNbrs(aliasDraw(idx1, idx2))
+            walk(i) = curNbrs(aliasDraw(idx1, idx2))
 
           }else {
-            val prevNode = walk.init.last
+            val prevNode = walk(i-2)//  walk.init.last
             val (idx1, idx2) = aliasEdges((prevNode, curNode))
-            walk += curNbrs(aliasDraw(idx1, idx2))
+            walk(i) = curNbrs(aliasDraw(idx1, idx2))
 
           }
+          
         }else{
           break
         }
@@ -189,7 +203,7 @@ class Node2Vec (
 
     }
 
-    val toWrite = walk.toList.map(x => mapIdxNodes(x)).mkString(" ") + "\n"
+    val toWrite = walk.filter(_ != -1).map(x => mapIdxNodes(x)).mkString(" ") + "\n"
     lock.synchronized {
       bw.write(toWrite)
     }
@@ -200,29 +214,34 @@ class Node2Vec (
 
   def getAliasEdge(src: Int, dst: Int) = {
 
-    var unnormalizedProbs: MutableList[Float] = MutableList()
+    
 
     if (graph.contains(dst)){
+      val dstNbrs = graph(dst)
+      val lenDstNbrs = dstNbrs.length
+      val unnormalizedProbs: Array[Float] = Array.fill(lenDstNbrs){-1}
 
-      for (dstNbr <- graph(dst).sorted) {
+      for (i <- 0 until lenDstNbrs)  {
+        val dstNbr = dstNbrs(i)
         val prob = weights((dst, dstNbr))
 
         if (dstNbr == src){
-          unnormalizedProbs += prob/p
+          unnormalizedProbs(i) = prob/p
         }else if( weights.contains((dstNbr, src))){
-          unnormalizedProbs += prob
+          unnormalizedProbs(i) = prob
         }else{
-          unnormalizedProbs += prob/q
+          unnormalizedProbs(i) = prob/q
         }
+
       }
 
       val normConst = unnormalizedProbs.sum
       val normalizedProbs = unnormalizedProbs.map(x => x/normConst)
 
-      aliasSetup(normalizedProbs.toList)
+      aliasSetup(normalizedProbs.toArray)
 
     }else{
-      aliasSetup(Nil)
+      (Array[Int](), Array[Float]())
     }
 
   }
@@ -234,14 +253,17 @@ class Node2Vec (
     val (idx, indices) = params
     val l = indices.length
     println(s"Thread $idx, nodes to process $l")
+
     for (i <- indices){
       val node = i
-      val unnormalizedProbs = graph(node).sorted.map(nbr => weights((node, nbr)))
+      //      val unnormalizedProbs = graph(node).sorted.map(nbr => weights((node, nbr)))
+      val unnormalizedProbs = graph(node).map(nbr => weights((node, nbr)))
       val normConst = unnormalizedProbs.sum
-      val normalizedProbs = unnormalizedProbs.map(x => x/normConst).toList
+      val normalizedProbs = unnormalizedProbs.map(x => x/normConst)
 
+      val alias = aliasSetup(normalizedProbs)
       lock.synchronized {
-        aliasNodes += (node -> aliasSetup(normalizedProbs))
+        aliasNodes += (node -> alias)
       }
 
     }
@@ -257,10 +279,12 @@ class Node2Vec (
     for ((src, dst) <- edges){
 
       val alias = getAliasEdge(src, dst)
+      
       lock.synchronized {
+        
         aliasEdges += ((src, dst) -> alias)
       }
-
+      
     }
 
   }
@@ -269,51 +293,58 @@ class Node2Vec (
   //https://lips.cs.princeton.edu/the-alias-method-efficient-sampling-with-many-discrete-outcomes/
 
 
-  def aliasSetup(probs: List[Float]) = {
+  def aliasSetup(probs: Array[Float]) = {
 
     val K = probs.length
-    val q: ListBuffer[Float] = ListBuffer.fill(K)(0)
-    val J: ListBuffer[Int] = ListBuffer.fill(K)(0)
+    val q: Array[Float] = new Array[Float](K)
+    val J: Array[Int] = new Array[Int](K)
 
     val smaller = Stack[Int]()
     val larger = Stack[Int]()
 
     for ((kk, prob) <- Range(0, K, 1).zip(probs)){
+      val qkk = K*prob
+      q(kk) = qkk
 
-      q(kk) = K*prob
-
-      if (q(kk) < 1){
+      if (qkk < 1){
         smaller.push(kk)
       }else {
         larger.push(kk)
       }
     }
 
-    while (smaller.length > 0 && larger.length > 0){
+    var smallLen = smaller.length
+    var largeLen = larger.length
+    var qlarge: Float  = 0
+    while (smallLen > 0 && largeLen > 0){
       val small = smaller.pop
       val large = larger.pop
 
       J(small) = large
-      q(large) = q(large) + q(small) - 1
 
-      if (q(large) < 1){
+      qlarge = q(large) + q(small) - 1
+      q(large) = qlarge
+
+      if (qlarge < 1){
         smaller.push(large)
+        largeLen -=1
       }else{
         larger.push(large)
+        smallLen -= 1
       }
     }
 
-    (J.toList, q.toList)
+    (J, q)
 
   }
 
-  def aliasDraw(J: List[Int], q: List[Float]): Int  = {
+  def aliasDraw(J: Array[Int], q: Array[Float]): Int  = {
 
-    val r = scala.util.Random
     val K = J.length
-    val kk = (r.nextFloat * K).floor.toInt
+    val kk = rand.nextInt(K)
 
-    if (r.nextFloat < q(kk)){
+    
+    if (rand.nextFloat< q(kk)){
       kk
     }else{
       J(kk)
