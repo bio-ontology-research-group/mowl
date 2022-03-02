@@ -33,6 +33,10 @@ apply plugin: 'scala'
   //  classpath = classpath.plus(files(compileGroovy.destinationDir))
  //   dependsOn compileGroovy
 //}
+tasks.withType(ScalaCompile) {
+    scalaCompileOptions.additionalParameters = ["-optimize"]
+}
+
 
 // In this section you declare where to find the dependencies of your project
 repositories {
