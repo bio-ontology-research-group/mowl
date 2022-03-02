@@ -26,8 +26,7 @@ cd mowl
 conda env create -f environment.yml
 conda activate mowl
 
-cd mowl
-./rebuild.sh
+./build_jars.sh
 ```
 
 The last line will generate the necessary `jar` files to bind Python with the code that runs in the JVM
