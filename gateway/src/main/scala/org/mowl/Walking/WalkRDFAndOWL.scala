@@ -73,10 +73,17 @@ class WalkRDFAndOWL (
     Await.ready(fut, Duration.Inf)
 
     fut.onComplete {
-      case result =>
+      case Success(msg) => {
         println("* processing is over, shutting down the executor")
         executionContext.shutdown()
         bw.close
+      }
+      case Failure(t) =>
+        {
+          println("An error has ocurred in preprocessing generating random walks: " + t.getMessage + " - " + t.printStackTrace)
+          executionContext.shutdown()
+          bw.close
+        }
     }
 
   }
@@ -128,7 +135,7 @@ class WalkRDFAndOWL (
       }
     }
 
-    val toWrite = walk.toList.map(x => mapIdxEnts(x)).mkString(" ") + "\n"
+    val toWrite = walk.filter(_ != -1).map(x => mapIdxEnts(x)).mkString(" ") + "\n"
     lock.synchronized{
       bw.write(toWrite)
     }

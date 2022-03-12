@@ -78,10 +78,18 @@ class DeepWalk (
     Await.ready(fut, Duration.Inf)
 
     fut.onComplete {
-      case result =>
+      case Success(msg) => {
         println("* processing is over, shutting down the executor")
         executionContext.shutdown()
         bw.close
+      }
+      case Failure(t) =>
+        {
+          println("An error has ocurred in preprocessing generating random walks: " + t.getMessage + " - " + t.printStackTrace)
+          executionContext.shutdown()
+          bw.close
+        }
+
     }
 
 

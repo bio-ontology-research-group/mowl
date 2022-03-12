@@ -93,7 +93,7 @@ def testCase (dataset, num_walks, walk_length, alpha, p, q, workers):
 if __name__ == "__main__":
     data1 = "data/go.owl"
     data2 = "data/goslim_yeast.owl"
-    ds = PathDataset(data1, None, None)
+    ds = PathDataset(data2, None, None)
     walk_length = 100
     num_walks = 10
     p = 1
