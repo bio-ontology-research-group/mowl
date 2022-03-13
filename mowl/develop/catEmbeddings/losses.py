@@ -4,7 +4,6 @@ import numpy as np
 import random
 from torch.linalg import norm
 
-
 def exponential_loss(objects, morphisms, emb_up, full = True, up = None):
     up2down, up2exp, down2exp, up2ant, down2ant, up2cons, down2cons, fc = morphisms
     antecedent, consequent = objects
@@ -33,7 +32,8 @@ def exponential_loss(objects, morphisms, emb_up, full = True, up = None):
         estim_consFromUp = up2cons(up)
         estim_consFromDown = down2cons(down)
         estim_consFromDownChained = down2cons(estim_downFromUp)
-            
+
+
         loss1 = norm(estim_expFromUp - exponential, dim = 1)
         loss2 = norm(estim_antFromUp - antecedent, dim =1) 
         loss3 = norm(estim_expFromdown - exponential, dim = 1) 
@@ -151,20 +151,22 @@ def nf2_loss(objects, prod_morphisms, exp_morphisms, embed_nets, neg = False):
 #    return prod_loss + exp_loss
 
 
-def nf3_loss(objects, prod_morphisms, exp_morphisms, embed_nets):
+def nf3_loss(objects, prod_morphisms, exp_morphisms, embed_nets, neg = False):
     embed_objects, embed_rels, embed_fst, embed_up, embed_big_prod = embed_nets
 
     relations = embed_rels(objects[:, 0])
     antecedents = embed_objects(objects[:, 1])
     consequents = embed_objects(objects[:, 2])
     
-    chosen_vars = embed_fst(th.cat([antecedents, relations, consequents], dim = 1))
+    chosen_vars = embed_fst(th.cat([relations, antecedents, consequents], dim = 1))
     prod = (chosen_vars + antecedents)/2
 
-    prod_loss = product_loss((chosen_vars, antecedents), prod_morphisms, embed_big_prod, big_prod = prod)
-
-    
-    exp_loss = exponential_loss((prod, consequents), exp_morphisms, embed_up)
+    if neg:
+        prod_loss = 0
+        exp_loss = 0
+    else:
+        prod_loss = product_loss((chosen_vars, antecedents), prod_morphisms, embed_big_prod)
+        exp_loss = exponential_loss((prod, consequents), exp_morphisms, embed_up)
 
     return prod_loss + exp_loss
 
@@ -175,10 +177,8 @@ def nf4_loss(objects, prod_morphisms, exp_morphisms, embed_nets, neg = False, nu
     relations = embed_rels(objects[:, 1])
     consequents = embed_objects(objects[:, 2])
 
-    chosen_vars = embed_snd(th.cat([consequents, relations, antecedents], dim = 1))
 
-    prod = (antecedents + consequents)/2    
-    prod_loss = product_loss((chosen_vars, consequents), prod_morphisms, embed_big_prod)
+
 
 
     # if neg:
@@ -194,15 +194,19 @@ def nf4_loss(objects, prod_morphisms, exp_morphisms, embed_nets, neg = False, nu
     if neg:
         negs = th.tensor(np.random.choice(num_objects, size = len(objects))).to("cuda")
         embed_negs = embed_objects(negs)
-        chosen_vars = embed_snd(th.cat([embed_negs, relations, antecedents], dim=1))
-        prod = (antecedents + embed_negs)/2
+        chosen_vars = embed_snd(th.cat([antecedents, relations, embed_negs], dim=1))
+        prod = (chosen_vars + embed_negs)/2
         prod_loss = product_loss((chosen_vars, embed_negs), prod_morphisms, embed_big_prod) 
-        loss = exponential_loss((antecedents, embed_negs), exp_morphisms, embed_up)
+        exp_loss = exponential_loss((antecedents, prod), exp_morphisms, embed_up)
 #        loss = th.relu(margin - negative_loss)
 
     else:
-        loss = exponential_loss((antecedents, prod), exp_morphisms, embed_up)
-    assert prod_loss.shape == loss.shape
+        chosen_vars = embed_snd(th.cat([antecedents, relations, consequents], dim = 1))
+        prod = (chosen_vars + consequents)/2    
+        prod_loss = product_loss((chosen_vars, consequents), prod_morphisms, embed_big_prod)
+        exp_loss = exponential_loss((antecedents, prod), exp_morphisms, embed_up)
 
-    return prod_loss + loss
+        assert prod_loss.shape == exp_loss.shape
+
+    return prod_loss + exp_loss
 
