@@ -63,7 +63,7 @@ def evalNF4Loss(model, test_nf4, prot_dict, prot_index, trlabels, num_prots, dev
             first = np.where(index == 1)[0]
             last = np.where(index == len(prot_index))[0]
 
-            print(f" ({rank},{res[d]}), ({index[first]}, {res[first]}), ({index[last]}, {res[last]}) ")
+#            print(f" ({rank},{res[d]}), ({index[first]}, {res[first]}), ({index[last]}, {res[last]}) ")
 
             # print(1 / 0)
             

@@ -52,4 +52,43 @@ class TaxonomyParser(var ontology: OWLOntology, var bidirectional_taxonomy: Bool
 
   }
 
+
+
+  def parseWithTransitiveClosure() = {
+    val imports = Imports.fromBoolean(false)
+
+    val goClasses = ontology.getClassesInSignature(imports).asScala.toList
+    printf("INFO: Number of ontology classes: %d\n", goClasses.length)
+
+    getTransitiveClosure(goClasses)
+
+    val edges = goClasses.foldLeft(List[Triple]()){(acc, x) => acc ::: processOntClass(x)}
+
+    edges.asJava
+  }
+
+
+
+  def getTransitiveClosure(goClasses:List[OWLClass]){
+
+    if (transitiveClosure == "subclass"){
+      val reasonerFactory = new ElkReasonerFactory();
+      val reasoner = reasonerFactory.createReasoner(ontology);
+
+      val superClasses = (cl:OWLClass) => (cl, reasoner.getSuperClasses(cl, false).getFlattened.asScala.toList)
+
+      //aux function
+      val transitiveAxioms = (tuple: (OWLClass, List[OWLClass])) => {
+        val subclass = tuple._1
+        val superClasses = tuple._2
+        superClasses.map((sup) => new OWLSubClassOfAxiomImpl(subclass, sup, Nil.asJava))
+      }
+
+      //compose aux functions
+      val newAxioms = goClasses flatMap (transitiveAxioms compose  superClasses)
+
+      ontManager.addAxioms(ontology, newAxioms.toSet.asJava)
+    }
+}
+
 }
