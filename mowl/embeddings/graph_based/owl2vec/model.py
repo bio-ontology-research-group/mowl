@@ -1,5 +1,5 @@
 from mowl.model import Model
-from mowl.graph.util import parser_factory
+from mowl.graph.factory import parser_factory
 from mowl.walking.factory import walking_factory
 from mowl.graph.edge import Edge
 
@@ -20,8 +20,7 @@ from threading import Lock
 
 logging.basicConfig(level=logging.INFO)
 
-class OWL2Vec(Model):
-
+class OWL2VecStar(Model):
     '''
     :param dataset: Dataset composed by training, validation and testing sets, each of which are in OWL format.
     :type dataset: :class:`mowl.datasets.base.Dataset`
@@ -29,26 +28,31 @@ class OWL2Vec(Model):
     :type outfile: str
     :param bidirectional_taxonomy: If true, the ontology projection into a graph will add inverse edges per each subclass axiom
     :type bidirectional_taxonomy: bool
-    :param include_literals: If true the graph will also include triples involving data property assertions and annotations. Default is False.
-    :type include_literals: bool
-    :param only_taxonomy: If true, the projection will only include subClass edges
+    :param only_taxonomy: If true, the ontology projection will consider only subclass axioms.
     :type only_taxonomy: bool
+    :param include_literals: If true, the graph will also include triples involving data property assertions and annotations.
+    :type include_literals: bool
+    :param walking_method: Method for generating the walks. Choices are: deepwalk (default), node2vec, walkrdfowl.
+    :type walking_method: str
     :param walk_length: Length of the walk performed for each node
     :type walk_length: int
     :param num_walks: Number of walks performed per node
     :type num_walks: int
-    :param alpha: Probability of restart in the walking phase
+    :param alpha: Probability of restart in the walking phase. Applicable with DeepWalk
     :type alpha: float
+    :param p: Return hyperparameter. Default is 1. Applicable with Node2Vec
+    :type p: float
+    :param q: In-out hyperparameter. Default is 1. Applicable with Node2Vec.
+    :type q: float
     :param vector_size: Dimensionality of the word vectors. Same as :class:`gensim.models.word2vec.Word2Vec`
     :type vector_size: int
     :param wv_epochs: Number of epochs for the Word2Vec model
     :type wv_epochs: int
     :param window: Maximum distance between the current and predicted word within a sentence. Same as :class:`gensim.models.word2vec.Word2Vec`
     :type window: int
-    :param num_procs: Number of threads to use for the random walks and the Word2Vec model.
-    :type num_procs: int
+    :param workers: Number of threads to use for the random walks and the Word2Vec model.
+    :type workers: int
     '''
-
     
     def __init__(self, dataset, outfile, bidirectional_taxonomy=False, include_literals = False, only_taxonomy = False, walking_method = "deepwalk", walk_length = 30, wv_epochs = 10, alpha = 0, num_walks = 100, vector_size = 100, window = 5, workers = 1, p = 1, q=1):
 

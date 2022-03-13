@@ -2,7 +2,7 @@ name: mowl
 channels:
   - conda-forge
 dependencies:
-  - python=3.7
+  - python=3.8
   - cairo
   - dglteam::dgl
   - numpy
@@ -10,7 +10,6 @@ dependencies:
   - click
   - grpcio
   - JPype1
-  - owlready2
   - pandas
   - protobuf
   - pytest
@@ -26,4 +25,3 @@ dependencies:
   - pip
   - pip:
     - pykeen
-    - https://github.com/thibaudmartinez/node2vec/releases/download/v0.1.0/node2vec-0.1.0-cp37-cp37m-linux_x86_64.whl

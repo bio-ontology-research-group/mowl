@@ -12,6 +12,12 @@ public class Edge {
 	this.dst = dst;	    
     }
 
+    public Edge(String src, String rel, String dst){
+	this.src = src;
+	this.rel = rel;
+	this.dst = dst;
+    }
+    
     public Edge(String src, String dst, float weight){
 	this.src = src;
 	this.dst = dst;
