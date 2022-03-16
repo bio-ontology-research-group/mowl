@@ -18,25 +18,31 @@ object Types {
 
     sealed trait QuantifiedExpression {
         def getProperty(): OWLObjectPropertyExpression
-        def getFiller(): OWLClassExpression 
+      def getFiller(): OWLClassExpression
+      def unlift():OWLClassExpression
     }
    
     case class Universal(val expression: OWLObjectAllValuesFrom) extends QuantifiedExpression{
         def getProperty() = expression.getProperty
-        def getFiller() = expression.getFiller
+      def getFiller() = expression.getFiller
+      def unlift() = expression.asInstanceOf[OWLClassExpression]
     }
     case class Existential(val expression: OWLObjectSomeValuesFrom) extends QuantifiedExpression{
         def getProperty() = expression.getProperty
         def getFiller() = expression.getFiller
+        def unlift() = expression.asInstanceOf[OWLClassExpression]
+
     }
     case class MinCardinality(val expression: OWLObjectMinCardinality) extends QuantifiedExpression{
         def getProperty() = expression.getProperty
         def getFiller() = expression.getFiller
+        def unlift() = expression.asInstanceOf[OWLClassExpression]
     }
    case class MaxCardinality(val expression: OWLObjectMaxCardinality) extends QuantifiedExpression{
         def getProperty() = expression.getProperty
         def getFiller() = expression.getFiller
-    }
+        def unlift() = expression.asInstanceOf[OWLClassExpression]
+   }
 
 
     sealed trait Expression
@@ -54,7 +60,23 @@ object Types {
         def this(src: OWLClass, rel: Relation, dst: String) = this(goClassToStr(src), rel, dst)
     }
 
-    def goClassToStr(goClass: OWLClass) = goClass.toStringID.split("/").last.replace("_", ":")
+  def goClassToStr(goClass: OWLClass) = goClass.toStringID.split("/").last.replace("_", ":")
+
+  def annotationSubject2Str(subject: OWLAnnotationSubject): String = {
+
+    val annotStr = subject.toString
+
+    if (annotStr.length > 4) {
+      annotStr.slice(0,4) match {
+        case "http" => annotStr.split("/").last.replace("_", ":")
+        case _ => annotStr
+      }
+    }else{
+      annotStr
+    }
+
+
+  }
 
     def getNodes(triples: List[Triple]) = {
         

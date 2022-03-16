@@ -62,7 +62,7 @@ class ELEmbeddings(Model):
         normalizer = OntologyNormalizer()
         factory = IntegerOntologyObjectFactoryImpl()
         normalizedOntology = normalizer.normalize(intAxioms, factory)
-        rTranslator = ReverseAxiomTranslator(translator, self.dataset.ontology)
+        rTranslator = ReverseAxiomTranslator(translator, ontology)
         renderer = ManchesterOWLSyntaxOWLObjectRendererImpl()
         with open(normal_forms_filepath, 'w') as f:
             for ax in normalizedOntology:

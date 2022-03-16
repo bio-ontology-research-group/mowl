@@ -1,0 +1,40 @@
+general:
+  ontology: data/ppi/go.owl
+  graph-gen-method: taxonomy
+  use-case: ppi
+
+data-params:
+  train-size: -1
+  val-size: -1
+  test-size: -1
+
+
+gnn-sim-params:
+ lr: 0.0001
+ bs: 128
+ epochs: 32
+ regularization: 0.00001
+ normalization: True
+ self-loop: True
+ seed: 0
+ min-edges: 0
+
+ppi-model-params:
+  siamese: True
+  act: relu
+  n-heads: 1
+  feat-drop: 0.5
+  attn-drop: 0.5
+  neg-slope: 0.2
+  residual: True
+  bias: True
+  share-weights: False
+
+files:
+  train_inter_file: "data/ppi/4932.train_interactions.pkl"
+  valid_inter_file: "data/ppi/4932.valid_interactions.pkl"
+  test_inter_file: "data/ppi/4932.test_interactions.pkl"
+  data_file: "data/ppi/4932.annotations.tsv"
+  terms_file: "data/ppi/4932.terms.tsv"
+  precomputed_edges_file: "data/ppi/4932.edges_tax.pkl"
+  output_model: "data/ppi/tax_yeast_model_gat.pt"

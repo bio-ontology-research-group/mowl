@@ -2,7 +2,7 @@ name: mowl
 channels:
   - conda-forge
 dependencies:
-  - python=3.9
+  - python=3.8
   - cairo
   - dglteam::dgl
   - numpy
@@ -10,7 +10,6 @@ dependencies:
   - click
   - grpcio
   - JPype1
-  - owlready2
   - pandas
   - protobuf
   - pytest

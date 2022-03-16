@@ -106,31 +106,33 @@ class CatEmbeddings(Model):
         self.model = None
         ### For eval ppi
         self.load_data_old(train_file, valid_file, test_file, device = 'cuda')
-        _, _, _, train_nf4 = self.train_nfs
-        proteins = {}
-        for k, v in self.classes.items():
-            if not k.startswith('<http://purl.obolibrary.org/obo/GO_') and not k.startswith("GO_"):
-                proteins[k] = v
-        self.prot_index = proteins.values()
-        self.prot_dict = {v: k for k, v in enumerate(self.prot_index)}
 
-        print(f"prot dict created. Number of proteins: {len(self.prot_index)}")
-        self.trlabels = {}
-        
-        for c,r,d in train_nf4:
-            if r != 0:
-                continue
-            c, r, d = c.detach().item(), r.detach().item(), d.detach().item()
+        if self.eval_ppi:
+            _, _, _, train_nf4 = self.train_nfs
+            proteins = {}
+            for k, v in self.classes.items():
+                if not k.startswith('<http://purl.obolibrary.org/obo/GO_') and not k.startswith("GO_"):
+                    proteins[k] = v
+            self.prot_index = proteins.values()
+            self.prot_dict = {v: k for k, v in enumerate(self.prot_index)}
 
-            if c not in self.prot_index or d not in self.prot_index:
-                continue
-        
-            c, d =  self.prot_dict[c], self.prot_dict[d]
+            print(f"prot dict created. Number of proteins: {len(self.prot_index)}")
+            self.trlabels = {}
 
-            if r not in self.trlabels:
-                self.trlabels[r] = np.ones((len(self.prot_index), len(self.prot_index)), dtype=np.int32)
-            self.trlabels[r][c, d] = 1000
-        print("trlabels created")
+            for c,r,d in train_nf4:
+                if r != 0:
+                    continue
+                c, r, d = c.detach().item(), r.detach().item(), d.detach().item()
+
+                if c not in self.prot_index or d not in self.prot_index:
+                    continue
+
+                c, d =  self.prot_dict[c], self.prot_dict[d]
+
+                if r not in self.trlabels:
+                    self.trlabels[r] = np.ones((len(self.prot_index), len(self.prot_index)), dtype=np.int32)
+                self.trlabels[r][c, d] = 1000
+            print("trlabels created")
 
 
         
@@ -291,12 +293,17 @@ class CatEmbeddings(Model):
             if neg:
                 neg_loss = self.model(nf, idx, neg = True)
                 assert pos_loss.shape == neg_loss.shape, f"{pos_loss.shape}, {neg_loss.shape}"
-                diff_loss = th.mean(th.relu(pos_loss - neg_loss + margin))
+#                new_margin = max(margin,th.mean(pos_loss))
+                new_margin = margin if th.mean(neg_loss - pos_loss) > margin else 2*th.mean(pos_loss)
+                diff_loss = th.mean(th.relu(pos_loss - neg_loss + new_margin))
+                
                 step_loss += diff_loss
+
                 nf_neg_loss += th.mean(neg_loss).detach().item()
                 nf_diff_loss += diff_loss.detach().item()
 
             print(f"step loss {step_loss}   {step_loss*len(nf)/nb_data_points}")
+
             step_loss = step_loss*len(nf)/nb_data_points
             if train:
                 self.optimizer.zero_grad()
@@ -718,9 +725,8 @@ class CatModel(nn.Module):
         self.up2cons = self.create_morphism()
         self.down2cons = self.create_morphism()
         self.cons2exp = self.create_morphism()
-        self.fc = self.create_morphism()
 
-        self.exponential_morphisms = (self.up2down, self.up2exp, self.down2exp, self.up2ant, self.down2ant, self.up2cons, self.down2cons, self.fc)
+        self.exponential_morphisms = (self.up2down, self.up2exp, self.down2exp, self.up2ant, self.down2ant, self.up2cons, self.down2cons)
 
         #Product
 
@@ -749,13 +755,13 @@ class CatModel(nn.Module):
         embed_nets = (self.net_object, self.net_rel, self.embed_snd, self.embed_up, self.embed_bigger_prod)
         return L.nf4_loss(data, self.product_morphisms, self.exponential_morphisms, embed_nets)
     def create_morphism(self):
-        fc = nn.Sequential(
-            nn.Linear(self.embedding_size, self.embedding_size),
+#        fc = nn.Sequential(
+#            nn.Linear(self.embedding_size, self.embedding_size),
   #          self.dropout
-        )
-        return fc
+ #       )
+  #      return fc
+        return nn.Linear(self.embedding_size, self.embedding_size)
 
-        
     def forward(self, normal_form, idx, neg = False, margin = 0):
 #        nf1, nf2, nf3, nf4 = normal_forms
 
@@ -768,7 +774,7 @@ class CatModel(nn.Module):
         
         if idx == 1:
             embed_nets = (self.net_object, self.embed_up)
-            loss = L.nf1_loss(normal_form, self.exponential_morphisms, embed_nets, neg = neg)
+            loss = L.nf1_loss(normal_form, self.exponential_morphisms, embed_nets, neg = neg, num_objects = self.num_obj)
 
         elif idx == 2:
             embed_nets = (self.net_object, self.embed_up, self.embed_bigger_prod)

@@ -3,7 +3,7 @@ package org.mowl.Walking
 import collection.JavaConverters._
 import java.io._
 import java.util.{HashMap, ArrayList}
-import scala.collection.mutable.{MutableList, ListBuffer, Map}
+import scala.collection.mutable.{MutableList, ListBuffer, Map, ArrayBuffer}
 import util.control.Breaks._
 import java.util.concurrent.{ExecutorService, Executors}
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -29,7 +29,7 @@ class DeepWalk (
   val nodesIdx = nodes.map(mapNodesIdx(_))
 
   val graph = processEdges()
-
+  val rand = scala.util.Random
   val (pathsPerWorker, newWorkers) = numPathsPerWorker()
 
   private[this] val lock = new Object()
@@ -39,21 +39,21 @@ class DeepWalk (
 
 
   def processEdges() = {
-    val graph: Map[Int, ListBuffer[Int]] = Map()
+    val graph: Map[Int, ArrayBuffer[Int]] = Map()
 
     for ((src, dst) <- edgesSc){
       val srcIdx = mapNodesIdx(src)
       val dstIdx = mapNodesIdx(dst)
 
       if (!graph.contains(srcIdx)){
-        graph(srcIdx) = ListBuffer()
+        graph(srcIdx) = ArrayBuffer(dstIdx)
       }else{
         graph(srcIdx) += dstIdx
       }
     }
 
 
-    graph
+    graph.mapValues(_.toArray)
   }
 
 
@@ -78,10 +78,18 @@ class DeepWalk (
     Await.ready(fut, Duration.Inf)
 
     fut.onComplete {
-      case result =>
+      case Success(msg) => {
         println("* processing is over, shutting down the executor")
         executionContext.shutdown()
         bw.close
+      }
+      case Failure(t) =>
+        {
+          println("An error has ocurred in preprocessing generating random walks: " + t.getMessage + " - " + t.printStackTrace)
+          executionContext.shutdown()
+          bw.close
+        }
+
     }
 
 
@@ -95,11 +103,8 @@ class DeepWalk (
      val start = System.nanoTime() / 1000000
 
 
-     val r = scala.util.Random
-
-
      for (i <- 0 until numWalks){
-       val nodesR = r.shuffle(nodesIdx)
+       val nodesR = rand.shuffle(nodesIdx)
        for (n <- nodesR){
          randomWalk(walkLength, alpha, n)
        }
@@ -116,28 +121,30 @@ class DeepWalk (
 
   def randomWalk(walkLength: Int, alpha: Float, start: Int ) ={
 
-    var walk = MutableList(start)
+    val walk = Array.fill(walkLength){-1}
+    walk(0) = start
 
     breakable {
-      while (walk.length < walkLength){
 
-        var curNode = walk.last
+      var i: Int = 1
+      while (i < walkLength){
+
+        val curNode = walk(i-1)
 
         val lenNeighb = graph.contains(curNode) match {
           case true => graph(curNode).length
           case false => 0
         }
 
-        val r = scala.util.Random
-
         if (lenNeighb > 0){
-          if (r.nextFloat >= alpha){
-            val idx = r.nextInt(lenNeighb)
+          if (rand.nextFloat >= alpha){
+            val idx = rand.nextInt(lenNeighb)
             val next = graph(curNode)(idx)
-            walk += next
+            walk(i) = next
           }else{
-            walk += walk.head
+            walk(i) = walk.head
           }
+          i+=1
         }else{
           break
         }
@@ -146,7 +153,7 @@ class DeepWalk (
 
     }
 
-    val toWrite = walk.toList.map(x => mapIdxNodes(x)).mkString(" ") + "\n"
+    val toWrite = walk.filter(_ != -1).map(x => mapIdxNodes(x)).mkString(" ") + "\n"
     lock.synchronized {
       bw.write(toWrite)
 

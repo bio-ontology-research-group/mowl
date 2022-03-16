@@ -28,32 +28,26 @@ def main(species):
     if species == "yeast":
         ds = 'data/data-train/yeast-classes-normalized.owl', 'data/data-valid/4932.protein.links.v10.5.txt', 'data/data-test/4932.protein.links.v10.5.txt'        
         lr = 5e-3
-#        milestones = [68,129,200,300,400,500,600,700,800,900,1000,2000,2100]
-#        milestones = [68,129,300,500,700,900,1000,2000,2001] #before activating other nfs
-#        milestones = [15,21,26,161,227]
-#        milestones = [5,12,36,45,49,54,92,137,180,250,300,350,400,20000]
-
-
-
-
-        milestones = [150, 200000] #only_nf4
+        embedding_size = 1024
+        milestones = [150, 500,200000] #only_nf4
 #        milestones = [150, 250, 450, 2000000]
         #milestones = [200000]
+        margin = 5
     elif species == "human":
         ds = 'data/data-train/human-classes-normalized.owl', 'data/data-valid/9606.protein.links.v10.5.txt', 'data/data-test/9606.protein.links.v10.5.txt'
         lr = 5e-3
-#        milestones = [68,129,200,300,400,500,600,700,800,900,1000,2000]
-#        milestones = [50, 100, 150, 200, 250, 300,20000]
-        milestones = [150, 2000000]
-#        milestones = [100*x for x in range(20)]
+        embedding_size = 1024
+        milestones = [150, 2000002]
+        #milestones = [150,300, 450, 600,  2000000] #works with 1e-2 in lr but cannot rank negatives properly
+        margin = 5
 
     model = CatEmbeddings(
         ds, 
         4096*4, #4096*4, #bs 
-        1024, #embeddings size
+        embedding_size, #embeddings size
         lr, #lr ##1e-3 yeast, 1e-5 human
-        1024, #epochs
-        1000, #num points eval ppi
+        1300, #epochs
+        100, #num points eval ppi
         milestones,
         dropout = 0,
         decay = 0.00,
@@ -67,7 +61,7 @@ def main(species):
         nf3_neg = False,
         nf4 = True,
         nf4_neg = True,
-        margin = 5,
+        margin = margin,
         seed = 0,
         early_stopping = 200000
     )
