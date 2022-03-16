@@ -10,6 +10,7 @@ import requests
 
 # OWLAPI imports
 from org.semanticweb.owlapi.model import OWLOntology
+from org.semanticweb.owlapi.model import OWLOntologyLoaderConfiguration
 from org.semanticweb.owlapi.apibinding import OWLManager
 from org.semanticweb.owlapi.reasoner import ConsoleProgressMonitor
 from org.semanticweb.owlapi.reasoner import SimpleConfiguration
@@ -89,10 +90,14 @@ class PathDataset(Dataset):
         if not self.validation_path is None:
             self._validation =  self.ont_manager.loadOntologyFromOntologyDocument(
                 java.io.File(self.validation_path))
+        else:
+            self._validation = None
 
         if not self.testing_path is None:
             self._testing =  self.ont_manager.loadOntologyFromOntologyDocument(
                 java.io.File(self.testing_path))
+        else:
+            self._testing = None
         self._loaded = True
 
     def _create_reasoner(self):

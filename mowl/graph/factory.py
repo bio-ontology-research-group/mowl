@@ -21,4 +21,6 @@ def parser_factory(method_name, dataset, bidirectional_taxonomy, include_literal
     elif method_name == "owl2vec_star":
         return OWL2VecParser(dataset, bidirectional_taxonomy=bidirectional_taxonomy, include_literals = include_literals, only_taxonomy = only_taxonomy)
     else:
-        raise Exception(f"Graph generation method unrecognized. Recognized methods are: {methods}")
+        raise ValueError(f"Method not recognized. Methods are {methods}")
+    
+    

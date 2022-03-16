@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/source/mowl_black_background_colors_2048x2048px.png" width="300"/>
+  <img src= "https://github.com/bio-ontology-research-group/mowl/blob/master/docs/source/mowl_black_background_colors_2048x2048px.png?raw=true" width="300"/>
 </p>
   
 # mOWL: Machine Learning Library with Ontologies
@@ -16,6 +16,13 @@ mainly in Python, but we have integrated the functionalities of [OWLAPI](https:/
 
 ## Installation
 
+### Test PyPi (beta version)
+
+```
+pip install -i https://test.pypi.org/simple/ mowl-borg
+```
+
+### From GitHub
 Installation can be done with the following commands:
 
 ```
@@ -26,8 +33,7 @@ cd mowl
 conda env create -f environment.yml
 conda activate mowl
 
-cd mowl
-./rebuild.sh
+./build_jars.sh
 ```
 
 The last line will generate the necessary `jar` files to bind Python with the code that runs in the JVM
