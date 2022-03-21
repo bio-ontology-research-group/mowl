@@ -46,6 +46,7 @@ class CatEmbeddings(Model):
             milestones,
             dropout = 0,
             decay = 0,
+            gamma = None,
             eval_ppi = False,
             sampling = False,
             nf1 = False, 
@@ -58,7 +59,8 @@ class CatEmbeddings(Model):
             nf4_neg = False,
             margin = 0,
             seed = -1,
-            early_stopping = 10
+            early_stopping = 10,
+            device = "cuda"
     ):
         super().__init__(dataset)
 
@@ -70,6 +72,7 @@ class CatEmbeddings(Model):
         self.milestones = milestones
         self.dropout = dropout
         self.decay = decay
+        self.gamma = gamma
         self.eval_ppi = eval_ppi
         self.sampling = sampling
         self.nf1 = nf1
@@ -82,7 +85,7 @@ class CatEmbeddings(Model):
         self.nf4_neg = nf4_neg
         self.margin = margin
         self.early_stopping = early_stopping
-
+        self.device = device
         train_file, valid_file, test_file = dataset
         
         if "yeast" in train_file:
@@ -91,9 +94,14 @@ class CatEmbeddings(Model):
             species = "human"
         else:
             raise ValueError("Species not defined")
-
+            
+        self.species = species
         milestones_str = "_".join(str(m) for m in milestones)
-        self.model_filepath = f"data/models/{species}/bs{self.batch_size}_emb{self.embedding_size}_lr{lr}_epochs{epochs}_eval{num_points_eval}_mlstns_{milestones_str}_drop_{self.dropout}_decay_{self.decay}_evalppi_{self.eval_ppi}_sampling_{sampling}_nf1{self.nf1}{self.nf1_neg}_nf2{self.nf2}{self.nf2_neg}_nf3{self.nf3}{self.nf3_neg}_nf4{self.nf4}{self.nf4_neg}_margin{self.margin}.th"
+        self.data_root = f"data/models/{species}/"
+        self.file_name = f"bs{self.batch_size}_emb{self.embedding_size}_lr{lr}_epochs{epochs}_eval{num_points_eval}_mlstns_{milestones_str}_drop_{self.dropout}_decay_{self.decay}_gamma_{self.gamma}_evalppi_{self.eval_ppi}_sampling_{sampling}_nf1{self.nf1}{self.nf1_neg}_nf2{self.nf2}{self.nf2_neg}_nf3{self.nf3}{self.nf3_neg}_nf4{self.nf4}{self.nf4_neg}_margin{self.margin}.th"
+        self.model_filepath = self.data_root + self.file_name
+        self.predictions_file = f"data/predictions/{self.species}/" + self.file_name
+        self.labels_file = f"data/labels/{self.species}/" + self.file_name
         print(f"model will be saved in {self.model_filepath}")
 
         self._loaded = False
@@ -107,11 +115,11 @@ class CatEmbeddings(Model):
         ### For eval ppi
         self.load_data_old(train_file, valid_file, test_file, device = 'cuda')
 
-        if self.eval_ppi:
+        if self.eval_ppi or True:
             _, _, _, train_nf4 = self.train_nfs
             proteins = {}
             for k, v in self.classes.items():
-                if not k.startswith('<http://purl.obolibrary.org/obo/GO_') and not k.startswith("GO_"):
+                if not k.startswith('<http://purl.obolibrary.org/obo/GO_') and not k.startswith("GO:"):
                     proteins[k] = v
             self.prot_index = proteins.values()
             self.prot_dict = {v: k for k, v in enumerate(self.prot_index)}
@@ -119,25 +127,30 @@ class CatEmbeddings(Model):
             print(f"prot dict created. Number of proteins: {len(self.prot_index)}")
             self.trlabels = {}
 
-            for c,r,d in train_nf4:
-                if r != 0:
-                    continue
-                c, r, d = c.detach().item(), r.detach().item(), d.detach().item()
 
-                if c not in self.prot_index or d not in self.prot_index:
-                    continue
+            print("Generating training labels")
+            with ck.progressbar(train_nf4) as bar:
+                for c,r,d in bar:
+                    if r != 0:
+                        continue
+                    c, r, d = c.detach().item(), r.detach().item(), d.detach().item()
 
-                c, d =  self.prot_dict[c], self.prot_dict[d]
+                    if c not in self.prot_index or d not in self.prot_index:
+                        continue
 
-                if r not in self.trlabels:
-                    self.trlabels[r] = np.ones((len(self.prot_index), len(self.prot_index)), dtype=np.int32)
-                self.trlabels[r][c, d] = 1000
-            print("trlabels created")
+                    c, d =  self.prot_dict[c], self.prot_dict[d]
+
+                    if r not in self.trlabels:
+                        self.trlabels[r] = np.ones((len(self.prot_index), len(self.prot_index)), dtype=np.int32)
+                    self.trlabels[r][c, d] = 1000
+                print("trlabels created")
 
 
         
 
     def train(self):
+
+
  #       self._loaded = False
         device = "cuda"
 #        self.load_data_old(device="cuda")
@@ -147,10 +160,12 @@ class CatEmbeddings(Model):
 
         self.train_nfs = tuple(map(lambda x: x.to(device), self.train_nfs))
         
-        num_classes = len(self.classes)
-        num_rels = len(self.relations)
+        self.num_classes = len(self.classes)
+        self.num_rels = len(self.relations)
         
-        self.model = CatModel(num_classes, num_rels, self.embedding_size, dropout = self.dropout)
+        self.model = CatModel(self.num_classes, self.num_rels, self.embedding_size, dropout = self.dropout)
+        th.save(self.model.state_dict(), self.model_filepath)
+
         paramss = sum(p.numel() for p in self.model.parameters())
 
         logging.info("Number of parameters: %d", paramss)
@@ -160,7 +175,7 @@ class CatEmbeddings(Model):
         
         self.optimizer = optim.Adam(self.model.parameters(), lr = self.lr, weight_decay=self.decay)
 
-        self.scheduler = optim.lr_scheduler.MultiStepLR(self.optimizer, milestones = self.milestones, gamma = 0.3) #only nf4#
+        self.scheduler = optim.lr_scheduler.MultiStepLR(self.optimizer, milestones = self.milestones, gamma = self.gamma) #only nf4#
 
         best_mean_rank = float("inf")
         best_val_loss = float("inf")
@@ -203,8 +218,6 @@ class CatEmbeddings(Model):
     
             self.model.eval()
             
-            if self.eval_ppi:
-                top1, top10, top100, top1000, mean_rank, ftop1, ftop10, ftop100, fmean_rank = self.evaluate_ppi_valid()
 
             with th.no_grad():
                 self.optimizer.zero_grad()
@@ -238,6 +251,8 @@ class CatEmbeddings(Model):
                     th.save(self.model.state_dict(), self.model_filepath)
 
             if self.eval_ppi:
+                top1, top10, top100, top1000, mean_rank, ftop1, ftop10, ftop100, fmean_rank = self.evaluate_ppi_valid()
+
                 if best_mean_rank >= mean_rank:
                     best_mean_rank = mean_rank
                     th.save(self.model.state_dict(), self.model_filepath)
@@ -251,6 +266,72 @@ class CatEmbeddings(Model):
             if train_early_stopping == 0:
                 print(f"Stop training (early stopping): {train_early_stopping}: {best_train_loss}, {valid_early_stopping}, {best_val_loss}")
                 break
+        
+        logging.info("Finished training. Generating predictions")
+#        self.run_and_save_predictions(self.model)
+
+
+    def run_and_save_predictions(self, model, samples=None, save = True):
+        device = "cuda"
+
+        model.eval()
+        print(self.device)
+
+        if samples is None:
+            logging.info("No data points specified. Proceeding to compute predictions on test set")
+            model.load_state_dict(th.load( self.model_filepath))
+            model = model.to(device)
+            _, _, _, test_nf4 = self.test_nfs
+
+            eval_data = test_nf4
+
+        else:
+            eval_data = samples
+
+        test_model = TestModule(model)
+
+        preds = np.zeros((len(self.prot_index), len(self.prot_index)), dtype=np.float32)
+        labels = np.zeros((len(self.prot_dict), len(self.prot_dict)), dtype=np.int32)
+        already = set()
+
+
+ #       logging.info("Filling up labels")
+        with ck.progressbar(eval_data) as prog_data:
+            for c, r, d in prog_data:
+                c_emb = c
+                d_emb = d
+                c, d = c.detach().item(), d.detach().item()
+                c, d = self.prot_dict[c], self.prot_dict[d]
+
+                labels[c, d] = 1
+            
+
+        test_dataset = TestDataset(eval_data, self.prot_index, self.prot_dict, 0)
+        if self.species == "yeast":
+            bs = 16
+        else:
+            bs = 8
+        test_dl = DataLoader(test_dataset, batch_size = bs)
+
+        with ck.progressbar(test_dl) as prog_data:
+            for idxs, batch in prog_data:
+
+                res = test_model(batch.to(device))
+                res = res.cpu().detach().numpy()
+                preds[idxs,:] = res
+
+        
+
+        if save:
+            with open(self.predictions_file, "wb") as f:
+                pkl.dump(preds, f)
+
+            with open(self.labels_file, "wb") as f:
+                pkl.dump(labels, f)
+
+        return preds, labels
+
+        
 
     def forward_nf(self, nf, idx, margin, pos, neg, train = True):
         nf_pos_loss = 0
@@ -264,7 +345,10 @@ class CatEmbeddings(Model):
                 if neg:
                     neg_loss = self.model(batch_nf, idx, neg = True)
                     assert pos_loss.shape == neg_loss.shape, f"{pos_loss.shape}, {neg_loss.shape}"
-                    diff_loss = th.mean(th.relu(pos_loss - neg_loss + margin))
+                    #new_margin = margin
+                    new_margin = margin if th.mean(neg_loss - pos_loss) > margin else 2*th.mean(pos_loss)
+
+                    diff_loss = th.mean(th.relu(pos_loss - neg_loss + new_margin))
                     step_loss += diff_loss
                     nf_neg_loss += th.mean(neg_loss).detach().item()
                     nf_diff_loss += diff_loss.detach().item()
@@ -293,7 +377,7 @@ class CatEmbeddings(Model):
             if neg:
                 neg_loss = self.model(nf, idx, neg = True)
                 assert pos_loss.shape == neg_loss.shape, f"{pos_loss.shape}, {neg_loss.shape}"
-#                new_margin = max(margin,th.mean(pos_loss))
+#                new_margin = margin
                 new_margin = margin if th.mean(neg_loss - pos_loss) > margin else 2*th.mean(pos_loss)
                 diff_loss = th.mean(th.relu(pos_loss - neg_loss + new_margin))
                 
@@ -330,6 +414,18 @@ class CatEmbeddings(Model):
                      train = True
                  ):
 
+        if train:
+            nb_nf1, nb_nf2, nb_nf3, nb_nf4 = tuple(map(len, self.train_nfs))
+        else:
+            nb_nf1, nb_nf2, nb_nf3, nb_nf4 = tuple(map(len, self.valid_nfs))
+        
+        nb_nf1 = nb_nf1 if self.nf1 else 0
+        nb_nf2 = nb_nf2 if self.nf2 else 0
+        nb_nf3 = nb_nf3 if self.nf3 else 0
+        nb_nf4 = nb_nf4 if self.nf4 else 0
+        
+        total = nb_nf1 + nb_nf2 + nb_nf3 + nb_nf4
+
         data_nf1, data_nf2, data_nf3, data_nf4 = dataloaders
        
         nf1_pos_loss, nf1_neg_loss, nf1_diff_loss = self.forward_nf(data_nf1, 1, margin, nf1, nf1_neg, train = train)
@@ -337,12 +433,21 @@ class CatEmbeddings(Model):
         nf3_pos_loss, nf3_neg_loss, nf3_diff_loss = self.forward_nf(data_nf3, 3, margin, nf3, nf3_neg, train = train)
         nf4_pos_loss, nf4_neg_loss, nf4_diff_loss = self.forward_nf(data_nf4, 4, margin, nf4, nf4_neg, train = train)
 
+        nf1_pos_loss *= nb_nf1/total
+        nf2_pos_loss *= nb_nf2/total
+        nf3_pos_loss *= nb_nf3/total
+        nf4_pos_loss *= nb_nf4/total
+        nf1_diff_loss *= nb_nf1/total
+        nf2_diff_loss *= nb_nf2/total
+        nf3_diff_loss *= nb_nf3/total
+        nf4_diff_loss *= nb_nf4/total
+
         print(f"nf1: {nf1_diff_loss}, \tnf1p: {nf1_pos_loss}, \tnf1n: {nf1_neg_loss}")
         print(f"nf2: {nf2_diff_loss}, \tnf2p: {nf2_pos_loss}, \tnf2n: {nf2_neg_loss}")
         print(f"nf3: {nf3_diff_loss}, \tnf3p: {nf3_pos_loss}, \tnf3n: {nf3_neg_loss}")
         print(f"nf4: {nf4_diff_loss}, \tnf4p: {nf4_pos_loss}, \tnf4n: {nf4_neg_loss}")
       
-        return nf1_pos_loss + nf1_diff_loss + nf2_pos_loss + nf2_diff_loss + nf3_pos_loss + nf3_diff_loss + nf4_pos_loss + nf4_diff_loss
+        return  nf1_pos_loss + nf1_diff_loss+ nf2_pos_loss + nf2_diff_loss + nf3_pos_loss + nf3_diff_loss + nf4_pos_loss + nf4_diff_loss
 
 
     def forward_step_sampling(self,
@@ -427,11 +532,16 @@ class CatEmbeddings(Model):
         index = np.random.choice(len(valid_nf4), size = self.num_points_eval, replace = False)
 #        index = list(range(self.num_points_eval))
         valid_nfs = valid_nf4[index]
-        results = evalNF4Loss(self.model, valid_nfs, self.prot_dict, self.prot_index, self.trlabels, len(self.prot_index), device= 'cuda')
+        preds, labels = self.run_and_save_predictions(self.model, samples = valid_nfs, save = False)
+
+#        results = evalNF4Loss(self.model, valid_nfs, self.prot_dict, self.prot_index, self.trlabels, len(self.prot_index), device = "cuda")
+        results = evalNF4Loss(valid_nfs, self.prot_dict, self.prot_index, self.trlabels, len(self.prot_index), device= 'cuda', preds =preds, labels = labels)
 
         return results
 
     def evaluate_ppi(self):
+
+        self.run_and_save_predictions(self.model)
         #self.load_data(device = "cuda")
         #self.device = "cuda"
         #test_model = TestModule((len(self.classes), len(self.relations), self.embedding_size, self.model_filepath)).to(self.device)
@@ -442,18 +552,19 @@ class CatEmbeddings(Model):
         
         #test_dataset = TestDataset(test_nf4, self.prot_index, 0)
 
-        self.model = CatModel(len(self.classes), len(self.relations), self.embedding_size).to(self.device)
-        print('Load the best model', self.model_filepath)
-        self.model.load_state_dict(th.load(self.model_filepath))
-        #test_model.eval()
-        print(self.device)
         #self.create_dataloaders(device = "cuda")
         _, _, _, test_nf4 = self.test_nfs
 #        index = np.random.choice(len(test_nf4), size = 2000, replace = False)
 #        index = list(range(100))
         test_nfs = test_nf4#[index]
+        print(f"Device: {self.device}")
 
-        evalNF4Loss(self.model, test_nfs,  self.prot_dict, self.prot_index, self.trlabels, len(self.prot_index), device= self.device, show = True)
+ #       self.model = CatModel(len(self.classes), len(self.relations), self.embedding_size).to(self.device)
+ #       print('Load the best model', self.model_filepath)
+ #       self.model.load_state_dict(th.load(self.model_filepath))
+
+  #      results = evalNF4Loss(self.model, test_nf4, self.prot_dict, self.prot_index, self.trlabels, len(self.prot_index), device = "cuda", show = True)
+        evalNF4Loss(test_nfs, self.prot_dict, self.prot_index, self.trlabels, len(self.prot_index), device= self.device, show = True, preds_file =  self.predictions_file, labels_file = self.labels_file )
         
     #########################################
     ### Borrowed code from ELEmbeddings
@@ -630,15 +741,6 @@ class CatEmbeddings(Model):
         self.test_dl = tuple(map(lambda x: DataLoader(x, batch_size = self.batch_size), test_ds))
         
 
-class Adjust(nn.Module):
-
-    def __init__(self):
-        super(Shift, self).__init__()
-        
-    def forward(self, x):
-        x = th.sigmoid(x)
-        return (x+1)/2
-
 
 class CatModel(nn.Module):
 
@@ -656,15 +758,14 @@ class CatModel(nn.Module):
 
         self.embed_rel = nn.Embedding(num_rels, embedding_size)
         k = math.sqrt(1 / embedding_size)
-        nn.init.uniform_(self.embed.weight, -0, 1)
+        nn.init.uniform_(self.embed_rel.weight, -0,1)
 
         # Embedding network for the ontology ojects
         self.net_object = nn.Sequential(
             self.embed,
-#            nn.ReLU(),
             nn.Linear(embedding_size, embedding_size),
-            # nn.ReLU(),
-            # nn.Linear(embedding_size, embedding_size),
+            nn.ReLU(),
+            nn.Linear(embedding_size, embedding_size),
             # nn.ReLU(),
             # nn.Linear(embedding_size, embedding_size),
             nn.Sigmoid(),
@@ -674,8 +775,9 @@ class CatModel(nn.Module):
         # Embedding network for the ontology relations
         self.net_rel = nn.Sequential(
             self.embed_rel,
+
             nn.Linear(embedding_size, embedding_size),
-            # nn.ReLU(),
+            
             # nn.Linear(embedding_size, embedding_size),
             # nn.ReLU(),
             # nn.Linear(embedding_size, embedding_size),
@@ -685,8 +787,9 @@ class CatModel(nn.Module):
 
         # Embedding network for left part of 3rd normal form
         self.embed_fst = nn.Sequential(
+
             nn.Linear(3*embedding_size, embedding_size),
-            # nn.ReLU(),
+            
             # nn.Linear(embedding_size, embedding_size),
             # nn.ReLU(),
             # nn.Linear(embedding_size, embedding_size),
@@ -695,8 +798,9 @@ class CatModel(nn.Module):
         )
 
         self.embed_snd = nn.Sequential(
+
             nn.Linear(3*embedding_size, embedding_size),
-            # nn.ReLU(),
+            
             # nn.Linear(embedding_size, embedding_size),
             # nn.ReLU(),
             # nn.Linear(embedding_size, embedding_size),
@@ -706,9 +810,10 @@ class CatModel(nn.Module):
 
         # Embedding network for left part of 3rd normal form
         self.embed_up = nn.Sequential(
+
             nn.Linear(2*embedding_size, embedding_size),
 #            self.dropout,
-            # nn.ReLU(),
+            
             # nn.Linear(embedding_size, embedding_size),
             # nn.ReLU(),
             # nn.Linear(embedding_size, embedding_size),
@@ -733,10 +838,10 @@ class CatModel(nn.Module):
         # Embedding network for the objects in the exponential diagram
         self.embed_bigger_prod = nn.Sequential(
             nn.Linear(2*embedding_size, embedding_size),
-            self.dropout,
- #           nn.ReLU(),
- #           nn.Linear(embedding_size, embedding_size),
- #           nn.Sigmoid()
+
+            nn.ReLU(),
+            nn.Linear(embedding_size, embedding_size),
+            nn.Sigmoid()
         )
 
 
@@ -762,6 +867,14 @@ class CatModel(nn.Module):
   #      return fc
         return nn.Linear(self.embedding_size, self.embedding_size)
 
+
+    # def cos_sim(self, data):
+    #     srcs = self.net_object(data[:,0])
+    #     dsts = self.net_object(data[:,2])
+        
+    #     x = th.sum(srcs*dsts, dim = 1, keepdim = True).squeeze()
+    #     return th.sigmoid(x)
+
     def forward(self, normal_form, idx, neg = False, margin = 0):
 #        nf1, nf2, nf3, nf4 = normal_forms
 
@@ -774,7 +887,7 @@ class CatModel(nn.Module):
         
         if idx == 1:
             embed_nets = (self.net_object, self.embed_up)
-            loss = L.nf1_loss(normal_form, self.exponential_morphisms, embed_nets, neg = neg, num_objects = self.num_obj)
+            loss = L.nf1_loss(normal_form, self.exponential_morphisms, self.product_morphisms, embed_nets, neg = neg, num_objects = self.num_obj)
 
         elif idx == 2:
             embed_nets = (self.net_object, self.embed_up, self.embed_bigger_prod)
@@ -797,14 +910,12 @@ class CatModel(nn.Module):
 
     
 class TestModule(nn.Module):
-    def __init__(self, cat_params):
+    def __init__(self, model):
         super().__init__()
-        
-        num_objects, num_rels, embedding_size, best_model = cat_params
 
-        self.catModel = CatModel(num_objects, num_rels, embedding_size)
+        self.catModel = model
         
-        self.catModel.load_state_dict(th.load(best_model))
+
         
 
     def forward(self, x):
@@ -821,20 +932,24 @@ class TestModule(nn.Module):
 
 
 class TestDataset(IterableDataset):
-    def __init__(self, data, prot_index, r):
+    def __init__(self, data, prot_index, prot_dict, r):
         super().__init__()
         self.data = data
+        self.prot_dict = prot_dict
         self.len_data = len(data)
         self.predata = np.array([[0, r, x] for x in prot_index])
         
 
     def get_data(self):
         for c, r, d in self.data:
+            c_emb = c.detach().item()
+            c = c.detach().item()
+            c = self.prot_dict[c]
             new_array = np.array(self.predata, copy = True)
-            new_array[:,0] = c
+            new_array[:,0] = c_emb
             
             tensor = new_array
-            yield tensor, [c,r,d]
+            yield c, tensor
 
     def __iter__(self):
         return self.get_data()

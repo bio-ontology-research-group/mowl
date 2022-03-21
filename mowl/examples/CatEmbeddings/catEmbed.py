@@ -7,7 +7,7 @@ import gzip
 import os
 import sys
 import logging
-
+import torch as th
 logging.basicConfig(level=logging.DEBUG)   
 sys.path.insert(0, '')
 sys.path.append('../../../')
@@ -24,19 +24,24 @@ def main(config):
     logging.info(f"Number of cores detected: {os.cpu_count()}")
 
 
-    go_slim = True
+    # go_slim = True
 
-    if go_slim:
-        ontology = "data/goslim_yeast.owl"
-        val = "data/trans_yeast.owl"
-    else:
-        ontology = "data/go.owl"
-        val = "data/trans.owl"
+    # if go_slim:
+    #     ontology = "data/goslim_yeast.owl"
+    #     val = "data/trans_yeast.owl"
+    # else:
+    #     ontology = "data/go.owl"
+    #     val = "data/trans.owl"
    
-    ds = PathDataset(ontology, val, None)
+    # ds = PathDataset(ontology, val, None)
+    device = "cuda" if th.cuda.is_available() else "cpu"
+    logging.info("Device: %s", device)
 
-    model = CatEmbeddings(ds, 128)
-
+    go = True
+    if go:
+        model = CatEmbeddings("data/subsumption_data/go/", 4096*4, 1024, lr = 1e-0,  device = device)
+    else:
+        model = CatEmbeddings("data/subsumption_data/goslim/", 4096*4, 1024, lr = 1e-0,  device = device)
     model.train()
     model.evaluate()
 

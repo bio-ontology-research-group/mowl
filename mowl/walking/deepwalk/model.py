@@ -13,8 +13,6 @@ logging.basicConfig(level=logging.INFO)
 class DeepWalk(WalkingModel):
 
     '''
-    Implementation of DeepWalk based on <https://github.com/phanein/deepwalk/blob/master/deepwalk/graph.py>
-
     :param alpha: Probability of restart
     :type alpha: float
     '''
