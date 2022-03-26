@@ -172,7 +172,8 @@ class CatEmbeddings(Model):
         logging.debug("Model created")
         
         self.model = self.model.to(device)
-        
+
+ 
         self.optimizer = optim.Adam(self.model.parameters(), lr = self.lr, weight_decay=self.decay)
 
         self.scheduler = optim.lr_scheduler.MultiStepLR(self.optimizer, milestones = self.milestones, gamma = self.gamma) #only nf4#
@@ -345,8 +346,8 @@ class CatEmbeddings(Model):
                 if neg:
                     neg_loss = self.model(batch_nf, idx, neg = True)
                     assert pos_loss.shape == neg_loss.shape, f"{pos_loss.shape}, {neg_loss.shape}"
-                    #new_margin = margin
-                    new_margin = margin if th.mean(neg_loss - pos_loss) > margin else 2*th.mean(pos_loss)
+                    new_margin = margin
+ #                   new_margin = margin if th.mean(neg_loss - pos_loss) > margin else 2*th.mean(pos_loss)
 
                     diff_loss = th.mean(th.relu(pos_loss - neg_loss + new_margin))
                     step_loss += diff_loss
@@ -377,8 +378,8 @@ class CatEmbeddings(Model):
             if neg:
                 neg_loss = self.model(nf, idx, neg = True)
                 assert pos_loss.shape == neg_loss.shape, f"{pos_loss.shape}, {neg_loss.shape}"
-#                new_margin = margin
-                new_margin = margin if th.mean(neg_loss - pos_loss) > margin else 2*th.mean(pos_loss)
+                new_margin = margin
+#                new_margin = margin if th.mean(neg_loss - pos_loss) > margin else 2*th.mean(pos_loss)
                 diff_loss = th.mean(th.relu(pos_loss - neg_loss + new_margin))
                 
                 step_loss += diff_loss
@@ -758,14 +759,14 @@ class CatModel(nn.Module):
 
         self.embed_rel = nn.Embedding(num_rels, embedding_size)
         k = math.sqrt(1 / embedding_size)
-        nn.init.uniform_(self.embed_rel.weight, -0,1)
+#        nn.init.uniform_(self.embed_rel.weight, -k,k)
 
         # Embedding network for the ontology ojects
         self.net_object = nn.Sequential(
             self.embed,
             nn.Linear(embedding_size, embedding_size),
-            nn.ReLU(),
-            nn.Linear(embedding_size, embedding_size),
+#            nn.ReLU(),
+#            nn.Linear(embedding_size, embedding_size),
             # nn.ReLU(),
             # nn.Linear(embedding_size, embedding_size),
             nn.Sigmoid(),
@@ -788,22 +789,26 @@ class CatModel(nn.Module):
         # Embedding network for left part of 3rd normal form
         self.embed_fst = nn.Sequential(
 
-            nn.Linear(3*embedding_size, embedding_size),
+            nn.Linear(3*embedding_size, 2*embedding_size),
             
             # nn.Linear(embedding_size, embedding_size),
-            # nn.ReLU(),
-            # nn.Linear(embedding_size, embedding_size),
+            nn.ReLU(),
+            nn.Linear(2*embedding_size, embedding_size),
+            nn.ReLU(),
+            nn.Linear(embedding_size, embedding_size),
             nn.Sigmoid(),
             self.dropout
         )
 
         self.embed_snd = nn.Sequential(
 
-            nn.Linear(3*embedding_size, embedding_size),
+            nn.Linear(3*embedding_size, 2*embedding_size),
             
             # nn.Linear(embedding_size, embedding_size),
-            # nn.ReLU(),
-            # nn.Linear(embedding_size, embedding_size),
+            nn.ReLU(),
+            nn.Linear(2*embedding_size, embedding_size),
+            nn.ReLU(),
+            nn.Linear(embedding_size, embedding_size),
             nn.Sigmoid(),
             self.dropout
         )
@@ -815,8 +820,8 @@ class CatModel(nn.Module):
 #            self.dropout,
             
             # nn.Linear(embedding_size, embedding_size),
-            # nn.ReLU(),
-            # nn.Linear(embedding_size, embedding_size),
+             nn.ReLU(),
+             nn.Linear(embedding_size, embedding_size),
             nn.Sigmoid(),
             self.dropout
         )

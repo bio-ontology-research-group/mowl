@@ -2,7 +2,9 @@ import torch as th
 import torch.nn as nn
 import numpy as np
 import random
-from torch.linalg import norm
+
+def norm(x, dim = None):
+    return th.linalg.norm(x, dim = 1)
 
 def exponential_loss_(objects, exp_morphisms, prod_morphisms, emb_up, full = True, up = None):
     up2down, up2exp, down2exp, up2ant, down2ant, up2cons, down2cons = exp_morphisms
@@ -52,8 +54,9 @@ def exponential_loss(objects, exp_morphisms, prod_morphisms, emb_up, full = True
         
     if up is None:
         up = emb_up(th.cat([antecedent, consequent], dim = 1))
-    exponential = consequent/(antecedent + 1e-10)
-    exponential = exponential.where(exponential > 1, th.tensor(1.0).to(up.device))
+    exponential = th.relu(consequent - antecedent)
+#    exponential = consequent/(antecedent + 1e-10)
+#    exponential = exponential.where(exponential > 1, th.tensor(1.0).to(up.device))
         
     down = (exponential + antecedent)/2
     
@@ -80,7 +83,7 @@ def exponential_loss(objects, exp_morphisms, prod_morphisms, emb_up, full = True
     loss2 = norm(estim_antFromUp - antecedent, dim =1) 
     loss3 = norm(estim_expFromdown - exponential, dim = 1) 
     loss4 = norm(estim_antFromDown - antecedent, dim = 1) 
-    loss5 = norm(estim_downFromUp - down, dim = 1) 
+    loss5 = norm(estim_downFromUp - exponential, dim = 1) 
     loss6 = norm(estim_consFromDown - consequent, dim = 1) 
     loss7 = norm(estim_consFromUp - consequent, dim = 1) 
 
@@ -102,7 +105,8 @@ def exponential_loss(objects, exp_morphisms, prod_morphisms, emb_up, full = True
             
     loss = loss5 + loss6+ loss7 + path_loss3 + loss1 +loss2 +loss3 + loss4 + path_loss1 + path_loss2
 
-
+#    toprint = list(map(lambda x: th.mean(x).detach().item(), [loss5, loss6, loss7,path_loss3]))
+#    print(toprint)
     return loss
 
 
@@ -253,5 +257,5 @@ def nf4_loss(objects, prod_morphisms, exp_morphisms, embed_nets, neg = False, nu
 
         assert prod_loss.shape == exp_loss.shape
 
-    return prod_loss + exp_loss
+    return exp_loss + prod_loss
 

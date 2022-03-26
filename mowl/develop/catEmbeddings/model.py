@@ -41,7 +41,7 @@ class CatEmbeddings():
 
     def train(self):
 
-        train_data_loader, val_data_loader, _, num_classes = self.load_data()
+        train_data_loader, test_data_loader, num_classes = self.load_data()
         
         model = CatModel(num_classes, self.embedding_size).to(self.device)
         paramss = sum(p.numel() for p in model.parameters())
@@ -54,24 +54,19 @@ class CatEmbeddings():
         lr = self.lr # 1e-0 go
         optimizer = optim.Adam(model.parameters(), lr = lr, weight_decay=0)
         criterion = nn.BCELoss()
-        for epoch in range(128):
+        for epoch in range(256):
 
             epoch_loss = 0
             train_cat_loss = 0
             model.train()
 
             with ck.progressbar(train_data_loader) as bar:
-                for i, (pos, neg1, neg2) in enumerate(bar):
+                for i, (samples, lbls) in enumerate(bar):
+                    samples = list(map(lambda x: x.to(self.device), samples))
+                    logits = model(samples)
+                    lbls = lbls.float().to(self.device)
 
-                    pos = list(map(lambda x: x.to(self.device), pos))
-                    neg1 = list(map(lambda x: x.to(self.device), neg1))
-                    neg2 = list(map(lambda x: x.to(self.device), neg2))
-                    tr_loss, logits = model(pos, neg1, neg2)
-                    #print(tr_loss)
-                    batch_size = len(pos[0])
-
-                    lbls = th.cat([th.ones(batch_size), th.zeros(batch_size), th.zeros(batch_size)], 0).to(self.device)
-                    loss = criterion(logits.squeeze(), lbls)
+                    loss = criterion(logits, lbls)
                     optimizer.zero_grad()
                     loss.backward()
                     optimizer.step()
@@ -87,18 +82,14 @@ class CatEmbeddings():
         
             with th.no_grad():
                 optimizer.zero_grad()
-                with ck.progressbar(val_data_loader) as bar:
-                    for i, (pos, neg1, neg2) in enumerate(bar):
-                        pos = list(map(lambda x: x.to(self.device), pos))
-                        neg1 = list(map(lambda x: x.to(self.device), neg1))
-                        neg2 = list(map(lambda x: x.to(self.device), neg2))
-
-                        _, logits = model(pos, neg1, neg2)
-                        batch_size = len(pos[0])
-
-                        lbls = th.cat([th.ones(batch_size), th.zeros(batch_size), th.zeros(batch_size)], 0).to(self.device)
+                with ck.progressbar(test_data_loader) as bar:
+                    for i, (samples, lbls) in enumerate(bar):
+                        samples = list(map(lambda x: x.to(self.device), samples))
+ 
+                        logits = model(samples) 
                         labels = np.append(labels, lbls.cpu())
                         preds = np.append(preds, logits.cpu())
+                        lbls = lbls.float().to(self.device)
                         loss = criterion(logits.squeeze(), lbls)
                         val_loss += loss.detach().item()
                     val_loss /= (i+1)
@@ -110,34 +101,30 @@ class CatEmbeddings():
 
     def load_data(self):
         train_file = self.data_root + "train_data.pkl"
-        valid_file = self.data_root + "valid_data.pkl"
+        
         test_file = self.data_root + "test_data.pkl"
 
         with open(train_file, "rb") as f:
             train_data = list(pkl.load(f))
 
-        with open(valid_file, "rb") as f:
-            valid_data = list(pkl.load(f))
-        
         with open(test_file, "rb") as f:
             test_data = list(pkl.load(f))
 
+        random.shuffle(train_data)
         objects = {"owl#Thing"}
-        objects |= {s for (s,_), _, _ in train_data}
-        objects |= {t for (_,t), _, _ in train_data}
+        objects |= {s for (s,_),_ in train_data}
+        objects |= {t for (_,t),_ in train_data}
 
         objects = list(objects)
         objects_idx = {v:k for k,v in enumerate(objects)}
 
         train_set = CatDataset(train_data, objects_idx)
-        valid_set = CatDataset(valid_data, objects_idx)
         test_set  = CatDataset(test_data, objects_idx)
 
         train_dl = DataLoader(train_set, self.batch_size, drop_last = False)
-        valid_dl = DataLoader(valid_set, self.batch_size, drop_last = False)
         test_dl = DataLoader(test_set, self.batch_size, drop_last = False)
 
-        return train_dl, valid_dl, test_dl, len(objects)
+        return train_dl, test_dl, len(objects)
         
     # def load_data_old(self):
 
@@ -313,11 +300,11 @@ class CatModel(nn.Module):
 
         num_obj = num_classes
         self.embedding_size  = embedding_size
-        self.dropout = nn.Dropout(0.2)
+        self.dropout = nn.Dropout(0)
 
         self.embed = nn.Embedding(num_obj, embedding_size)
         k = math.sqrt(1 / embedding_size)
-        nn.init.uniform_(self.embed.weight, -1/k, 1/k)
+        nn.init.uniform_(self.embed.weight, -k, k)
         
         self.net_object = nn.Sequential(
             self.embed,
@@ -340,18 +327,18 @@ class CatModel(nn.Module):
         self.emb_up = nn.Sequential(
             nn.Linear(2*embedding_size, embedding_size),
             self.dropout,
- #           nn.ReLU(),
+            nn.ReLU(),
             nn.Linear(embedding_size, embedding_size),
             nn.Sigmoid()
         )
 
-        self.emb_down = nn.Sequential(
-            nn.Linear(3*embedding_size, 2*embedding_size),
-            self.dropout,
-  #          nn.ReLU(),
-            nn.Linear(2*embedding_size, embedding_size),
-            nn.Sigmoid()
-        )
+  #       self.emb_down = nn.Sequential(
+  #           nn.Linear(3*embedding_size, 2*embedding_size),
+  #           self.dropout,
+  # #          nn.ReLU(),
+  #           nn.Linear(2*embedding_size, embedding_size),
+  #           nn.Sigmoid()
+  #       )
 
         self.up2exp = nn.Sequential(
             nn.Linear(embedding_size, embedding_size),
@@ -512,50 +499,69 @@ class CatModel(nn.Module):
         return nn.Linear(self.embedding_size, self.embedding_size)
 
         
-    def forward(self, positive, negative1, negative2):
-        
+    def forward(self, samples):
+        samples = th.vstack(samples).transpose(0,1)
 
-
-        positive = th.vstack(positive).transpose(0,1)
-
-        negative1 = th.vstack(negative1).transpose(0,1)
-        negative2 = th.vstack(negative2).transpose(0,1)
-
-        loss_pos = L.nf1_loss(positive, self.exponential_morphisms, self.product_morphisms,(self.net_object, self.emb_up)) # self.compute_loss(positive)
+        loss = L.nf1_loss(samples, self.exponential_morphisms, self.product_morphisms,(self.net_object, self.emb_up)) # self.compute_loss(positive)
 #        loss_pos = self.norm(loss_pos)
 
-        min_pos = th.min(loss_pos)
-        max_pos = th.max(loss_pos)
+        min_ = th.min(loss)
+        max_ = th.max(loss)
 
-        loss_neg1 = L.nf1_loss(negative1, self.exponential_morphisms, self.product_morphisms, (self.net_object, self.emb_up)) #self.compute_loss(negative1)
- #       loss_neg1 = self.norm(loss_neg1)
 
-        min_neg1 = th.min(loss_neg1)
-        max_neg1 = th.max(loss_neg1)
-
-        loss_neg2 = L.nf1_loss(negative2, self.exponential_morphisms, self.product_morphisms, (self.net_object, self.emb_up)) #self.compute_loss(negative2)
-  
-
-        min_neg2 = th.min(loss_neg2)
-        max_neg2 = th.max(loss_neg2)
-  
-        min_ = min(min_pos, min_neg1, min_neg2)
-        max_ = max(max_pos, max_neg1, max_neg2)
-        
-
-        loss_pos = (loss_pos-min_)/(max_ - min_)
+        loss = (loss-min_)/(max_ - min_)
 #        loss_pos = loss_pos/self.embedding_size
-        logit_pos = 1 - 2*(th.sigmoid(loss_pos) - 0.5)
+        logits = 1 - 2*(th.sigmoid(loss) - 0.5)
 
-        loss_neg1 = (loss_neg1-min_)/(max_ - min_)
-        logit_neg1 = 1 - 2*(th.sigmoid(loss_neg1) - 0.5)
-        
-        loss_neg2 = (loss_neg2-min_)/(max_ - min_)
-        logit_neg2 = 1 - 2*(th.sigmoid(loss_neg2) - 0.5)
       
-        logits = th.cat([logit_pos, logit_neg1, logit_neg2], 0)
+
         
-        return th.sum(loss_pos + loss_neg1 + loss_neg2), logits
+        return logits
+
+#     def forward(self, positive, negative1, negative2):
+        
+
+
+#         positive = th.vstack(positive).transpose(0,1)
+
+#         negative1 = th.vstack(negative1).transpose(0,1)
+#         negative2 = th.vstack(negative2).transpose(0,1)
+
+#         loss_pos = L.nf1_loss(positive, self.exponential_morphisms, self.product_morphisms,(self.net_object, self.emb_up)) # self.compute_loss(positive)
+# #        loss_pos = self.norm(loss_pos)
+
+#         min_pos = th.min(loss_pos)
+#         max_pos = th.max(loss_pos)
+
+#         loss_neg1 = L.nf1_loss(negative1, self.exponential_morphisms, self.product_morphisms, (self.net_object, self.emb_up)) #self.compute_loss(negative1)
+#  #       loss_neg1 = self.norm(loss_neg1)
+
+#         min_neg1 = th.min(loss_neg1)
+#         max_neg1 = th.max(loss_neg1)
+
+#         loss_neg2 = L.nf1_loss(negative2, self.exponential_morphisms, self.product_morphisms, (self.net_object, self.emb_up)) #self.compute_loss(negative2)
+  
+
+#         min_neg2 = th.min(loss_neg2)
+#         max_neg2 = th.max(loss_neg2)
+  
+#         min_ = min(min_pos, min_neg1, min_neg2)
+#         max_ = max(max_pos, max_neg1, max_neg2)
+        
+
+#         loss_pos = (loss_pos-min_)/(max_ - min_)
+# #        loss_pos = loss_pos/self.embedding_size
+#         logit_pos = 1 - 2*(th.sigmoid(loss_pos) - 0.5)
+
+#         loss_neg1 = (loss_neg1-min_)/(max_ - min_)
+#         logit_neg1 = 1 - 2*(th.sigmoid(loss_neg1) - 0.5)
+        
+#         loss_neg2 = (loss_neg2-min_)/(max_ - min_)
+#         logit_neg2 = 1 - 2*(th.sigmoid(loss_neg2) - 0.5)
+      
+
+        
+#         return logit_pos, logit_neg1, logit_neg2
 
     
 class CatDataset(IterableDataset):
@@ -565,12 +571,10 @@ class CatDataset(IterableDataset):
         
     def get_data(self):
 
-        for pos, neg1, neg2  in self.data:
+        for sample, label  in self.data:
 
-            pos = self.generate_objects(*pos)
-            neg1 = self.generate_objects(*neg1)
-            neg2 = self.generate_objects(*neg2)
-            yield pos, neg1, neg2
+            sample = self.generate_objects(*sample)
+            yield sample, label
         
 
     def __iter__(self):

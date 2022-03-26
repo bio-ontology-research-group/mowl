@@ -37,13 +37,13 @@ def main(config):
     device = "cuda" if th.cuda.is_available() else "cpu"
     logging.info("Device: %s", device)
 
-    go = True
+    go = False
     if go:
-        model = CatEmbeddings("data/subsumption_data/go/", 4096*4, 1024, lr = 1e-0,  device = device)
+        model = CatEmbeddings("data/subsumption_data/go/", 4096*4, 1024, lr = 5e-1,  device = device)
     else:
-        model = CatEmbeddings("data/subsumption_data/goslim/", 4096*4, 1024, lr = 1e-0,  device = device)
+        model = CatEmbeddings("data/subsumption_data/goslim/", 4096*4, 100, lr = 1e-4,  device = device)
     model.train()
-    model.evaluate()
+#    model.evaluate()
 
 
 if __name__ == '__main__':
