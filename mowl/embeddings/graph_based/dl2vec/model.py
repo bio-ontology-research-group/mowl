@@ -69,7 +69,8 @@ class DL2Vec(Model):
         self.outfile = outfile
         self.walking_method = walking_method
         self.parserTrain = parser_factory("dl2vec", self.dataset.ontology, bidirectional_taxonomy)
-        self.parserTest = parser_factory("dl2vec", self.dataset.testing, bidirectional_taxonomy)
+        if not self.dataset.testing is None:
+            self.parserTest = parser_factory("dl2vec", self.dataset.testing, bidirectional_taxonomy)
 
         self.lock = Lock()
 
