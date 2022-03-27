@@ -59,7 +59,8 @@ class TranslationalOnt(Model):
 
         if not dataset is None: 
             self.parserTrain = parser_factory(self.parsing_method, self.dataset.ontology, bidirectional_taxonomy)
-            self.parserTest = parser_factory(self.parsing_method, self.dataset.testing, bidirectional_taxonomy)
+            if not self.dataset.testing is None:
+                self.parserTest = parser_factory(self.parsing_method, self.dataset.testing, bidirectional_taxonomy)
 
         self.model = None
         
@@ -102,6 +103,9 @@ class TranslationalOnt(Model):
     def evaluate(self):
         if self.model is None:
             raise ValueError("Train a model first.")
+            
+        if self.dataset.testing is None:
+            raise ValueError("No testing dataset defined")
 
         if self.edges_test is None:
             self.edges_test = self.parserTest.parse()
