@@ -59,7 +59,8 @@ class TranslationalOnt(Model):
 
         if not dataset is None: 
             self.parserTrain = parser_factory(self.parsing_method, self.dataset.ontology, bidirectional_taxonomy)
-            self.parserTest = parser_factory(self.parsing_method, self.dataset.testing, bidirectional_taxonomy)
+            if not self.dataset.testing is None:
+                self.parserTest = parser_factory(self.parsing_method, self.dataset.testing, bidirectional_taxonomy)
 
         self.model = None
         
@@ -70,9 +71,11 @@ class TranslationalOnt(Model):
 
         entities, relations = Edge.getEntitiesAndRelations(self.edges_train)
 
+        entities_test, relations_test = dict(), dict()
         if self.edges_test is None:
-            self.edges_test = self.parserTest.parse()
-        entities_test, relations_test = Edge.getEntitiesAndRelations(self.edges_test)
+            if not self.dataset.testing is None:
+                self.edges_test = self.parserTest.parse()
+                entities_test, relations_test = Edge.getEntitiesAndRelations(self.edges_test)
 
         total_entities = entities.union(entities_test)
         total_relations = relations.union(relations_test)
@@ -102,7 +105,9 @@ class TranslationalOnt(Model):
     def evaluate(self):
         if self.model is None:
             raise ValueError("Train a model first.")
-
+        if self.dataset.testing is None:
+            raise ValueError("Testing dataset is not defined.")
+        
         if self.edges_test is None:
             self.edges_test = self.parserTest.parse()
 
