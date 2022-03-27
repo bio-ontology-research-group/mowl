@@ -105,9 +105,10 @@ class TranslationalOnt(Model):
     def evaluate(self):
         if self.model is None:
             raise ValueError("Train a model first.")
+
         if self.dataset.testing is None:
             raise ValueError("Testing dataset is not defined.")
-        
+                    
         if self.edges_test is None:
             self.edges_test = self.parserTest.parse()
 
