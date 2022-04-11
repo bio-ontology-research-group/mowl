@@ -543,28 +543,12 @@ class CatEmbeddings(Model):
     def evaluate_ppi(self):
 
         self.run_and_save_predictions(self.model)
-        #self.load_data(device = "cuda")
-        #self.device = "cuda"
-        #test_model = TestModule((len(self.classes), len(self.relations), self.embedding_size, self.model_filepath)).to(self.device)
 
-        #_, _, _, test_nf4 = self.test_nfs
-
-        #test_nf4 = test_nf4.cpu().detach().numpy()
-        
-        #test_dataset = TestDataset(test_nf4, self.prot_index, 0)
-
-        #self.create_dataloaders(device = "cuda")
         _, _, _, test_nf4 = self.test_nfs
-#        index = np.random.choice(len(test_nf4), size = 2000, replace = False)
-#        index = list(range(100))
+
         test_nfs = test_nf4#[index]
         print(f"Device: {self.device}")
 
- #       self.model = CatModel(len(self.classes), len(self.relations), self.embedding_size).to(self.device)
- #       print('Load the best model', self.model_filepath)
- #       self.model.load_state_dict(th.load(self.model_filepath))
-
-  #      results = evalNF4Loss(self.model, test_nf4, self.prot_dict, self.prot_index, self.trlabels, len(self.prot_index), device = "cuda", show = True)
         evalNF4Loss(test_nfs, self.prot_dict, self.prot_index, self.trlabels, len(self.prot_index), device= self.device, show = True, preds_file =  self.predictions_file, labels_file = self.labels_file )
         
     #########################################
@@ -752,78 +736,59 @@ class CatModel(nn.Module):
         self.num_obj = num_objects 
         
         self.dropout = nn.Dropout(dropout)
-
+        self.act = nn.Sigmoid()
         self.embed = nn.Embedding(self.num_obj, embedding_size)
         k = math.sqrt(1 / embedding_size)
         nn.init.uniform_(self.embed.weight, -0, 1)
 
         self.embed_rel = nn.Embedding(num_rels, embedding_size)
         k = math.sqrt(1 / embedding_size)
-#        nn.init.uniform_(self.embed_rel.weight, -k,k)
+        nn.init.uniform_(self.embed_rel.weight, -0,1)
 
         # Embedding network for the ontology ojects
         self.net_object = nn.Sequential(
             self.embed,
             nn.Linear(embedding_size, embedding_size),
-#            nn.ReLU(),
-#            nn.Linear(embedding_size, embedding_size),
-            # nn.ReLU(),
-            # nn.Linear(embedding_size, embedding_size),
-            nn.Sigmoid(),
-            self.dropout
+
+            self.act,
+
         )
 
         # Embedding network for the ontology relations
         self.net_rel = nn.Sequential(
             self.embed_rel,
-
             nn.Linear(embedding_size, embedding_size),
-            
-            # nn.Linear(embedding_size, embedding_size),
-            # nn.ReLU(),
-            # nn.Linear(embedding_size, embedding_size),
-            nn.Sigmoid(),
-            self.dropout
+            self.act
+
         )
 
         # Embedding network for left part of 3rd normal form
         self.embed_fst = nn.Sequential(
 
             nn.Linear(3*embedding_size, 2*embedding_size),
-            
-            # nn.Linear(embedding_size, embedding_size),
             nn.ReLU(),
             nn.Linear(2*embedding_size, embedding_size),
-            nn.ReLU(),
-            nn.Linear(embedding_size, embedding_size),
-            nn.Sigmoid(),
-            self.dropout
+            self.act
+
         )
 
         self.embed_snd = nn.Sequential(
 
             nn.Linear(3*embedding_size, 2*embedding_size),
-            
-            # nn.Linear(embedding_size, embedding_size),
             nn.ReLU(),
             nn.Linear(2*embedding_size, embedding_size),
-            nn.ReLU(),
-            nn.Linear(embedding_size, embedding_size),
-            nn.Sigmoid(),
-            self.dropout
+            self.act,
+       
         )
 
         # Embedding network for left part of 3rd normal form
         self.embed_up = nn.Sequential(
 
             nn.Linear(2*embedding_size, embedding_size),
-#            self.dropout,
-            
-            # nn.Linear(embedding_size, embedding_size),
-             nn.ReLU(),
-             nn.Linear(embedding_size, embedding_size),
-            nn.Sigmoid(),
-            self.dropout
+            nn.ReLU(),
+            nn.Linear(embedding_size, embedding_size),
+            self.act
+         
         )
 
         # Morphisms for the exponential diagram
@@ -843,10 +808,7 @@ class CatModel(nn.Module):
         # Embedding network for the objects in the exponential diagram
         self.embed_bigger_prod = nn.Sequential(
             nn.Linear(2*embedding_size, embedding_size),
-
-            nn.ReLU(),
-            nn.Linear(embedding_size, embedding_size),
-            nn.Sigmoid()
+            self.act
         )
 
 
@@ -870,7 +832,8 @@ class CatModel(nn.Module):
   #          self.dropout
  #       )
   #      return fc
-        return nn.Linear(self.embedding_size, self.embedding_size)
+        return Morphism(self.embedding_size)
+#        return nn.Linear(self.embedding_size, self.embedding_size)
 
 
     # def cos_sim(self, data):
@@ -935,6 +898,19 @@ class TestModule(nn.Module):
         return x
 
 
+class Morphism(nn.Module):
+    def __init__(self, embedding_size):
+        super().__init__()
+        self.net = nn.Sequential(
+            nn.Linear(embedding_size, embedding_size),
+        )
+
+    def forward(self,x):
+        x = self.net(x)
+        #min_ = th.min(x, dim=1, keepdim= True).values
+        #max_ = th.max(x, dim=1, keepdim = True).values
+
+        return x#(x-min_)/(max_ - min_)
 
 class TestDataset(IterableDataset):
     def __init__(self, data, prot_index, prot_dict, r):

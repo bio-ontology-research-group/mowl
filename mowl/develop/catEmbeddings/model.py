@@ -340,49 +340,22 @@ class CatModel(nn.Module):
   #           nn.Sigmoid()
   #       )
 
-        self.up2exp = nn.Sequential(
-            nn.Linear(embedding_size, embedding_size),
-            self.dropout
-        )
+        self.up2exp = self.create_morphism()
         
-        self.up2ant = nn.Sequential(
-            nn.Linear(embedding_size, embedding_size),
-            self.dropout
-        )
+        self.up2ant = self.create_morphism()
 
-        self.down2exp = nn.Sequential(
-            nn.Linear(embedding_size, embedding_size),
-            self.dropout
-        )
+        self.down2exp = self.create_morphism()
 
-        self.down2ant = nn.Sequential(
-            nn.Linear(embedding_size, embedding_size),
-            self.dropout
-        )
+        self.down2ant = self.create_morphism()
         
-        self.up2down = nn.Sequential(
-            nn.Linear(embedding_size, embedding_size),
-            self.dropout
-        )
-        self.up2cons = nn.Sequential(
-            nn.Linear(embedding_size, embedding_size),
-            self.dropout
-        )
+        self.up2down = self.create_morphism()
+        self.up2cons = self.create_morphism()
         
-        self.down2cons = nn.Sequential(
-            nn.Linear(embedding_size, embedding_size),
-            self.dropout
-        )
+        self.down2cons = self.create_morphism()
 
-        self.cons2exp = nn.Sequential(
-            nn.Linear(embedding_size, embedding_size),
-            self.dropout
-        )
+        self.cons2exp = self.create_morphism()
 
-        self.fc = nn.Sequential(
-            nn.Linear(embedding_size, embedding_size),
-            self.dropout
-        )
+
 
 
         self.exponential_morphisms = (self.up2down, self.up2exp, self.down2exp, self.up2ant, self.down2ant, self.up2cons, self.down2cons)
@@ -396,107 +369,10 @@ class CatModel(nn.Module):
 
         self.product_morphisms = (self.big2prod, self.big2left, self.big2right, self.prod2left, self.prod2right)
 
-#     def compute_loss2(self, objects):
-
-#         rmse = RMSELoss()
-#         rmseNR = RMSELoss(reduction = "none")
-#         antecedent, consequent = map(self.net_object, objects)
-        
-        
-#         up = self.emb_up(th.cat([antecedent, consequent], dim = 1))
-#         exponential = consequent/(antecedent + 1e-6)
-#         exponential = exponential.where(exponential > 1, th.tensor(1.0))
-        
-# #        exponential = self.emb_exp(th.cat([antecedent, consequent], dim = 1))
-#         down = (exponential + antecedent)/2
-# #        down = self.emb_down(th.cat([antecedent, consequent, exponential], dim =1))
-#         full = True
-        
-#         if full:
-
-#             estim_downFromUp = self.up2down(up)
-
-#             estim_expFromUp = self.up2exp(up)
-
-#             estim_expFromdown = self.down2exp(down)
-#             estim_expFromDownChained = self.down2exp(estim_downFromUp)
-            
-#             estim_antFromUp = self.up2ant(up)
-
-#             estim_antFromDown = self.down2ant(down)
-#             estim_antFromDownChained = self.down2ant(estim_downFromUp)
-            
-#             estim_consFromUp = self.up2cons(up)
-#             estim_consFromDown = self.down2cons(down)
-#             estim_consFromDownChained = self.down2cons(estim_downFromUp)
-            
-#             loss1 = rmseNR(estim_expFromUp, exponential)
-#             loss1 = th.mean(loss1, dim=1)
-#             loss2 = rmseNR(estim_antFromUp, antecedent) 
-#             loss2 = th.mean(loss2, dim=1)
-
-
-            
-#             loss3 = rmseNR(estim_expFromdown, exponential) 
-#             loss3 = th.mean(loss3, dim=1)
-#             loss4 = rmseNR(estim_antFromDown, antecedent) 
-#             loss4 = th.mean(loss4, dim=1)
-            
-#             loss5 = rmseNR(estim_downFromUp, down) 
-#             loss5 = th.mean(loss5, dim=1)
-#             loss6 = rmseNR(estim_consFromDown, consequent) 
-#             loss6 = th.mean(loss6, dim=1)
-#             loss7 = rmseNR(estim_consFromUp, consequent) 
-#             loss7 = th.mean(loss7, dim=1)
-
-#             #Using the negation form
-#             exp_sum = self.cons2exp(consequent)
-#             loss8 = rmseNR(exp_sum, exponential)
-#             loss8 = th.mean(loss8, dim=1)
-            
-#             path_loss1 = rmseNR(estim_expFromDownChained, exponential)
-#             path_loss1 = th.mean(path_loss1, dim=1)
-            
-#             path_loss2 = rmseNR(estim_antFromDownChained, antecedent)
-#             path_loss2 = th.mean(path_loss2, dim=1)
-            
-#             path_loss3 = rmseNR(estim_consFromDownChained, consequent)
-#             path_loss3 = th.mean(path_loss3, dim =1)
-
-#             path_loss4 = rmseNR(self.cons2exp(estim_consFromDown), exponential)
-#             path_loss4 = th.mean(path_loss4, dim=1)
-            
-#             assert loss1.shape == loss2.shape
-#             assert loss2.shape == loss3.shape
-#             assert loss3.shape == loss4.shape
-#             assert loss4.shape == loss5.shape
-#             assert loss5.shape == loss6.shape
-#             assert loss6.shape == loss7.shape
-#             assert loss7.shape == path_loss1.shape
-#             assert path_loss1.shape == path_loss2.shape
-#             assert path_loss2.shape == path_loss3.shape
-#             assert path_loss3.shape == path_loss4.shape
-#             assert path_loss4.shape == loss8.shape
-            
-#             sim_loss = loss5 + loss6+ loss7 + path_loss3 + loss1 +loss2 +loss3 + loss4 + path_loss1 + path_loss2 + loss8 + path_loss4
-#         else:
-
-#             estimCons = self.fc(antecedent)
-#             sim_loss = rmseNR(estimCons, consequent)
-#             sim_loss = th.mean(sim_loss, dim=1)
-
-#         logit = 1 - 2*(th.sigmoid(sim_loss) - 0.5)
-
-#         return logit
- 
         
     def create_morphism(self):
-#        fc = nn.Sequential(
-#            nn.Linear(self.embedding_size, self.embedding_size),
-  #          self.dropout
- #       )
-  #      return fc
-        return nn.Linear(self.embedding_size, self.embedding_size)
+        return Morphism(self.embedding_size)
+
 
         
     def forward(self, samples):
@@ -517,52 +393,6 @@ class CatModel(nn.Module):
 
         
         return logits
-
-#     def forward(self, positive, negative1, negative2):
-        
-
-
-#         positive = th.vstack(positive).transpose(0,1)
-
-#         negative1 = th.vstack(negative1).transpose(0,1)
-#         negative2 = th.vstack(negative2).transpose(0,1)
-
-#         loss_pos = L.nf1_loss(positive, self.exponential_morphisms, self.product_morphisms,(self.net_object, self.emb_up)) # self.compute_loss(positive)
-# #        loss_pos = self.norm(loss_pos)
-
-#         min_pos = th.min(loss_pos)
-#         max_pos = th.max(loss_pos)
-
-#         loss_neg1 = L.nf1_loss(negative1, self.exponential_morphisms, self.product_morphisms, (self.net_object, self.emb_up)) #self.compute_loss(negative1)
-#  #       loss_neg1 = self.norm(loss_neg1)
-
-#         min_neg1 = th.min(loss_neg1)
-#         max_neg1 = th.max(loss_neg1)
-
-#         loss_neg2 = L.nf1_loss(negative2, self.exponential_morphisms, self.product_morphisms, (self.net_object, self.emb_up)) #self.compute_loss(negative2)
-  
-
-#         min_neg2 = th.min(loss_neg2)
-#         max_neg2 = th.max(loss_neg2)
-  
-#         min_ = min(min_pos, min_neg1, min_neg2)
-#         max_ = max(max_pos, max_neg1, max_neg2)
-        
-
-#         loss_pos = (loss_pos-min_)/(max_ - min_)
-# #        loss_pos = loss_pos/self.embedding_size
-#         logit_pos = 1 - 2*(th.sigmoid(loss_pos) - 0.5)
-
-#         loss_neg1 = (loss_neg1-min_)/(max_ - min_)
-#         logit_neg1 = 1 - 2*(th.sigmoid(loss_neg1) - 0.5)
-        
-#         loss_neg2 = (loss_neg2-min_)/(max_ - min_)
-#         logit_neg2 = 1 - 2*(th.sigmoid(loss_neg2) - 0.5)
-      
-
-        
-#         return logit_pos, logit_neg1, logit_neg2
-
     
 class CatDataset(IterableDataset):
     def __init__(self, data, object_dict):
@@ -625,7 +455,20 @@ class CatDataset2(IterableDataset):
         
         return antecedent_, consequent_
 
+class Morphism(nn.Module):
+    def __init__(self, embedding_size):
+        super().__init__()
+        self.fc = nn.Linear(embedding_size, embedding_size)
+
+    def forward(self,x):
+        x = self.fc(x)
+        min_ = th.min(x, dim=1, keepdim= True).values
+        max_ = th.max(x, dim=1, keepdim = True).values
+
+        return  (x-min_)/(max_ - min_)
     
+
+
 def compute_roc(labels, preds):
     # Compute ROC curve and ROC area for each class
     fpr, tpr, _ = roc_curve(labels.flatten(), preds.flatten())
