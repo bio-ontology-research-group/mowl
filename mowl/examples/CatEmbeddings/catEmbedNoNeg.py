@@ -30,12 +30,12 @@ def main(species):
  
 
         lr = 5e-3
-        embedding_size = 50
+        embedding_size = 100
 #        milestones = [ 150, 2000, 200112]
 #        milestones = [50, 100, 150, 400,  6000, 20001001] #only_nf4
         gamma = 0.3
 #        milestones = [150, 250, 450, 2000000]
-        milestones = [200, 2000, 200999876540]
+        milestones = [200, 800, 2000, 70999870]
         margin = 10
         epochs = 1000
     elif species == "human":
@@ -54,14 +54,14 @@ def main(species):
         embedding_size, #embeddings size
         lr, #lr ##1e-3 yeast, 1e-5 human
         epochs, #epochs
-        100, #num points eval ppi
+        1000, #num points eval ppi
         milestones,
         dropout = 0,
-        decay = 0.00,
+        decay = 1e-5,
         gamma = gamma,
         eval_ppi = True,
         sampling = False,
-        nf1 = False,
+        nf1 = True,
         nf1_neg = False,
         nf2 = False,
         nf2_neg = False,

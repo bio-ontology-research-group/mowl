@@ -14,7 +14,7 @@ gnn-sim-params:
   lr: 0.000001
   bs: 128
   epochs: 32
-  regularization: 0.003
+  regularization: 0.01
   normalization: True
   self-loop: True
   seed: 0
@@ -23,8 +23,8 @@ gnn-sim-params:
 ppi-model-params:
   siamese: True
   dropout: 0.5
-  n-hid: 3
-  residual: True
+  n-hid: 0
+  residual: False
   num-bases: -1
 
 files:
@@ -33,5 +33,5 @@ files:
   test_inter_file: "data/ppi/4932.test_interactions.pkl"
   data_file: "data/ppi/4932.annotations.tsv"
   terms_file: "data/ppi/4932.terms.tsv"
-  output_model: "data/ppi/dl2vec_yeast_model_1v22.pt"
+  output_model: "data/ppi/dl2vec_yeast_model_hid_0_siam_True_res_False_.pt"
 
