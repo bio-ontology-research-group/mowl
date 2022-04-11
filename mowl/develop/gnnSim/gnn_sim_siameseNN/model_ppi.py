@@ -72,8 +72,6 @@ class GNNSimPPI(AbsGNNSimPPI):
             self.net = nn.Sequential(
                 nn.Linear(dim1, 1024),
                 nn.Dropout(),
-    #            nn.Linear(dim2, 1024),
-    #            nn.Dropout()
             )
 
         def forward_each(self, g, features, edge_type, norm):
@@ -82,12 +80,11 @@ class GNNSimPPI(AbsGNNSimPPI):
 
             for l in self.rgcn_layers:
                 x = l(g, x, edge_type, norm)
-                x = self.bnorm(x)
-                x = self.act(x)
-                x = skip + x
-                skip = x
+                #x = self.bnorm(x)
+                #x = self.act(x)
+                #x = skip + x
+                #skip = x
                 
-    #            x += initial
 
             x = th.flatten(x).view(-1, self.num_nodes*self.h_dim)
             x = self.net(x)

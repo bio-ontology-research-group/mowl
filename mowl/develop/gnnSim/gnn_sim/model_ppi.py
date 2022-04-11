@@ -1,4 +1,4 @@
-from mowl.develop.GNNSim.gnnSimAbstract import AbsGNNSimPPI
+from mowl.develop.gnnSim.gnnSimAbstract import AbsGNNSimPPI
  
 import torch as th
 import math
@@ -22,7 +22,7 @@ class GNNSimPPI(AbsGNNSimPPI):
             self.siamese = params["siamese"]
 
             if self.siamese:
-                self.h_dim = 1
+                self.h_dim = 3
             else:
                 self.h_dim = 2
 
@@ -43,16 +43,19 @@ class GNNSimPPI(AbsGNNSimPPI):
             k = math.sqrt(1 / self.h_dim)
             nn.init.uniform_(self.emb.weight, -k, k)
 
-
+            self.drop = nn.Dropout(self.dropout)
             self.rgcn_layers = nn.ModuleList()
-
-            for i in range(self.n_hid):
-                #act = F.relu if i < self.n_hid - 1 else None
-                act  = None
-                newLayer = RelGraphConv(self.h_dim, self.h_dim, self.num_rels, "basis", self.num_bases, activation = act, self_loop = False, dropout = self.dropout)
-                self.rgcn_layers.append(newLayer)
             
-        
+            if self.residual:
+                for i in range(self.n_hid):
+                    newBlock = ResGCNBlock(2, self.h_dim, self.num_rels, self.num_bases, self.dropout)
+                    self.rgcn_layers.append(newBlock)
+            else:
+                for i in range(self.n_hid):
+                    newLayer = RelGraphConv(self.h_dim, self.h_dim, self.num_rels, "basis", self.num_bases, activation = None, self_loop = False, dropout = self.dropout)
+                    self.rgcn_layers.append(newLayer)
+            
+
             dim1 = self.num_nodes
             dim2 = floor(self.num_nodes/2)
 
@@ -68,20 +71,16 @@ class GNNSimPPI(AbsGNNSimPPI):
 
 
         def forward_each(self, g, features, edge_type, norm):
-        
-            if self.residual:
-                skip = features
+
             
             x = features
             for l in self.rgcn_layers:
                 x = l(g, x, edge_type, norm)
 #                x = self.bnorm(x)
                 x = self.act(x)
+                x = self.drop(x)
 
-                if self.residual:
-                    x = skip + x
-                    skip = x
-            
+             
 #            x = x.reshape(-1, self.num_nodes, self.h_dim)
 #            x = th.sum(x, dim = 1)
             x = x.view(-1, self.h_dim*self.num_nodes)
@@ -92,21 +91,6 @@ class GNNSimPPI(AbsGNNSimPPI):
 
         def forward(self, g, feat1, feat2):
             device = "cuda"
-
-            # bs = floor(ffeat1.shape[0]/self.num_nodes)
-
-            # idx = th.tensor([i for i in range(self.num_nodes)]).to(device)
-
-            # feat1 = self.emb(idx).repeat(bs, 1)
-            # feat2 = self.emb(idx).repeat(bs, 1)
-            
-            # mask1 = ffeat1.clone().detach().repeat(1, self.h_dim).to(device)
-            # mask2 = ffeat2.clone().detach().repeat(1, self.h_dim).to(device)
-            
-            # assert feat1.shape == mask1.shape, f"{feat1.shape}, {mask1.shape}"
-            # assert feat2.shape == mask2.shape, f"{feat2.shape}, {mask2.shape}"
-            # feat1 *= mask1
-            # feat2 *= mask2
 
             edge_type = g.edata['rel_type'].long()
 
@@ -122,8 +106,7 @@ class GNNSimPPI(AbsGNNSimPPI):
                 return th.sigmoid(x)
 
 
-    
-
+            
     class GraphDatasetPPI(IterableDataset):
 
         def __init__(self, g, df, labels, annots, prot_idx):
@@ -143,6 +126,7 @@ class GNNSimPPI(AbsGNNSimPPI):
 
                 feat1 = self.annots[:, pi1]
                 feat2 = self.annots[:, pi2]
+                
 
                 yield (self.graph, label, pi1, pi2)
 
@@ -153,3 +137,29 @@ class GNNSimPPI(AbsGNNSimPPI):
             return len(self.df)
 
 
+class ResGCNBlock(nn.Module):
+    def __init__(self, n_hid, h_dim, num_rels, num_bases, dropout):
+        super().__init__()
+
+        self.n_hid = n_hid
+        self.dropout = dropout
+        self.h_dim = h_dim
+        self.num_rels = num_rels
+        self.num_bases = num_bases
+
+        self.rgcn_layers = nn.ModuleList()
+
+        for i in range(self.n_hid):
+            newLayer = RelGraphConv(self.h_dim, self.h_dim, self.num_rels, "basis", self.num_bases, activation = None, self_loop = False, dropout = self.dropout)
+            self.rgcn_layers.append(newLayer)
+
+    def forward(self, g, features, edge_type, norm):
+        skip = features
+
+        for l in self.rgcn_layers:
+            x = l(g, features, edge_type, norm)
+            x = th.relu(x)
+
+        x = x + skip
+
+        return x

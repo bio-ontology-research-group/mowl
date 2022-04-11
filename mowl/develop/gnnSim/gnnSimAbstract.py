@@ -9,7 +9,8 @@ import logging
 from .baseRGCN import BaseRGCN
 import pickle as pkl
 from sklearn.metrics import roc_curve, auc, matthews_corrcoef
-
+import networkx as nx
+from GraphRicciCurvature.OllivierRicci import OllivierRicci
 import dgl
 from dgl.dataloading import GraphDataLoader
 from torch import optim
@@ -113,6 +114,7 @@ class AbsGNNSimPPI(Model):
         best_loss = float("inf")
         best_roc_auc = 0
 
+            
         for epoch in range(self.epochs):
             device = "cuda"
             model = model.to(device)
@@ -124,7 +126,7 @@ class AbsGNNSimPPI(Model):
                 for i, (batch_g, batch_labels, feats1, feats2) in enumerate(bar):
 
                     feats1 = annots[feats1].view(-1,1)
-                    feats2 = annots[feats2].view(-1,1)
+                    feats2 = annots[feats2].view(-1,1)                    
                     
                     logits = model(batch_g.to(device), feats1.to(device), feats2.to(device)).squeeze()
 
@@ -152,6 +154,7 @@ class AbsGNNSimPPI(Model):
                         feats1 = annots[feats1].view(-1,1)
                         feats2 = annots[feats2].view(-1,1)
                         
+                    
                         logits = model(batch_g.to(device), feats1.to(device), feats2.to(device)).squeeze()
                         lbls = batch_labels.squeeze().to(device)
                         loss = loss_func(logits, lbls.float())
@@ -333,13 +336,13 @@ class AbsGNNSimPPI(Model):
         terms_file = self.file_params["terms_file"]
 
         with open(terms_file) as f:
-             #            removed_classes = {'GO:0005575', 'GO:0110165'}
-        #     removed_classes = set()
             terms = list(f.read().splitlines())
             edges = [(s, r, d) for s,r,d in edges if s in terms and  d in terms]# and ics[s] > 0.3 and ics[d]>0.3]
         
 
         srcs, rels, dsts = tuple(map(list, zip(*edges)))
+
+
         
 
         g = dgl.DGLGraph()
@@ -356,6 +359,15 @@ class AbsGNNSimPPI(Model):
         srcs_idx = [node_idx[s] for s in srcs]
         dsts_idx = [node_idx[d] for d in dsts]
         
+
+        logging.info("Computing ORC..")
+        nxGraph = nx.DiGraph()
+        noRelEdges = [(s,d) for (s,_,d) in edges]
+        nxGraph.add_edges_from(noRelEdges)
+        orc = OllivierRicci(nxGraph, alpha=0.5, verbose="INFO")
+        orc.compute_ricci_curvature()
+        logging.info("Finished computing ORC")
+
         edges_per_rel = {}
         for rel in rels:
             if not rel in edges_per_rel:
@@ -371,7 +383,7 @@ class AbsGNNSimPPI(Model):
 
 
 
-        prot_idx, annotations = self.getAnnotations(g.number_of_nodes, node_idx, ics)
+        prot_idx, annotations = self.getAnnotations(g.number_of_nodes, node_idx, ics, orc)
 
 
         if self.normalization:
@@ -393,10 +405,17 @@ class AbsGNNSimPPI(Model):
             norm = [edge_node[i] for i in rels_dst_idx]
             
             norm_ics = [ics[item[1]] for item in rels_dst]
-            norm_comp = [x*y for x, y in zip(norm,norm_ics)]
+            norm_orc = [orc.G.nodes[item[1]]["ricciCurvature"] for item in rels_dst]
+            self.dict_ics = dict(list({(node_idx[n], ics[n]) for n in nodes})) 
+            self.dict_orc = dict(list({(node_idx[n], orc.G.nodes[n]["ricciCurvature"]) for n in nodes})) 
+            min_orc = min(norm_orc)
+            max_orc = max(norm_orc)
+            norm_orc = list(map(lambda x: 1- (x-min_orc)/(max_orc-min_orc), norm_orc))
+
+            norm_comp = [x*(y+z) for x, y, z  in zip(norm,norm_ics, norm_orc)]
 
             zipped_data = list(zip(srcs_idx, dsts_idx, rels, norm_comp))
-            srcs, dsts, rels, norm = zip(*[(s, d, r, n) for s, d, r, n in zipped_data if edges_per_rel[r] > self.min_edges])
+            srcs, dsts, rels, norm = zip(*[(s, d, r, max(0,n)) for s, d, r, n in zipped_data if edges_per_rel[r] > self.min_edges])
 
             norm = th.Tensor(norm).view(-1, 1)
 
@@ -458,13 +477,13 @@ class AbsGNNSimPPI(Model):
         return annots_dict
 
 
-    def getAnnotations(self, num_nodes, node_idx, ics):
+    def getAnnotations(self, num_nodes, node_idx, ics, orc):
         data_file = self.file_params["data_file"]
         prot_idx = {}
         with open(data_file, 'r') as f:
             rows = [line.strip('\n').split('\t') for line in f.readlines()]
 
-            annotations = np.zeros((len(rows), num_nodes()), dtype=np.float32)
+            annotations = np.zeros((len(rows), num_nodes(), 3), dtype=np.float32)
 
             for i, row  in enumerate(rows):
                 prot_id = row[0]
@@ -472,7 +491,7 @@ class AbsGNNSimPPI(Model):
                 prot_idx[prot_id] = i
                 for go_id in row[1:]:
                     if go_id in node_idx:
-                        annotations[i, node_idx[go_id]] = ics[go_id]
+                        annotations[i, node_idx[go_id]] = [1, ics[go_id], orc.G.nodes[go_id]["ricciCurvature"]]
         logging.info("Finished processing annotations")
  
         return prot_idx, annotations
