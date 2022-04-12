@@ -1,8 +1,7 @@
 general:
   ontology: data/ppi/go.owl
-  graph-gen-method: dl2vec
+  graph-gen-method: taxonomy
   use-case: ppi
-
 
 data-params:
   train-size: -1
@@ -11,21 +10,25 @@ data-params:
 
 
 gnn-sim-params:
-  lr: 0.000001
-  bs: 128
-  epochs: 32
-  regularization: 0.01
-  normalization: True
-  self-loop: True
-  seed: 0
-  min-edges: 0
+ lr: 0.0001
+ bs: 128
+ epochs: 32
+ regularization: 0.00001
+ normalization: True
+ self-loop: True
+ seed: 0
+ min-edges: 0
 
 ppi-model-params:
   siamese: True
-  dropout: 0.5
-  n-hid: 0
-  residual: False
-  num-bases: -1
+  act: relu
+  n-heads: 1
+  feat-drop: 0.5
+  attn-drop: 0.5
+  neg-slope: 0.2
+  residual: True
+  bias: True
+  share-weights: False
 
 files:
   train_inter_file: "data/ppi/4932.train_interactions.pkl"
@@ -33,5 +36,5 @@ files:
   test_inter_file: "data/ppi/4932.test_interactions.pkl"
   data_file: "data/ppi/4932.annotations.tsv"
   terms_file: "data/ppi/4932.terms.tsv"
-  output_model: "data/ppi/dl2vec_yeast_model_hid_0_siam_True_res_False_.pt"
-
+  precomputed_edges_file: "data/ppi/4932.edges_tax.pkl"
+  output_model: "data/ppi/tax_yeast_model_gat.pt"

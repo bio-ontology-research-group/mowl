@@ -1,14 +1,14 @@
 general:
   ontology: data/ppi/go.owl
   graph-gen-method: taxonomy_rels
-
+  use-case: ppi
 rgcn-params:
-  lr: 0.0001
-  n-hidden: 2
-  batch-size: 32
-  epochs: 32
-  dropout: 0
-  regularization: 0.0001
+  lr: 0.00001
+  n-hidden: 3
+  batch-size: 128
+  epochs: 64
+  dropout: 0.5
+  regularization: 0.001
   num-bases: -1
   normalization: True
   self-loop: False

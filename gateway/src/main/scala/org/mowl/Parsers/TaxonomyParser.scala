@@ -56,6 +56,7 @@ class TaxonomyParser(var ontology: OWLOntology, var bidirectional_taxonomy: Bool
   }
 
 
+
  def parseWithTransClosure = {
    val imports = Imports.fromBoolean(false)
 
@@ -88,4 +89,5 @@ class TaxonomyParser(var ontology: OWLOntology, var bidirectional_taxonomy: Bool
 
     ontManager.addAxioms(ontology, newAxioms.toSet.asJava)
   }
+
 }

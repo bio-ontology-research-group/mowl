@@ -59,3 +59,4 @@ class Edge:
             relations |= {edge.rel()}
 
         return (entities, relations)
+

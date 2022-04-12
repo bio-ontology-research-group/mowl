@@ -1,4 +1,5 @@
-name: mowl
+
+name: mowlmulti
 channels:
   - conda-forge
 dependencies:

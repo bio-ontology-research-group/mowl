@@ -1,14 +1,15 @@
 general:
   ontology: data/ppi/go.owl
-  graph-gen-method: dl2vec
-  use-case: ppi  
+  graph-gen-method: taxonomy
+  use-case: ppi
+
 rgcn-params:
-  lr: 0.00001
-  n-hidden: 3
+  lr: 0.000001
+  n-hidden: 0
   batch-size: 128
   epochs: 64
   dropout: 0.5
-  regularization: 0.01
+  regularization: 0.0000
   num-bases: -1
   normalization: True
   self-loop: False
@@ -21,5 +22,5 @@ files:
   test_inter_file: "data/ppi/9606.test_interactions.pkl"
   data_file: "data/ppi/9606.annotations.tsv"
   terms_file: "data/ppi/9606.terms.tsv"
-  precomputed_edges_file: "data/ppi/9606.edges_dl2vec.pkl"
-  output_model: "data/ppi/dl2vec_human_model.pt"
+  precomputed_edges_file: "data/ppi/9606.edges_tax.pkl"
+  output_model: "data/ppi/lin_human_model.pt"

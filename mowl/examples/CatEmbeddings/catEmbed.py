@@ -24,24 +24,26 @@ def main(config):
     logging.info(f"Number of cores detected: {os.cpu_count()}")
 
 
-    go_slim = True
+    # go_slim = True
 
-    if go_slim:
-        ontology = "data/goslim_yeast.owl"
-        val = "data/trans_yeast.owl"
-    else:
-        ontology = "data/go.owl"
-        val = "data/trans.owl"
+    # if go_slim:
+    #     ontology = "data/goslim_yeast.owl"
+    #     val = "data/trans_yeast.owl"
+    # else:
+    #     ontology = "data/go.owl"
+    #     val = "data/trans.owl"
    
-    ds = PathDataset(ontology, val, None)
+    # ds = PathDataset(ontology, val, None)
     device = "cuda" if th.cuda.is_available() else "cpu"
     logging.info("Device: %s", device)
 
-    
-    model = CatEmbeddings(ds, 128, 128, device = device)
-
+    go = False
+    if go:
+        model = CatEmbeddings("data/subsumption_data/go/", 4096*4, 1024, lr = 5e-1,  device = device)
+    else:
+        model = CatEmbeddings("data/subsumption_data/goslim/", 4096*4, 100, lr = 1e-4,  device = device)
     model.train()
-    model.evaluate()
+#    model.evaluate()
 
 
 if __name__ == '__main__':

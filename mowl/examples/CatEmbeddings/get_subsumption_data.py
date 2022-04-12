@@ -76,7 +76,7 @@ def split_closure(closure_file, valid_out_file, test_out_file):
 
 
 if __name__ == "__main__":
-    root = "data/"
+    root = "data/subsumption_data/"
 
     ont_file = root + "go.owl"
     train_edges_file = root + "train_pos_data.tsv"
