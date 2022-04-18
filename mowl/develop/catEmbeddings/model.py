@@ -22,12 +22,15 @@ from mowl.graph.edge import Edge
 
 logging.basicConfig(level=logging.DEBUG)
 
-class CatEmbeddings(Model):
-    def __init__(self, dataset, batch_size, file_params = None, seed = 0):
-        super().__init__(dataset)
+ROOT = "data/"
+
+class CatEmbeddings():
+    def __init__(self, dataset, batch_size, embedding_size, file_params = None, seed = 0, device = "cpu"):
+#        super().__init__(dataset)
         self.file_params = file_params
         self.batch_size = 32 # batch_size
-
+        self.embedding_size = embedding_size
+        self.device = device
         if seed>=0:
             th.manual_seed(seed)
             np.random.seed(seed)
@@ -37,9 +40,9 @@ class CatEmbeddings(Model):
 
     def train(self):
 
-        train_data_loader, val_data_loader, num_classes, num_edges, num_objects = self.load_data()
+        train_data_loader, val_data_loader, _, num_classes = self.load_data()
         
-        model = CatModel(num_classes, num_edges, num_objects,1024)
+        model = CatModel(num_classes, self.embedding_size).to(self.device)
         paramss = sum(p.numel() for p in model.parameters())
         logging.info("Number of parameters: %d", paramss)
         logging.debug("Model created")
@@ -58,10 +61,13 @@ class CatEmbeddings(Model):
             model.train()
 
             with ck.progressbar(train_data_loader) as bar:
-                for i, (batch_objects_pos, batch_objects_neg1, batch_objects_neg2) in enumerate(bar):
-                    cat_loss, logits = model(batch_objects_pos, batch_objects_neg1, batch_objects_neg2)
+                for i, (pos, neg1, neg2) in enumerate(bar):
+                    pos = pos.to(self.device)
+                    neg1 = neg1.to(self.device)
+                    neg2 = neg2.to(self.device)
+                    cat_loss, logits = model(pos, neg1, neg2)
                     cat_loss = criterion(cat_loss)
-                    batch_size = len(batch_objects_pos[0])
+                    batch_size = len(pos[0])
 
                     lbls = th.cat([th.ones(batch_size), th.zeros(batch_size), th.zeros(batch_size)], 0)
                     classif_loss = criterion2(logits.squeeze(), lbls)
@@ -86,10 +92,13 @@ class CatEmbeddings(Model):
             with th.no_grad():
                 optimizer.zero_grad()
                 with ck.progressbar(val_data_loader) as bar:
-                    for i, (batch_objects_pos, batch_objects_neg1, batch_objects_neg2) in enumerate(bar):
-                        cat_loss, logits = model(batch_objects_pos, batch_objects_neg1, batch_objects_neg2)
+                    for i, (pos, neg1, neg2) in enumerate(bar):
+                        pos = pos.to(self.device)
+                        neg1 = neg1.to(self.device)
+                        neg2 = neg2.to(self.device)
+                        cat_loss, logits = model(pos, neg1, neg2)
                         cat_loss = criterion(cat_loss)
-                        batch_size = len(batch_objects_pos[0])
+                        batch_size = len(pos[0])
                         lbls = th.cat([th.ones(batch_size), th.zeros(batch_size), th.zeros(batch_size)], 0)
                         labels = np.append(labels, lbls.cpu())
                         preds = np.append(preds, logits.cpu())
@@ -113,8 +122,38 @@ class CatEmbeddings(Model):
 
  #           print(f'Epoch {epoch}: Loss - {epoch_loss}') #, \tVal loss - {val_loss}, \tAUC - {roc_auc}')
 
-
     def load_data(self):
+        train_file = ROOT + "train_data.pkl"
+        valid_file = ROOT + "valid_data.pkl"
+        test_file = ROOT + "test_data.pkl"
+
+        with open(train_file, "rb") as f:
+            train_data = list(pkl.load(f))
+
+        with open(valid_file, "rb") as f:
+            valid_data = list(pkl.load(f))
+        
+        with open(test_file, "rb") as f:
+            test_data = list(pkl.load(f))
+
+        objects = {"owl#Thing"}
+        objects |= {s for (s,_), _, _ in train_data}
+        objects |= {t for (_,t), _, _ in train_data}
+
+        objects = list(objects)
+        objects_idx = {v:k for k,v in enumerate(objects)}
+
+        train_set = CatDataset(train_data, objects_idx)
+        valid_set = CatDataset(valid_data, objects_idx)
+        test_set  = CatDataset(test_data, objects_idx)
+
+        train_dl = DataLoader(train_set, self.batch_size, drop_last = True)
+        valid_dl = DataLoader(valid_set, self.batch_size, drop_last = True)
+        test_dl = DataLoader(test_set, self.batch_size, drop_last = True)
+
+        return train_dl, valid_dl, test_dl, len(objects)
+        
+    def load_data_old(self):
 
         train_set_path = "data/train_set_go_slim.pkl"
         val_set_path = "data/val_set_go_slim.pkl"
@@ -305,10 +344,10 @@ class RMSELoss(nn.Module):
         
 class CatModel(nn.Module):
 
-    def __init__(self, num_classses, num_axioms, num_objects, embedding_size):
+    def __init__(self, num_classes, embedding_size):
         super(CatModel, self).__init__()
 
-        num_obj = num_objects 
+        num_obj = num_classes
 
         self.dropout = nn.Dropout(0.4)
 
@@ -517,6 +556,35 @@ class CatModel(nn.Module):
 
     
 class CatDataset(IterableDataset):
+    def __init__(self, data, object_dict):
+        self.data = data
+        self.object_dict = object_dict
+        
+    def get_data(self):
+
+        for pos, neg1, neg2  in self.data:
+            pos = self.generate_objects(*pos)
+            neg1 = self.generate_objects(*neg1)
+            neg2 = self.generate_objects(*neg2)
+            
+            yield pos, neg1, neg2
+        
+
+    def __iter__(self):
+        return self.get_data()
+
+    def __len__(self):
+        return len(self.data)
+
+    def generate_objects(self, antecedent, consequent):
+ 
+        antecedent_ = self.object_dict[antecedent]
+        consequent_ = self.object_dict[consequent]
+
+        return antecedent_, consequent_
+
+
+class CatDataset2(IterableDataset):
     def __init__(self, edges, negatives, object_dict, mode="train"):
         self.edges = edges
         self.object_dict = object_dict
@@ -549,7 +617,8 @@ class CatDataset(IterableDataset):
         consequent_ = self.object_dict[consequent]
 
         return antecedent_, consequent_
-                            
+
+    
 def compute_roc(labels, preds):
     # Compute ROC curve and ROC area for each class
     fpr, tpr, _ = roc_curve(labels.flatten(), preds.flatten())

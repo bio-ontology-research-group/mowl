@@ -8,7 +8,7 @@ import gzip
 import os
 import sys
 import logging
-
+import torch as th
 logging.basicConfig(level=logging.DEBUG)   
 sys.path.insert(0, '')
 sys.path.append('../../../')
@@ -32,8 +32,11 @@ def main(config):
 #    val = "data/trans.owl"
    
     ds = PathDataset(ontology, val, None)
+    device = "cuda" if th.cuda.is_available() else "cpu"
+    logging.info("Device: %s", device)
 
-    model = CatEmbeddings(ds, 128)
+    
+    model = CatEmbeddings(ds, 128, 128, device = device)
 
     model.train()
     model.evaluate()
