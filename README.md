@@ -97,7 +97,7 @@ For the random walks method we have a similar factory method that can be found i
 * [Sonja Katz](https://github.com/sonjakatz)
 * [Marco Anteghini](https://github.com/MarcoAnteghini)
 * Francesco Gualdi
-* [luis-sribeiro]
+* [luis-sribeiro](https://github.com/luis-sribeiro)
 * [Leduin Cuenca](https://github.com/leduin) (logo)
 
 ## License
