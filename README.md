@@ -89,6 +89,17 @@ For the random walks method we have a similar factory method that can be found i
 
 ## List of contributors
 
+* [Fernando Zhapa](https://github.com/ferzcam)
+* [Maxat Kulmanov](https://github.com/coolmaksat)
+* [Sarah Alghamdi](https://github.com/smalghamdi)
+* [Robert Hoehndorf](https://github.com/leechuck)
+* [Carsten Jahn](https://github.com/carsten-jahn)
+* [Sonja Katz](https://github.com/sonjakatz)
+* [Marco Anteghini](https://github.com/MarcoAnteghini)
+* Francesco Gualdi
+* [luis-sribeiro]
+* [Leduin Cuenca](https://github.com/leduin) (logo)
+
 ## License
 
 ## Documentation
