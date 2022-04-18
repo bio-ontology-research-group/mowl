@@ -20,7 +20,7 @@ An example of use can be found at :doc:`../../../tutorials/DL2Vec`
 OWL2Vec*
 --------
 
-.. automodule:: mowl.embeddings.graph_based.owl2vec_star.model
+.. automodule:: mowl.embeddings.graph_based.owl2vec.model
    :members:
    :undoc-members:
    :show-inheritance:
