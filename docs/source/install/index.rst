@@ -13,6 +13,7 @@ Install
 Installation can be done with the following commands:
 
 .. code:: bash
+	  
    git clone https://github.com/bio-ontology-research-group/mowl.git
    
    cd mowl
@@ -21,7 +22,7 @@ Installation can be done with the following commands:
    conda activate mowl
 
    cd mowl
-   ./rebuild.sh
+   ./build_jars.sh
 
 The last line will generate the necessary `jar` files to bind Python with the code that runs in the JVM
 
