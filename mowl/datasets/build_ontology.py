@@ -44,7 +44,7 @@ def insert_annotations(ontology_file, annotations, out_file = None, verbose=Fals
 
                 for ont_id in items[1:]:
                     ont_id = ont_id.replace(":", "_")
-                    ont_class = factory.getOWLClass(IRI.create(f"http://purl.obolibrary.org/obo/{ont_id}"))
+                    ont_class = factory.getOWLClass(IRI.create(f"{ont_id}"))
                     objSomeValsAxiom = factory.getOWLObjectSomeValuesFrom(relation, ont_class)
                     axiom = factory.getOWLSubClassOfAxiom(annotated_entity, objSomeValsAxiom)
                     manager.addAxiom(ont, axiom)
