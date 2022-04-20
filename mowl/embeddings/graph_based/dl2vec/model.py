@@ -49,10 +49,12 @@ class DL2Vec(Model):
     :type window: int
     :param workers: Number of threads to use for the random walks and the Word2Vec model.
     :type workers: int
+    :param walks_outfile: Path for savings the walks. If not set the walks will not be saved.
+    :type walks_outfile: str
     '''
 
     
-    def __init__(self, dataset, outfile, bidirectional_taxonomy=False, walking_method = "deepwalk", walk_length = 30, alpha = 0, num_walks = 100, wv_epochs = 10, vector_size = 100, window = 5, workers = 1, p = 1, q=1):
+    def __init__(self, dataset, outfile, bidirectional_taxonomy=False, walking_method = "deepwalk", walk_length = 30, alpha = 0, num_walks = 100, wv_epochs = 10, vector_size = 100, window = 5, workers = 1, p = 1, q=1, walks_outfile = None):
 
         super().__init__(dataset)
 
@@ -72,9 +74,13 @@ class DL2Vec(Model):
         if not self.dataset.testing is None:
             self.parserTest = parser_factory("dl2vec", self.dataset.testing, bidirectional_taxonomy)
 
+        self.walks_outfile = walks_outfile
         self.lock = Lock()
+        
 
     def train(self):
+
+        save_walks = True
 
         logging.info("Generating graph from ontology...")
         edges = self.parserTrain.parse()
@@ -83,18 +89,26 @@ class DL2Vec(Model):
         logging.info("Finished graph generation")
 
         logging.info("Generating random walks...")
-        walks_outfile = "data/walks.txt"
-        walker = walking_factory(self.walking_method, edges, self.num_walks, self.walk_length, walks_outfile, workers = self.workers, alpha = self.alpha, p = self.p, q= self.q)
+        if self.walks_outfile is None:
+            save_walks = False
+            self.walks_outfile = "walks_temporary_output_file.tmp"
+            
+        walker = walking_factory(self.walking_method, edges, self.num_walks, self.walk_length, self.walks_outfile, workers = self.workers, alpha = self.alpha, p = self.p, q= self.q)
         walker.walk()
         logging.info("Walks generated")
 
+        if save_walks:
+            logging.info(f"Walks saved at {self.walks_outfile}")
+
         logging.info("Starting to train the Word2Vec model")
 
-        sentences = gensim.models.word2vec.LineSentence(walks_outfile)
+        sentences = gensim.models.word2vec.LineSentence(self.walks_outfile)
         model = gensim.models.Word2Vec(sentences, sg=1, min_count=1, vector_size=self.vector_size, window = self.window, epochs = self.wv_epochs, workers = self.workers)
         logging.info("Word2Vec training finished")
         logging.info(f"Saving model at {self.outfile}")
-        os.remove(walks_outfile)
+
+        if not save_walks:
+            os.remove(self.walks_outfile)
         model.save(self.outfile)
         logging.info("Model saved")
         
