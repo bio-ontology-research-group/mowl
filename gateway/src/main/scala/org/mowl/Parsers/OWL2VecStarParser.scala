@@ -71,14 +71,14 @@ class OWL2VecStarParser(
 
 //    otherAxioms.map(println(_))
 
-    val subClassOfTriples = subClassOfAxioms.flatMap(x => processSubClassAxiom(x.getSubClass.asInstanceOf[OWLClass], x.getSuperClass))
+    val subClassOfTriples = subClassOfAxioms.flatMap(x => processSubClassAxiom(x.getSubClass, x.getSuperClass))
     val equivalenceTriples = equivalenceAxioms.flatMap(
       x => {
         val subClass::superClass::rest= x.getClassExpressionsAsList.asScala.toList
 
         
         superClass.getClassExpressionType.getName match{
-          case "ObjectIntersectionOf" => superClass.asInstanceOf[OWLObjectIntersectionOf].getOperands.asScala.toList.flatMap(processSubClassAxiom(subClass.asInstanceOf[OWLClass], _))
+          case "ObjectIntersectionOf" => superClass.asInstanceOf[OWLObjectIntersectionOf].getOperands.asScala.toList.flatMap(processSubClassAxiom(subClass, _))
 
           case _ => Nil
         }
@@ -163,54 +163,133 @@ class OWL2VecStarParser(
     }
   }
 
-  def processSubClassAxiom(subClass: OWLClass, superClass: OWLClassExpression): List[Triple] = {
+  def processSubClassAxiom(subClass: OWLClassExpression, superClass: OWLClassExpression): List[Triple] = {
+
+    val firstCase = processSubClassAxiomComplexSubClass(subClass, superClass)
+
+    if (firstCase == Nil){
+      processSubClassAxiomComplexSuperClass(subClass, superClass)
+    }else{
+      firstCase
+    }
+
+  }
+
+
+  def processSubClassAxiomComplexSubClass(subClass: OWLClassExpression, superClass: OWLClassExpression): List[Triple] = {
+
+    // When subclass is complex, superclass must be atomic
 
     val quantityModifiers = List("ObjectSomeValuesFrom", "ObjectAllValuesFrom", "ObjectMaxCardinality", "ObjectMinCardinality")
 
     val superClassType = superClass.getClassExpressionType.getName
 
-    superClassType match {
+    if (superClassType != "Class") {
+      Nil
+    }else{
 
-      case m if (quantityModifiers contains m) && !only_taxonomy => {
+      val superClass_ = superClass.asInstanceOf[OWLClass]
+      val subClassType = subClass.getClassExpressionType.getName
 
-	val superClass_ = lift2QuantifiedExpression(superClass)
+      subClassType match {
 
-        parseQuantifiedExpression(superClass_) match {
+        case m if (quantityModifiers contains m) && !only_taxonomy => {
 
-          case Some((rel, Some(inverseRel), dstClass)) => {
-            val dstClasses = splitClass(dstClass)
+	  val subClass_ = lift2QuantifiedExpression(subClass)
 
-            val outputEdges = for (dst <- dstClasses)
-            yield List(new Triple(subClass, rel, dst), new Triple(dst, inverseRel, subClass))
+          parseQuantifiedExpression(subClass_) match {
 
-            outputEdges.flatten
+            case Some((rel, Some(inverseRel), dstClass)) => {
+              val dstClasses = splitClass(dstClass)
+
+              val outputEdges = for (dst <- dstClasses)
+              yield List(new Triple(superClass_, rel, dst), new Triple(dst, inverseRel, superClass_))
+
+              outputEdges.flatten
+            }
+
+            case Some((rel, None, dstClass)) => {
+              val dstClasses = splitClass(dstClass)
+
+              for (dst <- dstClasses) yield new Triple(superClass_, rel, dst)
+
+            }
+
+            case None => Nil
+          }
+        }
+
+        case _ => Nil
+
+      }
+    }
+  }
+
+
+  def processSubClassAxiomComplexSuperClass(subClass: OWLClassExpression, superClass: OWLClassExpression): List[Triple] = {
+
+    // When superclass is complex, subclass must be atomic
+
+
+    val subClassType = subClass.getClassExpressionType.getName
+
+    if (subClassType != "Class"){
+      Nil
+    }else{
+
+      val subClass_  = subClass.asInstanceOf[OWLClass]
+
+      val quantityModifiers = List("ObjectSomeValuesFrom", "ObjectAllValuesFrom", "ObjectMaxCardinality", "ObjectMinCardinality")
+
+      val superClassType = superClass.getClassExpressionType.getName
+
+      superClassType match {
+
+        case m if (quantityModifiers contains m) && !only_taxonomy => {
+
+	  val superClass_ = lift2QuantifiedExpression(superClass)
+
+          parseQuantifiedExpression(superClass_) match {
+
+            case Some((rel, Some(inverseRel), dstClass)) => {
+              val dstClasses = splitClass(dstClass)
+
+              val outputEdges = for (dst <- dstClasses)
+              yield List(new Triple(subClass_, rel, dst), new Triple(dst, inverseRel, subClass_))
+
+              outputEdges.flatten
+            }
+
+            case Some((rel, None, dstClass)) => {
+              val dstClasses = splitClass(dstClass)
+
+              for (dst <- dstClasses) yield new Triple(subClass_, rel, dst)
+
+            }
+
+            case None => Nil
+          }
+        }
+
+        case "Class" => {
+	  val dst = superClass.asInstanceOf[OWLClass]
+          if (bidirectional_taxonomy){
+	    new Triple(subClass_, "subClassOf", dst) :: new Triple(dst, "superClassOf", subClass_) :: Nil
+          }else{
+            new Triple(subClass_, "subClassOf", dst) :: Nil
           }
 
-          case Some((rel, None, dstClass)) => {
-            val dstClasses = splitClass(dstClass)
-
-            for (dst <- dstClasses) yield new Triple(subClass, rel, dst)
-
-          }
-
-          case None => Nil
         }
-      }
-
-      case "Class" => {
-	val dst = superClass.asInstanceOf[OWLClass]
-        if (bidirectional_taxonomy){
-	  new Triple(subClass, "subClassOf", dst) :: new Triple(dst, "superClassOf", subClass) :: Nil
-        }else{
-          new Triple(subClass, "subClassOf", dst) :: Nil
-        }
+        case _ => Nil
 
       }
-      case _ => Nil
 
     }
 
+
   }
+
+
 
   def processAnnotationAxiom(axiom: OWLAnnotationAssertionAxiom): Option[Triple]= {
     val property = stripValue(axiom.getProperty.toString)
