@@ -1,5 +1,8 @@
+
+
 import os
 import requests
+
 
 def download(url: str, dest_folder: str):
     if not os.path.exists(dest_folder):
@@ -19,6 +22,7 @@ def download(url: str, dest_folder: str):
                     os.fsync(f.fileno())
     else:  # HTTP status code 4XX/5XX
         print("Download failed: status code {}\n{}".format(r.status_code, r.text))
+
 
 
 
