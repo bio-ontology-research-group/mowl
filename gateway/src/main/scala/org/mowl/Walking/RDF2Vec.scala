@@ -13,7 +13,7 @@ import scala.concurrent.{ExecutionContext, ExecutionContextExecutorService}
 import scala.util.{Failure, Success, Try}
 import org.mowl.Edge
 
-class WalkRDFAndOWL (
+class RDF2Vec (
   var edges: ArrayList[Edge],
   var numWalks: Int,
   var walkLength: Int,

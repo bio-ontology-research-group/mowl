@@ -37,9 +37,8 @@ class DL2VecParser(var ontology: OWLOntology, var bidirectional_taxonomy: Boolea
       }
       case "EquivalentClasses" => {
 	var ax = axiom.asInstanceOf[OWLEquivalentClassesAxiom].getClassExpressionsAsList.asScala
-        
-        assert(goClass == ax.head)
-        val rightSide = ax.tail
+
+        val rightSide = ax.filter((x) => x != goClass)
         
 	rightSide.toList.flatMap(parseSubClassOrEquivAxiom(goClass, _:OWLClassExpression, "subClassOf"))
 
