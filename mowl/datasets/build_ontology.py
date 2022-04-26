@@ -7,14 +7,19 @@ import jpype.imports
 from org.semanticweb.owlapi.apibinding import OWLManager
 from org.semanticweb.owlapi.model import IRI
 
+PREFIXES = {
+    "obo": "http://purl.obolibrary.org/obo/",
+    "default": "http://default/mowl/"
+}
+
 def insert_annotations(ontology_file, annotations, out_file = None, verbose=False):
     """
-    Method to build dataset given an ontology file and the annotations that must be attached to the ontology. Annotation files must be in .tsv format, with no header. Per each row, the first element is the annotated entity and the rest of the elements are the annotation entities (which are the entities in the ontology).
+    Method to build dataset given an ontology file and the annotations to be inserted to the ontology. Annotation files must be in .tsv format, with no header. Per each row, the first element is the annotated entity and the rest of the elements are the annotation entities (which are the entities in the ontology).
 
     :param ontology_file: Ontology file in .owl format
     :type ontology_file: str
     :param annotations: Annotations to be included in the ontology. There can be more than one annotation file.
-    :type annotations: List of (str, str) corresponding to (annotation file path, relation name)
+    :type annotations: List of (str, str, str) corresponding to (annotation file path, relation name, annotations prefix)
     :param out_file: Path for the new ontology.
     :type out_file: str
     :param verbose: If true, information is shown."
@@ -31,20 +36,33 @@ def insert_annotations(ontology_file, annotations, out_file = None, verbose=Fals
         
     manager = OWLManager.createOWLOntologyManager()
     ont = manager.loadOntologyFromOntologyDocument(java.io.File(ontology_file))
+
+    owl_format = manager.getOntologyFormat(ont)
+    if owl_format.isPrefixOWLOntologyFormat():
+        ont_prefixes = owl_format.asPrefixOWLOntologyFormat().getPrefixName2PrefixMap()
+        ont_prefixes = dict(ont_prefixes).values()
+        
     factory = manager.getOWLDataFactory()
 
-    for annots_file, relation_name in annotations:
-        relation = factory.getOWLObjectProperty(IRI.create(f"http://{relation_name}"))
+    for annots_file, relation_name, prefix in annotations:
+        relation = factory.getOWLObjectProperty(IRI.create(f"{PREFIXES['default']}{relation_name}"))
 
+        if prefix is None:
+            prefix = PREFIXES["default"]
+        elif prefix in PREFIXES:
+            prefix = PREFIXES[prefix]
+        else:
+            prefix = validate_prefix(prefix, ont_prefixes)
+        
         with open(annots_file) as f:
             for line in f:
                 items = line.strip().split("\t")
                 annotated_entity = items[0]
-                annotated_entity = factory.getOWLClass(IRI.create(f"http://{annotated_entity}"))
+                annotated_entity = factory.getOWLClass(IRI.create(f"{PREFIXES['default']}{annotated_entity}"))
 
                 for ont_id in items[1:]:
-#                    ont_id = ont_id.replace(":", "_")
-                    ont_class = factory.getOWLClass(IRI.create(f"{ont_id}"))
+                    ont_id = ont_id.replace(":", "_")
+                    ont_class = factory.getOWLClass(IRI.create(f"{prefix}{ont_id}"))
                     objSomeValsAxiom = factory.getOWLObjectSomeValuesFrom(relation, ont_class)
                     axiom = factory.getOWLSubClassOfAxiom(annotated_entity, objSomeValsAxiom)
                     manager.addAxiom(ont, axiom)
@@ -53,41 +71,47 @@ def insert_annotations(ontology_file, annotations, out_file = None, verbose=Fals
     manager.saveOntology(ont, IRI.create("file:" + os.path.abspath(out_file)))
 
 
+def validate_prefix(prefix, ont_prefixes):
+    if prefix.startswith("http://"):
+        if not prefix[-1] == "/":
+            prefix += "/"
+        if prefix in ont_prefixes:
+            return prefix
+        else:
+            raise ValueError(f"Prefix {prefix} is not part of the current ontology prefixes.")
+    else:
+        raise ValueError("Incorrect format of prefix.")
+        
 
-def add_triples(triples_file, relation_name = None, out_file = None , bidirectional = False, current_ontology_file = None):
+def create_from_triples(
+        triples_file,
+        out_file,
+        relation_name = None,
+        bidirectional = False,
+        head_prefix = PREFIXES["default"],
+        tail_prefix = PREFIXES["default"]
+):
 
-    """Method to create an ontology from a .tsv file with triplets.    
+    """Method to create an ontology from a .tsv file with triples.    
 
     :param triples_file: Path for the file containing the triples. This file must be a `.tsv` file and each row must be of the form (head, relation, tail). It is also supported `.tsv` files with rows of the form (head, tail); in that case the field `relation_name` must be specified.
     :type triples_file: str
     :param relation_name: Name for relation in case the `.tsv` input file has only two columns.
     :type relation_name: str
-    :param current_ontology_file: Use this parameter to add the triples to an existing ontology. Otherwise, a new ontology will be created.
-    :type current_ontology_file: str
     :param bidirectional: If `True`, the triples will be considered undirected.
     :type bidirectional: bool
     :param out_file: Path for the output ontology. If `None` and an existing ontology is input, the existing ontology will be overwritten.
     :type out_file: str
+    :param head_prefix: Prefix to be assigned to the head of each triple. Default is `http://default/mowl/`
+    :type head_prefix: str
+    :param tail_prefix: Prefix to be assigned to the tail of each triple. Default is `http://default/mowl/`
+    :type tail_prefix: str
     """
 
-    if out_file is None and current_ontology_file is None:
-        raise ValueError("Neither output file nor current ontology file were not specified ")
-
-    
     manager = OWLManager.createOWLOntologyManager()
     factory = manager.getOWLDataFactory()
 
-    root_dir = triples_file.split("/")[:-1]
-    root_dir = "/".join(root_dir) + "/"
-
-    if current_ontology_file is None:
-        ont = manager.createOntology()
-    else:
-        if out_file is None:
-            out_file = current_ontology_file
-        ont = manager.loadOntologyFromOntologyDocument(java.io.File(current_ontology_file))
-
-    
+    ont = manager.createOntology()
 
     with open(triples_file, "r") as f:
         for line in f:
@@ -104,9 +128,9 @@ def add_triples(triples_file, relation_name = None, out_file = None , bidirectio
             if len(line) == 3:
                 head, rel, tail = line
 
-            head = factory.getOWLClass(IRI.create(f"http://{head}"))
-            rel = factory.getOWLObjectProperty(IRI.create(f"http://{rel}"))
-            tail = factory.getOWLClass(IRI.create(f"http://{tail}"))
+            head = factory.getOWLClass(IRI.create(f"{head_prefix}{head}"))
+            rel = factory.getOWLObjectProperty(IRI.create(f"{PREFIXES['default']}{rel}"))
+            tail = factory.getOWLClass(IRI.create(f"{tail_prefix}{tail}"))
 
             axiom = factory.getOWLSubClassOfAxiom(
                 head, factory.getOWLObjectSomeValuesFrom(
@@ -125,3 +149,4 @@ def add_triples(triples_file, relation_name = None, out_file = None , bidirectio
     
 
     
+                                          
