@@ -29,6 +29,6 @@ class OWL2VecStarParser(GraphGenModel):
     def parse(self):
         edges = self.parser.parse()
 
-        edges =[Edge(str(e.src()), str(e.rel()), str(e.dst())) for e in edges]
+        edges =[Edge(str(e.src()), str(e.rel()), str(e.dst())) for e in edges if str(e.dst()) != ""]
         
         return edges

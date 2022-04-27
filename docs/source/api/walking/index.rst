@@ -26,6 +26,6 @@ Node2Vec
 Walk RDF and OWL
 ------------------
 
-.. automodule:: mowl.walking.walkRdfAndOwl.model
+.. automodule:: mowl.walking.rdf2vec.model
    :members:
    :show-inheritance:
