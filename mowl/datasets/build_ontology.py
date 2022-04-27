@@ -45,10 +45,11 @@ def insert_annotations(ontology_file, annotations, out_file = None, verbose=Fals
     factory = manager.getOWLDataFactory()
 
     for annots_file, relation_name, prefix in annotations:
+        prefix_in_document = False
         relation = factory.getOWLObjectProperty(IRI.create(f"{PREFIXES['default']}{relation_name}"))
 
         if prefix is None:
-            prefix = PREFIXES["default"]
+            prefix_in_document = True
         elif prefix in PREFIXES:
             prefix = PREFIXES[prefix]
         else:
@@ -57,14 +58,17 @@ def insert_annotations(ontology_file, annotations, out_file = None, verbose=Fals
         with open(annots_file) as f:
             for line in f:
                 items = line.strip().split("\t")
-                annotated_entity = items[0]
-                annotated_entity = factory.getOWLClass(IRI.create(f"{PREFIXES['default']}{annotated_entity}"))
+                annotating_entity = items[0]
+                annotating_entity = factory.getOWLClass(IRI.create(f"{PREFIXES['default']}{annotating_entity}"))
 
                 for ont_id in items[1:]:
-                    ont_id = ont_id.replace(":", "_")
-                    ont_class = factory.getOWLClass(IRI.create(f"{prefix}{ont_id}"))
+                    if not prefix_in_document:
+                        ont_id = ont_id.replace(":", "_")
+                        ont_class = factory.getOWLClass(IRI.create(f"{prefix}{ont_id}"))
+                    else:
+                        ont_class = factory.getOWLClass(IRI.create(f"{ont_id}"))
                     objSomeValsAxiom = factory.getOWLObjectSomeValuesFrom(relation, ont_class)
-                    axiom = factory.getOWLSubClassOfAxiom(annotated_entity, objSomeValsAxiom)
+                    axiom = factory.getOWLSubClassOfAxiom(annotating_entity, objSomeValsAxiom)
                     manager.addAxiom(ont, axiom)
 
     
