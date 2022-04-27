@@ -69,3 +69,73 @@ The walks are saved in the specified filepath. After generating the walks, one u
    vectors = w2v_model.wv
 
 
+
+Syntactic embeddings
+------------------------
+
+This approach consists on generating textual representations (sentences) from ontologies. For this task, we provide methods like ``extract_axiom_corpus`` that generates sentences out of axioms in the ontology. Furthermore, the method ``extract_annotation_corpus`` will generate corpus from the annotations in the ontology.
+
+As a data augmentation step, reasoning can be applied to the ontology to generate more axioms. For reasoning, the methods of the OWLAPI can be accesed directly. However, we provide the wrapper class ``MOWLReasoner`` with implementation of some common tasks, such as inferring subclass, equivalent class and disjoint class axioms.
+
+The following code example corresponds to the implementation of the paper `Onto2Vec: joint vector-based representation of biological entities and their ontology-based annotations <https://academic.oup.com/bioinformatics/article/34/13/i52/5045776>`_
+
+First, we need to do the corresponding imports
+
+.. code:: python
+
+   from mowl.reasoning.base import MOWLReasoner
+   from org.semanticweb.elk.owlapi import ElkReasonerFactory
+
+Then, we perform the reasoning steps to add axioms to the training ontology.
+
+.. code:: python
+	  
+   reasoner_factory = ElkReasonerFactory()
+   reasoner = reasoner_factory.createReasoner(dataset.ontology)
+   reasoner.precomputeInferences()
+
+   mowl_reasoner = MOWLReasoner(reasoner)
+   mowl_reasoner.infer_subclass_axioms(dataset.ontology)
+   mowl_reasoner.infer_equiv_class_axioms(dataset.ontology)
+
+After preprocessing the ontology, we generate the corpus out of the ontology axioms and save the corpus into a file.
+
+.. code:: python
+	  
+   extract_axiom_corpus(dataset.ontology, "corpus_file_path")
+
+      
+Finally, use Word2vec to generate the embeddings
+
+.. code:: python
+   
+   sentences = LineSentence(corpus_file)
+
+   model = Word2Vec(
+            sentences,
+            sg = 1,
+            min_count = 1,
+            vector_size = 20,
+            window = 5,
+            epochs = 20,
+            workers = 4
+        )
+
+   model.save(word2vec_file)
+
+
+To implement the paper `OPA2Vec: combining formal and informal content of biomedical ontologies to improve similarity-based prediction <https://pubmed.ncbi.nlm.nih.gov/30407490/>`_, we replace the code
+
+.. code:: python
+	  
+   extract_axiom_corpus(dataset.ontology, "corpus_file_path")
+
+with
+
+.. code:: python
+	  
+   extract_axiom_corpus(dataset.ontology, "corpus_file_path")
+   extract_annotation_corpus(dataset.ontology, "corpus_file_path")
+
+
+To add annotation textual information to the corpus.
