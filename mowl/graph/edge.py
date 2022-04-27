@@ -4,7 +4,7 @@ class Edge:
     def __init__(self, src, rel, dst, weight = 1):
         self._src = prettyFormat(src)
         self._rel = rel
-        self._dst = prettyFormat(dst)
+        self._dst = "" if dst == "" else prettyFormat(dst)
         self._weight = weight
 
     def src(self):

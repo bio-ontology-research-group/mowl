@@ -1,6 +1,7 @@
 name: mowldev
 channels:
   - conda-forge
+  - anaconda
 dependencies:
   - python=3.9
   - cairo
@@ -26,5 +27,10 @@ dependencies:
   - pip
   - pip:
     - pykeen
+    - sphinx-rtd-theme
   - jupyter
   - ipykernel
+  - sphinx
+  - sphinx-gallery
+  - nbsphinx
+  - mock
