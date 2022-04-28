@@ -101,7 +101,8 @@ Then, we perform the reasoning steps to add axioms to the training ontology.
 After preprocessing the ontology, we generate the corpus out of the ontology axioms and save the corpus into a file.
 
 .. code:: python
-	  
+
+   from mowl.corpus.base import extract_axiom_corpus
    extract_axiom_corpus(dataset.ontology, "corpus_file_path")
 
       
@@ -133,7 +134,9 @@ To implement the paper `OPA2Vec: combining formal and informal content of biomed
 with
 
 .. code:: python
-	  
+
+   from mowl.corpus.base import extract_axiom_corpus, extract_annotation_corpus
+
    extract_axiom_corpus(dataset.ontology, "corpus_file_path")
    extract_annotation_corpus(dataset.ontology, "corpus_file_path")
 
