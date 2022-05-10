@@ -60,23 +60,12 @@ object Types {
         def this(src: OWLClass, rel: Relation, dst: String) = this(goClassToStr(src), rel, dst)
     }
 
-  def goClassToStr(goClass: OWLClass) = goClass.toStringID.split("/").last.replace("_", ":")
+  def goClassToStr(goClass: OWLClass) = goClass.toStringID
 
-  def annotationSubject2Str(subject: OWLAnnotationSubject): String = {
-
-    val annotStr = subject.toString
-
-    if (annotStr.length > 4) {
-      annotStr.slice(0,4) match {
-        case "http" => annotStr.split("/").last.replace("_", ":")
-        case _ => annotStr
-      }
-    }else{
-      annotStr
-    }
+  def annotationSubject2Str(subject: OWLAnnotationSubject): String = subject.toString
 
 
-  }
+
 
     def getNodes(triples: List[Triple]) = {
         

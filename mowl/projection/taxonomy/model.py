@@ -1,10 +1,10 @@
-from mowl.graph.graph import GraphGenModel
+from mowl.projection.base import ProjectionModel
 
-from org.mowl.Parsers import TaxonomyParser as Parser
+from org.mowl.Projectors import TaxonomyProjector as Projector
 from org.semanticweb.owlapi.model import OWLOntology
-from mowl.graph.edge import Edge
+from mowl.projection.edge import Edge
 
-class TaxonomyParser(GraphGenModel):
+class TaxonomyProjector(ProjectionModel):
 
     '''
     This class will project the ontology considering only the axioms of the form :math:`A \sqsubseteq B` where A and B are ontology classes.
@@ -13,18 +13,18 @@ class TaxonomyParser(GraphGenModel):
     :param bidirectional_taxonomy: If true then per each SubClass edge one SuperClass edge will be generated.
     '''
     
-    def __init__(self, ontology: OWLOntology, bidirectional_taxonomy: bool = False):
-        super().__init__(ontology)
+    def __init__(self, bidirectional_taxonomy: bool = False):
+        super().__init__()
 
-        self.parser = Parser(ontology, bidirectional_taxonomy)
+        self.projector = Projector(bidirectional_taxonomy)
 
-    def parse(self):        
-        edges = self.parser.parse()
+    def project(self, ontology):        
+        edges = self.projector.project(ontology)
         edges = [Edge(str(e.src()), str(e.rel()), str(e.dst())) for e in edges]
         return edges
 
-    def parseWithTransClosure(self):
-        edges = self.parser.parseWithTransClosure()
+    def projectWithTransClosure(self, ontology):
+        edges = self.projector.projectWithTransClosure(ontology)
         edges = [Edge(str(e.src()), str(e.rel()), str(e.dst())) for e in edges]
         return edges
         

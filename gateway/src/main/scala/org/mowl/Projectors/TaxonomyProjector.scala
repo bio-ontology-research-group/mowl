@@ -1,4 +1,4 @@
-package org.mowl.Parsers
+package org.mowl.Projectors
 
 // OWL API imports
 import org.semanticweb.owlapi.model._
@@ -18,14 +18,14 @@ import collection.JavaConverters._
 import org.mowl.Types._
 
 
-class TaxonomyParser(var ontology: OWLOntology, var bidirectional_taxonomy: Boolean = false) extends AbstractParser{
+class TaxonomyProjector(var bidirectional_taxonomy: Boolean = false) extends AbstractProjector{
 
-  def parseAxiom(go_class: OWLClass, axiom: OWLClassAxiom): List[Triple] = {
+  def projectAxiom(go_class: OWLClass, axiom: OWLClassAxiom): List[Triple] = {
     val axiomType = axiom.getAxiomType().getName()
     axiomType match {
       case "SubClassOf" => {
 	val ax = axiom.asInstanceOf[OWLSubClassOfAxiom]
-	parseSubClassAxiom(ax.getSubClass.asInstanceOf[OWLClass], ax.getSuperClass)
+	projectSubClassAxiom(ax.getSubClass.asInstanceOf[OWLClass], ax.getSuperClass)
       }
       case _ => Nil
     }
@@ -35,7 +35,7 @@ class TaxonomyParser(var ontology: OWLOntology, var bidirectional_taxonomy: Bool
 
 
 
-  def parseSubClassAxiom(go_class: OWLClass, superClass: OWLClassExpression): List[Triple] = {
+  def projectSubClassAxiom(go_class: OWLClass, superClass: OWLClassExpression): List[Triple] = {
 
     val superClass_type = superClass.getClassExpressionType().getName()
 
@@ -44,9 +44,9 @@ class TaxonomyParser(var ontology: OWLOntology, var bidirectional_taxonomy: Bool
       case "Class" => {
 	val dst = superClass.asInstanceOf[OWLClass]
         if (bidirectional_taxonomy){
-	  new Triple(go_class, "subClassOf", dst) :: new Triple(dst, "superClassOf", go_class) :: Nil
+	  new Triple(go_class, "subclassOf", dst) :: new Triple(dst, "superclassOf", go_class) :: Nil
         }else{
-          new Triple(go_class, "subClassOf", dst) :: Nil
+          new Triple(go_class, "subclassOf", dst) :: Nil
         }
       }
       case _ => Nil
@@ -56,21 +56,21 @@ class TaxonomyParser(var ontology: OWLOntology, var bidirectional_taxonomy: Bool
   }
 
 
- def parseWithTransClosure = {
+ def projectWithTransClosure(ontology: OWLOntology) = {
    val imports = Imports.fromBoolean(false)
 
-   val goClasses = ontology.getClassesInSignature(imports).asScala.toList
-   printf("INFO: Number of ontology classes: %d\n", goClasses.length)
+   val ontClasses = ontology.getClassesInSignature(imports).asScala.toList
+   printf("INFO: Number of ontology classes: %d\n", ontClasses.length)
 
-   getTransitiveClosure(goClasses)
+   getTransitiveClosure(ontClasses, ontology)
 
-   val edges = goClasses.foldLeft(List[Triple]()){(acc, x) => acc ::: processOntClass(x)}
+   val edges = ontClasses.foldLeft(List[Triple]()){(acc, x) => acc ::: processOntClass(x, ontology)}
 
    edges.asJava
   }
 
 
-  def getTransitiveClosure(goClasses:List[OWLClass]){
+  def getTransitiveClosure(ontClasses:List[OWLClass], ontology: OWLOntology){
     val reasonerFactory = new ElkReasonerFactory();
     val reasoner = reasonerFactory.createReasoner(ontology);
 
@@ -84,8 +84,15 @@ class TaxonomyParser(var ontology: OWLOntology, var bidirectional_taxonomy: Bool
     }
 
     //compose aux functions
-    val newAxioms = goClasses flatMap (transitiveAxioms compose  superClasses)
+    val newAxioms = ontClasses flatMap (transitiveAxioms compose  superClasses)
 
     ontManager.addAxioms(ontology, newAxioms.toSet.asJava)
   }
+
+
+
+  // Abstract methods
+  def projectAxiom(go_class: OWLClass, axiom: OWLClassAxiom, ontology: OWLOntology): List[Triple] = Nil
+  
+  
 }

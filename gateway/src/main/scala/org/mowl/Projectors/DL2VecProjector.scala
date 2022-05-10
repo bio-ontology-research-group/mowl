@@ -1,4 +1,4 @@
-package org.mowl.Parsers
+package org.mowl.Projectors
 
 // OWL API imports
 import org.semanticweb.owlapi.model._
@@ -17,7 +17,7 @@ import collection.JavaConverters._
 import org.mowl.Types._
 import org.mowl.Utils._
 
-class DL2VecParser(var ontology: OWLOntology, var bidirectional_taxonomy: Boolean = false) extends AbstractParser{
+class DL2VecProjector(var bidirectional_taxonomy: Boolean = false) extends AbstractProjector{
 
   var relCounter = 0
 
@@ -25,7 +25,7 @@ class DL2VecParser(var ontology: OWLOntology, var bidirectional_taxonomy: Boolea
 
   val collectors = List("ObjectIntersectionOf", "ObjectUnionOf")
 
-  def parseAxiom(goClass: OWLClass, axiom: OWLClassAxiom): List[Triple] = {
+  def projectAxiom(ontClass: OWLClass, axiom: OWLClassAxiom): List[Triple] = {
 
     val axiomType = axiom.getAxiomType().getName()
 
@@ -33,16 +33,16 @@ class DL2VecParser(var ontology: OWLOntology, var bidirectional_taxonomy: Boolea
 
       case "SubClassOf" => {
 	var ax = axiom.asInstanceOf[OWLSubClassOfAxiom]
-	parseSubClassOrEquivAxiom(ax.getSubClass.asInstanceOf[OWLClass], ax.getSuperClass, "subClassOf")
+	projectSubClassOrEquivAxiom(ax.getSubClass.asInstanceOf[OWLClass], ax.getSuperClass, "subclassOf")
       }
       case "EquivalentClasses" => {
 	var ax = axiom.asInstanceOf[OWLEquivalentClassesAxiom].getClassExpressionsAsList.asScala
 
-        val rightSide = ax.filter((x) => x != goClass)
+        val rightSide = ax.filter((x) => x != ontClass)
         
-	rightSide.toList.flatMap(parseSubClassOrEquivAxiom(goClass, _:OWLClassExpression, "subClassOf"))
+	rightSide.toList.flatMap(projectSubClassOrEquivAxiom(ontClass, _:OWLClassExpression, "subclassOf"))
 
-//        parseSubClassOrEquivAxiom(goClass, new OWLObjectIntersectionOfImpl(rightSide.toSet.asJava), "equivalentTo")
+//        projectSubClassOrEquivAxiom(ontClass, new OWLObjectIntersectionOfImpl(rightSide.toSet.asJava), "equivalentTo")
       }
 
       case _ => Nil
@@ -51,11 +51,11 @@ class DL2VecParser(var ontology: OWLOntology, var bidirectional_taxonomy: Boolea
 
 
 
-   def parseSubClassOrEquivAxiom(goClass: OWLClass, superClass: OWLClassExpression, relName: String): List[Triple] = {
+   def projectSubClassOrEquivAxiom(ontClass: OWLClass, superClass: OWLClassExpression, relName: String): List[Triple] = {
      var invRelName = ""
 
-     if (relName == "subClassOf"){
-       invRelName = "superClassOf"
+     if (relName == "subclassOf"){
+       invRelName = "superclassOf"
      }else if(relName == "equivalentTo"){
        invRelName = relName
      }
@@ -69,28 +69,28 @@ class DL2VecParser(var ontology: OWLOntology, var bidirectional_taxonomy: Boolea
 
         val superClass_ = lift2QuantifiedExpression(superClass)
 
-        val (relations, dstClass) = parseQuantifiedExpression(superClass_, Nil)
+        val (relations, dstClass) = projectQuantifiedExpression(superClass_, Nil)
         val dstClasses = splitClass(dstClass)
 
         for (
           rel <- relations;
           dst <- dstClasses.filter(_.getClassExpressionType.getName == "Class").map(_.asInstanceOf[OWLClass])
-        ) yield new Triple(goClass, rel, dst)
+        ) yield new Triple(ontClass, rel, dst)
          
       }
 
       case c if (collectors contains c) => {
         val dstClasses = splitClass(superClass)
 
-        dstClasses.flatMap(parseSubClassOrEquivAxiom(goClass, _:OWLClassExpression, "subClassOf"))
+        dstClasses.flatMap(projectSubClassOrEquivAxiom(ontClass, _:OWLClassExpression, "subclassOf"))
       }
 
       case "Class" => {
 	val dst = superClass.asInstanceOf[OWLClass]
         if (bidirectional_taxonomy){
-	  new Triple(goClass, relName, dst) :: new Triple(dst, invRelName, goClass) :: Nil
+	  new Triple(ontClass, relName, dst) :: new Triple(dst, invRelName, ontClass) :: Nil
         }else{
-          new Triple(goClass, relName, dst) :: Nil
+          new Triple(ontClass, relName, dst) :: Nil
        
         }
       }
@@ -100,14 +100,14 @@ class DL2VecParser(var ontology: OWLOntology, var bidirectional_taxonomy: Boolea
 
    }
 
-  def parseQuantifiedExpression(expr:QuantifiedExpression, relations:List[String]): (List[String], OWLClassExpression) = {
+  def projectQuantifiedExpression(expr:QuantifiedExpression, relations:List[String]): (List[String], OWLClassExpression) = {
     val rel = expr.getProperty.asInstanceOf[OWLObjectProperty]
     val relName = rel.toString
     var filler = expr.getFiller
 
     defineQuantifiedExpression(filler) match {
 
-      case Some(expr) => parseQuantifiedExpression(expr, relName::relations)
+      case Some(expr) => projectQuantifiedExpression(expr, relName::relations)
 
       case None => (relName::relations, filler)
     }
@@ -145,19 +145,8 @@ class DL2VecParser(var ontology: OWLOntology, var bidirectional_taxonomy: Boolea
     }
   }
 
+  // Abstract methods
+  def projectAxiom(go_class: OWLClass, axiom: OWLClassAxiom, ontology: OWLOntology): List[Triple] = Nil
 
-  def getRelationName(relation: OWLObjectProperty) = {
-        
-    val rel_annots = ontology.getAnnotationAssertionAxioms(relation.getIRI()).asScala.toList
 
-    val rel = rel_annots find (x => x.getProperty() == dataFactory.getRDFSLabel()) match {
-      case Some(r) => r.getValue().toString.replace("\"", "").replace(" ", "_")
-      case None => {
-        relCounter = relCounter + 1
-        "rel" + (relCounter)
-      }
-    }
-
-    rel
-  }
 }

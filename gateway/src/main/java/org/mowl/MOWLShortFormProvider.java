@@ -1,9 +1,9 @@
-package org.mowl.Onto2Vec;
+package org.mowl;
 
 import org.semanticweb.owlapi.util.ShortFormProvider;
 import org.semanticweb.owlapi.model.OWLEntity;
 
-public class Onto2VecShortFormProvider implements ShortFormProvider {
+public class MOWLShortFormProvider implements ShortFormProvider {
 
     @Override
     public String getShortForm(OWLEntity entity) {
