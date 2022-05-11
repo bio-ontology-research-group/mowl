@@ -4,6 +4,7 @@ from scipy.stats import rankdata
 import torch.nn as nn
 import click as ck
 from mowl.graph.edge import Edge
+from mowl.graph.util import prettyFormat
 from mowl.datasets.build_ontology import PREFIXES
 from gensim.models import Word2Vec
 from gensim.models.keyedvectors import KeyedVectors
@@ -192,28 +193,36 @@ class PPIEvaluator(Evaluator):
     def load_data(self):
         if self._data_loaded:
             return
-        self.entities = dict() #name -> embedding
-
+        self.head_entities = dict() #name -> embedding
+        self.tail_entities = dict()
         for k, v in self.embeddings.items():
+            if not "4932" in k:
+                continue
+            k = prettyFormat(k)
             if not k.startswith('<http://purl.obolibrary.org/obo/GO_') and not k.startswith("GO"):
-                self.entities[k] = v
+                self.head_entities[k] = v
+                self.tail_entities[k] = v
+                
+        self.head_entity_names = list(self.head_entities.keys())
+        self.head_entity_name_index = {v:k for k,v in enumerate(self.head_entity_names)} # name -> index
+        self.tail_entity_names = list(self.tail_entities.keys())
+        self.tail_entity_name_index = {v:k for k,v in enumerate(self.tail_entity_names)} # name -> index
 
-        self.entity_names = list(self.entities.keys())
-        self.entity_name_index = {v:k for k,v in enumerate(self.entity_names)} # name -> index
 
-
-        print(f"Proteins dictionary created. Number of proteins: {len(self.prot_names)}")
-        self.trlabels = np.ones((len(self.entity_names), len(self.entity_names)), dtype=np.int32)
+        print(f"Entities dictionary created. Number of proteins: {len(self.head_entity_names)}.")
+        self.trlabels = np.ones((len(self.head_entity_names), len(self.tail_entity_names)), dtype=np.int32)
 
         for c,r,d in self.training_set:
-            if c not in self.entity_names or d not in self.entity_names: 
+            if c not in self.head_entity_names or d not in self.tail_entity_names: 
                 continue                                                                                            
 
-            c, d =  self.entity_name_index[c], self.entity_name_index[d] 
+            c, d =  self.head_entity_name_index[c], self.tail_entity_name_index[d] 
             
             self.trlabels[c, d] = 10000
         print("Training labels created")
-                                   
+
+
+
 
 class GDAEvaluator(Evaluator):
 
@@ -249,6 +258,7 @@ class GDAEvaluator(Evaluator):
         self.tail_entities = dict()
         
         for k, v in self.embeddings.items():
+            k = prettyFormat(k)
             if k.isnumeric():
                 self.head_entities[k] = v
             if k.startswith('OMIM:'):
