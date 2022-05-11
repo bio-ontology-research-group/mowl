@@ -1,7 +1,7 @@
-from mowl.model import Model
-from mowl.graph.factory import parser_factory
+from mowl.model import EmbeddingModel
+from mowl.projection.factory import projector_factory
 from mowl.walking.factory import walking_factory
-from mowl.graph.edge import Edge
+from mowl.projection.edge import Edge
 
 import numpy as np
 import random
@@ -10,6 +10,7 @@ import sys
 import os
 import gensim
 import tempfile
+import torch as th
 import networkx as nx
 from networkx.readwrite import json_graph
 import multiprocessing as mp
@@ -18,9 +19,11 @@ import pickle as pkl
 import logging
 from threading import Lock
 
+from mowl.evaluation.base import CosineSimilarity
+
 logging.basicConfig(level=logging.INFO)
 
-class DL2Vec(Model):
+class DL2Vec(EmbeddingModel):
 
     '''
     :param dataset: Dataset composed by training, validation and testing sets, each of which are in OWL format.
@@ -54,7 +57,7 @@ class DL2Vec(Model):
     '''
 
     
-    def __init__(self, dataset, outfile, bidirectional_taxonomy=False, walking_method = "deepwalk", walk_length = 30, alpha = 0, num_walks = 100, wv_epochs = 10, vector_size = 100, window = 5, workers = 1, p = 1, q=1, walks_outfile = None):
+    def __init__(self, dataset, outfile, bidirectional_taxonomy=False, walking_method = "deepwalk", walk_length = 30, alpha = 0, num_walks = 100, wv_epochs = 10, vector_size = 100, window = 5, workers = 1, p = 1, q=1, walks_outfile = None, device = "cpu"):
 
         super().__init__(dataset)
 
@@ -70,20 +73,39 @@ class DL2Vec(Model):
         self.window = window
         self.outfile = outfile
         self.walking_method = walking_method
-        self.parserTrain = parser_factory("dl2vec", self.dataset.ontology, bidirectional_taxonomy)
-        if not self.dataset.testing is None:
-            self.parserTest = parser_factory("dl2vec", self.dataset.testing, bidirectional_taxonomy)
+        self.projector = projector_factory("dl2vec", bidirectional_taxonomy)
+        self.device = device
 
         self.walks_outfile = walks_outfile
-        self.lock = Lock()
+        self._loaded = False
+
+        self.load_data()
+
+    def load_data(self):
+        if self._loaded:
+            return
+        eval_projector = projector_factory('taxonomy_rels', taxonomy=False, relations=["http://interacts_with"])
+
+        self._training_set = eval_projector.project(self.dataset.ontology)
+        self._testing_set = eval_projector.project(self.dataset.testing)
+
+        training_entities,_ = Edge.getEntitiesAndRelations(self._training_set)
+        testing_entities,_ = Edge.getEntitiesAndRelations(self._testing_set)
+
+        entities = list(set(training_entities) | set(testing_entities))
+        
+        self._head_entities = entities
+        self._tail_entities = entities
+        self._loaded = True
         
 
+    
     def train(self):
 
         save_walks = True
 
         logging.info("Generating graph from ontology...")
-        edges = self.parserTrain.parse()
+        edges = self.projector.project(self.dataset.ontology)
         entities, _ = Edge.getEntitiesAndRelations(edges)
         self.entities = list(entities)
         logging.info("Finished graph generation")
@@ -112,3 +134,22 @@ class DL2Vec(Model):
         model.save(self.outfile)
         logging.info("Model saved")
         
+
+    def get_embeddings(self):
+
+        w2v = gensim.models.Word2Vec.load(self.outfile).wv
+
+        embeddings_dict = dict()
+        
+        for idx, word in enumerate(w2v.index_to_key):
+            embeddings_dict[word] = w2v[word]
+
+        
+        self.class_index_dict = {v:k for k,v in enumerate(embeddings_dict.keys())}
+        self.relation_index_dict = {"http://interacts_with": -1}
+        self.embeddings = embeddings_dict
+        return embeddings_dict, self.relation_index_dict
+
+    def eval_method(self, data):
+        method = CosineSimilarity(th.tensor(np.ndarray(self.embeddings.values()))).to(self.device)
+        return method(data)
