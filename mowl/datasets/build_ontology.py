@@ -133,7 +133,7 @@ def create_from_triples(
                 head, rel, tail = line
 
             head = factory.getOWLClass(IRI.create(f"{head_prefix}{head}"))
-            rel = factory.getOWLObjectProperty(IRI.create(f"{PREFIXES['default']}{rel}"))
+            rel = factory.getOWLObjectProperty(IRI.create(f"{rel}"))
             tail = factory.getOWLClass(IRI.create(f"{tail_prefix}{tail}"))
 
             axiom = factory.getOWLSubClassOfAxiom(
