@@ -1,6 +1,6 @@
-from mowl.graph.edge import Edge
+from mowl.projection.edge import Edge
 
-class GraphGenModel():
+class ProjectionModel():
     """
     Abstract class for Ontology projection into a graph
 
@@ -8,10 +8,10 @@ class GraphGenModel():
     :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
     """
     
-    def __init__(self, ontology):
-        self.ontology = ontology
-
-    def parse(self):
+    def __init__(self):
+        return
+    
+    def project(self, ontology):
         '''
         Performs the ontology parsing.
 

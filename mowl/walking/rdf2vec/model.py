@@ -3,14 +3,14 @@ import random
 import os
 import logging
 
-from org.mowl.Walking import WalkRDFAndOWL as WRO
+from org.mowl.Walking import RDF2Vec as R2V
 from java.util import HashMap
 from java.util import ArrayList
 from org.mowl import Edge
 logging.basicConfig(level=logging.INFO)
 
 
-class WalkRDFAndOWL(WalkingModel):
+class RDF2Vec(WalkingModel):
 
     '''
     Implementation of `Walking RDF and OWL <https://github.com/bio-ontology-research-group/walking-rdf-and-owl>`_
@@ -34,6 +34,6 @@ class WalkRDFAndOWL(WalkingModel):
             newEdge = Edge(edge.src(), edge.rel(), edge.dst())
             edgesJ.add(newEdge)
 
-        walker = WRO(edgesJ, self.num_walks, self.walk_length, self.workers, self.outfile)
+        walker = R2V(edgesJ, self.num_walks, self.walk_length, self.workers, self.outfile)
 
         walker.walk()

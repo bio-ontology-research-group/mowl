@@ -4,70 +4,116 @@ import numpy as np
 from scipy.stats import rankdata
 
 from mowl.model import Model
+from mowl.reasoning.base import MOWLReasoner
+from mowl.corpus import extract_axiom_corpus
 from jpype.types import *
 
-from org.semanticweb.owlapi.manchestersyntax.renderer import ManchesterOWLSyntaxOWLObjectRendererImpl
-from org.mowl.Onto2Vec import Onto2VecShortFormProvider
 from org.semanticweb.owlapi.model import AxiomType
+from org.semanticweb.elk.owlapi import ElkReasonerFactory
+from org.semanticweb.HermiT import Reasoner
+
 from sklearn.metrics import pairwise_distances
-import gensim
+
+from gensim.models import Word2Vec
+from gensim.models.word2vec import LineSentence
+
 import logging
 
 MAX_FLOAT = np.finfo(np.float32).max
-
-class CorpusGenerator(object):
-
-    def __init__(self, filepath):
-        self.filepath = filepath
-
-    def __iter__(self):
-        with open(self.filepath) as f:
-            for line in f:
-                yield line.strip().split(' ')
+TEMP_CORPUS_FILE = "temp_corpus_file"
 
 class Onto2Vec(Model):
 
-    def __init__(self, dataset, w2v_params={}):
+    '''
+    :param dataset: Dataset composed by training, validation and testing sets, each of which are in OWL format.
+    :type dataset: :class:`mowl.datasets.base.Dataset`
+    :param model_outfile: Path to save the final model
+    :type model_outfile: str
+    :param vector_size: Dimensionality of the word vectors. Same as :class:`gensim.models.word2vec.Word2Vec`
+    :type vector_size: int
+    :param wv_epochs: Number of epochs for the Word2Vec model
+    :type wv_epochs: int
+    :param window: Maximum distance between the current and predicted word within a sentence. Same as :class:`gensim.models.word2vec.Word2Vec`
+    :type window: int
+    :param workers: Number of threads to use for the random walks and the Word2Vec model.
+    :type workers: int
+    :param corpus_outfile: Path for savings the corpus. If not set the walks will not be saved.
+    :type corpus_outfile: str
+    '''
+
+    def __init__(
+            self,
+            dataset,
+            model_outfile,
+            corpus_outfile = None,
+            reasoner = "elk",
+            wv_epochs = 10,
+            vector_size = 100,
+            window = 5,
+            workers = 1):
+        
         super().__init__(dataset)
-        self.axioms_filepath = os.path.join(
-            dataset.data_root, dataset.dataset_name, 'axioms.o2v')
-        self.w2v_params = w2v_params
-        self.model_filepath = os.path.join(
-            dataset.data_root, dataset.dataset_name, 'w2v.model')
+
+        if corpus_outfile is None:
+            self.axioms_filepath = TEMP_CORPUS_FILE
+        else:
+            self.axioms_filepath = corpus_outfile
+        self.wv_epochs = wv_epochs
+        self.vector_size = vector_size
+        self.window = window
+        self.model_filepath = model_filepath
+        
+
         self.w2v_model = None
         
-    def _create_axioms_corpus(self):
-        logging.info("Generating axioms corpus")
-        renderer = ManchesterOWLSyntaxOWLObjectRendererImpl()
-        shortFormProvider = Onto2VecShortFormProvider()
-        renderer.setShortFormProvider(shortFormProvider)
-        with open(self.axioms_filepath, 'w') as f:
-            for owl_class in self.dataset.ontology.getClassesInSignature():
-                axioms = self.dataset.ontology.getAxioms(owl_class)
-                for axiom in axioms:
-                    rax = renderer.render(axiom)
-                    rax = rax.replaceAll(JString("[\\r\\n|\\r|\\n()]"), JString(""))
-                    f.write(f'{rax}\n')
+        if reasoner == "elk":
+            reasoner_factory = ElkReasonerFactory()
+            reasoner = reasoner_factory.createReasoner(self.dataset.ontology)
+            reasoner.precomputeInferences()
+        elif reasoner == "hermit":
+            reasoner_factory = Reasoner.ReasonerFactory()
+            reasoner = reasoner_factory.createReasoner(self.dataset.ontology)
+            reasoner.precomputeInferences()
+
+        self.mowl_reasoner = MOWLReasoner(reasoner)
 
     def _load_pretrained_model(self):
         return None
 
     def train(self):
         if not os.path.exists(self.axioms_filepath):
-            self.dataset.infer_axioms()
-            self._create_axioms_corpus()
+            self.mowl_reasoner.infer_subclass_axioms(self.dataset.ontology)
+            self.mowl_reasoner.infer_equiv_class_axioms(self.dataset.ontology)
 
-        sentences = CorpusGenerator(self.axioms_filepath)
+            extract_axiom_corpus(self.dataset.ontology, self.axioms_filepath)
+
+        sentences = LineSentence(self.axioms_filepath)
 
         self.w2v_model = self._load_pretrained_model()
+
         if not self.w2v_model:
-            self.w2v_model = gensim.models.Word2Vec(
-                sentences=sentences, **self.w2v_params)
+            self.w2v_model = Word2Vec(
+                sentences=sentences,
+                sg=1,
+                min_count=1,
+                vector_size=self.vector_size,
+                window = self.window,
+                epochs = self.wv_epochs,
+                workers = self.workers)
         else:
             # retrain the pretrained model with our axioms
             self.w2v_model.build_vocab(sentences, update=True)
-            self.w2v_model.train(sentences, total_examples=self.w2v_model.corpus_count, epochs=100, **self.w2v_params)
+            self.w2v_model.train(
+                sentences,
+                total_examples=self.w2v_model.corpus_count,
+                sg=1,
+                min_count=1,
+                vector_size=self.vector_size,
+                window = self.window,
+                epochs = self.wv_epochs,
+                workers = self.workers)
             # (following example from: https://github.com/bio-ontology-research-group/opa2vec/blob/master/runWord2Vec.py )
+
         self.w2v_model.save(self.model_filepath)
 
 
