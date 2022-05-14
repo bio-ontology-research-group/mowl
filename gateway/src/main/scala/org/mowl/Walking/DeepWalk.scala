@@ -23,12 +23,17 @@ class DeepWalk (
 
 
   val edgesSc = edges.asScala.map(x => (x.src, x.rel, x.dst))
-  val entities = (edgesSc.map(x => List(x._1, x._2, x._3)).flatten +: "*****").toSet
+  val entities_ = edgesSc.map(x => List(x._1, x._2, x._3)).flatten.toSet
+  val entities = entities_ + "*****"
   val mapEntsIdx = entities.zip(Range(0, entities.size, 1)).toMap
   val mapIdxEnts = Range(0, entities.size, 1).zip(entities).toMap
   val entsIdx = entities.map(mapEntsIdx(_))
 
   val nodes = edgesSc.map(x => List(x._1, x._3)).flatten.toSet
+  println(entities.size)
+  println(nodes.size)
+  println(entities.contains("http://purl.obolibrary.org/obo/GO_0007580"))
+  println(nodes.contains("http://purl.obolibrary.org/obo/GO_0007580"))
   val nodesIdx = nodes.map(mapEntsIdx(_))
 
   val graph = processEdges()

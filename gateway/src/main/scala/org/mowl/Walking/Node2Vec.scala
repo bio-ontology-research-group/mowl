@@ -28,11 +28,12 @@ class Node2Vec (
   val entsSrc = edgesSc.map(_._1).toSet
   val mapEntsIdx = entities.zip(Range(0, entities.size, 1)).toMap
   val mapIdxEnts = Range(0, entities.size, 1).zip(entities).toMap
-  val entsIdx = nodes.map(mapEntsIdx(_))
+  val entsIdx = entities.map(mapEntsIdx(_))
   val entsSrcIdx = entsSrc.map(mapEntsIdx(_))
   val nodes = edgesSc.map(x => List(x._1, x._3)).flatten.toSet
   val nodesIdx = nodes.map(mapEntsIdx(_))
   val (graph, weights) = processEdges()
+
 
   val rand = scala.util.Random
 
@@ -54,7 +55,7 @@ class Node2Vec (
       val srcIdx = mapEntsIdx(src)
       val relIdx = mapEntsIdx(rel)
       val dstIdx = mapEntsIdx(dst)
-      
+
       if (!graph.contains(srcIdx)){
         graph(srcIdx) = ArrayBuffer((relIdx, dstIdx))
       }else{
@@ -182,7 +183,7 @@ class Node2Vec (
         val curNbrs = graph.contains(curNode) match {
           
           case true => graph(curNode)
-          case false => Array()
+          case false => Array[Tuple2[Int, Int]]()
         }
 
         if (curNbrs.size > 0) {
@@ -192,15 +193,15 @@ class Node2Vec (
             val (rel, next) = curNbrs(aliasDraw(idx1, idx2))
             walk(i) = rel
             walk(i+1) = next
-
           }else {
-            val prevNode = walk(i-3)//  walk.init.last
+            val prevNode = walk(i-3)
             val (idx1, idx2) = aliasEdges((prevNode, curNode))
             val (rel, next) = curNbrs(aliasDraw(idx1, idx2))
+         
             walk(i) = rel
             walk(i+1) = next
-            i = i+2
           }
+          i = i+2
           
         }else{
           break
