@@ -48,7 +48,7 @@ def extract_only_closure(train_edges_file, closure_edges_file, out_only_closure_
             f.write(f"{s}\t{d}\n")
 
 
-def split_closure(closure_file, valid_out_file, test_out_file):
+def split_closure(closure_file, test_out_file):
     
     with open(closure_file, "r") as f:
         closure_edges = set()
@@ -61,24 +61,18 @@ def split_closure(closure_file, valid_out_file, test_out_file):
     random.shuffle(closure_edges)
 
     num_closure = len(closure_edges)
-
-    valid_data = closure_edges[:num_closure//2]
-    test_data = closure_edges[num_closure//2:]
-
-    with open(valid_out_file, "w") as f:
-        for s, d in list(valid_data):
-            f.write(f"{s}\t{d}\n")
+    
 
     with open(test_out_file, "w") as f:
-        for s, d in list(test_data):
+        for s, d in list(closure_edges):
             f.write(f"{s}\t{d}\n")
 
 
 
 if __name__ == "__main__":
-    root = "data/"
+    root = "data/goslim/"
 
-    ont_file = root + "go.owl"
+    ont_file = root + "goslim_yeast.owl"
     train_edges_file = root + "train_pos_data.tsv"
     closure_edges_file = root + "closure_pos_data.tsv"
     only_closure_edges_file = root + "only_closure_pos_data.tsv"

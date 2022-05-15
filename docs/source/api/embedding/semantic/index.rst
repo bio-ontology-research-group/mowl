@@ -11,7 +11,3 @@ ELEmbeddings
    :show-inheritance:
 
 
-Example of use
-^^^^^^^^^^^^^^^
-An example can be found at :doc:`../../../tutorials/ELEmbeddings`
-

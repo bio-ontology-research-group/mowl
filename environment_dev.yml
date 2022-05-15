@@ -30,5 +30,10 @@ dependencies:
   - pip
   - pip:
     - pykeen
+    - sphinx-rtd-theme
   - jupyter
   - ipykernel
+  - sphinx
+  - sphinx-gallery
+  - nbsphinx
+  - mock
