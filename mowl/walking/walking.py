@@ -2,8 +2,6 @@
 class WalkingModel():
 
     '''
-    :param edges: List of edges
-    :type edges: mowl.graph.edge.Edge
     :param num_walks: Number of walks per node
     :type num_walks: int
     :param walk_length: Length of each walk
@@ -11,8 +9,7 @@ class WalkingModel():
     :param workers: Number of threads to be used for computing the walks. Default is 1'
     :type workers: int
     '''
-    def __init__(self, edges, num_walks, walk_length, outfile, workers=1):    
-        self.edges = edges
+    def __init__(self, num_walks, walk_length, outfile, workers=1):
         self.num_walks = num_walks
         self.walk_length = walk_length
         self.workers = workers
@@ -21,7 +18,10 @@ class WalkingModel():
     def walk(self):
 
         '''
-        This method will generate the walks which can be accessed from the attribute `walks`.
+        This method will generate the walks.
+
+        :param edges: List of edges
+        :type edges: mowl.graph.edge.Edge
         '''
         
         raise NotImplementedError()
