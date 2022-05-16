@@ -16,11 +16,12 @@ import time
 from itertools import chain
 import math
 import mowl.develop.catEmbeddings.lossesELSimple as L
-from mowl.develop.catEmbeddings.cat_net import Product, ExponentialMorphism, Existential
+from mowl.develop.catEmbeddings.cat_net import Product, EntailmentMorphism, Existential
 import os
 from mowl.model import Model
-from mowl.graph.taxonomy.model import TaxonomyParser
-from mowl.graph.edge import Edge
+from mowl.reasoning.normalize import ELNormalizer
+from mowl.projection.taxonomy.model import TaxonomyProjector
+from mowl.projection.edge import Edge
 from org.semanticweb.owlapi.util import SimpleShortFormProvider
 from scipy.stats import rankdata
 from mowl.develop.catEmbeddings.evaluate_interactions import evalNF4Loss
@@ -41,6 +42,7 @@ class CatEmbeddings(Model):
             gamma = None,
             eval_ppi = False,
             sampling = False,
+            size_hom_set = 1,
             nf1 = False, 
             nf1_neg = False, 
             nf2 = False,
@@ -52,7 +54,8 @@ class CatEmbeddings(Model):
             margin = 0,
             seed = -1,
             early_stopping = 10,
-            device = "cuda"
+            species = "yeast",
+            device = "cpu"
     ):
         super().__init__(dataset)
 
@@ -67,6 +70,7 @@ class CatEmbeddings(Model):
         self.gamma = gamma
         self.eval_ppi = eval_ppi
         self.sampling = sampling
+        self.size_hom_set = size_hom_set
         self.nf1 = nf1
         self.nf1_neg = nf1_neg
         self.nf2 = nf2
@@ -79,13 +83,6 @@ class CatEmbeddings(Model):
         self.early_stopping = early_stopping
         self.device = device
         self.dataset = dataset
-        
-        if "yeast" in train_file:
-            species = "yeast"
-        elif "human" in train_file:
-            species = "human"
-        else:
-            raise ValueError("Species not defined")
             
         self.species = species
         milestones_str = "_".join(str(m) for m in milestones)
@@ -98,6 +95,8 @@ class CatEmbeddings(Model):
 
         self._loaded = False
 
+        self.load_data()
+        
         if seed>=0:
             th.manual_seed(seed)
             np.random.seed(seed)
@@ -105,25 +104,26 @@ class CatEmbeddings(Model):
 
         self.model = None
         ### For eval ppi
-        self.load_data_old(train_file, valid_file, test_file, device = 'cuda')
+        
 
         if self.eval_ppi or True:
             _, _, _, train_nf4 = self.train_nfs
             proteins = {}
-            for k, v in self.classes.items():
+            for k, v in self.classes_index_dict.items():
+                k = str(k)
                 if not k.startswith('<http://purl.obolibrary.org/obo/GO_') and not k.startswith("GO:"):
                     proteins[k] = v
             self.prot_index = proteins.values()
             self.prot_dict = {v: k for k, v in enumerate(self.prot_index)}
 
             print(f"prot dict created. Number of proteins: {len(self.prot_index)}")
-            self.trlabels = {}
+            self.trlabels = np.ones((len(self.prot_index), len(self.prot_index)), dtype=np.int32)
 
 
             print("Generating training labels")
             with ck.progressbar(train_nf4) as bar:
                 for c,r,d in bar:
-                    if r != 0:
+                    if r != self.relations["http://interacts_with"]:
                         continue
                     c, r, d = c.detach().item(), r.detach().item(), d.detach().item()
 
@@ -131,10 +131,8 @@ class CatEmbeddings(Model):
                         continue
 
                     c, d =  self.prot_dict[c], self.prot_dict[d]
-
-                    if r not in self.trlabels:
-                        self.trlabels[r] = np.ones((len(self.prot_index), len(self.prot_index)), dtype=np.int32)
-                    self.trlabels[r][c, d] = 1000
+ 
+                    self.trlabels[c, d] = 1000
                 print("trlabels created")
 
 
@@ -144,18 +142,18 @@ class CatEmbeddings(Model):
 
 
  #       self._loaded = False
-        device = "cuda"
-#        self.load_data_old(device="cuda")
+        device = self.device
+
         
         if not self.sampling:
             self.create_dataloaders(device = device)
 
         self.train_nfs = tuple(map(lambda x: x.to(device), self.train_nfs))
         
-        self.num_classes = len(self.classes)
+        self.num_classes = len(self.classes_index_dict)
         self.num_rels = len(self.relations)
         
-        self.model = CatModel(self.num_classes, self.num_rels, self.embedding_size, dropout = self.dropout)
+        self.model = CatModel(self.num_classes, self.num_rels, self.size_hom_set, self.embedding_size, dropout = self.dropout)
         th.save(self.model.state_dict(), self.model_filepath)
 
         paramss = sum(p.numel() for p in self.model.parameters())
@@ -220,9 +218,9 @@ class CatEmbeddings(Model):
                     False,
                     False,
                     False,
+                    self.nf3,
                     False,
                     False,
-                    self.nf4,
                     False,
                     self.margin,
                     train = False
@@ -265,7 +263,7 @@ class CatEmbeddings(Model):
 
 
     def run_and_save_predictions(self, model, samples=None, save = True):
-        device = "cuda"
+        device = self.device
 
         model.eval()
         print(self.device)
@@ -511,7 +509,7 @@ class CatEmbeddings(Model):
 
     def evaluate(self):
 #        self.load_data()
-        self.model = CatModel(len(self.classes), len(self.relations), 1024).to(self.device)
+        self.model = CatModel(len(self.classes_index_dict), len(self.relations), self.size_hom_set, 1024).to(self.device)
         print('Load the best model', self.model_filepath)
         self.model.load_state_dict(th.load(self.model_filepath))
         self.model.eval()
@@ -521,14 +519,14 @@ class CatEmbeddings(Model):
  
     def evaluate_ppi_valid(self):
         self.model.eval()
-        _, _, _, valid_nf4 = self.valid_nfs
-        index = np.random.choice(len(valid_nf4), size = self.num_points_eval, replace = False)
+        _, _, valid_nf3, _ = self.valid_nfs
+        index = np.random.choice(len(valid_nf3), size = self.num_points_eval, replace = False)
 #        index = list(range(self.num_points_eval))
-        valid_nfs = valid_nf4[index]
+        valid_nfs = valid_nf3[index]
         preds, labels = self.run_and_save_predictions(self.model, samples = valid_nfs, save = False)
 
 #        results = evalNF4Loss(self.model, valid_nfs, self.prot_dict, self.prot_index, self.trlabels, len(self.prot_index), device = "cuda")
-        results = evalNF4Loss(valid_nfs, self.prot_dict, self.prot_index, self.trlabels, len(self.prot_index), device= 'cuda', preds =preds, labels = labels)
+        results = evalNF4Loss(valid_nfs, self.prot_dict, self.prot_index, self.trlabels, len(self.prot_index), device= self.device, preds =preds, labels = labels)
 
         return results
 
@@ -628,8 +626,8 @@ class CatEmbeddings(Model):
         else:
             nf1 = th.empty((1,1)).to(device)
             nf2 = th.empty((1,1)).to(device)
-            nf3 = th.empty((1,1)).to(device)
-            nf4 = th.LongTensor(nfs).to(device)
+            nf4 = th.empty((1,1)).to(device)
+            nf3 = th.LongTensor(nfs).to(device)
 
         nfs = nf1, nf2, nf3, nf4
         nb_data_points = tuple(map(len, nfs))
@@ -655,28 +653,31 @@ class CatEmbeddings(Model):
 
 class CatModel(nn.Module):
 
-    def __init__(self, num_objects, num_rels, embedding_size, dropout = 0):
+    def __init__(self, num_objects, num_rels, size_hom_set, embedding_size, dropout = 0):
         super(CatModel, self).__init__()
 
         self.embedding_size = embedding_size
         self.num_obj = num_objects 
-        
+        self.size_hom_set = size_hom_set
         self.dropout = nn.Dropout(dropout)
-        self.act = nn.Sigmoid()
+        self.act = nn.Tanh()
 
         self.embed = nn.Embedding(self.num_obj, embedding_size)
         k = math.sqrt(1 / embedding_size)
-        nn.init.uniform_(self.embed.weight, -0, 1)
+        nn.init.uniform_(self.embed.weight, -k, k)
 
         self.embed_rel = nn.Embedding(num_rels, embedding_size)
         k = math.sqrt(1 / embedding_size)
-        nn.init.uniform_(self.embed_rel.weight, -0,1)
+        nn.init.uniform_(self.embed_rel.weight, -k,k)
 
         self.prod_net = Product(self.embedding_size)
-        self.exp_net = EntailmentMorphism(self.embedding_size)
+        self.exp_net = nn.ModuleList()
+        for i in range(self.size_hom_set):
+            self.exp_net.append(EntailmentMorphism(self.embedding_size))
+  #      self.exp_net = EntailmentMorphism(self.embedding_size)
         self.ex_net = Existential(self.embedding_size)
 
-
+        self.dummy_param = nn.Parameter(th.empty(0))
         # Embedding network for the ontology ojects
         self.net_object = nn.Sequential(
             self.embed,
@@ -695,10 +696,10 @@ class CatModel(nn.Module):
         )
 
         self.variable_getter = nn.Sequential(
-            nn.Linear(embedding_size, embedding_size)
+            nn.Linear(embedding_size, embedding_size),
             nn.ReLU(),
             nn.Linear(embedding_size, embedding_size),
-            nn.Sigmoid()
+            nn.Tanh()
         )
 
     def forward(self, normal_form, idx, neg = False, margin = 0):
@@ -708,16 +709,16 @@ class CatModel(nn.Module):
         
         if idx == 1:
 
-            loss = L.nf1_loss(normal_form, self.exponential_net, self.net_object, neg = neg, num_objects = self.num_obj)
+            loss = L.nf1_loss(normal_form, self.exp_net, self.net_object, neg = neg, num_objects = self.num_obj, device = self.dummy_param.device)
 
         elif idx == 2:
-            loss = L.nf2_loss(normal_form, self.exponential_net, self.prod_net, self.net_object, neg = neg)
-
-        elif idx == 3:
-            loss = L.nf3_loss(normal_form, self.variable_getter, self.exp_net,  self.prod_net,  self.ex_net, self.net_object, self.net_rel, neg = neg)
+            loss = L.nf2_loss(normal_form, self.exp_net, self.prod_net, self.net_object, neg = neg)
 
         elif idx == 4:
-            loss = L.nf4_loss(normal_form,  self.variable_getter, self.exp_net, self.prod_net, self.ex_net, self.net_object, self.net_rel,  neg = neg, num_objects = self.num_obj)
+            loss = L.nf4_loss(normal_form, self.variable_getter, self.exp_net,  self.prod_net,  self.ex_net, self.net_object, self.net_rel, neg = neg)
+
+        elif idx == 3:
+            loss = L.nf3_loss(normal_form,  self.variable_getter, self.exp_net, self.prod_net, self.ex_net, self.net_object, self.net_rel,  neg = neg, num_objects = self.num_obj, device = self.dummy_param.device)
         else:
             raise ValueError("Invalid index")
             
@@ -741,7 +742,7 @@ class TestModule(nn.Module):
         assert 3 == ents
         x = x.reshape(-1, ents)
 
-        x = self.catModel(x, 4)
+        x = self.catModel(x, 3)
 
         x = x.reshape(bs, num_prots)
 

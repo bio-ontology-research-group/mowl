@@ -5,22 +5,32 @@ import random
 import mowl.develop.catEmbeddings.losses as L
 
 
-def nf1_loss(objects, exponential_net,  embed_objects, neg = False,  num_objects = None):
+def nf1_loss(objects, exponential_net,  embed_objects, neg = False,  num_objects = None, device = "cpu"):
 
     antecedents = embed_objects(objects[:, 0])
     consequents = embed_objects(objects[:, 1])
 
     if neg:
-        negs = th.tensor(np.random.choice(num_objects, size = len(objects))).to("cuda")
+        negs = th.tensor(np.random.choice(num_objects, size = len(objects))).to(device)
         embed_negs = embed_objects(negs)
-        _, neg_loss_1 = exponential_net(consequents, antecedents, prod_net)
-        _, neg_loss_2 = exponential_net(antecedents, embed_negs, prod_net)
-        
-        neg_loss = random.choice([neg_loss_1, neg_loss_2])
+        #neg_loss_1 = exponential_net(consequents, antecedents)
+        #neg_loss_2 = exponential_net(antecedents, embed_negs)
+        neg_loss_1 = 0
+        for layer in exponential_net:
+            neg_loss_1 += layer(consequents, antecedents)
+
+        neg_loss_2 = 0
+        for layer in exponential_net:
+            neg_loss_2 += layer(antecedents, embed_negs)
+            
+        neg_loss = sum([neg_loss_1, neg_loss_2])/2
         return neg_loss
                                         
     else:
-        _, loss = exponential_net(antecedents, consequents)
+        #loss = exponential_net(antecedents, consequents)
+        loss = 0
+        for layer in exponential_net:
+            loss += layer(antecedents, consequents)
         return loss
 
     
@@ -40,7 +50,7 @@ def nf2_loss(objects, exp_net, prod_net, embed_objects, neg = False):
         exp_loss = exp_net(prod, antecedents[1], prod_net)
 
     else:
-        prod_loss = product_loss(antecedents_left, antecedents_right)
+        prod_loss = prod_net(antecedents_left, antecedents_right)
         prod = antecedents_left + antecedents_right
         exp_loss = L.exponential_loss(prod, consequents, prod_net)
 
@@ -48,7 +58,7 @@ def nf2_loss(objects, exp_net, prod_net, embed_objects, neg = False):
 
 
 
-def nf3_loss(objects, variable_getter, exp_net, prod_net, ex_net, embed_objects, embed_rels, neg = False):
+def nf4_loss(objects, variable_getter, exp_net, prod_net, slicing_net, embed_objects, embed_rels, neg = False):
 
 
 
@@ -66,11 +76,11 @@ def nf3_loss(objects, variable_getter, exp_net, prod_net, ex_net, embed_objects,
         prod_loss = prod_net(relations, antecedents)
 
         sliced_object = slicing_net(variable, prod)
-        exp_loss = exp_net(sliced_object, consequent)
+        exp_loss = exp_net(sliced_object, consequents)
 
     return prod_loss + exp_loss
 
-def nf4_loss(objects, variable_getter,  exp_net, prod_net, ex_net, embed_objects, embed_rels, neg = False, num_objects = None):
+def nf3_loss(objects, variable_getter,  exp_net, prod_net, slicing_net, embed_objects, embed_rels, neg = False, num_objects = None, device = "cpu"):
     
     antecedents = embed_objects(objects[:, 0])
     relations = embed_rels(objects[:, 1])
@@ -79,7 +89,7 @@ def nf4_loss(objects, variable_getter,  exp_net, prod_net, ex_net, embed_objects
     variable = variable_getter(antecedents)
 
     if neg:
-        negs = th.tensor(np.random.choice(num_objects, size = len(objects))).to("cuda")
+        negs = th.tensor(np.random.choice(num_objects, size = len(objects))).to(device)
         consequents  = embed_objects(negs)
 
 
@@ -87,9 +97,11 @@ def nf4_loss(objects, variable_getter,  exp_net, prod_net, ex_net, embed_objects
     prod_loss = prod_net(relations, antecedents)
 
     sliced_object = slicing_net(variable, prod)
-
-    exp_loss = exp_net(antecedents, sliced_object)
-
+    sliced_object = prod
+    #exp_loss = exp_net(antecedents, sliced_object)
+    exp_loss = 0
+    for layer in exp_net:
+        exp_loss += layer(antecedents, sliced_object)
     return exp_loss + prod_loss
 
 def nf4_loss_old(objects, exp_net, prod_net, pullback_net, ex_net, embed_objects, neg = False, num_objects = None):

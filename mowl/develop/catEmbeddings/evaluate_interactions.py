@@ -70,7 +70,7 @@ def evalNF4Loss(eval_data, prot_dict, prot_index, trlabels, num_prots, preds = N
            # print(res.shape,trlabels[r][c, :].shape)
             rank1 = rank
            # print(rank,1)
-            index = rankdata((res * trlabels[0][c, :]), method='average')
+            index = rankdata((res * trlabels[c, :]), method='average')
 
             rank = index[d]
             

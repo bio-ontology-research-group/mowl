@@ -2,8 +2,14 @@ import torch as th
 import torch.nn as nn
 from mowl.develop.catEmbeddings.functor import Functor
 
-def norm(tensor, dim = None):
+def norm_(tensor, dim = None):
     return th.linalg.norm(tensor, dim = dim)
+
+def norm(a, b):
+
+    x = th.sum(a * b, dim=1, keepdims=True)
+    return 1- th.sigmoid(x)
+
 
 def assert_shapes(shapes):
     assert len(set(shapes)) == 1
@@ -20,21 +26,24 @@ class Product(nn.Module):
             nn.Linear(2*embedding_size, embedding_size),
             nn.ReLU(),
             nn.Linear(embedding_size, embedding_size),
-            nn.Sigmoid()
+            nn.Tanh()
         )
+
         
-        self.pi1 = nn.EntailmentMorphism(embedding_size)
-        self.pi2 = nn.EntailmentMorphism(embedding_size)
-        self.m   = nn.EntailmentMorphism(embedding_size)
-        self.p1  = nn.EntailmentMorphism(embedding_size)
-        self.p2  = nn.EntailmentMorphism(embedding_size)
+        
+        self.pi1 = EntailmentMorphism(embedding_size)
+        self.pi2 = EntailmentMorphism(embedding_size)
+        self.m   = EntailmentMorphism(embedding_size)
+        self.p1  = EntailmentMorphism(embedding_size)
+        self.p2  = EntailmentMorphism(embedding_size)
         
 
     def forward(self, left, right, up=None):
         product = left + right
 
-        if up is None:
-            up = self.embed_up(th.cat([left, right], dim = 1))
+        up = product + th.rand(product.shape).to(product.device)
+#        if up is None:
+#            up = self.embed_up(th.cat([left, right], dim = 1))
 
 
         loss = 0
@@ -51,14 +60,15 @@ class EntailmentMorphism(nn.Module):
     def __init__(self, embedding_size):
         super().__init__()
 
+        
         self.entails = nn.Linear(embedding_size, embedding_size)
-  
+        self.dropout = nn.Dropout(0.3)
 
     def forward(self, antecedent, consequent):
         
         estim_cons = self.entails(antecedent)
-
-        loss1 = norm(estim_cons - consequent, dim = 1)
+        estim_cons = self.dropout(estim_cons)
+        loss1 = norm(estim_cons, consequent)
         losses = [loss1]
     
         return sum(losses)
@@ -72,11 +82,12 @@ class Existential(nn.Module):
             nn.Linear(2*embedding_size, embedding_size),
             nn.ReLU(),
             nn.Linear(embedding_size, embedding_size),
-            nn.Sigmoid()
+            nn.Tanh()
         )
         
     def forward(self, internal, variable):
-        
-        return self.slicing(variable, internal)
+
+        x = th.cat([variable, internal], dim =1)
+        return self.slicing(x)
 
         

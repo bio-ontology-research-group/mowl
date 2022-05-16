@@ -17,7 +17,7 @@ mowl.init_jvm("10g")
 
 from mowl.datasets.ppi_yeast import PPIYeastSlimDataset, PPIYeastDataset
 #from mowl.develop.catEmbeddings.modelWithFeats import CatEmbeddings
-from mowl.develop.catEmbeddings.modelELSimple import CatEmbeddings
+from mowl.develop.catEmbeddings.modelEL_simple import CatEmbeddings
 
 @ck.command()
 @ck.option(
@@ -30,16 +30,17 @@ def main(species):
 
     if species == "yeast":
         ds = 'data/data-train/yeast-classes-normalized.owl', 'data/data-valid/4932.protein.links.v10.5.txt', 'data/data-test/4932.protein.links.v10.5.txt'        
- 
 
-        lr = 5e-4
-        embedding_size = 50
+        ds = PPIYeastSlimDataset()
+
+        lr = 5e-1
+        embedding_size = 80
 #        milestones = [ 150, 2000, 200112]
 #        milestones = [50, 100, 150, 400,  6000, 20001001] #only_nf4
         gamma = 0.3
 #        milestones = [150, 250, 450, 2000000]
         milestones = [50, 200, 800, 2000, 70993]
-        margin = 5
+        margin = 0.5
         epochs = 1000
     elif species == "human":
         ds = 'data/data-train/human-classes-normalized.owl', 'data/data-valid/9606.protein.links.v10.5.txt', 'data/data-test/9606.protein.links.v10.5.txt'
@@ -51,9 +52,11 @@ def main(species):
         gamma = 0.1
         margin = 5
         epochs = 800
+
+        
     model = CatEmbeddings(
         ds, 
-        4096*16, #4096*4, #bs 
+        4096*8, #4096*4, #bs 
         embedding_size, #embeddings size
         lr, #lr ##1e-3 yeast, 1e-5 human
         epochs, #epochs
@@ -64,17 +67,19 @@ def main(species):
         gamma = gamma,
         eval_ppi = True,
         sampling = False,
+        size_hom_set = 5,
         nf1 = True,
         nf1_neg = True,
         nf2 = False,
         nf2_neg = False,
-        nf3 = False,
-        nf3_neg = False,
-        nf4 = True,
-        nf4_neg = True,
+        nf3 = True,
+        nf3_neg = True,
+        nf4 = False,
+        nf4_neg = False,
         margin = margin,
         seed = 0,
-        early_stopping = 200000
+        early_stopping = 200000,
+        device = "cpu"
     )
 
     model.train()
