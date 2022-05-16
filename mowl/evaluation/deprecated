@@ -1,0 +1,123 @@
+
+        
+
+        
+class PPIEvaluator(Evaluator):
+
+    """
+    Evaluation model for protein-protein interactions
+  
+    """
+    def __init__(
+            self,
+            embeddings,
+            training_set: list,
+            testing_set: list,
+            mode = "cosine_similarity",
+            device = "cpu",
+    ):
+        super().__init__(embeddings, training_set, testing_set, mode, device)
+       
+        _, self.rels = Edge.getEntitiesAndRelations(training_set)
+        self.rels_dict = {v:k for k,v in enumerate(self.rels)}
+
+        self.training_set = [x.astuple() for x in training_set]
+        self.testing_set = [x.astuple() for x in testing_set]
+       
+        self._data_loaded = False
+        self.mode = mode
+        self.metrics = {}
+        self.device = "cpu" #"cuda" if th.cuda.is_available else "cpu"
+
+    def load_data(self):
+        if self._data_loaded:
+            return
+        self.head_entities = dict() #name -> embedding
+        self.tail_entities = dict()
+        for k, v in self.embeddings.items():
+            if not "4932" in k:
+                continue
+            k = prettyFormat(k)
+            if not k.startswith('<http://purl.obolibrary.org/obo/GO_') and not k.startswith("GO"):
+                self.head_entities[k] = v
+                self.tail_entities[k] = v
+                
+        self.head_entity_names = list(self.head_entities.keys())
+        self.head_entity_name_index = {v:k for k,v in enumerate(self.head_entity_names)} # name -> index
+        self.tail_entity_names = list(self.tail_entities.keys())
+        self.tail_entity_name_index = {v:k for k,v in enumerate(self.tail_entity_names)} # name -> index
+
+
+        print(f"Entities dictionary created. Number of proteins: {len(self.head_entity_names)}.")
+        self.trlabels = np.ones((len(self.head_entity_names), len(self.tail_entity_names)), dtype=np.int32)
+
+        for c,r,d in self.training_set:
+            if c not in self.head_entity_names or d not in self.tail_entity_names: 
+                continue                                                                                            
+
+            c, d =  self.head_entity_name_index[c], self.tail_entity_name_index[d] 
+            
+            self.trlabels[c, d] = 10000
+        print("Training labels created")
+
+
+
+
+class GDAEvaluator(Evaluator):
+
+    """
+    Evaluation model for protein-protein interactions
+  
+    """
+    def __init__(
+            self,
+            embeddings,
+            training_set: list,
+            testing_set: list,
+            mode = "cosine_similarity",
+            device = "cpu",
+    ):
+        super().__init__(embeddings, training_set, testing_set, mode, device)
+       
+        _, self.rels = Edge.getEntitiesAndRelations(training_set)
+        self.rels_dict = {v:k for k,v in enumerate(self.rels)}
+
+        self.training_set = [x.astuple() for x in training_set]
+        self.testing_set = [x.astuple() for x in testing_set]
+       
+        self._data_loaded = False
+        self.mode = mode
+        self.metrics = {}
+        self.device = "cpu" #"cuda" if th.cuda.is_available else "cpu"
+
+    def load_data(self):
+        if self._data_loaded:
+            return
+        self.head_entities = dict() #name -> embedding
+        self.tail_entities = dict()
+        
+        for k, v in self.embeddings.items():
+            k = prettyFormat(k)
+            if k.isnumeric():
+                self.head_entities[k] = v
+            if k.startswith('OMIM:'):
+                self.tail_entities[k] = v
+
+        self.head_entity_names = list(self.head_entities.keys())
+        self.head_entity_name_index = {v:k for k,v in enumerate(self.head_entity_names)} # name -> index
+        self.tail_entity_names = list(self.tail_entities.keys())
+        self.tail_entity_name_index = {v:k for k,v in enumerate(self.tail_entity_names)} # name -> index
+
+
+        print(f"Entities dictionary created. Number of genes: {len(self.head_entity_names)}. Number of diseases: {len(self.head_entity_names)}")
+        self.trlabels = np.ones((len(self.head_entity_names), len(self.tail_entity_names)), dtype=np.int32)
+
+        for c,r,d in self.training_set:
+            if c not in self.head_entity_names or d not in self.tail_entity_names: 
+                continue                                                                                            
+
+            c, d =  self.head_entity_name_index[c], self.tail_entity_name_index[d] 
+            
+            self.trlabels[c, d] = 10000
+        print("Training labels created")
+                                   

@@ -29,14 +29,14 @@ def main(species):
         ds = 'data/data-train/yeast-classes-normalized.owl', 'data/data-valid/4932.protein.links.v10.5.txt', 'data/data-test/4932.protein.links.v10.5.txt'        
  
 
-        lr = 5e-3
-        embedding_size = 100
+        lr = 5e-4
+        embedding_size = 50
 #        milestones = [ 150, 2000, 200112]
 #        milestones = [50, 100, 150, 400,  6000, 20001001] #only_nf4
         gamma = 0.3
 #        milestones = [150, 250, 450, 2000000]
-        milestones = [200, 800, 2000, 70999870]
-        margin = 10
+        milestones = [50, 200, 800, 2000, 70993]
+        margin = 5
         epochs = 1000
     elif species == "human":
         ds = 'data/data-train/human-classes-normalized.owl', 'data/data-valid/9606.protein.links.v10.5.txt', 'data/data-test/9606.protein.links.v10.5.txt'
@@ -57,12 +57,12 @@ def main(species):
         1000, #num points eval ppi
         milestones,
         dropout = 0,
-        decay = 1e-5,
+        decay = 0,
         gamma = gamma,
         eval_ppi = True,
         sampling = False,
         nf1 = True,
-        nf1_neg = False,
+        nf1_neg = True,
         nf2 = False,
         nf2_neg = False,
         nf3 = False,

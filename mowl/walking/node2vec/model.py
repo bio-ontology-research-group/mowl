@@ -14,7 +14,6 @@ class Node2Vec(WalkingModel):
     :type q: float
     '''
     def __init__(self,
-                 edges,
 		 num_walks,
 		 walk_length,
 		 p,
@@ -23,17 +22,17 @@ class Node2Vec(WalkingModel):
                  workers=1
                  ):
         
-        super().__init__(edges, num_walks, walk_length, outfile, workers) 
+        super().__init__(num_walks, walk_length, outfile, workers) 
 
         self.p = p
         self.q = q
 
-    def walk(self):
+    def walk(self, edges):
 
         edgesJ = ArrayList()
 
-        for edge in self.edges:
-            newEdge = Edge(edge.src(), edge.dst(), edge.weight())
+        for edge in edges:
+            newEdge = Edge(edge.src(), edge.rel(),  edge.dst(), edge.weight())
 
             edgesJ.add(newEdge)
 

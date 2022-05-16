@@ -14,9 +14,7 @@ def exponential_loss(objects, exp_morphisms, emb_up):
     up2down, up2exp, down2exp, up2ant, down2ant, up2cons, down2cons = exp_morphisms
     antecedent, consequent = objects
 
-    if up is None:
-        up = emb_up(th.cat([antecedent, consequent], dim = 1))
-#    exponential = th.relu(consequent - antecedent)
+    up = emb_up(th.cat([antecedent, consequent], dim = 1))
 
     exponential = consequent/(antecedent + 1e-10)
     exponential = exponential.where(exponential > 1, th.tensor(1.0).to(up.device))
@@ -103,7 +101,7 @@ def pullback_loss(objects, morphisms, embed_pullback):
     left, right, end = objects
     left_from_pullback, end_from_left, right_from_pullback, end_from_right = morphisms
 
-    pullback = embed_pullback(left, right)
+    pullback = embed_pullback(th.cat([(left+ right)/2, end], dim = 1))
 
     estim_left = left_from_pullback(pullback)
     estim_end_from_left = end_from_left(left)
@@ -126,22 +124,23 @@ def pullback_loss(objects, morphisms, embed_pullback):
     
 
 
-def existential_loss(objects, pullback_morphisms, nets):
+def existential_loss(objects, product_morphisms, pullback_morphisms, nets):
     
     rel, filler = objects
-    gen_slicer, gen_extra, gen_right, gen_pullback, slicer = nets
+    gen_slicer, gen_extra, gen_right, gen_pullback, slicer_net, embed_bigger_prod = nets
 
-    slicer = gen_slicer(rel, filler)
-    extra = gen_extra(rel, filler)
+    slicer = gen_slicer(th.cat([rel, filler], dim =1 ))
+    extra = gen_extra(th.cat([rel, filler], dim=1))
     left_pullback = (slicer+extra)/2
-    right_pullback = gen_right(rel, filler)
+    right_pullback = gen_right(th.cat([rel, filler], dim=1))
 
     
     loss_pullback = pullback_loss((left_pullback, right_pullback, extra), pullback_morphisms, gen_pullback)
 
 
-    sliced_rel = slicer(th.cat[rel, slicer, extra, right_pullback])
-    sliced_filler = slicer(th.cat[filler, slicer, extra, right_pullback])
+    sliced_rel = slicer_net(th.cat([rel, slicer], dim=1))
+    sliced_filler = slicer_net(th.cat([filler, slicer], dim=1))
 
-    return (sliced_rel + sliced_filler)/2, loss_pullback
+    prod_loss = product_loss((sliced_rel, sliced_filler), product_morphisms, embed_bigger_prod)
+    return (sliced_rel + sliced_filler)/2, loss_pullback + prod_loss
 

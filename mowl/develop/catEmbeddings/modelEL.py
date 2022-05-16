@@ -15,7 +15,8 @@ import pickle as pkl
 import time
 from itertools import chain
 import math
-import mowl.develop.catEmbeddings.losses as L
+import mowl.develop.catEmbeddings.lossesEL as L
+from mowl.develop.catEmbeddings.cat_net import Product, Pullback, Exponential, Existential
 import os
 from mowl.model import Model
 from mowl.graph.taxonomy.model import TaxonomyParser
@@ -737,6 +738,7 @@ class CatModel(nn.Module):
         
         self.dropout = nn.Dropout(dropout)
         self.act = nn.Sigmoid()
+
         self.embed = nn.Embedding(self.num_obj, embedding_size)
         k = math.sqrt(1 / embedding_size)
         nn.init.uniform_(self.embed.weight, -0, 1)
@@ -744,6 +746,12 @@ class CatModel(nn.Module):
         self.embed_rel = nn.Embedding(num_rels, embedding_size)
         k = math.sqrt(1 / embedding_size)
         nn.init.uniform_(self.embed_rel.weight, -0,1)
+
+        self.prod_net = Product(self.embedding_size)
+        self.pullback_net = Pullback(self.embedding_size)
+        self.exp_net = Exponential(self.embedding_size)
+        self.ex_net = Existential(self.embedding_size)
+
 
         # Embedding network for the ontology ojects
         self.net_object = nn.Sequential(
@@ -762,128 +770,11 @@ class CatModel(nn.Module):
 
         )
 
-        # Embedding network for left part of 3rd normal form
-        self.embed_fst = nn.Sequential(
-
-            nn.Linear(3*embedding_size, 2*embedding_size),
-            nn.ReLU(),
-            nn.Linear(2*embedding_size, embedding_size),
-            self.act
-
-        )
-
-        self.embed_snd = nn.Sequential(
-
-            nn.Linear(3*embedding_size, 2*embedding_size),
-            nn.ReLU(),
-            nn.Linear(2*embedding_size, embedding_size),
-            self.act,
-       
-        )
-
-        # Embedding network for up part of exponential diagram
-        self.embed_up = nn.Sequential(
-
-            nn.Linear(2*embedding_size, embedding_size),
-            nn.ReLU(),
-            nn.Linear(embedding_size, embedding_size),
-            self.act
-         
-        )
-
-
-        
-
-        # Morphisms for the exponential diagram
-        self.up2exp = self.create_morphism()
-        self.up2ant = self.create_morphism()
-        self.down2exp = self.create_morphism()
-        self.down2ant = self.create_morphism()
-        self.up2down = self.create_morphism()
-        self.up2cons = self.create_morphism()
-        self.down2cons = self.create_morphism()
-        self.cons2exp = self.create_morphism()
-
-        self.exponential_morphisms = (self.up2down, self.up2exp, self.down2exp, self.up2ant, self.down2ant, self.up2cons, self.down2cons)
-
-        #Product
-
-        # Embedding network for the objects in the exponential diagram
-        self.embed_bigger_prod = nn.Sequential(
-            nn.Linear(2*embedding_size, embedding_size),
-            self.act
-        )
-
-
-        #Morphisms for the product
-        self.big2left = self.create_morphism()
-        self.big2right = self.create_morphism()
-        self.prod2left = self.create_morphism()
-        self.prod2right = self.create_morphism()
-        self.big2prod = self.create_morphism()
-
-        self.product_morphisms = (self.big2prod, self.big2left, self.big2right, self.prod2left, self.prod2right)
-
-
-        # Existential
-        self.pullback2left = self.create_morphism()
-        self.pullback2right = self.create_morphism()
-        self.left2end = self.create_morphism()
-        self.right2end = self.create_morphism()
-
-        self.pullback_morphisms = pullback2left, left2end, pullback2right, right2end
-
-        # Embedding network for existential loss
-        self.embed_slicer = nn.Sequential(
-
-            nn.Linear(2*embedding_size, embedding_size),
-            nn.ReLU(),
-            nn.Linear(embedding_size, embedding_size),
-            self.act
-         
-        )
-
-        self.embed_extra = nn.Sequential(
-
-            nn.Linear(2*embedding_size, embedding_size),
-            nn.ReLU(),
-            nn.Linear(embedding_size, embedding_size),
-            self.act
-         
-        )
-
-        self.embed_right_pullback = nn.Sequential(
-
-            nn.Linear(2*embedding_size, embedding_size),
-            nn.ReLU(),
-            nn.Linear(embedding_size, embedding_size),
-            self.act
-         
-        )
-
-        self.slicer = nn.Sequential(
-
-            nn.Linear(4*embedding_size, 3*embedding_size),
-            nn.ReLU(),
-            nn.Linear(3*embedding_size, 2*embedding_size),
-            nn.ReLU(),
-            nn.Linear(2*embedding_size, embedding_size),
-            nn.ReLU(),
-            nn.Linear(embedding_size, embedding_size),
-            self.act
-         
-        )
-        
-
-        self.exist_nets = self.embed_slicer, self.embed_extra, self.embed_right_pullback, self.slicer
-
-
-
         
         
-    def nf4_loss(self, data):
-        embed_nets = (self.net_object, self.net_rel, self.embed_snd, self.embed_up, self.embed_bigger_prod)
-        return L.nf4_loss(data, self.product_morphisms, self.exponential_morphisms, embed_nets)
+    # def nf4_loss(self, data):
+    #     embed_nets = (self.net_object, self.net_rel, self.embed_snd, self.embed_up, self.embed_big_prod)
+    #     return L.nf4_loss(data, self.pullback_morphisms, self.exponential_morphisms, embed_nets)
 
     def create_morphism(self):
         return Morphism(self.embedding_size)
@@ -900,20 +791,17 @@ class CatModel(nn.Module):
         bs, _ = normal_form.shape
         
         if idx == 1:
-            embed_nets = (self.net_object, self.embed_up)
-            loss = L.nf1_loss(normal_form, self.exponential_morphisms, self.product_morphisms, embed_nets, neg = neg, num_objects = self.num_obj)
+
+            loss = L.nf1_loss(normal_form, self.exp_net, self.prod_net, self.net_object, neg = neg, num_objects = self.num_obj)
 
         elif idx == 2:
-            embed_nets = (self.net_object, self.embed_up, self.embed_bigger_prod)
-            loss = L.nf2_loss(normal_form, self.product_morphisms, self.exponential_morphisms, embed_nets, neg = neg)
+            loss = L.nf2_loss(normal_form, self.exp_net, self.prod_net, self.net_object, neg = neg)
 
         elif idx == 3:
-            embed_nets = (self.net_object, self.net_rel, self.embed_fst, self.embed_up, self.embed_bigger_prod)
-            loss = L.nf3_loss(normal_form, self.product_morphisms, self.exponential_morphisms, embed_nets, neg = neg)
+            loss = L.nf3_loss(normal_form, self.exp_net, self.prod_net, self.pullback_net, self.ex_net, self.net_object, self.net_rel, neg = neg)
 
         elif idx == 4:
-            embed_nets = (self.net_object, self.net_rel, self.embed_snd, self.embed_up, self.embed_bigger_prod)
-            loss = L.nf4_loss(normal_form, self.pullback_morphisms,  self.exponential_morphisms, embed_nets, self.exist_nets, neg = neg, num_objects = self.num_obj)
+            loss = L.nf4_loss(normal_form, self.exp_net, self.prod_net, self.pullback_net, self.ex_net, self.net_object, self.net_rel,  neg = neg, num_objects = self.num_obj)
         else:
             raise ValueError("Invalid index")
             
