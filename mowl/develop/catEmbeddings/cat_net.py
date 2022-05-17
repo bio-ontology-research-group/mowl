@@ -2,10 +2,11 @@ import torch as th
 import torch.nn as nn
 from mowl.develop.catEmbeddings.functor import Functor
 
-def norm_(tensor, dim = None):
+def norm(a,b, dim = 1):
+    tensor = a-b
     return th.linalg.norm(tensor, dim = dim)
 
-def norm(a, b):
+def norm_(a, b):
 
     x = th.sum(a * b, dim=1, keepdims=True)
     return 1- th.sigmoid(x)
@@ -84,9 +85,16 @@ class Existential(nn.Module):
             nn.Linear(embedding_size, embedding_size),
             nn.Tanh()
         )
-        
-    def forward(self, internal, variable):
 
+        self.transform = nn.Sequential(
+            nn.Linear(embedding_size, embedding_size),
+            nn.Sigmoid()
+        )
+        
+    def forward(self, variable, internal):
+
+        var = self.transform(variable)
+        return var + internal
         x = th.cat([variable, internal], dim =1)
         return self.slicing(x)
 

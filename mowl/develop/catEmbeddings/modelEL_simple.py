@@ -111,7 +111,7 @@ class CatEmbeddings(Model):
             proteins = {}
             for k, v in self.classes_index_dict.items():
                 k = str(k)
-                if not k.startswith('<http://purl.obolibrary.org/obo/GO_') and not k.startswith("GO:"):
+                if not k.startswith('http://purl.obolibrary.org/obo/GO_') and not k.startswith("GO:"):
                     proteins[k] = v
             self.prot_index = proteins.values()
             self.prot_dict = {v: k for k, v in enumerate(self.prot_index)}
@@ -681,17 +681,17 @@ class CatModel(nn.Module):
         # Embedding network for the ontology ojects
         self.net_object = nn.Sequential(
             self.embed,
-            nn.Linear(embedding_size, embedding_size),
+            #nn.Linear(embedding_size, embedding_size),
 
-            self.act,
+#            self.act,
 
         )
 
         # Embedding network for the ontology relations
         self.net_rel = nn.Sequential(
             self.embed_rel,
-            nn.Linear(embedding_size, embedding_size),
-            self.act
+ #           nn.Linear(embedding_size, embedding_size),
+  #          self.act
 
         )
 

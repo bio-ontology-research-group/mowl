@@ -96,8 +96,8 @@ def nf3_loss(objects, variable_getter,  exp_net, prod_net, slicing_net, embed_ob
     prod = relations + consequents
     prod_loss = prod_net(relations, antecedents)
 
-    sliced_object = slicing_net(variable, prod)
-    sliced_object = prod
+    sliced_object = slicing_net(antecedents, prod) #changed variable -> antecedents
+    #sliced_object = prod
     #exp_loss = exp_net(antecedents, sliced_object)
     exp_loss = 0
     for layer in exp_net:

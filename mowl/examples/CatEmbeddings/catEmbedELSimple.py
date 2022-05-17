@@ -33,14 +33,14 @@ def main(species):
 
         ds = PPIYeastSlimDataset()
 
-        lr = 5e-1
+        lr = 5e-3
         embedding_size = 80
 #        milestones = [ 150, 2000, 200112]
 #        milestones = [50, 100, 150, 400,  6000, 20001001] #only_nf4
         gamma = 0.3
 #        milestones = [150, 250, 450, 2000000]
         milestones = [50, 200, 800, 2000, 70993]
-        margin = 0.5
+        margin = 5
         epochs = 1000
     elif species == "human":
         ds = 'data/data-train/human-classes-normalized.owl', 'data/data-valid/9606.protein.links.v10.5.txt', 'data/data-test/9606.protein.links.v10.5.txt'
@@ -79,7 +79,7 @@ def main(species):
         margin = margin,
         seed = 0,
         early_stopping = 200000,
-        device = "cpu"
+        device = "cuda"
     )
 
     model.train()
