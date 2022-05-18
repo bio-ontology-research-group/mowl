@@ -27,6 +27,9 @@ from scipy.stats import rankdata
 from mowl.develop.catEmbeddings.evaluate_interactions import evalNF4Loss
 logging.basicConfig(level=logging.DEBUG)
 
+ACT = nn.Sigmoid()
+
+
 class CatEmbeddings(Model):
     def __init__(
             self, 
@@ -123,7 +126,7 @@ class CatEmbeddings(Model):
             print("Generating training labels")
             with ck.progressbar(train_nf4) as bar:
                 for c,r,d in bar:
-                    if r != self.relations["http://interacts_with"]:
+                    if r != self.relations["http://interacts"]:
                         continue
                     c, r, d = c.detach().item(), r.detach().item(), d.detach().item()
 
@@ -660,7 +663,7 @@ class CatModel(nn.Module):
         self.num_obj = num_objects 
         self.size_hom_set = size_hom_set
         self.dropout = nn.Dropout(dropout)
-        self.act = nn.Tanh()
+        self.act = ACT
 
         self.embed = nn.Embedding(self.num_obj, embedding_size)
         k = math.sqrt(1 / embedding_size)
@@ -699,7 +702,7 @@ class CatModel(nn.Module):
             nn.Linear(embedding_size, embedding_size),
             nn.ReLU(),
             nn.Linear(embedding_size, embedding_size),
-            nn.Tanh()
+            ACT
         )
 
     def forward(self, normal_form, idx, neg = False, margin = 0):

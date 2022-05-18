@@ -2,15 +2,21 @@ import torch as th
 import torch.nn as nn
 from mowl.develop.catEmbeddings.functor import Functor
 
+ACT = nn.Sigmoid()
+
+
 def norm(a,b, dim = 1):
     tensor = a-b
-    return th.linalg.norm(tensor, dim = dim)
+    return th.relu(a-b)
+#    return th.linalg.norm(tensor, dim = dim)
 
 def norm_(a, b):
 
     x = th.sum(a * b, dim=1, keepdims=True)
     return 1- th.sigmoid(x)
 
+
+    
 
 def assert_shapes(shapes):
     assert len(set(shapes)) == 1
@@ -27,7 +33,7 @@ class Product(nn.Module):
             nn.Linear(2*embedding_size, embedding_size),
             nn.ReLU(),
             nn.Linear(embedding_size, embedding_size),
-            nn.Tanh()
+            ACT
         )
 
         
@@ -83,7 +89,7 @@ class Existential(nn.Module):
             nn.Linear(2*embedding_size, embedding_size),
             nn.ReLU(),
             nn.Linear(embedding_size, embedding_size),
-            nn.Tanh()
+            ACT
         )
 
         self.transform = nn.Sequential(
