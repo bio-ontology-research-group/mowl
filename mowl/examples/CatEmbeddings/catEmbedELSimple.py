@@ -41,7 +41,7 @@ def main(species):
         gamma = 0.3
 #        milestones = [150, 250, 450, 2000000]
         milestones = [8099999999]
-        margin = 10
+        margin = 2
         epochs = 1000
     elif species == "human":
         ds = 'data/data-train/human-classes-normalized.owl', 'data/data-valid/9606.protein.links.v10.5.txt', 'data/data-test/9606.protein.links.v10.5.txt'

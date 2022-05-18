@@ -45,10 +45,10 @@ def evalNF4Loss(eval_data, prot_dict, prot_index, trlabels, num_prots, preds = N
 
             rank = index[d]
             
-#            first = np.where(index == 1)[0]
-#            last = np.where(index == len(prot_index))[0]
+            #first = np.where(index == 1)[0]
+            #last = np.where(index == len(prot_index))[0]
 
-#            print(f" ({rank},{res[d]}), ({index[first]}, {res[first]}), ({index[last]}, {res[last]}) ")
+            #print(f" ({rank},{res[d]}), ({index[first]}, {res[first]}), ({index[last]}, {res[last]}) ")
 
             # print(1 / 0)
             

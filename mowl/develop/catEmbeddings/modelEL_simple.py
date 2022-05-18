@@ -27,7 +27,7 @@ from scipy.stats import rankdata
 from mowl.develop.catEmbeddings.evaluate_interactions import evalNF4Loss
 logging.basicConfig(level=logging.DEBUG)
 
-ACT = nn.Sigmoid()
+ACT = nn.Tanh() # nn.Sigmoid()
 
 
 class CatEmbeddings(Model):
@@ -337,13 +337,13 @@ class CatEmbeddings(Model):
                 pos_loss = self.model(batch_nf, idx)
                 step_loss = th.mean(pos_loss)
                 if neg:
-                    neg_loss = self.model(batch_nf, idx, neg = True)
+                    neg_loss = th.relu(-self.model(batch_nf, idx, neg = True) + 5) 
                     assert pos_loss.shape == neg_loss.shape, f"{pos_loss.shape}, {neg_loss.shape}"
                     new_margin = margin
  #                   new_margin = margin if th.mean(neg_loss - pos_loss) > margin else 2*th.mean(pos_loss)
 
                     diff_loss = th.mean(th.relu(pos_loss - neg_loss + new_margin))
-                    step_loss += diff_loss
+                    step_loss += th.mean(neg_loss)#step_loss += diff_loss
                     nf_neg_loss += th.mean(neg_loss).detach().item()
                     nf_diff_loss += diff_loss.detach().item()
 
@@ -441,7 +441,8 @@ class CatEmbeddings(Model):
         print(f"nf3: {nf3_diff_loss}, \tnf3p: {nf3_pos_loss}, \tnf3n: {nf3_neg_loss}")
         print(f"nf4: {nf4_diff_loss}, \tnf4p: {nf4_pos_loss}, \tnf4n: {nf4_neg_loss}")
       
-        return  nf1_pos_loss + nf1_diff_loss+ nf2_pos_loss + nf2_diff_loss + nf3_pos_loss + nf3_diff_loss + nf4_pos_loss + nf4_diff_loss
+        #        return  nf1_pos_loss + nf1_diff_loss+ nf2_pos_loss + nf2_diff_loss + nf3_pos_loss + nf3_diff_loss + nf4_pos_loss + nf4_diff_loss
+        return  nf1_pos_loss + nf1_neg_loss+ nf2_pos_loss + nf2_neg_loss + nf3_pos_loss + nf3_neg_loss + nf4_pos_loss + nf4_neg_loss
 
 
     def forward_step_sampling(self,
@@ -667,11 +668,11 @@ class CatModel(nn.Module):
 
         self.embed = nn.Embedding(self.num_obj, embedding_size)
         k = math.sqrt(1 / embedding_size)
-        nn.init.uniform_(self.embed.weight, -k, k)
+        nn.init.uniform_(self.embed.weight, -0, 1)
 
         self.embed_rel = nn.Embedding(num_rels, embedding_size)
         k = math.sqrt(1 / embedding_size)
-        nn.init.uniform_(self.embed_rel.weight, -k,k)
+        nn.init.uniform_(self.embed_rel.weight, -0,1)
 
         self.prod_net = Product(self.embedding_size)
         self.exp_net = nn.ModuleList()
@@ -684,17 +685,17 @@ class CatModel(nn.Module):
         # Embedding network for the ontology ojects
         self.net_object = nn.Sequential(
             self.embed,
-            #nn.Linear(embedding_size, embedding_size),
+            nn.Linear(embedding_size, embedding_size),
 
-#            self.act,
+            ACT,
 
         )
 
         # Embedding network for the ontology relations
         self.net_rel = nn.Sequential(
             self.embed_rel,
- #           nn.Linear(embedding_size, embedding_size),
-  #          self.act
+            nn.Linear(embedding_size, embedding_size),
+            ACT
 
         )
 

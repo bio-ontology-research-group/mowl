@@ -2,13 +2,15 @@ import torch as th
 import torch.nn as nn
 from mowl.develop.catEmbeddings.functor import Functor
 
-ACT = nn.Sigmoid()
+ACT = nn.Tanh() #nn.Sigmoid()
 
 
 def norm(a,b, dim = 1):
-    tensor = a-b
-    return th.relu(a-b)
-#    return th.linalg.norm(tensor, dim = dim)
+    #normA = th.linalg.norm(a, dim = dim)
+    #normB = th.linalg.norm(b, dim = dim)
+    #tensor = normA - normB
+#    return th.relu(tensor + 5)
+    return th.linalg.norm(a-b, dim = dim)
 
 def norm_(a, b):
 
@@ -94,13 +96,13 @@ class Existential(nn.Module):
 
         self.transform = nn.Sequential(
             nn.Linear(embedding_size, embedding_size),
-            nn.Sigmoid()
+            ACT
         )
         
     def forward(self, variable, internal):
 
-        var = self.transform(variable)
-        return var + internal
+    #    var = self.transform(variable)
+    #    return var + internal
         x = th.cat([variable, internal], dim =1)
         return self.slicing(x)
 
