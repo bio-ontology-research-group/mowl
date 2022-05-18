@@ -15,6 +15,7 @@ sys.path.append('../../../')
 import mowl
 mowl.init_jvm("10g")
 
+from mowl.datasets.base import PathDataset
 from mowl.datasets.ppi_yeast import PPIYeastSlimDataset, PPIYeastDataset
 #from mowl.develop.catEmbeddings.modelWithFeats import CatEmbeddings
 from mowl.develop.catEmbeddings.modelEL_simple import CatEmbeddings
@@ -29,22 +30,22 @@ def main(species):
     logging.info(f"Number of cores detected: {os.cpu_count()}")
 
     if species == "yeast":
-        ds = 'data/data-train/yeast-classes-normalized.owl', 'data/data-valid/4932.protein.links.v10.5.txt', 'data/data-test/4932.protein.links.v10.5.txt'        
+#        ds = 'data/data-train/yeast-classes-normalized.owl', 'data/data-valid/4932.protein.links.v10.5.txt', 'data/data-test/4932.protein.links.v10.5.txt'        
 
-        ds = PPIYeastSlimDataset()
-
+#        ds = PPIYeastSlimDataset()
+        ds = PathDataset("data_old/yeast-classes.owl", "data_old/valid.owl", "data_old/test.owl")
         lr = 5e-3
-        embedding_size = 80
+        embedding_size = 50
 #        milestones = [ 150, 2000, 200112]
 #        milestones = [50, 100, 150, 400,  6000, 20001001] #only_nf4
         gamma = 0.3
 #        milestones = [150, 250, 450, 2000000]
-        milestones = [50, 200, 800, 2000, 70993]
-        margin = 5
+        milestones = [8099999999]
+        margin = 10
         epochs = 1000
     elif species == "human":
         ds = 'data/data-train/human-classes-normalized.owl', 'data/data-valid/9606.protein.links.v10.5.txt', 'data/data-test/9606.protein.links.v10.5.txt'
-        lr = 5e-3
+        lr = 5e-2
         embedding_size =100
         milestones = [150, 200001111] #only_nf4
 #        milestones = [150, 2000002]
