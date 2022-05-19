@@ -86,7 +86,7 @@ def nf3_loss(objects, variable_getter,  exp_net, prod_net, slicing_net, embed_ob
     relations = embed_rels(objects[:, 1])
     consequents = embed_objects(objects[:, 2])
 
-    variable = variable_getter(antecedents)
+#    variable = variable_getter(antecedents)
 
     if neg:
         negs = th.tensor(np.random.choice(num_objects, size = len(objects))).to(device)
@@ -100,8 +100,6 @@ def nf3_loss(objects, variable_getter,  exp_net, prod_net, slicing_net, embed_ob
 #    sliced_object = prod
     #exp_loss = exp_net(antecedents, sliced_object)y
 
-    if neg:
-        antecedents, sliced_object = sliced_object, antecedents
     exp_loss = 0
     for layer in exp_net:
         exp_loss += layer(antecedents, sliced_object)

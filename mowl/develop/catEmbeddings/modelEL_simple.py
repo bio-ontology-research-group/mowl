@@ -538,9 +538,9 @@ class CatEmbeddings(Model):
 
         self.run_and_save_predictions(self.model)
 
-        _, _, _, test_nf4 = self.test_nfs
+        _, _, test_nf3, _ = self.test_nfs
 
-        test_nfs = test_nf4#[index]
+        test_nfs = test_nf3#[index]
         print(f"Device: {self.device}")
 
         evalNF4Loss(test_nfs, self.prot_dict, self.prot_index, self.trlabels, len(self.prot_index), device= self.device, show = True, preds_file =  self.predictions_file, labels_file = self.labels_file )
@@ -668,11 +668,11 @@ class CatModel(nn.Module):
 
         self.embed = nn.Embedding(self.num_obj, embedding_size)
         k = math.sqrt(1 / embedding_size)
-        nn.init.uniform_(self.embed.weight, -0, 1)
+        nn.init.uniform_(self.embed.weight, -k, k)
 
         self.embed_rel = nn.Embedding(num_rels, embedding_size)
         k = math.sqrt(1 / embedding_size)
-        nn.init.uniform_(self.embed_rel.weight, -0,1)
+        nn.init.uniform_(self.embed_rel.weight, -k,k)
 
         self.prod_net = Product(self.embedding_size)
         self.exp_net = nn.ModuleList()
@@ -685,17 +685,17 @@ class CatModel(nn.Module):
         # Embedding network for the ontology ojects
         self.net_object = nn.Sequential(
             self.embed,
-            nn.Linear(embedding_size, embedding_size),
+#            nn.Linear(embedding_size, embedding_size),
 
-            ACT,
+#            ACT,
 
         )
 
         # Embedding network for the ontology relations
         self.net_rel = nn.Sequential(
             self.embed_rel,
-            nn.Linear(embedding_size, embedding_size),
-            ACT
+ #           nn.Linear(embedding_size, embedding_size),
+ #           ACT
 
         )
 

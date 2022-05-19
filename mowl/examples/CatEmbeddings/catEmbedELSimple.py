@@ -35,14 +35,15 @@ def main(species):
 #        ds = PPIYeastSlimDataset()
         ds = PathDataset("data_old/yeast-classes.owl", "data_old/valid.owl", "data_old/test.owl")
         lr = 5e-3
-        embedding_size = 50
+        embedding_size = 100
 #        milestones = [ 150, 2000, 200112]
 #        milestones = [50, 100, 150, 400,  6000, 20001001] #only_nf4
         gamma = 0.3
 #        milestones = [150, 250, 450, 2000000]
         milestones = [8099999999]
         margin = 2
-        epochs = 1000
+        epochs = 100
+
     elif species == "human":
         ds = 'data/data-train/human-classes-normalized.owl', 'data/data-valid/9606.protein.links.v10.5.txt', 'data/data-test/9606.protein.links.v10.5.txt'
         lr = 5e-2
@@ -66,7 +67,7 @@ def main(species):
         dropout = 0,
         decay = 0,
         gamma = gamma,
-        eval_ppi = True,
+        eval_ppi = False,
         sampling = False,
         size_hom_set = 5,
         nf1 = True,
