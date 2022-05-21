@@ -2,14 +2,14 @@ import torch as th
 import torch.nn as nn
 from mowl.develop.catEmbeddings.functor import Functor
 
-ACT = nn.Tanh() #nn.Sigmoid()
+ACT = nn.Sigmoid()
 
 
 def norm(a,b, dim = 1):
-    #normA = th.linalg.norm(a, dim = dim)
-    #normB = th.linalg.norm(b, dim = dim)
-    #tensor = normA - normB
-#    return th.relu(tensor + 5)
+    normA = th.linalg.norm(a, dim = dim)
+    normB = th.linalg.norm(b, dim = dim)
+    tensor = normA - normB
+    return th.relu(tensor + 1)
     return th.linalg.norm(a-b, dim = dim)
 
 def norm_(a, b):
@@ -71,7 +71,7 @@ class EntailmentMorphism(nn.Module):
 
         
         self.entails = nn.Linear(embedding_size, embedding_size)
-        self.dropout = nn.Dropout(0.3)
+        self.dropout = nn.Dropout(0.5)
 
     def forward(self, antecedent, consequent):
         

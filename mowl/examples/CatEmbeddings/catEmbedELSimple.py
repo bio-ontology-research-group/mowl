@@ -34,15 +34,15 @@ def main(species):
 
 #        ds = PPIYeastSlimDataset()
         ds = PathDataset("data_old/yeast-classes.owl", "data_old/valid.owl", "data_old/test.owl")
-        lr = 5e-3
+        lr = 5e-2
         embedding_size = 100
-#        milestones = [ 150, 2000, 200112]
+
 #        milestones = [50, 100, 150, 400,  6000, 20001001] #only_nf4
-        gamma = 0.3
-#        milestones = [150, 250, 450, 2000000]
-        milestones = [8099999999]
+        gamma = 0.1
+        milestones = [50, 150, 250, 450, 550,  20000011]
+#        milestones = [8099999999]
         margin = 2
-        epochs = 100
+        epochs = 600
 
     elif species == "human":
         ds = 'data/data-train/human-classes-normalized.owl', 'data/data-valid/9606.protein.links.v10.5.txt', 'data/data-test/9606.protein.links.v10.5.txt'
@@ -58,7 +58,7 @@ def main(species):
         
     model = CatEmbeddings(
         ds, 
-        4096*8, #4096*4, #bs 
+        4096*64, #4096*4, #bs 
         embedding_size, #embeddings size
         lr, #lr ##1e-3 yeast, 1e-5 human
         epochs, #epochs
@@ -67,21 +67,21 @@ def main(species):
         dropout = 0,
         decay = 0,
         gamma = gamma,
-        eval_ppi = False,
+        eval_ppi = True,
         sampling = False,
         size_hom_set = 5,
         nf1 = True,
         nf1_neg = True,
-        nf2 = False,
+        nf2 = True,
         nf2_neg = False,
         nf3 = True,
         nf3_neg = True,
-        nf4 = False,
+        nf4 = True,
         nf4_neg = False,
         margin = margin,
         seed = 0,
         early_stopping = 200000,
-        device = "cuda"
+        device = "cuda:0"
     )
 
     model.train()

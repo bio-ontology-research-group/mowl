@@ -19,12 +19,12 @@ def nf1_loss(objects, exponential_net,  embed_objects, neg = False,  num_objects
         for layer in exponential_net:
             neg_loss_1 += layer(consequents, antecedents)
 
-        neg_loss_2 = 0
-        for layer in exponential_net:
-            neg_loss_2 += layer(antecedents, embed_negs)
+#        neg_loss_2 = 0
+#        for layer in exponential_net:
+#            neg_loss_2 += layer(antecedents, embed_negs)
             
-        neg_loss = sum([neg_loss_1, neg_loss_2])/2
-        return neg_loss
+#        neg_loss = sum([neg_loss_1, neg_loss_2])/2
+        return neg_loss_1
                                         
     else:
         #loss = exponential_net(antecedents, consequents)
@@ -46,13 +46,16 @@ def nf2_loss(objects, exp_net, prod_net, embed_objects, neg = False):
     if neg:
         antecedents = [antecedents_left, antecedents_right]
         random.shuffle(antecedents)
-        prod, prod_loss = prod_net(antecedents[0], consequents)
-        exp_loss = exp_net(prod, antecedents[1], prod_net)
+        prod_loss = prod_net(antecedents[0], consequents)
+        exp_loss = exp_net(prod, antecedents[1])
 
     else:
         prod_loss = prod_net(antecedents_left, antecedents_right)
         prod = antecedents_left + antecedents_right
-        exp_loss = L.exponential_loss(prod, consequents, prod_net)
+        exp_loss = 0
+
+        for layer in exp_net:
+            exp_loss += layer(prod, consequents)
 
     return prod_loss + exp_loss
 
@@ -66,7 +69,7 @@ def nf4_loss(objects, variable_getter, exp_net, prod_net, slicing_net, embed_obj
     antecedents = embed_objects(objects[:, 1])
     consequents = embed_objects(objects[:, 2])
 
-    variable = variable_getter(consequents)
+#    variable = variable_getter(consequents)
     
     if neg:
         prod_loss = 0
@@ -75,8 +78,11 @@ def nf4_loss(objects, variable_getter, exp_net, prod_net, slicing_net, embed_obj
         prod = relations + antecedents
         prod_loss = prod_net(relations, antecedents)
 
-        sliced_object = slicing_net(variable, prod)
-        exp_loss = exp_net(sliced_object, consequents)
+        sliced_object = slicing_net(consequents, prod)
+
+        exp_loss = 0
+        for layer in exp_net:
+            exp_loss += layer(sliced_object, consequents)
 
     return prod_loss + exp_loss
 

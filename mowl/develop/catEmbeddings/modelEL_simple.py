@@ -27,7 +27,7 @@ from scipy.stats import rankdata
 from mowl.develop.catEmbeddings.evaluate_interactions import evalNF4Loss
 logging.basicConfig(level=logging.DEBUG)
 
-ACT = nn.Tanh() # nn.Sigmoid()
+ACT = nn.Sigmoid()
 
 
 class CatEmbeddings(Model):
@@ -138,6 +138,10 @@ class CatEmbeddings(Model):
                     self.trlabels[c, d] = 1000
                 print("trlabels created")
 
+        self.train_nfs = tuple(map(lambda x: x.to(device), self.train_nfs))
+        
+        self.num_classes = len(self.classes_index_dict)
+        self.num_rels = len(self.relations)
 
         
 
@@ -151,10 +155,6 @@ class CatEmbeddings(Model):
         if not self.sampling:
             self.create_dataloaders(device = device)
 
-        self.train_nfs = tuple(map(lambda x: x.to(device), self.train_nfs))
-        
-        self.num_classes = len(self.classes_index_dict)
-        self.num_rels = len(self.relations)
         
         self.model = CatModel(self.num_classes, self.num_rels, self.size_hom_set, self.embedding_size, dropout = self.dropout)
         th.save(self.model.state_dict(), self.model_filepath)
@@ -241,17 +241,17 @@ class CatEmbeddings(Model):
             else:
                 best_val_loss = val_loss
                 valid_early_stopping = stop_value
-                if not self.eval_ppi:
+                if not self.eval_ppi or True: #dummy condition
                     th.save(self.model.state_dict(), self.model_filepath)
 
-            if self.eval_ppi:
+            if self.eval_ppi and epoch % 10 == 0:
                 top1, top10, top100, top1000, mean_rank, ftop1, ftop10, ftop100, fmean_rank = self.evaluate_ppi_valid()
 
                 if best_mean_rank >= mean_rank:
                     best_mean_rank = mean_rank
-                    th.save(self.model.state_dict(), self.model_filepath)
+#                    th.save(self.model.state_dict(), self.model_filepath)
             print(f'Epoch {epoch}: Loss - {train_loss:.6}, \tVal loss - {val_loss:.6}')
-            if self.eval_ppi:
+            if self.eval_ppi and epoch % 10 == 0:
                 print(f' MR - {mean_rank}, \tT10 - {top10},\tT100 - {top100}, \tT1000 - {top1000}')
                 print(f'FMR - {fmean_rank}, \tT10 - {ftop10},\tT100 - {ftop100}')
             print("\n\n")
@@ -275,9 +275,9 @@ class CatEmbeddings(Model):
             logging.info("No data points specified. Proceeding to compute predictions on test set")
             model.load_state_dict(th.load( self.model_filepath))
             model = model.to(device)
-            _, _, _, test_nf4 = self.test_nfs
+            _, _, test_nf3, _ = self.test_nfs
 
-            eval_data = test_nf4
+            eval_data = test_nf3
 
         else:
             eval_data = samples
@@ -328,16 +328,16 @@ class CatEmbeddings(Model):
         
 
     def forward_nf(self, nf, idx, margin, pos, neg, train = True):
-        nf_pos_loss = 0
-        nf_neg_loss = 0
-        nf_diff_loss = 0
+        nf_pos_loss = 0.0
+        nf_neg_loss = 0.0
+        nf_diff_loss = 0.0
         if pos:
             i = 0
             for i, batch_nf in enumerate(nf):
                 pos_loss = self.model(batch_nf, idx)
                 step_loss = th.mean(pos_loss)
                 if neg:
-                    neg_loss = th.relu(-self.model(batch_nf, idx, neg = True) + 5) 
+                    neg_loss = th.relu(-self.model(batch_nf, idx, neg = True) + 15) 
                     assert pos_loss.shape == neg_loss.shape, f"{pos_loss.shape}, {neg_loss.shape}"
                     new_margin = margin
  #                   new_margin = margin if th.mean(neg_loss - pos_loss) > margin else 2*th.mean(pos_loss)
@@ -436,10 +436,10 @@ class CatEmbeddings(Model):
         nf3_diff_loss *= nb_nf3/total
         nf4_diff_loss *= nb_nf4/total
 
-        print(f"nf1: {nf1_diff_loss}, \tnf1p: {nf1_pos_loss}, \tnf1n: {nf1_neg_loss}")
-        print(f"nf2: {nf2_diff_loss}, \tnf2p: {nf2_pos_loss}, \tnf2n: {nf2_neg_loss}")
-        print(f"nf3: {nf3_diff_loss}, \tnf3p: {nf3_pos_loss}, \tnf3n: {nf3_neg_loss}")
-        print(f"nf4: {nf4_diff_loss}, \tnf4p: {nf4_pos_loss}, \tnf4n: {nf4_neg_loss}")
+        print(f"nf1: {nf1_diff_loss:.6}, \tnf1p: {nf1_pos_loss:.6}, \tnf1n: {nf1_neg_loss:.6}")
+        print(f"nf2: {nf2_diff_loss:.6}, \tnf2p: {nf2_pos_loss:.6}, \tnf2n: {nf2_neg_loss:.6}")
+        print(f"nf3: {nf3_diff_loss:.6}, \tnf3p: {nf3_pos_loss:.6}, \tnf3n: {nf3_neg_loss:.6}")
+        print(f"nf4: {nf4_diff_loss:.6}, \tnf4p: {nf4_pos_loss:.6}, \tnf4n: {nf4_neg_loss:.6}")
       
         #        return  nf1_pos_loss + nf1_diff_loss+ nf2_pos_loss + nf2_diff_loss + nf3_pos_loss + nf3_diff_loss + nf4_pos_loss + nf4_diff_loss
         return  nf1_pos_loss + nf1_neg_loss+ nf2_pos_loss + nf2_neg_loss + nf3_pos_loss + nf3_neg_loss + nf4_pos_loss + nf4_neg_loss
@@ -535,7 +535,9 @@ class CatEmbeddings(Model):
         return results
 
     def evaluate_ppi(self):
-
+        self.model = CatModel(self.num_classes, self.num_rels, self.size_hom_set, self.embedding_size, dropout = self.dropout)
+        self.model.load_state_dict(th.load(self.model_filepath))
+        
         self.run_and_save_predictions(self.model)
 
         _, _, test_nf3, _ = self.test_nfs
@@ -668,11 +670,11 @@ class CatModel(nn.Module):
 
         self.embed = nn.Embedding(self.num_obj, embedding_size)
         k = math.sqrt(1 / embedding_size)
-        nn.init.uniform_(self.embed.weight, -k, k)
+        nn.init.uniform_(self.embed.weight, -0, 1)
 
         self.embed_rel = nn.Embedding(num_rels, embedding_size)
         k = math.sqrt(1 / embedding_size)
-        nn.init.uniform_(self.embed_rel.weight, -k,k)
+        nn.init.uniform_(self.embed_rel.weight, -0, 1)
 
         self.prod_net = Product(self.embedding_size)
         self.exp_net = nn.ModuleList()
