@@ -5,14 +5,14 @@ from mowl.develop.catEmbeddings.functor import Functor
 ACT = nn.Sigmoid()
 
 
-def norm(a,b, dim = 1):
-    normA = th.linalg.norm(a, dim = dim)
-    normB = th.linalg.norm(b, dim = dim)
-    tensor = normA - normB
-    return th.relu(tensor + 1)
+def norm_(a,b, dim = 1):
+#    normA = th.linalg.norm(a, dim = dim)
+#    normB = th.linalg.norm(b, dim = dim)
+#    tensor = normA - normB
+#    return th.relu(tensor + 1)
     return th.linalg.norm(a-b, dim = dim)
 
-def norm_(a, b):
+def norm(a, b):
 
     x = th.sum(a * b, dim=1, keepdims=True)
     return 1- th.sigmoid(x)
