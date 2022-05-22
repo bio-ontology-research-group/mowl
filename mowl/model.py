@@ -22,8 +22,8 @@ class EmbeddingModel(Model):
 
     def __init__(self, dataset):
         super().__init__(dataset)
-
-
+        
+        
     def get_entities_index_dict(self):
         return self.class_index_dict, self.relation_index_dict
         

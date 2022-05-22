@@ -1,7 +1,7 @@
 from mowl.model import EmbeddingModel
 
-from mowl.graph.factory import parser_factory
-from mowl.graph.edge import Edge
+from mowl.projection.factory import projector_factory
+from mowl.projection.edge import Edge
 
 #PyKEEN imports
 from pykeen.triples import CoreTriplesFactory
@@ -20,7 +20,7 @@ class TranslationalOnt():
 
     '''
     :param edges: List of edges
-    :type edges: mowl.graph.edge.Edge
+    :type edges: mowl.projection.edge.Edge
     :param trans_method: Translational model. Choices are: "transE", "transH", "transR", "transD".
     :type trans_method: str
     :param embedding_dim: Dimension of embedding for each node
@@ -44,6 +44,7 @@ class TranslationalOnt():
         self.batch_size = batch_size
 
         self.model = None
+        self._trained = False
         
     def train(self):
 
@@ -68,7 +69,15 @@ class TranslationalOnt():
         training_loop = SLCWATrainingLoop(model=self.model, triples_factory=triples_factory, optimizer=optimizer)
 
         _ = training_loop.train(triples_factory=triples_factory, num_epochs=self.epochs, batch_size=self.batch_size)
+        self._trained = True
 
+    def get_embeddings(self):
+        if not self._trained:
+            raise ValueError("Model has not been trained yet")
+
+        embeddings = self.model.entity_representations[0](indices = None).cpu().detach().numpy()
+        embeddings = {item[0]: embeddings[item[1]] for item in self.entities_idx.items()}
+        return embeddings
 
     def trans_factory(self, method_name, triples_factory, embedding_dim):
         methods = {
