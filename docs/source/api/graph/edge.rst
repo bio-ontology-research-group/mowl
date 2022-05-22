@@ -1,7 +1,7 @@
 Edge
 -----
 
-.. autoclass:: mowl.graph.edge.Edge
+.. autoclass:: mowl.projection.edge.Edge
    :private-members:
    :members:
    :noindex:

@@ -28,7 +28,7 @@ from torch import nn
 class ELEmbeddings(EmbeddingModel):
 
 
-    def __init__(self, dataset, embed_dim=50, margin=0, reg_norm=1, learning_rate=0.001, epochs=1000, device = 'cpu'):
+    def __init__(self, dataset, embed_dim=50, margin=0, reg_norm=1, learning_rate=0.001, epochs=1000, model_filepath = None, device = 'cpu'):
         super().__init__(dataset)
 
 
@@ -38,7 +38,7 @@ class ELEmbeddings(EmbeddingModel):
         self.learning_rate = learning_rate
         self.epochs = epochs
         self.device = device
-        self.model_filepath = "data/model.th"
+        self.model_filepath = model_filepath
         self.short_form_provider = SimpleShortFormProvider()
         self._loaded = False
         self._loaded_eval = False
@@ -67,6 +67,28 @@ class ELEmbeddings(EmbeddingModel):
         self._loaded_eval = True
         
 
+    @property
+    def training_set(self):
+        self.load_eval_data()
+        return self._training_set
+
+
+    @property
+    def testing_set(self):
+        self.load_eval_data()
+        return self._testing_set
+
+    @property
+    def head_entities(self):
+        self.load_eval_data()
+        return self._head_entities
+
+    @property
+    def tail_entities(self):
+        self.load_eval_data()
+        return self._tail_entities
+
+        
     
     def load_data(self):
         if self._loaded:

@@ -36,7 +36,7 @@ The OWL2Vec* graph follows the rules described in the paper `OWL2Vec*: embedding
 
 
 
-.. automodule:: mowl.graph.owl2vec_star.model
+.. automodule:: mowl.projection.owl2vec_star.model
    :members:
    :noindex:
    :show-inheritance:

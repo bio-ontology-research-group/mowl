@@ -22,7 +22,7 @@ The DL2Vec graph follows the rules described in the paper `Predicting candidate 
 
 
 
-.. automodule:: mowl.graph.dl2vec.model
+.. automodule:: mowl.projection.dl2vec.model
    :members:
    :noindex:
    :show-inheritance:
