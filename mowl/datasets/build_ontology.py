@@ -46,7 +46,7 @@ def insert_annotations(ontology_file, annotations, out_file = None, verbose=Fals
 
     for annots_file, relation_name, prefix in annotations:
         prefix_in_document = False
-        relation = factory.getOWLObjectProperty(IRI.create(f"{PREFIXES['default']}{relation_name}"))
+        relation = factory.getOWLObjectProperty(IRI.create(f"{relation_name}"))
 
         if prefix is None:
             prefix_in_document = True
@@ -59,7 +59,7 @@ def insert_annotations(ontology_file, annotations, out_file = None, verbose=Fals
             for line in f:
                 items = line.strip().split("\t")
                 annotating_entity = items[0]
-                annotating_entity = factory.getOWLClass(IRI.create(f"{PREFIXES['default']}{annotating_entity}"))
+                annotating_entity = factory.getOWLClass(IRI.create(f"{annotating_entity}"))
 
                 for ont_id in items[1:]:
                     if not prefix_in_document:
