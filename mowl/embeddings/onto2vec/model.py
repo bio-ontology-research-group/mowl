@@ -5,7 +5,7 @@ from scipy.stats import rankdata
 
 from mowl.model import Model
 from mowl.reasoning.base import MOWLReasoner
-from mowl.corpus import extract_axiom_corpus
+from mowl.corpus.base import extract_axiom_corpus
 from jpype.types import *
 
 from org.semanticweb.owlapi.model import AxiomType

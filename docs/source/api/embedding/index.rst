@@ -2,6 +2,7 @@ Embedding Ontologies
 =====================
 
 * :doc:`graph_based/index`
+* :doc:`translational/index`
 * :doc:`syntactic/index`
 * :doc:`semantic/index`
 
@@ -13,5 +14,6 @@ Embedding Ontologies
    :glob:
 
    graph_based/index
+   translational/index
    syntactic/index
    semantic/index

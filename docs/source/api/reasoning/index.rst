@@ -7,7 +7,7 @@ Reasoning over ontologies
    :show-inheritance:
 
 EL Normalization
-----------
+-------------------
 
 .. automodule:: mowl.reasoning.normalize
    :members:
