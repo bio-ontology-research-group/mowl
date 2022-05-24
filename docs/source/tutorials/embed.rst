@@ -69,7 +69,38 @@ The walks are saved in the specified filepath. After generating the walks, one u
    vectors = w2v_model.wv
 
 
+Translational embeddings
+--------------------------
 
+Translational embeddings were designed to embed knowedge graphs. Since we can generate a graph representation of an ontology we can also perform translational embeddings.
+
+To provide translational embedding methods in mOWL, we rely on `PyKEEN <https://github.com/pykeen/pykeen>`_, which contains efficient implementations of those methods.
+
+
+After generating a set of `edges`, we can call a translational method in the following way:
+
+.. code:: python
+
+   from mowl.embeddings.translational.model import TranslationalOnt
+
+   trans_model = TranslationalOnt(
+        edges,
+        trans_method = "transE",
+        embedding_dim = 50
+        epochs = 20,
+        batch_size = 32
+    )
+
+    trans_model.train()
+    embeddings = transMethod.get_embeddings()
+
+.. note::
+
+   Notice the parameter ``trans_method`` is set to ``transE``. There are other 3 options: ``transH``, ``transR``, ``transD``, each of which corresponds to different variations of translational methods.
+
+   
+ 
+   
 Syntactic embeddings
 ------------------------
 
@@ -142,3 +173,29 @@ with
 
 
 To add annotation textual information to the corpus.
+
+
+
+
+Semantic embedddings
+----------------------
+
+This type of embeddings are generated with models designed to capture the semantics of the ontology axioms.
+
+
+One example of this models is `EL Embeddings <https://www.ijcai.org/Proceedings/2019/845>`_. To use this method we can write the following code:
+
+.. code:: python
+
+   from mowl.embeddings.elembeddings.model import ELEmbeddings
+
+   model = ELEmbeddings(
+        dataset,
+        epochs = 1000,
+        margin = 0.1,
+        model_filepath = "model.th"
+    )
+
+   model.train()
+
+   embeddings = model.get_embeddings()
