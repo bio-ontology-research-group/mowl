@@ -19,7 +19,7 @@ Let's use the built-in dataset ``PPIYeastSlimDataset``
    dataset = PPIYeastSlimDataset()
 
 
-For projecting the ontology, mOWL provides different :doc:`ontology parsing methods <../api/graph/index>`. In this case let's use DL2Vec projection method, which can be imported and defined in two different ways:
+For projecting the ontology, mOWL provides different :doc:`ontology parsing methods <../api/projection/index>`. In this case let's use DL2Vec projection method, which can be imported and defined in two different ways:
 
 The first way is calling the ``DL2VecParser`` class directly:
 

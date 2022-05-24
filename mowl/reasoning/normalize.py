@@ -12,12 +12,21 @@ import logging
 logging.basicConfig(level = logging.INFO)
 
 class ELNormalizer():
-    
+
+    """This class wraps the normalization functionality found in the Java library :class:`Jcel`. The normalization process transforms an ontology into 4 normal forms in the description logic EL language.
+    """
     
     def __init__(self):
         return
 
     def normalize(self, ontology):
+
+        """Performs the normalization.
+        :param ontology: Input ontology
+        :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
+
+        :rtype: Dictionary where the keys are labels for each normal form and the values are a list of axioms of each normal form.
+        """
 
         jreasoner = JcelReasoner(ontology, False)
         root_ont = jreasoner.getRootOntology()

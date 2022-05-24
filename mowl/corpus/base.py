@@ -12,21 +12,37 @@ import logging
 
 def extract_axiom_corpus(ontology, out_file):
 
-        logging.info("Generating axioms corpus")
-        renderer = ManchesterOWLSyntaxOWLObjectRendererImpl()
-        shortFormProvider = MOWLShortFormProvider()
-        renderer.setShortFormProvider(shortFormProvider)
-        with open(out_file, 'w') as f:
-            for owl_class in ontology.getClassesInSignature():
-                axioms = ontology.getAxioms(owl_class)
-                for axiom in axioms:
-                    rax = renderer.render(axiom)
-                    rax = rax.replaceAll(JString("[\\r\\n|\\r|\\n()|<|>]"), JString(""))
-                    f.write(f'{rax}\n')
+    """This method generates a textual representation of the axioms in an ontology following the Manchester Syntax.
+
+    :param ontology: Input ontology
+    :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
+    :param out_file: Path of the file where the corpus will be saved.
+    :type out_file: str
+    """
+
+    logging.info("Generating axioms corpus")
+    renderer = ManchesterOWLSyntaxOWLObjectRendererImpl()
+    shortFormProvider = MOWLShortFormProvider()
+    renderer.setShortFormProvider(shortFormProvider)
+    with open(out_file, 'w') as f:
+        for owl_class in ontology.getClassesInSignature():
+            axioms = ontology.getAxioms(owl_class)
+            for axiom in axioms:
+                rax = renderer.render(axiom)
+                rax = rax.replaceAll(JString("[\\r\\n|\\r|\\n()|<|>]"), JString(""))
+                f.write(f'{rax}\n')
     
 
 
 def extract_annotation_corpus(ontology, out_file, mode = "append"):
+
+    """This method generates a textual representation of the annotation axioms in an ontology following the Manchester Syntax.
+
+        :param ontology: Input ontology
+        :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
+        :param out_file: Path of the file where the corpus will be saved.
+        :type out_file: str
+    """
 
     if mode == "append":
         mode = "a"

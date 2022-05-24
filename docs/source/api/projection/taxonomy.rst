@@ -1,7 +1,7 @@
 Subclass Hierarchy
 ---------------------
 
-.. autoclass:: mowl.projection.taxonomy.model.TaxonomyParser
+.. automodule:: mowl.projection.taxonomy.model
    :members:
    :no-inherited-members:
    :noindex:
