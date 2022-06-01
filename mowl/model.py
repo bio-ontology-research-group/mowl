@@ -27,3 +27,6 @@ class EmbeddingModel(Model):
     def get_entities_index_dict(self):
         return self.class_index_dict, self.relation_index_dict
         
+
+    def get_embeddings_data(self):
+        raise NotImplementedError()
