@@ -55,30 +55,19 @@ object Types {
 
 
     class Triple(val src:GOClass, val rel:Relation, val dst:GOClass){
-        def this(src: OWLClass, rel: Relation, dst: OWLClass) = this(goClassToStr(src), rel, goClassToStr(dst))
-        def this(src: String, rel: Relation, dst: OWLClass) = this(src, rel, goClassToStr(dst))
-        def this(src: OWLClass, rel: Relation, dst: String) = this(goClassToStr(src), rel, dst)
+        def this(src: OWLClass, rel: Relation, dst: OWLClass) = this(goClassToStr(src), removeBrackets(rel), goClassToStr(dst))
+        def this(src: String, rel: Relation, dst: OWLClass) = this(src, removeBrackets(rel), goClassToStr(dst))
+        def this(src: OWLClass, rel: Relation, dst: String) = this(goClassToStr(src), removeBrackets(rel), dst)
     }
 
-  def goClassToStr(goClass: OWLClass) = goClass.toStringID.split("/").last.replace("_", ":")
+  def goClassToStr(goClass: OWLClass) = removeBrackets(goClass.toStringID)
 
-  def annotationSubject2Str(subject: OWLAnnotationSubject): String = {
-
-    val annotStr = subject.toString
-
-    if (annotStr.length > 4) {
-      annotStr.slice(0,4) match {
-        case "http" => annotStr.split("/").last.replace("_", ":")
-        case _ => annotStr
-      }
-    }else{
-      annotStr
-    }
+  def annotationSubject2Str(subject: OWLAnnotationSubject): String = subject.toString
 
 
-  }
 
-    def getNodes(triples: List[Triple]) = {
+
+  def getNodes(triples: List[Triple]) = {
         
         val triples_sc = triples
         val srcs = triples_sc.map((e) => e.src)
@@ -86,5 +75,11 @@ object Types {
 
         (srcs ::: dsts).toSet
     }
+
+  def removeBrackets(name: String): String = {
+    if (name.startsWith("<")) name.tail.init
+    else name
+  }
+
 
 }

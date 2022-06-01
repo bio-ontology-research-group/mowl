@@ -22,11 +22,19 @@ class DeepWalk (
   var outfile: String) {
 
 
-  val edgesSc = edges.asScala.map(x => (x.src, x.dst))
-  val nodes = edgesSc.map(x => List(x._1, x._2)).flatten.toSet
-  val mapNodesIdx = nodes.zip(Range(0, nodes.size, 1)).toMap
-  val mapIdxNodes = Range(0, nodes.size, 1).zip(nodes).toMap
-  val nodesIdx = nodes.map(mapNodesIdx(_))
+  val edgesSc = edges.asScala.map(x => (x.src, x.rel, x.dst))
+  val entities_ = edgesSc.map(x => List(x._1, x._2, x._3)).flatten.toSet
+  val entities = entities_ + "*****"
+  val mapEntsIdx = entities.zip(Range(0, entities.size, 1)).toMap
+  val mapIdxEnts = Range(0, entities.size, 1).zip(entities).toMap
+  val entsIdx = entities.map(mapEntsIdx(_))
+
+  val nodes = edgesSc.map(x => List(x._1, x._3)).flatten.toSet
+  println(entities.size)
+  println(nodes.size)
+  println(entities.contains("http://purl.obolibrary.org/obo/GO_0007580"))
+  println(nodes.contains("http://purl.obolibrary.org/obo/GO_0007580"))
+  val nodesIdx = nodes.map(mapEntsIdx(_))
 
   val graph = processEdges()
   val rand = scala.util.Random
@@ -39,16 +47,17 @@ class DeepWalk (
 
 
   def processEdges() = {
-    val graph: Map[Int, ArrayBuffer[Int]] = Map()
+    val graph: Map[Int, ArrayBuffer[(Int, Int)]] = Map()
 
-    for ((src, dst) <- edgesSc){
-      val srcIdx = mapNodesIdx(src)
-      val dstIdx = mapNodesIdx(dst)
+    for ((src, rel, dst) <- edgesSc){
+      val srcIdx = mapEntsIdx(src)
+      val relIdx = mapEntsIdx(rel)
+      val dstIdx = mapEntsIdx(dst)
 
       if (!graph.contains(srcIdx)){
-        graph(srcIdx) = ArrayBuffer(dstIdx)
+        graph(srcIdx) = ArrayBuffer((relIdx, dstIdx))
       }else{
-        graph(srcIdx) += dstIdx
+        graph(srcIdx) += ((relIdx, dstIdx))
       }
     }
 
@@ -78,10 +87,18 @@ class DeepWalk (
     Await.ready(fut, Duration.Inf)
 
     fut.onComplete {
-      case result =>
+      case Success(msg) => {
         println("* processing is over, shutting down the executor")
         executionContext.shutdown()
         bw.close
+      }
+      case Failure(t) =>
+        {
+          println("An error has ocurred in preprocessing generating random walks: " + t.getMessage + " - " + t.printStackTrace)
+          executionContext.shutdown()
+          bw.close
+        }
+
     }
 
 
@@ -113,13 +130,13 @@ class DeepWalk (
 
   def randomWalk(walkLength: Int, alpha: Float, start: Int ) ={
 
-    val walk = Array.fill(walkLength){-1}
+    val walk = Array.fill(2*walkLength-1){-1}
     walk(0) = start
 
     breakable {
 
       var i: Int = 1
-      while (i < walkLength){
+      while (i < 2*walkLength-1){
 
         val curNode = walk(i-1)
 
@@ -131,21 +148,21 @@ class DeepWalk (
         if (lenNeighb > 0){
           if (rand.nextFloat >= alpha){
             val idx = rand.nextInt(lenNeighb)
-            val next = graph(curNode)(idx)
-            walk(i) = next
+            val (rel, next) = graph(curNode)(idx)
+            walk(i) = rel
+            walk(i+1) = next
           }else{
-            walk(i) = walk.head
+            walk(i) = mapEntsIdx("*****")
+            walk(i+1) = walk.head
           }
-          i+=1
+          i+=2
         }else{
           break
         }
-
       }
-
     }
 
-    val toWrite = walk.filter(_ != -1).map(x => mapIdxNodes(x)).mkString(" ") + "\n"
+    val toWrite = walk.filter(_ != -1).map(x => mapIdxEnts(x)).mkString(" ") + "\n"
     lock.synchronized {
       bw.write(toWrite)
 

@@ -23,14 +23,17 @@ class Node2Vec (
   var outfile: String) {
 
 
-  val edgesSc = edges.asScala.map(x => (x.src, x.dst, x.weight))
-  val nodes = edgesSc.map(x => List(x._1, x._2)).flatten.toSet
-  val nodesSrc = edgesSc.map(_._1).toSet
-  val mapNodesIdx = nodes.zip(Range(0, nodes.size, 1)).toMap
-  val mapIdxNodes = Range(0, nodes.size, 1).zip(nodes).toMap
-  val nodesIdx = nodes.map(mapNodesIdx(_))
-  val nodesSrcIdx = nodesSrc.map(mapNodesIdx(_))
+  val edgesSc = edges.asScala.map(x => (x.src, x.rel, x.dst, x.weight))
+  val entities = edgesSc.map(x => List(x._1, x._2, x._3)).flatten.toSet
+  val entsSrc = edgesSc.map(_._1).toSet
+  val mapEntsIdx = entities.zip(Range(0, entities.size, 1)).toMap
+  val mapIdxEnts = Range(0, entities.size, 1).zip(entities).toMap
+  val entsIdx = entities.map(mapEntsIdx(_))
+  val entsSrcIdx = entsSrc.map(mapEntsIdx(_))
+  val nodes = edgesSc.map(x => List(x._1, x._3)).flatten.toSet
+  val nodesIdx = nodes.map(mapEntsIdx(_))
   val (graph, weights) = processEdges()
+
 
   val rand = scala.util.Random
 
@@ -46,23 +49,24 @@ class Node2Vec (
 
 
   def processEdges() = {
-    val graph: Map[Int, ArrayBuffer[Int]] = Map()
+    val graph: Map[Int, ArrayBuffer[(Int, Int)]] = Map()
     val weights: HashMap[(Int, Int), Float] = HashMap()
-    for ((src, dst, weight) <- edgesSc){
-      val srcIdx = mapNodesIdx(src)
-      val dstIdx = mapNodesIdx(dst)
+    for ((src, rel, dst, weight) <- edgesSc){
+      val srcIdx = mapEntsIdx(src)
+      val relIdx = mapEntsIdx(rel)
+      val dstIdx = mapEntsIdx(dst)
 
       if (!graph.contains(srcIdx)){
-        graph(srcIdx) = ArrayBuffer(dstIdx)
+        graph(srcIdx) = ArrayBuffer((relIdx, dstIdx))
       }else{
-        graph(srcIdx) += dstIdx
+        graph(srcIdx) += ((relIdx, dstIdx))
       }
 
       weights((srcIdx, dstIdx)) = weight
     }
 
 
-    (graph.mapValues(_.sorted.toArray), weights)
+    (graph.mapValues(_.sortBy(_._2).toArray), weights)
   }
 
   def walk() = {
@@ -85,7 +89,7 @@ class Node2Vec (
     val start = System.nanoTime() / 1000000
 
     var listsN: ListBuffer[ListBuffer[Int]] = ListBuffer.fill(newWorkers)(ListBuffer())
-    for (i <- nodesSrcIdx){
+    for (i <- entsSrcIdx){
       listsN(i%newWorkers) += i
     }
     val argsListN = Range(0, newWorkers, 1).zip(listsN.toList.map(_.toList))
@@ -166,34 +170,38 @@ class Node2Vec (
 
   def randomWalk(walkLength: Int, p: Float, q: Float, start: Int ) = {
 
-    val walk = Array.fill(walkLength){-1}
+    val walk = Array.fill(2*walkLength-1){-1}
 
     walk(0) = start
     breakable {
 
-      
-      for (i <- 1 until walkLength){
+      var i = 1
+      while (i < 2*walkLength-1){
         
         val curNode = walk(i-1)
 
         val curNbrs = graph.contains(curNode) match {
           
           case true => graph(curNode)
-          case false => Array()
+          case false => Array[Tuple2[Int, Int]]()
         }
 
         if (curNbrs.size > 0) {
 
           if (walk(1) == -1){
             val (idx1, idx2) = aliasNodes(curNode)
-            walk(i) = curNbrs(aliasDraw(idx1, idx2))
-
+            val (rel, next) = curNbrs(aliasDraw(idx1, idx2))
+            walk(i) = rel
+            walk(i+1) = next
           }else {
-            val prevNode = walk(i-2)//  walk.init.last
+            val prevNode = walk(i-3)
             val (idx1, idx2) = aliasEdges((prevNode, curNode))
-            walk(i) = curNbrs(aliasDraw(idx1, idx2))
-
+            val (rel, next) = curNbrs(aliasDraw(idx1, idx2))
+         
+            walk(i) = rel
+            walk(i+1) = next
           }
+          i = i+2
           
         }else{
           break
@@ -203,7 +211,7 @@ class Node2Vec (
 
     }
 
-    val toWrite = walk.filter(_ != -1).map(x => mapIdxNodes(x)).mkString(" ") + "\n"
+    val toWrite = walk.filter(_ != -1).map(x => mapIdxEnts(x)).mkString(" ") + "\n"
     lock.synchronized {
       bw.write(toWrite)
     }
@@ -217,7 +225,7 @@ class Node2Vec (
     
 
     if (graph.contains(dst)){
-      val dstNbrs = graph(dst)
+      val dstNbrs = graph(dst).map(_._2)
       val lenDstNbrs = dstNbrs.length
       val unnormalizedProbs: Array[Float] = Array.fill(lenDstNbrs){-1}
 
@@ -257,7 +265,7 @@ class Node2Vec (
     for (i <- indices){
       val node = i
       //      val unnormalizedProbs = graph(node).sorted.map(nbr => weights((node, nbr)))
-      val unnormalizedProbs = graph(node).map(nbr => weights((node, nbr)))
+      val unnormalizedProbs = graph(node).map(nbr => weights((node, nbr._2)))
       val normConst = unnormalizedProbs.sum
       val normalizedProbs = unnormalizedProbs.map(x => x/normConst)
 
