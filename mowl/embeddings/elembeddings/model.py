@@ -1,6 +1,7 @@
 import os
 
 from mowl.model import EmbeddingModel
+import mowl.embeddings.elembeddings.losses as L
 from mowl.reasoning.normalize import ELNormalizer
 
 from de.tudresden.inf.lat.jcel.owlapi.main import JcelReasoner
@@ -20,6 +21,7 @@ import logging
 from scipy.stats import rankdata
 from mowl.projection.factory import projector_factory
 from mowl.projection.edge import Edge
+from mowl.embeddings.elembeddings.evaluate import ELEmbeddingsPPIEvaluator
 from tqdm import trange, tqdm
 
 import torch as th
@@ -28,7 +30,7 @@ from torch import nn
 class ELEmbeddings(EmbeddingModel):
 
 
-    def __init__(self, dataset, embed_dim=50, margin=0, reg_norm=1, learning_rate=0.001, epochs=1000, device = 'cpu'):
+    def __init__(self, dataset, embed_dim=50, margin=0, reg_norm=1, learning_rate=0.001, epochs=1000, model_filepath = None, device = 'cpu'):
         super().__init__(dataset)
 
 
@@ -38,36 +40,16 @@ class ELEmbeddings(EmbeddingModel):
         self.learning_rate = learning_rate
         self.epochs = epochs
         self.device = device
-        self.model_filepath = "data/model.th"
+        self.model_filepath = model_filepath
         self.short_form_provider = SimpleShortFormProvider()
         self._loaded = False
         self._loaded_eval = False
 
-        self.load_eval_data()
+#        self.load_eval_data()
+
     def get_entities_index_dict(self):
-        return self.classes_index_dict, self.relations
-
-
-
-    def load_eval_data(self):
-        if self._loaded_eval:
-            return
-        eval_projector = projector_factory('taxonomy_rels', taxonomy=False, relations=["http://interacts_with"])
-
-        self._training_set = eval_projector.project(self.dataset.ontology)
-        self._testing_set = eval_projector.project(self.dataset.testing)
-
-        training_entities,_ = Edge.getEntitiesAndRelations(self._training_set)
-        testing_entities,_ = Edge.getEntitiesAndRelations(self._testing_set)
-
-        entities = list(set(training_entities) | set(testing_entities))
-        
-        self._head_entities = entities
-        self._tail_entities = entities
-        self._loaded_eval = True
-        
-
-    
+        return self.classes_index_dict, self.relations_index_dict
+                                                                     
     def load_data(self):
         if self._loaded:
             return
@@ -85,11 +67,20 @@ class ELEmbeddings(EmbeddingModel):
                 classes.add(axiom.subclass)
                 classes.add(axiom.superclass)
 
+            for axiom in axioms_dict["gci0_bot"]:
+                classes.add(axiom.subclass)
+                classes.add(axiom.superclass)
+            
             for axiom in axioms_dict["gci1"]:
                 classes.add(axiom.left_subclass)
                 classes.add(axiom.right_subclass)
                 classes.add(axiom.superclass)
-            
+
+            for axiom in axioms_dict["gci1_bot"]:
+                classes.add(axiom.left_subclass)
+                classes.add(axiom.right_subclass)
+                classes.add(axiom.superclass)
+
             for axiom in axioms_dict["gci2"]:
                 classes.add(axiom.subclass)
                 classes.add(axiom.filler)
@@ -100,62 +91,84 @@ class ELEmbeddings(EmbeddingModel):
                 classes.add(axiom.filler)
                 relations.add(axiom.obj_property)
 
-        self.classes_index_dict = {v: k  for k, v in enumerate(list(classes))}
-        self.relations = {v: k for k, v in enumerate(list(relations))}
+            for axiom in axioms_dict["gci3_bot"]:
+                classes.add(axiom.superclass)
+                classes.add(axiom.filler)
+                relations.add(axiom.obj_property)
 
-        training_nfs = self.load_normal_forms(self.training_axioms, self.classes_index_dict, self.relations)
-        validation_nfs = self.load_normal_forms(self.validation_axioms, self.classes_index_dict, self.relations)
-        testing_nfs = self.load_normal_forms(self.testing_axioms, self.classes_index_dict, self.relations)
+        self.classes_index_dict = {v: k  for k, v in enumerate(list(classes))}
+        self.relations_index_dict = {v: k for k, v in enumerate(list(relations))}
+
+        training_nfs = self.load_normal_forms(self.training_axioms, self.classes_index_dict, self.relations_index_dict)
+        validation_nfs = self.load_normal_forms(self.validation_axioms, self.classes_index_dict, self.relations_index_dict)
+        testing_nfs = self.load_normal_forms(self.testing_axioms, self.classes_index_dict, self.relations_index_dict)
         
-        self.train_nfs = self.nfs_to_tensors(training_nfs, self.device)
-        self.valid_nfs = self.nfs_to_tensors(validation_nfs, self.device)
-        self.test_nfs = self.nfs_to_tensors(testing_nfs, self.device)
+        self.train_nfs = self.gcis_to_tensors(training_nfs, self.device)
+        self.valid_nfs = self.gcis_to_tensors(validation_nfs, self.device)
+        self.test_nfs = self.gcis_to_tensors(testing_nfs, self.device)
         self._loaded = True
         
     def load_normal_forms(self, axioms_dict, classes_dict, relations_dict):
-        nf0 = []
-        nf1 = []
-        nf2 = []
-        nf3 = []
+        gci0 = []
+        gci1 = []
+        gci2 = []
+        gci3 = []
 
         for axiom in axioms_dict["gci0"]:
             cl1 = classes_dict[axiom.subclass]
             cl2 = classes_dict[axiom.superclass]
-            nf0.append((cl1, cl2))
+            gci0.append((cl1, cl2))
+
+        for axiom in axioms_dict["gci0_bot"]:
+            cl1 = classes_dict[axiom.subclass]
+            cl2 = classes_dict[axiom.superclass]
+            gci0.append((cl1, cl2))
 
         for axiom in axioms_dict["gci1"]:
             cl1 = classes_dict[axiom.left_subclass]
             cl2 = classes_dict[axiom.right_subclass]
             cl3 = classes_dict[axiom.superclass]
-            nf1.append((cl1, cl2, cl3))
-            
+            gci1.append((cl1, cl2, cl3))
+
+        for axiom in axioms_dict["gci1_bot"]:
+            cl1 = classes_dict[axiom.left_subclass]
+            cl2 = classes_dict[axiom.right_subclass]
+            cl3 = classes_dict[axiom.superclass]
+            gci1.append((cl1, cl2, cl3))
+
         for axiom in axioms_dict["gci2"]:
             cl1 = classes_dict[axiom.subclass]
             rel = relations_dict[axiom.obj_property]
             cl2 = classes_dict[axiom.filler]
-            nf2.append((cl1, rel, cl2))
+            gci2.append((cl1, rel, cl2))
         
         for axiom in axioms_dict["gci3"]:
             rel = relations_dict[axiom.obj_property]
             cl1 = classes_dict[axiom.filler]
             cl2 = classes_dict[axiom.superclass]
-            nf3.append((rel, cl1, cl2))
+            gci3.append((rel, cl1, cl2))
 
-        return nf0, nf1, nf2, nf3
+        for axiom in axioms_dict["gci3_bot"]:
+            rel = relations_dict[axiom.obj_property]
+            cl1 = classes_dict[axiom.filler]
+            cl2 = classes_dict[axiom.superclass]
+            gci3.append((rel, cl1, cl2))
+
+        return gci0, gci1, gci2, gci3
         
-    def nfs_to_tensors(self, nfs, device):
-        nf1, nf2, nf3, nf4 = nfs
-        nf1 = th.LongTensor(nf1).to(device)
-        nf2 = th.LongTensor(nf2).to(device)
-        nf3 = th.LongTensor(nf3).to(device)
-        nf4 = th.LongTensor(nf4).to(device)
-        nfs = nf1, nf2, nf3, nf4
-        return nfs
+    def gcis_to_tensors(self, gcis, device):
+        gci0, gci1, gci2, gci3 = gcis
+        gci0 = th.LongTensor(gci0).to(device)
+        gci1 = th.LongTensor(gci1).to(device)
+        gci2 = th.LongTensor(gci2).to(device)
+        gci3 = th.LongTensor(gci3).to(device)
+        gcis = gci0, gci1, gci2, gci3
+        return gcis
 
 
     def train(self):
         self.load_data()
-        self.model = ELModel(len(self.classes_index_dict), len(self.relations), self.device).to(self.device)
+        self.model = ELModel(len(self.classes_index_dict), len(self.relations_index_dict), self.device).to(self.device)
         optimizer = th.optim.Adam(self.model.parameters(), lr=self.learning_rate)
         best_loss = float('inf')
         for epoch in trange(self.epochs):
@@ -183,7 +196,7 @@ class ELEmbeddings(EmbeddingModel):
             
     def evaluate(self):
         self.load_data()
-        self.model = ELModel(len(self.classes), len(self.relations), self.device).to(self.device)
+        self.model = ELModel(len(self.classes_index_dict), len(self.relations_index_dict), self.device).to(self.device)
         print('Load the best model', self.model_filepath)
         self.model.load_state_dict(th.load(self.model_filepath))
         self.model.eval()
@@ -192,19 +205,35 @@ class ELEmbeddings(EmbeddingModel):
         
     def get_embeddings(self):
         self.load_data()
-        self.model = ELModel(len(self.classes_index_dict), len(self.relations), self.device).to(self.device)
+        self.model = ELModel(len(self.classes_index_dict), len(self.relations_index_dict), self.device).to(self.device)
         print('Load the best model', self.model_filepath)
         self.model.load_state_dict(th.load(self.model_filepath))
         self.model.eval()
 
-        ent_embeds = {k:v for k,v in zip(self.classes_index_dict.keys(), self.model.go_embed.weight.cpu().detach().numpy())}
-        rel_embeds = {k:v for k,v in zip(self.relations.keys(), self.model.rel_embed.weight.cpu().detach().numpy())}
+        ent_embeds = {k:v for k,v in zip(self.classes_index_dict.keys(), self.model.class_embed.weight.cpu().detach().numpy())}
+        rel_embeds = {k:v for k,v in zip(self.relations_index_dict.keys(), self.model.rel_embed.weight.cpu().detach().numpy())}
         return ent_embeds, rel_embeds
  
 
     def evaluate_ppi(self):
         self.load_data()
-        model = ELModel(len(self.classes_index_dict), len(self.relations), self.device).to(self.device)
+
+        model = ELModel(len(self.classes_index_dict), len(self.relations_index_dict), self.device).to(self.device)
+        print('Load the best model', self.model_filepath)
+        model.load_state_dict(th.load(self.model_filepath))
+        model.eval()
+
+        eval_method = model.gci2_loss
+
+        evaluator = ELEmbeddingsPPIEvaluator(self.dataset.testing, eval_method, self.dataset.ontology, self.classes_index_dict, self.relations_index_dict, device = self.device)
+
+        evaluator()
+
+        evaluator.print_metrics()
+        
+    def evaluate_ppi_(self):
+        self.load_data()
+        model = ELModel(len(self.classes_index_dict), len(self.relations_index_dict), self.device).to(self.device)
         print('Load the best model', self.model_filepath)
         model.load_state_dict(th.load(self.model_filepath))
         model.eval()
@@ -218,10 +247,10 @@ class ELEmbeddings(EmbeddingModel):
         #print(prot_dict)
         train_ppis = {}
         _, _, nf3, _ = self.train_nfs
-        print(self.relations)
+        print(self.relations_index_dict)
         for c, r, d in nf3:
             c, r, d = c.item(), r.item(), d.item()
-            if r != self.relations["http://interacts"]:
+            if r != self.relations_index_dict["http://interacts_with"]:
                 continue
             if c not in train_ppis:
                 train_ppis[c] = []
@@ -229,7 +258,7 @@ class ELEmbeddings(EmbeddingModel):
         _, _, nf3, _ = self.valid_nfs
         for c, r, d in nf3:
             c, r, d = c.item(), r.item(), d.item()
-            if r != self.relations["http://interacts"]:
+            if r != self.relations_index_dict["http://interacts_with"]:
                 continue
             if c not in train_ppis:
                 train_ppis[c] = []
@@ -240,24 +269,27 @@ class ELEmbeddings(EmbeddingModel):
         nf1, nf2, nf3, nf4 = self.test_nfs
         mean_rank = 0
         n_nf3 = len(nf3)
+        n = len(proteins)
         for it in tqdm(nf3):
+            
             c, r, d = it
             c, r, d = c.item(), r.item(), d.item()
-            #print(r)
-            #            if c not in train_ppis or d not in train_ppis:
-            
-            #                continue
-            if c not in prot_dict:
-                print(c, "not in prot dict")
+
+            if not c in train_ppis or not d in train_ppis:
                 n_nf3 -= 1
                 continue
 
-            if d not in prot_dict:
-                print(d, "not in prot dict")
-                n_nf3-=1
-                continue
+#            if c not in prot_dict:
+#                print(c, "not in prot dict")
+#                n_nf3 -= 1
+#                continue
 
-            n = len(proteins)
+#            if d not in prot_dict:
+#                print(d, "not in prot dict")
+#                n_nf3-=1
+#                continue
+
+#            n = len(proteins)
             data = th.zeros(n, 3, dtype=th.long).to(self.device)
             data[:, 0] = c
             data[:, 1] = r
@@ -279,26 +311,37 @@ class ELEmbeddings(EmbeddingModel):
     
 class ELModel(nn.Module):
 
-    def __init__(self, nb_gos, nb_rels, device, embed_dim=50, margin=0.1):
+    def __init__(self, nb_ont_classes, nb_rels, device, embed_dim=50, margin=0.1):
         super().__init__()
-        self.nb_gos = nb_gos
+        self.nb_ont_classes = nb_ont_classes
         self.nb_rels = nb_rels
+
         # ELEmbeddings
         self.embed_dim = embed_dim
-        self.go_embed = nn.Embedding(nb_gos, embed_dim)
-        self.go_norm = nn.BatchNorm1d(embed_dim)
+        self.class_embed = nn.Embedding(self.nb_ont_classes, embed_dim)
+        self.class_norm = nn.BatchNorm1d(embed_dim)
         k = math.sqrt(1 / embed_dim)
-        nn.init.uniform_(self.go_embed.weight, -0, 1)
-        self.go_rad = nn.Embedding(nb_gos, 1)
-        nn.init.uniform_(self.go_rad.weight, -0, 1)
-        # self.go_embed.weight.requires_grad = False
-        # self.go_rad.weight.requires_grad = False
+        nn.init.uniform_(self.class_embed.weight, -0, 1)
+        self.class_rad = nn.Embedding(self.nb_ont_classes, 1)
+        nn.init.uniform_(self.class_rad.weight, -0, 1)
         
         self.rel_embed = nn.Embedding(nb_rels, embed_dim)
         nn.init.uniform_(self.rel_embed.weight, -k, k)
-        self.all_gos = th.arange(self.nb_gos).to(device)
+        self.all_gos = th.arange(self.nb_ont_classes).to(device)
         self.margin = margin
 
+    def gci0_loss(self, data):
+        return L.gci0_loss(data, self.class_norm, self.class_embed, self.class_rad, self.margin)
+    def gci1_loss(self, data):
+        return L.gci1_loss(data, self.class_norm, self.class_embed, self.class_rad, self.margin)
+    def gci3_loss(self, data):
+        return L.gci3_loss(data, self.class_norm, self.class_embed, self.class_rad, self.rel_embed, self.margin)
+    def gci2_loss(self, data):
+        return L.gci2_loss(data, self.class_norm, self.class_embed, self.class_rad, self.rel_embed, self.margin)
+    def gci2_loss_neg(self, data):
+        return L.gci2_loss_neg(data, self.class_norm, self.class_embed, self.class_rad, self.rel_embed, self.margin)
+
+        
     def forward(self, go_normal_forms):
         nf0, nf1, nf2, nf3 = go_normal_forms
         loss = 0
@@ -313,79 +356,5 @@ class ELModel(nn.Module):
             loss += th.mean(self.gci3_loss(nf3))
         return loss
 
-    def class_dist(self, data):
-        c = self.go_norm(self.go_embed(data[:, 0]))
-        d = self.go_norm(self.go_embed(data[:, 1]))
-        rc = th.abs(self.go_rad(data[:, 0]))
-        rd = th.abs(self.go_rad(data[:, 1]))
-        dist = th.linalg.norm(c - d, dim=1, keepdim=True) + rc - rd
-        return dist
-        
-    def gci0_loss(self, data):
-        pos_dist = self.class_dist(data)
-        loss = th.relu(pos_dist - self.margin)
-        return loss
-
-    def gci1_loss(self, data):
-        c = self.go_norm(self.go_embed(data[:, 0]))
-        d = self.go_norm(self.go_embed(data[:, 1]))
-        e = self.go_norm(self.go_embed(data[:, 2]))
-        rc = th.abs(self.go_rad(data[:, 0]))
-        rd = th.abs(self.go_rad(data[:, 1]))
-        re = th.abs(self.go_rad(data[:, 2]))
-        
-        sr = rc + rd
-        dst = th.linalg.norm(c - d, dim=1, keepdim=True)
-        dst2 = th.linalg.norm(e - c, dim=1, keepdim=True)
-        dst3 = th.linalg.norm(e - d, dim=1, keepdim=True)
-        loss = (th.relu(dst - sr - self.margin)
-                    + th.relu(dst2 - rc - self.margin)
-                    + th.relu(dst3 - rd - self.margin))
-
-        return loss
-
-    def gci3_loss(self, data):
-        # R some C subClassOf D
-        n = data.shape[0]
-        rE = self.rel_embed(data[:, 0])
-        c = self.go_norm(self.go_embed(data[:, 1]))
-        d = self.go_norm(self.go_embed(data[:, 2]))
-        rc = th.abs(self.go_rad(data[:, 1]))
-        rd = th.abs(self.go_rad(data[:, 2]))
-        
-        rSomeC = c + rE
-        euc = th.linalg.norm(c - rE  - d, dim=1, keepdim=True)
-        loss = th.relu(euc - rc - rd - self.margin)
-        return loss
 
 
-    def gci2_loss(self, data):
-        # C subClassOf R some D
-        n = data.shape[0]
-        c = self.go_norm(self.go_embed(data[:, 0]))
-        rE = self.rel_embed(data[:, 1])
-        d = self.go_norm(self.go_embed(data[:, 2]))
-        
-        rc = th.abs(self.go_rad(data[:, 1]))
-        rd = th.abs(self.go_rad(data[:, 2]))
-        # c should intersect with d + r
-        
-        dst = th.linalg.norm(c + rE - d, dim=1, keepdim=True)
-        loss = th.relu(dst + rc - rd  - self.margin)
-        return loss
-
-
-    def gci2_loss_neg(self, data):
-        # C subClassOf R some D
-        n = data.shape[0]
-        c = self.go_norm(self.go_embed(data[:, 0]))
-        rE = self.rel_embed(data[:, 1])
-        d = self.go_norm(self.go_embed(data[:, 2]))
-        
-        rc = th.abs(self.go_rad(data[:, 1]))
-        rd = th.abs(self.go_rad(data[:, 2]))
-        # c should intersect with d + r
-        
-        dst = th.linalg.norm(c + rE - d, dim=1, keepdim=True)
-        loss = th.relu(rc + rd - dst  + self.margin)
-        return loss
