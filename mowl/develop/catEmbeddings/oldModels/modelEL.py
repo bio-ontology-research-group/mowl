@@ -15,19 +15,24 @@ import pickle as pkl
 import time
 from itertools import chain
 import math
-import mowl.develop.catEmbeddings.lossesELSimple as L
-from mowl.develop.catEmbeddings.cat_net import Product, EntailmentMorphism, Existential
+import mowl.develop.catEmbeddings.lossesEL as L
+from mowl.develop.catEmbeddings.cat_net import Product, Pullback, Exponential, Existential
 import os
 from mowl.model import Model
-from mowl.reasoning.normalize import ELNormalizer
-from mowl.projection.taxonomy.model import TaxonomyProjector
-from mowl.projection.edge import Edge
+from mowl.graph.taxonomy.model import TaxonomyParser
+from mowl.graph.edge import Edge
 from org.semanticweb.owlapi.util import SimpleShortFormProvider
 from scipy.stats import rankdata
 from mowl.develop.catEmbeddings.evaluate_interactions import evalNF4Loss
 logging.basicConfig(level=logging.DEBUG)
 
-ACT = nn.Sigmoid()
+
+from de.tudresden.inf.lat.jcel.owlapi.main import JcelReasoner
+from java.util import HashSet
+from de.tudresden.inf.lat.jcel.ontology.normalization import OntologyNormalizer
+from de.tudresden.inf.lat.jcel.ontology.axiom.extension import IntegerOntologyObjectFactoryImpl
+from de.tudresden.inf.lat.jcel.owlapi.translator import ReverseAxiomTranslator
+from org.semanticweb.owlapi.manchestersyntax.renderer import ManchesterOWLSyntaxOWLObjectRendererImpl
 
 
 class CatEmbeddings(Model):
@@ -45,7 +50,6 @@ class CatEmbeddings(Model):
             gamma = None,
             eval_ppi = False,
             sampling = False,
-            size_hom_set = 1,
             nf1 = False, 
             nf1_neg = False, 
             nf2 = False,
@@ -57,8 +61,7 @@ class CatEmbeddings(Model):
             margin = 0,
             seed = -1,
             early_stopping = 10,
-            species = "yeast",
-            device = "cpu"
+            device = "cuda"
     ):
         super().__init__(dataset)
 
@@ -73,7 +76,6 @@ class CatEmbeddings(Model):
         self.gamma = gamma
         self.eval_ppi = eval_ppi
         self.sampling = sampling
-        self.size_hom_set = size_hom_set
         self.nf1 = nf1
         self.nf1_neg = nf1_neg
         self.nf2 = nf2
@@ -85,7 +87,14 @@ class CatEmbeddings(Model):
         self.margin = margin
         self.early_stopping = early_stopping
         self.device = device
-        self.dataset = dataset
+        train_file, valid_file, test_file = dataset
+        
+        if "yeast" in train_file:
+            species = "yeast"
+        elif "human" in train_file:
+            species = "human"
+        else:
+            raise ValueError("Species not defined")
             
         self.species = species
         milestones_str = "_".join(str(m) for m in milestones)
@@ -98,8 +107,6 @@ class CatEmbeddings(Model):
 
         self._loaded = False
 
-        self.load_data()
-        
         if seed>=0:
             th.manual_seed(seed)
             np.random.seed(seed)
@@ -107,26 +114,25 @@ class CatEmbeddings(Model):
 
         self.model = None
         ### For eval ppi
-        
+        self.load_data_old(train_file, valid_file, test_file, device = 'cuda')
 
         if self.eval_ppi or True:
             _, _, _, train_nf4 = self.train_nfs
             proteins = {}
-            for k, v in self.classes_index_dict.items():
-                k = str(k)
-                if not k.startswith('http://purl.obolibrary.org/obo/GO_') and not k.startswith("GO:"):
+            for k, v in self.classes.items():
+                if not k.startswith('<http://purl.obolibrary.org/obo/GO_') and not k.startswith("GO:"):
                     proteins[k] = v
             self.prot_index = proteins.values()
             self.prot_dict = {v: k for k, v in enumerate(self.prot_index)}
 
             print(f"prot dict created. Number of proteins: {len(self.prot_index)}")
-            self.trlabels = np.ones((len(self.prot_index), len(self.prot_index)), dtype=np.int32)
+            self.trlabels = {}
 
 
             print("Generating training labels")
             with ck.progressbar(train_nf4) as bar:
                 for c,r,d in bar:
-                    if r != self.relations["http://interacts"]:
+                    if r != 0:
                         continue
                     c, r, d = c.detach().item(), r.detach().item(), d.detach().item()
 
@@ -134,14 +140,12 @@ class CatEmbeddings(Model):
                         continue
 
                     c, d =  self.prot_dict[c], self.prot_dict[d]
- 
-                    self.trlabels[c, d] = 1000
+
+                    if r not in self.trlabels:
+                        self.trlabels[r] = np.ones((len(self.prot_index), len(self.prot_index)), dtype=np.int32)
+                    self.trlabels[r][c, d] = 1000
                 print("trlabels created")
 
-        self.train_nfs = tuple(map(lambda x: x.to(device), self.train_nfs))
-        
-        self.num_classes = len(self.classes_index_dict)
-        self.num_rels = len(self.relations)
 
         
 
@@ -149,14 +153,18 @@ class CatEmbeddings(Model):
 
 
  #       self._loaded = False
-        device = self.device
-
+        device = "cuda"
+#        self.load_data_old(device="cuda")
         
         if not self.sampling:
             self.create_dataloaders(device = device)
 
+        self.train_nfs = tuple(map(lambda x: x.to(device), self.train_nfs))
         
-        self.model = CatModel(self.num_classes, self.num_rels, self.size_hom_set, self.embedding_size, dropout = self.dropout)
+        self.num_classes = len(self.classes)
+        self.num_rels = len(self.relations)
+        
+        self.model = CatModel(self.num_classes, self.num_rels, self.embedding_size, dropout = self.dropout)
         th.save(self.model.state_dict(), self.model_filepath)
 
         paramss = sum(p.numel() for p in self.model.parameters())
@@ -221,9 +229,9 @@ class CatEmbeddings(Model):
                     False,
                     False,
                     False,
-                    self.nf3,
                     False,
                     False,
+                    self.nf4,
                     False,
                     self.margin,
                     train = False
@@ -241,17 +249,17 @@ class CatEmbeddings(Model):
             else:
                 best_val_loss = val_loss
                 valid_early_stopping = stop_value
-                if not self.eval_ppi or True: #dummy condition
+                if not self.eval_ppi:
                     th.save(self.model.state_dict(), self.model_filepath)
 
-            if self.eval_ppi and epoch % 10 == 0:
+            if self.eval_ppi:
                 top1, top10, top100, top1000, mean_rank, ftop1, ftop10, ftop100, fmean_rank = self.evaluate_ppi_valid()
 
                 if best_mean_rank >= mean_rank:
                     best_mean_rank = mean_rank
-#                    th.save(self.model.state_dict(), self.model_filepath)
+                    th.save(self.model.state_dict(), self.model_filepath)
             print(f'Epoch {epoch}: Loss - {train_loss:.6}, \tVal loss - {val_loss:.6}')
-            if self.eval_ppi and epoch % 10 == 0:
+            if self.eval_ppi:
                 print(f' MR - {mean_rank}, \tT10 - {top10},\tT100 - {top100}, \tT1000 - {top1000}')
                 print(f'FMR - {fmean_rank}, \tT10 - {ftop10},\tT100 - {ftop100}')
             print("\n\n")
@@ -266,7 +274,7 @@ class CatEmbeddings(Model):
 
 
     def run_and_save_predictions(self, model, samples=None, save = True):
-        device = self.device
+        device = "cuda"
 
         model.eval()
         print(self.device)
@@ -275,9 +283,9 @@ class CatEmbeddings(Model):
             logging.info("No data points specified. Proceeding to compute predictions on test set")
             model.load_state_dict(th.load( self.model_filepath))
             model = model.to(device)
-            _, _, test_nf3, _ = self.test_nfs
+            _, _, _, test_nf4 = self.test_nfs
 
-            eval_data = test_nf3
+            eval_data = test_nf4
 
         else:
             eval_data = samples
@@ -328,22 +336,22 @@ class CatEmbeddings(Model):
         
 
     def forward_nf(self, nf, idx, margin, pos, neg, train = True):
-        nf_pos_loss = 0.0
-        nf_neg_loss = 0.0
-        nf_diff_loss = 0.0
+        nf_pos_loss = 0
+        nf_neg_loss = 0
+        nf_diff_loss = 0
         if pos:
             i = 0
             for i, batch_nf in enumerate(nf):
                 pos_loss = self.model(batch_nf, idx)
                 step_loss = th.mean(pos_loss)
                 if neg:
-                    neg_loss = th.relu(-self.model(batch_nf, idx, neg = True) + 15) 
+                    neg_loss = self.model(batch_nf, idx, neg = True)
                     assert pos_loss.shape == neg_loss.shape, f"{pos_loss.shape}, {neg_loss.shape}"
                     new_margin = margin
  #                   new_margin = margin if th.mean(neg_loss - pos_loss) > margin else 2*th.mean(pos_loss)
 
                     diff_loss = th.mean(th.relu(pos_loss - neg_loss + new_margin))
-                    step_loss += th.mean(neg_loss)#step_loss += diff_loss
+                    step_loss += diff_loss
                     nf_neg_loss += th.mean(neg_loss).detach().item()
                     nf_diff_loss += diff_loss.detach().item()
 
@@ -436,13 +444,12 @@ class CatEmbeddings(Model):
         nf3_diff_loss *= nb_nf3/total
         nf4_diff_loss *= nb_nf4/total
 
-        print(f"nf1: {nf1_diff_loss:.6}, \tnf1p: {nf1_pos_loss:.6}, \tnf1n: {nf1_neg_loss:.6}")
-        print(f"nf2: {nf2_diff_loss:.6}, \tnf2p: {nf2_pos_loss:.6}, \tnf2n: {nf2_neg_loss:.6}")
-        print(f"nf3: {nf3_diff_loss:.6}, \tnf3p: {nf3_pos_loss:.6}, \tnf3n: {nf3_neg_loss:.6}")
-        print(f"nf4: {nf4_diff_loss:.6}, \tnf4p: {nf4_pos_loss:.6}, \tnf4n: {nf4_neg_loss:.6}")
+        print(f"nf1: {nf1_diff_loss}, \tnf1p: {nf1_pos_loss}, \tnf1n: {nf1_neg_loss}")
+        print(f"nf2: {nf2_diff_loss}, \tnf2p: {nf2_pos_loss}, \tnf2n: {nf2_neg_loss}")
+        print(f"nf3: {nf3_diff_loss}, \tnf3p: {nf3_pos_loss}, \tnf3n: {nf3_neg_loss}")
+        print(f"nf4: {nf4_diff_loss}, \tnf4p: {nf4_pos_loss}, \tnf4n: {nf4_neg_loss}")
       
-        #        return  nf1_pos_loss + nf1_diff_loss+ nf2_pos_loss + nf2_diff_loss + nf3_pos_loss + nf3_diff_loss + nf4_pos_loss + nf4_diff_loss
-        return  nf1_pos_loss + nf1_neg_loss+ nf2_pos_loss + nf2_neg_loss + nf3_pos_loss + nf3_neg_loss + nf4_pos_loss + nf4_neg_loss
+        return  nf1_pos_loss + nf1_diff_loss+ nf2_pos_loss + nf2_diff_loss + nf3_pos_loss + nf3_diff_loss + nf4_pos_loss + nf4_diff_loss
 
 
     def forward_step_sampling(self,
@@ -513,7 +520,7 @@ class CatEmbeddings(Model):
 
     def evaluate(self):
 #        self.load_data()
-        self.model = CatModel(len(self.classes_index_dict), len(self.relations), self.size_hom_set, 1024).to(self.device)
+        self.model = CatModel(len(self.classes), len(self.relations), 1024).to(self.device)
         print('Load the best model', self.model_filepath)
         self.model.load_state_dict(th.load(self.model_filepath))
         self.model.eval()
@@ -523,104 +530,116 @@ class CatEmbeddings(Model):
  
     def evaluate_ppi_valid(self):
         self.model.eval()
-        _, _, valid_nf3, _ = self.valid_nfs
-        index = np.random.choice(len(valid_nf3), size = self.num_points_eval, replace = False)
+        _, _, _, valid_nf4 = self.valid_nfs
+        index = np.random.choice(len(valid_nf4), size = self.num_points_eval, replace = False)
 #        index = list(range(self.num_points_eval))
-        valid_nfs = valid_nf3[index]
+        valid_nfs = valid_nf4[index]
         preds, labels = self.run_and_save_predictions(self.model, samples = valid_nfs, save = False)
 
 #        results = evalNF4Loss(self.model, valid_nfs, self.prot_dict, self.prot_index, self.trlabels, len(self.prot_index), device = "cuda")
-        results = evalNF4Loss(valid_nfs, self.prot_dict, self.prot_index, self.trlabels, len(self.prot_index), device= self.device, preds =preds, labels = labels)
+        results = evalNF4Loss(valid_nfs, self.prot_dict, self.prot_index, self.trlabels, len(self.prot_index), device= 'cuda', preds =preds, labels = labels)
 
         return results
 
     def evaluate_ppi(self):
-        self.model = CatModel(self.num_classes, self.num_rels, self.size_hom_set, self.embedding_size, dropout = self.dropout)
-        self.model.load_state_dict(th.load(self.model_filepath))
-        
+
         self.run_and_save_predictions(self.model)
 
-        _, _, test_nf3, _ = self.test_nfs
+        _, _, _, test_nf4 = self.test_nfs
 
-        test_nfs = test_nf3#[index]
+        test_nfs = test_nf4#[index]
         print(f"Device: {self.device}")
 
         evalNF4Loss(test_nfs, self.prot_dict, self.prot_index, self.trlabels, len(self.prot_index), device= self.device, show = True, preds_file =  self.predictions_file, labels_file = self.labels_file )
         
-    def load_data(self):
-        if self._loaded:
+    #########################################
+    ### Borrowed code from ELEmbeddings
+
+    def create_normal_forms(self, ontology, normal_forms_filepath):
+        if os.path.exists(normal_forms_filepath):
             return
-        
-        normalizer = ELNormalizer()
-        self.training_axioms = normalizer.normalize(self.dataset.ontology)
-        self.validation_axioms = normalizer.normalize(self.dataset.validation)
-        self.testing_axioms = normalizer.normalize(self.dataset.testing)
+        jReasoner = JcelReasoner(ontology, False)
+        rootOnt = jReasoner.getRootOntology()
+        translator = jReasoner.getTranslator()
+        axioms = HashSet()
+        axioms.addAll(rootOnt.getAxioms())
+        translator.getTranslationRepository().addAxiomEntities(
+            rootOnt)
+        for ont in rootOnt.getImportsClosure():
+            axioms.addAll(ont.getAxioms())
+            translator.getTranslationRepository().addAxiomEntities(
+                ont)
 
-        classes = set()
-        relations = set()
+        intAxioms = translator.translateSA(axioms)
 
-        for axioms_dict in [self.training_axioms, self.validation_axioms, self.testing_axioms]:
-            for axiom in axioms_dict["gci0"]:
-                classes.add(axiom.subclass)
-                classes.add(axiom.superclass)
+        normalizer = OntologyNormalizer()
+        factory = IntegerOntologyObjectFactoryImpl()
+        normalizedOntology = normalizer.normalize(intAxioms, factory)
+        rTranslator = ReverseAxiomTranslator(translator, self.dataset.ontology)
+        renderer = ManchesterOWLSyntaxOWLObjectRendererImpl()
+        with open(normal_forms_filepath, 'w') as f:
+            for ax in normalizedOntology:
+                try:
+                    axiom = renderer.render(rTranslator.visit(ax))
+                    f.write(f'{axiom}\n')
+                except Exception as e:
+                    print(f'Ignoring {ax}', e)
 
-            for axiom in axioms_dict["gci1"]:
-                classes.add(axiom.left_subclass)
-                classes.add(axiom.right_subclass)
-                classes.add(axiom.superclass)
-            
-            for axiom in axioms_dict["gci2"]:
-                classes.add(axiom.subclass)
-                classes.add(axiom.filler)
-                relations.add(axiom.obj_property)
-
-            for axiom in axioms_dict["gci3"]:
-                classes.add(axiom.superclass)
-                classes.add(axiom.filler)
-                relations.add(axiom.obj_property)
-
-        self.classes_index_dict = {v: k  for k, v in enumerate(list(classes))}
-        self.relations = {v: k for k, v in enumerate(list(relations))}
-
-        training_nfs = self.load_normal_forms(self.training_axioms, self.classes_index_dict, self.relations)
-        validation_nfs = self.load_normal_forms(self.validation_axioms, self.classes_index_dict, self.relations)
-        testing_nfs = self.load_normal_forms(self.testing_axioms, self.classes_index_dict, self.relations)
-        
-        self.train_nfs = self.nfs_to_tensors(training_nfs, self.device)
-        self.valid_nfs = self.nfs_to_tensors(validation_nfs, self.device)
-        self.test_nfs = self.nfs_to_tensors(testing_nfs, self.device)
-        self._loaded = True
-        
-    def load_normal_forms(self, axioms_dict, classes_dict, relations_dict):
-        nf0 = []
+    def load_normal_forms(self, filepath, classes={}, relations={}):
         nf1 = []
         nf2 = []
         nf3 = []
+        nf4 = []
+        print(filepath)
+        with open(filepath) as f:
+            for line in f:
+                line = line.strip()
+                if line.find('SubClassOf') == -1:
+                    continue
+                left, right = line.split(' SubClassOf ')
+                # C SubClassOf D
+                if len(left) == 10 and len(right) == 10:
+                    go1, go2 = left, right
+                    if go1 not in classes:
+                        classes[go1] = len(classes)
+                    if go2 not in classes:
+                        classes[go2] = len(classes)
+                    g1, g2 = classes[go1], classes[go2]
+                    nf1.append((g1, g2))
+                elif left.find('and') != -1: # C and D SubClassOf E
+                    go1, go2 = left.split(' and ')
+                    go3 = right
+                    if go1 not in classes:
+                        classes[go1] = len(classes)
+                    if go2 not in classes:
+                        classes[go2] = len(classes)
+                    if go3 not in classes:
+                        classes[go3] = len(classes)
 
-        for axiom in axioms_dict["gci0"]:
-            cl1 = classes_dict[axiom.subclass]
-            cl2 = classes_dict[axiom.superclass]
-            nf0.append((cl1, cl2))
+                    nf2.append((classes[go1], classes[go2], classes[go3]))
+                elif left.find('some') != -1:  # R some C SubClassOf D
+                    rel, go1 = left.split(' some ')
+                    go2 = right
+                    if go1 not in classes:
+                        classes[go1] = len(classes)
+                    if go2 not in classes:
+                        classes[go2] = len(classes)
+                    if rel not in relations:
+                        relations[rel] = len(relations)
+                    nf3.append((relations[rel], classes[go1], classes[go2]))
+                elif right.find('some') != -1: # C SubClassOf R some D
+                    go1 = left
+                    rel, go2 = right.split(' some ')
+                    if go1 not in classes:
+                        classes[go1] = len(classes)
+                    if go2 not in classes:
+                        classes[go2] = len(classes)
 
-        for axiom in axioms_dict["gci1"]:
-            cl1 = classes_dict[axiom.left_subclass]
-            cl2 = classes_dict[axiom.right_subclass]
-            cl3 = classes_dict[axiom.superclass]
-            nf1.append((cl1, cl2, cl3))
-            
-        for axiom in axioms_dict["gci2"]:
-            cl1 = classes_dict[axiom.subclass]
-            rel = relations_dict[axiom.obj_property]
-            cl2 = classes_dict[axiom.filler]
-            nf2.append((cl1, rel, cl2))
-        
-        for axiom in axioms_dict["gci3"]:
-            rel = relations_dict[axiom.obj_property]
-            cl1 = classes_dict[axiom.filler]
-            cl2 = classes_dict[axiom.superclass]
-            nf3.append((rel, cl1, cl2))
-
-        return nf0, nf1, nf2, nf3
+                    if rel not in relations:
+                        relations[rel] = len(relations)
+                    nf4.append((classes[go1], relations[rel], classes[go2]))
+        normal_forms = nf1, nf2, nf3, nf4
+        return normal_forms, classes, relations
 
     def nfs_to_tensors(self, nfs, device, train = True):
         if train:
@@ -632,14 +651,66 @@ class CatEmbeddings(Model):
         else:
             nf1 = th.empty((1,1)).to(device)
             nf2 = th.empty((1,1)).to(device)
-            nf4 = th.empty((1,1)).to(device)
-            nf3 = th.LongTensor(nfs).to(device)
+            nf3 = th.empty((1,1)).to(device)
+            nf4 = th.LongTensor(nfs).to(device)
 
         nfs = nf1, nf2, nf3, nf4
         nb_data_points = tuple(map(len, nfs))
         print(f"Number of data points: {nb_data_points}")
         return nfs
 
+    def load_data(self, device = 'cpu'):
+        if self._loaded:
+            return
+        if device == 'cuda':
+            self.device = 'cuda' if th.cuda.is_available() else 'cpu'
+        else:
+            self.device = 'cpu'
+
+        print(f"In device: {self.device}")
+        train_nfs, classes, relations = self.load_normal_forms(self.training_filepath)
+        valid_nfs, classes, relations = self.load_normal_forms(self.validation_filepath, classes, relations)
+        test_nfs, classes, relations = self.load_normal_forms(self.testing_filepath, classes, relations)
+        self.classes = classes
+        self.class_dict = {v: k for k, v in classes.items()}
+        self.relations = relations
+        print(relations)
+        self.train_nfs = self.nfs_to_tensors(train_nfs, self.device)
+        self.valid_nfs = self.nfs_to_tensors(valid_nfs, self.device)
+        self.test_nfs = self.nfs_to_tensors(test_nfs, self.device)
+
+        self._loaded = True
+
+    def load_data_old(self, train_file, valid_file, test_file, device = 'cpu'):
+        if self._loaded:
+            return
+
+        if device == 'cuda':
+            self.device = 'cuda' if th.cuda.is_available() else 'cpu'
+        else:
+            self.device = 'cpu'
+
+        print(f"In device: {self.device}")
+
+        from mowl.develop.catEmbeddings.load_data import load_data, load_valid_data
+        
+        nfs, classes, relations = load_data(train_file)
+        self.classes = classes
+        self.class_dict = {v: k for k, v in classes.items()}
+        self.relations = relations
+        print(relations)
+        
+        print(type(nfs['nf1']))
+        train_nfs = nfs['nf1'], nfs['nf2'], nfs['nf4'], nfs['nf3']
+        self.train_nfs = self.nfs_to_tensors(train_nfs, self.device)
+
+        valid_nfs = load_valid_data(valid_file, classes, relations)
+        test_nfs = load_valid_data(test_file, classes, relations)
+        print(f"Valid data points: {len(valid_nfs)}. Test data points: {len(test_nfs)}")
+
+        self.valid_nfs = self.nfs_to_tensors(valid_nfs, self.device, train = False)
+        self.test_nfs = self.nfs_to_tensors(test_nfs, self.device, train = False)
+        self._loaded = True
 
     def create_dataloaders(self, device):
         train_nfs = tuple(map(lambda x: x.to(device), self.train_nfs))
@@ -659,14 +730,14 @@ class CatEmbeddings(Model):
 
 class CatModel(nn.Module):
 
-    def __init__(self, num_objects, num_rels, size_hom_set, embedding_size, dropout = 0):
+    def __init__(self, num_objects, num_rels, embedding_size, dropout = 0):
         super(CatModel, self).__init__()
 
         self.embedding_size = embedding_size
         self.num_obj = num_objects 
-        self.size_hom_set = size_hom_set
+        
         self.dropout = nn.Dropout(dropout)
-        self.act = ACT
+        self.act = nn.Sigmoid()
 
         self.embed = nn.Embedding(self.num_obj, embedding_size)
         k = math.sqrt(1 / embedding_size)
@@ -674,57 +745,63 @@ class CatModel(nn.Module):
 
         self.embed_rel = nn.Embedding(num_rels, embedding_size)
         k = math.sqrt(1 / embedding_size)
-        nn.init.uniform_(self.embed_rel.weight, -0, 1)
+        nn.init.uniform_(self.embed_rel.weight, -0,1)
 
         self.prod_net = Product(self.embedding_size)
-        self.exp_net = nn.ModuleList()
-        for i in range(self.size_hom_set):
-            self.exp_net.append(EntailmentMorphism(self.embedding_size))
-  #      self.exp_net = EntailmentMorphism(self.embedding_size)
+        self.pullback_net = Pullback(self.embedding_size)
+        self.exp_net = Exponential(self.embedding_size)
         self.ex_net = Existential(self.embedding_size)
 
-        self.dummy_param = nn.Parameter(th.empty(0))
+
         # Embedding network for the ontology ojects
         self.net_object = nn.Sequential(
             self.embed,
-#            nn.Linear(embedding_size, embedding_size),
+            nn.Linear(embedding_size, embedding_size),
 
-#            ACT,
+            self.act,
 
         )
 
         # Embedding network for the ontology relations
         self.net_rel = nn.Sequential(
             self.embed_rel,
- #           nn.Linear(embedding_size, embedding_size),
- #           ACT
+            nn.Linear(embedding_size, embedding_size),
+            self.act
 
         )
 
-        self.variable_getter = nn.Sequential(
-            nn.Linear(embedding_size, embedding_size),
-            nn.ReLU(),
-            nn.Linear(embedding_size, embedding_size),
-            ACT
-        )
+        
+        
+    # def nf4_loss(self, data):
+    #     embed_nets = (self.net_object, self.net_rel, self.embed_snd, self.embed_up, self.embed_big_prod)
+    #     return L.nf4_loss(data, self.pullback_morphisms, self.exponential_morphisms, embed_nets)
+
+    def create_morphism(self):
+        return Morphism(self.embedding_size)
+                 
 
     def forward(self, normal_form, idx, neg = False, margin = 0):
+
+        # logging.debug(f"NF1: {len(nf1)}")
+        # logging.debug(f"NF2: {len(nf2)}")
+        # logging.debug(f"NF3: {len(nf3)}")
+        # logging.debug(f"NF4: {len(nf4)}")
         
         loss = 0
         bs, _ = normal_form.shape
         
         if idx == 1:
 
-            loss = L.nf1_loss(normal_form, self.exp_net, self.net_object, neg = neg, num_objects = self.num_obj, device = self.dummy_param.device)
+            loss = L.nf1_loss(normal_form, self.exp_net, self.prod_net, self.net_object, neg = neg, num_objects = self.num_obj)
 
         elif idx == 2:
             loss = L.nf2_loss(normal_form, self.exp_net, self.prod_net, self.net_object, neg = neg)
 
-        elif idx == 4:
-            loss = L.nf4_loss(normal_form, self.variable_getter, self.exp_net,  self.prod_net,  self.ex_net, self.net_object, self.net_rel, neg = neg)
-
         elif idx == 3:
-            loss = L.nf3_loss(normal_form,  self.variable_getter, self.exp_net, self.prod_net, self.ex_net, self.net_object, self.net_rel,  neg = neg, num_objects = self.num_obj, device = self.dummy_param.device)
+            loss = L.nf3_loss(normal_form, self.exp_net, self.prod_net, self.pullback_net, self.ex_net, self.net_object, self.net_rel, neg = neg)
+
+        elif idx == 4:
+            loss = L.nf4_loss(normal_form, self.exp_net, self.prod_net, self.pullback_net, self.ex_net, self.net_object, self.net_rel,  neg = neg, num_objects = self.num_obj)
         else:
             raise ValueError("Invalid index")
             
@@ -748,7 +825,7 @@ class TestModule(nn.Module):
         assert 3 == ents
         x = x.reshape(-1, ents)
 
-        x = self.catModel(x, 3)
+        x = self.catModel(x, 4)
 
         x = x.reshape(bs, num_prots)
 

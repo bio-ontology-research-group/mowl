@@ -1,4 +1,4 @@
-package org.mowl.CatParser
+package org.mowl.Projectors
 
 // OWL API imports
 import org.semanticweb.owlapi.model._
@@ -16,7 +16,7 @@ import collection.JavaConverters._
 import org.mowl.Types._
 
 
-class CatParser(var ontology: OWLOntology) {
+class CatProjector(var ontology: OWLOntology) {
 
     private val ont_manager = OWLManager.createOWLOntologyManager()
     println(s"INFO: Start loading ontology")
@@ -25,7 +25,7 @@ class CatParser(var ontology: OWLOntology) {
     
     var rel_counter = 0
 
-    def parse = {
+    def project = {
            
         val axioms = ontology.getAxioms()
         val imports = Imports.fromBoolean(false)
@@ -40,7 +40,7 @@ class CatParser(var ontology: OWLOntology) {
 
         val nodes = getNodes(edges)
 
-        val id_edges = nodes.map((x) => new Triple(x, "id", x)).toList
+        val id_edges = nodes.map((x) => new Triple(x, "http://identity", x)).toList
 
 
         (id_edges ::: edges).asJava

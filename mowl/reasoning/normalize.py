@@ -38,7 +38,7 @@ class ELNormalizer():
         normalizedOntology = normalizer.normalize(intAxioms, factory)
         rTranslator = ReverseAxiomTranslator(translator, ontology)
 
-        axioms_dict = {"gci0": [], "gci1": [], "gci2": [], "gci3": []}
+        axioms_dict = {"gci0": [], "gci1": [], "gci2": [], "gci3": [], "gci0_bot": [], "gci1_bot": [], "gci3_bot": []}
         
         for ax in normalizedOntology:
             try:
@@ -60,18 +60,29 @@ def process_axiom(axiom: OWLAxiom):
         left_subclass = operands[0].toStringID()
         right_subclass = operands[1].toStringID()
         superclass = superclass.toStringID()
+        if superclass.contains("owl#Nothing"):
+            return "gci1_bot", GCI1_BOT(left_subclass, right_subclass, superclass)
+        
         return "gci1", GCI1(left_subclass, right_subclass, superclass)
 
     elif type(subclass) == OWLObjectSomeValuesFromImpl:
         obj_property = subclass.getProperty().toString()
         filler = subclass.getFiller().toStringID()
         superclass = superclass.toStringID()
+
+        if superclass.contains("owl#Nothing"):
+            return "gci3_bot", GCI3_BOT(left_subclass, right_subclass, superclass)
+        
         return "gci3", GCI3(obj_property, filler, superclass)
 
     elif type(subclass) == OWLClassImpl:
 
         if type(superclass) == OWLClassImpl:
-            return "gci0", GCI0(subclass.toStringID(), superclass.toStringID())
+            superclass = superclass.toStringID()
+            if superclass.contains("owl#Nothing"):
+                return "gci0_bot", GCI0_BOT(subclass.toStringID(), superclass)
+        
+            return "gci0", GCI0(subclass.toStringID(), superclass)
 
         elif type(superclass) == OWLObjectSomeValuesFromImpl:
             obj_property = superclass.getProperty().toString()
@@ -92,6 +103,17 @@ class GCI0():
         self.subclass = str(subclass)
         self.superclass = str(superclass)
 
+class GCI0_BOT(GCI0):
+
+    def __init__(self, subclass, superclass):
+
+        if not superclass.contains("owl#Nothing"):
+            raise ValueError("Superclass in GCI0_BOT must be the bottom concept.")
+
+        super().__init__(subclass, superclass)
+
+
+        
 class GCI1():
 
     def __init__(self, left_subclass, right_subclass, superclass):
@@ -100,6 +122,15 @@ class GCI1():
         self.right_subclass = str(right_subclass)
         self.superclass = str(superclass)
 
+class GCI1_BOT(GCI1):
+
+    def __init__(self, l, r, superclass):
+
+        if not superclass.contains("owl#Nothing"):
+            raise ValueError("Superclass in GCI1_BOT must be the bottom concept.")
+
+        super().__init__(l, r, superclass)
+        
 class GCI2():
 
     def __init__(self, subclass, obj_property, filler):
@@ -117,3 +148,13 @@ class GCI3():
         self.filler = filler
         self.superclass = superclass
                     
+class GCI3_BOT(GCI3):
+
+    def __init__(self, o, f, superclass):
+
+        if not superclass.contains("owl#Nothing"):
+            raise ValueError("Superclass in GCI3_BOT must be the bottom concept.")
+
+        super().__init__(o, f, superclass)
+
+        
