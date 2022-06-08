@@ -16,224 +16,312 @@ import collection.JavaConverters._
 import org.mowl.Types._
 
 
-class CatProjector(var ontology: OWLOntology) {
+class CatProjector(var ontology: OWLOntology, var bidirectional: Boolean) {
 
-    private val ont_manager = OWLManager.createOWLOntologyManager()
-    println(s"INFO: Start loading ontology")
-    private val data_factory = ont_manager.getOWLDataFactory()
-    println("INFO: Finished creating data factory")
+  private val ont_manager = OWLManager.createOWLOntologyManager()
+  println(s"INFO: Start loading ontology")
+  private val data_factory = ont_manager.getOWLDataFactory()
+  println("INFO: Finished creating data factory")
     
-    var rel_counter = 0
+  var rel_counter = 0
 
-    def project = {
+  def project = {
            
-        val axioms = ontology.getAxioms()
-        val imports = Imports.fromBoolean(false)
+    val axioms = ontology.getAxioms()
+    val imports = Imports.fromBoolean(false)
 
-        val go_classes = ontology.getClassesInSignature(imports).asScala.toList
+    val go_classes = ontology.getClassesInSignature(imports).asScala.toList
 
 
-        println(s"INFO: Number of GO classes: ${go_classes.length}")
-       
+    println(s"INFO: Number of GO classes: ${go_classes.length}")
+
+
+    val edges = go_classes.foldLeft(List[Triple]()){(acc, x) => acc ::: processGOClass(x)}
+
+    val nodes = getNodes(edges)
+
+    // val id_edges = nodes.map((x) => new Triple(x, "http://identity", x)).toList
+
+    edges.asJava
+    //        (id_edges ::: edges).asJava
+  }
+
+
+
+
+
+  def processGOClass(go_class: OWLClass): List[Triple] = {
+    val axioms = ontology.getAxioms(go_class).asScala.toList
+
+    val edges = axioms.flatMap(parseAxiom(go_class, _: OWLClassAxiom))
+    edges
+  }
+
+  def parseAxiom(go_class: OWLClass, axiom: OWLClassAxiom): List[Triple] = {
+    val axiomType = axiom.getAxiomType().getName()
+    axiomType match {
+      case "EquivalentClasses" => {
+        var ax = axiom.asInstanceOf[OWLEquivalentClassesAxiom].getClassExpressionsAsList.asScala.toList
+        ax.filter(_ != go_class).flatMap(parseEquivClassAxiom(go_class, _: OWLClassExpression))
+      }
+      case "SubClassOf" => {
+        var ax = axiom.asInstanceOf[OWLSubClassOfAxiom]
+        parseSubClassAxiom(ax.getSubClass.asInstanceOf[OWLClass], ax.getSuperClass)
+      }
+      // case "DisjointClasses" => {
+      //   var ax = axiom.asInstanceOf[OWLDisjointClassesAxiom].getClassExpressionsAsList.asScala.toList
+      //   ax.filter(_ != go_class).flatMap(parseDisjointnessAxiom(go_class, _: OWLClassExpression))
+      // }
+      case _ => {
+        println(s"Not parsing axiom $axiomType")
+        Nil
+//        throw new Exception()
+      }
+    }
+  }
+//}
+
+
+  /////////////////////////////////////////////
+  def parseEquivClassAxiom(go_class: OWLClass, rightSideExpr: OWLClassExpression, prevRel: Option[String] = None, origin: String = "Not specified"): List[Triple] =  {
+
+
+    val rightSideType = rightSideExpr.getClassExpressionType.getName
+
+    rightSideType match {
+
+      case "Class" => {
+        val rightOWLClass = rightSideExpr.asInstanceOf[OWLClass]
+        val subclassEntailment1 = subclassMorphism(go_class, rightOWLClass)
+        val subclassEntailment2 = subclassMorphism(rightOWLClass, go_class)
+
+        subclassEntailment1 :: subclassEntailment2 :: Nil
+      }
+      case _ => {
+
+        val rightSideObj = "equivalentTo_" + go_class.toStringID
+        val entailment1 = subclassMorphism(rightSideObj, go_class)
+        val otherEntailments = parseSubClassAxiom(go_class, rightSideExpr, rightSideObj)
         
-        val edges = go_classes.foldLeft(List[Triple]()){(acc, x) => acc ::: processGOClass(x)}
+        entailment1 :: otherEntailments
 
-        val nodes = getNodes(edges)
+      }
+    }
+  }
 
-        val id_edges = nodes.map((x) => new Triple(x, "http://identity", x)).toList
+  def parseDisjointnessAxiom() = {}
+  // def parseDisjointnessAxiom(go_class: OWLClass, rightSideExpr: OWLClassExpression) = {
+
+  //   val rightSideType = rightSideExpr.getClassExpressionType.getName
+
+  //   rightSideType match {
+
+  //     case "Class" => {
+  //       val intersectionObject = "intersection_" + go_class.toStringID + "_" + rightSideExpr.asInstanceOf[OWLClass].toStringID
+
+  //       val entailment = subclassMorphism(intersectionObject, Bottom )
+  //       val intersection_edges = parseIntersection(go_class, rightSideExpr, intersectionObject)
+  //       entailment :: intersectionEdges
+  //     }
+
+  //     case _ => {
+  //       val intersectionObject = "intersection_" + go_class.toStringID + "_others"
+  //       val entailment = entailmentMorphism(intersectionObject, Bottom)
+  //       val intersectionEdges = parseIntersection(go_class, rightSideExpr, intersectionObject)
+
+  //       entailment :: intersectionEdges
+
+  //     }
+
+  //   }
 
 
-        (id_edges ::: edges).asJava
+ //  }
+
+  def parseSubClassAxiom(go_class: OWLClass, superClass: OWLClassExpression, nameRightSide: String  = ""): List[Triple] = {
+
+    val rightSideType = superClass.getClassExpressionType.getName
+
+    rightSideType match {
+      case "Class" => {
+        val subclassTriple = subclassMorphism(go_class, superClass.asInstanceOf[OWLClass])
+        val superclassTriple = superclassMorphism(superClass.asInstanceOf[OWLClass], go_class)
+        subclassTriple :: superclassTriple :: Nil
+      }
+      case _ => {
+        val superClassObject = nameRightSide match {
+          case "" => "superclassOf_" + go_class.toStringID
+          case m => m
+        }
+        
+        val entailment = subclassMorphism(go_class, superClassObject)
+        val reverseEntailment = superclassMorphism(superClassObject, go_class)
+        val rightEdges = parseExpression(superClass, superClassObject)
+
+        entailment :: reverseEntailment :: rightEdges
+
+      }
     }
 
-    
 
-   
-    
-    def processGOClass(go_class: OWLClass): List[Triple] = {
-        val axioms = ontology.getAxioms(go_class).asScala.toList
+  }
 
-        val edges = axioms.flatMap(parseAxiom(go_class, _: OWLClassAxiom))
+
+  /////////////////////////////////////////////
+
+  def parseExpression(expression: OWLClassExpression, origin: String) : List[Triple] = {
+    val expressionType = expression.getClassExpressionType.getName
+
+    expressionType match {
+      case "ObjectIntersectionOf" => {
+        val operands = expression.asInstanceOf[OWLObjectIntersectionOf].getOperands.asScala.toList
+        val edges = operands.flatMap((x) => generateProjectionMorphism(origin, x))
         edges
-    }
+      }
 
-    def parseAxiom(go_class: OWLClass, axiom: OWLClassAxiom): List[Triple] = {
-        val axiomType = axiom.getAxiomType().getName()
-        axiomType match {
-            case "EquivalentClasses" => {
-                var ax = axiom.asInstanceOf[OWLEquivalentClassesAxiom].getClassExpressionsAsList.asScala.toList
-                ax.filter(_ != go_class).flatMap(parseEquivClassAxiom(go_class, _: OWLClassExpression))
-            }
-            case "SubClassOf" => {
-                var ax = axiom.asInstanceOf[OWLSubClassOfAxiom]
-                parseSubClassAxiom(ax.getSubClass.asInstanceOf[OWLClass], ax.getSuperClass)
-            }
-            case "DisjointClasses" => {
-                var ax = axiom.asInstanceOf[OWLDisjointClassesAxiom].getClassExpressionsAsList.asScala.toList
-                ax.filter(_ != go_class).flatMap(parseDisjointnessAxiom(go_class, _: OWLClassExpression))
-            }
-            case _ =>  throw new Exception(s"Not parsing axiom $axiomType")
+      case "ObjectSomeValuesFrom" => {
+        val expr = expression.asInstanceOf[OWLObjectSomeValuesFrom]
+        val filler = expr.getFiller
+        val property = expr.getProperty
+
+        filler.getClassExpressionType.getName match {
+          case "Class" => {
+            new Triple(origin, property.toString, filler.asInstanceOf[OWLClass]) :: Nil
+            
+          }
         }
-    }
-
-
-    /////////////////////////////////////////////
-    def parseEquivClassAxiom(go_class: OWLClass, rightSideExpr: OWLClassExpression, prevRel: Option[String] = None, origin: String = "Not specified"): List[Triple] =  {
-        val exprType = rightSideExpr.getClassExpressionType().getName()
-
-        exprType match {
-            case "ObjectIntersectionOf" =>  {
-                var expr = rightSideExpr.asInstanceOf[OWLObjectIntersectionOf].getOperands.asScala.toList
-
-                
-                expr.flatMap(parseIntersection(go_class, _: OWLClassExpression))
-                }
-            case "ObjectUnionOf" => {
-                var expr = rightSideExpr.asInstanceOf[OWLObjectUnionOf].getOperands.asScala.toList
-                expr.flatMap(parseUnion(go_class, _: OWLClassExpression))
-            }
-
-            case "ObjectSomeValuesFrom" => {
-                val right_side_class = rightSideExpr.asInstanceOf[OWLObjectSomeValuesFrom]
-                
-                val(rel, dst_class) = parseQuantifiedExpression(Existential(right_side_class)) 
-
-                prevRel match {
-                    case None => parseEquivClassAxiom(go_class, dst_class, Some(rel), "rec equiv OSV") // simple case
-
-                    case Some(r) => parseEquivClassAxiom(go_class, dst_class, Some(r + "_" + rel))
-
-                    case _ => throw new Exception(s"Complex structure in parseEquivClass (ObjectSomeValuesFrom) $origin\n$go_class\n$rightSideExpr")
-                }
-            }
-            case "Class" => {
-                List()
-            }
-            case _ =>  throw new Exception(s"Not parsing EquivalentClass rigth side $exprType\n$go_class\n$rightSideExpr")
-        }
-
-    }
-
-    def parseDisjointnessAxiom(go_class: OWLClass, rightSideExpr: OWLClassExpression) = {
-        val exprType = rightSideExpr.getClassExpressionType().getName()
-
-        val left_proj = projectionMorphism(Bottom, go_class)
-
-        val right_proj = parseIntersection(Bottom, rightSideExpr, None, origin = "Disjointness")
-
-        left_proj :: right_proj
-    }
-
-    def parseSubClassAxiom(go_class: OWLClass, superClass: OWLClassExpression): List[Triple] = {
-
-        val neg_sub = negationMorphism(go_class)
-
-        val injection_sub = parseUnion(Top, go_class, origin="SubClass") // new Triple(go_class, "injects", "Top")
-
-        val injections_super = parseUnion(Top, superClass, origin="SubClass")
-
-        neg_sub :: injection_sub ::: injections_super
-
-    }
-
-
-    /////////////////////////////////////////////
-    def parseIntersection(go_class: OWLClass, projected_expr: OWLClassExpression, prevRel: Option[String] = None, origin: String = "Equiv") : List[Triple] = {
-        val exprType = projected_expr.getClassExpressionType.getName
-
-        exprType match {
-            case "Class" => projectionMorphism(go_class, projected_expr, prevRel) :: Nil
-
-            case "ObjectComplementOf" => {
-                val operand = projected_expr.asInstanceOf[OWLObjectComplementOf].getOperand
-                val operandType = operand.getClassExpressionType.getName
-
-                operandType match {
-                    case "Class" => {
-                        val neg = negationMorphism(operand)
-                        val projection = parseIntersection(go_class, operand, prevRel,"rec intersection OC")
-                        neg :: projection
-                    }
-                    case _ => {
-                        val projected_NNF = projected_expr.getNNF
-                        parseIntersection(go_class, projected_NNF, prevRel)
-                    }
-                }
-            }
-
-            case "ObjectSomeValuesFrom" => {
-                val proj_class = projected_expr.asInstanceOf[OWLObjectSomeValuesFrom]
-                
-                val(rel, dst_class) = parseQuantifiedExpression(Existential(proj_class)) 
-
-                prevRel match {
-                    case None => parseIntersection(go_class, dst_class, Some(rel), "rec intersection OSV") // simple case
-
-                    case Some(r) => parseIntersection(go_class, dst_class, Some(r + "_" + rel))
-
-                    case _ => throw new Exception(s"Complex structure in ObjectSomeValuesFrom $origin\n$go_class\n$projected_expr")
-                }
-            }
-
-
-            case "ObjectAllValuesFrom" => {
-                val proj_class = projected_expr.asInstanceOf[OWLObjectAllValuesFrom]
-                
-                val(rel, dst_class) = parseQuantifiedExpression(Universal(proj_class)) 
-
-                prevRel match {
-                    case None => parseIntersection(go_class, dst_class, Some(rel), "rec intersection OAV") // simple case
-
-                    // case Some(r) => parseIntersection(go_class, dst_class, Some(r + "_" + rel))
-
-                    case _ => throw new Exception(s"Complex structure in ObjectSomeValuesFrom $origin\n$go_class\n$projected_expr")
-                }
-            }
-
-
-            case "ObjectIntersectionOf" => {
-                val proj_class = projected_expr.asInstanceOf[OWLObjectIntersectionOf]
-                val exactCardinality = checkExactCardinality(proj_class)
-                
-                exactCardinality match {
-                    case None => {
-                        val proj_class = projected_expr.asInstanceOf[OWLObjectIntersectionOf].getOperands.asScala.toList
-
-                
-                       proj_class.flatMap(parseIntersection(go_class, _: OWLClassExpression, prevRel, "nested intersection"))
-                    }
-                    case Some(expr) => parseIntersection(go_class, expr, prevRel, "exactCardinality")
-                }
-            }
-
-            case "ObjectMinCardinality" => {
-                val proj_class = projected_expr.asInstanceOf[OWLObjectMinCardinality]
-                
-                val(rel, src_class) = parseQuantifiedExpression(MinCardinality(proj_class), true) 
-
-                val src_type = src_class.getClassExpressionType.getName
-                
-                prevRel match {
-                    case None => parseIntersection(go_class, src_class, Some(rel), "rec union OMC") // simple case
-
-                    case _ => throw new Exception(s"Complex structure in ObjectMinCardinality $src_type")
-
-                }
-            }
-
-            case "ObjectUnionOf" => {
-                val proj_class = projected_expr.asInstanceOf[OWLObjectUnionOf]
-                
-                //throw new Exception(s"Not parsed complex intersection in union: $origin\n$go_class")
-                println(s"PARSING WARNING: Not parsed complex nested union in intersection: $origin\n$go_class")
-                List()
         
+      }
+
+      case _ =>  {
+        println(s"Not parsing axiom $expressionType")
+        Nil
+      }
+    }
+  }
+
+  
+
+  def generateProjectionMorphism(big: String, projected: OWLClassExpression) : List[Triple] = {
+    val exprType = projected.getClassExpressionType.getName
+
+        exprType match {
+          case "Class" => projectionMorphism(big, projected) :: Nil
+
+          // case "ObjectComplementOf" => {
+          //       val operand = projected.asInstanceOf[OWLObjectComplementOf].getOperand
+          //       val operandType = operand.getClassExpressionType.getName
+
+          //       operandType match {
+          //         case "Class" => {
+          //           val negative = "not_" + operand.toStringID
+          //           projectionMorphism(go_class, negative)
+          //           }
+          //           case _ => {
+          //             Nil
+          //           }
+          //       }
+          //   }
+
+          //   case "ObjectSomeValuesFrom" => {
+          //       val projType = projected.asInstanceOf[OWLObjectSomeValuesFrom]
+                
+          //       val(rel, dst_class) = parseQuantifiedExpression(Existential(proj_class)) 
+
+
+          //       prevRel match {
+          //           case None => parseIntersection(go_class, dst_class, Some(rel), "rec intersection OSV") // simple case
+
+          //           case Some(r) => parseIntersection(go_class, dst_class, Some(r + "_" + rel))
+
+          //           case _ => throw new Exception(s"Complex structure in ObjectSomeValuesFrom $origin\n$go_class\n$projected_expr")
+          //       }
+          //   }
+
+
+          //   case "ObjectAllValuesFrom" => {
+          //       val proj_class = projected_expr.asInstanceOf[OWLObjectAllValuesFrom]
+                
+          //       val(rel, dst_class) = parseQuantifiedExpression(Universal(proj_class)) 
+
+          //       prevRel match {
+          //           case None => parseIntersection(go_class, dst_class, Some(rel), "rec intersection OAV") // simple case
+
+          //           // case Some(r) => parseIntersection(go_class, dst_class, Some(r + "_" + rel))
+
+          //           case _ => throw new Exception(s"Complex structure in ObjectSomeValuesFrom $origin\n$go_class\n$projected_expr")
+          //       }
+          //   }
+
+
+          //   case "ObjectIntersectionOf" => {
+          //       val proj_class = projected_expr.asInstanceOf[OWLObjectIntersectionOf]
+          //       val exactCardinality = checkExactCardinality(proj_class)
+                
+          //       exactCardinality match {
+          //           case None => {
+          //               val proj_class = projected_expr.asInstanceOf[OWLObjectIntersectionOf].getOperands.asScala.toList
+
+                
+          //              proj_class.flatMap(parseIntersection(go_class, _: OWLClassExpression, prevRel, "nested intersection"))
+          //           }
+          //           case Some(expr) => parseIntersection(go_class, expr, prevRel, "exactCardinality")
+          //       }
+          //   }
+
+          //   case "ObjectMinCardinality" => {
+          //       val proj_class = projected_expr.asInstanceOf[OWLObjectMinCardinality]
+                
+          //       val(rel, src_class) = parseQuantifiedExpression(MinCardinality(proj_class), true) 
+
+          //       val src_type = src_class.getClassExpressionType.getName
+                
+          //       prevRel match {
+          //           case None => parseIntersection(go_class, src_class, Some(rel), "rec union OMC") // simple case
+
+          //           case _ => throw new Exception(s"Complex structure in ObjectMinCardinality $src_type")
+
+          //       }
+          //   }
+
+          //   case "ObjectUnionOf" => {
+          //       val proj_class = projected_expr.asInstanceOf[OWLObjectUnionOf]
+                
+          //       //throw new Exception(s"Not parsed complex intersection in union: $origin\n$go_class")
+          //       println(s"PARSING WARNING: Not parsed complex nested union in intersection: $origin\n$go_class")
+          //       List()
+        
+          //   }
+          case "ObjectSomeValuesFrom" => {
+            val projected_ = projected.asInstanceOf[OWLObjectSomeValuesFrom]
+            val filler = projected_.getFiller
+            val objProp = projected_.getProperty
+
+            filler.getClassExpressionType.getName match {
+              case "Class" => {
+                val filler_ = filler.asInstanceOf[OWLClass]
+                val existential_object = "exists_" + objProp.toString + "_" + filler_.toStringID
+                val projMorphism = projectionMorphism(big, existential_object)
+                val otherMorphism = new Triple(existential_object, objProp.toString, filler_)
+
+                projMorphism :: otherMorphism :: Nil
+              }
+              case _ => {
+                println("Not parsing complex filler in projection morphism: $filler")
+                Nil
+              }
             }
 
-            case _ =>  throw new Exception(s"Not parsing Intersection ($origin) operand $exprType\n$go_class\n$projected_expr")
+          }
+          case _ =>  {
+            println(s"Not parsing projection from $big into $projected")
+            Nil
+            
+          }
         }
+  }
 
-    }
+
 
     def parseUnion(go_class: OWLClass, injected_expr: OWLClassExpression, prevRel: Option[String] = None, origin: String = "Union"): List[Triple] = {
         val exprType = injected_expr.getClassExpressionType.getName
@@ -428,12 +516,68 @@ class CatProjector(var ontology: OWLOntology) {
         }
     }
 
-    def projectionMorphism(src: OWLClassExpression, dst: OWLClassExpression, rel: Option[String] = None) = {
-        val src_OWLClass = src.asInstanceOf[OWLClass]
-        val dst_OWLClass = dst.asInstanceOf[OWLClass]
-        rel match {
-            case Some(r) => new Triple(src_OWLClass, "projects_" + r, dst_OWLClass)
-            case None => new Triple(src_OWLClass, "projects", dst_OWLClass)
-        }
+    def projectionMorphism(src: OWLClassExpression, dst: OWLClassExpression) = {
+    val src_OWLClass = src.asInstanceOf[OWLClass]
+    val dst_OWLClass = dst.asInstanceOf[OWLClass]
+    new Triple(src_OWLClass, "projects", dst_OWLClass)
+    
     }
+    def projectionMorphism(src: String, dst: OWLClassExpression) = {
+      val src_OWLClass = src
+      val dst_OWLClass = dst.asInstanceOf[OWLClass]
+      new Triple(src_OWLClass, "projects", dst_OWLClass)
+    
+    }
+    def projectionMorphism(src: OWLClassExpression, dst: String) = {
+    val src_OWLClass = src.asInstanceOf[OWLClass]
+    val dst_OWLClass = dst
+    new Triple(src_OWLClass, "projects", dst_OWLClass)
+    
+    }
+    def projectionMorphism(src: String, dst: String) = {
+      val src_OWLClass = src
+    val dst_OWLClass = dst
+    new Triple(src_OWLClass, "projects", dst_OWLClass)
+    
+    }
+
+    def subclassMorphism(src: OWLClassExpression, dst: OWLClassExpression) = {
+      val src_OWLClass = src.asInstanceOf[OWLClass]
+      val dst_OWLClass = dst.asInstanceOf[OWLClass]
+      new Triple(src_OWLClass, "subclass", dst_OWLClass)
+      
+  }
+  def subclassMorphism(src: OWLClassExpression, dst: String) = {
+      val src_OWLClass = src.asInstanceOf[OWLClass]
+      val dst_OWLClass = dst
+      new Triple(src_OWLClass, "subclass", dst_OWLClass)
+      
+  }
+  def subclassMorphism(src: String, dst: OWLClassExpression) = {
+    val src_OWLClass = src
+    val dst_OWLClass = dst.asInstanceOf[OWLClass]
+    new Triple(src_OWLClass, "subclass", dst_OWLClass)
+      
+  }
+
+
+  def superclassMorphism(src: OWLClassExpression, dst: OWLClassExpression) = {
+      val src_OWLClass = src.asInstanceOf[OWLClass]
+      val dst_OWLClass = dst.asInstanceOf[OWLClass]
+      new Triple(src_OWLClass, "superclass", dst_OWLClass)
+      
+  }
+  def superclassMorphism(src: OWLClassExpression, dst: String) = {
+      val src_OWLClass = src.asInstanceOf[OWLClass]
+      val dst_OWLClass = dst
+      new Triple(src_OWLClass, "superclass", dst_OWLClass)
+      
+  }
+  def superclassMorphism(src: String, dst: OWLClassExpression) = {
+    val src_OWLClass = src
+    val dst_OWLClass = dst.asInstanceOf[OWLClass]
+    new Triple(src_OWLClass, "superclass", dst_OWLClass)
+      
+  }
+
 }

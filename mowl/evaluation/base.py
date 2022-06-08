@@ -99,36 +99,59 @@ class AxiomsRankBasedEvaluator():
     
     def __init__(
             self,
-            axioms,
             eval_method,
             axioms_to_filter = None,
             device = "cpu",
             verbose = False
     ):
 
-        self.axioms = self._init_axioms(axioms)
+        self.axioms = None
         self.eval_method = eval_method
         self.device = device
         self.verbose = verbose
+        self.axioms_to_filter_raw = axioms_to_filter
+        self.axioms_to_filter = None
         if axioms_to_filter is None:
             self._compute_filtered_metrics = False
         else:
             self._compute_filtered_metrics = True
-            
-        self.axioms_to_filter = self._init_axioms(axioms_to_filter)
         
         return
 
+
+    @property
+    def metrics(self):
+        return self._metrics
+
+    @property
+    def fmetrics(self):
+        return self._fmetrics
+    
     def _init_axioms(self, axioms):
         """This method must transform the axioms into the appropriate data structure to be used by the ``eval_method``. This method accesses the ``axioms`` variable, which can be an OWL file or a list of OWLAxioms.
         """
         raise NotImplementedError()
 
-    def compute_axiom_rank(self, axiom):
+    def _init_axioms_to_filter(self, axioms):
         raise NotImplementedError()
     
-    def __call__(self):
+    def compute_axiom_rank(self, axiom, predictions):
+        raise NotImplementedError()
 
+    def _load_filtered_scores(self):
+        raise NotImplementedError()
+
+    def _get_predictions(self):
+        raise NotImplementedError()
+    
+    def __call__(self, axioms, init_axioms = False):
+
+        if self.axioms is None or init_axioms:
+            self.axioms = self._init_axioms(axioms)
+            if self.axioms_to_filter is None:
+                self.axioms_to_filter = self._init_axioms_to_filter(self.axioms_to_filter_raw)
+            self.filtered_scores = self._load_filtered_scores()
+        predictions = self.get_predictions()
         tops = {1: 0, 3: 0, 5: 0, 10:0, 100:0, 1000:0}
         ftops = {1: 0, 3: 0, 5: 0, 10:0, 100:0, 1000:0}
         mean_rank = 0
@@ -138,7 +161,7 @@ class AxiomsRankBasedEvaluator():
 
         n = 0
         for axiom in tqdm(self.axioms):
-            rank, frank, worst_rank = self.compute_axiom_rank(axiom)
+            rank, frank, worst_rank = self.compute_axiom_rank(axiom, predictions)
 
             if rank is None:
                 continue
@@ -186,7 +209,7 @@ class AxiomsRankBasedEvaluator():
 
     def print_metrics(self):
 
-        to_print = "Normal:\t"
+        to_print = "Normal:  \t"
         for name, value in self._metrics.items():
             to_print += f"{name}: {value:.2f}\t"
 

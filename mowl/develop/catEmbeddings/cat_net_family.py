@@ -1,7 +1,7 @@
 import torch as th
 import torch.nn as nn
 import random
-#ACT = nn.Sigmoid()
+#ACT = nn.ReLU()
 ACT = nn.Identity()
 
 def norm(a,b, dim = 1):
@@ -66,16 +66,21 @@ class Product(nn.Module):
         self.p2  = entailment_net
 
         self.ent = entailment_net
-                                        
+        # self.pi1 = EntailmentHomSet(embedding_size, hom_set_size = 5)
+        # self.pi2 = EntailmentHomSet(embedding_size, hom_set_size = 5)
+        # self.m   = EntailmentHomSet(embedding_size, hom_set_size = 1)
+        # self.p1  = EntailmentHomSet(embedding_size, hom_set_size = 5)
+        # self.p2  = EntailmentHomSet(embedding_size, hom_set_size = 5)
         
 
     def forward(self, left, right, up=None):
 
         product = self.prod(th.cat([left, right], dim = 1))
-
+#        product = (left + right)/2
 
         up = (product + rand_tensor(product.shape, product.device))/2
-
+#        if up is None:
+#            up = self.embed_up(th.cat([left, right], dim = 1))
 
         
         loss = 0
@@ -243,7 +248,7 @@ class Existential(nn.Module):
         x = th.cat([outer, filler], dim =1)
         sliced_filler = self.slicing_filler(x)
 
-
+#        prod = (sliced_relation + sliced_filler)/2
 
         prod, prod_loss = self.prod_net(sliced_relation, sliced_filler)
  

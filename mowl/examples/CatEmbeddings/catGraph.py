@@ -5,18 +5,41 @@ import mowl
 mowl.init_jvm("4g")
 
 from org.mowl.Projectors import CatProjector
-from mowl.datasets.ppi_yeast import PPIYeastSlimDataset
+from mowl.datasets.ppi_yeast import PPIYeastSlimDataset, PPIYeastDataset
 from mowl.projection.factory import projector_factory
 from mowl.projection.edge import Edge
 from mowl.walking.factory import walking_factory
 from gensim.models import Word2Vec
-from mowl.visualization import TSNE as MTSNE
+from mowl.visualization.base import TSNE as MTSNE
 from gensim.models.word2vec import LineSentence
 from mowl.evaluation.rank_based import EmbeddingsRankBasedEvaluator
 from mowl.evaluation.base import CosineSimilarity
 import pickle as pkl
 import logging
 from os.path import exists
+
+
+def exist_files(*args):
+    ex = True
+    for arg in args:
+        ex &= exists(arg)
+
+    return ex
+
+def save_pickles(*args):
+    for data, filename in args:
+        with open(filename, "wb") as f:
+            pkl.dump(data, f)
+
+def load_pickles(*args):
+    pkls = []
+    for arg in args:
+        with open(arg, "rb") as f:
+            pkls.append(pkl.load(f))
+
+    return tuple(pkls)
+
+
 
 ROOT = "data/projection/"
 dummy_params  = {
@@ -36,48 +59,68 @@ dummy_params  = {
     "epochs" : 20
 }
 
+params = {
+    "bd" : True,
+    "ot" : False,
+    "il" : False,
+    
+    "num_walks" : 20,
+    "walk_length" : 20,
+    "workers" : 16,
+    "alpha" : 0.1,
+    "p" : 10,
+    "q" : 0.1,
+    
+    "vector_size" : 100, 
+    "window" : 5 ,
+    "epochs" : 10
+}
 
-params = dummy_params
+
+params = params
+
 test = "ppi"
-dataset = PPIYeastSlimDataset()
+dataset = PPIYeastDataset()
 device = "cuda:1"
-projector = CatProjector(dataset.ontology)
+projector = CatProjector(dataset.ontology, True)
 
 edges = projector.project()
-edges = [(str(e.src()), str(e.rel()), str(e.dst())) for e in edges]
-
+edges = [Edge(str(e.src()), str(e.rel()), str(e.dst())) for e in edges]
+print(f"number of edges: {len(edges)}")
+with open("data/projection/graph.pkl", "wb") as f:
+    pkl.dump(edges, f)
 walking_method = 'deepwalk'
 
 walks_file = ROOT + f"walks_{walking_method}.txt"
 workers = params["workers"]
     
-if not exists(walks_file):
-    logging.info("Walks not found. Generating...")
-    num_walks = params["num_walks"]
-    walk_length = params["walk_length"]
-        
-    alpha = params["alpha"]
-    p = params["p"]
-    q = params["q"]
-    
-    walker = walking_factory(
-        walking_method,
-        num_walks,
-        walk_length,
-        walks_file,
-        workers = workers,
-        alpha = alpha,
-        p = p,
-        q=q)
 
-    walker.walk(edges)
+logging.info("Walks not found. Generating...")
+num_walks = params["num_walks"]
+walk_length = params["walk_length"]
+
+alpha = params["alpha"]
+p = params["p"]
+q = params["q"]
+    
+walker = walking_factory(
+    walking_method,
+    num_walks,
+    walk_length,
+    walks_file,
+    workers = workers,
+    alpha = alpha,
+    p = p,
+    q=q)
+
+walker.walk(edges)
 
 
 ### WORD2VEC
 
 word2vec_file = ROOT + f"embeddings_{walking_method}"
 
-if exists(word2vec_file):
+if exists(word2vec_file) and False:
     w2v = Word2Vec.load(word2vec_file)
     vectors = w2v.wv
 else:
@@ -175,7 +218,7 @@ else:
 
 
     ###### TSNE ############
-
+    tsne = True
     if tsne:
         ec_num_file = ROOT + "ec_numbers_data"
 
@@ -202,22 +245,3 @@ else:
         tsne.savefig(ROOT + f'mowl_tsne_{walking_method}.jpg')
         
 
-def exist_files(*args):
-    ex = True
-    for arg in args:
-        ex &= exists(arg)
-
-    return ex
-
-def save_pickles(*args):
-    for data, filename in args:
-        with open(filename, "wb") as f:
-            pkl.dump(data, f)
-
-def load_pickles(*args):
-    pkls = []
-    for arg in args:
-        with open(arg, "rb") as f:
-            pkls.append(pkl.load(f))
-
-    return tuple(pkls)
