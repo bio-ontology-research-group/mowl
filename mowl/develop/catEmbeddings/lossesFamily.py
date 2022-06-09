@@ -4,13 +4,6 @@ import numpy as np
 import random
 
 
-def morphism_loss(antecedent, consequent, morphism_net):
-
-    pos_loss = morphism_net(antecedent, consequent)
-    neg_loss = max(0, -morphism_net(consequent, antecedent))
-
-    return pos_loss - neg_loss
-
 def gci0_loss(objects, exponential_net,  embed_objects, neg = False,  num_objects = None, device = "cpu"):
 
     antecedents = embed_objects(objects[:, 0])

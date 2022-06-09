@@ -48,6 +48,10 @@ class Product(nn.Module):
         self.embed_up = nn.Sequential(
             nn.Linear(2*embedding_size, embedding_size),
             nn.LayerNorm(embedding_size),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(embedding_size, embedding_size),
+            nn.LayerNorm(embedding_size),
             ACT
         )
 
@@ -55,6 +59,10 @@ class Product(nn.Module):
         
         self.prod = nn.Sequential(
             nn.Linear(2*embedding_size, embedding_size),
+            nn.LayerNorm(embedding_size),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(embedding_size, embedding_size),
             nn.LayerNorm(embedding_size),
             ACT
         )
@@ -124,11 +132,19 @@ class Coproduct(nn.Module):
         self.embed_up = nn.Sequential(
             nn.Linear(2*embedding_size, embedding_size),
             nn.LayerNorm(embedding_size),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(embedding_size, embedding_size),
+            nn.LayerNorm(embedding_size),
             ACT
         )
 
         self.coprod = nn.Sequential(
             nn.Linear(2*embedding_size, embedding_size),
+            nn.LayerNorm(embedding_size),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(embedding_size, embedding_size),
             nn.LayerNorm(embedding_size),
             ACT
         )
@@ -192,6 +208,7 @@ class EntailmentHomSet(nn.Module):
                 morphism.append(MorphismBlock(embedding_size, dropout))
 
             morphism.append(nn.Linear(embedding_size, embedding_size))
+            morphism.append(nn.LayerNorm(embedding_size))
             morphism.append(ACT)
 
             self.hom_set.append(morphism)
@@ -220,6 +237,10 @@ class Existential(nn.Module):
         
         self.slicing_filler = nn.Sequential(
             nn.Linear(2*embedding_size, embedding_size),
+            nn.LayerNorm(embedding_size),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(embedding_size, embedding_size),
             nn.LayerNorm(embedding_size),
             ACT
         )

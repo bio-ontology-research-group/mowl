@@ -1,9 +1,10 @@
 import torch as th
 import torch.nn as nn
 import random
-#ACT = nn.ReLU()
 ACT = nn.Identity()
-
+#ACT = nn.Identity()
+#ACT = nn.Sigmoid()
+#th.autograd.set_detect_anomaly(True)
 def norm(a,b, dim = 1):
 #    normA = th.linalg.norm(a, dim = dim)
 #    normB = th.linalg.norm(b, dim = dim)
@@ -14,6 +15,15 @@ def norm(a,b, dim = 1):
 #    return tensor
 #    return th.relu(tensor)
 
+    hom_a = a[:, -1].unsqueeze(1)
+#    print(a.shape, hom_a.shape)
+    a = a/hom_a
+    hom_b = b[:, -1].unsqueeze(1)
+    b = b/hom_b
+
+    a = a[:,:-1]
+    b = b[:, :-1]
+    
     n = a.shape[1]
     sqe = (a-b)**2
     rmse = th.sqrt(th.sum(sqe, dim =1))/n 
@@ -41,20 +51,25 @@ class Product(nn.Module):
 
     def __init__(self, embedding_size, entailment_net, coproduct_net, dropout = 0):
         super().__init__()
-        
-
-        
-    
-        self.embed_up = nn.Sequential(
-            nn.Linear(2*embedding_size, embedding_size),
-            nn.LayerNorm(embedding_size),
-            ACT
-        )
 
         self.coproduct_net = coproduct_net
         
         self.prod = nn.Sequential(
             nn.Linear(2*embedding_size, embedding_size),
+            nn.LayerNorm(embedding_size),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(embedding_size, embedding_size),
+            nn.LayerNorm(embedding_size),
+            ACT
+        )
+
+        self.up = nn.Sequential(
+            nn.Linear(2*embedding_size, embedding_size),
+            nn.LayerNorm(embedding_size),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(embedding_size, embedding_size),
             nn.LayerNorm(embedding_size),
             ACT
         )
@@ -78,7 +93,7 @@ class Product(nn.Module):
         product = self.prod(th.cat([left, right], dim = 1))
 #        product = (left + right)/2
 
-        up = (product + rand_tensor(product.shape, product.device))/2
+        up = self.up(th.cat([left, right], dim =1))# (product + rand_tensor(product.shape, product.device))/2
 #        if up is None:
 #            up = self.embed_up(th.cat([left, right], dim = 1))
 
@@ -86,9 +101,9 @@ class Product(nn.Module):
         loss = 0
 
         #Diagram losses
-        loss += self.p1(up, left)
-        loss += self.m(up, product)
-        loss += self.p2(up, right)
+#        loss += self.p1(up, left)
+#        loss += self.m(up, product)
+#        loss += self.p2(up, right)
         loss += self.pi1(product, left)
         loss += self.pi2(product, right)
 
@@ -126,14 +141,22 @@ class Coproduct(nn.Module):
 
         self.bn = nn.LayerNorm(embedding_size)
 
-        self.embed_up = nn.Sequential(
+        self.coprod = nn.Sequential(
             nn.Linear(2*embedding_size, embedding_size),
             nn.LayerNorm(embedding_size),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(embedding_size, embedding_size),
+            nn.LayerNorm(embedding_size),            
             ACT
         )
 
-        self.coprod = nn.Sequential(
+        self.down = nn.Sequential(
             nn.Linear(2*embedding_size, embedding_size),
+            nn.LayerNorm(embedding_size),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(embedding_size, embedding_size),
             nn.LayerNorm(embedding_size),
             ACT
         )
@@ -150,43 +173,105 @@ class Coproduct(nn.Module):
         coproduct = self.coprod(th.cat([left, right], dim = 1))
 #        product = (left + right)/2
 
-        down = (coproduct + rand_tensor(coproduct.shape, coproduct.device))/2
+        down = self.down(th.cat([left, right], dim =1)) #(coproduct + rand_tensor(coproduct.shape, coproduct.device))/2
 #        if up is None:
 #            up = self.embed_up(th.cat([left, right], dim = 1))
 
 
         loss = 0
-        loss += self.i1(left, down)
-        loss += self.m(coproduct, down)
-        loss += self.i2(right, down)
+ #       loss += self.i1(left, down)
+ #       loss += self.m(coproduct, down)
+ #       loss += self.i2(right, down)
         loss += self.iota1(left, coproduct)
         loss += self.iota2(right, coproduct)
 
         return coproduct, loss
 
-class MorphismBlock(nn.Module):
+
+
+    
+class ProjectiveTranslationMorphismBlock(nn.Module):
 
     def __init__(self, embedding_size, dropout):
         super().__init__()
+
+                                         
+        self.fc = ProjectiveLinear(embedding_size, embedding_size, bias = False)
         
-        self.fc = nn.Linear(embedding_size, embedding_size)
         self.bn = nn.LayerNorm(embedding_size)
         self.act = nn.ReLU()
         self.dropout = nn.Dropout(dropout)
-
+ #       print(self.mask.shape, self.fc.weight.shape)
     def forward(self, x):
+        
+ #       self.fc.weigth *= self.mask
+ #       x = th.cat([x, self.hom_coord], dim = 1) #self.proj_mask(x)
+        
+        self.fc.weigth = self.mask
         x = self.fc(x)
         x = self.bn(x)
         x = self.act(x)
         x = self.dropout(x)
+
+    
+class MorphismBlock(nn.Module):
+
+    def __init__(self, embedding_size, dropout):
+        super().__init__()
+
+        self.mask = th.ones((embedding_size+1, embedding_size+1))
+#        self.mask[:,-1] = 0
+#        self.mask[-1,:] = 0
+#        self.mask[-1,-1] = 1
+
+#        self.hom_coord = th.ones((embedding_size, 1))
+
+#        self.proj_mask = Projective(embedding_size)
+        self.fc = ProjectiveLinear(embedding_size, embedding_size, bias = False)
+        self.bn = nn.LayerNorm(embedding_size)
+        self.act = nn.ReLU()
+        self.dropout = nn.Dropout(dropout)
+ #       print(self.mask.shape, self.fc.weight.shape)
+    def forward(self, x):
+        
+ #       self.fc.weigth *= self.mask
+ #       x = th.cat([x, self.hom_coord], dim = 1) #self.proj_mask(x)
+        x = self.fc(x)
+      #  x = self.bn(x)
+        x = self.act(x)
+        x = self.dropout(x)
+        return x
+
+
+class ProjectiveLinear(nn.Module):
+
+    def __init__(self, x_dim, y_dim , bias = True):
+        super().__init__()
+
+        self.x_dim = x_dim
+        self.y_dim = y_dim
+        self.bias = bias
+        self.fc = nn.Linear(x_dim, y_dim, bias = bias)
+        x = nn.Parameter(th.rand(1))
+        y = nn.Parameter(th.rand(1))
+        self.x = x
+        self.y = y
+         
+
+    def forward(self, x):
+        fc = nn.Linear(self.x_dim, self.y_dim, bias = self.bias).to(self.x.device)
+        mask = th.eye(self.x_dim).to(self.x.device)
+        mask[0,-1] = self.x
+        mask[1, -1] = self.y
+        fc.weigth = mask
+        x = fc(x)
+#        self.fc.weigth = self.mask
+#        x = self.fc(x)
         return x
     
 class EntailmentHomSet(nn.Module):
     def __init__(self, embedding_size, hom_set_size = 1, depth = 1, dropout = 0):
         super().__init__()
-
-        
-
         
         self.hom_set = nn.ModuleList()
         
@@ -194,9 +279,10 @@ class EntailmentHomSet(nn.Module):
             morphism = nn.Sequential()
 
             for j in range(depth-1):
-                morphism.append(MorphismBlock(embedding_size, dropout))
+                morphism.append(ProjectiveTranslationMorphismBlock(embedding_size, dropout))
 
-            morphism.append(nn.Linear(embedding_size, embedding_size))
+            morphism.append(ProjectiveLinear(embedding_size, embedding_size, bias = False))
+            #morphism.append(nn.LayerNorm(embedding_size))
             morphism.append(ACT)
 
             self.hom_set.append(morphism)
@@ -225,6 +311,9 @@ class Existential(nn.Module):
         
         self.slicing_filler = nn.Sequential(
             nn.Linear(2*embedding_size, embedding_size),
+            nn.LayerNorm(embedding_size),
+            nn.Dropout(dropout),
+            nn.Linear(embedding_size, embedding_size),
             nn.LayerNorm(embedding_size),
             ACT
         )
