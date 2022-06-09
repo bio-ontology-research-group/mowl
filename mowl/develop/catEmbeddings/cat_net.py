@@ -2,7 +2,7 @@ import torch as th
 import torch.nn as nn
 from mowl.develop.catEmbeddings.functor import Functor
 
-ACT = nn.Tanh() #nn.Sigmoid()
+ACT = nn.Sigmoid()
 
 
 def norm(a,b, dim = 1):
@@ -76,7 +76,7 @@ class EntailmentMorphism(nn.Module):
     def forward(self, antecedent, consequent):
         
         estim_cons = self.entails(antecedent)
-        estim_cons = self.dropout(estim_cons)
+#        estim_cons = self.dropout(estim_cons)
         loss1 = norm(estim_cons, consequent)
         losses = [loss1]
     

@@ -34,13 +34,13 @@ def main(species):
 
 #        ds = PPIYeastSlimDataset()
         ds = PathDataset("data_old/yeast-classes.owl", "data_old/valid.owl", "data_old/test.owl")
-        lr = 5e-3
-        embedding_size = 100
+        lr = 5e-4
+        embedding_size = 200
 #        milestones = [ 150, 2000, 200112]
 #        milestones = [50, 100, 150, 400,  6000, 20001001] #only_nf4
         gamma = 0.3
 #        milestones = [150, 250, 450, 2000000]
-        milestones = [8099999999]
+        milestones = [8099999]
         margin = 2
         epochs = 100
 
@@ -58,7 +58,7 @@ def main(species):
         
     model = CatEmbeddings(
         ds, 
-        4096*8, #4096*4, #bs 
+        4096*16, #4096*4, #bs 
         embedding_size, #embeddings size
         lr, #lr ##1e-3 yeast, 1e-5 human
         epochs, #epochs

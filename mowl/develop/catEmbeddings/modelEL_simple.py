@@ -27,7 +27,7 @@ from scipy.stats import rankdata
 from mowl.develop.catEmbeddings.evaluate_interactions import evalNF4Loss
 logging.basicConfig(level=logging.DEBUG)
 
-ACT = nn.Tanh() # nn.Sigmoid()
+ACT = nn.Sigmoid()
 
 
 class CatEmbeddings(Model):
@@ -337,7 +337,7 @@ class CatEmbeddings(Model):
                 pos_loss = self.model(batch_nf, idx)
                 step_loss = th.mean(pos_loss)
                 if neg:
-                    neg_loss = th.relu(-self.model(batch_nf, idx, neg = True) + 5) 
+                    neg_loss = th.relu(-self.model(batch_nf, idx, neg = True) + 25) 
                     assert pos_loss.shape == neg_loss.shape, f"{pos_loss.shape}, {neg_loss.shape}"
                     new_margin = margin
  #                   new_margin = margin if th.mean(neg_loss - pos_loss) > margin else 2*th.mean(pos_loss)
@@ -668,11 +668,11 @@ class CatModel(nn.Module):
 
         self.embed = nn.Embedding(self.num_obj, embedding_size)
         k = math.sqrt(1 / embedding_size)
-        nn.init.uniform_(self.embed.weight, -k, k)
+        nn.init.uniform_(self.embed.weight, -0, 1)
 
         self.embed_rel = nn.Embedding(num_rels, embedding_size)
         k = math.sqrt(1 / embedding_size)
-        nn.init.uniform_(self.embed_rel.weight, -k,k)
+        nn.init.uniform_(self.embed_rel.weight, -0,1)
 
         self.prod_net = Product(self.embedding_size)
         self.exp_net = nn.ModuleList()
