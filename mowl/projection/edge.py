@@ -59,3 +59,8 @@ class Edge:
 
         return (entities, relations)
 
+
+    @staticmethod
+    def zip(edges):
+        return tuple(zip(*[x.astuple() for x in edges]))
+

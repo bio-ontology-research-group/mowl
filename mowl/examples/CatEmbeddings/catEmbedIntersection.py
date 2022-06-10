@@ -17,8 +17,7 @@ mowl.init_jvm("10g")
 
 from mowl.datasets.base import PathDataset
 from mowl.datasets.ppi_yeast import PPIYeastSlimDataset, PPIYeastDataset
-#from mowl.develop.catEmbeddings.modelWithFeats import CatEmbeddings
-from mowl.develop.catEmbeddings.modelEL_simple import CatEmbeddings
+from mowl.develop.catEmbeddings.modelIntersection import CatEmbeddings
 
 @ck.command()
 @ck.option(
@@ -31,22 +30,23 @@ def main(species):
 
     if species == "yeast":
 #        ds = 'data/data-train/yeast-classes-normalized.owl', 'data/data-valid/4932.protein.links.v10.5.txt', 'data/data-test/4932.protein.links.v10.5.txt'        
-
 #        ds = PPIYeastSlimDataset()
-        ds = PathDataset("data_old/yeast-classes.owl", "data_old/valid.owl", "data_old/test.owl")
-        lr = 5e-4
-        embedding_size = 200
-#        milestones = [ 150, 2000, 200112]
-#        milestones = [50, 100, 150, 400,  6000, 20001001] #only_nf4
-        gamma = 0.3
-#        milestones = [150, 250, 450, 2000000]
-        milestones = [8099999]
-        margin = 2
-        epochs = 100
+#        ds = PPIYeastDataset()
+        ds = PathDataset("data/go2018.owl", None, None)
+#        ds = PathDataset("data_old/yeast/yeast-classes.owl", "data_old/yeast/valid.owl", "data_old/yeast/test.owl")
+#        ds = PathDataset("data_old/human/human-classes.owl", "data_old/human/valid.owl", "data_old/human/test.owl")
+        lr = 1e-1
+        embedding_size = 50 #80 for human
+        
+        #milestones = [20,50, 90,150, 180,400,  600, 800, 1000, 1300, 1600, 20001001] #only_nf4\
+        gamma = 0.9
+        margin = 5
+        epochs = 1000
+        milestones = [i*70 for i in range(epochs//70)]
 
     elif species == "human":
         ds = 'data/data-train/human-classes-normalized.owl', 'data/data-valid/9606.protein.links.v10.5.txt', 'data/data-test/9606.protein.links.v10.5.txt'
-        lr = 5e-2
+        lr = 5e-3 #2 for ppi slim
         embedding_size =100
         milestones = [150, 200001111] #only_nf4
 #        milestones = [150, 2000002]
@@ -64,29 +64,21 @@ def main(species):
         epochs, #epochs
         1000, #num points eval ppi
         milestones,
-        dropout = 0,
+        dropout = 0.3,
         decay = 0,
         gamma = gamma,
-        eval_ppi = False,
-        sampling = False,
-        size_hom_set = 5,
-        nf1 = True,
-        nf1_neg = True,
-        nf2 = False,
-        nf2_neg = False,
-        nf3 = True,
-        nf3_neg = True,
-        nf4 = False,
-        nf4_neg = False,
+        eval_intersection = True,
+        size_hom_set = 3,
+        depth = 3,
         margin = margin,
         seed = 0,
-        early_stopping = 200000,
+        early_stopping = 20000,
         device = "cuda"
     )
 
     model.train()
 #    model.evaluate()
-    model.evaluate_ppi()
+#    model.evaluate_ppi()
 
 
 if __name__ == '__main__':

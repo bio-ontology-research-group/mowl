@@ -16,7 +16,7 @@ import time
 from itertools import chain
 import math
 import mowl.develop.catEmbeddings.losses as L
-from mowl.develop.catEmbeddings.cat_net import Product, EntailmentHomSet, Existential, Coproduct
+from mowl.develop.catEmbeddings.cat_net import Product, EntailmentHomSet, Existential, Coproduct, norm
 import os
 from mowl.model import Model
 from mowl.reasoning.normalize import ELNormalizer
@@ -25,7 +25,7 @@ from mowl.projection.edge import Edge
 from org.semanticweb.owlapi.util import SimpleShortFormProvider
 from scipy.stats import rankdata
 from mowl.develop.catEmbeddings.evaluate_interactions import evalGCI2Loss, print_metrics
-from mowl.develop.catEmbeddings.evaluate import CatEmbeddingsPPIEvaluator
+from mowl.develop.catEmbeddings.evaluate import CatEmbeddingsIntersectionEvaluator
 logging.basicConfig(level=logging.DEBUG)
 from tqdm import tqdm
 ACT = nn.Identity()
@@ -44,7 +44,7 @@ class CatEmbeddings(Model):
             dropout = 0,
             decay = 0,
             gamma = None,
-            eval_ppi = False,
+            eval_intersection = True,
             size_hom_set = 1,
             depth = 1,
             margin = 0,
@@ -64,7 +64,7 @@ class CatEmbeddings(Model):
         self.dropout = dropout
         self.decay = decay
         self.gamma = gamma
-        self.eval_ppi = eval_ppi
+        self.eval_intersection = eval_intersection
         self.size_hom_set = size_hom_set
         self.depth = depth
         self.margin = margin
@@ -75,7 +75,7 @@ class CatEmbeddings(Model):
         self.species = species
         milestones_str = "_".join(str(m) for m in milestones)
         self.data_root = f"data/models/{species}/"
-        self.file_name = f"bs{self.batch_size}_emb{self.embedding_size}_lr{lr}_epochs{epochs}_eval{num_points_eval}_mlstns_{milestones_str}_drop_{self.dropout}_decay_{self.decay}_gamma_{self.gamma}_evalppi_{self.eval_ppi}_margin{self.margin}.th"
+        self.file_name = f"bs{self.batch_size}_emb{self.embedding_size}_lr{lr}_epochs{epochs}_eval{num_points_eval}_mlstns_{milestones_str}_drop_{self.dropout}_decay_{self.decay}_gamma_{self.gamma}_evalintersection_{self.eval_intersection}_margin{self.margin}.th"
         self.model_filepath = self.data_root + self.file_name
         self.predictions_file = f"data/predictions/{self.species}/" + self.file_name
         self.labels_file = f"data/labels/{self.species}/" + self.file_name
@@ -93,61 +93,17 @@ class CatEmbeddings(Model):
         ### For eval ppi
         
 
-        if self.eval_ppi and False:
-            _, _, train_nf3, _ = self.train_nfs
-            proteins = {}
-            for k, v in self.classes_index_dict.items():
-                k = str(k)
-                if not k.startswith('http://purl.obolibrary.org/obo/GO_') and not k.startswith("GO:"):
-                    proteins[k] = v
-            self.prot_index = proteins.values()
-            self.prot_dict = {v: k for k, v in enumerate(self.prot_index)}
-
-            print(f"prot dict created. Number of proteins: {len(self.prot_index)}")
-            self.trlabels = np.ones((len(self.prot_index), len(self.prot_index)), dtype=np.int32)
-
-
-            print("Generating training scores")
-            
-            for c,r,d in tqdm(train_nf3):
-                if r != self.relations["http://interacts"]:
-                    continue
-                c, r, d = c.detach().item(), r.detach().item(), d.detach().item()
-
-                if c not in self.prot_index or d not in self.prot_index:
-                    continue
-
-                c, d =  self.prot_dict[c], self.prot_dict[d]
-
-                self.trlabels[c, d] = 1000
-            print("trlabels created")
-
-            #        self.train_nfs = tuple(map(lambda x: x.to(device), self.train_nfs))
-
-        proteins = set()
-        for k, v in self.classes_index_dict.items():
-            k = str(k)
-            if not k.startswith('http://purl.obolibrary.org/obo/GO_') and not k.startswith("GO:"):
-                proteins.add(k)
-
-        proteins = list(proteins)
         self.num_classes = len(self.classes_index_dict)
         self.num_rels = len(self.relations)
 
         self.create_dataloaders(device = self.device)
         self.model = CatModel(self.num_classes, self.num_rels, self.size_hom_set, self.embedding_size, dropout = self.dropout, depth = self.depth)
-        self.ppi_evaluator = CatEmbeddingsPPIEvaluator(self.model.gci2_loss, self.dataset.ontology, self.classes_index_dict, self.relations, proteins, device = self.device)
-
+        #self.ppi_evaluator = CatEmbeddingsPPIEvaluator(self.model.gci2_loss, self.dataset.ontology, self.classes_index_dict, self.relations, proteins, device = self.device)
+        self.intersection_evaluator = CatEmbeddingsIntersectionEvaluator(norm, self.classes_index_dict, self.model.prod_net, device = self.device)
 
     def train(self):
 
         device = self.device
-
-        
-        
-        
-
-        
         
         th.save(self.model.state_dict(), self.model_filepath)
 
@@ -170,19 +126,19 @@ class CatEmbeddings(Model):
 #        nf1, nf2, nf3, nf4 = self.train_nfs
         stop_value = self.early_stopping
         train_early_stopping = stop_value
-        valid_early_stopping = stop_value
+        
 
                                                                 
         forward_function = self.forward_step
         train_data = self.train_dl
-        valid_data = self.val_dl
-        test_data = self.test_dl
+        
 
         for epoch in range(self.epochs):
 
             batch = self.batch_size
             self.model.train()
             self.model = self.model.to(device)
+
             
             train_loss = forward_function(
                 train_data, 
@@ -191,42 +147,26 @@ class CatEmbeddings(Model):
     
             self.model.eval()
             
-
-            with th.no_grad():
-                self.optimizer.zero_grad()
-                val_loss  = forward_function(
-                    valid_data,
-                    self.margin,
-                    train = False
-                    )
-
-
             if best_train_loss < train_loss:
                 train_early_stopping -= 1
             else:
+                print("saving model")
+                th.save(self.model.state_dict(), self.model_filepath)
+
                 best_train_loss = train_loss
                 train_early_stopping = stop_value
 
-            if best_val_loss < val_loss:
-                valid_early_stopping -= 1
-            else:
-                best_val_loss = val_loss
-                valid_early_stopping = stop_value
-                if not self.eval_ppi: #dummy condition
-                    print("saving model")
-                    th.save(self.model.state_dict(), self.model_filepath)
-
-            if self.eval_ppi and epoch % 10 == 0:
-                metrics, fmetrics = self.evaluate_ppi_valid()
+            
+            if self.eval_intersection and (epoch) % 10 == 0:
+                metrics, fmetrics = self.evaluate_intersection_valid()
                 mean_rank = metrics["mean_rank"]
                 if best_mean_rank >= mean_rank:
                     best_mean_rank = mean_rank
                     print("saving model")
                     th.save(self.model.state_dict(), self.model_filepath)
                     
-            print(f'Epoch {epoch}: Loss - {train_loss:.6}, \tVal loss - {val_loss:.6}')
-            if self.eval_ppi and epoch % 10 == 0:
-                print_metrics(metrics, fmetrics)
+            print(f'Epoch {epoch}: Loss - {train_loss:.6}')
+
             
             self.scheduler.step()
 
@@ -237,6 +177,22 @@ class CatEmbeddings(Model):
         logging.info("Finished training. Generating predictions")
 #        self.run_and_save_predictions(self.model)
 
+
+    def get_embeddings(self, load_best_model = True):
+        self.load_data()
+        if load_best_model:
+            print('Load the best model', self.model_filepath)
+            self.model.load_state_dict(th.load(self.model_filepath))
+        self.model.eval()
+
+#        ent_embeds = {k:v for k,v in zip(self.classes_index_dict.keys(), self.model.embed.weight.cpu().detach().numpy())}
+        ent_embeds = {k: self.model.net_object(th.tensor([v], device = self.device)).squeeze().cpu().detach().numpy() for k,v in self.classes_index_dict.items()}
+#        ent_embeds = {k: v/v[-1] for k, v in ent_embeds.items()}
+ #       rel_embeds = {k:v for k,v in zip(self.relations.keys(), self.model.embed_rel.weight.cpu().detach().numpy())}
+        rel_embeds = {k: self.model.net_rel(th.tensor([v], device = self.device) ).squeeze().cpu().detach().numpy() for k,v in self.relations.items()}
+        return ent_embeds, rel_embeds
+
+        
     def forward_nf(self, nf, idx, margin, train = True):
         
         nf_loss = 0.0
@@ -250,9 +206,11 @@ class CatEmbeddings(Model):
                 assert pos_loss.shape == neg_loss.shape, f"{pos_loss.shape}, {neg_loss.shape}"
             
                 loss = pos_loss - neg_loss + margin
-                print(th.mean(loss))
+#                print(th.mean(pos_loss), th.mean(neg_loss))
+#                print(th.mean(loss))
                 loss = - th.mean(F.logsigmoid(-loss))
-                print(th.mean(loss))
+#                print(th.mean(loss))
+#                print("here")
                 step_loss  = loss
                 nf_loss += loss.detach().item()
 
@@ -310,41 +268,18 @@ class CatEmbeddings(Model):
         test_loss = self.forward_step(self.test_dl, self.margin, train=False) #model(self.test_nfs).detach().item()
         print('Test Loss:', test_loss)
  
-    def evaluate_ppi_valid(self):
-        if False:
-            self.model.eval()
-            _, _, valid_nf3, _ = self.valid_nfs
-            index = np.random.choice(len(valid_nf3), size = self.num_points_eval, replace = False)
-            #        index = list(range(self.num_points_eval))
-            valid_nfs = valid_nf3[index]
-            preds = self.run_and_save_predictions(self.model, samples = valid_nfs, save = False)
-            
-            #        results = evalGCI2Loss(self.model, valid_nfs, self.prot_dict, self.prot_index, self.trlabels, len(self.prot_index), device = "cuda")
-            results = evalGCI2Loss(valid_nfs, self.prot_dict, self.prot_index, self.trlabels, len(self.prot_index), device= self.device, preds =preds)
 
-        else:
-            self.ppi_evaluator(self.dataset.validation)
-            self.ppi_evaluator.print_metrics()
 
-        return self.ppi_evaluator.metrics, self.ppi_evaluator.fmetrics
+    def evaluate_intersection_valid(self):
+
+        embeddings,_ = self.get_embeddings(load_best_model = False)
+        self.intersection_evaluator(self.gci1_train, embeddings)
+        self.intersection_evaluator.print_metrics()
+
+        return self.intersection_evaluator.metrics, self.intersection_evaluator.fmetrics
 #        return results
 
-    def evaluate_ppi(self):
-        if False:
-            self.model = CatModel(self.num_classes, self.num_rels, self.size_hom_set, self.embedding_size, dropout = self.dropout, depth = self.depth)
-            self.model.load_state_dict(th.load(self.model_filepath))
-        
-            self.run_and_save_predictions(self.model)
 
-            _, _, test_nf3, _ = self.test_nfs
-
-            test_nfs = test_nf3#[index]
-            print(f"Device: {self.device}")
-
-            evalGCI2Loss(test_nfs, self.prot_dict, self.prot_index, self.trlabels, len(self.prot_index), device= self.device, show = True, preds_file =  self.predictions_file)
-        else:
-            self.ppi_evaluator(self.dataset.testing, init_axioms=True)
-            self.ppi_evaluator.print_metrics()
         
     def load_data(self):
         if self._loaded:
@@ -352,13 +287,11 @@ class CatEmbeddings(Model):
         
         normalizer = ELNormalizer()
         self.training_axioms = normalizer.normalize(self.dataset.ontology)
-        self.validation_axioms = normalizer.normalize(self.dataset.validation)
-        self.testing_axioms = normalizer.normalize(self.dataset.testing)
 
         classes = set()
         relations = set()
 
-        for axioms_dict in [self.training_axioms, self.validation_axioms, self.testing_axioms]:
+        for axioms_dict in [self.training_axioms]:
             for axiom in axioms_dict["gci0"]:
                 classes.add(axiom.subclass)
                 classes.add(axiom.superclass)
@@ -398,15 +331,15 @@ class CatEmbeddings(Model):
         relations.sort()
         
         self.classes_index_dict = {v: k  for k, v in enumerate(classes)}
+        print(f"Number of classes: {len(self.classes_index_dict)}" )
         self.relations = {v: k for k, v in enumerate(relations)}
 
         training_nfs = self.load_normal_forms(self.training_axioms, self.classes_index_dict, self.relations)
-        validation_nfs = self.load_normal_forms(self.validation_axioms, self.classes_index_dict, self.relations)
-        testing_nfs = self.load_normal_forms(self.testing_axioms, self.classes_index_dict, self.relations)
+        self.gci1_train = training_nfs[1][:100]
+        
         
         self.train_nfs = self.nfs_to_tensors(training_nfs, self.device)
-        self.valid_nfs = self.nfs_to_tensors(validation_nfs, self.device)
-        self.test_nfs = self.nfs_to_tensors(testing_nfs, self.device)
+
         self._loaded = True
         
     def load_normal_forms(self, axioms_dict, classes_dict, relations_dict):
@@ -430,7 +363,9 @@ class CatEmbeddings(Model):
             cl2 = classes_dict[axiom.right_subclass]
             cl3 = classes_dict[axiom.superclass]
             gci1.append((cl1, cl2, cl3))
-
+            gci0.append((cl3,cl1))
+            gci0.append((cl3,cl2))
+            
         for axiom in axioms_dict["gci1_bot"]:
             cl1 = classes_dict[axiom.left_subclass]
             cl2 = classes_dict[axiom.right_subclass]
@@ -478,17 +413,12 @@ class CatEmbeddings(Model):
 
     def create_dataloaders(self, device):
         train_nfs = tuple(map(lambda x: x.to(device), self.train_nfs))
-        valid_nfs = tuple(map(lambda x: x.to(device), self.valid_nfs))
-        test_nfs = tuple(map(lambda x: x.to(device), self.test_nfs))
+
 
         train_ds = map(lambda x: NFDataset(x), train_nfs)
         self.train_dl = tuple(map(lambda x: DataLoader(x, batch_size = self.batch_size), train_ds))
 
-        val_ds = map(lambda x: NFDataset(x), valid_nfs)
-        self.val_dl = tuple(map(lambda x: DataLoader(x, batch_size = self.batch_size), val_ds))
 
-        test_ds = map(lambda x: NFDataset(x), test_nfs)
-        self.test_dl = tuple(map(lambda x: DataLoader(x, batch_size = self.batch_size), test_ds))
         
 
 

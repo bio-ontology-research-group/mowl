@@ -86,6 +86,142 @@ class EvaluationMethod(nn.Module):
     def forward(self):
         raise NotImplementedError()
 
+
+
+class AxiomsRankBasedEvaluator():
+
+    """
+    :param axioms: A set of axioms over which perform the evaluation. The axioms can be given as an .owl file or as a list of OWLAxioms.
+    :param embeddinds_data: A list of dictionaries, each of which has as keys the names of the entities and as values the embedding vectors
+    :param eval_method: The evaluation method for the axioms. 
+    :param axioms_to_filter: Axioms to be put at the bottom of the rankings. If the axioms are empty, filtered metrics will not be computed.
+    """
+    
+    def __init__(
+            self,
+            eval_method,
+            axioms_to_filter = None,
+            device = "cpu",
+            verbose = False
+    ):
+
+        self.axioms = None
+        self.eval_method = eval_method
+        self.device = device
+        self.verbose = verbose
+        self.axioms_to_filter_raw = axioms_to_filter
+        self.axioms_to_filter = None
+        if axioms_to_filter is None:
+            self._compute_filtered_metrics = False
+        else:
+            self._compute_filtered_metrics = True
+        
+        return
+
+
+    @property
+    def metrics(self):
+        return self._metrics
+
+    @property
+    def fmetrics(self):
+        return self._fmetrics
+    
+    def _init_axioms(self, axioms):
+        """This method must transform the axioms into the appropriate data structure to be used by the ``eval_method``. This method accesses the ``axioms`` variable, which can be an OWL file or a list of OWLAxioms.
+        """
+        raise NotImplementedError()
+
+    def _init_axioms_to_filter(self, axioms):
+        raise NotImplementedError()
+    
+    def compute_axiom_rank(self, axiom, predictions):
+        raise NotImplementedError()
+
+    def _load_filtered_scores(self):
+        raise NotImplementedError()
+
+    def _get_predictions(self):
+        raise NotImplementedError()
+    
+    def __call__(self, axioms, init_axioms = False):
+
+        if self.axioms is None or init_axioms:
+            self.axioms = self._init_axioms(axioms)
+            if self.axioms_to_filter is None:
+                self.axioms_to_filter = self._init_axioms_to_filter(self.axioms_to_filter_raw)
+            self.filtered_scores = self._load_filtered_scores()
+        predictions = self.get_predictions()
+        tops = {1: 0, 3: 0, 5: 0, 10:0, 100:0, 1000:0}
+        ftops = {1: 0, 3: 0, 5: 0, 10:0, 100:0, 1000:0}
+        mean_rank = 0
+        fmean_rank = 0
+        ranks = {}
+        franks = {}
+
+        n = 0
+        for axiom in tqdm(self.axioms):
+            rank, frank, worst_rank = self.compute_axiom_rank(axiom, predictions)
+
+            if rank is None:
+                continue
+
+            n = n+1
+            for top in tops:
+                if rank <= top:
+                    tops[top] += 1
+
+            mean_rank += rank
+
+            if rank not in ranks:
+                ranks[rank] = 0
+            ranks[rank] += 1
+
+            # Filtered rank
+            if self._compute_filtered_metrics:
+                for ftop in ftops:
+                    if frank <= ftop:
+                        ftops[ftop] += 1
+
+                if rank not in franks:
+                    franks[rank] = 0
+                franks[rank] += 1
+
+                fmean_rank += frank
+
+        tops = {k: v/n for k, v in tops.items()}
+        ftops = {k: v/n for k, v in ftops.items()}
+
+        mean_rank, fmean_rank = mean_rank/n, fmean_rank/n
+
+        rank_auc = compute_rank_roc(ranks, worst_rank)
+        frank_auc = compute_rank_roc(franks, worst_rank)
+
+        self._metrics = {f"hits@{k}": tops[k] for k in tops}
+        self._metrics["mean_rank"] = mean_rank
+        self._metrics["rank_auc"] = rank_auc
+        self._fmetrics = {f"hits@{k}": ftops[k] for k in ftops}
+        self._fmetrics["mean_rank"] = fmean_rank
+        self._fmetrics["rank_auc"] = frank_auc
+
+        return
+
+
+    def print_metrics(self):
+
+        to_print = "Normal:  \t"
+        for name, value in self._metrics.items():
+            to_print += f"{name}: {value:.2f}\t"
+
+        to_print += "\nFiltered:\t"
+        for name, value in self._fmetrics.items():
+            to_print += f"{name}: {value:.2f}\t"
+
+
+        print(to_print)
+
+
+    
 class CosineSimilarity(EvaluationMethod):
 
     def __init__(self, *args, **kwargs):
@@ -99,19 +235,20 @@ class CosineSimilarity(EvaluationMethod):
         x = th.sum(srcs*dsts, dim=1)
         return 1-th.sigmoid(x)
         
-def compute_rank_roc(ranks, n_entities):                                                                               
+def compute_rank_roc(ranks, worst_rank): 
+
     auc_x = list(ranks.keys())                                                                                      
     auc_x.sort()                                                                                                    
     auc_y = []                                                                                                      
     tpr = 0                                                                                                         
-    sum_rank = sum(ranks.values())
+    sum_rank = sum(ranks.values()) #number of evaluation points
     
     for x in auc_x:                                                                                                 
         tpr += ranks[x]                                                                                             
         auc_y.append(tpr / sum_rank)
         
-    auc_x.append(n_entities)
+    auc_x.append(worst_rank)
     auc_y.append(1)
-    auc = np.trapz(auc_y, auc_x) / n_entities
+    auc = np.trapz(auc_y, auc_x) / worst_rank
     return auc
                     
