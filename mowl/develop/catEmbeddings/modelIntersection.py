@@ -15,8 +15,8 @@ import pickle as pkl
 import time
 from itertools import chain
 import math
-import mowl.develop.catEmbeddings.losses as L
-from mowl.develop.catEmbeddings.cat_net import Product, EntailmentHomSet, Existential, Coproduct, norm
+import mowl.develop.catEmbeddings.lossesInt as L
+from mowl.develop.catEmbeddings.cat_net_int import Product, EntailmentHomSet, Existential, Coproduct, norm
 import os
 from mowl.model import Model
 from mowl.reasoning.normalize import ELNormalizer
@@ -29,7 +29,7 @@ from mowl.develop.catEmbeddings.evaluate import CatEmbeddingsIntersectionEvaluat
 logging.basicConfig(level=logging.DEBUG)
 from tqdm import tqdm
 ACT = nn.Identity()
-
+#ACT = nn.Tanh()
 
 class CatEmbeddings(Model):
     def __init__(
@@ -99,7 +99,7 @@ class CatEmbeddings(Model):
         self.create_dataloaders(device = self.device)
         self.model = CatModel(self.num_classes, self.num_rels, self.size_hom_set, self.embedding_size, dropout = self.dropout, depth = self.depth)
         #self.ppi_evaluator = CatEmbeddingsPPIEvaluator(self.model.gci2_loss, self.dataset.ontology, self.classes_index_dict, self.relations, proteins, device = self.device)
-        self.intersection_evaluator = CatEmbeddingsIntersectionEvaluator(norm, self.classes_index_dict, self.model.prod_net, device = self.device)
+        self.intersection_evaluator = CatEmbeddingsIntersectionEvaluator(norm, self.classes_index_dict, self.model.prod_net, self.model.entailment_net,  device = self.device)
 
     def train(self):
 
@@ -245,8 +245,8 @@ class CatEmbeddings(Model):
         nf2_loss = self.forward_nf(data_nf2, 2, margin, train = train)
         nf3_loss = self.forward_nf(data_nf3, 3, margin, train = train)
 
-        nf0_loss *= nb_nf0/total
-        nf1_loss *= nb_nf1/total
+        #nf0_loss *= nb_nf0/total
+        #nf1_loss *= nb_nf1/total
         nf2_loss *= nb_nf2/total
         nf3_loss *= nb_nf3/total
 
@@ -335,7 +335,7 @@ class CatEmbeddings(Model):
         self.relations = {v: k for k, v in enumerate(relations)}
 
         training_nfs = self.load_normal_forms(self.training_axioms, self.classes_index_dict, self.relations)
-        self.gci1_train = training_nfs[1][:100]
+        self.gci1_train = training_nfs[1][:5]
         
         
         self.train_nfs = self.nfs_to_tensors(training_nfs, self.device)
@@ -371,13 +371,16 @@ class CatEmbeddings(Model):
             cl2 = classes_dict[axiom.right_subclass]
             cl3 = classes_dict[axiom.superclass]
             gci1.append((cl1, cl2, cl3))
-
+            gci0.append((cl3,cl1))
+            gci0.append((cl3,cl2))
+            
         for axiom in axioms_dict["gci2"]:
             cl1 = classes_dict[axiom.subclass]
             rel = relations_dict[axiom.obj_property]
             cl2 = classes_dict[axiom.filler]
             gci2.append((cl1, rel, cl2))
-        
+            
+            
         for axiom in axioms_dict["gci3"]:
             rel = relations_dict[axiom.obj_property]
             cl1 = classes_dict[axiom.filler]

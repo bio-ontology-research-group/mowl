@@ -35,7 +35,7 @@ def main(species):
     
     gamma = 0.6
     margin = 2
-    epochs = 300
+    epochs = 1000
     step = 30
     milestones = [i*step for i in range(epochs//step)]
     
@@ -118,7 +118,8 @@ def main(species):
     
 
     
-    for label, (xs,ys,_) in embeddings.items():
+    for label, (xs,ys) in embeddings.items():
+                                        
         color = class_color_dict[label]
         ax.scatter(xs, ys, color=color, label=label)
 

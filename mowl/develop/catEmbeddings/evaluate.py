@@ -191,6 +191,7 @@ class CatEmbeddingsIntersectionEvaluator(AxiomsRankBasedEvaluator):
             eval_method,
             class_name_indexemb,
             product_generator,
+            entailment,
             device = "cpu",
             verbose = False
     ):
@@ -199,7 +200,7 @@ class CatEmbeddingsIntersectionEvaluator(AxiomsRankBasedEvaluator):
 
         self.class_name_indexemb = class_name_indexemb
         self.product_generator = product_generator
-        
+        self.entailment = entailment
                         
         self._loaded_eval_data = False
         self._loaded_ht_data = False        
@@ -227,13 +228,13 @@ class CatEmbeddingsIntersectionEvaluator(AxiomsRankBasedEvaluator):
  #       else:
  #           eval_data = samples
 
-        test_model = TestModuleIntersection(self.product_generator, self.eval_method, self.embeddings).to(self.device)
+        test_model = TestModuleIntersection(self.product_generator, self.entailment, self.eval_method, self.embeddings).to(self.device)
 
         preds = np.zeros((len(samples), len(self.embeddings)), dtype=np.float32)
             
         test_dataset = TestDatasetIntersection(samples, self.class_name_indexemb)
     
-        bs = 8
+        bs = 4
         test_dl = DataLoader(test_dataset, batch_size = bs)
 
         
@@ -271,7 +272,11 @@ class CatEmbeddingsIntersectionEvaluator(AxiomsRankBasedEvaluator):
         
         #self.testing_predictions[c_sc_idx, :] = res                                                                                
         index = rankdata(res, method='average')
+        first = res[np.where(index == 1)[0]]
+        last  = res[np.where(index == len(index))[0]]
         rank = index[d]
+
+        print(rank, res[d], first, last)
 
         findex = rankdata((res), method='average')
         frank = findex[d]
@@ -390,12 +395,12 @@ class TestDatasetPPI(IterableDataset):
 
     
 class TestModuleIntersection(nn.Module):
-    def __init__(self, prod_generator,  method, embeddings):
+    def __init__(self, prod_generator, entailment, method, embeddings):
         super().__init__()
 
         self.prod_generator = prod_generator
         self.method = method
-
+        self.entailment = entailment
         embeddings = list(embeddings.values())
         self.embeddings = nn.Embedding(len(embeddings), len(embeddings[0]))
 
@@ -413,8 +418,14 @@ class TestModuleIntersection(nn.Module):
         d = self.embeddings(d)
         
         intersection, _ = self.prod_generator(c_left, c_right)
-        
-        scores = self.method(intersection, d)
+
+        scores = self.entailment(intersection, d)
+        #estim_d = self.entailment.get_consequent(intersection, d)
+        #int_back = self.entailment.get_consequent(estim_d, intersection)
+        #estim_back = self.entailment.get_consequent(int_back, d)
+        #scores = self.method(intersection,estim_back)
+
+        #scores = self.method(intersection, d)
         
 
 #        x = self.method(x)

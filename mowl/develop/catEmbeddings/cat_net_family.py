@@ -15,14 +15,14 @@ def norm(a,b, dim = 1):
 #    return tensor
 #    return th.relu(tensor)
 
-    hom_a = a[:, -1].unsqueeze(1)
+#    hom_a = a[:, -1].unsqueeze(1)
 #    print(a.shape, hom_a.shape)
-    a = a/hom_a
-    hom_b = b[:, -1].unsqueeze(1)
-    b = b/hom_b
+#    a = a/hom_a
+#    hom_b = b[:, -1].unsqueeze(1)
+#    b = b/hom_b
 
-    a = a[:,:-1]
-    b = b[:, :-1]
+#    a = a[:,:-1]
+#    b = b[:, :-1]
     
     n = a.shape[1]
     sqe = (a-b)**2
@@ -54,15 +54,18 @@ class Product(nn.Module):
 
         self.coproduct_net = coproduct_net
         
-        self.prod = nn.Sequential(
+        self.prod_ = nn.Sequential(
             nn.Linear(2*embedding_size, embedding_size),
             nn.LayerNorm(embedding_size),
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Linear(embedding_size, embedding_size),
-            nn.LayerNorm(embedding_size),
+#            nn.LayerNorm(embedding_size),
             ACT
         )
+
+        self.prod = lambda x: (x[:,:embedding_size]+x[:,embedding_size:])/2
+
 
         self.up = nn.Sequential(
             nn.Linear(2*embedding_size, embedding_size),
@@ -70,7 +73,7 @@ class Product(nn.Module):
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Linear(embedding_size, embedding_size),
-            nn.LayerNorm(embedding_size),
+ #           nn.LayerNorm(embedding_size),
             ACT
         )
 
@@ -141,15 +144,18 @@ class Coproduct(nn.Module):
 
         self.bn = nn.LayerNorm(embedding_size)
 
-        self.coprod = nn.Sequential(
+        self.coprod_ = nn.Sequential(
             nn.Linear(2*embedding_size, embedding_size),
             nn.LayerNorm(embedding_size),
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Linear(embedding_size, embedding_size),
-            nn.LayerNorm(embedding_size),            
+  #          nn.LayerNorm(embedding_size),            
             ACT
         )
+
+        self.coprod = lambda x: (x[:,:embedding_size]+x[:,embedding_size:])
+
 
         self.down = nn.Sequential(
             nn.Linear(2*embedding_size, embedding_size),
@@ -157,7 +163,7 @@ class Coproduct(nn.Module):
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Linear(embedding_size, embedding_size),
-            nn.LayerNorm(embedding_size),
+   #         nn.LayerNorm(embedding_size),
             ACT
         )
         
@@ -279,16 +285,28 @@ class EntailmentHomSet(nn.Module):
             morphism = nn.Sequential()
 
             for j in range(depth-1):
-                morphism.append(ProjectiveTranslationMorphismBlock(embedding_size, dropout))
+                morphism.append(MorphismBlock(embedding_size, dropout))
 
-            morphism.append(ProjectiveLinear(embedding_size, embedding_size, bias = False))
+            morphism.append(nn.Linear(embedding_size, embedding_size))
             #morphism.append(nn.LayerNorm(embedding_size))
             morphism.append(ACT)
 
             self.hom_set.append(morphism)
-        
-        
+            
     def forward(self, antecedent, consequent):
+
+        best_loss = float("inf")
+        for morphism in self.hom_set:
+            estim_cons = morphism(antecedent)
+            loss = norm(estim_cons, consequent)
+            mean_loss = th.mean(loss)
+
+            if mean_loss < best_loss:
+                chosen_loss = loss
+                best_loss = mean_loss
+        return chosen_loss
+    
+    def forward_(self, antecedent, consequent):
 
         loss = 0
         for morphism in self.hom_set:
@@ -314,7 +332,9 @@ class Existential(nn.Module):
             nn.LayerNorm(embedding_size),
             nn.Dropout(dropout),
             nn.Linear(embedding_size, embedding_size),
-#            nn.LayerNorm(embedding_size),
+
+    #        nn.LayerNorm(embedding_size),
+
             ACT
         )
 
@@ -325,7 +345,9 @@ class Existential(nn.Module):
             nn.Dropout(dropout),
             
             nn.Linear(2*embedding_size, embedding_size),
- #           nn.LayerNorm(embedding_size),
+
+     #       nn.LayerNorm(embedding_size),
+
             ACT
             
         )

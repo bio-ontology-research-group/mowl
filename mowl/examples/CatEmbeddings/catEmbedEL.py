@@ -66,7 +66,7 @@ def main(species):
         decay = 0,
         gamma = gamma,
         eval_ppi = True,
-        size_hom_set = 1,
+        size_hom_set = 3,
         depth = 4,
         margin = margin,
         seed = 0,
