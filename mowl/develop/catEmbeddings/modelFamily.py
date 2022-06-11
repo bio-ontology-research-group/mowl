@@ -545,7 +545,7 @@ class CatModel(nn.Module):
     def __init__(self, num_objects, num_rels, size_hom_set, embedding_size, dropout = 0, depth = 1):
         super(CatModel, self).__init__()
 
-        self.embedding_size = embedding_size+1
+        self.embedding_size = embedding_size#+1
         self.num_obj = num_objects 
         self.size_hom_set = size_hom_set
         self.dropout = dropout

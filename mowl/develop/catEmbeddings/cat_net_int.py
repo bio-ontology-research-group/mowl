@@ -47,16 +47,28 @@ class Product(nn.Module):
 
         
     
-        
-        self.coproduct_net = coproduct_net
-        
-        self.prod = nn.Sequential(
+        self.embed_up = nn.Sequential(
             nn.Linear(2*embedding_size, embedding_size),
             nn.LayerNorm(embedding_size),
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Linear(embedding_size, embedding_size),
-        #    nn.LayerNorm(embedding_size),
+            nn.LayerNorm(embedding_size),
+            ACT
+        )
+
+        self.coproduct_net = coproduct_net
+
+        
+        self.prod = lambda x: (x[:,:embedding_size]+x[:,embedding_size:])/2
+        
+        self.prod_ = nn.Sequential(
+            nn.Linear(2*embedding_size, embedding_size),
+            nn.LayerNorm(embedding_size),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(embedding_size, embedding_size),
+            nn.LayerNorm(embedding_size),
             ACT
         )
 
@@ -122,15 +134,25 @@ class Coproduct(nn.Module):
 
         self.bn = nn.LayerNorm(embedding_size)
 
-        
-
-        self.coprod = nn.Sequential(
+        self.embed_up = nn.Sequential(
             nn.Linear(2*embedding_size, embedding_size),
             nn.LayerNorm(embedding_size),
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Linear(embedding_size, embedding_size),
-        #    nn.LayerNorm(embedding_size),
+            nn.LayerNorm(embedding_size),
+            ACT
+        )
+
+        self.coprod = lambda x: x[:,:embedding_size]+x[:,embedding_size:]
+        
+        self.coprod_ = nn.Sequential(
+            nn.Linear(2*embedding_size, embedding_size),
+            nn.LayerNorm(embedding_size),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(embedding_size, embedding_size),
+            nn.LayerNorm(embedding_size),
             ACT
         )
         
@@ -193,25 +215,35 @@ class EntailmentHomSet(nn.Module):
                 morphism.append(MorphismBlock(embedding_size, dropout))
 
             morphism.append(nn.Linear(embedding_size, embedding_size))
-#            morphism.append(nn.LayerNorm(embedding_size))
+            morphism.append(nn.LayerNorm(embedding_size))
             morphism.append(ACT)
 
             self.hom_set.append(morphism)
         
+
+    def get_consequent(self, antecedent, consequent):
+        best_loss = float("inf")
+        cons = None
+        for morphism in self.hom_set:
+            estim_cons = morphism(antecedent)
+        
+            loss = norm(estim_cons, consequent)
+            loss = th.mean(loss)
+            if loss < best_loss:
+                cons = estim_cons
+
+        return cons
         
     def forward(self, antecedent, consequent):
 
-        best_loss = float("inf")
+        loss = 0
         for morphism in self.hom_set:
             estim_cons = morphism(antecedent)
-            loss = norm(estim_cons, consequent)
-            mean_loss = th.mean(loss)
-            
-            if mean_loss < best_loss:
-                chosen_loss = loss
-                best_loss = mean_loss
-        return chosen_loss
-#        return loss/len(self.hom_set)
+        
+
+            loss += norm(estim_cons, consequent)
+        
+        return loss/len(self.hom_set)
 
 
 class Existential(nn.Module):
@@ -231,7 +263,7 @@ class Existential(nn.Module):
             nn.ReLU(),
             nn.Dropout(dropout),
             nn.Linear(embedding_size, embedding_size),
-            #nn.LayerNorm(embedding_size),
+            nn.LayerNorm(embedding_size),
             ACT
         )
 
@@ -242,7 +274,7 @@ class Existential(nn.Module):
             nn.Dropout(dropout),
             
             nn.Linear(2*embedding_size, embedding_size),
-            #nn.LayerNorm(embedding_size),
+            nn.LayerNorm(embedding_size),
             ACT
             
         )

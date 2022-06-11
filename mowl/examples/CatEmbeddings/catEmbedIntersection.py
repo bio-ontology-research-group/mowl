@@ -68,12 +68,12 @@ def main(species):
         decay = 0,
         gamma = gamma,
         eval_intersection = True,
-        size_hom_set = 3,
-        depth = 3,
+        size_hom_set = 2,
+        depth = 2,
         margin = margin,
         seed = 0,
         early_stopping = 20000,
-        device = "cuda"
+        device = "cuda:0"
     )
 
     model.train()
