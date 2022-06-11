@@ -314,7 +314,7 @@ class Existential(nn.Module):
             nn.LayerNorm(embedding_size),
             nn.Dropout(dropout),
             nn.Linear(embedding_size, embedding_size),
-            nn.LayerNorm(embedding_size),
+#            nn.LayerNorm(embedding_size),
             ACT
         )
 
@@ -325,7 +325,7 @@ class Existential(nn.Module):
             nn.Dropout(dropout),
             
             nn.Linear(2*embedding_size, embedding_size),
-            nn.LayerNorm(embedding_size),
+ #           nn.LayerNorm(embedding_size),
             ACT
             
         )

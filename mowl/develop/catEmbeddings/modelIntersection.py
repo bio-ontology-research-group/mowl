@@ -464,6 +464,7 @@ class CatModel(nn.Module):
         self.net_object = nn.Sequential(
             self.embed,
             nn.Linear(embedding_size, embedding_size),
+            #nn.LayerNorm(embedding_size),
             ACT,
 
         )
@@ -472,6 +473,7 @@ class CatModel(nn.Module):
         self.net_rel = nn.Sequential(
             self.embed_rel,
             nn.Linear(embedding_size, embedding_size),
+            #nn.LayerNorm(embedding_size),
             ACT
 
         )
