@@ -192,7 +192,6 @@ class EntailmentHomSet(nn.Module):
             self.hom_set.append(morphism)
             self.hom_set.append(nn.Identity())
         
-        
     def forward(self, antecedent, consequent):
 
         best_loss = float("inf")

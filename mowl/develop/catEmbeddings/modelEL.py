@@ -75,7 +75,7 @@ class CatEmbeddings(Model):
         self.species = species
         milestones_str = "_".join(str(m) for m in milestones)
         self.data_root = f"data/models/{species}/"
-        self.file_name = f"bs{self.batch_size}_emb{self.embedding_size}_lr{lr}_epochs{epochs}_eval{num_points_eval}_mlstns_{milestones_str}_drop_{self.dropout}_decay_{self.decay}_gamma_{self.gamma}_evalppi_{self.eval_ppi}_margin{self.margin}_hs_{self.hom_set_size}_depth_{self.depth}.th"
+        self.file_name = f"bs{self.batch_size}_emb{self.embedding_size}_lr{lr}_epochs{epochs}_eval{num_points_eval}_mlstns_{milestones_str}_drop_{self.dropout}_decay_{self.decay}_gamma_{self.gamma}_evalppi_{self.eval_ppi}_margin{self.margin}_hs_{self.size_hom_set}_depth_{self.depth}.th"
         self.model_filepath = self.data_root + self.file_name
         self.predictions_file = f"data/predictions/{self.species}/" + self.file_name
         self.labels_file = f"data/labels/{self.species}/" + self.file_name
@@ -250,6 +250,8 @@ class CatEmbeddings(Model):
                 assert pos_loss.shape == neg_loss.shape, f"{pos_loss.shape}, {neg_loss.shape}"
             
                 loss = pos_loss - neg_loss + margin
+
+ 
                 
                 loss = - th.mean(F.logsigmoid(-loss))
                 
@@ -534,6 +536,7 @@ class CatModel(nn.Module):
         self.net_object = nn.Sequential(
             self.embed,
             nn.Linear(embedding_size, embedding_size),
+            nn.LayerNorm(embedding_size),
             ACT,
 
         )
@@ -542,6 +545,7 @@ class CatModel(nn.Module):
         self.net_rel = nn.Sequential(
             self.embed_rel,
             nn.Linear(embedding_size, embedding_size),
+            nn.LayerNorm(embedding_size),
             ACT
 
         )
