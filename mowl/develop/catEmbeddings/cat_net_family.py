@@ -5,7 +5,7 @@ ACT = nn.Identity()
 #ACT = nn.Identity()
 #ACT = nn.Sigmoid()
 #th.autograd.set_detect_anomaly(True)
-def norm(a,b, dim = 1):
+def norm_(a,b, dim = 1):
 #    normA = th.linalg.norm(a, dim = dim)
 #    normB = th.linalg.norm(b, dim = dim)
 #    tensor = normA - normB
@@ -30,10 +30,11 @@ def norm(a,b, dim = 1):
     return rmse
 #    return th.linalg.norm(a-b, dim = dim)
 
-def norm_(a, b):
+def norm(a, b):
 
     x = th.sum(a * b, dim=1, keepdims=True)
-    return 1- th.sigmoid(x)
+    sim = 1- th.sigmoid(x)
+    return sim*sim
 
 
 def rand_tensor(shape, device):

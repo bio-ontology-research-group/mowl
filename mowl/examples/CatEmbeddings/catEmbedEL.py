@@ -38,10 +38,11 @@ def main(species):
         embedding_size = 80
         
         #milestones = [20,50, 90,150, 180,400,  600, 800, 1000, 1300, 1600, 20001001] #only_nf4\
-        gamma = 0.9
+        gamma = 0.5
         margin = 5
-        epochs = 1000
-        milestones = [i*70 for i in range(epochs//70)]
+        epochs = 100
+        step = 10
+        milestones = [i*step for i in range(epochs//step)]
     elif species == "human":
         ds = 'data/data-train/human-classes-normalized.owl', 'data/data-valid/9606.protein.links.v10.5.txt', 'data/data-test/9606.protein.links.v10.5.txt'
         lr = 5e-3 #2 for ppi slim
@@ -67,7 +68,7 @@ def main(species):
         gamma = gamma,
         eval_ppi = True,
         size_hom_set = 3,
-        depth = 4,
+        depth = 3,
         margin = margin,
         seed = 0,
         early_stopping = 20000,
