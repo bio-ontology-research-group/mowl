@@ -29,7 +29,8 @@ import click as ck
     "--test", "-t", default = "ppi", help = "Type of test: ppi or gda")
 def main(test):
     global ROOT
-    
+
+    tsne = False
     if test == "ppi":
         ROOT = "../ppi/data/"
         ds = PPIYeastDataset()
@@ -53,7 +54,8 @@ def main(test):
 
         "vector_size" : 20,
         "epochs" : 2,
-        "batch_size": 32
+        "batch_size": 32,
+        "device": "cuda:1"
     }
     
     
@@ -64,8 +66,8 @@ def main(test):
 
         "vector_size" : 100,
         "epochs" : 20,
-        "batch_size": 32
-        
+        "batch_size": 1024,
+        "device": "cuda:1"
     }
     
     
@@ -154,7 +156,8 @@ def benchmark_case(dataset, parsing_method, trans_method, params, test, tsne = F
         trans_method = trans_method,
         embedding_dim = params["vector_size"],
         epochs = params["epochs"],
-        batch_size = params["batch_size"]
+        batch_size = params["batch_size"],
+        device = params["device"]
     )
 
     transMethod.train()
@@ -168,7 +171,8 @@ def benchmark_case(dataset, parsing_method, trans_method, params, test, tsne = F
         CosineSimilarity,
         training_set=eval_train_edges,
         head_entities = head_entities,
-        device = "cuda"
+        tail_entities = tail_entities,
+        device = params["device"]
     )
 
     evaluator.evaluate(show=False)

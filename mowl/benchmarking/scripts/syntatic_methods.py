@@ -36,6 +36,7 @@ def main(test):
     global ROOT
     methods = ["opa2vec", "onto2vec"]
 
+    tsne = False
     if test == "ppi":
         ROOT = "../ppi/data/"
         ds = PPIYeastDataset()
@@ -132,19 +133,38 @@ def benchmark_case(dataset, method, params, test, tsne = False):
         logging.info("Evaluation data found. Loading...")
         eval_train_edges, eval_test_edges, head_entities, tail_entities = load_pickles(*eval_data_files)
     else:
+
         logging.info("Evaluation data not found. Generating...")
 
-        eval_projector = projector_factory("taxonomy_rels", relations = ["http://interacts_with"])
+        if test == "ppi":
+            eval_projector = projector_factory("taxonomy_rels", relations = ["http://interacts_with"])
 
-        eval_train_edges = eval_projector.project(dataset.ontology)
-        eval_test_edges = eval_projector.project(dataset.testing)
+            eval_train_edges = eval_projector.project(dataset.ontology)
+            eval_test_edges = eval_projector.project(dataset.testing)
+            
+            train_head_ents, _, train_tail_ents = Edge.zip(eval_train_edges)
+            test_head_ents, _, test_tail_ents = Edge.zip(eval_test_edges)
+            
+            head_entities = list(set(train_head_ents) | set(test_head_ents))
+            tail_entities = list(set(train_tail_ents) | set(test_tail_ents))
+            
+        else:
+            eval_projector = projector_factory("taxonomy_rels", taxonomy = True, relations = ["http://is_associated_with", "http://has_annotation"])
 
-        train_head_ents, _, train_tail_ents = Edge.zip(eval_train_edges)
-        test_head_ents, _, test_tail_ents = Edge.zip(eval_test_edges)
+            eval_train_edges = eval_projector.project(dataset.ontology)
+            eval_test_edges = eval_projector.project(dataset.testing)
 
-        head_entities = list(set(train_head_ents) | set(test_head_ents))
-        tail_entities = list(set(train_tail_ents) | set(test_tail_ents))
-
+            print(f"number of test edges is {len(eval_test_edges)}")
+            train_entities, _ = Edge.getEntitiesAndRelations(eval_train_edges)
+            test_entities, _ = Edge.getEntitiesAndRelations(eval_test_edges)
+                        
+            all_entities = list(set(train_entities) | set(test_entities))
+            print("\n\n")
+            print(len(test_entities))
+            head_entities = [e for e in all_entities if e[7:].isnumeric()]
+            tail_entities = [e for e in all_entities if "OMIM_" in e]
+            
+            
         save_pickles(
             (eval_train_edges, eval_train_file),
             (eval_test_edges, eval_test_file),
@@ -161,6 +181,7 @@ def benchmark_case(dataset, method, params, test, tsne = False):
         CosineSimilarity,
         training_set=eval_train_edges,
         head_entities = head_entities,
+        tail_entities = tail_entities,
         device = "cuda"
     )
 

@@ -48,7 +48,7 @@ def main(test):
         ROOT = "../gda/data_human/"
         ds = PathDataset(ROOT + "train_human.owl", ROOT + "valid_human.owl", ROOT + "test_human.owl")
     
-    parsing_methods = [m for m in PARSING_METHODS if not ("taxonomy" in m) and not("owl2vec" in m)]
+    parsing_methods = [m for m in PARSING_METHODS if not ("taxonomy" in m)]
     
     
 
@@ -84,17 +84,13 @@ def main(test):
 
         "vector_size" : 100, 
         "window" : 5 ,
-        "epochs" : 40 
+        "epochs" : 20
     }
     
     
     for pm in parsing_methods:
-        if not (pm == "dl2vec"):
-            continue
         for w in WALKING_METHODS:
-            if not (w == "deepwalk"):
-                continue
-            benchmark_case(ds,pm,w,params, test, tsne = tsne,)
+            benchmark_case(ds,pm,w,dummy_params, test, tsne = tsne,)
 
 
 def create_dir(path_dir):
@@ -170,19 +166,21 @@ def benchmark_case(dataset, parsing_method, walking_method, params, test,  tsne 
             tail_entities = list(set(train_tail_ents) | set(test_tail_ents))
             
         else:
-            eval_projector = projector_factory("taxonomy_rels", relations = ["http://is_associated_with"])
+            eval_projector = projector_factory("taxonomy_rels", taxonomy = True, relations = ["http://is_associated_with", "http://has_annotation"])
 
             eval_train_edges = eval_projector.project(dataset.ontology)
             eval_test_edges = eval_projector.project(dataset.testing)
 
+            print(f"number of test edges is {len(eval_test_edges)}")
             train_entities, _ = Edge.getEntitiesAndRelations(eval_train_edges)
             test_entities, _ = Edge.getEntitiesAndRelations(eval_test_edges)
                         
             all_entities = list(set(train_entities) | set(test_entities))
+            print("\n\n")
+            print(len(test_entities))
+            head_entities = [e for e in all_entities if e[7:].isnumeric()]
+            tail_entities = [e for e in all_entities if "OMIM_" in e]
             
-            head_entities = [e for e in all_entities if e.is_numeric()]
-            tail_entities = [e for e in all_entities if e.contains("OMIM")]
-
             
         save_pickles(
             (eval_train_edges, eval_train_file),
@@ -191,6 +189,7 @@ def benchmark_case(dataset, parsing_method, walking_method, params, test,  tsne 
             (tail_entities, eval_tails_file)
         )
 
+    logging.info("Number of head and tail entities: %d, %d", len(head_entities), len(tail_entities))
     ### WALK
 
     walks_file = ROOT + f"walks/{parsing_method}_{walking_method}.txt"
@@ -248,13 +247,16 @@ def benchmark_case(dataset, parsing_method, walking_method, params, test,  tsne 
         vectors = model.wv
 
     ### FINALLY, EVALUATION
-
+    print(f"number of test edges is {len(eval_test_edges)}")
+            
+    
     evaluator = EmbeddingsRankBasedEvaluator(
         vectors,
         eval_test_edges,
         CosineSimilarity,
         training_set=eval_train_edges,
         head_entities = head_entities,
+        tail_entities = tail_entities,
         device = device
     )
 
