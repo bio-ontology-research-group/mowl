@@ -35,6 +35,7 @@ class RankBasedEvaluator(Evaluator):
             self.compute_filtered_metrics = False
             logging.info("Training set was not input. Filtered metrics will not be available.")
 
+        self.device = device
         self._data_loaded : bool
 
         self.relation_index_emb = relation_index_emb
@@ -61,7 +62,7 @@ class RankBasedEvaluator(Evaluator):
         self.testing_predictions = np.zeros((len(self.head_entities), len(self.tail_entities)), dtype=np.int32)
         
         self.load_training_scores()
-
+        
         
     def filter_head_tail_data(self):
 
