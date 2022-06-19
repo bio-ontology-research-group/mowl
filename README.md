@@ -45,6 +45,8 @@ The last line will generate the necessary `jar` files to bind Python with the co
 In this example we use the training data (which is an OWL ontology) from the built-in dataset [PPIYeasSlimDataset](https://mowl.readthedocs.io/en/latest/api/datasets/index.html#mowl.datasets.ppi_yeast.PPIYeastSlimDataset) to build a graph representation using the _subClassOf_ axioms.
 
 ```python
+import mowl
+mowl.init_jvm("4g")
 from mowl.datasets.ppi_yeast import PPIYeastSlimDataset
 from mowl.projection.taxonomy.model import TaxonomyProjector
 
