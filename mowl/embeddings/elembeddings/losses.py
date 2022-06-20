@@ -9,6 +9,7 @@ def class_dist(data, class_norm, class_embed, class_rad):
         return dist
         
 def gci0_loss(data, class_norm, class_embed, class_rad, margin):
+    
     pos_dist = class_dist(data, class_norm, class_embed, class_rad)
     loss = th.relu(pos_dist - margin)
     return loss
