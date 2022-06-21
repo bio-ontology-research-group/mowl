@@ -9,6 +9,7 @@ After generating embeddings for ontology classes, it might be useful to have a v
  
    tsne = TSNE(embeddings, labels)
    tsne.generate_points(5000, workers = 4)
+   tsne.show()
    tsne.savefig("path-to-file.jpg")
 
 
