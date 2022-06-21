@@ -20,6 +20,7 @@ from org.semanticweb.owlapi.util import InferredEquivalentClassAxiomGenerator
 from org.semanticweb.owlapi.util import InferredSubClassAxiomGenerator
 from org.semanticweb.elk.owlapi import ElkReasonerFactory
 
+from mowl.projection.taxonomyRels.model import TaxonomyWithRelsProjector
 class Dataset(object):
 
     """This class provide training, validation and testing datasets encoded as OWL ontologies.
@@ -109,6 +110,7 @@ class PathDataset(Dataset):
 
 
     def infer_axioms(self):
+        print("The infer_axioms method is deprecated and will be removed soon. Please consider using the methods existing in the mowl.reasoning module.")
         if not self.reasoner:
             self._create_reasoner()
         assertion_axioms = InferredClassAssertionAxiomGenerator().createAxioms(
@@ -124,6 +126,13 @@ class PathDataset(Dataset):
     def get_evaluation_classes(self):
         return self.ontology.getClassesInSignature()
 
+
+    def get_labels(self):
+        projector = TaxonomyWithRelsProjector(relations = ["http://has_label"])
+        edges = projector.project(self.ontology)
+        labels = {str(e.src()): str(e.dst()) for e in edges}
+        return labels
+    
 class TarFileDataset(PathDataset):
     """Loads the dataset from a `tar` file.
 
