@@ -1,4 +1,4 @@
-from mowl.model import EmbeddingModel
+
 
 from mowl.projection.factory import projector_factory
 from mowl.projection.edge import Edge
@@ -27,6 +27,8 @@ class TranslationalOnt():
     :type embedding_dim: int
     :param epochs: Number of epochs
     :type epochs: int
+    :param device: Device to run the model. Default is `cpu`
+    :type device: str
     '''
     
     def __init__(self,
@@ -34,7 +36,8 @@ class TranslationalOnt():
                  trans_method="transE",
                  embedding_dim = 50,
                  epochs = 5,
-                 batch_size = 32
+                 batch_size = 32,
+                 device = "cpu"
     ):
         
         self.edges = edges
@@ -42,7 +45,7 @@ class TranslationalOnt():
         self.embedding_dim = embedding_dim
         self.epochs = epochs
         self.batch_size = batch_size
-
+        self.device = device
         self.model = None
         self._trained = False
         
@@ -62,7 +65,7 @@ class TranslationalOnt():
         triples_factory = CoreTriplesFactory(mapped_triples, len(entities), len(relations), self.entities_idx, self.relations_idx)
 
 
-        self.model = self.trans_factory(self.trans_method, triples_factory, self.embedding_dim)
+        self.model = self.trans_factory(self.trans_method, triples_factory, self.embedding_dim).to(self.device)
 
         optimizer = Adam(params=self.model.get_grad_params())
 
