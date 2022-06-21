@@ -35,7 +35,7 @@ def main(test, device):
     tsne = False
 
     if test == "ppi":
-        ROOT = "../ppi/data/"
+        ROOT = "tmp/"
         ds = PPIYeastDataset()
         tsne = True
         
@@ -54,9 +54,9 @@ def main(test, device):
     
 
     dummy_params  = {
-        "vector_size" : 20,
-        "epochs" : 501,
-        "margin": 0.1,
+        "vector_size" : 10,
+        "epochs" : 10,
+        "margin": -0.1,
         "batch_size": 32,
         "device": device
     }
@@ -72,9 +72,9 @@ def main(test, device):
     }
     
     
-    benchmark_case(ds, dummy_params, device)
+    benchmark_case(ds, dummy_params, device, test)
 
-def benchmark_case(dataset, params, device):
+def benchmark_case(dataset, params, device, test):
 
     eval_train_file = ROOT + "eval_data/training_set.pkl"
     eval_test_file = ROOT + "eval_data/test_set.pkl"
@@ -133,10 +133,16 @@ def benchmark_case(dataset, params, device):
     )
     
     model.train()
+
+    exclude_gos = lambda x: not "GO" in x
+    relation_condition = lambda x: x in ["http://interacts_with"]
     
+    #model.infer_gci2(top_k = 10, mode = "infer_property", subclass_condition=exclude_gos,  filler_condition = exclude_gos )
+    #model.infer_gci2(top_k = 10, mode = "infer_subclass", subclass_condition=exclude_gos, property_condition = relation_condition,  filler_condition = exclude_gos )
+    #model.infer_gci2(top_k = 10, mode = "infer_filler", subclass_condition=exclude_gos, property_condition = relation_condition,  filler_condition = exclude_gos )
     ### FINALLY, EVALUATION
 
-    model.evaluate_ppi()
+    #model.evaluate_ppi()
 #    evaluator = ModelRankBasedEvaluator(
 #        model,
 #        device = device
@@ -157,29 +163,12 @@ def benchmark_case(dataset, params, device):
 
     ###### TSNE ############
 
-    ec_num_file = ROOT + "ec_numbers_data"
-
-    if exist_files(ec_num_file):
-        ec_numbers, = load_pickles(ec_num_file)
-    else:
-        ec_numbers = {}
-        with open("yeast_ec.tab", "r") as f:
-            next(f)
-            for line in f:
-                it = line.strip().split('\t', -1)
-                if len(it) < 5:
-                    continue
-                if it[3]:
-                    prot_id = it[3].split(';')[0]
-                    prot_id = '{0}'.format(prot_id)
-                    ec_numbers[f"http://{prot_id}"] = it[4].split(".")[0]
-
-        save_pickles((ec_numbers, ec_num_file))
-
+    labels = dataset.get_labels()
+        
     embeddings, _ = model.get_embeddings()
 
     entities = list(set(head_entities) | set(tail_entities))
-    tsne = MTSNE(embeddings, ec_numbers, entities = entities)
+    tsne = MTSNE(embeddings, labels, entities = entities)
     tsne.generate_points(5000, workers = 16, verbose = 1)
     tsne.savefig(ROOT + f'tsne/elembeddings.jpg')
         

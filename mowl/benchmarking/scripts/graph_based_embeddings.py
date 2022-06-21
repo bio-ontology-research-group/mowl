@@ -37,7 +37,8 @@ def main(test):
 
     
     if test == "ppi":
-        ROOT = "../ppi/data/"
+        ROOT = "tmp/"
+#        ROOT = "../ppi/data/"
         ds = PPIYeastDataset()
         tsne = True
         
@@ -277,25 +278,7 @@ def benchmark_case(dataset, parsing_method, walking_method, params, test,  tsne 
 
     if tsne:
         if test == "ppi":
-            ec_num_file = ROOT + "ec_numbers_data"
-
-            if exist_files(ec_num_file):
-                labels, = load_pickles(ec_num_file)
-            else:
-                labels = {}
-                with open(ROOT + "yeast_ec.tab", "r") as f:
-                    next(f)
-                    for line in f:
-                        it = line.strip().split('\t', -1)
-                        if len(it) < 5:
-                            continue
-                        if it[3]:
-                            prot_id = it[3].split(';')[0]
-                            prot_id = '{0}'.format(prot_id)
-                            labels[f"http://{prot_id}"] = it[4].split(".")[0]
-
-                save_pickles((labels, ec_num_file))
-
+            labels = dataset.get_labels()
             entities = list(set(head_entities) | set(tail_entities))
         tsne = MTSNE(vectors, labels, entities = entities)
         tsne.generate_points(5000, workers = 16, verbose = 1)

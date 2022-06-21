@@ -38,7 +38,8 @@ def main(test):
 
     tsne = False
     if test == "ppi":
-        ROOT = "../ppi/data/"
+        ROOT = "tmp/"
+        #ROOT = "../ppi/data/"
         ds = PPIYeastDataset()
         tsne = True
         
@@ -55,7 +56,7 @@ def main(test):
     dummy_params  = {
         "vector_size" : 20,
         "window" : 5,
-        "epochs" : 20,
+        "epochs" : 5,
         "workers": 16
     }
 
@@ -68,7 +69,7 @@ def main(test):
     
     
     for m in methods:
-        benchmark_case(ds,m,params, test, tsne)
+        benchmark_case(ds,m,dummy_params, test, tsne)
 
 
 
@@ -185,42 +186,26 @@ def benchmark_case(dataset, method, params, test, tsne = False):
         device = "cuda"
     )
 
-    evaluator.evaluate(show=False)
+    evaluate = True
+    if evaluate and False:
+        #evaluator.evaluate(show=False)
 
-    log_file = ROOT + f"results/{method}.dat"
+        log_file = ROOT + f"results/{method}.dat"
 
-    with open(log_file, "w") as f:
-        tex_table = ""
-        for k, v in evaluator.metrics.items():
-            tex_table += f"{v} &\t"
-            f.write(f"{k}\t{v}\n")
+        with open(log_file, "w") as f:
+            tex_table = ""
+            for k, v in evaluator.metrics.items():
+                tex_table += f"{v} &\t"
+                f.write(f"{k}\t{v}\n")
 
-        f.write(f"\n{tex_table}")
+            f.write(f"\n{tex_table}")
 
 
     ###### TSNE ############
 
     if tsne:
         if test == "ppi":
-            ec_num_file = ROOT + "ec_numbers_data"
-
-            if exist_files(ec_num_file):
-                labels, = load_pickles(ec_num_file)
-            else:
-                labels = {}
-                with open(ROOT + "yeast_ec.tab", "r") as f:
-                    next(f)
-                    for line in f:
-                        it = line.strip().split('\t', -1)
-                        if len(it) < 5:
-                            continue
-                        if it[3]:
-                            prot_id = it[3].split(';')[0]
-                            prot_id = '{0}'.format(prot_id)
-                            labels[f"http://{prot_id}"] = it[4].split(".")[0]
-
-                save_pickles((labels, ec_num_file))
-
+            labels = dataset.get_labels()
             entities = list(set(head_entities) | set(tail_entities))
         tsne = MTSNE(vectors, labels, entities = entities)
         tsne.generate_points(5000, workers = 16, verbose = 1)

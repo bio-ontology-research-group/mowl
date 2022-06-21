@@ -32,7 +32,8 @@ def main(test):
 
     tsne = False
     if test == "ppi":
-        ROOT = "../ppi/data/"
+        ROOT = "tmp/"
+        #ROOT = "../ppi/data/"
         ds = PPIYeastDataset()
         tsne = True
         
@@ -175,17 +176,19 @@ def benchmark_case(dataset, parsing_method, trans_method, params, test, tsne = F
         device = params["device"]
     )
 
-    evaluator.evaluate(show=False)
+    evaluate = True
+    if evaluate and False:
+        #evaluator.evaluate(show=False)
 
-    log_file = ROOT + f"results/{parsing_method}_{trans_method}.dat"
+        log_file = ROOT + f"results/{parsing_method}_{trans_method}.dat"
 
-    with open(log_file, "w") as f:
-        tex_table = ""
-        for k, v in evaluator.metrics.items():
-            tex_table += f"{v} &\t"
-            f.write(f"{k}\t{v}\n")
+        with open(log_file, "w") as f:
+            tex_table = ""
+            for k, v in evaluator.metrics.items():
+                tex_table += f"{v} &\t"
+                f.write(f"{k}\t{v}\n")
 
-        f.write(f"\n{tex_table}")
+            f.write(f"\n{tex_table}")
 
 
     ###### TSNE ############
@@ -193,24 +196,8 @@ def benchmark_case(dataset, parsing_method, trans_method, params, test, tsne = F
 
     if tsne:
         if test == "ppi":
-            ec_num_file = ROOT + "ec_numbers_data"
-
-            if exist_files(ec_num_file):
-                labels, = load_pickles(ec_num_file)
-            else:
-                labels = {}
-                with open(ROOT + "yeast_ec.tab", "r") as f:
-                    next(f)
-                    for line in f:
-                        it = line.strip().split('\t', -1)
-                        if len(it) < 5:
-                            continue
-                        if it[3]:
-                            prot_id = it[3].split(';')[0]
-                            prot_id = '{0}'.format(prot_id)
-                            labels[f"http://{prot_id}"] = it[4].split(".")[0]
-
-                save_pickles((labels, ec_num_file))
+            
+            labels = dataset.get_labels()
 
             entities = list(set(head_entities) | set(tail_entities))
     
