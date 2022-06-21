@@ -1,4 +1,4 @@
-from mowl.model import EmbeddingModel
+from mowl.base_models.model import EmbeddingModel
 from mowl.projection.factory import projector_factory
 from mowl.walking.factory import walking_factory
 from mowl.projection.edge import Edge
