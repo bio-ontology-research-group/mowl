@@ -44,16 +44,8 @@ def insert_annotations(ontology_file, annotations, out_file = None, verbose=Fals
         
     factory = manager.getOWLDataFactory()
 
-    for annots_file, relation_name, prefix in annotations:
-        prefix_in_document = False
+    for annots_file, relation_name, directed in annotations:
         relation = factory.getOWLObjectProperty(IRI.create(f"{relation_name}"))
-
-        if prefix is None:
-            prefix_in_document = True
-        elif prefix in PREFIXES:
-            prefix = PREFIXES[prefix]
-        else:
-            prefix = validate_prefix(prefix, ont_prefixes)
         
         with open(annots_file) as f:
             for line in f:
@@ -62,14 +54,15 @@ def insert_annotations(ontology_file, annotations, out_file = None, verbose=Fals
                 annotating_entity = factory.getOWLClass(IRI.create(f"{annotating_entity}"))
 
                 for ont_id in items[1:]:
-                    if not prefix_in_document:
-                        ont_id = ont_id.replace(":", "_")
-                        ont_class = factory.getOWLClass(IRI.create(f"{prefix}{ont_id}"))
-                    else:
-                        ont_class = factory.getOWLClass(IRI.create(f"{ont_id}"))
+                    ont_class = factory.getOWLClass(IRI.create(f"{ont_id}"))
                     objSomeValsAxiom = factory.getOWLObjectSomeValuesFrom(relation, ont_class)
                     axiom = factory.getOWLSubClassOfAxiom(annotating_entity, objSomeValsAxiom)
                     manager.addAxiom(ont, axiom)
+                    if not directed:
+                        objSomeValsAxiom = factory.getOWLObjectSomeValuesFrom(relation, annotating_entity)
+                        axiom = factory.getOWLSubClassOfAxiom(ont_class, objSomeValsAxiom)
+                        manager.addAxiom(ont, axiom)
+                        
 
     
     manager.saveOntology(ont, IRI.create("file:" + os.path.abspath(out_file)))
@@ -92,8 +85,8 @@ def create_from_triples(
         out_file,
         relation_name = None,
         bidirectional = False,
-        head_prefix = PREFIXES["default"],
-        tail_prefix = PREFIXES["default"]
+        head_prefix = "",
+        tail_prefix = ""
 ):
 
     """Method to create an ontology from a .tsv file with triples.    
@@ -106,9 +99,9 @@ def create_from_triples(
     :type bidirectional: bool
     :param out_file: Path for the output ontology. If `None` and an existing ontology is input, the existing ontology will be overwritten.
     :type out_file: str
-    :param head_prefix: Prefix to be assigned to the head of each triple. Default is `http://default/mowl/`
+    :param head_prefix: Prefix to be assigned to the head of each triple. Default is `""`
     :type head_prefix: str
-    :param tail_prefix: Prefix to be assigned to the tail of each triple. Default is `http://default/mowl/`
+    :param tail_prefix: Prefix to be assigned to the tail of each triple. Default is `""`
     :type tail_prefix: str
     """
 
