@@ -9,6 +9,6 @@ Tutorials
 
    dataset
    embed
-   visualization
+   visualizationem
    
    
