@@ -1,4 +1,9 @@
 import os
+import sys
+sys.path.append("../../../")
+import mowl
+mowl.init_jvm("3g")
+
 from mowl.embeddings.onto2vec.model import Onto2Vec
 from jpype import java
 from org.semanticweb.owlapi.apibinding import OWLManager

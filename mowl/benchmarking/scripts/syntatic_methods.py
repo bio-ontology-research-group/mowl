@@ -36,8 +36,10 @@ def main(test):
     global ROOT
     methods = ["opa2vec", "onto2vec"]
 
+    tsne = False
     if test == "ppi":
-        ROOT = "../ppi/data/"
+        ROOT = "tmp/"
+        #ROOT = "../ppi/data/"
         ds = PPIYeastDataset()
         tsne = True
         
@@ -54,7 +56,7 @@ def main(test):
     dummy_params  = {
         "vector_size" : 20,
         "window" : 5,
-        "epochs" : 20,
+        "epochs" : 5,
         "workers": 16
     }
 
@@ -67,7 +69,7 @@ def main(test):
     
     
     for m in methods:
-        benchmark_case(ds,m,params, test, tsne)
+        benchmark_case(ds,m,dummy_params, test, tsne)
 
 
 
@@ -132,19 +134,38 @@ def benchmark_case(dataset, method, params, test, tsne = False):
         logging.info("Evaluation data found. Loading...")
         eval_train_edges, eval_test_edges, head_entities, tail_entities = load_pickles(*eval_data_files)
     else:
+
         logging.info("Evaluation data not found. Generating...")
 
-        eval_projector = projector_factory("taxonomy_rels", relations = ["http://interacts_with"])
+        if test == "ppi":
+            eval_projector = projector_factory("taxonomy_rels", relations = ["http://interacts_with"])
 
-        eval_train_edges = eval_projector.project(dataset.ontology)
-        eval_test_edges = eval_projector.project(dataset.testing)
+            eval_train_edges = eval_projector.project(dataset.ontology)
+            eval_test_edges = eval_projector.project(dataset.testing)
+            
+            train_head_ents, _, train_tail_ents = Edge.zip(eval_train_edges)
+            test_head_ents, _, test_tail_ents = Edge.zip(eval_test_edges)
+            
+            head_entities = list(set(train_head_ents) | set(test_head_ents))
+            tail_entities = list(set(train_tail_ents) | set(test_tail_ents))
+            
+        else:
+            eval_projector = projector_factory("taxonomy_rels", taxonomy = True, relations = ["http://is_associated_with", "http://has_annotation"])
 
-        train_head_ents, _, train_tail_ents = Edge.zip(eval_train_edges)
-        test_head_ents, _, test_tail_ents = Edge.zip(eval_test_edges)
+            eval_train_edges = eval_projector.project(dataset.ontology)
+            eval_test_edges = eval_projector.project(dataset.testing)
 
-        head_entities = list(set(train_head_ents) | set(test_head_ents))
-        tail_entities = list(set(train_tail_ents) | set(test_tail_ents))
-
+            print(f"number of test edges is {len(eval_test_edges)}")
+            train_entities, _ = Edge.getEntitiesAndRelations(eval_train_edges)
+            test_entities, _ = Edge.getEntitiesAndRelations(eval_test_edges)
+                        
+            all_entities = list(set(train_entities) | set(test_entities))
+            print("\n\n")
+            print(len(test_entities))
+            head_entities = [e for e in all_entities if e[7:].isnumeric()]
+            tail_entities = [e for e in all_entities if "OMIM_" in e]
+            
+            
         save_pickles(
             (eval_train_edges, eval_train_file),
             (eval_test_edges, eval_test_file),
@@ -161,45 +182,30 @@ def benchmark_case(dataset, method, params, test, tsne = False):
         CosineSimilarity,
         training_set=eval_train_edges,
         head_entities = head_entities,
+        tail_entities = tail_entities,
         device = "cuda"
     )
 
-    evaluator.evaluate(show=False)
+    evaluate = True
+    if evaluate and False:
+        #evaluator.evaluate(show=False)
 
-    log_file = ROOT + f"results/{method}.dat"
+        log_file = ROOT + f"results/{method}.dat"
 
-    with open(log_file, "w") as f:
-        tex_table = ""
-        for k, v in evaluator.metrics.items():
-            tex_table += f"{v} &\t"
-            f.write(f"{k}\t{v}\n")
+        with open(log_file, "w") as f:
+            tex_table = ""
+            for k, v in evaluator.metrics.items():
+                tex_table += f"{v} &\t"
+                f.write(f"{k}\t{v}\n")
 
-        f.write(f"\n{tex_table}")
+            f.write(f"\n{tex_table}")
 
 
     ###### TSNE ############
 
     if tsne:
         if test == "ppi":
-            ec_num_file = ROOT + "ec_numbers_data"
-
-            if exist_files(ec_num_file):
-                labels, = load_pickles(ec_num_file)
-            else:
-                labels = {}
-                with open(ROOT + "yeast_ec.tab", "r") as f:
-                    next(f)
-                    for line in f:
-                        it = line.strip().split('\t', -1)
-                        if len(it) < 5:
-                            continue
-                        if it[3]:
-                            prot_id = it[3].split(';')[0]
-                            prot_id = '{0}'.format(prot_id)
-                            labels[f"http://{prot_id}"] = it[4].split(".")[0]
-
-                save_pickles((labels, ec_num_file))
-
+            labels = dataset.get_labels()
             entities = list(set(head_entities) | set(tail_entities))
         tsne = MTSNE(vectors, labels, entities = entities)
         tsne.generate_points(5000, workers = 16, verbose = 1)

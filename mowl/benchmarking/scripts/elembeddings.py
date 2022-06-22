@@ -1,11 +1,12 @@
 import sys
-sys.path.append("../../")
+sys.path.append("../../../")
 
 import mowl
 mowl.init_jvm("5g")
 from os.path import exists
 
 from mowl.datasets.ppi_yeast import PPIYeastSlimDataset, PPIYeastDataset
+from mowl.datasets.base import PathDataset
 from mowl.projection.factory import projector_factory, PARSING_METHODS
 from mowl.projection.edge import Edge
 from mowl.evaluation.rank_based import ModelRankBasedEvaluator
@@ -14,7 +15,7 @@ from mowl.evaluation.base import CosineSimilarity
 
 import pickle as pkl
 from mowl.visualization.base import TSNE as MTSNE
-from mowl.benchmarking.util import exist_files, load_pickles, save_pickles
+from mowl.benchmarking.scripts.util import exist_files, load_pickles, save_pickles
 from mowl.embeddings.elembeddings.model import ELEmbeddings
 import logging
 logging.basicConfig(level=logging.INFO)
@@ -31,24 +32,31 @@ import click as ck
 def main(test, device):
     global ROOT
 
-
+    tsne = False
 
     if test == "ppi":
-        ROOT = "data_ppi/"
-        ds = PPIYeastSlimDataset()
-    elif test == "gda":
-        ROOT = "data_gda/"
+        ROOT = "tmp/"
+        ds = PPIYeastDataset()
+        tsne = True
+        
+    elif test == "gda_mouse":
+        ROOT = "../gda/data_mouse/"
+        ds = PathDataset(ROOT + "train_mouse.owl", ROOT + "valid_mouse.owl", ROOT + "test_mouse.owl")
+    elif test == "gda_human":
+        ROOT = "../gda/data_human/"
+        ds = PathDataset(ROOT + "train_human.owl", ROOT + "valid_human.owl", ROOT + "test_human.owl")
+
     else:
         raise ValueError(f"Type of test not recognized: {test}")
 
-    parsing_methods = [m for m in PARSING_METHODS if not ("taxonomy" in m)]
+    
     
     
 
     dummy_params  = {
-        "vector_size" : 20,
-        "epochs" : 501,
-        "margin": 0.1,
+        "vector_size" : 10,
+        "epochs" : 10,
+        "margin": -0.1,
         "batch_size": 32,
         "device": device
     }
@@ -64,14 +72,14 @@ def main(test, device):
     }
     
     
-    benchmark_case(ds, dummy_params, device)
+    benchmark_case(ds, dummy_params, device, test)
 
-def benchmark_case(dataset, params, device):
+def benchmark_case(dataset, params, device, test):
 
-    eval_train_file = ROOT + "eval_training_set.pkl"
-    eval_test_file = ROOT + "eval_test_set.pkl"
-    eval_heads_file = ROOT + "eval_head_entities.pkl"
-    eval_tails_file = ROOT + "eval_tail_entities.pkl"
+    eval_train_file = ROOT + "eval_data/training_set.pkl"
+    eval_test_file = ROOT + "eval_data/test_set.pkl"
+    eval_heads_file = ROOT + "eval_data/head_entities.pkl"
+    eval_tails_file = ROOT + "eval_data/tail_entities.pkl"
 
     eval_data_files = [eval_train_file, eval_test_file, eval_heads_file, eval_tails_file]
     
@@ -81,17 +89,34 @@ def benchmark_case(dataset, params, device):
     else:
         logging.info("Evaluation data not found. Generating...")
 
-        eval_projector = projector_factory("taxonomy_rels", relations = ["http://interacts_with"])
+        if test == "ppi":
+            eval_projector = projector_factory("taxonomy_rels", relations = ["http://interacts_with"])
 
-        eval_train_edges = eval_projector.project(dataset.ontology)
-        eval_test_edges = eval_projector.project(dataset.testing)
+            eval_train_edges = eval_projector.project(dataset.ontology)
+            eval_test_edges = eval_projector.project(dataset.testing)
+            
+            train_head_ents, _, train_tail_ents = Edge.zip(eval_train_edges)
+            test_head_ents, _, test_tail_ents = Edge.zip(eval_test_edges)
+            
+            head_entities = list(set(train_head_ents) | set(test_head_ents))
+            tail_entities = list(set(train_tail_ents) | set(test_tail_ents))
+            
+        else:
+            eval_projector = projector_factory("taxonomy_rels", taxonomy = True, relations = ["http://is_associated_with", "http://has_annotation"])
 
-        train_head_ents, _, train_tail_ents = Edge.zip(eval_train_edges)
-        test_head_ents, _, test_tail_ents = Edge.zip(eval_test_edges)
+            eval_train_edges = eval_projector.project(dataset.ontology)
+            eval_test_edges = eval_projector.project(dataset.testing)
 
-        head_entities = list(set(train_head_ents) | set(test_head_ents))
-        tail_entities = list(set(train_tail_ents) | set(test_tail_ents))
-
+            print(f"number of test edges is {len(eval_test_edges)}")
+            train_entities, _ = Edge.getEntitiesAndRelations(eval_train_edges)
+            test_entities, _ = Edge.getEntitiesAndRelations(eval_test_edges)
+                        
+            all_entities = list(set(train_entities) | set(test_entities))
+            print("\n\n")
+            print(len(test_entities))
+            head_entities = [e for e in all_entities if e[7:].isnumeric()]
+            tail_entities = [e for e in all_entities if "OMIM_" in e]
+    
         save_pickles(
             (eval_train_edges, eval_train_file),
             (eval_test_edges, eval_test_file),
@@ -108,15 +133,16 @@ def benchmark_case(dataset, params, device):
     )
     
     model.train()
+
+    exclude_gos = lambda x: not "GO" in x
+    relation_condition = lambda x: x in ["http://interacts_with"]
     
+    #model.infer_gci2(top_k = 10, mode = "infer_property", subclass_condition=exclude_gos,  filler_condition = exclude_gos )
+    #model.infer_gci2(top_k = 10, mode = "infer_subclass", subclass_condition=exclude_gos, property_condition = relation_condition,  filler_condition = exclude_gos )
+    #model.infer_gci2(top_k = 10, mode = "infer_filler", subclass_condition=exclude_gos, property_condition = relation_condition,  filler_condition = exclude_gos )
     ### FINALLY, EVALUATION
 
-    
-
-
-    model.evaluate_ppi_()
-
-    model.evaluate_ppi()
+    #model.evaluate_ppi()
 #    evaluator = ModelRankBasedEvaluator(
 #        model,
 #        device = device
@@ -137,31 +163,14 @@ def benchmark_case(dataset, params, device):
 
     ###### TSNE ############
 
-    ec_num_file = ROOT + "ec_numbers_data"
-
-    if exist_files(ec_num_file):
-        ec_numbers, = load_pickles(ec_num_file)
-    else:
-        ec_numbers = {}
-        with open("yeast_ec.tab", "r") as f:
-            next(f)
-            for line in f:
-                it = line.strip().split('\t', -1)
-                if len(it) < 5:
-                    continue
-                if it[3]:
-                    prot_id = it[3].split(';')[0]
-                    prot_id = '{0}'.format(prot_id)
-                    ec_numbers[f"http://{prot_id}"] = it[4].split(".")[0]
-
-        save_pickles((ec_numbers, ec_num_file))
-
+    labels = dataset.get_labels()
+        
     embeddings, _ = model.get_embeddings()
 
     entities = list(set(head_entities) | set(tail_entities))
-    tsne = MTSNE(embeddings, ec_numbers, entities = entities)
+    tsne = MTSNE(embeddings, labels, entities = entities)
     tsne.generate_points(5000, workers = 16, verbose = 1)
-    tsne.savefig(ROOT + f'mowl_tsne_elembeddings.jpg')
+    tsne.savefig(ROOT + f'tsne/elembeddings.jpg')
         
 
 

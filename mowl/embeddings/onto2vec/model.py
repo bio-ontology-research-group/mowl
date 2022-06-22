@@ -1,9 +1,13 @@
 import os
-
+import sys
+sys.path.append("../../../")
+import mowl
+mowl.init_jvm("3g")
 import numpy as np
 from scipy.stats import rankdata
 
-from mowl.model import Model
+
+from mowl.base_models.model import Model
 from mowl.reasoning.base import MOWLReasoner
 from mowl.corpus.base import extract_axiom_corpus
 from jpype.types import *

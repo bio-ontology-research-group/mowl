@@ -19,25 +19,25 @@ Let's use the built-in dataset ``PPIYeastSlimDataset``
    dataset = PPIYeastSlimDataset()
 
 
-For projecting the ontology, mOWL provides different :doc:`ontology parsing methods <../api/projection/index>`. In this case let's use DL2Vec projection method, which can be imported and defined in two different ways:
+For projecting the ontology, mOWL provides different :doc:`ontology projection methods <../api/projection/index>`. In this case let's use DL2Vec projection method, which can be imported and defined in two different ways:
 
-The first way is calling the ``DL2VecParser`` class directly:
+The first way is calling the ``DL2VecProjector`` class directly:
 
 .. code:: python
 
-   from mowl.graph.dl2vec.model import DL2VecParser
-   parser = DL2VecParser(dataset.ontology, bidirectional_taxonomy = True)
-   edges = parser.parse()
+   from mowl.projection.dl2vec.model import DL2VecProjector
+   projector = DL2VecProjector(bidirectional_taxonomy = True)
+   edges = projector.project(dataset.ontology)
 
 The second way is calling the class through a factory method:
 
 .. code:: python
 	  
-   from mowl.graph.factory import parser_factory
-   parser = parser_factory("dl2vec", dataset.ontology, bidirectional_taxonomy = True)
-   edges = parser.parse()
+   from mowl.projection.factory import projector_factory
+   projector = projector_factory("dl2vec", bidirectional_taxonomy = True)
+   edges = projector.project(dataset.ontology)
 
-The factory method will return a different parsing class depending on the first parameter.
+The factory method will return a different projector class depending on the first parameter.
 
 After obtaining a graph as an edge list, we can perform random walks. As before, the walking methods can be imported directly or through a factory method. Let's use the factory method in this case.
    
@@ -150,7 +150,8 @@ Finally, use Word2vec to generate the embeddings
             vector_size = 20,
             window = 5,
             epochs = 20,
-            workers = 4
+            workers = 4,
+	    device = "cuda"
         )
 
    model.save(word2vec_file)
@@ -193,7 +194,8 @@ One example of this models is `EL Embeddings <https://www.ijcai.org/Proceedings/
         dataset,
         epochs = 1000,
         margin = 0.1,
-        model_filepath = "model.th"
+        model_filepath = "model.th",
+	device = "cuda"
     )
 
    model.train()
