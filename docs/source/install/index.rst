@@ -35,4 +35,18 @@ PyPi installation is on testing phase and can be done as follows:
 
 .. code:: bash
 	  
-   pip install -i https://test.pypi.org/simple/ mowl-borg
+   pip install mowl-borg
+
+
+Install from Conda
+------------------------------
+
+
+.. code:: bash
+
+   conda install -c ferzcam mowl-borg
+
+
+.. note::
+
+   Latest version is 0.0.24
