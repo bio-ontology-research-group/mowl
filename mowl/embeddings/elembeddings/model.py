@@ -29,23 +29,28 @@ class ELEmbeddings(EmbeddingELModel):
         self.model_filepath = model_filepath
         self._loaded = False
         self._loaded_eval = False
+        self.extended = False
 
 #        self.load_eval_data()
 
     def get_entities_index_dict(self):
         return self.classes_index_dict, self.relations_index_dict
                                                                      
-
-    def train(self):
-        self.load_data(extended = False)
-        self.train_nfs = self.train_nfs[:4]
-        self.valid_nfs = self.valid_nfs[:4]
-        self.test_nfs = self.test_nfs[:4]
+    def init_model(self):
+        self.load_data(extended = self.extended)
         self.model = ELModel(
             len(self.classes_index_dict),
             len(self.relations_index_dict),
             device = self.device).to(self.device)
-
+    
+        
+    def train(self):
+        self.load_data(extended=self.extended)
+        self.train_nfs = self.train_nfs[:4]
+        self.valid_nfs = self.valid_nfs[:4]
+        self.test_nfs = self.test_nfs[:4]
+      
+        self.init_model()
         optimizer = th.optim.Adam(self.model.parameters(), lr=self.learning_rate)
         best_loss = float('inf')
 
@@ -65,15 +70,16 @@ class ELEmbeddings(EmbeddingELModel):
             if epoch % 100 == 0:
                 print(f'Epoch {epoch}: Train loss: {loss.cpu().detach().item()} Valid loss: {valid_loss}')
 
+                
     def eval_method(self, data):
-        self.load_data()
+        self.load_data(extended=self.extended)
         scores = self.model.gci2_loss(data)
         return scores
         
         
             
     def evaluate(self):
-        self.load_data()
+        self.load_data(extended=self.extended)
         self.model = ELModel(len(self.classes_index_dict), len(self.relations_index_dict), self.device).to(self.device)
         print('Load the best model', self.model_filepath)
         self.model.load_state_dict(th.load(self.model_filepath))
@@ -82,8 +88,9 @@ class ELEmbeddings(EmbeddingELModel):
         print('Test Loss:', test_loss)
         
     def get_embeddings(self):
-        self.load_data()
-        self.model = ELModel(len(self.classes_index_dict), len(self.relations_index_dict), device = self.device).to(self.device)
+        self.load_data(extended=self.extended)
+        self.init_model()
+        
         print('Load the best model', self.model_filepath)
         self.model.load_state_dict(th.load(self.model_filepath))
         self.model.eval()
@@ -94,28 +101,42 @@ class ELEmbeddings(EmbeddingELModel):
  
 
     def evaluate_ppi(self):
-        self.load_data()
+        self.load_data(extended=self.extended)
 
-        model = ELModel(len(self.classes_index_dict), len(self.relations_index_dict), device = self.device).to(self.device)
+        self.init_model()
         print('Load the best model', self.model_filepath)
-        model.load_state_dict(th.load(self.model_filepath))
-        model.eval()
+        self.model.load_state_dict(th.load(self.model_filepath))
+        self.model.eval()
 
-        eval_method = model.gci2_loss
+        eval_method = self.model.gci2_loss
 
         evaluator = ELEmbeddingsPPIEvaluator(self.dataset.testing, eval_method, self.dataset.ontology, self.classes_index_dict, self.relations_index_dict, device = self.device)
 
         evaluator()
 
         evaluator.print_metrics()
-            
+
+    def gci0_loss(self, data):
+        x, y = data
+        x, y = self.classes_index_dict[x], self.classes_index_dict[y]
+        ###implement code that checks dimensionality
+        data = [[x,y]]
+        data = th.tensor(data).to(self.device)
+        return self.model.gci0_loss(data)
+    def gci1_loss(self, data):
+        return self.model.gci1_loss(data)
+    def gci2_loss(self, data):
+        return self.model.gci2_loss(data)
+    def gci3_loss(self, data):
+        return self.model.gci3_loss(data)
+    
     def infer_gci0(self, top_k = 5):
-        self.load_data()
-        model = ELModel(len(self.classes_index_dict), len(self.relations_index_dict), device = self.device).to(self.device)
+        self.load_data(extended=self.extended)
+        self.init_model()
         print('Load the best model', self.model_filepath)
-        model.load_state_dict(th.load(self.model_filepath))
-        model.eval()
-        method = model.gci0_loss
+        self.model.load_state_dict(th.load(self.model_filepath))
+        self.model.eval()
+        method = self.model.gci0_loss
 
         infer_engine = GCI0Inference(method, self.device)
         infer_engine.infer_subclass(self.classes_index_dict)
@@ -123,7 +144,7 @@ class ELEmbeddings(EmbeddingELModel):
 
 
     def infer_gci2(self, mode, top_k = 5, subclass_condition = None, property_condition = None, filler_condition = None, axioms_to_filter = None):
-        self.load_data()
+        self.load_data(extended=self.extended)
         model = ELModel(len(self.classes_index_dict), len(self.relations_index_dict), device = self.device).to(self.device)
         print('Load the best model', self.model_filepath)
         model.load_state_dict(th.load(self.model_filepath))
