@@ -9,7 +9,17 @@ class EmbeddingELModel(EmbeddingModel):
         super().__init__(dataset)
 
         self._data_loaded = False
-        
+        self.extended = None
+
+    def init_model(self):
+        raise NotImplementedError()
+    
+    def load_best_model(self):
+        self.load_data(extended = self.extended)
+        self.init_model()
+        self.model.load_state_dict(th.load(self.model_filepath))
+        self.model.eval()
+    
     def gci0_loss(self):
         raise NotImplementedError()
 
