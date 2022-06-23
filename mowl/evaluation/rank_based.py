@@ -128,13 +128,18 @@ class RankBasedEvaluator(Evaluator):
         
         num_head_entities = len(self.head_entities)
         num_tail_entities = len(self.tail_entities)
-                
+
+        worst_rank = num_tail_entities
+        
         n = len(self.testing_set)
 
         for c, r, d in tqdm(self.testing_set):
 
             if not (c in self.head_entities) or not (d in self.tail_entities):
+                
                 n-=1
+                if not d in self.tail_entities:
+                    worst_rank -= 1
                 continue
 
             # Embedding indices
@@ -145,8 +150,6 @@ class RankBasedEvaluator(Evaluator):
 
 
             r = self.relation_index_emb[r]
-
-            self.testing_scores[c_sc_idx, d_sc_idx] = 1 
 
             data = th.tensor([[c_emb_idx, r, self.tail_name_indexemb[x]] for x in self.tail_entities]).to(self.device)
             res = self.eval_method(data).squeeze().cpu().detach().numpy()                                                                                                                   
@@ -184,6 +187,7 @@ class RankBasedEvaluator(Evaluator):
                     franks[rank] = 0
                 franks[rank] += 1
 
+        
         top1 /= n
         top10 /= n
         top100 /= n
@@ -194,8 +198,8 @@ class RankBasedEvaluator(Evaluator):
         ftop100 /= n
         fmean_rank /= n
 
-        rank_auc = compute_rank_roc(ranks, num_head_entities)
-        frank_auc = compute_rank_roc(franks, num_head_entities)
+        rank_auc = compute_rank_roc(ranks, worst_rank)
+        frank_auc = compute_rank_roc(franks, worst_rank)
 
         if show:
             print(f'Hits@1:   {top1:.2f} Filtered:   {ftop1:.2f}')

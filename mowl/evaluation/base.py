@@ -76,6 +76,11 @@ class EvaluationMethod(nn.Module):
         num_classes = len(embeddings)        
         embedding_size = len(embeddings[0])
 
+        if isinstance(embeddings, list):
+            embeddings = th.tensor(embeddings).to(device)
+        if isinstance(embeddings_relation, list):
+            embeddings_relation = th.tensor(embeddings_relation).to(device)
+
         self.embeddings = nn.Embedding(num_classes, embedding_size)
         self.embeddings.weight = nn.parameter.Parameter(embeddings)
         if not embeddings_relation is None:
@@ -205,6 +210,7 @@ class CosineSimilarity(EvaluationMethod):
         super().__init__(*args, **kwargs)
         
     def forward(self, x):
+        
         s, d = x[:,0], x[:,2]
         srcs = self.embeddings(s)
         dsts = self.embeddings(d)
