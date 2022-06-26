@@ -11,10 +11,8 @@ from tqdm import trange, tqdm
 
 import torch as th
 from torch import nn
-#from mowl.inference.elinference import GCI0Inference, GCI2Inference
-from mowl.inference.elinfer.gci2 import GCI2Inference
-class ELEmbeddings(EmbeddingELModel):
 
+class ELEmbeddings(EmbeddingELModel):
 
     def __init__(self, dataset, embed_dim=50, margin=0, reg_norm=1, learning_rate=0.001, epochs=1000, model_filepath = None, device = 'cpu'):
         super().__init__(dataset)
@@ -116,53 +114,42 @@ class ELEmbeddings(EmbeddingELModel):
 
         evaluator.print_metrics()
 
+    #Methods used to be exported for inference
     def gci0_loss(self, data):
         x, y = data
         x, y = self.classes_index_dict[x], self.classes_index_dict[y]
         ###implement code that checks dimensionality
-        data = [[x,y]]
-        data = th.tensor(data).to(self.device)
-        return self.model.gci0_loss(data)
+        point = self.point_to_tensor([x,y])
+        return self.model.gci0_loss(point)
+
     def gci1_loss(self, data):
-        return self.model.gci1_loss(data)
-    def gci2_loss(self, data):
-        return self.model.gci2_loss(data)
-    def gci3_loss(self, data):
-        return self.model.gci3_loss(data)
+        x, y, z = data
+        x = self.classes_index_dict[x]
+        y = self.classes_index_dict[y]
+        z = self.classes_index_dict[z]
+        point = self.point_to_tensor([x,y,z])
+        return self.model.gci1_loss(point)
     
-    def infer_gci0(self, top_k = 5):
-        self.load_data(extended=self.extended)
-        self.init_model()
-        print('Load the best model', self.model_filepath)
-        self.model.load_state_dict(th.load(self.model_filepath))
-        self.model.eval()
-        method = self.model.gci0_loss
+    def gci2_loss(self, data):
+        x, y, z = data
+        x = self.classes_index_dict[x]
+        y = self.relations_index_dict[y]
+        z = self.classes_index_dict[z]
+        point = self.point_to_tensor([x,y,z])
+        return self.model.gci2_loss(point)
 
-        infer_engine = GCI0Inference(method, self.device)
-        infer_engine.infer_subclass(self.classes_index_dict)
-        infer_engine.get_inferences(top_k = top_k)
+    def gci3_loss(self, data):
+        x, y, z = data
+        x = self.relations_index_dict[x]
+        y = self.classes_index_dict[y]
+        z = self.classes_index_dict[z]
+        point = self.point_to_tensor([x,y,z])
+        return self.model.gci3_loss(point)
 
-
-    def infer_gci2(self, mode, top_k = 5, subclass_condition = None, property_condition = None, filler_condition = None, axioms_to_filter = None):
-        self.load_data(extended=self.extended)
-        model = ELModel(len(self.classes_index_dict), len(self.relations_index_dict), device = self.device).to(self.device)
-        print('Load the best model', self.model_filepath)
-        model.load_state_dict(th.load(self.model_filepath))
-        model.eval()
-        method = model.gci2_loss
-
-        infer_engine = GCI2Inference(method, self.classes_index_dict, self.relations_index_dict,self.device)
-        if mode == "infer_subclass":
-            infer_engine.infer_subclass(subclass_condition = subclass_condition, property_condition = property_condition, filler_condition = filler_condition, axioms_to_filter = axioms_to_filter)
-            self.subclass_inferences = infer_engine.get_inferences(top_k = top_k, infer_mode = "subclass")
-            
-        if mode == "infer_property":
-            infer_engine.infer_superclass_property(subclass_condition = subclass_condition, property_condition = property_condition, filler_condition = filler_condition, axioms_to_filter = axioms_to_filter)
-            self.property_inferences = infer_engine.get_inferences(top_k = top_k, infer_mode = "property")
-
-        if mode == "infer_filler":
-            infer_engine.infer_superclass_filler(subclass_condition = subclass_condition, property_condition = property_condition, filler_condition = filler_condition, axioms_to_filter = axioms_to_filter)
-            self.filler_inferences = infer_engine.get_inferences(top_k = top_k, infer_mode = "filler")
+    def point_to_tensor(self, point):
+        point = [list(point)]
+        point = th.tensor(point).to(self.device)
+        return point
 
 class ELModel(nn.Module):
 
