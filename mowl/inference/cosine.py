@@ -2,17 +2,31 @@ from mowl.inference.axiom_scoring import AxiomScoring
 from mowl.evaluation.base import CosineSimilarity
 import torch as th
 import torch.nn as nn
+from gensim.models.keyedvectors import KeyedVectors
 
 class CosineSimilarityInfer(AxiomScoring):
 
     def __init__(self, embeddings, relation):
+        embeddings = self.embeddings_to_dict(embeddings)
         method = CosineSimilarity(embeddings)
         class_list = list(embeddings.keys())
-        patterns = [f"c?? subclassOf {relation} someValuesFrom c??"]
+        patterns = [f"c?? SubClassOf {relation} some c??"]
         super().__init__(patterns, method, class_list)
         
 
+    def embeddings_to_dict(self, embeddings):
+        embeddings_dict = dict()
+        if isinstance(embeddings, KeyedVectors):
+            for idx, word in enumerate(embeddings.index_to_key):
+                embeddings_dict[word] = embeddings[word]
+        elif isinstance(embeddings, dict):
+            embeddings_dict = embeddings
+        else:
+            raise TypeError("Embeddings type {type(embeddings)} not recognized. Expected types are dict or gensim.models.keyedvectors.KeyedVectors")
 
+        return embeddings_dict
+
+    
 class CosineSimilarity(nn.Module):
 
     def __init__(self, class_embeddings, device = "cpu"):

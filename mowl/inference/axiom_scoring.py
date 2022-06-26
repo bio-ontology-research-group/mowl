@@ -22,6 +22,7 @@ class AxiomScoring():
         
     def is_pattern_correct(self, pattern):
         pattern = self.canonical_expression(pattern)
+        print(pattern)
         if pattern in self.patterns:
             return True
         else:
@@ -38,27 +39,25 @@ class AxiomScoring():
         return " ".join(canon_pattern)
 
     def standardize_pattern(self, pattern):
-        """Transformsa pattern to its canonical form. This is a fixed point method.
+        """Transforms a pattern to its canonical form. This is a fixed point method.
         """
         pattern = pattern.strip()
         pattern_decomp = re.split("\s+", pattern)
-        return " ".join(pattern_decomp)
+        return pattern_decomp
 
     def pattern_to_data_points(self, pattern):
         """This method will receive any accepted pattern and transform it into data points to be accepted by the method.
         """
-        pattern = pattern.strip()
-        pattern_decomp = re.split("\s+", pattern)
+        pattern_decomp = self.standardize_pattern(pattern)
 
         objects = []
-        regex = re.compile("[cr]\?.*?\?")
+        regex = re.compile("[cp]\?.*?\?")
         for pat in pattern_decomp:
             match = regex.fullmatch(pat)
             if match:
                 objects.append(match.group(0))
         
         #objects =re.findall("[cr]\?.*?\?", pattern)
-        print("objects",  objects)
         objects = [x[:-1] for x in objects]
 
         objects_sub_lists = []
@@ -70,7 +69,7 @@ class AxiomScoring():
             
             if obj.startswith("c"):
                 iter_list = self.class_list
-            elif obj.startswith("r"):
+            elif obj.startswith("p"):
                 iter_list = self.property_list
 
             curr_list = []
@@ -80,7 +79,6 @@ class AxiomScoring():
                 if match:
                     curr_list.append(match.group(0))
             objects_sub_lists.append(curr_list)
-        
         return it.product(*objects_sub_lists)
 
     def inverse(self, point, pattern):
