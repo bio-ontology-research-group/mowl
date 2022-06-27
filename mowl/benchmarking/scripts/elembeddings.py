@@ -134,31 +134,27 @@ def benchmark_case(dataset, params, device, test):
     
     model.train()
 
-    exclude_gos = lambda x: not "GO" in x
-    relation_condition = lambda x: x in ["http://interacts_with"]
-    
-    #model.infer_gci2(top_k = 10, mode = "infer_property", subclass_condition=exclude_gos,  filler_condition = exclude_gos )
-    #model.infer_gci2(top_k = 10, mode = "infer_subclass", subclass_condition=exclude_gos, property_condition = relation_condition,  filler_condition = exclude_gos )
-    #model.infer_gci2(top_k = 10, mode = "infer_filler", subclass_condition=exclude_gos, property_condition = relation_condition,  filler_condition = exclude_gos )
+        
+            
     ### FINALLY, EVALUATION
 
     #model.evaluate_ppi()
-#    evaluator = ModelRankBasedEvaluator(
-#        model,
-#        device = device
-#    )
+    evaluator = ModelRankBasedEvaluator(
+        model,
+        device = device
+    )
 
-#    evaluator.evaluate(show=False)
+    evaluator.evaluate(show=False)
 
-#    log_file = ROOT + f"results_elembeddings.dat"
+    log_file = ROOT + f"results_elembeddings.dat"
 
-#    with open(log_file, "w") as f:
-#        tex_table = ""
-#        for k, v in evaluator.metrics.items():
-#            tex_table += f"{v} &\t"
-#            f.write(f"{k}\t{v}\n")
+    with open(log_file, "w") as f:
+        tex_table = ""
+        for k, v in evaluator.metrics.items():
+            tex_table += f"{v} &\t"
+            f.write(f"{k}\t{v}\n")
 
-#        f.write(f"\n{tex_table}")
+        f.write(f"\n{tex_table}")
 
 
     ###### TSNE ############

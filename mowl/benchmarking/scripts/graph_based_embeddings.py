@@ -6,6 +6,7 @@ mowl.init_jvm("5g")
 from os.path import exists
 
 from mowl.datasets.ppi_yeast import PPIYeastSlimDataset, PPIYeastDataset
+from mowl.datasets.gda import GDAHumanDataset, GDAMouseDataset
 from mowl.datasets.base import PathDataset
 from mowl.projection.factory import projector_factory, PARSING_METHODS
 from mowl.projection.edge import Edge
@@ -37,20 +38,24 @@ def main(test):
 
     
     if test == "ppi":
-        ROOT = "tmp/"
-#        ROOT = "../ppi/data/"
+        
+        ROOT = "../ppi/data/"
         ds = PPIYeastDataset()
         tsne = True
         
     elif test == "gda_mouse":
-        ROOT = "../gda/data_mouse/"
-        ds = PathDataset(ROOT + "train_mouse.owl", ROOT + "valid_mouse.owl", ROOT + "test_mouse.owl")
+        ROOT = "tmp_gda/"
+        #ROOT = "../gda/data_mouse/"
+        ds = GDAMouseDataset()
+        #ds = PathDataset(ROOT + "train_mouse.owl", ROOT + "valid_mouse.owl", ROOT + "test_mouse.owl")
     elif test == "gda_human":
-        ROOT = "../gda/data_human/"
-        ds = PathDataset(ROOT + "train_human.owl", ROOT + "valid_human.owl", ROOT + "test_human.owl")
+        ROOT = "tmp_gda/"
+        #ROOT = "../gda/data_human/"
+        ds = GDAHumanDataset()
+#        ds = PathDataset(ROOT + "train_human.owl", ROOT + "valid_human.owl", ROOT + "test_human.owl")
     
     parsing_methods = [m for m in PARSING_METHODS if not ("taxonomy" in m)]
-    
+    walking_methods = ["node2vec"]
     
 
     dummy_params  = {
@@ -90,7 +95,7 @@ def main(test):
     
     
     for pm in parsing_methods:
-        for w in WALKING_METHODS:
+        for w in walking_methods:
             benchmark_case(ds,pm,w,dummy_params, test, tsne = tsne,)
 
 
@@ -155,33 +160,21 @@ def benchmark_case(dataset, parsing_method, walking_method, params, test,  tsne 
         logging.info("Evaluation data not found. Generating...")
 
         if test == "ppi":
-            eval_projector = projector_factory("taxonomy_rels", relations = ["http://interacts_with"])
+            head_entities = dataset.get_evaluation_classes()
+            tail_entities = head_entities[:]
+
+            eval_projector = projector_factory("taxonomy_rels", taxonomy = False, relations = ["http://interacts_with"])
 
             eval_train_edges = eval_projector.project(dataset.ontology)
             eval_test_edges = eval_projector.project(dataset.testing)
-            
-            train_head_ents, _, train_tail_ents = Edge.zip(eval_train_edges)
-            test_head_ents, _, test_tail_ents = Edge.zip(eval_test_edges)
-            
-            head_entities = list(set(train_head_ents) | set(test_head_ents))
-            tail_entities = list(set(train_tail_ents) | set(test_tail_ents))
             
         else:
-            eval_projector = projector_factory("taxonomy_rels", taxonomy = True, relations = ["http://is_associated_with", "http://has_annotation"])
+            head_entities, tail_entities = dataset.get_evaluation_classes()
+
+            eval_projector = projector_factory("taxonomy_rels", taxonomy = False, relations = ["http://is_associated_with", "http://has_annotation"])
 
             eval_train_edges = eval_projector.project(dataset.ontology)
-            eval_test_edges = eval_projector.project(dataset.testing)
-
-            print(f"number of test edges is {len(eval_test_edges)}")
-            train_entities, _ = Edge.getEntitiesAndRelations(eval_train_edges)
-            test_entities, _ = Edge.getEntitiesAndRelations(eval_test_edges)
-                        
-            all_entities = list(set(train_entities) | set(test_entities))
-            print("\n\n")
-            print(len(test_entities))
-            head_entities = [e for e in all_entities if e[7:].isnumeric()]
-            tail_entities = [e for e in all_entities if "OMIM_" in e]
-            
+            eval_test_edges = eval_projector.project(dataset.testing)           
             
         save_pickles(
             (eval_train_edges, eval_train_file),
