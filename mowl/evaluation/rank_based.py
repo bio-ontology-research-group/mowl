@@ -83,7 +83,7 @@ class RankBasedEvaluator(Evaluator):
                 new_tail_entities.add(e)
             else:
                 logging.info("Entity %s not present in the embeddings dictionary. Ignoring it.", e)
-
+                
         self.head_entities = new_head_entities
         self.tail_entities = new_tail_entities
         
@@ -211,17 +211,18 @@ class RankBasedEvaluator(Evaluator):
             
 
         self.metrics = {
-            "hits_1": top1,
-            "hits_10": top10,
-            "hits_100": top100,
+            "hits@1": top1,
+            "fhits@1": ftop1,
+            "hits@10": top10,
+            "fhits@10": ftop10,
+            "hits@100": top100,
+            "fhits@100": ftop100,
             "mean_rank": mean_rank,
-            "rank_auc": rank_auc,
-            "fhits_1": ftop1,
-            "fhits_10": ftop10,
-            "fhits_100": ftop100,
             "fmean_rank": fmean_rank,
+            "rank_auc": rank_auc,
             "frank_auc": frank_auc
         }
+
 
         print('Evaluation finished. Access the results using the "metrics" attribute.')
                                                                                          
@@ -245,8 +246,6 @@ class ModelRankBasedEvaluator(RankBasedEvaluator):
         head_entities = model.head_entities
         tail_entities = model.tail_entities
         eval_method = model.eval_method
-
-
         relation = testing_set[0].rel()
         if relation_embeddings is None:
             relation_index_emb = {relation: -1}
@@ -276,13 +275,15 @@ class EmbeddingsRankBasedEvaluator(RankBasedEvaluator):
     def __init__(self,
                  class_embeddings,
                  testing_set,
-                 eval_method,
+                 eval_method_class,
+                 score_func = None,
                  training_set = None,
                  relation_embeddings = None,
                  head_entities = None,
                  tail_entities = None,
                  device = "cpu"):
 
+        self.score_func = score_func
         self.class_embeddings = self.embeddings_to_dict(class_embeddings)
         class_embeddings_values = th.tensor(list(self.class_embeddings.values())).to(device)
         class_index_emb = {v: k for k, v in enumerate(self.class_embeddings.keys())}
@@ -297,7 +298,7 @@ class EmbeddingsRankBasedEvaluator(RankBasedEvaluator):
             rel_embeds_values = th.tensor(list(self.relation_embeddings.values())).to(device)
             relation_index_emb = {v: k for k, v in enumerate(self.relation_embeddings.keys())}
 
-        self.eval_method = eval_method(class_embeddings_values, rel_embeds_values, device = device).to(device)
+        self.eval_method = eval_method_class(class_embeddings_values, rel_embeds_values, method = self.score_func, device = device).to(device)
      
 
         if tail_entities is None:

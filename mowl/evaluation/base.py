@@ -217,7 +217,25 @@ class CosineSimilarity(EvaluationMethod):
 
         x = th.sum(srcs*dsts, dim=1)
         return 1-th.sigmoid(x)
+
+class TranslationalScore(EvaluationMethod):
+
+    def __init__(self, embeddings, embeddings_relation, method, device = "cpu"):
+        super().__init__(embeddings, embeddings_relation = embeddings_relation, device = device)
+
+        self.method = method
+    def forward(self, x):
         
+        s, r, d = x[:,0], x[:,1], x[:,2]
+        srcs = self.embeddings(s)
+        resl = self.embeddings(r)
+        dsts = self.embeddings(d)
+
+        return self.method(x)
+        
+        x = th.sum(srcs*dsts, dim=1)
+        return 1-th.sigmoid(x)
+
 def compute_rank_roc(ranks, worst_rank): 
 
     auc_x = list(ranks.keys())                                                                                      
