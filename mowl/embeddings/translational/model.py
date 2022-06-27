@@ -98,12 +98,17 @@ class TranslationalOnt():
             th.save(self.model.state_dict(), self.model_filepath)
         self._trained = True
 
+
+
         
 
-    def get_embeddings(self):
+
+    def get_embeddings(self, load_best_model = True):
 
         self.load_data()
         self.init_model()
+        if load_best_model:
+            self.load_best_model()
                      
         embeddings = self.model.entity_representations[0](indices = None).cpu().detach().numpy()
         embeddings = {item[0]: embeddings[item[1]] for item in self.entities_idx.items()}
@@ -114,14 +119,17 @@ class TranslationalOnt():
         
         return embeddings, rel_embeddings
 
-    def score_method(self, point):
+    def score_method_point(self, point):
         x, y, z = point
         x, y, z = self.entities_idx[x], self.relations_idx[y], self.entities_idx[z]
         ###implement code that checks dimensionality
         point = self.point_to_tensor([x,y,z])
 
-        return self.model.score_hrt(point)
+        return - self.model.score_hrt(point)
 
+    def score_method_tensor(self, data):
+        return -self.model.score_hrt(data)
+    
     def point_to_tensor(self, point):
         point = [list(point)]
         point = th.tensor(point).to(self.device)

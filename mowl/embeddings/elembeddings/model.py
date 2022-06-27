@@ -2,7 +2,8 @@ import os
 
 from mowl.base_models.elmodel import EmbeddingELModel
 import mowl.embeddings.elembeddings.losses as L
-
+from mowl.projection.factory import projector_factory
+from mowl.projection.edge import Edge
 import math
 import logging
 
@@ -74,6 +75,49 @@ class ELEmbeddings(EmbeddingELModel):
         scores = self.model.gci2_loss(data)
         return scores
         
+    def load_eval_data(self):
+        
+        if self._loaded_eval:
+            return
+
+        eval_property = self.dataset.get_evaluation_property()
+        eval_classes = self.dataset.get_evaluation_classes()
+        if isinstance(eval_classes, tuple) and len(eval_classes) == 2:
+            self._head_entities = eval_classes[0]
+            self._tail_entities = eval_classes[1]
+        else:
+            self._head_entities = set(list(eval_classes)[:])
+            self._tail_entities = set(list(eval_classes)[:])
+
+        eval_projector = projector_factory('taxonomy_rels', taxonomy=False, relations=[eval_property])
+
+        self._training_set = eval_projector.project(self.dataset.ontology)
+        self._testing_set = eval_projector.project(self.dataset.testing)
+        
+        self._loaded_eval = True
+
+
+    @property
+    def training_set(self):
+        self.load_eval_data()
+        return self._training_set
+
+#        self.load_eval_data()
+
+    @property
+    def testing_set(self):
+        self.load_eval_data()
+        return self._testing_set
+
+    @property
+    def head_entities(self):
+        self.load_eval_data()
+        return self._head_entities
+
+    @property
+    def tail_entities(self):
+        self.load_eval_data()
+        return self._tail_entities
         
             
     def evaluate(self):
