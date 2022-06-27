@@ -124,7 +124,8 @@ class PathDataset(Dataset):
         self.ont_manager.addAxioms(self.ontology, subclass_axioms)
 
     def get_evaluation_classes(self):
-        return self.ontology.getClassesInSignature()
+        classes = self.ontology.getClassesInSignature()        
+        return [str(x.toString())[1:-1] for x in classes]
 
 
     def get_labels(self):
