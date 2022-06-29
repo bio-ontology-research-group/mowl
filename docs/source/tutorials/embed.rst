@@ -133,8 +133,8 @@ After preprocessing the ontology, we generate the corpus out of the ontology axi
 
 .. code:: python
 
-   from mowl.corpus.base import extract_axiom_corpus
-   extract_axiom_corpus(dataset.ontology, "corpus_file_path")
+   from mowl.corpus.base import extract_and_save_axiom_corpus
+   extract_and_save_axiom_corpus(dataset.ontology, "corpus_file_path")
 
       
 Finally, use Word2vec to generate the embeddings
@@ -167,9 +167,9 @@ with
 
 .. code:: python
 
-   from mowl.corpus.base import extract_axiom_corpus, extract_annotation_corpus
+   from mowl.corpus.base import extract_and_save_axiom_corpus, extract_annotation_corpus
 
-   extract_axiom_corpus(dataset.ontology, "corpus_file_path")
+   extract_and_save_axiom_corpus(dataset.ontology, "corpus_file_path")
    extract_annotation_corpus(dataset.ontology, "corpus_file_path")
 
 
