@@ -76,6 +76,11 @@ class EvaluationMethod(nn.Module):
         num_classes = len(embeddings)        
         embedding_size = len(embeddings[0])
 
+        if isinstance(embeddings, list):
+            embeddings = th.tensor(embeddings).to(device)
+        if isinstance(embeddings_relation, list):
+            embeddings_relation = th.tensor(embeddings_relation).to(device)
+
         self.embeddings = nn.Embedding(num_classes, embedding_size)
         self.embeddings.weight = nn.parameter.Parameter(embeddings)
         if not embeddings_relation is None:
@@ -205,13 +210,32 @@ class CosineSimilarity(EvaluationMethod):
         super().__init__(*args, **kwargs)
         
     def forward(self, x):
+        
         s, d = x[:,0], x[:,2]
         srcs = self.embeddings(s)
         dsts = self.embeddings(d)
 
         x = th.sum(srcs*dsts, dim=1)
         return 1-th.sigmoid(x)
+
+class TranslationalScore(EvaluationMethod):
+
+    def __init__(self, embeddings, embeddings_relation, method, device = "cpu"):
+        super().__init__(embeddings, embeddings_relation = embeddings_relation, device = device)
+
+        self.method = method
+    def forward(self, x):
         
+        s, r, d = x[:,0], x[:,1], x[:,2]
+        srcs = self.embeddings(s)
+        resl = self.embeddings(r)
+        dsts = self.embeddings(d)
+
+        return self.method(x)
+        
+        x = th.sum(srcs*dsts, dim=1)
+        return 1-th.sigmoid(x)
+
 def compute_rank_roc(ranks, worst_rank): 
 
     auc_x = list(ranks.keys())                                                                                      

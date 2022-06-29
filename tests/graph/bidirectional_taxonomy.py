@@ -1,8 +1,11 @@
 import sys
-sys.path.append('../')
+sys.path.append('../../')
 from unittest import TestCase
 import os
 import requests
+
+import mowl
+mowl.init_jvm("2g")
 
 from mowl.datasets.base import PathDataset
 from mowl.graph.util import parser_factory

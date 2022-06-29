@@ -85,8 +85,8 @@ def create_from_triples(
         out_file,
         relation_name = None,
         bidirectional = False,
-        head_prefix = PREFIXES["default"],
-        tail_prefix = PREFIXES["default"]
+        head_prefix = "",
+        tail_prefix = ""
 ):
 
     """Method to create an ontology from a .tsv file with triples.    
@@ -99,9 +99,9 @@ def create_from_triples(
     :type bidirectional: bool
     :param out_file: Path for the output ontology. If `None` and an existing ontology is input, the existing ontology will be overwritten.
     :type out_file: str
-    :param head_prefix: Prefix to be assigned to the head of each triple. Default is `http://default/mowl/`
+    :param head_prefix: Prefix to be assigned to the head of each triple. Default is `""`
     :type head_prefix: str
-    :param tail_prefix: Prefix to be assigned to the tail of each triple. Default is `http://default/mowl/`
+    :param tail_prefix: Prefix to be assigned to the tail of each triple. Default is `""`
     :type tail_prefix: str
     """
 

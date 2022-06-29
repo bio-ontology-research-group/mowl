@@ -1,7 +1,11 @@
+import sys
+sys.path.append("../../")
+import mowl
+mowl.init_jvm("2g")
 import pandas as pd
 
 from mowl.datasets.ppi_yeast import PPIYeastSlimDataset
-from mowl.opa2vec.model import OPA2Vec
+from mowl.embeddings.opa2vec.model import OPA2Vec
 
 
 def test_opa2vec_yeast():

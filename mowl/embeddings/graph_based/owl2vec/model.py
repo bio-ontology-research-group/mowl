@@ -1,4 +1,4 @@
-from mowl.model import Model
+from mowl.base_models.model import Model
 from mowl.graph.factory import parser_factory
 from mowl.walking.factory import walking_factory
 from mowl.graph.edge import Edge

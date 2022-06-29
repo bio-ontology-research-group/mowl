@@ -1,34 +1,19 @@
 import os
 
-from mowl.model import EmbeddingModel
+from mowl.base_models.elmodel import EmbeddingELModel
 import mowl.embeddings.elembeddings.losses as L
-from mowl.reasoning.normalize import ELNormalizer
-
-from de.tudresden.inf.lat.jcel.owlapi.main import JcelReasoner
-from de.tudresden.inf.lat.jcel.ontology.normalization import OntologyNormalizer
-from de.tudresden.inf.lat.jcel.ontology.axiom.extension import IntegerOntologyObjectFactoryImpl
-from de.tudresden.inf.lat.jcel.owlapi.translator import ReverseAxiomTranslator
-from org.semanticweb.owlapi.model import OWLAxiom
-from org.semanticweb.owlapi.manchestersyntax.renderer import ManchesterOWLSyntaxOWLObjectRendererImpl
-from java.util import HashSet
-from org.semanticweb.owlapi.util import SimpleShortFormProvider
-
-import pandas as pd
-import numpy as np
-import re
-import math
-import logging
-from scipy.stats import rankdata
 from mowl.projection.factory import projector_factory
 from mowl.projection.edge import Edge
+import math
+import logging
+
 from mowl.embeddings.elembeddings.evaluate import ELEmbeddingsPPIEvaluator
 from tqdm import trange, tqdm
 
 import torch as th
 from torch import nn
 
-class ELEmbeddings(EmbeddingModel):
-
+class ELEmbeddings(EmbeddingELModel):
 
     def __init__(self, dataset, embed_dim=50, margin=0, reg_norm=1, learning_rate=0.001, epochs=1000, model_filepath = None, device = 'cpu'):
         super().__init__(dataset)
@@ -41,136 +26,33 @@ class ELEmbeddings(EmbeddingModel):
         self.epochs = epochs
         self.device = device
         self.model_filepath = model_filepath
-        self.short_form_provider = SimpleShortFormProvider()
         self._loaded = False
         self._loaded_eval = False
+        self.extended = False
 
 #        self.load_eval_data()
 
     def get_entities_index_dict(self):
         return self.classes_index_dict, self.relations_index_dict
                                                                      
-    def load_data(self):
-        if self._loaded:
-            return
+    def init_model(self):
+        self.load_data(extended = self.extended)
+        self.model = ELModel(
+            len(self.classes_index_dict),
+            len(self.relations_index_dict),
+            device = self.device).to(self.device)
+    
         
-        normalizer = ELNormalizer()
-        self.training_axioms = normalizer.normalize(self.dataset.ontology)
-        self.validation_axioms = normalizer.normalize(self.dataset.validation)
-        self.testing_axioms = normalizer.normalize(self.dataset.testing)
-
-        classes = set()
-        relations = set()
-
-        for axioms_dict in [self.training_axioms, self.validation_axioms, self.testing_axioms]:
-            for axiom in axioms_dict["gci0"]:
-                classes.add(axiom.subclass)
-                classes.add(axiom.superclass)
-
-            for axiom in axioms_dict["gci0_bot"]:
-                classes.add(axiom.subclass)
-                classes.add(axiom.superclass)
-            
-            for axiom in axioms_dict["gci1"]:
-                classes.add(axiom.left_subclass)
-                classes.add(axiom.right_subclass)
-                classes.add(axiom.superclass)
-
-            for axiom in axioms_dict["gci1_bot"]:
-                classes.add(axiom.left_subclass)
-                classes.add(axiom.right_subclass)
-                classes.add(axiom.superclass)
-
-            for axiom in axioms_dict["gci2"]:
-                classes.add(axiom.subclass)
-                classes.add(axiom.filler)
-                relations.add(axiom.obj_property)
-
-            for axiom in axioms_dict["gci3"]:
-                classes.add(axiom.superclass)
-                classes.add(axiom.filler)
-                relations.add(axiom.obj_property)
-
-            for axiom in axioms_dict["gci3_bot"]:
-                classes.add(axiom.superclass)
-                classes.add(axiom.filler)
-                relations.add(axiom.obj_property)
-
-        self.classes_index_dict = {v: k  for k, v in enumerate(list(classes))}
-        self.relations_index_dict = {v: k for k, v in enumerate(list(relations))}
-
-        training_nfs = self.load_normal_forms(self.training_axioms, self.classes_index_dict, self.relations_index_dict)
-        validation_nfs = self.load_normal_forms(self.validation_axioms, self.classes_index_dict, self.relations_index_dict)
-        testing_nfs = self.load_normal_forms(self.testing_axioms, self.classes_index_dict, self.relations_index_dict)
-        
-        self.train_nfs = self.gcis_to_tensors(training_nfs, self.device)
-        self.valid_nfs = self.gcis_to_tensors(validation_nfs, self.device)
-        self.test_nfs = self.gcis_to_tensors(testing_nfs, self.device)
-        self._loaded = True
-        
-    def load_normal_forms(self, axioms_dict, classes_dict, relations_dict):
-        gci0 = []
-        gci1 = []
-        gci2 = []
-        gci3 = []
-
-        for axiom in axioms_dict["gci0"]:
-            cl1 = classes_dict[axiom.subclass]
-            cl2 = classes_dict[axiom.superclass]
-            gci0.append((cl1, cl2))
-
-        for axiom in axioms_dict["gci0_bot"]:
-            cl1 = classes_dict[axiom.subclass]
-            cl2 = classes_dict[axiom.superclass]
-            gci0.append((cl1, cl2))
-
-        for axiom in axioms_dict["gci1"]:
-            cl1 = classes_dict[axiom.left_subclass]
-            cl2 = classes_dict[axiom.right_subclass]
-            cl3 = classes_dict[axiom.superclass]
-            gci1.append((cl1, cl2, cl3))
-
-        for axiom in axioms_dict["gci1_bot"]:
-            cl1 = classes_dict[axiom.left_subclass]
-            cl2 = classes_dict[axiom.right_subclass]
-            cl3 = classes_dict[axiom.superclass]
-            gci1.append((cl1, cl2, cl3))
-
-        for axiom in axioms_dict["gci2"]:
-            cl1 = classes_dict[axiom.subclass]
-            rel = relations_dict[axiom.obj_property]
-            cl2 = classes_dict[axiom.filler]
-            gci2.append((cl1, rel, cl2))
-        
-        for axiom in axioms_dict["gci3"]:
-            rel = relations_dict[axiom.obj_property]
-            cl1 = classes_dict[axiom.filler]
-            cl2 = classes_dict[axiom.superclass]
-            gci3.append((rel, cl1, cl2))
-
-        for axiom in axioms_dict["gci3_bot"]:
-            rel = relations_dict[axiom.obj_property]
-            cl1 = classes_dict[axiom.filler]
-            cl2 = classes_dict[axiom.superclass]
-            gci3.append((rel, cl1, cl2))
-
-        return gci0, gci1, gci2, gci3
-        
-    def gcis_to_tensors(self, gcis, device):
-        gci0, gci1, gci2, gci3 = gcis
-        gci0 = th.LongTensor(gci0).to(device)
-        gci1 = th.LongTensor(gci1).to(device)
-        gci2 = th.LongTensor(gci2).to(device)
-        gci3 = th.LongTensor(gci3).to(device)
-        gcis = gci0, gci1, gci2, gci3
-        return gcis
-
-
     def train(self):
-        self.load_data()
-        self.model = ELModel(len(self.classes_index_dict), len(self.relations_index_dict), self.device).to(self.device)
+        self.load_data(extended=self.extended)
+        self.train_nfs = self.train_nfs[:4]
+        self.valid_nfs = self.valid_nfs[:4]
+        self.test_nfs = self.test_nfs[:4]
+      
+        self.init_model()
         optimizer = th.optim.Adam(self.model.parameters(), lr=self.learning_rate)
         best_loss = float('inf')
+
         for epoch in trange(self.epochs):
             self.model.train()
             loss = self.model(self.train_nfs)
@@ -187,15 +69,59 @@ class ELEmbeddings(EmbeddingModel):
             if epoch % 100 == 0:
                 print(f'Epoch {epoch}: Train loss: {loss.cpu().detach().item()} Valid loss: {valid_loss}')
 
+                
     def eval_method(self, data):
-        self.load_data()
+        self.load_data(extended=self.extended)
         scores = self.model.gci2_loss(data)
         return scores
         
+    def load_eval_data(self):
+        
+        if self._loaded_eval:
+            return
+
+        eval_property = self.dataset.get_evaluation_property()
+        eval_classes = self.dataset.get_evaluation_classes()
+        if isinstance(eval_classes, tuple) and len(eval_classes) == 2:
+            self._head_entities = eval_classes[0]
+            self._tail_entities = eval_classes[1]
+        else:
+            self._head_entities = set(list(eval_classes)[:])
+            self._tail_entities = set(list(eval_classes)[:])
+
+        eval_projector = projector_factory('taxonomy_rels', taxonomy=False, relations=[eval_property])
+
+        self._training_set = eval_projector.project(self.dataset.ontology)
+        self._testing_set = eval_projector.project(self.dataset.testing)
+        
+        self._loaded_eval = True
+
+
+    @property
+    def training_set(self):
+        self.load_eval_data()
+        return self._training_set
+
+#        self.load_eval_data()
+
+    @property
+    def testing_set(self):
+        self.load_eval_data()
+        return self._testing_set
+
+    @property
+    def head_entities(self):
+        self.load_eval_data()
+        return self._head_entities
+
+    @property
+    def tail_entities(self):
+        self.load_eval_data()
+        return self._tail_entities
         
             
     def evaluate(self):
-        self.load_data()
+        self.load_data(extended=self.extended)
         self.model = ELModel(len(self.classes_index_dict), len(self.relations_index_dict), self.device).to(self.device)
         print('Load the best model', self.model_filepath)
         self.model.load_state_dict(th.load(self.model_filepath))
@@ -204,8 +130,9 @@ class ELEmbeddings(EmbeddingModel):
         print('Test Loss:', test_loss)
         
     def get_embeddings(self):
-        self.load_data()
-        self.model = ELModel(len(self.classes_index_dict), len(self.relations_index_dict), self.device).to(self.device)
+        self.load_data(extended=self.extended)
+        self.init_model()
+        
         print('Load the best model', self.model_filepath)
         self.model.load_state_dict(th.load(self.model_filepath))
         self.model.eval()
@@ -216,102 +143,61 @@ class ELEmbeddings(EmbeddingModel):
  
 
     def evaluate_ppi(self):
-        self.load_data()
+        self.load_data(extended=self.extended)
 
-        model = ELModel(len(self.classes_index_dict), len(self.relations_index_dict), self.device).to(self.device)
+        self.init_model()
         print('Load the best model', self.model_filepath)
-        model.load_state_dict(th.load(self.model_filepath))
-        model.eval()
+        self.model.load_state_dict(th.load(self.model_filepath))
+        self.model.eval()
 
-        eval_method = model.gci2_loss
+        eval_method = self.model.gci2_loss
 
         evaluator = ELEmbeddingsPPIEvaluator(self.dataset.testing, eval_method, self.dataset.ontology, self.classes_index_dict, self.relations_index_dict, device = self.device)
 
         evaluator()
 
         evaluator.print_metrics()
-        
-    def evaluate_ppi_(self):
-        self.load_data()
-        model = ELModel(len(self.classes_index_dict), len(self.relations_index_dict), self.device).to(self.device)
-        print('Load the best model', self.model_filepath)
-        model.load_state_dict(th.load(self.model_filepath))
-        model.eval()
-        
-        proteins = [str(c)[1:-1] for c in self.dataset.get_evaluation_classes() if "4932." in str(c)]
-#        proteins = [str(self.short_form_provider.getShortForm(cls)) for cls in proteins]
-        
-        proteins = [self.classes_index_dict[p_id] for p_id in proteins if p_id in self.classes_index_dict]
-        print(len(proteins))
-        prot_dict = {v:k for k, v in enumerate(proteins)}
-        #print(prot_dict)
-        train_ppis = {}
-        _, _, nf3, _ = self.train_nfs
-        print(self.relations_index_dict)
-        for c, r, d in nf3:
-            c, r, d = c.item(), r.item(), d.item()
-            if r != self.relations_index_dict["http://interacts_with"]:
-                continue
-            if c not in train_ppis:
-                train_ppis[c] = []
-            train_ppis[c].append(d)
-        _, _, nf3, _ = self.valid_nfs
-        for c, r, d in nf3:
-            c, r, d = c.item(), r.item(), d.item()
-            if r != self.relations_index_dict["http://interacts_with"]:
-                continue
-            if c not in train_ppis:
-                train_ppis[c] = []
-            train_ppis[c].append(d)
 
-        
-        proteins = th.LongTensor(proteins)
-        nf1, nf2, nf3, nf4 = self.test_nfs
-        mean_rank = 0
-        n_nf3 = len(nf3)
-        n = len(proteins)
-        for it in tqdm(nf3):
-            
-            c, r, d = it
-            c, r, d = c.item(), r.item(), d.item()
+    #Methods used to be exported for inference
+    def gci0_loss(self, data):
+        x, y = data
+        x, y = self.classes_index_dict[x], self.classes_index_dict[y]
+        ###implement code that checks dimensionality
+        point = self.point_to_tensor([x,y])
+        return self.model.gci0_loss(point)
 
-            if not c in train_ppis or not d in train_ppis:
-                n_nf3 -= 1
-                continue
-
-#            if c not in prot_dict:
-#                print(c, "not in prot dict")
-#                n_nf3 -= 1
-#                continue
-
-#            if d not in prot_dict:
-#                print(d, "not in prot dict")
-#                n_nf3-=1
-#                continue
-
-#            n = len(proteins)
-            data = th.zeros(n, 3, dtype=th.long).to(self.device)
-            data[:, 0] = c
-            data[:, 1] = r
-            data[:, 2] = proteins
-            scores = model.gci2_loss(data).cpu().detach().cpu().numpy()
-            scores = scores.flatten()
-            for td in train_ppis[c]:
-                if td in prot_dict:
-                    scores[prot_dict[td]] = 1000.0
-            index = rankdata(scores, method='average')
-            rank = index[prot_dict[d]]
-            mean_rank += rank
-
-        print("total",n_nf3)
-        mean_rank /= n_nf3
-        print(mean_rank)
-        
-            
+    def gci1_loss(self, data):
+        x, y, z = data
+        x = self.classes_index_dict[x]
+        y = self.classes_index_dict[y]
+        z = self.classes_index_dict[z]
+        point = self.point_to_tensor([x,y,z])
+        return self.model.gci1_loss(point)
     
+    def gci2_loss(self, data):
+        x, y, z = data
+        x = self.classes_index_dict[x]
+        y = self.relations_index_dict[y]
+        z = self.classes_index_dict[z]
+        point = self.point_to_tensor([x,y,z])
+        return self.model.gci2_loss(point)
+
+    def gci3_loss(self, data):
+        x, y, z = data
+        x = self.relations_index_dict[x]
+        y = self.classes_index_dict[y]
+        z = self.classes_index_dict[z]
+        point = self.point_to_tensor([x,y,z])
+        return self.model.gci3_loss(point)
+
+    def point_to_tensor(self, point):
+        point = [list(point)]
+        point = th.tensor(point).to(self.device)
+        return point
+
 class ELModel(nn.Module):
 
-    def __init__(self, nb_ont_classes, nb_rels, device, embed_dim=50, margin=0.1):
+    def __init__(self, nb_ont_classes, nb_rels, embed_dim=50, margin=0.1, device = "cpu"):
         super().__init__()
         self.nb_ont_classes = nb_ont_classes
         self.nb_rels = nb_rels
@@ -343,17 +229,18 @@ class ELModel(nn.Module):
 
         
     def forward(self, go_normal_forms):
-        nf0, nf1, nf2, nf3 = go_normal_forms
+        gci0, gci1, gci2, gci3 = go_normal_forms
+        
         loss = 0
-        if len(nf0) > 1:
-            loss += th.mean(self.gci0_loss(nf0))
-        if len(nf1) > 1:
-            loss += th.mean(self.gci1_loss(nf1))
-        if len(nf2) > 1:
-            loss += th.mean(self.gci2_loss(nf2))
-            loss += th.mean(self.gci2_loss_neg(nf2))
-        if len(nf3) > 1:
-            loss += th.mean(self.gci3_loss(nf3))
+        if len(gci0) > 1:
+            loss += th.mean(self.gci0_loss(gci0))
+        if len(gci1) > 1:
+            loss += th.mean(self.gci1_loss(gci1))
+        if len(gci2) > 1:
+            loss += th.mean(self.gci2_loss(gci2))
+            loss += th.mean(self.gci2_loss_neg(gci2))
+        if len(gci3) > 1:
+            loss += th.mean(self.gci3_loss(gci3))
         return loss
 
 

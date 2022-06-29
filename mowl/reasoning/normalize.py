@@ -138,15 +138,15 @@ class GCI2():
         self.subclass = str(subclass)
         obj_property = str(obj_property)
         self.obj_property = obj_property[1:-1] if obj_property.startswith("<") else obj_property
-        self.filler = filler
+        self.filler = str(filler)
         
 class GCI3():
 
     def __init__(self, obj_property, filler, superclass):
         obj_property = str(obj_property)
         self.obj_property = obj_property[1:-1] if obj_property.startswith("<") else obj_property
-        self.filler = filler
-        self.superclass = superclass
+        self.filler = str(filler)
+        self.superclass = str(superclass)
                     
 class GCI3_BOT(GCI3):
 

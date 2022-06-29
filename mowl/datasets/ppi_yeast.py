@@ -20,35 +20,16 @@ class PPIYeastDataset(RemoteDataset):
         """Classes that are used in evaluation
         """
         classes = super().get_evaluation_classes()
-        eval_classes = HashSet()
+        proteins = set()
         for owl_cls in classes:
-            if owl_cls.toString().startsWith("<http://4932"):
-                eval_classes.add(owl_cls)
-        return eval_classes
+            if "http://4932" in owl_cls:
+                proteins.add(owl_cls)
+        return proteins
 
+    def get_evaluation_property(self):
+        return "http://interacts_with"
+    
 class PPIYeastSlimDataset(PPIYeastDataset):
 
     def __init__(self, *args, **kwargs):
         super().__init__(url=SLIM_DATA_URL)
-
-
-class PPIYeastLocalTestDataset(PathDataset):
-
-    def __init__(self, *args, **kwargs):
-        dataset_root = pathlib.Path('../data/ppi_yeast_localtest')
-        self.data_root = pathlib.Path('../data/')
-        self.dataset_name = 'ppi_yeast_localtest'
-        super().__init__(
-            os.path.join(dataset_root, 'ontology.owl'),
-            os.path.join(dataset_root, 'valid.owl'),
-            os.path.join(dataset_root, 'test.owl'))
-
-    def get_evaluation_classes(self):
-        """Classes that are used in evaluation
-        """
-        classes = super().get_evaluation_classes()
-        eval_classes = HashSet()
-        for owl_cls in classes:
-            if owl_cls.toString().startsWith("<http://4932"):
-                eval_classes.add(owl_cls)
-        return eval_classes
