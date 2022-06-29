@@ -20,8 +20,8 @@ project = 'MOWL'
 copyright = '2021, me'
 author = 'me'
 
-release = '0.1'
-version = '0.1.0'
+release = '0.0.24'
+version = '0.0.24'
 
 # -- General configuration
 
