@@ -6,7 +6,7 @@ mowl.init_jvm("10g")
 from os.path import exists
 
 from mowl.datasets.ppi_yeast import PPIYeastSlimDataset, PPIYeastDataset
-from mowl.corpus.base import extract_axiom_corpus, extract_annotation_corpus
+from mowl.corpus.base import extract_and_save_axiom_corpus, extract_annotation_corpus
 from mowl.projection.edge import Edge
 from mowl.projection.factory import projector_factory
 from mowl.reasoning.base import MOWLReasoner
@@ -78,7 +78,7 @@ def benchmark_case(dataset, method, params, test, tsne = False):
 
     corpus_file = ROOT +  f"corpus/{method}"
 
-    if not exists(corpus_file):
+    if not exists(corpus_file) or True:
         reasoner_factory = ElkReasonerFactory()
         reasoner = reasoner_factory.createReasoner(dataset.ontology)
         reasoner.precomputeInferences()
@@ -87,7 +87,7 @@ def benchmark_case(dataset, method, params, test, tsne = False):
         mowl_reasoner.infer_subclass_axioms(dataset.ontology)
         mowl_reasoner.infer_equiv_class_axioms(dataset.ontology)
         
-        extract_axiom_corpus(dataset.ontology, corpus_file)
+        extract_and_save_axiom_corpus(dataset.ontology, corpus_file)
 
     if method == "opa2vec":
         extract_annotation_corpus(dataset.ontology, corpus_file)
@@ -187,8 +187,8 @@ def benchmark_case(dataset, method, params, test, tsne = False):
     )
 
     evaluate = True
-    if evaluate and False:
-        #evaluator.evaluate(show=False)
+    if evaluate:
+        evaluator.evaluate(show=False)
 
         log_file = ROOT + f"results/{method}.dat"
 
