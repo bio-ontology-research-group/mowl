@@ -206,11 +206,10 @@ class AxiomsRankBasedEvaluator():
     
 class CosineSimilarity(EvaluationMethod):
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        
-    def forward(self, x):
-        
+    def __init__(self, embeddings, embeddings_relation=None, method = None, device = "cpu"):
+        super().__init__(embeddings, embeddings_relation=embeddings_relation, device = device)
+
+    def method(self, x):
         s, d = x[:,0], x[:,2]
         srcs = self.embeddings(s)
         dsts = self.embeddings(d)
@@ -218,6 +217,9 @@ class CosineSimilarity(EvaluationMethod):
         x = th.sum(srcs*dsts, dim=1)
         return 1-th.sigmoid(x)
 
+    def forward(self, x):
+        return self.method(x)
+        
 class TranslationalScore(EvaluationMethod):
 
     def __init__(self, embeddings, embeddings_relation, method, device = "cpu"):
