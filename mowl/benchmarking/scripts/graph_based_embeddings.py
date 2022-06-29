@@ -55,7 +55,7 @@ def main(test):
 #        ds = PathDataset(ROOT + "train_human.owl", ROOT + "valid_human.owl", ROOT + "test_human.owl")
     
     parsing_methods = [m for m in PARSING_METHODS if not ("taxonomy" in m)]
-    walking_methods = ["node2vec"]
+    
     
 
     dummy_params  = {
@@ -70,9 +70,9 @@ def main(test):
         "p" : 10,
         "q" : 0.1,
 
-        "vector_size" : 20,
+        "vector_size" : 10,
         "window" : 5,
-        "epochs" : 20
+        "epochs" : 1
     }
     
     
@@ -95,7 +95,7 @@ def main(test):
     
     
     for pm in parsing_methods:
-        for w in walking_methods:
+        for w in WALKING_METHODS:
             benchmark_case(ds,pm,w,dummy_params, test, tsne = tsne,)
 
 
