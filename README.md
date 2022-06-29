@@ -59,10 +59,10 @@ The projected `edges` is an edge list of a graph. One use of this may be to gene
 ```python
 from mowl.walking.deepwalk.model import DeepWalk
 walker = DeepWalk(100, # number of walks
-				  20, # length of each walk
-				  0.2, # probability of restart
-				  workers = 4, # number of usable CPUs
-				  )
+		20, # length of each walk
+		0.2, # probability of restart
+		workers = 4, # number of usable CPUs
+		)
 
 walker.walk(edges)
 walks = walker.walks
