@@ -37,7 +37,8 @@ class TranslationalOnt():
                  embedding_dim = 50,
                  epochs = 5,
                  batch_size = 32,
-                 device = "cpu"
+                 device = "cpu",
+                 model_filepath = None,
     ):
         
         self.edges = edges
@@ -48,8 +49,13 @@ class TranslationalOnt():
         self.device = device
         self.model = None
         self._trained = False
+        self._data_loaded = False
+
+        self.model_filepath = model_filepath
         
-    def train(self):
+    def load_data(self):
+        if self._data_loaded:
+            return
 
         entities, relations = Edge.getEntitiesAndRelations(self.edges)
 
@@ -62,26 +68,74 @@ class TranslationalOnt():
 
         mapped_triples = th.tensor(mapped_triples).long()
 
-        triples_factory = CoreTriplesFactory(mapped_triples, len(entities), len(relations), self.entities_idx, self.relations_idx)
+        self.triples_factory = CoreTriplesFactory(mapped_triples, len(entities), len(relations), self.entities_idx, self.relations_idx)
 
+        self._data_loaded = True
 
-        self.model = self.trans_factory(self.trans_method, triples_factory, self.embedding_dim).to(self.device)
+    def load_best_model(self):
+        self.load_data()
+        self.init_model()
+        self.model.load_state_dict(th.load(self.model_filepath))
+        self.model.eval()
+
+    def init_model(self):
+        self.load_data()
+        
+        self.model = self.trans_factory(self.trans_method, self.triples_factory, self.embedding_dim).to(self.device)
+        
+    def train(self): 
+        self.load_data()
+        
+        self.init_model()
 
         optimizer = Adam(params=self.model.get_grad_params())
 
-        training_loop = SLCWATrainingLoop(model=self.model, triples_factory=triples_factory, optimizer=optimizer)
+        training_loop = SLCWATrainingLoop(model=self.model, triples_factory=self.triples_factory, optimizer=optimizer)
 
-        _ = training_loop.train(triples_factory=triples_factory, num_epochs=self.epochs, batch_size=self.batch_size)
+        _ = training_loop.train(triples_factory=self.triples_factory, num_epochs=self.epochs, batch_size=self.batch_size)
+
+        if self.model_filepath:
+            th.save(self.model.state_dict(), self.model_filepath)
         self._trained = True
 
-    def get_embeddings(self):
-        if not self._trained:
-            raise ValueError("Model has not been trained yet")
 
+
+        
+
+
+    def get_embeddings(self, load_best_model = True):
+
+        self.load_data()
+        self.init_model()
+        if load_best_model:
+            self.load_best_model()
+                     
         embeddings = self.model.entity_representations[0](indices = None).cpu().detach().numpy()
         embeddings = {item[0]: embeddings[item[1]] for item in self.entities_idx.items()}
-        return embeddings
 
+        rel_embeddings = self.model.relation_representations[0](indices = None).cpu().detach().numpy()
+        rel_embeddings = {item[0]: rel_embeddings[item[1]] for item in self.relations_idx.items()}
+
+        
+        return embeddings, rel_embeddings
+
+    def score_method_point(self, point):
+        x, y, z = point
+        x, y, z = self.entities_idx[x], self.relations_idx[y], self.entities_idx[z]
+        ###implement code that checks dimensionality
+        point = self.point_to_tensor([x,y,z])
+
+        return - self.model.score_hrt(point)
+
+    def score_method_tensor(self, data):
+        return -self.model.score_hrt(data)
+    
+    def point_to_tensor(self, point):
+        point = [list(point)]
+        point = th.tensor(point).to(self.device)
+        return point
+
+    
     def trans_factory(self, method_name, triples_factory, embedding_dim):
         methods = {
             "transE": TransE,

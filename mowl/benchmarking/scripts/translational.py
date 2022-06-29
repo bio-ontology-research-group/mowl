@@ -11,7 +11,7 @@ from mowl.projection.factory import projector_factory, PARSING_METHODS
 from mowl.projection.edge import Edge
 from mowl.walking.factory import walking_factory, WALKING_METHODS
 from mowl.evaluation.rank_based import EmbeddingsRankBasedEvaluator
-from mowl.evaluation.base import CosineSimilarity
+from mowl.evaluation.base import TranslationalScore
 from gensim.models import Word2Vec
 from gensim.models.word2vec import LineSentence
 import pickle as pkl
@@ -32,8 +32,8 @@ def main(test):
 
     tsne = False
     if test == "ppi":
-        ROOT = "tmp/"
-        #ROOT = "../ppi/data/"
+        
+        ROOT = "../ppi/data/"
         ds = PPIYeastDataset()
         tsne = True
         
@@ -55,7 +55,7 @@ def main(test):
 
         "vector_size" : 20,
         "epochs" : 2,
-        "batch_size": 32,
+        "batch_size": 1024,
         "device": "cuda:1"
     }
     
@@ -158,27 +158,31 @@ def benchmark_case(dataset, parsing_method, trans_method, params, test, tsne = F
         embedding_dim = params["vector_size"],
         epochs = params["epochs"],
         batch_size = params["batch_size"],
-        device = params["device"]
+        device = params["device"],
+        model_filepath= ROOT + f"models/{parsing_method}_{trans_method}.th"
     )
 
     transMethod.train()
 
-    embeddings = transMethod.get_embeddings()
+    embeddings, rel_embeddings = transMethod.get_embeddings()
     ### FINALLY, EVALUATION
 
+    
     evaluator = EmbeddingsRankBasedEvaluator(
         embeddings,
         eval_test_edges,
-        CosineSimilarity,
+        TranslationalScore,
+        score_func = transMethod.score_method_tensor,
         training_set=eval_train_edges,
+        relation_embeddings = rel_embeddings,
         head_entities = head_entities,
         tail_entities = tail_entities,
         device = params["device"]
     )
 
     evaluate = True
-    if evaluate and False:
-        #evaluator.evaluate(show=False)
+    if evaluate:
+        evaluator.evaluate(show=False)
 
         log_file = ROOT + f"results/{parsing_method}_{trans_method}.dat"
 
