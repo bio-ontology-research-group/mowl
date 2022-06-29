@@ -1,5 +1,7 @@
 import sys
-sys.path.append("../..")
+sys.path.append("../../")
+import mowl
+mowl.init_jvm("2g")
 
 from mowl.datasets.base import PathDataset
 

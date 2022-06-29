@@ -9,16 +9,8 @@ from org.mowl import MOWLShortFormProvider
 import logging
 
 
-
-def extract_axiom_corpus(ontology, out_file):
-
-    """This method generates a textual representation of the axioms in an ontology following the Manchester Syntax.
-
-    :param ontology: Input ontology
-    :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
-    :param out_file: Path of the file where the corpus will be saved.
-    :type out_file: str
-    """
+def extract_and_save_axiom_corpus(ontology, out_file):
+        
 
     logging.info("Generating axioms corpus")
     renderer = ManchesterOWLSyntaxOWLObjectRendererImpl()
@@ -31,7 +23,26 @@ def extract_axiom_corpus(ontology, out_file):
                 rax = renderer.render(axiom)
                 rax = rax.replaceAll(JString("[\\r\\n|\\r|\\n()|<|>]"), JString(""))
                 f.write(f'{rax}\n')
+
+
+
+def extract_axiom_corpus(ontology):
+
+    logging.info("Generating axioms corpus")
+    renderer = ManchesterOWLSyntaxOWLObjectRendererImpl()
+    shortFormProvider = MOWLShortFormProvider()
+    renderer.setShortFormProvider(shortFormProvider)
+
+    corpus = []
     
+    for owl_class in ontology.getClassesInSignature():
+        axioms = ontology.getAxioms(owl_class)
+        for axiom in axioms:
+            rax = renderer.render(axiom)
+            rax = rax.replaceAll(JString("[\\r\\n|\\r|\\n()|<|>]"), JString(""))
+            corpus.append(rax)
+    return corpus
+
 
 
 def extract_annotation_corpus(ontology, out_file, mode = "append"):

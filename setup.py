@@ -6,7 +6,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="mowl-borg",
-    version="0.0.17",
+    version="0.0.24",
     author="Bio-Ontology Research Group",
     author_email="fernando.zhapacamacho@kaust.edu.sa",
     description="mOWL: A machine learning library with ontologies",
@@ -22,7 +22,7 @@ setuptools.setup(
         "Operating System :: OS Independent",
     ],
     package_dir={"": "."},
-    packages=setuptools.find_packages(where="."),
+    packages=setuptools.find_packages(where=".", exclude=("tests",)),
     package_data={"mowl": ["lib/*.jar"]},
     python_requires=">=3.8",
     install_requires=[
@@ -31,8 +31,8 @@ setuptools.setup(
         "networkx",
         "click",
         "pandas",
-        "pyyaml",
         "scipy",
+        "pyyaml",
         "scikit-learn",
         "urllib3",
         "torch",
@@ -40,6 +40,4 @@ setuptools.setup(
         "requests",
     ]
 )
-
-#    package_dir={"": "mowl"},
 

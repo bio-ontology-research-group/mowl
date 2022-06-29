@@ -2,7 +2,8 @@ import os
 
 from mowl.base_models.elmodel import EmbeddingELModel
 import mowl.embeddings.elembeddings.losses as L
-
+from mowl.projection.factory import projector_factory
+from mowl.projection.edge import Edge
 import math
 import logging
 
@@ -11,10 +12,8 @@ from tqdm import trange, tqdm
 
 import torch as th
 from torch import nn
-#from mowl.inference.elinference import GCI0Inference, GCI2Inference
-from mowl.inference.elinfer.gci2 import GCI2Inference
-class ELEmbeddings(EmbeddingELModel):
 
+class ELEmbeddings(EmbeddingELModel):
 
     def __init__(self, dataset, embed_dim=50, margin=0, reg_norm=1, learning_rate=0.001, epochs=1000, model_filepath = None, device = 'cpu'):
         super().__init__(dataset)
@@ -29,23 +28,28 @@ class ELEmbeddings(EmbeddingELModel):
         self.model_filepath = model_filepath
         self._loaded = False
         self._loaded_eval = False
+        self.extended = False
 
 #        self.load_eval_data()
 
     def get_entities_index_dict(self):
         return self.classes_index_dict, self.relations_index_dict
                                                                      
-
-    def train(self):
-        self.load_data(extended = False)
-        self.train_nfs = self.train_nfs[:4]
-        self.valid_nfs = self.valid_nfs[:4]
-        self.test_nfs = self.test_nfs[:4]
+    def init_model(self):
+        self.load_data(extended = self.extended)
         self.model = ELModel(
             len(self.classes_index_dict),
             len(self.relations_index_dict),
             device = self.device).to(self.device)
-
+    
+        
+    def train(self):
+        self.load_data(extended=self.extended)
+        self.train_nfs = self.train_nfs[:4]
+        self.valid_nfs = self.valid_nfs[:4]
+        self.test_nfs = self.test_nfs[:4]
+      
+        self.init_model()
         optimizer = th.optim.Adam(self.model.parameters(), lr=self.learning_rate)
         best_loss = float('inf')
 
@@ -65,15 +69,59 @@ class ELEmbeddings(EmbeddingELModel):
             if epoch % 100 == 0:
                 print(f'Epoch {epoch}: Train loss: {loss.cpu().detach().item()} Valid loss: {valid_loss}')
 
+                
     def eval_method(self, data):
-        self.load_data()
+        self.load_data(extended=self.extended)
         scores = self.model.gci2_loss(data)
         return scores
         
+    def load_eval_data(self):
+        
+        if self._loaded_eval:
+            return
+
+        eval_property = self.dataset.get_evaluation_property()
+        eval_classes = self.dataset.get_evaluation_classes()
+        if isinstance(eval_classes, tuple) and len(eval_classes) == 2:
+            self._head_entities = eval_classes[0]
+            self._tail_entities = eval_classes[1]
+        else:
+            self._head_entities = set(list(eval_classes)[:])
+            self._tail_entities = set(list(eval_classes)[:])
+
+        eval_projector = projector_factory('taxonomy_rels', taxonomy=False, relations=[eval_property])
+
+        self._training_set = eval_projector.project(self.dataset.ontology)
+        self._testing_set = eval_projector.project(self.dataset.testing)
+        
+        self._loaded_eval = True
+
+
+    @property
+    def training_set(self):
+        self.load_eval_data()
+        return self._training_set
+
+#        self.load_eval_data()
+
+    @property
+    def testing_set(self):
+        self.load_eval_data()
+        return self._testing_set
+
+    @property
+    def head_entities(self):
+        self.load_eval_data()
+        return self._head_entities
+
+    @property
+    def tail_entities(self):
+        self.load_eval_data()
+        return self._tail_entities
         
             
     def evaluate(self):
-        self.load_data()
+        self.load_data(extended=self.extended)
         self.model = ELModel(len(self.classes_index_dict), len(self.relations_index_dict), self.device).to(self.device)
         print('Load the best model', self.model_filepath)
         self.model.load_state_dict(th.load(self.model_filepath))
@@ -82,8 +130,9 @@ class ELEmbeddings(EmbeddingELModel):
         print('Test Loss:', test_loss)
         
     def get_embeddings(self):
-        self.load_data()
-        self.model = ELModel(len(self.classes_index_dict), len(self.relations_index_dict), device = self.device).to(self.device)
+        self.load_data(extended=self.extended)
+        self.init_model()
+        
         print('Load the best model', self.model_filepath)
         self.model.load_state_dict(th.load(self.model_filepath))
         self.model.eval()
@@ -94,54 +143,57 @@ class ELEmbeddings(EmbeddingELModel):
  
 
     def evaluate_ppi(self):
-        self.load_data()
+        self.load_data(extended=self.extended)
 
-        model = ELModel(len(self.classes_index_dict), len(self.relations_index_dict), device = self.device).to(self.device)
+        self.init_model()
         print('Load the best model', self.model_filepath)
-        model.load_state_dict(th.load(self.model_filepath))
-        model.eval()
+        self.model.load_state_dict(th.load(self.model_filepath))
+        self.model.eval()
 
-        eval_method = model.gci2_loss
+        eval_method = self.model.gci2_loss
 
         evaluator = ELEmbeddingsPPIEvaluator(self.dataset.testing, eval_method, self.dataset.ontology, self.classes_index_dict, self.relations_index_dict, device = self.device)
 
         evaluator()
 
         evaluator.print_metrics()
-            
-    def infer_gci0(self, top_k = 5):
-        self.load_data()
-        model = ELModel(len(self.classes_index_dict), len(self.relations_index_dict), device = self.device).to(self.device)
-        print('Load the best model', self.model_filepath)
-        model.load_state_dict(th.load(self.model_filepath))
-        model.eval()
-        method = model.gci0_loss
 
-        infer_engine = GCI0Inference(method, self.device)
-        infer_engine.infer_subclass(self.classes_index_dict)
-        infer_engine.get_inferences(top_k = top_k)
+    #Methods used to be exported for inference
+    def gci0_loss(self, data):
+        x, y = data
+        x, y = self.classes_index_dict[x], self.classes_index_dict[y]
+        ###implement code that checks dimensionality
+        point = self.point_to_tensor([x,y])
+        return self.model.gci0_loss(point)
 
+    def gci1_loss(self, data):
+        x, y, z = data
+        x = self.classes_index_dict[x]
+        y = self.classes_index_dict[y]
+        z = self.classes_index_dict[z]
+        point = self.point_to_tensor([x,y,z])
+        return self.model.gci1_loss(point)
+    
+    def gci2_loss(self, data):
+        x, y, z = data
+        x = self.classes_index_dict[x]
+        y = self.relations_index_dict[y]
+        z = self.classes_index_dict[z]
+        point = self.point_to_tensor([x,y,z])
+        return self.model.gci2_loss(point)
 
-    def infer_gci2(self, mode, top_k = 5, subclass_condition = None, property_condition = None, filler_condition = None, axioms_to_filter = None):
-        self.load_data()
-        model = ELModel(len(self.classes_index_dict), len(self.relations_index_dict), device = self.device).to(self.device)
-        print('Load the best model', self.model_filepath)
-        model.load_state_dict(th.load(self.model_filepath))
-        model.eval()
-        method = model.gci2_loss
+    def gci3_loss(self, data):
+        x, y, z = data
+        x = self.relations_index_dict[x]
+        y = self.classes_index_dict[y]
+        z = self.classes_index_dict[z]
+        point = self.point_to_tensor([x,y,z])
+        return self.model.gci3_loss(point)
 
-        infer_engine = GCI2Inference(method, self.classes_index_dict, self.relations_index_dict,self.device)
-        if mode == "infer_subclass":
-            infer_engine.infer_subclass(subclass_condition = subclass_condition, property_condition = property_condition, filler_condition = filler_condition, axioms_to_filter = axioms_to_filter)
-            self.subclass_inferences = infer_engine.get_inferences(top_k = top_k, infer_mode = "subclass")
-            
-        if mode == "infer_property":
-            infer_engine.infer_superclass_property(subclass_condition = subclass_condition, property_condition = property_condition, filler_condition = filler_condition, axioms_to_filter = axioms_to_filter)
-            self.property_inferences = infer_engine.get_inferences(top_k = top_k, infer_mode = "property")
-
-        if mode == "infer_filler":
-            infer_engine.infer_superclass_filler(subclass_condition = subclass_condition, property_condition = property_condition, filler_condition = filler_condition, axioms_to_filter = axioms_to_filter)
-            self.filler_inferences = infer_engine.get_inferences(top_k = top_k, infer_mode = "filler")
+    def point_to_tensor(self, point):
+        point = [list(point)]
+        point = th.tensor(point).to(self.device)
+        return point
 
 class ELModel(nn.Module):
 
