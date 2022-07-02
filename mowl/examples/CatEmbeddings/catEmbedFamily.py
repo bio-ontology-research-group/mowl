@@ -30,7 +30,7 @@ import torch as th
 
 def main(species):
     ds = PathDataset("data/family/familyDomain.owl", None, None)
-    lr = 1e-9
+    lr = 1e-1
     embedding_size = 2
     
     gamma = 0.6
@@ -52,8 +52,8 @@ def main(species):
         decay = 0,
         gamma = gamma,
         eval_ppi = True,
-        size_hom_set =3,
-        depth = 4,
+        size_hom_set =4,
+        depth = 3,
         margin = margin,
         seed = 0,
         early_stopping = 20000,

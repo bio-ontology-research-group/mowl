@@ -12,10 +12,11 @@ def gci0_loss(objects, exponential_net,  embed_objects, neg = False,  num_object
     if neg:
         negs = th.tensor(np.random.choice(num_objects, size = len(objects))).to(device)
         embed_negs = embed_objects(negs)
-        neg_loss_1 = exponential_net(consequents, antecedents)
+        neg_loss_1 = 0
+        #neg_loss_1 = exponential_net(consequents, antecedents)
         neg_loss_2 = exponential_net(antecedents, embed_negs)
         
-        return (neg_loss_1 + neg_loss_2)/2
+        return (neg_loss_1 + neg_loss_2)
                                         
     else:
         loss = exponential_net(antecedents, consequents)
@@ -48,6 +49,9 @@ def gci1_loss(objects, exp_net, prod_net, embed_objects, neg = False, num_object
         exp_loss = exp_net(prod_neg_2, consequents)
         neg_loss_3 = prod_loss_2 + exp_loss
 
+
+        return neg_loss_1
+#        return (neg_loss_2 + neg_loss_3)/2
         return (neg_loss_1 + neg_loss_2 + neg_loss_3)/3
         
     else:
