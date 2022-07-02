@@ -232,19 +232,19 @@ class CatEmbeddingsIntersectionEvaluator(AxiomsRankBasedEvaluator):
 
         preds = np.zeros((len(samples), len(self.embeddings)), dtype=np.float32)
             
-        test_dataset = TestDatasetIntersection(samples, self.class_name_indexemb)
+        test_dataset = TestDatasetIntersection(samples, self.class_name_indexemb, self.left_side_dict)
     
         bs = 4
         test_dl = DataLoader(test_dataset, batch_size = bs)
 
         
-        for idx_l, idx_r, batch in tqdm(test_dl):
+        for idxs, batch in tqdm(test_dl):
 
-            idxs = []
-            for l,r in zip(idx_l, idx_r):
-                l = l.detach().item()
-                r = r.detach().item()
-                idxs.append(self.left_side_dict[(l,r)])
+            #idxs = []
+            #for l,r in zip(idx_l, idx_r):
+                #l = l.detach().item()
+                #r = r.detach().item()
+                #idxs.append(self.left_side_dict[(l,r)])
                 
             res = test_model(batch.to(self.device))
             res = res.cpu().detach().numpy()
@@ -276,7 +276,7 @@ class CatEmbeddingsIntersectionEvaluator(AxiomsRankBasedEvaluator):
         last  = res[np.where(index == len(index))[0]]
         rank = index[d]
 
-        print(rank, res[d], first, last)
+        #print(rank, res[d], first, last)
 
         findex = rankdata((res), method='average')
         frank = findex[d]
@@ -413,19 +413,20 @@ class TestModuleIntersection(nn.Module):
         c_right = x[:,1]
         d = x[:,2]
 
-        c_left = self.embeddings(c_left)
-        c_right = self.embeddings(c_right)
-        d = self.embeddings(d)
+        #c_left = self.embeddings(c_left)
+        #c_right = self.embeddings(c_right)
+        #d = self.embeddings(d)
         
-        intersection, _ = self.prod_generator(c_left, c_right)
+        intersection = self.prod_generator(c_left, c_right)
 
-        scores = self.entailment(intersection, d)
+        #scores = self.entailment(intersection, d)
         #estim_d = self.entailment.get_consequent(intersection, d)
         #int_back = self.entailment.get_consequent(estim_d, intersection)
         #estim_back = self.entailment.get_consequent(int_back, d)
         #scores = self.method(intersection,estim_back)
 
-        #scores = self.method(intersection, d)
+        #scores = self.entailment(intersection, d)
+        scores = self.entailment(c_left, c_right, d)
         
 
 #        x = self.method(x)
@@ -437,11 +438,12 @@ class TestModuleIntersection(nn.Module):
 
 
 class TestDatasetIntersection(IterableDataset):
-    def __init__(self, data, class_name_indexemb):
+    def __init__(self, data, class_name_indexemb, indices_emb_indexsc):
         super().__init__()
         self.data = data
         self.len_data = len(data)
         self.class_name_indexemb = class_name_indexemb
+        self.indices_emb_indexsc = indices_emb_indexsc
         self.predata = np.array([[-1,-1, x] for x in list(class_name_indexemb.values())])
         
     def get_data(self):
@@ -453,7 +455,8 @@ class TestDatasetIntersection(IterableDataset):
             new_array[:,1] = c_right
             
             tensor = new_array
-            yield c_left, c_right, tensor
+            idx = self.indices_emb_indexsc[(c_left, c_right)]
+            yield idx, tensor
 
     def __iter__(self):
         return self.get_data()

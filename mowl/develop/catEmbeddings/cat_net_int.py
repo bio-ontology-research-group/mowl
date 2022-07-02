@@ -7,26 +7,10 @@ ACT = nn.Identity()
 #ACT = nn.Tanh()
 
 def norm(a,b, dim = 1):
-#    normA = th.linalg.norm(a, dim = dim)
-#    normB = th.linalg.norm(b, dim = dim)
-#    tensor = normA - normB
-#    tensor = a-b
-#    tensor = th.relu(tensor)
-#    tensor = th.linalg.norm(tensor, dim = dim)
-#    return tensor
-#    return th.relu(tensor)
-
     n = a.shape[1]
     sqe = (a-b)**2
-    rmse = th.sqrt(th.sum(sqe, dim =1))/n 
-    return rmse
-#    return th.linalg.norm(a-b, dim = dim)
-
-def norm_(a, b):
-
-    x = th.sum(a * b, dim=1, keepdims=True)
-    return 1- th.sigmoid(x)
-
+    mse = th.sum(sqe, dim =1)/n 
+    return mse
 
 def rand_tensor(shape, device):
     x = th.rand(shape).to(device)
@@ -37,6 +21,31 @@ def assert_shapes(shapes):
     assert len(set(shapes)) == 1
 
 
+
+class ObjectGenerator(nn.Module):
+    def __init__(self, embedding_size, dropout):
+        super().__init__()
+
+        self.transform = nn.Sequential(
+            nn.Linear(2*embedding_size, embedding_size),
+            nn.LayerNorm(embedding_size),
+            nn.ReLU(),
+            nn.Dropout(dropout),
+            nn.Linear(embedding_size, embedding_size),
+
+            nn.LayerNorm(embedding_size),
+
+            ACT
+        )
+
+    def forward(self, left,right):
+        mean = (left+right)/2
+
+        x = th.cat([left,right], dim = 1)
+        x = self.transform(x)
+        #x = x+mean
+        return x
+
 class Product(nn.Module):
     """Representation of the categorical diagram of the product. 
     """
@@ -45,20 +54,10 @@ class Product(nn.Module):
         super().__init__()
         
         self.coproduct_net = coproduct_net
-
-        self.prod = lambda x: (x[:,:embedding_size]+x[:,embedding_size:])/2
  
-        self.prod_ = nn.Sequential(
-            nn.Linear(2*embedding_size, embedding_size),
-            nn.LayerNorm(embedding_size),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(embedding_size, embedding_size),
+        self.prod = ObjectGenerator(embedding_size, dropout)
 
-        #    nn.LayerNorm(embedding_size),
-
-            ACT
-        )
+        self.up = ObjectGenerator(embedding_size, dropout)
 
         self.pi1 = entailment_net
         self.pi2 = entailment_net
@@ -67,17 +66,11 @@ class Product(nn.Module):
         self.p2  = entailment_net
 
         self.ent = entailment_net
-                                        
-        
 
     def forward(self, left, right, up=None):
 
-        product = self.prod(th.cat([left, right], dim = 1))
-
-
-        up = (product + rand_tensor(product.shape, product.device))/2
-
-
+        product = self.prod(left, right)
+        up = self.up(left, right)
         
         loss = 0
 
@@ -89,18 +82,27 @@ class Product(nn.Module):
         loss += self.pi2(product, right)
 
         #Distributivity over conjunction: C and (D or E) entails (C and D) or (C and E)
-        extra_obj = rand_tensor(product.shape, product.device)
+#        extra_obj = rand_tensor(product.shape, product.device)
 
-        right_or_extra, roe_loss = self.coproduct_net(right, extra_obj)
-        antecedent = self.prod(th.cat([left, right_or_extra], dim = 1))
-        left_and_extra = self.prod(th.cat([left, extra_obj], dim = 1))
-        consequent, cons_loss = self.coproduct_net(product, left_and_extra)
+#        right_or_extra, roe_loss = self.coproduct_net(right, extra_obj)
 
-        loss += roe_loss
-        loss += cons_loss
+        #antecedent = self.prod(th.cat([left, right_or_extra], dim = 1))
+#        antecedent = self.prod(left, right_or_extra)
         
-        loss += self.ent(antecedent, consequent)
+        #left_and_extra = self.prod(th.cat([left, extra_obj], dim = 1))
+#        left_and_extra = self.prod(left, extra_obj)
+
+#        consequent, cons_loss = self.coproduct_net(product, left_and_extra)
+
+#        loss += roe_loss
+#        loss += cons_loss
         
+#        loss += self.ent(antecedent, consequent)
+
+        # (A and B) entails (A or B)
+        coprod, coprod_loss = self.coproduct_net(left, right)
+        loss += self.ent(product, coprod)
+
 #        chosen = random.choice([left, right])
 #        other_product = self.prod(th.cat([chosen, extra_obj], dim = 1))
 
@@ -119,24 +121,9 @@ class Coproduct(nn.Module):
     def __init__(self, embedding_size, entailment_net, dropout = 0):
         super().__init__()
         
+        self.coprod = ObjectGenerator(embedding_size, dropout)
 
-        self.bn = nn.LayerNorm(embedding_size)
-
-
-
-        self.coprod = lambda x: (x[:,:embedding_size]+x[:,embedding_size:])
-
-        self.coprod_ = nn.Sequential(
-            nn.Linear(2*embedding_size, embedding_size),
-            nn.LayerNorm(embedding_size),
-            nn.ReLU(),
-            nn.Dropout(dropout),
-            nn.Linear(embedding_size, embedding_size),
-
-        #    nn.LayerNorm(embedding_size),
-
-            ACT
-        )
+        self.down = ObjectGenerator(embedding_size, dropout)
         
         self.iota1 = entailment_net
         self.iota2 = entailment_net
@@ -147,10 +134,11 @@ class Coproduct(nn.Module):
 
     def forward(self, left, right, up=None):
 
-        coproduct = self.coprod(th.cat([left, right], dim = 1))
-#        product = (left + right)/2
+        coproduct = self.coprod(left, right)# self.coprod(th.cat([left, right], dim = 1))
+        down = self.down(left, right) #self.down(th.cat([left, right], dim = 1))
+        #        product = (left + right)/2
 
-        down = (coproduct + rand_tensor(coproduct.shape, coproduct.device))/2
+        #down = (coproduct + rand_tensor(coproduct.shape, coproduct.device))/2
 #        if up is None:
 #            up = self.embed_up(th.cat([left, right], dim = 1))
 
@@ -164,6 +152,9 @@ class Coproduct(nn.Module):
 
         return coproduct, loss
 
+
+
+
 class MorphismBlock(nn.Module):
 
     def __init__(self, embedding_size, dropout):
@@ -175,18 +166,16 @@ class MorphismBlock(nn.Module):
         self.dropout = nn.Dropout(dropout)
 
     def forward(self, x):
+        skip = x
         x = self.fc(x)
         x = self.bn(x)
         x = self.act(x)
         x = self.dropout(x)
-        return x
+        return x + skip
     
 class EntailmentHomSet(nn.Module):
     def __init__(self, embedding_size, hom_set_size = 1, depth = 1, dropout = 0):
         super().__init__()
-
-        
-
         
         self.hom_set = nn.ModuleList()
         
@@ -197,28 +186,39 @@ class EntailmentHomSet(nn.Module):
                 morphism.append(MorphismBlock(embedding_size, dropout))
 
             morphism.append(nn.Linear(embedding_size, embedding_size))
-
-            #morphism.append(nn.LayerNorm(embedding_size))
-
+            morphism.append(nn.LayerNorm(embedding_size))
             morphism.append(ACT)
 
             self.hom_set.append(morphism)
+            self.hom_set.append(nn.Identity())
         
         
     def forward(self, antecedent, consequent):
 
-
         best_loss = float("inf")
+        losses = []
 
         for morphism in self.hom_set:
-            estim_cons = morphism(antecedent)
+            residual = morphism(antecedent)
+            estim_cons =  residual  + antecedent
             loss = norm(estim_cons, consequent)
-            mean_loss = th.mean(loss)
+
+            losses.append(loss)
+#            mean_loss = th.mean(loss)
             
-            if mean_loss < best_loss:
-                chosen_loss = loss
-                best_loss = mean_loss
-        return chosen_loss
+#            if mean_loss < best_loss:
+#                chosen_loss = loss
+#                best_loss = mean_loss
+
+#        losses = losses.transpose(0,1)
+        losses = th.vstack(losses).transpose(0,1)
+
+        losses = th.min(losses, dim = 1)
+        losses_values = losses.values
+        losses_indices = losses.indices
+        #print(type(losses_indices))
+        #print(th.unique(losses_indices, sorted = True, return_counts = True))
+        return losses_values
 
 #        return loss/len(self.hom_set)
 
@@ -241,7 +241,7 @@ class Existential(nn.Module):
             nn.Dropout(dropout),
             nn.Linear(embedding_size, embedding_size),
 
-            #nn.LayerNorm(embedding_size),
+            nn.LayerNorm(embedding_size),
 
             ACT
         )
@@ -254,7 +254,7 @@ class Existential(nn.Module):
             
             nn.Linear(2*embedding_size, embedding_size),
 
-            #nn.LayerNorm(embedding_size),
+            nn.LayerNorm(embedding_size),
 
             ACT
             
@@ -266,8 +266,6 @@ class Existential(nn.Module):
         sliced_relation = self.slicing_relation(x)
         x = th.cat([outer, filler], dim =1)
         sliced_filler = self.slicing_filler(x)
-
-
 
         prod, prod_loss = self.prod_net(sliced_relation, sliced_filler)
  

@@ -33,17 +33,17 @@ def main(species):
 #        ds = PPIYeastSlimDataset()
 #        ds = PPIYeastDataset()
         ds = PathDataset("data/go2018.owl", None, None)
-#        ds = PathDataset("data_old/yeast/yeast-classes.owl", "data_old/yeast/valid.owl", "data_old/yeast/test.owl")
+        #ds = PathDataset("data_old/yeast/yeast-classes.owl", "data_old/yeast/valid.owl", "data_old/yeast/test.owl")
 #        ds = PathDataset("data_old/human/human-classes.owl", "data_old/human/valid.owl", "data_old/human/test.owl")
         lr = 1e-1
-        embedding_size = 50 #80 for human
+        embedding_size = 80 #80 for human
         
         #milestones = [20,50, 90,150, 180,400,  600, 800, 1000, 1300, 1600, 20001001] #only_nf4\
         gamma = 0.9
         margin = 5
-        epochs = 1000
+        epochs = 2000
         milestones = [i*70 for i in range(epochs//70)]
-
+        milestones.append(300000000)
     elif species == "human":
         ds = 'data/data-train/human-classes-normalized.owl', 'data/data-valid/9606.protein.links.v10.5.txt', 'data/data-test/9606.protein.links.v10.5.txt'
         lr = 5e-3 #2 for ppi slim
@@ -68,7 +68,7 @@ def main(species):
         decay = 0,
         gamma = gamma,
         eval_intersection = True,
-        size_hom_set = 2,
+        size_hom_set = 5,
         depth = 2,
         margin = margin,
         seed = 0,

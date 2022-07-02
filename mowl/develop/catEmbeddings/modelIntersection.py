@@ -99,7 +99,7 @@ class CatEmbeddings(Model):
         self.create_dataloaders(device = self.device)
         self.model = CatModel(self.num_classes, self.num_rels, self.size_hom_set, self.embedding_size, dropout = self.dropout, depth = self.depth)
         #self.ppi_evaluator = CatEmbeddingsPPIEvaluator(self.model.gci2_loss, self.dataset.ontology, self.classes_index_dict, self.relations, proteins, device = self.device)
-        self.intersection_evaluator = CatEmbeddingsIntersectionEvaluator(norm, self.classes_index_dict, self.model.prod_net, self.model.entailment_net,  device = self.device)
+        self.intersection_evaluator = CatEmbeddingsIntersectionEvaluator(norm, self.classes_index_dict, self.model.product_generator, self.model.equivalence,  device = self.device)
 
     def train(self):
 
@@ -306,6 +306,7 @@ class CatEmbeddings(Model):
                 classes.add(axiom.superclass)
 
             for axiom in axioms_dict["gci1_bot"]:
+                continue
                 classes.add(axiom.left_subclass)
                 classes.add(axiom.right_subclass)
                 classes.add(axiom.superclass)
@@ -335,7 +336,7 @@ class CatEmbeddings(Model):
         self.relations = {v: k for k, v in enumerate(relations)}
 
         training_nfs = self.load_normal_forms(self.training_axioms, self.classes_index_dict, self.relations)
-        self.gci1_train = training_nfs[1][:5]
+        self.gci1_train = training_nfs[1][:100]
         
         
         self.train_nfs = self.nfs_to_tensors(training_nfs, self.device)
@@ -367,6 +368,7 @@ class CatEmbeddings(Model):
             gci0.append((cl3,cl2))
             
         for axiom in axioms_dict["gci1_bot"]:
+            continue
             cl1 = classes_dict[axiom.left_subclass]
             cl2 = classes_dict[axiom.right_subclass]
             cl3 = classes_dict[axiom.superclass]
@@ -467,8 +469,8 @@ class CatModel(nn.Module):
         self.net_object = nn.Sequential(
             self.embed,
             nn.Linear(embedding_size, embedding_size),
-            #nn.LayerNorm(embedding_size),
-            ACT,
+            nn.LayerNorm(embedding_size),
+            #ACT,
 
         )
 
@@ -476,11 +478,23 @@ class CatModel(nn.Module):
         self.net_rel = nn.Sequential(
             self.embed_rel,
             nn.Linear(embedding_size, embedding_size),
-            #nn.LayerNorm(embedding_size),
-            ACT
+            nn.LayerNorm(embedding_size),
+            #ACT
 
         )
         
+    def product_generator(self, left, right):
+        left = self.net_object(left)
+        right = self.net_object(right)
+        prod, _ = self.prod_net(left, right)
+        return prod
+
+    def equivalence(self, a, b, c):
+        a = self.net_object(a)
+        b = self.net_object(b)
+        intersection, _ = self.prod_net(a, b)
+        c = self.net_object(c)
+        return norm(intersection,c)
         
     def gci0_loss(self, data, neg = False):
         device = self.dummy_param.device
