@@ -35,25 +35,25 @@ def main(species):
         ds = PathDataset("data_old/yeast/yeast-classes.owl", "data_old/yeast/valid.owl", "data_old/yeast/test.owl")
 #        ds = PathDataset("data_old/human/human-classes.owl", "data_old/human/valid.owl", "data_old/human/test.owl")
         lr = 1e-1
-        embedding_size = 180
+        embedding_size = 50 #100
         
         #milestones = [20,50, 90,150, 180,400,  600, 800, 1000, 1300, 1600, 20001001] #only_nf4\
-        gamma = 0.5
+        gamma = 0.8
         margin = 0#0.5
         epochs = 1500
-        step = 80
+        step = 60
         milestones = [i*step for i in range(epochs//step)]
         milestones.append("70000000000")
     elif species == "human":
         ds = PathDataset("data_old/human/human-classes.owl", "data_old/human/valid.owl", "data_old/human/test.owl")
         lr = 1e-1
-        embedding_size = 180
+        embedding_size = 80
         
         #milestones = [20,50, 90,150, 180,400,  600, 800, 1000, 1300, 1600, 20001001] #only_nf4\
-        gamma = 0.5
+        gamma = 0.7
         margin = 0#0.5
         epochs = 1500
-        step = 80
+        step = 60
         milestones = [i*step for i in range(epochs//step)]
         milestones.append("80000000000")
  
@@ -80,8 +80,8 @@ def main(species):
         decay = 0,
         gamma = gamma,
         eval_ppi = True,
-        size_hom_set = 3,
-        depth = 3,
+        size_hom_set = 2,
+        depth = 2,
         margin = margin,
         seed = 0,
         early_stopping = 20000,
