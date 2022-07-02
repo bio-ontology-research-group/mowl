@@ -30,12 +30,12 @@ import torch as th
 
 def main(species):
     ds = PathDataset("data/family/familyDomain.owl", None, None)
-    lr = 2e-1
+    lr = 1e-1
     embedding_size = 2
     
     gamma = 0.6
-    margin = 2
-    epochs = 1000
+    margin = 0
+    epochs = 300
     step = 30
     milestones = [i*step for i in range(epochs//step)]
     
@@ -52,8 +52,8 @@ def main(species):
         decay = 0,
         gamma = gamma,
         eval_ppi = True,
-        size_hom_set =2,
-        depth = 1,
+        size_hom_set =4,
+        depth = 3,
         margin = margin,
         seed = 0,
         early_stopping = 20000,

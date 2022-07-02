@@ -44,6 +44,7 @@ def main(species):
         step = 60
         milestones = [i*step for i in range(epochs//step)]
         milestones.append("70000000000")
+
     elif species == "human":
         ds = PathDataset("data_old/human/human-classes.owl", "data_old/human/valid.owl", "data_old/human/test.owl")
         lr = 1e-1

@@ -104,6 +104,7 @@ class Product(nn.Module):
 
         # (A and B) entails (A or B)
         coprod, coprod_loss = self.coproduct_net(left, right)
+        
         loss += self.ent(product, coprod)
 
 
@@ -162,7 +163,7 @@ class MorphismBlock(nn.Module):
 
     def __init__(self, embedding_size, dropout):
         super().__init__()
-        
+        self.embedding_size = embedding_size
         self.fc = nn.Linear(embedding_size, embedding_size)
         self.bn = nn.LayerNorm(embedding_size)
         self.act = nn.ReLU()
@@ -170,6 +171,7 @@ class MorphismBlock(nn.Module):
 
     def forward(self, x):
         skip = x
+        
         x = self.fc(x)
         x = self.bn(x)
         x = self.act(x)
@@ -266,8 +268,11 @@ class Existential(nn.Module):
             
         )
         
-    def forward(self, outer, relation, filler):
+    def forward(self, relation, filler, *outers):
 
+        
+        outer = sum(outers)/len(outers)
+        
         x = th.cat([outer, filler, relation], dim =1)
         sliced_relation = self.slicing_relation(x)
         x = th.cat([outer, filler], dim =1)

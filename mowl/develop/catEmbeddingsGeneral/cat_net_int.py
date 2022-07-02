@@ -12,7 +12,6 @@ def norm(a,b, dim = 1):
     mse = th.sum(sqe, dim =1)/n 
     return mse
 
-
 def rand_tensor(shape, device):
     x = th.rand(shape).to(device)
     x = (x*2) - 1
@@ -28,7 +27,6 @@ class ObjectGenerator(nn.Module):
         super().__init__()
 
         self.transform = nn.Sequential(
-
             nn.Linear(2*embedding_size, embedding_size),
             nn.LayerNorm(embedding_size),
             nn.ReLU(),
@@ -36,6 +34,7 @@ class ObjectGenerator(nn.Module):
             nn.Linear(embedding_size, embedding_size),
 
             nn.LayerNorm(embedding_size),
+
             ACT
         )
 
@@ -60,7 +59,6 @@ class Product(nn.Module):
 
         self.up = ObjectGenerator(embedding_size, dropout)
 
-
         self.pi1 = entailment_net
         self.pi2 = entailment_net
         self.m   = entailment_net
@@ -73,7 +71,6 @@ class Product(nn.Module):
 
         product = self.prod(left, right)
         up = self.up(left, right)
-
         
         loss = 0
 
@@ -106,7 +103,6 @@ class Product(nn.Module):
         coprod, coprod_loss = self.coproduct_net(left, right)
         loss += self.ent(product, coprod)
 
-
 #        chosen = random.choice([left, right])
 #        other_product = self.prod(th.cat([chosen, extra_obj], dim = 1))
 
@@ -128,7 +124,6 @@ class Coproduct(nn.Module):
         self.coprod = ObjectGenerator(embedding_size, dropout)
 
         self.down = ObjectGenerator(embedding_size, dropout)
-
         
         self.iota1 = entailment_net
         self.iota2 = entailment_net
@@ -143,7 +138,6 @@ class Coproduct(nn.Module):
         down = self.down(left, right) #self.down(th.cat([left, right], dim = 1))
         #        product = (left + right)/2
 
-
         #down = (coproduct + rand_tensor(coproduct.shape, coproduct.device))/2
 #        if up is None:
 #            up = self.embed_up(th.cat([left, right], dim = 1))
@@ -157,6 +151,9 @@ class Coproduct(nn.Module):
         loss += self.iota2(right, coproduct)
 
         return coproduct, loss
+
+
+
 
 class MorphismBlock(nn.Module):
 
@@ -179,7 +176,7 @@ class MorphismBlock(nn.Module):
 class EntailmentHomSet(nn.Module):
     def __init__(self, embedding_size, hom_set_size = 1, depth = 1, dropout = 0):
         super().__init__()
-
+        
         self.hom_set = nn.ModuleList()
         
         for i in range(hom_set_size):
@@ -190,11 +187,11 @@ class EntailmentHomSet(nn.Module):
 
             morphism.append(nn.Linear(embedding_size, embedding_size))
             morphism.append(nn.LayerNorm(embedding_size))
-
             morphism.append(ACT)
 
             self.hom_set.append(morphism)
             self.hom_set.append(nn.Identity())
+        
         
     def forward(self, antecedent, consequent):
 
@@ -223,7 +220,6 @@ class EntailmentHomSet(nn.Module):
         #print(th.unique(losses_indices, sorted = True, return_counts = True))
         return losses_values
 
-
 #        return loss/len(self.hom_set)
 
 
@@ -247,7 +243,6 @@ class Existential(nn.Module):
 
             nn.LayerNorm(embedding_size),
 
-
             ACT
         )
 
@@ -260,7 +255,6 @@ class Existential(nn.Module):
             nn.Linear(2*embedding_size, embedding_size),
 
             nn.LayerNorm(embedding_size),
-
 
             ACT
             

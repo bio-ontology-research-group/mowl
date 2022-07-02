@@ -44,5 +44,10 @@ object Utils {
 
 
 
+  def removeBrackets(name: String): String = {
+    if (name.startsWith("<")) name.tail.init
+    else name
+  }
+
 
 }
