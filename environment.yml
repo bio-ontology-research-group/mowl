@@ -27,3 +27,4 @@ dependencies:
   - pip
   - pip:
     - pykeen
+    - temp
