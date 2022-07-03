@@ -167,13 +167,14 @@ with
 
 .. code:: python
 
-   from mowl.corpus.base import extract_and_save_axiom_corpus, extract_annotation_corpus
+   from mowl.corpus.base import extract_and_save_axiom_corpus, extract_and_save_annotation_corpus
 
    extract_and_save_axiom_corpus(dataset.ontology, "corpus_file_path")
-   extract_annotation_corpus(dataset.ontology, "corpus_file_path")
+   extract_and_save_annotation_corpus(ds.ontology, "corpus_file_path", mode = "a")
 
 
-To add annotation textual information to the corpus.
+
+To add annotation textual information to the corpus. The parameter `mode` will be used for opening the file where the axioms will be saved. In the example above, we want the annotations axioms to be added to the file where the class axioms where already written.
 
 
 
