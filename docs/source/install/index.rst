@@ -46,7 +46,3 @@ Install from Conda
 
    conda install -c ferzcam mowl-borg
 
-
-.. note::
-
-   Latest version is 0.0.24

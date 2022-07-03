@@ -9,6 +9,7 @@ Tutorials
 
    dataset
    embed
+   infer
    visualization
    
    
