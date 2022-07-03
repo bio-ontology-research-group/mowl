@@ -6,9 +6,8 @@ from mowl.walking.rdf2vec.model import RDF2Vec
 WALKING_METHODS = ["deepwalk", "node2vec"]
 
 
-def walking_factory(method_name, num_walks, walk_length, outfile, workers = 1, alpha = 0, p = 1, q=1):
-
-
+def walking_factory(method_name, num_walks, walk_length, outfile = None, workers = 1, alpha = 0, p = 1, q=1):
+    
     if method_name == "deepwalk":
         return DeepWalk(num_walks, walk_length, alpha, outfile, workers=workers)
     elif method_name == "node2vec":
