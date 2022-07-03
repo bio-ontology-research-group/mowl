@@ -44,8 +44,8 @@ After obtaining a graph as an edge list, we can perform random walks. As before,
 .. code:: python
    
    from mowl.walking.factory import walking_factory
-   walker = walking_factory("deepwalk", edges, alpha = 0.1, walk_length = 10, num_walks = 10, outfile = "data/walks")
-   walker.walk()
+   walker = walking_factory("deepwalk", alpha = 0.1, walk_length = 10, num_walks = 10, outfile = "data/walks")
+   walker.walk(edges)
 
 The walks are saved in the specified filepath. After generating the walks, one usual step is to use the Word2Vec model to generate embeddings of the entities. In this case we rely on the library Gensim to use the Word2Vec model.
    
@@ -55,7 +55,7 @@ The walks are saved in the specified filepath. After generating the walks, one u
    from gensim.models.word2vec import LineSentence
    
 
-   corpus = LineSentence("data/walks")
+   corpus = LineSentence(walker.outfile)
    
    w2v_model = Word2Vec(
 	  corpus,
