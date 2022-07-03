@@ -86,7 +86,7 @@ After generating a set of `edges`, we can call a translational method in the fol
    trans_model = TranslationalOnt(
         edges,
         trans_method = "transE",
-        embedding_dim = 50
+        embedding_dim = 50,
         epochs = 20,
         batch_size = 32
     )
