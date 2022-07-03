@@ -1,6 +1,6 @@
 from mowl.walking.walking import WalkingModel
 import logging
-
+import tempfile
 from java.util import ArrayList
 from org.mowl import Edge
 from org.mowl.Walking import Node2Vec as N2V
@@ -18,10 +18,14 @@ class Node2Vec(WalkingModel):
 		 walk_length,
 		 p,
 		 q,
-                 outfile,
+                 outfile = None,
                  workers=1
                  ):
-        
+
+        if outfile is None:
+            tmp_file = tempfile.NamedTemporaryFile()
+            outfile = tmp_file.name
+
         super().__init__(num_walks, walk_length, outfile, workers) 
 
         self.p = p
