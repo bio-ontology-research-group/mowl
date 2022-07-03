@@ -23,12 +23,5 @@ OWL2Vec*
    :show-inheritance:
 
 
-Translational Embeddings
--------------------------
-
-.. automodule:: mowl.embeddings.graph_based.translational.model
-   :members:
-   :undoc-members:
-   :show-inheritance:
 
 

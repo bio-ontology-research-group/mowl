@@ -7,5 +7,9 @@ Tutorials
    :hidden:
    :glob:
 
-   dl2vec
+   dataset
+   embed
+   infer
+   visualization
+   
    

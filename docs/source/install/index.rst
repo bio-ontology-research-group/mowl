@@ -5,11 +5,15 @@ System requirements
 -------------------
 
 - Ubuntu >16.04
-- Python version >3.8
+- JDK version 8
+- Python version 3.8
 
 Install from source code
 --------------------------
 
+Before installing from source, make sure to have the following dependencies:
+
+  
 Installation can be done with the following commands:
 
 .. code:: bash
@@ -35,4 +39,14 @@ PyPi installation is on testing phase and can be done as follows:
 
 .. code:: bash
 	  
-   pip install -i https://test.pypi.org/simple/ mowl-borg
+   pip install mowl-borg
+
+
+Install from Conda
+------------------------------
+
+
+.. code:: bash
+
+   conda install -c ferzcam mowl-borg
+
