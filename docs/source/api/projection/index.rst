@@ -7,7 +7,7 @@ In this module we provide different methods for projecting an ontology into a gr
 Ontology Projection
 ------------------------------------
 
-.. automodule:: mowl.graph.graph
+.. automodule:: mowl.projection.base
    :members:
    :show-inheritance:
 
@@ -17,7 +17,7 @@ All the methods will return a list of edges corresponding to the **Edge** class:
 .. include:: edge.rst
 
       
-.. include:: subclass.rst
-.. include:: subclassRels.rst
+.. include:: taxonomy.rst
+.. include:: taxonomyRels.rst
 .. include:: dl2vec.rst
 .. include:: owl2vec.rst

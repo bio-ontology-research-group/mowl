@@ -1,7 +1,8 @@
+
 from mowl.base_models.model import Model
-from mowl.graph.factory import parser_factory
+from mowl.projection.factory import projector_factory
 from mowl.walking.factory import walking_factory
-from mowl.graph.edge import Edge
+from mowl.projection.edge import Edge
 
 import numpy as np
 import random
@@ -57,7 +58,7 @@ class OWL2VecStar(Model):
 
     '''
     
-    def __init__(self, dataset, outfile, bidirectional_taxonomy=False, include_literals = False, only_taxonomy = False, walking_method = "deepwalk", walk_length = 30, wv_epochs = 10, alpha = 0, num_walks = 100, vector_size = 100, window = 5, workers = 1, p = 1, q=1, walks_outfile = None):
+    def __init__(self, dataset, outfile, bidirectional_taxonomy=False, include_literals = False, only_taxonomy = False, walking_method = "deepwalk", walk_length = 30, wv_epochs = 10, alpha = 0, num_walks = 100, vector_size = 100, window = 5, workers = 1, p = 1, q=1, walks_outfile = None, device = "cpu"):
 
         super().__init__(dataset)
 
@@ -75,18 +76,21 @@ class OWL2VecStar(Model):
         self.window = window
         self.outfile = outfile
         self.walking_method = walking_method
-        self.parserTrain = parser_factory("owl2vec_star", self.dataset.ontology, bidirectional_taxonomy = self.bidirectional_taxonomy, include_literals = self.include_literals, only_taxonomy = self.only_taxonomy)
-        self.parserTest = parser_factory("owl2vec_star", self.dataset.testing, bidirectional_taxonomy = self.bidirectional_taxonomy, include_literals = self.include_literals, only_taxonomy = self.only_taxonomy)
+        self.projector = projector_factory("owl2vec_star", bidirectional_taxonomy = self.bidirectional_taxonomy, include_literals = self.include_literals, only_taxonomy = self.only_taxonomy)
+
 
         self.walks_outfile = walks_outfile
-        self.lock = Lock()
+        self.device = device
 
+
+
+        
     def train(self):
         
         save_walks = True
 
         logging.info("Generating graph from ontology...")
-        edges = self.parserTrain.parse()
+        edges = self.projector.project(self.dataset.ontology)
         entities, _ = Edge.getEntitiesAndRelations(edges)
         self.entities = list(entities)
         logging.info("Finished graph generation")

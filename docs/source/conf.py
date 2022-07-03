@@ -20,8 +20,8 @@ project = 'MOWL'
 copyright = '2021, me'
 author = 'me'
 
-release = '0.1'
-version = '0.1.0'
+release = '0.0.24'
+version = '0.0.24'
 
 # -- General configuration
 
@@ -67,4 +67,4 @@ source_suffix = ['.rst', '.md']
 # The master toctree document.
 master_doc = 'index'
 
-autodoc_mock_imports = ['org', 'java', 'numpy', 'jpype', 'de', 'pandas', 'scipy', 'sklearn', 'owlready2', 'gensim', 'torch', 'rdflib', 'networkx', 'pykeen', 'node2vec']
+autodoc_mock_imports = ['org', 'uk', 'java', 'numpy', 'jpype', 'de', 'pandas', 'scipy', 'sklearn', 'owlready2', 'gensim', 'torch', 'rdflib', 'networkx', 'pykeen', 'node2vec', 'matplotlib', 'tqdm', 'click']

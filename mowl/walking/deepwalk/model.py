@@ -2,7 +2,7 @@ from mowl.walking.walking import WalkingModel
 import random
 import os
 import logging
-
+import tempfile
 from org.mowl.Walking import DeepWalk as DW
 from java.util import HashMap
 from java.util import ArrayList
@@ -17,16 +17,21 @@ class DeepWalk(WalkingModel):
 
     :param alpha: Probability of restart
     :type alpha: float
+    :param outfile: Path for saving the generated walks, defaults to :class:`tempfile.NamedTemporaryFile`"
+    :type outfile: str, optional
     '''
     
     def __init__(self,
                  num_walks,
                  walk_length,
                  alpha,
-                 outfile,
+                 outfile = None,
                  workers=1,
 ):
 
+        if outfile is None:
+            tmp_file = tempfile.NamedTemporaryFile()
+            outfile = tmp_file.name
         super().__init__(num_walks, walk_length, outfile, workers)
 
         self.alpha = alpha
