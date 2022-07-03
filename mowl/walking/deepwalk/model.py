@@ -17,6 +17,8 @@ class DeepWalk(WalkingModel):
 
     :param alpha: Probability of restart
     :type alpha: float
+    :param outfile: Path for saving the generated walks, defaults to :class:`tempfile.NamedTemporaryFile`"
+    :type outfile: str, optional
     '''
     
     def __init__(self,

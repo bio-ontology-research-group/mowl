@@ -12,6 +12,8 @@ class Node2Vec(WalkingModel):
     :type p: float
     :param q: In-out hyperparameter. Default is 1.
     :type q: float
+    :param outfile: Path for saving the generated walks, defaults to :class:`tempfile.NamedTemporaryFile`"
+    :type outfile: str, optional
     '''
     def __init__(self,
 		 num_walks,
