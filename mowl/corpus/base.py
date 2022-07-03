@@ -12,12 +12,13 @@ import logging
 
 def extract_and_save_axiom_corpus(ontology, out_file, mode = "w"):
     """Method to extract axioms of a particular ontology and save it into a file.
-    :param ontology: OWL ontology from which the axioms will be extracted.
-    :type ontology: OWLOntology
+    
+    :param ontology: Input ontology.
+    :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
     :param out_file: File path to save the extracted axioms.
     :type out_file: str
     :param mode: mode for opening the `out_file`, defaults to `"w"`
-    :type mode: str(,optional)
+    :type mode: str, optional
     """
     
     logging.info("Generating axioms corpus")
@@ -36,8 +37,10 @@ def extract_and_save_axiom_corpus(ontology, out_file, mode = "w"):
 
 def extract_axiom_corpus(ontology):
     """Method to extract axioms of a particular ontology. Similar to :func:`extract_and_save_axiom_corpus` but this method returns a list instead saving into a file.
-    :param ontology: OWL ontology from which the axioms will be extracted.
-    :type ontology: OWLOntology
+    
+    :param ontology: Input ontology.
+    :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
+    :rtype: list[str]
     """    
 
     logging.info("Generating axioms corpus")
@@ -58,21 +61,15 @@ def extract_axiom_corpus(ontology):
 
 
 def extract_and_save_annotation_corpus(ontology, out_file, mode):
-    """Method to extract annotations of a particular ontology and save it into a file.
+    """This method generates a textual representation of the annotation axioms in an ontology following the Manchester Syntax.
+
+
     :param ontology: OWL ontology from which the annotations will be extracted.
-    :type ontology: OWLOntology
+    :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
     :param out_file: File path to save the extracted annotations.
     :type out_file: str
     :param mode: mode for opening the `out_file`, defaults to `"w"`
-    :type mode: str(,optional)
-    """
-
-    """This method generates a textual representation of the annotation axioms in an ontology following the Manchester Syntax.
-
-        :param ontology: Input ontology
-        :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
-        :param out_file: Path of the file where the corpus will be saved.
-        :type out_file: str
+    :type mode: str ,optional
     """
 
     if mode == "append":
@@ -95,9 +92,11 @@ def extract_and_save_annotation_corpus(ontology, out_file, mode):
 
 
 def extract_annotation_corpus(ontology):
-    """Method to extract annotations of a particular ontology. Similar to :func:`extract_and_save_annotation_corpus` but this method returns a list instead saving into a file.
-    :param ontology: OWL ontology from which the annotations will be extracted.
-    :type ontology: OWLOntology
+    """This method generates a textual representation of the annotation axioms in an ontology following the Manchester Syntax. Similar to :func:`extract_and_save_annotation_corpus` but this method returns a list instead saving into a file.
+    
+    :param ontology: Input ontology
+    :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
+    :rtype: list[str]
     """    
 
     logging.info("Generating annotation corpus")
