@@ -5,11 +5,15 @@ System requirements
 -------------------
 
 - Ubuntu >16.04
-- Python version >3.8
+- JDK version 8
+- Python version 3.8
 
 Install from source code
 --------------------------
 
+Before installing from source, make sure to have the following dependencies:
+
+  
 Installation can be done with the following commands:
 
 .. code:: bash
