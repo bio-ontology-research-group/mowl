@@ -40,10 +40,10 @@ def main(species):
         #milestones = [20,50, 90,150, 180,400,  600, 800, 1000, 1300, 1600, 20001001] #only_nf4\
         gamma = 0.5
         margin = 0#0.5
-        epochs = 1500
+        epochs = 1000
         step = 80
         milestones = [i*step for i in range(epochs//step)]
-        milestones.append("70000000000")
+        milestones.append("80000000")
 
     elif species == "human":
         ds = PathDataset("data_old/human/human-classes.owl", "data_old/human/valid.owl", "data_old/human/test.owl")

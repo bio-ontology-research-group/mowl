@@ -39,10 +39,11 @@ def main(species):
         embedding_size = 80 #80 for human
         
         #milestones = [20,50, 90,150, 180,400,  600, 800, 1000, 1300, 1600, 20001001] #only_nf4\
-        gamma = 0.9
+        gamma = 0.8
         margin = 5
         epochs = 2000
-        milestones = [i*70 for i in range(epochs//70)]
+        step = 60
+        milestones = [i*60 for i in range(epochs//60)]
         milestones.append(300000000)
     elif species == "human":
         ds = 'data/data-train/human-classes-normalized.owl', 'data/data-valid/9606.protein.links.v10.5.txt', 'data/data-test/9606.protein.links.v10.5.txt'
@@ -58,7 +59,7 @@ def main(species):
         
     model = CatEmbeddings(
         ds, 
-        4096*16, #4096*4, #bs 
+        4096*32, #4096*4, #bs 
         embedding_size, #embeddings size
         lr, #lr ##1e-3 yeast, 1e-5 human
         epochs, #epochs
@@ -68,7 +69,7 @@ def main(species):
         decay = 0,
         gamma = gamma,
         eval_intersection = True,
-        size_hom_set = 5,
+        size_hom_set = 4,
         depth = 2,
         margin = margin,
         seed = 0,

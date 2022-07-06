@@ -89,13 +89,30 @@ def gci2_loss(objects, exp_net, slicing_net, embed_objects, embed_rels, neg = Fa
     antecedents = embed_objects(objects[:, 0])
     relations = embed_rels(objects[:, 1])
     consequents = embed_objects(objects[:, 2])
-
+    
+    loss = 0
     if neg:
         negs = th.tensor(np.random.choice(num_objects, size = len(objects))).to(device)
-        consequents  = embed_objects(negs)
+        consequents_neg  = embed_objects(negs)
+        sliced_prod, prod_loss = slicing_net(antecedents, relations, consequents_neg)
+        exp_loss = exp_net(antecedents, sliced_prod)
+        loss += prod_loss
+        loss += exp_loss
 
-    sliced_prod, prod_loss = slicing_net(antecedents, relations, consequents)
-    exp_loss = exp_net(antecedents, sliced_prod)
-    return exp_loss + prod_loss
+        if False:
+            negs = th.tensor(np.random.choice(num_objects, size = len(objects))).to(device)
+            antecedents_neg  = embed_objects(negs)
+            sliced_prod, prod_loss = slicing_net(antecedents_neg, relations, consequents)
+            exp_loss = exp_net(antecedents_neg, sliced_prod)
+            loss += prod_loss/2
+            loss += exp_loss/2
+    else:
+        sliced_prod, prod_loss = slicing_net(antecedents, relations, consequents)
+        exp_loss = exp_net(antecedents, sliced_prod)
+        loss += prod_loss
+        loss += exp_loss
+        
+
+    return loss
 
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       

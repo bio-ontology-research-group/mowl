@@ -255,7 +255,11 @@ class CatEmbeddings(Model):
                 
                 loss = - th.mean(F.logsigmoid(-loss))
                 
-                step_loss  = loss
+                mean_pos_loss = th.mean(pos_loss)
+                step_loss = loss
+                if mean_pos_loss > loss:
+                    step_loss += th.mean(pos_loss)
+                
                 nf_loss += loss.detach().item()
 
                 self.optimizer.zero_grad()

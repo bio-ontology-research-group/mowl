@@ -239,6 +239,12 @@ class CatEmbeddings(Model):
 
     def forward_nf(self, nf, idx, margin, train = True):
         
+        aggr = "sum"
+        if aggr == "sum":
+            aggr_fun = th.sum
+        elif aggr == "mean":
+            aggr_fun = th.mean
+        
         nf_loss = 0.0
         
         for i, batch_nf in enumerate(nf):
@@ -253,7 +259,7 @@ class CatEmbeddings(Model):
 
  
                 
-                loss = - th.mean(F.logsigmoid(-loss))
+                loss = - aggr_fun(F.logsigmoid(-loss))
                 
                 step_loss  = loss
                 nf_loss += loss.detach().item()
@@ -263,7 +269,7 @@ class CatEmbeddings(Model):
                 self.optimizer.step()
 
             else:
-                nf_loss += th.mean(pos_loss).detach().item()
+                nf_loss += aggr_fun(pos_loss).detach().item()
                 
             nf_loss /= (i+1)
 
@@ -279,7 +285,22 @@ class CatEmbeddings(Model):
             nb_nf1, nb_nf2, nb_nf3, nb_nf4, nb_nf5, nb_nf6 = tuple(map(len, self.train_nfs))
         else:
             nb_nf1, nb_nf2, nb_nf3, nb_nf4, nb_nf5, nb_nf6 = tuple(map(len, self.valid_nfs))
-        
+
+        nb_ents_nf1 = 1
+        nb_ents_nf2 = 7
+        nb_ents_nf3 = 7
+        nb_ents_nf4 = 7
+        nb_ents_nf5 = 7
+        nb_ents_nf6 = 13
+
+        nb_nf1 *= nb_ents_nf1
+        nb_nf2 *= nb_ents_nf2
+        nb_nf3 *= nb_ents_nf3
+        nb_nf4 *= nb_ents_nf4
+        nb_nf5 *= nb_ents_nf5
+        nb_nf6 *= nb_ents_nf6
+
+
         total = nb_nf1 + nb_nf2 + nb_nf3 + nb_nf4 + nb_nf5 + nb_nf6
 
         data_nf1, data_nf2, data_nf3, data_nf4, data_nf5, data_nf6 = dataloaders

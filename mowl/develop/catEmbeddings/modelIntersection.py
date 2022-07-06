@@ -73,7 +73,7 @@ class CatEmbeddings(Model):
         self.dataset = dataset
             
         self.species = species
-        milestones_str = "_".join(str(m) for m in milestones)
+        milestones_str = "_".join(str(m) for m in milestones)[:100]
         self.data_root = f"data/models/{species}/"
         self.file_name = f"bs{self.batch_size}_emb{self.embedding_size}_lr{lr}_epochs{epochs}_eval{num_points_eval}_mlstns_{milestones_str}_drop_{self.dropout}_decay_{self.decay}_gamma_{self.gamma}_evalintersection_{self.eval_intersection}_margin{self.margin}.th"
         self.model_filepath = self.data_root + self.file_name
@@ -336,7 +336,7 @@ class CatEmbeddings(Model):
         self.relations = {v: k for k, v in enumerate(relations)}
 
         training_nfs = self.load_normal_forms(self.training_axioms, self.classes_index_dict, self.relations)
-        self.gci1_train = training_nfs[1][:100]
+        self.gci1_train = training_nfs[1][:1000]
         
         
         self.train_nfs = self.nfs_to_tensors(training_nfs, self.device)

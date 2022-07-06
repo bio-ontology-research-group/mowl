@@ -200,7 +200,7 @@ class EntailmentHomSet(nn.Module):
 
         for morphism in self.hom_set:
             residual = morphism(antecedent)
-            estim_cons =  residual  + antecedent
+            estim_cons =  residual#  + antecedent
             loss = norm(estim_cons, consequent)
 
             losses.append(loss)
