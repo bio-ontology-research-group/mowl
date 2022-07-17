@@ -1,5 +1,5 @@
 <p align="center">
-  <img src= "https://github.com/bio-ontology-research-group/mowl/blob/master/docs/source/mowl_black_background_colors_2048x2048px.png?raw=true" width="300"/>
+  <img src= "https://github.com/bio-ontology-research-group/mowl/blob/main/docs/source/mowl_black_background_colors_2048x2048px.png?raw=true" width="300"/>
 </p>
   
 # mOWL: Machine Learning Library with Ontologies
