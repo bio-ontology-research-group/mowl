@@ -28,21 +28,12 @@ class OWL2VecStarProjector(
   // var memory_reasoner: String = "10240"
 ) extends AbstractProjector{
 
-
   val inverseRelations = scala.collection.mutable.Map[String, Option[String]]()
-
-//  val dataFactory = OWLManager.createOWLOntologyManager().getOWLDataFactory()
-
   val searcher = new EntitySearcher()
-
-
 
   override def project(ontology: OWLOntology) = {
 
     var edgesFromObjectProperties = List[Triple]()
-
-//    println(ontology.getAxioms(imports).asScala.toList)
-
     val axioms = ontology.getAxioms(imports).asScala.toList
 
     var subclassOfAxioms = ListBuffer[OWLSubClassOfAxiom]()
@@ -59,67 +50,26 @@ class OWL2VecStarProjector(
           annotationAxioms += axiom.asInstanceOf[OWLAnnotationAssertionAxiom]
         }
         case "EquivalentClasses" => equivalenceAxioms += axiom.asInstanceOf[OWLEquivalentClassesAxiom]
-          
-        
         case _ => {
-//          println(axiom)
+          //println(axiom)
           otherAxioms += axiom
         }
       }
     }
 
-//    otherAxioms.map(println(_))
-
     val subclassOfTriples = subclassOfAxioms.flatMap(x => processSubClassAxiom(x.getSubClass, x.getSuperClass, ontology))
     val equivalenceTriples = equivalenceAxioms.flatMap(
       x => {
         val subClass::superClass::rest= x.getClassExpressionsAsList.asScala.toList
-
-        
         superClass.getClassExpressionType.getName match{
           case "ObjectIntersectionOf" => superClass.asInstanceOf[OWLObjectIntersectionOf].getOperands.asScala.toList.flatMap(processSubClassAxiom(subClass, _, ontology))
-
           case _ => Nil
         }
-
       }
     )
     val annotationTriples = annotationAxioms.map(processAnnotationAxiom(_)).flatten
-    
-    //val ontClasses = ontology.getClassesInSignature().asScala.toList
-    //printf("INFO: Number of ontology classes: %d", ontClasses.length)
-    //val edgesFromClasses = ontClasses.foldLeft(List[Triple]()){(acc, x) => acc ::: processOntClass(x)}
-
-    // if (include_literals) {
-
-    //   val objectProperties = ontology.getObjectPropertiesInSignature().asScala.toList//.filter(o => !(avoid_properties contains o))
-
-    //   val edgesFromObjectProperties = objectProperties.foldLeft(List[Triple]()){(acc, x) => acc ::: processObjectProperty(x)}
-
-    //   val annotationProperties = dataFactory.getRDFSLabel ::  ontology.getAnnotationPropertiesInSignature.asScala.toList
-    //   val edgesFromAnnotationProperties = annotationProperties.foldLeft(List[Triple]()){(acc, x) => acc ::: processAnnotationProperty(x)}
-
-    //   println("ANNOTATIONS")
-    //   println(ontology.getAnnotations.asScala.toList)
-
-    //   (edgesFromClasses ::: edgesFromObjectProperties  ::: edgesFromAnnotationProperties).asJava
-
-    // }else {
-    //   (edgesFromClasses ::: edgesFromObjectProperties).asJava
-
-    // }
-
-    //println(ontology.getRBoxAxioms(imports))
-
     (subclassOfTriples.toList ::: equivalenceTriples.toList ::: annotationTriples.toList).asJava
   }
-
-   
-
-
-
-
-
 
   // CLASSES PROCESSING
 
@@ -129,7 +79,6 @@ class OWL2VecStarProjector(
 
     if (include_literals){ //ANNOTATION PROCESSSING
       val annotProperties = ontClass.getAnnotationPropertiesInSignature.asScala.toList
-
       val annotationAxioms = ontology.getAnnotationAssertionAxioms(ontClass.getIRI).asScala.toList
       annotationEdges = annotationAxioms.map(annotationAxiom2Edge).flatten
     }
@@ -146,7 +95,6 @@ class OWL2VecStarProjector(
     val axiomType = axiom.getAxiomType().getName()
 
     axiomType match {
-
       case "SubClassOf" => {
 	var ax = axiom.asInstanceOf[OWLSubClassOfAxiom]
 	projectSubClassOrEquivAxiom(ax.getSubClass.asInstanceOf[OWLClass], ax.getSuperClass, ontology)
@@ -157,7 +105,6 @@ class OWL2VecStarProjector(
         val rightSide = ax.tail
 	projectSubClassOrEquivAxiom(ontClass, new OWLObjectIntersectionOfImpl(rightSide.toSet.asJava), ontology)
       }
-
       case _ => Nil
     }
   }
@@ -171,16 +118,12 @@ class OWL2VecStarProjector(
     }else{
       firstCase
     }
-
   }
 
-
   def processSubClassAxiomComplexSubClass(subClass: OWLClassExpression, superClass: OWLClassExpression, ontology: OWLOntology): List[Triple] = {
-
     // When subclass is complex, superclass must be atomic
 
     val quantityModifiers = List("ObjectSomeValuesFrom", "ObjectAllValuesFrom", "ObjectMaxCardinality", "ObjectMinCardinality")
-
     val superClassType = superClass.getClassExpressionType.getName
 
     if (superClassType != "Class") {
@@ -195,7 +138,6 @@ class OWL2VecStarProjector(
         case m if (quantityModifiers contains m) && !only_taxonomy => {
 
 	  val subClass_ = lift2QuantifiedExpression(subClass)
-
           projectQuantifiedExpression(subClass_, ontology) match {
 
             case Some((rel, Some(inverseRel), dstClass)) => {
@@ -203,23 +145,17 @@ class OWL2VecStarProjector(
 
               val outputEdges = for (dst <- dstClasses)
               yield List(new Triple(superClass_, rel, dst), new Triple(dst, inverseRel, superClass_))
-
               outputEdges.flatten
             }
 
             case Some((rel, None, dstClass)) => {
               val dstClasses = splitClass(dstClass)
-
               for (dst <- dstClasses) yield new Triple(superClass_, rel, dst)
-
             }
-
             case None => Nil
           }
         }
-
         case _ => Nil
-
       }
     }
   }
@@ -229,47 +165,33 @@ class OWL2VecStarProjector(
 
     // When superclass is complex, subclass must be atomic
 
-
     val subClassType = subClass.getClassExpressionType.getName
-
     if (subClassType != "Class"){
       Nil
     }else{
-
       val subClass_  = subClass.asInstanceOf[OWLClass]
-
       val quantityModifiers = List("ObjectSomeValuesFrom", "ObjectAllValuesFrom", "ObjectMaxCardinality", "ObjectMinCardinality")
-
       val superClassType = superClass.getClassExpressionType.getName
 
       superClassType match {
 
         case m if (quantityModifiers contains m) && !only_taxonomy => {
-
 	  val superClass_ = lift2QuantifiedExpression(superClass)
-
           projectQuantifiedExpression(superClass_, ontology) match {
 
             case Some((rel, Some(inverseRel), dstClass)) => {
               val dstClasses = splitClass(dstClass)
-
               val outputEdges = for (dst <- dstClasses)
               yield List(new Triple(subClass_, rel, dst), new Triple(dst, inverseRel, subClass_))
-
               outputEdges.flatten
             }
-
             case Some((rel, None, dstClass)) => {
               val dstClasses = splitClass(dstClass)
-
               for (dst <- dstClasses) yield new Triple(subClass_, rel, dst)
-
             }
-
             case None => Nil
           }
         }
-
         case "Class" => {
 	  val dst = superClass.asInstanceOf[OWLClass]
           if (bidirectional_taxonomy){
@@ -277,15 +199,10 @@ class OWL2VecStarProjector(
           }else{
             new Triple(subClass_, "subclassOf", dst) :: Nil
           }
-
         }
         case _ => Nil
-
       }
-
     }
-
-
   }
 
 
@@ -310,52 +227,37 @@ class OWL2VecStarProjector(
             } 
           }
           case false => stripValue(axiom.getValue.toString)
-
         }
-
-
-
         Some(new Triple(subject, m, valueStr))
       }
-
       case _ => {
         //println("C ",property)
         None
       }
     }
-
   }
 
   def projectSubClassOrEquivAxiom(ontClass: OWLClass, superClass: OWLClassExpression, ontology: OWLOntology): List[Triple] = {
 
-     val quantityModifiers = List("ObjectSomeValuesFrom", "ObjectAllValuesFrom", "ObjectMaxCardinality", "ObjectMinCardinality")
-
-     val superClassType = superClass.getClassExpressionType.getName
+    val quantityModifiers = List("ObjectSomeValuesFrom", "ObjectAllValuesFrom", "ObjectMaxCardinality", "ObjectMinCardinality")
+    val superClassType = superClass.getClassExpressionType.getName
 
     superClassType match {
-
       case m if (quantityModifiers contains m) && !only_taxonomy => {
-
 	val superClass_ = lift2QuantifiedExpression(superClass)
-
         projectQuantifiedExpression(superClass_, ontology) match {
 
           case Some((rel, Some(inverseRel), dstClass)) => {
             val dstClasses = splitClass(dstClass)
-
             val outputEdges = for (dst <- dstClasses)
             yield List(new Triple(ontClass, rel, dst), new Triple(dst, inverseRel, ontClass))
-
             outputEdges.flatten
           }
 
           case Some((rel, None, dstClass)) => {
             val dstClasses = splitClass(dstClass)
-
             for (dst <- dstClasses) yield new Triple(ontClass, rel, dst)
-
           }
-
           case None => Nil
         }
       }
@@ -367,28 +269,20 @@ class OWL2VecStarProjector(
         }else{
           new Triple(ontClass, "subclassOf", dst) :: Nil
         }
-
       }
-
       case _ => Nil
-
     }
-
-   }
+  }
 
   def projectQuantifiedExpression(expr:QuantifiedExpression, ontology: OWLOntology): Option[(String, Option[String], OWLClassExpression)] = {
 
     val rel = expr.getProperty.asInstanceOf[OWLObjectProperty]
-
     val (relName, inverseRelName) = getRelationInverseNames(rel, ontology)
-    
     val filler = expr.getFiller
-
     val fillerType = filler.getClassExpressionType.getName
 
     fillerType match {
       case "Class" => Some((relName, inverseRelName, filler.asInstanceOf[OWLClass]))
-
       case _ => None
     }
   }
@@ -398,27 +292,19 @@ class OWL2VecStarProjector(
 
     exprType match {
       case "Class" => classExpr.asInstanceOf[OWLClass] :: Nil
-
       case "ObjectIntersectionOf" => {
         val classExprInt = classExpr.asInstanceOf[OWLObjectIntersectionOf]
-
         val operands = classExprInt.getOperands.asScala.toList
-
         operands.flatMap(splitClass(_: OWLClassExpression))
-
       }
 
       case "ObjectUnionOf" => {
         val classExprUnion = classExpr.asInstanceOf[OWLObjectUnionOf]
-
         val operands = classExprUnion.getOperands.asScala.toList
-
         operands.flatMap(splitClass(_: OWLClassExpression))
-
       }
 
       case _ => Nil
-
     }
   }
 
@@ -428,10 +314,7 @@ class OWL2VecStarProjector(
   //OBJECT PROPERTIES PROCESSING
 
   def processObjectProperty(property: OWLObjectProperty): List[Triple] = {
-
-
     Nil
-
   }
 
   def getRelationInverseNames(relation: OWLObjectProperty, ontology: OWLOntology): (String, Option[String]) = {
@@ -442,9 +325,7 @@ class OWL2VecStarProjector(
     }else{
 
       val rels = ontology.getInverseObjectPropertyAxioms(relation).asScala.toList
-
       if (!rels.isEmpty){
-       // println(relation, rels.head.getFirstProperty, rels.head.getSecondProperty)
 
         val firstProperty = stripBracket(rels.head.getFirstProperty)
         val secondProperty = stripBracket(rels.head.getSecondProperty) //TODO: remove head and modify the code to deal with lists
@@ -453,7 +334,6 @@ class OWL2VecStarProjector(
         if (secondProperty == relName){
           inverseRelName = firstProperty
         }
-
 
         inverseRelations += (relName -> Some(inverseRelName))
         (relName, Some(inverseRelName))
@@ -478,7 +358,6 @@ class OWL2VecStarProjector(
   //////////////////////////////////////////////////
 
   //ANNOTATION PROPERTIES PROCESSING
-
 
   val mainLabelURIs = List(
     "http://www.w3.org/2000/01/rdf-schema#label",
@@ -529,8 +408,6 @@ class OWL2VecStarProjector(
     "http://www.geneontology.org/formats/oboInOwl#hasOBONamespace"
   )
 
-
-
   val excludedAnnotationProperties = List("http://www.geneontology.org/formats/oboInOwl#inSubset", "'http://www.geneontology.org/formats/oboInOwl#id", "http://www.geneontology.org/formats/oboInOwl#hasAlternativeId") //List("rdfs:comment", "http://www.w3.org/2000/01/rdf-schema#comment")
 
   def annotationAxiom2Edge(annotationAxiom: OWLAnnotationAssertionAxiom): Option[Triple] = {
@@ -538,13 +415,10 @@ class OWL2VecStarProjector(
     val property = annotationAxiom.getProperty.toStringID.toString
 
     property match {
-
       case m if true || (lexicalAnnotationURIs contains m) =>  {
         val subject = annotationAxiom.getSubject.toString
         val value = annotationAxiom.getValue
-//        println("N ", property)
-        
-        Some(new Triple(subject, m, stripValue(value.toString)))
+          Some(new Triple(subject, m, stripValue(value.toString)))
       }
       case _ => {
         println("C ",property)
@@ -561,32 +435,18 @@ class OWL2VecStarProjector(
       case '<' => value.tail.init
       case _ => value
     }
-
   }
 
   def processAnnotationProperty(annotProperty: OWLAnnotationProperty, ontology: OWLOntology): List[Triple] = {
 
-//    println("Annotation Property: ")
-//    println(ontology.getAxioms(annotProperty))
-
     val annotations = EntitySearcher.getAnnotations(annotProperty, ontology).asScala.toList
-
-    println(annotations)
-
-    println(dataFactory.getRDFSLabel)
-  //    val deepAnnotations = annotations.flatMap(a => a.getAnnotations.asScala.toList)
-
     val property = annotProperty.toStringID.toString
 
     property match {
       case m if true || (lexicalAnnotationURIs contains m) => {
         val axioms = ontology.getAnnotationAssertionAxioms(annotProperty.getIRI).asScala.toList
-        println(property, " ", axioms.length)
-//        println(axioms)
         val axx = axioms.map(annotationAxiom2Edge).flatten
-//        println(property, " ", axx.length)
         axx
-//        Nil
       }
 
       case _ => {
@@ -594,12 +454,8 @@ class OWL2VecStarProjector(
         Nil
       }
     }
-//    println(ontology.getAnnotationAssertionAxioms(annotProperty.getIRI))
-
-  //  Nil
   }
 
   // Abstract methods
   def projectAxiom(go_class: OWLClass, axiom: OWLClassAxiom): List[Triple] = Nil
-
 }
