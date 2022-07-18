@@ -1,0 +1,7 @@
+name: testmowl
+channels:
+  - conda-forge
+dependencies:
+  - python=3.8
+  - jupyter
+  - nbconvert==6.5.0
