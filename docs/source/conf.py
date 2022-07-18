@@ -17,12 +17,11 @@ sys.path.insert(0, os.path.abspath('../../gateway/src/main/scala/org'))
 # -- Project information
 
 project = 'MOWL'
-copyright = '2021, me'
-author = 'me'
+copyright = '2021, BORG'
+author = 'BORG'
 
-release = '0.0.24'
-version = '0.0.24'
-
+release = '0.1.0'
+version = '0.1.0'
 # -- General configuration
 
 extensions = [
