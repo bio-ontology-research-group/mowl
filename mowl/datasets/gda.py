@@ -7,6 +7,7 @@ import numpy as np
 import gzip
 import os
 from java.util import HashSet
+import warnings
 
 DATA_HUMAN_URL = 'https://bio2vec.cbrc.kaust.edu.sa/data/mowl/gda_human.tar.gz'
 DATA_MOUSE_URL = 'https://bio2vec.cbrc.kaust.edu.sa/data/mowl/gda_mouse.tar.gz'
@@ -34,9 +35,11 @@ class GDADataset(RemoteDataset):
         return "http://is_associated_with"
     
 class GDAHumanDataset(GDADataset):
+    warnings.warn("Importing this dataset as 'mowl.datasets.gda.GDAHumanDataset' will be removed in version 1.0.0. Consider using 'mowl.datasets.builtin.GDAHumanDataset'", FutureWarning, stacklevel=2)
     def __init__(self):
         super().__init__(url=DATA_HUMAN_URL)
 
 class GDAMouseDataset(GDADataset):
+    warnings.warn("Importing this dataset as 'mowl.datasets.gda.GDAMouseDataset' will be removed in version 1.0.0. Consider using 'mowl.datasets.builtin.GDAMouseDataset'", FutureWarning, stacklevel=2)
     def __init__(self):
         super().__init__(url=DATA_MOUSE_URL)

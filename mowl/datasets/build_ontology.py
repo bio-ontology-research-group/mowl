@@ -3,7 +3,7 @@ import os
 from jpype import *
 import jpype.imports
 
-
+import warnings
 from org.semanticweb.owlapi.apibinding import OWLManager
 from org.semanticweb.owlapi.model import IRI
 
@@ -13,6 +13,7 @@ PREFIXES = {
 }
 
 def insert_annotations(ontology_file, annotations, out_file = None, verbose=False):
+    warnings.warn("Importing this method using 'mowl.datasets.build_ontology.insert_annotations' will be removed in version 1.0.0. Consider using 'mowl.ontology.extend.insert_annotations' instead", FutureWarning, stacklevel=2)
     """
     Method to build dataset given an ontology file and the annotations to be inserted to the ontology. Annotation files must be in .tsv format, with no header. Per each row, the first element is the annotated entity and the rest of the elements are the annotation entities (which are the entities in the ontology).
 
@@ -88,7 +89,7 @@ def create_from_triples(
         head_prefix = "",
         tail_prefix = ""
 ):
-
+    warnings.warn("Importing this method using 'mowl.datasets.build_ontology.create_from_triples' will be removed in version 1.0.0. Consider using 'mowl.ontology.create.create_from_triples' instead", FutureWarning, stacklevel=2)
     """Method to create an ontology from a .tsv file with triples.    
 
     :param triples_file: Path for the file containing the triples. This file must be a `.tsv` file and each row must be of the form (head, relation, tail). It is also supported `.tsv` files with rows of the form (head, tail); in that case the field `relation_name` must be specified.
