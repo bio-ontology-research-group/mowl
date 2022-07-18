@@ -30,10 +30,6 @@ class DeepWalk (
   val entsIdx = entities.map(mapEntsIdx(_))
 
   val nodes = edgesSc.map(x => List(x._1, x._3)).flatten.toSet
-  println(entities.size)
-  println(nodes.size)
-  println(entities.contains("http://purl.obolibrary.org/obo/GO_0007580"))
-  println(nodes.contains("http://purl.obolibrary.org/obo/GO_0007580"))
   val nodesIdx = nodes.map(mapEntsIdx(_))
 
   val graph = processEdges()
@@ -60,27 +56,18 @@ class DeepWalk (
         graph(srcIdx) += ((relIdx, dstIdx))
       }
     }
-
-
     graph.mapValues(_.toArray)
   }
 
 
   def walk() = {
-
     val argsList = for (
       i <- Range(0, newWorkers, 1)
     ) yield (i, pathsPerWorker(i), walkLength, alpha)
 
-
-    print("Starting pool...")
-
-
+    println("Starting pool...")
     val executor: ExecutorService = Executors.newFixedThreadPool(newWorkers)
-
     implicit val executionContext: ExecutionContextExecutorService = ExecutionContext.fromExecutorService(executor)
-
-   
 
     val fut = Future.traverse(argsList)(writeWalksToDisk)
 
@@ -88,7 +75,7 @@ class DeepWalk (
 
     fut.onComplete {
       case Success(msg) => {
-        println("* processing is over, shutting down the executor")
+        println("* Walking is done, shutting down the executor")
         executionContext.shutdown()
         bw.close
       }
@@ -98,19 +85,14 @@ class DeepWalk (
           executionContext.shutdown()
           bw.close
         }
-
     }
-
-
-
   }
 
 
    def writeWalksToDisk(params: (Int, Int, Int, Float))(implicit ec: ExecutionContext): Future[Unit] = Future {
      val (index, numWalks, walkLength, alpha) = params
-     println(s"+ started processing $index")
+     println(s"+ started processing thread $index")
      val start = System.nanoTime() / 1000000
-
 
      for (i <- 0 until numWalks){
        val nodesR = rand.shuffle(nodesIdx)
@@ -122,7 +104,7 @@ class DeepWalk (
      
      val end = System.nanoTime() / 1000000
      val duration = (end - start)
-     println(s"- finished processing $index after $duration")
+     println(s"- finished processing thread $index after $duration")
      
   }
 
@@ -190,7 +172,6 @@ class DeepWalk (
       var pathsPerWorker = ListBuffer(ppw)
 
       for (i <- 0 until (workers -1)){
-
         pathsPerWorker += ppw
       }
 
@@ -199,9 +180,7 @@ class DeepWalk (
         pathsPerWorker(i%workers) =  pathsPerWorker(i%workers) - 1
         i = i+1
         aux = aux -1
-
       }
-
       (pathsPerWorker.toList, newWorkers)
     }
   }

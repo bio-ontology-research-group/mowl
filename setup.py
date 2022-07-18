@@ -40,7 +40,8 @@ setuptools.setup(
         "requests",
         "matplotlib",
         "tqdm",
-        "temp"
+        "temp",
+        "deprecated"
     ]
 )
 

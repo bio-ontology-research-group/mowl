@@ -13,7 +13,6 @@ import java.util.{HashMap, ArrayList}
 import collection.JavaConverters._
 import org.mowl.Types._
 
-
 class TaxonomyWithRelsProjector(
   var taxonomy: Boolean = false,
   var bidirectional_taxonomy: Boolean=false,
@@ -25,12 +24,10 @@ class TaxonomyWithRelsProjector(
   def projectAxiom(ontClass: OWLClass, axiom: OWLClassAxiom): List[Triple] = {
     val axiomType = axiom.getAxiomType().getName()
     axiomType match {
-
       case "SubClassOf" => {
 	var ax = axiom.asInstanceOf[OWLSubClassOfAxiom]
 	projectSubClassAxiom(ax.getSubClass.asInstanceOf[OWLClass], ax.getSuperClass)
       }
-
       case _ => Nil
     }
   }
@@ -39,14 +36,10 @@ class TaxonomyWithRelsProjector(
   def projectSubClassAxiom(ontClass: OWLClass, superClass: OWLClassExpression): List[Triple] = {
 
     val superClass_type = superClass.getClassExpressionType().getName()
-
     superClass_type match {
-
       case "ObjectSomeValuesFrom" => {
-
 	val superClass_ = superClass.asInstanceOf[OWLObjectSomeValuesFrom]
-                
-	val (rel, dstClass) = projectQuantifiedExpression(Existential(superClass_))
+        val (rel, dstClass) = projectQuantifiedExpression(Existential(superClass_))
 
         rel match {
           case r if (relationsSc contains rel) => {
@@ -73,28 +66,19 @@ class TaxonomyWithRelsProjector(
         else if (taxonomy){
           new Triple(ontClass, "subclassOf", dst) :: Nil
         }else Nil
-
       }
       case _ => Nil
-
     }
-
   }
 
     
   def projectQuantifiedExpression(expr: QuantifiedExpression) = {
-        
     var relation = expr.getProperty.asInstanceOf[OWLObjectProperty]
     val rel = relation.getIRI().toString
     val dstClass = expr.getFiller
-
     (rel, dstClass)
-        
   }
 
   // Abstract methods
   def projectAxiom(go_class: OWLClass, axiom: OWLClassAxiom, ontology: OWLOntology): List[Triple] = Nil
-
-  
-
 }
