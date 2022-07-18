@@ -35,6 +35,7 @@ Then to add that information to the ontology we use the following instructions:
 
 .. code:: python
 
+   from mowl.ontology.extend import insert_annotations
    anotation_document_1 = ("annots.tsv", "http://has_annotation", True)
    annotations = [annotation_document_1]
    insert_annotations("MyOntology.owl", annotations, out_file = None)
