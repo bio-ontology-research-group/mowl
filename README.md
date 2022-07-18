@@ -110,4 +110,4 @@ This software library is distributed under the [BSD-3-Clause license](https://gi
 Full documentation and API reference can be found in our [ReadTheDocs](https://mowl.readthedocs.io/en/latest/index.html) website.
 
 ## ChangeLog
-ChangeLog is available in our [changelog file](https://github.com/bio-ontology-research-group/mowl/main/CHANGELOG.md) and also in the [release section](https://github.com/bio-ontology-research-group/mowl/releases/).
+ChangeLog is available in our [changelog file](https://github.com/bio-ontology-research-group/mowl/blob/main/CHANGELOG.md) and also in the [release section](https://github.com/bio-ontology-research-group/mowl/releases/).
