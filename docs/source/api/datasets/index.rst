@@ -14,9 +14,13 @@ Built-in datasets
    :members:
    :show-inheritance:
 
-.. note::
-   PPIYeastDataset, PPIYeastSlimDataset, GDAHumanDataset, GDAMouseDataset
+Dataset for :math:`\mathcal{EL}` language
+------------------------------------------
+.. automodule:: mowl.datasets.el_dataset
+   :members:
+   :show-inheritance:
 
+   
 PPI Yeast dataset
 -------------------------------
 .. warning::
