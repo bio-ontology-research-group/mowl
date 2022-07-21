@@ -32,7 +32,7 @@ The annotation information must be store in a file with the following format:
    http://newclass2    http://some_prefix/class:001    http://some_prefix/class:003
 
 Then to add that information to the ontology we use the following instructions:
-
+   
 .. code:: python
 
    from mowl.ontology.extend import insert_annotations

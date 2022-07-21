@@ -25,7 +25,7 @@ class PPIYeastDataset(RemoteDataset):
             if "http://4932" in owl_cls:
                 proteins.add(owl_cls)
         return proteins
-
+    
     def get_evaluation_property(self):
         return "http://interacts_with"
     

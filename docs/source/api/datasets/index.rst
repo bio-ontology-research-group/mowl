@@ -14,14 +14,15 @@ Built-in datasets
    :members:
    :show-inheritance:
 
-.. automodule:: mowl.datasets.builtin.gda
-   :members:
-   :show-inheritance:
+.. note::
+   PPIYeastDataset, PPIYeastSlimDataset, GDAHumanDataset, GDAMouseDataset
 
-      
 PPI Yeast dataset
 -------------------------------
-.. deprecated:: 0.1.0
+.. warning::
+   .. deprecated:: 0.1.0
+      This module has been deprecated and will be removed soon. Refer to each class for more detail on how to import them.
+
 .. automodule:: mowl.datasets.ppi_yeast
    :members:
    :show-inheritance:
@@ -29,7 +30,10 @@ PPI Yeast dataset
 
 Extending ontologies
 ========================
-.. deprecated:: 0.1.0
+.. warning::
+   .. deprecated:: 0.1.0
+      The methods in this module has been moved to a new location. Please refer to each method for futher detail.
+      
 .. automodule:: mowl.datasets.build_ontology
    :members:
    :show-inheritance:

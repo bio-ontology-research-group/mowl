@@ -48,7 +48,7 @@ The package is released under the BSD 3-Clause License.
 
    install/index
    tutorials/index
-
+   embedding_el/index
 .. toctree::
    :maxdepth: 3
    :caption: API
@@ -56,6 +56,7 @@ The package is released under the BSD 3-Clause License.
    :glob:
 
    api/datasets/index
+   api/ontology/index
    api/projection/index
    api/walking/index
    api/reasoning/index

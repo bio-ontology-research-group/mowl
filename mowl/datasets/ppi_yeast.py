@@ -37,7 +37,7 @@ class PPIYeastDataset(RemoteDataset):
         return "http://interacts_with"
 
 @deprecated(
-    reason = "Importing this dataset as `mowl.datasets.ppi_yeast.PPIYeastSlimDataset` will be removed in version 1.0.0. Consider using `mowl.datasets.builtin.PPIYeastSlimDataset` instead",
+    reason = "Importing this dataset as `mowl.datasets.ppi_yeast.PPIYeastSlimDataset` will be removed in version 1.0.0. Consider using :class:`mowl.datasets.builtin.PPIYeastSlimDataset` instead",
     version = "0.1.0"
 )
 class PPIYeastSlimDataset(PPIYeastDataset):

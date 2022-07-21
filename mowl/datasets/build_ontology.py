@@ -15,7 +15,7 @@ PREFIXES = {
 }
 
 @deprecated(
-    reason = "Importing this method using `mowl.datasets.build_ontology.insert_annotations` will be removed in version 1.0.0. Consider using `mowl.ontology.extend.insert_annotations` instead",
+    reason = "Importing this method using `mowl.datasets.build_ontology.insert_annotations` will be removed in version 1.0.0. Consider using :func:`mowl.ontology.extend.insert_annotations` instead",
     version = '0.1.0'
 )
 def insert_annotations(ontology_file, annotations, out_file = None, verbose=False):
@@ -88,7 +88,7 @@ def validate_prefix(prefix, ont_prefixes):
         
 
 @deprecated(
-    reason = "Importing this method using `mowl.datasets.build_ontology.create_from_triples` will be removed in version 1.0.0. Consider using `mowl.ontology.create.create_from_triples` instead",
+    reason = "Importing this method using `mowl.datasets.build_ontology.create_from_triples` will be removed in version 1.0.0. Consider using :func:`mowl.ontology.create.create_from_triples` instead",
     version = "0.1.0"
 )
 def create_from_triples(
