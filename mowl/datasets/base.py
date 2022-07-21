@@ -88,13 +88,13 @@ class PathDataset(Dataset):
     @property
     def classes(self):
         if self._classes is None:
-            self._classes = self.get_classes
+            self._classes = self.get_classes()
         return self._classes
 
     @property
     def object_properties(self):
         if self._object_properties is None:
-            self._object_properties = self.get_object_properties
+            self._object_properties = self.get_object_properties()
         return self._object_properties
 
     
@@ -144,28 +144,31 @@ class PathDataset(Dataset):
 
 
     def get_classes(self):
-        classes = []
-        classes += [str(x.toString())[1:-1] for x in self.ontology.getClassesInSignature()]
+        classes = set(["http://www.w3.org/2002/07/owl#Nothing", "http://www.w3.org/2002/07/owl#Thing"])
+        classes |= set([str(x.toString())[1:-1] for x in self.ontology.getClassesInSignature()])
 
         if self.validation:
-            classes += [str(x.toString())[1:-1] for x in self.validation.getClassesInSignature()]
+            classes |= set([str(x.toString())[1:-1] for x in self.validation.getClassesInSignature()])
         if self.testing:
-            classes += [str(x.toString())[1:-1] for x in self.testing.getClassesInSignature()]
+            classes |= set([str(x.toString())[1:-1] for x in self.testing.getClassesInSignature()])
 
+        classes = list(classes)
+        classes.sort()
         return classes
 
     def get_object_properties(self):
-        obj_properties = []
-        obj_properties += [str(x.toString())[1:-1] for x in self.ontology.getObjectPropertiesInSignature()]
+        obj_properties = set()
+        obj_properties |= set([str(x.toString())[1:-1] for x in self.ontology.getObjectPropertiesInSignature()])
 
         if self.validation:
-            obj_properties += [str(x.toString())[1:-1] for x in self.validation.getObjectPropertiesInSignature()]
+            obj_properties |= set([str(x.toString())[1:-1] for x in self.validation.getObjectPropertiesInSignature()])
         if self.testing:
-            obj_properties += [str(x.toString())[1:-1] for x in self.testing.getObjectPropertiesInSignature()]
+            obj_properties |= set([str(x.toString())[1:-1] for x in self.testing.getObjectPropertiesInSignature()])
 
+        obj_properties = list(obj_properties)
+        obj_properties.sort()
         return obj_properties
-
-    
+        
     def get_labels(self):
         projector = TaxonomyWithRelsProjector(relations = ["http://has_label"])
         edges = projector.project(self.ontology)
