@@ -23,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Deprecated
 - Modules `mowl.datasets.ppi_yeast` and `mowl.datasets.gda`.
 - File `mowl.datasets.build_ontology`.
-
+- Class `mowl.embeddings.elembeddings.ELEmbeddings`. Future versions will point to `mowl.models.ELEmbeddings`
 ### Removed
 ### Fixed
 ### Security
