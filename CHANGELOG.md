@@ -10,11 +10,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Modules `mowl.ontology.extend` and `mowl.ontology.create` created including `insert_annotations` and `create_from_triples` methods, respectively.
 - Package `deprecated` as dependency.
+- ELEmbeddingModel abstract class that contains basic functionality for models embedding the EL language.
+- Implementation of [ELBoxEmbeddings](https://arxiv.org/abs/2202.14018)
+- ELDataset class to work with EL models.
+- Module `mowl.nn` where `torch.nn`-based modules will reside. The first module existing there is the abstract module for EL models.
+- Module `mowl.models` where implementation of ELEmbeddings and ELBoxEmbeddings reside.
+
 ### Changed
 - All builtin datasets can be imported from `mowl.datasets.builtin` module.
+- Updated implementation of [ELEmbeddings](https://www.ijcai.org/Proceedings/2019/845)
+
 ### Deprecated
 - Modules `mowl.datasets.ppi_yeast` and `mowl.datasets.gda`.
 - File `mowl.datasets.build_ontology`.
+- Class `mowl.embeddings.elembeddings.ELEmbeddings`. Future versions will point to `mowl.models.ELEmbeddings`
 ### Removed
 ### Fixed
 ### Security
