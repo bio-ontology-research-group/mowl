@@ -57,7 +57,9 @@ The package is released under the BSD 3-Clause License.
    :hidden:
    :glob:
 
+   api/abstract/index
    api/datasets/index
+   api/nn/index
    api/ontology/index
    api/projection/index
    api/walking/index

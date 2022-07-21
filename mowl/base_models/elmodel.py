@@ -1,11 +1,12 @@
 from mowl.base_models.model import EmbeddingModel
 import torch as th
 from torch.utils.data import DataLoader, default_collate
-from mowl.datasets.el_dataset import ELDataset
+from mowl.datasets.el import ELDataset
 
 
 class EmbeddingELModel(EmbeddingModel):
     """Abstract class that provides basic functionalities for methods that aim to embed EL language.
+
     :param extended: If `True`, the model is supposed with 7 EL normal forms. This will be reflected on the :class:`DataLoaders` that will be generated and also the model must contain 7 loss functions. If `False`, the model will work with 4 normal forms only, merging the 3 extra to their corresponding origin normal forms. Defaults to True
     :type extended: bool, optional
     """

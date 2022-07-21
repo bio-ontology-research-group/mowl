@@ -1,7 +1,7 @@
 import torch as th
 from torch.utils.data import DataLoader
 from mowl.reasoning.normalize import ELNormalizer, GCI
-from .gci_data import GCIDataset
+from mowl.datasets.gci import GCIDataset
 import random
 
 class ELDataset():
@@ -9,11 +9,11 @@ class ELDataset():
 
     :param ontology: Input ontology that will be normalized into :math:`\mathcal{EL}` normal forms
     :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
-    :param extended: If true, the normalization process will return 7 normal forms. If false, only 4 normal forms. See :doc:`/embedding_el/index` for more information. Defaults to True.
+    :param extended: If true, the normalization process will return 7 normal forms. If false, only 4 normal forms. See :doc:`/embedding_el/index` for more information. Defaults to ``True``.
     :type extended: bool, optional
-    :param class_index_dict: Dictionary containing information `class name --> index`. If not provided, a dictionary will be created from the ontology classes. Defaults to None
+    :param class_index_dict: Dictionary containing information `class name --> index`. If not provided, a dictionary will be created from the ontology classes. Defaults to ``None``.
     :type class_index_dict: dict, optional
-    :param object_property_index_dict: Dictionary containing information `object property name --> index`. If not provided, a dictionary will be created from the ontology object properties. Defaults to None
+    :param object_property_index_dict: Dictionary containing information `object property name --> index`. If not provided, a dictionary will be created from the ontology object properties. Defaults to ``None``.
     :type object_property_index_dict: dict, optional
     """
     

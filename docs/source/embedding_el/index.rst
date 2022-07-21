@@ -1,6 +1,8 @@
 Embedding the :math:`\mathcal{EL}` language
 ============================================
-.. |EL| replace:: :math:`\mathcal{EL}`
+.. |eldataset| replace:: :class:`ELDataset <mowl.datasets.el.ELDataset>`
+
+.. |el| replace:: :math:`\mathcal{EL}`
 
 The :math:`\mathcal{EL}` language is part of the Description Logics family. Concept descriptions in :math:`\mathcal{EL}` can be expressed in the following normal forms:
 
@@ -13,7 +15,7 @@ The :math:`\mathcal{EL}` language is part of the Description Logics family. Conc
    \end{align}
 
    
-.. note::
+.. hint::
 
    GCI stands for General Concept Inclusion
 
@@ -31,4 +33,130 @@ mOWL provides different functionalities to generate models that aim to embed axi
 
 The ELDataset class
 ------------------------
-The :class:`mowl.datasets.ELDataset` class is the first thing you should know about. mOWL first entry point are ontologies. However, not all of them are in the normalized in the |EL| language.
+The :class:`ELDataset <mowl.datasets.el.ELDataset>` class is the first thing you should know about. mOWL first entry point are ontologies. However, not all of them are in the normalized in the |el| language. For that reason, we have to normalize the ontology. To do so, we rely on the `Jcel <https://julianmendez.github.io/jcel/>`_ library.
+
+.. note::
+   mOWL wraps the Jcel normalization procedure. For more information on this please see :doc:`normalization` (TODO).
+
+To create a |el| dataset use the following code:
+
+.. code-block:: python
+
+   from mowl.datasets.el import ELDataset
+   el_dataset = ELDataset(
+		ontology,
+		class_index_dict = None,
+		object_property_index_dict = None,
+		extended = True)
+
+As mentioned in the :class:`ELDataset <mowl.datasets.el.ELDataset>` API docs, the variable ``class_index_dict`` is a dictionary where keys are classes names and values are integer indices. The reason for this is that ``ELDataset`` is a collection of integer datasets and the ``class_index_dict`` dictionary keeps the mapping to the datasets. The same situation is true for ``object_property_index_dict``, but it applies for ontology object properties.
+The class dictionary can be predefined and input to the dataset. Otherwise it will be created from the input ``ontology``.
+
+The most important method of |eldataset| is:
+   
+.. code-block:: python
+
+   gci_datasets = el_dataset.get_gci_datasets()
+
+That will return a collection of :class:`torch.utils.data.Dataset` objects. If ``extended = False``, then:
+
+.. code-block:: bash
+
+   >> gci_datasets
+   {
+   'gci0': <mowl.datasets.el.el_dataset.GCI0Dataset at 0x7f977c9d4250>,
+   'gci1': <mowl.datasets.el.el_dataset.GCI1Dataset at 0x7f977c9d4220>,
+   'gci2': <mowl.datasets.el.el_dataset.GCI2Dataset at 0x7f977c9d42e0>,
+   'gci3': <mowl.datasets.el.el_dataset.GCI3Dataset at 0x7f977c9d4340>
+   }
+
+which means that only 4 normal forms were obtained after the normalization process. On the other hand, if ``extended = True``, then:
+
+.. code-block:: bash
+
+   >> gci_datasets
+   {
+   'gci0': <mowl.datasets.el.el_dataset.GCI0Dataset at 0x7f67f3f4ff10>,
+   'gci1': <mowl.datasets.el.el_dataset.GCI1Dataset at 0x7f67f351c040>,
+   'gci2': <mowl.datasets.el.el_dataset.GCI2Dataset at 0x7f67f351c160>,
+   'gci3': <mowl.datasets.el.el_dataset.GCI3Dataset at 0x7f67f3f4feb0>,
+   'gci0_bot': <mowl.datasets.el.el_dataset.GCI0Dataset at 0x7f67f3f4ff40>,
+   'gci1_bot': <mowl.datasets.el.el_dataset.GCI1Dataset at 0x7f67f351c130>,
+   'gci3_bot': <mowl.datasets.el.el_dataset.GCI3Dataset at 0x7f67fc3b99d0>
+   }
+
+in this case, normal forms 0, 1 and 3 have been split to consider apart the special cases where the :math:`\bot` concept appears in the right side of each GCI.
+
+The datasets generated can be used directly or through a :class:`torch.utils.data.DataLoader` object. For example:
+
+.. code-block:: python
+
+   from torch.utils.data import DataLoader
+   dataloader_gci0 = DataLoader(gci_datasets["gci0"])
+
+The ELModule class
+----------------------
+Previously, we introduced the data-related aspect of this tutorial. Now, let's see how to use the data to train a model.
+
+In the :doc:`/api/nn/index` module, we define the :class:`ELModule <mowl.nn.elmodule.ELModule>` abstract class, which is a subclass of :class:`torch.nn.Module`. To use this class, it is required to define loss functions for the GCIs of interest. For example:
+
+.. code-block:: python
+
+   from mowl.nn.elmodule.ELModule
+
+   class MyELModule(ELModule):
+       def __init__(self):
+           super().__init__()
+
+       def gci0_loss(self, gci, neg = False):
+           """
+	   your code here
+	   """
+	   if neg:
+	       """
+	       your code in case this loss function has a negative version
+	       """
+	   return loss
+	
+We have created an ELModule that computes losses for axioms in the GCI0 normal form. Notice that if negative loss is required, it should be encoded inside the original loss function and accesed through the ``neg`` parameter.
+
+Following these procedure is all what is needed. It is not necessary to define the forward function. However, let's see how this works by looking at the implementation in the parent class:
+
+.. code-block:: python 
+
+   class ELModule(nn.Module):
+
+    def __init__(self):
+        super().__init__()
+
+    """
+    .
+    .
+    .
+    loss functions definitions here
+    .
+    .
+    .
+    """
+
+    def get_loss_function(self, gci_name):
+        if gci_name == "gci2_bot":
+            raise ValueError("GCI2 does not allow bottom entity in the right side.")
+        return {
+            "gci0_bot": self.gci0_bot_loss,
+            "gci1_bot": self.gci1_bot_loss,
+            "gci3_bot": self.gci3_bot_loss,
+            "gci0"    : self.gci0_loss,
+            "gci1"    : self.gci1_loss,
+            "gci2"    : self.gci2_loss,
+            "gci3"    : self.gci3_loss
+        }[gci_name]
+
+    def forward(self, gci, gci_name, neg = False):
+        loss_fn = self.get_loss_function(gci_name)
+        
+        loss = loss_fn(gci, neg = neg)
+        return loss
+	   
+The ELEmbeddingModel class
+---------------------------------

@@ -16,7 +16,7 @@ Built-in datasets
 
 Dataset for :math:`\mathcal{EL}` language
 ------------------------------------------
-.. automodule:: mowl.datasets.el_dataset
+.. automodule:: mowl.datasets.el
    :members:
    :show-inheritance:
 
