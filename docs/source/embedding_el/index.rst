@@ -1,7 +1,7 @@
 Embedding the :math:`\mathcal{EL}` language
 ============================================
 .. |eldataset| replace:: :class:`ELDataset <mowl.datasets.el.ELDataset>`
-
+.. |elmodule| replace:: :class:`ELModule <mowl.nn.elmodule.ELModule>`
 .. |el| replace:: :math:`\mathcal{EL}`
 
 The :math:`\mathcal{EL}` language is part of the Description Logics family. Concept descriptions in :math:`\mathcal{EL}` can be expressed in the following normal forms:
@@ -157,6 +157,52 @@ Following these procedure is all what is needed. It is not necessary to define t
         
         loss = loss_fn(gci, neg = neg)
         return loss
-	   
+
+We can see that the already implemented forward function takes the data, the GCI name and the ``neg`` parameter. The idea here is that in the training loop we can get the losses for all the GCIs, and their potential negative versions and we can aggregate them appropriately. In the following section we will see an example of how to use use the :class:`ELModule <mowl.nn.elmodule.ELModule>` and how it matches with the |eldataset| class.
+
 The ELEmbeddingModel class
 ---------------------------------
+
+At this point, it would be possible to just use the |eldataset| and the |elmodule| together in a script to train a model. Something like this:
+
+.. code-block:: python
+
+   from mowl.datasets.el import ELDataset
+   from mowl.nn.elmodule import ELModule
+   from mowl.datasets.builtin import GDAMouseDataset
+
+   dataset = GDAMouseDataset()
+   class_index_dict = {v:k for k,v in enumerate(self.dataset.classes)}
+   object_property_index_dict = {v:k for k,v in enumerate(self.dataset.object_properties)}
+
+   training_dataset = ELDataset(dataset.ontology, class_index_dict = class_index_dict, object_property_index_dict = object_property_index_dict, extended = False) 
+   validation_dataset = ELDataset(dataset.validation, class_index_dict = class_index_dict, object_property_index_dict = object_property_index_dict, extended = False) 
+   testing_dataset = ELDataset(dataset.testing, class_index_dict = class_index_dict, object_property_index_dict = object_property_index_dict, extended = False) 
+
+   """
+   Furthermore if we need DataLoaders (which might not be always the case)
+   """
+
+   training_dataloaders = {k, DataLoader(v, batch_size = 64) for k,v in training_datasets.get_gci_datasets().items()}
+   validation_dataloaders = ..
+   testing_dataloaders = ...
+
+   
+   model = MyELModule() #Let's reuse the module of the example before.
+
+   for epoch in epochs:
+       for gci_name, gci_dataloader in training_dataloaders.items():
+           for i, batch in enumerate(gci_dataloader):
+		loss = model(gci_name, batch)
+
+	.
+	.
+	.
+	More logic for training
+	.
+	.
+	.
+
+In the previous script, there are some lines of code dedicated to preprocessing the data. That functionality is what is encoded in the :class:`ELEmbeddingModel <mowl.base_models.elmodel.ELEmbeddingModel>` such that if we use it, we can bypass all the data preprocessing and start directly in the training, validation and testing loops.
+
+To see actual examples of EL models, let's go to :doc:`/examples/elmodels/elembeddings` and :doc:`/examples/elmodels/elboxembeddings`

@@ -30,10 +30,21 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.autosummary',
     'sphinx.ext.intersphinx',
-    'nbsphinx',
-    'sphinx_gallery.load_style',
+    'sphinx_gallery.gen_gallery',
 #    'IPython.sphinxext.ipython_console_highlighting'
 ]
+
+examples_dirs = [
+    '../../examples/elmodels'
+]
+
+gallery_dirs = [
+    'examples/elmodels']
+
+sphinx_gallery_conf = {
+    'examples_dirs': examples_dirs,   # path to your example scripts
+    'gallery_dirs': gallery_dirs,  # path to where to save gallery generated output
+}
 
 autodoc_member_order = 'bysource'
 
@@ -42,6 +53,7 @@ intersphinx_mapping = {
     'python': ('https://docs.python.org/3/', None),
     'sphinx': ('https://www.sphinx-doc.org/en/master/', None),
 }
+
 intersphinx_disabled_domains = ['std']
 
 templates_path = ['_templates']
