@@ -4,6 +4,7 @@ import collection.JavaConverters._
 import java.io._
 import java.util.{HashMap, ArrayList}
 import scala.collection.mutable.{MutableList, ListBuffer, Map, ArrayBuffer}
+import scala.collection.immutable.HashSet
 import util.control.Breaks._
 import java.util.concurrent.{ExecutorService, Executors}
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -19,7 +20,9 @@ class DeepWalk (
   var walkLength: Int,
   var alpha: Float,
   var workers: Int,
-  var outfile: String) {
+  var outfile: String,
+  var nodesOfInterest: ArrayList[String]
+) {
 
 
   val edgesSc = edges.asScala.map(x => (x.src, x.rel, x.dst))
@@ -35,6 +38,8 @@ class DeepWalk (
   val graph = processEdges()
   val rand = scala.util.Random
   val (pathsPerWorker, newWorkers) = numPathsPerWorker()
+
+  val nodesOfInterestIdx =  HashSet() ++ nodesOfInterest.asScala.map(mapEntsIdx(_)).toSet
 
   private[this] val lock = new Object()
 
@@ -145,9 +150,22 @@ class DeepWalk (
     }
 
     val toWrite = walk.filter(_ != -1).map(x => mapIdxEnts(x)).mkString(" ") + "\n"
-    lock.synchronized {
-      bw.write(toWrite)
 
+    if (nodesOfInterest.size > 0){
+      val walkSet = HashSet() ++ walk.toSet
+      val intersection = walkSet & nodesOfInterestIdx
+
+      if (intersection.size > 0){
+        
+
+        lock.synchronized {
+          bw.write(toWrite)
+        }
+      }
+    }else{
+      lock.synchronized {
+        bw.write(toWrite)
+      }
     }
 
   }
