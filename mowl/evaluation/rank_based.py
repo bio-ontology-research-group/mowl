@@ -152,7 +152,8 @@ class RankBasedEvaluator(Evaluator):
             r = self.relation_index_emb[r]
 
             data = th.tensor([[c_emb_idx, r, self.tail_name_indexemb[x]] for x in self.tail_entities]).to(self.device)
-            res = self.eval_method(data).squeeze().cpu().detach().numpy()                                                                                                                   
+            res = self.eval_method(data).squeeze().cpu().detach().numpy()
+            
             self.testing_predictions[c_sc_idx, :] = res                                                                                
             index = rankdata(res, method='average')
             rank = index[d_sc_idx]
@@ -172,20 +173,21 @@ class RankBasedEvaluator(Evaluator):
             # Filtered rank
 
             if self.compute_filtered_metrics:
-                index = rankdata((res * self.training_scores[c_sc_idx, :]), method='average')
-                rank = index[d_sc_idx]
-
-                if rank == 1:
+                fres = res * self.training_scores[c_sc_idx, :]
+                index = rankdata(fres, method='average')
+                frank = index[d_sc_idx]
+                
+                if frank == 1:
                     ftop1 += 1
-                if rank <= 10:
+                if frank <= 10:
                     ftop10 += 1
-                if rank <= 100:
+                if frank <= 100:
                     ftop100 += 1
-                fmean_rank += rank
+                fmean_rank += frank
 
-                if rank not in franks:
-                    franks[rank] = 0
-                franks[rank] += 1
+                if frank not in franks:
+                    franks[frank] = 0
+                franks[frank] += 1
 
         
         top1 /= n
