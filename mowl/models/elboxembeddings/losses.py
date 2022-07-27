@@ -62,14 +62,10 @@ def gci2_loss(data, class_embed, class_offset, rel_embed, margin, neg = False):
 def gci2_loss_neg(data, class_embed, class_offset, rel_embed, margin):
     c = class_embed(data[:, 0])
     r =   rel_embed(data[:, 1])
-
-    rand_index = np.random.choice(class_embed.weight.shape[0], size = len(data))
-    rand_index = th.tensor(rand_index).to(class_embed.weight.device)
-    d = class_embed(rand_index)
-#    d = class_embed(data[:, 2])
+    d = class_embed(data[:, 2])
     
     off_c = th.abs(class_offset(data[:,0]))
-    off_d = th.abs(class_offset(rand_index))
+    off_d = th.abs(class_offset(data[:,2]))
 
     euc = th.abs(c + r - d)
     dst = th.reshape(th.linalg.norm(th.relu(euc - off_c - off_d - margin), axis=1), [-1, 1])

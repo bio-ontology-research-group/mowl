@@ -1,16 +1,13 @@
 from mowl.base_models.elmodel import EmbeddingELModel
-import mowl.models.elembeddings.losses as L
-from mowl.nn.elmodule import ELModule
-from mowl.projection.factory import projector_factory
-from mowl.projection.edge import Edge
-import math
-import logging
+
+from .module import ELEmModule
 
 from mowl.models.elembeddings.evaluate import ELEmbeddingsPPIEvaluator
+from mowl.projection.factory import projector_factory
 from tqdm import trange, tqdm
-
 import torch as th
-from torch import nn
+
+import numpy as np
 
 class ELEmbeddings(EmbeddingELModel):
 
@@ -49,7 +46,10 @@ class ELEmbeddings(EmbeddingELModel):
         ).to(self.device)
     
         
-    def train(self):
+    def train(self, sample_negs = None):
+        if sample_negs is None:
+            sample_negs = self.dataset.evaluation_classes
+
         self.init_model()
         optimizer = th.optim.Adam(self.model.parameters(), lr=self.learning_rate)
         best_loss = float('inf')
@@ -66,7 +66,12 @@ class ELEmbeddings(EmbeddingELModel):
                 
                 loss += th.mean(self.model(gci_dataset[:], gci_name))
                 if gci_name == "gci2":
-                    loss += th.mean(self.model(gci_dataset[:], gci_name, neg = True))
+                    prots = [self.class_index_dict[p] for p in sample_negs]
+                    idxs_for_negs = np.random.choice(prots, size = len(gci_dataset), replace = True)
+                    rand_index = th.tensor(idxs_for_negs).to(self.device)
+                    data = gci_dataset[:]
+                    neg_data = th.cat([data[:,:2], rand_index.unsqueeze(1)], dim = 1)
+                    loss += th.mean(self.model(neg_data, gci_name, neg = True))
             
             optimizer.zero_grad()
             loss.backward()
@@ -81,11 +86,11 @@ class ELEmbeddings(EmbeddingELModel):
                 loss = th.mean(self.model(gci2_data, "gci2"))
                 valid_loss += loss.detach().item()
                 
-            checkpoint = 500
+            checkpoint = 10
             if best_loss > valid_loss:
                 best_loss = valid_loss
                 th.save(self.model.state_dict(), self.model_filepath)
-            if (epoch + 1) % checkpoint == 0:
+            if (epoch + 1) % (checkpoint) == 0:
                 print(f'Epoch {epoch}: Train loss: {train_loss} Valid loss: {valid_loss}')
 
     def evaluate_ppi(self):
@@ -101,44 +106,61 @@ class ELEmbeddings(EmbeddingELModel):
             evaluator()
             evaluator.print_metrics()
 
-class ELEmModule(ELModule):
-
-    def __init__(self, nb_ont_classes, nb_rels, embed_dim=50, margin=0.1):
-        super().__init__()
-        self.nb_ont_classes = nb_ont_classes
-        self.nb_rels = nb_rels
-
-        self.embed_dim = embed_dim
-
-        self.class_embed = nn.Embedding(self.nb_ont_classes, embed_dim)
-        nn.init.uniform_(self.class_embed.weight, a=-1, b=1)
-        self.class_embed.weight.data /= th.linalg.norm(self.class_embed.weight.data,axis=1).reshape(-1,1)
-
-        self.class_rad = nn.Embedding(self.nb_ont_classes, 1)
-        nn.init.uniform_(self.class_rad.weight, a=-1, b=1)
-        self.class_rad.weight.data /= th.linalg.norm(self.class_rad.weight.data,axis=1).reshape(-1,1)
+    def load_eval_data(self):
         
-        self.rel_embed = nn.Embedding(nb_rels, embed_dim)
-        nn.init.uniform_(self.rel_embed.weight, a=-1, b=1)
-        self.rel_embed.weight.data /= th.linalg.norm(self.rel_embed.weight.data,axis=1).reshape(-1,1)
+        if self._loaded_eval:
+            return
 
-        self.margin = margin
+        eval_property = self.dataset.get_evaluation_property()
+        eval_classes = self.dataset.get_evaluation_classes()
+        if isinstance(eval_classes, tuple) and len(eval_classes) == 2:
+            self._head_entities = eval_classes[0]
+            self._tail_entities = eval_classes[1]
+        else:
+            self._head_entities = set(list(eval_classes)[:])
+            self._tail_entities = set(list(eval_classes)[:])
 
-    def class_reg(self, x):
-        res = th.abs(th.linalg.norm(x, axis=1) - 1) #force n-ball to be inside unit ball
-        res = th.reshape(res, [-1, 1])
-        return res
-    
-    def gci0_loss(self, data, neg = False):
-        return L.gci0_loss(data, self.class_embed, self.class_rad, self.class_reg, self.margin, neg = neg)
-    def gci1_loss(self, data, neg = False):
-        return L.gci1_loss(data, self.class_embed, self.class_rad, self.class_reg, self.margin, neg = neg)
-    def gci1_bot_loss(self, data, neg = False):
-        return L.gci1_bot_loss(data, self.class_embed, self.class_rad, self.class_reg, self.margin, neg = neg)
-    def gci2_loss(self, data, neg = False):
-        return L.gci2_loss(data, self.class_embed, self.class_rad, self.rel_embed, self.class_reg, self.margin, neg = neg)
-    def gci3_loss(self, data, neg = False):
-        return L.gci3_loss(data, self.class_embed, self.class_rad, self.rel_embed, self.class_reg, self.margin, neg = neg)
+        eval_projector = projector_factory('taxonomy_rels', taxonomy=False, relations=[eval_property])
+
+        self._training_set = eval_projector.project(self.dataset.ontology)
+        self._testing_set = eval_projector.project(self.dataset.testing)
+        
+        self._loaded_eval = True
+
+    def get_embeddings(self):
+        self.init_model()
+        
+        print('Load the best model', self.model_filepath)
+        self.model.load_state_dict(th.load(self.model_filepath))
+        self.model.eval()
+
+        ent_embeds = {k:v for k,v in zip(self.classes_index_dict.keys(), self.model.class_embed.weight.cpu().detach().numpy())}
+        rel_embeds = {k:v for k,v in zip(self.relations_index_dict.keys(), self.model.rel_embed.weight.cpu().detach().numpy())}
+        return ent_embeds, rel_embeds
+
+
+    @property
+    def training_set(self):
+        self.load_eval_data()
+        return self._training_set
+
+#        self.load_eval_data()
+
+    @property
+    def testing_set(self):
+        self.load_eval_data()
+        return self._testing_set
+
+    @property
+    def head_entities(self):
+        self.load_eval_data()
+        return self._head_entities
+
+    @property
+    def tail_entities(self):
+        self.load_eval_data()
+        return self._tail_entities
+
 
 
 

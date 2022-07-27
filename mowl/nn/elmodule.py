@@ -4,10 +4,9 @@ import torch.nn as nn
 
 class ELModule(nn.Module):
 
-    def __init__(self, device = "cpu"):
+    def __init__(self):
         super().__init__()
-        self.device = device
-
+        
     def gci0_loss(self, gci, neg = False):
         raise NotImplementedError()
 
