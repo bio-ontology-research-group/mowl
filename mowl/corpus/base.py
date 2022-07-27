@@ -73,10 +73,9 @@ def extract_and_save_annotation_corpus(ontology, out_file, mode = "w"):
     :type mode: str ,optional
     """
 
-    if mode == "append":
-        mode = "a"
-    else:
-        mode = "w"
+    if not mode in ["w", "a"]:
+        raise ValueError("File opening mode not recognized. Options are 'a', 'w'")
+
     logging.info("Generating annotation corpus")
     with open(out_file, mode) as f:
         for owl_class in ontology.getClassesInSignature():
