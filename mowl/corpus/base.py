@@ -1,7 +1,7 @@
 from org.semanticweb.owlapi.manchestersyntax.renderer import ManchesterOWLSyntaxOWLObjectRendererImpl
 from org.semanticweb.owlapi.model import OWLLiteral
 from org.semanticweb.owlapi.search import EntitySearcher
-
+from deprecated.sphinx import deprecated
 
 from jpype.types import *
 
@@ -35,6 +35,7 @@ def extract_and_save_axiom_corpus(ontology, out_file, mode = "w"):
 
 
 
+
 def extract_axiom_corpus(ontology):
     """Method to extract axioms of a particular ontology. Similar to :func:`extract_and_save_axiom_corpus` but this method returns a list instead saving into a file.
     
@@ -60,7 +61,7 @@ def extract_axiom_corpus(ontology):
 
 
 
-def extract_and_save_annotation_corpus(ontology, out_file, mode):
+def extract_and_save_annotation_corpus(ontology, out_file, mode = "w"):
     """This method generates a textual representation of the annotation axioms in an ontology following the Manchester Syntax.
 
 
@@ -90,8 +91,8 @@ def extract_and_save_annotation_corpus(ontology, out_file, mode):
                     f.write(f'{cls} {obj_property} {value}\n')
 
 
-
-def extract_annotation_corpus(ontology):
+@deprecated(version = "0.1.0", reason = "This method will be split into two methods: ``extract_and_save_annotation_corpus`` to save the generated corpus into a file and ``extract_annotation_corpus`` that will return a list of sentences. ")
+def extract_annotation_corpus(ontology, out_file = None, mode = "w", save = True):
     """This method generates a textual representation of the annotation axioms in an ontology following the Manchester Syntax. Similar to :func:`extract_and_save_annotation_corpus` but this method returns a list instead saving into a file.
     
     :param ontology: Input ontology
@@ -99,6 +100,8 @@ def extract_annotation_corpus(ontology):
     :rtype: list[str]
     """    
 
+    if save:
+        extract_and_save_annotation_corpus(ontology, out_file, mode)
     logging.info("Generating annotation corpus")
 
     corpus = []
