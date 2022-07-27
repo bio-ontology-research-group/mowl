@@ -18,3 +18,4 @@ ppi_yeast_slim/
 *.tar.gz
 ppi_yeast/
 docs/build/
+docs/source/examples/

@@ -49,6 +49,8 @@ The package is released under the BSD 3-Clause License.
 
    install/index
    tutorials/index
+   projection/index
+   random_walks/index
    embedding_el/index
    paper_study/index
    

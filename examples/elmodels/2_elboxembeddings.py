@@ -1,14 +1,23 @@
 """
 ELBoxEmbeddings 
 ===========================
+
+This example is based on the paper `Description Logic EL++ Embeddings with Intersectional Closure <https://arxiv.org/abs/2202.14018v1>`_. This paper is based on the idea of :doc:`/examples/elmodels/1_elembeddings`, but in this work the main point is to solve the *intersectional closure* problem. 
+
+In the case of :doc:`/examples/elmodels/1_elembeddings`, the geometric objects representing ontology classes are :math:`n`-dimensional balls. One of the normal forms in EL is:
+
+.. math::
+   C_1 \sqcap C_2 \sqsubseteq D
+
+As we can see, there is an intersection operation :math:`C_1 \sqcap C_2`. Computing this intersection using balls is not a closed operations because the region contained in the intersection of two balls is not a ball. To solve that issue, this paper proposes the idea of changing the geometric objects to boxes, for which the intersection operation has the closure property.
 """
 
+# %%
+# This example is quite similar to the one found in :doc:`/examples/elmodels/1_elembeddings`. There might be slight changes in the training part but the most important changes are in the `Definition of loss functions`_ definition of the loss functions for each normal form.
 
 from mowl.base_models.elmodel import EmbeddingELModel
 import mowl.models.elboxembeddings.losses as L
 from mowl.nn.elmodule import ELModule
-from mowl.projection.factory import projector_factory
-from mowl.projection.edge import Edge
 import math
 import logging
 import numpy as np
@@ -70,9 +79,7 @@ class ELBoxEmbeddings(EmbeddingELModel):
             self.model.train()
 
             train_loss = 0
-            loss = 0
-
-            
+            loss = 0            
             for gci_name, gci_dataset in training_datasets.items():
                 if len(gci_dataset) == 0:
                     continue
@@ -122,7 +129,12 @@ class ELBoxEmbeddings(EmbeddingELModel):
             evaluator()
             evaluator.print_metrics()
 
-    
+
+# %%
+#
+# Definition of loss functions
+# ------------------------------
+            
 class ELBoxModule(ELModule):
 
     def __init__(self, nb_ont_classes, nb_rels, embed_dim=50, margin=0.1):
@@ -146,13 +158,89 @@ class ELBoxModule(ELModule):
         
         self.margin = margin
 
-    def gci0_loss(self, data, neg = False):
-        return L.gci0_loss(data, self.class_embed, self.class_offset, self.margin, neg = neg)
-    def gci1_loss(self, data, neg = False):
-        return L.gci1_loss(data, self.class_embed, self.class_offset, self.margin, neg = neg)
-    def gci1_bot_loss(self, data, neg = False):
-        return L.gci1_bot_loss(data, self.class_embed, self.class_offset, self.margin, neg = neg)
-    def gci2_loss(self, data, neg = False):
-        return L.gci2_loss(data, self.class_embed, self.class_offset, self.rel_embed, self.margin, neg = neg)
-    def gci3_loss(self, data, neg = False):
-        return L.gci3_loss(data, self.class_embed, self.class_offset, self.rel_embed, self.margin, neg = neg)
+    def gci0_loss(data, neg = False):
+        c = self.class_embed(data[:, 0])
+        d = self.class_embed(data[:, 1])
+
+        off_c = th.abs(self.class_offset(data[:, 0]))
+        off_d = th.abs(self.class_offset(data[:, 1]))
+
+        euc = th.abs(c-d)
+        dst = th.reshape(th.linalg.norm(th.relu(euc + off_c - off_d + self.margin), axis=1), [-1, 1])
+            
+        return dst
+
+    def gci1_loss(data, neg = False):
+        c = self.class_embed(data[:, 0])
+        d = self.class_embed(data[:, 1])
+        e = self.class_embed(data[:, 2])
+        off_c = th.abs(self.class_offset(data[:, 0]))
+        off_d = th.abs(self.class_offset(data[:, 1]))
+        off_e = th.abs(self.class_offset(data[:, 2]))
+    
+        startAll = th.maximum(c - off_c, d - off_d)
+        endAll   = th.minimum(c + off_c, d + off_d)
+    
+        new_offset = th.abs(startAll-endAll)/2
+ 
+        cen1 = (startAll+endAll)/2
+        euc = th.abs(cen1 - e)
+    
+        dst = th.reshape(th.linalg.norm(th.relu(euc + new_offset - off_e + self.margin), axis=1), [-1, 1]) +th.linalg.norm(th.relu(startAll-endAll), axis=1)
+        return dst
+
+    def gci1_bot_loss(data, neg = False):
+        c = self.class_embed(data[:, 0])
+        d = self.class_embed(data[:, 1])
+
+        off_c = th.abs(self.class_offset(data[:, 0]))
+        off_d = th.abs(self.class_offset(data[:, 1]))
+
+    
+        euc = th.abs(c - d)
+        dst = th.reshape(th.linalg.norm(th.relu(-euc + off_c + off_d + self.margin), axis=1), [-1, 1])
+        return dst
+        
+    def gci2_loss(data, neg = False):
+        if neg:
+            return gci2_loss_neg(data,   rel_embed, self.margin)
+        else:
+            c = self.class_embed(data[:, 0])
+            r = self.rel_embed(data[:, 1])
+            d = self.class_embed(data[:, 2])
+            
+            off_c = th.abs(self.class_offset(data[:, 0]))
+            off_d = th.abs(self.class_offset(data[:, 2]))
+            
+            euc = th.abs(c + r - d)
+            dst = th.reshape(th.linalg.norm(th.relu(euc + off_c - off_d + self.margin), axis=1),[-1,1])
+            return  dst
+
+
+    def gci2_loss_neg(data):
+        c = self.class_embed(data[:, 0])
+        r = self.rel_embed(data[:, 1])
+            
+        rand_index = np.random.choice(self.class_embed.weight.shape[0], size = len(data))
+        rand_index = th.tensor(rand_index).to(self.class_embed.weight.device)
+        d = self.class_embed(rand_index)
+            
+    
+        off_c = th.abs(self.class_offset(data[:,0]))
+        off_d = th.abs(self.class_offset(rand_index))
+
+        euc = th.abs(c + r - d)
+        dst = th.reshape(th.linalg.norm(th.relu(euc - off_c - off_d - self.margin), axis=1), [-1, 1])
+        return dst
+
+    def gci3_loss(data, neg = False):
+        r = self.rel_embed(data[:, 0])
+        c = self.class_embed(data[:, 1])
+        d = self.class_embed(data[:, 2])
+            
+        off_c = th.abs(self.class_offset(data[:, 1]))
+        off_d = th.abs(self.class_offset(data[:, 2]))
+
+        euc = th.abs(c - r - d)
+        dst = th.reshape(th.linalg.norm(th.relu(euc - off_c - off_d + self.margin), axis=1), [-1, 1])
+        return dst

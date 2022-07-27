@@ -35,9 +35,6 @@ The ELDataset class
 ------------------------
 The :class:`ELDataset <mowl.datasets.el.ELDataset>` class is the first thing you should know about. mOWL first entry point are ontologies. However, not all of them are in the normalized in the |el| language. For that reason, we have to normalize the ontology. To do so, we rely on the `Jcel <https://julianmendez.github.io/jcel/>`_ library.
 
-.. note::
-   mOWL wraps the Jcel normalization procedure. For more information on this please see :doc:`normalization` (TODO).
-
 To create a |el| dataset use the following code:
 
 .. code-block:: python
@@ -205,4 +202,4 @@ At this point, it would be possible to just use the |eldataset| and the |elmodul
 
 In the previous script, there are some lines of code dedicated to preprocessing the data. That functionality is what is encoded in the :class:`ELEmbeddingModel <mowl.base_models.elmodel.ELEmbeddingModel>` such that if we use it, we can bypass all the data preprocessing and start directly in the training, validation and testing loops.
 
-To see actual examples of EL models, let's go to :doc:`/examples/elmodels/elembeddings` and :doc:`/examples/elmodels/elboxembeddings`
+To see actual examples of EL models, let's go to :doc:`/examples/elmodels/1_elembeddings` and :doc:`/examples/elmodels/2_elboxembeddings`

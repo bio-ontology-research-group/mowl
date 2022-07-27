@@ -1,5 +1,7 @@
 
 class Edge:
+    """Class representing a graph edge. 
+    """
     def __init__(self, src, rel, dst, weight = 1):
         self._src = src
         self._rel = rel

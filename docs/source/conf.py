@@ -9,6 +9,7 @@
 import os
 import sys
 import mock
+from sphinx_gallery.sorting import FileNameSortKey
 
 sys.path.insert(0, os.path.abspath('../../..'))
 sys.path.insert(0, os.path.abspath('../..'))
@@ -44,6 +45,8 @@ gallery_dirs = [
 sphinx_gallery_conf = {
     'examples_dirs': examples_dirs,   # path to your example scripts
     'gallery_dirs': gallery_dirs,  # path to where to save gallery generated output
+
+    "within_subsection_order": FileNameSortKey
 }
 
 autodoc_member_order = 'bysource'

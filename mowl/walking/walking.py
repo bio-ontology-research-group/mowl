@@ -21,7 +21,7 @@ class WalkingModel():
         This method will generate the walks.
 
         :param edges: List of edges
-        :type edges: :class:`mowl.graph.edge.Edge`
+        :type edges: :class:`mowl.projection.edge.Edge`
         '''
         
         raise NotImplementedError()

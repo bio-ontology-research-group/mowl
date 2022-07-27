@@ -136,6 +136,10 @@ class ELEmbeddings(EmbeddingELModel):
             evaluator.print_metrics()
 
 # %%
+#
+# Definition of loss functions
+# --------------------------------
+#
 # In this part we define the neural network part. As mentioned earlier, ontology classes are :math:`n`-dimensional balls. Each ball has a center :math:`c \in \mathbb{R}^n` and radius :math:`r \in \mathbb{R}`. :math:`n` will be the embedding size.
 
 class ELEmModule(ELModule):
