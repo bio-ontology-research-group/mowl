@@ -14,7 +14,7 @@ import torch as th
 from torch import nn
 from deprecated.sphinx import deprecated
 
-@deprecated(version = "0.1.0", reason = "The updated version of this class is available at :class:`mowl.models.ELEmbeddings` and will be removed from the current location soon.")
+@deprecated(version = "0.1.0", reason = "The updated version of this class is available at :class:`mowl.models.elembeddings.examples.model_ppi.ELEmbeddings` and will be removed from the current location soon.")
 class ELEmbeddings(EmbeddingELModelOld):
 
     def __init__(self, dataset, embed_dim=50, margin=0, reg_norm=1, learning_rate=0.001, epochs=1000, model_filepath = None, device = 'cpu'):
