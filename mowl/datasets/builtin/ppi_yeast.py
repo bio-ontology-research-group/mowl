@@ -34,7 +34,7 @@ class PPIYeastDataset(RemoteDataset):
         proteins = list(proteins)
         proteins.sort()
         return proteins
-
+    
     def get_evaluation_property(self):
         return "http://interacts_with"
     

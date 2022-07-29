@@ -17,3 +17,5 @@ ppi_yeast_slim/
 .ipynb_checkpoints/
 *.tar.gz
 ppi_yeast/
+docs/build/
+docs/source/examples/

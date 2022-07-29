@@ -16,7 +16,7 @@ class ProjectionModel():
         Performs the ontology parsing.
 
         :returns: A list of triples where each triple is of the form :math:`(head, relation, tail)`
-        :rtype: List of :class:`mowl.graph.edge.Edge`
+        :rtype: List of :class:`mowl.projection.edge.Edge`
         '''
 
         raise NotImplementedError()
@@ -30,7 +30,7 @@ class Graph():
     Stores a graph in the form of an edgelist in which each edge is an instance of the class :class:`mowl.graph.edge.Edge`
 
     :param edges: A list of edges
-    :type edges: :class:`mowl.graph.edge.Edge`
+    :type edges: :class:`mowl.projection.edge.Edge`
     '''
     
     def __init__(self, edges):

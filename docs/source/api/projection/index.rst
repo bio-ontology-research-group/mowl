@@ -14,7 +14,13 @@ Ontology Projection
 
 All the methods will return a list of edges corresponding to the **Edge** class:
 
-.. include:: edge.rst
+Edge
+-----
+
+.. automodule:: mowl.projection.edge
+   :private-members:
+   :members:
+   :show-inheritance:
 
       
 .. include:: taxonomy.rst

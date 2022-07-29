@@ -15,7 +15,7 @@ DATA_URL = 'https://bio2vec.cbrc.kaust.edu.sa/data/mowl/ppi_yeast.tar.gz'
 SLIM_DATA_URL = 'https://bio2vec.cbrc.kaust.edu.sa/data/mowl/ppi_yeast_slim.tar.gz'
 
 @deprecated(
-    reason = "Importing this dataset as `mowl.datasets.ppi_yeast.PPIYeastDataset` will be removed in version 1.0.0. Consider using `mowl.datasets.builtin.PPIYeastDataset` instead",
+    reason = "Importing this dataset as `mowl.datasets.ppi_yeast.PPIYeastDataset` will be removed in version 1.0.0. Consider using :class:`mowl.datasets.builtin.PPIYeastDataset` instead",
     version = "0.1.0"
 )
 class PPIYeastDataset(RemoteDataset):
@@ -43,7 +43,7 @@ class PPIYeastDataset(RemoteDataset):
         return "http://interacts_with"
 
 @deprecated(
-    reason = "Importing this dataset as `mowl.datasets.ppi_yeast.PPIYeastSlimDataset` will be removed in version 1.0.0. Consider using `mowl.datasets.builtin.PPIYeastSlimDataset` instead",
+    reason = "Importing this dataset as `mowl.datasets.ppi_yeast.PPIYeastSlimDataset` will be removed in version 1.0.0. Consider using :class:`mowl.datasets.builtin.PPIYeastSlimDataset` instead",
     version = "0.1.0"
 )
 class PPIYeastSlimDataset(PPIYeastDataset):
