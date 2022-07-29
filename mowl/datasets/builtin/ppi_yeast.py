@@ -15,15 +15,24 @@ class PPIYeastDataset(RemoteDataset):
 
     def __init__(self, url=None):
         super().__init__(url=DATA_URL if not url else url)
+        self._evaluation_classes = None
+        self._loaded_eval_data = False
 
-    def get_evaluation_classes(self):
+    @property
+    def evaluation_classes(self):
         """Classes that are used in evaluation
         """
-        classes = super().get_evaluation_classes()
+        if self._loaded_eval_data:
+            return self._evaluation_classes
+        
         proteins = set()
-        for owl_cls in classes:
+        for owl_cls in self.classes:
             if "http://4932" in owl_cls:
                 proteins.add(owl_cls)
+        self._evaluation_classes = proteins
+        self._loaded_eval_data = True
+        proteins = list(proteins)
+        proteins.sort()
         return proteins
     
     def get_evaluation_property(self):

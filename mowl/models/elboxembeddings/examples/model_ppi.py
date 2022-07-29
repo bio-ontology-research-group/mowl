@@ -1,13 +1,14 @@
 from mowl.base_models.elmodel import EmbeddingELModel
-import mowl.models.elboxembeddings.losses as L
-from mowl.nn.elmodule import ELModule
+
+from mowl.models.elboxembeddings.module import ELBoxModule
+
 from mowl.projection.factory import projector_factory
 from mowl.projection.edge import Edge
 import math
 import logging
 import numpy as np
 
-from .evaluate import ELBoxEmbeddingsPPIEvaluator
+from mowl.models.elboxembeddings.evaluate import ELBoxEmbeddingsPPIEvaluator
 
 from tqdm import trange, tqdm
 
@@ -40,7 +41,7 @@ class ELBoxEmbeddings(EmbeddingELModel):
         self._loaded = False
         self._loaded_eval = False
         self.extended = False
-
+        self.init_model()
                 
     def init_model(self):
         self.model = ELBoxModule(
@@ -52,7 +53,6 @@ class ELBoxEmbeddings(EmbeddingELModel):
     
         
     def train(self):
-        self.init_model()
         criterion = nn.MSELoss()
         optimizer = th.optim.Adam(self.model.parameters(), lr=self.learning_rate)
         best_loss = float('inf')
@@ -77,7 +77,13 @@ class ELBoxEmbeddings(EmbeddingELModel):
                 
                 if gci_name == "gci2":
                     rand_index = np.random.choice(len(gci_dataset), size = 512)
-                    dst = self.model(gci_dataset[rand_index], gci_name, neg = True)
+                    gci_batch = gci_dataset[rand_index]
+                    prots = [self.class_index_dict[p] for p in self.dataset.evaluation_classes]
+                    idxs_for_negs = np.random.choice(prots, size = len(gci_batch), replace = True)
+                    rand_prot_ids = th.tensor(idxs_for_negs).to(self.device)
+                    neg_data = th.cat([gci_batch[:, :2], rand_prot_ids.unsqueeze(1)], dim = 1)
+                    
+                    dst = self.model(neg_data, gci_name, neg = True)
                     mse_loss = criterion(dst, th.ones(dst.shape, requires_grad = False).to(self.device))
                     loss += mse_loss
         
@@ -95,7 +101,7 @@ class ELBoxEmbeddings(EmbeddingELModel):
                 loss = criterion(dst, th.zeros(dst.shape, requires_grad = False).to(self.device))
                 valid_loss += loss.detach().item()
                 
-            checkpoint = 1000
+            checkpoint = 100
             if best_loss > valid_loss and (epoch+1) % checkpoint == 0:
                 best_loss = valid_loss
                 print("Saving model..")
@@ -117,36 +123,62 @@ class ELBoxEmbeddings(EmbeddingELModel):
             evaluator.print_metrics()
 
     
-class ELBoxModule(ELModule):
-
-    def __init__(self, nb_ont_classes, nb_rels, embed_dim=50, margin=0.1):
-        super().__init__()
-        self.nb_ont_classes = nb_ont_classes
-        self.nb_rels = nb_rels
-
-        self.embed_dim = embed_dim
+    def load_eval_data(self):
         
-        self.class_embed = nn.Embedding(self.nb_ont_classes, embed_dim)
-        nn.init.uniform_(self.class_embed.weight, a=-1, b=1)
-        self.class_embed.weight.data /= th.linalg.norm(self.class_embed.weight.data,axis=1).reshape(-1,1)
+        if self._loaded_eval:
+            return
 
-        self.class_offset = nn.Embedding(self.nb_ont_classes, embed_dim)
-        nn.init.uniform_(self.class_offset.weight, a=-1, b=1)
-        self.class_offset.weight.data /= th.linalg.norm(self.class_offset.weight.data,axis=1).reshape(-1,1)
+        eval_property = self.dataset.get_evaluation_property()
+        eval_classes = self.dataset.evaluation_classes
+                                        
+        self._head_entities = set(list(eval_classes)[:])
+        self._tail_entities = set(list(eval_classes)[:])
 
-        self.rel_embed = nn.Embedding(nb_rels, embed_dim)
-        nn.init.uniform_(self.rel_embed.weight, a=-1, b=1)
-        self.rel_embed.weight.data /= th.linalg.norm(self.rel_embed.weight.data,axis=1).reshape(-1,1)
+        eval_projector = projector_factory('taxonomy_rels', taxonomy=False, relations=[eval_property])
+
+        self._training_set = eval_projector.project(self.dataset.ontology)
+        self._testing_set = eval_projector.project(self.dataset.testing)
         
-        self.margin = margin
+        self._loaded_eval = True
 
-    def gci0_loss(self, data, neg = False):
-        return L.gci0_loss(data, self.class_embed, self.class_offset, self.margin, neg = neg)
-    def gci1_loss(self, data, neg = False):
-        return L.gci1_loss(data, self.class_embed, self.class_offset, self.margin, neg = neg)
-    def gci1_bot_loss(self, data, neg = False):
-        return L.gci1_bot_loss(data, self.class_embed, self.class_offset, self.margin, neg = neg)
-    def gci2_loss(self, data, neg = False):
-        return L.gci2_loss(data, self.class_embed, self.class_offset, self.rel_embed, self.margin, neg = neg)
-    def gci3_loss(self, data, neg = False):
-        return L.gci3_loss(data, self.class_embed, self.class_offset, self.rel_embed, self.margin, neg = neg)
+    def get_embeddings(self):
+        self.init_model()
+        
+        print('Load the best model', self.model_filepath)
+        self.model.load_state_dict(th.load(self.model_filepath))
+        self.model.eval()
+
+        ent_embeds = {k:v for k,v in zip(self.class_index_dict.keys(), self.model.class_embed.weight.cpu().detach().numpy())}
+        rel_embeds = {k:v for k,v in zip(self.object_property_index_dict.keys(), self.model.rel_embed.weight.cpu().detach().numpy())}
+        return ent_embeds, rel_embeds
+
+    def load_best_model(self):
+        self.init_model()
+        self.model.load_state_dict(th.load(self.model_filepath))
+        self.model.eval()
+    
+    @property
+    def training_set(self):
+        self.load_eval_data()
+        return self._training_set
+
+#        self.load_eval_data()
+
+    @property
+    def testing_set(self):
+        self.load_eval_data()
+        return self._testing_set
+
+    @property
+    def head_entities(self):
+        self.load_eval_data()
+        return self._head_entities
+
+    @property
+    def tail_entities(self):
+        self.load_eval_data()
+        return self._tail_entities
+
+
+
+

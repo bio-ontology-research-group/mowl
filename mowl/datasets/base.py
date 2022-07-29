@@ -6,7 +6,7 @@ from typing import Optional
 from jpype import *
 import jpype.imports
 import requests
-
+from deprecated.sphinx import deprecated
 
 # OWLAPI imports
 from org.semanticweb.owlapi.model import OWLOntology
@@ -66,6 +66,8 @@ class PathDataset(Dataset):
         self._loaded = False
         self._classes = None
         self._object_properties = None
+        self._evaluation_classes = None
+        
     @property
     def ontology(self):
         if not self._loaded:
@@ -88,16 +90,20 @@ class PathDataset(Dataset):
     @property
     def classes(self):
         if self._classes is None:
-            self._classes = self.get_classes()
+            self._classes = self._get_classes()
         return self._classes
 
     @property
     def object_properties(self):
         if self._object_properties is None:
-            self._object_properties = self.get_object_properties()
+            self._object_properties = self._get_object_properties()
         return self._object_properties
 
-    
+    @property
+    def evaluation_classes(self):
+        if self._evaluation_classes is None:
+            self._evaluation_classes = self.get_evaluation_classes()
+        return self._evaluation_classes
     
     def _load(self):
 
@@ -139,11 +145,11 @@ class PathDataset(Dataset):
         self.ont_manager.addAxioms(self.ontology, subclass_axioms)
 
     def get_evaluation_classes(self):
-        classes = self.ontology.getClassesInSignature()        
-        return [str(x.toString())[1:-1] for x in classes]
+        classes = self.testing.getClassesInSignature()        
+        return set([str(x.toString())[1:-1] for x in classes])
 
 
-    def get_classes(self):
+    def _get_classes(self):
         classes = set(["http://www.w3.org/2002/07/owl#Nothing", "http://www.w3.org/2002/07/owl#Thing"])
         classes |= set([str(x.toString())[1:-1] for x in self.ontology.getClassesInSignature()])
 
@@ -156,7 +162,7 @@ class PathDataset(Dataset):
         classes.sort()
         return classes
 
-    def get_object_properties(self):
+    def _get_object_properties(self):
         obj_properties = set()
         obj_properties |= set([str(x.toString())[1:-1] for x in self.ontology.getObjectPropertiesInSignature()])
 

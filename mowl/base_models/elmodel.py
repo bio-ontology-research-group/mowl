@@ -54,7 +54,6 @@ class EmbeddingELModel(EmbeddingModel):
 
         self._dataloaders_loaded = True
 
-
     @property
     def training_datasets(self):
         self._load_datasets()
@@ -75,8 +74,6 @@ class EmbeddingELModel(EmbeddingModel):
 
         self._load_datasets()
         return self._testing_datasets
-
-
         
     @property
     def training_dataloaders(self):
@@ -101,10 +98,6 @@ class EmbeddingELModel(EmbeddingModel):
 
 
     
-
-
-
-
         
 from mowl.reasoning.normalize import ELNormalizer
 import torch as th

@@ -4,6 +4,7 @@ import collection.JavaConverters._
 import java.io._
 import java.util.{ArrayList}
 import scala.collection.mutable.{MutableList, ListBuffer, Stack, Map, HashMap, ArrayBuffer}
+import scala.collection.immutable.HashSet
 import util.control.Breaks._
 import java.util.concurrent.{ExecutorService, Executors}
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -20,7 +21,9 @@ class Node2Vec (
   var p: Float,
   var q: Float,
   var workers: Int,
-  var outfile: String) {
+  var outfile: String,
+  var nodesOfInterest: ArrayList[String]
+) {
 
 
   val edgesSc = edges.asScala.map(x => (x.src, x.rel, x.dst, x.weight))
@@ -41,6 +44,8 @@ class Node2Vec (
 
   var aliasNodes = Map[Int, (Array[Int], Array[Float])]()
   var aliasEdges = Map[(Int, Int), (Array[Int], Array[Float])]()
+
+  val nodesOfInterestIdx =  HashSet() ++ nodesOfInterest.asScala.map(mapEntsIdx(_)).toSet
 
   private[this] val lock = new Object()
 
@@ -196,12 +201,24 @@ class Node2Vec (
     }
 
     val toWrite = walk.filter(_ != -1).map(x => mapIdxEnts(x)).mkString(" ") + "\n"
-    lock.synchronized {
-      bw.write(toWrite)
+
+    if (nodesOfInterest.size > 0){
+      val walkSet = HashSet() ++ walk.toSet
+      val intersection = walkSet & nodesOfInterestIdx
+
+      if (intersection.size > 0){
+        
+        lock.synchronized {
+          bw.write(toWrite)
+        }
+      }
+    }else{
+      lock.synchronized {
+        bw.write(toWrite)
+      }
     }
 
   }
-
 
 
   def getAliasEdge(src: Int, dst: Int) = {

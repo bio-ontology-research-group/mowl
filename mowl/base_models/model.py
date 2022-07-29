@@ -13,7 +13,7 @@ class Model(object):
         '''
         raise NotImplementedError()
 
-    def eval_method():
+    def eval_method(self):
         raise NotImplementedError()
     
     def evaluate(self):

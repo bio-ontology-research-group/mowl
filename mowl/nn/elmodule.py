@@ -4,8 +4,8 @@ import torch.nn as nn
 
 class ELModule(nn.Module):
     """Subclass of :class:`torch.nn.Module` for :math:`\mathcal{EL}` models. This class provides an interface for loss functions of the 7 possible normal forms existing in the :math:`\mathcal{EL}` language. In case a negative version of one of the loss function exist, it must be placed inside the original loss function and be accesed through the ``neg`` parameter. More information of this can be found at :doc:`/embedding_el/index`
-
     """
+
     def __init__(self):
         super().__init__()
         

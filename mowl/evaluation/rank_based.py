@@ -108,7 +108,7 @@ class RankBasedEvaluator(Evaluator):
             c, d = self.head_name_indexemb[c], self.tail_name_indexemb[d]
             c, d = self.head_indexemb_indexsc[c], self.tail_indexemb_indexsc[d]
             
-            self.training_scores[c, d] = 10000
+            self.training_scores[c, d] = 1000000
 
         logging.info("Training scores created")
         self._loaded_tr_scores = True
@@ -152,7 +152,8 @@ class RankBasedEvaluator(Evaluator):
             r = self.relation_index_emb[r]
 
             data = th.tensor([[c_emb_idx, r, self.tail_name_indexemb[x]] for x in self.tail_entities]).to(self.device)
-            res = self.eval_method(data).squeeze().cpu().detach().numpy()                                                                                                                   
+            res = self.eval_method(data).squeeze().cpu().detach().numpy()
+            
             self.testing_predictions[c_sc_idx, :] = res                                                                                
             index = rankdata(res, method='average')
             rank = index[d_sc_idx]
@@ -172,20 +173,21 @@ class RankBasedEvaluator(Evaluator):
             # Filtered rank
 
             if self.compute_filtered_metrics:
-                index = rankdata((res * self.training_scores[c_sc_idx, :]), method='average')
-                rank = index[d_sc_idx]
-
-                if rank == 1:
+                fres = res * self.training_scores[c_sc_idx, :]
+                index = rankdata(fres, method='average')
+                frank = index[d_sc_idx]
+                
+                if frank == 1:
                     ftop1 += 1
-                if rank <= 10:
+                if frank <= 10:
                     ftop10 += 1
-                if rank <= 100:
+                if frank <= 100:
                     ftop100 += 1
-                fmean_rank += rank
+                fmean_rank += frank
 
-                if rank not in franks:
-                    franks[rank] = 0
-                franks[rank] += 1
+                if frank not in franks:
+                    franks[frank] = 0
+                franks[frank] += 1
 
         
         top1 /= n
@@ -232,29 +234,30 @@ class ModelRankBasedEvaluator(RankBasedEvaluator):
     def __init__(self,
                  model,
                  device = "cpu",
+                 eval_method = None
                  ):
 
         self.model = model
-        class_embeddings, relation_embeddings = self.model.get_embeddings()
+        self.model.load_best_model()
+        #class_embeddings, relation_embeddings = self.model.get_embeddings()
         
-        self.class_embeddings = self.embeddings_to_dict(class_embeddings)
-        class_index_emb = {v: k for k, v in enumerate(self.class_embeddings.keys())}
+        #self.class_embeddings = self.embeddings_to_dict(class_embeddings)
+        #class_index_emb = {v: k for k, v in enumerate(self.class_embeddings.keys())}
+        class_index_emb = self.model.class_index_dict
 
-
-        testing_set = model.testing_set
-        training_set = model.training_set
-        head_entities = model.head_entities
-        tail_entities = model.tail_entities
-        eval_method = model.eval_method
+        testing_set = self.model.testing_set
+        training_set = self.model.training_set
+        head_entities = self.model.head_entities
+        tail_entities = self.model.tail_entities
+        eval_method = self.model.eval_method if eval_method is None else eval_method
         relation = testing_set[0].rel()
-        if relation_embeddings is None:
-            relation_index_emb = {relation: -1}
-        else:
-            relation_index_emb = {v: k for k, v in enumerate(relation_embeddings.keys())}
+        relation_index_emb = self.model.object_property_index_dict
+        #if relation_embeddings is None:
+        #    relation_index_emb = {relation: -1}
+        #else:
             
-
-
-
+            #relation_index_emb = {v: k for k, v in enumerate(relation_embeddings.keys())}
+            
         super().__init__(
             class_index_emb,
             relation_index_emb,
