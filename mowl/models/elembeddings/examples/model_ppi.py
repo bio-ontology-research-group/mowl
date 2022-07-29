@@ -90,6 +90,8 @@ class ELEmbeddings(EmbeddingELModel):
             if (epoch + 1) % (checkpoint*10) == 0:
                 print(f'Epoch {epoch}: Train loss: {train_loss} Valid loss: {valid_loss}')
 
+    def eval_method(self, data):
+        return self.model.gci2_loss(data)
     def evaluate_ppi(self):
         self.init_model()
         print('Load the best model', self.model_filepath)

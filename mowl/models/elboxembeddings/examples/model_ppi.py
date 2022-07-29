@@ -122,7 +122,9 @@ class ELBoxEmbeddings(EmbeddingELModel):
             evaluator()
             evaluator.print_metrics()
 
-    
+    def eval_method(self, data):
+        return self.model.gci2_loss(data)
+
     def load_eval_data(self):
         
         if self._loaded_eval:

@@ -126,7 +126,10 @@ class ELEmbeddings(EmbeddingELModel):
         self.init_model()
         self.model.load_state_dict(th.load(self.model_filepath))
         self.model.eval()
-    
+        
+    def eval_method(self, data):
+        return self.model.gci2_loss(data)
+
     @property
     def training_set(self):
         self.load_eval_data()
