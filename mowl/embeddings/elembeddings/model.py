@@ -1,6 +1,6 @@
 import os
 
-from mowl.base_models.elmodel import EmbeddingELModel
+from mowl.base_models.elmodel import EmbeddingELModelOld
 import mowl.embeddings.elembeddings.losses as L
 from mowl.projection.factory import projector_factory
 from mowl.projection.edge import Edge
@@ -12,8 +12,10 @@ from tqdm import trange, tqdm
 
 import torch as th
 from torch import nn
+from deprecated.sphinx import deprecated
 
-class ELEmbeddings(EmbeddingELModel):
+@deprecated(version = "0.1.0", reason = "The updated version of this class is available at :class:`mowl.models.elembeddings.examples.model_ppi.ELEmbeddings` and will be removed from the current location soon.")
+class ELEmbeddings(EmbeddingELModelOld):
 
     def __init__(self, dataset, embed_dim=50, margin=0, reg_norm=1, learning_rate=0.001, epochs=1000, model_filepath = None, device = 'cpu'):
         super().__init__(dataset)
@@ -226,7 +228,6 @@ class ELModel(nn.Module):
         return L.gci2_loss(data, self.class_norm, self.class_embed, self.class_rad, self.rel_embed, self.margin)
     def gci2_loss_neg(self, data):
         return L.gci2_loss_neg(data, self.class_norm, self.class_embed, self.class_rad, self.rel_embed, self.margin)
-
         
     def forward(self, go_normal_forms):
         gci0, gci1, gci2, gci3 = go_normal_forms

@@ -40,5 +40,4 @@ trait AbstractProjector{
     edges
   }
 
-
 }

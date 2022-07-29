@@ -4,6 +4,7 @@ import collection.JavaConverters._
 import java.io._
 import java.util.{HashMap, ArrayList}
 import scala.collection.mutable.{MutableList, ListBuffer, Map, ArrayBuffer}
+import scala.collection.immutable.HashSet
 import util.control.Breaks._
 import java.util.concurrent.{ExecutorService, Executors}
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -19,7 +20,9 @@ class DeepWalk (
   var walkLength: Int,
   var alpha: Float,
   var workers: Int,
-  var outfile: String) {
+  var outfile: String,
+  var nodesOfInterest: ArrayList[String]
+) {
 
 
   val edgesSc = edges.asScala.map(x => (x.src, x.rel, x.dst))
@@ -30,15 +33,13 @@ class DeepWalk (
   val entsIdx = entities.map(mapEntsIdx(_))
 
   val nodes = edgesSc.map(x => List(x._1, x._3)).flatten.toSet
-  println(entities.size)
-  println(nodes.size)
-  println(entities.contains("http://purl.obolibrary.org/obo/GO_0007580"))
-  println(nodes.contains("http://purl.obolibrary.org/obo/GO_0007580"))
   val nodesIdx = nodes.map(mapEntsIdx(_))
 
   val graph = processEdges()
   val rand = scala.util.Random
   val (pathsPerWorker, newWorkers) = numPathsPerWorker()
+
+  val nodesOfInterestIdx =  HashSet() ++ nodesOfInterest.asScala.map(mapEntsIdx(_)).toSet
 
   private[this] val lock = new Object()
 
@@ -60,27 +61,18 @@ class DeepWalk (
         graph(srcIdx) += ((relIdx, dstIdx))
       }
     }
-
-
     graph.mapValues(_.toArray)
   }
 
 
   def walk() = {
-
     val argsList = for (
       i <- Range(0, newWorkers, 1)
     ) yield (i, pathsPerWorker(i), walkLength, alpha)
 
-
-    print("Starting pool...")
-
-
+    println("Starting pool...")
     val executor: ExecutorService = Executors.newFixedThreadPool(newWorkers)
-
     implicit val executionContext: ExecutionContextExecutorService = ExecutionContext.fromExecutorService(executor)
-
-   
 
     val fut = Future.traverse(argsList)(writeWalksToDisk)
 
@@ -88,7 +80,7 @@ class DeepWalk (
 
     fut.onComplete {
       case Success(msg) => {
-        println("* processing is over, shutting down the executor")
+        println("* Walking is done, shutting down the executor")
         executionContext.shutdown()
         bw.close
       }
@@ -98,19 +90,14 @@ class DeepWalk (
           executionContext.shutdown()
           bw.close
         }
-
     }
-
-
-
   }
 
 
    def writeWalksToDisk(params: (Int, Int, Int, Float))(implicit ec: ExecutionContext): Future[Unit] = Future {
      val (index, numWalks, walkLength, alpha) = params
-     println(s"+ started processing $index")
+     println(s"+ started processing thread $index")
      val start = System.nanoTime() / 1000000
-
 
      for (i <- 0 until numWalks){
        val nodesR = rand.shuffle(nodesIdx)
@@ -122,7 +109,7 @@ class DeepWalk (
      
      val end = System.nanoTime() / 1000000
      val duration = (end - start)
-     println(s"- finished processing $index after $duration")
+     println(s"- finished processing thread $index after $duration")
      
   }
 
@@ -163,9 +150,22 @@ class DeepWalk (
     }
 
     val toWrite = walk.filter(_ != -1).map(x => mapIdxEnts(x)).mkString(" ") + "\n"
-    lock.synchronized {
-      bw.write(toWrite)
 
+    if (nodesOfInterest.size > 0){
+      val walkSet = HashSet() ++ walk.toSet
+      val intersection = walkSet & nodesOfInterestIdx
+
+      if (intersection.size > 0){
+        
+
+        lock.synchronized {
+          bw.write(toWrite)
+        }
+      }
+    }else{
+      lock.synchronized {
+        bw.write(toWrite)
+      }
     }
 
   }
@@ -190,7 +190,6 @@ class DeepWalk (
       var pathsPerWorker = ListBuffer(ppw)
 
       for (i <- 0 until (workers -1)){
-
         pathsPerWorker += ppw
       }
 
@@ -199,9 +198,7 @@ class DeepWalk (
         pathsPerWorker(i%workers) =  pathsPerWorker(i%workers) - 1
         i = i+1
         aux = aux -1
-
       }
-
       (pathsPerWorker.toList, newWorkers)
     }
   }

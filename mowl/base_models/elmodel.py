@@ -1,9 +1,107 @@
 from mowl.base_models.model import EmbeddingModel
+import torch as th
+from torch.utils.data import DataLoader, default_collate
+from mowl.datasets.el import ELDataset
 
+
+class EmbeddingELModel(EmbeddingModel):
+    """Abstract class that provides basic functionalities for methods that aim to embed EL language.
+    :param extended: If `True`, the model is supposed with 7 EL normal forms. This will be reflected on the :class:`DataLoaders` that will be generated and also the model must contain 7 loss functions. If `False`, the model will work with 4 normal forms only, merging the 3 extra to their corresponding origin normal forms. Defaults to True
+    :type extended: bool, optional
+    """
+    
+    def __init__(self, dataset, batch_size, extended = True, device = "cpu"):
+        super().__init__(dataset)
+
+        self._datasets_loaded = False
+        self._dataloaders_loaded = False
+        self._extended = extended
+        self.batch_size = batch_size
+        self.device = device
+
+    def _load_datasets(self):
+        """This method will create different data attributes and finally the corresponding DataLoaders for each GCI type in each subset (training, validation and testing).
+        """
+        if self._datasets_loaded:
+            return
+
+        self._training_datasets = ELDataset(self.dataset.ontology, self.class_index_dict, self.object_property_index_dict, extended = self._extended, device = self.device)
+
+        self._validation_datasets = None
+        if self.dataset.validation:
+            self._validation_datasets = ELDataset(self.dataset.validation, self.class_index_dict, self.object_property_index_dict, extended = self._extended, device = self.device)
+
+        self._testing_datasets = None
+        if self.dataset.testing:
+            self._testing_datasets = ELDataset(self.dataset.testing, self.class_index_dict, self.object_property_index_dict, extended = self._extended, device = self.device)
+
+        self._datasets_loaded = True
+
+    def _load_dataloaders():
+        if self._dataloaders_loaded:
+            return
+
+        self._load_datasets()
+        
+        self._training_dataloaders = {k: DataLoader(v, batch_size=self.batch_size, pin_memory = False) for k,v in self._training_datasets.get_gci_datasets().items()}
+
+        if self._validation_datasets:
+            self._validation_dataloaders = {k: DataLoader(v, batch_size=self.batch_size, pin_memory = False) for k,v in self._validation_datasets.get_gci_datasets().items()}
+
+        if self._testing_datasets:
+            self._testing_dataloaders = {k: DataLoader(v, batch_size=self.batch_size, pin_memory = False) for k,v in self._testing_datasets.get_gci_datasets().items()}
+
+        self._dataloaders_loaded = True
+
+    @property
+    def training_datasets(self):
+        self._load_datasets()
+        return self._training_datasets
+
+    @property
+    def validation_datasets(self):
+        if self.dataset.validation is None:
+            raise AttributeError("Validation dataset is None.")
+
+        self._load_datasets()
+        return self._validation_datasets
+
+    @property
+    def testing_datasets(self):
+        if self.dataset.testing is None:
+            raise AttributeError("Testing dataset is None.")
+
+        self._load_datasets()
+        return self._testing_datasets
+        
+    @property
+    def training_dataloaders(self):
+        self._load_dataloaders()
+        return self._training_dataloaders
+
+    @property
+    def validation_dataloaders(self):
+        if self.dataset.validation is None:
+            raise AttributeError("Validation dataset is None.")
+
+        self._load_dataloaders()
+        return self._validation_dataloaders
+
+    @property
+    def testing_dataloaders(self):
+        if self.dataset.testing is None:
+            raise AttributeError("Testing dataset is None.")
+
+        self._load_dataloaders()
+        return self._testing_dataloaders
+
+
+    
+        
 from mowl.reasoning.normalize import ELNormalizer
 import torch as th
 
-class EmbeddingELModel(EmbeddingModel):
+class EmbeddingELModelOld(EmbeddingModel):
 
     def __init__(self, dataset):
         super().__init__(dataset)
@@ -84,17 +182,17 @@ class EmbeddingELModel(EmbeddingModel):
             for axiom in axioms_dict["gci2"]:
                 classes.add(axiom.subclass)
                 classes.add(axiom.filler)
-                relations.add(axiom.obj_property)
+                relations.add(axiom.object_property)
 
             for axiom in axioms_dict["gci3"]:
                 classes.add(axiom.superclass)
                 classes.add(axiom.filler)
-                relations.add(axiom.obj_property)
+                relations.add(axiom.object_property)
 
             for axiom in axioms_dict["gci3_bot"]:
                 classes.add(axiom.superclass)
                 classes.add(axiom.filler)
-                relations.add(axiom.obj_property)
+                relations.add(axiom.object_property)
 
         self.classes_index_dict = {v: k  for k, v in enumerate(list(classes))}
         self.relations_index_dict = {v: k for k, v in enumerate(list(relations))}
@@ -148,18 +246,18 @@ class EmbeddingELModel(EmbeddingModel):
                 
         for axiom in axioms_dict["gci2"]:
             cl1 = classes_dict[axiom.subclass]
-            rel = relations_dict[axiom.obj_property]
+            rel = relations_dict[axiom.object_property]
             cl2 = classes_dict[axiom.filler]
             gci2.append((cl1, rel, cl2))
         
         for axiom in axioms_dict["gci3"]:
-            rel = relations_dict[axiom.obj_property]
+            rel = relations_dict[axiom.object_property]
             cl1 = classes_dict[axiom.filler]
             cl2 = classes_dict[axiom.superclass]
             gci3.append((rel, cl1, cl2))
 
         for axiom in axioms_dict["gci3_bot"]:
-            rel = relations_dict[axiom.obj_property]
+            rel = relations_dict[axiom.object_property]
             cl1 = classes_dict[axiom.filler]
             cl2 = classes_dict[axiom.superclass]
             if extended:
@@ -182,6 +280,3 @@ class EmbeddingELModel(EmbeddingModel):
         gcis = gci0, gci1, gci2, gci3, gci0_bot, gci1_bot,gci3_bot
         return gcis
 
-
-
-        

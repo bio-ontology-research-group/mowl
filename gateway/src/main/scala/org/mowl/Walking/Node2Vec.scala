@@ -4,6 +4,7 @@ import collection.JavaConverters._
 import java.io._
 import java.util.{ArrayList}
 import scala.collection.mutable.{MutableList, ListBuffer, Stack, Map, HashMap, ArrayBuffer}
+import scala.collection.immutable.HashSet
 import util.control.Breaks._
 import java.util.concurrent.{ExecutorService, Executors}
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -20,7 +21,9 @@ class Node2Vec (
   var p: Float,
   var q: Float,
   var workers: Int,
-  var outfile: String) {
+  var outfile: String,
+  var nodesOfInterest: ArrayList[String]
+) {
 
 
   val edgesSc = edges.asScala.map(x => (x.src, x.rel, x.dst, x.weight))
@@ -41,6 +44,8 @@ class Node2Vec (
 
   var aliasNodes = Map[Int, (Array[Int], Array[Float])]()
   var aliasEdges = Map[(Int, Int), (Array[Int], Array[Float])]()
+
+  val nodesOfInterestIdx =  HashSet() ++ nodesOfInterest.asScala.map(mapEntsIdx(_)).toSet
 
   private[this] val lock = new Object()
 
@@ -64,26 +69,20 @@ class Node2Vec (
 
       weights((srcIdx, dstIdx)) = weight
     }
-
-
     (graph.mapValues(_.sortBy(_._2).toArray), weights)
   }
 
   def walk() = {
 
     //preprocessTransitionProbs
-
     val argsList = for (
       i <- Range(0, newWorkers, 1)
     ) yield (i, pathsPerWorker(i), walkLength, p, q)
-
 
     print("Starting pool...")
 
     val executor: ExecutorService = Executors.newFixedThreadPool(workers)
     implicit val executionContext: ExecutionContextExecutorService = ExecutionContext.fromExecutorService(executor)
-
-
 
     println(s"+ started preprocessing probabilities...")
     val start = System.nanoTime() / 1000000
@@ -98,8 +97,8 @@ class Node2Vec (
     Await.ready(futNodes, Duration.Inf)
 
     futNodes.onComplete {
-      case Success(msg) => println("* processing nodes is over")
-      case Failure(t) => println("An error has ocurred in preprocessing nodes: " + t.getMessage + " - " + t.printStackTrace)
+      case Success(msg) => println("* processing probabilities for nodes is over")
+      case Failure(t) => println("An error has ocurred in preprocessing probabilities for nodes: " + t.getMessage + " - " + t.printStackTrace)
     }
 
     var listsE: ListBuffer[ListBuffer[(Int, Int)]] = ListBuffer.fill(newWorkers)(ListBuffer())
@@ -113,14 +112,14 @@ class Node2Vec (
     Await.ready(futEdges, Duration.Inf)
 
     futEdges.onComplete {
-      case Success(msg) => println("* processing edges is over")
-      case Failure(t) => println("An error has ocurred in preprocessing edges: " + t.getMessage + " - " + t.printStackTrace)
+      case Success(msg) => println("* processing probabilities for edges is over")
+      case Failure(t) => println("An error has ocurred in preprocessing probabilities for edges: " + t.getMessage + " - " + t.printStackTrace)
     }
 
 
     val end = System.nanoTime() / 1000000
     val duration = (end - start) / 1000
-    println(s"- finished preprocessing probabilities  after $duration seconds")
+    println(s"- finished preprocessing probabilities after $duration seconds")
 
 
     val futWalks = Future.traverse(argsList)(writeWalksToDisk)
@@ -129,7 +128,7 @@ class Node2Vec (
 
     futWalks.onComplete {
       case Success(msg) => {
-        println("* processing is over, shutting down the executor")
+        println("* Walking is done, shutting down the executor")
         executionContext.shutdown()
         bw.close
       }
@@ -147,26 +146,20 @@ class Node2Vec (
 
     val (index, numWalks, walkLength, p, q) = params
 
-    println(s"+ started processing $index")
+    println(s"+ started processing thread $index")
     val start = System.nanoTime() / 1000000
 
-
-    
-    
     for (i <- 0 until numWalks){
       val nodesR = rand.shuffle(nodesIdx)
       for (n <- nodesR){
         randomWalk(walkLength, p, q, n)
       }
-
     }
      
     val end = System.nanoTime() / 1000000
     val duration = (end - start)
-    println(s"- finished processing $index after $duration")
+    println(s"- finished processing thread $index after $duration")
   }
-
-
 
   def randomWalk(walkLength: Int, p: Float, q: Float, start: Int ) = {
 
@@ -179,9 +172,7 @@ class Node2Vec (
       while (i < 2*walkLength-1){
         
         val curNode = walk(i-1)
-
         val curNbrs = graph.contains(curNode) match {
-          
           case true => graph(curNode)
           case false => Array[Tuple2[Int, Int]]()
         }
@@ -206,24 +197,31 @@ class Node2Vec (
         }else{
           break
         }
-
       }
-
     }
 
     val toWrite = walk.filter(_ != -1).map(x => mapIdxEnts(x)).mkString(" ") + "\n"
-    lock.synchronized {
-      bw.write(toWrite)
+
+    if (nodesOfInterest.size > 0){
+      val walkSet = HashSet() ++ walk.toSet
+      val intersection = walkSet & nodesOfInterestIdx
+
+      if (intersection.size > 0){
+        
+        lock.synchronized {
+          bw.write(toWrite)
+        }
+      }
+    }else{
+      lock.synchronized {
+        bw.write(toWrite)
+      }
     }
 
   }
 
 
-
   def getAliasEdge(src: Int, dst: Int) = {
-
-    
-
     if (graph.contains(dst)){
       val dstNbrs = graph(dst).map(_._2)
       val lenDstNbrs = dstNbrs.length
@@ -240,7 +238,6 @@ class Node2Vec (
         }else{
           unnormalizedProbs(i) = prob/q
         }
-
       }
 
       val normConst = unnormalizedProbs.sum
@@ -257,14 +254,12 @@ class Node2Vec (
 
 
   def threadNodes(params: (Int, List[Int]))(implicit ec: ExecutionContext): Future[Unit] = Future {
-
     val (idx, indices) = params
     val l = indices.length
-    println(s"Thread $idx, nodes to process $l")
+    //println(s"Thread $idx, nodes to process $l")
 
     for (i <- indices){
       val node = i
-      //      val unnormalizedProbs = graph(node).sorted.map(nbr => weights((node, nbr)))
       val unnormalizedProbs = graph(node).map(nbr => weights((node, nbr._2)))
       val normConst = unnormalizedProbs.sum
       val normalizedProbs = unnormalizedProbs.map(x => x/normConst)
@@ -273,33 +268,25 @@ class Node2Vec (
       lock.synchronized {
         aliasNodes += (node -> alias)
       }
-
     }
-
   }
 
   def threadEdges(params:  (Int, List[(Int, Int)]))(implicit ec: ExecutionContext): Future[Unit] = Future {
 
     val (idx, edges) = params
     val l = edges.length
-    println(s"Thread $idx, edges to process $l")
+    //println(s"Thread $idx, edges to process $l")
 
     for ((src, dst) <- edges){
-
       val alias = getAliasEdge(src, dst)
-      
       lock.synchronized {
-        
         aliasEdges += ((src, dst) -> alias)
       }
-      
     }
-
   }
 
   //////////////////////////////////////////
   //https://lips.cs.princeton.edu/the-alias-method-efficient-sampling-with-many-discrete-outcomes/
-
 
   def aliasSetup(probs: Array[Float]) = {
 
@@ -350,7 +337,6 @@ class Node2Vec (
 
     val K = J.length
     val kk = rand.nextInt(K)
-
     
     if (rand.nextFloat< q(kk)){
       kk
@@ -358,15 +344,7 @@ class Node2Vec (
       J(kk)
     }
   }
-
-
   /////////////////////////////////////////
-
-
-
-
-
-
 
   def numPathsPerWorker(): (List[Int], Int) = {
 
@@ -396,9 +374,7 @@ class Node2Vec (
         pathsPerWorker(i%workers) =  pathsPerWorker(i%workers) - 1
         i = i+1
         aux = aux -1
-
       }
-
       (pathsPerWorker.toList, newWorkers)
     }
   }

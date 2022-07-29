@@ -6,7 +6,7 @@ from typing import Optional
 from jpype import *
 import jpype.imports
 import requests
-
+from deprecated.sphinx import deprecated
 
 # OWLAPI imports
 from org.semanticweb.owlapi.model import OWLOntology
@@ -64,6 +64,9 @@ class PathDataset(Dataset):
         self.data_factory = self.ont_manager.getOWLDataFactory()
         self.reasoner = None
         self._loaded = False
+        self._classes = None
+        self._object_properties = None
+        self._evaluation_classes = None
         
     @property
     def ontology(self):
@@ -84,6 +87,24 @@ class PathDataset(Dataset):
             self._load()
         return self._testing
 
+    @property
+    def classes(self):
+        if self._classes is None:
+            self._classes = self._get_classes()
+        return self._classes
+
+    @property
+    def object_properties(self):
+        if self._object_properties is None:
+            self._object_properties = self._get_object_properties()
+        return self._object_properties
+
+    @property
+    def evaluation_classes(self):
+        if self._evaluation_classes is None:
+            self._evaluation_classes = self.get_evaluation_classes()
+        return self._evaluation_classes
+    
     def _load(self):
 
         self._ontology = self.ont_manager.loadOntologyFromOntologyDocument(
@@ -124,10 +145,36 @@ class PathDataset(Dataset):
         self.ont_manager.addAxioms(self.ontology, subclass_axioms)
 
     def get_evaluation_classes(self):
-        classes = self.ontology.getClassesInSignature()        
-        return [str(x.toString())[1:-1] for x in classes]
+        classes = self.testing.getClassesInSignature()        
+        return set([str(x.toString())[1:-1] for x in classes])
 
 
+    def _get_classes(self):
+        classes = set(["http://www.w3.org/2002/07/owl#Nothing", "http://www.w3.org/2002/07/owl#Thing"])
+        classes |= set([str(x.toString())[1:-1] for x in self.ontology.getClassesInSignature()])
+
+        if self.validation:
+            classes |= set([str(x.toString())[1:-1] for x in self.validation.getClassesInSignature()])
+        if self.testing:
+            classes |= set([str(x.toString())[1:-1] for x in self.testing.getClassesInSignature()])
+
+        classes = list(classes)
+        classes.sort()
+        return classes
+
+    def _get_object_properties(self):
+        obj_properties = set()
+        obj_properties |= set([str(x.toString())[1:-1] for x in self.ontology.getObjectPropertiesInSignature()])
+
+        if self.validation:
+            obj_properties |= set([str(x.toString())[1:-1] for x in self.validation.getObjectPropertiesInSignature()])
+        if self.testing:
+            obj_properties |= set([str(x.toString())[1:-1] for x in self.testing.getObjectPropertiesInSignature()])
+
+        obj_properties = list(obj_properties)
+        obj_properties.sort()
+        return obj_properties
+        
     def get_labels(self):
         projector = TaxonomyWithRelsProjector(relations = ["http://has_label"])
         edges = projector.project(self.ontology)

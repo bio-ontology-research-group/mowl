@@ -1,7 +1,6 @@
 package org.mowl
 
 import org.semanticweb.owlapi.model._
-
 import uk.ac.manchester.cs.owl.owlapi.OWLClassImpl
 
 object Types {
@@ -9,15 +8,12 @@ object Types {
     val Top = new OWLClassImpl(IRI.create("http://www.w3.org/2002/07/owl#Thing")).asOWLClass
     val Bottom = new OWLClassImpl(IRI.create("http://www.w3.org/2002/07/owl#Nothing")).asOWLClass
 
-
-    
-
     type GOClass = String
     type Relation = String
 
 
     sealed trait QuantifiedExpression {
-        def getProperty(): OWLObjectPropertyExpression
+      def getProperty(): OWLObjectPropertyExpression
       def getFiller(): OWLClassExpression
       def unlift():OWLClassExpression
     }
@@ -27,6 +23,7 @@ object Types {
       def getFiller() = expression.getFiller
       def unlift() = expression.asInstanceOf[OWLClassExpression]
     }
+
     case class Existential(val expression: OWLObjectSomeValuesFrom) extends QuantifiedExpression{
         def getProperty() = expression.getProperty
         def getFiller() = expression.getFiller
@@ -64,15 +61,11 @@ object Types {
 
   def annotationSubject2Str(subject: OWLAnnotationSubject): String = subject.toString
 
-
-
-
   def getNodes(triples: List[Triple]) = {
         
         val triples_sc = triples
         val srcs = triples_sc.map((e) => e.src)
         val dsts = triples_sc.map((e) => e.dst)
-
         (srcs ::: dsts).toSet
     }
 
@@ -80,6 +73,5 @@ object Types {
     if (name.startsWith("<")) name.tail.init
     else name
   }
-
 
 }
