@@ -14,7 +14,7 @@ Let's use the built-in dataset ``PPIYeastSlimDataset``
 
 .. code:: python
 
-   from mowl.datasets.ppi_yeast import PPIYeastSlimDataset
+   from mowl.datasets.builtin import PPIYeastSlimDataset
 
    dataset = PPIYeastSlimDataset()
 
@@ -161,7 +161,7 @@ To implement the paper `OPA2Vec: combining formal and informal content of biomed
 
 .. code:: python
 	  
-   extract_axiom_corpus(dataset.ontology, "corpus_file_path")
+   extract_and_save_axiom_corpus(dataset.ontology, "corpus_file_path")
 
 with
 

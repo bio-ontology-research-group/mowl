@@ -1,9 +1,9 @@
 from torch.utils.data import IterableDataset, Dataset
 
 class GCIDataset(Dataset):
-    def __init__(self, data, class_index_dict, relation_index_dict = None, device = "cpu"):
+    def __init__(self, data, class_index_dict, object_property_index_dict = None, device = "cpu"):
         self.class_index_dict = class_index_dict
-        self.relation_index_dict = relation_index_dict
+        self.object_property_index_dict = object_property_index_dict
         self.device = device
         self.data = self.push_to_device(data)
         

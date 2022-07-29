@@ -20,12 +20,11 @@ class WalkingModel():
     # Abstract methods
     @versionchanged(version = "0.1.0", reason = "The method now can accept a list of entities to focus on when generating the random walks.")
     def walk(self, edges, nodes_of_interest = None):
-
         '''
         This method will generate random walks from a graph in the form of edgelist.
 
         :param edges: List of edges
-        :type edges: :class:`mowl.graph.edge.Edge`
+        :type edges: :class:`mowl.projection.edge.Edge`
         :param nodes_of_interest: List of entity names to filter the generated walks. If a walk contains at least one word of interest, it will be saved into disk, otherwise it will be ignored.  If no list is input, all the nodes will be considered. Defaults to ``None``
         :type nodes_of_interest: list, optional
         '''

@@ -9,6 +9,7 @@
 import os
 import sys
 import mock
+from sphinx_gallery.sorting import FileNameSortKey
 
 sys.path.insert(0, os.path.abspath('../../..'))
 sys.path.insert(0, os.path.abspath('../..'))
@@ -17,12 +18,11 @@ sys.path.insert(0, os.path.abspath('../../gateway/src/main/scala/org'))
 # -- Project information
 
 project = 'MOWL'
-copyright = '2021, me'
-author = 'me'
+copyright = '2021, BORG'
+author = 'BORG'
 
-release = '0.0.24'
-version = '0.0.24'
-
+release = '0.1.0'
+version = '0.1.0'
 # -- General configuration
 
 extensions = [
@@ -31,10 +31,23 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.autosummary',
     'sphinx.ext.intersphinx',
-    'nbsphinx',
-    'sphinx_gallery.load_style',
+    'sphinx_gallery.gen_gallery',
 #    'IPython.sphinxext.ipython_console_highlighting'
 ]
+
+examples_dirs = [
+    '../../examples/elmodels'
+]
+
+gallery_dirs = [
+    'examples/elmodels']
+
+sphinx_gallery_conf = {
+    'examples_dirs': examples_dirs,   # path to your example scripts
+    'gallery_dirs': gallery_dirs,  # path to where to save gallery generated output
+
+    "within_subsection_order": FileNameSortKey
+}
 
 autodoc_member_order = 'bysource'
 
@@ -43,6 +56,7 @@ intersphinx_mapping = {
     'python': ('https://docs.python.org/3/', None),
     'sphinx': ('https://www.sphinx-doc.org/en/master/', None),
 }
+
 intersphinx_disabled_domains = ['std']
 
 templates_path = ['_templates']
