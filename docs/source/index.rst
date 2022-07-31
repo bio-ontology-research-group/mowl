@@ -52,6 +52,7 @@ The package is released under the BSD 3-Clause License.
    datasets/index
    projection/index
    random_walks/index
+   pykeen/index
    embedding_el/index
    paper_study/index
    
