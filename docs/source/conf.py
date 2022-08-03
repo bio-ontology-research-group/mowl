@@ -36,11 +36,11 @@ extensions = [
 ]
 
 examples_dirs = [
-    '../../examples/elmodels'
+    '../../examples/'
 ]
 
 gallery_dirs = [
-    'examples/elmodels']
+    'examples/']
 
 sphinx_gallery_conf = {
     'examples_dirs': examples_dirs,   # path to your example scripts
