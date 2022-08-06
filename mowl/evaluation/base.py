@@ -77,9 +77,9 @@ class EvaluationMethod(nn.Module):
         embedding_size = len(embeddings[0])
 
         if isinstance(embeddings, list):
-            embeddings = th.tensor(embeddings).to(device)
+            embeddings = th.tensor(embeddings, device = device)
         if isinstance(embeddings_relation, list):
-            embeddings_relation = th.tensor(embeddings_relation).to(device)
+            embeddings_relation = th.tensor(embeddings_relation, device = device)
 
         self.embeddings = nn.Embedding(num_classes, embedding_size)
         self.embeddings.weight = nn.parameter.Parameter(embeddings)
@@ -120,7 +120,7 @@ class AxiomsRankBasedEvaluator():
         else:
             self._compute_filtered_metrics = True
             
-        self.axioms_to_filter = self._init_axioms(axioms_to_filter)
+        self.axioms_to_filter = self._init_axioms_to_filter(axioms_to_filter)
         
         return
 
@@ -129,6 +129,9 @@ class AxiomsRankBasedEvaluator():
         """
         raise NotImplementedError()
 
+    def _init_axioms_to_filter():
+        raise NotImplementedError()
+    
     def compute_axiom_rank(self, axiom):
         raise NotImplementedError()
     
