@@ -3,6 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 from gensim.models.keyedvectors import KeyedVectors
 import logging
+import warnings
 logging.basicConfig(level=logging.INFO)
 
 class Visualizer():
@@ -53,7 +54,7 @@ class TSNE(Visualizer):
                 self.embeddings = {name: emb for name, emb in embeddings.items() if name in entities and name in self.labels}
         else:
             raise TypeError("Embeddings type {type(embeddings)} not recognized. Expected types are dict or gensim.models.keyedvectors.KeyedVectors")
-
+        
         logging.info("Found %d embedding vectors. Processing only %d.", self.total_embeddings, len(self.embeddings))
         self.embedding_idx_dict = {v: k for k,v in enumerate(self.embeddings.keys())}
 
@@ -62,7 +63,11 @@ class TSNE(Visualizer):
         self.class_color_dict = {cl: col for cl, col in zip(self.classes, colors)}
 
     def generate_points(self, epochs, workers = 1, verbose = 0):
-        self.points = SKTSNE(n_components=2, verbose=verbose, n_iter=epochs, n_jobs=workers).fit_transform(np.array(list(self.embeddings.values())))
+        points = np.array(list(self.embeddings.values()))
+        if np.iscomplexobj(points):
+            warnings.warn("Complex numpy array detected. Only real part will be considered", UserWarning)
+            points = points.real
+        self.points = SKTSNE(n_components=2, verbose=verbose, n_iter=epochs, n_jobs=workers).fit_transform(points)
         self.plot_data = {}
 
         for name, idx in self.embedding_idx_dict.items():
