@@ -42,11 +42,10 @@ class PathDataset(Dataset):
 
     :param ontology_path: Training dataset
     :type ontology_path: str
-    :param validation_path: Validation dataset
-    :type validation_path: str
-    :param testing_path: Testing dataset
-    :type testing_path: str
-
+    :param validation_path: Validation dataset. Defaults to ``None``.
+    :type validation_path: str, optional
+    :param testing_path: Testing dataset. Defaults to ``None``.
+    :type testing_path: str, optional
     """
 
     ontology_path: str
@@ -56,7 +55,7 @@ class PathDataset(Dataset):
     _validation: OWLOntology
     _testing: OWLOntology
     
-    def __init__(self, ontology_path: str, validation_path: str, testing_path: str):
+    def __init__(self, ontology_path: str, validation_path: str = None, testing_path: str = None):
         self.ontology_path = ontology_path
         self.validation_path = validation_path
         self.testing_path = testing_path
