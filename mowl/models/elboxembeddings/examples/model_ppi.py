@@ -1,4 +1,16 @@
-from mowl.base_models.elmodel import EmbeddingELModel
+"""
+ELBoxEmbeddings 
+===========================
+
+This example is based on the paper `Description Logic EL++ Embeddings with Intersectional Closure <https://arxiv.org/abs/2202.14018v1>`_. This paper is based on the idea of :doc:`/examples/elmodels/1_elembeddings`, but in this work the main point is to solve the *intersectional closure* problem. 
+
+In the case of :doc:`/examples/elmodels/1_elembeddings`, the geometric objects representing ontology classes are :math:`n`-dimensional balls. One of the normal forms in EL is:
+
+.. math::
+   C_1 \sqcap C_2 \sqsubseteq D
+
+As we can see, there is an intersection operation :math:`C_1 \sqcap C_2`. Computing this intersection using balls is not a closed operations because the region contained in the intersection of two balls is not a ball. To solve that issue, this paper proposes the idea of changing the geometric objects to boxes, for which the intersection operation has the closure property.
+"""
 
 from mowl.models.elboxembeddings.module import ELBoxModule
 
@@ -64,9 +76,7 @@ class ELBoxEmbeddings(EmbeddingELModel):
             self.model.train()
 
             train_loss = 0
-            loss = 0
-
-            
+            loss = 0            
             for gci_name, gci_dataset in training_datasets.items():
                 if len(gci_dataset) == 0:
                     continue

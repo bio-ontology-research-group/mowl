@@ -69,6 +69,10 @@ class PathDataset(Dataset):
         
     @property
     def ontology(self):
+        """Training dataset
+
+        :rtype: org.semanticweb.owlapi.model.OWLOntology
+        """
         if not self._loaded:
             self._load()
         return self._ontology
@@ -76,33 +80,55 @@ class PathDataset(Dataset):
 
     @property
     def validation(self):
+        """Validation dataset
+
+        :rtype: org.semanticweb.owlapi.model.OWLOntology
+        """
+
         if not self._loaded:
             self._load()
         return self._validation
 
     @property
     def testing(self):
+        """Testing ontology
+        
+        :rtype: org.semanticweb.owlapi.model.OWLOntology
+        """
         if not self._loaded:
             self._load()
         return self._testing
 
     @property
     def classes(self):
+        """List of classes in the dataset. The classes are collected from training, validation and testing ontologies using the OWLAPI method ``ontology.getClassesInSignature()``, removed duplicates, sorted and returned as a list.
+
+        :rtype: list
+        """
         if self._classes is None:
             self._classes = self._get_classes()
         return self._classes
 
     @property
     def object_properties(self):
+        """List of object properties (relations) in the dataset. The object properties are collected from training, validation and testing ontologies using the OWLAPI method ``ontology.getObjectPropertiesInSignature()``, removed duplicates, sorted and returned as a list.
+
+        :rtype: list
+        """
         if self._object_properties is None:
             self._object_properties = self._get_object_properties()
         return self._object_properties
 
     @property
     def evaluation_classes(self):
+        """List of classes used for evaluation. Depending on the dataset, this method could return a single list (as in :class:`PPIYeastDataset <mowl.datasets.builtin.PPIYeastDataset>`) or a tuple of lists (as in :class:`GDAHumanDataset <mowl.datasets.builtin.GDAHumanDataset>`). It not overriden, this method returns the classes in the testing ontology obtained from the OWLAPI method ``ontology.getClassesInSignature()``
+
+        :r
+        """
         if self._evaluation_classes is None:
-            self._evaluation_classes = self.get_evaluation_classes()
+            self._evaluation_classes = self._get_evaluation_classes()
         return self._evaluation_classes
+
     
     def _load(self):
 
@@ -143,7 +169,7 @@ class PathDataset(Dataset):
             self.data_factory, self.reasoner)
         self.ont_manager.addAxioms(self.ontology, subclass_axioms)
 
-    def get_evaluation_classes(self):
+    def _get_evaluation_classes(self):
         classes = self.testing.getClassesInSignature()        
         return set([str(x.toString())[1:-1] for x in classes])
 
@@ -175,6 +201,10 @@ class PathDataset(Dataset):
         return obj_properties
         
     def get_labels(self):
+        """This method returns labels of entities as a dictionary. To be called, the training ontology must contain axioms of the form :math:`class_1 \sqsubseteq \exists http://has\_label . class_2`.
+
+        :rtype: dict
+        """
         projector = TaxonomyWithRelsProjector(relations = ["http://has_label"])
         edges = projector.project(self.ontology)
         labels = {str(e.src()): str(e.dst()) for e in edges}
