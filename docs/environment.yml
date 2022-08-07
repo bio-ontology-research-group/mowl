@@ -3,6 +3,7 @@ channels:
 dependencies:
   - pip
   - pip:
+    - deprecated
     - nbsphinx
     - sphinx-gallery
     - ipython
