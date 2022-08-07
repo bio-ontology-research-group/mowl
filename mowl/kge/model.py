@@ -4,7 +4,7 @@ from mowl.projection.factory import projector_factory
 from mowl.projection.edge import Edge
 
 #PyKEEN imports
-from pykeen.triples import , TriplesFactory
+from pykeen.triples import TriplesFactory
 from pykeen.models import TransE, TransH, TransR, TransD
 from pykeen.training import SLCWATrainingLoop
 from pykeen.evaluation import RankBasedEvaluator
@@ -56,7 +56,7 @@ class KGEModel():
         
         if model_filepath is None:
             model_filepath = tempfile.NamedTemporaryFile()
-            model_filepath = tempfile.name
+            model_filepath = model_filepath.name
         self.model_filepath = model_filepath
         
         self._trained = False
