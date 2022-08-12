@@ -104,14 +104,12 @@ class AxiomsRankBasedEvaluator():
     
     def __init__(
             self,
-            axioms,
             eval_method,
             axioms_to_filter = None,
             device = "cpu",
             verbose = False
     ):
 
-        self.axioms = self._init_axioms(axioms)
         self.eval_method = eval_method
         self.device = device
         self.verbose = verbose
@@ -135,8 +133,8 @@ class AxiomsRankBasedEvaluator():
     def compute_axiom_rank(self, axiom):
         raise NotImplementedError()
     
-    def __call__(self):
-
+    def __call__(self, axioms):
+        self.axioms = self._init_axioms(axioms)
         tops = {1: 0, 3: 0, 5: 0, 10:0, 100:0, 1000:0}
         ftops = {1: 0, 3: 0, 5: 0, 10:0, 100:0, 1000:0}
         mean_rank = 0

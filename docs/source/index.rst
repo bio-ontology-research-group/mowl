@@ -10,6 +10,9 @@ Getting started
 
 **mOWL** can be installed from the `source code <https://github.com/bio-ontology-research-group/mowl>`_ or from `Test PyPi <https://pypi.org/project/mowl-borg/>`_ or from `Conda <https://anaconda.org/ferzcam/mowl-borg>`_. For more details on installation check out the how to :doc:`install/index` section of the project.
 
+.. note::
+   This version of documentation corresponds to mOWL-0.1.0-alpha, which is on development and can be installed from our `Github releases <https://github.com/bio-ontology-research-group/mowl/releases/tag/v0.1.0>`_
+
 
 Import mOWL and start the JVM
 =============================

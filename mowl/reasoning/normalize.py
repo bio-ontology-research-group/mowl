@@ -65,38 +65,30 @@ def process_axiom(axiom: OWLAxiom):
     superclass = axiom.getSuperClass()
 
     if type(subclass) == OWLObjectIntersectionOfImpl:
-        operands = subclass.getOperandsAsList()
-        left_subclass = operands[0].toStringID()
-        right_subclass = operands[1].toStringID()
         superclass = superclass.toStringID()
         if superclass.contains("owl#Nothing"):
-            return "gci1_bot", GCI1_BOT(left_subclass, right_subclass, superclass)
+            return "gci1_bot", GCI1_BOT(axiom)
+        return "gci1", GCI1(axiom)
         
-        return "gci1", GCI1(left_subclass, right_subclass, superclass)
 
     elif type(subclass) == OWLObjectSomeValuesFromImpl:
-        obj_property = subclass.getProperty().toString()
-        filler = subclass.getFiller().toStringID()
         superclass = superclass.toStringID()
-
         if superclass.contains("owl#Nothing"):
-            return "gci3_bot", GCI3_BOT(left_subclass, right_subclass, superclass)
+            return "gci3_bot", GCI3_BOT(axiom)
         
-        return "gci3", GCI3(obj_property, filler, superclass)
+        return "gci3", GCI3(axiom)
 
     elif type(subclass) == OWLClassImpl:
 
         if type(superclass) == OWLClassImpl:
             superclass = superclass.toStringID()
             if superclass.contains("owl#Nothing"):
-                return "gci0_bot", GCI0_BOT(subclass.toStringID(), superclass)
+                return "gci0_bot", GCI0_BOT(axiom)
         
-            return "gci0", GCI0(subclass.toStringID(), superclass)
+            return "gci0", GCI0(axiom)
 
         elif type(superclass) == OWLObjectSomeValuesFromImpl:
-            obj_property = superclass.getProperty().toString()
-            filler = superclass.getFiller().toStringID()
-            return "gci2", GCI2(subclass.toStringID(), obj_property, filler)
+            return "gci2", GCI2(axiom)
 
         else:
             logging.info("Processing axiom. Ignoring axiom %s", axiom)
@@ -106,9 +98,23 @@ def process_axiom(axiom: OWLAxiom):
 
 
 class GCI():
-    def __init__(self):
+    def __init__(self, axiom):
+        self._axiom = axiom
         return
 
+    @property
+    def owl_subclass(self):
+        return self._axiom.getSubClass()
+
+    @property
+    def owl_superclass(self):
+        return self._axiom.getSuperClass()
+
+    @property
+    def owl_axiom(self):
+        return self._axiom
+
+    
     @staticmethod
     def get_entities(gcis):
         classes = set()
@@ -124,61 +130,156 @@ class GCI():
         
 class GCI0(GCI):
 
-    def __init__(self, subclass, superclass):
+    def __init__(self, axiom):
+        super().__init__(axiom)
+        self._subclass = None
+        self._superclass = None
 
-        self.subclass = str(subclass)
-        self.superclass = str(superclass)
+    @property
+    def subclass(self):
+        if not self._subclass:
+            self._subclass = str(self.owl_subclass.toStringID()) 
+        return self._subclass
 
+    @property
+    def superclass(self):
+        if not self._superclass:
+            self._superclass = str(self.owl_superclass.toStringID())
+        return self._superclass
+ 
     def get_entities(self):
         return set([self.subclass, self.superclass]), set()
 
 class GCI0_BOT(GCI0):
 
-    def __init__(self, subclass, superclass):
-
-        if not superclass.contains("owl#Nothing"):
+    def __init__(self, axiom):
+        super().__init__(axiom)
+        if not self.superclass.contains("owl#Nothing"):
             raise ValueError("Superclass in GCI0_BOT must be the bottom concept.")
-        super().__init__(subclass, superclass)
+        
         
 class GCI1(GCI):
-    def __init__(self, left_subclass, right_subclass, superclass):
-        self.left_subclass = str(left_subclass)
-        self.right_subclass = str(right_subclass)
-        self.superclass = str(superclass)
+    def __init__(self, axiom):
+        super().__init__(axiom)
+        
+        self._left_subclass = None
+        self._right_subclass = None
+        self._superclass = None
 
+    def _process_left_side(self):
+        operands = self.owl_subclass.getOperandsAsList()
+        left_subclass = operands[0].toStringID()
+        right_subclass = operands[1].toStringID()
+        
+        self._left_subclass = str(left_subclass)
+        self._right_subclass = str(right_subclass)
+
+    @property
+    def left_subclass(self):
+        if not self._left_subclass:
+            self._process_left_side()
+        return self._left_subclass
+
+    @property
+    def right_subclass(self):
+        if not self._right_subclass:
+            self._process_left_side()
+        return self._right_subclass
+
+    @property
+    def superclass(self):
+        if not self._superclass:
+            self._superclass = str(self.owl_superclass.toStringID())
+        return self._superclass
+        
     def get_entities(self):
         return set([self.left_subclass, self.right_subclass, self.superclass]), set()
             
 class GCI1_BOT(GCI1):
-    def __init__(self, l, r, superclass):
-        if not superclass.contains("owl#Nothing"):
+    def __init__(self, axiom):
+        super().__init__(axiom)
+        if not self.superclass.contains("owl#Nothing"):
             raise ValueError("Superclass in GCI1_BOT must be the bottom concept.")
-        super().__init__(l, r, superclass)
+        
         
 class GCI2(GCI):
-    def __init__(self, subclass, obj_property, filler):
-        self.subclass = str(subclass)
-        obj_property = str(obj_property)
-        self.object_property = obj_property[1:-1] if obj_property.startswith("<") else obj_property
-        self.filler = str(filler)
+    def __init__(self, axiom):
+        super().__init__(axiom)
 
+        self._subclass = None
+        self._object_property = None
+        self._filler = None
+
+    def _process_right_side(self):
+         object_property = str(self.owl_superclass.getProperty().toString())
+         filler = str(self.owl_superclass.getFiller().toStringID())
+
+         self._object_property = object_property[1:-1] if object_property.startswith("<") else object_property
+         self._filler = filler
+
+    @property
+    def subclass(self):
+        if not self._subclass:
+            self._subclass = str(self.owl_subclass.toStringID()) 
+        return self._subclass
+
+    @property
+    def object_property(self):
+        if not self._object_property:
+            self._process_right_side()
+        return self._object_property
+
+    @property
+    def filler(self):
+        if not self._filler:
+            self._process_right_side()
+        return self._filler
+         
+    
     def get_entities(self):
         return set([self.subclass, self.filler]), set(self.object_property)
 
 class GCI3(GCI):
-    def __init__(self, obj_property, filler, superclass):
-        obj_property = str(obj_property)
-        self.object_property = obj_property[1:-1] if obj_property.startswith("<") else obj_property
-        self.filler = str(filler)
-        self.superclass = str(superclass)
+    def __init__(self, axiom):
+        super().__init__(axiom)
+
+        self._obj_property = None
+        self._filler = None
+        self._superclass = None
+
+    def _process_left_side(self):
+         object_property = str(self.owl_subclass.getProperty().toString())
+         filler = str(self.owl_subclass.getFiller().toStringID())
+
+         self._object_property = object_property[1:-1] if object_property.startswith("<") else object_property
+         self._filler = filler
+
+    @property
+    def object_property(self):
+        if not self._object_property:
+            self._process_left_side()
+        return self._object_property
+
+    @property
+    def filler(self):
+        if not self._filler:
+            self._process_left_side()
+        return self._filler
+         
+    @property
+    def superclass(self):
+        if not self._superclass:
+            self._superclass = str(self.owl_superclass.toStringID()) 
+        return self._superclass
 
     def get_entities(self):
         return set([self.filler, self.superclass]), set(self.object_property)
                 
 class GCI3_BOT(GCI3):
-    def __init__(self, o, f, superclass):
+    def __init__(self, axiom):
+        super().__init__(axiom)
         if not superclass.contains("owl#Nothing"):
             raise ValueError("Superclass in GCI3_BOT must be the bottom concept.")
-        super().__init__(o, f, superclass)
+        
 
         

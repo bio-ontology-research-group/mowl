@@ -47,8 +47,8 @@ class Model(object):
 
 class EmbeddingModel(Model):
 
-    def __init__(self, dataset):
-        super().__init__(dataset)
+    def __init__(self, dataset, model_filepath = None):
+        super().__init__(dataset, model_filepath = model_filepath)
         
     @deprecated(version = "0.1.0")
     def get_entities_index_dict(self):

@@ -11,8 +11,8 @@ class EmbeddingELModel(EmbeddingModel):
     :type extended: bool, optional
     """
     
-    def __init__(self, dataset, batch_size, extended = True, device = "cpu"):
-        super().__init__(dataset)
+    def __init__(self, dataset, batch_size, extended = True, model_filepath = None, device = "cpu"):
+        super().__init__(dataset, model_filepath = model_filepath)
 
         self._datasets_loaded = False
         self._dataloaders_loaded = False
