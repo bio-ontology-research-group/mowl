@@ -1,4 +1,4 @@
-Visualize ontology entities
+mowl.visualization
 =============================
 
 mOWL TSNE

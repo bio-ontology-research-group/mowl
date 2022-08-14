@@ -1,4 +1,4 @@
-Abstract models
+mowl.base_models
 =====================
 
 Model

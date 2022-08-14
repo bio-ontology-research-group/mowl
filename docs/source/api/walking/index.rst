@@ -1,4 +1,4 @@
-Random Walks
+mowl.walking
 ======================
 
 Walking

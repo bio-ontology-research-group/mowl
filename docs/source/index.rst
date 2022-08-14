@@ -57,12 +57,13 @@ The package is released under the BSD 3-Clause License.
    random_walks/index
    pykeen/index
    embedding_el/index
+   evaluation/index
    examples/index
    
    
    
 .. toctree::
-   :maxdepth: 3
+   :maxdepth: 0
    :caption: API
    :hidden:
    :glob:
@@ -75,7 +76,7 @@ The package is released under the BSD 3-Clause License.
    api/walking/index
    api/reasoning/index
    api/text/index
-   api/embedding/index
+   api/evaluation/index
    api/visualization/index
 
 

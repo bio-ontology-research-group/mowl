@@ -69,8 +69,9 @@ class Edge:
     def zip(edges):
         return tuple(zip(*[x.astuple() for x in edges]))
 
-    @versionadded(version = "0.1.0", reason = "This method is available to transform graph edges obtained from ontologies into PyKEEN triples.")
+    
     @staticmethod
+    @versionadded(version = "0.1.0", reason = "This method is available to transform graph edges obtained from ontologies into PyKEEN triples.")
     def as_pykeen(edges, create_inverse_triples = True, entity_to_id = None, relation_to_id = None):
         """This method transform a set of edges into an object of the type :class:`pykeen.triples.triples_factory.TriplesFactory`. This method is intended to be used for PyKEEN methods.
         :param edges: List of edges.

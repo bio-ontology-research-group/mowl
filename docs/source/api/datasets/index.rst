@@ -1,4 +1,4 @@
-Datasets
+mowl.datasets
 =====================
 
 Base dataset
@@ -33,7 +33,7 @@ PPI Yeast dataset
 
 
 Extending ontologies
-========================
+--------------------------
 .. warning::
    .. deprecated:: 0.1.0
       The methods in this module has been moved to a new location. Please refer to each method for futher detail.

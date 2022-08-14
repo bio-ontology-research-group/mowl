@@ -28,9 +28,11 @@ class ELNormalizer():
         :rtype: Dictionary where the keys are labels for each normal form and the values are a list of axioms of each normal form.
         """
 
-        jreasoner = JcelReasoner(ontology, False)
-        root_ont = jreasoner.getRootOntology()
-        translator = jreasoner.getTranslator()
+        #jreasoner = JcelReasoner(ontology, False)
+        #root_ont = jreasoner.getRootOntology()
+        root_ont = ontology
+        translator = Translator(ontology.getOWLOntologyManager().getOWLDataFactory(), IntegerOntologyObjectFactoryImpl())
+        #translator = jreasoner.getTranslator()
         axioms = HashSet()
         axioms.addAll(root_ont.getAxioms())
         translator.getTranslationRepository().addAxiomEntities(root_ont)

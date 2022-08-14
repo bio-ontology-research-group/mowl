@@ -95,11 +95,14 @@ class EvaluationMethod(nn.Module):
 
 class AxiomsRankBasedEvaluator():
 
-    """
-    :param axioms: A set of axioms over which perform the evaluation. The axioms can be given as an .owl file or as a list of OWLAxioms.
-    :param embeddinds_data: A list of dictionaries, each of which has as keys the names of the entities and as values the embedding vectors
-    :param eval_method: The evaluation method for the axioms. 
-    :param axioms_to_filter: Axioms to be put at the bottom of the rankings. If the axioms are empty, filtered metrics will not be computed.
+    """ Abstract method for evaluating axioms in a rank-based manner. To inherit from this class, 3 methods must be defined (dee the corresponding docstrings for each of them).
+    
+    :param eval_method: The evaluation method for the axioms.
+    :type eval_method: function
+    :param axioms_to_filter: Axioms to be put at the bottom of the rankings. If the axioms are empty, filtered metrics will not be computed. The input type of this parameter will depend on the signature of the ``_init_axioms_to_filter`` method. Defaults to ``None``.
+    :type axioms_to_filter: any, optional
+    :param device: Device to run the evaluation. Defaults to "cpu".
+    :type device: str, optional
     """
     
     def __init__(
@@ -107,12 +110,14 @@ class AxiomsRankBasedEvaluator():
             eval_method,
             axioms_to_filter = None,
             device = "cpu",
-            verbose = False
     ):
 
+        self._metrics = None
+        self._fmetrics = None
+        
         self.eval_method = eval_method
         self.device = device
-        self.verbose = verbose
+        
         if axioms_to_filter is None:
             self._compute_filtered_metrics = False
         else:
@@ -122,15 +127,52 @@ class AxiomsRankBasedEvaluator():
         
         return
 
+    @property
+    def metrics(self):
+        """Metrics as a dictionary with string metric names as keys and metrics as values.
+
+        :rtype: dict
+        """
+        if self._metrics is None:
+            raise ValueError("Metrics have not been computed yet.")
+        else:
+            return self._metrics
+
+    @property
+    def fmetrics(self):
+        """Filtered metrics as a dictionary with string metric names as keys and metrics as values.
+
+        :rtype: dict
+        """
+
+        if self._fmetrics is None:
+            raise ValueError("Metrics have not been computed yet.")
+        else:
+            return self._fmetrics
+
+
     def _init_axioms(self, axioms):
         """This method must transform the axioms into the appropriate data structure to be used by the ``eval_method``. This method accesses the ``axioms`` variable, which can be an OWL file or a list of OWLAxioms.
+
+        :param: axioms: Collection of axioms to be transformed. The choice of type for this parameter is up to the user but it is recommended to use either a OWL file, OWLOntology or a collection of OWLAxioms.
         """
         raise NotImplementedError()
 
-    def _init_axioms_to_filter():
+    def _init_axioms_to_filter(self, axioms):
+        """ This method transforms the axioms that would be used in filtered metrics. The final type and format of the transformed axioms must be congruent to the signature of the ``eval_method`` parameter.
+
+        :param: axioms: Collection of axioms to be transformed. The choice of type for this parameter is up to the user but it is recommended to use either a OWL file, OWLOntology or a collection of OWLAxioms.
+        """
         raise NotImplementedError()
     
     def compute_axiom_rank(self, axiom):
+        """This function should compute the rank of a single axiom. This method will be used iteratively by the ``__call__`` method. This method returns a 3-tuple: rank of the axiom, frank of the axiom and the possible achievable worst rank.
+
+        :param axiom: Axiom of the type congruent to the ``eval_method`` signature.
+        :rtype: (int, int, int)
+
+
+        """
         raise NotImplementedError()
     
     def __call__(self, axioms):

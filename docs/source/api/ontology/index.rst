@@ -1,4 +1,4 @@
-Ontology Management
+mowl.ontology
 ======================
 
 Ontology creation
