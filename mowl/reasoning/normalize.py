@@ -2,6 +2,7 @@ from de.tudresden.inf.lat.jcel.owlapi.main import JcelReasoner
 from de.tudresden.inf.lat.jcel.ontology.normalization import OntologyNormalizer
 from de.tudresden.inf.lat.jcel.ontology.axiom.extension import IntegerOntologyObjectFactoryImpl
 from de.tudresden.inf.lat.jcel.owlapi.translator import ReverseAxiomTranslator
+from de.tudresden.inf.lat.jcel.owlapi.translator import Translator
 
 from uk.ac.manchester.cs.owl.owlapi import OWLClassImpl, OWLObjectSomeValuesFromImpl, OWLObjectIntersectionOfImpl
 from org.semanticweb.owlapi.model import OWLAxiom
@@ -156,7 +157,7 @@ class GCI0_BOT(GCI0):
 
     def __init__(self, axiom):
         super().__init__(axiom)
-        if not self.superclass.contains("owl#Nothing"):
+        if not "owl#Nothing" in self.superclass:
             raise ValueError("Superclass in GCI0_BOT must be the bottom concept.")
         
         
@@ -200,7 +201,7 @@ class GCI1(GCI):
 class GCI1_BOT(GCI1):
     def __init__(self, axiom):
         super().__init__(axiom)
-        if not self.superclass.contains("owl#Nothing"):
+        if not "owl#Nothing" in self.superclass:
             raise ValueError("Superclass in GCI1_BOT must be the bottom concept.")
         
         
@@ -280,7 +281,7 @@ class GCI3(GCI):
 class GCI3_BOT(GCI3):
     def __init__(self, axiom):
         super().__init__(axiom)
-        if not superclass.contains("owl#Nothing"):
+        if not "owl#Nothing" in superclass:
             raise ValueError("Superclass in GCI3_BOT must be the bottom concept.")
         
 
