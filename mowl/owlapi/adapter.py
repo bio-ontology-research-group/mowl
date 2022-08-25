@@ -1,14 +1,19 @@
+"""This module implements shortcut methods to access some OWLAPI objects."""
 from org.semanticweb.owlapi.apibinding import OWLManager
-from org.semanticweb.owlapi.model import OWLDataFactory, IRI 
+from org.semanticweb.owlapi.model import IRI
 
 import mowl.error as err
 
 class OWLAPIAdapter():
+    """Adapter class adapting OWLAPI. Here you can find shortcuts to:
+    * OWLManager
+    * OWLDataFactory
+    * IRI
+    """
     def __init__(self):
 
         self._owl_manager = None
         self._data_factory = None
-        return
 
     @property
     def owl_manager(self):
