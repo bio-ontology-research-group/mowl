@@ -246,7 +246,7 @@ class GCI3(GCI):
     def __init__(self, axiom):
         super().__init__(axiom)
 
-        self._obj_property = None
+        self._object_property = None
         self._filler = None
         self._superclass = None
 

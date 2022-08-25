@@ -10,10 +10,7 @@ from java.util import HashSet
 import warnings
 from deprecated.sphinx import deprecated
 
-DATA_HUMAN_URL = 'https://bio2vec.cbrc.kaust.edu.sa/data/mowl/gda_human.tar.gz'
-DATA_HUMAN_EL_URL = 'https://bio2vec.cbrc.kaust.edu.sa/data/mowl/gda_human_el.tar.gz'
-DATA_MOUSE_URL = 'https://bio2vec.cbrc.kaust.edu.sa/data/mowl/gda_mouse.tar.gz'
-DATA_MOUSE_EL_URL = 'https://bio2vec.cbrc.kaust.edu.sa/data/mowl/gda_mouse_el.tar.gz'
+from mowl.datasets.builtin.gda import DATA_HUMAN_URL, DATA_HUMAN_EL_URL, DATA_MOUSE_URL, DATA_MOUSE_EL_URL
 
 class GDADataset(RemoteDataset):
 

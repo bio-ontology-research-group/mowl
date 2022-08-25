@@ -20,6 +20,11 @@ class EmbeddingELModel(EmbeddingModel):
         self.batch_size = batch_size
         self.device = device
 
+        self._training_datasets = None
+        self._validation_datasets = None
+        self._testing_datasets = None
+        
+
     def _load_datasets(self):
         """This method will create different data attributes and finally the corresponding DataLoaders for each GCI type in each subset (training, validation and testing).
         """
