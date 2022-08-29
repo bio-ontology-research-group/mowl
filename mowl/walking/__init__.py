@@ -1,5 +1,3 @@
-import mowl
-import jpype
-
-if not jpype.isJVMStarted():
-    mowl.init_jvm("5g")
+from .deepwalk.model import DeepWalk
+from .node2vec.model import Node2Vec
+from .factory import walker_factory

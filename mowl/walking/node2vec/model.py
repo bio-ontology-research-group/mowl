@@ -16,24 +16,23 @@ class Node2Vec(WalkingModel):
     :type p: float
     :param q: In-out hyperparameter. Default is 1.
     :type q: float
-    :param outfile: Path for saving the generated walks, defaults to :class:`tempfile.NamedTemporaryFile`"
-    :type outfile: str, optional
     '''
     def __init__(self,
-		 num_walks,
-		 walk_length,
-		 p,
-		 q,
-                 outfile = None,
-                 workers=1
+        		num_walks,
+		        walk_length,
+		        p = 1.,
+    		    q = 1.,
+                outfile = None,
+                workers=1
                  ):
 
-        if outfile is None:
-            tmp_file = tempfile.NamedTemporaryFile()
-            outfile = tmp_file.name
+        super().__init__(num_walks, walk_length, outfile=outfile, workers=workers)
 
-        super().__init__(num_walks, walk_length, outfile, workers) 
-
+        #Type checking
+        if not isinstance(p, float):
+            raise TypeError("Optional parameter p must be a float")
+        if not isinstance(q, float):
+            raise TypeError("Optional parameter q must be a float")
         self.p = p
         self.q = q
 
