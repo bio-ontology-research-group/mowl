@@ -280,13 +280,16 @@ class Entities():
         """
         raise NotImplementedError
 
+    def to_str(self, owl_class):
+        raise NotImplementedError
+
     def to_dict(self):
         """Generates a dictionaty indexed by OWL entities IRIs and the values
         are the corresponding OWL entities.
         """
         dict_ = {}
         for ent in self._collection:
-            name = ent.toString()[1:-1]
+            name = self.to_str(ent)
             if not name in dict_:
                 dict_[name] = ent
         dict_ = dict(sorted(dict_.items()))
@@ -310,6 +313,10 @@ class OWLClasses(Entities):
                 raise TypeError("Type of elements in collection must be OWLClass.")
         return collection
 
+    def to_str(self, owl_class):
+        name = str(owl_class.toStringID())
+        return name
+
 class OWLObjectProperties(Entities):
     """Class containing OWL object properties indexed by they IRIs"""
     def check_owl_type(self, collection):
@@ -317,3 +324,9 @@ class OWLObjectProperties(Entities):
             if not isinstance(item, OWLObjectProperty):
                 raise TypeError("Type of elements in collection must be OWLObjectProperty.")
         return collection
+
+    def to_str(self, owl_class):
+        name = str(owl_class.toString())
+        if name.startswith("<"):
+            name = name[1:-1]
+        return name

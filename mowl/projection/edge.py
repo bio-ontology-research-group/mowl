@@ -1,5 +1,5 @@
 from pykeen.triples import TriplesFactory
-from deprecated.sphinx import versionadded
+from deprecated.sphinx import versionadded, deprecated
 import numpy as np
 import torch as th
 
@@ -44,9 +44,13 @@ class Edge:
         return tuple(map(str, (self.src(), self.rel(), self.dst())))
 
 
-    
     @staticmethod
+    @deprecated(version = "0.1.0", reason="Use get_entities_and_relations instead")
     def getEntitiesAndRelations(edges):
+        return Edge.get_entities_and_relations(edges)
+
+    @staticmethod
+    def get_entities_and_relations(edges):
         '''
         :param edges: list of edges 
         :type edges: :class:`Edge`

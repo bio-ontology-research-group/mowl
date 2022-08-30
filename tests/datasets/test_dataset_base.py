@@ -3,7 +3,7 @@ Test Cases for Dataset class and its subclasses
 """
 
 from unittest import TestCase
-from random import randrange
+from random import randrange, choice
 import os
 import shutil
 import requests
@@ -285,3 +285,21 @@ class TestEntities(TestCase):
 
         classes = self.ds.classes.as_owl
         self.assertRaises(TypeError, OWLObjectProperties, classes)
+
+    def test_format_of_class_as_str(self):
+        """This checks if the format of the class string is correct"""
+
+        classes = self.ds.classes.as_str
+        owl_class_str = choice(classes)
+        self.assertFalse(owl_class_str.startswith("<"))
+        self.assertFalse(owl_class_str.endswith(">"))
+        self.assertTrue(owl_class_str.startswith("http://"))
+
+    def test_format_of_object_property_as_str(self):
+        """This checks if the format of the object property string is correct"""
+
+        props = self.ds.object_properties.as_str
+        owl_prop_str = choice(props)
+        self.assertFalse(owl_prop_str.startswith("<"))
+        self.assertFalse(owl_prop_str.endswith(">"))
+        self.assertTrue(owl_prop_str.startswith("http://"))
