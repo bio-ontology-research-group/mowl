@@ -2,7 +2,6 @@ from mowl.walking.walking import WalkingModel
 import random
 import os
 import logging
-import tempfile
 from org.mowl.Walking import DeepWalk as DW
 from java.util import HashMap
 from java.util import ArrayList
@@ -18,25 +17,22 @@ class DeepWalk(WalkingModel):
     '''
     Implementation of DeepWalk based on <https://github.com/phanein/deepwalk/blob/master/deepwalk/graph.py>
 
-    :param alpha: Probability of restart
-    :type alpha: float
-    :param outfile: Path for saving the generated walks, defaults to :class:`tempfile.NamedTemporaryFile`
-    :type outfile: str, optional
+    :param alpha: Probability of restart, defaults to 0
+    :type alpha: float, optional
     '''
     
     def __init__(self,
                  num_walks,
                  walk_length,
-                 alpha,
+                 alpha = 0.,
                  outfile = None,
                  workers=1,
 ):
+        super().__init__(num_walks, walk_length, outfile = outfile, workers = workers)
 
-        if outfile is None:
-            tmp_file = tempfile.NamedTemporaryFile()
-            outfile = tmp_file.name
-        super().__init__(num_walks, walk_length, outfile, workers)
-
+        #Type checking
+        if not isinstance(alpha, float):
+            raise TypeError("Optional parameter alpha must be a float")
         self.alpha = alpha
 
     @versionchanged(version = "0.1.0", reason = "The method now can accept a list of entities to focus on when generating the random walks.")

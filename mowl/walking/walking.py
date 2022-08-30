@@ -1,5 +1,5 @@
 from deprecated.sphinx import versionchanged
-
+import tempfile
 class WalkingModel():
 
     '''
@@ -11,10 +11,27 @@ class WalkingModel():
     :type workers: int, optional
     '''
     def __init__(self, num_walks, walk_length, outfile, workers=1):
+
+        if not isinstance(num_walks, int):
+            raise TypeError("Parameter num_walks must be an integer")
+        if not isinstance(walk_length, int):
+            raise TypeError("Parameter walk_length must be an integer")
+        if not isinstance(workers, int):
+            raise TypeError("Optional parameter workers must be an integer")
+        
+
+        if outfile is None:
+            tmp_file = tempfile.NamedTemporaryFile()
+            self.outfile = tmp_file.name
+        else:
+            if not isinstance(outfile, str):
+                raise TypeError("Optional parameter outfile must be a string")
+            self.outfile = outfile
+
         self.num_walks = num_walks
         self.walk_length = walk_length
         self.workers = workers
-        self.outfile = outfile
+
 
 
     # Abstract methods

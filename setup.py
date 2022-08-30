@@ -24,7 +24,7 @@ setuptools.setup(
     package_dir={"": "."},
     packages=setuptools.find_packages(where=".", exclude=("tests",)),
     package_data={"mowl": ["lib/*.jar"]},
-    python_requires=">=3.8",
+    python_requires=">=3.6",
     install_requires=[
         "JPype1==1.3.0",
         "numpy",
