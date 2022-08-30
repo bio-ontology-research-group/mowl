@@ -11,14 +11,19 @@ class EmbeddingELModel(EmbeddingModel):
     :type extended: bool, optional
     """
     
-    def __init__(self, dataset, batch_size, extended = True, device = "cpu"):
-        super().__init__(dataset)
+    def __init__(self, dataset, batch_size, extended = True, model_filepath = None, device = "cpu"):
+        super().__init__(dataset, model_filepath = model_filepath)
 
         self._datasets_loaded = False
         self._dataloaders_loaded = False
         self._extended = extended
         self.batch_size = batch_size
         self.device = device
+
+        self._training_datasets = None
+        self._validation_datasets = None
+        self._testing_datasets = None
+        
 
     def _load_datasets(self):
         """This method will create different data attributes and finally the corresponding DataLoaders for each GCI type in each subset (training, validation and testing).

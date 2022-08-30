@@ -1,3 +1,14 @@
+"""
+EL Embeddings
+===============
+
+This example corresponds to the paper `EL Embeddings: Geometric Construction of Models for the Description Logic EL++ <https://www.ijcai.org/proceedings/2019/845>`_.
+
+The idea of this paper is to embed EL by modeling ontology classes as :math:`n`-dimensional balls (:math:`n`-balls) and ontology object properties as transformations of those :math:`n`-balls. For each of the normal forms, there is a distance function defined that will work as loss functions in the optimization framework.
+"""
+
+# %%
+# Let's just define the imports that will be needed along the example:
 from mowl.base_models.elmodel import EmbeddingELModel
 
 from mowl.models.elembeddings.module import ELEmModule
@@ -39,13 +50,12 @@ class ELEmbeddings(EmbeddingELModel):
                 
     def init_model(self):
         self.model = ELEmModule(
-            len(self.class_index_dict),
-            len(self.object_property_index_dict),
+            len(self.class_index_dict), #number of ontology classes
+            len(self.object_property_index_dict), #number of ontology object properties
             embed_dim = self.embed_dim,
             margin = self.margin
         ).to(self.device)
     
-        
     def train(self):
 
         optimizer = th.optim.Adam(self.model.parameters(), lr=self.learning_rate)
@@ -83,11 +93,11 @@ class ELEmbeddings(EmbeddingELModel):
                 loss = th.mean(self.model(gci2_data, "gci2"))
                 valid_loss += loss.detach().item()
                 
-            checkpoint = 10
+            checkpoint = 100
             if best_loss > valid_loss:
                 best_loss = valid_loss
                 th.save(self.model.state_dict(), self.model_filepath)
-            if (epoch + 1) % (checkpoint*10) == 0:
+            if (epoch + 1) % checkpoint == 0:
                 print(f'Epoch {epoch}: Train loss: {train_loss} Valid loss: {valid_loss}')
 
     def eval_method(self, data):

@@ -113,7 +113,9 @@ class RankBasedEvaluator(Evaluator):
         logging.info("Training scores created")
         self._loaded_tr_scores = True
         
-    def evaluate(self, show = False):
+    def evaluate(self, activation = None, show = False):
+        if activation is None:
+            activation = lambda x: x
 
         top1 = 0
         top10 = 0
@@ -151,8 +153,13 @@ class RankBasedEvaluator(Evaluator):
 
             r = self.relation_index_emb[r]
 
-            data = th.tensor([[c_emb_idx, r, self.tail_name_indexemb[x]] for x in self.tail_entities]).to(self.device)
-            res = self.eval_method(data).squeeze().cpu().detach().numpy()
+            data = [[c_emb_idx, r, self.tail_name_indexemb[x]] for x in self.tail_entities]
+            data = np.array(data)
+            data = th.tensor(data, requires_grad = False).to(self.device)
+            with th.no_grad():
+                res = self.eval_method(data)
+                res = activation(res)
+                res = res.squeeze().cpu().detach().numpy()
             
             self.testing_predictions[c_sc_idx, :] = res                                                                                
             index = rankdata(res, method='average')
@@ -288,7 +295,8 @@ class EmbeddingsRankBasedEvaluator(RankBasedEvaluator):
 
         self.score_func = score_func
         self.class_embeddings = self.embeddings_to_dict(class_embeddings)
-        class_embeddings_values = th.tensor(list(self.class_embeddings.values())).to(device)
+        class_embeddings_values = np.array(list(self.class_embeddings.values()))
+        class_embeddings_values = th.tensor(class_embeddings_values).to(device)
         class_index_emb = {v: k for k, v in enumerate(self.class_embeddings.keys())}
 
         relation = testing_set[0].rel()
@@ -298,7 +306,8 @@ class EmbeddingsRankBasedEvaluator(RankBasedEvaluator):
             relation_index_emb = {relation: -1}
         else:
             self.relation_embeddings = self.embeddings_to_dict(relation_embeddings)
-            rel_embeds_values = th.tensor(list(self.relation_embeddings.values())).to(device)
+            rel_embeds_values = np.array(list(self.relation_embeddings.values()))
+            rel_embeds_values = th.tensor(rel_embeds_values).to(device)
             relation_index_emb = {v: k for k, v in enumerate(self.relation_embeddings.keys())}
 
         self.eval_method = eval_method_class(class_embeddings_values, rel_embeds_values, method = self.score_func, device = device).to(device)

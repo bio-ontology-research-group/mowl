@@ -77,9 +77,9 @@ class EvaluationMethod(nn.Module):
         embedding_size = len(embeddings[0])
 
         if isinstance(embeddings, list):
-            embeddings = th.tensor(embeddings).to(device)
+            embeddings = th.tensor(embeddings, device = device)
         if isinstance(embeddings_relation, list):
-            embeddings_relation = th.tensor(embeddings_relation).to(device)
+            embeddings_relation = th.tensor(embeddings_relation, device = device)
 
         self.embeddings = nn.Embedding(num_classes, embedding_size)
         self.embeddings.weight = nn.parameter.Parameter(embeddings)
@@ -95,45 +95,88 @@ class EvaluationMethod(nn.Module):
 
 class AxiomsRankBasedEvaluator():
 
-    """
-    :param axioms: A set of axioms over which perform the evaluation. The axioms can be given as an .owl file or as a list of OWLAxioms.
-    :param embeddinds_data: A list of dictionaries, each of which has as keys the names of the entities and as values the embedding vectors
-    :param eval_method: The evaluation method for the axioms. 
-    :param axioms_to_filter: Axioms to be put at the bottom of the rankings. If the axioms are empty, filtered metrics will not be computed.
+    """ Abstract method for evaluating axioms in a rank-based manner. To inherit from this class, 3 methods must be defined (dee the corresponding docstrings for each of them).
+    
+    :param eval_method: The evaluation method for the axioms.
+    :type eval_method: function
+    :param axioms_to_filter: Axioms to be put at the bottom of the rankings. If the axioms are empty, filtered metrics will not be computed. The input type of this parameter will depend on the signature of the ``_init_axioms_to_filter`` method. Defaults to ``None``.
+    :type axioms_to_filter: any, optional
+    :param device: Device to run the evaluation. Defaults to "cpu".
+    :type device: str, optional
     """
     
     def __init__(
             self,
-            axioms,
             eval_method,
             axioms_to_filter = None,
             device = "cpu",
-            verbose = False
     ):
 
-        self.axioms = self._init_axioms(axioms)
+        self._metrics = None
+        self._fmetrics = None
+        
         self.eval_method = eval_method
         self.device = device
-        self.verbose = verbose
+        
         if axioms_to_filter is None:
             self._compute_filtered_metrics = False
         else:
             self._compute_filtered_metrics = True
             
-        self.axioms_to_filter = self._init_axioms(axioms_to_filter)
+        self.axioms_to_filter = self._init_axioms_to_filter(axioms_to_filter)
         
         return
 
+    @property
+    def metrics(self):
+        """Metrics as a dictionary with string metric names as keys and metrics as values.
+
+        :rtype: dict
+        """
+        if self._metrics is None:
+            raise ValueError("Metrics have not been computed yet.")
+        else:
+            return self._metrics
+
+    @property
+    def fmetrics(self):
+        """Filtered metrics as a dictionary with string metric names as keys and metrics as values.
+
+        :rtype: dict
+        """
+
+        if self._fmetrics is None:
+            raise ValueError("Metrics have not been computed yet.")
+        else:
+            return self._fmetrics
+
+
     def _init_axioms(self, axioms):
         """This method must transform the axioms into the appropriate data structure to be used by the ``eval_method``. This method accesses the ``axioms`` variable, which can be an OWL file or a list of OWLAxioms.
+
+        :param: axioms: Collection of axioms to be transformed. The choice of type for this parameter is up to the user but it is recommended to use either a OWL file, OWLOntology or a collection of OWLAxioms.
         """
         raise NotImplementedError()
 
-    def compute_axiom_rank(self, axiom):
+    def _init_axioms_to_filter(self, axioms):
+        """ This method transforms the axioms that would be used in filtered metrics. The final type and format of the transformed axioms must be congruent to the signature of the ``eval_method`` parameter.
+
+        :param: axioms: Collection of axioms to be transformed. The choice of type for this parameter is up to the user but it is recommended to use either a OWL file, OWLOntology or a collection of OWLAxioms.
+        """
         raise NotImplementedError()
     
-    def __call__(self):
+    def compute_axiom_rank(self, axiom):
+        """This function should compute the rank of a single axiom. This method will be used iteratively by the ``__call__`` method. This method returns a 3-tuple: rank of the axiom, frank of the axiom and the possible achievable worst rank.
 
+        :param axiom: Axiom of the type congruent to the ``eval_method`` signature.
+        :rtype: (int, int, int)
+
+
+        """
+        raise NotImplementedError()
+    
+    def __call__(self, axioms):
+        self.axioms = self._init_axioms(axioms)
         tops = {1: 0, 3: 0, 5: 0, 10:0, 100:0, 1000:0}
         ftops = {1: 0, 3: 0, 5: 0, 10:0, 100:0, 1000:0}
         mean_rank = 0

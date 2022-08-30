@@ -1,4 +1,4 @@
-Corpus extraction from ontologies
+mowl.corpus
 ==================================
 
 .. automodule:: mowl.corpus.base

@@ -25,6 +25,14 @@ class ELDataset():
         self._object_property_index_dict = object_property_index_dict
         self.device = device
 
+        self._gci0_dataset = None
+        self._gci1_dataset = None
+        self._gci2_dataset = None
+        self._gci3_dataset = None
+        self._gci0_bot_dataset = None
+        self._gci1_bot_dataset = None
+        self._gci3_bot_dataset = None
+
     def load(self):
         if self._loaded:
             return
@@ -108,11 +116,20 @@ class ELDataset():
     
     @property
     def class_index_dict(self):
+        """Returns indexed dictionary with class names present in the dataset.
+        
+        :rtype: dict
+        """
         self.load()
         return self._class_index_dict
 
     @property
     def object_property_index_dict(self):
+        """Returns indexed dictionary with object property names present in the dataset.
+        
+        :rtype: dict
+        """
+
         self.load()
         return self._object_property_index_dict
 

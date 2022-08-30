@@ -22,7 +22,7 @@ import math
 import logging
 import numpy as np
 
-from .evaluate import ELBoxEmbeddingsPPIEvaluator
+from mowl.models.elboxembeddings.evaluate import ELBoxEmbeddingsPPIEvaluator
 
 from tqdm import trange, tqdm
 
@@ -55,7 +55,7 @@ class ELBoxEmbeddings(EmbeddingELModel):
         self._loaded = False
         self._loaded_eval = False
         self.extended = False
-
+        self.init_model()
                 
     def init_model(self):
         self.model = ELBoxModule(
@@ -67,7 +67,6 @@ class ELBoxEmbeddings(EmbeddingELModel):
     
         
     def train(self):
-        self.init_model()
         criterion = nn.MSELoss()
         optimizer = th.optim.Adam(self.model.parameters(), lr=self.learning_rate)
         best_loss = float('inf')
@@ -90,7 +89,13 @@ class ELBoxEmbeddings(EmbeddingELModel):
                 
                 if gci_name == "gci2":
                     rand_index = np.random.choice(len(gci_dataset), size = 512)
-                    dst = self.model(gci_dataset[rand_index], gci_name, neg = True)
+                    gci_batch = gci_dataset[rand_index]
+                    prots = [self.class_index_dict[p] for p in self.dataset.evaluation_classes]
+                    idxs_for_negs = np.random.choice(prots, size = len(gci_batch), replace = True)
+                    rand_prot_ids = th.tensor(idxs_for_negs).to(self.device)
+                    neg_data = th.cat([gci_batch[:, :2], rand_prot_ids.unsqueeze(1)], dim = 1)
+                    
+                    dst = self.model(neg_data, gci_name, neg = True)
                     mse_loss = criterion(dst, th.ones(dst.shape, requires_grad = False).to(self.device))
                     loss += mse_loss
         
@@ -108,7 +113,7 @@ class ELBoxEmbeddings(EmbeddingELModel):
                 loss = criterion(dst, th.zeros(dst.shape, requires_grad = False).to(self.device))
                 valid_loss += loss.detach().item()
                 
-            checkpoint = 1000
+            checkpoint = 100
             if best_loss > valid_loss and (epoch+1) % checkpoint == 0:
                 best_loss = valid_loss
                 print("Saving model..")

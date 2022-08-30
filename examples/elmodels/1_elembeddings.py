@@ -67,7 +67,7 @@ class ELEmbeddings(EmbeddingELModel):
         self._loaded = False
         self._loaded_eval = False
         self.extended = False
-
+        self.init_model()
     # Notice that here we are initializing the neural network module.
     # We will see later that ``ElEmModule`` inherits from ``ELModule``,
     # which implements an interface for EL GCIs losses functions.
@@ -81,7 +81,6 @@ class ELEmbeddings(EmbeddingELModel):
         ).to(self.device)
     
     def train(self):
-        self.init_model()
         optimizer = th.optim.Adam(self.model.parameters(), lr=self.learning_rate)
         best_loss = float('inf')
 
@@ -100,7 +99,12 @@ class ELEmbeddings(EmbeddingELModel):
                 
                 loss += th.mean(self.model(gci_dataset[:], gci_name))
                 if gci_name == "gci2":
-                    loss += th.mean(self.model(gci_dataset[:], gci_name, neg = True))
+                    prots = [self.class_index_dict[p] for p in self.dataset.evaluation_classes]
+                    idxs_for_negs = np.random.choice(prots, size = len(gci_dataset), replace = True)
+                    rand_index = th.tensor(idxs_for_negs).to(self.device)
+                    data = gci_dataset[:]
+                    neg_data = th.cat([data[:,:2], rand_index.unsqueeze(1)], dim = 1)
+                    loss += th.mean(self.model(neg_data, gci_name, neg = True))
             
             optimizer.zero_grad()
             loss.backward()
@@ -115,7 +119,7 @@ class ELEmbeddings(EmbeddingELModel):
                 loss = th.mean(self.model(gci2_data, "gci2"))
                 valid_loss += loss.detach().item()
                 
-            checkpoint = 500
+            checkpoint = 100
             if best_loss > valid_loss:
                 best_loss = valid_loss
                 th.save(self.model.state_dict(), self.model_filepath)

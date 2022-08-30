@@ -1,4 +1,4 @@
-Reasoning over ontologies
+mowl.reasoning
 ============================
 
 

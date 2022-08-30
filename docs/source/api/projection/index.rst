@@ -1,4 +1,4 @@
-Ontology to graph
+mowl.projection
 =============================
 
 In this module we provide different methods for projecting an ontology into a graph: The methods we provide are:
