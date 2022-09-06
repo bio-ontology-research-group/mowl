@@ -61,10 +61,10 @@ class TaxonomyWithRelsProjector(
 	val dst = superClass.asInstanceOf[OWLClass]
 
         if (bidirectional_taxonomy){
-	  new Triple(ontClass, "subclassOf", dst) :: new Triple(dst, "superclassOf", ontClass) :: Nil
+	  new Triple(ontClass, "http://subclassof", dst) :: new Triple(dst, "http://superclassof", ontClass) :: Nil
         }
         else if (taxonomy){
-          new Triple(ontClass, "subclassOf", dst) :: Nil
+          new Triple(ontClass, "http://subclassof", dst) :: Nil
         }else Nil
       }
       case _ => Nil
