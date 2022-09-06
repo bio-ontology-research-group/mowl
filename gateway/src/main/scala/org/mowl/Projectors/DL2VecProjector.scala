@@ -31,12 +31,12 @@ class DL2VecProjector(var bidirectional_taxonomy: Boolean = false) extends Abstr
 
       case "SubClassOf" => {
 	var ax = axiom.asInstanceOf[OWLSubClassOfAxiom]
-	projectSubClassOrEquivAxiom(ax.getSubClass.asInstanceOf[OWLClass], ax.getSuperClass, "subclassOf")
+	projectSubClassOrEquivAxiom(ax.getSubClass.asInstanceOf[OWLClass], ax.getSuperClass, "http://subclassof")
       }
       case "EquivalentClasses" => {
 	var ax = axiom.asInstanceOf[OWLEquivalentClassesAxiom].getClassExpressionsAsList.asScala
         val rightSide = ax.filter((x) => x != ontClass)
-      	rightSide.toList.flatMap(projectSubClassOrEquivAxiom(ontClass, _:OWLClassExpression, "subclassOf"))
+      	rightSide.toList.flatMap(projectSubClassOrEquivAxiom(ontClass, _:OWLClassExpression, "http://subclassof"))
       }
       case _ => Nil
     }
@@ -45,9 +45,9 @@ class DL2VecProjector(var bidirectional_taxonomy: Boolean = false) extends Abstr
    def projectSubClassOrEquivAxiom(ontClass: OWLClass, superClass: OWLClassExpression, relName: String): List[Triple] = {
      var invRelName = ""
 
-     if (relName == "subclassOf"){
-       invRelName = "superclassOf"
-     }else if(relName == "equivalentTo"){
+     if (relName == "http://subclassof"){
+       invRelName = "http://superclassof"
+     }else if(relName == "http://equivalentto"){
        invRelName = relName
      }
      
@@ -68,7 +68,7 @@ class DL2VecProjector(var bidirectional_taxonomy: Boolean = false) extends Abstr
 
       case c if (collectors contains c) => {
         val dstClasses = splitClass(superClass)
-        dstClasses.flatMap(projectSubClassOrEquivAxiom(ontClass, _:OWLClassExpression, "subclassOf"))
+        dstClasses.flatMap(projectSubClassOrEquivAxiom(ontClass, _:OWLClassExpression, "http://subclassof"))
       }
 
       case "Class" => {

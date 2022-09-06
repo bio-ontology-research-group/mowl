@@ -19,7 +19,7 @@ trait AbstractProjector{
 
 
   def project(ontology: OWLOntology) = {
-    val imports = Imports.fromBoolean(false)
+    val imports = Imports.fromBoolean(true)
 
     val ontClasses = ontology.getClassesInSignature(imports).asScala.toList
     printf("INFO: Number of ontology classes: %d\n", ontClasses.length)
