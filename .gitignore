@@ -19,3 +19,6 @@ ppi_yeast_slim/
 ppi_yeast/
 docs/build/
 docs/source/examples/
+
+build/
+dist/
