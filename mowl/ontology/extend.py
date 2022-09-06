@@ -21,6 +21,14 @@ def insert_annotations(ontology_file, annotations, out_file = None, verbose=Fals
     :type verbose: bool
     """
 
+    if not isinstance(ontology_file, str):
+        raise TypeError("Parameter ontology_file must be of type str")
+    if not isinstance(annotations, list):
+        raise TypeError("Parameter annotations must be of type list")
+    if out_file is not None and not isinstance(out_file, str):
+        raise TypeError("Optional parameter out_file must be of type str")
+    if not isinstance(verbose, bool):
+        raise TypeError("Optional parameter verbose must be of type bool")
             
     if verbose:
         logging.basicConfig(level = logging.INFO)

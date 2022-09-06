@@ -66,4 +66,16 @@ class TestNode2Vec(TestCase):
         self.assertEqual(len(walks), num_walks * len(self.nodes))
 
 
-#    def test_walking_with_list_of_nodes(self):
+    def test_walking_with_list_of_nodes_ignore_unknown_nodes(self):
+        """This method tests if the walking ignores unknown nodes"""
+        num_walks = 10
+        walk_length = 5
+        node2vec = Node2Vec(num_walks, walk_length)
+
+        with self.assertLogs("node2vec", level='INFO') as cm:
+            node2vec.walk(self.graph, nodes_of_interest = ["A", "X"])
+        
+        self.assertEqual(cm.output, ["INFO:node2vec:Node X does not exist in the graph. Ignoring it."])
+
+
+        

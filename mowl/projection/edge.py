@@ -6,12 +6,24 @@ import torch as th
 class Edge:
     """Class representing a graph edge. 
     """
-    def __init__(self, src, rel, dst, weight = 1):
+    def __init__(self, src, rel, dst, weight = 1.):
+
+        if not isinstance(src, str):
+            raise TypeError("Parameter src must be a string")
+        if not isinstance(rel, str):
+            raise TypeError("Parameter rel must be a string")
+        if not isinstance(dst, str):
+            raise TypeError("Parameter dst must be a string")
+        if not isinstance(weight, float):
+            raise TypeError("Optional parameter weight must be a float")
+            
         self._src = src
         self._rel = rel
         self._dst = "" if dst == "" else dst
         self._weight = weight
 
+
+    @property
     def src(self):
         """Getter method for _src attribute
         
@@ -19,6 +31,7 @@ class Edge:
         """
         return self._src
 
+    @property
     def rel(self):
         """Getter method for _rel attribute
         
@@ -26,6 +39,7 @@ class Edge:
         """
         return self._rel
 
+    @property
     def dst(self):
         """Getter method for _dst attribute
         
@@ -33,6 +47,7 @@ class Edge:
         """
         return self._dst
 
+    @property
     def weight(self):
         """Getter method for _weight attribute
         
@@ -40,8 +55,9 @@ class Edge:
         """
         return self._weight
 
+
     def astuple(self):
-        return tuple(map(str, (self.src(), self.rel(), self.dst())))
+        return tuple(map(str, (self._src, self._rel, self._dst)))
 
 
     @staticmethod
@@ -64,8 +80,8 @@ class Edge:
         relations = set()
 
         for edge in edges:
-            entities |= {edge.src(), edge.dst()}
-            relations |= {edge.rel()}
+            entities |= {edge.src, edge.dst}
+            relations |= {edge.rel}
 
         return (entities, relations)
 
@@ -93,7 +109,7 @@ class Edge:
         if relation_to_id is None:
             relation_to_id = {v:k for k,v in enumerate(list(relations))}
 
-        map_edge = lambda edge: [entity_to_id[edge.src()], relation_to_id[edge.rel()], entity_to_id[edge.dst()]]
+        map_edge = lambda edge: [entity_to_id[edge.src], relation_to_id[edge.rel], entity_to_id[edge.dst]]
         
         triples = [map_edge(edge) for edge in edges]
         triples = np.array(triples, dtype = int)

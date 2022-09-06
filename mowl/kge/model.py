@@ -1,16 +1,11 @@
-
-
-from mowl.projection.factory import projector_factory
-from mowl.projection.edge import Edge
-
 #PyKEEN imports
-from pykeen.triples import TriplesFactory
-from pykeen.models import TransE, TransH, TransR, TransD
+from pykeen.triples.triples_factory import TriplesFactory
+from pykeen.models import ERModel
 from pykeen.training import SLCWATrainingLoop
-from pykeen.evaluation import RankBasedEvaluator
+
 import tempfile
 import torch as th
-from torch.optim import Adam
+from torch.optim import Adam, Optimizer
 
 import logging
 logging.basicConfig(level=logging.INFO)
@@ -46,6 +41,26 @@ class KGEModel():
                  device = "cpu",
                  model_filepath = None,
     ):
+
+        if not isinstance(triples_factory, TriplesFactory):
+            raise TypeError("Parameter triples_factory must be of type or subtype of pykeen.triples.triples_factory.TriplesFactory.")
+        if not isinstance(pykeen_model, ERModel):
+            raise TypeError("Parameter pykeen_model must be of type or subtype of pykeen.models.ERModel.")
+        if not isinstance(epochs, int):
+            raise TypeError("Parameter epochs must be of type int.")
+        if not isinstance(batch_size, int):
+            raise TypeError("Optional parameter batch_size must be of type int.")
+        try:
+            optimizer(params = [th.empty(1)])
+        except:
+            raise TypeError("Optional parameter optimizer must be a subtype of torch.optim.Optimizer.")
+        if not isinstance(lr, float):
+            raise TypeError("Optional parameter lr must be of type float.")
+        if not isinstance(device, str):
+            raise TypeError("Optional parameter device must be of type str.")
+        if not isinstance(model_filepath, str) and model_filepath is not None:
+            raise TypeError("Optional parameter model_filepath must be of type str or None.")
+
         self.triples_factory = triples_factory
         self.device = device
         self.model = pykeen_model.to(self.device)
@@ -61,6 +76,39 @@ class KGEModel():
         
         self._trained = False
         self._data_loaded = False
+
+        self._class_index_dict = None
+        self._class_embeddings_dict = None
+        self._object_property_index_dict = None
+        self._object_property_embeddings_dict = None
+
+    @property
+    def class_index_dict(self):
+        """This returns a dictionary of the form class_name -> class_index. This equivalent to the method triples_factory.entity_to_id from PyKEEN."""
+
+        if self._class_index_dict is None:
+            self._class_index_dict = self.triples_factory.entity_to_id
+        return self._class_index_dict
+
+    @property
+    def object_property_index_dict(self):
+        """This returns a dictionary of the form object_property_name -> object_property_index. This equivalent to the method triples_factory.relation_to_id from PyKEEN."""
+
+        if self._object_property_index_dict is None:
+            self._object_property_index_dict = self.triples_factory.relation_to_id
+        return self._object_property_index_dict
+
+    @property
+    def class_embeddings_dict(self):
+        if self._class_embeddings_dict is None:
+            self.get_embeddings()
+        return self._class_embeddings_dict
+
+    @property
+    def object_property_embeddings_dict(self):
+        if self._object_property_embeddings_dict is None:
+            self.get_embeddings()
+        return self._object_property_embeddings_dict
 
     def load_best_model(self):
         self.model.load_state_dict(th.load(self.model_filepath))
@@ -80,25 +128,34 @@ class KGEModel():
         if load_best_model:
             self.load_best_model()
                      
-        embeddings = self.model.entity_representations[0](indices = None).cpu().detach().numpy()
-        embeddings = {item[0]: embeddings[item[1]] for item in self.triples_factory.entity_to_id.items()}
+        cls_embeddings = self.model.entity_representations[0](indices = None).cpu().detach().numpy()
+        cls_ids = {item[0]: item[1] for item in self.triples_factory.entity_to_id.items()}
+        cls_embeddings = {item[0]: cls_embeddings[item[1]] for item in self.triples_factory.entity_to_id.items()}
+
+        self._class_index_dict = cls_ids
+        self._class_embeddings_dict = cls_embeddings
+
 
         rel_embeddings = self.model.relation_representations[0](indices = None).cpu().detach().numpy()
+        rel_ids = {item[0]: item[1] for item in self.triples_factory.relation_to_id.items()}
         rel_embeddings = {item[0]: rel_embeddings[item[1]] for item in self.triples_factory.relation_to_id.items()}
 
-        
-        return embeddings, rel_embeddings
+        self._object_property_index_dict = rel_ids
+        self._object_property_embeddings_dict = rel_embeddings
 
+    @th.no_grad()
     def score_method_point(self, point):
-        x, y, z = point
-        x, y, z = self.entities_idx[x], self.relations_idx[y], self.entities_idx[z]
+        """Receives the embedding of a point and returns its score."""
+        self.model.eval()
         ###TODO implement code that checks dimensionality
-        point = self.point_to_tensor([x,y,z])
+        point = self.point_to_tensor(point)
 
-        return - self.model.predict_hrt(point)
+        return self.model.predict_hrt(point)
 
+    @th.no_grad()
     def score_method_tensor(self, data):
-        return -self.model.predict_hrt(data)
+        self.model.eval()
+        return self.model.predict_hrt(data)
     
     def point_to_tensor(self, point):
         point = [list(point)]

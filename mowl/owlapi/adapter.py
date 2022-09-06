@@ -21,7 +21,7 @@ class OWLAPIAdapter():
         :rtype: org.semanticweb.owlapi.apibinding.OWLManager
         """
         if self._owl_manager is None:
-            self._owl_manager = OWLManager()
+            self._owl_manager = OWLManager.createOWLOntologyManager()
 
         return self._owl_manager
 

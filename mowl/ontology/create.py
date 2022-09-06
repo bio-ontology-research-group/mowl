@@ -32,6 +32,19 @@ def create_from_triples(
     :type tail_prefix: str
     """
 
+    if not isinstance(triples_file, str):
+        raise TypeError("Parameter triples_file must be of type str")
+    if not isinstance(out_file, str):
+        raise TypeError("Parameter out_file must be of type str")
+    if relation_name is not None and not isinstance(relation_name, str):
+        raise TypeError("Optional parameter relation_name must be of type str")
+    if not isinstance(bidirectional, bool):
+        raise TypeError("Optional parameter bidirectional must be of type bool")
+    if not isinstance(head_prefix, str):
+        raise TypeError("Optional parameter head_prefix must be of type str")
+    if not isinstance(tail_prefix, str):
+        raise TypeError("Optional parameter tail_prefix must be of type str")
+
     manager = OWLManager.createOWLOntologyManager()
     factory = manager.getOWLDataFactory()
 

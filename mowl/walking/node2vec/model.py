@@ -8,6 +8,7 @@ from mowl.projection.edge import Edge as PyEdge
 from deprecated.sphinx import versionchanged
 
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("node2vec")
 
 class Node2Vec(WalkingModel):
 
@@ -48,11 +49,11 @@ class Node2Vec(WalkingModel):
                 if node in all_nodes:
                     nodes_of_interest.add(node)
                 else:
-                    logging.info(f"Node {node} does not exist in graph. Ignoring it.")
+                    logger.info(f"Node {node} does not exist in the graph. Ignoring it.")
                     
         edgesJ = ArrayList()
         for edge in edges:
-            newEdge = Edge(edge.src(), edge.rel(),  edge.dst(), edge.weight())
+            newEdge = Edge(edge.src, edge.rel,  edge.dst, edge.weight)
             edgesJ.add(newEdge)
 
         walker = N2V(edgesJ, self.num_walks, self.walk_length, self.p, self.q, self.workers, self.outfile, nodes_of_interest)

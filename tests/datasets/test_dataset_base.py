@@ -12,11 +12,47 @@ mowl.init_jvm("10g")
 
 from mowl.owlapi.model import OWLOntology, OWLClass, OWLObjectProperty
 from mowl.datasets.builtin import PPIYeastSlimDataset, GDAHumanDataset
-from mowl.datasets import PathDataset, RemoteDataset, TarFileDataset
+from mowl.datasets import Dataset, PathDataset, RemoteDataset, TarFileDataset
 from mowl.datasets.base import Entities, OWLClasses, OWLObjectProperties
 from mowl.owlapi import OWLAPIAdapter
 from mowl.owlapi.defaults import BOT, TOP
 
+
+class TestDataset(TestCase):
+
+    @classmethod
+    def setUpClass(self):
+        adapter = OWLAPIAdapter()
+        owl_manager = adapter.owl_manager
+        self.training_ont = owl_manager.createOntology()
+        self.validation_ont = owl_manager.createOntology()
+        self.testing_ont = owl_manager.createOntology()
+
+    def test_constructor_argument_types(self):
+        """This checks if type of arguments is checked"""
+
+        self.assertRaisesRegex(TypeError, "Parameter ontology must be an OWLOntology.", Dataset, 1)
+        self.assertRaisesRegex(TypeError, "Optional parameter validation must be an OWLOntology.", Dataset, self.training_ont, validation = 1)
+        self.assertRaisesRegex(TypeError, "Optional parameter testing must be an OWLOntology.", Dataset, self.training_ont, testing = 1)
+
+    def test_accessing_not_existing_attributes_is_None(self):
+        """This checks if attributes can be accessed in any order"""
+        dataset1 = Dataset(self.training_ont, validation = None, testing = self.testing_ont)
+        self.assertIsNone(dataset1.validation)
+
+        dataset2 = Dataset(self.training_ont, validation = self.validation_ont, testing = None)
+        self.assertIsNone(dataset2.testing)
+
+        dataset3 = Dataset(self.training_ont, validation = None, testing = None)
+        self.assertIsNone(dataset3.validation)
+        self.assertIsNone(dataset3.testing)
+
+    def test_label_property_non_existing(self):
+        """It should check return value to be {} when label property does not exist."""
+        dataset = Dataset(self.training_ont)
+        self.assertEqual({}, dataset.labels)
+
+###############################################################
 class TestPathDataset(TestCase):
 
     @classmethod
@@ -56,7 +92,21 @@ class TestPathDataset(TestCase):
         dataset = self.dataset_full
         self.assertIsInstance(dataset.ontology, OWLOntology)
         self.assertIsInstance(dataset.testing, OWLOntology)
-        self.assertIsInstance(dataset.validation, OWLOntology)
+        self.assertIsInstance(dataset.validation, OWLOntology)     
+
+    def test_return_evaluation_classes_default(self):
+        """It should check the default behaviour of evaluation classes property"""
+        ds = self.dataset_full
+        testing_classes_from_owlapi = ds.testing.getClassesInSignature()
+        eval_classes = ds.evaluation_classes.as_str
+
+        eval_classes_owl = [x.toString()[1:-1] for x in testing_classes_from_owlapi]
+        eval_classes.sort()
+        eval_classes_owl.sort()
+
+        idx = randrange(0, len(eval_classes))
+        self.assertEqual(eval_classes[idx], eval_classes_owl[idx])
+
 
     def test_attribute_classes(self):
         """Test types of dataset.classes.as_owl attribute"""
@@ -65,8 +115,26 @@ class TestPathDataset(TestCase):
         self.assertIsInstance(classes, list)
         self.assertIsInstance(classes[0], OWLClass)
 
-        
+    def test_attribute_object_properties(self):
+        """Test types of dataset.object_properties.as_owl attribute"""
+        dataset = self.dataset_full
+        object_properties = dataset.object_properties.as_owl
+        self.assertIsInstance(object_properties, list)
+        self.assertIsInstance(object_properties[0], OWLObjectProperty)
 
+
+    def test_label_property_existing(self):
+        """It should check the correct behaviour of label property when it exists."""
+        labels = self.ppi_dataset.labels
+        self.assertIsInstance(labels, dict)
+        idx = randrange(0, len(labels))
+        self.assertIsInstance(list(labels.keys())[0], str)
+        self.assertIsInstance(list(labels.values())[0], str)
+
+        unique_labels = set(labels.keys())
+        self.assertEqual(len(labels), len(unique_labels))
+
+    
     def test_attribute_classes_as_str(self):
         """Test types and format of dataset.classes.as_str attribute"""
         dataset = self.dataset_full
@@ -92,12 +160,6 @@ class TestPathDataset(TestCase):
         idx = randrange(0, len(classes_from_owl_api))
         self.assertEqual(classes[idx], classes_from_owl_api[idx])
 
-    def test_attribute_object_properties(self):
-        """Test types of dataset.object_properties.as_owl attribute"""
-        dataset = self.dataset_full
-        object_properties = dataset.object_properties.as_owl
-        self.assertIsInstance(object_properties, list)
-        self.assertIsInstance(object_properties[0], OWLObjectProperty)
                                 
 
     def test_attribute_object_properties_as_str(self):
@@ -124,50 +186,6 @@ class TestPathDataset(TestCase):
         idx = randrange(0, len(object_properties_from_owl_api))
         self.assertEqual(object_properties[idx], object_properties_from_owl_api[idx])
 
-        
-    
-    def test_accessing_not_existing_attributes_is_None(self):
-        """This checks if attributes can be accessed in any order"""
-        dataset1 = PathDataset(self.training_ont_path, validation_path = None, testing_path = self.testing_ont_path)
-        self.assertIsNone(dataset1.validation)
-
-        dataset2 = PathDataset(self.training_ont_path, validation_path = self.validation_ont_path, testing_path = None)
-        self.assertIsNone(dataset2.testing)
-
-        dataset3 = PathDataset(self.training_ont_path, validation_path = None, testing_path = None)
-        self.assertIsNone(dataset3.validation)
-        self.assertIsNone(dataset3.testing)
-
-
-    def test_return_evaluation_classes_default(self):
-        """It should check the default behaviour of evaluation classes property"""
-        ds = self.dataset_full
-        testing_classes_from_owlapi = ds.testing.getClassesInSignature()
-        eval_classes = ds.evaluation_classes.as_str
-
-        eval_classes_owl = [x.toString()[1:-1] for x in testing_classes_from_owlapi]
-        eval_classes.sort()
-        eval_classes_owl.sort()
-
-        idx = randrange(0, len(eval_classes))
-        self.assertEqual(eval_classes[idx], eval_classes_owl[idx])
-
-
-    def test_label_property_existing(self):
-        """It should check the correct behaviour of label property when it exists."""
-        labels = self.ppi_dataset.labels
-        self.assertIsInstance(labels, dict)
-        idx = randrange(0, len(labels))
-        self.assertIsInstance(list(labels.keys())[0], str)
-        self.assertIsInstance(list(labels.values())[0], str)
-
-        unique_labels = set(labels.keys())
-        self.assertEqual(len(labels), len(unique_labels))
-        
-    def test_label_property_non_existing(self):
-        """It should check return value to be {} when label property does not exist."""
-
-        self.assertEqual({}, self.gda_dataset.labels)
 
 #############################################################
 
@@ -212,7 +230,7 @@ class TestRemoteDataset(TestCase):
 
         self.good_url = 'https://bio2vec.cbrc.kaust.edu.sa/data/mowl/ppi_yeast.tar.gz'
         self.bad_url = 'https://bio2vec.cbrc.kaust.edu.sa/data/mowl/gda_mouse_el.tar.gzq'
-
+        self.only_training_set_url = 'https://bio2vec.cbrc.kaust.edu.sa/data/mowl/family.tar.gz'
 
     def test_successful_download_in_default_path(self):
         """This checks if dataset is downloaded in the default path ./"""
@@ -254,6 +272,16 @@ class TestRemoteDataset(TestCase):
         shutil.rmtree("/tmp/ppi_yeast")
         os.remove("/tmp/ppi_yeast.tar.gz")
 
+    def test_dataset_with_only_training_set(self):
+        """This should check that dataset is downloaded correctly if it has only training set"""
+        ds = RemoteDataset(self.only_training_set_url, data_root = "/tmp/")
+        self.assertTrue(os.path.exists("/tmp/family"))
+        self.assertTrue(os.path.exists("/tmp/family/ontology.owl"))
+        self.assertFalse(os.path.exists("/tmp/family/valid.owl"))
+        self.assertFalse(os.path.exists("/tmp/family/test.owl"))
+
+        shutil.rmtree("/tmp/family")
+        os.remove("/tmp/family.tar.gz")
 #############################################################
 
 class TestEntities(TestCase):

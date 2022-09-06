@@ -13,84 +13,36 @@ import requests
 from org.semanticweb.owlapi.model import OWLOntology, OWLClass, OWLObjectProperty
 from org.semanticweb.owlapi.apibinding import OWLManager
 
-from mowl.projection.taxonomyRels.model import TaxonomyWithRelsProjector
+from mowl.projection import TaxonomyWithRelsProjector
 from mowl.owlapi.adapter import OWLAPIAdapter
 from mowl.owlapi.defaults import TOP, BOT
 
-class PathDataset():
-    """Loads the dataset from ontology documents.
-
-    :param ontology_path: Training dataset
-    :type ontology_path: str
-    :param validation_path: Validation dataset. Defaults to ``None``.
-    :type validation_path: str, optional
-    :param testing_path: Testing dataset. Defaults to ``None``.
-    :type testing_path: str, optional
+class Dataset():
+    """This class represents an mOWL dataset.
+    
+    :param ontology: The ontology containing the training data of the dataset.
+    :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
+    :param validation: The ontology containing the validation data of the dataset, defaults to ``None``.
+    :type validation: :class:`org.semanticweb.owlapi.model.OWLOntology`, optional
+    :param testing: The ontology containing the testing data of the dataset, defaults to ``None``.
+    :type testing: :class:`org.semanticweb.owlapi.model.OWLOntology`, optional
     """
 
-    ontology_path: str
-    validation_path: str
-    testing_path: str
-    _ontology: OWLOntology
-    _validation: OWLOntology
-    _testing: OWLOntology
+    def __init__(self, ontology, validation = None , testing = None ):
 
-    def __init__(self,
-                 ontology_path: str,
-                 validation_path: str = None,
-                 testing_path: str = None):
+        if not isinstance(ontology, OWLOntology):
+            raise TypeError(f"Parameter ontology must be an OWLOntology.")
+    
+        if not isinstance(validation, OWLOntology) and validation is not   None:
+            raise TypeError(f"Optional parameter validation must be an OWLOntology.")
+    
+        if not isinstance(testing, OWLOntology) and testing is not None:
+            raise TypeError(f"Optional parameter testing must be an OWLOntology.")
 
-        #Checks on training file path
-        if not isinstance(ontology_path, str):
-            raise TypeError("Training ontology path must be a string.")
+        self._ontology = ontology
+        self._validation = validation
+        self._testing = testing
 
-        if not os.path.exists(ontology_path):
-            raise FileNotFoundError(f"Training ontology file not found {ontology_path}")
-
-        #Checks on validation file path
-        if validation_path is not None:
-            if not isinstance(validation_path, str):
-                raise TypeError("Training validation path must be a string.")
-
-            if not os.path.exists(validation_path):
-                raise FileNotFoundError(f"Validation ontology file not found {validation_path}")
-
-        #Checks on testing file path
-        if testing_path is not None:
-            if not isinstance(testing_path, str):
-                raise TypeError("Training testing path must be a string.")
-
-            if not os.path.exists(testing_path):
-                raise FileNotFoundError(f"Testing ontology file not found {testing_path}")
-
-        self.ontology_path = ontology_path
-        self.validation_path = validation_path
-        self.testing_path = testing_path
-        self._loaded = False
-        self._classes = None
-        self._object_properties = None
-        self._evaluation_classes = None
-
-
-    def _load(self):
-        if self._loaded:
-            return
-
-        ont_manager = OWLManager.createOWLOntologyManager()
-        self._ontology = ont_manager.loadOntologyFromOntologyDocument(
-            java.io.File(self.ontology_path))
-        if not self.validation_path is None:
-            self._validation = ont_manager.loadOntologyFromOntologyDocument(
-                java.io.File(self.validation_path))
-        else:
-            self._validation = None
-
-        if not self.testing_path is None:
-            self._testing = ont_manager.loadOntologyFromOntologyDocument(
-                java.io.File(self.testing_path))
-        else:
-            self._testing = None
-        self._loaded = True
 
     @property
     def ontology(self):
@@ -98,7 +50,6 @@ class PathDataset():
 
         :rtype: org.semanticweb.owlapi.model.OWLOntology
         """
-        self._load()
         return self._ontology
 
     @property
@@ -107,7 +58,6 @@ class PathDataset():
 
         :rtype: org.semanticweb.owlapi.model.OWLOntology
         """
-        self._load()
         return self._validation
 
     @property
@@ -116,7 +66,6 @@ class PathDataset():
 
         :rtype: org.semanticweb.owlapi.model.OWLOntology
         """
-        self._load()
         return self._testing
 
     @property
@@ -187,11 +136,91 @@ class PathDataset():
 
         :rtype: dict
         """
-        self._load()
         projector = TaxonomyWithRelsProjector(relations = ["http://has_label"])
         edges = projector.project(self._ontology)
-        labels = {str(e.src()): str(e.dst()) for e in edges}
+        labels = {str(e.src): str(e.dst) for e in edges}
         return labels
+
+
+
+class PathDataset(Dataset):
+    """Loads the dataset from ontology documents.
+
+    :param ontology_path: Training dataset
+    :type ontology_path: str
+    :param validation_path: Validation dataset. Defaults to ``None``.
+    :type validation_path: str, optional
+    :param testing_path: Testing dataset. Defaults to ``None``.
+    :type testing_path: str, optional
+    """
+
+    ontology_path: str
+    validation_path: str
+    testing_path: str
+    _ontology: OWLOntology
+    _validation: OWLOntology
+    _testing: OWLOntology
+
+    def __init__(self,
+                 ontology_path: str,
+                 validation_path: str = None,
+                 testing_path: str = None):
+
+        #Checks on training file path
+        if not isinstance(ontology_path, str):
+            raise TypeError("Training ontology path must be a string.")
+
+        if not os.path.exists(ontology_path):
+            raise FileNotFoundError(f"Training ontology file not found {ontology_path}")
+
+        #Checks on validation file path
+        if validation_path is not None:
+            if not isinstance(validation_path, str):
+                raise TypeError("Training validation path must be a string.")
+
+            if not os.path.exists(validation_path):
+                raise FileNotFoundError(f"Validation ontology file not found {validation_path}")
+
+        #Checks on testing file path
+        if testing_path is not None:
+            if not isinstance(testing_path, str):
+                raise TypeError("Training testing path must be a string.")
+
+            if not os.path.exists(testing_path):
+                raise FileNotFoundError(f"Testing ontology file not found {testing_path}")
+
+        self.ontology_path = ontology_path
+        self.validation_path = validation_path
+        self.testing_path = testing_path
+
+        ontology, validation, testing = self._load()
+        super().__init__(ontology, validation=validation, testing=testing)
+
+        self._loaded = False
+        self._classes = None
+        self._object_properties = None
+        self._evaluation_classes = None
+
+
+
+    def _load(self):
+
+        ont_manager = OWLManager.createOWLOntologyManager()
+        ontology = ont_manager.loadOntologyFromOntologyDocument(
+            java.io.File(self.ontology_path))
+
+        validation = None
+        if not self.validation_path is None:
+            validation = ont_manager.loadOntologyFromOntologyDocument(
+                java.io.File(self.validation_path))
+
+        testing = None
+        if not self.testing_path is None:
+            testing = ont_manager.loadOntologyFromOntologyDocument(
+                java.io.File(self.testing_path))
+
+        return ontology, validation, testing
+
 
 class TarFileDataset(PathDataset):
     """Loads the dataset from a `tar` file.
@@ -225,8 +254,16 @@ class TarFileDataset(PathDataset):
         ontology_exists = os.path.exists(ontology_path)
         validation_exists = os.path.exists(validation_path)
         testing_exists = os.path.exists(testing_path)
+        
+        #Check if the dataset is already extracted
         if not (ontology_exists and validation_exists and testing_exists):
             self._extract()
+
+        #Check if validation and testing ontologies exist
+        if not os.path.exists(validation_path):
+            validation_path = None
+        if not os.path.exists(testing_path):
+            testing_path = None
 
         super().__init__(
             ontology_path,

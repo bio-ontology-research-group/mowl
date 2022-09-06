@@ -1,9 +1,17 @@
 from deprecated.sphinx import deprecated, versionchanged
 import tempfile
+from mowl.datasets import Dataset
 
 @versionchanged(version = "0.1.0", reason = "Parameter ``model_filepath`` added in the base class for all models. Optional parameter that will use temporary files in case it is not set.")
-class Model(object):
+class Model():
     def __init__(self, dataset, model_filepath = None):
+
+        if not isinstance(dataset, Dataset):
+            raise TypeError("Parameter dataset must be a mOWL Dataset.")
+
+        if model_filepath is not None and not isinstance(model_filepath, str):
+            raise TypeError("Optional parameter model_filepath must be a string.")
+
         self.dataset = dataset
         self._model_filepath = model_filepath
         self._testing_set = None
@@ -13,17 +21,11 @@ class Model(object):
     def train(self):
         '''Trains the model
         '''
-        raise NotImplementedError()
+        raise NotImplementedError("Method train is not implemented.")
 
-    def eval_method(self):
-        raise NotImplementedError()
+    def eval_fn(self):
+        raise NotImplementedError("Method eval_fn is not implemented.")
     
-    def evaluate(self):
-        '''Evaluates the model
-        '''
-        raise NotImplementedError()
-
-
     @property
     def model_filepath(self):
         if self._model_filepath is None:
@@ -34,13 +36,13 @@ class Model(object):
     @property
     def class_index_dict(self):
         if self._class_index_dict is None:
-            self._class_index_dict = {v:k for k,v in enumerate(self.dataset.classes)}
+            self._class_index_dict = {v:k for k,v in enumerate(self.dataset.classes.as_str)}
         return self._class_index_dict
 
     @property
     def object_property_index_dict(self):
         if self._object_property_index_dict is None:
-            self._object_property_index_dict = {v:k for k,v in enumerate(self.dataset.object_properties)}
+            self._object_property_index_dict = {v:k for k,v in enumerate(self.dataset.object_properties.as_str)}
         return self._object_property_index_dict
 
     

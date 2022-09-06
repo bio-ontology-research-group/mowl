@@ -10,6 +10,7 @@ from mowl.projection.edge import Edge as PyEdge
 from deprecated.sphinx import versionchanged
 
 logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("deepwalk")
 
 
 class DeepWalk(WalkingModel):
@@ -40,7 +41,7 @@ class DeepWalk(WalkingModel):
         if nodes_of_interest is None:
             nodes_of_interest = ArrayList()
         else:
-            all_nodes, _ = PyEdge.getEntitiesAndRelations(edges)
+            all_nodes, _ = PyEdge.get_entities_and_relations(edges)
             all_nodes = set(all_nodes)
             python_nodes = nodes_of_interest[:]
             nodes_of_interest = ArrayList()
@@ -48,11 +49,11 @@ class DeepWalk(WalkingModel):
                 if node in all_nodes:
                     nodes_of_interest.add(node)
                 else:
-                    logging.info(f"Node {node} does not exist in graph. Ignoring it.")
+                    logger.info(f"Node {node} does not exist in the graph. Ignoring it.")
                     
         edgesJ = ArrayList()
         for edge in edges:
-            newEdge = Edge(edge.src(), edge.rel(), edge.dst())
+            newEdge = Edge(edge.src, edge.rel, edge.dst)
             edgesJ.add(newEdge)
 
         walker = DW(edgesJ, self.num_walks, self.walk_length, self.alpha, self.workers, self.outfile, nodes_of_interest)
