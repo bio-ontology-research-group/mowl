@@ -36,7 +36,7 @@ class DL2VecProjector(var bidirectional_taxonomy: Boolean = false) extends Abstr
       case "EquivalentClasses" => {
 	var ax = axiom.asInstanceOf[OWLEquivalentClassesAxiom].getClassExpressionsAsList.asScala
         val rightSide = ax.filter((x) => x != ontClass)
-      	rightSide.toList.flatMap(projectSubClassOrEquivAxiom(ontClass, _:OWLClassExpression, "http://subclassof"))
+      	rightSide.toList.flatMap(projectSubClassOrEquivAxiom(ontClass, _:OWLClassExpression, "http://equivalentto"))
       }
       case _ => Nil
     }
@@ -66,10 +66,10 @@ class DL2VecProjector(var bidirectional_taxonomy: Boolean = false) extends Abstr
         ) yield new Triple(ontClass, rel, dst)
       }
 
-      case c if (collectors contains c) => {
-        val dstClasses = splitClass(superClass)
-        dstClasses.flatMap(projectSubClassOrEquivAxiom(ontClass, _:OWLClassExpression, "http://subclassof"))
-      }
+     //case c if (collectors contains c) => {
+     //   val dstClasses = splitClass(superClass)
+     //   dstClasses.flatMap(projectSubClassOrEquivAxiom(ontClass, _:OWLClassExpression, "http://subclassof"))
+     // }
 
       case "Class" => {
 	val dst = superClass.asInstanceOf[OWLClass]
