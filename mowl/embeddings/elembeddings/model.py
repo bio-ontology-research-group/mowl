@@ -36,21 +36,21 @@ class ELEmbeddings(EmbeddingELModelOld):
 
     def get_entities_index_dict(self):
         return self.classes_index_dict, self.relations_index_dict
-                                                                     
+
     def init_model(self):
         self.load_data(extended = self.extended)
         self.model = ELModel(
             len(self.classes_index_dict),
             len(self.relations_index_dict),
             device = self.device).to(self.device)
-    
-        
+
+
     def train(self):
         self.load_data(extended=self.extended)
         self.train_nfs = self.train_nfs[:4]
         self.valid_nfs = self.valid_nfs[:4]
         self.test_nfs = self.test_nfs[:4]
-      
+
         self.init_model()
         optimizer = th.optim.Adam(self.model.parameters(), lr=self.learning_rate)
         best_loss = float('inf')
@@ -61,7 +61,7 @@ class ELEmbeddings(EmbeddingELModelOld):
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
-            
+
             self.model.eval()
             valid_loss = self.model(self.valid_nfs).cpu().detach().item()
             if best_loss > valid_loss:
@@ -71,14 +71,14 @@ class ELEmbeddings(EmbeddingELModelOld):
             if epoch % 100 == 0:
                 print(f'Epoch {epoch}: Train loss: {loss.cpu().detach().item()} Valid loss: {valid_loss}')
 
-                
+
     def eval_method(self, data):
         self.load_data(extended=self.extended)
         scores = self.model.gci2_loss(data)
         return scores
-        
+
     def load_eval_data(self):
-        
+
         if self._loaded_eval:
             return
 
@@ -95,7 +95,7 @@ class ELEmbeddings(EmbeddingELModelOld):
 
         self._training_set = eval_projector.project(self.dataset.ontology)
         self._testing_set = eval_projector.project(self.dataset.testing)
-        
+
         self._loaded_eval = True
 
 
@@ -120,8 +120,8 @@ class ELEmbeddings(EmbeddingELModelOld):
     def tail_entities(self):
         self.load_eval_data()
         return self._tail_entities
-        
-            
+
+
     def evaluate(self):
         self.load_data(extended=self.extended)
         self.model = ELModel(len(self.classes_index_dict), len(self.relations_index_dict), self.device).to(self.device)
@@ -130,11 +130,11 @@ class ELEmbeddings(EmbeddingELModelOld):
         self.model.eval()
         test_loss = self.model(self.test_nfs).cpu().detach().item()
         print('Test Loss:', test_loss)
-        
+
     def get_embeddings(self):
         self.load_data(extended=self.extended)
         self.init_model()
-        
+
         print('Load the best model', self.model_filepath)
         self.model.load_state_dict(th.load(self.model_filepath))
         self.model.eval()
@@ -142,7 +142,7 @@ class ELEmbeddings(EmbeddingELModelOld):
         ent_embeds = {k:v for k,v in zip(self.classes_index_dict.keys(), self.model.class_embed.weight.cpu().detach().numpy())}
         rel_embeds = {k:v for k,v in zip(self.relations_index_dict.keys(), self.model.rel_embed.weight.cpu().detach().numpy())}
         return ent_embeds, rel_embeds
- 
+
 
     def evaluate_ppi(self):
         self.load_data(extended=self.extended)
@@ -175,7 +175,7 @@ class ELEmbeddings(EmbeddingELModelOld):
         z = self.classes_index_dict[z]
         point = self.point_to_tensor([x,y,z])
         return self.model.gci1_loss(point)
-    
+
     def gci2_loss(self, data):
         x, y, z = data
         x = self.classes_index_dict[x]
@@ -212,7 +212,7 @@ class ELModel(nn.Module):
         nn.init.uniform_(self.class_embed.weight, -0, 1)
         self.class_rad = nn.Embedding(self.nb_ont_classes, 1)
         nn.init.uniform_(self.class_rad.weight, -0, 1)
-        
+
         self.rel_embed = nn.Embedding(nb_rels, embed_dim)
         nn.init.uniform_(self.rel_embed.weight, -k, k)
         self.all_gos = th.arange(self.nb_ont_classes).to(device)
@@ -228,10 +228,10 @@ class ELModel(nn.Module):
         return L.gci2_loss(data, self.class_norm, self.class_embed, self.class_rad, self.rel_embed, self.margin)
     def gci2_loss_neg(self, data):
         return L.gci2_loss_neg(data, self.class_norm, self.class_embed, self.class_rad, self.rel_embed, self.margin)
-        
+
     def forward(self, go_normal_forms):
         gci0, gci1, gci2, gci3 = go_normal_forms
-        
+
         loss = 0
         if len(gci0) > 1:
             loss += th.mean(self.gci0_loss(gci0))
@@ -243,6 +243,3 @@ class ELModel(nn.Module):
         if len(gci3) > 1:
             loss += th.mean(self.gci3_loss(gci3))
         return loss
-
-
-

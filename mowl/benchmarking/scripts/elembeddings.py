@@ -38,7 +38,7 @@ def main(test, device):
         ROOT = "tmp/"
         ds = PPIYeastDataset()
         tsne = True
-        
+
     elif test == "gda_mouse":
         ROOT = "../gda/data_mouse/"
         ds = PathDataset(ROOT + "train_mouse.owl", ROOT + "valid_mouse.owl", ROOT + "test_mouse.owl")
@@ -49,9 +49,9 @@ def main(test, device):
     else:
         raise ValueError(f"Type of test not recognized: {test}")
 
-    
-    
-    
+
+
+
 
     dummy_params  = {
         "vector_size" : 10,
@@ -60,18 +60,18 @@ def main(test, device):
         "batch_size": 32,
         "device": device
     }
-    
-    
+
+
     params = {
         "vector_size" : 50,
         "epochs" : 5000,
         "margin": -0.1,
         "batch_size": 32,
         "device": device
-        
+
     }
-    
-    
+
+
     benchmark_case(ds, dummy_params, device, test)
 
 def benchmark_case(dataset, params, device, test):
@@ -82,7 +82,7 @@ def benchmark_case(dataset, params, device, test):
     eval_tails_file = ROOT + "eval_data/tail_entities.pkl"
 
     eval_data_files = [eval_train_file, eval_test_file, eval_heads_file, eval_tails_file]
-    
+
     if exist_files(*eval_data_files):
         logging.info("Evaluation data found. Loading...")
         eval_train_edges, eval_test_edges, head_entities, tail_entities = load_pickles(*eval_data_files)
@@ -94,13 +94,13 @@ def benchmark_case(dataset, params, device, test):
 
             eval_train_edges = eval_projector.project(dataset.ontology)
             eval_test_edges = eval_projector.project(dataset.testing)
-            
+
             train_head_ents, _, train_tail_ents = Edge.zip(eval_train_edges)
             test_head_ents, _, test_tail_ents = Edge.zip(eval_test_edges)
-            
+
             head_entities = list(set(train_head_ents) | set(test_head_ents))
             tail_entities = list(set(train_tail_ents) | set(test_tail_ents))
-            
+
         else:
             eval_projector = projector_factory("taxonomy_rels", taxonomy = True, relations = ["http://is_associated_with", "http://has_annotation"])
 
@@ -110,20 +110,20 @@ def benchmark_case(dataset, params, device, test):
             print(f"number of test edges is {len(eval_test_edges)}")
             train_entities, _ = Edge.getEntitiesAndRelations(eval_train_edges)
             test_entities, _ = Edge.getEntitiesAndRelations(eval_test_edges)
-                        
+
             all_entities = list(set(train_entities) | set(test_entities))
             print("\n\n")
             print(len(test_entities))
             head_entities = [e for e in all_entities if e[7:].isnumeric()]
             tail_entities = [e for e in all_entities if "OMIM_" in e]
-    
+
         save_pickles(
             (eval_train_edges, eval_train_file),
             (eval_test_edges, eval_test_file),
             (head_entities, eval_heads_file),
             (tail_entities, eval_tails_file)
         )
-        
+
     model = ELEmbeddings(
         dataset,
         epochs = params["epochs"],
@@ -131,11 +131,11 @@ def benchmark_case(dataset, params, device, test):
         device = params["device"],
         model_filepath = ROOT + "elem_model.th"
     )
-    
+
     model.train()
 
-        
-            
+
+
     ### FINALLY, EVALUATION
 
     #model.evaluate_ppi()
@@ -160,14 +160,14 @@ def benchmark_case(dataset, params, device, test):
     ###### TSNE ############
 
     labels = dataset.get_labels()
-        
+
     embeddings, _ = model.get_embeddings()
 
     entities = list(set(head_entities) | set(tail_entities))
     tsne = MTSNE(embeddings, labels, entities = entities)
     tsne.generate_points(5000, workers = 16, verbose = 1)
     tsne.savefig(ROOT + f'tsne/elembeddings.jpg')
-        
+
 
 
 if __name__ == "__main__":

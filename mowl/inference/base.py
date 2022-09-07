@@ -5,7 +5,5 @@ class Inference():
         self.method = method
 
 
-    
-    def score(self.axiom):
 
-        
+    def score(self.axiom):

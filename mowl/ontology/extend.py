@@ -29,14 +29,14 @@ def insert_annotations(ontology_file, annotations, out_file = None, verbose=Fals
         raise TypeError("Optional parameter out_file must be of type str")
     if not isinstance(verbose, bool):
         raise TypeError("Optional parameter verbose must be of type bool")
-            
+
     if verbose:
         logging.basicConfig(level = logging.INFO)
 
     if out_file is None:
         out_file = ontology_file
-        
-        
+
+
     manager = OWLManager.createOWLOntologyManager()
     ont = manager.loadOntologyFromOntologyDocument(java.io.File(ontology_file))
 
@@ -44,12 +44,12 @@ def insert_annotations(ontology_file, annotations, out_file = None, verbose=Fals
     if owl_format.isPrefixOWLOntologyFormat():
         ont_prefixes = owl_format.asPrefixOWLOntologyFormat().getPrefixName2PrefixMap()
         ont_prefixes = dict(ont_prefixes).values()
-        
+
     factory = manager.getOWLDataFactory()
 
     for annots_file, relation_name, directed in annotations:
         relation = factory.getOWLObjectProperty(IRI.create(f"{relation_name}"))
-        
+
         with open(annots_file) as f:
             for line in f:
                 items = line.strip().split("\t")
@@ -65,14 +65,7 @@ def insert_annotations(ontology_file, annotations, out_file = None, verbose=Fals
                         objSomeValsAxiom = factory.getOWLObjectSomeValuesFrom(relation, annotating_entity)
                         axiom = factory.getOWLSubClassOfAxiom(ont_class, objSomeValsAxiom)
                         manager.addAxiom(ont, axiom)
-                        
 
-    
+
+
     manager.saveOntology(ont, IRI.create("file:" + os.path.abspath(out_file)))
-
-        
-
-    
-
-    
-                                          

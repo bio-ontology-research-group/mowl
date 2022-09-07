@@ -36,7 +36,7 @@ class ELEmbeddings(EmbeddingELModel):
         self._loaded_eval = False
         self.extended = False
         self.init_model()
-                
+
     def init_model(self):
         self.model = ELEmModule(
             len(self.class_index_dict),
@@ -44,8 +44,8 @@ class ELEmbeddings(EmbeddingELModel):
             embed_dim = self.embed_dim,
             margin = self.margin
         ).to(self.device)
-    
-        
+
+
     def train(self):
         _, diseases = self.dataset.evaluation_classes
 
@@ -61,7 +61,7 @@ class ELEmbeddings(EmbeddingELModel):
             for gci_name, gci_dataset in self.training_datasets.get_gci_datasets().items():
                 if len(gci_dataset) == 0:
                     continue
-                
+
                 loss += th.mean(self.model(gci_dataset[:], gci_name))
                 if gci_name == "gci2":
                     dis = [self.class_index_dict[d] for d in diseases]
@@ -70,7 +70,7 @@ class ELEmbeddings(EmbeddingELModel):
                     data = gci_dataset[:]
                     neg_data = th.cat([data[:,:2], rand_index.unsqueeze(1)], dim = 1)
                     loss += th.mean(self.model(neg_data, gci_name, neg = True))
-            
+
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -83,7 +83,7 @@ class ELEmbeddings(EmbeddingELModel):
                 gci2_data = self.validation_datasets.get_gci_datasets()["gci2"][:]
                 loss = th.mean(self.model(gci2_data, "gci2"))
                 valid_loss += loss.detach().item()
-                
+
             checkpoint = 10
             if best_loss > valid_loss:
                 best_loss = valid_loss
@@ -93,13 +93,13 @@ class ELEmbeddings(EmbeddingELModel):
 
 
     def load_eval_data(self):
-        
+
         if self._loaded_eval:
             return
 
         eval_property = self.dataset.get_evaluation_property()
         eval_classes = self.dataset.get_evaluation_classes()
-        
+
         self._head_entities = eval_classes[0]
         self._tail_entities = eval_classes[1]
 
@@ -108,12 +108,12 @@ class ELEmbeddings(EmbeddingELModel):
 
         self._training_set = eval_projector.project(self.dataset.ontology)
         self._testing_set = eval_projector.project(self.dataset.testing)
-        
+
         self._loaded_eval = True
 
     def get_embeddings(self):
         self.init_model()
-        
+
         print('Load the best model', self.model_filepath)
         self.model.load_state_dict(th.load(self.model_filepath))
         self.model.eval()
@@ -126,7 +126,7 @@ class ELEmbeddings(EmbeddingELModel):
         self.init_model()
         self.model.load_state_dict(th.load(self.model_filepath))
         self.model.eval()
-        
+
     def eval_method(self, data):
         return self.model.gci2_loss(data)
 

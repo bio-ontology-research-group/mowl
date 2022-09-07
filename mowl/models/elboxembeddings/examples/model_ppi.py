@@ -1,8 +1,8 @@
 """
-ELBoxEmbeddings 
+ELBoxEmbeddings
 ===========================
 
-This example is based on the paper `Description Logic EL++ Embeddings with Intersectional Closure <https://arxiv.org/abs/2202.14018v1>`_. This paper is based on the idea of :doc:`/examples/elmodels/1_elembeddings`, but in this work the main point is to solve the *intersectional closure* problem. 
+This example is based on the paper `Description Logic EL++ Embeddings with Intersectional Closure <https://arxiv.org/abs/2202.14018v1>`_. This paper is based on the idea of :doc:`/examples/elmodels/1_elembeddings`, but in this work the main point is to solve the *intersectional closure* problem.
 
 In the case of :doc:`/examples/elmodels/1_elembeddings`, the geometric objects representing ontology classes are :math:`n`-dimensional balls. One of the normal forms in EL is:
 
@@ -54,7 +54,7 @@ class ELBoxEmbeddings(EmbeddingELModel):
         self._loaded_eval = False
         self.extended = False
         self.init_model()
-                
+
     def init_model(self):
         self.model = ELBoxModule(
             len(self.class_index_dict),
@@ -62,8 +62,8 @@ class ELBoxEmbeddings(EmbeddingELModel):
             embed_dim = self.embed_dim,
             margin = self.margin
         ).to(self.device)
-    
-        
+
+
     def train(self):
         criterion = nn.MSELoss()
         optimizer = th.optim.Adam(self.model.parameters(), lr=self.learning_rate)
@@ -76,7 +76,7 @@ class ELBoxEmbeddings(EmbeddingELModel):
             self.model.train()
 
             train_loss = 0
-            loss = 0            
+            loss = 0
             for gci_name, gci_dataset in training_datasets.items():
                 if len(gci_dataset) == 0:
                     continue
@@ -84,7 +84,7 @@ class ELBoxEmbeddings(EmbeddingELModel):
                 dst = self.model(gci_dataset[rand_index], gci_name)
                 mse_loss = criterion(dst, th.zeros(dst.shape, requires_grad = False).to(self.device))
                 loss += mse_loss
-                
+
                 if gci_name == "gci2":
                     rand_index = np.random.choice(len(gci_dataset), size = 512)
                     gci_batch = gci_dataset[rand_index]
@@ -92,11 +92,11 @@ class ELBoxEmbeddings(EmbeddingELModel):
                     idxs_for_negs = np.random.choice(prots, size = len(gci_batch), replace = True)
                     rand_prot_ids = th.tensor(idxs_for_negs).to(self.device)
                     neg_data = th.cat([gci_batch[:, :2], rand_prot_ids.unsqueeze(1)], dim = 1)
-                    
+
                     dst = self.model(neg_data, gci_name, neg = True)
                     mse_loss = criterion(dst, th.ones(dst.shape, requires_grad = False).to(self.device))
                     loss += mse_loss
-        
+
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -110,7 +110,7 @@ class ELBoxEmbeddings(EmbeddingELModel):
                 dst = self.model(gci2_data, "gci2")
                 loss = criterion(dst, th.zeros(dst.shape, requires_grad = False).to(self.device))
                 valid_loss += loss.detach().item()
-                
+
             checkpoint = 100
             if best_loss > valid_loss and (epoch+1) % checkpoint == 0:
                 best_loss = valid_loss
@@ -136,13 +136,13 @@ class ELBoxEmbeddings(EmbeddingELModel):
         return self.model.gci2_loss(data)
 
     def load_eval_data(self):
-        
+
         if self._loaded_eval:
             return
 
         eval_property = self.dataset.get_evaluation_property()
         eval_classes = self.dataset.evaluation_classes
-                                        
+
         self._head_entities = set(list(eval_classes)[:])
         self._tail_entities = set(list(eval_classes)[:])
 
@@ -150,12 +150,12 @@ class ELBoxEmbeddings(EmbeddingELModel):
 
         self._training_set = eval_projector.project(self.dataset.ontology)
         self._testing_set = eval_projector.project(self.dataset.testing)
-        
+
         self._loaded_eval = True
 
     def get_embeddings(self):
         self.init_model()
-        
+
         print('Load the best model', self.model_filepath)
         self.model.load_state_dict(th.load(self.model_filepath))
         self.model.eval()
@@ -168,7 +168,7 @@ class ELBoxEmbeddings(EmbeddingELModel):
         self.init_model()
         self.model.load_state_dict(th.load(self.model_filepath))
         self.model.eval()
-    
+
     @property
     def training_set(self):
         self.load_eval_data()
@@ -190,7 +190,3 @@ class ELBoxEmbeddings(EmbeddingELModel):
     def tail_entities(self):
         self.load_eval_data()
         return self._tail_entities
-
-
-
-

@@ -19,7 +19,7 @@ class ELEmModule(ELModule):
         self.class_rad = nn.Embedding(self.nb_ont_classes, 1)
         nn.init.uniform_(self.class_rad.weight, a=-1, b=1)
         self.class_rad.weight.data /= th.linalg.norm(self.class_rad.weight.data,axis=1).reshape(-1,1)
-        
+
         self.rel_embed = nn.Embedding(nb_rels, embed_dim)
         nn.init.uniform_(self.rel_embed.weight, a=-1, b=1)
         self.rel_embed.weight.data /= th.linalg.norm(self.rel_embed.weight.data,axis=1).reshape(-1,1)
@@ -30,7 +30,7 @@ class ELEmModule(ELModule):
         res = th.abs(th.linalg.norm(x, axis=1) - self.reg_norm) #force n-ball to be inside unit ball
         res = th.reshape(res, [-1, 1])
         return res
-    
+
     def gci0_loss(self, data, neg = False):
         return L.gci0_loss(data, self.class_embed, self.class_rad, self.class_reg, self.margin, neg = neg)
     def gci1_loss(self, data, neg = False):
@@ -41,12 +41,3 @@ class ELEmModule(ELModule):
         return L.gci2_loss(data, self.class_embed, self.class_rad, self.rel_embed, self.class_reg, self.margin, neg = neg)
     def gci3_loss(self, data, neg = False):
         return L.gci3_loss(data, self.class_embed, self.class_rad, self.rel_embed, self.class_reg, self.margin, neg = neg)
-
-
-
-
-
-
-
-
-

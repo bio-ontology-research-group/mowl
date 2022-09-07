@@ -8,7 +8,9 @@ class ELModule(nn.Module):
 
     def __init__(self):
         super().__init__()
-        
+
+        self.gci_names = ["gci0", "gci1", "gci2", "gci3", "gci0_bot", "gci1_bot", "gci3_bot"]
+
     def gci0_loss(self, gci, neg = False):
         """Loss function for GCI0: :math:`C \sqsubseteq D`.
 
@@ -17,13 +19,13 @@ class ELModule(nn.Module):
         :param neg: Parameter indicating that the negative version of this loss function must be used. Defaults to ``False``.
         :type neg: bool, optional.
         """
-        
 
-       
+
+
         raise NotImplementedError()
 
     def gci1_loss(self, gci, neg = False):
-        """Loss function for GCI1: :math:`C_1 \sqcap C_2 \sqsubseteq D`. 
+        """Loss function for GCI1: :math:`C_1 \sqcap C_2 \sqsubseteq D`.
 
         :param gci: Input tensor of shape \(\*,3\) where ``C1`` classes will be at ``gci[:,0]``, ``C2`` classes will be at gci[:,1] and ``D`` classes will be at ``gci[:,2]``. It is recommended to use the :class:`ELDataset <mowl.datasets.el.ELDataset>`.
         :type gci: :class:`torch.Tensor`
@@ -34,7 +36,7 @@ class ELModule(nn.Module):
         raise NotImplementedError()
 
     def gci2_loss(self, gci, neg = False):
-        """Loss function for GCI2: :math:`C \sqsubseteq R. D`. 
+        """Loss function for GCI2: :math:`C \sqsubseteq R. D`.
 
         :param gci: Input tensor of shape \(\*,3\) where ``C`` classes will be at ``gci[:,0]``, ``R`` object properties will be at ``gci[:,1]`` and ``D`` classes will be at ``gci[:,2]``. It is recommended to use the :class:`ELDataset <mowl.datasets.el.ELDataset>`.
         :type gci: :class:`torch.Tensor`
@@ -45,7 +47,7 @@ class ELModule(nn.Module):
         raise NotImplementedError()
 
     def gci3_loss(self, gci, neg = False):
-        """Loss function for GCI3: :math:`R. C \sqsubseteq D`. 
+        """Loss function for GCI3: :math:`R. C \sqsubseteq D`.
 
         :param gci: Input tensor of shape \(\*,3\) where ``R`` object properties will be at gci[:,0], ``C`` classes will be at ``gci[:,1]``  and ``D`` classes will be at ``gci[:,2]``. It is recommended to use the :class:`ELDataset <mowl.datasets.el.ELDataset>`.
         :type gci: :class:`torch.Tensor`
@@ -56,7 +58,7 @@ class ELModule(nn.Module):
         raise NotImplementedError()
 
     def gci0_bot_loss(self, gci, neg = False):
-        """Loss function for GCI0 with bottom concept: :math:`C \sqsubseteq \perp`. 
+        """Loss function for GCI0 with bottom concept: :math:`C \sqsubseteq \perp`.
 
         :param gci: Input tensor of shape \(\*,2\) where ``C`` classes will be at ``gci[:,0]`` and ``bottom`` classes will be at ``gci[:,1]``. It is recommended to use the :class:`ELDataset <mowl.datasets.el.ELDataset>`.
         :type gci: :class:`torch.Tensor`
@@ -67,7 +69,7 @@ class ELModule(nn.Module):
         raise NotImplementedError()
 
     def gci1_bot_loss(self, gci, neg = False):
-        """Loss function for GCI1 with bottom concept: :math:`C_1 \sqcap C_2 \sqsubseteq \perp`. 
+        """Loss function for GCI1 with bottom concept: :math:`C_1 \sqcap C_2 \sqsubseteq \perp`.
 
         :param gci: Input tensor of shape \(\*,3\) where ``C1`` classes will be at ``gci[:,0]``, ``C2`` classes will be at gci[:,1] and ``bottom`` classes will be at ``gci[:,2]``. It is recommended to use the :class:`ELDataset <mowl.datasets.el.ELDataset>`.
         :type gci: :class:`torch.Tensor`
@@ -78,7 +80,7 @@ class ELModule(nn.Module):
         raise NotImplementedError()
 
     def gci3_bot_loss(self, gci, neg = False):
-        """Loss function for GCI3 with bottom concept: :math:`R. C \sqsubseteq \perp`. 
+        """Loss function for GCI3 with bottom concept: :math:`R. C \sqsubseteq \perp`.
 
         :param gci: Input tensor of shape \(\*,3\) where ``R`` object properties will be at gci[:,0], ``C`` classes will be at ``gci[:,1]``  and ``bottom`` classes will be at ``gci[:,2]``. It is recommended to use the :class:`ELDataset <mowl.datasets.el.ELDataset>`.
         :type gci: :class:`torch.Tensor`
@@ -89,6 +91,10 @@ class ELModule(nn.Module):
         raise NotImplementedError()
 
     def get_loss_function(self, gci_name):
+
+        if not gci_name in self.gci_names:
+            raise ValueError(f"Parameter gci_name must be one of the following: {', '.join(self.gci_names)}.")
+
         if gci_name == "gci2_bot":
             raise ValueError("GCI2 does not allow bottom entity in the right side.")
         return {
@@ -103,6 +109,6 @@ class ELModule(nn.Module):
 
     def forward(self, gci, gci_name, neg = False):
         loss_fn = self.get_loss_function(gci_name)
-        
+
         loss = loss_fn(gci, neg = neg)
         return loss

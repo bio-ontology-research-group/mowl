@@ -18,7 +18,7 @@ class WalkingModel():
             raise TypeError("Parameter walk_length must be an integer")
         if not isinstance(workers, int):
             raise TypeError("Optional parameter workers must be an integer")
-        
+
 
         if outfile is None:
             tmp_file = tempfile.NamedTemporaryFile()
@@ -45,5 +45,5 @@ class WalkingModel():
         :param nodes_of_interest: List of entity names to filter the generated walks. If a walk contains at least one word of interest, it will be saved into disk, otherwise it will be ignored.  If no list is input, all the nodes will be considered. Defaults to ``None``
         :type nodes_of_interest: list, optional
         '''
-        
+
         raise NotImplementedError()

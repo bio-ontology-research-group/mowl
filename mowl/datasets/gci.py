@@ -14,10 +14,10 @@ class GCIDataset(Dataset):
     def data(self):
         return self._data
 
-    
+
     def push_to_device(self):
         raise NotImplementedError()
-    
+
     def get_data(self):
         raise NotImplementedError()
 
@@ -37,16 +37,15 @@ class GCIDataset(Dataset):
 
         if not all(in_indices):
             raise ValueError("Extending element contains not recognized index.")
-        
+
         new_tensor = th.cat([self._data, tensor.to(self.device)], dim = 0)
         self._data = new_tensor
-        
+
     def __getitem__(self, idx):
         return self.data[idx]
-        
+
 #    def __iter__(self):
  #       return self.get_data()
 
     def __len__(self):
         return len(self.data)
-

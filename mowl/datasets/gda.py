@@ -28,7 +28,7 @@ class GDADataset(RemoteDataset):
                 genes.add(owl_cls)
             if "OMIM_" in owl_cls:
                 diseases.add(owl_cls)
-                
+
         return genes, diseases
 
     def get_evaluation_property(self):

@@ -12,7 +12,7 @@ class TestOwl2VecStar(TestCase):
         self.assertRaisesRegex(TypeError, "Optional parameter bidirectional_taxonomy must be of type boolean", OWL2VecStarProjector, bidirectional_taxonomy = "True")
         self.assertRaisesRegex(TypeError, "Optional parameter only_taxonomy must be of type boolean", OWL2VecStarProjector, only_taxonomy = "True")
         self.assertRaisesRegex(TypeError, "Optional parameter include_literals must be of type boolean", OWL2VecStarProjector, include_literals = "True")
-    
+
     def test_project_method_parameter_types(self):
         """This should raise TypeError with message when project method parameter is of incorrect type"""
         projector = OWL2VecStarProjector()

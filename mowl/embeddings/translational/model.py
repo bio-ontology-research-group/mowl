@@ -30,7 +30,7 @@ class TranslationalOnt():
     :param device: Device to run the model. Default is `cpu`
     :type device: str
     '''
-    
+
     def __init__(self,
                  edges,
                  trans_method="transE",
@@ -40,7 +40,7 @@ class TranslationalOnt():
                  device = "cpu",
                  model_filepath = None,
     ):
-        
+
         self.edges = edges
         self.trans_method = trans_method
         self.embedding_dim = embedding_dim
@@ -52,7 +52,7 @@ class TranslationalOnt():
         self._data_loaded = False
 
         self.model_filepath = model_filepath
-        
+
     def load_data(self):
         if self._data_loaded:
             return
@@ -80,12 +80,12 @@ class TranslationalOnt():
 
     def init_model(self):
         self.load_data()
-        
+
         self.model = self.trans_factory(self.trans_method, self.triples_factory, self.embedding_dim).to(self.device)
-        
-    def train(self): 
+
+    def train(self):
         self.load_data()
-        
+
         self.init_model()
 
         optimizer = Adam(params=self.model.get_grad_params())
@@ -104,14 +104,14 @@ class TranslationalOnt():
         self.init_model()
         if load_best_model:
             self.load_best_model()
-                     
+
         embeddings = self.model.entity_representations[0](indices = None).cpu().detach().numpy()
         embeddings = {item[0]: embeddings[item[1]] for item in self.entities_idx.items()}
 
         rel_embeddings = self.model.relation_representations[0](indices = None).cpu().detach().numpy()
         rel_embeddings = {item[0]: rel_embeddings[item[1]] for item in self.relations_idx.items()}
 
-        
+
         return embeddings, rel_embeddings
 
     def score_method_point(self, point):
@@ -124,13 +124,13 @@ class TranslationalOnt():
 
     def score_method_tensor(self, data):
         return -self.model.score_hrt(data)
-    
+
     def point_to_tensor(self, point):
         point = [list(point)]
         point = th.tensor(point).to(self.device)
         return point
 
-    
+
     def trans_factory(self, method_name, triples_factory, embedding_dim):
         methods = {
             "transE": TransE,
@@ -166,7 +166,7 @@ class TranslationalOntNew():
     :param model_filepath: Path for saving the model. Defaults to :class:`tempfile.NamedTemporaryFile`
     :type model_filepath: str, optional
     '''
-    
+
     def __init__(self,
                  triples_factory,
                  pykeen_model,
@@ -184,12 +184,12 @@ class TranslationalOntNew():
         self.batch_size = batch_size
         self.optimizer = optimizer
         self.lr = lr
-        
+
         if model_filepath is None:
             model_filepath = tempfile.NamedTemporaryFile()
             model_filepath = model_filepath.name
         self.model_filepath = model_filepath
-        
+
         self._trained = False
         self._data_loaded = False
 
@@ -197,7 +197,7 @@ class TranslationalOntNew():
         self.model.load_state_dict(th.load(self.model_filepath))
         self.model.eval()
 
-    def train(self): 
+    def train(self):
         optimizer = self.optimizer(params=self.model.get_grad_params(), lr = self.lr)
 
         training_loop = SLCWATrainingLoop(model=self.model, triples_factory=self.triples_factory, optimizer=optimizer)
@@ -210,14 +210,14 @@ class TranslationalOntNew():
     def get_embeddings(self, load_best_model = True):
         if load_best_model:
             self.load_best_model()
-                     
+
         embeddings = self.model.entity_representations[0](indices = None).cpu().detach().numpy()
         embeddings = {item[0]: embeddings[item[1]] for item in self.triples_factory.entity_to_id.items()}
 
         rel_embeddings = self.model.relation_representations[0](indices = None).cpu().detach().numpy()
         rel_embeddings = {item[0]: rel_embeddings[item[1]] for item in self.triples_factory.relation_to_id.items()}
 
-        
+
         return embeddings, rel_embeddings
 
     def score_method_point(self, point):
@@ -230,9 +230,8 @@ class TranslationalOntNew():
 
     def score_method_tensor(self, data):
         return -self.model.predict_hrt(data)
-    
+
     def point_to_tensor(self, point):
         point = [list(point)]
         point = th.tensor(point).to(self.device)
         return point
-

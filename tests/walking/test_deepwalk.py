@@ -11,7 +11,7 @@ class TestDeepWalk(TestCase):
 
     @classmethod
     def setUpClass(self):
-        
+
         edge1 = Edge("A", "http://rel1", "B")
         edge2 = Edge("B", "http://rel1", "C")
         edge3 = Edge("C", "http://rel1", "D")
@@ -69,7 +69,7 @@ class TestDeepWalk(TestCase):
 
         with self.assertLogs("deepwalk", level='INFO') as cm:
             node2vec.walk(self.graph, nodes_of_interest = ["A", "X"])
-        
+
         self.assertEqual(cm.output, ["INFO:deepwalk:Node X does not exist in the graph. Ignoring it."])
 
     def test_passing_outfile_name(self):

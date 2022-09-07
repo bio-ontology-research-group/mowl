@@ -45,4 +45,3 @@ setuptools.setup(
         "deprecated"
     ]
 )
-

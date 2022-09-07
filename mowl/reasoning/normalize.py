@@ -16,7 +16,7 @@ class ELNormalizer():
 
     """This class wraps the normalization functionality found in the Java library :class:`Jcel`. The normalization process transforms an ontology into 7 normal forms in the description logic EL language.
     """
-    
+
     def __init__(self):
         return
 
@@ -45,13 +45,13 @@ class ELNormalizer():
         intAxioms = translator.translateSA(axioms)
 
         normalizer = OntologyNormalizer()
-            
+
         factory = IntegerOntologyObjectFactoryImpl()
         normalizedOntology = normalizer.normalize(intAxioms, factory)
         rTranslator = ReverseAxiomTranslator(translator, ontology)
 
         axioms_dict = {"gci0": [], "gci1": [], "gci2": [], "gci3": [], "gci0_bot": [], "gci1_bot": [], "gci3_bot": []}
-        
+
         for ax in normalizedOntology:
             try:
                 axiom = rTranslator.visit(ax)
@@ -61,7 +61,7 @@ class ELNormalizer():
                 logging.info("Reverse translation. Ignoring axiom: %s", ax)
                 logging.info(e)
         return axioms_dict
-    
+
 def process_axiom(axiom: OWLAxiom):
 
     subclass = axiom.getSubClass()
@@ -72,13 +72,13 @@ def process_axiom(axiom: OWLAxiom):
         if superclass.contains("owl#Nothing"):
             return "gci1_bot", GCI1_BOT(axiom)
         return "gci1", GCI1(axiom)
-        
+
 
     elif type(subclass) == OWLObjectSomeValuesFromImpl:
         superclass = superclass.toStringID()
         if superclass.contains("owl#Nothing"):
             return "gci3_bot", GCI3_BOT(axiom)
-        
+
         return "gci3", GCI3(axiom)
 
     elif type(subclass) == OWLClassImpl:
@@ -87,7 +87,7 @@ def process_axiom(axiom: OWLAxiom):
             superclass = superclass.toStringID()
             if superclass.contains("owl#Nothing"):
                 return "gci0_bot", GCI0_BOT(axiom)
-        
+
             return "gci0", GCI0(axiom)
 
         elif type(superclass) == OWLObjectSomeValuesFromImpl:
@@ -117,7 +117,7 @@ class GCI():
     def owl_axiom(self):
         return self._axiom
 
-    
+
     @staticmethod
     def get_entities(gcis):
         classes = set()
@@ -127,10 +127,10 @@ class GCI():
             new_classes, new_obj_props = gci.get_entities()
             classes |= new_classes
             object_properties |= new_obj_props
-            
+
         return classes, object_properties
-        
-        
+
+
 class GCI0(GCI):
 
     def __init__(self, axiom):
@@ -141,7 +141,7 @@ class GCI0(GCI):
     @property
     def subclass(self):
         if not self._subclass:
-            self._subclass = str(self.owl_subclass.toStringID()) 
+            self._subclass = str(self.owl_subclass.toStringID())
         return self._subclass
 
     @property
@@ -149,7 +149,7 @@ class GCI0(GCI):
         if not self._superclass:
             self._superclass = str(self.owl_superclass.toStringID())
         return self._superclass
- 
+
     def get_entities(self):
         return set([self.subclass, self.superclass]), set()
 
@@ -159,12 +159,12 @@ class GCI0_BOT(GCI0):
         super().__init__(axiom)
         if not "owl#Nothing" in self.superclass:
             raise ValueError("Superclass in GCI0_BOT must be the bottom concept.")
-        
-        
+
+
 class GCI1(GCI):
     def __init__(self, axiom):
         super().__init__(axiom)
-        
+
         self._left_subclass = None
         self._right_subclass = None
         self._superclass = None
@@ -173,7 +173,7 @@ class GCI1(GCI):
         operands = self.owl_subclass.getOperandsAsList()
         left_subclass = operands[0].toStringID()
         right_subclass = operands[1].toStringID()
-        
+
         self._left_subclass = str(left_subclass)
         self._right_subclass = str(right_subclass)
 
@@ -194,17 +194,17 @@ class GCI1(GCI):
         if not self._superclass:
             self._superclass = str(self.owl_superclass.toStringID())
         return self._superclass
-        
+
     def get_entities(self):
         return set([self.left_subclass, self.right_subclass, self.superclass]), set()
-            
+
 class GCI1_BOT(GCI1):
     def __init__(self, axiom):
         super().__init__(axiom)
         if not "owl#Nothing" in self.superclass:
             raise ValueError("Superclass in GCI1_BOT must be the bottom concept.")
-        
-        
+
+
 class GCI2(GCI):
     def __init__(self, axiom):
         super().__init__(axiom)
@@ -223,7 +223,7 @@ class GCI2(GCI):
     @property
     def subclass(self):
         if not self._subclass:
-            self._subclass = str(self.owl_subclass.toStringID()) 
+            self._subclass = str(self.owl_subclass.toStringID())
         return self._subclass
 
     @property
@@ -237,8 +237,8 @@ class GCI2(GCI):
         if not self._filler:
             self._process_right_side()
         return self._filler
-         
-    
+
+
     def get_entities(self):
         return set([self.subclass, self.filler]), set(self.object_property)
 
@@ -268,21 +268,18 @@ class GCI3(GCI):
         if not self._filler:
             self._process_left_side()
         return self._filler
-         
+
     @property
     def superclass(self):
         if not self._superclass:
-            self._superclass = str(self.owl_superclass.toStringID()) 
+            self._superclass = str(self.owl_superclass.toStringID())
         return self._superclass
 
     def get_entities(self):
         return set([self.filler, self.superclass]), set(self.object_property)
-                
+
 class GCI3_BOT(GCI3):
     def __init__(self, axiom):
         super().__init__(axiom)
         if not "owl#Nothing" in superclass:
             raise ValueError("Superclass in GCI3_BOT must be the bottom concept.")
-        
-
-        

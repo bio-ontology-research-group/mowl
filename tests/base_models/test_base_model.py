@@ -40,7 +40,7 @@ class TestModel(TestCase):
         self.assertIsInstance(list(cls_id_dict.values())[rnd_idx], int)
         rnd_idx = random.randrange(0, len(cls_id_dict))
         self.assertIsInstance(list(cls_id_dict.keys())[rnd_idx], str)
-    
+
     def test_get_object_property_index_dict_attribute(self):
         """This checks if Model.get_object_property_index_dict attribute works correctly"""
 

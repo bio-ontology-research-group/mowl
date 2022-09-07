@@ -11,7 +11,7 @@ class ELBoxModule(ELModule):
         self.nb_rels = nb_rels
 
         self.embed_dim = embed_dim
-        
+
         self.class_embed = nn.Embedding(self.nb_ont_classes, embed_dim)
         nn.init.uniform_(self.class_embed.weight, a=-1, b=1)
         self.class_embed.weight.data /= th.linalg.norm(self.class_embed.weight.data,axis=1).reshape(-1,1)
@@ -23,7 +23,7 @@ class ELBoxModule(ELModule):
         self.rel_embed = nn.Embedding(nb_rels, embed_dim)
         nn.init.uniform_(self.rel_embed.weight, a=-1, b=1)
         self.rel_embed.weight.data /= th.linalg.norm(self.rel_embed.weight.data,axis=1).reshape(-1,1)
-        
+
         self.margin = margin
 
     def gci0_loss(self, data, neg = False):

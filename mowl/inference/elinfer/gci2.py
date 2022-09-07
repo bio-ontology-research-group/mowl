@@ -13,14 +13,14 @@ class GCI2Inference():
         self.property_index_dict = property_index_dict
         self.index_class_dict = {v:k for k,v in self.class_index_dict.items()}
         self.index_property_dict = {v:k for k,v in self.property_index_dict.items()}
-        
+
         self.device = device
-        
+
     def infer_subclass(self, subclass_condition = None, property_condition = None, filler_condition = None, axioms_to_filter = None):
         if subclass_condition is None:
             subclass_condition = lambda _: True
         if property_condition is None:
-            property_condition = lambda _: True            
+            property_condition = lambda _: True
         if filler_condition is None:
             filler_condition = lambda _: True
 
@@ -35,18 +35,18 @@ class GCI2Inference():
         subclass_indexemb_indexsc = {v:k for k,v in enumerate(subclass_name_indexemb.values())}
         self.subclass_name_indexemb_inverse = invert_dict(subclass_name_indexemb)
         self.subclass_indexemb_indexsc_inverse = invert_dict(subclass_indexemb_indexsc)
-        
-        property_filler = {(self.property_index_dict[p], self.class_index_dict[f]) for p in properties for f in fillers} #(embed_index, embed_index) 
+
+        property_filler = {(self.property_index_dict[p], self.class_index_dict[f]) for p in properties for f in fillers} #(embed_index, embed_index)
         prop_filler_idx = {v:k for k,v in enumerate(property_filler)} #(embed_idx, embed_idx) -> score_idx
         self.prop_filler_idx_inverse = {v:k for k,v in prop_filler_idx.items()} #score_idx -> (embed_idx, embed_idx)
-        
+
         dataset = InferGCI2Dataset(self.class_index_dict, self.property_index_dict, prop_filler_idx, subclass_indexemb_indexsc, mode = "infer_subclass")
         dataloader = DataLoader(dataset, batch_size = 4)
-        
+
         nb_subclasses = len(subclasses)
-        
+
         self.preds_subclass   = np.zeros((len(property_filler), nb_subclasses), dtype=np.float32)
-        
+
         self.filtered_scores = np.ones((len(property_filler), nb_subclasses), dtype=np.int32)
 
         if not axioms_to_filter is None:
@@ -56,7 +56,7 @@ class GCI2Inference():
             self.filtered_scores[rows, cols] = 10000000
 
         diagonal = [(prop_filler_idx[(p,d)], subclass_indexemb_indexsc[c]) for p,d in prop_filler_idx for c in subclass_indexemb_indexsc if c == d]
-        
+
         rows, cols = zip(*diagonal)
         self.filtered_scores[rows, cols] = 1000000
         infer_model = InferGCI2Module(self.method)
@@ -64,20 +64,20 @@ class GCI2Inference():
             res = infer_model(batch.to(self.device))
             res = res.cpu().detach().numpy()
             idxs = [prop_filler_idx[(p.detach().item(),d.detach().item())] for p, d in zip(property_idxs, filler_idxs)]
-            
+
             self.preds_subclass[idxs,:] = res
 
         self.preds_subclass *= self.filtered_scores
-        
+
         self.ranks=rankdata(self.preds_subclass, method = 'ordinal').reshape(self.preds_subclass.shape)
-        
+
 
     def infer_superclass_property(self, subclass_condition = None, property_condition = None, filler_condition = None, axioms_to_filter = None):
         if subclass_condition is None:
             subclass_condition = lambda _: True
         if property_condition is None:
             property_condition = lambda _: True
-            
+
         if filler_condition is None:
             filler_condition = lambda _: True
 
@@ -92,18 +92,18 @@ class GCI2Inference():
         property_indexemb_indexsc = {v:k for k,v in enumerate(property_name_indexemb.values())}
         self.property_name_indexemb_inverse = invert_dict(property_name_indexemb)
         self.property_indexemb_indexsc_inverse = invert_dict(property_indexemb_indexsc)
-        
-        subclass_filler = {(self.class_index_dict[s], self.class_index_dict[f]) for s in subclasses for f in fillers} #(embed_index, embed_index) 
+
+        subclass_filler = {(self.class_index_dict[s], self.class_index_dict[f]) for s in subclasses for f in fillers} #(embed_index, embed_index)
         sub_filler_idx = {v:k for k,v in enumerate(subclass_filler)} #(embed_idx, embed_idx) -> score_idx
         self.sub_filler_idx_inverse = {v:k for k,v in sub_filler_idx.items()} #score_idx -> (embed_idx, embed_idx)
-        
+
         dataset = InferGCI2Dataset(self.class_index_dict, self.property_index_dict, sub_filler_idx, property_indexemb_indexsc, mode = "infer_property")
         dataloader = DataLoader(dataset, batch_size = 4)
-        
+
         nb_properties = len(properties)
-        
+
         self.preds_property = np.zeros((len(subclass_filler), nb_properties), dtype=np.float32)
-        
+
         self.filtered_scores = np.ones((len(subclass_filler), nb_properties), dtype=np.int32)
 
         if not axioms_to_filter is None:
@@ -113,7 +113,7 @@ class GCI2Inference():
             self.filtered_scores[rows, cols] = 10000000
 
         diagonal = [(sub_filler_idx[(c,d)], property_indexemb_indexsc[p]) for c,d in sub_filler_idx for p in property_indexemb_indexsc if c == d]
-        
+
         rows, cols = zip(*diagonal)
         self.filtered_scores[rows, cols] = 1000000
         infer_model = InferGCI2Module(self.method)
@@ -122,21 +122,21 @@ class GCI2Inference():
             res = infer_model(batch.to(self.device))
             res = res.cpu().detach().numpy()
             idxs = [sub_filler_idx[(c.detach().item(),d.detach().item())] for c, d in zip(subclass_idxs, filler_idxs)]
-            
+
             self.preds_property[idxs,:] = res
 
         self.preds_property *= self.filtered_scores
-        
-        self.ranks=rankdata(self.preds_property, method = 'ordinal').reshape(self.preds_property.shape)
-        
 
-        
+        self.ranks=rankdata(self.preds_property, method = 'ordinal').reshape(self.preds_property.shape)
+
+
+
     def infer_superclass_filler(self, subclass_condition = None, property_condition = None, filler_condition = None, axioms_to_filter = None):
         if subclass_condition is None:
             subclass_condition = lambda _: True
         if property_condition is None:
             property_condition = lambda _: True
-            
+
         if filler_condition is None:
             filler_condition = lambda _: True
 
@@ -151,18 +151,18 @@ class GCI2Inference():
         filler_indexemb_indexsc = {v:k for k,v in enumerate(filler_name_indexemb.values())}
         self.filler_name_indexemb_inverse = invert_dict(filler_name_indexemb)
         self.filler_indexemb_indexsc_inverse = invert_dict(filler_indexemb_indexsc)
-        
-        subclass_property = {(self.class_index_dict[s], self.property_index_dict[p]) for s in subclasses for p in properties} #(embed_index, embed_index) 
+
+        subclass_property = {(self.class_index_dict[s], self.property_index_dict[p]) for s in subclasses for p in properties} #(embed_index, embed_index)
         sub_prop_idx = {v:k for k,v in enumerate(subclass_property)} #(embed_idx, embed_idx) -> score_idx
         self.sub_prop_idx_inverse = {v:k for k,v in sub_prop_idx.items()} #score_idx -> (embed_idx, embed_idx)
-        
+
         dataset = InferGCI2Dataset(self.class_index_dict, self.property_index_dict, sub_prop_idx, filler_indexemb_indexsc, mode = "infer_filler")
         dataloader = DataLoader(dataset, batch_size = 4)
-        
+
         nb_fillers = len(fillers)
-        
+
         self.preds_filler   = np.zeros((len(subclass_property), nb_fillers), dtype=np.float32)
-        
+
         self.filtered_scores = np.ones((len(subclass_property), nb_fillers), dtype=np.int32)
 
         if not axioms_to_filter is None:
@@ -172,7 +172,7 @@ class GCI2Inference():
             self.filtered_scores[rows, cols] = 10000000
 
         diagonal = [(sub_prop_idx[(c,p)], filler_indexemb_indexsc[d]) for c,p in sub_prop_idx for d in filler_indexemb_indexsc if c == d]
-        
+
         rows, cols = zip(*diagonal)
         self.filtered_scores[rows, cols] = 1000000
         infer_model = InferGCI2Module(self.method)
@@ -180,14 +180,14 @@ class GCI2Inference():
             res = infer_model(batch.to(self.device))
             res = res.cpu().detach().numpy()
             idxs = [sub_prop_idx[(c.detach().item(),r.detach().item())] for c, r in zip(subclass_idxs, property_idxs)]
-            
+
             self.preds_filler[idxs,:] = res
 
         self.preds_filler *= self.filtered_scores
         print("before ranks")
         self.ranks=rankdata(self.preds_filler, method = 'ordinal').reshape(self.preds_filler.shape)
         print("after ranks")
-        
+
     def get_inferences(self, top_k = float("inf"), infer_mode="subclass", subclasses = None, properties = None, fillers = None):
         if infer_mode == "subclass":
             preds = self.preds_subclass
@@ -198,7 +198,7 @@ class GCI2Inference():
         else:
             raise ValueError()
 
-        
+
         idxsA_idxsB, missing_entities = np.where(self.ranks <= top_k)
 
         zipped_idxs = zip(idxsA_idxsB, missing_entities)
@@ -221,13 +221,13 @@ class GCI2Inference():
             axioms[(sub, prop, filler)] = score
 
         axioms = dict(sorted(axioms.items(), key = lambda x: x[1]))
-        return axioms 
-        
+        return axioms
+
 class InferGCI2Module(nn.Module):
     def __init__(self, method):
         super().__init__()
 
-        self.method = method        
+        self.method = method
 
     def forward(self, x):
         bs, num_classes, ents = x.shape
@@ -248,9 +248,9 @@ class InferGCI2Dataset(IterableDataset):
         self.data = list(mixed_indexemb_dict.keys())[:1000]
         self.class_name_indexemb = class_name_indexemb
         self.property_name_indexemb = property_name_indexemb
-        
+
         self.mixed_indexemb_indexsc = {v:k for k,v in enumerate(mixed_indexemb_dict)}
-        
+
         self.missing_entity_indexemb_indexsc = missing_entity_indexemb_indexsc
         self.len_data = len(self.data)
         self.mode = mode # this could be "infer_subclass" or "infer_superclass"
@@ -261,7 +261,7 @@ class InferGCI2Dataset(IterableDataset):
             self.predata = np.array([[-1, x, -1] for x in missing_entity_indexemb_indexsc.keys()])
         elif mode == "infer_filler":
             self.predata = np.array([[-1,-1, x] for x in self.missing_entity_indexemb_indexsc.keys()])
-            
+
     def get_data(self):
         for a,b in self.data:
 
@@ -276,7 +276,7 @@ class InferGCI2Dataset(IterableDataset):
             elif self.mode == "infer_filler":
                 new_array[:,0] = a
                 new_array[:,1] = b
-                
+
             tensor = new_array
             yield a, b, tensor
 

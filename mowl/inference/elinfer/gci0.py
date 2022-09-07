@@ -7,7 +7,7 @@ class GCI0Inference():
     def __init__(self, method, device):
         self.method = method
         self.device = device
-        
+
     def infer_subclass(self, class_index_dict):
         self.index_class_dict = {v:k for k, v in class_index_dict.items()}
 
@@ -26,7 +26,7 @@ class GCI0Inference():
 
         self.ranks=rankdata(self.preds_subclass, method = 'ordinal').reshape(self.preds_subclass.shape)
         np.fill_diagonal(self.preds_subclass, 100000)
-        
+
     def infer_superclass(self, class_index_dict):
         self.index_class_dict = {v:k for k, v in class_index_dict.items()}
 
@@ -35,7 +35,7 @@ class GCI0Inference():
         nb_subclasses = len(class_index_dict)
         nb_superclasses = len(class_index_dict)
         self.preds_superclass = np.zeros((nb_subclasses, nb_superclasses), dtype=np.float32)
-        
+
         for superclass_idxs, batch in tqdm(dataloader):
             res = self.method(batch.to(self.device))
             res = res.cpu().detach().numpy()
@@ -44,7 +44,7 @@ class GCI0Inference():
 
 
         self.ranks=rankdata(self.preds_superclass).reshape(self.preds_superclass.shape)
-    
+
     def get_inferences(self, top_k = 3, mode="subclass"):
         if mode == "subclass":
             preds = self.preds_subclass
@@ -56,15 +56,15 @@ class GCI0Inference():
         subs, supers = np.where(self.ranks <= top_k)
 
         for sub, sup in zip(subs, supers):
-            score = preds[sub, sup]        
+            score = preds[sub, sup]
             sub, sup = self.index_class_dict[sub], self.index_class_dict[sup]
             print(sub, sup, score)
-        
+
 class InferGCI0Module(nn.Module):
     def __init__(self, method):
         super().__init__()
 
-        self.method = method        
+        self.method = method
 
     def forward(self, x):
         bs, num_classes, ents = x.shape
@@ -111,4 +111,3 @@ class InferGCI0Dataset(IterableDataset):
 
     def __len__(self):
         return self.len_data
-

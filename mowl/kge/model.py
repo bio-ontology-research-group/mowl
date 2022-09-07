@@ -6,7 +6,8 @@ from pykeen.training import SLCWATrainingLoop
 import tempfile
 import torch as th
 from torch.optim import Adam, Optimizer
-
+import os
+import mowl.error as err
 import logging
 logging.basicConfig(level=logging.INFO)
 
@@ -30,7 +31,7 @@ class KGEModel():
     :param model_filepath: Path for saving the model. Defaults to :class:`tempfile.NamedTemporaryFile`
     :type model_filepath: str, optional
     '''
-    
+
     def __init__(self,
                  triples_factory,
                  pykeen_model,
@@ -68,12 +69,12 @@ class KGEModel():
         self.batch_size = batch_size
         self.optimizer = optimizer
         self.lr = lr
-        
+
         if model_filepath is None:
             model_filepath = tempfile.NamedTemporaryFile()
             model_filepath = model_filepath.name
         self.model_filepath = model_filepath
-        
+
         self._trained = False
         self._data_loaded = False
 
@@ -101,20 +102,28 @@ class KGEModel():
     @property
     def class_embeddings_dict(self):
         if self._class_embeddings_dict is None:
-            self.get_embeddings()
+            try:
+                self._get_embeddings()
+            except FileNotFoundError:
+                raise AttributeError(err.EMBEDDINGS_NOT_FOUND_MODEL_NOT_TRAINED)
         return self._class_embeddings_dict
 
     @property
     def object_property_embeddings_dict(self):
         if self._object_property_embeddings_dict is None:
-            self.get_embeddings()
+            try:
+                self._get_embeddings()
+            except FileNotFoundError:
+                raise AttributeError(err.EMBEDDINGS_NOT_FOUND_MODEL_NOT_TRAINED)
         return self._object_property_embeddings_dict
 
     def load_best_model(self):
+        if not os.path.exists(self.model_filepath):
+            raise FileNotFoundError("Loading best model failed because file was not found at the given path. Please train the model first.")
         self.model.load_state_dict(th.load(self.model_filepath))
         self.model.eval()
 
-    def train(self): 
+    def train(self):
         optimizer = self.optimizer(params=self.model.get_grad_params(), lr = self.lr)
 
         training_loop = SLCWATrainingLoop(model=self.model, triples_factory=self.triples_factory, optimizer=optimizer)
@@ -124,10 +133,11 @@ class KGEModel():
         th.save(self.model.state_dict(), self.model_filepath)
         self._trained = True
 
-    def get_embeddings(self, load_best_model = True):
+    def _get_embeddings(self, load_best_model = True):
+
         if load_best_model:
             self.load_best_model()
-                     
+
         cls_embeddings = self.model.entity_representations[0](indices = None).cpu().detach().numpy()
         cls_ids = {item[0]: item[1] for item in self.triples_factory.entity_to_id.items()}
         cls_embeddings = {item[0]: cls_embeddings[item[1]] for item in self.triples_factory.entity_to_id.items()}
@@ -156,9 +166,8 @@ class KGEModel():
     def score_method_tensor(self, data):
         self.model.eval()
         return self.model.predict_hrt(data)
-    
+
     def point_to_tensor(self, point):
         point = [list(point)]
         point = th.tensor(point).to(self.device)
         return point
-

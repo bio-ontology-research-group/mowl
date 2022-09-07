@@ -55,7 +55,7 @@ class Onto2Vec(Model):
             vector_size = 100,
             window = 5,
             workers = 1):
-        
+
         super().__init__(dataset)
 
         if corpus_outfile is None:
@@ -66,10 +66,10 @@ class Onto2Vec(Model):
         self.vector_size = vector_size
         self.window = window
         self.model_filepath = model_filepath
-        
+
 
         self.w2v_model = None
-        
+
         if reasoner == "elk":
             reasoner_factory = ElkReasonerFactory()
             reasoner = reasoner_factory.createReasoner(self.dataset.ontology)
@@ -209,4 +209,3 @@ class Onto2Vec(Model):
         rank_10 = histogram[0] + histogram[1]
         rank_100 = histogram[0] + histogram[1] + histogram[2]
         return(np.mean(observed_ranks), rank_1, rank_10, rank_100)
-

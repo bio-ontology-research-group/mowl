@@ -28,8 +28,8 @@ def main(data_file, out_file):
             for go_id in row.exp_annotations:
                 f.write('\t' + go_id)
             f.write('\n')
-    f.close()    
-    
+    f.close()
+
 
 if __name__ == '__main__':
     main()

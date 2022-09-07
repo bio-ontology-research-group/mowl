@@ -16,8 +16,8 @@ class TestAdapter(TestCase):
         self.owlapi_data_factory = owlapi_owl_manager.getOWLDataFactory()
 
         self.iri1 = "http://mowl/iri1"
-        
-    
+
+
     def test_create_owl_manager(self):
         """Create an OWLManager from OWLAPI"""
         adapter = OWLAPIAdapter()
@@ -37,10 +37,9 @@ class TestAdapter(TestCase):
         adapter = OWLAPIAdapter()
         owlclass = adapter.create_class(self.iri1)
         self.assertIsInstance(owlclass, OWLClass)
-        
+
 
         #Sad paths
         self.assertRaisesRegex(TypeError, f"IRI must be a string to use this method. {err.OWLAPI_DIRECT}", adapter.create_class, 1)
         self.assertRaisesRegex(TypeError, f"IRI must be a string to use this method. {err.OWLAPI_DIRECT}", adapter.create_class, True)
         self.assertRaisesRegex(TypeError, f"IRI must be a string to use this method. {err.OWLAPI_DIRECT}", adapter.create_class, lambda: 1)
-        

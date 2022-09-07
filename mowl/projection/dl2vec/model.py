@@ -15,11 +15,11 @@ class DL2VecProjector(ProjectionModel):
     '''
     def __init__(self, bidirectional_taxonomy: bool = False):
         super().__init__()
-        
+
         if not isinstance(bidirectional_taxonomy, bool):
             raise TypeError("Optional parameter bidirectional_taxonomy must be of type boolean")
         self.projector = Projector(bidirectional_taxonomy)
-        
+
     def project(self, ontology):
         if not isinstance(ontology, OWLOntology):
             raise TypeError("Parameter ontology must be of type org.semanticweb.owlapi.model.OWLOntology")

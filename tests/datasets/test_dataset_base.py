@@ -73,26 +73,26 @@ class TestPathDataset(TestCase):
         os.remove("ppi_yeast_slim.tar.gz")
         shutil.rmtree("gda_human")
         os.remove("gda_human.tar.gz")
-        
+
     def test_file_not_found_exception(self):
         """It should return a FileNotFound error when file path not found"""
         self.assertRaises(FileNotFoundError, PathDataset, self.training_ont_path, validation_path = "")
         self.assertRaises(FileNotFoundError, PathDataset, "")
         self.assertRaises(FileNotFoundError, PathDataset, self.training_ont_path, testing_path = "")
-        
+
     def test_constructor_argument_types(self):
         """It should handle incorrect argument types when constructing a path dataset"""
         self.assertRaises(TypeError, PathDataset, 1)
         self.assertRaises(TypeError, PathDataset, self.training_ont_path, validation_path = 1)
         self.assertRaises(TypeError, PathDataset, self.training_ont_path, testing_path = True)
-        
+
     def test_type_of_ontology_attributes(self):
         """This should return the correct type of attributes"""
 
         dataset = self.dataset_full
         self.assertIsInstance(dataset.ontology, OWLOntology)
         self.assertIsInstance(dataset.testing, OWLOntology)
-        self.assertIsInstance(dataset.validation, OWLOntology)     
+        self.assertIsInstance(dataset.validation, OWLOntology)
 
     def test_return_evaluation_classes_default(self):
         """It should check the default behaviour of evaluation classes property"""
@@ -134,7 +134,7 @@ class TestPathDataset(TestCase):
         unique_labels = set(labels.keys())
         self.assertEqual(len(labels), len(unique_labels))
 
-    
+
     def test_attribute_classes_as_str(self):
         """Test types and format of dataset.classes.as_str attribute"""
         dataset = self.dataset_full
@@ -153,14 +153,14 @@ class TestPathDataset(TestCase):
         #Classes from OWLAPI should be the same as coming from dataset class.
         adapter = OWLAPIAdapter()
         classes_from_owl_api = list(dataset.ontology.getClassesInSignature()) + list(dataset.validation.getClassesInSignature()) + list(dataset.testing.getClassesInSignature()) + [adapter.create_class(TOP), adapter.create_class(BOT)]
-        classes_from_owl_api = [str(x.toStringID()) for x in classes_from_owl_api]        
+        classes_from_owl_api = [str(x.toStringID()) for x in classes_from_owl_api]
         classes_from_owl_api = list(set(classes_from_owl_api))
         classes_from_owl_api.sort()
 
         idx = randrange(0, len(classes_from_owl_api))
         self.assertEqual(classes[idx], classes_from_owl_api[idx])
 
-                                
+
 
     def test_attribute_object_properties_as_str(self):
         """Test types and format of dataset.object_properties.as_str attribute"""
@@ -179,7 +179,7 @@ class TestPathDataset(TestCase):
         #Object_Properties from OWLAPI should be the same as coming from dataset class.
         adapter = OWLAPIAdapter()
         object_properties_from_owl_api = list(dataset.ontology.getObjectPropertiesInSignature()) + list(dataset.validation.getObjectPropertiesInSignature()) + list(dataset.testing.getObjectPropertiesInSignature())
-        object_properties_from_owl_api = [str(x.toString())[1:-1] for x in object_properties_from_owl_api]        
+        object_properties_from_owl_api = [str(x.toString())[1:-1] for x in object_properties_from_owl_api]
         object_properties_from_owl_api = list(set(object_properties_from_owl_api))
         object_properties_from_owl_api.sort()
 
@@ -194,7 +194,7 @@ class TestTarFileDataset(TestCase):
     def download(self, url):
         filename = url.split('/')[-1]
         filepath = os.path.join("/tmp/", filename)
-                    
+
         with requests.get(url, stream=True) as r:
             r.raise_for_status()
             with open(filepath, 'wb') as f:
@@ -243,7 +243,7 @@ class TestRemoteDataset(TestCase):
         shutil.rmtree("./ppi_yeast")
         os.remove("./ppi_yeast.tar.gz")
 
-        
+
     def test_successful_download_in_custom_path(self):
         """This checks if dataset is downloaded a custom path"""
         ds = RemoteDataset(self.good_url, data_root = "/tmp/")
@@ -251,10 +251,10 @@ class TestRemoteDataset(TestCase):
         self.assertTrue(os.path.exists("/tmp/ppi_yeast/ontology.owl"))
         self.assertTrue(os.path.exists("/tmp/ppi_yeast/valid.owl"))
         self.assertTrue(os.path.exists("/tmp/ppi_yeast/test.owl"))
-        
+
         shutil.rmtree("/tmp/ppi_yeast")
         os.remove("/tmp/ppi_yeast.tar.gz")
-        
+
 
     def test_incorrect_url(self):
         """This checks if error is raised for incorrect URL"""

@@ -50,7 +50,7 @@ class Node2Vec(WalkingModel):
                     nodes_of_interest.add(node)
                 else:
                     logger.info(f"Node {node} does not exist in the graph. Ignoring it.")
-                    
+
         edgesJ = ArrayList()
         for edge in edges:
             newEdge = Edge(edge.src, edge.rel,  edge.dst, edge.weight)
@@ -59,7 +59,3 @@ class Node2Vec(WalkingModel):
         walker = N2V(edgesJ, self.num_walks, self.walk_length, self.p, self.q, self.workers, self.outfile, nodes_of_interest)
 
         walker.walk()
-            
-        
-
-        

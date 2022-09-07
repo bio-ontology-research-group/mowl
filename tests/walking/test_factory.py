@@ -16,6 +16,3 @@ class TestFactoryMethod(TestCase):
 
         # Test if exception is raised when walker name is not valid
         self.assertRaisesRegex(ValueError, err.INVALID_WALKER_NAME, walker_factory, "invalid_walker_name", 1, 1)
-
-
-

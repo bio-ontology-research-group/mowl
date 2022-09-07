@@ -12,7 +12,7 @@ class TestObjects(TestCase):
     def setUpClass(self):
         self.bot_str = "http://www.w3.org/2002/07/owl#Nothing"
         self.top_str = "http://www.w3.org/2002/07/owl#Thing"
-        
+
     def test_types(self):
         """Types returned from mowl.owlapi are OWLAPI types"""
         self.assertEqual(OWLOntology, J.OWLOntology)

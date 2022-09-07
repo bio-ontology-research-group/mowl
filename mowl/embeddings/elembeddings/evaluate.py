@@ -24,14 +24,14 @@ class ELEmbeddingsPPIEvaluator(AxiomsRankBasedEvaluator):
         self.class_name_indexemb = class_name_indexemb
         self.relation_name_indexemb = rel_name_indexemb
 
-        
+
 
         self._loaded_training_scores = False
         self._loaded_eval_data = False
         self._loaded_ht_data = False
 
-        
-        
+
+
     def _load_head_tail_entities(self):
         if self._loaded_ht_data:
             return
@@ -46,7 +46,7 @@ class ELEmbeddingsPPIEvaluator(AxiomsRankBasedEvaluator):
             if e in self.class_name_indexemb:
                 self.head_entities.add(e)
             else:
-                logging.info("Entity %s not present in the embeddings dictionary. Ignoring it.", e)       
+                logging.info("Entity %s not present in the embeddings dictionary. Ignoring it.", e)
 
         self.tail_entities = set()
         for e in entities:
@@ -60,17 +60,17 @@ class ELEmbeddingsPPIEvaluator(AxiomsRankBasedEvaluator):
 
         self.head_indexemb_indexsc = {v: k for k, v in enumerate(self.head_name_indexemb.values())}
         self.tail_indexemb_indexsc = {v: k for k, v in enumerate(self.tail_name_indexemb.values())}
-                
+
         self._loaded_ht_data = True
 
-        
+
 
     def _load_training_scores(self):
         if self._loaded_training_scores:
             return self.training_scores
 
         self._load_head_tail_entities()
-        
+
         training_scores = np.ones((len(self.head_entities), len(self.tail_entities)), dtype=np.int32)
 
         if self._compute_filtered_metrics:
@@ -79,34 +79,34 @@ class ELEmbeddingsPPIEvaluator(AxiomsRankBasedEvaluator):
                 c, _, d = axiom.astuple()
                 if (not c in self.head_entities) or not (d in self.tail_entities):
                     continue
-            
+
                 c, d = self.head_name_indexemb[c], self.tail_name_indexemb[d]
                 c, d = self.head_indexemb_indexsc[c], self.tail_indexemb_indexsc[d]
-            
+
                 training_scores[c, d] = 10000
 
             logging.info("Training scores created")
 
         self._loaded_training_scores = True
         return training_scores
-        
-        
+
+
     def _init_axioms(self, axioms):
 
         if axioms is None:
             return None
-        
+
         projector = projector_factory("taxonomy_rels", relations = ["http://interacts_with"])
 
         edges = projector.project(axioms)
         return edges # List of Edges
-    
+
     def compute_axiom_rank(self, axiom):
-        
+
         self.training_scores = self._load_training_scores()
 
         c, r, d = axiom.astuple()
-        
+
         if not (c in self.head_entities) or not (d in self.tail_entities):
             return None, None, None
 
@@ -121,8 +121,8 @@ class ELEmbeddingsPPIEvaluator(AxiomsRankBasedEvaluator):
         data = th.tensor([[c_emb_idx, r, self.tail_name_indexemb[x]] for x in self.tail_entities]).to(self.device)
 
         res = self.eval_method(data).squeeze().cpu().detach().numpy()
-        
-        #self.testing_predictions[c_sc_idx, :] = res                                                                                
+
+        #self.testing_predictions[c_sc_idx, :] = res
         index = rankdata(res, method='average')
         rank = index[d_sc_idx]
 

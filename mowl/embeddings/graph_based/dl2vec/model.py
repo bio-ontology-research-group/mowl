@@ -56,7 +56,7 @@ class DL2Vec(EmbeddingModel):
     :type walks_outfile: str
     '''
 
-    
+
     def __init__(self, dataset, outfile, bidirectional_taxonomy=False, walking_method = "deepwalk", walk_length = 30, alpha = 0, num_walks = 100, wv_epochs = 10, vector_size = 100, window = 5, workers = 1, p = 1, q=1, walks_outfile = None, device = "cpu"):
 
         super().__init__(dataset)
@@ -93,13 +93,13 @@ class DL2Vec(EmbeddingModel):
         testing_entities,_ = Edge.getEntitiesAndRelations(self._testing_set)
 
         entities = list(set(training_entities) | set(testing_entities))
-        
+
         self._head_entities = entities
         self._tail_entities = entities
         self._loaded = True
-        
 
-    
+
+
     def train(self):
 
         save_walks = True
@@ -114,7 +114,7 @@ class DL2Vec(EmbeddingModel):
         if self.walks_outfile is None:
             save_walks = False
             self.walks_outfile = "walks_temporary_output_file.tmp"
-            
+
         walker = walking_factory(self.walking_method, edges, self.num_walks, self.walk_length, self.walks_outfile, workers = self.workers, alpha = self.alpha, p = self.p, q= self.q)
         walker.walk()
         logging.info("Walks generated")
@@ -133,18 +133,18 @@ class DL2Vec(EmbeddingModel):
             os.remove(self.walks_outfile)
         model.save(self.outfile)
         logging.info("Model saved")
-        
+
 
     def get_embeddings(self):
 
         w2v = gensim.models.Word2Vec.load(self.outfile).wv
 
         embeddings_dict = dict()
-        
+
         for idx, word in enumerate(w2v.index_to_key):
             embeddings_dict[word] = w2v[word]
 
-        
+
         self.class_index_dict = {v:k for k,v in enumerate(embeddings_dict.keys())}
         self.relation_index_dict = {"http://interacts_with": -1}
         self.embeddings = embeddings_dict

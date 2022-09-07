@@ -57,7 +57,7 @@ class OWL2VecStar(Model):
     :type walks_outfile: str
 
     '''
-    
+
     def __init__(self, dataset, outfile, bidirectional_taxonomy=False, include_literals = False, only_taxonomy = False, walking_method = "deepwalk", walk_length = 30, wv_epochs = 10, alpha = 0, num_walks = 100, vector_size = 100, window = 5, workers = 1, p = 1, q=1, walks_outfile = None, device = "cpu"):
 
         super().__init__(dataset)
@@ -84,9 +84,9 @@ class OWL2VecStar(Model):
 
 
 
-        
+
     def train(self):
-        
+
         save_walks = True
 
         logging.info("Generating graph from ontology...")
@@ -121,4 +121,3 @@ class OWL2VecStar(Model):
             os.remove(self.walks_outfile)
         model.save(self.outfile)
         logging.info("Model saved")
-        

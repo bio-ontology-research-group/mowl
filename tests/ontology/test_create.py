@@ -21,6 +21,3 @@ class TestCreate(TestCase):
         self.assertRaisesRegex(TypeError, "Optional parameter head_prefix must be of type str", create_from_triples, "triples_file", "out_file", head_prefix = 1)
 
         self.assertRaisesRegex(TypeError, "Optional parameter tail_prefix must be of type str", create_from_triples, "triples_file", "out_file", tail_prefix = 1)
-
-
-    

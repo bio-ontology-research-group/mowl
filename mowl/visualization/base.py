@@ -17,12 +17,12 @@ class Visualizer():
     def savefig(self, outfile):
         raise NotImplementedError()
 
-        
+
 
 class TSNE(Visualizer):
     """
     Wrapper for :class:`sklearn.manifold.TSNE`
-    
+
     :param embeddings: Embeddings dictionary
     :type embeddings: dict or :class:`gensim.models.keyedvectors.KeyedVectors`
     :param labels: Dictionary containing label information of the entities
@@ -54,7 +54,7 @@ class TSNE(Visualizer):
                 self.embeddings = {name: emb for name, emb in embeddings.items() if name in entities and name in self.labels}
         else:
             raise TypeError("Embeddings type {type(embeddings)} not recognized. Expected types are dict or gensim.models.keyedvectors.KeyedVectors")
-        
+
         logging.info("Found %d embedding vectors. Processing only %d.", self.total_embeddings, len(self.embeddings))
         self.embedding_idx_dict = {v: k for k,v in enumerate(self.embeddings.keys())}
 
@@ -77,10 +77,10 @@ class TSNE(Visualizer):
             if not label in self.plot_data:
                 self.plot_data[label] = [], []
             self.plot_data[label][0].append(x)
-            self.plot_data[label][1].append(y)  
-        
+            self.plot_data[label][1].append(y)
+
     def show(self):
-        
+
         fig, ax = plt.subplots(figsize=(20, 20))
 
         for label, (xs, ys) in self.plot_data.items():
@@ -89,11 +89,11 @@ class TSNE(Visualizer):
 
             ax.legend()
             ax.grid(True)
-        
+
         plt.show()
 
     def savefig(self, outfile):
-        
+
         fig, ax = plt.subplots(figsize=(20, 20))
 
         for label, (xs, ys) in self.plot_data.items():
@@ -102,7 +102,6 @@ class TSNE(Visualizer):
 
             ax.legend()
             ax.grid(True)
-        
+
         plt.savefig(outfile)
         plt.close()
-            

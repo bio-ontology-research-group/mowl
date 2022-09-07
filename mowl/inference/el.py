@@ -17,7 +17,7 @@ class GCI0Score(AxiomScoring):
             objects = [pattern_decomp[1]]
             objects.append("c?http://www.w3.org/2002/07/owl#Nothing?")
             return objects
-        
+
 class GCI1Score(AxiomScoring):
     def __init__(self, gci0_method, class_list):
         patterns = ["c?? and c?? SubClassOf c??", "c?? DisjointWith c??"]
@@ -38,10 +38,8 @@ class GCI2Score(AxiomScoring):
         patterns = ["c?? SubClassOf p?? some c??"]
         super().__init__(patterns, gci0_method, class_list, property_list)
 
-        
+
 class GCI3Score(AxiomScoring):
     def __init__(self, gci0_method, class_list, property_list):
         patterns = ["p?? some c?? SubClassOf c??"]
         super().__init__(patterns, gci0_method, class_list, property_list)
-
-        

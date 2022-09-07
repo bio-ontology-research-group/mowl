@@ -7,10 +7,10 @@ class ProjectionModel():
     :param ontology: The ontology to be processed.
     :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
     """
-    
+
     def __init__(self):
         return
-    
+
     def project(self, ontology):
         '''
         Performs the ontology parsing.
@@ -20,5 +20,3 @@ class ProjectionModel():
         '''
 
         raise NotImplementedError()
-
-

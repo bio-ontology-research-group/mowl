@@ -41,7 +41,7 @@ class ELBoxEmbeddings(EmbeddingELModel):
         self._loaded_eval = False
         self.extended = False
         self.init_model()
-                
+
     def init_model(self):
         self.model = ELBoxModule(
             len(self.class_index_dict),
@@ -49,11 +49,11 @@ class ELBoxEmbeddings(EmbeddingELModel):
             embed_dim = self.embed_dim,
             margin = self.margin
         ).to(self.device)
-    
-        
+
+
     def train(self):
         _, diseases = self.dataset.evaluation_classes
-        
+
         criterion = nn.MSELoss()
         optimizer = th.optim.Adam(self.model.parameters(), lr=self.learning_rate)
         best_loss = float('inf')
@@ -74,7 +74,7 @@ class ELBoxEmbeddings(EmbeddingELModel):
                 dst = self.model(gci_dataset[rand_index], gci_name)
                 mse_loss = criterion(dst, th.zeros(dst.shape, requires_grad = False).to(self.device))
                 loss += mse_loss
-                
+
                 if gci_name == "gci2":
                     rand_index = np.random.choice(len(gci_dataset), size = self.batch_size)
                     gci_batch = gci_dataset[rand_index]
@@ -82,11 +82,11 @@ class ELBoxEmbeddings(EmbeddingELModel):
                     idxs_for_negs = np.random.choice(len(self.class_index_dict), size = len(gci_batch), replace = True)
                     rand_dis_ids = th.tensor(idxs_for_negs).to(self.device)
                     neg_data = th.cat([gci_batch[:, :2], rand_dis_ids.unsqueeze(1)], dim = 1)
-                    
+
                     dst = self.model(neg_data, gci_name, neg = True)
                     mse_loss = criterion(dst, th.ones(dst.shape, requires_grad = False).to(self.device))
                     loss += mse_loss
-        
+
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -100,7 +100,7 @@ class ELBoxEmbeddings(EmbeddingELModel):
                 dst = self.model(gci2_data, "gci2")
                 loss = criterion(dst, th.zeros(dst.shape, requires_grad = False).to(self.device))
                 valid_loss += loss.detach().item()
-                
+
             checkpoint = 100
             if best_loss > valid_loss and (epoch+1) % checkpoint == 0:
                 best_loss = valid_loss
@@ -112,13 +112,13 @@ class ELBoxEmbeddings(EmbeddingELModel):
 
 
     def load_eval_data(self):
-        
+
         if self._loaded_eval:
             return
 
         eval_property = self.dataset.get_evaluation_property()
         eval_classes = self.dataset.get_evaluation_classes()
-        
+
         self._head_entities = eval_classes[0]
         self._tail_entities = eval_classes[1]
 
@@ -127,12 +127,12 @@ class ELBoxEmbeddings(EmbeddingELModel):
 
         self._training_set = eval_projector.project(self.dataset.ontology)
         self._testing_set = eval_projector.project(self.dataset.testing)
-        
+
         self._loaded_eval = True
 
     def get_embeddings(self):
         self.init_model()
-        
+
         print('Load the best model', self.model_filepath)
         self.model.load_state_dict(th.load(self.model_filepath))
         self.model.eval()

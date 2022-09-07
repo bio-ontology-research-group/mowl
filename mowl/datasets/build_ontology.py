@@ -19,7 +19,7 @@ PREFIXES = {
     version = '0.1.0'
 )
 def insert_annotations(ontology_file, annotations, out_file = None, verbose=False):
-    
+
     """
     Method to build dataset given an ontology file and the annotations to be inserted to the ontology. Annotation files must be in .tsv format, with no header. Per each row, the first element is the annotated entity and the rest of the elements are the annotation entities (which are the entities in the ontology).
 
@@ -33,14 +33,14 @@ def insert_annotations(ontology_file, annotations, out_file = None, verbose=Fals
     :type verbose: bool
     """
 
-            
+
     if verbose:
         logging.basicConfig(level = logging.INFO)
 
     if out_file is None:
         out_file = ontology_file
-        
-        
+
+
     manager = OWLManager.createOWLOntologyManager()
     ont = manager.loadOntologyFromOntologyDocument(java.io.File(ontology_file))
 
@@ -48,12 +48,12 @@ def insert_annotations(ontology_file, annotations, out_file = None, verbose=Fals
     if owl_format.isPrefixOWLOntologyFormat():
         ont_prefixes = owl_format.asPrefixOWLOntologyFormat().getPrefixName2PrefixMap()
         ont_prefixes = dict(ont_prefixes).values()
-        
+
     factory = manager.getOWLDataFactory()
 
     for annots_file, relation_name, directed in annotations:
         relation = factory.getOWLObjectProperty(IRI.create(f"{relation_name}"))
-        
+
         with open(annots_file) as f:
             for line in f:
                 items = line.strip().split("\t")
@@ -69,9 +69,9 @@ def insert_annotations(ontology_file, annotations, out_file = None, verbose=Fals
                         objSomeValsAxiom = factory.getOWLObjectSomeValuesFrom(relation, annotating_entity)
                         axiom = factory.getOWLSubClassOfAxiom(ont_class, objSomeValsAxiom)
                         manager.addAxiom(ont, axiom)
-                        
 
-    
+
+
     manager.saveOntology(ont, IRI.create("file:" + os.path.abspath(out_file)))
 
 
@@ -85,7 +85,7 @@ def validate_prefix(prefix, ont_prefixes):
             raise ValueError(f"Prefix {prefix} is not part of the current ontology prefixes.")
     else:
         raise ValueError("Incorrect format of prefix.")
-        
+
 
 @deprecated(
     reason = "Importing this method using :func:`mowl.datasets.build_ontology.create_from_triples` will be removed in version 1.0.0. Consider using :func:`mowl.ontology.create.create_from_triples` instead.",
@@ -99,8 +99,8 @@ def create_from_triples(
         head_prefix = "",
         tail_prefix = ""
 ):
-    
-    """Method to create an ontology from a .tsv file with triples.    
+
+    """Method to create an ontology from a .tsv file with triples.
 
     :param triples_file: Path for the file containing the triples. This file must be a `.tsv` file and each row must be of the form (head, relation, tail). It is also supported `.tsv` files with rows of the form (head, tail); in that case the field `relation_name` must be specified.
     :type triples_file: str
@@ -150,11 +150,6 @@ def create_from_triples(
                     tail, factory.getOWLObjectSomeValuesFrom(
                         rel, head))
                 manager.addAxiom(ont, axiom)
-                
+
 
     manager.saveOntology(ont, IRI.create("file:" + os.path.abspath(out_file)))
-
-    
-
-    
-                                          

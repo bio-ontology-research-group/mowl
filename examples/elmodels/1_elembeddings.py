@@ -26,7 +26,7 @@ from tqdm import trange
 #    \exists R. C &\sqsubseteq D & (\text{GCI 3})\\
 #    C &\sqsubseteq \bot & (\text{GCI BOT 0}) \\
 #    C_1 \sqcap C_2 &\sqsubseteq \bot & (\text{GCI BOT 1}) \\
-#    \exists R. C &\sqsubseteq \bot & (\text{GCI BOT 3}) 
+#    \exists R. C &\sqsubseteq \bot & (\text{GCI BOT 3})
 #    \end{align}
 #
 # where :math:`C,C_1, C_2,D` are ontology classes and :math:`R` is an ontology object property
@@ -40,7 +40,7 @@ from tqdm import trange
 
 
 # %%
-# Now, let's first write the code containing the tranining and validation parts. For that, let's use the :class:`EmbeddingELModel <mowl.base_models.elmodel.EmbeddingELModel>` class. 
+# Now, let's first write the code containing the tranining and validation parts. For that, let's use the :class:`EmbeddingELModel <mowl.base_models.elmodel.EmbeddingELModel>` class.
 
 class ELEmbeddings(EmbeddingELModel):
 
@@ -71,7 +71,7 @@ class ELEmbeddings(EmbeddingELModel):
     # Notice that here we are initializing the neural network module.
     # We will see later that ``ElEmModule`` inherits from ``ELModule``,
     # which implements an interface for EL GCIs losses functions.
-        
+
     def init_model(self):
         self.model = ELEmModule(
             len(self.class_index_dict), #number of ontology classes
@@ -79,7 +79,7 @@ class ELEmbeddings(EmbeddingELModel):
             embed_dim = self.embed_dim,
             margin = self.margin
         ).to(self.device)
-    
+
     def train(self):
         optimizer = th.optim.Adam(self.model.parameters(), lr=self.learning_rate)
         best_loss = float('inf')
@@ -96,7 +96,7 @@ class ELEmbeddings(EmbeddingELModel):
             for gci_name, gci_dataset in self.training_datasets.get_gci_datasets().items():
                 if len(gci_dataset) == 0:
                     continue
-                
+
                 loss += th.mean(self.model(gci_dataset[:], gci_name))
                 if gci_name == "gci2":
                     prots = [self.class_index_dict[p] for p in self.dataset.evaluation_classes]
@@ -105,7 +105,7 @@ class ELEmbeddings(EmbeddingELModel):
                     data = gci_dataset[:]
                     neg_data = th.cat([data[:,:2], rand_index.unsqueeze(1)], dim = 1)
                     loss += th.mean(self.model(neg_data, gci_name, neg = True))
-            
+
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -118,7 +118,7 @@ class ELEmbeddings(EmbeddingELModel):
                 gci2_data = self.validation_datasets.get_gci_datasets()["gci2"][:]
                 loss = th.mean(self.model(gci2_data, "gci2"))
                 valid_loss += loss.detach().item()
-                
+
             checkpoint = 100
             if best_loss > valid_loss:
                 best_loss = valid_loss
@@ -206,7 +206,7 @@ class ELEmModule(ELModule):
         loss = (th.relu(dst - sr - self.margin)
                 + th.relu(dst2 - rc - self.margin)
                 + th.relu(dst3 - rd - self.margin))
-        
+
         return loss + self.class_reg(c) + self.class_reg(d) + self.class_reg(e)
 
 
@@ -236,7 +236,7 @@ class ELEmModule(ELModule):
 
             rc = th.abs(self.class_rad(data[:,0]))
             rd = th.abs(self.class_rad(data[:,2]))
-            
+
             dst = th.linalg.norm(c + rE - d, dim=1, keepdim=True)
             loss = th.relu(dst + rc - rd  - self.margin)
             return loss + self.class_reg(c) + self.class_reg(d)
@@ -244,21 +244,21 @@ class ELEmModule(ELModule):
 
     # Loss function for normal form :math:`C \nsqsubseteq \exists R. D`
     def gci2_loss_neg(self, data):
-    
+
         c = self.class_embed(data[:,0])
         rE = rel_embed(data[:,1])
 
         d = self.class_embed(data[:,2])
         rc = th.abs(self.class_rad(data[:,1]))
         rd = th.abs(self.class_rad(data[:,2]))
-    
+
         dst = th.linalg.norm(c + rE - d, dim=1, keepdim=True)
         loss = th.relu(rc + rd - dst  + self.margin)
         return loss + self.class_reg(c) + self.class_reg(d)
 
     # Loss function for normal form :math:`\exists R. C \sqsubseteq D`
     def gci3_loss(self, data, neg = False):
-    
+
         rE = rel_embed(data[:,0])
         c = self.class_embed(data[:,1])
         d = self.class_embed(data[:,2])

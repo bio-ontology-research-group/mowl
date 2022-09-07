@@ -52,7 +52,7 @@ class TestKge(TestCase):
 
         with self.assertRaisesRegex(TypeError, "Optional parameter device must be of type str."):
             KGEModel(self.triples, pykeen_model, 32, device = 32)
-        
+
         with self.assertRaisesRegex(TypeError, "Optional parameter model_filepath must be of type str."):
             KGEModel(self.triples, pykeen_model, 32, model_filepath = 32)
 
@@ -64,9 +64,12 @@ class TestKge(TestCase):
         graph = Edge.as_pykeen(graph)
         pykeen_model = TransE(triples_factory = graph)
         kge_model = KGEModel(graph, pykeen_model, 32)
-        with self.assertRaisesRegex(ValueError, err.EMBEDDINGS_NOT_FOUND_MODEL_NOT_TRAINED):
-            kge_model.get_embeddings()
-            
+        with self.assertRaisesRegex(AttributeError, err.EMBEDDINGS_NOT_FOUND_MODEL_NOT_TRAINED):
+            _ = kge_model.class_embeddings_dict
+
+        with self.assertRaisesRegex(AttributeError, err.EMBEDDINGS_NOT_FOUND_MODEL_NOT_TRAINED):
+            _ = kge_model.object_property_embeddings_dict
+
 
     def test_attributes_class_index_dict_type(self):
         """This checks if the class_index_dict attribute has the correct type."""
@@ -77,6 +80,3 @@ class TestKge(TestCase):
         kge_model = KGEModel(graph, pykeen_model, 32)
         self.assertIsInstance(kge_model.class_index_dict, dict)
         self.assertIsInstance(list(kge_model.class_index_dict.keys())[0], str)
-
-
-

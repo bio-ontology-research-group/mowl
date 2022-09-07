@@ -62,7 +62,7 @@ class Ontology(object):
                 min_n = min([cnt[x] for x in parents])
 
             self.ic[go_id] = math.log(min_n / n, 2)
-    
+
     def get_ic(self, go_id):
         if self.ic is None:
             raise Exception('Not yet calculated')
@@ -165,7 +165,7 @@ class Ontology(object):
 
     def get_namespace(self, term_id):
         return self.ont[term_id]['namespace']
-    
+
     def get_term_set(self, term_id):
         if term_id not in self.ont:
             return set()
@@ -251,6 +251,3 @@ class DataGenerator(object):
         else:
             self.reset()
             return self.next()
-
-
-        

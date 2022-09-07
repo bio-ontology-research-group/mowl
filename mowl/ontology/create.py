@@ -16,7 +16,7 @@ def create_from_triples(
         tail_prefix = ""
 ):
 
-    """Method to create an ontology from a .tsv file with triples.    
+    """Method to create an ontology from a .tsv file with triples.
 
     :param triples_file: Path for the file containing the triples. This file must be a `.tsv` file and each row must be of the form (head, relation, tail). It is also supported `.tsv` files with rows of the form (head, tail); in that case the field `relation_name` must be specified.
     :type triples_file: str
@@ -79,11 +79,6 @@ def create_from_triples(
                     tail, factory.getOWLObjectSomeValuesFrom(
                         rel, head))
                 manager.addAxiom(ont, axiom)
-                
+
 
     manager.saveOntology(ont, IRI.create("file:" + os.path.abspath(out_file)))
-
-    
-
-    
-                                          

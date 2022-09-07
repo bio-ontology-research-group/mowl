@@ -11,7 +11,7 @@ class TestNode2Vec(TestCase):
 
     @classmethod
     def setUpClass(self):
-        
+
         edge1 = Edge("A", "http://rel1", "B")
         edge2 = Edge("B", "http://rel1", "C")
         edge3 = Edge("C", "http://rel1", "D")
@@ -74,8 +74,5 @@ class TestNode2Vec(TestCase):
 
         with self.assertLogs("node2vec", level='INFO') as cm:
             node2vec.walk(self.graph, nodes_of_interest = ["A", "X"])
-        
+
         self.assertEqual(cm.output, ["INFO:node2vec:Node X does not exist in the graph. Ignoring it."])
-
-
-        

@@ -21,7 +21,7 @@ class DeepWalk(WalkingModel):
     :param alpha: Probability of restart, defaults to 0
     :type alpha: float, optional
     '''
-    
+
     def __init__(self,
                  num_walks,
                  walk_length,
@@ -50,7 +50,7 @@ class DeepWalk(WalkingModel):
                     nodes_of_interest.add(node)
                 else:
                     logger.info(f"Node {node} does not exist in the graph. Ignoring it.")
-                    
+
         edgesJ = ArrayList()
         for edge in edges:
             newEdge = Edge(edge.src, edge.rel, edge.dst)

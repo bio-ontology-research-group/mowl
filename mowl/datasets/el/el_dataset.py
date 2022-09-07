@@ -1,4 +1,4 @@
-import torch as th
+import torch as th
 from torch.utils.data import DataLoader
 from mowl.reasoning.normalize import ELNormalizer, GCI
 from mowl.datasets.gci import GCIDataset
@@ -16,7 +16,7 @@ class ELDataset():
     :param object_property_index_dict: Dictionary containing information `object property name --> index`. If not provided, a dictionary will be created from the ontology object properties. Defaults to ``None``.
     :type object_property_index_dict: dict, optional
     """
-    
+
     def __init__(self, ontology, class_index_dict = None, object_property_index_dict = None, extended = True, device = "cpu"):
         self._ontology = ontology
         self._loaded = False
@@ -36,9 +36,9 @@ class ELDataset():
     def load(self):
         if self._loaded:
             return
-        
+
         normalizer = ELNormalizer()
-        
+
         gcis = normalizer.normalize(self._ontology)
 
         classes = set()
@@ -47,18 +47,16 @@ class ELDataset():
             new_classes, new_relations = GCI.get_entities(v)
             classes |= set(new_classes)
             relations |= set(new_relations)
-
         if self._class_index_dict is None:
             self._class_index_dict = {v:k for k,v in enumerate(classes)}
         if self._object_property_index_dict is None:
             self._object_property_index_dict = {v:k for k,v in enumerate(relations)}
-
         if not self._extended:
             gci0 = gcis["gci0"] + gcis["gci0_bot"]
             gci1 = gcis["gci1"] + gcis["gci1_bot"]
             gci2 = gcis["gci2"]
             gci3 = gcis["gci3"] + gcis["gci3_bot"]
-        
+
             random.shuffle(gci0)
             random.shuffle(gci1)
             random.shuffle(gci2)
@@ -76,7 +74,7 @@ class ELDataset():
             gci2     = gcis["gci2"]
             gci3     = gcis["gci3"]
             gci3_bot = gcis["gci3_bot"]
-        
+
             random.shuffle(gci0)
             random.shuffle(gci0_bot)
             random.shuffle(gci1)
@@ -94,7 +92,7 @@ class ELDataset():
             self._gci3_bot_dataset = GCI3Dataset(gci3_bot, self._class_index_dict, object_property_index_dict = self._object_property_index_dict, device = self.device)
 
         self._loaded = True
-            
+
     def get_gci_datasets(self):
         """Returns a dictionary containing the name of the normal forms as keys and the corresponding datasets as values. This method will return 7 datasets if the class parameter `extended` is True, otherwise it will return only 4 datasets.
 
@@ -113,11 +111,11 @@ class ELDataset():
             datasets["gci3_bot"] = self.gci3_bot_dataset
 
         return datasets
-    
+
     @property
     def class_index_dict(self):
         """Returns indexed dictionary with class names present in the dataset.
-        
+
         :rtype: dict
         """
         self.load()
@@ -126,7 +124,7 @@ class ELDataset():
     @property
     def object_property_index_dict(self):
         """Returns indexed dictionary with object property names present in the dataset.
-        
+
         :rtype: dict
         """
 
@@ -157,7 +155,7 @@ class ELDataset():
     def gci0_bot_dataset(self):
         if not self._extended:
             raise AttributeError("Extended normal forms do not exist because `extended` parameter was set to False")
-        
+
         self.load()
         return self._gci0_bot_dataset
 
@@ -166,20 +164,20 @@ class ELDataset():
     def gci1_bot_dataset(self):
         if not self._extended:
             raise AttributeError("Extended normal forms do not exist because `extended` parameter was set to False")
-        
+
         self.load()
         return self._gci1_bot_dataset
-    
+
     @property
     def gci3_bot_dataset(self):
         if not self._extended:
             raise AttributeError("Extended normal forms do not exist because `extended` parameter was set to False")
-        
+
         self.load()
         return self._gci3_bot_dataset
 
-    
-        
+
+
 class GCI0Dataset(GCIDataset):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -192,7 +190,7 @@ class GCI0Dataset(GCIDataset):
             pretensor.append([subclass, superclass])
         tensor = th.tensor(pretensor).to(self.device)
         return tensor
-        
+
     def get_data_(self):
         for gci in self.data:
             subclass = self.class_index_dict[gci.subclass]
@@ -213,7 +211,7 @@ class GCI1Dataset(GCIDataset):
 
         tensor = th.tensor(pretensor).to(self.device)
         return tensor
-    
+
     def get_data_(self):
         for gci in self.data:
             left_subclass = self.class_index_dict[gci.left_subclass]
@@ -234,14 +232,14 @@ class GCI2Dataset(GCIDataset):
             pretensor.append([subclass, object_property, filler])
         tensor = th.tensor(pretensor).to(self.device)
         return tensor
-        
+
     def get_data_(self):
         for gci in self.data:
             subclass = self.class_index_dict[gci.subclass]
             object_property = self.object_property_index_dict[gci.object_property]
             filler = self.class_index_dict[gci.filler]
             yield subclass, object_property, filler
-        
+
 class GCI3Dataset(GCIDataset):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -255,11 +253,10 @@ class GCI3Dataset(GCIDataset):
             pretensor.append([object_property, filler, superclass])
         tensor = th.tensor(pretensor).to(self.device)
         return tensor
-            
+
     def get_data_(self):
         for gci in self.data:
             object_property = self.object_property_index_dict[gci.object_property]
             filler = self.class_index_dict[gci.filler]
             superclass = self.class_index_dict[gci.superclass]
             yield object_property, filler, superclass
-

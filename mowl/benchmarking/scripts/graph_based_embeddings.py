@@ -36,13 +36,13 @@ def main(test):
     ppi = True
     tsne = False
 
-    
+
     if test == "ppi":
-        
+
         ROOT = "../ppi/data/"
         ds = PPIYeastDataset()
         tsne = True
-        
+
     elif test == "gda_mouse":
         ROOT = "tmp_gda/"
         #ROOT = "../gda/data_mouse/"
@@ -53,10 +53,10 @@ def main(test):
         #ROOT = "../gda/data_human/"
         ds = GDAHumanDataset()
 #        ds = PathDataset(ROOT + "train_human.owl", ROOT + "valid_human.owl", ROOT + "test_human.owl")
-    
+
     parsing_methods = [m for m in PARSING_METHODS if not ("taxonomy" in m)]
-    
-    
+
+
 
     dummy_params  = {
         "bd" : True,
@@ -74,8 +74,8 @@ def main(test):
         "window" : 5,
         "epochs" : 1
     }
-    
-    
+
+
     params = {
         "bd" : True,
         "ot" : False,
@@ -88,12 +88,12 @@ def main(test):
         "p" : 10,
         "q" : 0.1,
 
-        "vector_size" : 100, 
+        "vector_size" : 100,
         "window" : 5 ,
         "epochs" : 20
     }
-    
-    
+
+
     for pm in parsing_methods:
         for w in WALKING_METHODS:
             benchmark_case(ds,pm,w,dummy_params, test, tsne = tsne,)
@@ -103,7 +103,7 @@ def create_dir(path_dir):
     if not os.path.exists(path_dir):
         os.makedirs(path_dir)
 
-            
+
 def benchmark_case(dataset, parsing_method, walking_method, params, test,  tsne = False):
 
     device = "cuda:1"
@@ -115,11 +115,11 @@ def benchmark_case(dataset, parsing_method, walking_method, params, test,  tsne 
     create_dir(ROOT+"tsne/")
     create_dir(ROOT+"embeddings/")
 
-    
+
     graph_train_file = ROOT + f"graphs/{parsing_method}_train.pkl"
     graph_test_file = ROOT + f"graphs/{parsing_method}_test.pkl"
     graph_data_files = [graph_train_file, graph_test_file]
-    
+
     walks_file = ROOT +  f"walks/{parsing_method}_{walking_method}.txt"
 
     eval_train_file = ROOT + "eval_data/training_set.pkl"
@@ -138,7 +138,7 @@ def benchmark_case(dataset, parsing_method, walking_method, params, test,  tsne 
         bd = params["bd"]
         il = params["il"]
         ot = params["ot"]
-        
+
         projector = projector_factory(
             parsing_method,
             bidirectional_taxonomy = bd,
@@ -167,15 +167,15 @@ def benchmark_case(dataset, parsing_method, walking_method, params, test,  tsne 
 
             eval_train_edges = eval_projector.project(dataset.ontology)
             eval_test_edges = eval_projector.project(dataset.testing)
-            
+
         else:
             head_entities, tail_entities = dataset.get_evaluation_classes()
 
             eval_projector = projector_factory("taxonomy_rels", taxonomy = False, relations = ["http://is_associated_with", "http://has_annotation"])
 
             eval_train_edges = eval_projector.project(dataset.ontology)
-            eval_test_edges = eval_projector.project(dataset.testing)           
-            
+            eval_test_edges = eval_projector.project(dataset.testing)
+
         save_pickles(
             (eval_train_edges, eval_train_file),
             (eval_test_edges, eval_test_file),
@@ -188,12 +188,12 @@ def benchmark_case(dataset, parsing_method, walking_method, params, test,  tsne 
 
     walks_file = ROOT + f"walks/{parsing_method}_{walking_method}.txt"
     workers = params["workers"]
-    
+
     if not exists(walks_file):
         logging.info("Walks not found. Generating...")
         num_walks = params["num_walks"]
         walk_length = params["walk_length"]
-        
+
         alpha = params["alpha"]
         p = params["p"]
         q = params["q"]
@@ -242,8 +242,8 @@ def benchmark_case(dataset, parsing_method, walking_method, params, test,  tsne 
 
     ### FINALLY, EVALUATION
     print(f"number of test edges is {len(eval_test_edges)}")
-            
-    
+
+
     evaluator = EmbeddingsRankBasedEvaluator(
         vectors,
         eval_test_edges,
@@ -276,7 +276,7 @@ def benchmark_case(dataset, parsing_method, walking_method, params, test,  tsne 
         tsne = MTSNE(vectors, labels, entities = entities)
         tsne.generate_points(5000, workers = 16, verbose = 1)
         tsne.savefig(ROOT + f'tsne/{parsing_method}_{walking_method}.jpg')
-        
+
 
 
 if __name__ == "__main__":

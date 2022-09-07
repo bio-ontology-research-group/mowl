@@ -19,18 +19,18 @@ SLIM_DATA_URL = 'https://bio2vec.cbrc.kaust.edu.sa/data/mowl/ppi_yeast_slim.tar.
     version = "0.1.0"
 )
 class PPIYeastDataset(RemoteDataset):
-    
-    def __init__(self, url=None):        
+
+    def __init__(self, url=None):
         super().__init__(url=DATA_URL if not url else url)
         self._evaluation_classes = None
         self._loaded_eval_data = False
-        
+
     def get_evaluation_classes(self):
         """Classes that are used in evaluation
         """
         if self._loaded_eval_data:
             return self._evaluation_classes
-        
+
         classes = super().get_evaluation_classes()
         proteins = set()
         for owl_cls in classes:
@@ -47,7 +47,6 @@ class PPIYeastDataset(RemoteDataset):
     version = "0.1.0"
 )
 class PPIYeastSlimDataset(PPIYeastDataset):
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(url=SLIM_DATA_URL)
-        

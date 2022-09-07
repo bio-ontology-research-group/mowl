@@ -4,29 +4,29 @@ import mowl
 import shutil
 mowl.init_jvm("10g")
 
-from mowl.datasets.builtin import PPIYeastDataset, PPIYeastSlimDataset, GDAHumanDataset, GDAHumanELDataset, GDAMouseDataset, GDAMouseELDataset, FamilyDataset
+from tests.datasetFactory import PPIYeastDataset, PPIYeastSlimDataset, GDAHumanDataset, GDAHumanELDataset, GDAMouseDataset, GDAMouseELDataset, FamilyDataset
 
 
 
 
-class TestDownloadDatasets(TestCase):
+class DeprecatedTestDownloadDatasets(TestCase):
 
     @classmethod
     def tearDownClass(self):
-        os.remove('ppi_yeast.tar.gz')
-        os.remove('ppi_yeast_slim.tar.gz')
-        os.remove('gda_human.tar.gz')
-        os.remove('gda_human_el.tar.gz')
-        os.remove('gda_mouse.tar.gz')
-        os.remove('gda_mouse_el.tar.gz')
-        os.remove('family.tar.gz')
-        shutil.rmtree('ppi_yeast')
-        shutil.rmtree('ppi_yeast_slim')
-        shutil.rmtree('gda_human')
-        shutil.rmtree('gda_human_el')
-        shutil.rmtree('gda_mouse')
-        shutil.rmtree('gda_mouse_el')
-        shutil.rmtree('family')
+        os.remove('../ppi_yeast.tar.gz')
+        os.remove('../ppi_yeast_slim.tar.gz')
+        os.remove('../gda_human.tar.gz')
+        os.remove('../gda_human_el.tar.gz')
+        os.remove('../gda_mouse.tar.gz')
+        os.remove('../gda_mouse_el.tar.gz')
+        os.remove('../family.tar.gz')
+        shutil.rmtree('../ppi_yeast')
+        shutil.rmtree('../ppi_yeast_slim')
+        shutil.rmtree('../gda_human')
+        shutil.rmtree('../gda_human_el')
+        shutil.rmtree('../gda_mouse')
+        shutil.rmtree('../gda_mouse_el')
+        shutil.rmtree('../family')
 
     def test_download_ppi_yeast_dataset(self):
         """This should download and check paths of the PPIYeastDataset"""
@@ -48,7 +48,7 @@ class TestDownloadDatasets(TestCase):
         self.assertTrue(os.path.exists('gda_human/ontology.owl'))
         self.assertTrue(os.path.exists('gda_human/valid.owl'))
         self.assertTrue(os.path.exists('gda_human/test.owl'))
-        
+
     def test_download_gda_human_el_dataset(self):
         """This should download and check paths of the GDAHumanELDataset"""
         dataset = GDAHumanELDataset()
@@ -69,7 +69,7 @@ class TestDownloadDatasets(TestCase):
         self.assertTrue(os.path.exists('gda_mouse_el/ontology.owl'))
         self.assertTrue(os.path.exists('gda_mouse_el/valid.owl'))
         self.assertTrue(os.path.exists('gda_mouse_el/test.owl'))
-    
+
     def test_download_family_dataset(self):
         """This should download and check paths of the FamilyDataset"""
         dataset = FamilyDataset()
@@ -80,7 +80,7 @@ class TestDownloadDatasets(TestCase):
 
 
 class TestInstanceOfDataset(TestCase):
-    
+
     @classmethod
     def tearDownClass(self):
         os.remove('ppi_yeast.tar.gz')
@@ -118,7 +118,7 @@ class TestInstanceOfDataset(TestCase):
         """This should check if GDAHumanDataset is an instance of Dataset"""
         dataset = GDAHumanDataset()
         self.assertIsInstance(dataset, mowl.datasets.Dataset)
-    
+
     def test_gda_human_el_is_instance_of_dataset(self):
         """This should check if GDAHumanELDataset is an instance of Dataset"""
         dataset = GDAHumanELDataset()
@@ -128,7 +128,7 @@ class TestInstanceOfDataset(TestCase):
         """This should check if GDAMouseDataset is an instance of Dataset"""
         dataset = GDAMouseDataset()
         self.assertIsInstance(dataset, mowl.datasets.Dataset)
-    
+
     def test_gda_mouse_el_is_instance_of_dataset(self):
         """This should check if GDAMouseELDataset is an instance of Dataset"""
         dataset = GDAMouseELDataset()

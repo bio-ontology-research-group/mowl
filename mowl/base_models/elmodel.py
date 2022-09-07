@@ -10,7 +10,7 @@ class EmbeddingELModel(EmbeddingModel):
     :param extended: If `True`, the model is supposed with 7 EL normal forms. This will be reflected on the :class:`DataLoaders` that will be generated and also the model must contain 7 loss functions. If `False`, the model will work with 4 normal forms only, merging the 3 extra to their corresponding origin normal forms. Defaults to True
     :type extended: bool, optional
     """
-    
+
     def __init__(self, dataset, batch_size, extended = True, model_filepath = None, device = "cpu"):
         super().__init__(dataset, model_filepath = model_filepath)
 
@@ -23,7 +23,7 @@ class EmbeddingELModel(EmbeddingModel):
         self._training_datasets = None
         self._validation_datasets = None
         self._testing_datasets = None
-        
+
 
     def _load_datasets(self):
         """This method will create different data attributes and finally the corresponding DataLoaders for each GCI type in each subset (training, validation and testing).
@@ -48,7 +48,7 @@ class EmbeddingELModel(EmbeddingModel):
             return
 
         self._load_datasets()
-        
+
         self._training_dataloaders = {k: DataLoader(v, batch_size=self.batch_size, pin_memory = False) for k,v in self._training_datasets.get_gci_datasets().items()}
 
         if self._validation_datasets:
@@ -79,7 +79,7 @@ class EmbeddingELModel(EmbeddingModel):
 
         self._load_datasets()
         return self._testing_datasets
-        
+
     @property
     def training_dataloaders(self):
         self._load_dataloaders()
@@ -102,8 +102,8 @@ class EmbeddingELModel(EmbeddingModel):
         return self._testing_dataloaders
 
 
-    
-        
+
+
 from mowl.reasoning.normalize import ELNormalizer
 import torch as th
 
@@ -117,13 +117,13 @@ class EmbeddingELModelOld(EmbeddingModel):
 
     def init_model(self):
         raise NotImplementedError()
-    
+
     def load_best_model(self):
         self.load_data(extended = self.extended)
         self.init_model()
         self.model.load_state_dict(th.load(self.model_filepath))
         self.model.eval()
-    
+
     def gci0_loss(self):
         raise NotImplementedError()
 
@@ -154,15 +154,15 @@ class EmbeddingELModelOld(EmbeddingModel):
         all_axioms = []
         self.training_axioms = normalizer.normalize(self.dataset.ontology)
         all_axioms.append(self.training_axioms)
-        
+
         if not self.dataset.validation is None:
             self.validation_axioms = normalizer.normalize(self.dataset.validation)
             all_axioms.append(self.validation_axioms)
-            
+
         if not self.dataset.testing is None:
             self.testing_axioms = normalizer.normalize(self.dataset.testing)
             all_axioms.append(self.testing_axioms)
-            
+
         classes = set()
         relations = set()
 
@@ -174,7 +174,7 @@ class EmbeddingELModelOld(EmbeddingModel):
             for axiom in axioms_dict["gci0_bot"]:
                 classes.add(axiom.subclass)
                 classes.add(axiom.superclass)
-            
+
             for axiom in axioms_dict["gci1"]:
                 classes.add(axiom.left_subclass)
                 classes.add(axiom.right_subclass)
@@ -206,13 +206,13 @@ class EmbeddingELModelOld(EmbeddingModel):
         training_nfs = self.load_normal_forms(self.training_axioms, self.classes_index_dict, self.relations_index_dict, extended)
         validation_nfs = self.load_normal_forms(self.validation_axioms, self.classes_index_dict, self.relations_index_dict, extended)
         testing_nfs = self.load_normal_forms(self.testing_axioms, self.classes_index_dict, self.relations_index_dict, extended)
-        
+
         self.train_nfs = self.gcis_to_tensors(training_nfs, self.device)
         self.valid_nfs = self.gcis_to_tensors(validation_nfs, self.device)
         self.test_nfs = self.gcis_to_tensors(testing_nfs, self.device)
         self._data_loaded = True
 
-        
+
     def load_normal_forms(self, axioms_dict, classes_dict, relations_dict, extended = True):
         gci0 =     []
         gci0_bot = []
@@ -234,7 +234,7 @@ class EmbeddingELModelOld(EmbeddingModel):
                 gci0_bot.append((cl1, cl2))
             else:
                 gci0.append((cl1, cl2))
-                
+
         for axiom in axioms_dict["gci1"]:
             cl1 = classes_dict[axiom.left_subclass]
             cl2 = classes_dict[axiom.right_subclass]
@@ -249,13 +249,13 @@ class EmbeddingELModelOld(EmbeddingModel):
                 gci1_bot.append((cl1, cl2, cl3))
             else:
                 gci1_bot.append((cl1, cl2, cl3))
-                
+
         for axiom in axioms_dict["gci2"]:
             cl1 = classes_dict[axiom.subclass]
             rel = relations_dict[axiom.object_property]
             cl2 = classes_dict[axiom.filler]
             gci2.append((cl1, rel, cl2))
-        
+
         for axiom in axioms_dict["gci3"]:
             rel = relations_dict[axiom.object_property]
             cl1 = classes_dict[axiom.filler]
@@ -270,9 +270,9 @@ class EmbeddingELModelOld(EmbeddingModel):
                 gci3_bot.append((rel, cl1, cl2))
             else:
                 gci3.append((rel, cl1, cl2))
-                
+
         return gci0, gci1, gci2, gci3, gci0_bot, gci1_bot,gci3_bot
-        
+
     def gcis_to_tensors(self, gcis, device):
         gci0, gci1, gci2, gci3, gci0_bot, gci1_bot,gci3_bot = gcis
 
@@ -285,4 +285,3 @@ class EmbeddingELModelOld(EmbeddingModel):
         gci3_bot = th.LongTensor(gci3_bot).to(device)
         gcis = gci0, gci1, gci2, gci3, gci0_bot, gci1_bot,gci3_bot
         return gcis
-

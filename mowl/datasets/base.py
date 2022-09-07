@@ -19,7 +19,7 @@ from mowl.owlapi.defaults import TOP, BOT
 
 class Dataset():
     """This class represents an mOWL dataset.
-    
+
     :param ontology: The ontology containing the training data of the dataset.
     :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
     :param validation: The ontology containing the validation data of the dataset, defaults to ``None``.
@@ -32,10 +32,10 @@ class Dataset():
 
         if not isinstance(ontology, OWLOntology):
             raise TypeError(f"Parameter ontology must be an OWLOntology.")
-    
+
         if not isinstance(validation, OWLOntology) and validation is not   None:
             raise TypeError(f"Optional parameter validation must be an OWLOntology.")
-    
+
         if not isinstance(testing, OWLOntology) and testing is not None:
             raise TypeError(f"Optional parameter testing must be an OWLOntology.")
 
@@ -254,7 +254,7 @@ class TarFileDataset(PathDataset):
         ontology_exists = os.path.exists(ontology_path)
         validation_exists = os.path.exists(validation_path)
         testing_exists = os.path.exists(testing_path)
-        
+
         #Check if the dataset is already extracted
         if not (ontology_exists and validation_exists and testing_exists):
             self._extract()

@@ -4,7 +4,7 @@ import numpy as np
 import torch as th
 
 class Edge:
-    """Class representing a graph edge. 
+    """Class representing a graph edge.
     """
     def __init__(self, src, rel, dst, weight = 1.):
 
@@ -16,7 +16,7 @@ class Edge:
             raise TypeError("Parameter dst must be a string")
         if not isinstance(weight, float):
             raise TypeError("Optional parameter weight must be a float")
-            
+
         self._src = src
         self._rel = rel
         self._dst = "" if dst == "" else dst
@@ -26,7 +26,7 @@ class Edge:
     @property
     def src(self):
         """Getter method for _src attribute
-        
+
         :rtype: str
         """
         return self._src
@@ -34,7 +34,7 @@ class Edge:
     @property
     def rel(self):
         """Getter method for _rel attribute
-        
+
         :rtype: str
         """
         return self._rel
@@ -42,7 +42,7 @@ class Edge:
     @property
     def dst(self):
         """Getter method for _dst attribute
-        
+
         :rtype: str
         """
         return self._dst
@@ -50,7 +50,7 @@ class Edge:
     @property
     def weight(self):
         """Getter method for _weight attribute
-        
+
         :rtype: str
         """
         return self._weight
@@ -68,7 +68,7 @@ class Edge:
     @staticmethod
     def get_entities_and_relations(edges):
         '''
-        :param edges: list of edges 
+        :param edges: list of edges
         :type edges: :class:`Edge`
 
         :returns: Returns a 2-tuple containing the list of entities (heads and tails) and the list of relations
@@ -89,7 +89,7 @@ class Edge:
     def zip(edges):
         return tuple(zip(*[x.astuple() for x in edges]))
 
-    
+
     @staticmethod
     @versionadded(version = "0.1.0", reason = "This method is available to transform graph edges obtained from ontologies into PyKEEN triples.")
     def as_pykeen(edges, create_inverse_triples = True, entity_to_id = None, relation_to_id = None):
@@ -110,10 +110,10 @@ class Edge:
             relation_to_id = {v:k for k,v in enumerate(list(relations))}
 
         map_edge = lambda edge: [entity_to_id[edge.src], relation_to_id[edge.rel], entity_to_id[edge.dst]]
-        
+
         triples = [map_edge(edge) for edge in edges]
         triples = np.array(triples, dtype = int)
         tensor_triples = th.tensor(triples)
-    
+
         triples_factory = TriplesFactory(tensor_triples, entity_to_id = entity_to_id, relation_to_id = relation_to_id, create_inverse_triples = create_inverse_triples)
         return triples_factory

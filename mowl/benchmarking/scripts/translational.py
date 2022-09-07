@@ -32,11 +32,11 @@ def main(test):
 
     tsne = False
     if test == "ppi":
-        
+
         ROOT = "../ppi/data/"
         ds = PPIYeastDataset()
         tsne = True
-        
+
     elif test == "gda_mouse":
         ROOT = "../gda/data_mouse/"
         ds = PathDataset(ROOT + "train_mouse.owl", ROOT + "valid_mouse.owl", ROOT + "test_mouse.owl")
@@ -45,8 +45,8 @@ def main(test):
         ds = PathDataset(ROOT + "train_human.owl", ROOT + "valid_human.owl", ROOT + "test_human.owl")
 
     parsing_methods = [m for m in PARSING_METHODS if not ("taxonomy" in m)]
-    
-    
+
+
 
     dummy_params  = {
         "bd" : True,
@@ -58,8 +58,8 @@ def main(test):
         "batch_size": 1024,
         "device": "cuda:1"
     }
-    
-    
+
+
     params = {
         "bd" : True,
         "ot" : False,
@@ -70,8 +70,8 @@ def main(test):
         "batch_size": 1024,
         "device": "cuda:1"
     }
-    
-    
+
+
     for pm in parsing_methods:
         for t in ["trans" + m for m in ["E", "R", "H", "D"]]:
             benchmark_case(ds,pm,t,params, test, tsne)
@@ -86,8 +86,8 @@ def benchmark_case(dataset, parsing_method, trans_method, params, test, tsne = F
     eval_test_file = ROOT + "eval_data/test_set.pkl"
     eval_heads_file = ROOT + "eval_data/head_entities.pkl"
     eval_tails_file = ROOT + "eval_data/tail_entities.pkl"
-    
-                            
+
+
     if exist_files(*graph_data_files):
         logging.info("Graph found. Loading...")
         train_edges, test_edges, *_ = load_pickles(*graph_data_files)
@@ -98,7 +98,7 @@ def benchmark_case(dataset, parsing_method, trans_method, params, test, tsne = F
         bd = params["bd"]
         il = params["il"]
         ot = params["ot"]
-        
+
         projector = projector_factory(
             parsing_method,
             bidirectional_taxonomy = bd,
@@ -124,13 +124,13 @@ def benchmark_case(dataset, parsing_method, trans_method, params, test, tsne = F
 
             eval_train_edges = eval_projector.project(dataset.ontology)
             eval_test_edges = eval_projector.project(dataset.testing)
-            
+
             train_head_ents, _, train_tail_ents = Edge.zip(eval_train_edges)
             test_head_ents, _, test_tail_ents = Edge.zip(eval_test_edges)
-            
+
             head_entities = list(set(train_head_ents) | set(test_head_ents))
             tail_entities = list(set(train_tail_ents) | set(test_tail_ents))
-            
+
         else:
             eval_projector = projector_factory("taxonomy_rels", relations = ["http://is_associated_with"])
 
@@ -139,11 +139,11 @@ def benchmark_case(dataset, parsing_method, trans_method, params, test, tsne = F
 
             train_entities, _ = Edge.getEntitiesAndRelations(eval_train_edges)
             test_entities, _ = Edge.getEntitiesAndRelations(eval_test_edges)
-                        
+
             all_entities = list(set(train_entities) | set(test_entities))
-            
+
             head_entities = [e for e in all_entities if e.is_numeric()]
-            tail_entities = [e for e in all_entities if e.contains("OMIM")]                                  
+            tail_entities = [e for e in all_entities if e.contains("OMIM")]
 
         save_pickles(
             (eval_train_edges, eval_train_file),
@@ -167,7 +167,7 @@ def benchmark_case(dataset, parsing_method, trans_method, params, test, tsne = F
     embeddings, rel_embeddings = transMethod.get_embeddings()
     ### FINALLY, EVALUATION
 
-    
+
     evaluator = EmbeddingsRankBasedEvaluator(
         embeddings,
         eval_test_edges,
@@ -200,15 +200,15 @@ def benchmark_case(dataset, parsing_method, trans_method, params, test, tsne = F
 
     if tsne:
         if test == "ppi":
-            
+
             labels = dataset.get_labels()
 
             entities = list(set(head_entities) | set(tail_entities))
-    
+
         tsne = MTSNE(embeddings, labels, entities = entities)
         tsne.generate_points(5000, workers = 16, verbose = 1)
         tsne.savefig(ROOT + f'tsne/{parsing_method}_{trans_method}.jpg')
-        
+
 
 
 if __name__ == "__main__":

@@ -11,7 +11,7 @@ class TestBase(TestCase):
 
     @classmethod
     def setUpClass(self):
-        self.family_dataset = FamilyDataset()  
+        self.family_dataset = FamilyDataset()
         self.ppi_yeast_slim_dataset = PPIYeastSlimDataset()
 
     @classmethod
@@ -63,7 +63,7 @@ class TestBase(TestCase):
         extract_and_save_axiom_corpus(self.family_dataset.ontology, out_file, "a")
         with open(out_file, "r") as f:
             content_third = f.readlines()
-        
+
         self.assertEqual(content_first + content_second, content_third)
         os.remove(out_file)
     #######################################3
@@ -108,7 +108,7 @@ class TestBase(TestCase):
         extract_and_save_annotation_corpus(self.ppi_yeast_slim_dataset.ontology, out_file, "a")
         with open(out_file, "r") as f:
             content_third = f.readlines()
-        
+
         self.assertEqual(content_first + content_second, content_third)
 
         os.remove(out_file)
@@ -132,9 +132,8 @@ class TestBase(TestCase):
         """This should test the type checking of the method `extract_annotation_corpus`."""
 
         self.assertRaisesRegex(TypeError, "Parameter ontology must be of type org.semanticweb.owlapi.model.OWLOntology", extract_annotation_corpus, "ontology")
-    
+
     def test_extract_annotation_corpus_return_type(self):
         """This should test the return type of the method `extract_annotation_corpus`."""
 
         self.assertIsInstance(extract_annotation_corpus(self.ppi_yeast_slim_dataset.ontology), list)
- 

@@ -14,7 +14,7 @@ from java.util import HashSet
 
 
 def transformString(string):
-    
+
     rel_dict = {"http://www.w3.org/2000/01/rdf-schema#subClassOf": "subClassOf",
                 "http://www.semanticweb.org/owl2vec#superClassOf": "superClassOf",
                 "http://purl.obolibrary.org/obo/bfo_0000050": "http://purl.obolibrary.org/obo/bfo_0000050",
@@ -42,7 +42,7 @@ if __name__ == "__main__":
     ot = True
     il = True
 
-    
+
     parserOld = OWL2VecParser(dataset, bidirectional_taxonomy = bd, only_taxonomy = ot, include_literals = il)
     edgesOld = {(e.src(), transformString(e.rel()), e.dst()) for e in parserOld.parseOWL()}
 
@@ -51,13 +51,13 @@ if __name__ == "__main__":
 
 
 #    print("Length old, new: ", len(edgesOld), len(edgesNew))
-    
+
 #    edges_old_file = open("data/edges_old.pkl", "wb")
 #    edges_new_file = open("data/edges_new.pkl", "wb")
 #    pkl.dump(edgesOld, edges_old_file)
 #    pkl.dump(edgesNew, edges_new_file)
 
-    diff_edges1 = {(s,r,d) for (s,r,d) in edgesOld-edgesNew} # if not r in  ["equivalentTo"] 
+    diff_edges1 = {(s,r,d) for (s,r,d) in edgesOld-edgesNew} # if not r in  ["equivalentTo"]
     diff_edges2 = {(s,r,d) for (s,r,d) in edgesNew-edgesOld}
 
 
@@ -80,8 +80,8 @@ if __name__ == "__main__":
     with open("new.txt", "w") as f:
         f.write(str(list(edgesNew)))
 
-    
-        
+
+
 
     print(f"Lengths: {len(diff_edges1)}, {len(diff_edges2)}")
 
