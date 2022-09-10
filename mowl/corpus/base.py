@@ -1,17 +1,17 @@
 from typing import Type
-from org.semanticweb.owlapi.manchestersyntax.renderer import ManchesterOWLSyntaxOWLObjectRendererImpl
+from org.semanticweb.owlapi.manchestersyntax.renderer import \
+    ManchesterOWLSyntaxOWLObjectRendererImpl
 from org.semanticweb.owlapi.model import OWLLiteral, OWLOntology
 from org.semanticweb.owlapi.search import EntitySearcher
 from deprecated.sphinx import deprecated
 
-from jpype.types import *
+from jpype.types import JString
 
 from org.mowl import MOWLShortFormProvider
 import logging
 
 
-
-def extract_and_save_axiom_corpus(ontology, out_file, mode = "w"):
+def extract_and_save_axiom_corpus(ontology, out_file, mode="w"):
     """Method to extract axioms of a particular ontology and save it into a file.
 
     :param ontology: Input ontology.
@@ -23,13 +23,14 @@ def extract_and_save_axiom_corpus(ontology, out_file, mode = "w"):
     """
 
     if not isinstance(ontology, OWLOntology):
-        raise TypeError("Parameter ontology must be of type org.semanticweb.owlapi.model.OWLOntology")
+        raise TypeError(
+            "Parameter ontology must be of type org.semanticweb.owlapi.model.OWLOntology")
     if not isinstance(out_file, str):
         raise TypeError("Parameter out_file must be of type str")
     if not isinstance(mode, str):
         raise TypeError("Optional parameter mode must be of type str")
 
-    if not mode in ["w", "a"]:
+    if mode not in ["w", "a"]:
         raise ValueError("Parameter mode must be a file reading mode. Options are 'a' or 'w'")
 
     logging.info("Generating axioms corpus")
@@ -45,10 +46,9 @@ def extract_and_save_axiom_corpus(ontology, out_file, mode = "w"):
                 f.write(f'{rax}\n')
 
 
-
-
 def extract_axiom_corpus(ontology):
-    """Method to extract axioms of a particular ontology. Similar to :func:`extract_and_save_axiom_corpus` but this method returns a list instead saving into a file.
+    """Method to extract axioms of a particular ontology. Similar to \
+:func:`extract_and_save_axiom_corpus` but this method returns a list instead saving into a file.
 
     :param ontology: Input ontology.
     :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
@@ -56,7 +56,8 @@ def extract_axiom_corpus(ontology):
     """
 
     if not isinstance(ontology, OWLOntology):
-        raise TypeError("Parameter ontology must be of type org.semanticweb.owlapi.model.OWLOntology")
+        raise TypeError(
+            "Parameter ontology must be of type org.semanticweb.owlapi.model.OWLOntology")
 
     logging.info("Generating axioms corpus")
     renderer = ManchesterOWLSyntaxOWLObjectRendererImpl()
@@ -74,10 +75,9 @@ def extract_axiom_corpus(ontology):
     return corpus
 
 
-
-def extract_and_save_annotation_corpus(ontology, out_file, mode = "w"):
-    """This method generates a textual representation of the annotation axioms in an ontology following the Manchester Syntax.
-
+def extract_and_save_annotation_corpus(ontology, out_file, mode="w"):
+    """This method generates a textual representation of the annotation axioms in an ontology \
+following the Manchester Syntax.
 
     :param ontology: OWL ontology from which the annotations will be extracted.
     :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
@@ -88,13 +88,14 @@ def extract_and_save_annotation_corpus(ontology, out_file, mode = "w"):
     """
 
     if not isinstance(ontology, OWLOntology):
-        raise TypeError("Parameter ontology must be of type org.semanticweb.owlapi.model.OWLOntology")
+        raise TypeError(
+            "Parameter ontology must be of type org.semanticweb.owlapi.model.OWLOntology")
     if not isinstance(out_file, str):
         raise TypeError("Parameter out_file must be of type str")
     if not isinstance(mode, str):
         raise TypeError("Optional parameter mode must be of type str")
 
-    if not mode in ["w", "a"]:
+    if mode not in ["w", "a"]:
         raise ValueError("Parameter mode must be a file reading mode. Options are 'a' or 'w'")
 
     logging.info("Generating annotation corpus")
@@ -112,7 +113,9 @@ def extract_and_save_annotation_corpus(ontology, out_file, mode = "w"):
 
 
 def extract_annotation_corpus(ontology):
-    """This method generates a textual representation of the annotation axioms in an ontology following the Manchester Syntax. Similar to :func:`extract_and_save_annotation_corpus` but this method returns a list instead saving into a file.
+    """This method generates a textual representation of the annotation axioms in an ontology \
+following the Manchester Syntax. Similar to :func:`extract_and_save_annotation_corpus` but \
+this method returns a list instead saving into a file.
 
     :param ontology: Input ontology
     :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
@@ -120,7 +123,8 @@ def extract_annotation_corpus(ontology):
     """
 
     if not isinstance(ontology, OWLOntology):
-        raise TypeError("Parameter ontology must be of type org.semanticweb.owlapi.model.OWLOntology")
+        raise TypeError(
+            "Parameter ontology must be of type org.semanticweb.owlapi.model.OWLOntology")
 
     logging.info("Generating annotation corpus")
 

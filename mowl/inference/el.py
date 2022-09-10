@@ -1,6 +1,7 @@
 from mowl.inference.axiom_scoring import AxiomScoring
 import re
 
+
 class GCI0Score(AxiomScoring):
     def __init__(self, gci0_method, class_list):
         patterns = ["c?? SubClassOf c??",
@@ -18,6 +19,7 @@ class GCI0Score(AxiomScoring):
             objects.append("c?http://www.w3.org/2002/07/owl#Nothing?")
             return objects
 
+
 class GCI1Score(AxiomScoring):
     def __init__(self, gci0_method, class_list):
         patterns = ["c?? and c?? SubClassOf c??", "c?? DisjointWith c??"]
@@ -32,6 +34,7 @@ class GCI1Score(AxiomScoring):
                 return objects
             else:
                 return super().standardize_pattern(pattern)
+
 
 class GCI2Score(AxiomScoring):
     def __init__(self, gci0_method, class_list, property_list):

@@ -23,7 +23,19 @@ class DL2VecProjector(var bidirectional_taxonomy: Boolean = false) extends Abstr
 
   val collectors = List("ObjectIntersectionOf", "ObjectUnionOf")
 
-  def projectAxiom(ontClass: OWLClass, axiom: OWLClassAxiom): List[Triple] = {
+  override def project(ontology: OWLOntology) = {
+    val imports = Imports.fromBoolean(true)
+    val axioms = ontology.getAxioms(imports).asScala.toList
+
+    val edges = axioms.foldLeft(List[Triple]()){(acc, x) => acc ::: projectAxiom(x)}
+    edges.asJava
+  }
+
+  def projectAxiom(ontClass: OWLClass, axiom: OWLClassAxiom): List[Triple] = {Nil}
+  def projectAxiom(ontClass: OWLClass, axiom: OWLClassAxiom, ontology: OWLOntology): List[Triple] = {Nil}
+  def projectAxiom(axiom: OWLClassAxiom): List[Triple] = {Nil}
+  
+  def projectAxiom(axiom: OWLAxiom): List[Triple] = {
 
     val axiomType = axiom.getAxiomType().getName()
 
@@ -31,12 +43,22 @@ class DL2VecProjector(var bidirectional_taxonomy: Boolean = false) extends Abstr
 
       case "SubClassOf" => {
 	var ax = axiom.asInstanceOf[OWLSubClassOfAxiom]
-	projectSubClassOrEquivAxiom(ax.getSubClass.asInstanceOf[OWLClass], ax.getSuperClass, "http://subclassof")
+        ax.getSubClass.isInstanceOf[OWLClass] match {
+          case true => 	projectSubClassOrEquivAxiom(ax.getSubClass.asInstanceOf[OWLClass], ax.getSuperClass, "http://subclassof")
+          case false => Nil
+        }
+        
       }
       case "EquivalentClasses" => {
 	var ax = axiom.asInstanceOf[OWLEquivalentClassesAxiom].getClassExpressionsAsList.asScala
-        val rightSide = ax.filter((x) => x != ontClass)
-      	rightSide.toList.flatMap(projectSubClassOrEquivAxiom(ontClass, _:OWLClassExpression, "http://equivalentto"))
+        ax.find(_.isInstanceOf[OWLClass]) match {
+          case Some(head) => {
+            val rightSide = ax.filter((x) => x != head)
+      	    rightSide.toList.flatMap(projectSubClassOrEquivAxiom(head.asInstanceOf[OWLClass], _:OWLClassExpression, "http://equivalentto"))
+
+          }
+          case None => Nil
+        }
       }
       case _ => Nil
     }
@@ -116,6 +138,5 @@ class DL2VecProjector(var bidirectional_taxonomy: Boolean = false) extends Abstr
     }
   }
 
-  // Abstract methods
-  def projectAxiom(go_class: OWLClass, axiom: OWLClassAxiom, ontology: OWLOntology): List[Triple] = Nil
+
 }

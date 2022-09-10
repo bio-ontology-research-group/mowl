@@ -1,10 +1,11 @@
+from pykeen.triples.triples_factory import TriplesFactory
+from mowl.projection import Edge
 from unittest import TestCase
 
 import mowl
 mowl.init_jvm("10g")
 
-from mowl.projection import Edge
-from pykeen.triples.triples_factory import TriplesFactory
+
 class TestEdge(TestCase):
 
     def test_edge_parameter_types(self):
@@ -13,8 +14,8 @@ class TestEdge(TestCase):
         self.assertRaisesRegex(TypeError, "Parameter src must be a string", Edge, 1, "rel", "dst")
         self.assertRaisesRegex(TypeError, "Parameter rel must be a string", Edge, "src", 1, "dst")
         self.assertRaisesRegex(TypeError, "Parameter dst must be a string", Edge, "src", "rel", 1)
-        self.assertRaisesRegex(TypeError, "Optional parameter weight must be a float", Edge, "src", "rel", "dst", weight = 1)
-
+        self.assertRaisesRegex(TypeError, "Optional parameter weight must be a float", Edge,
+                               "src", "rel", "dst", weight=1)
 
     def test_edge_attributes(self):
         """This checks if Edge attributes are set correctly"""
@@ -24,7 +25,6 @@ class TestEdge(TestCase):
         self.assertEqual(edge.rel, "rel")
         self.assertEqual(edge.dst, "dst")
         self.assertEqual(edge.weight, 1)
-
 
     def test_as_tuple_method(self):
         """This checks if Edge.as_tuple method works correctly"""
@@ -54,7 +54,6 @@ class TestEdge(TestCase):
         self.assertEqual(srcs, ("src1", "src2"))
         self.assertEqual(rels, ("rel1", "rel2"))
         self.assertEqual(dsts, ("dst1", "dst2"))
-
 
     def test_as_pykeen_method(self):
         """This checks if Edge.as_pykeen method works correctly"""

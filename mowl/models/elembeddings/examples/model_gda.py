@@ -9,6 +9,7 @@ import torch as th
 
 import numpy as np
 
+
 class ELEmbeddings(EmbeddingELModel):
 
     def __init__(self,
@@ -18,12 +19,11 @@ class ELEmbeddings(EmbeddingELModel):
                  reg_norm=1,
                  learning_rate=0.001,
                  epochs=1000,
-                 batch_size = 4096*8,
-                 model_filepath = None,
-                 device = 'cpu'
+                 batch_size=4096 * 8,
+                 model_filepath=None,
+                 device='cpu'
                  ):
-        super().__init__(dataset, batch_size, extended = True)
-
+        super().__init__(dataset, batch_size, extended=True)
 
         self.embed_dim = embed_dim
         self.margin = margin
@@ -41,10 +41,9 @@ class ELEmbeddings(EmbeddingELModel):
         self.model = ELEmModule(
             len(self.class_index_dict),
             len(self.object_property_index_dict),
-            embed_dim = self.embed_dim,
-            margin = self.margin
+            embed_dim=self.embed_dim,
+            margin=self.margin
         ).to(self.device)
-
 
     def train(self):
         _, diseases = self.dataset.evaluation_classes
@@ -64,12 +63,12 @@ class ELEmbeddings(EmbeddingELModel):
 
                 loss += th.mean(self.model(gci_dataset[:], gci_name))
                 if gci_name == "gci2":
-                    dis = [self.class_index_dict[d] for d in diseases]
-                    idxs_for_negs = np.random.choice(len(self.class_index_dict), size = len(gci_dataset), replace = True)
+                    idxs_for_negs = np.random.choice(len(self.class_index_dict),
+                                                     size=len(gci_dataset), replace=True)
                     rand_index = th.tensor(idxs_for_negs).to(self.device)
                     data = gci_dataset[:]
-                    neg_data = th.cat([data[:,:2], rand_index.unsqueeze(1)], dim = 1)
-                    loss += th.mean(self.model(neg_data, gci_name, neg = True))
+                    neg_data = th.cat([data[:, :2], rand_index.unsqueeze(1)], dim=1)
+                    loss += th.mean(self.model(neg_data, gci_name, neg=True))
 
             optimizer.zero_grad()
             loss.backward()
@@ -88,9 +87,8 @@ class ELEmbeddings(EmbeddingELModel):
             if best_loss > valid_loss:
                 best_loss = valid_loss
                 th.save(self.model.state_dict(), self.model_filepath)
-            if (epoch + 1) % (checkpoint*10) == 0:
+            if (epoch + 1) % (checkpoint * 10) == 0:
                 print(f'Epoch {epoch}: Train loss: {train_loss} Valid loss: {valid_loss}')
-
 
     def load_eval_data(self):
 
@@ -103,8 +101,8 @@ class ELEmbeddings(EmbeddingELModel):
         self._head_entities = eval_classes[0]
         self._tail_entities = eval_classes[1]
 
-
-        eval_projector = projector_factory('taxonomy_rels', taxonomy=False, relations=[eval_property])
+        eval_projector = projector_factory('taxonomy_rels', taxonomy=False,
+                                           relations=[eval_property])
 
         self._training_set = eval_projector.project(self.dataset.ontology)
         self._testing_set = eval_projector.project(self.dataset.testing)
@@ -118,8 +116,10 @@ class ELEmbeddings(EmbeddingELModel):
         self.model.load_state_dict(th.load(self.model_filepath))
         self.model.eval()
 
-        ent_embeds = {k:v for k,v in zip(self.class_index_dict.keys(), self.model.class_embed.weight.cpu().detach().numpy())}
-        rel_embeds = {k:v for k,v in zip(self.object_property_index_dict.keys(), self.model.rel_embed.weight.cpu().detach().numpy())}
+        ent_embeds = {k: v for k, v in zip(self.class_index_dict.keys(),
+                                           self.model.class_embed.weight.cpu().detach().numpy())}
+        rel_embeds = {k: v for k, v in zip(self.object_property_index_dict.keys(),
+                                           self.model.rel_embed.weight.cpu().detach().numpy())}
         return ent_embeds, rel_embeds
 
     def load_best_model(self):

@@ -32,6 +32,8 @@ trait AbstractProjector{
   //Abstract methods
   def projectAxiom(ontClass: OWLClass, axiom: OWLClassAxiom): List[Triple]
   def projectAxiom(ontClass: OWLClass, axiom: OWLClassAxiom, ontology: OWLOntology): List[Triple]
+  def projectAxiom(axiom: OWLClassAxiom): List[Triple]
+  def projectAxiom(axiom: OWLAxiom): List[Triple]
   //////////////////////
 
   def processOntClass(ontClass: OWLClass, ontology: OWLOntology): List[Triple] = {

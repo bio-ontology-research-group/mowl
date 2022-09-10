@@ -1,8 +1,10 @@
+import mowl.error as err
+from mowl.walking import DeepWalk, Node2Vec, walker_factory
 from unittest import TestCase
 import mowl
 mowl.init_jvm("10g")
-from mowl.walking import DeepWalk, Node2Vec, walker_factory
-import mowl.error as err
+
+
 class TestFactoryMethod(TestCase):
 
     def test_factory_return_types(self):
@@ -15,4 +17,5 @@ class TestFactoryMethod(TestCase):
         self.assertIsInstance(walker_factory("node2vec", 1, 1), Node2Vec)
 
         # Test if exception is raised when walker name is not valid
-        self.assertRaisesRegex(ValueError, err.INVALID_WALKER_NAME, walker_factory, "invalid_walker_name", 1, 1)
+        self.assertRaisesRegex(ValueError, err.INVALID_WALKER_NAME, walker_factory,
+                               "invalid_walker_name", 1, 1)

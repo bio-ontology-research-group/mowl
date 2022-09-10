@@ -72,4 +72,7 @@ class TaxonomyProjector(var bidirectional_taxonomy: Boolean = false) extends Abs
 
   // Abstract methods
   def projectAxiom(go_class: OWLClass, axiom: OWLClassAxiom, ontology: OWLOntology): List[Triple] = Nil
+  def projectAxiom(axiom: OWLAxiom): List[org.mowl.Types.Triple] = Nil
+  def projectAxiom(axiom: OWLClassAxiom): List[org.mowl.Types.Triple] = Nil
+
 }

@@ -2,18 +2,26 @@
 ELBoxEmbeddings
 ===========================
 
-This example is based on the paper `Description Logic EL++ Embeddings with Intersectional Closure <https://arxiv.org/abs/2202.14018v1>`_. This paper is based on the idea of :doc:`/examples/elmodels/1_elembeddings`, but in this work the main point is to solve the *intersectional closure* problem.
+This example is based on the paper `Description Logic EL++ Embeddings with Intersectional \
+Closure <https://arxiv.org/abs/2202.14018v1>`_. This paper is based on the idea of \
+:doc:`/examples/elmodels/1_elembeddings`, but in this work the main point is to solve the \
+*intersectional closure* problem.
 
-In the case of :doc:`/examples/elmodels/1_elembeddings`, the geometric objects representing ontology classes are :math:`n`-dimensional balls. One of the normal forms in EL is:
+In the case of :doc:`/examples/elmodels/1_elembeddings`, the geometric objects representing \
+ontology classes are :math:`n`-dimensional balls. One of the normal forms in EL is:
 
 .. math::
    C_1 \sqcap C_2 \sqsubseteq D
 
-As we can see, there is an intersection operation :math:`C_1 \sqcap C_2`. Computing this intersection using balls is not a closed operations because the region contained in the intersection of two balls is not a ball. To solve that issue, this paper proposes the idea of changing the geometric objects to boxes, for which the intersection operation has the closure property.
+As we can see, there is an intersection operation :math:`C_1 \sqcap C_2`. Computing this \
+intersection using balls is not a closed operations because the region contained in the \
+intersection of two balls is not a ball. To solve that issue, this paper proposes the idea of \
+changing the geometric objects to boxes, for which the intersection operation has the closure \
+property.
 """
 
 from mowl.models.elboxembeddings.module import ELBoxModule
-
+from mowl.base_models.elmodel import EmbeddingELModel
 from mowl.projection.factory import projector_factory
 from mowl.projection.edge import Edge
 import math
@@ -27,6 +35,7 @@ from tqdm import trange, tqdm
 import torch as th
 from torch import nn
 
+
 class ELBoxEmbeddings(EmbeddingELModel):
 
     def __init__(self,
@@ -36,12 +45,11 @@ class ELBoxEmbeddings(EmbeddingELModel):
                  reg_norm=1,
                  learning_rate=0.001,
                  epochs=1000,
-                 batch_size = 4096*8,
-                 model_filepath = None,
-                 device = 'cpu'
+                 batch_size=4096 * 8,
+                 model_filepath=None,
+                 device='cpu'
                  ):
-        super().__init__(dataset, batch_size, extended = True)
-
+        super().__init__(dataset, batch_size, extended=True)
 
         self.embed_dim = embed_dim
         self.margin = margin
@@ -59,17 +67,17 @@ class ELBoxEmbeddings(EmbeddingELModel):
         self.model = ELBoxModule(
             len(self.class_index_dict),
             len(self.object_property_index_dict),
-            embed_dim = self.embed_dim,
-            margin = self.margin
+            embed_dim=self.embed_dim,
+            margin=self.margin
         ).to(self.device)
-
 
     def train(self):
         criterion = nn.MSELoss()
         optimizer = th.optim.Adam(self.model.parameters(), lr=self.learning_rate)
         best_loss = float('inf')
 
-        training_datasets = {k: v.data for k,v in self.training_datasets.get_gci_datasets().items()}
+        training_datasets = {
+            k: v.data for k, v in self.training_datasets.get_gci_datasets().items()}
         validation_dataset = self.validation_datasets.get_gci_datasets()["gci2"][:]
 
         for epoch in trange(self.epochs):
@@ -80,21 +88,22 @@ class ELBoxEmbeddings(EmbeddingELModel):
             for gci_name, gci_dataset in training_datasets.items():
                 if len(gci_dataset) == 0:
                     continue
-                rand_index = np.random.choice(len(gci_dataset), size = 512)
+                rand_index = np.random.choice(len(gci_dataset), size=512)
                 dst = self.model(gci_dataset[rand_index], gci_name)
-                mse_loss = criterion(dst, th.zeros(dst.shape, requires_grad = False).to(self.device))
+                mse_loss = criterion(dst, th.zeros(dst.shape, requires_grad=False).to(self.device))
                 loss += mse_loss
 
                 if gci_name == "gci2":
-                    rand_index = np.random.choice(len(gci_dataset), size = 512)
+                    rand_index = np.random.choice(len(gci_dataset), size=512)
                     gci_batch = gci_dataset[rand_index]
                     prots = [self.class_index_dict[p] for p in self.dataset.evaluation_classes]
-                    idxs_for_negs = np.random.choice(prots, size = len(gci_batch), replace = True)
+                    idxs_for_negs = np.random.choice(prots, size=len(gci_batch), replace=True)
                     rand_prot_ids = th.tensor(idxs_for_negs).to(self.device)
-                    neg_data = th.cat([gci_batch[:, :2], rand_prot_ids.unsqueeze(1)], dim = 1)
+                    neg_data = th.cat([gci_batch[:, :2], rand_prot_ids.unsqueeze(1)], dim=1)
 
-                    dst = self.model(neg_data, gci_name, neg = True)
-                    mse_loss = criterion(dst, th.ones(dst.shape, requires_grad = False).to(self.device))
+                    dst = self.model(neg_data, gci_name, neg=True)
+                    mse_loss = criterion(dst,
+                                         th.ones(dst.shape, requires_grad=False).to(self.device))
                     loss += mse_loss
 
             optimizer.zero_grad()
@@ -108,15 +117,15 @@ class ELBoxEmbeddings(EmbeddingELModel):
                 gci2_data = validation_dataset
 
                 dst = self.model(gci2_data, "gci2")
-                loss = criterion(dst, th.zeros(dst.shape, requires_grad = False).to(self.device))
+                loss = criterion(dst, th.zeros(dst.shape, requires_grad=False).to(self.device))
                 valid_loss += loss.detach().item()
 
             checkpoint = 100
-            if best_loss > valid_loss and (epoch+1) % checkpoint == 0:
+            if best_loss > valid_loss and (epoch + 1) % checkpoint == 0:
                 best_loss = valid_loss
                 print("Saving model..")
                 th.save(self.model.state_dict(), self.model_filepath)
-            if (epoch+1) % checkpoint == 0:
+            if (epoch + 1) % checkpoint == 0:
                 print(f'Epoch {epoch}: Train loss: {train_loss} Valid loss: {valid_loss}')
 
     def evaluate_ppi(self):
@@ -128,7 +137,9 @@ class ELBoxEmbeddings(EmbeddingELModel):
 
             eval_method = self.model.gci2_loss
 
-            evaluator = ELBoxEmbeddingsPPIEvaluator(self.dataset.testing, eval_method, self.dataset.ontology, self.class_index_dict, self.object_property_index_dict, device = self.device)
+            evaluator = ELBoxEmbeddingsPPIEvaluator(
+                self.dataset.testing, eval_method, self.dataset.ontology, self.class_index_dict,
+                self.object_property_index_dict, device=self.device)
             evaluator()
             evaluator.print_metrics()
 
@@ -146,7 +157,8 @@ class ELBoxEmbeddings(EmbeddingELModel):
         self._head_entities = set(list(eval_classes)[:])
         self._tail_entities = set(list(eval_classes)[:])
 
-        eval_projector = projector_factory('taxonomy_rels', taxonomy=False, relations=[eval_property])
+        eval_projector = projector_factory('taxonomy_rels', taxonomy=False,
+                                           relations=[eval_property])
 
         self._training_set = eval_projector.project(self.dataset.ontology)
         self._testing_set = eval_projector.project(self.dataset.testing)
@@ -160,8 +172,10 @@ class ELBoxEmbeddings(EmbeddingELModel):
         self.model.load_state_dict(th.load(self.model_filepath))
         self.model.eval()
 
-        ent_embeds = {k:v for k,v in zip(self.class_index_dict.keys(), self.model.class_embed.weight.cpu().detach().numpy())}
-        rel_embeds = {k:v for k,v in zip(self.object_property_index_dict.keys(), self.model.rel_embed.weight.cpu().detach().numpy())}
+        ent_embeds = {k: v for k, v in zip(self.class_index_dict.keys(),
+                                           self.model.class_embed.weight.cpu().detach().numpy())}
+        rel_embeds = {k: v for k, v in zip(self.object_property_index_dict.keys(),
+                                           self.model.rel_embed.weight.cpu().detach().numpy())}
         return ent_embeds, rel_embeds
 
     def load_best_model(self):

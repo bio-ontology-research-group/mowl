@@ -1,10 +1,10 @@
+from mowl.base_models import Model
+from tests.datasetFactory import FamilyDataset
 from unittest import TestCase
 import random
 import mowl
 mowl.init_jvm("10g")
 
-from mowl.datasets.builtin import FamilyDataset
-from mowl.base_models import Model
 
 class TestModel(TestCase):
 
@@ -16,19 +16,22 @@ class TestModel(TestCase):
         """This checks if type of parameters is checked"""
 
         self.assertRaisesRegex(TypeError, "Parameter dataset must be a mOWL Dataset.", Model, 1)
-        self.assertRaisesRegex(TypeError, "Optional parameter model_filepath must be a string.", Model, self.dataset, model_filepath = 1)
+        self.assertRaisesRegex(TypeError, "Optional parameter model_filepath must be a string.",
+                               Model, self.dataset, model_filepath=1)
 
     def test_train_method(self):
         """This checks if Model.train method works correctly"""
 
         model = Model(self.dataset)
-        self.assertRaisesRegex(NotImplementedError, "Method train is not implemented.", model.train)
+        self.assertRaisesRegex(NotImplementedError, "Method train is not implemented.",
+                               model.train)
 
     def test_eval_fn(self):
         """This checks if Model.eval_fn method works correctly"""
 
         model = Model(self.dataset)
-        self.assertRaisesRegex(NotImplementedError, "Method eval_fn is not implemented.", model.eval_fn)
+        self.assertRaisesRegex(NotImplementedError, "Method eval_fn is not implemented.",
+                               model.eval_fn)
 
     def test_get_class_index_dict_attribute(self):
         """This checks if Model.get_class_index_dict attribute works correctly"""

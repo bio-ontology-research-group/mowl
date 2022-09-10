@@ -1,8 +1,7 @@
+import mowl.error as err
 from unittest import TestCase
 import mowl
 mowl.init_jvm("10g")
-
-import mowl.error as err
 
 
 class TestErrorMessages(TestCase):

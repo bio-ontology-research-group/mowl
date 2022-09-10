@@ -1,11 +1,11 @@
+import time
+from mowl.walking import DeepWalk
+from mowl.projection import Edge
 from unittest import TestCase
 import os
 import mowl
 mowl.init_jvm("10g")
 
-from mowl.projection import Edge
-from mowl.walking import DeepWalk
-import time
 
 class TestDeepWalk(TestCase):
 
@@ -22,31 +22,35 @@ class TestDeepWalk(TestCase):
         self.graph = [edge1, edge2, edge3, edge4, edge5, edge6]
         self.nodes, self.rels = Edge.get_entities_and_relations(self.graph)
 
-
     def test_deepwalk_raise_error_with_incorrect_types(self):
         """This method tests if the exception is raised when the types are incorrect"""
         num_walks = "10"
         walk_length = 5
-        self.assertRaisesRegex(TypeError, "Parameter num_walks must be an integer", DeepWalk, num_walks, walk_length)
+        self.assertRaisesRegex(TypeError, "Parameter num_walks must be an integer", DeepWalk,
+                               num_walks, walk_length)
 
         num_walks = 10
         walk_length = "5"
-        self.assertRaisesRegex(TypeError, "Parameter walk_length must be an integer", DeepWalk, num_walks, walk_length)
+        self.assertRaisesRegex(TypeError, "Parameter walk_length must be an integer", DeepWalk,
+                               num_walks, walk_length)
 
         num_walks = 10
         walk_length = 5
         alpha = "0.1"
-        self.assertRaisesRegex(TypeError, "Optional parameter alpha must be a float", DeepWalk, num_walks, walk_length, alpha=alpha)
+        self.assertRaisesRegex(TypeError, "Optional parameter alpha must be a float", DeepWalk,
+                               num_walks, walk_length, alpha=alpha)
 
         num_walks = 10
         walk_length = 5
         workers = "1"
-        self.assertRaisesRegex(TypeError, "Optional parameter workers must be an integer", DeepWalk, num_walks, walk_length, workers=workers)
+        self.assertRaisesRegex(TypeError, "Optional parameter workers must be an integer",
+                               DeepWalk, num_walks, walk_length, workers=workers)
 
         num_walks = 10
         walk_length = 5
         outfile = 16
-        self.assertRaisesRegex(TypeError, "Optional parameter outfile must be a string", DeepWalk, num_walks, walk_length, outfile = outfile)
+        self.assertRaisesRegex(TypeError, "Optional parameter outfile must be a string",
+                               DeepWalk, num_walks, walk_length, outfile=outfile)
 
     def test_deepwalk_number_of_walks(self):
         """This method tests if the number of walks is correct"""
@@ -60,7 +64,6 @@ class TestDeepWalk(TestCase):
 
         self.assertEqual(len(walks), num_walks * len(self.nodes))
 
-
     def test_walking_with_list_of_nodes_ignore_unknown_nodes(self):
         """This method tests if the walking ignores unknown nodes when list of nodes specified"""
         num_walks = 10
@@ -68,9 +71,10 @@ class TestDeepWalk(TestCase):
         node2vec = DeepWalk(num_walks, walk_length)
 
         with self.assertLogs("deepwalk", level='INFO') as cm:
-            node2vec.walk(self.graph, nodes_of_interest = ["A", "X"])
+            node2vec.walk(self.graph, nodes_of_interest=["A", "X"])
 
-        self.assertEqual(cm.output, ["INFO:deepwalk:Node X does not exist in the graph. Ignoring it."])
+        self.assertEqual(cm.output, ["INFO:deepwalk:Node X does not exist in the graph. \
+Ignoring it."])
 
     def test_passing_outfile_name(self):
         """This checks that outfile name passed to walking method is created"""

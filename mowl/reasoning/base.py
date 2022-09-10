@@ -1,5 +1,6 @@
 
-from uk.ac.manchester.cs.owl.owlapi import OWLSubClassOfAxiomImpl, OWLDisjointClassesAxiomImpl, OWLEquivalentClassesAxiomImpl
+from uk.ac.manchester.cs.owl.owlapi import OWLSubClassOfAxiomImpl, OWLDisjointClassesAxiomImpl, \
+    OWLEquivalentClassesAxiomImpl
 from org.semanticweb.owlapi.model import OWLClass
 from org.semanticweb.owlapi.reasoner import OWLReasoner
 
@@ -12,7 +13,6 @@ import logging
 logging.basicConfig(level=logging.INFO)
 
 
-
 def count_added_axioms(func):
     @wraps(func)
     def wrapper(self, owl_classes):
@@ -22,19 +22,21 @@ def count_added_axioms(func):
     return wrapper
 
 
-
 class MOWLReasoner():
 
-    """This class encapsulates some of the funcionalities in the OWLAPI. It provies methods to infer different types of axioms to extend a particular ontology.
+    """This class encapsulates some of the funcionalities in the OWLAPI. It provies methods to \
+        infer different types of axioms to extend a particular ontology.
 
     :param reasoner: Reasoner that will be used to infer the axioms.
-    :type reasoner: This parameter has to implement the OWLAPI interface :class:`org.semanticweb.owlapi.reasoner.OWLReasoner`
+    :type reasoner: This parameter has to implement the OWLAPI interface \
+    :class:`org.semanticweb.owlapi.reasoner.OWLReasoner`
     """
 
     def __init__(self, reasoner):
 
         if not isinstance(reasoner, OWLReasoner):
-            raise TypeError("Parameter reasoner must be an instance of org.semanticweb.owlapi.reasoner.OWLReasoner")
+            raise TypeError("Parameter reasoner must be an instance of \
+org.semanticweb.owlapi.reasoner.OWLReasoner")
 
         self.reasoner = reasoner
         self.adapter = OWLAPIAdapter()
@@ -52,20 +54,20 @@ class MOWLReasoner():
         owl_classes = list(owl_classes)
 
         if not all(isinstance(owl_class, OWLClass) for owl_class in owl_classes):
-            raise TypeError("All elements in parameter owl_classes must be of type org.semanticweb.owlapi.model.OWLClass")
+            raise TypeError("All elements in parameter owl_classes must be of type \
+org.semanticweb.owlapi.model.OWLClass")
 
         axioms = []
         for owl_class in owl_classes:
             super_classes = self.reasoner.getSuperClasses(owl_class, False).getFlattened()
-            new_axioms = set(map(lambda x: OWLSubClassOfAxiomImpl(owl_class, x, []), super_classes))
+            new_axioms = set(map(lambda x: OWLSubClassOfAxiomImpl(owl_class, x, []),
+                                 super_classes))
 
             axioms += list(new_axioms)
         return axioms
 
-
     @count_added_axioms
     def infer_equiv_class_axioms(self, owl_classes):
-
         """Infers and returns axioms of the form :math:`C \equiv D`
 
         :param owl_classes: List of OWLClass objects to be used to infer the axioms.
@@ -76,8 +78,8 @@ class MOWLReasoner():
         owl_classes = list(owl_classes)
 
         if not all(isinstance(owl_class, OWLClass) for owl_class in owl_classes):
-            raise TypeError("All elements in parameter owl_classes must be of type org.semanticweb.owlapi.model.OWLClass")
-
+            raise TypeError("All elements in parameter owl_classes must be of type \
+org.semanticweb.owlapi.model.OWLClass")
 
         axioms = []
         for owl_class in owl_classes:
@@ -100,7 +102,8 @@ class MOWLReasoner():
         owl_classes = list(owl_classes)
 
         if not all(isinstance(owl_class, OWLClass) for owl_class in owl_classes):
-            raise TypeError("All elements in parameter owl_classes must be of type org.semanticweb.owlapi.model.OWLClass")
+            raise TypeError("All elements in parameter owl_classes must be of type \
+org.semanticweb.owlapi.model.OWLClass")
 
         axioms = []
         for owl_class in owl_classes:

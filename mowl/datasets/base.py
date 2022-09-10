@@ -17,32 +17,33 @@ from mowl.projection import TaxonomyWithRelsProjector
 from mowl.owlapi.adapter import OWLAPIAdapter
 from mowl.owlapi.defaults import TOP, BOT
 
+
 class Dataset():
     """This class represents an mOWL dataset.
 
     :param ontology: The ontology containing the training data of the dataset.
     :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
-    :param validation: The ontology containing the validation data of the dataset, defaults to ``None``.
+    :param validation: The ontology containing the validation data of the dataset, defaults to \
+    ``None``.
     :type validation: :class:`org.semanticweb.owlapi.model.OWLOntology`, optional
     :param testing: The ontology containing the testing data of the dataset, defaults to ``None``.
     :type testing: :class:`org.semanticweb.owlapi.model.OWLOntology`, optional
     """
 
-    def __init__(self, ontology, validation = None , testing = None ):
+    def __init__(self, ontology, validation=None, testing=None):
 
         if not isinstance(ontology, OWLOntology):
-            raise TypeError(f"Parameter ontology must be an OWLOntology.")
+            raise TypeError("Parameter ontology must be an OWLOntology.")
 
-        if not isinstance(validation, OWLOntology) and validation is not   None:
-            raise TypeError(f"Optional parameter validation must be an OWLOntology.")
+        if not isinstance(validation, OWLOntology) and validation is not None:
+            raise TypeError("Optional parameter validation must be an OWLOntology.")
 
         if not isinstance(testing, OWLOntology) and testing is not None:
-            raise TypeError(f"Optional parameter testing must be an OWLOntology.")
+            raise TypeError("Optional parameter testing must be an OWLOntology.")
 
         self._ontology = ontology
         self._validation = validation
         self._testing = testing
-
 
     @property
     def ontology(self):
@@ -117,10 +118,13 @@ class Dataset():
 
     @property
     def evaluation_classes(self):
-        """List of classes used for evaluation. Depending on the dataset, this
-        method could return a single :class:`OWLClasses` object
-        (as in :class:`PPIYeastDataset <mowl.datasets.builtin.PPIYeastDataset>`)
-        or a tuple of :class:`OWLClasses` objects (as in :class:`GDAHumanDataset <mowl.datasets.builtin.GDAHumanDataset>`). If not overriden, this method returns the classes in the testing ontology obtained from the OWLAPI method ``getClassesInSignature()`` as a :class:`OWLClasses` object.
+        """List of classes used for evaluation. Depending on the dataset, this method could \
+        return a single :class:`OWLClasses` object \
+        (as in :class:`PPIYeastDataset <mowl.datasets.builtin.PPIYeastDataset>`) \
+        or a tuple of :class:`OWLClasses` objects \
+        (as in :class:`GDAHumanDataset <mowl.datasets.builtin.GDAHumanDataset>`). If not \
+        overriden, this method returns the classes in the testing ontology obtained from the \
+        OWLAPI method ``getClassesInSignature()`` as a :class:`OWLClasses` object.
         """
         self._load()
         if self._evaluation_classes is None:
@@ -136,11 +140,10 @@ class Dataset():
 
         :rtype: dict
         """
-        projector = TaxonomyWithRelsProjector(relations = ["http://has_label"])
+        projector = TaxonomyWithRelsProjector(relations=["http://has_label"])
         edges = projector.project(self._ontology)
         labels = {str(e.src): str(e.dst) for e in edges}
         return labels
-
 
 
 class PathDataset(Dataset):
@@ -166,14 +169,14 @@ class PathDataset(Dataset):
                  validation_path: str = None,
                  testing_path: str = None):
 
-        #Checks on training file path
+        # Checks on training file path
         if not isinstance(ontology_path, str):
             raise TypeError("Training ontology path must be a string.")
 
         if not os.path.exists(ontology_path):
             raise FileNotFoundError(f"Training ontology file not found {ontology_path}")
 
-        #Checks on validation file path
+        # Checks on validation file path
         if validation_path is not None:
             if not isinstance(validation_path, str):
                 raise TypeError("Training validation path must be a string.")
@@ -181,7 +184,7 @@ class PathDataset(Dataset):
             if not os.path.exists(validation_path):
                 raise FileNotFoundError(f"Validation ontology file not found {validation_path}")
 
-        #Checks on testing file path
+        # Checks on testing file path
         if testing_path is not None:
             if not isinstance(testing_path, str):
                 raise TypeError("Training testing path must be a string.")
@@ -201,8 +204,6 @@ class PathDataset(Dataset):
         self._object_properties = None
         self._evaluation_classes = None
 
-
-
     def _load(self):
 
         ont_manager = OWLManager.createOWLOntologyManager()
@@ -210,12 +211,12 @@ class PathDataset(Dataset):
             java.io.File(self.ontology_path))
 
         validation = None
-        if not self.validation_path is None:
+        if self.validation_path is not None:
             validation = ont_manager.loadOntologyFromOntologyDocument(
                 java.io.File(self.validation_path))
 
         testing = None
-        if not self.testing_path is None:
+        if self.testing_path is not None:
             testing = ont_manager.loadOntologyFromOntologyDocument(
                 java.io.File(self.testing_path))
 
@@ -255,11 +256,11 @@ class TarFileDataset(PathDataset):
         validation_exists = os.path.exists(validation_path)
         testing_exists = os.path.exists(testing_path)
 
-        #Check if the dataset is already extracted
+        # Check if the dataset is already extracted
         if not (ontology_exists and validation_exists and testing_exists):
             self._extract()
 
-        #Check if validation and testing ontologies exist
+        # Check if validation and testing ontologies exist
         if not os.path.exists(validation_path):
             validation_path = None
         if not os.path.exists(testing_path):
@@ -273,6 +274,7 @@ class TarFileDataset(PathDataset):
     def _extract(self):
         with tarfile.open(self.tarfile_path) as tarf:
             tarf.extractall(path=self.data_root)
+
 
 class RemoteDataset(TarFileDataset):
     """Loads the dataset from a remote URL.
@@ -307,6 +309,7 @@ class RemoteDataset(TarFileDataset):
 
 class Entities():
     """Abstract class containing OWLEntities indexed by they IRIs"""
+
     def __init__(self, collection):
         self._collection = self.check_owl_type(collection)
         self._name_owlobject = self.to_dict()
@@ -327,7 +330,7 @@ class Entities():
         dict_ = {}
         for ent in self._collection:
             name = self.to_str(ent)
-            if not name in dict_:
+            if name not in dict_:
                 dict_[name] = ent
         dict_ = dict(sorted(dict_.items()))
         return dict_
@@ -342,8 +345,10 @@ class Entities():
         """Returns the list of entities as OWL objects."""
         return list(self._name_owlobject.values())
 
+
 class OWLClasses(Entities):
     """Class containing OWL classes indexed by they IRIs"""
+
     def check_owl_type(self, collection):
         for item in collection:
             if not isinstance(item, OWLClass):
@@ -354,8 +359,10 @@ class OWLClasses(Entities):
         name = str(owl_class.toStringID())
         return name
 
+
 class OWLObjectProperties(Entities):
     """Class containing OWL object properties indexed by they IRIs"""
+
     def check_owl_type(self, collection):
         for item in collection:
             if not isinstance(item, OWLObjectProperty):

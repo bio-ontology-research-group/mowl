@@ -2,9 +2,13 @@
 EL Embeddings
 ===============
 
-This example corresponds to the paper `EL Embeddings: Geometric Construction of Models for the Description Logic EL++ <https://www.ijcai.org/proceedings/2019/845>`_.
+This example corresponds to the paper `EL Embeddings: Geometric Construction of Models for the \
+Description Logic EL++ <https://www.ijcai.org/proceedings/2019/845>`_.
 
-The idea of this paper is to embed EL by modeling ontology classes as :math:`n`-dimensional balls (:math:`n`-balls) and ontology object properties as transformations of those :math:`n`-balls. For each of the normal forms, there is a distance function defined that will work as loss functions in the optimization framework.
+The idea of this paper is to embed EL by modeling ontology classes as :math:`n`-dimensional \
+balls (:math:`n`-balls) and ontology object properties as transformations of those \
+:math:`n`-balls. For each of the normal forms, there is a distance function defined that will \
+work as loss functions in the optimization framework.
 """
 
 # %%
@@ -20,6 +24,7 @@ import torch as th
 
 import numpy as np
 
+
 class ELEmbeddings(EmbeddingELModel):
 
     def __init__(self,
@@ -29,12 +34,11 @@ class ELEmbeddings(EmbeddingELModel):
                  reg_norm=1,
                  learning_rate=0.001,
                  epochs=1000,
-                 batch_size = 4096*8,
-                 model_filepath = None,
-                 device = 'cpu'
+                 batch_size=4096 * 8,
+                 model_filepath=None,
+                 device='cpu'
                  ):
-        super().__init__(dataset, batch_size, extended = True)
-
+        super().__init__(dataset, batch_size, extended=True)
 
         self.embed_dim = embed_dim
         self.margin = margin
@@ -50,10 +54,10 @@ class ELEmbeddings(EmbeddingELModel):
 
     def init_model(self):
         self.model = ELEmModule(
-            len(self.class_index_dict), #number of ontology classes
-            len(self.object_property_index_dict), #number of ontology object properties
-            embed_dim = self.embed_dim,
-            margin = self.margin
+            len(self.class_index_dict),  # number of ontology classes
+            len(self.object_property_index_dict),  # number of ontology object properties
+            embed_dim=self.embed_dim,
+            margin=self.margin
         ).to(self.device)
 
     def train(self):
@@ -74,11 +78,11 @@ class ELEmbeddings(EmbeddingELModel):
                 loss += th.mean(self.model(gci_dataset[:], gci_name))
                 if gci_name == "gci2":
                     prots = [self.class_index_dict[p] for p in self.dataset.evaluation_classes]
-                    idxs_for_negs = np.random.choice(prots, size = len(gci_dataset), replace = True)
+                    idxs_for_negs = np.random.choice(prots, size=len(gci_dataset), replace=True)
                     rand_index = th.tensor(idxs_for_negs).to(self.device)
                     data = gci_dataset[:]
-                    neg_data = th.cat([data[:,:2], rand_index.unsqueeze(1)], dim = 1)
-                    loss += th.mean(self.model(neg_data, gci_name, neg = True))
+                    neg_data = th.cat([data[:, :2], rand_index.unsqueeze(1)], dim=1)
+                    loss += th.mean(self.model(neg_data, gci_name, neg=True))
 
             optimizer.zero_grad()
             loss.backward()
@@ -102,6 +106,7 @@ class ELEmbeddings(EmbeddingELModel):
 
     def eval_method(self, data):
         return self.model.gci2_loss(data)
+
     def evaluate_ppi(self):
         self.init_model()
         print('Load the best model', self.model_filepath)
@@ -111,7 +116,9 @@ class ELEmbeddings(EmbeddingELModel):
 
             eval_method = self.model.gci2_loss
 
-            evaluator = ELEmbeddingsPPIEvaluator(self.dataset.testing, eval_method, self.dataset.ontology, self.class_index_dict, self.object_property_index_dict, device = self.device)
+            evaluator = ELEmbeddingsPPIEvaluator(
+                self.dataset.testing, eval_method, self.dataset.ontology, self.class_index_dict,
+                self.object_property_index_dict, device=self.device)
             evaluator()
             evaluator.print_metrics()
 
@@ -126,7 +133,8 @@ class ELEmbeddings(EmbeddingELModel):
         self._head_entities = set(list(eval_classes)[:])
         self._tail_entities = set(list(eval_classes)[:])
 
-        eval_projector = projector_factory('taxonomy_rels', taxonomy=False, relations=[eval_property])
+        eval_projector = projector_factory('taxonomy_rels', taxonomy=False,
+                                           relations=[eval_property])
 
         self._training_set = eval_projector.project(self.dataset.ontology)
         self._testing_set = eval_projector.project(self.dataset.testing)
@@ -140,8 +148,12 @@ class ELEmbeddings(EmbeddingELModel):
         self.model.load_state_dict(th.load(self.model_filepath))
         self.model.eval()
 
-        ent_embeds = {k:v for k,v in zip(self.class_index_dict.keys(), self.model.class_embed.weight.cpu().detach().numpy())}
-        rel_embeds = {k:v for k,v in zip(self.object_property_index_dict.keys(), self.model.rel_embed.weight.cpu().detach().numpy())}
+        ent_embeds = {
+            k: v for k, v in zip(self.class_index_dict.keys(),
+                                 self.model.class_embed.weight.cpu().detach().numpy())}
+        rel_embeds = {
+            k: v for k, v in zip(self.object_property_index_dict.keys(),
+                                 self.model.rel_embed.weight.cpu().detach().numpy())}
         return ent_embeds, rel_embeds
 
     def load_best_model(self):

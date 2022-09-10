@@ -1,10 +1,10 @@
+import org.semanticweb.owlapi.model as J
+from mowl.owlapi.defaults import BOT, TOP
+from mowl.owlapi import OWLOntology, OWLClass
 from unittest import TestCase
 import mowl
 mowl.init_jvm("10g")
 
-from mowl.owlapi import OWLOntology, OWLClass
-from mowl.owlapi.defaults import BOT, TOP
-import org.semanticweb.owlapi.model as J
 
 class TestObjects(TestCase):
 

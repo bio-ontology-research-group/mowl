@@ -2,6 +2,7 @@ import jpype
 import jpype.imports
 import os
 
+
 def init_jvm(memory):
     dirname = os.path.dirname(__file__)
     jars_dir = os.path.join(dirname, "lib/")

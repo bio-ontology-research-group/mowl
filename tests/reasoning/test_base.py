@@ -1,17 +1,14 @@
+from org.semanticweb.HermiT import Reasoner
+from org.semanticweb.elk.owlapi import ElkReasonerFactory
+from mowl.reasoning import MOWLReasoner
+from tests.datasetFactory import FamilyDataset
+from org.semanticweb.owlapi.model import OWLSubClassOfAxiom, OWLEquivalentClassesAxiom, \
+    OWLDisjointClassesAxiom
 from random import randrange
 from unittest import TestCase
-import os
-import shutil
-from random import randrange
 import mowl
 mowl.init_jvm("10g")
 
-from org.semanticweb.owlapi.model import OWLSubClassOfAxiom, OWLEquivalentClassesAxiom, OWLDisjointClassesAxiom
-
-from mowl.datasets.builtin import FamilyDataset
-from mowl.reasoning import MOWLReasoner
-from org.semanticweb.elk.owlapi import ElkReasonerFactory
-from org.semanticweb.HermiT import Reasoner
 
 class TestMowlReasoner(TestCase):
 
@@ -19,15 +16,13 @@ class TestMowlReasoner(TestCase):
     def setUpClass(self):
         self.dataset = FamilyDataset()
 
-    @classmethod
-    def tearDownClass(self):
-        os.remove("family.tar.gz")
-        shutil.rmtree("family")
-
     def test_attribute_type_checking(self):
         """This should test if type checking is applied for MOWLReasoner class"""
 
-        with self.assertRaisesRegex(TypeError, "Parameter reasoner must be an instance of org.semanticweb.owlapi.reasoner.OWLReasoner"):
+        with self.assertRaisesRegex(
+            TypeError,
+            "Parameter reasoner must be an instance of \
+org.semanticweb.owlapi.reasoner.OWLReasoner"):
             _ = MOWLReasoner("reasoner")
 
 ###############################################
@@ -38,7 +33,8 @@ class TestMowlReasoner(TestCase):
         reasoner.precomputeInferences()
 
         mowl_reasoner = MOWLReasoner(reasoner)
-        with self.assertRaisesRegex(TypeError, "All elements in parameter owl_classes must be of type org.semanticweb.owlapi.model.OWLClass"):
+        with self.assertRaisesRegex(TypeError, "All elements in parameter owl_classes must be of \
+type org.semanticweb.owlapi.model.OWLClass"):
             mowl_reasoner.infer_subclass_axioms(["owl:Thing"])
 
     def test_return_values_infer_subclass_axioms_method(self):
@@ -63,7 +59,8 @@ class TestMowlReasoner(TestCase):
         reasoner.precomputeInferences()
 
         mowl_reasoner = MOWLReasoner(reasoner)
-        with self.assertRaisesRegex(TypeError, "All elements in parameter owl_classes must be of type org.semanticweb.owlapi.model.OWLClass"):
+        with self.assertRaisesRegex(TypeError, "All elements in parameter owl_classes must be of \
+type org.semanticweb.owlapi.model.OWLClass"):
             mowl_reasoner.infer_equiv_class_axioms(["ontology"])
 
     def test_return_values_infer_equiv_class_axioms_method(self):
@@ -80,8 +77,8 @@ class TestMowlReasoner(TestCase):
         rand_idx = randrange(0, len(result))
         self.assertIsInstance(result[rand_idx], OWLEquivalentClassesAxiom)
 
-
 ###############################################
+
     def test_infer_disjoint_class_axioms_type_checking(self):
         """This should test if type checking is applied for infer_disjoint_class_axioms method"""
         reasoner_factory = ElkReasonerFactory()
@@ -89,12 +86,15 @@ class TestMowlReasoner(TestCase):
         reasoner.precomputeInferences()
 
         mowl_reasoner = MOWLReasoner(reasoner)
-        with self.assertRaisesRegex(TypeError, "All elements in parameter owl_classes must be of type org.semanticweb.owlapi.model.OWLClass"):
+        with self.assertRaisesRegex(
+            TypeError,
+            "All elements in parameter owl_classes must be of type \
+org.semanticweb.owlapi.model.OWLClass"):
             mowl_reasoner.infer_disjoint_class_axioms(["ontology"])
 
-
     def test_return_values_infer_disjoint_class_axioms_method(self):
-        """This should test if the return values of infer_disjoint_class_axioms method are correct"""
+        """This should test if the return values of infer_disjoint_class_axioms method are \
+correct"""
 
         hermit_reasoner = Reasoner.ReasonerFactory().createReasoner(self.dataset.ontology)
         hermit_reasoner.precomputeInferences()

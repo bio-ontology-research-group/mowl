@@ -1,5 +1,6 @@
 from mowl.projection.edge import Edge
 
+
 class ProjectionModel():
     """
     Abstract class for Ontology projection into a graph

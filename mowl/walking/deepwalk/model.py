@@ -16,7 +16,8 @@ logger = logging.getLogger("deepwalk")
 class DeepWalk(WalkingModel):
 
     '''
-    Implementation of DeepWalk based on <https://github.com/phanein/deepwalk/blob/master/deepwalk/graph.py>
+    Implementation of DeepWalk based on \
+    <https://github.com/phanein/deepwalk/blob/master/deepwalk/graph.py>
 
     :param alpha: Probability of restart, defaults to 0
     :type alpha: float, optional
@@ -25,19 +26,20 @@ class DeepWalk(WalkingModel):
     def __init__(self,
                  num_walks,
                  walk_length,
-                 alpha = 0.,
-                 outfile = None,
+                 alpha=0.,
+                 outfile=None,
                  workers=1,
-):
-        super().__init__(num_walks, walk_length, outfile = outfile, workers = workers)
+                 ):
+        super().__init__(num_walks, walk_length, outfile=outfile, workers=workers)
 
-        #Type checking
+        # Type checking
         if not isinstance(alpha, float):
             raise TypeError("Optional parameter alpha must be a float")
         self.alpha = alpha
 
-    @versionchanged(version = "0.1.0", reason = "The method now can accept a list of entities to focus on when generating the random walks.")
-    def walk(self, edges, nodes_of_interest = None):
+    @versionchanged(version="0.1.0", reason="The method now can accept a list of entities to \
+    focus on when generating the random walks.")
+    def walk(self, edges, nodes_of_interest=None):
         if nodes_of_interest is None:
             nodes_of_interest = ArrayList()
         else:
@@ -56,6 +58,7 @@ class DeepWalk(WalkingModel):
             newEdge = Edge(edge.src, edge.rel, edge.dst)
             edgesJ.add(newEdge)
 
-        walker = DW(edgesJ, self.num_walks, self.walk_length, self.alpha, self.workers, self.outfile, nodes_of_interest)
+        walker = DW(edgesJ, self.num_walks, self.walk_length, self.alpha, self.workers,
+                    self.outfile, nodes_of_interest)
 
         walker.walk()

@@ -1,8 +1,8 @@
+from mowl.nn import ELModule
 from unittest import TestCase
 import mowl
 mowl.init_jvm("10g")
 
-from mowl.nn import ELModule
 
 class TestELModule(TestCase):
 
@@ -11,5 +11,8 @@ class TestELModule(TestCase):
 
         module = ELModule()
 
-        with self.assertRaisesRegex(ValueError, "Parameter gci_name must be one of the following: gci0, gci1, gci2, gci3, gci0_bot, gci1_bot, gci3_bot."):
+        with self.assertRaisesRegex(
+            ValueError,
+            "Parameter gci_name must be one of the following: gci0, gci1, gci2, gci3, gci0_bot, \
+gci1_bot, gci3_bot."):
             _ = module([], "gci4")

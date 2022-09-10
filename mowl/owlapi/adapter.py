@@ -4,12 +4,14 @@ from org.semanticweb.owlapi.model import IRI
 
 import mowl.error as err
 
+
 class OWLAPIAdapter():
     """Adapter class adapting OWLAPI. Here you can find shortcuts to:
     * OWLManager
     * OWLDataFactory
     * IRI
     """
+
     def __init__(self):
 
         self._owl_manager = None
@@ -27,14 +29,14 @@ class OWLAPIAdapter():
 
     @property
     def data_factory(self):
-        """Creates an OWLDataFactory from OWLAPI. If OWLManager does not exist, it is created as well.
+        """Creates an OWLDataFactory from OWLAPI. If OWLManager does not exist, it is created as \
+            well.
         :rtype: org.semanticweb.owlapi.model.OWLDataFactory
         """
 
         if self._data_factory is None:
             self._data_factory = self.owl_manager.getOWLDataFactory()
         return self._data_factory
-
 
     def create_class(self, iri):
         """Creates and OWL class given a valid IRI string"""
