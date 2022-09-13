@@ -1,10 +1,6 @@
 from mowl.ontology.extend import insert_annotations
 from unittest import TestCase
 
-import os
-import mowl
-mowl.init_jvm("10g")
-
 
 class TestExtend(TestCase):
 

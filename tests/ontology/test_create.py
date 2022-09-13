@@ -1,7 +1,5 @@
 from mowl.ontology.create import create_from_triples
 from unittest import TestCase
-import mowl
-mowl.init_jvm("10g")
 
 
 class TestCreate(TestCase):

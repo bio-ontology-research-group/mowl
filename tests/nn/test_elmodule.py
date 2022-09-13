@@ -1,7 +1,5 @@
 from mowl.nn import ELModule
 from unittest import TestCase
-import mowl
-mowl.init_jvm("10g")
 
 
 class TestElModule(TestCase):

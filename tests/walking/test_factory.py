@@ -1,8 +1,6 @@
 import mowl.error as err
 from mowl.walking import DeepWalk, Node2Vec, walker_factory
 from unittest import TestCase
-import mowl
-mowl.init_jvm("10g")
 
 
 class TestFactoryMethod(TestCase):

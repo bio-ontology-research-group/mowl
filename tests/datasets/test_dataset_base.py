@@ -13,8 +13,6 @@ from random import randrange, choice
 import os
 import shutil
 import requests
-import mowl
-mowl.init_jvm("10g")
 
 
 class TestDataset(TestCase):

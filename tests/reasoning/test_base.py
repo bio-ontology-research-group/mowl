@@ -6,8 +6,6 @@ from org.semanticweb.owlapi.model import OWLSubClassOfAxiom, OWLEquivalentClasse
     OWLDisjointClassesAxiom
 from random import randrange
 from unittest import TestCase
-import mowl
-mowl.init_jvm("10g")
 
 
 class TestMowlReasoner(TestCase):

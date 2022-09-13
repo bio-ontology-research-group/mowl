@@ -1,11 +1,11 @@
-from mowl.corpus import extract_and_save_axiom_corpus, \
-    extract_and_save_annotation_corpus, extract_axiom_corpus, extract_annotation_corpus
 from tests.datasetFactory import FamilyDataset, PPIYeastSlimDataset
 from unittest import TestCase
 import os
 import shutil
 import mowl
 mowl.init_jvm("10g")
+from mowl.corpus import extract_and_save_axiom_corpus, \
+    extract_and_save_annotation_corpus, extract_axiom_corpus, extract_annotation_corpus
 
 
 class TestBase(TestCase):

@@ -1,10 +1,9 @@
+import mowl
 from tests.datasetFactory import PPIYeastDataset, PPIYeastSlimDataset, GDAHumanDataset, \
     GDAHumanELDataset, GDAMouseDataset, GDAMouseELDataset, FamilyDataset
 from unittest import TestCase
 import os
-import mowl
 import shutil
-mowl.init_jvm("10g")
 
 
 class DeprecatedTestDownloadDatasets(TestCase):

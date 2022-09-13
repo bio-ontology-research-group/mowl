@@ -10,8 +10,6 @@ from pykeen.triples.triples_factory import TriplesFactory
 from pykeen.models import TransE
 from mowl.kge import KGEModel
 from unittest import TestCase
-import mowl
-mowl.init_jvm("10g")
 
 
 class TestKge(TestCase):

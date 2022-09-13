@@ -1,9 +1,6 @@
 from mowl.projection.base import ProjectionModel
 from unittest import TestCase
 
-import mowl
-mowl.init_jvm("10g")
-
 
 class TestBase(TestCase):
 
