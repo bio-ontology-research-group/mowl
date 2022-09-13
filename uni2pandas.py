@@ -62,10 +62,10 @@ def main(swissprot_file, out_file, org_id):
         annots = list(annot_set)
         prop_annotations.append(annots)
     df['prop_annotations'] = prop_annotations
-    
+
     df.to_pickle(out_file)
     logging.info('Successfully saved %d proteins' % (len(df),) )
-    
+
 def load_data(swissprot_file, org_id):
     proteins = list()
     accessions = list()

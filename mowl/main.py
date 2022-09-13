@@ -1,12 +1,12 @@
 #!/usr/bin/env python
 
+from mowl.elembeddings.model import ELEmbeddings
+from mowl.onto2vec.model import Onto2Vec
+from mowl.datasets.ppi_yeast import PPIYeastSlimDataset, PPIYeastDataset
 import click as ck
 import sys
 import os
 sys.path.append('')
-from mowl.datasets.ppi_yeast import PPIYeastSlimDataset, PPIYeastDataset
-from mowl.onto2vec.model import Onto2Vec
-from mowl.elembeddings.model import ELEmbeddings
 
 
 @ck.command()
@@ -21,6 +21,7 @@ def main(model, dataset):
     model = ELEmbeddings(dataset)
     # model.train()
     model.evaluate_ppi()
+
 
 if __name__ == '__main__':
     main()

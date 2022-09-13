@@ -33,9 +33,9 @@ class TaxonomyProjector(var bidirectional_taxonomy: Boolean = false) extends Abs
       case "Class" => {
 	val dst = superClass.asInstanceOf[OWLClass]
         if (bidirectional_taxonomy){
-	  new Triple(go_class, "subclassOf", dst) :: new Triple(dst, "superclassOf", go_class) :: Nil
+	  new Triple(go_class, "http://subclassof", dst) :: new Triple(dst, "http://superclassof", go_class) :: Nil
         }else{
-          new Triple(go_class, "subclassOf", dst) :: Nil
+          new Triple(go_class, "http://subclassof", dst) :: Nil
         }
       }
       case _ => Nil
@@ -72,4 +72,7 @@ class TaxonomyProjector(var bidirectional_taxonomy: Boolean = false) extends Abs
 
   // Abstract methods
   def projectAxiom(go_class: OWLClass, axiom: OWLClassAxiom, ontology: OWLOntology): List[Triple] = Nil
+  def projectAxiom(axiom: OWLAxiom): List[org.mowl.Types.Triple] = Nil
+  def projectAxiom(axiom: OWLClassAxiom): List[org.mowl.Types.Triple] = Nil
+
 }

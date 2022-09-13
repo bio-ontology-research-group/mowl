@@ -6,17 +6,21 @@ from mowl.projection.factory import projector_factory
 from scipy.stats import rankdata
 import torch as th
 
+
 class RankBasedEvaluator(Evaluator):
 
     """
-    This class corresponds to evaluation based on ranking. That is, for each testing triple :math:`(h,r,t)`, scores are computed for triples :math:`(h,r,t')` for all possible :math:`t'`. After that, the ranking of the testing triple :math:`(h,r,t)` score is obtained.
+    This class corresponds to evaluation based on ranking. That is, for each testing triple \
+    :math:`(h,r,t)`, scores are computed for triples :math:`(h,r,t')` for all possible \
+    :math:`t'`. After that, the ranking of the testing triple :math:`(h,r,t)` score is obtained.
 
     :param device: Use `cpu` or `cuda`
     :type device: str
-    :param homogeneous: This parameter indicates whether or not the head entities are of the same type of the tail entities.
- 
+    :param homogeneous: This parameter indicates whether or not the head entities are of the \
+    same type of the tail entities.
+
     """
-    
+
     def __init__(self,
                  class_index_emb,
                  relation_index_emb,
@@ -28,7 +32,6 @@ class RankBasedEvaluator(Evaluator):
                  device):
         super().__init__(device)
 
-
         self.eval_method = eval_method
         self.compute_filtered_metrics = True
         if training_set is None:
@@ -36,18 +39,18 @@ class RankBasedEvaluator(Evaluator):
             logging.info("Training set was not input. Filtered metrics will not be available.")
 
         self.device = device
-        self._data_loaded : bool
+        self._data_loaded: bool
 
         self.relation_index_emb = relation_index_emb
-        
+
         self.head_entities = head_entities
-        self.head_name_indexemb : dict
-        self.head_indexemb_indexsc : dict
-        
+        self.head_name_indexemb: dict
+        self.head_indexemb_indexsc: dict
+
         self.tail_entities = tail_entities
-        self.tail_name_indexemb : dict
-        self.tail_indexemb_indexsc : dict
-        
+        self.tail_name_indexemb: dict
+        self.tail_indexemb_indexsc: dict
+
         self.class_index_emb = class_index_emb
         self.training_set = [x.astuple() for x in training_set]
         self.testing_set = [x.astuple() for x in testing_set]
@@ -56,14 +59,16 @@ class RankBasedEvaluator(Evaluator):
         self._loaded_tr_scores = False
 
         self.filter_head_tail_data()
-        
-        self.training_scores = np.ones((len(self.head_entities), len(self.tail_entities)), dtype=np.int32)
-        self.testing_scores = np.ones((len(self.head_entities), len(self.tail_entities)), dtype=np.int32)
-        self.testing_predictions = np.zeros((len(self.head_entities), len(self.tail_entities)), dtype=np.int32)
-        
+
+        self.training_scores = np.ones((len(self.head_entities), len(self.tail_entities)),
+                                       dtype=np.int32)
+        self.testing_scores = np.ones((len(self.head_entities), len(self.tail_entities)),
+                                      dtype=np.int32)
+        self.testing_predictions = np.zeros((len(self.head_entities), len(self.tail_entities)),
+                                            dtype=np.int32)
+
         self.load_training_scores()
-        
-        
+
     def filter_head_tail_data(self):
 
         if self._loaded_ht_data:
@@ -71,7 +76,7 @@ class RankBasedEvaluator(Evaluator):
 
         new_head_entities = set()
         new_tail_entities = set()
-                     
+
         for e in self.head_entities:
             if e in self.class_index_emb:
                 new_head_entities.add(e)
@@ -83,18 +88,18 @@ class RankBasedEvaluator(Evaluator):
                 new_tail_entities.add(e)
             else:
                 logging.info("Entity %s not present in the embeddings dictionary. Ignoring it.", e)
-                
+
         self.head_entities = new_head_entities
         self.tail_entities = new_tail_entities
-        
+
         self.head_name_indexemb = {k: self.class_index_emb[k] for k in self.head_entities}
         self.tail_name_indexemb = {k: self.class_index_emb[k] for k in self.tail_entities}
 
         self.head_indexemb_indexsc = {v: k for k, v in enumerate(self.head_name_indexemb.values())}
         self.tail_indexemb_indexsc = {v: k for k, v in enumerate(self.tail_name_indexemb.values())}
-                
+
         self._loaded_ht_data = True
-        
+
     def load_training_scores(self):
 
         if self._loaded_tr_scores or not self.compute_filtered_metrics:
@@ -102,20 +107,21 @@ class RankBasedEvaluator(Evaluator):
 
         # careful here: c must be in head entities and d must be in tail entities
         for c, _, d in self.training_set:
-            if (not c in self.head_entities) or not (d in self.tail_entities):
+            if (c not in self.head_entities) or not (d in self.tail_entities):
                 continue
-            
+
             c, d = self.head_name_indexemb[c], self.tail_name_indexemb[d]
             c, d = self.head_indexemb_indexsc[c], self.tail_indexemb_indexsc[d]
-            
+
             self.training_scores[c, d] = 1000000
 
         logging.info("Training scores created")
         self._loaded_tr_scores = True
-        
-    def evaluate(self, activation = None, show = False):
+
+    def evaluate(self, activation=None, show=False):
         if activation is None:
-            activation = lambda x: x
+            def activation(x):
+                return x
 
         top1 = 0
         top10 = 0
@@ -127,20 +133,19 @@ class RankBasedEvaluator(Evaluator):
         fmean_rank = 0
         ranks = {}
         franks = {}
-        
-        num_head_entities = len(self.head_entities)
+
         num_tail_entities = len(self.tail_entities)
 
         worst_rank = num_tail_entities
-        
+
         n = len(self.testing_set)
 
         for c, r, d in tqdm(self.testing_set):
 
             if not (c in self.head_entities) or not (d in self.tail_entities):
-                
-                n-=1
-                if not d in self.tail_entities:
+
+                n -= 1
+                if d not in self.tail_entities:
                     worst_rank -= 1
                 continue
 
@@ -148,20 +153,20 @@ class RankBasedEvaluator(Evaluator):
             c_emb_idx, d_emb_idx = self.head_name_indexemb[c], self.tail_name_indexemb[d]
 
             # Scores matrix labels
-            c_sc_idx, d_sc_idx = self.head_indexemb_indexsc[c_emb_idx], self.tail_indexemb_indexsc[d_emb_idx]
-
+            c_sc_idx, d_sc_idx = self.head_indexemb_indexsc[c_emb_idx],
+            self.tail_indexemb_indexsc[d_emb_idx]
 
             r = self.relation_index_emb[r]
 
             data = [[c_emb_idx, r, self.tail_name_indexemb[x]] for x in self.tail_entities]
             data = np.array(data)
-            data = th.tensor(data, requires_grad = False).to(self.device)
+            data = th.tensor(data, requires_grad=False).to(self.device)
             with th.no_grad():
                 res = self.eval_method(data)
                 res = activation(res)
                 res = res.squeeze().cpu().detach().numpy()
-            
-            self.testing_predictions[c_sc_idx, :] = res                                                                                
+
+            self.testing_predictions[c_sc_idx, :] = res
             index = rankdata(res, method='average')
             rank = index[d_sc_idx]
 
@@ -183,7 +188,7 @@ class RankBasedEvaluator(Evaluator):
                 fres = res * self.training_scores[c_sc_idx, :]
                 index = rankdata(fres, method='average')
                 frank = index[d_sc_idx]
-                
+
                 if frank == 1:
                     ftop1 += 1
                 if frank <= 10:
@@ -196,7 +201,6 @@ class RankBasedEvaluator(Evaluator):
                     franks[frank] = 0
                 franks[frank] += 1
 
-        
         top1 /= n
         top10 /= n
         top100 /= n
@@ -217,8 +221,6 @@ class RankBasedEvaluator(Evaluator):
             print(f'MR:       {mean_rank:.2f} Filtered: {fmean_rank:.2f}')
             print(f'AUC:      {rank_auc:.2f} Filtered:   {frank_auc:.2f}')
 
-            
-
         self.metrics = {
             "hits@1": top1,
             "fhits@1": ftop1,
@@ -232,24 +234,23 @@ class RankBasedEvaluator(Evaluator):
             "frank_auc": frank_auc
         }
 
-
         print('Evaluation finished. Access the results using the "metrics" attribute.')
-                                                                                         
+
 
 class ModelRankBasedEvaluator(RankBasedEvaluator):
 
     def __init__(self,
                  model,
-                 device = "cpu",
-                 eval_method = None
+                 device="cpu",
+                 eval_method=None
                  ):
 
         self.model = model
         self.model.load_best_model()
-        #class_embeddings, relation_embeddings = self.model.get_embeddings()
-        
-        #self.class_embeddings = self.embeddings_to_dict(class_embeddings)
-        #class_index_emb = {v: k for k, v in enumerate(self.class_embeddings.keys())}
+        # class_embeddings, relation_embeddings = self.model.get_embeddings()
+
+        # self.class_embeddings = self.embeddings_to_dict(class_embeddings)
+        # class_index_emb = {v: k for k, v in enumerate(self.class_embeddings.keys())}
         class_index_emb = self.model.class_index_dict
 
         testing_set = self.model.testing_set
@@ -257,14 +258,14 @@ class ModelRankBasedEvaluator(RankBasedEvaluator):
         head_entities = self.model.head_entities
         tail_entities = self.model.tail_entities
         eval_method = self.model.eval_method if eval_method is None else eval_method
-        relation = testing_set[0].rel()
+
         relation_index_emb = self.model.object_property_index_dict
-        #if relation_embeddings is None:
+        # if relation_embeddings is None:
         #    relation_index_emb = {relation: -1}
-        #else:
-            
-            #relation_index_emb = {v: k for k, v in enumerate(relation_embeddings.keys())}
-            
+        # else:
+
+        # relation_index_emb = {v: k for k, v in enumerate(relation_embeddings.keys())}
+
         super().__init__(
             class_index_emb,
             relation_index_emb,
@@ -275,9 +276,6 @@ class ModelRankBasedEvaluator(RankBasedEvaluator):
             tail_entities,
             device
         )
-        
-        
-        
 
 
 class EmbeddingsRankBasedEvaluator(RankBasedEvaluator):
@@ -286,12 +284,12 @@ class EmbeddingsRankBasedEvaluator(RankBasedEvaluator):
                  class_embeddings,
                  testing_set,
                  eval_method_class,
-                 score_func = None,
-                 training_set = None,
-                 relation_embeddings = None,
-                 head_entities = None,
-                 tail_entities = None,
-                 device = "cpu"):
+                 score_func=None,
+                 training_set=None,
+                 relation_embeddings=None,
+                 head_entities=None,
+                 tail_entities=None,
+                 device="cpu"):
 
         self.score_func = score_func
         self.class_embeddings = self.embeddings_to_dict(class_embeddings)
@@ -300,7 +298,7 @@ class EmbeddingsRankBasedEvaluator(RankBasedEvaluator):
         class_index_emb = {v: k for k, v in enumerate(self.class_embeddings.keys())}
 
         relation = testing_set[0].rel()
-        
+
         if relation_embeddings is None:
             rel_embeds_values = None
             relation_index_emb = {relation: -1}
@@ -310,24 +308,27 @@ class EmbeddingsRankBasedEvaluator(RankBasedEvaluator):
             rel_embeds_values = th.tensor(rel_embeds_values).to(device)
             relation_index_emb = {v: k for k, v in enumerate(self.relation_embeddings.keys())}
 
-        self.eval_method = eval_method_class(class_embeddings_values, rel_embeds_values, method = self.score_func, device = device).to(device)
-     
+        self.eval_method = eval_method_class(class_embeddings_values, rel_embeds_values,
+                                             method=self.score_func, device=device).to(device)
 
         if tail_entities is None:
             if head_entities is None:
-                logging.info("Neither head nor tail entites input. Head and tail entities will be extracted from testing and training data.")
+                logging.info("Neither head nor tail entites input. Head and tail entities will \
+                    be extracted from testing and training data.")
 
-                head_test_entities, _, tail_test_entities = zip(*[x.astuple() for x in testing_set])
+                head_test_entities, _, tail_test_entities = zip(*[x.astuple() for x in
+                                                                  testing_set])
 
-                if not training_set is None:
-                    head_train_entities, _, tail_train_entities = zip(*[x.astuple() for x in training_set])
-                    
+                if training_set is not None:
+                    head_train_entities, _, tail_train_entities = zip(*[x.astuple() for x in
+                                                                        training_set])
+
                 head_entities = set(head_test_entities) | set(head_train_entities)
                 tail_entities = set(tail_test_entities) | set(tail_train_entities)
 
-                
             else:
-                logging.info("Tail entities not input. It will be assumed that tail entities are the same as head entities.")
+                logging.info("Tail entities not input. It will be assumed that tail entities are \
+                    the same as head entities.")
                 tail_entities = head_entities
 
         super().__init__(
@@ -340,6 +341,3 @@ class EmbeddingsRankBasedEvaluator(RankBasedEvaluator):
             tail_entities,
             device
         )
-
-        
-   

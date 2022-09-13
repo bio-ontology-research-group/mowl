@@ -195,9 +195,9 @@ class OWL2VecStarProjector(
         case "Class" => {
 	  val dst = superClass.asInstanceOf[OWLClass]
           if (bidirectional_taxonomy){
-	    new Triple(subClass_, "subclassOf", dst) :: new Triple(dst, "superclassOf", subClass_) :: Nil
+	    new Triple(subClass_, "http://subclassof", dst) :: new Triple(dst, "http://superclassof", subClass_) :: Nil
           }else{
-            new Triple(subClass_, "subclassOf", dst) :: Nil
+            new Triple(subClass_, "http://subclassof", dst) :: Nil
           }
         }
         case _ => Nil
@@ -265,9 +265,9 @@ class OWL2VecStarProjector(
       case "Class" => {
 	val dst = superClass.asInstanceOf[OWLClass]
         if (bidirectional_taxonomy){
-	  new Triple(ontClass, "subclassOf", dst) :: new Triple(dst, "superclassOf", ontClass) :: Nil
+	  new Triple(ontClass, "http://subclassof", dst) :: new Triple(dst, "http://superclassof", ontClass) :: Nil
         }else{
-          new Triple(ontClass, "subclassOf", dst) :: Nil
+          new Triple(ontClass, "http://subclassof", dst) :: Nil
         }
       }
       case _ => Nil
@@ -458,4 +458,6 @@ class OWL2VecStarProjector(
 
   // Abstract methods
   def projectAxiom(go_class: OWLClass, axiom: OWLClassAxiom): List[Triple] = Nil
+  def projectAxiom(axiom: OWLAxiom): List[org.mowl.Types.Triple] = Nil
+  def projectAxiom(axiom: OWLClassAxiom): List[org.mowl.Types.Triple] = Nil
 }

@@ -121,7 +121,7 @@ def main(ont_file, data_file, annots_file, go_annots_file, out_dir):
             protein2, factory.getOWLObjectSomeValuesFrom(
                 interacts_rel, protein1))
         manager.addAxiom(valid_ont, axiom)
-        
+
     valid_ont_file = os.path.join(out_dir, 'valid.owl')
     manager.saveOntology(valid_ont, IRI.create('file:' + os.path.abspath(valid_ont_file)))
 
@@ -168,8 +168,7 @@ def load_and_split_interactions(data_file, ratio=(0.9, 0.05, 0.05)):
     valid = inters[index[train_n: train_n + valid_n]]
     test = inters[index[train_n + valid_n:]]
     return train, valid, test
-    
+
 if __name__ == '__main__':
     main()
     shutdownJVM()
-

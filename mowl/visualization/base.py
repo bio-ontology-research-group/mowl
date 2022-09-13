@@ -6,6 +6,7 @@ import logging
 import warnings
 logging.basicConfig(level=logging.INFO)
 
+
 class Visualizer():
 
     def __init_(self):
@@ -17,21 +18,21 @@ class Visualizer():
     def savefig(self, outfile):
         raise NotImplementedError()
 
-        
 
 class TSNE(Visualizer):
     """
     Wrapper for :class:`sklearn.manifold.TSNE`
-    
+
     :param embeddings: Embeddings dictionary
     :type embeddings: dict or :class:`gensim.models.keyedvectors.KeyedVectors`
     :param labels: Dictionary containing label information of the entities
     :type labels: dict of {str: str}
-    :param entities: List of entities to consider for computing the TSNE. If `None`, then all the entitites in the embeddings dictionary will be considered.
+    :param entities: List of entities to consider for computing the TSNE. If `None`, then all \
+        the entitites in the embeddings dictionary will be considered.
     :type entities: list of str
     """
 
-    def __init__(self, embeddings, labels, entities = None):
+    def __init__(self, embeddings, labels, entities=None):
 
         self.total_embeddings = len(embeddings)
         self.labels = labels
@@ -40,47 +41,53 @@ class TSNE(Visualizer):
         self.not_to_process = 0
         if isinstance(embeddings, KeyedVectors):
             for idx, word in enumerate(embeddings.index_to_key):
-                if (not entities is None) and (not word in entities):
+                if (entities is not None) and (word not in entities):
                     self.not_to_process += 1
                     continue
-                if not word in self.labels:
+                if word not in self.labels:
                     self.not_to_process += 1
                     continue
                 self.embeddings[word] = embeddings[word]
         elif isinstance(embeddings, dict):
             if entities is None:
-                self.embeddings = {name: emb for name, emb in embeddings.items() if  name in self.labels}
+                self.embeddings = {name: emb for name, emb in embeddings.items()
+                                   if name in self.labels}
             else:
-                self.embeddings = {name: emb for name, emb in embeddings.items() if name in entities and name in self.labels}
+                self.embeddings = {name: emb for name, emb in embeddings.items()
+                                   if name in entities and name in self.labels}
         else:
-            raise TypeError("Embeddings type {type(embeddings)} not recognized. Expected types are dict or gensim.models.keyedvectors.KeyedVectors")
-        
-        logging.info("Found %d embedding vectors. Processing only %d.", self.total_embeddings, len(self.embeddings))
-        self.embedding_idx_dict = {v: k for k,v in enumerate(self.embeddings.keys())}
+            raise TypeError("Embeddings type {type(embeddings)} not recognized. Expected types \
+                are dict or gensim.models.keyedvectors.KeyedVectors")
+
+        logging.info("Found %d embedding vectors. Processing only %d.", self.total_embeddings,
+                     len(self.embeddings))
+        self.embedding_idx_dict = {v: k for k, v in enumerate(self.embeddings.keys())}
 
         self.classes = set(self.labels.values())
         colors = plt.cm.rainbow(np.linspace(0, 1, len(self.classes)))
         self.class_color_dict = {cl: col for cl, col in zip(self.classes, colors)}
 
-    def generate_points(self, epochs, workers = 1, verbose = 0):
+    def generate_points(self, epochs, workers=1, verbose=0):
         points = np.array(list(self.embeddings.values()))
         if np.iscomplexobj(points):
-            warnings.warn("Complex numpy array detected. Only real part will be considered", UserWarning)
+            warnings.warn("Complex numpy array detected. Only real part will be considered",
+                          UserWarning)
             points = points.real
-        self.points = SKTSNE(n_components=2, verbose=verbose, n_iter=epochs, n_jobs=workers).fit_transform(points)
+        self.points = SKTSNE(n_components=2, verbose=verbose, n_iter=epochs, n_jobs=workers)
+        self.points = self.points.fit_transform(points)
         self.plot_data = {}
 
         for name, idx in self.embedding_idx_dict.items():
             label = self.labels[name]
             x, y = tuple(self.points[idx])
 
-            if not label in self.plot_data:
+            if label not in self.plot_data:
                 self.plot_data[label] = [], []
             self.plot_data[label][0].append(x)
-            self.plot_data[label][1].append(y)  
-        
+            self.plot_data[label][1].append(y)
+
     def show(self):
-        
+
         fig, ax = plt.subplots(figsize=(20, 20))
 
         for label, (xs, ys) in self.plot_data.items():
@@ -89,11 +96,11 @@ class TSNE(Visualizer):
 
             ax.legend()
             ax.grid(True)
-        
+
         plt.show()
 
     def savefig(self, outfile):
-        
+
         fig, ax = plt.subplots(figsize=(20, 20))
 
         for label, (xs, ys) in self.plot_data.items():
@@ -102,7 +109,6 @@ class TSNE(Visualizer):
 
             ax.legend()
             ax.grid(True)
-        
+
         plt.savefig(outfile)
         plt.close()
-            

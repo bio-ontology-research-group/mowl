@@ -1,10 +1,10 @@
+import org.semanticweb.owlapi.model as J
+from mowl.owlapi.defaults import BOT, TOP
+from mowl.owlapi import OWLOntology, OWLClass
 from unittest import TestCase
 import mowl
 mowl.init_jvm("10g")
 
-from mowl.owlapi import OWLOntology, OWLClass
-from mowl.owlapi.defaults import BOT, TOP
-import org.semanticweb.owlapi.model as J
 
 class TestObjects(TestCase):
 
@@ -12,7 +12,7 @@ class TestObjects(TestCase):
     def setUpClass(self):
         self.bot_str = "http://www.w3.org/2002/07/owl#Nothing"
         self.top_str = "http://www.w3.org/2002/07/owl#Thing"
-        
+
     def test_types(self):
         """Types returned from mowl.owlapi are OWLAPI types"""
         self.assertEqual(OWLOntology, J.OWLOntology)

@@ -19,7 +19,7 @@ trait AbstractProjector{
 
 
   def project(ontology: OWLOntology) = {
-    val imports = Imports.fromBoolean(false)
+    val imports = Imports.fromBoolean(true)
 
     val ontClasses = ontology.getClassesInSignature(imports).asScala.toList
     printf("INFO: Number of ontology classes: %d\n", ontClasses.length)
@@ -32,6 +32,8 @@ trait AbstractProjector{
   //Abstract methods
   def projectAxiom(ontClass: OWLClass, axiom: OWLClassAxiom): List[Triple]
   def projectAxiom(ontClass: OWLClass, axiom: OWLClassAxiom, ontology: OWLOntology): List[Triple]
+  def projectAxiom(axiom: OWLClassAxiom): List[Triple]
+  def projectAxiom(axiom: OWLAxiom): List[Triple]
   //////////////////////
 
   def processOntClass(ontClass: OWLClass, ontology: OWLOntology): List[Triple] = {

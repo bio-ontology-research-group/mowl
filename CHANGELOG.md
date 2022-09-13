@@ -8,6 +8,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- `Family` dataset: a small ontology containing 12 axioms.
+
+### Changed
+### Deprecated
+### Removed
+### Fixed
+### Security
+
+## [0.1.0]
+
+### Added
 - Modules `mowl.ontology.extend` and `mowl.ontology.create` created including `insert_annotations` and `create_from_triples` methods, respectively.
 - Package `deprecated` as dependency.
 - ELEmbeddingModel abstract class that contains basic functionality for models embedding the EL language.
@@ -39,5 +50,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Walking methods accept optional `outfile` parameter and corpus extraction methods do not append by default.
 - Documentation updated and fixed some typos.
 
-[unreleased]: https://github.com/bio-ontology-research-group/mowl/compare/v0.0.30...HEAD
+[unreleased]: https://github.com/bio-ontology-research-group/mowl/compare/v0.1.0...HEAD
+[0.1.0]: https://github.com/bio-ontology-research-group/mowl/releases/tag/v0.1.0
 [0.0.30]: https://github.com/bio-ontology-research-group/mowl/releases/tag/v0.0.30

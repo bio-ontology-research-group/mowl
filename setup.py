@@ -37,7 +37,7 @@ setuptools.setup(
         "urllib3",
         "torch",
         "gensim",
-        "pykeen",
+        "pykeen==1.9.0",
         "requests",
         "matplotlib",
         "tqdm",
@@ -45,4 +45,3 @@ setuptools.setup(
         "deprecated"
     ]
 )
-

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src= "https://github.com/bio-ontology-research-group/mowl/blob/master/docs/source/mowl_black_background_colors_2048x2048px.png?raw=true" width="300"/>
+  <img src= "https://github.com/bio-ontology-research-group/mowl/blob/main/docs/source/mowl_black_background_colors_2048x2048px.png?raw=true" width="300"/>
 </p>
   
 # mOWL: Machine Learning Library with Ontologies
@@ -12,14 +12,17 @@ mainly in Python, but we have integrated the functionalities of [OWLAPI](https:/
   - [Installation](#installation)
   - [Examples of use](#examples-of-use)
   - [List of contributors](#list-of-contributors)
+  - [License](#license)
+  - [Documentation](#documentation)
+  - [Changelog](#changelog)
 
 
 ## Installation
 
-### Test PyPi (beta version)
+### PyPi v0.0.30
 
 ```
-pip install -i https://test.pypi.org/simple/ mowl-borg
+pip install mowl-borg
 ```
 
 ### From GitHub
@@ -89,7 +92,6 @@ For the random walks method we have a similar factory method that can be found i
 
 
 ## List of contributors
-
 * [Fernando Zhapa](https://github.com/ferzcam)
 * [Maxat Kulmanov](https://github.com/coolmaksat)
 * [Sarah Alghamdi](https://github.com/smalghamdi)
@@ -102,7 +104,10 @@ For the random walks method we have a similar factory method that can be found i
 * [Leduin Cuenca](https://github.com/leduin) (logo)
 
 ## License
+This software library is distributed under the [BSD-3-Clause license](https://github.com/bio-ontology-research-group/mowl/blob/main/LICENSE)
 
 ## Documentation
-
 Full documentation and API reference can be found in our [ReadTheDocs](https://mowl.readthedocs.io/en/latest/index.html) website.
+
+## ChangeLog
+ChangeLog is available in our [changelog file](https://github.com/bio-ontology-research-group/mowl/blob/main/CHANGELOG.md) and also in the [release section](https://github.com/bio-ontology-research-group/mowl/releases/).

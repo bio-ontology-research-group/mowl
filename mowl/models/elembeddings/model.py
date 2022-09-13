@@ -9,6 +9,7 @@ import torch as th
 
 import numpy as np
 
+
 class ELEmbeddings(EmbeddingELModel):
 
     def __init__(self,
@@ -18,12 +19,11 @@ class ELEmbeddings(EmbeddingELModel):
                  reg_norm=1,
                  learning_rate=0.001,
                  epochs=1000,
-                 batch_size = 4096*8,
-                 model_filepath = None,
-                 device = 'cpu'
+                 batch_size=4096 * 8,
+                 model_filepath=None,
+                 device='cpu'
                  ):
-        super().__init__(dataset, batch_size, extended = True)
-
+        super().__init__(dataset, batch_size, extended=True)
 
         self.embed_dim = embed_dim
         self.margin = margin
@@ -36,17 +36,15 @@ class ELEmbeddings(EmbeddingELModel):
         self._loaded_eval = False
         self.extended = False
 
-                
     def init_model(self):
         self.model = ELEmModule(
             len(self.class_index_dict),
             len(self.object_property_index_dict),
-            embed_dim = self.embed_dim,
-            margin = self.margin
+            embed_dim=self.embed_dim,
+            margin=self.margin
         ).to(self.device)
-    
-        
-    def train(self, sample_negs = None):
+
+    def train(self, sample_negs=None):
         if sample_negs is None:
             sample_negs = self.dataset.evaluation_classes
 
@@ -63,16 +61,16 @@ class ELEmbeddings(EmbeddingELModel):
             for gci_name, gci_dataset in self.training_datasets.get_gci_datasets().items():
                 if len(gci_dataset) == 0:
                     continue
-                
+
                 loss += th.mean(self.model(gci_dataset[:], gci_name))
                 if gci_name == "gci2":
                     prots = [self.class_index_dict[p] for p in sample_negs]
-                    idxs_for_negs = np.random.choice(prots, size = len(gci_dataset), replace = True)
+                    idxs_for_negs = np.random.choice(prots, size=len(gci_dataset), replace=True)
                     rand_index = th.tensor(idxs_for_negs).to(self.device)
                     data = gci_dataset[:]
-                    neg_data = th.cat([data[:,:2], rand_index.unsqueeze(1)], dim = 1)
-                    loss += th.mean(self.model(neg_data, gci_name, neg = True))
-            
+                    neg_data = th.cat([data[:, :2], rand_index.unsqueeze(1)], dim=1)
+                    loss += th.mean(self.model(neg_data, gci_name, neg=True))
+
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -85,7 +83,7 @@ class ELEmbeddings(EmbeddingELModel):
                 gci2_data = self.validation_datasets.get_gci_datasets()["gci2"][:]
                 loss = th.mean(self.model(gci2_data, "gci2"))
                 valid_loss += loss.detach().item()
-                
+
             checkpoint = 10
             if best_loss > valid_loss:
                 best_loss = valid_loss
@@ -102,12 +100,14 @@ class ELEmbeddings(EmbeddingELModel):
 
             eval_method = self.model.gci2_loss
 
-            evaluator = ELEmbeddingsPPIEvaluator(self.dataset.testing, eval_method, self.dataset.ontology, self.class_index_dict, self.object_property_index_dict, device = self.device)
+            evaluator = ELEmbeddingsPPIEvaluator(
+                self.dataset.testing, eval_method, self.dataset.ontology, self.class_index_dict,
+                self.object_property_index_dict, device=self.device)
             evaluator()
             evaluator.print_metrics()
 
     def load_eval_data(self):
-        
+
         if self._loaded_eval:
             return
 
@@ -120,24 +120,26 @@ class ELEmbeddings(EmbeddingELModel):
             self._head_entities = set(list(eval_classes)[:])
             self._tail_entities = set(list(eval_classes)[:])
 
-        eval_projector = projector_factory('taxonomy_rels', taxonomy=False, relations=[eval_property])
+        eval_projector = projector_factory('taxonomy_rels', taxonomy=False,
+                                           relations=[eval_property])
 
         self._training_set = eval_projector.project(self.dataset.ontology)
         self._testing_set = eval_projector.project(self.dataset.testing)
-        
+
         self._loaded_eval = True
 
     def get_embeddings(self):
         self.init_model()
-        
+
         print('Load the best model', self.model_filepath)
         self.model.load_state_dict(th.load(self.model_filepath))
         self.model.eval()
 
-        ent_embeds = {k:v for k,v in zip(self.classes_index_dict.keys(), self.model.class_embed.weight.cpu().detach().numpy())}
-        rel_embeds = {k:v for k,v in zip(self.relations_index_dict.keys(), self.model.rel_embed.weight.cpu().detach().numpy())}
+        ent_embeds = {k: v for k, v in zip(self.classes_index_dict.keys(),
+                                           self.model.class_embed.weight.cpu().detach().numpy())}
+        rel_embeds = {k: v for k, v in zip(self.relations_index_dict.keys(),
+                                           self.model.rel_embed.weight.cpu().detach().numpy())}
         return ent_embeds, rel_embeds
-
 
     @property
     def training_set(self):
@@ -160,7 +162,3 @@ class ELEmbeddings(EmbeddingELModel):
     def tail_entities(self):
         self.load_eval_data()
         return self._tail_entities
-
-
-
-
