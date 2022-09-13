@@ -25,14 +25,14 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - name: Set up Miniconda
-    - uses: conda-incubator/setup-miniconda@v2
-      with:
-        auto-update-conda: true
-        python-version: ${{ matrix.python-version }}
-        activate-environment: anaconda-client-env
-        environment-file: environment.yml
-        auto-activate-base: false
-        channels: conda-forge
+      uses: conda-incubator/setup-miniconda@v2
+        with:
+          auto-update-conda: true
+          python-version: ${{ matrix.python-version }}
+          activate-environment: anaconda-client-env
+          environment-file: environment.yml
+          auto-activate-base: false
+          channels: conda-forge
     - name: Build JAR files
       run: |
         bash build_jars.sh
