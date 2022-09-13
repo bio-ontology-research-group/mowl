@@ -2,9 +2,6 @@ from pykeen.triples.triples_factory import TriplesFactory
 from mowl.projection import Edge
 from unittest import TestCase
 
-import mowl
-mowl.init_jvm("10g")
-
 
 class TestEdge(TestCase):
 

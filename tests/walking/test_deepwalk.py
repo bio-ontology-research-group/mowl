@@ -3,8 +3,6 @@ from mowl.walking import DeepWalk
 from mowl.projection import Edge
 from unittest import TestCase
 import os
-import mowl
-mowl.init_jvm("10g")
 
 
 class TestDeepWalk(TestCase):

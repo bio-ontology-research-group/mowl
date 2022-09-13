@@ -6,15 +6,13 @@ from mowl.owlapi.defaults import BOT, TOP
 from mowl.owlapi import OWLAPIAdapter
 from mowl.datasets.base import Entities, OWLClasses, OWLObjectProperties
 from mowl.datasets import Dataset, PathDataset, RemoteDataset, TarFileDataset
-from tests.datasetFactory import PPIYeastSlimDataset, GDAHumanDataset
+from tests.datasetFactory import PPIYeastSlimDataset, GDAHumanELDataset
 from mowl.owlapi.model import OWLOntology, OWLClass, OWLObjectProperty
 from unittest import TestCase
 from random import randrange, choice
 import os
 import shutil
 import requests
-import mowl
-mowl.init_jvm("10g")
 
 
 class TestDataset(TestCase):
@@ -63,7 +61,7 @@ class TestPathDataset(TestCase):
 
         # Data for PathDataset
         self.ppi_dataset = PPIYeastSlimDataset()
-        self.gda_dataset = GDAHumanDataset()
+        self.gda_dataset = GDAHumanELDataset()
         self.training_ont_path = "ppi_yeast_slim/ontology.owl"
         self.validation_ont_path = "ppi_yeast_slim/valid.owl"
         self.testing_ont_path = "ppi_yeast_slim/test.owl"

@@ -2,10 +2,7 @@ from org.semanticweb.owlapi.model import OWLDataFactory, OWLClass, OWLOntologyMa
 from org.semanticweb.owlapi.apibinding import OWLManager
 from mowl.owlapi import OWLAPIAdapter
 from unittest import TestCase
-
-import mowl
 import mowl.error as err
-mowl.init_jvm("10g")
 
 
 class TestAdapter(TestCase):

@@ -2,8 +2,6 @@ from tests.datasetFactory import FamilyDataset
 from mowl.projection import DL2VecProjector
 from mowl.owlapi.defaults import TOP
 from unittest import TestCase
-import mowl
-mowl.init_jvm("10g")
 
 
 class TestDl2Vec(TestCase):

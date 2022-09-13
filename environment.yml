@@ -3,28 +3,24 @@ channels:
   - conda-forge
 dependencies:
   - python=3.8
-  - cairo
-  - dglteam::dgl
-  - matplotlib
-  - numpy
-  - networkx
   - click
-  - grpcio
-  - JPype1
+  - deprecated
+  - gensim
+  - gradle
+  - JPype1=1.3.0
+  - matplotlib
+  - networkx
+  - numpy
+  - openjdk
   - pandas
-  - protobuf
-  - pytest
+  - pytorch
   - pyyaml
   - requests
-  - scipy
   - scikit-learn
-  - urllib3
-  - pytorch
-  - gensim
-  - openjdk
-  - gradle
+  - scipy  
   - tqdm
+  - urllib3
   - pip
   - pip:
-    - pykeen
+    - pykeen==1.9.0
     - temp

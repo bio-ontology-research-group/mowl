@@ -1,8 +1,6 @@
 from mowl.projection import OWL2VecStarProjector
 from unicodedata import bidirectional
 from unittest import TestCase
-import mowl
-mowl.init_jvm("10g")
 
 
 class TestOwl2VecStar(TestCase):

@@ -1,9 +1,6 @@
 from mowl.walking.walking import WalkingModel
 from unittest import TestCase
 
-import mowl
-mowl.init_jvm("10g")
-
 
 class TestBaseClass(TestCase):
 

@@ -1,9 +1,9 @@
-from mowl.base_models import Model
 from tests.datasetFactory import FamilyDataset
 from unittest import TestCase
 import random
 import mowl
 mowl.init_jvm("10g")
+from mowl.base_models import Model
 
 
 class TestModel(TestCase):

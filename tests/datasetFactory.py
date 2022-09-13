@@ -1,6 +1,6 @@
-from mowl.datasets import PathDataset
 import mowl
 mowl.init_jvm("10g")
+from mowl.datasets import PathDataset
 
 
 class FamilyDataset(PathDataset):

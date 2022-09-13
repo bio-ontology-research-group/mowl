@@ -3,9 +3,6 @@ from mowl.walking import Node2Vec
 from mowl.projection import Edge
 from unittest import TestCase
 
-import mowl
-mowl.init_jvm("10g")
-
 
 class TestNode2Vec(TestCase):
 
