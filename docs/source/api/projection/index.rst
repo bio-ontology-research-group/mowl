@@ -24,6 +24,6 @@ Edge
 
       
 .. include:: taxonomy.rst
-.. include:: taxonomyRels.rst
+.. include:: taxonomy_rels.rst
 .. include:: dl2vec.rst
 .. include:: owl2vec.rst

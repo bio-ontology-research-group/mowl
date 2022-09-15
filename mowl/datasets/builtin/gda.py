@@ -22,7 +22,7 @@ class GDADataset(RemoteDataset):
     <http://www.informatics.jax.org/downloads/reports/HMD_HumanPhenotype.rpt>`_ document. Disease \
     annotations were obtained from the \
     `HPO annotations for rare disease <http://purl.obolibrary.org/obo/hp/hpoa/phenotype.hpoa>`_ \
-    document. These annotations were added to the *Unified Phenotype Ontology*(uPheno) to build \
+    document. These annotations were added to the *Unified Phenotype Ontology* (uPheno) to build \
     the training ontology. Futhermore, gene-disease associations were obtained from the \
     `Associations of Mouse Genes with DO Diseases \
     <http://www.informatics.jax.org/downloads/reports/MGI_DO.rpt>`_ file, from which associations \

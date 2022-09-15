@@ -53,11 +53,11 @@ The package is released under the BSD 3-Clause License.
    install/index
    tutorials/index
    datasets/index
+   ontology/index
    projection/index
    random_walks/index
    pykeen/index
    embedding_el/index
-   evaluation/index
    examples/index
    
    
@@ -76,7 +76,6 @@ The package is released under the BSD 3-Clause License.
    api/walking/index
    api/reasoning/index
    api/text/index
-   api/evaluation/index
    api/visualization/index
 
 

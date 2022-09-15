@@ -74,10 +74,7 @@ Directly:
 
 .. code-block:: python
 
-   from mowl.projection.taxonomy.model import TaxonomyProjector
-   from mowl.projection.taxonomyRels.model import TaxonomyWithRelsProjector
-   from mowl.projection.dl2vec.model import DL2VecProjector
-   from mowl.projection.owl2vec_star.model import OWL2VecStarProjector
+   from mowl.projection import TaxonomyProjector, TaxonomyWithRelsProjector, OWL2VecStarProjector, DL2VecProjector
 
    projector = TaxonomyProjector(bidirectional_taxonomy=True)
 

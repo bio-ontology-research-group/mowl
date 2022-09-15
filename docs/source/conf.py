@@ -21,8 +21,8 @@ project = 'MOWL'
 copyright = '2021, BORG'
 author = 'BORG'
 
-release = '0.1.0'
-version = '0.1.0'
+release = '0.1.1'
+version = '0.1.1'
 # -- General configuration
 
 extensions = [
@@ -32,8 +32,11 @@ extensions = [
     'sphinx.ext.autosummary',
     'sphinx.ext.intersphinx',
     'sphinx_gallery.gen_gallery',
+    'sphinx.ext.todo',
 #    'IPython.sphinxext.ipython_console_highlighting'
 ]
+
+todo_include_todos = True
 
 examples_dirs = [
     '../../examples/'
