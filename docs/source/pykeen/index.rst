@@ -18,14 +18,14 @@ Now, this triples factory can be used to call a PyKEEN model:
 .. code-block:: python
 
    from pykeen.models import TransE
-   pk_model = TransE(triples_factory)
+   pk_model = TransE(triples_factory=triples_factory)
 
    
 At this point, it is possible to continue in either in PyKEEN or mOWL environments. mOWL :class:`mowl.kge.model.KGEModel` wraps the :class:`pykeen.training.SLCWATrainingLoop` construction:
 
 .. code-block:: python
 
-   from mowl.kge.model import KGEModel
+   from mowl.kge import KGEModel
 
    model = KGEModel(triples_factory, pk_model, epochs = 10, batch_size = 32)
    model.train()

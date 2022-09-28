@@ -32,9 +32,9 @@ class KGEModel():
     :type lr: float, optional
     :param device: Device to run the model. Defaults to `cpu`.
     :type device: str
-    :param model_filepath: Path for saving the model. Defaults to \
+    :param model_outfile: Path for saving the model. Defaults to \
     :class:`tempfile.NamedTemporaryFile`
-    :type model_filepath: str, optional
+    :type model_outfile: str, optional
     '''
 
     def __init__(self,
@@ -45,7 +45,7 @@ class KGEModel():
                  optimizer=Adam,
                  lr=1e-3,
                  device="cpu",
-                 model_filepath=None,
+                 model_outfile=None,
                  ):
 
         if not isinstance(triples_factory, TriplesFactory):
@@ -68,8 +68,8 @@ pykeen.triples.triples_factory.TriplesFactory.")
             raise TypeError("Optional parameter lr must be of type float.")
         if not isinstance(device, str):
             raise TypeError("Optional parameter device must be of type str.")
-        if not isinstance(model_filepath, str) and model_filepath is not None:
-            raise TypeError("Optional parameter model_filepath must be of type str or None.")
+        if not isinstance(model_outfile, str) and model_outfile is not None:
+            raise TypeError("Optional parameter model_outfile must be of type str or None.")
 
         self.triples_factory = triples_factory
         self.device = device
@@ -79,10 +79,10 @@ pykeen.triples.triples_factory.TriplesFactory.")
         self.optimizer = optimizer
         self.lr = lr
 
-        if model_filepath is None:
-            model_filepath = tempfile.NamedTemporaryFile()
-            model_filepath = model_filepath.name
-        self.model_filepath = model_filepath
+        if model_outfile is None:
+            model_outfile = tempfile.NamedTemporaryFile()
+            model_outfile = model_outfile.name
+        self.model_outfile = model_outfile
 
         self._trained = False
         self._data_loaded = False
@@ -129,11 +129,11 @@ This equivalent to the method triples_factory.relation_to_id from PyKEEN."""
         return self._object_property_embeddings_dict
 
     def load_best_model(self):
-        if not os.path.exists(self.model_filepath):
+        if not os.path.exists(self.model_outfile):
             raise FileNotFoundError(
                 "Loading best model failed because file was not found at the given path. \
 Please train the model first.")
-        self.model.load_state_dict(th.load(self.model_filepath))
+        self.model.load_state_dict(th.load(self.model_outfile))
         self.model.eval()
 
     def train(self):
@@ -145,7 +145,7 @@ Please train the model first.")
         _ = training_loop.train(triples_factory=self.triples_factory, num_epochs=self.epochs,
                                 batch_size=self.batch_size)
 
-        th.save(self.model.state_dict(), self.model_filepath)
+        th.save(self.model.state_dict(), self.model_outfile)
         self._trained = True
 
     def _get_embeddings(self, load_best_model=True):

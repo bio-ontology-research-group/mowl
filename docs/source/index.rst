@@ -53,6 +53,7 @@ The package is released under the BSD 3-Clause License.
    install/index
    tutorials/index
    datasets/index
+   corpus/index
    ontology/index
    projection/index
    random_walks/index
@@ -68,14 +69,15 @@ The package is released under the BSD 3-Clause License.
    :hidden:
    :glob:
 
-   api/abstract/index
+   api/base_models/index
+   api/corpus/index
    api/datasets/index
    api/nn/index
    api/ontology/index
    api/projection/index
    api/walking/index
    api/reasoning/index
-   api/text/index
+
    api/visualization/index
 
 

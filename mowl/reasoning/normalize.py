@@ -1,9 +1,8 @@
-from de.tudresden.inf.lat.jcel.owlapi.main import JcelReasoner
 from de.tudresden.inf.lat.jcel.ontology.normalization import OntologyNormalizer
 from de.tudresden.inf.lat.jcel.ontology.axiom.extension import IntegerOntologyObjectFactoryImpl
 from de.tudresden.inf.lat.jcel.owlapi.translator import ReverseAxiomTranslator
 from de.tudresden.inf.lat.jcel.owlapi.translator import Translator
-
+from org.semanticweb.owlapi.model.parameters import Imports
 from uk.ac.manchester.cs.owl.owlapi import OWLClassImpl, OWLObjectSomeValuesFromImpl, \
     OWLObjectIntersectionOfImpl
 from org.semanticweb.owlapi.model import OWLAxiom
@@ -12,6 +11,7 @@ from java.util import HashSet
 
 import logging
 logging.basicConfig(level=logging.INFO)
+from mowl.owlapi import OWLAPIAdapter
 
 
 class ELNormalizer():
@@ -35,6 +35,7 @@ class ELNormalizer():
 
         # jreasoner = JcelReasoner(ontology, False)
         # root_ont = jreasoner.getRootOntology()
+        ontology = self.preprocess_ontology(ontology)
         root_ont = ontology
         translator = Translator(ontology.getOWLOntologyManager().getOWLDataFactory(),
                                 IntegerOntologyObjectFactoryImpl())
@@ -68,6 +69,53 @@ class ELNormalizer():
                 logging.info("Reverse translation. Ignoring axiom: %s", ax)
                 logging.info(e)
         return axioms_dict
+
+    def preprocess_ontology(self, ontology):
+        """Preprocesses the ontology to remove axioms that are not supported by the normalization \
+            process.
+        :param ontology: Input ontology
+        :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
+
+        :rtype: :class:`org.semanticweb.owlapi.model.OWLOntology`
+        """
+
+        tbox_axioms = ontology.getTBoxAxioms(Imports.fromBoolean(True))
+        new_tbox_axioms = HashSet()
+        for axiom in tbox_axioms:
+            axiom_as_str = axiom.toString()
+
+            if "UnionOf" in axiom_as_str:
+                continue
+            elif "MinCardinality" in axiom_as_str:
+                continue
+            elif "ComplementOf" in axiom_as_str:
+                continue
+            elif "AllValuesFrom" in axiom_as_str:
+                continue
+            elif "MaxCardinality" in axiom_as_str:
+                continue
+            elif "ExactCardinality" in axiom_as_str:
+                continue
+            elif "Annotation" in axiom_as_str:
+                continue
+            elif "ObjectHasSelf" in axiom_as_str:
+                continue
+            elif "urn:swrl" in axiom_as_str:
+                continue
+            elif "EquivalentObjectProperties" in axiom_as_str:
+                continue
+            elif "SymmetricObjectProperty" in axiom_as_str:
+                continue
+            elif "AsymmetricObjectProperty" in axiom_as_str:
+                continue
+            elif "ObjectOneOf" in axiom_as_str:
+                continue
+            else:
+                new_tbox_axioms.add(axiom)
+
+        owl_manager = OWLAPIAdapter().owl_manager
+        new_ontology = owl_manager.createOntology(new_tbox_axioms)
+        return new_ontology
 
 
 def process_axiom(axiom: OWLAxiom):
@@ -248,7 +296,7 @@ class GCI2(GCI):
         return self._filler
 
     def get_entities(self):
-        return set([self.subclass, self.filler]), set(self.object_property)
+        return set([self.subclass, self.filler]), set([self.object_property])
 
 
 class GCI3(GCI):
@@ -286,7 +334,7 @@ class GCI3(GCI):
         return self._superclass
 
     def get_entities(self):
-        return set([self.filler, self.superclass]), set(self.object_property)
+        return set([self.filler, self.superclass]), set([self.object_property])
 
 
 class GCI3_BOT(GCI3):

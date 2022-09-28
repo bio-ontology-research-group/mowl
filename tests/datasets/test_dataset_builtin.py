@@ -1,6 +1,6 @@
 import mowl
 from tests.datasetFactory import PPIYeastSlimDataset, GDAHumanELDataset, GDAMouseELDataset, \
-     FamilyDataset
+    FamilyDataset
 from unittest import TestCase
 import os
 import shutil

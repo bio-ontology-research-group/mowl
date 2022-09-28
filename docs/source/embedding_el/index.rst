@@ -1,4 +1,4 @@
-Embedding the :math:`\mathcal{EL}` language
+Embedding the EL language
 ============================================
 .. |eldataset| replace:: :class:`ELDataset <mowl.datasets.el.ELDataset>`
 .. |elmodule| replace:: :class:`ELModule <mowl.nn.elmodule.ELModule>`

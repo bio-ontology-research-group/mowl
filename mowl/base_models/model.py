@@ -7,12 +7,18 @@ from mowl.datasets import Dataset
     all models. Optional parameter that will use temporary files in case it is not set.")
 class Model():
     def __init__(self, dataset, model_filepath=None):
+        """Abstract model class
+        :param dataset: Dataset object.
+        :type dataset: mowl.datasets.base.Dataset
+        :param model_filepath: Path for saving the model. Defaults to a temporary file path.
+        :type model_filepath: str, optional
+        """
 
         if not isinstance(dataset, Dataset):
             raise TypeError("Parameter dataset must be a mOWL Dataset.")
 
         if model_filepath is not None and not isinstance(model_filepath, str):
-            raise TypeError("Optional parameter model_filepath must be a string.")
+            raise TypeError("Optional parameter model_filepath must be of type str.")
 
         self.dataset = dataset
         self._model_filepath = model_filepath
@@ -21,7 +27,7 @@ class Model():
         self._object_property_index_dict = None
 
     def train(self):
-        '''Trains the model
+        '''Abstract method for training the model. This method must be implemented in child classes
         '''
         raise NotImplementedError("Method train is not implemented.")
 
@@ -30,6 +36,9 @@ class Model():
 
     @property
     def model_filepath(self):
+        """Path for saving the model.
+        :rtype: str
+        """
         if self._model_filepath is None:
             model_filepath = tempfile.NamedTemporaryFile()
             self._model_filepath = model_filepath.name
@@ -37,12 +46,18 @@ class Model():
 
     @property
     def class_index_dict(self):
+        """Dictionary with class names as keys and class indexes as values.
+        :rtype: dict
+        """
         if self._class_index_dict is None:
             self._class_index_dict = {v: k for k, v in enumerate(self.dataset.classes.as_str)}
         return self._class_index_dict
 
     @property
     def object_property_index_dict(self):
+        """Dictionary with object property names as keys and object property indexes as values.
+        :rtype: dict
+        """
         if self._object_property_index_dict is None:
             self._object_property_index_dict = {v: k for k, v in
                                                 enumerate(self.dataset.object_properties.as_str)}
@@ -51,12 +66,8 @@ class Model():
 
 class EmbeddingModel(Model):
 
-    def __init__(self, dataset, model_filepath=None):
-        super().__init__(dataset, model_filepath=model_filepath)
-
-    @deprecated(version="0.1.0")
-    def get_entities_index_dict(self):
-        raise NotImplementedError()
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 
     def get_embeddings_data(self):
         raise NotImplementedError()
