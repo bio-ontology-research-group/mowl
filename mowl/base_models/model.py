@@ -37,6 +37,7 @@ class Model():
     @property
     def model_filepath(self):
         """Path for saving the model.
+
         :rtype: str
         """
         if self._model_filepath is None:
@@ -47,6 +48,7 @@ class Model():
     @property
     def class_index_dict(self):
         """Dictionary with class names as keys and class indexes as values.
+    
         :rtype: dict
         """
         if self._class_index_dict is None:
@@ -56,6 +58,7 @@ class Model():
     @property
     def object_property_index_dict(self):
         """Dictionary with object property names as keys and object property indexes as values.
+
         :rtype: dict
         """
         if self._object_property_index_dict is None:
