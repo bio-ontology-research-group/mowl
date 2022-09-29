@@ -5,7 +5,7 @@ from de.tudresden.inf.lat.jcel.owlapi.translator import Translator
 from org.semanticweb.owlapi.model.parameters import Imports
 from uk.ac.manchester.cs.owl.owlapi import OWLClassImpl, OWLObjectSomeValuesFromImpl, \
     OWLObjectIntersectionOfImpl
-from org.semanticweb.owlapi.model import OWLAxiom
+from org.semanticweb.owlapi.model import OWLAxiom, OWLOntology
 
 from java.util import HashSet
 
@@ -20,7 +20,7 @@ class ELNormalizer():
         The normalization process transforms an ontology into 7 normal forms in the description \
             logic EL language.
     """
-
+ 
     def __init__(self):
         return
 
@@ -32,6 +32,10 @@ class ELNormalizer():
         :rtype: Dictionary where the keys are labels for each normal form and the values are a \
             list of axioms of each normal form.
         """
+
+        # Type check
+        if not isinstance(ontology, OWLOntology):
+            raise TypeError("Parameter 'ontology' must be of type org.semanticweb.owlapi.model.OWLOntology")
 
         # jreasoner = JcelReasoner(ontology, False)
         # root_ont = jreasoner.getRootOntology()
@@ -70,6 +74,7 @@ class ELNormalizer():
                 logging.info(e)
         return axioms_dict
 
+    # TODO: This method is missing unit tests
     def preprocess_ontology(self, ontology):
         """Preprocesses the ontology to remove axioms that are not supported by the normalization \
             process.
@@ -78,6 +83,10 @@ class ELNormalizer():
 
         :rtype: :class:`org.semanticweb.owlapi.model.OWLOntology`
         """
+
+        # Type check
+        if not isinstance(ontology, OWLOntology):
+            raise TypeError("Parameter 'ontology' must be of type org.semanticweb.owlapi.model.OWLOntology")
 
         tbox_axioms = ontology.getTBoxAxioms(Imports.fromBoolean(True))
         new_tbox_axioms = HashSet()
@@ -120,6 +129,10 @@ class ELNormalizer():
 
 def process_axiom(axiom: OWLAxiom):
 
+    # Type check
+    if not isinstance(axiom, OWLAxiom):
+        raise TypeError("Parameter 'axiom' must be of type org.semanticweb.owlapi.model.OWLAxiom")
+
     subclass = axiom.getSubClass()
     superclass = axiom.getSuperClass()
 
@@ -159,6 +172,9 @@ class GCI():
     def __init__(self, axiom):
         self._axiom = axiom
         return
+
+    def __eq__(self, other):
+        return self._axiom.equals(other._axiom)
 
     @property
     def owl_subclass(self):
