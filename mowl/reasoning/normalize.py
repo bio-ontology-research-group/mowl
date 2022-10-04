@@ -57,21 +57,27 @@ class ELNormalizer():
         normalizer = OntologyNormalizer()
 
         factory = IntegerOntologyObjectFactoryImpl()
-        normalizedOntology = normalizer.normalize(intAxioms, factory)
-        rTranslator = ReverseAxiomTranslator(translator, ontology)
+        normalized_ontology = normalizer.normalize(intAxioms, factory)
+        self.rTranslator = ReverseAxiomTranslator(translator, ontology)
 
+        axioms_dict = self.__revert_translation(normalized_ontology)
+        
+        return axioms_dict
+
+    def __revert_translation(self, normalized_ontology):
         axioms_dict = {
             "gci0": [], "gci1": [], "gci2": [], "gci3": [], "gci0_bot": [], "gci1_bot": [],
             "gci3_bot": []}
 
-        for ax in normalizedOntology:
+        for ax in normalized_ontology:
             try:
-                axiom = rTranslator.visit(ax)
+                axiom = self.rTranslator.visit(ax)
                 key, value = process_axiom(axiom)
                 axioms_dict[key].append(value)
             except Exception as e:
                 logging.info("Reverse translation. Ignoring axiom: %s", ax)
                 logging.info(e)
+                
         return axioms_dict
 
     # TODO: This method is missing unit tests
@@ -105,18 +111,18 @@ class ELNormalizer():
                 continue
             elif "ExactCardinality" in axiom_as_str:
                 continue
-            elif "Annotation" in axiom_as_str:
-                continue
+            # elif "Annotation" in axiom_as_str:
+            #    continue
             elif "ObjectHasSelf" in axiom_as_str:
                 continue
-            elif "urn:swrl" in axiom_as_str:
-                continue
-            elif "EquivalentObjectProperties" in axiom_as_str:
-                continue
-            elif "SymmetricObjectProperty" in axiom_as_str:
-                continue
-            elif "AsymmetricObjectProperty" in axiom_as_str:
-                continue
+            # elif "urn:swrl" in axiom_as_str:
+            #     continue
+            #elif "EquivalentObjectProperties" in axiom_as_str:
+            #    continue
+            # elif "SymmetricObjectProperty" in axiom_as_str:
+            #    continue
+            # elif "AsymmetricObjectProperty" in axiom_as_str:
+            #    continue
             elif "ObjectOneOf" in axiom_as_str:
                 continue
             else:
@@ -162,10 +168,10 @@ def process_axiom(axiom: OWLAxiom):
             return "gci2", GCI2(axiom)
 
         else:
-            logging.info("Processing axiom. Ignoring axiom %s", axiom)
+            logging.info("Superclass type not recognized. Ignoring axiom: %s", axiom)
 
     else:
-        logging.info("Processing axiom. Ignoring axiom %s", axiom)
+        logging.info("Subclass type not recognized. Ignoring axiom: %s", axiom)
 
 
 class GCI():
