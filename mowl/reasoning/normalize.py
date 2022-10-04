@@ -83,7 +83,7 @@ class ELNormalizer():
 
         :rtype: :class:`org.semanticweb.owlapi.model.OWLOntology`
         """
-
+        
         # Type check
         if not isinstance(ontology, OWLOntology):
             raise TypeError("Parameter 'ontology' must be of type org.semanticweb.owlapi.model.OWLOntology")

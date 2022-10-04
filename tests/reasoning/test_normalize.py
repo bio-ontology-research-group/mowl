@@ -14,6 +14,7 @@ class TestElNormalizer(TestCase):
     def setUpClass(self):
         self.family_dataset = FamilyDataset()
         
+        
         adapter = OWLAPIAdapter()
         data_factory = adapter.data_factory
         # GCI0 Axiom
@@ -161,3 +162,59 @@ org.semanticweb.owlapi.model.OWLOntology"):
         ontology = normalizer.preprocess_ontology(self.ontology)
 
         self.assertEqual(ontology.getAxiomCount(), 0)
+
+
+
+    # Test GCIs
+    
+    def test_gci0(self):
+        """"This should check the correct behaviour of GCI0"""
+        axiom = GCI0(self.gci0_axiom)
+        # Attributes
+        self.assertEqual(axiom.subclass, "http://class1")
+        self.assertEqual(axiom.superclass, "http://class2")
+
+        # Flattened entities
+        classes = {"http://class1", "http://class2"}
+        roles = set()
+        self.assertEqual(axiom.get_entities(), (classes, roles))
+        
+        
+    def test_gci1(self):
+        """"This should check the correct behaviour of GCI1"""
+        axiom = GCI1(self.gci1_axiom)
+        # Attributes
+        self.assertEqual(axiom.left_subclass, "http://class1")
+        self.assertEqual(axiom.right_subclass, "http://class3")
+        self.assertEqual(axiom.superclass, "http://class2")
+
+        # Flattened entities
+        classes = {"http://class1", "http://class2", "http://class3"}
+        roles = set()
+        self.assertEqual(axiom.get_entities(), (classes, roles))
+        
+    def test_gci2(self):
+        """"This should check the correct behaviour of GCI2"""
+        axiom = GCI2(self.gci2_axiom)
+        # Attributes
+        self.assertEqual(axiom.subclass, "http://class1")
+        self.assertEqual(axiom.object_property, "http://role")
+        self.assertEqual(axiom.filler, "http://class2")
+
+        # Flattened entities
+        classes = {"http://class1", "http://class2"}
+        roles = {"http://role"}
+        self.assertEqual(axiom.get_entities(), (classes, roles))
+    def test_gci3(self):
+        """"This should check the correct behaviour of GCI3"""
+        axiom = GCI3(self.gci3_axiom)
+        # Attributes
+        self.assertEqual(axiom.object_property, "http://role")
+        self.assertEqual(axiom.filler, "http://class2")
+        self.assertEqual(axiom.superclass, "http://class1")
+
+        # Flattened entities
+        classes = {"http://class1", "http://class2"}
+        roles = {"http://role"}
+        self.assertEqual(axiom.get_entities(), (classes, roles))
+        
