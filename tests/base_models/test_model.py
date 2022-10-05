@@ -64,14 +64,13 @@ class TestModel(TestCase):
         self.assertIsInstance(model_filepath, str)
         self.assertEqual(model_filepath, "test")
 
-
     def test_temporary_model_filepath(self):
         """This checks temporary model filepath"""
-            
+
         model = Model(self.dataset)
         model_filepath = model.model_filepath
         self.assertIsInstance(model_filepath, str)
-        self.assertTrue(model_filepath.startswith("/tmp/")) 
+        self.assertTrue(model_filepath.startswith("/tmp/"))
 
 
 class TestEmbeddingModel(TestCase):

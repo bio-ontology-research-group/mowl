@@ -17,10 +17,10 @@ from mowl.owlapi import OWLAPIAdapter
 class ELNormalizer():
 
     """This class wraps the normalization functionality found in the Java library :class:`Jcel`. \
-        The normalization process transforms an ontology into 7 normal forms in the description \
-            logic EL language.
+The normalization process transforms an ontology into 7 normal forms in the description \
+logic EL language.
     """
- 
+
     def __init__(self):
         return
 
@@ -35,7 +35,8 @@ class ELNormalizer():
 
         # Type check
         if not isinstance(ontology, OWLOntology):
-            raise TypeError("Parameter 'ontology' must be of type org.semanticweb.owlapi.model.OWLOntology")
+            raise TypeError(f"Parameter 'ontology' must be of \
+type org.semanticweb.owlapi.model.OWLOntology. Found: {type(ontology)}")
 
         # jreasoner = JcelReasoner(ontology, False)
         # root_ont = jreasoner.getRootOntology()
@@ -61,7 +62,7 @@ class ELNormalizer():
         self.rTranslator = ReverseAxiomTranslator(translator, ontology)
 
         axioms_dict = self.__revert_translation(normalized_ontology)
-        
+
         return axioms_dict
 
     def __revert_translation(self, normalized_ontology):
@@ -77,7 +78,7 @@ class ELNormalizer():
             except Exception as e:
                 logging.info("Reverse translation. Ignoring axiom: %s", ax)
                 logging.info(e)
-                
+
         return axioms_dict
 
     # TODO: This method is missing unit tests
@@ -89,10 +90,11 @@ class ELNormalizer():
 
         :rtype: :class:`org.semanticweb.owlapi.model.OWLOntology`
         """
-        
+
         # Type check
         if not isinstance(ontology, OWLOntology):
-            raise TypeError("Parameter 'ontology' must be of type org.semanticweb.owlapi.model.OWLOntology")
+            raise TypeError("Parameter 'ontology' must be of \
+type org.semanticweb.owlapi.model.OWLOntology")
 
         tbox_axioms = ontology.getTBoxAxioms(Imports.fromBoolean(True))
         new_tbox_axioms = HashSet()
@@ -117,7 +119,7 @@ class ELNormalizer():
                 continue
             # elif "urn:swrl" in axiom_as_str:
             #     continue
-            #elif "EquivalentObjectProperties" in axiom_as_str:
+            # elif "EquivalentObjectProperties" in axiom_as_str:
             #    continue
             # elif "SymmetricObjectProperty" in axiom_as_str:
             #    continue

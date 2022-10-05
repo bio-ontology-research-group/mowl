@@ -51,7 +51,7 @@ str -> ELDataset"""
         model = EmbeddingELModel(self.family_dataset, 1, False)
 
         training_datasets = model.training_datasets
-        training_datasets = model.training_datasets # this is a hack to get 100% coverage
+        training_datasets = model.training_datasets  # this is a hack to get 100% coverage
 
         self.assertTrue(isinstance(training_datasets, dict))
 
@@ -94,7 +94,7 @@ str -> DataLoader"""
         model = EmbeddingELModel(self.ppi_dataset, 1, False)
 
         training_dataloaders = model.training_dataloaders
-        training_dataloaders = model.training_dataloaders # this is a hack to get 100% coverage
+        training_dataloaders = model.training_dataloaders  # this is a hack to get 100% coverage
 
         self.assertTrue(isinstance(training_dataloaders, dict))
         idx = random.randrange(0, len(training_dataloaders))
@@ -153,7 +153,6 @@ of str -> DataLoader"""
         self.assertIn("gci0_bot", training_datasets)
         self.assertIn("gci1_bot", training_datasets)
         self.assertIn("gci3_bot", training_datasets)
-
 
     def test_accesing_non_attributes(self):
         """This should check if the model raises an error when trying to access \

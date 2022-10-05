@@ -48,7 +48,7 @@ class Model():
     @property
     def class_index_dict(self):
         """Dictionary with class names as keys and class indexes as values.
-    
+
         :rtype: dict
         """
         if self._class_index_dict is None:

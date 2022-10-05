@@ -45,26 +45,25 @@ merging the 3 extra to their corresponding origin normal forms. Defaults to True
         if self._datasets_loaded:
             return
 
-
         training_el_dataset = ELDataset(self.dataset.ontology, self.class_index_dict,
-                                            self.object_property_index_dict,
-                                            extended=self._extended, device=self.device)
+                                        self.object_property_index_dict,
+                                        extended=self._extended, device=self.device)
 
         self._training_datasets = training_el_dataset.get_gci_datasets()
 
         self._validation_datasets = None
         if self.dataset.validation:
             validation_el_dataset = ELDataset(self.dataset.validation, self.class_index_dict,
-                                                  self.object_property_index_dict,
-                                                  extended=self._extended, device=self.device)
+                                              self.object_property_index_dict,
+                                              extended=self._extended, device=self.device)
 
             self._validation_datasets = validation_el_dataset.get_gci_datasets()
 
         self._testing_datasets = None
         if self.dataset.testing:
             testing_el_dataset = ELDataset(self.dataset.testing, self.class_index_dict,
-                                               self.object_property_index_dict,
-                                               extended=self._extended, device=self.device)
+                                           self.object_property_index_dict,
+                                           extended=self._extended, device=self.device)
 
             self._testing_datasets = testing_el_dataset.get_gci_datasets()
 
