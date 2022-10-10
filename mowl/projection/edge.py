@@ -1,4 +1,4 @@
-#from pykeen.triples import TriplesFactory
+from pykeen.triples import TriplesFactory
 from deprecated.sphinx import versionadded, deprecated
 import numpy as np
 import torch as th
@@ -88,36 +88,36 @@ class Edge:
     def zip(edges):
         return tuple(zip(*[x.astuple() for x in edges]))
 
-    # @staticmethod
-    # @versionadded(version="0.1.0", reason="This method is available to transform graph edges \
-    #     obtained from ontologies into PyKEEN triples.")
-    # def as_pykeen(edges, create_inverse_triples=True, entity_to_id=None, relation_to_id=None):
-    #     """This method transform a set of edges into an object of the type \
-    #     :class:`pykeen.triples.triples_factory.TriplesFactory`. This method is intended to be \
-    #     used for PyKEEN methods.
-    #     :param edges: List of edges.
-    #     :type edges: list of :class:`Edge`
-    #     :param create_inverse_triple: Whether to create inverse triples. Defaults to ``True``
-    #     :type create_inverse_triple: bool, optional
-    #     :rtype: :class:`pykeen.triples.triples_factory.TriplesFactory`
-    #     """
-    #     if entity_to_id is None or relation_to_id is None:
-    #         classes, relations = Edge.getEntitiesAndRelations(edges)
-    #         classes, relations = set(classes), set(relations)
+    @staticmethod
+    @versionadded(version="0.1.0", reason="This method is available to transform graph edges \
+        obtained from ontologies into PyKEEN triples.")
+    def as_pykeen(edges, create_inverse_triples=True, entity_to_id=None, relation_to_id=None):
+        """This method transform a set of edges into an object of the type \
+        :class:`pykeen.triples.triples_factory.TriplesFactory`. This method is intended to be \
+        used for PyKEEN methods.
+        :param edges: List of edges.
+        :type edges: list of :class:`Edge`
+        :param create_inverse_triple: Whether to create inverse triples. Defaults to ``True``
+        :type create_inverse_triple: bool, optional
+        :rtype: :class:`pykeen.triples.triples_factory.TriplesFactory`
+        """
+        if entity_to_id is None or relation_to_id is None:
+            classes, relations = Edge.getEntitiesAndRelations(edges)
+            classes, relations = set(classes), set(relations)
 
-    #     if entity_to_id is None:
-    #         entity_to_id = {v: k for k, v in enumerate(list(classes))}
-    #     if relation_to_id is None:
-    #         relation_to_id = {v: k for k, v in enumerate(list(relations))}
+        if entity_to_id is None:
+            entity_to_id = {v: k for k, v in enumerate(list(classes))}
+        if relation_to_id is None:
+            relation_to_id = {v: k for k, v in enumerate(list(relations))}
 
-    #     def map_edge(edge):
-    #         return [entity_to_id[edge.src], relation_to_id[edge.rel], entity_to_id[edge.dst]]
+        def map_edge(edge):
+            return [entity_to_id[edge.src], relation_to_id[edge.rel], entity_to_id[edge.dst]]
 
-    #     triples = [map_edge(edge) for edge in edges]
-    #     triples = np.array(triples, dtype=int)
-    #     tensor_triples = th.tensor(triples)
+        triples = [map_edge(edge) for edge in edges]
+        triples = np.array(triples, dtype=int)
+        tensor_triples = th.tensor(triples)
 
-    #     triples_factory = TriplesFactory(tensor_triples, entity_to_id=entity_to_id,
-    #                                      relation_to_id=relation_to_id,
-    #                                      create_inverse_triples=create_inverse_triples)
-    #     return triples_factory
+        triples_factory = TriplesFactory(tensor_triples, entity_to_id=entity_to_id,
+                                         relation_to_id=relation_to_id,
+                                         create_inverse_triples=create_inverse_triples)
+        return triples_factory
