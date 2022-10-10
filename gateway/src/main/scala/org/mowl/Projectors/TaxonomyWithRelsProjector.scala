@@ -80,8 +80,9 @@ class TaxonomyWithRelsProjector(
   }
 
   // Abstract methods
+  def project(ontology: OWLOntology, withIndividuals: Boolean, verbose: Boolean): java.util.List[Triple] = Nil.asJava
   def projectAxiom(go_class: OWLClass, axiom: OWLClassAxiom, ontology: OWLOntology): List[Triple] = Nil
   def projectAxiom(axiom: OWLAxiom): List[org.mowl.Types.Triple] = Nil
   def projectAxiom(axiom: OWLClassAxiom): List[org.mowl.Types.Triple] = Nil
-
+  def projectAxiom(axiom: OWLAxiom, with_individuals: Boolean, verbose: Boolean): List[Triple] = Nil
 }

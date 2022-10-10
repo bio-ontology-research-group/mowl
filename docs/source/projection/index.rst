@@ -112,3 +112,32 @@ Given any projector, the input for starting the graph generation is an OWLOntolo
 
 
 The output is stored in the variable ``edges``, which is a list of :class:`Edge <mowl.projection.edge.Edge>` instances.
+
+
+DL2Vec extension
+-------------------
+
+Initially, DL2Vec projection rules are intended to parse TBox axioms. However, for some cases, useful information might be present as ABox axioms of the form :math:`C(a)`, :math:`\exists R.C (a)` and :math:`R(a,b)` where :math:`C` is an atomic concept, :math:`R` is a role and :math:`a, b` are individuals. The extended rules are the following:
+
+
++---------------------------+-----------------------------------------------------------+
+| Condition		    | Triple     						|
++===========================+===========================================================+
+| :math:`C(a)`	            | :math:`\left\langle a, http://type, C \right\rangle`	|
++---------------------------+-----------------------------------------------------------+
+| :math:`\exists R.C (a)`   | :math:`\left\langle a, R, C \right\rangle`		|
++---------------------------+-----------------------------------------------------------+
+| :math:`R(a,b)`	    | :math:`\left\langle a, R, b \right\rangle`		|
++---------------------------+-----------------------------------------------------------+
+
+To use the extension, use the ``with_individuals`` parameters in the ``project`` method:
+
+.. code-block:: python
+
+   from mowl.projection import DL2VecProjector
+   projector = DL2VecProjector(bidirectional_taxonomy= True)
+   edges_with_individuals = projector.project(dataset.
+   ontology, with_individuals=True)
+
+
+   

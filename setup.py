@@ -34,14 +34,14 @@ setuptools.setup(
         "networkx",
         "numpy",
         "pandas",
-        "pykeen==1.9.0",
+        "pykeen", #1.9.0
         "pyyaml",
         "requests",
         "scikit-learn",
         "scipy",
         "temp",
         "tqdm",
-        "torch",
+        "torch==1.7.1",
         "urllib3"
     ]
 )
