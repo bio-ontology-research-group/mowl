@@ -9,7 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 - `Family` dataset: a small ontology containing 12 axioms.
-
+- Unit tests up to 88% of coverage
+- DL2VecProjector includes assertion axioms with named individuals
 ### Changed
 ### Deprecated
 ### Removed
