@@ -41,7 +41,7 @@ setuptools.setup(
         "scipy",
         "temp",
         "tqdm",
-        "torch==1.7.1",
+        "torch",
         "urllib3"
     ]
 )
