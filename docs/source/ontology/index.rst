@@ -1,5 +1,15 @@
 Ontology management
 =========================
+.. testsetup:: 
+
+   from org.semanticweb.owlapi.model import IRI
+   from mowl.owlapi import OWLAPIAdapter
+   manager = OWLAPIAdapter().owl_manager
+   ont = manager.createOntology()
+   manager.saveOntology(ont, IRI.create("file:" + os.path.abspath("MyOntology.owl")))
+
+   with open("annots.tsv", "w") as f:
+       f.write("hi")
 
 Adding annotations to ontologies
 ----------------------------------
@@ -17,11 +27,11 @@ The annotation information must be store in a file with the following format:
 
 Then to add that information to the ontology we use the following instructions:
    
-.. code:: python
+.. testcode:: 
 
    from mowl.ontology.extend import insert_annotations
-   anotation_data_1 = ("annots.tsv", "http://has_annotation", True)
-   annotations = [annotation_document_1] # There  could be more than 1 annotations file.
+   annotation_data_1 = ("annots.tsv", "http://has_annotation", True)
+   annotations = [annotation_data_1] # There  could be more than 1 annotations file.
    insert_annotations("MyOntology.owl", annotations, out_file = None)
 
 The annotations will be added to the ontology and since ``out_file = None``, the input ontology will be overwritten.
