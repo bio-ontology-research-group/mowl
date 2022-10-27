@@ -13,7 +13,7 @@ import requests
 from org.semanticweb.owlapi.model import OWLOntology, OWLClass, OWLObjectProperty
 from org.semanticweb.owlapi.apibinding import OWLManager
 
-from mowl.projection import TaxonomyWithRelsProjector
+from mowl.projection import TaxonomyWithRelationsProjector
 from mowl.owlapi.adapter import OWLAPIAdapter
 from mowl.owlapi.defaults import TOP, BOT
 
@@ -140,7 +140,7 @@ class Dataset():
 
         :rtype: dict
         """
-        projector = TaxonomyWithRelsProjector(relations=["http://has_label"])
+        projector = TaxonomyWithRelationsProjector(relations=["http://has_label"])
         edges = projector.project(self._ontology)
         labels = {str(e.src): str(e.dst) for e in edges}
         return labels

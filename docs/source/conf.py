@@ -33,8 +33,26 @@ extensions = [
     'sphinx.ext.intersphinx',
     'sphinx_gallery.gen_gallery',
     'sphinx.ext.todo',
+    'sphinx.ext.coverage',
+    'sphinx.ext.viewcode',
+    'sphinx.ext.mathjax',
 #    'IPython.sphinxext.ipython_console_highlighting'
 ]
+
+doctest_global_setup = """
+import jpype
+import jpype.imports
+import os
+dirname = os.path.dirname("../mowl/")
+jars_dir = os.path.join(dirname, "lib/")
+jars = f'{str.join(":", [jars_dir + name for name in os.listdir(jars_dir)])}'
+if not jpype.isJVMStarted():
+    jpype.startJVM(
+           jpype.getDefaultJVMPath(), "-ea",
+	   "-Xmx10g",
+	   "-Djava.class.path=" + jars,
+	   convertStrings=False)
+"""
 
 todo_include_todos = True
 
@@ -84,4 +102,6 @@ source_suffix = ['.rst', '.md']
 # The master toctree document.
 master_doc = 'index'
 
-autodoc_mock_imports = ['org', 'uk', 'java', 'numpy', 'jpype', 'de', 'pandas', 'scipy', 'sklearn', 'owlready2', 'gensim', 'torch', 'rdflib', 'networkx', 'pykeen', 'node2vec', 'matplotlib', 'tqdm', 'click']
+autodoc_mock_imports = ['jpype', 'de', 'owlready2', 'gensim', 'rdflib', 'networkx', 'node2vec', 'matplotlib']
+
+# autodoc_mock_imports = ['org', 'uk, 'java', 'numpy', 'jpype', 'de', 'pandas', 'scipy', 'sklearn', 'owlready2', 'gensim', 'torch', 'rdflib', 'networkx', 'pykeen', 'node2vec', 'matplotlib', 'tqdm', 'click']

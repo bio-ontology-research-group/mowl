@@ -72,16 +72,16 @@ To use any projector, we can initialize them in two ways: directly or through a 
 
 Directly:
 
-.. code-block:: python
+.. testcode:: python
 
-   from mowl.projection import TaxonomyProjector, TaxonomyWithRelsProjector, OWL2VecStarProjector, DL2VecProjector
+   from mowl.projection import TaxonomyProjector, TaxonomyWithRelationsProjector, OWL2VecStarProjector, DL2VecProjector
 
    projector = TaxonomyProjector(bidirectional_taxonomy=True)
 
-   projector = TaxonomyWithRelsProjector(
+   projector = TaxonomyWithRelationsProjector(
 		taxonomy = True,
 		bidirectional_taxonomy=False,
-		relations = ["name of relation 1", "name of relation 2", ...])
+		relations = ["name of relation 1", "name of relation 2", "..."])
 
    projector = DL2VecProjector(bidirectional_taxonomy= True)
 
@@ -93,7 +93,7 @@ Directly:
 
 Using a factory method:
 
-.. code-block:: python
+.. testcode:: python
 
    from mowl.projection.factory import projector_factory
    projector = projector_factory("dl2vec", bidirectional_taxonomy = True)
@@ -101,14 +101,13 @@ Using a factory method:
 
 Given any projector, the input for starting the graph generation is an OWLOntology. For example:
 
-.. code-block:: python
+.. testcode:: python
 
-   from mowl.datasets.builtin import GDAMouseDataset
+   from mowl.datasets.builtin import FamilyDataset
 
-   dataset = GDAMouseDataset()
+   dataset = FamilyDataset()
 
    edges = projector.project(dataset.ontology)
-
 
 
 The output is stored in the variable ``edges``, which is a list of :class:`Edge <mowl.projection.edge.Edge>` instances.
@@ -132,7 +131,7 @@ Initially, DL2Vec projection rules are intended to parse TBox axioms. However, f
 
 To use the extension, use the ``with_individuals`` parameters in the ``project`` method:
 
-.. code-block:: python
+.. testcode:: python
 
    from mowl.projection import DL2VecProjector
    projector = DL2VecProjector(bidirectional_taxonomy= True)

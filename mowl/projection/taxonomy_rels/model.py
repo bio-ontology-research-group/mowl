@@ -7,7 +7,7 @@ from mowl.projection.base import ProjectionModel
 from java.util import ArrayList
 
 
-class TaxonomyWithRelsProjector(ProjectionModel):
+class TaxonomyWithRelationsProjector(ProjectionModel):
 
     r'''
     This class will project the ontology considering the following axioms:
@@ -26,6 +26,18 @@ class TaxonomyWithRelsProjector(ProjectionModel):
     def __init__(self, taxonomy=False, bidirectional_taxonomy: bool = False, relations=None):
         super().__init__()
 
+        if not isinstance(taxonomy, bool):
+            raise TypeError('Optional parameter taxonomy must be of type boolean')
+        if not isinstance(bidirectional_taxonomy, bool):
+            raise TypeError('Optional parameter bidirectional_taxonomy must be of type boolean')
+        if relations is not None and not isinstance(relations, list):
+            raise TypeError('Optional parameter relations must be of type list or None')
+
+        if not taxonomy and bidirectional_taxonomy:
+            raise ValueError("Parameter taxonomy=False incompatible with parameter bidirectional_taxonomy=True")
+        if not taxonomy and (relations is None or relations == []):
+            raise ValueError("Bad configuration of parameters. Either taxonomy should be True or relations a non-empty list")
+        
         relations = [] if relations is None else relations
         relationsJ = ArrayList()
         for r in relations:
@@ -34,6 +46,8 @@ class TaxonomyWithRelsProjector(ProjectionModel):
         self.projector = Projector(taxonomy, bidirectional_taxonomy, relationsJ)
 
     def project(self, ontology):
+        if not isinstance(ontology, OWLOntology):
+            raise TypeError('Parameter ontology must be of type org.semanticweb.owlapi.model.OWLOntology')
         edges = self.projector.project(ontology)
         edges = [Edge(str(e.src()), str(e.rel()), str(e.dst())) for e in edges]
         return edges

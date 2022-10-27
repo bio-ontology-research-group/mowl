@@ -16,7 +16,7 @@ function defined that will work as loss functions in the optimization framework.
 from mowl.base_models.elmodel import EmbeddingELModel
 from mowl.models.elembeddings.evaluate import ELEmbeddingsPPIEvaluator
 from mowl.nn.elmodule import ELModule
-import numpy as np
+import numpy as n
 import torch as th
 from torch import nn
 from tqdm import trange

@@ -28,6 +28,8 @@ dependencies:
   - pip:
     - pykeen
     - sphinx-rtd-theme
+    - nose
+    - coverage
   - jupyter
   - ipykernel
   - sphinx
