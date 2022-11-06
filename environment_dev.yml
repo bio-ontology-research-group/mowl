@@ -30,6 +30,7 @@ dependencies:
     - pykeen
     - sphinx-rtd-theme
     - nose
+    - nose-exclude
     - coverage
     - flake8
     - autopep8
