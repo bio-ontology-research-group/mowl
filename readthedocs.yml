@@ -13,7 +13,7 @@ build:
     - openjdk-11-jdk
   commands:
     - ./gradle_install.sh
-    - ./build_jars.sh
+   # - ./build_jars.sh
   tools:
     python: "miniconda3-4.7"
     # You can also specify other tool versions:
