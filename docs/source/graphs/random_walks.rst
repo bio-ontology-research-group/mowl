@@ -1,6 +1,6 @@
-Generating Random Walks
-=========================
-.. |projection| replace:: :doc:`Generating a graph from an ontology </projection/index>`
+Embedding with Random Walks
+==============================
+.. |projection| replace:: :doc:`generating a graph from an ontology <projection>`
 
 .. testsetup::
 
@@ -11,8 +11,8 @@ Generating Random Walks
 After |projection|, one possible next step is to generate random walks. 
 mOWL provides two different algorithms for random walks generation:
 
-* DeepWalk
-* Node2Vec
+* :class:`DeepWalk <mowl.walking.deepwalk.model.DeepWalk>`
+* :class:`Node2Vec <mowl.walking.node2vec.model.Node2Vec>`
 
 The algorithms in mOWL are a variation from the original ones. Graphs obtained from ontologies always have labeled edges, therefore the **edge labels are included** in the random walks.
 
@@ -115,3 +115,22 @@ It is possible to input a list of nodes (strings) in order to generate random wa
 .. note::
 
    In the case that any "filtering node" does not exist in the graph, a Warning will be raised.
+
+
+
+Generating embeddings
+---------------------
+
+Once the walks are generated, they can be used to generate embeddings using, for example, a :class:`Word2Vec <gensim.models.word2vec.Word2Vec>` model:
+
+.. testcode::
+
+   from gensim.models.word2vec import LineSentence
+   from gensim.models import Word2Vec
+   
+   walk_corpus_file = walker.outfile
+   sentences = LineSentence(walk_corpus_file)
+        
+   w2v_model = Word2Vec(sentences)
+   w2v_model.save("/tmp/my_word2vec_outfile")
+        

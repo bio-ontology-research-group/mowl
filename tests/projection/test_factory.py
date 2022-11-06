@@ -1,5 +1,7 @@
 from unittest import TestCase
-from mowl.projection import projector_factory, TaxonomyProjector, TaxonomyWithRelationsProjector, DL2VecProjector, OWL2VecStarProjector
+from mowl.projection import projector_factory, TaxonomyProjector, TaxonomyWithRelationsProjector, \
+    DL2VecProjector, OWL2VecStarProjector
+
 
 class TestProjectionFactory(TestCase):
 

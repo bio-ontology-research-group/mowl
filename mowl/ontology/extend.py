@@ -8,19 +8,19 @@ from org.semanticweb.owlapi.model import IRI
 
 def insert_annotations(ontology_file, annotations, out_file=None, verbose=False):
     """
-    Method to build dataset given an ontology file and the annotations to be inserted to the \
-    ontology. Annotation files must be in .tsv format, with no header. Per each row, the first \
-    element is the annotated entity and the rest of the elements are the annotation entities \
+    Method to build dataset given an ontology file and the annotations to be inserted to the
+    ontology. Annotation files must be in .tsv format, with no header. Per each row, the first
+    element is the annotated entity and the rest of the elements are the annotating entities
     (which are the entities in the ontology).
 
     :param ontology_file: Ontology file in .owl format
     :type ontology_file: str
-    :param annotations: Annotations to be included in the ontology. There can be more than one \
-    annotation file.
-    :type annotations: List of (str, str, str) corresponding to (annotation file path, relation \
-    name, annotations prefix)
-    :param out_file: Path for the new ontology.
-    :type out_file: str
+    :param annotations: Annotations to be included in the ontology. There can be more than one
+        annotation file.
+    :type annotations: List of (str, str, bool) corresponding to (annotation file path, relation
+        name, directed or undirected graph)
+    :param out_file: Path for the new ontology. Defaults to ``ontology_file``
+    :type out_file: str, optional
     :param verbose: If true, information is shown."
     :type verbose: bool
     """

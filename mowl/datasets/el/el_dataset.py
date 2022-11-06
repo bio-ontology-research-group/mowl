@@ -1,6 +1,6 @@
 import torch as th
 from torch.utils.data import DataLoader
-from mowl.reasoning.normalize import ELNormalizer, GCI
+from mowl.ontology.normalize import ELNormalizer, GCI
 from mowl.datasets.gci import GCIDataset
 import random
 from org.semanticweb.owlapi.model import OWLOntology

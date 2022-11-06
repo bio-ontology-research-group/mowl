@@ -16,7 +16,7 @@ Datasets
 
 
 
-mOWL is designed to handle input in OWL format. That is, you can input OWL ontologies. A mOWL dataset contains 3 ontologies: training, validation, testing.
+mOWL is designed to handle input in OWL format. That is, you can input OWL ontologies. A mOWL dataset contains 3 ontologies: training, validation and testing.
 
 Built-in datasets
 -------------------
@@ -51,7 +51,8 @@ In case you have your own training, validation and testing ontologies, you can t
 
    from mowl.datasets.base import PathDataset
    ds = PathDataset("training_ontology.owl", 
-                    validation_path="validation_ontology.owl", testing_path="testing_ontology.owl")
+                    validation_path="validation_ontology.owl",
+		    testing_path="testing_ontology.owl")
    
 
 .. note::

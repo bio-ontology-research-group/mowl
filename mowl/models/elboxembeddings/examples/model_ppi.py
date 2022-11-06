@@ -49,7 +49,7 @@ class ELBoxEmbeddings(EmbeddingELModel):
                  model_filepath=None,
                  device='cpu'
                  ):
-        super().__init__(dataset, batch_size, extended=True)
+        super().__init__(dataset, batch_size, extended=True, model_filepath=model_filepath)
 
         self.embed_dim = embed_dim
         self.margin = margin
@@ -57,7 +57,6 @@ class ELBoxEmbeddings(EmbeddingELModel):
         self.learning_rate = learning_rate
         self.epochs = epochs
         self.device = device
-        self.model_filepath = model_filepath
         self._loaded = False
         self._loaded_eval = False
         self.extended = False
@@ -77,8 +76,8 @@ class ELBoxEmbeddings(EmbeddingELModel):
         best_loss = float('inf')
 
         training_datasets = {
-            k: v.data for k, v in self.training_datasets.get_gci_datasets().items()}
-        validation_dataset = self.validation_datasets.get_gci_datasets()["gci2"][:]
+            k: v.data for k, v in self.training_datasets.items()}
+        validation_dataset = self.validation_datasets["gci2"][:]
 
         for epoch in trange(self.epochs):
             self.model.train()
@@ -96,7 +95,8 @@ class ELBoxEmbeddings(EmbeddingELModel):
                 if gci_name == "gci2":
                     rand_index = np.random.choice(len(gci_dataset), size=512)
                     gci_batch = gci_dataset[rand_index]
-                    prots = [self.class_index_dict[p] for p in self.dataset.evaluation_classes]
+                    prots = [self.class_index_dict[p] for p
+                             in self.dataset.evaluation_classes.as_str]
                     idxs_for_negs = np.random.choice(prots, size=len(gci_batch), replace=True)
                     rand_prot_ids = th.tensor(idxs_for_negs).to(self.device)
                     neg_data = th.cat([gci_batch[:, :2], rand_prot_ids.unsqueeze(1)], dim=1)
@@ -127,6 +127,8 @@ class ELBoxEmbeddings(EmbeddingELModel):
                 th.save(self.model.state_dict(), self.model_filepath)
             if (epoch + 1) % checkpoint == 0:
                 print(f'Epoch {epoch}: Train loss: {train_loss} Valid loss: {valid_loss}')
+
+        return 1
 
     def evaluate_ppi(self):
         self.init_model()

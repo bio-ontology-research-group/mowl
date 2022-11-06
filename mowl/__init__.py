@@ -19,5 +19,3 @@ def init_jvm(memory):
             f"-Xmx{memory}",
             "-Djava.class.path=" + jars,
             convertStrings=False)
-
-

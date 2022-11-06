@@ -13,7 +13,7 @@ class TestDl2Vec(TestCase):
     def setUpClass(self):
         dataset = FamilyDataset()
         self.ontology = dataset.ontology
-    
+
     def test_constructor_parameter_types(self):
         """This should check if the constructor parameters are of the correct type"""
         self.assertRaisesRegex(
@@ -45,7 +45,7 @@ class TestDl2Vec(TestCase):
         self.assertRaisesRegex(
             TypeError,
             "Optional parameter verbose must be of type boolean",
-            projector.project, self.ontology, verbose = "True")
+            projector.project, self.ontology, verbose="True")
 
     def test_project_family_ontology(self):
         """This should check if the projection result is correct"""
@@ -65,7 +65,6 @@ class TestDl2Vec(TestCase):
 
         self.assertEqual(set(edges), ground_truth_edges)
 
-
     def test_project_method_with_individuals(self):
         """This check the projection result with 'with_individuals' parameter set to True"""
         projector = DL2VecProjector()
@@ -74,7 +73,7 @@ class TestDl2Vec(TestCase):
         adapter = OWLAPIAdapter()
         data_factory = adapter.data_factory
         ont_manager = adapter.owl_manager
-        
+
         # Individual, relation, concept
         named_individual = data_factory.getOWLNamedIndividual(IRI.create("http://John"))
         class1 = data_factory.getOWLClass(IRI.create("http://Male"))
@@ -84,11 +83,13 @@ class TestDl2Vec(TestCase):
 
         # Individual, relation, individual
         named_individual2 = data_factory.getOWLNamedIndividual(IRI.create("http://Mary"))
-        axiom2 = data_factory.getOWLObjectPropertyAssertionAxiom(role, named_individual, named_individual2)
-        
+        axiom2 = data_factory.getOWLObjectPropertyAssertionAxiom(role,
+                                                                 named_individual,
+                                                                 named_individual2)
+
         ont_manager.addAxiom(ontology, axiom)
         ont_manager.addAxiom(ontology, axiom2)
-        edges = projector.project(ontology, with_individuals=True, verbose = True)
+        edges = projector.project(ontology, with_individuals=True, verbose=True)
         edges = {e.astuple() for e in edges}
 
         tuple_of_interest = ("http://John", "http://hasChild", "http://Male")

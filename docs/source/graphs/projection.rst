@@ -1,13 +1,13 @@
-Ontologies to graphs
-=====================
+Projecting ontologies
+=======================
 
 Ontologies contain adjacency information that can be projected into a graph. There are different ways of generating such graphs:
 
-* Taxonomy
-* Taxonomy with relations
-* DL2Vec
-* OWL2Vec*
-
+* :class:`Taxonomy <mowl.projection.taxonomy.model.TaxonomyProjector>`
+* :class:`Taxonomy with relations <mowl.projection.taxonomy_rels.model.TaxonomyWithRelationsProjector>`
+* :class:`DL2Vec <mowl.projection.dl2vec.model.DL2VecProjector>`
+* :class:`OWL2Vec* <mowl.projection.owl2vec_star.model.OWL2VecStarProjector>`
+* :class:`DeepWalk <mowl.walking.deepwalk.model.DeepWalk>`
 
 Each method follow different projection rules. In the case of ``Taxonomy``, only axioms of the form :math:`C \sqsubseteq D` will be considered (:math:`C,D` are atomic concepts) and each of them will form a graph edge ``(C, subclassOf, D)``. ``Taxonomy with relations`` is an extension of the previous one that also adds axioms of the form :math:`C \sqsubseteq \exists R. D` as edges ``(C, R, D)``. ``DL2Vec`` and ``OWL2Vec*`` contain more complex rules. Let's have a look at them:
 
@@ -138,5 +138,3 @@ To use the extension, use the ``with_individuals`` parameters in the ``project``
    edges_with_individuals = projector.project(dataset.
    ontology, with_individuals=True)
 
-
-   

@@ -5,6 +5,7 @@ channels:
 dependencies:
   - python=3.9
   - cairo
+  - deprecated
   - dglteam::dgl
   - numpy
   - networkx
@@ -30,6 +31,8 @@ dependencies:
     - sphinx-rtd-theme
     - nose
     - coverage
+    - flake8
+    - autopep8
   - jupyter
   - ipykernel
   - sphinx

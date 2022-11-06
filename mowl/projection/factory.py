@@ -15,13 +15,13 @@ def projector_factory(method_name, taxonomy=False, bidirectional_taxonomy=False,
         return TaxonomyProjector(bidirectional_taxonomy=bidirectional_taxonomy)
     elif method_name == "taxonomy_rels":
         return TaxonomyWithRelationsProjector(taxonomy=taxonomy,
-                                         bidirectional_taxonomy=bidirectional_taxonomy,
-                                         relations=relations)
+                                              bidirectional_taxonomy=bidirectional_taxonomy,
+                                              relations=relations)
     elif method_name == "dl2vec":
         return DL2VecProjector(bidirectional_taxonomy=bidirectional_taxonomy)
     elif method_name == "owl2vecstar":
         return OWL2VecStarProjector(bidirectional_taxonomy=bidirectional_taxonomy,
                                     include_literals=include_literals, only_taxonomy=only_taxonomy)
     else:
-        raise Exception(f"Graph generation method {method_name} unrecognized. Recognized methods are: \
-            {PARSING_METHODS}")
+        raise Exception(f"Graph generation method {method_name} unrecognized. Recognized methods \
+are: {PARSING_METHODS}")

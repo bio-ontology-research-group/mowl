@@ -45,6 +45,10 @@ class Dataset():
         self._validation = validation
         self._testing = testing
 
+        self._classes = None
+        self._object_properties = None
+        self._evaluation_classes = None
+
     @property
     def ontology(self):
         """Training dataset
@@ -76,7 +80,6 @@ class Dataset():
 
         :rtype: OWLClasses
         """
-        self._load()
         if self._classes is None:
             adapter = OWLAPIAdapter()
             top = adapter.create_class(TOP)
@@ -102,7 +105,7 @@ class Dataset():
 
         :rtype: OWLObjectProperties
         """
-        self._load()
+
         if self._object_properties is None:
             obj_properties = set()
             obj_properties |= set(self._ontology.getObjectPropertiesInSignature())
@@ -126,7 +129,7 @@ class Dataset():
         overriden, this method returns the classes in the testing ontology obtained from the \
         OWLAPI method ``getClassesInSignature()`` as a :class:`OWLClasses` object.
         """
-        self._load()
+
         if self._evaluation_classes is None:
             classes = self._testing.getClassesInSignature()
             self._evaluation_classes = OWLClasses(classes)
@@ -344,6 +347,11 @@ class Entities():
     def as_owl(self):
         """Returns the list of entities as OWL objects."""
         return list(self._name_owlobject.values())
+
+    @property
+    def as_dict(self):
+        """Returns the dictionary of entities indexed by their names."""
+        return self._name_owlobject
 
 
 class OWLClasses(Entities):

@@ -13,13 +13,13 @@ class TestTaxonomy(TestCase):
     def setUpClass(self):
         dataset = FamilyDataset()
         self.ontology = dataset.ontology
-    
+
     def test_constructor_parameter_types(self):
         """This should check if the constructor parameters are of the correct type"""
         self.assertRaisesRegex(
             TypeError, "Optional parameter bidirectional_taxonomy must be of type boolean",
             TaxonomyProjector, "True")
-                       
+
     def test_project_method_parameter_types(self):
         """This should check if the project method parameters are of the correct type"""
         projector = TaxonomyProjector()
@@ -42,7 +42,7 @@ class TestTaxonomy(TestCase):
         ground_truth_edges.add(("http://Father", "http://subclassof", "http://Parent"))
         ground_truth_edges.add(("http://Mother", "http://subclassof", "http://Parent"))
         ground_truth_edges.add(("http://Parent", "http://subclassof", "http://Person"))
-        
+
         self.assertEqual(set(edges), ground_truth_edges)
 
     def test_project_family_bidirectional_taxonomy(self):
@@ -59,7 +59,7 @@ class TestTaxonomy(TestCase):
         ground_truth_edges.add(("http://Father", "http://subclassof", "http://Parent"))
         ground_truth_edges.add(("http://Mother", "http://subclassof", "http://Parent"))
         ground_truth_edges.add(("http://Parent", "http://subclassof", "http://Person"))
-        
+
         ground_truth_edges.add(("http://Person", "http://superclassof", "http://Male"))
         ground_truth_edges.add(("http://Person", "http://superclassof", "http://Female"))
         ground_truth_edges.add(("http://Male", "http://superclassof", "http://Father"))

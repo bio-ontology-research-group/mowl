@@ -13,10 +13,13 @@ function defined that will work as loss functions in the optimization framework.
 
 # %%
 # Let's just define the imports that will be needed along the example:
+
+import mowl
+mowl.init_jvm("10g")
 from mowl.base_models.elmodel import EmbeddingELModel
 from mowl.models.elembeddings.evaluate import ELEmbeddingsPPIEvaluator
 from mowl.nn.elmodule import ELModule
-import numpy as n
+import numpy as np
 import torch as th
 from torch import nn
 from tqdm import trange
@@ -48,114 +51,10 @@ from tqdm import trange
 # .. math::
 #    p_1 \sqsubseteq interacts\_with. p_2
 
-
-# %%
-# Now, let's first write the code containing the tranining and validation parts.
-# For that, let's use the
-# :class:`EmbeddingELModel <mowl.base_models.elmodel.EmbeddingELModel>` class.
-
-class ELEmbeddings(EmbeddingELModel):
-
-    def __init__(self,
-                 dataset,
-                 embed_dim=50,
-                 margin=0,
-                 reg_norm=1,
-                 learning_rate=0.001,
-                 epochs=1000,
-                 batch_size=4096 * 8,
-                 model_filepath=None,
-                 device='cpu'
-                 ):
-        super().__init__(dataset, batch_size, extended=True)
-
-        self.embed_dim = embed_dim
-        self.margin = margin
-        self.reg_norm = reg_norm
-        self.learning_rate = learning_rate
-        self.epochs = epochs
-        self.device = device
-        self.model_filepath = model_filepath
-        self._loaded = False
-        self._loaded_eval = False
-        self.extended = False
-        self.init_model()
-    # Notice that here we are initializing the neural network module.
-    # We will see later that ``ElEmModule`` inherits from ``ELModule``,
-    # which implements an interface for EL GCIs losses functions.
-
-    def init_model(self):
-        self.model = ELEmModule(
-            len(self.class_index_dict),  # number of ontology classes
-            len(self.object_property_index_dict),  # number of ontology object properties
-            embed_dim=self.embed_dim,
-            margin=self.margin
-        ).to(self.device)
-
-    def train(self):
-        optimizer = th.optim.Adam(self.model.parameters(), lr=self.learning_rate)
-        best_loss = float('inf')
-
-        for epoch in trange(self.epochs):
-            self.model.train()
-
-            train_loss = 0
-            loss = 0
-
-            # Notice how we use the ``training_datasets`` variable directly
-            # and every element of it is a pair (GCI name, GCI tensor data).
-            for gci_name, gci_dataset in self.training_datasets.get_gci_datasets().items():
-                if len(gci_dataset) == 0:
-                    continue
-
-                loss += th.mean(self.model(gci_dataset[:], gci_name))
-                if gci_name == "gci2":
-                    prots = [self.class_index_dict[p] for p in self.dataset.evaluation_classes]
-                    idxs_for_negs = np.random.choice(prots, size=len(gci_dataset), replace=True)
-                    rand_index = th.tensor(idxs_for_negs).to(self.device)
-                    data = gci_dataset[:]
-                    neg_data = th.cat([data[:, :2], rand_index.unsqueeze(1)], dim=1)
-                    loss += th.mean(self.model(neg_data, gci_name, neg=True))
-
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            train_loss += loss.detach().item()
-
-            loss = 0
-            with th.no_grad():
-                self.model.eval()
-                valid_loss = 0
-                gci2_data = self.validation_datasets.get_gci_datasets()["gci2"][:]
-                loss = th.mean(self.model(gci2_data, "gci2"))
-                valid_loss += loss.detach().item()
-
-            checkpoint = 100
-            if best_loss > valid_loss:
-                best_loss = valid_loss
-                th.save(self.model.state_dict(), self.model_filepath)
-            if (epoch + 1) % checkpoint == 0:
-                print(f'Epoch {epoch}: Train loss: {train_loss} Valid loss: {valid_loss}')
-
-    def evaluate_ppi(self):
-        self.init_model()
-        print('Load the best model', self.model_filepath)
-        self.model.load_state_dict(th.load(self.model_filepath))
-        with th.no_grad():
-            self.model.eval()
-
-            eval_method = self.model.gci2_loss
-
-            evaluator = ELEmbeddingsPPIEvaluator(
-                self.dataset.testing, eval_method, self.dataset.ontology,
-                self.class_index_dict, self.object_property_index_dict, device=self.device)
-            evaluator()
-            evaluator.print_metrics()
-
 # %%
 #
-# Definition of loss functions
-# --------------------------------
+# Definition of the model and the loss functions
+# ---------------------------------------------------
 #
 # In this part we define the neural network part. As mentioned earlier, ontology classes \
 # are :math:`n`-dimensional balls. Each ball has a center :math:`c \in \mathbb{R}^n` and \
@@ -280,3 +179,126 @@ class ELEmModule(ELModule):
         euc = th.linalg.norm(c - rE - d, dim=1, keepdim=True)
         loss = th.relu(euc - rc - rd - self.margin)
         return loss + self.class_reg(c) + self.class_reg(d)
+
+
+
+# %%
+# Now, let's first write the code containing the tranining and validation parts.
+# For that, let's use the
+# :class:`EmbeddingELModel <mowl.base_models.elmodel.EmbeddingELModel>` class.
+
+class ELEmbeddings(EmbeddingELModel):
+
+    def __init__(self,
+                 dataset,
+                 embed_dim=50,
+                 margin=0,
+                 reg_norm=1,
+                 learning_rate=0.001,
+                 epochs=1000,
+                 batch_size=4096 * 8,
+                 model_filepath=None,
+                 device='cpu'
+                 ):
+        super().__init__(dataset, batch_size, extended=True, model_filepath=model_filepath)
+
+        self.embed_dim = embed_dim
+        self.margin = margin
+        self.reg_norm = reg_norm
+        self.learning_rate = learning_rate
+        self.epochs = epochs
+        self.device = device
+        self._loaded = False
+        self._loaded_eval = False
+        self.extended = False
+        self.init_model()
+            
+    def init_model(self):
+        self.model = ELEmModule(
+            len(self.class_index_dict),  # number of ontology classes
+            len(self.object_property_index_dict),  # number of ontology object properties
+            embed_dim=self.embed_dim,
+            margin=self.margin
+        ).to(self.device)
+
+    def train(self):
+        optimizer = th.optim.Adam(self.model.parameters(), lr=self.learning_rate)
+        best_loss = float('inf')
+
+        for epoch in trange(self.epochs):
+            self.model.train()
+
+            train_loss = 0
+            loss = 0
+
+            # Notice how we use the ``training_datasets`` variable directly
+            # and every element of it is a pair (GCI name, GCI tensor data).
+            for gci_name, gci_dataset in self.training_datasets.items():
+                if len(gci_dataset) == 0:
+                    continue
+
+                loss += th.mean(self.model(gci_dataset[:], gci_name))
+                if gci_name == "gci2":
+                    prots = [self.class_index_dict[p] for p in self.dataset.evaluation_classes.as_str]
+                    idxs_for_negs = np.random.choice(prots, size=len(gci_dataset), replace=True)
+                    rand_index = th.tensor(idxs_for_negs).to(self.device)
+                    data = gci_dataset[:]
+                    neg_data = th.cat([data[:, :2], rand_index.unsqueeze(1)], dim=1)
+                    loss += th.mean(self.model(neg_data, gci_name, neg=True))
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            train_loss += loss.detach().item()
+
+            loss = 0
+            with th.no_grad():
+                self.model.eval()
+                valid_loss = 0
+                gci2_data = self.validation_datasets["gci2"][:]
+                loss = th.mean(self.model(gci2_data, "gci2"))
+                valid_loss += loss.detach().item()
+
+            checkpoint = 1
+            if best_loss > valid_loss:
+                best_loss = valid_loss
+                th.save(self.model.state_dict(), self.model_filepath)
+            if (epoch + 1) % checkpoint == 0:
+                print(f'\nEpoch {epoch}: Train loss: {train_loss:4f} Valid loss: {valid_loss:.4f}')
+
+    def evaluate_ppi(self):
+        self.init_model()
+        print('Load the best model', self.model_filepath)
+        self.model.load_state_dict(th.load(self.model_filepath))
+        with th.no_grad():
+            self.model.eval()
+
+            eval_method = self.model.gci2_loss
+
+            evaluator = ELEmbeddingsPPIEvaluator(
+                self.dataset.testing, eval_method, self.dataset.ontology,
+                self.class_index_dict, self.object_property_index_dict, device=self.device)
+            evaluator()
+            evaluator.print_metrics()
+
+
+# %%
+# Training the model
+# -------------------
+
+
+from mowl.datasets.builtin import PPIYeastSlimDataset
+
+dataset = PPIYeastSlimDataset()
+
+model = ELEmbeddings(dataset,
+                     embed_dim=10,
+                     margin=0.1,
+                     reg_norm=1,
+                     learning_rate=0.001,
+                     epochs=20,
+                     batch_size=4096,
+                     model_filepath=None,
+                     device='cpu')
+
+model.train()

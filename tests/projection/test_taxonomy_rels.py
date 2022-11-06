@@ -13,7 +13,7 @@ class TestTaxonomyWithRels(TestCase):
     def setUpClass(self):
         dataset = FamilyDataset()
         self.ontology = dataset.ontology
-    
+
     def test_constructor_parameter_types(self):
         """This should check if the constructor parameters are of the correct type"""
         self.assertRaisesRegex(
@@ -25,7 +25,7 @@ class TestTaxonomyWithRels(TestCase):
         self.assertRaisesRegex(
             TypeError, "Optional parameter relations must be of type list or None",
             TaxonomyWithRelationsProjector, relations="True")
-        
+
     def test_project_method_parameter_types(self):
         """This should check if the project method parameters are of the correct type"""
         projector = TaxonomyWithRelationsProjector(taxonomy=True)
@@ -48,12 +48,12 @@ class TestTaxonomyWithRels(TestCase):
         ground_truth_edges.add(("http://Father", "http://subclassof", "http://Parent"))
         ground_truth_edges.add(("http://Mother", "http://subclassof", "http://Parent"))
         ground_truth_edges.add(("http://Parent", "http://subclassof", "http://Person"))
-        
+
         self.assertEqual(set(edges), ground_truth_edges)
 
     def test_project_family_bidirectional_taxonomy(self):
         """This should check if bidirectional taxonomy projection is correct"""
-        projector = TaxonomyWithRelationsProjector(taxonomy = True, bidirectional_taxonomy=True)
+        projector = TaxonomyWithRelationsProjector(taxonomy=True, bidirectional_taxonomy=True)
         edges = projector.project(self.ontology)
         edges = set([e.astuple() for e in edges])
 
@@ -65,7 +65,7 @@ class TestTaxonomyWithRels(TestCase):
         ground_truth_edges.add(("http://Father", "http://subclassof", "http://Parent"))
         ground_truth_edges.add(("http://Mother", "http://subclassof", "http://Parent"))
         ground_truth_edges.add(("http://Parent", "http://subclassof", "http://Person"))
-        
+
         ground_truth_edges.add(("http://Person", "http://superclassof", "http://Male"))
         ground_truth_edges.add(("http://Person", "http://superclassof", "http://Female"))
         ground_truth_edges.add(("http://Male", "http://superclassof", "http://Father"))
@@ -83,7 +83,7 @@ class TestTaxonomyWithRels(TestCase):
         edges = set([e.astuple() for e in edges])
 
         ground_truth_edges = set()
-        ground_truth_edges.add(("http://Parent", "http://hasChild", TOP))        
+        ground_truth_edges.add(("http://Parent", "http://hasChild", TOP))
         self.assertEqual(set(edges), ground_truth_edges)
 
     def test_parameter_combinations(self):
@@ -91,10 +91,12 @@ class TestTaxonomyWithRels(TestCase):
 
         with self.assertRaisesRegex(
                 ValueError,
-                "Parameter taxonomy=False incompatible with parameter bidirectional_taxonomy=True"):
-            projector = TaxonomyWithRelationsProjector(taxonomy=False, bidirectional_taxonomy=True)
+                "Parameter taxonomy=False incompatible with parameter bidirectional_taxonomy=True"
+        ):
+            _ = TaxonomyWithRelationsProjector(taxonomy=False, bidirectional_taxonomy=True)
 
         with self.assertRaisesRegex(
                 ValueError,
-                "Bad configuration of parameters. Either taxonomy should be True or relations a non-empty list"):
-            projector = TaxonomyWithRelationsProjector(taxonomy=False, relations=[])
+                "Bad configuration of parameters. Either taxonomy should be True or relations a \
+non-empty list"):
+            _ = TaxonomyWithRelationsProjector(taxonomy=False, relations=[])

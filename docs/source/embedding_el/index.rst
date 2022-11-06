@@ -3,6 +3,8 @@ Embedding the EL language
 .. |eldataset| replace:: :class:`ELDataset <mowl.datasets.el.ELDataset>`
 .. |elmodule| replace:: :class:`ELModule <mowl.nn.elmodule.ELModule>`
 .. |el| replace:: :math:`\mathcal{EL}`
+.. |tutorial_elembeddings| replace:: :doc:`../examples/elmodels/plot_1_elembeddings`
+.. |tutorial_elboxembeddings| replace:: :doc:`../examples/elmodels/plot_2_elboxembeddings`
 
 The :math:`\mathcal{EL}` language is part of the Description Logics family. Concept descriptions in :math:`\mathcal{EL}` can be expressed in the following normal forms:
 
@@ -224,4 +226,4 @@ At this point, it would be possible to just use the |eldataset| and the |elmodul
 
 In the previous script, there are some lines of code dedicated to preprocessing the data. That functionality is what is encoded in the :class:`ELEmbeddingModel <mowl.base_models.elmodel.ELEmbeddingModel>` such that if we use it, we can bypass all the data preprocessing and start directly in the training, validation and testing loops.
 
-To see actual examples of EL models, let's go to :doc:`/examples/elmodels/1_elembeddings` and :doc:`/examples/elmodels/2_elboxembeddings`
+To see actual examples of EL models, let's go to |tutorial_elembeddings| and |tutorial_elboxembeddings|.

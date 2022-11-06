@@ -1,5 +1,5 @@
 from unittest import TestCase
-from mowl.reasoning.normalize import ELNormalizer, GCI, GCI0, GCI1, GCI2, GCI3, GCI0_BOT, \
+from mowl.ontology.normalize import ELNormalizer, GCI, GCI0, GCI1, GCI2, GCI3, GCI0_BOT, \
     GCI1_BOT, GCI3_BOT, process_axiom
 from mowl.datasets.builtin import FamilyDataset
 from mowl.owlapi import OWLAPIAdapter

@@ -1,8 +1,12 @@
+Embedding with KGE methods
+===========================
+
+.. |edge| replace:: :class:`Edge <mowl.projection.edge.Edge>`
+
 PyKEEN integration
-=======================
+-----------------------
 
-
-Generating graphs from ontologies opens a wide range of possibilities on Knowledge Graph Embeddings. `PyKEEN <https://pykeen.readthedocs.io/en/stable/index.html>`_ is a Python package for reproducible, facile knowledge graph embeddings. mOWL provides some functionalities to ease the integration with PyKEEN methods that are subclasses of :class:`pykeen.models.base.EntityRelationEmbeddingModel` or :class:`pykeen.models.nbase.ERModel`. After :doc:`generating a graph from an ontology </projection/index>`, the output is a list of :class:`Edge <moowl.projection.edge.Edge>`. It is possible to transform this list to a PyKEEN :class:`pykeen.triples.TriplesFactory` class:
+Generating graphs from ontologies opens a wide range of possibilities on Knowledge Graph Embeddings. `PyKEEN <https://pykeen.readthedocs.io/en/stable/index.html>`_ is a Python package for reproducible, facile knowledge graph embeddings. mOWL provides some functionalities to ease the integration with PyKEEN methods that are subclasses of :class:`pykeen.models.base.EntityRelationEmbeddingModel` or :class:`pykeen.models.nbase.ERModel`. After :doc:`generating a graph from an ontology <projection>`, the output is a list of |edge|. It is possible to transform this list to a PyKEEN :class:`pykeen.triples.TriplesFactory` class:
 
 .. testcode:: [pykeen]
 

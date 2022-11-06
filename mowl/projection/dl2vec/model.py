@@ -10,7 +10,7 @@ class DL2VecProjector(ProjectionModel):
     :param ontology: The ontology to be processed.
     :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
 
-    :param bidirectional_taxonomy: If true then per each SubClass edge one SuperClass 
+    :param bidirectional_taxonomy: If true then per each SubClass edge one SuperClass
         edge will be generated.
     :type bidirectional_taxonomy: bool
     '''
@@ -22,7 +22,7 @@ class DL2VecProjector(ProjectionModel):
             raise TypeError("Optional parameter bidirectional_taxonomy must be of type boolean")
         self.projector = Projector(bidirectional_taxonomy)
 
-    def project(self, ontology, with_individuals=False, verbose = False):
+    def project(self, ontology, with_individuals=False, verbose=False):
         r"""Generates the projection of the ontology.
 
         :param ontology: The ontology to be processed.
@@ -30,9 +30,10 @@ class DL2VecProjector(ProjectionModel):
         :param with_individuals: If true then assertion axioms with named individuals
             will be included in the projection. Default is False.
         :type with_individuals: bool, optional
-        :param verbose: If true then the warnings will be printed to the standard output. Default is False.
+        :param verbose: If true then the warnings will be printed to the standard output. \
+            Default is False.
         :type verbose: bool, optional
-        
+
         :rtype: list(:class:`mowl.projection.edge.Edge`)
         """
 
@@ -45,7 +46,7 @@ class DL2VecProjector(ProjectionModel):
 
         if not isinstance(verbose, bool):
             raise TypeError("Optional parameter verbose must be of type boolean")
-        
+
         edges = self.projector.project(ontology, with_individuals, verbose)
         edges = [Edge(str(e.src()), str(e.rel()), str(e.dst())) for e in edges]
         return edges

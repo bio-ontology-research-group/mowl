@@ -12,10 +12,10 @@ class TaxonomyWithRelationsProjector(ProjectionModel):
     r'''
     This class will project the ontology considering the following axioms:
 
-    * :math:`A \sqsubseteq B` will generate the triple \
-        :math:`\langle A, subClassOf, B \rangle`
-    * :math:`A \sqsubseteq \exists R. B` will generate the triple \
-        :math:`\left\langle A, R, B \right\rangle`
+    * :math:`A \sqsubseteq B` will generate the triple
+      :math:`\langle A, subClassOf, B \rangle`
+    * :math:`A \sqsubseteq \exists R. B` will generate the triple
+      :math:`\left\langle A, R, B \right\rangle`
 
 
     :param ontology: The ontology to be processed.
@@ -34,10 +34,12 @@ class TaxonomyWithRelationsProjector(ProjectionModel):
             raise TypeError('Optional parameter relations must be of type list or None')
 
         if not taxonomy and bidirectional_taxonomy:
-            raise ValueError("Parameter taxonomy=False incompatible with parameter bidirectional_taxonomy=True")
+            raise ValueError("Parameter taxonomy=False incompatible with parameter \
+bidirectional_taxonomy=True")
         if not taxonomy and (relations is None or relations == []):
-            raise ValueError("Bad configuration of parameters. Either taxonomy should be True or relations a non-empty list")
-        
+            raise ValueError("Bad configuration of parameters. Either taxonomy should be True or \
+relations a non-empty list")
+
         relations = [] if relations is None else relations
         relationsJ = ArrayList()
         for r in relations:
@@ -47,7 +49,8 @@ class TaxonomyWithRelationsProjector(ProjectionModel):
 
     def project(self, ontology):
         if not isinstance(ontology, OWLOntology):
-            raise TypeError('Parameter ontology must be of type org.semanticweb.owlapi.model.OWLOntology')
+            raise TypeError('Parameter ontology must be of type \
+org.semanticweb.owlapi.model.OWLOntology')
         edges = self.projector.project(ontology)
         edges = [Edge(str(e.src()), str(e.rel()), str(e.dst())) for e in edges]
         return edges

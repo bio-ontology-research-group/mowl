@@ -8,11 +8,11 @@ from mowl.projection.edge import Edge
 class TaxonomyProjector(ProjectionModel):
 
     '''
-    This class will project the ontology considering only the axioms of the form \
-        :math:`A \sqsubseteq B` where A and B are ontology classes.
+    This class will project the ontology considering only the axioms of the form
+    :math:`A \sqsubseteq B` where A and B are ontology classes.
 
     :param ontology: The ontology to be processed.
-    :param bidirectional_taxonomy: If true then per each SubClass edge one SuperClass edge will \
+    :param bidirectional_taxonomy: If true then per each SubClass edge one SuperClass edge will
         be generated.
     '''
 
@@ -25,7 +25,8 @@ class TaxonomyProjector(ProjectionModel):
 
     def project(self, ontology):
         if not isinstance(ontology, OWLOntology):
-            raise TypeError("Parameter ontology must be of type org.semanticweb.owlapi.model.OWLOntology")
+            raise TypeError("Parameter ontology must be of \
+type org.semanticweb.owlapi.model.OWLOntology")
         edges = self.projector.project(ontology)
         edges = [Edge(str(e.src()), str(e.rel()), str(e.dst())) for e in edges]
         return edges

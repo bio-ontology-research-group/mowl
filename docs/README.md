@@ -13,6 +13,15 @@ cd build/html
 python3 -m http.server 8000
 ```
 
+or 
+
+```bash
+sphinx-build -b html source/ build/
+cd build/html
+python3 -m http.server 8000
+```
+
+
 Navigate to `http://localhost:8000/` to view
 
 In case new functions/Classes are added: 
@@ -30,6 +39,26 @@ sphinx-apidoc -o source/api ../mowl/
 https://sphinx-rtd-tutorial.readthedocs.io/en/latest/index.html
 
 
-# To Do 
+# Testing code snippets in documentation:
 
-- add Webhook for ReadTheDocs to enable automatic rebuilding after push
+```bash
+make doctest
+```
+
+or 
+
+```bash
+sphinx-build -b doctest source/ build/
+```
+
+Outputs of the tests can be found at `build/output.txt`
+
+For more information on testing, check [this](https://sphinx-tutorial.readthedocs.io/step-3/)
+
+To check the coverage of the tests in the documentation sources run
+
+```bash
+sphinx-build -b coverage source/ build/
+```
+
+The coverage results are in `build/python.txt`

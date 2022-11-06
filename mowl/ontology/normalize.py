@@ -85,6 +85,7 @@ type org.semanticweb.owlapi.model.OWLOntology. Found: {type(ontology)}")
     def preprocess_ontology(self, ontology):
         """Preprocesses the ontology to remove axioms that are not supported by the normalization \
             process.
+
         :param ontology: Input ontology
         :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
 
@@ -177,6 +178,8 @@ def process_axiom(axiom: OWLAxiom):
 
 
 class GCI():
+    """Base class for all GCI types in the :math:`\\mathcal{EL}` language"""
+
     def __init__(self, axiom):
         self._axiom = axiom
         return
@@ -186,18 +189,38 @@ class GCI():
 
     @property
     def owl_subclass(self):
+        """Returns the subclass of the GCI
+
+        :rtype: :class:`org.semanticweb.owlapi.model.OWLClassExpression`
+        """
         return self._axiom.getSubClass()
 
     @property
     def owl_superclass(self):
+        """Returns the superclass of the GCI
+
+        :rtype: :class:`org.semanticweb.owlapi.model.OWLClassExpression`
+        """
         return self._axiom.getSuperClass()
 
     @property
     def owl_axiom(self):
+        """Returns the axiom of the GCI
+
+        :rtype: :class:`org.semanticweb.owlapi.model.OWLAxiom`
+        """
         return self._axiom
 
     @staticmethod
     def get_entities(gcis):
+        """Returns all the classes and object properties that appear in the GCIs
+
+        :param gcis: List of GCIs
+        :type gcis: list
+
+        :rtype: tuple(set, set)
+        """
+
         classes = set()
         object_properties = set()
 
@@ -210,6 +233,12 @@ class GCI():
 
 
 class GCI0(GCI):
+    """
+    GCI of the form :math:`C \\sqsubseteq D`
+
+    :param axiom: Axiom of the form :math:`C \\sqsubseteq D`
+    :type axiom: :class:`org.semanticweb.owlapi.model.OWLAxiom`
+    """
 
     def __init__(self, axiom):
         super().__init__(axiom)
@@ -218,12 +247,22 @@ class GCI0(GCI):
 
     @property
     def subclass(self):
+        """Returns the subclass of the GCI: :math:`C`
+
+        :rtype: :class:`org.semanticweb.owlapi.model.OWLClass`
+        """
         if not self._subclass:
             self._subclass = str(self.owl_subclass.toStringID())
         return self._subclass
 
     @property
     def superclass(self):
+        """"
+        Returns the superclass of the GCI: :math:`D` or :math:`\\bot`
+
+        :rtype: :class:`org.semanticweb.owlapi.model.OWLClass`
+        """
+
         if not self._superclass:
             self._superclass = str(self.owl_superclass.toStringID())
         return self._superclass
@@ -233,7 +272,12 @@ class GCI0(GCI):
 
 
 class GCI0_BOT(GCI0):
+    """
+    GCI of the form :math:`C \\sqsubseteq \\bot`
 
+    :param axiom: Axiom of the form :math:`C \\sqsubseteq \\bot`
+    :type axiom: :class:`org.semanticweb.owlapi.model.OWLAxiom`
+    """
     def __init__(self, axiom):
         super().__init__(axiom)
         if "owl#Nothing" not in self.superclass:
@@ -241,6 +285,12 @@ class GCI0_BOT(GCI0):
 
 
 class GCI1(GCI):
+    """
+    GCI of the form :math:`C \\sqcap D \\sqsubseteq E`
+
+    :param axiom: Axiom of the form :math:`C \\sqcap D \\sqsubseteq E`
+    :type axiom: :class:`org.semanticweb.owlapi.model.OWLAxiom`
+    """
     def __init__(self, axiom):
         super().__init__(axiom)
 
@@ -258,18 +308,34 @@ class GCI1(GCI):
 
     @property
     def left_subclass(self):
+        """"
+        Returns the left operand of the subclass of the GCI: :math:`C`
+
+        :rtype: :class:`org.semanticweb.owlapi.model.OWLClass`
+        """
         if not self._left_subclass:
             self._process_left_side()
         return self._left_subclass
 
     @property
     def right_subclass(self):
+        """
+        Returns the right operand of the subclass of the GCI: :math:`D`
+
+        :rtype: :class:`org.semanticweb.owlapi.model.OWLClass`
+        """
         if not self._right_subclass:
             self._process_left_side()
         return self._right_subclass
 
     @property
     def superclass(self):
+        """
+        Returns the superclass of the GCI: :math:`E` or :math:`\\bot`
+
+        :rtype: :class:`org.semanticweb.owlapi.model.OWLClass`
+        """
+
         if not self._superclass:
             self._superclass = str(self.owl_superclass.toStringID())
         return self._superclass
@@ -279,6 +345,13 @@ class GCI1(GCI):
 
 
 class GCI1_BOT(GCI1):
+    """
+    GCI of the form :math:`C \\sqcap D \\sqsubseteq \\bot`
+
+    :param axiom: Axiom of the form :math:`C \\sqcap D \\sqsubseteq \\bot`
+    :type axiom: :class:`org.semanticweb.owlapi.model.OWLAxiom`
+    """
+
     def __init__(self, axiom):
         super().__init__(axiom)
         if "owl#Nothing" not in self.superclass:
@@ -286,6 +359,13 @@ class GCI1_BOT(GCI1):
 
 
 class GCI2(GCI):
+    """
+    GCI of the form :math:`C \\sqsubseteq \\exists R.D`
+
+    :param axiom: Axiom of the form :math:`C \\sqsubseteq \\exists R.D`
+    :type axiom: :class:`org.semanticweb.owlapi.model.OWLAxiom`
+    """
+
     def __init__(self, axiom):
         super().__init__(axiom)
 
@@ -303,18 +383,36 @@ class GCI2(GCI):
 
     @property
     def subclass(self):
+        """
+        Returns the subclass of the GCI: :math:`C`
+
+        :rtype: :class:`org.semanticweb.owlapi.model.OWLClass`
+        """
+
         if not self._subclass:
             self._subclass = str(self.owl_subclass.toStringID())
         return self._subclass
 
     @property
     def object_property(self):
+        """
+        Returns the object property of the GCI: :math:`R`
+
+        :rtype: :class:`org.semanticweb.owlapi.model.OWLObjectProperty`
+        """
+
         if not self._object_property:
             self._process_right_side()
         return self._object_property
 
     @property
     def filler(self):
+        """
+        Returns the filler of the GCI: :math:`D`
+
+        :rtype: :class:`org.semanticweb.owlapi.model.OWLClass`
+        """
+
         if not self._filler:
             self._process_right_side()
         return self._filler
@@ -324,6 +422,13 @@ class GCI2(GCI):
 
 
 class GCI3(GCI):
+    """
+    GCI of the form :math:`\\exists R.C \\sqsubseteq D`
+
+    :param axiom: Axiom of the form :math:`\\exists R.C \\sqsubseteq D`
+    :type axiom: :class:`org.semanticweb.owlapi.model.OWLAxiom`
+    """
+
     def __init__(self, axiom):
         super().__init__(axiom)
 
@@ -341,18 +446,35 @@ class GCI3(GCI):
 
     @property
     def object_property(self):
+        """
+        Returns the object property of the GCI: :math:`R`
+
+        :rtype: :class:`org.semanticweb.owlapi.model.OWLObjectProperty`
+        """
+
         if not self._object_property:
             self._process_left_side()
         return self._object_property
 
     @property
     def filler(self):
+        """
+        Returns the filler of the GCI: :math:`C`
+
+        :rtype: :class:`org.semanticweb.owlapi.model.OWLClass`
+        """
         if not self._filler:
             self._process_left_side()
         return self._filler
 
     @property
     def superclass(self):
+        """
+        Returns the superclass of the GCI: :math:`D` or :math:`\\bot`
+
+        :rtype: :class:`org.semanticweb.owlapi.model.OWLClass`
+        """
+
         if not self._superclass:
             self._superclass = str(self.owl_superclass.toStringID())
         return self._superclass
@@ -362,6 +484,13 @@ class GCI3(GCI):
 
 
 class GCI3_BOT(GCI3):
+    """
+    GCI of the form :math:`\\exists R.C \\sqsubseteq \\bot`
+
+    :param axiom: Axiom of the form :math:`\\exists R.C \\sqsubseteq \\bot`
+    :type axiom: :class:`org.semanticweb.owlapi.model.OWLAxiom`
+    """
+
     def __init__(self, axiom):
         super().__init__(axiom)
         if "owl#Nothing" not in self.superclass:

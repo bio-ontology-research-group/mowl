@@ -1,4 +1,4 @@
-from mowl.reasoning.normalize import ELNormalizer
+from mowl.ontology.normalize import ELNormalizer
 from mowl.base_models.model import EmbeddingModel
 import torch as th
 from torch.utils.data import DataLoader, default_collate

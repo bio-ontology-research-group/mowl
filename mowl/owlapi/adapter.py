@@ -6,10 +6,11 @@ import mowl.error as err
 
 
 class OWLAPIAdapter():
-    """Adapter class adapting OWLAPI. Here you can find shortcuts to:
-    * OWLManager
-    * OWLDataFactory
-    * IRI
+    """
+    Adapter class adapting OWLAPI. Here you can find shortcuts to:
+        - ``org.semanticweb.owlapi.apibinding.OWLManager``
+        - ``org.semanticweb.owlapi.model.OWLDataFactory``
+
     """
 
     def __init__(self):
