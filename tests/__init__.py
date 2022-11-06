@@ -2,7 +2,7 @@ import os
 import shutil
 import logging
 import mowl
-mowl.init_jvm("7g")
+mowl.init_jvm("5g")
 from mowl.datasets.builtin import FamilyDataset, GDAHumanELDataset, GDAMouseELDataset, \
     PPIYeastSlimDataset
 
