@@ -11,6 +11,6 @@ class TestELBoxEmbeddingsGDA(TestCase):
 checks the syntax of the code"""
 
         dataset = GDAHumanELDataset()
-        model = ELBoxEmbeddings(dataset, epochs=1, embed_dim=2)
+        model = ELBoxEmbeddings(dataset, epochs=1, embed_dim=1)
         return_value = model.train()
         self.assertEqual(return_value, 1)
