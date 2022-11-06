@@ -11,6 +11,8 @@ build:
   apt_packages:
     - openjdk-11-jre
     - openjdk-11-jdk
+  commands:
+    - ./build_jars.sh
   tools:
     python: "miniconda3-4.7"
     # You can also specify other tool versions:
