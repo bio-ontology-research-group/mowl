@@ -25,4 +25,4 @@ sphinx:
 
 # Optionally declare the Python requirements required to build your docs
 conda:
-    environment: docs/environment.yml
+    environment: environment.yml

@@ -43,5 +43,7 @@ setuptools.setup(
         "tqdm",
         "torch",
         "urllib3"
-    ]
+    ],
+
+    scripts=["build_jars.sh"]
 )
