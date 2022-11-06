@@ -12,7 +12,7 @@ build:
     - openjdk-11-jre
     - openjdk-11-jdk
   jobs:
-    pre_install"
+    pre_install:
       - ./gradle_install.sh
    # - ./build_jars.sh
   tools:
