@@ -38,7 +38,7 @@ class OWLAPIAdapter():
         if self._data_factory is None:
             self._data_factory = self.owl_manager.getOWLDataFactory()
         return self._data_factory
-    
+
     def create_ontology(self, iri):
         """Create an empty ontology given a valid IRI string"""
 
