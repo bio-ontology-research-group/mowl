@@ -4,15 +4,17 @@ Test Cases for Dataset class and its subclasses
 
 from mowl.owlapi.defaults import BOT, TOP
 from mowl.owlapi import OWLAPIAdapter
-from mowl.datasets.base import Entities, OWLClasses, OWLObjectProperties
+from mowl.datasets.base import Entities, OWLClasses, OWLObjectProperties, OWLNamedIndividuals
 from mowl.datasets import Dataset, PathDataset, RemoteDataset, TarFileDataset
-from tests.datasetFactory import PPIYeastSlimDataset, GDAHumanELDataset
+from tests.datasetFactory import PPIYeastSlimDataset, GDAHumanELDataset, FamilyDataset
 from mowl.owlapi.model import OWLOntology, OWLClass, OWLObjectProperty
 from unittest import TestCase
 from random import randrange, choice
 import os
 import shutil
 import requests
+
+from org.semanticweb.owlapi.model import IRI
 
 
 class TestDataset(TestCase):
@@ -285,6 +287,16 @@ class TestEntities(TestCase):
     @classmethod
     def setUpClass(self):
         self.ds = PPIYeastSlimDataset()
+        self.family_ds = FamilyDataset()
+
+        adapter = OWLAPIAdapter()
+        manager = adapter.owl_manager
+        data_factory = adapter.data_factory
+
+        individual = data_factory.getOWLNamedIndividual(IRI.create("http://Jhon"))
+        person = data_factory.getOWLClass(IRI.create("http://Person"))
+        assertion = data_factory.getOWLClassAssertionAxiom(person, individual)
+        manager.addAxiom(self.family_ds.ontology, assertion)
 
     def test_method_check_owl_type_not_implemented(self):
         """This checks that NotImplementedError is raised for method check_owl_type"""
@@ -294,17 +306,24 @@ class TestEntities(TestCase):
 
     def test_type_for_classes_method(self):
         """This checks error handling when the OWLClasses class does not receive OWLClass \
-            objects"""
+objects"""
 
         props = self.ds.object_properties.as_owl
         self.assertRaises(TypeError, OWLClasses, props)
 
     def test_type_for_object_property_method(self):
         """This checks error handling when the OWLObjectProperties class does not receive \
-            OWLObjectProperty objects"""
+OWLObjectProperty objects"""
 
         classes = self.ds.classes.as_owl
         self.assertRaises(TypeError, OWLObjectProperties, classes)
+
+    def test_type_for_named_individuals_method(self):
+        """This check error handling when the OWLNamedIndividuals class does not receive \
+OWLNamedIndividual objects"""
+
+        classes = self.ds.classes.as_owl
+        self.assertRaises(TypeError, OWLNamedIndividuals, classes)
 
     def test_format_of_class_as_str(self):
         """This checks if the format of the class string is correct"""
@@ -323,3 +342,12 @@ class TestEntities(TestCase):
         self.assertFalse(owl_prop_str.startswith("<"))
         self.assertFalse(owl_prop_str.endswith(">"))
         self.assertTrue(owl_prop_str.startswith("http://"))
+
+    def test_format_of_named_individual_as_str(self):
+        """This checks if the format of the individual string is correct"""
+
+        individuals = self.family_ds.individuals.as_str
+        owl_individual_str = choice(individuals)
+        self.assertFalse(owl_individual_str.startswith("<"))
+        self.assertFalse(owl_individual_str.endswith(">"))
+        self.assertTrue(owl_individual_str.startswith("http://"))

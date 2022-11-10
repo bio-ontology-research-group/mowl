@@ -1,8 +1,6 @@
 import setuptools
 import os
 
-cmd = "./build_jars.sh"
-os.system(cmd)
 
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()

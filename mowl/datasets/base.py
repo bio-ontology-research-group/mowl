@@ -10,7 +10,8 @@ from jpype import java
 import requests
 
 # OWLAPI imports
-from org.semanticweb.owlapi.model import OWLOntology, OWLClass, OWLObjectProperty
+from org.semanticweb.owlapi.model import OWLOntology, OWLClass, OWLObjectProperty, \
+    OWLNamedIndividual
 from org.semanticweb.owlapi.apibinding import OWLManager
 
 from mowl.projection import TaxonomyWithRelationsProjector
@@ -47,6 +48,7 @@ class Dataset():
 
         self._classes = None
         self._object_properties = None
+        self._individuals = None
         self._evaluation_classes = None
 
     @property
@@ -118,6 +120,28 @@ class Dataset():
             obj_properties = list(obj_properties)
             self._object_properties = OWLObjectProperties(obj_properties)
         return self._object_properties
+
+    @property
+    def individuals(self):
+        """List of individuals in the dataset. The individuals are collected
+        from training, validation and testing ontologies using the OWLAPI
+        method ``ontology.getIndividualsInSignature()``.
+
+        :rtype: OWLNamedIndividuals
+        """
+
+        if self._individuals is None:
+            individuals = set()
+            individuals |= set(self._ontology.getIndividualsInSignature())
+
+            if self._validation:
+                individuals |= set(self._validation.getIndividualsInSignature())
+            if self._testing:
+                individuals |= set(self._testing.getIndividualsInSignature())
+
+            individuals = list(individuals)
+            self._individuals = OWLNamedIndividuals(individuals)
+        return self._individuals
 
     @property
     def evaluation_classes(self):
@@ -250,6 +274,7 @@ class TarFileDataset(PathDataset):
         self.data_root = pathlib.Path(self.tarfile_path).parent
 
         dataset_root = os.path.join(self.data_root, self.dataset_name)
+        self.root = dataset_root
 
         ontology_path = os.path.join(dataset_root, 'ontology.owl')
         validation_path = os.path.join(dataset_root, 'valid.owl')
@@ -381,4 +406,18 @@ class OWLObjectProperties(Entities):
         name = str(owl_class.toString())
         if name.startswith("<"):
             name = name[1:-1]
+        return name
+
+
+class OWLNamedIndividuals(Entities):
+    """Class containing OWL classes indexed by they IRIs"""
+
+    def check_owl_type(self, collection):
+        for item in collection:
+            if not isinstance(item, OWLNamedIndividual):
+                raise TypeError("Type of elements in collection must be OWLNamedIndividual.")
+        return collection
+
+    def to_str(self, owl_individual):
+        name = str(owl_individual.toStringID())
         return name

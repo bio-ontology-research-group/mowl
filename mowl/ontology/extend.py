@@ -43,11 +43,6 @@ def insert_annotations(ontology_file, annotations, out_file=None, verbose=False)
     manager = OWLManager.createOWLOntologyManager()
     ont = manager.loadOntologyFromOntologyDocument(java.io.File(ontology_file))
 
-    owl_format = manager.getOntologyFormat(ont)
-    if owl_format.isPrefixOWLOntologyFormat():
-        ont_prefixes = owl_format.asPrefixOWLOntologyFormat().getPrefixName2PrefixMap()
-        ont_prefixes = dict(ont_prefixes).values()
-
     factory = manager.getOWLDataFactory()
 
     for annots_file, relation_name, directed in annotations:
