@@ -35,7 +35,10 @@ cd mowl
 conda env create -f environment.yml
 conda activate mowl
 
+If you are working from a Linux o Mac OS system:
 ./build_jars.sh
+If you are working from a Windows system:
+./build_jars.bat
 
 python -m build
 ```
