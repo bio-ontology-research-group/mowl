@@ -13,6 +13,7 @@ from random import randrange, choice
 import os
 import shutil
 import requests
+import tempfile
 
 
 class TestDataset(TestCase):
@@ -191,7 +192,7 @@ class TestTarFileDataset(TestCase):
 
     def download(self, url):
         filename = url.split('/')[-1]
-        filepath = os.path.join("/tmp/", filename)
+        filepath = os.path.join(tempfile.gettempdir(), filename)
 
         with requests.get(url, stream=True) as r:
             r.raise_for_status()
@@ -208,17 +209,18 @@ class TestTarFileDataset(TestCase):
 
     @classmethod
     def tearDownClass(self):
-        shutil.rmtree("/tmp/ppi_yeast_slim")
-        os.remove("/tmp/ppi_yeast_slim.tar.gz")
+        tmp_dir = tempfile.gettempdir()
+        shutil.rmtree(os.path.join(tmp_dir, "ppi_yeast_slim"))
+        os.remove(os.path.join(tmp_dir, "ppi_yeast_slim.tar.gz"))
 
     def test_extract_tar_file(self):
         """It should check correct extracting behaviour"""
         _ = TarFileDataset(self.filepath)
-
-        self.assertTrue(os.path.exists("/tmp/ppi_yeast_slim.tar.gz"))
-        self.assertTrue(os.path.exists("/tmp/ppi_yeast_slim/ontology.owl"))
-        self.assertTrue(os.path.exists("/tmp/ppi_yeast_slim/valid.owl"))
-        self.assertTrue(os.path.exists("/tmp/ppi_yeast_slim/test.owl"))
+        tmp_dir = tempfile.gettempdir()
+        self.assertTrue(os.path.exists(os.path.join(tmp_dir, "ppi_yeast_slim.tar.gz")))
+        self.assertTrue(os.path.exists(os.path.join(tmp_dir, "ppi_yeast_slim/ontology.owl")))
+        self.assertTrue(os.path.exists(os.path.join(tmp_dir, "ppi_yeast_slim/valid.owl")))
+        self.assertTrue(os.path.exists(os.path.join(tmp_dir, "ppi_yeast_slim/test.owl")))
 
 #############################################################
 
@@ -242,14 +244,15 @@ class TestRemoteDataset(TestCase):
 
     def test_successful_download_in_custom_path(self):
         """This checks if dataset is downloaded a custom path"""
-        _ = RemoteDataset(self.good_url, data_root="/tmp/")
-        self.assertTrue(os.path.exists("/tmp/ppi_yeast"))
-        self.assertTrue(os.path.exists("/tmp/ppi_yeast/ontology.owl"))
-        self.assertTrue(os.path.exists("/tmp/ppi_yeast/valid.owl"))
-        self.assertTrue(os.path.exists("/tmp/ppi_yeast/test.owl"))
+        tmp_dir = tempfile.gettempdir()
+        _ = RemoteDataset(self.good_url, data_root=tmp_dir)
+        self.assertTrue(os.path.exists(os.path.join(tmp_dir, "ppi_yeast")))
+        self.assertTrue(os.path.exists(os.path.join(tmp_dir, "ppi_yeast/ontology.owl")))
+        self.assertTrue(os.path.exists(os.path.join(tmp_dir, "ppi_yeast/valid.owl")))
+        self.assertTrue(os.path.exists(os.path.join(tmp_dir, "ppi_yeast/test.owl")))
 
-        shutil.rmtree("/tmp/ppi_yeast")
-        os.remove("/tmp/ppi_yeast.tar.gz")
+        shutil.rmtree(os.path.join(tmp_dir, "ppi_yeast"))
+        os.remove(os.path.join(tmp_dir, "ppi_yeast.tar.gz"))
 
     def test_incorrect_url(self):
         """This checks if error is raised for incorrect URL"""
@@ -257,26 +260,28 @@ class TestRemoteDataset(TestCase):
 
     def test_dataset_not_downloaded_if_already_exists(self):
         """This should check that dataset is not downloaded if already exists"""
-        _ = RemoteDataset(self.good_url, data_root="/tmp/")
-        file_timestamp1 = os.path.getmtime("/tmp/ppi_yeast.tar.gz")
-        _ = RemoteDataset(self.good_url, data_root="/tmp/")
-        file_timestamp2 = os.path.getmtime("/tmp/ppi_yeast.tar.gz")
+        tmp_dir = tempfile.gettempdir()
+        _ = RemoteDataset(self.good_url, data_root=tmp_dir)
+        file_timestamp1 = os.path.getmtime(os.path.join(tmp_dir, "ppi_yeast.tar.gz"))
+        _ = RemoteDataset(self.good_url, data_root=tmp_dir)
+        file_timestamp2 = os.path.getmtime(os.path.join(tmp_dir, "ppi_yeast.tar.gz"))
 
         self.assertEqual(file_timestamp1, file_timestamp2)
 
-        shutil.rmtree("/tmp/ppi_yeast")
-        os.remove("/tmp/ppi_yeast.tar.gz")
+        shutil.rmtree(os.path.join(tmp_dir, "ppi_yeast"))
+        os.remove(os.path.join(tmp_dir, "ppi_yeast.tar.gz"))
 
     def test_dataset_with_only_training_set(self):
         """This should check that dataset is downloaded correctly if it has only training set"""
-        _ = RemoteDataset(self.only_training_set_url, data_root="/tmp/")
-        self.assertTrue(os.path.exists("/tmp/family"))
-        self.assertTrue(os.path.exists("/tmp/family/ontology.owl"))
-        self.assertFalse(os.path.exists("/tmp/family/valid.owl"))
-        self.assertFalse(os.path.exists("/tmp/family/test.owl"))
+        tmp_dir = tempfile.gettempdir()
+        _ = RemoteDataset(self.only_training_set_url, data_root=tmp_dir)
+        self.assertTrue(os.path.exists(os.path.join(tmp_dir, "family")))
+        self.assertTrue(os.path.exists(os.path.join(tmp_dir, "family/ontology.owl")))
+        self.assertFalse(os.path.exists(os.path.join(tmp_dir, "family/valid.owl")))
+        self.assertFalse(os.path.exists(os.path.join(tmp_dir, "family/test.owl")))
 
-        shutil.rmtree("/tmp/family")
-        os.remove("/tmp/family.tar.gz")
+        shutil.rmtree(os.path.join(tmp_dir, "family"))
+        os.remove(os.path.join(tmp_dir, "family.tar.gz"))
 #############################################################
 
 

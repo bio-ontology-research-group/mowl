@@ -1,11 +1,9 @@
-import torch as th
-from torch.utils.data import DataLoader
-from mowl.ontology.normalize import ELNormalizer, GCI
-import random
+import torch
+from torch.utils.data import TensorDataset
 from mowl.owlapi import (
     OWLOntology, OWLClass, OWLObjectProperty, OWLSubClassOfAxiom,
     OWLEquivalentClassesAxiom, OWLObjectSomeValuesFrom, ClassExpressionType,
-    Imports
+    Imports, OWLNaryAxiom, OWLDisjointClassesAxiom
 )
 from mowl.owlapi.defaults import TOP
 from mowl.owlapi.constants import R, THING
@@ -34,51 +32,49 @@ class ALCDataset():
     :type object_property_index_dict: dict, optional
     """
 
-    def __init__(
-        self,
-        ontology,
-        class_index_dict=None,
-        object_property_index_dict=None,
-        device="cpu"
-    ):
+    def __init__(self, ontology, dataset, device="cpu"):
 
         if not isinstance(ontology, OWLOntology):
             raise TypeError(
-                "Parameter ontology must be of type \
-                org.semanticweb.owlapi.model.OWLOntology.")
-
-        if not isinstance(class_index_dict, dict) and \
-                class_index_dict is not None:
-            raise TypeError(
-                "Optional parameter class_index_dict must be of type dict")
-
-        obj = object_property_index_dict
-        if not isinstance(obj, dict) and obj is not None:
-            raise TypeError(
-                "Optional parameter object_property_index_dict must be of \
-                type dict")
+                "Parameter ontology must be of type org.semanticweb.owlapi.model.OWLOntology.")
 
         if not isinstance(device, str):
             raise TypeError("Optional parameter device must be of type str")
 
         self._ontology = ontology
+        self._dataset = dataset
         self._loaded = False
-        self._class_index_dict = class_index_dict
-        self._object_property_index_dict = object_property_index_dict
         self.device = device
 
         self.adapter = OWLAPIAdapter()
         self.thing = self.adapter.create_class(THING)
         self.r = self.adapter.create_object_property(R)
 
+    @property
+    def class_to_id(self):
+        return self._dataset.class_to_id
+
+    @property
+    def individual_to_id(self):
+        return self._dataset.individual_to_id
+
+    @property
+    def object_property_to_id(self):
+        return self._dataset.object_property_to_id
+    
+
     def get_grouped_axioms(self):
         res = {}
         for axiom in self._ontology.getTBoxAxioms(Imports.INCLUDED):
-            axiom_pattern = self.get_axiom_pattern(axiom)
-            if axiom_pattern not in res:
-                res[axiom_pattern] = [axiom, ]
-            else:
-                res[axiom_pattern].append(axiom)
+            axioms = [axiom,]
+            if isinstance(axiom, OWLNaryAxiom):
+                axioms = axiom.asPairwiseAxioms()
+            for ax in axioms:
+                axiom_pattern = self.get_axiom_pattern(axiom)
+                if axiom_pattern not in res:
+                    res[axiom_pattern] = [ax, ]
+                else:
+                    res[axiom_pattern].append(ax)
         return res
 
     def get_axiom_pattern(self, axiom):
@@ -117,6 +113,10 @@ class ALCDataset():
             cexprs = [get_cexpr_pattern(cexpr)
                       for cexpr in axiom.getClassExpressions()]
             return self.adapter.create_equivalent_classes(*cexprs)
+        elif isinstance(axiom, OWLDisjointClassesAxiom):
+            cexprs = [get_cexpr_pattern(cexpr)
+                      for cexpr in axiom.getClassExpressions()]
+            return self.adapter.create_disjoint_classes(*cexprs)
         else:
             raise NotImplementedError()
 
@@ -125,12 +125,12 @@ class ALCDataset():
         def get_cexpr_vector(cexpr):
             expr_type = cexpr.getClassExpressionType()
             if expr_type == ClassExpressionType.OWL_CLASS:
-                return [self.class_index_dict[cexpr.asOWLClass()], ]
+                return [self.class_to_id[cexpr.asOWLClass()], ]
             elif expr_type == ClassExpressionType.OBJECT_SOME_VALUES_FROM:
-                return [self.object_property_index_dict[cexpr.getProperty()], ] \
+                return [self.object_property_to_id[cexpr.getProperty()], ] \
                     + get_cexpr_vector(cexpr.getFiller())
             elif expr_type == ClassExpressionType.OBJECT_ALL_VALUES_FROM:
-                return [self.object_property_index_dict[cexpr.getProperty()], ] \
+                return [self.object_property_to_id[cexpr.getProperty()], ] \
                     + get_cexpr_vector(cexpr.getFiller())
             elif expr_type == ClassExpressionType.OBJECT_INTERSECTION_OF:
                 cexprs = []
@@ -154,6 +154,17 @@ class ALCDataset():
             for cexpr in axiom.getClassExpressions():
                 cexprs += get_cexpr_vector(cexpr)
             return cexprs
+        elif isinstance(axiom, OWLDisjointClassesAxiom):
+            cexprs = []
+            for cexpr in axiom.getClassExpressions():
+                cexprs += get_cexpr_vector(cexpr)
+            return cexprs
+        elif isinstance(axiom, OWLClassAssertionAxiom):
+            # TODO: implement
+            pass
+        elif isinstance(axiom, OWLObjectPropertyAssertionAxiom):
+            # TODO: implement
+            pass
         else:
             raise NotImplementedError()
 
@@ -161,22 +172,13 @@ class ALCDataset():
         if self._loaded:
             return
 
-        classes = self._ontology.getClassesInSignature()
-        relations = self._ontology.getObjectPropertiesInSignature()
-
-        if self._class_index_dict is None:
-            self._class_index_dict = {v: k for k, v in enumerate(classes)}
-        if self._object_property_index_dict is None:
-            self._object_property_index_dict = {
-                v: k for k, v in enumerate(relations)}
-
         self._grouped_axioms = self.get_grouped_axioms()
 
         self._loaded = True
 
     def get_datasets(self):
         """Returns a dictionary containing the name of the axiom
-        pattern as keys and the corresponding datasets as values.
+        pattern as keys and the corresponding TensorDatasets as values.
 
         :rtype: dict
         """
@@ -185,7 +187,10 @@ class ALCDataset():
             axiom_vectors = []
             for axiom in axioms:
                 axiom_vectors.append(self.get_axiom_vector(axiom))
-            datasets[ax_pattern] = axiom_vectors
+            axiom_tensor = torch.tensor(axiom_vectors, dtype=torch.int64)
+            datasets[ax_pattern] = TensorDataset(
+                axiom_tensor)
+            
         return datasets
 
     @property
@@ -195,24 +200,3 @@ class ALCDataset():
         for the patterns """
         self.load()
         return self._grouped_axioms
-
-    @property
-    def class_index_dict(self):
-        """Returns indexed dictionary with class names present in the
-        dataset.
-
-        :rtype: dict
-        """
-        self.load()
-        return self._class_index_dict
-
-    @property
-    def object_property_index_dict(self):
-        """Returns indexed dictionary with object property names
-        present in the dataset.
-
-        :rtype: dict
-        """
-
-        self.load()
-        return self._object_property_index_dict

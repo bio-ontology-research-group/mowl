@@ -2,12 +2,14 @@ from inspect import classify_class_attrs
 from unittest import TestCase
 
 from tests.datasetFactory import FamilyDataset
-from mowl.datasets import ALCDataset
+from mowl.datasets import ALCDataset, Dataset
 from mowl.owlapi.defaults import BOT, TOP
 from mowl.owlapi.constants import R, THING
-from mowl.owlapi.model import OWLClass
+from mowl.owlapi.model import OWLClass, OWLAxiom
 from mowl.owlapi.adapter import OWLAPIAdapter
 from java.util import HashSet
+
+from torch.utils.data import TensorDataset
 
 class TestALCDataset(TestCase):
 
@@ -40,29 +42,21 @@ class TestALCDataset(TestCase):
             self.has_child, self.person)
         axioms.add(self.adapter.create_subclass_of(self.parent, has_child_person))
         self.adapter.owl_manager.addAxioms(self.ontology, axioms)
+        self.dataset = Dataset(self.ontology, validation=self.ontology, testing=self.ontology)
         
     def test_param_types(self):
         """This should check if the parameters of ALCDataset are of the correct type"""
 
         with self.assertRaisesRegex(TypeError, "Parameter ontology must be of type \
 org.semanticweb.owlapi.model.OWLOntology."):
-            ALCDataset("ontology")
+            ALCDataset("ontology", self.dataset)
 
-        with self.assertRaisesRegex(TypeError, "Optional parameter class_index_dict must be of \
-type dict"):
-            ALCDataset(self.ontology, class_index_dict="class_index_dict")
-
-        with self.assertRaisesRegex(TypeError, "Optional parameter object_property_index_dict \
-must be of type dict"):
-            ALCDataset(self.ontology,
-                      object_property_index_dict="object_property_index_dict")
         with self.assertRaisesRegex(TypeError, "Optional parameter device must be of type str"):
-            ALCDataset(self.ontology, device=1)
+            ALCDataset(self.ontology, self.dataset, device=1)
 
     def test_get_axiom_pattern(self):
         """This should check axiom patterns"""
-
-        dataset = ALCDataset(self.ontology)
+        alc_dataset = ALCDataset(self.ontology, self.dataset)
         top = self.adapter.create_class(THING)
         r = self.adapter.create_object_property(R)
         
@@ -70,7 +64,7 @@ must be of type dict"):
         subclass_of_pat = self.adapter.create_subclass_of(top, top)
         
         self.assertEqual(
-            subclass_of_pat, dataset.get_axiom_pattern(subclass_of))
+            subclass_of_pat, alc_dataset.get_axiom_pattern(subclass_of))
 
         has_child_person = self.adapter.create_object_some_values_from(
             self.has_child, self.person)
@@ -81,18 +75,23 @@ must be of type dict"):
         
         self.assertEqual(
             subclass_of_object_some_values_from_pat,
-            dataset.get_axiom_pattern(subclass_of_object_some_values_from)
+            alc_dataset.get_axiom_pattern(subclass_of_object_some_values_from)
         )
 
     def test_get_grouped_axioms(self):
         """This should check grouped axiom patterns"""
-        dataset = ALCDataset(self.ontology)
-        grouped_axioms = dataset.get_grouped_axioms()
+        alc_dataset = ALCDataset(self.ontology, self.dataset)
+        grouped_axioms = alc_dataset.get_grouped_axioms()
+        self.assertIsInstance(grouped_axioms, dict)
         self.assertEqual(len(grouped_axioms), 5)
         
     def test_get_datasets(self):
         """This should check grouped axiom patterns"""
-        dataset = ALCDataset(self.ontology)
-        grouped_datasets = dataset.get_datasets()
+        alc_dataset = ALCDataset(self.ontology, self.dataset)
+        grouped_datasets = alc_dataset.get_datasets()
+        self.assertIsInstance(grouped_datasets, dict)
+        for axiom, dataset in grouped_datasets.items():
+            self.assertIsInstance(axiom, OWLAxiom)
+            self.assertIsInstance(dataset, TensorDataset)
         self.assertEqual(len(grouped_datasets), 5)
     
