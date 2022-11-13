@@ -105,5 +105,6 @@ class OWLAPIAdapter():
         return self.data_factory.getOWLClassAssertionAxiom(cexpr, ind)
 
     def create_object_property_assertion(self, obj_prop, ind1, ind2):
-        """Creates OWLObjectPropertyAssertionAxiom for a given object property and two individuals"""
+        """Creates OWLObjectPropertyAssertionAxiom for a given object property and two \
+individuals"""
         return self.data_factory.getOWLObjectPropertyAssertionAxiom(obj_prop, ind1, ind2)

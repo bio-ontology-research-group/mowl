@@ -1,14 +1,15 @@
-import torch
+import torch as th
 from torch.utils import checkpoint
-from mowl.owlapi import (
-    OWLAPIAdapter, ClassExpressionType, OWLSubClassOfAxiom,
-    OWLEquivalentClassesAxiom)
+from mowl.owlapi import OWLAPIAdapter, ClassExpressionType, OWLSubClassOfAxiom, \
+    OWLEquivalentClassesAxiom, OWLDisjointClassesAxiom, OWLClassAssertionAxiom, \
+    OWLObjectPropertyAssertionAxiom
 
 
-class FALCONModule(torch.nn.Module):
-    """Based on the original implementation at https://github.com/bio-ontology-research-group/FALCON
+class FALCONModule(th.nn.Module):
+    """Based on the original implementation at \
+https://github.com/bio-ontology-research-group/FALCON
     """
-    
+
     def __init__(
             self, nclasses, nentities, nrelations, embed_dim=128,
             anon_e=4, t_norm='product', max_measure='max', residuum='notCorD',
@@ -17,34 +18,34 @@ class FALCONModule(torch.nn.Module):
         self.nentities = nentities + anon_e
         self.anon_e = anon_e
 
-        self.c_embedding = torch.nn.Embedding(nclasses, embed_dim)
-        self.r_embedding = torch.nn.Embedding(nrelations, embed_dim)
-        self.e_embedding = torch.nn.Embedding(nentities, embed_dim)
-        self.fc_0 = torch.nn.Linear(embed_dim * 2, 1)
-        
-        torch.nn.init.xavier_uniform_(self.c_embedding.weight.data)
-        torch.nn.init.xavier_uniform_(self.r_embedding.weight.data)
-        torch.nn.init.xavier_uniform_(self.e_embedding.weight.data)
-        torch.nn.init.xavier_uniform_(self.fc_0.weight.data)
-        
+        self.c_embedding = th.nn.Embedding(nclasses, embed_dim)
+        self.r_embedding = th.nn.Embedding(nrelations, embed_dim)
+        self.e_embedding = th.nn.Embedding(nentities, embed_dim)
+        self.fc_0 = th.nn.Linear(embed_dim * 2, 1)
+
+        th.nn.init.xavier_uniform_(self.c_embedding.weight.data)
+        th.nn.init.xavier_uniform_(self.r_embedding.weight.data)
+        th.nn.init.xavier_uniform_(self.e_embedding.weight.data)
+        th.nn.init.xavier_uniform_(self.fc_0.weight.data)
+
         self.max_measure = max_measure
         self.t_norm = t_norm
-        self.nothing = torch.zeros(self.nentities).to(device)
+        self.nothing = th.zeros(self.nentities).to(device)
         self.residuum = residuum
         self.device = device
         self.adapter = OWLAPIAdapter()
-    
+
     def _logical_and(self, x, y):
         if self.t_norm == 'product':
             return x * y
         elif self.t_norm == 'minmax':
             x = x.unsqueeze(dim=-2)
             y = y.expand_as(x)
-            return torch.cat([x, y], dim=-2).min(dim=-2)[0]
+            return th.cat([x, y], dim=-2).min(dim=-2)[0]
         elif self.t_norm == 'Łukasiewicz':
             x = x.unsqueeze(dim=-2)
             y = y.expand_as(x)
-            return (((x + y -1) > 0) * (x + y - 1)).squeeze(dim=-2)
+            return (((x + y - 1) > 0) * (x + y - 1)).squeeze(dim=-2)
         else:
             raise ValueError
 
@@ -54,23 +55,23 @@ class FALCONModule(torch.nn.Module):
         elif self.t_norm == 'minmax':
             x = x.unsqueeze(dim=-2)
             y = y.expand_as(x)
-            return torch.cat([x, y], dim=-2).max(dim=-2)[0]
+            return th.cat([x, y], dim=-2).max(dim=-2)[0]
         elif self.t_norm == 'Łukasiewicz':
             x = x.unsqueeze(dim=-2)
             y = y.expand_as(x)
-            return 1 - ((((1-x) + (1-y) -1) > 0) * ((1-x) + (1-y) - 1)).squeeze(dim=-2)
+            return 1 - ((((1 - x) + (1 - y) - 1) > 0) * ((1 - x) + (1 - y) - 1)).squeeze(dim=-2)
         else:
             raise ValueError
-    
+
     def _logical_not(self, x):
         return 1 - x
-    
+
     def _logical_residuum(self, r_fs, c_fs):
         if self.residuum == 'notCorD':
             return self._logical_or(self._logical_not(r_fs), c_fs.unsqueeze(dim=-2))
         else:
             raise ValueError
-    
+
     def _logical_exist(self, r_fs, c_fs):
         return self._logical_and(r_fs, c_fs).max(dim=-1)[0]
 
@@ -78,34 +79,41 @@ class FALCONModule(torch.nn.Module):
         return self._logical_residuum(r_fs, c_fs).min(dim=-1)[0]
 
     def _get_c_fs(self, c_emb, anon_e_emb):
-        e_emb = torch.cat([self.e_embedding.weight, anon_e_emb], dim=0)
+        e_emb = th.cat([self.e_embedding.weight, anon_e_emb], dim=0)
         c_emb = c_emb.expand_as(e_emb)
-        emb = torch.cat([c_emb, e_emb], dim=-1)
-        # return torch.sigmoid(self.fc_1(torch.nn.functional.leaky_relu(self.fc_0(emb), negative_slope=0.1))).squeeze(dim=-1)
-        return torch.sigmoid(self.fc_0(emb)).squeeze(dim=-1)
+        emb = th.cat([c_emb, e_emb], dim=-1)
+        # return th.sigmoid(self.fc_1(th.nn.functional.leaky_relu(self.fc_0(emb),
+        # negative_slope=0.1))).squeeze(dim=-1)
+        return th.sigmoid(self.fc_0(emb)).squeeze(dim=-1)
 
     def _get_c_fs_batch(self, c_emb, anon_e_emb):
-        e_emb = torch.cat([self.e_embedding.weight, anon_e_emb], dim=0).unsqueeze(dim=0).repeat(c_emb.size()[0], 1, 1)
+        e_emb = th.cat([self.e_embedding.weight, anon_e_emb], dim=0).unsqueeze(
+            dim=0).repeat(c_emb.size()[0], 1, 1)
         c_emb = c_emb.unsqueeze(dim=1).expand_as(e_emb)
-        emb = torch.cat([c_emb, e_emb], dim=-1)
-        # return torch.sigmoid(self.fc_1(torch.nn.functional.leaky_relu(self.fc_0(emb), negative_slope=0.1))).squeeze(dim=-1)
-        return torch.sigmoid(self.fc_0(emb)).squeeze(dim=-1)
+        emb = th.cat([c_emb, e_emb], dim=-1)
+        # return th.sigmoid(self.fc_1(th.nn.functional.leaky_relu(self.fc_0(emb),
+        # negative_slope=0.1))).squeeze(dim=-1)
+        return th.sigmoid(self.fc_0(emb)).squeeze(dim=-1)
 
     def _get_r_fs(self, r_emb, anon_e_emb):
-        e_emb = torch.cat([self.e_embedding.weight, anon_e_emb], dim=0)
+        e_emb = th.cat([self.e_embedding.weight, anon_e_emb], dim=0)
         l_emb = (e_emb + r_emb.unsqueeze(dim=0)).unsqueeze(dim=1).repeat(1, self.nentities, 1)
         r_emb = e_emb.unsqueeze(dim=0).repeat(self.nentities, 1, 1)
-        emb = torch.cat([l_emb, r_emb], dim=-1)
-        # return torch.sigmoid(self.fc_1(torch.nn.functional.leaky_relu(self.fc_0(emb), negative_slope=0.1))).squeeze(dim=-1)
-        return torch.sigmoid(self.fc_0(emb)).squeeze(dim=-1)
+        emb = th.cat([l_emb, r_emb], dim=-1)
+        # return th.sigmoid(self.fc_1(th.nn.functional.leaky_relu(self.fc_0(emb),
+        # negative_slope=0.1))).squeeze(dim=-1)
+        return th.sigmoid(self.fc_0(emb)).squeeze(dim=-1)
 
     def _get_r_fs_batch(self, r_emb, anon_e_emb):
-        e_emb = torch.cat([self.e_embedding.weight, anon_e_emb], dim=0).unsqueeze(dim=0).repeat(r_emb.size()[0], 1, 1)
-        l_emb = (e_emb + r_emb.unsqueeze(dim=1).expand_as(e_emb)).unsqueeze(dim=1).repeat(1, self.nentities, 1, 1)
+        e_emb = th.cat([self.e_embedding.weight, anon_e_emb], dim=0).unsqueeze(
+            dim=0).repeat(r_emb.size()[0], 1, 1)
+        l_emb = (e_emb + r_emb.unsqueeze(dim=1).expand_as(e_emb)
+                 ).unsqueeze(dim=1).repeat(1, self.nentities, 1, 1)
         r_emb = e_emb.unsqueeze(dim=2).repeat(1, 1, self.nentities, 1)
-        emb = torch.cat([l_emb, r_emb], dim=-1)
-        # return torch.sigmoid(self.fc_1(torch.nn.functional.leaky_relu(self.fc_0(emb), negative_slope=0.1))).squeeze(dim=-1)
-        return torch.sigmoid(self.fc_0(emb)).squeeze(dim=-1)
+        emb = th.cat([l_emb, r_emb], dim=-1)
+        # return th.sigmoid(self.fc_1(th.nn.functional.leaky_relu(self.fc_0(emb),
+        # negative_slope=0.1))).squeeze(dim=-1)
+        return th.sigmoid(self.fc_0(emb)).squeeze(dim=-1)
 
     def forward_fs(self, cexpr, x, anon_e_emb, cur_index=0):
         expr_type = cexpr.getClassExpressionType()
@@ -145,13 +153,12 @@ class FALCONModule(torch.nn.Module):
                 cexpr.getOperand(), x, anon_e_emb, cur_index=cur_index))
         raise NotImplementedError()
 
-
     def get_cc_loss(self, fs):
         if self.max_measure == 'max':
-            return - torch.log(1 - fs.max(dim=-1)[0] + 1e-10)
+            return - th.log(1 - fs.max(dim=-1)[0] + 1e-10)
         elif self.max_measure[:5] == 'pmean':
             p = int(self.max_measure[-1])
-            return - torch.log(1 - ((fs ** p).mean(dim=-1))**(1/p) + 1e-10)
+            return - th.log(1 - ((fs ** p).mean(dim=-1))**(1 / p) + 1e-10)
         else:
             raise ValueError
 
@@ -172,13 +179,13 @@ class FALCONModule(torch.nn.Module):
             cexpr2 = self.adapter.create_object_intersection_of(
                 self.adapter.create_complement_of(C), D)
             fs2 = self.forward_fs(cexpr2, x, anon_e_emb)
-            return self.get_cc_loss(fs1).mean() + self.get_cc_loss(fs2).mean()   
+            return self.get_cc_loss(fs1).mean() + self.get_cc_loss(fs2).mean()
         elif isinstance(axiom, OWLDisjointClassesAxiom):
             cexprs = axiom.getClassExpressionsAsList()
             C, D = cexprs[0], cexprs[1]
             cexpr = self.adapter.create_object_intersection_of(C, D)
             fs = self.forward_fs(cexpr, x, anon_e_emb)
-            return self.get_cc_loss(fs).mean()   
+            return self.get_cc_loss(fs).mean()
         elif isinstance(axiom, OWLClassAssertionAxiom):
             pass
         elif isinstance(axiom, OWLObjectPropertyAssertionAxiom):
@@ -194,26 +201,30 @@ class FALCONModule(torch.nn.Module):
         return self.get_cc_loss(self._logical_and(fs_left, self._logical_not(fs_right))).mean()
 
     def forward_abox_ec(self, x, anon_e_emb):
-        e_emb = self.e_embedding(x[:, :, 0])        
+        e_emb = self.e_embedding(x[:, :, 0])
         r_emb = self.r_embedding(x[0, 0, 1])
         c_emb = self.c_embedding(x[:, 0, 2])
-        r_fs = self._get_c_fs_batch((e_emb + r_emb).view(-1, e_emb.size()[-1]), anon_e_emb).view(e_emb.size()[0], e_emb.size()[1], -1)
+        r_fs = self._get_c_fs_batch((e_emb + r_emb).view(-1, e_emb.size()
+                                    [-1]), anon_e_emb).view(e_emb.size()[0], e_emb.size()[1], -1)
         c_fs = self._get_c_fs_batch(c_emb, anon_e_emb).unsqueeze(dim=1)
         dofm = self._logical_exist(r_fs, c_fs)
-        return ( - torch.log(dofm[:, 0] + 1e-10).mean() - torch.log(1 - dofm[:, 1:] + 1e-10).mean()) / 2
+        return (- th.log(dofm[:, 0] + 1e-10).mean() - th.log(1 - dofm[:, 1:] + 1e-10).mean()) / 2
 
     def forward_abox_ec_created(self, x):
         e_emb = self.e_embedding(x[:, :, 0])
         c_emb = self.c_embedding(x[:, :, 1])
-        emb = torch.cat([c_emb, e_emb], dim=-1)
+        emb = th.cat([c_emb, e_emb], dim=-1)
         if self.cfg.loss_type == 'c':
-            dofm = torch.sigmoid(self.fc_0(emb)).squeeze(dim=-1)
-            # dofm = torch.sigmoid(self.fc_1(torch.nn.functional.leaky_relu(self.fc_0(emb), negative_slope=0.1))).squeeze(dim=-1)
-            return ( - torch.log(dofm[:, 0] + 1e-10).mean() - torch.log(1 - dofm[:, 1:] + 1e-10).mean()) / 2
+            dofm = th.sigmoid(self.fc_0(emb)).squeeze(dim=-1)
+            # dofm = th.sigmoid(self.fc_1(th.nn.functional.leaky_relu(self.fc_0(emb),
+            # negative_slope=0.1))).squeeze(dim=-1)
+            res = (- th.log(dofm[:, 0] + 1e-10).mean() - th.log(1 - dofm[:, 1:] + 1e-10).mean())
+            return res / 2
         elif self.cfg.loss_type == 'r':
             dofm = self.fc_0(emb).squeeze(dim=-1)
-            # dofm = self.fc_1(torch.nn.functional.leaky_relu(self.fc_0(emb), negative_slope=0.1)).squeeze(dim=-1)
-            return - torch.nn.functional.logsigmoid(dofm[:, 0].unsqueeze(dim=-1) - dofm[:, 1:]).mean()
+            # dofm = self.fc_1(th.nn.functional.leaky_relu(self.fc_0(emb),
+            # negative_slope=0.1)).squeeze(dim=-1)
+            return - th.nn.functional.logsigmoid(dofm[:, 0].unsqueeze(dim=-1) - dofm[:, 1:]).mean()
         else:
             raise ValueError
 
@@ -221,17 +232,21 @@ class FALCONModule(torch.nn.Module):
         e_1_emb = self.e_embedding(x[:, :, 0])
         r_emb = self.r_embedding(x[:, :, 1])
         e_2_emb = self.e_embedding(x[:, :, 2])
-        emb = torch.cat([e_1_emb + r_emb, e_2_emb], dim=-1)
+        emb = th.cat([e_1_emb + r_emb, e_2_emb], dim=-1)
         if stage == 'train':
             if self.cfg.loss_type == 'c':
-                dofm = torch.sigmoid(self.fc_0(emb)).squeeze(dim=-1)
-                # dofm = torch.sigmoid(self.fc_1(torch.nn.functional.leaky_relu(self.fc_0(emb), negative_slope=0.1))).squeeze(dim=-1)
-                return ( - torch.log(dofm[:, 0] + 1e-10).mean() - torch.log(1 - dofm[:, 1:] + 1e-10).mean()) / 2
+                dofm = th.sigmoid(self.fc_0(emb)).squeeze(dim=-1)
+                # dofm = th.sigmoid(self.fc_1(th.nn.functional.leaky_relu(self.fc_0(emb),
+                # negative_slope=0.1))).squeeze(dim=-1)
+                res = - th.log(dofm[:, 0] + 1e-10).mean() - th.log(1 - dofm[:, 1:] + 1e-10).mean()
+                return res / 2
             elif self.cfg.loss_type == 'r':
                 dofm = self.fc_0(emb).squeeze(dim=-1)
-                # dofm = self.fc_1(torch.nn.functional.leaky_relu(self.fc_0(emb), negative_slope=0.1)).squeeze(dim=-1)
-                return - torch.nn.functional.logsigmoid(dofm[:, 0].unsqueeze(dim=-1) - dofm[:, 1:]).mean()
+                # dofm = self.fc_1(th.nn.functional.leaky_relu(self.fc_0(emb),
+                # negative_slope=0.1)).squeeze(dim=-1)
+                diff = dofm[:, 0].unsqueeze(dim=-1) - dofm[:, 1:]
+                return - th.nn.functional.logsigmoid(diff).mean()
             else:
                 raise ValueError
         elif stage == 'test':
-            return torch.sigmoid(self.fc_0(emb)).flatten()
+            return th.sigmoid(self.fc_0(emb)).flatten()

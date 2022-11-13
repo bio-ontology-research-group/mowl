@@ -42,7 +42,7 @@ class EmbeddingALCModel(EmbeddingModel):
         self._validation_datasets = None
         if self.dataset.validation:
             validation_dataset = ALCDataset(
-                self.dataset.validation, self.dataset,  device=self.device)
+                self.dataset.validation, self.dataset, device=self.device)
             self._validation_datasets = validation_dataset.get_datasets()
 
         self._testing_datasets = None
@@ -50,7 +50,7 @@ class EmbeddingALCModel(EmbeddingModel):
             testing_dataset = ALCDataset(
                 self.dataset.testing, self.dataset, device=self.device)
 
-            self._testing_datasets = testing_el_dataset.get_datasets()
+            self._testing_datasets = testing_dataset.get_datasets()
 
         self._datasets_loaded = True
 

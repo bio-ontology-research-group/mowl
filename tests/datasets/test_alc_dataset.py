@@ -11,6 +11,7 @@ from java.util import HashSet
 
 from torch.utils.data import TensorDataset
 
+
 class TestALCDataset(TestCase):
 
     @classmethod
@@ -43,7 +44,7 @@ class TestALCDataset(TestCase):
         axioms.add(self.adapter.create_subclass_of(self.parent, has_child_person))
         self.adapter.owl_manager.addAxioms(self.ontology, axioms)
         self.dataset = Dataset(self.ontology, validation=self.ontology, testing=self.ontology)
-        
+
     def test_param_types(self):
         """This should check if the parameters of ALCDataset are of the correct type"""
 
@@ -59,10 +60,10 @@ org.semanticweb.owlapi.model.OWLOntology."):
         alc_dataset = ALCDataset(self.ontology, self.dataset)
         top = self.adapter.create_class(THING)
         r = self.adapter.create_object_property(R)
-        
+
         subclass_of = self.adapter.create_subclass_of(self.parent, self.person)
         subclass_of_pat = self.adapter.create_subclass_of(top, top)
-        
+
         self.assertEqual(
             subclass_of_pat, alc_dataset.get_axiom_pattern(subclass_of))
 
@@ -72,7 +73,7 @@ org.semanticweb.owlapi.model.OWLOntology."):
             self.parent, has_child_person)
         subclass_of_object_some_values_from_pat = self.adapter.create_subclass_of(
             top, self.adapter.create_object_some_values_from(r, top))
-        
+
         self.assertEqual(
             subclass_of_object_some_values_from_pat,
             alc_dataset.get_axiom_pattern(subclass_of_object_some_values_from)
@@ -84,7 +85,7 @@ org.semanticweb.owlapi.model.OWLOntology."):
         grouped_axioms = alc_dataset.get_grouped_axioms()
         self.assertIsInstance(grouped_axioms, dict)
         self.assertEqual(len(grouped_axioms), 5)
-        
+
     def test_get_datasets(self):
         """This should check grouped axiom patterns"""
         alc_dataset = ALCDataset(self.ontology, self.dataset)
@@ -94,4 +95,3 @@ org.semanticweb.owlapi.model.OWLOntology."):
             self.assertIsInstance(axiom, OWLAxiom)
             self.assertIsInstance(dataset, TensorDataset)
         self.assertEqual(len(grouped_datasets), 5)
-    

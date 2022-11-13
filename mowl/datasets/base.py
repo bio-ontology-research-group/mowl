@@ -101,11 +101,11 @@ class Dataset():
     @property
     def class_to_id(self):
         return self.classes.as_index_dict
-    
+
     @property
     def individuals(self):
-        """List of individuals in the dataset. The individuals are collected from training, validation and
-        testing ontologies using the OWLAPI method ``ontology.getIndividualsSignature()``.
+        """List of individuals in the dataset. The individuals are collected from training, \
+validation and testing ontologies using the OWLAPI method ``ontology.getIndividualsSignature()``.
 
         :rtype: OWLIndividuals
         """
@@ -122,7 +122,6 @@ class Dataset():
     @property
     def individual_to_id(self):
         return self.individuals.as_index_dict
-    
 
     @property
     def object_properties(self):
@@ -150,7 +149,6 @@ class Dataset():
     @property
     def object_property_to_id(self):
         return self.object_properties.as_index_dict
-    
 
     @property
     def evaluation_classes(self):
@@ -367,7 +365,7 @@ class Entities():
         item = self._collection[self.ind]
         self.ind += 1
         return item
-    
+
     def check_owl_type(self, collection):
         """This method checks whether the elements in the provided collection
         are of the correct type.
@@ -390,7 +388,6 @@ class Entities():
         """
         dict_ = {v: k for k, v in enumerate(self._collection)}
         return dict_
-
 
     @property
     def as_str(self):
@@ -454,18 +451,4 @@ class OWLObjectProperties(Entities):
         name = str(owl_class.toString())
         if name.startswith("<"):
             name = name[1:-1]
-        return name
-
-
-class OWLNamedIndividuals(Entities):
-    """Class containing OWL classes indexed by they IRIs"""
-
-    def check_owl_type(self, collection):
-        for item in collection:
-            if not isinstance(item, OWLNamedIndividual):
-                raise TypeError("Type of elements in collection must be OWLNamedIndividual.")
-        return collection
-
-    def to_str(self, owl_individual):
-        name = str(owl_individual.toStringID())
         return name

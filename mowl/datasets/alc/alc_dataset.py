@@ -3,7 +3,9 @@ from torch.utils.data import TensorDataset
 from mowl.owlapi import (
     OWLOntology, OWLClass, OWLObjectProperty, OWLSubClassOfAxiom,
     OWLEquivalentClassesAxiom, OWLObjectSomeValuesFrom, ClassExpressionType,
-    Imports, OWLNaryAxiom, OWLDisjointClassesAxiom
+    Imports, OWLNaryAxiom, OWLDisjointClassesAxiom, OWLClassAssertionAxiom,
+    OWLObjectPropertyAssertionAxiom
+
 )
 from mowl.owlapi.defaults import TOP
 from mowl.owlapi.constants import R, THING
@@ -61,12 +63,11 @@ class ALCDataset():
     @property
     def object_property_to_id(self):
         return self._dataset.object_property_to_id
-    
 
     def get_grouped_axioms(self):
         res = {}
         for axiom in self._ontology.getTBoxAxioms(Imports.INCLUDED):
-            axioms = [axiom,]
+            axioms = [axiom, ]
             if isinstance(axiom, OWLNaryAxiom):
                 axioms = axiom.asPairwiseAxioms()
             for ax in axioms:
@@ -190,7 +191,7 @@ class ALCDataset():
             axiom_tensor = torch.tensor(axiom_vectors, dtype=torch.int64)
             datasets[ax_pattern] = TensorDataset(
                 axiom_tensor)
-            
+
         return datasets
 
     @property

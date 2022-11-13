@@ -63,7 +63,8 @@ class Model():
         :rtype: dict
         """
         if self._individual_index_dict is None:
-            self._individual_index_dict = {v: k for k, v in enumerate(self.dataset.individuals.as_str)}
+            self._individual_index_dict = {v: k for k,
+                                           v in enumerate(self.dataset.individuals.as_str)}
         return self._individual_index_dict
 
     @property

@@ -6,6 +6,7 @@ from mowl.datasets import Dataset
 from mowl.owlapi import OWLAPIAdapter
 from java.util import HashSet
 
+
 class TestFalconPPI(TestCase):
 
     @classmethod
@@ -23,7 +24,7 @@ class TestFalconPPI(TestCase):
         Jane = self.adapter.create_individual("http://Jane")
         Robert = self.adapter.create_individual("http://Robert")
         Melissa = self.adapter.create_individual("http://Melissa")
-        
+
         axioms = HashSet()
         axioms.add(self.adapter.create_subclass_of(self.male, self.person))
         axioms.add(self.adapter.create_subclass_of(self.female, self.person))
@@ -48,11 +49,11 @@ class TestFalconPPI(TestCase):
         axioms.add(self.adapter.create_object_property_assertion(self.has_child, John, Robert))
         axioms.add(self.adapter.create_object_property_assertion(self.has_child, Jane, Robert))
         axioms.add(self.adapter.create_object_property_assertion(self.has_child, John, Melissa))
-        axioms.add(self.adapter.create_object_property_assertion(self.has_child, Jane, Melissa))        
+        axioms.add(self.adapter.create_object_property_assertion(self.has_child, Jane, Melissa))
         self.adapter.owl_manager.addAxioms(self.ontology, axioms)
 
         self.dataset = Dataset(self.ontology, validation=self.ontology)
-    
+
     def test_ppi(self):
         """Test FALCON on PPI dataset. The test is not very strict, it just checks the \
 correct syntax of the code."""

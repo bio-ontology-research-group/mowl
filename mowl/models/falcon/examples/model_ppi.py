@@ -1,6 +1,7 @@
 from mowl.base_models.alcmodel import EmbeddingALCModel
 
 from mowl.models.falcon.module import FALCONModule
+from mowl.projection import TaxonomyWithRelationsProjector
 
 from tqdm import trange, tqdm
 import numpy as np
@@ -40,7 +41,7 @@ class FALCON(EmbeddingALCModel):
         ).to(self.device)
 
     def train(self):
-        
+
         optimizer = torch.optim.Adam(self.model.parameters(), lr=self.learning_rate)
         best_loss = float('inf')
 
@@ -52,14 +53,14 @@ class FALCON(EmbeddingALCModel):
             anon_e_emb_2 = torch.rand(self.anon_e // 2, self.embed_dim).to(self.device)
             torch.nn.init.xavier_uniform_(anon_e_emb_2)
             anon_e_emb = torch.cat([anon_e_emb_1, anon_e_emb_2], dim=0)
-            
+
             train_loss = 0
             loss = 0
 
             for axiom, dataloader in self.training_dataloaders.items():
                 for batch_data in dataloader:
                     loss += torch.mean(self.model(axiom, batch_data[0], anon_e_emb))
-            
+
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -94,8 +95,8 @@ class FALCON(EmbeddingALCModel):
         self._head_entities = eval_classes[0]
         self._tail_entities = eval_classes[1]
 
-        eval_projector = projector_factory('taxonomy_rels', taxonomy=False,
-                                           relations=[eval_property])
+        eval_projector = TaxonomyWithRelationsProjector(taxonomy=False,
+                                                        relations=[eval_property])
 
         self._training_set = eval_projector.project(self.dataset.ontology)
         self._testing_set = eval_projector.project(self.dataset.testing)

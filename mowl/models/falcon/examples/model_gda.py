@@ -1,10 +1,11 @@
 from mowl.base_models.elmodel import EmbeddingALCModel
 
 from mowl.models.falcon.module import FALCONModule
+from mowl.projection import TaxonomyWithRelationsProjector
 
 from tqdm import trange, tqdm
 import numpy as np
-import torch
+import torch as th
 
 
 class FALCON(EmbeddingALCModel):
@@ -15,6 +16,7 @@ class FALCON(EmbeddingALCModel):
                  anon_e=4,
                  batch_size=256,
                  epochs=128,
+                 learning_rate=0.001,
                  model_filepath=None,
                  device='cpu'
                  ):
@@ -47,18 +49,18 @@ class FALCON(EmbeddingALCModel):
             self.model.train()
 
             anon_e_emb_1 = self.model.e_embedding.weight.detach()[:self.anon_e // 2] \
-                + torch.normal(0, 0.1, size=(self.anon_e // 2, self.embed_dim)).to(device)
-            anon_e_emb_2 = torch.rand(self.anon_e // 2, self.embed_dim).to(device)
-            torch.nn.init.xavier_uniform_(anon_e_emb_2)
-            anon_e_emb = torch.cat([anon_e_emb_1, anon_e_emb_2], dim=0)
-            
+                + th.normal(0, 0.1, size=(self.anon_e // 2, self.embed_dim)).to(self.device)
+            anon_e_emb_2 = th.rand(self.anon_e // 2, self.embed_dim).to(self.device)
+            th.nn.init.xavier_uniform_(anon_e_emb_2)
+            anon_e_emb = th.cat([anon_e_emb_1, anon_e_emb_2], dim=0)
+
             train_loss = 0
             loss = 0
 
             for axiom, dataloader in self.training_dataloaders.items():
                 for batch_data in dataloader:
-                    loss += torch.mean(self.model(axiom, batch_data[0], anon_e_emb))
-            
+                    loss += th.mean(self.model(axiom, batch_data[0], anon_e_emb))
+
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -93,8 +95,8 @@ class FALCON(EmbeddingALCModel):
         self._head_entities = eval_classes[0]
         self._tail_entities = eval_classes[1]
 
-        eval_projector = projector_factory('taxonomy_rels', taxonomy=False,
-                                           relations=[eval_property])
+        eval_projector = TaxonomyWithRelationsProjector(taxonomy=False,
+                                                        relations=[eval_property])
 
         self._training_set = eval_projector.project(self.dataset.ontology)
         self._testing_set = eval_projector.project(self.dataset.testing)

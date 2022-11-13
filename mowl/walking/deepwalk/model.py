@@ -38,7 +38,7 @@ class DeepWalk(WalkingModel):
             raise TypeError("Optional parameter alpha must be a float")
         self.alpha = alpha
         self.seed = seed
-        
+
     @versionchanged(version="0.1.0", reason="The method now can accept a list of entities to \
     focus on when generating the random walks.")
     def walk(self, edges, nodes_of_interest=None):
