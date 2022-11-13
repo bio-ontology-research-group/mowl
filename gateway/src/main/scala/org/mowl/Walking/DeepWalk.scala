@@ -21,7 +21,8 @@ class DeepWalk (
   var alpha: Float,
   var workers: Int,
   var outfile: String,
-  var nodesOfInterest: ArrayList[String]
+  var nodesOfInterest: ArrayList[String],
+  var seed: Int
 ) {
 
 
@@ -36,7 +37,7 @@ class DeepWalk (
   val nodesIdx = nodes.map(mapEntsIdx(_))
 
   val graph = processEdges()
-  val rand = scala.util.Random
+  val rand = new scala.util.Random(seed)
   val (pathsPerWorker, newWorkers) = numPathsPerWorker()
 
   val nodesOfInterestIdx =  HashSet() ++ nodesOfInterest.asScala.map(mapEntsIdx(_)).toSet

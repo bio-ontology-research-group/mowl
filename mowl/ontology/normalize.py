@@ -114,18 +114,18 @@ type org.semanticweb.owlapi.model.OWLOntology")
                 continue
             elif "ExactCardinality" in axiom_as_str:
                 continue
-            # elif "Annotation" in axiom_as_str:
-            #    continue
+            elif "Annotation" in axiom_as_str:
+                continue
             elif "ObjectHasSelf" in axiom_as_str:
                 continue
-            # elif "urn:swrl" in axiom_as_str:
-            #     continue
-            # elif "EquivalentObjectProperties" in axiom_as_str:
-            #    continue
-            # elif "SymmetricObjectProperty" in axiom_as_str:
-            #    continue
-            # elif "AsymmetricObjectProperty" in axiom_as_str:
-            #    continue
+            elif "urn:swrl" in axiom_as_str:
+                continue
+            elif "EquivalentObjectProperties" in axiom_as_str:
+                continue
+            elif "SymmetricObjectProperty" in axiom_as_str:
+                continue
+            elif "AsymmetricObjectProperty" in axiom_as_str:
+                continue
             elif "ObjectOneOf" in axiom_as_str:
                 continue
             else:
