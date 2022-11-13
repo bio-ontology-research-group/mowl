@@ -10,8 +10,7 @@ from jpype import java
 import requests
 
 # OWLAPI imports
-from org.semanticweb.owlapi.model import OWLOntology, OWLClass, OWLObjectProperty, \
-    OWLNamedIndividual
+from org.semanticweb.owlapi.model import OWLOntology, OWLClass, OWLObjectProperty, OWLIndividual
 from org.semanticweb.owlapi.apibinding import OWLManager
 
 from mowl.projection import TaxonomyWithRelationsProjector
@@ -47,6 +46,7 @@ class Dataset():
         self._testing = testing
 
         self._classes = None
+        self._individuals = None
         self._object_properties = None
         self._individuals = None
         self._evaluation_classes = None
@@ -99,6 +99,32 @@ class Dataset():
         return self._classes
 
     @property
+    def class_to_id(self):
+        return self.classes.as_index_dict
+    
+    @property
+    def individuals(self):
+        """List of individuals in the dataset. The individuals are collected from training, validation and
+        testing ontologies using the OWLAPI method ``ontology.getIndividualsSignature()``.
+
+        :rtype: OWLIndividuals
+        """
+        if self._individuals is None:
+            individuals = set(self._ontology.getIndividualsInSignature())
+            if self._validation:
+                individuals |= set(self._validation.getIndividualsInSignature())
+            if self._testing:
+                individuals |= set(self._testing.getIndividualsInSignature())
+            individuals = list(individuals)
+            self._individuals = OWLIndividuals(individuals)
+        return self._individuals
+
+    @property
+    def individual_to_id(self):
+        return self.individuals.as_index_dict
+    
+
+    @property
     def object_properties(self):
         """List of object properties (relations) in the dataset. The object
         properties are collected from training, validation and testing
@@ -122,26 +148,9 @@ class Dataset():
         return self._object_properties
 
     @property
-    def individuals(self):
-        """List of individuals in the dataset. The individuals are collected
-        from training, validation and testing ontologies using the OWLAPI
-        method ``ontology.getIndividualsInSignature()``.
-
-        :rtype: OWLNamedIndividuals
-        """
-
-        if self._individuals is None:
-            individuals = set()
-            individuals |= set(self._ontology.getIndividualsInSignature())
-
-            if self._validation:
-                individuals |= set(self._validation.getIndividualsInSignature())
-            if self._testing:
-                individuals |= set(self._testing.getIndividualsInSignature())
-
-            individuals = list(individuals)
-            self._individuals = OWLNamedIndividuals(individuals)
-        return self._individuals
+    def object_property_to_id(self):
+        return self.object_properties.as_index_dict
+    
 
     @property
     def evaluation_classes(self):
@@ -340,8 +349,25 @@ class Entities():
 
     def __init__(self, collection):
         self._collection = self.check_owl_type(collection)
+        self._collection = sorted(self._collection, key=lambda x: x.toStringID())
         self._name_owlobject = self.to_dict()
+        self._index_dict = self.to_index_dict()
 
+    def __getitem__(self, idx):
+        return self._collection[idx]
+
+    def __len__(self):
+        return len(self._collection)
+
+    def __iter__(self):
+        self.ind = 0
+        return self
+
+    def __next__(self):
+        item = self._collection[self.ind]
+        self.ind += 1
+        return item
+    
     def check_owl_type(self, collection):
         """This method checks whether the elements in the provided collection
         are of the correct type.
@@ -355,13 +381,16 @@ class Entities():
         """Generates a dictionaty indexed by OWL entities IRIs and the values
         are the corresponding OWL entities.
         """
-        dict_ = {}
-        for ent in self._collection:
-            name = self.to_str(ent)
-            if name not in dict_:
-                dict_[name] = ent
-        dict_ = dict(sorted(dict_.items()))
+        dict_ = {self.to_str(ent): ent for ent in self._collection}
         return dict_
+
+    def to_index_dict(self):
+        """Generates a dictionary indexed by OWL objects and the values
+        are the corresponding indicies.
+        """
+        dict_ = {v: k for k, v in enumerate(self._collection)}
+        return dict_
+
 
     @property
     def as_str(self):
@@ -378,6 +407,11 @@ class Entities():
         """Returns the dictionary of entities indexed by their names."""
         return self._name_owlobject
 
+    @property
+    def as_index_dict(self):
+        """Returns the dictionary of entities indexed by their names."""
+        return self._index_dict
+
 
 class OWLClasses(Entities):
     """Class containing OWL classes indexed by they IRIs"""
@@ -390,6 +424,20 @@ class OWLClasses(Entities):
 
     def to_str(self, owl_class):
         name = str(owl_class.toStringID())
+        return name
+
+
+class OWLIndividuals(Entities):
+    """Class containing OWL individuals indexed by they IRIs"""
+
+    def check_owl_type(self, collection):
+        for item in collection:
+            if not isinstance(item, OWLIndividual):
+                raise TypeError("Type of elements in collection must be OWLIndividual.")
+        return collection
+
+    def to_str(self, owl_individual):
+        name = str(owl_individual.toStringID())
         return name
 
 
