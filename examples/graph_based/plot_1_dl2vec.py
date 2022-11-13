@@ -37,7 +37,7 @@ from gensim.models import Word2Vec
 # -----------------------
 #
 # We project the ontology using the DL2VecProjector class. The rules used to project the 
-# ontology can be found at :doc:`graphs/projection`. The outcome of the projection algorithm
+# ontology can be found at :doc:`/graphs/projection`. The outcome of the projection algorithm
 # is an edgelist.
 
 dataset = GDAHumanDataset()
