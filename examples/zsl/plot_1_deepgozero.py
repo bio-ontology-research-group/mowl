@@ -32,7 +32,7 @@ from mowl.owlapi.defaults import BOT, TOP
 from mowl.datasets import ELDataset, RemoteDataset
 from mowl.models.elembeddings.module import ELEmModule
 from mowl.owlapi import OWLAPIAdapter
-from mowl.datasets.base import Entities, OWLClasses, OWLNamedIndividuals
+from mowl.datasets.base import Entities, OWLClasses, OWLIndividuals
 
 from org.semanticweb.owlapi.model import AxiomType
 from org.semanticweb.owlapi.model.parameters import Imports
@@ -101,7 +101,7 @@ class DGZeroDataset(RemoteDataset):
             for ind_str, ind_owl in self.individuals.as_dict.items():
                 if ind_str.startswith("http://mowl/protein"):
                     proteins.add(ind_owl)
-            self._proteins = OWLNamedIndividuals(proteins)
+            self._proteins = OWLIndividuals(proteins)
         return self._proteins
 
     @property
@@ -111,7 +111,7 @@ class DGZeroDataset(RemoteDataset):
             for ind_str, ind_owl in self.individuals.as_dict.items():
                 if ind_str.startswith("http://mowl/interpro"):
                     interpros.add(ind_owl)
-            self._interpros = OWLNamedIndividuals(interpros)
+            self._interpros = OWLIndividuals(interpros)
         return self._interpros
     
 
