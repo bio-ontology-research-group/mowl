@@ -67,7 +67,7 @@ mOWL provides some shortcuts for performing reasoning over ontologies. The works
    classes_to_infer_over = list(dataset.ontology.getClassesInSignature())
   
    subclass_axioms = mowl_reasoner.infer_subclass_axioms(classes_to_infer_over)
-   equivalence_axioms = mowl_reasoner.infer_equiv_class_axioms(classes_to_infer_over)
+   equivalence_axioms = mowl_reasoner.infer_equivalent_class_axioms(classes_to_infer_over)
    disjointness_axioms = mowl_reasoner.infer_disjoint_class_axioms(classes_to_infer_over)
 
 

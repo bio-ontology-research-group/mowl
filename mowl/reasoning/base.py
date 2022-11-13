@@ -71,7 +71,7 @@ org.semanticweb.owlapi.model.OWLClass")
         return axioms
 
     @count_added_axioms
-    def infer_equiv_class_axioms(self, owl_classes):
+    def infer_equivalent_class_axioms(self, owl_classes):
         """Infers and returns axioms of the form :math:`C \equiv D`
 
         :param owl_classes: List of OWLClass objects to be used to infer the axioms.
