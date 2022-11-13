@@ -278,6 +278,7 @@ class GCI0_BOT(GCI0):
     :param axiom: Axiom of the form :math:`C \\sqsubseteq \\bot`
     :type axiom: :class:`org.semanticweb.owlapi.model.OWLAxiom`
     """
+
     def __init__(self, axiom):
         super().__init__(axiom)
         if "owl#Nothing" not in self.superclass:
@@ -291,6 +292,7 @@ class GCI1(GCI):
     :param axiom: Axiom of the form :math:`C \\sqcap D \\sqsubseteq E`
     :type axiom: :class:`org.semanticweb.owlapi.model.OWLAxiom`
     """
+
     def __init__(self, axiom):
         super().__init__(axiom)
 

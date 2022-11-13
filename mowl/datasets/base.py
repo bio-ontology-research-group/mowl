@@ -48,6 +48,7 @@ class Dataset():
         self._classes = None
         self._individuals = None
         self._object_properties = None
+        self._individuals = None
         self._evaluation_classes = None
 
     @property
@@ -282,6 +283,7 @@ class TarFileDataset(PathDataset):
         self.data_root = pathlib.Path(self.tarfile_path).parent
 
         dataset_root = os.path.join(self.data_root, self.dataset_name)
+        self.root = dataset_root
 
         ontology_path = os.path.join(dataset_root, 'ontology.owl')
         validation_path = os.path.join(dataset_root, 'valid.owl')
@@ -452,4 +454,18 @@ class OWLObjectProperties(Entities):
         name = str(owl_class.toString())
         if name.startswith("<"):
             name = name[1:-1]
+        return name
+
+
+class OWLNamedIndividuals(Entities):
+    """Class containing OWL classes indexed by they IRIs"""
+
+    def check_owl_type(self, collection):
+        for item in collection:
+            if not isinstance(item, OWLNamedIndividual):
+                raise TypeError("Type of elements in collection must be OWLNamedIndividual.")
+        return collection
+
+    def to_str(self, owl_individual):
+        name = str(owl_individual.toStringID())
         return name
