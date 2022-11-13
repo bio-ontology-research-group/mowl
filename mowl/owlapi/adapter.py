@@ -3,6 +3,7 @@ from org.semanticweb.owlapi.apibinding import OWLManager
 from org.semanticweb.owlapi.model import IRI
 
 import mowl.error as err
+from java.util import HashSet
 
 
 class OWLAPIAdapter():
@@ -38,7 +39,7 @@ class OWLAPIAdapter():
         if self._data_factory is None:
             self._data_factory = self.owl_manager.getOWLDataFactory()
         return self._data_factory
-    
+
     def create_ontology(self, iri):
         """Create an empty ontology given a valid IRI string"""
 
@@ -52,6 +53,13 @@ class OWLAPIAdapter():
         if not isinstance(iri, str):
             raise TypeError(f"IRI must be a string to use this method. {err.OWLAPI_DIRECT}")
         return self.data_factory.getOWLClass(IRI.create(iri))
+
+    def create_individual(self, iri):
+        """Creates and OWLNamedIndividual given a valid IRI string"""
+
+        if not isinstance(iri, str):
+            raise TypeError(f"IRI must be a string to use this method. {err.OWLAPI_DIRECT}")
+        return self.data_factory.getOWLNamedIndividual(IRI.create(iri))
 
     def create_object_property(self, iri):
         """Creates and OWL Object property given a valid IRI string"""
@@ -68,6 +76,10 @@ class OWLAPIAdapter():
         """Creates OWLEquivalentClassesAxiom for a given list of class expressions"""
         return self.data_factory.getOWLEquivalentClassesAxiom(cexprs)
 
+    def create_disjoint_classes(self, *cexprs):
+        """Creates OWLDisjointClassesAxiom for a given list of class expressions"""
+        return self.data_factory.getOWLDisjointClassesAxiom(cexprs)
+
     def create_object_some_values_from(self, obj_prop, cexpr):
         """Creates OWLObjectSomeValuesFrom for a given object property and a class expression"""
         return self.data_factory.getOWLObjectSomeValuesFrom(obj_prop, cexpr)
@@ -78,12 +90,20 @@ class OWLAPIAdapter():
 
     def create_object_intersection_of(self, *cexprs):
         """Creates OWLObjectIntersectionOf for a given list of class expressions"""
-        return self.data_factory.getOWLObjectIntersectionOf(*cexprs)
+        return self.data_factory.getOWLObjectIntersectionOf(cexprs)
 
     def create_object_union_of(self, *cexprs):
         """Creates OWLObjectUnionOf for a given list of class expressions"""
-        return self.data_factory.getOWLObjectUnionOf(*cexprs)
+        return self.data_factory.getOWLObjectUnionOf(cexprs)
 
     def create_complement_of(self, cexpr):
-        """Creates OWLObjectUnionOf for a given list of class expressions"""
+        """Creates OWLObjectComplementOf for a given class expression"""
         return self.data_factory.getOWLObjectComplementOf(cexpr)
+
+    def create_class_assertion(self, cexpr, ind):
+        """Creates OWLClassAssertionAxiom for a given class expression and individual"""
+        return self.data_factory.getOWLClassAssertionAxiom(cexpr, ind)
+
+    def create_object_property_assertion(self, obj_prop, ind1, ind2):
+        """Creates OWLObjectPropertyAssertionAxiom for a given object property and two individuals"""
+        return self.data_factory.getOWLObjectPropertyAssertionAxiom(obj_prop, ind1, ind2)

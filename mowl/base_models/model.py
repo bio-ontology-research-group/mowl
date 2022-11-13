@@ -24,6 +24,7 @@ class Model():
         self._model_filepath = model_filepath
         self._testing_set = None
         self._class_index_dict = None
+        self._individual_index_dict = None
         self._object_property_index_dict = None
 
     def train(self):
@@ -54,6 +55,16 @@ class Model():
         if self._class_index_dict is None:
             self._class_index_dict = {v: k for k, v in enumerate(self.dataset.classes.as_str)}
         return self._class_index_dict
+
+    @property
+    def individual_index_dict(self):
+        """Dictionary with individual names as keys and indexes as values.
+
+        :rtype: dict
+        """
+        if self._individual_index_dict is None:
+            self._individual_index_dict = {v: k for k, v in enumerate(self.dataset.individuals.as_str)}
+        return self._individual_index_dict
 
     @property
     def object_property_index_dict(self):
