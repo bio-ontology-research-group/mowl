@@ -28,7 +28,7 @@ class DL2VecProjector(var bidirectional_taxonomy: Boolean = false) extends Abstr
     val imports = Imports.fromBoolean(true)
     val axioms = ontology.getAxioms(imports).asScala.toList
 
-    val edges = axioms.foldLeft(List[Triple]()){(acc, x) => acc ::: projectAxiom(x, withIndividuals, verbose)}
+    val edges = axioms.map(projectAxiom(_, withIndividuals, verbose)).flatten
     edges.asJava
   }
 
