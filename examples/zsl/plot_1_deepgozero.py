@@ -54,8 +54,9 @@ CC_URL = "https://deepgo.cbrc.kaust.edu.sa/data/deepgozero/mowl/cellular_compone
 # To begin, each subontology data is encapsutaled in the ``DGZeroDataset``. This class contains \
 # three ontologies: training, validation and testing.
 # For this project, the training ontology is the Gene Ontology extended with the following axioms:
-# - $\exists has\_function. go\_class (protein)$, which encodes protein function annotations.
-# - $has\_interpro (protein, interpro)$, which encodes interpro features for proteins.
+#
+# * :math:`\exists has\_function. go\_class (protein)`, which encodes protein function annotations.
+# * :math:`has\_interpro (protein, interpro)`, which encodes interpro features for proteins.
 #
 # The validation and testing ontologies contain protein function and intepro annotations.
 
