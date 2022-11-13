@@ -4,7 +4,7 @@ Test Cases for Dataset class and its subclasses
 
 from mowl.owlapi.defaults import BOT, TOP
 from mowl.owlapi import OWLAPIAdapter
-from mowl.datasets.base import Entities, OWLClasses, OWLObjectProperties, OWLNamedIndividuals
+from mowl.datasets.base import Entities, OWLClasses, OWLObjectProperties, OWLIndividuals
 from mowl.datasets import Dataset, PathDataset, RemoteDataset, TarFileDataset
 from tests.datasetFactory import PPIYeastSlimDataset, GDAHumanELDataset, FamilyDataset
 from mowl.owlapi.model import OWLOntology, OWLClass, OWLObjectProperty
@@ -323,12 +323,12 @@ OWLObjectProperty objects"""
         classes = self.ds.classes.as_owl
         self.assertRaises(TypeError, OWLObjectProperties, classes)
 
-    def test_type_for_named_individuals_method(self):
-        """This check error handling when the OWLNamedIndividuals class does not receive \
-OWLNamedIndividual objects"""
+    def test_type_for_individuals_method(self):
+        """This check error handling when the OWLIndividuals class does not receive \
+OWLIndividual objects"""
 
         classes = self.ds.classes.as_owl
-        self.assertRaises(TypeError, OWLNamedIndividuals, classes)
+        self.assertRaises(TypeError, OWLIndividuals, classes)
 
     def test_format_of_class_as_str(self):
         """This checks if the format of the class string is correct"""
@@ -348,7 +348,7 @@ OWLNamedIndividual objects"""
         self.assertFalse(owl_prop_str.endswith(">"))
         self.assertTrue(owl_prop_str.startswith("http://"))
 
-    def test_format_of_named_individual_as_str(self):
+    def test_format_of_individual_as_str(self):
         """This checks if the format of the individual string is correct"""
 
         individuals = self.family_ds.individuals.as_str
