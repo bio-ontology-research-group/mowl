@@ -38,3 +38,4 @@ dependencies:
   - sphinx-gallery
   - nbsphinx
   - mock
+  - memory-profiler

@@ -6,7 +6,6 @@ This example corresponds to the paper `DeepGOZero: improving protein function pr
 sequence and zero-shot learning based on ontology axioms \
 <https://doi.org/10.1093/bioinformatics/btac256>`_. DeepGOZero is a machine learning model that \
 performs protein function prediction for functions that have small number or zero annotations.
-
 """
 # %%
 # First, we have the necesary imports for this example.
@@ -534,6 +533,10 @@ def main(ont, batch_size, epochs, device):
     # test_df['preds'] = preds
     # test_df.to_pickle(out_file)
 
+
+# %%
+# Training the model
+# --------------------
 
 
 ont = "mf"

@@ -27,3 +27,4 @@ dependencies:
     - nbsphinx
     - sphinx-gallery
     - ipython
+    - memory-profiler

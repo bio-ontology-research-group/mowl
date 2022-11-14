@@ -5,8 +5,8 @@
 
 Computation times
 =================
-**01:54.101** total execution time for **examples_graph_based** files:
+**01:56.534** total execution time for **examples_graph_based** files:
 
 +------------------------------------------------------------------------------+-----------+--------+
-| :ref:`sphx_glr_examples_graph_based_plot_1_dl2vec.py` (``plot_1_dl2vec.py``) | 01:54.101 | 0.0 MB |
+| :ref:`sphx_glr_examples_graph_based_plot_1_dl2vec.py` (``plot_1_dl2vec.py``) | 01:56.534 | 0.0 MB |
 +------------------------------------------------------------------------------+-----------+--------+

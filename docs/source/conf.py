@@ -70,7 +70,8 @@ sphinx_gallery_conf = {
     "within_subsection_order": FileNameSortKey,
     "run_stale_examples": True,
     "abort_on_example_error": True,
-    "plot_gallery": False
+    "plot_gallery": False,
+    "show_memory": True,
 }
 
 autodoc_member_order = 'bysource'

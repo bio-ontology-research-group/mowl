@@ -23,11 +23,11 @@ DeepGOZero
 
 This example corresponds to the paper `DeepGOZero: improving protein function prediction from sequence and zero-shot learning based on ontology axioms <https://doi.org/10.1093/bioinformatics/btac256>`_. DeepGOZero is a machine learning model that performs protein function prediction for functions that have small number or zero annotations.
 
-.. GENERATED FROM PYTHON SOURCE LINES 12-13
+.. GENERATED FROM PYTHON SOURCE LINES 11-12
 
 First, we have the necesary imports for this example.
 
-.. GENERATED FROM PYTHON SOURCE LINES 13-42
+.. GENERATED FROM PYTHON SOURCE LINES 12-41
 
 .. code-block:: default
 
@@ -67,7 +67,7 @@ First, we have the necesary imports for this example.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 43-48
+.. GENERATED FROM PYTHON SOURCE LINES 42-47
 
 Dataset
 --------
@@ -75,7 +75,7 @@ Dataset
 The datasets are stored in the cloud and the following links correspond for the data for the
 Gene Ontology sub-ontologies: molecular function, biological process and cellular component.
 
-.. GENERATED FROM PYTHON SOURCE LINES 48-53
+.. GENERATED FROM PYTHON SOURCE LINES 47-52
 
 .. code-block:: default
 
@@ -91,7 +91,7 @@ Gene Ontology sub-ontologies: molecular function, biological process and cellula
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 54-62
+.. GENERATED FROM PYTHON SOURCE LINES 53-61
 
 To begin, each subontology data is encapsutaled in the ``DGZeroDataset``. This class contains \
 three ontologies: training, validation and testing.
@@ -102,7 +102,7 @@ For this project, the training ontology is the Gene Ontology extended with the f
 
 The validation and testing ontologies contain protein function and intepro annotations.
 
-.. GENERATED FROM PYTHON SOURCE LINES 62-176
+.. GENERATED FROM PYTHON SOURCE LINES 61-175
 
 .. code-block:: default
 
@@ -227,7 +227,7 @@ The validation and testing ontologies contain protein function and intepro annot
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 177-184
+.. GENERATED FROM PYTHON SOURCE LINES 176-183
 
 DeepGoZero model
 ----------------
@@ -237,7 +237,7 @@ The DeepGoZero model is composed by:
 representation of the protein. Futhermore, this representation is associated to a GO term \
 to predict if the GO term is a function of the protein.
 
-.. GENERATED FROM PYTHON SOURCE LINES 184-213
+.. GENERATED FROM PYTHON SOURCE LINES 183-212
 
 .. code-block:: default
 
@@ -277,13 +277,13 @@ to predict if the GO term is a function of the protein.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 214-217
+.. GENERATED FROM PYTHON SOURCE LINES 213-216
 
 The GO terms representations are learned using a model theoretic approach called
 :doc:`ELEmbeddings </examples/elmodels/plot_1_elembeddings>`. ELEmbeddings processes the axioms
 of the Gene Ontology and learns a representation of the GO terms.
 
-.. GENERATED FROM PYTHON SOURCE LINES 217-289
+.. GENERATED FROM PYTHON SOURCE LINES 216-288
 
 .. code-block:: default
 
@@ -366,7 +366,7 @@ of the Gene Ontology and learns a representation of the GO terms.
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 290-302
+.. GENERATED FROM PYTHON SOURCE LINES 289-301
 
 Training DeepGoZero
 -------------------
@@ -381,7 +381,7 @@ Not all the GO terms are present in the first component, but only on the second 
 However, DeepGOZero is able to predict protein functions that do not have annotations by
 leveraging the semantics of the Gene Ontology.
 
-.. GENERATED FROM PYTHON SOURCE LINES 302-544
+.. GENERATED FROM PYTHON SOURCE LINES 301-537
 
 .. code-block:: default
 
@@ -622,6 +622,23 @@ leveraging the semantics of the Gene Ontology.
 
 
 
+
+
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 538-540
+
+Training the model
+--------------------
+
+.. GENERATED FROM PYTHON SOURCE LINES 540-547
+
+.. code-block:: default
+
+
+
     ont = "mf"
     batch_size = 16
     epochs = 2
@@ -676,22 +693,22 @@ leveraging the semantics of the Gene Ontology.
       )
     )
     Training the model
-      0%|          | 0/2 [00:00<?, ?it/s]     50%|#####     | 1/2 [00:01<00:01,  1.64s/it]    100%|##########| 2/2 [00:03<00:00,  1.82s/it]    100%|##########| 2/2 [00:03<00:00,  1.79s/it]
+      0%|          | 0/2 [00:00<?, ?it/s]     50%|#####     | 1/2 [00:01<00:01,  1.54s/it]    100%|##########| 2/2 [00:03<00:00,  1.69s/it]    100%|##########| 2/2 [00:03<00:00,  1.66s/it]
     Validation
-      0%|          | 0/241 [00:00<?, ?it/s]      7%|7         | 17/241 [00:00<00:01, 163.12it/s]     14%|#4        | 34/241 [00:00<00:01, 159.09it/s]     21%|##        | 50/241 [00:00<00:01, 153.94it/s]     27%|##7       | 66/241 [00:00<00:01, 146.59it/s]     34%|###3      | 81/241 [00:00<00:01, 133.26it/s]     39%|###9      | 95/241 [00:00<00:01, 123.07it/s]     45%|####4     | 108/241 [00:00<00:01, 115.64it/s]     50%|####9     | 120/241 [00:00<00:01, 110.32it/s]     55%|#####4    | 132/241 [00:01<00:01, 105.60it/s]     59%|#####9    | 143/241 [00:01<00:00, 101.37it/s]     64%|######3   | 154/241 [00:01<00:00, 97.47it/s]      68%|######8   | 164/241 [00:01<00:00, 94.02it/s]     72%|#######2  | 174/241 [00:01<00:00, 90.87it/s]     76%|#######6  | 184/241 [00:01<00:00, 87.89it/s]     80%|########  | 193/241 [00:01<00:00, 85.44it/s]     84%|########3 | 202/241 [00:01<00:00, 83.14it/s]     88%|########7 | 211/241 [00:02<00:00, 80.90it/s]     91%|#########1| 220/241 [00:02<00:00, 75.77it/s]     95%|#########4| 228/241 [00:02<00:00, 71.43it/s]     98%|#########7| 236/241 [00:02<00:00, 70.89it/s]    100%|##########| 241/241 [00:02<00:00, 96.63it/s]
-    Epoch 0: Loss - 0.8898204565048218, EL Loss: 8.311100959777832, Valid loss - 0.6785894516098054, AUC - 0.5228590750062458
-    EL Loss 8.311100959777832
+      0%|          | 0/241 [00:00<?, ?it/s]      7%|6         | 16/241 [00:00<00:01, 159.76it/s]     13%|#3        | 32/241 [00:00<00:01, 143.14it/s]     20%|#9        | 47/241 [00:00<00:01, 134.23it/s]     25%|##5       | 61/241 [00:00<00:01, 129.05it/s]     31%|###       | 74/241 [00:00<00:01, 119.99it/s]     36%|###6      | 87/241 [00:00<00:01, 115.24it/s]     41%|####1     | 99/241 [00:00<00:01, 110.69it/s]     46%|####6     | 111/241 [00:00<00:01, 106.59it/s]     51%|#####     | 122/241 [00:01<00:01, 101.00it/s]     55%|#####5    | 133/241 [00:01<00:01, 96.37it/s]      59%|#####9    | 143/241 [00:01<00:01, 90.31it/s]     63%|######3   | 153/241 [00:01<00:01, 87.55it/s]     67%|######7   | 162/241 [00:01<00:00, 83.01it/s]     71%|#######   | 171/241 [00:01<00:00, 82.33it/s]     75%|#######4  | 180/241 [00:01<00:00, 81.27it/s]     78%|#######8  | 189/241 [00:01<00:00, 77.43it/s]     82%|########1 | 197/241 [00:02<00:00, 74.65it/s]     85%|########5 | 205/241 [00:02<00:00, 74.42it/s]     88%|########8 | 213/241 [00:02<00:00, 73.95it/s]     92%|#########1| 221/241 [00:02<00:00, 73.18it/s]     95%|#########5| 229/241 [00:02<00:00, 71.93it/s]     98%|#########8| 237/241 [00:02<00:00, 70.80it/s]    100%|##########| 241/241 [00:02<00:00, 90.09it/s]
+    Epoch 0: Loss - 0.8684782385826111, EL Loss: 8.31731128692627, Valid loss - 0.6835167949625071, AUC - 0.5248809636465112
+    EL Loss 8.31731128692627
     Saving model
-      0%|          | 0/2 [00:00<?, ?it/s]     50%|#####     | 1/2 [00:01<00:01,  1.85s/it]    100%|##########| 2/2 [00:03<00:00,  1.49s/it]    100%|##########| 2/2 [00:03<00:00,  1.55s/it]
+      0%|          | 0/2 [00:00<?, ?it/s]     50%|#####     | 1/2 [00:01<00:01,  1.58s/it]    100%|##########| 2/2 [00:02<00:00,  1.38s/it]    100%|##########| 2/2 [00:02<00:00,  1.41s/it]
     Validation
-      0%|          | 0/241 [00:00<?, ?it/s]      7%|7         | 17/241 [00:00<00:01, 163.33it/s]     14%|#4        | 34/241 [00:00<00:01, 158.05it/s]     21%|##        | 50/241 [00:00<00:01, 155.64it/s]     27%|##7       | 66/241 [00:00<00:01, 151.96it/s]     34%|###4      | 82/241 [00:00<00:01, 147.00it/s]     40%|####      | 97/241 [00:00<00:01, 142.19it/s]     46%|####6     | 112/241 [00:00<00:00, 133.39it/s]     52%|#####2    | 126/241 [00:00<00:00, 124.90it/s]     58%|#####7    | 139/241 [00:01<00:00, 107.62it/s]     63%|######2   | 151/241 [00:01<00:00, 97.07it/s]      67%|######7   | 162/241 [00:01<00:00, 94.06it/s]     71%|#######1  | 172/241 [00:01<00:00, 90.61it/s]     76%|#######5  | 182/241 [00:01<00:00, 87.67it/s]     79%|#######9  | 191/241 [00:01<00:00, 85.43it/s]     83%|########2 | 200/241 [00:01<00:00, 82.92it/s]     87%|########6 | 209/241 [00:01<00:00, 80.82it/s]     90%|######### | 218/241 [00:02<00:00, 78.85it/s]     94%|#########3| 226/241 [00:02<00:00, 76.97it/s]     97%|#########7| 234/241 [00:02<00:00, 75.35it/s]    100%|##########| 241/241 [00:02<00:00, 100.15it/s]
-    Epoch 1: Loss - 0.90168097615242, EL Loss: 8.171331405639648, Valid loss - 0.6564685143375792, AUC - 0.5125712474456847
-    EL Loss 8.171331405639648
+      0%|          | 0/241 [00:00<?, ?it/s]      7%|6         | 16/241 [00:00<00:01, 158.85it/s]     13%|#3        | 32/241 [00:00<00:01, 157.10it/s]     20%|#9        | 48/241 [00:00<00:01, 154.40it/s]     27%|##6       | 64/241 [00:00<00:01, 149.94it/s]     33%|###3      | 80/241 [00:00<00:01, 140.27it/s]     39%|###9      | 95/241 [00:00<00:01, 137.13it/s]     45%|####5     | 109/241 [00:00<00:00, 134.81it/s]     51%|#####1    | 123/241 [00:00<00:00, 130.75it/s]     57%|#####6    | 137/241 [00:01<00:00, 122.09it/s]     62%|######2   | 150/241 [00:01<00:00, 114.17it/s]     67%|######7   | 162/241 [00:01<00:00, 108.31it/s]     72%|#######1  | 173/241 [00:01<00:00, 103.40it/s]     76%|#######6  | 184/241 [00:01<00:00, 99.59it/s]      80%|########  | 194/241 [00:01<00:00, 96.23it/s]     85%|########4 | 204/241 [00:01<00:00, 93.72it/s]     89%|########8 | 214/241 [00:01<00:00, 91.03it/s]     93%|#########2| 224/241 [00:01<00:00, 84.98it/s]     97%|#########6| 233/241 [00:02<00:00, 79.15it/s]    100%|##########| 241/241 [00:02<00:00, 74.23it/s]    100%|##########| 241/241 [00:02<00:00, 106.55it/s]
+    Epoch 1: Loss - 0.8291801810264587, EL Loss: 8.176726341247559, Valid loss - 0.6579567151940215, AUC - 0.5077325859340581
+    EL Loss 8.176726341247559
     Saving model
     Loading the best model
-      0%|          | 0/295 [00:00<?, ?it/s]      5%|5         | 16/295 [00:00<00:01, 159.21it/s]     11%|#         | 32/295 [00:00<00:01, 153.77it/s]     16%|#6        | 48/295 [00:00<00:01, 148.05it/s]     21%|##1       | 63/295 [00:00<00:01, 147.18it/s]     26%|##6       | 78/295 [00:00<00:01, 141.85it/s]     32%|###1      | 93/295 [00:00<00:01, 138.70it/s]     36%|###6      | 107/295 [00:00<00:01, 135.31it/s]     41%|####1     | 121/295 [00:00<00:01, 131.17it/s]     46%|####5     | 135/295 [00:01<00:01, 122.92it/s]     50%|#####     | 148/295 [00:01<00:01, 111.36it/s]     54%|#####4    | 160/295 [00:01<00:01, 103.04it/s]     58%|#####7    | 171/295 [00:01<00:01, 97.17it/s]      61%|######1   | 181/295 [00:01<00:01, 92.75it/s]     65%|######4   | 191/295 [00:01<00:01, 88.79it/s]     68%|######7   | 200/295 [00:01<00:01, 85.62it/s]     71%|#######   | 209/295 [00:01<00:01, 82.68it/s]     74%|#######3  | 218/295 [00:02<00:00, 80.03it/s]     77%|#######6  | 227/295 [00:02<00:00, 77.78it/s]     80%|#######9  | 235/295 [00:02<00:00, 75.84it/s]     82%|########2 | 243/295 [00:02<00:00, 73.84it/s]     85%|########5 | 251/295 [00:02<00:00, 72.23it/s]     88%|########7 | 259/295 [00:02<00:00, 70.60it/s]     91%|######### | 267/295 [00:02<00:00, 68.98it/s]     93%|#########2| 274/295 [00:02<00:00, 67.58it/s]     95%|#########5| 281/295 [00:02<00:00, 66.23it/s]     98%|#########7| 288/295 [00:03<00:00, 64.86it/s]    100%|##########| 295/295 [00:03<00:00, 63.22it/s]    100%|##########| 295/295 [00:03<00:00, 92.61it/s]
-    Test Loss - 0.6562292955689512, AUC - 0.5095570360313815
-      0%|          | 0/10 [00:00<?, ?it/s]     10%|#         | 1/10 [00:00<00:01,  8.00it/s]     20%|##        | 2/10 [00:00<00:00,  8.19it/s]     30%|###       | 3/10 [00:00<00:00,  8.34it/s]     40%|####      | 4/10 [00:00<00:00,  8.51it/s]     50%|#####     | 5/10 [00:00<00:00,  8.57it/s]     60%|######    | 6/10 [00:00<00:00,  8.60it/s]     70%|#######   | 7/10 [00:00<00:00,  8.61it/s]     80%|########  | 8/10 [00:00<00:00,  8.64it/s]     90%|######### | 9/10 [00:01<00:00,  8.63it/s]    100%|##########| 10/10 [00:01<00:00,  8.63it/s]    100%|##########| 10/10 [00:01<00:00,  8.55it/s]
+      0%|          | 0/295 [00:00<?, ?it/s]      5%|5         | 16/295 [00:00<00:01, 156.17it/s]     11%|#         | 32/295 [00:00<00:01, 154.84it/s]     16%|#6        | 48/295 [00:00<00:01, 153.32it/s]     22%|##1       | 64/295 [00:00<00:01, 149.58it/s]     27%|##6       | 79/295 [00:00<00:01, 145.51it/s]     32%|###1      | 94/295 [00:00<00:01, 139.41it/s]     37%|###6      | 108/295 [00:00<00:01, 136.18it/s]     41%|####1     | 122/295 [00:00<00:01, 132.69it/s]     46%|####6     | 136/295 [00:00<00:01, 125.15it/s]     51%|#####     | 149/295 [00:01<00:01, 115.88it/s]     55%|#####4    | 161/295 [00:01<00:01, 110.51it/s]     59%|#####8    | 173/295 [00:01<00:01, 105.47it/s]     62%|######2   | 184/295 [00:01<00:01, 101.81it/s]     66%|######6   | 195/295 [00:01<00:01, 96.65it/s]      69%|######9   | 205/295 [00:01<00:00, 93.20it/s]     73%|#######2  | 215/295 [00:01<00:00, 91.29it/s]     76%|#######6  | 225/295 [00:01<00:00, 84.81it/s]     79%|#######9  | 234/295 [00:02<00:00, 79.78it/s]     82%|########2 | 243/295 [00:02<00:00, 75.90it/s]     85%|########5 | 251/295 [00:02<00:00, 73.00it/s]     88%|########7 | 259/295 [00:02<00:00, 69.62it/s]     90%|######### | 266/295 [00:02<00:00, 67.37it/s]     93%|#########2| 273/295 [00:02<00:00, 65.16it/s]     95%|#########4| 280/295 [00:02<00:00, 63.51it/s]     97%|#########7| 287/295 [00:02<00:00, 61.95it/s]    100%|#########9| 294/295 [00:03<00:00, 60.83it/s]    100%|##########| 295/295 [00:03<00:00, 94.48it/s]
+    Test Loss - 0.6582908357604075, AUC - 0.5113331666250782
+      0%|          | 0/10 [00:00<?, ?it/s]     10%|#         | 1/10 [00:00<00:05,  1.78it/s]     20%|##        | 2/10 [00:00<00:02,  3.32it/s]     30%|###       | 3/10 [00:00<00:01,  4.69it/s]     40%|####      | 4/10 [00:01<00:01,  3.03it/s]     50%|#####     | 5/10 [00:01<00:01,  4.01it/s]     60%|######    | 6/10 [00:01<00:00,  4.98it/s]     70%|#######   | 7/10 [00:01<00:00,  5.88it/s]     80%|########  | 8/10 [00:01<00:00,  5.52it/s]     90%|######### | 9/10 [00:01<00:00,  5.96it/s]    100%|##########| 10/10 [00:02<00:00,  6.41it/s]    100%|##########| 10/10 [00:02<00:00,  4.78it/s]
 
 
 
@@ -699,7 +716,7 @@ leveraging the semantics of the Gene Ontology.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** ( 2 minutes  2.639 seconds)
+   **Total running time of the script:** ( 2 minutes  4.757 seconds)
 
 
 .. _sphx_glr_download_examples_zsl_plot_1_deepgozero.py:

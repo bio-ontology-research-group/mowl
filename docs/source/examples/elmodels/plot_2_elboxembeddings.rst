@@ -342,46 +342,46 @@ Training the model
  .. code-block:: none
 
       0%|          | 0/20 [00:00<?, ?it/s]
-    Epoch 0: Train loss: 11.5451 Valid loss: 4.4286
+    Epoch 0: Train loss: 11.8286 Valid loss: 4.4744
 
-    Epoch 1: Train loss: 11.4585 Valid loss: 4.4192
+    Epoch 1: Train loss: 11.7796 Valid loss: 4.4643
 
-    Epoch 2: Train loss: 11.2971 Valid loss: 4.4095
+    Epoch 2: Train loss: 11.7101 Valid loss: 4.4537
 
-    Epoch 3: Train loss: 11.1169 Valid loss: 4.3996
+    Epoch 3: Train loss: 11.5194 Valid loss: 4.4429
 
-    Epoch 4: Train loss: 11.1086 Valid loss: 4.3895
+    Epoch 4: Train loss: 11.5145 Valid loss: 4.4319
 
-    Epoch 5: Train loss: 11.0307 Valid loss: 4.3792
+    Epoch 5: Train loss: 11.4206 Valid loss: 4.4207
 
-    Epoch 6: Train loss: 10.9731 Valid loss: 4.3689
-     35%|###5      | 7/20 [00:00<00:00, 67.93it/s]
-    Epoch 7: Train loss: 10.8510 Valid loss: 4.3585
+    Epoch 6: Train loss: 11.4348 Valid loss: 4.4095
 
-    Epoch 8: Train loss: 10.6381 Valid loss: 4.3480
+    Epoch 7: Train loss: 11.2051 Valid loss: 4.3982
 
-    Epoch 9: Train loss: 10.5697 Valid loss: 4.3375
+    Epoch 8: Train loss: 11.1888 Valid loss: 4.3868
 
-    Epoch 10: Train loss: 10.4573 Valid loss: 4.3270
+    Epoch 9: Train loss: 10.9229 Valid loss: 4.3754
 
-    Epoch 11: Train loss: 10.4192 Valid loss: 4.3166
+    Epoch 10: Train loss: 10.7974 Valid loss: 4.3640
 
-    Epoch 12: Train loss: 10.3421 Valid loss: 4.3061
+    Epoch 11: Train loss: 10.6068 Valid loss: 4.3527
+     60%|######    | 12/20 [00:00<00:00, 116.21it/s]
+    Epoch 12: Train loss: 10.6643 Valid loss: 4.3413
 
-    Epoch 13: Train loss: 10.2918 Valid loss: 4.2956
+    Epoch 13: Train loss: 10.3678 Valid loss: 4.3300
 
-    Epoch 14: Train loss: 10.0976 Valid loss: 4.2851
+    Epoch 14: Train loss: 10.6361 Valid loss: 4.3187
 
-    Epoch 15: Train loss: 10.0329 Valid loss: 4.2746
+    Epoch 15: Train loss: 10.2633 Valid loss: 4.3075
 
-    Epoch 16: Train loss: 9.8135 Valid loss: 4.2642
+    Epoch 16: Train loss: 10.2521 Valid loss: 4.2962
 
-    Epoch 17: Train loss: 9.9968 Valid loss: 4.2537
+    Epoch 17: Train loss: 10.2094 Valid loss: 4.2850
 
-    Epoch 18: Train loss: 9.9214 Valid loss: 4.2432
+    Epoch 18: Train loss: 10.1987 Valid loss: 4.2737
 
-    Epoch 19: Train loss: 9.6263 Valid loss: 4.2327
-    100%|##########| 20/20 [00:00<00:00, 115.71it/s]
+    Epoch 19: Train loss: 9.9891 Valid loss: 4.2625
+    100%|##########| 20/20 [00:00<00:00, 134.13it/s]
 
 
 
@@ -389,7 +389,7 @@ Training the model
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** ( 0 minutes  14.504 seconds)
+   **Total running time of the script:** ( 0 minutes  14.737 seconds)
 
 
 .. _sphx_glr_download_examples_elmodels_plot_2_elboxembeddings.py:

@@ -135,7 +135,7 @@ To train the Word2Vec model, we rely on the Gensim library:
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** ( 1 minutes  54.101 seconds)
+   **Total running time of the script:** ( 1 minutes  56.534 seconds)
 
 
 .. _sphx_glr_download_examples_graph_based_plot_1_dl2vec.py:

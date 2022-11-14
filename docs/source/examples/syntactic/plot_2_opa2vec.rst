@@ -193,7 +193,7 @@ Cleaning up the memory
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** ( 0 minutes  12.143 seconds)
+   **Total running time of the script:** ( 0 minutes  12.209 seconds)
 
 
 .. _sphx_glr_download_examples_syntactic_plot_2_opa2vec.py:
