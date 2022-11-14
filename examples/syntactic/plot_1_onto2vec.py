@@ -33,6 +33,8 @@ from java.util import HashSet
 from gensim.models.word2vec import LineSentence
 from gensim.models import Word2Vec
 
+import os
+
 # %%
 # Inferring new axioms
 # --------------------
@@ -83,3 +85,8 @@ extract_and_save_axiom_corpus(dataset.ontology, "onto2vec_corpus.txt")
 
 sentences = LineSentence("onto2vec_corpus.txt")
 model = Word2Vec(sentences, vector_size=5, window=2, min_count=1, workers=4)
+
+# %%
+# Cleaning up memory
+
+os.remove("onto2vec_corpus.txt")
