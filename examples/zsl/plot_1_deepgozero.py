@@ -537,7 +537,7 @@ def main(ont, batch_size, epochs, device):
 
 
 ont = "mf"
-batch_size = 32
+batch_size = 16
 epochs = 2
 device = "cpu"
 main(ont, batch_size, epochs, device)
