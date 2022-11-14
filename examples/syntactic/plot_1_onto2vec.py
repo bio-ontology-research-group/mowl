@@ -82,4 +82,4 @@ manager.addAxioms(dataset.ontology, axioms)
 extract_and_save_axiom_corpus(dataset.ontology, "onto2vec_corpus.txt")
 
 sentences = LineSentence("onto2vec_corpus.txt")
-model = Word2Vec(sentences, vector_size=10, window=5, min_count=1, workers=4)
+model = Word2Vec(sentences, vector_size=5, window=2, min_count=1, workers=4)
