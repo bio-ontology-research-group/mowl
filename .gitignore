@@ -18,7 +18,7 @@ gateway/.gradle/
 *.tar.gz
 
 docs/build/
-docs/source/examples/
+
 
 docs/*.owl
 docs/*.tsv

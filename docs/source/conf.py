@@ -68,8 +68,9 @@ sphinx_gallery_conf = {
     'gallery_dirs': gallery_dirs,  # path to where to save gallery generated output
 
     "within_subsection_order": FileNameSortKey,
-    #"run_stale_examples": True,
-    #"abort_on_example_error": True,
+    "run_stale_examples": True,
+    "abort_on_example_error": True,
+    "plot_gallery": False
 }
 
 autodoc_member_order = 'bysource'
