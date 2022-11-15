@@ -153,8 +153,8 @@ class RankBasedEvaluator(Evaluator):
             c_emb_idx, d_emb_idx = self.head_name_indexemb[c], self.tail_name_indexemb[d]
 
             # Scores matrix labels
-            c_sc_idx, d_sc_idx = self.head_indexemb_indexsc[c_emb_idx],
-            self.tail_indexemb_indexsc[d_emb_idx]
+            c_sc_idx = self.head_indexemb_indexsc[c_emb_idx]
+            d_sc_idx = self.tail_indexemb_indexsc[d_emb_idx]
 
             r = self.relation_index_emb[r]
 
@@ -297,7 +297,7 @@ class EmbeddingsRankBasedEvaluator(RankBasedEvaluator):
         class_embeddings_values = th.tensor(class_embeddings_values).to(device)
         class_index_emb = {v: k for k, v in enumerate(self.class_embeddings.keys())}
 
-        relation = testing_set[0].rel()
+        relation = testing_set[0].rel
 
         if relation_embeddings is None:
             rel_embeds_values = None

@@ -34,11 +34,13 @@ To show an example of DL2Vec, we need 3 components:
 - The random walks generator
 - The Word2Vec model
 
-.. GENERATED FROM PYTHON SOURCE LINES 24-35
+.. GENERATED FROM PYTHON SOURCE LINES 24-37
 
 .. code-block:: default
 
 
+    import sys
+    sys.path.append('../../')
     import mowl
     mowl.init_jvm("10g")
 
@@ -50,13 +52,7 @@ To show an example of DL2Vec, we need 3 components:
 
 
 
-
-
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 36-42
+.. GENERATED FROM PYTHON SOURCE LINES 38-44
 
 Projecting the ontology
 -----------------------
@@ -65,7 +61,7 @@ We project the ontology using the DL2VecProjector class. The rules used to proje
 ontology can be found at :doc:`/graphs/projection`. The outcome of the projection algorithm
 is an edgelist.
 
-.. GENERATED FROM PYTHON SOURCE LINES 42-48
+.. GENERATED FROM PYTHON SOURCE LINES 44-50
 
 .. code-block:: default
 
@@ -76,13 +72,7 @@ is an edgelist.
     edges = projector.project(dataset.ontology)
 
 
-
-
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 49-54
+.. GENERATED FROM PYTHON SOURCE LINES 51-56
 
 Generating random walks
 -----------------------
@@ -90,12 +80,12 @@ Generating random walks
 The random walks are generated using the DeepWalk class. This class implements the DeepWalk
 algorithm with a modification consisting of including the edge labels as part of the walks.
 
-.. GENERATED FROM PYTHON SOURCE LINES 54-63
+.. GENERATED FROM PYTHON SOURCE LINES 56-65
 
 .. code-block:: default
 
 
-    walker = DeepWalk(5, # number of walks per node
+    walker = DeepWalk(20, # number of walks per node
                       20, # walk length
                       0.1, # restart probability
                       workers=4) # number of threads
@@ -104,38 +94,88 @@ algorithm with a modification consisting of including the edge labels as part of
 
 
 
-
-
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 64-68
+.. GENERATED FROM PYTHON SOURCE LINES 66-70
 
 Training the Word2Vec model
 ---------------------------
 
 To train the Word2Vec model, we rely on the Gensim library:
 
-.. GENERATED FROM PYTHON SOURCE LINES 68-72
+.. GENERATED FROM PYTHON SOURCE LINES 70-75
 
 .. code-block:: default
 
 
     walks_file = walker.outfile
     sentences = LineSentence(walks_file)
-    model = Word2Vec(sentences, vector_size=20, window=3, min_count=1, workers=4)
+    model = Word2Vec(sentences, vector_size=100, epochs = 20, window=5, min_count=1, workers=4)
 
 
+.. GENERATED FROM PYTHON SOURCE LINES 76-82
+
+Evaluating the embeddings
+------------------------------
+
+We can evaluate the embeddings using the
+:class:`EmbeddingsRankBasedEvaluator <mowl.evaluation.rank_based.EmbeddingsRankBasedEvaluator>`
+class. We need to do some data preparation.
+
+.. GENERATED FROM PYTHON SOURCE LINES 82-86
+
+.. code-block:: default
 
 
+    from mowl.evaluation.rank_based import EmbeddingsRankBasedEvaluator
+    from mowl.evaluation.base import CosineSimilarity
+    from mowl.projection import TaxonomyWithRelationsProjector
+
+.. GENERATED FROM PYTHON SOURCE LINES 87-89
+
+We are going to evaluate the plausability of an association gene-disease with a gene against all
+possible diseases and check the rank of the true disease association.
+
+.. GENERATED FROM PYTHON SOURCE LINES 89-99
+
+.. code-block:: default
 
 
+    genes, diseases = dataset.evaluation_classes
+
+    projector = TaxonomyWithRelationsProjector(taxonomy=False,
+                                               relations=["http://is_associated_with"])
+
+    evaluation_edges = projector.project(dataset.testing)
+    filtering_edges = projector.project(dataset.ontology)
+    assert len(evaluation_edges) > 0
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 100-102
+
+The gene-disease associations will be scoredc using cosine similarity. For that reason we use
+the ``CosineSimilarity`` class.
+
+.. GENERATED FROM PYTHON SOURCE LINES 102-115
+
+.. code-block:: default
+
+
+    vectors = model.wv
+    evaluator = EmbeddingsRankBasedEvaluator(
+        vectors,
+        evaluation_edges,
+        CosineSimilarity,
+        training_set=filtering_edges,
+        head_entities = genes.as_str,
+        tail_entities = diseases.as_str,
+        device = 'cpu'
+    )
+
+    evaluator.evaluate(show=True)
 
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** ( 1 minutes  56.534 seconds)
+   **Total running time of the script:** ( 0 minutes  0.000 seconds)
 
 
 .. _sphx_glr_download_examples_graph_based_plot_1_dl2vec.py:
