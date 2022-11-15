@@ -24,9 +24,14 @@ class EmbeddingALCModel(EmbeddingModel):
         self.batch_size = batch_size
         self.device = device
 
+        self._training_dataset = None
+        self._validation_dataset = None
+        self._testing_dataset = None
+
         self._training_datasets = None
         self._validation_datasets = None
         self._testing_datasets = None
+
 
     def _load_datasets(self):
         """This method will create different data attributes and finally the corresponding \
@@ -35,22 +40,22 @@ class EmbeddingALCModel(EmbeddingModel):
         if self._datasets_loaded:
             return
 
-        training_dataset = ALCDataset(
+        self._training_dataset = ALCDataset(
             self.dataset.ontology, self.dataset, device=self.device)
-        self._training_datasets = training_dataset.get_datasets()
+        self._training_datasets = self._training_dataset.get_datasets()
 
         self._validation_datasets = None
         if self.dataset.validation:
-            validation_dataset = ALCDataset(
+            self._validation_dataset = ALCDataset(
                 self.dataset.validation, self.dataset, device=self.device)
-            self._validation_datasets = validation_dataset.get_datasets()
+            self._validation_datasets = self._validation_dataset.get_datasets()
 
         self._testing_datasets = None
         if self.dataset.testing:
-            testing_dataset = ALCDataset(
+            self._testing_dataset = ALCDataset(
                 self.dataset.testing, self.dataset, device=self.device)
 
-            self._testing_datasets = testing_dataset.get_datasets()
+            self._testing_datasets = self._testing_dataset.get_datasets()
 
         self._datasets_loaded = True
 
@@ -77,19 +82,19 @@ class EmbeddingALCModel(EmbeddingModel):
         self._dataloaders_loaded = True
 
     @property
-    def training_datasets(self):
-        """Returns the training datasets for each GCI type. Each dataset is an instance \
-of :class:`mowl.datasets.el.ELDataset`
+    def training_dataset(self):
+        """Returns the training dataset. Each dataset is an instance \
+of :class:`mowl.datasets.el.ALCDataset`
 
         :rtype: dict
         """
         self._load_datasets()
-        return self._training_datasets
+        return self._training_dataset
 
     @property
-    def validation_datasets(self):
-        """Returns the validation datasets for each GCI type. Each dataset is an instance \
-of :class:`mowl.datasets.el.ELDataset`
+    def validation_dataset(self):
+        """Returns the validation datasets . Each dataset is an instance \
+of :class:`mowl.datasets.el.ALCDataset`
 
         :rtype: dict
         """
@@ -97,12 +102,12 @@ of :class:`mowl.datasets.el.ELDataset`
             raise AttributeError("Validation dataset is None.")
 
         self._load_datasets()
-        return self._validation_datasets
+        return self._validation_dataset
 
     @property
-    def testing_datasets(self):
-        """Returns the testing datasets for each GCI type. Each dataset is an instance \
-of :class:`mowl.datasets.el.ELDataset`
+    def testing_dataset(self):
+        """Returns the testing datasets. Each dataset is an instance \
+of :class:`mowl.datasets.el.ALCDataset`
 
         :rtype: dict
         """
@@ -110,7 +115,7 @@ of :class:`mowl.datasets.el.ELDataset`
             raise AttributeError("Testing dataset is None.")
 
         self._load_datasets()
-        return self._testing_datasets
+        return self._testing_dataset
 
     @property
     def training_dataloaders(self):

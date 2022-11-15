@@ -8,7 +8,7 @@ from mowl.owlapi import (
 
 )
 from mowl.owlapi.defaults import TOP
-from mowl.owlapi.constants import R, THING
+from mowl.owlapi.constants import R, THING, INDIVIDUAL
 from mowl.owlapi.adapter import OWLAPIAdapter
 
 
@@ -51,7 +51,10 @@ class ALCDataset():
         self.adapter = OWLAPIAdapter()
         self.thing = self.adapter.create_class(THING)
         self.r = self.adapter.create_object_property(R)
-
+        self.ind = self.adapter.create_individual(INDIVIDUAL)
+        self.obj_prop_assertion_pat = self.adapter.create_object_property_assertion(
+            self.r, self.ind, self.ind)
+        
     @property
     def class_to_id(self):
         return self._dataset.class_to_id
@@ -66,7 +69,7 @@ class ALCDataset():
 
     def get_grouped_axioms(self):
         res = {}
-        for axiom in self._ontology.getTBoxAxioms(Imports.INCLUDED):
+        for axiom in self._ontology.getAxioms(Imports.INCLUDED):
             axioms = [axiom, ]
             if isinstance(axiom, OWLNaryAxiom):
                 axioms = axiom.asPairwiseAxioms()
@@ -118,6 +121,11 @@ class ALCDataset():
             cexprs = [get_cexpr_pattern(cexpr)
                       for cexpr in axiom.getClassExpressions()]
             return self.adapter.create_disjoint_classes(*cexprs)
+        elif isinstance(axiom, OWLClassAssertionAxiom):
+            cexpr = get_cexpr_pattern(axiom.getClassExpression())
+            return self.adapter.create_class_assertion(cexpr, self.ind)
+        elif isinstance(axiom, OWLObjectPropertyAssertionAxiom):
+            return self.obj_prop_assertion_pat
         else:
             raise NotImplementedError()
 
@@ -161,11 +169,17 @@ class ALCDataset():
                 cexprs += get_cexpr_vector(cexpr)
             return cexprs
         elif isinstance(axiom, OWLClassAssertionAxiom):
-            # TODO: implement
-            pass
+            ind = axiom.getIndividual()
+            vector = [self.individual_to_id[ind],]
+            vector += get_cexpr_vector(axiom.getClassExpression())
+            return vector
         elif isinstance(axiom, OWLObjectPropertyAssertionAxiom):
-            # TODO: implement
-            pass
+            ind1 = axiom.getObject()
+            ind2 = axiom.getSubject()
+            prop = axiom.getProperty()
+            return [self.individual_to_id[ind1],
+                    self.object_property_to_id[prop],
+                    self.individual_to_id[ind2]]
         else:
             raise NotImplementedError()
 
@@ -201,3 +215,7 @@ class ALCDataset():
         for the patterns """
         self.load()
         return self._grouped_axioms
+
+
+    def get_obj_prop_assertion_data(self):
+        return self.get_datasets()[self.obj_prop_assertion_pat]
