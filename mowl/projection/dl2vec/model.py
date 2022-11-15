@@ -31,7 +31,7 @@ class DL2VecProjector(ProjectionModel):
             will be included in the projection. Default is False.
         :type with_individuals: bool, optional
         :param verbose: If true then the warnings will be printed to the standard output. \
-            Default is False.
+Default is False.
         :type verbose: bool, optional
 
         :rtype: list(:class:`mowl.projection.edge.Edge`)
