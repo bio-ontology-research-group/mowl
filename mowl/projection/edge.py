@@ -26,7 +26,8 @@ class Edge:
 
     @property
     def src(self):
-        """Getter method for _src attribute
+        """
+        Getter method for ``_src`` attribute
 
         :rtype: str
         """
@@ -34,7 +35,8 @@ class Edge:
 
     @property
     def rel(self):
-        """Getter method for _rel attribute
+        """
+        Getter method for ``_rel`` attribute
 
         :rtype: str
         """
@@ -42,7 +44,8 @@ class Edge:
 
     @property
     def dst(self):
-        """Getter method for _dst attribute
+        """
+        Getter method for ``_dst`` attribute
 
         :rtype: str
         """
@@ -50,7 +53,8 @@ class Edge:
 
     @property
     def weight(self):
-        """Getter method for _weight attribute
+        """
+        Getter method for ``_weight`` attribute
 
         :rtype: str
         """
@@ -92,9 +96,11 @@ class Edge:
     @versionadded(version="0.1.0", reason="This method is available to transform graph edges \
         obtained from ontologies into PyKEEN triples.")
     def as_pykeen(edges, create_inverse_triples=True, entity_to_id=None, relation_to_id=None):
-        """This method transform a set of edges into an object of the type \
-        :class:`pykeen.triples.triples_factory.TriplesFactory`. This method is intended to be \
+        """
+        This method transform a set of edges into an object of the type
+        :class:`pykeen.triples.triples_factory.TriplesFactory`. This method is intended to be
         used for PyKEEN methods.
+
         :param edges: List of edges.
         :type edges: list of :class:`Edge`
         :param create_inverse_triple: Whether to create inverse triples. Defaults to ``True``

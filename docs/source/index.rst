@@ -2,20 +2,25 @@
  Welcome to mOWL's documentation!
 ==================================
 
-**mOWL** is a Python library for Machine Learning with Ontologies. Here you can find several methods to generate embeddings of ontology entities as described in the paper `Semantic similarity and machine learning with ontologies <https://academic.oup.com/bib/article/22/4/bbaa199/5922325>`_.
+**mOWL** is a Python library for Machine Learning with Ontologies. Here you can find functionalities to manipulate ontologies and use them as data for several methods that generate embeddings of ontology entities. Some of the methods implemented in this library can be found at: `Semantic similarity and machine learning with ontologies <https://academic.oup.com/bib/article/22/4/bbaa199/5922325>`_.
 
 
 Getting started
 ===============
 
-**mOWL** can be installed from the `source code <https://github.com/bio-ontology-research-group/mowl>`_ or from `Test PyPi <https://pypi.org/project/mowl-borg/>`_ or from `Conda <https://anaconda.org/ferzcam/mowl-borg>`_. For more details on installation check out the how to :doc:`install/index` section of the project.
+**mOWL** can be installed from `source code <https://github.com/bio-ontology-research-group/mowl>`_ or from `Test PyPi <https://pypi.org/project/mowl-borg/>`_ or from `Conda <https://anaconda.org/ferzcam/mowl-borg>`_. For more details on installation check out the how to :doc:`install/index` section of the project.
 
 .. note::
-   This version of documentation corresponds to mOWL-0.1.0-alpha, which is on development and can be installed from our `Github releases <https://github.com/bio-ontology-research-group/mowl/releases/tag/v0.1.0>`_
+   This version of documentation corresponds to mOWL-0.1.1.
 
 
-Import mOWL and start the JVM
+mOWL, JPype and the JVM
 =============================
+
+mOWL is a Python library. However, it interfaces the OWLAPI, which is written in Java. For that reason, mOWL uses JPype to use the JVM and access Java code from Python scripts.
+
+.. image:: imgs/architecture.png
+	   
 
 In order to use mOWL with all its functionalities, the Java Virtual Machine must be started. We can do that in the following way:
 
@@ -28,7 +33,7 @@ In the above piece of code, we specify the amount of memory given to the JVM. Th
 
 .. note::
 
-   The function `init_jvm` can only be called once during running time. This means that the JVM cannot be restarted and this is a limitation of JPype as stated in this `section <https://jpype.readthedocs.io/en/latest/api.html#jpype.shutdownJVM>`_ of their documentation.
+   The function ``init_jvm`` can only be called once during running time. This means that the JVM cannot be restarted and this is a limitation of JPype as stated in this `section <https://jpype.readthedocs.io/en/latest/api.html#jpype.shutdownJVM>`_ of their documentation.
 
 
    
@@ -51,20 +56,18 @@ The package is released under the BSD 3-Clause License.
    :glob:
 
    install/index
-   tutorials/index
    datasets/index
    corpus/index
    ontology/index
-   projection/index
-   random_walks/index
-   pykeen/index
+   owlapi/index
+   graphs/index
    embedding_el/index
    examples/index
    
    
    
 .. toctree::
-   :maxdepth: 0
+   :maxdepth: 2
    :caption: API
    :hidden:
    :glob:
@@ -74,6 +77,7 @@ The package is released under the BSD 3-Clause License.
    api/datasets/index
    api/nn/index
    api/ontology/index
+   api/owlapi/index
    api/projection/index
    api/walking/index
    api/reasoning/index

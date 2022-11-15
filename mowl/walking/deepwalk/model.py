@@ -29,6 +29,7 @@ class DeepWalk(WalkingModel):
                  alpha=0.,
                  outfile=None,
                  workers=1,
+                 seed=0
                  ):
         super().__init__(num_walks, walk_length, outfile=outfile, workers=workers)
 
@@ -36,6 +37,7 @@ class DeepWalk(WalkingModel):
         if not isinstance(alpha, float):
             raise TypeError("Optional parameter alpha must be a float")
         self.alpha = alpha
+        self.seed = seed
 
     @versionchanged(version="0.1.0", reason="The method now can accept a list of entities to \
     focus on when generating the random walks.")
@@ -59,6 +61,6 @@ class DeepWalk(WalkingModel):
             edgesJ.add(newEdge)
 
         walker = DW(edgesJ, self.num_walks, self.walk_length, self.alpha, self.workers,
-                    self.outfile, nodes_of_interest)
+                    self.outfile, nodes_of_interest, self.seed)
 
         walker.walk()

@@ -46,13 +46,17 @@ class TestNode2Vec(TestCase):
         num_walks = 10
         walk_length = 5
         p = "0.1"
-        self.assertRaisesRegex(TypeError, "Optional parameter p must be a float", Node2Vec,
+        self.assertRaisesRegex(TypeError,
+                               "Optional parameter p must be of type int or float",
+                               Node2Vec,
                                num_walks, walk_length, p=p)
 
         num_walks = 10
         walk_length = 5
         q = "0.1"
-        self.assertRaisesRegex(TypeError, "Optional parameter q must be a float", Node2Vec,
+        self.assertRaisesRegex(TypeError,
+                               "Optional parameter q must be of type int or float",
+                               Node2Vec,
                                num_walks, walk_length, q=q)
 
     def test_node2vec_number_of_walks(self):

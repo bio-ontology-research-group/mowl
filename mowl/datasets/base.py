@@ -10,10 +10,10 @@ from jpype import java
 import requests
 
 # OWLAPI imports
-from org.semanticweb.owlapi.model import OWLOntology, OWLClass, OWLObjectProperty
+from org.semanticweb.owlapi.model import OWLOntology, OWLClass, OWLObjectProperty, OWLIndividual
 from org.semanticweb.owlapi.apibinding import OWLManager
 
-from mowl.projection import TaxonomyWithRelsProjector
+from mowl.projection import TaxonomyWithRelationsProjector
 from mowl.owlapi.adapter import OWLAPIAdapter
 from mowl.owlapi.defaults import TOP, BOT
 
@@ -44,6 +44,12 @@ class Dataset():
         self._ontology = ontology
         self._validation = validation
         self._testing = testing
+
+        self._classes = None
+        self._individuals = None
+        self._object_properties = None
+        self._individuals = None
+        self._evaluation_classes = None
 
     @property
     def ontology(self):
@@ -76,7 +82,6 @@ class Dataset():
 
         :rtype: OWLClasses
         """
-        self._load()
         if self._classes is None:
             adapter = OWLAPIAdapter()
             top = adapter.create_class(TOP)
@@ -94,6 +99,31 @@ class Dataset():
         return self._classes
 
     @property
+    def class_to_id(self):
+        return self.classes.as_index_dict
+
+    @property
+    def individuals(self):
+        """List of individuals in the dataset. The individuals are collected from training, \
+validation and testing ontologies using the OWLAPI method ``ontology.getIndividualsSignature()``.
+
+        :rtype: OWLIndividuals
+        """
+        if self._individuals is None:
+            individuals = set(self._ontology.getIndividualsInSignature())
+            if self._validation:
+                individuals |= set(self._validation.getIndividualsInSignature())
+            if self._testing:
+                individuals |= set(self._testing.getIndividualsInSignature())
+            individuals = list(individuals)
+            self._individuals = OWLIndividuals(individuals)
+        return self._individuals
+
+    @property
+    def individual_to_id(self):
+        return self.individuals.as_index_dict
+
+    @property
     def object_properties(self):
         """List of object properties (relations) in the dataset. The object
         properties are collected from training, validation and testing
@@ -102,7 +132,7 @@ class Dataset():
 
         :rtype: OWLObjectProperties
         """
-        self._load()
+
         if self._object_properties is None:
             obj_properties = set()
             obj_properties |= set(self._ontology.getObjectPropertiesInSignature())
@@ -117,6 +147,10 @@ class Dataset():
         return self._object_properties
 
     @property
+    def object_property_to_id(self):
+        return self.object_properties.as_index_dict
+
+    @property
     def evaluation_classes(self):
         """List of classes used for evaluation. Depending on the dataset, this method could \
         return a single :class:`OWLClasses` object \
@@ -126,7 +160,7 @@ class Dataset():
         overriden, this method returns the classes in the testing ontology obtained from the \
         OWLAPI method ``getClassesInSignature()`` as a :class:`OWLClasses` object.
         """
-        self._load()
+
         if self._evaluation_classes is None:
             classes = self._testing.getClassesInSignature()
             self._evaluation_classes = OWLClasses(classes)
@@ -140,7 +174,7 @@ class Dataset():
 
         :rtype: dict
         """
-        projector = TaxonomyWithRelsProjector(relations=["http://has_label"])
+        projector = TaxonomyWithRelationsProjector(relations=["http://has_label"])
         edges = projector.project(self._ontology)
         labels = {str(e.src): str(e.dst) for e in edges}
         return labels
@@ -247,6 +281,7 @@ class TarFileDataset(PathDataset):
         self.data_root = pathlib.Path(self.tarfile_path).parent
 
         dataset_root = os.path.join(self.data_root, self.dataset_name)
+        self.root = dataset_root
 
         ontology_path = os.path.join(dataset_root, 'ontology.owl')
         validation_path = os.path.join(dataset_root, 'valid.owl')
@@ -312,7 +347,24 @@ class Entities():
 
     def __init__(self, collection):
         self._collection = self.check_owl_type(collection)
+        self._collection = sorted(self._collection, key=lambda x: x.toStringID())
         self._name_owlobject = self.to_dict()
+        self._index_dict = self.to_index_dict()
+
+    def __getitem__(self, idx):
+        return self._collection[idx]
+
+    def __len__(self):
+        return len(self._collection)
+
+    def __iter__(self):
+        self.ind = 0
+        return self
+
+    def __next__(self):
+        item = self._collection[self.ind]
+        self.ind += 1
+        return item
 
     def check_owl_type(self, collection):
         """This method checks whether the elements in the provided collection
@@ -327,12 +379,14 @@ class Entities():
         """Generates a dictionaty indexed by OWL entities IRIs and the values
         are the corresponding OWL entities.
         """
-        dict_ = {}
-        for ent in self._collection:
-            name = self.to_str(ent)
-            if name not in dict_:
-                dict_[name] = ent
-        dict_ = dict(sorted(dict_.items()))
+        dict_ = {self.to_str(ent): ent for ent in self._collection}
+        return dict_
+
+    def to_index_dict(self):
+        """Generates a dictionary indexed by OWL objects and the values
+        are the corresponding indicies.
+        """
+        dict_ = {v: k for k, v in enumerate(self._collection)}
         return dict_
 
     @property
@@ -344,6 +398,16 @@ class Entities():
     def as_owl(self):
         """Returns the list of entities as OWL objects."""
         return list(self._name_owlobject.values())
+
+    @property
+    def as_dict(self):
+        """Returns the dictionary of entities indexed by their names."""
+        return self._name_owlobject
+
+    @property
+    def as_index_dict(self):
+        """Returns the dictionary of entities indexed by their names."""
+        return self._index_dict
 
 
 class OWLClasses(Entities):
@@ -357,6 +421,20 @@ class OWLClasses(Entities):
 
     def to_str(self, owl_class):
         name = str(owl_class.toStringID())
+        return name
+
+
+class OWLIndividuals(Entities):
+    """Class containing OWL individuals indexed by they IRIs"""
+
+    def check_owl_type(self, collection):
+        for item in collection:
+            if not isinstance(item, OWLIndividual):
+                raise TypeError("Type of elements in collection must be OWLIndividual.")
+        return collection
+
+    def to_str(self, owl_individual):
+        name = str(owl_individual.toStringID())
         return name
 
 

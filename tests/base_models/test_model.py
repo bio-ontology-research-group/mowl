@@ -70,7 +70,9 @@ class TestModel(TestCase):
         model = Model(self.dataset)
         model_filepath = model.model_filepath
         self.assertIsInstance(model_filepath, str)
-        self.assertTrue(model_filepath.startswith("/tmp/"))
+        import tempfile
+        tmppath = tempfile.gettempdir()
+        self.assertTrue(model_filepath.startswith(tmppath))
 
 
 class TestEmbeddingModel(TestCase):

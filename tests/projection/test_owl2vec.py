@@ -79,7 +79,7 @@ class TestOwl2VecStar(TestCase):
         # Rule 3
         # named_individual1 = data_factory.getOWLNamedIndividual(IRI.create("http://individual1"))
         # exists_some_individual1 = data_factory.getOWLObjectSomeValuesFrom(role2,
-        #                                                  named_individual1.asOWLClass())
+        # named_individual1.asOWLClass())
         # axiom_rule_3_1 = data_factory.getOWLSubClassOfAxiom(class1, exists_some_individual1)
         # axiom_rule_3_2 = data_factory.getOWLAssertionAxiom(class2, named_individual1)
         # triple_rule3 = ("http://class1", "http://role2", "http://class2")

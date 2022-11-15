@@ -1,5 +1,4 @@
 from mowl.projection.base import ProjectionModel
-
 from org.mowl.Projectors import DL2VecProjector as Projector
 from org.semanticweb.owlapi.model import OWLOntology
 from mowl.projection.edge import Edge
@@ -7,12 +6,12 @@ import logging
 
 
 class DL2VecProjector(ProjectionModel):
-
     '''
     :param ontology: The ontology to be processed.
     :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
-    :param bidirectional_taxonomy: If true then per each SubClass edge one SuperClass edge will \
-        be generated.
+
+    :param bidirectional_taxonomy: If true then per each SubClass edge one SuperClass
+        edge will be generated.
     :type bidirectional_taxonomy: bool
     '''
 
@@ -28,8 +27,8 @@ class DL2VecProjector(ProjectionModel):
 
         :param ontology: The ontology to be processed.
         :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
-        :param with_individuals: If true then assertion axioms with named individuals \
-will be included in the projection. Default is False.
+        :param with_individuals: If true then assertion axioms with named individuals
+            will be included in the projection. Default is False.
         :type with_individuals: bool, optional
         :param verbose: If true then the warnings will be printed to the standard output. \
 Default is False.

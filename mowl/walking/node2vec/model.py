@@ -23,8 +23,8 @@ class Node2Vec(WalkingModel):
     def __init__(self,
                  num_walks,
                  walk_length,
-                 p=1.,
-                 q=1.,
+                 p=1,
+                 q=1,
                  outfile=None,
                  workers=1
                  ):
@@ -33,9 +33,15 @@ class Node2Vec(WalkingModel):
 
         # Type checking
         if not isinstance(p, float):
-            raise TypeError("Optional parameter p must be a float")
+            if isinstance(p, int):
+                p = float(p)
+            else:
+                raise TypeError("Optional parameter p must be of type int or float")
         if not isinstance(q, float):
-            raise TypeError("Optional parameter q must be a float")
+            if isinstance(q, int):
+                q = float(q)
+            else:
+                raise TypeError("Optional parameter q must be of type int or float")
         self.p = p
         self.q = q
 

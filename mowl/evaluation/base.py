@@ -6,7 +6,6 @@ import click as ck
 from mowl.projection.edge import Edge
 
 from mowl.projection.factory import projector_factory
-from mowl.datasets.build_ontology import PREFIXES
 from gensim.models import Word2Vec
 from gensim.models.keyedvectors import KeyedVectors
 import logging

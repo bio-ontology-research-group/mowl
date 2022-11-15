@@ -43,5 +43,6 @@ setuptools.setup(
         "tqdm",
         "torch",
         "urllib3"
-    ]
+    ],
+
 )
