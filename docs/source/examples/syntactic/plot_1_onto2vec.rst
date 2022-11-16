@@ -140,6 +140,8 @@ We can now add the inferred axioms to the ontology.
 
 .. rst-class:: sphx-glr-script-out
 
+ Out:
+
  .. code-block:: none
 
 
@@ -192,23 +194,30 @@ Cleaning up memory
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** ( 0 minutes  13.632 seconds)
+   **Total running time of the script:** ( 0 minutes  24.128 seconds)
+
+**Estimated memory usage:**  68 MB
 
 
 .. _sphx_glr_download_examples_syntactic_plot_1_onto2vec.py:
 
-.. only:: html
 
-  .. container:: sphx-glr-footer sphx-glr-footer-example
+.. only :: html
+
+ .. container:: sphx-glr-footer
+    :class: sphx-glr-footer-example
 
 
-    .. container:: sphx-glr-download sphx-glr-download-python
 
-      :download:`Download Python source code: plot_1_onto2vec.py <plot_1_onto2vec.py>`
+  .. container:: sphx-glr-download sphx-glr-download-python
 
-    .. container:: sphx-glr-download sphx-glr-download-jupyter
+     :download:`Download Python source code: plot_1_onto2vec.py <plot_1_onto2vec.py>`
 
-      :download:`Download Jupyter notebook: plot_1_onto2vec.ipynb <plot_1_onto2vec.ipynb>`
+
+
+  .. container:: sphx-glr-download sphx-glr-download-jupyter
+
+     :download:`Download Jupyter notebook: plot_1_onto2vec.ipynb <plot_1_onto2vec.ipynb>`
 
 
 .. only:: html

@@ -27,7 +27,7 @@ sys.path.append('../../')
 import mowl
 mowl.init_jvm("10g")
 
-from mowl.datasets.builtin import GDAHumanDataset
+from mowl.datasets.builtin import GDAMouseDataset
 from mowl.projection import DL2VecProjector
 from mowl.walking import DeepWalk
 from gensim.models.word2vec import LineSentence
@@ -42,7 +42,7 @@ from gensim.models import Word2Vec
 # ontology can be found at :doc:`/graphs/projection`. The outcome of the projection algorithm
 # is an edgelist.
 
-dataset = GDAHumanDataset()
+dataset = GDAMouseDataset()
 
 projector = DL2VecProjector(bidirectional_taxonomy=True)
 edges = projector.project(dataset.ontology)

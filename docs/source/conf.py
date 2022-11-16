@@ -69,8 +69,8 @@ sphinx_gallery_conf = {
 
     "within_subsection_order": FileNameSortKey,
     "run_stale_examples": True,
-    "abort_on_example_error": True,
-    "plot_gallery": False,
+    "abort_on_example_error": False,
+    #"plot_gallery": False,
     "show_memory": True,
 }
 
@@ -83,6 +83,7 @@ intersphinx_mapping = {
     'pykeen': ('https://pykeen.readthedocs.io/en/latest/', None),
     'pytorch': ('https://pytorch.org/docs/stable/', None),
     'gensim': ('https://radimrehurek.com/gensim/', None),
+    'sklearn': ('https://scikit-learn.org/stable/', None),
 }
 
 intersphinx_disabled_domains = ['std']
@@ -109,7 +110,7 @@ source_suffix = ['.rst', '.md']
 # The master toctree document.
 master_doc = 'index'
 
-autodoc_mock_imports = ['jpype', 'owlready2', 'gensim', 'rdflib', 'networkx', 'node2vec', 'matplotlib']
+autodoc_mock_imports = ['jpype', 'owlready2', 'rdflib', 'networkx', 'node2vec', 'matplotlib']
 
 #autodoc_mock_imports = ['org', 'uk', 'java', 'numpy', 'jpype', 'de', 'pandas', 'scipy', 'sklearn', 'owlready2', 'gensim', 'torch', 'rdflib', 'networkx', 'pykeen', 'node2vec', 'matplotlib', 'tqdm', 'click']
 
