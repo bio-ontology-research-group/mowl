@@ -368,49 +368,51 @@ Training the model
 
 .. rst-class:: sphx-glr-script-out
 
+ Out:
+
  .. code-block:: none
 
       0%|          | 0/20 [00:00<?, ?it/s]
-    Epoch 0: Train loss: 4.009109 Valid loss: 1.6046
-      5%|5         | 1/20 [00:11<03:40, 11.62s/it]
-    Epoch 1: Train loss: 4.013802 Valid loss: 1.6020
-
-    Epoch 2: Train loss: 3.993320 Valid loss: 1.6003
-     15%|#5        | 3/20 [00:11<00:52,  3.07s/it]
-    Epoch 3: Train loss: 3.976562 Valid loss: 1.5980
-
-    Epoch 4: Train loss: 3.967067 Valid loss: 1.5958
-     25%|##5       | 5/20 [00:11<00:22,  1.53s/it]
-    Epoch 5: Train loss: 3.955366 Valid loss: 1.5936
-
-    Epoch 6: Train loss: 3.938182 Valid loss: 1.5920
-     35%|###5      | 7/20 [00:12<00:11,  1.09it/s]
-    Epoch 7: Train loss: 3.926151 Valid loss: 1.5905
-
-    Epoch 8: Train loss: 3.915285 Valid loss: 1.5889
-     45%|####5     | 9/20 [00:12<00:06,  1.67it/s]
-    Epoch 9: Train loss: 3.902578 Valid loss: 1.5876
-
-    Epoch 10: Train loss: 3.889038 Valid loss: 1.5863
-     55%|#####5    | 11/20 [00:12<00:03,  2.39it/s]
-    Epoch 11: Train loss: 3.876056 Valid loss: 1.5848
-
-    Epoch 12: Train loss: 3.865698 Valid loss: 1.5831
-     65%|######5   | 13/20 [00:12<00:02,  3.28it/s]
-    Epoch 13: Train loss: 3.856456 Valid loss: 1.5815
-
-    Epoch 14: Train loss: 3.847373 Valid loss: 1.5799
-     75%|#######5  | 15/20 [00:12<00:01,  4.31it/s]
-    Epoch 15: Train loss: 3.837473 Valid loss: 1.5783
-
-    Epoch 16: Train loss: 3.828924 Valid loss: 1.5767
-     85%|########5 | 17/20 [00:12<00:00,  5.46it/s]
-    Epoch 17: Train loss: 3.820574 Valid loss: 1.5752
-
-    Epoch 18: Train loss: 3.811502 Valid loss: 1.5737
-     95%|#########5| 19/20 [00:13<00:00,  6.62it/s]
-    Epoch 19: Train loss: 3.803204 Valid loss: 1.5722
-    100%|##########| 20/20 [00:13<00:00,  1.53it/s]
+    Epoch 0: Train loss: 4.438335 Valid loss: 1.6051
+      5%|5         | 1/20 [00:15<04:53, 15.46s/it]
+    Epoch 1: Train loss: 4.450060 Valid loss: 1.6025
+     10%|#         | 2/20 [00:15<01:57,  6.52s/it]
+    Epoch 2: Train loss: 4.429717 Valid loss: 1.6010
+     15%|#5        | 3/20 [00:15<01:02,  3.67s/it]
+    Epoch 3: Train loss: 4.411909 Valid loss: 1.5988
+     20%|##        | 4/20 [00:16<00:37,  2.33s/it]
+    Epoch 4: Train loss: 4.401057 Valid loss: 1.5968
+     25%|##5       | 5/20 [00:16<00:23,  1.58s/it]
+    Epoch 5: Train loss: 4.390624 Valid loss: 1.5947
+     30%|###       | 6/20 [00:16<00:15,  1.14s/it]
+    Epoch 6: Train loss: 4.376946 Valid loss: 1.5932
+     35%|###5      | 7/20 [00:17<00:11,  1.17it/s]
+    Epoch 7: Train loss: 4.365747 Valid loss: 1.5918
+     40%|####      | 8/20 [00:17<00:08,  1.50it/s]
+    Epoch 8: Train loss: 4.352935 Valid loss: 1.5904
+     45%|####5     | 9/20 [00:17<00:05,  1.84it/s]
+    Epoch 9: Train loss: 4.338408 Valid loss: 1.5891
+     50%|#####     | 10/20 [00:17<00:04,  2.18it/s]
+    Epoch 10: Train loss: 4.325152 Valid loss: 1.5880
+     55%|#####5    | 11/20 [00:18<00:03,  2.50it/s]
+    Epoch 11: Train loss: 4.312129 Valid loss: 1.5865
+     60%|######    | 12/20 [00:18<00:02,  2.77it/s]
+    Epoch 12: Train loss: 4.298018 Valid loss: 1.5849
+     65%|######5   | 13/20 [00:18<00:02,  3.01it/s]
+    Epoch 13: Train loss: 4.283844 Valid loss: 1.5833
+     70%|#######   | 14/20 [00:18<00:01,  3.17it/s]
+    Epoch 14: Train loss: 4.272910 Valid loss: 1.5818
+     75%|#######5  | 15/20 [00:19<00:01,  3.33it/s]
+    Epoch 15: Train loss: 4.260476 Valid loss: 1.5803
+     80%|########  | 16/20 [00:19<00:01,  3.45it/s]
+    Epoch 16: Train loss: 4.247974 Valid loss: 1.5788
+     85%|########5 | 17/20 [00:19<00:00,  3.53it/s]
+    Epoch 17: Train loss: 4.232961 Valid loss: 1.5774
+     90%|######### | 18/20 [00:20<00:00,  3.58it/s]
+    Epoch 18: Train loss: 4.219107 Valid loss: 1.5760
+     95%|#########5| 19/20 [00:20<00:00,  3.62it/s]
+    Epoch 19: Train loss: 4.207544 Valid loss: 1.5746
+    100%|##########| 20/20 [00:20<00:00,  3.65it/s]    100%|##########| 20/20 [00:20<00:00,  1.03s/it]
 
 
 
@@ -418,23 +420,30 @@ Training the model
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** ( 0 minutes  17.187 seconds)
+   **Total running time of the script:** ( 0 minutes  27.308 seconds)
+
+**Estimated memory usage:**  1217 MB
 
 
 .. _sphx_glr_download_examples_elmodels_plot_1_elembeddings.py:
 
-.. only:: html
 
-  .. container:: sphx-glr-footer sphx-glr-footer-example
+.. only :: html
+
+ .. container:: sphx-glr-footer
+    :class: sphx-glr-footer-example
 
 
-    .. container:: sphx-glr-download sphx-glr-download-python
 
-      :download:`Download Python source code: plot_1_elembeddings.py <plot_1_elembeddings.py>`
+  .. container:: sphx-glr-download sphx-glr-download-python
 
-    .. container:: sphx-glr-download sphx-glr-download-jupyter
+     :download:`Download Python source code: plot_1_elembeddings.py <plot_1_elembeddings.py>`
 
-      :download:`Download Jupyter notebook: plot_1_elembeddings.ipynb <plot_1_elembeddings.ipynb>`
+
+
+  .. container:: sphx-glr-download sphx-glr-download-jupyter
+
+     :download:`Download Jupyter notebook: plot_1_elembeddings.ipynb <plot_1_elembeddings.ipynb>`
 
 
 .. only:: html

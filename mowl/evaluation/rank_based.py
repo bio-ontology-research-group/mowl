@@ -14,11 +14,23 @@ class RankBasedEvaluator(Evaluator):
     :math:`(h,r,t)`, scores are computed for triples :math:`(h,r,t')` for all possible \
     :math:`t'`. After that, the ranking of the testing triple :math:`(h,r,t)` score is obtained.
 
+    :param class_index_emb: dictionary of classes and their embeddings
+    :type class_index_emb: dict(str, np.array)
+    :param relation_index_emb: dictionary of relations and their embeddings
+    :type relation_index_emb: dict(str, np.array)
+    :param testing_set: Set of triples that are true positives. 
+    :type testing_set: list(mowl.projection.edge.Edge)
+    :param eval_method: evaluation method score the triples
+    :type eval_method: function
+    :param training_set: Set of triples that are true positives but exist in the training set. \
+This is used to compute filtered metrics.
+    :type training_set: list(mowl.projection.edge.Edge)
+    :param head_entities: List of entities that are used as head entities in the testing set.
+    :type head_entities: list(str)
+    :param tail_entities: List of entities that are used as tail entities in the testing set.
+    :type tail_entities: list(str)
     :param device: Use `cpu` or `cuda`
     :type device: str
-    :param homogeneous: This parameter indicates whether or not the head entities are of the \
-    same type of the tail entities.
-
     """
 
     def __init__(self,
@@ -153,8 +165,8 @@ class RankBasedEvaluator(Evaluator):
             c_emb_idx, d_emb_idx = self.head_name_indexemb[c], self.tail_name_indexemb[d]
 
             # Scores matrix labels
-            c_sc_idx, d_sc_idx = self.head_indexemb_indexsc[c_emb_idx],
-            self.tail_indexemb_indexsc[d_emb_idx]
+            c_sc_idx = self.head_indexemb_indexsc[c_emb_idx]
+            d_sc_idx = self.tail_indexemb_indexsc[d_emb_idx]
 
             r = self.relation_index_emb[r]
 
@@ -238,7 +250,18 @@ class RankBasedEvaluator(Evaluator):
 
 
 class ModelRankBasedEvaluator(RankBasedEvaluator):
+    """This class corresponds to evaluation based on ranking, where the embedding information of \
+an entity is enclosed in some model.
 
+    :param model: The model to be evaluated.
+    :type model: mowl.base_models.EmbeddingModel
+    :param device: The device to be used for evaluation. Defaults to 'cpu'.
+    :type device: str, optional
+    :param eval_method: The method used for the evaluation. If None, the method will be set \
+to ``self.eval_method``. Defaults to None.
+    :type eval_method: callable, optional
+"""
+    
     def __init__(self,
                  model,
                  device="cpu",
@@ -279,7 +302,31 @@ class ModelRankBasedEvaluator(RankBasedEvaluator):
 
 
 class EmbeddingsRankBasedEvaluator(RankBasedEvaluator):
+    """This class corresponds to evaluation based on raking where the embedding information are \
+just vectors and are not part of a model.
 
+    :param class_embeddings: The embeddings of the classes.
+    :type class_embeddings: dict(str, numpy.ndarray)
+    :param testing_set: Set of triples that are true positives. 
+    :type testing_set: list(mowl.projection.edge.Edge)
+    :param eval_method_class: Class that contains placeholders for class and relation embeddings.
+    :type eval_method_class: :class:`mowl.evaluation.base.EvaluationMethod`
+    :param score_func: The function used to compute the score. Defaults to None. This function \
+will be inserted into the ``eval_method_class``.
+    :param training_set: Set of triples that are true positives but exist in the training set. \
+    This is used to compute filtered metrics.
+    :type training_set: list(mowl.projection.edge.Edge)
+    :param relation_embeddings: The embeddings of the relations. Defaults to None.
+    :type relation_embeddings: dict(str, numpy.ndarray), optional
+    :param head_entities: List of entities that are used as head entities in the testing set.
+    :type head_entities: list(str)
+    :param tail_entities: List of entities that are used as tail entities in the testing set.
+    :type tail_entities: list(str)
+    :param device: Use `cpu` or `cuda`
+    :type device: str
+    """
+
+    
     def __init__(self,
                  class_embeddings,
                  testing_set,
@@ -297,7 +344,7 @@ class EmbeddingsRankBasedEvaluator(RankBasedEvaluator):
         class_embeddings_values = th.tensor(class_embeddings_values).to(device)
         class_index_emb = {v: k for k, v in enumerate(self.class_embeddings.keys())}
 
-        relation = testing_set[0].rel()
+        relation = testing_set[0].rel
 
         if relation_embeddings is None:
             rel_embeds_values = None

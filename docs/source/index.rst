@@ -8,7 +8,7 @@
 Getting started
 ===============
 
-**mOWL** can be installed from `source code <https://github.com/bio-ontology-research-group/mowl>`_ or from `Test PyPi <https://pypi.org/project/mowl-borg/>`_ or from `Conda <https://anaconda.org/ferzcam/mowl-borg>`_. For more details on installation check out the how to :doc:`install/index` section of the project.
+**mOWL** can be installed from `source code <https://github.com/bio-ontology-research-group/mowl>`_ or from `PyPi <https://pypi.org/project/mowl-borg/>`_. For more details on installation check out the how to :doc:`install/index` section of the project.
 
 .. note::
    This version of documentation corresponds to mOWL-0.1.1.
@@ -62,6 +62,8 @@ The package is released under the BSD 3-Clause License.
    owlapi/index
    graphs/index
    embedding_el/index
+   evaluation/index
+   visualization/index
    examples/index
    
    
@@ -75,6 +77,7 @@ The package is released under the BSD 3-Clause License.
    api/base_models/index
    api/corpus/index
    api/datasets/index
+   api/evaluation/index
    api/nn/index
    api/ontology/index
    api/owlapi/index

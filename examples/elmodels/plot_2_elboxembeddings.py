@@ -25,6 +25,10 @@ property.
 # There might be slight changes in the training part but the most important changes are in the
 # `Definition of loss functions`_ definition of the loss functions for each normal form.
 
+
+import mowl
+mowl.init_jvm("10g")
+
 from mowl.base_models.elmodel import EmbeddingELModel
 import mowl.models.elboxembeddings.losses as L
 from mowl.nn.elmodule import ELModule
@@ -33,7 +37,8 @@ import logging
 import numpy as np
 
 from mowl.models.elboxembeddings.evaluate import ELBoxEmbeddingsPPIEvaluator
-
+from mowl.projection import TaxonomyWithRelationsProjector
+    
 from tqdm import trange, tqdm
 
 import torch as th
@@ -190,7 +195,38 @@ class ELBoxEmbeddings(EmbeddingELModel):
         self._loaded_eval = False
         self.extended = False
         self.init_model()
+        self._testing_set = None
+        self._training_set = None
+        self._head_entities = None
 
+    @property
+    def testing_set(self):
+        if self._testing_set is None:
+            projector = TaxonomyWithRelationsProjector(taxonomy=False,
+                                                       relations=["http://interacts_with"]
+                                                       )
+            self._testing_set = projector.project(dataset.testing)
+        return self._testing_set
+
+    @property
+    def training_set(self):
+        if self._training_set is None:
+            projector = TaxonomyWithRelationsProjector(taxonomy=False,
+                                                       relations=["http://interacts_with"]
+                                                       )
+            self._training_set = projector.project(dataset.ontology)
+        return self._training_set
+
+    @property
+    def head_entities(self):
+        if self._head_entities is None:
+            self._head_entities = self.dataset.evaluation_classes.as_str
+        return self._head_entities
+
+    @property
+    def tail_entities(self):
+        return self.head_entities
+    
     def init_model(self):
         self.model = ELBoxModule(
             len(self.class_index_dict),
@@ -198,6 +234,10 @@ class ELBoxEmbeddings(EmbeddingELModel):
             embed_dim=self.embed_dim,
             margin=self.margin
         ).to(self.device)
+
+    def load_best_model(self):
+        self.model.load_state_dict(th.load(self.model_filepath))
+        
 
     def train(self):
         criterion = nn.MSELoss()
@@ -247,12 +287,12 @@ class ELBoxEmbeddings(EmbeddingELModel):
                 loss = criterion(dst, th.zeros(dst.shape, requires_grad=False).to(self.device))
                 valid_loss += loss.detach().item()
 
-            checkpoint = 1
+            checkpoint = 500
             if best_loss > valid_loss:
                 best_loss = valid_loss
                 th.save(self.model.state_dict(), self.model_filepath)
             if (epoch + 1) % checkpoint == 0:
-                print(f'\nEpoch {epoch}: Train loss: {train_loss:.4f} Valid loss: {valid_loss:.4f}')
+                print(f'\nEpoch {epoch+1}: Train loss: {train_loss:.4f} Valid loss: {valid_loss:.4f}')
 
     def evaluate_ppi(self):
         self.init_model()
@@ -281,14 +321,35 @@ from mowl.datasets.builtin import PPIYeastSlimDataset
 dataset = PPIYeastSlimDataset()
 
 model = ELBoxEmbeddings(dataset,
-                     embed_dim=10,
-                     margin=0.1,
+                     embed_dim=50,
+                     margin=-0.05,
                      reg_norm=1,
                      learning_rate=0.001,
-                     epochs=20,
+                     epochs=10000,
                      batch_size=4096,
                      model_filepath=None,
                      device='cpu')
 
 model.train()
 
+
+
+# %%
+# Evaluating the model
+# ----------------------
+#
+# Now, it is time to evaluate embeddings. For this, we use the
+# :class:`ModelRankBasedEvaluator <mowl.evaluation.ModelRankBasedEvaluator>` class.
+
+
+from mowl.evaluation.rank_based import ModelRankBasedEvaluator
+
+with th.no_grad():                                                                        
+    model.load_best_model()                                                               
+    evaluator = ModelRankBasedEvaluator(                                                  
+        model,                                                                            
+        device = "cpu",
+        eval_method = model.model.gci2_loss                                               
+    )                                                                                         
+                                                                                                  
+    evaluator.evaluate(show=True)

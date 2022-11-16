@@ -44,12 +44,3 @@ Install from PyPi
 	  
    pip install mowl-borg
 
-
-Install from Conda
-------------------------------
-
-
-.. code:: bash
-
-   conda install -c ferzcam mowl-borg
-

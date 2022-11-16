@@ -61,12 +61,6 @@ First, we have the necesary imports for this example.
 
 
 
-
-
-
-
-
-
 .. GENERATED FROM PYTHON SOURCE LINES 42-47
 
 Dataset
@@ -83,12 +77,6 @@ Gene Ontology sub-ontologies: molecular function, biological process and cellula
     MF_URL = "https://deepgo.cbrc.kaust.edu.sa/data/deepgozero/mowl/molecular_function.tar.gz"
     BP_URL = "https://deepgo.cbrc.kaust.edu.sa/data/deepgozero/mowl/biological_process.tar.gz"
     CC_URL = "https://deepgo.cbrc.kaust.edu.sa/data/deepgozero/mowl/cellular_component.tar.gz"
-
-
-
-
-
-
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 53-61
@@ -221,12 +209,6 @@ The validation and testing ontologies contain protein function and intepro annot
         return data, labels
 
 
-
-
-
-
-
-
 .. GENERATED FROM PYTHON SOURCE LINES 176-183
 
 DeepGoZero model
@@ -268,12 +250,6 @@ to predict if the GO term is a function of the protein.
             if self.dropout:
                 x = self.dropout(x)
             return x
-
-
-
-
-
-
 
 
 
@@ -357,12 +333,6 @@ of the Gene Ontology and learns a representation of the GO terms.
         roc_auc = auc(fpr, tpr)
 
         return roc_auc
-
-
-
-
-
-
 
 
 
@@ -622,12 +592,6 @@ leveraging the semantics of the Gene Ontology.
 
 
 
-
-
-
-
-
-
 .. GENERATED FROM PYTHON SOURCE LINES 538-540
 
 Training the model
@@ -646,77 +610,9 @@ Training the model
     main(ont, batch_size, epochs, device)
 
 
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    Loading DeepGOZero dataset...
-    Functions:      50722
-    Proteins:       43279
-    Interpros:      21579
-    Relations:      11
-    GO terms list: 2041
-    Interpro list: 26406
-    Non-zero functions:     2041
-    Zero functions:         48681
-    In get_data. Interpros processed: 153955. Functions processed: 364571
-    In get_data. Interpros processed: 17956. Functions processed: 40176
-    In get_data. Interpros processed: 21084. Functions processed: 51317
-    Loading normal forms from disk...
-    Axioms in GCI0: 80941
-    Axioms in GCI1: 11842
-    Axioms in GCI2: 19594
-    Axioms in GCI3: 11810
-    DGELModel(
-      (net): Sequential(
-        (0): MLPBlock(
-          (linear): Linear(in_features=26406, out_features=1024, bias=True)
-          (activation): ReLU()
-          (layer_norm): BatchNorm1d(1024, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-          (dropout): Dropout(p=0.1, inplace=False)
-        )
-        (1): Residual(
-          (fn): MLPBlock(
-            (linear): Linear(in_features=1024, out_features=1024, bias=True)
-            (activation): ReLU()
-            (layer_norm): BatchNorm1d(1024, eps=1e-05, momentum=0.1, affine=True, track_running_stats=True)
-            (dropout): Dropout(p=0.1, inplace=False)
-          )
-        )
-      )
-      (elembeddings): ELEmModule(
-        (class_embed): Embedding(50724, 1024)
-        (class_rad): Embedding(50722, 1)
-        (rel_embed): Embedding(11, 1024)
-      )
-    )
-    Training the model
-      0%|          | 0/2 [00:00<?, ?it/s]     50%|#####     | 1/2 [00:01<00:01,  1.54s/it]    100%|##########| 2/2 [00:03<00:00,  1.69s/it]    100%|##########| 2/2 [00:03<00:00,  1.66s/it]
-    Validation
-      0%|          | 0/241 [00:00<?, ?it/s]      7%|6         | 16/241 [00:00<00:01, 159.76it/s]     13%|#3        | 32/241 [00:00<00:01, 143.14it/s]     20%|#9        | 47/241 [00:00<00:01, 134.23it/s]     25%|##5       | 61/241 [00:00<00:01, 129.05it/s]     31%|###       | 74/241 [00:00<00:01, 119.99it/s]     36%|###6      | 87/241 [00:00<00:01, 115.24it/s]     41%|####1     | 99/241 [00:00<00:01, 110.69it/s]     46%|####6     | 111/241 [00:00<00:01, 106.59it/s]     51%|#####     | 122/241 [00:01<00:01, 101.00it/s]     55%|#####5    | 133/241 [00:01<00:01, 96.37it/s]      59%|#####9    | 143/241 [00:01<00:01, 90.31it/s]     63%|######3   | 153/241 [00:01<00:01, 87.55it/s]     67%|######7   | 162/241 [00:01<00:00, 83.01it/s]     71%|#######   | 171/241 [00:01<00:00, 82.33it/s]     75%|#######4  | 180/241 [00:01<00:00, 81.27it/s]     78%|#######8  | 189/241 [00:01<00:00, 77.43it/s]     82%|########1 | 197/241 [00:02<00:00, 74.65it/s]     85%|########5 | 205/241 [00:02<00:00, 74.42it/s]     88%|########8 | 213/241 [00:02<00:00, 73.95it/s]     92%|#########1| 221/241 [00:02<00:00, 73.18it/s]     95%|#########5| 229/241 [00:02<00:00, 71.93it/s]     98%|#########8| 237/241 [00:02<00:00, 70.80it/s]    100%|##########| 241/241 [00:02<00:00, 90.09it/s]
-    Epoch 0: Loss - 0.8684782385826111, EL Loss: 8.31731128692627, Valid loss - 0.6835167949625071, AUC - 0.5248809636465112
-    EL Loss 8.31731128692627
-    Saving model
-      0%|          | 0/2 [00:00<?, ?it/s]     50%|#####     | 1/2 [00:01<00:01,  1.58s/it]    100%|##########| 2/2 [00:02<00:00,  1.38s/it]    100%|##########| 2/2 [00:02<00:00,  1.41s/it]
-    Validation
-      0%|          | 0/241 [00:00<?, ?it/s]      7%|6         | 16/241 [00:00<00:01, 158.85it/s]     13%|#3        | 32/241 [00:00<00:01, 157.10it/s]     20%|#9        | 48/241 [00:00<00:01, 154.40it/s]     27%|##6       | 64/241 [00:00<00:01, 149.94it/s]     33%|###3      | 80/241 [00:00<00:01, 140.27it/s]     39%|###9      | 95/241 [00:00<00:01, 137.13it/s]     45%|####5     | 109/241 [00:00<00:00, 134.81it/s]     51%|#####1    | 123/241 [00:00<00:00, 130.75it/s]     57%|#####6    | 137/241 [00:01<00:00, 122.09it/s]     62%|######2   | 150/241 [00:01<00:00, 114.17it/s]     67%|######7   | 162/241 [00:01<00:00, 108.31it/s]     72%|#######1  | 173/241 [00:01<00:00, 103.40it/s]     76%|#######6  | 184/241 [00:01<00:00, 99.59it/s]      80%|########  | 194/241 [00:01<00:00, 96.23it/s]     85%|########4 | 204/241 [00:01<00:00, 93.72it/s]     89%|########8 | 214/241 [00:01<00:00, 91.03it/s]     93%|#########2| 224/241 [00:01<00:00, 84.98it/s]     97%|#########6| 233/241 [00:02<00:00, 79.15it/s]    100%|##########| 241/241 [00:02<00:00, 74.23it/s]    100%|##########| 241/241 [00:02<00:00, 106.55it/s]
-    Epoch 1: Loss - 0.8291801810264587, EL Loss: 8.176726341247559, Valid loss - 0.6579567151940215, AUC - 0.5077325859340581
-    EL Loss 8.176726341247559
-    Saving model
-    Loading the best model
-      0%|          | 0/295 [00:00<?, ?it/s]      5%|5         | 16/295 [00:00<00:01, 156.17it/s]     11%|#         | 32/295 [00:00<00:01, 154.84it/s]     16%|#6        | 48/295 [00:00<00:01, 153.32it/s]     22%|##1       | 64/295 [00:00<00:01, 149.58it/s]     27%|##6       | 79/295 [00:00<00:01, 145.51it/s]     32%|###1      | 94/295 [00:00<00:01, 139.41it/s]     37%|###6      | 108/295 [00:00<00:01, 136.18it/s]     41%|####1     | 122/295 [00:00<00:01, 132.69it/s]     46%|####6     | 136/295 [00:00<00:01, 125.15it/s]     51%|#####     | 149/295 [00:01<00:01, 115.88it/s]     55%|#####4    | 161/295 [00:01<00:01, 110.51it/s]     59%|#####8    | 173/295 [00:01<00:01, 105.47it/s]     62%|######2   | 184/295 [00:01<00:01, 101.81it/s]     66%|######6   | 195/295 [00:01<00:01, 96.65it/s]      69%|######9   | 205/295 [00:01<00:00, 93.20it/s]     73%|#######2  | 215/295 [00:01<00:00, 91.29it/s]     76%|#######6  | 225/295 [00:01<00:00, 84.81it/s]     79%|#######9  | 234/295 [00:02<00:00, 79.78it/s]     82%|########2 | 243/295 [00:02<00:00, 75.90it/s]     85%|########5 | 251/295 [00:02<00:00, 73.00it/s]     88%|########7 | 259/295 [00:02<00:00, 69.62it/s]     90%|######### | 266/295 [00:02<00:00, 67.37it/s]     93%|#########2| 273/295 [00:02<00:00, 65.16it/s]     95%|#########4| 280/295 [00:02<00:00, 63.51it/s]     97%|#########7| 287/295 [00:02<00:00, 61.95it/s]    100%|#########9| 294/295 [00:03<00:00, 60.83it/s]    100%|##########| 295/295 [00:03<00:00, 94.48it/s]
-    Test Loss - 0.6582908357604075, AUC - 0.5113331666250782
-      0%|          | 0/10 [00:00<?, ?it/s]     10%|#         | 1/10 [00:00<00:05,  1.78it/s]     20%|##        | 2/10 [00:00<00:02,  3.32it/s]     30%|###       | 3/10 [00:00<00:01,  4.69it/s]     40%|####      | 4/10 [00:01<00:01,  3.03it/s]     50%|#####     | 5/10 [00:01<00:01,  4.01it/s]     60%|######    | 6/10 [00:01<00:00,  4.98it/s]     70%|#######   | 7/10 [00:01<00:00,  5.88it/s]     80%|########  | 8/10 [00:01<00:00,  5.52it/s]     90%|######### | 9/10 [00:01<00:00,  5.96it/s]    100%|##########| 10/10 [00:02<00:00,  6.41it/s]    100%|##########| 10/10 [00:02<00:00,  4.78it/s]
-
-
-
-
-
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** ( 2 minutes  4.757 seconds)
+   **Total running time of the script:** ( 0 minutes  0.000 seconds)
 
 
 .. _sphx_glr_download_examples_zsl_plot_1_deepgozero.py:

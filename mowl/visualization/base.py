@@ -68,10 +68,20 @@ class TSNE(Visualizer):
         self.class_color_dict = {cl: col for cl, col in zip(self.classes, colors)}
 
     def generate_points(self, epochs, workers=1, verbose=0):
+        """This method will call the :meth:`sklearn.manifold.TSNE.fit_transform` 
+        method to generate the points for the plot.
+
+        :param epochs: Number of epochs to run the TSNE algorithm
+        :type epochs: int
+        :param workers: Number of workers to use for parallel processing. Defaults to 1.
+        :type workers: int, optional
+        :param verbose: Verbosity level. Defaults to 0.
+        """
         points = np.array(list(self.embeddings.values()))
         if np.iscomplexobj(points):
-            warnings.warn("Complex numpy array detected. Only real part will be considered",
-                          UserWarning)
+            if verbose:
+                warnings.warn("Complex numpy array detected. Only real part will be considered",
+                              UserWarning)
             points = points.real
         self.points = SKTSNE(n_components=2, verbose=verbose, n_iter=epochs, n_jobs=workers)
         self.points = self.points.fit_transform(points)
@@ -87,7 +97,9 @@ class TSNE(Visualizer):
             self.plot_data[label][1].append(y)
 
     def show(self):
-
+        """ This method will call the :meth:`matplotlib.pyplot.show` method to show the plot.
+        """
+        
         fig, ax = plt.subplots(figsize=(20, 20))
 
         for label, (xs, ys) in self.plot_data.items():
@@ -100,7 +112,11 @@ class TSNE(Visualizer):
         plt.show()
 
     def savefig(self, outfile):
-
+        """ This method will call the :meth:`matplotlib.pyplot.savefig` method to save the plot.
+        :param outfile: Path to the output file
+        :type outfile: str
+        """
+        
         fig, ax = plt.subplots(figsize=(20, 20))
 
         for label, (xs, ys) in self.plot_data.items():
