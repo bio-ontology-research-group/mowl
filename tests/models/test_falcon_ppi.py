@@ -57,7 +57,6 @@ class TestFalconPPI(TestCase):
     def test_ppi(self):
         """Test FALCON on PPI dataset. The test is not very strict, it just checks the \
 correct syntax of the code."""
-
-        model = FALCON(self.dataset, epochs=1, embed_dim=2)
+        model = FALCON(self.dataset, epochs=5, embed_dim=16)
         return_value = model.train()
         self.assertEqual(return_value, 1)

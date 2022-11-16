@@ -32,10 +32,27 @@ class FALCON(EmbeddingALCModel):
         self.init_model()
 
     def init_model(self):
+        ind_triples = self.training_dataset.get_obj_prop_assertion_data()
+        heads_dict = {}
+        tails_dict = {}
+        for item in ind_triples:
+            h, r, t = item[0] # ,item[0], item[1], item[2]
+            h, r, t = h.item(), r.item(), t.item()
+            if (t, r) not in heads_dict:
+                heads_dict[(t, r)] = [h, ]
+            else:
+                heads_dict[(t, r)].append(h)
+            if (h, r) not in tails_dict:
+                tails_dict[(h, r)] = [t, ]
+            else:
+                tails_dict[(h, r)].append(t)
+                
         self.model = FALCONModule(
             len(self.dataset.classes),
             len(self.dataset.individuals),
             len(self.dataset.object_properties),
+            heads_dict,
+            tails_dict,
             embed_dim=self.embed_dim,
             anon_e=self.anon_e,
         ).to(self.device)
@@ -79,8 +96,7 @@ class FALCON(EmbeddingALCModel):
             if best_loss > valid_loss:
                 best_loss = valid_loss
                 torch.save(self.model.state_dict(), self.model_filepath)
-            if (epoch + 1) % (checkpoint * 10) == 0:
-                print(f'Epoch {epoch}: Train loss: {train_loss} Valid loss: {valid_loss}')
+            print(f'Epoch {epoch}: Train loss: {train_loss} Valid loss: {valid_loss}')
 
         return 1
 
