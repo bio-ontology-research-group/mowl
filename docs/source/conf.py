@@ -37,6 +37,17 @@ extensions = [
     'sphinx.ext.viewcode',
     'sphinx_gallery.gen_gallery',
 #    'IPython.sphinxext.ipython_console_highlighting'
+
+    # Matplotlib
+    #'matplotlib.sphinxext.only_directives',
+    'matplotlib.sphinxext.plot_directive',
+    'IPython.sphinxext.ipython_directive',
+    'IPython.sphinxext.ipython_console_highlighting',
+    'sphinx.ext.mathjax',
+    'sphinx.ext.autodoc',
+    'sphinx.ext.doctest',
+    'sphinx.ext.inheritance_diagram',
+    #'numpydoc'
 ]
 
 doctest_global_setup = """
@@ -66,7 +77,7 @@ gallery_dirs = [
 sphinx_gallery_conf = {
     'examples_dirs': examples_dirs,   # path to your example scripts
     'gallery_dirs': gallery_dirs,  # path to where to save gallery generated output
-
+    'filename_pattern': '/nopattern',
     "within_subsection_order": FileNameSortKey,
     "run_stale_examples": True,
     "abort_on_example_error": False,

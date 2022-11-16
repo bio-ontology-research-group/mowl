@@ -50,7 +50,7 @@ In order to ease the ontology management, mOWL provides an adapter class that wr
 Shortcuts to OWL Reasoners
 ------------------------------
 
-mOWL provides some shortcuts for performing reasoning over ontologies. The works by wrapping OWL Reasoners that are instances of ``org.semanticweb.owlapi.reasoner.OWLReasoner``. The following example shows how to obtain inferences from an ontology.
+mOWL provides some shortcuts for performing reasoning over ontologies. This works by wrapping OWL Reasoners that are instances of ``org.semanticweb.owlapi.reasoner.OWLReasoner``. The following example shows how to obtain inferences from an ontology.
 
 .. testcode::
 
@@ -70,6 +70,8 @@ mOWL provides some shortcuts for performing reasoning over ontologies. The works
    equivalence_axioms = mowl_reasoner.infer_equivalent_class_axioms(classes_to_infer_over)
    disjointness_axioms = mowl_reasoner.infer_disjoint_class_axioms(classes_to_infer_over)
 
+
+The previous example uses the HermiT reasoner. We can also use ELK:
 
 .. testcode::
 

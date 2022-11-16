@@ -62,6 +62,8 @@ The package is released under the BSD 3-Clause License.
    owlapi/index
    graphs/index
    embedding_el/index
+   evaluation/index
+   visualization/index
    examples/index
    
    

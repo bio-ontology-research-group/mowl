@@ -1,9 +1,5 @@
 :orphan:
 
-
-
-.. _sphx_glr_examples:
-
 Paper study with mOWL
 ==================================
 
@@ -13,13 +9,15 @@ Welcome to the paper study section with mOWL. Here you will find examples of dif
 
 
 
+
 .. raw:: html
 
-    <div class="sphx-glr-clear"></div>
+    <div class="sphx-glr-thumbnails">
 
 
+.. raw:: html
 
-.. _sphx_glr_examples_elmodels:
+    </div>
 
 Models embeddings the :math:`\mathcal{EL}` language
 ------------------------------------------------------
@@ -28,24 +26,25 @@ Models embeddings the :math:`\mathcal{EL}` language
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbnails">
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper `EL Embeddings: Geometric Construction of Models for the ...">
 
 .. only:: html
 
- .. figure:: /examples/elmodels/images/thumb/sphx_glr_plot_1_elembeddings_thumb.png
-     :alt: EL Embeddings
+  .. image:: /examples/elmodels/images/thumb/sphx_glr_plot_1_elembeddings_thumb.png
+    :alt: EL Embeddings
 
-     :ref:`sphx_glr_examples_elmodels_plot_1_elembeddings.py`
+  :ref:`sphx_glr_examples_elmodels_plot_1_elembeddings.py`
 
 .. raw:: html
 
+      <div class="sphx-glr-thumbnail-title">EL Embeddings</div>
     </div>
 
-
-.. toctree::
-   :hidden:
-
-   /examples/elmodels/plot_1_elembeddings
 
 .. raw:: html
 
@@ -53,27 +52,20 @@ Models embeddings the :math:`\mathcal{EL}` language
 
 .. only:: html
 
- .. figure:: /examples/elmodels/images/thumb/sphx_glr_plot_2_elboxembeddings_thumb.png
-     :alt: ELBoxEmbeddings
+  .. image:: /examples/elmodels/images/thumb/sphx_glr_plot_2_elboxembeddings_thumb.png
+    :alt: ELBoxEmbeddings
 
-     :ref:`sphx_glr_examples_elmodels_plot_2_elboxembeddings.py`
+  :ref:`sphx_glr_examples_elmodels_plot_2_elboxembeddings.py`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">ELBoxEmbeddings</div>
+    </div>
+
 
 .. raw:: html
 
     </div>
-
-
-.. toctree::
-   :hidden:
-
-   /examples/elmodels/plot_2_elboxembeddings
-.. raw:: html
-
-    <div class="sphx-glr-clear"></div>
-
-
-
-.. _sphx_glr_examples_graph_based:
 
 Graph-based models
 --------------------
@@ -82,31 +74,29 @@ Graph-based models
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbnails">
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper `Predicting candidate genes from phenotypes, functions an...">
 
 .. only:: html
 
- .. figure:: /examples/graph_based/images/thumb/sphx_glr_plot_1_dl2vec_thumb.png
-     :alt: DL2Vec
+  .. image:: /examples/graph_based/images/thumb/sphx_glr_plot_1_dl2vec_thumb.png
+    :alt: DL2Vec
 
-     :ref:`sphx_glr_examples_graph_based_plot_1_dl2vec.py`
+  :ref:`sphx_glr_examples_graph_based_plot_1_dl2vec.py`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">DL2Vec</div>
+    </div>
+
 
 .. raw:: html
 
     </div>
-
-
-.. toctree::
-   :hidden:
-
-   /examples/graph_based/plot_1_dl2vec
-.. raw:: html
-
-    <div class="sphx-glr-clear"></div>
-
-
-
-.. _sphx_glr_examples_syntactic:
 
 Syntactic models
 --------------------
@@ -115,24 +105,25 @@ Syntactic models
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbnails">
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper `Onto2Vec: joint vector-based representation of biologica...">
 
 .. only:: html
 
- .. figure:: /examples/syntactic/images/thumb/sphx_glr_plot_1_onto2vec_thumb.png
-     :alt: Onto2Vec
+  .. image:: /examples/syntactic/images/thumb/sphx_glr_plot_1_onto2vec_thumb.png
+    :alt: Onto2Vec
 
-     :ref:`sphx_glr_examples_syntactic_plot_1_onto2vec.py`
+  :ref:`sphx_glr_examples_syntactic_plot_1_onto2vec.py`
 
 .. raw:: html
 
+      <div class="sphx-glr-thumbnail-title">Onto2Vec</div>
     </div>
 
-
-.. toctree::
-   :hidden:
-
-   /examples/syntactic/plot_1_onto2vec
 
 .. raw:: html
 
@@ -140,27 +131,20 @@ Syntactic models
 
 .. only:: html
 
- .. figure:: /examples/syntactic/images/thumb/sphx_glr_plot_2_opa2vec_thumb.png
-     :alt: OPA2Vec
+  .. image:: /examples/syntactic/images/thumb/sphx_glr_plot_2_opa2vec_thumb.png
+    :alt: OPA2Vec
 
-     :ref:`sphx_glr_examples_syntactic_plot_2_opa2vec.py`
+  :ref:`sphx_glr_examples_syntactic_plot_2_opa2vec.py`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">OPA2Vec</div>
+    </div>
+
 
 .. raw:: html
 
     </div>
-
-
-.. toctree::
-   :hidden:
-
-   /examples/syntactic/plot_2_opa2vec
-.. raw:: html
-
-    <div class="sphx-glr-clear"></div>
-
-
-
-.. _sphx_glr_examples_zsl:
 
 Zero-shot learning based models
 -----------------------------------
@@ -169,14 +153,25 @@ Zero-shot learning based models
 
 .. raw:: html
 
+    <div class="sphx-glr-thumbnails">
+
+
+.. raw:: html
+
     <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper `DeepGOZero: improving protein function prediction from s...">
 
 .. only:: html
 
- .. figure:: /examples/zsl/images/thumb/sphx_glr_plot_1_deepgozero_thumb.png
-     :alt: DeepGOZero
+  .. image:: /examples/zsl/images/thumb/sphx_glr_plot_1_deepgozero_thumb.png
+    :alt: DeepGOZero
 
-     :ref:`sphx_glr_examples_zsl_plot_1_deepgozero.py`
+  :ref:`sphx_glr_examples_zsl_plot_1_deepgozero.py`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">DeepGOZero</div>
+    </div>
+
 
 .. raw:: html
 
@@ -185,29 +180,25 @@ Zero-shot learning based models
 
 .. toctree::
    :hidden:
+   :includehidden:
 
-   /examples/zsl/plot_1_deepgozero
-.. raw:: html
-
-    <div class="sphx-glr-clear"></div>
-
-
-
-.. only :: html
-
- .. container:: sphx-glr-footer
-    :class: sphx-glr-footer-gallery
+   /examples//elmodels/index.rst
+   /examples//graph_based/index.rst
+   /examples//syntactic/index.rst
+   /examples//zsl/index.rst
 
 
-  .. container:: sphx-glr-download sphx-glr-download-python
+.. only:: html
 
-    :download:`Download all examples in Python source code: examples_python.zip </examples/examples_python.zip>`
+  .. container:: sphx-glr-footer sphx-glr-footer-gallery
 
+    .. container:: sphx-glr-download sphx-glr-download-python
 
+      :download:`Download all examples in Python source code: examples_python.zip </examples/examples_python.zip>`
 
-  .. container:: sphx-glr-download sphx-glr-download-jupyter
+    .. container:: sphx-glr-download sphx-glr-download-jupyter
 
-    :download:`Download all examples in Jupyter notebooks: examples_jupyter.zip </examples/examples_jupyter.zip>`
+      :download:`Download all examples in Jupyter notebooks: examples_jupyter.zip </examples/examples_jupyter.zip>`
 
 
 .. only:: html
