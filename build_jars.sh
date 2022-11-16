@@ -1,3 +1,4 @@
+set -e
 cd gateway
 gradle distZip
 cd build/distributions
