@@ -75,6 +75,8 @@ class ALCDataset():
                 axioms = axiom.asPairwiseAxioms()
             for ax in axioms:
                 axiom_pattern = self.get_axiom_pattern(axiom)
+                if axiom_pattern is None:
+                    continue
                 if axiom_pattern not in res:
                     res[axiom_pattern] = [ax, ]
                 else:
@@ -91,10 +93,10 @@ class ALCDataset():
                 return self.adapter.create_class(THING + f'_{index}')
             elif expr_type == ClassExpressionType.OBJECT_SOME_VALUES_FROM:
                 return self.adapter.create_object_some_values_from(
-                    self.r, get_cexpr_pattern(cexpr.getFiller()))
+                    self.r, get_cexpr_pattern(cexpr.getFiller(), index=index))
             elif expr_type == ClassExpressionType.OBJECT_ALL_VALUES_FROM:
                 return self.adapter.create_object_all_values_from(
-                    self.r, get_cexpr_pattern(cexpr.getFiller()))
+                    self.r, get_cexpr_pattern(cexpr.getFiller(), index=index))
             elif expr_type == ClassExpressionType.OBJECT_INTERSECTION_OF:
                 cexprs = [get_cexpr_pattern(expr, index=i)
                           for i, expr in enumerate(cexpr.getOperandsAsList())]
@@ -105,7 +107,7 @@ class ALCDataset():
                 return self.adapter.create_object_union_of(*cexprs)
             elif expr_type == ClassExpressionType.OBJECT_COMPLEMENT_OF:
                 return self.adapter.create_complement_of(
-                    get_cexpr_pattern(cexpr.getOperand()))
+                    get_cexpr_pattern(cexpr.getOperand(), index=index))
             raise NotImplementedError()
 
         if isinstance(axiom, OWLSubClassOfAxiom):
@@ -126,8 +128,8 @@ class ALCDataset():
             return self.adapter.create_class_assertion(cexpr, self.ind)
         elif isinstance(axiom, OWLObjectPropertyAssertionAxiom):
             return self.obj_prop_assertion_pat
-        else:
-            raise NotImplementedError()
+
+        return None
 
     def get_axiom_vector(self, axiom):
 
@@ -180,8 +182,7 @@ class ALCDataset():
             return [self.individual_to_id[ind1],
                     self.object_property_to_id[prop],
                     self.individual_to_id[ind2]]
-        else:
-            raise NotImplementedError()
+        return None
 
     def load(self):
         if self._loaded:
@@ -201,7 +202,8 @@ class ALCDataset():
         for ax_pattern, axioms in self.grouped_axioms.items():
             axiom_vectors = []
             for axiom in axioms:
-                axiom_vectors.append(self.get_axiom_vector(axiom))
+                vector = self.get_axiom_vector(axiom)
+                axiom_vectors.append(vector)
             axiom_tensor = torch.tensor(axiom_vectors, dtype=torch.int64)
             datasets[ax_pattern] = TensorDataset(
                 axiom_tensor)

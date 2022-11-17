@@ -5,7 +5,7 @@ from mowl.models.falcon.examples.model_ppi import FALCON
 from mowl.datasets import Dataset
 from mowl.owlapi import OWLAPIAdapter
 from java.util import HashSet
-
+from java.io import File
 
 class TestFalconPPI(TestCase):
 
