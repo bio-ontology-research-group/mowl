@@ -75,7 +75,7 @@ where :math:`C,C_1, C_2,D` are ontology classes and :math:`R` is an ontology obj
 EL-Embeddings uses GCI 0, 1, 2, 3 and GCI BOT 1 (to express disjointness between classes).
 In the use case of this example, we will test over a biological problem, which is
 protein-protein interactions. Given two proteins :math:`p_1,p_2`, the phenomenon
-":math:`p_1` interacts with :math:`p_1`" is encoded using GCI 2 as:
+":math:`p_1` interacts with :math:`p_2`" is encoded using GCI 2 as:
 
 .. math::
    p_1 \sqsubseteq interacts\_with. p_2
@@ -368,51 +368,49 @@ Training the model
 
 .. rst-class:: sphx-glr-script-out
 
- Out:
-
  .. code-block:: none
 
       0%|          | 0/20 [00:00<?, ?it/s]
-    Epoch 0: Train loss: 4.438335 Valid loss: 1.6051
-      5%|5         | 1/20 [00:15<04:53, 15.46s/it]
-    Epoch 1: Train loss: 4.450060 Valid loss: 1.6025
-     10%|#         | 2/20 [00:15<01:57,  6.52s/it]
-    Epoch 2: Train loss: 4.429717 Valid loss: 1.6010
-     15%|#5        | 3/20 [00:15<01:02,  3.67s/it]
-    Epoch 3: Train loss: 4.411909 Valid loss: 1.5988
-     20%|##        | 4/20 [00:16<00:37,  2.33s/it]
-    Epoch 4: Train loss: 4.401057 Valid loss: 1.5968
-     25%|##5       | 5/20 [00:16<00:23,  1.58s/it]
-    Epoch 5: Train loss: 4.390624 Valid loss: 1.5947
-     30%|###       | 6/20 [00:16<00:15,  1.14s/it]
-    Epoch 6: Train loss: 4.376946 Valid loss: 1.5932
-     35%|###5      | 7/20 [00:17<00:11,  1.17it/s]
-    Epoch 7: Train loss: 4.365747 Valid loss: 1.5918
-     40%|####      | 8/20 [00:17<00:08,  1.50it/s]
-    Epoch 8: Train loss: 4.352935 Valid loss: 1.5904
-     45%|####5     | 9/20 [00:17<00:05,  1.84it/s]
-    Epoch 9: Train loss: 4.338408 Valid loss: 1.5891
-     50%|#####     | 10/20 [00:17<00:04,  2.18it/s]
-    Epoch 10: Train loss: 4.325152 Valid loss: 1.5880
-     55%|#####5    | 11/20 [00:18<00:03,  2.50it/s]
-    Epoch 11: Train loss: 4.312129 Valid loss: 1.5865
-     60%|######    | 12/20 [00:18<00:02,  2.77it/s]
-    Epoch 12: Train loss: 4.298018 Valid loss: 1.5849
-     65%|######5   | 13/20 [00:18<00:02,  3.01it/s]
-    Epoch 13: Train loss: 4.283844 Valid loss: 1.5833
-     70%|#######   | 14/20 [00:18<00:01,  3.17it/s]
-    Epoch 14: Train loss: 4.272910 Valid loss: 1.5818
-     75%|#######5  | 15/20 [00:19<00:01,  3.33it/s]
-    Epoch 15: Train loss: 4.260476 Valid loss: 1.5803
-     80%|########  | 16/20 [00:19<00:01,  3.45it/s]
-    Epoch 16: Train loss: 4.247974 Valid loss: 1.5788
-     85%|########5 | 17/20 [00:19<00:00,  3.53it/s]
-    Epoch 17: Train loss: 4.232961 Valid loss: 1.5774
-     90%|######### | 18/20 [00:20<00:00,  3.58it/s]
-    Epoch 18: Train loss: 4.219107 Valid loss: 1.5760
-     95%|#########5| 19/20 [00:20<00:00,  3.62it/s]
-    Epoch 19: Train loss: 4.207544 Valid loss: 1.5746
-    100%|##########| 20/20 [00:20<00:00,  3.65it/s]    100%|##########| 20/20 [00:20<00:00,  1.03s/it]
+    Epoch 0: Train loss: 4.123617 Valid loss: 1.6074
+      5%|5         | 1/20 [00:14<04:36, 14.54s/it]
+    Epoch 1: Train loss: 4.124363 Valid loss: 1.6047
+     10%|#         | 2/20 [00:14<01:49,  6.07s/it]
+    Epoch 2: Train loss: 4.109043 Valid loss: 1.6030
+     15%|#5        | 3/20 [00:14<00:57,  3.36s/it]
+    Epoch 3: Train loss: 4.094981 Valid loss: 1.6006
+     20%|##        | 4/20 [00:14<00:33,  2.09s/it]
+    Epoch 4: Train loss: 4.078265 Valid loss: 1.5985
+     25%|##5       | 5/20 [00:15<00:20,  1.38s/it]
+    Epoch 5: Train loss: 4.065317 Valid loss: 1.5963
+     30%|###       | 6/20 [00:15<00:13,  1.04it/s]
+    Epoch 6: Train loss: 4.052018 Valid loss: 1.5947
+     35%|###5      | 7/20 [00:15<00:08,  1.45it/s]
+    Epoch 7: Train loss: 4.039583 Valid loss: 1.5933
+     40%|####      | 8/20 [00:15<00:06,  1.95it/s]
+    Epoch 8: Train loss: 4.027699 Valid loss: 1.5917
+     45%|####5     | 9/20 [00:15<00:04,  2.55it/s]
+    Epoch 9: Train loss: 4.012502 Valid loss: 1.5904
+     50%|#####     | 10/20 [00:15<00:03,  3.21it/s]
+    Epoch 10: Train loss: 3.999578 Valid loss: 1.5892
+     55%|#####5    | 11/20 [00:15<00:02,  3.89it/s]
+    Epoch 11: Train loss: 3.985123 Valid loss: 1.5876
+     60%|######    | 12/20 [00:16<00:01,  4.58it/s]
+    Epoch 12: Train loss: 3.974498 Valid loss: 1.5859
+     65%|######5   | 13/20 [00:16<00:01,  5.20it/s]
+    Epoch 13: Train loss: 3.962286 Valid loss: 1.5842
+     70%|#######   | 14/20 [00:16<00:01,  5.70it/s]
+    Epoch 14: Train loss: 3.947988 Valid loss: 1.5826
+     75%|#######5  | 15/20 [00:16<00:00,  6.12it/s]
+    Epoch 15: Train loss: 3.935778 Valid loss: 1.5810
+     80%|########  | 16/20 [00:16<00:00,  6.49it/s]
+    Epoch 16: Train loss: 3.923309 Valid loss: 1.5794
+     85%|########5 | 17/20 [00:16<00:00,  6.76it/s]
+    Epoch 17: Train loss: 3.910354 Valid loss: 1.5779
+     90%|######### | 18/20 [00:16<00:00,  6.91it/s]
+    Epoch 18: Train loss: 3.898570 Valid loss: 1.5764
+     95%|#########5| 19/20 [00:16<00:00,  7.03it/s]
+    Epoch 19: Train loss: 3.885187 Valid loss: 1.5750
+    100%|##########| 20/20 [00:17<00:00,  6.92it/s]    100%|##########| 20/20 [00:17<00:00,  1.17it/s]
 
 
 
@@ -420,30 +418,23 @@ Training the model
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** ( 0 minutes  27.308 seconds)
-
-**Estimated memory usage:**  1217 MB
+   **Total running time of the script:** ( 0 minutes  23.695 seconds)
 
 
 .. _sphx_glr_download_examples_elmodels_plot_1_elembeddings.py:
 
+.. only:: html
 
-.. only :: html
-
- .. container:: sphx-glr-footer
-    :class: sphx-glr-footer-example
+  .. container:: sphx-glr-footer sphx-glr-footer-example
 
 
+    .. container:: sphx-glr-download sphx-glr-download-python
 
-  .. container:: sphx-glr-download sphx-glr-download-python
+      :download:`Download Python source code: plot_1_elembeddings.py <plot_1_elembeddings.py>`
 
-     :download:`Download Python source code: plot_1_elembeddings.py <plot_1_elembeddings.py>`
+    .. container:: sphx-glr-download sphx-glr-download-jupyter
 
-
-
-  .. container:: sphx-glr-download sphx-glr-download-jupyter
-
-     :download:`Download Jupyter notebook: plot_1_elembeddings.ipynb <plot_1_elembeddings.ipynb>`
+      :download:`Download Jupyter notebook: plot_1_elembeddings.ipynb <plot_1_elembeddings.ipynb>`
 
 
 .. only:: html

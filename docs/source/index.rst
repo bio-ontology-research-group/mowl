@@ -2,7 +2,21 @@
  Welcome to mOWL's documentation!
 ==================================
 
-**mOWL** is a Python library for Machine Learning with Ontologies. Here you can find functionalities to manipulate ontologies and use them as data for several methods that generate embeddings of ontology entities. Some of the methods implemented in this library can be found at: `Semantic similarity and machine learning with ontologies <https://academic.oup.com/bib/article/22/4/bbaa199/5922325>`_.
+**mOWL** is a Python library for Machine Learning with
+Ontologies. Here you can find functionalities to manipulate
+ontologies and use them as data for several methods that generate
+embeddings of ontology entities.
+
+Background
+===========
+
+The development of this library was based on the paper: `Semantic
+similarity and machine learning with ontologies
+<https://academic.oup.com/bib/article/22/4/bbaa199/5922325>`_. In this
+work, several tutorials and slides have been created for users that
+are interested on ontologies and machine learning methods. The tutorials can be found as Jupyter notebooks at this `link to the notebooks <https://github.com/bio-ontology-research-group/machine-learning-with-ontologies#notebooks>`_. The slides can be found at this `link to the slides <https://github.com/bio-ontology-research-group/machine-learning-with-ontologies#slides>`_.
+
+Some of those tutorials can be found in mOWL in the :doc:`/examples/index/` section and, eventually, more examples will be available directly in mOWL.
 
 
 Getting started
@@ -41,7 +55,10 @@ Authors
 =======
 
 **mOWL** is a project initiated and developed by the `Bio-Ontology Research Group <https://cemse.kaust.edu.sa/borg>`_ from KAUST.
-Furthermore, mOWL had other collaboration by being part of the `Biohackathon Europe 2021 <https://2021.biohackathon-europe.org/>`_.
+Furthermore, mOWL had other collaboration by being part of:
+
+* `Biohackathon Europe 2021 <https://2021.biohackathon-europe.org/>`_ as project ``#27``.
+* `Biohackathon Europe 2022 <https://biohackathon-europe.org/>`_ as project ``#18``.
 
 License
 =======

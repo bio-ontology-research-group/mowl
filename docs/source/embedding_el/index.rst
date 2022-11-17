@@ -35,7 +35,7 @@ mOWL provides different functionalities to generate models that aim to embed axi
 
 The ELDataset class
 ------------------------
-The :class:`ELDataset <mowl.datasets.el.ELDataset>` class is the first thing you should know about. mOWL first entry point are ontologies. However, not all of them are in the normalized in the |el| language. For that reason, we have to normalize the ontology. To do so, we rely on the `Jcel <https://julianmendez.github.io/jcel/>`_ library.
+The :class:`ELDataset <mowl.datasets.el.ELDataset>` class is the first thing you should know about. mOWL first entry point are ontologies. However, not all of them are normalized in the |el| language. For that reason, we have to normalize the ontology. To do so, we rely on the `Jcel <https://julianmendez.github.io/jcel/>`_ library.
 
 To create a |el| dataset use the following code:
 

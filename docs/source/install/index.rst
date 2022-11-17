@@ -10,11 +10,20 @@ System requirements
 - JDK version 8
 - Python version 3.8
 
+
+Python requirements
+----------------------
+
+- Gensim >= 4.x.x
+- PyTorch >= 1.12.x
+- PyKEEN >= 1.9.x
+
+
   
 Install from source code
 --------------------------
 
-Before installing from source, make sure to meet the dependencies:
+Before installing from source, make sure to meet the dependencies.
 
   
 Installation can be done with the following commands:
@@ -30,7 +39,7 @@ Installation can be done with the following commands:
 
    cd mowl
    ./build_jars.sh
-   
+
    python setup.py install
 
 Since mOWL needs to bind the Java Virtual Machine, the last line will generate the necessary ``.jar`` files.

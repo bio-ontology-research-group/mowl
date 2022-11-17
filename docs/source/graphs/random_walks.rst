@@ -101,7 +101,7 @@ Filtering random walks
 
 It is possible to input a list of nodes (strings) in order to generate random walks that include at least one of the nodes of interest.
 
-.. testcode::
+.. testcode:: filtered
 
    from mowl.projection import Edge
 
@@ -110,8 +110,62 @@ It is possible to input a list of nodes (strings) in order to generate random wa
    edge3 = Edge("node_3", "rel", "node_4")
 
    edges = [edge1, edge2, edge3]
+
+Let's see the difference of filtered and non-filtered random walks:
+
+* No filtered
+
+.. testcode:: filtered
+
+   from mowl.walking import DeepWalk
+
+   walker = DeepWalk(6,3,alpha=0,outfile="no_filtered_walks")
+   walker.walk(edges)
+
+.. code:: python
+	  
+   with open("no_filtered_walks", "r") as f:
+       lines = f.readlines()
+       lines.sort()
+       print(lines)
+
+The output will include the following walks:
+
+.. code:: bash
+
+   node_1 rel node_2
+   node_1 rel node_3 rel node_4
+   node_3 rel node_4
+	  
+
+
+* Filtered
+  
+.. testcode:: filtered
+
+   from mowl.walking import DeepWalk
+
+   walker = DeepWalk(3,3,alpha=0,outfile="filtered_walks")
    walker.walk(edges, nodes_of_interest = ["node_1", "node_2"])
 
+.. code:: python
+	  
+   with open("filtered_walks", "r") as f:
+       lines = f.readlines()
+       lines.sort()
+       print(lines)
+
+In this case, the output will include the following walks:
+
+.. code:: bash
+
+   node_1 rel node_2
+   node_1 rel node_3 rel node_4
+
+.. hint::
+
+   The walk ``node_3 rel node_4`` is not included in this case because it does not contain any of the ``nodes_of_interest``.
+       
 .. note::
 
    In the case that any "filtering node" does not exist in the graph, a Warning will be raised.
