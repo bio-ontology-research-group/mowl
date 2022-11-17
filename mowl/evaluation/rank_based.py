@@ -18,7 +18,7 @@ class RankBasedEvaluator(Evaluator):
     :type class_index_emb: dict(str, np.array)
     :param relation_index_emb: dictionary of relations and their embeddings
     :type relation_index_emb: dict(str, np.array)
-    :param testing_set: Set of triples that are true positives. 
+    :param testing_set: Set of triples that are true positives.
     :type testing_set: list(mowl.projection.edge.Edge)
     :param eval_method: evaluation method score the triples
     :type eval_method: function
@@ -261,7 +261,7 @@ an entity is enclosed in some model.
 to ``self.eval_method``. Defaults to None.
     :type eval_method: callable, optional
 """
-    
+
     def __init__(self,
                  model,
                  device="cpu",
@@ -307,7 +307,7 @@ just vectors and are not part of a model.
 
     :param class_embeddings: The embeddings of the classes.
     :type class_embeddings: dict(str, numpy.ndarray)
-    :param testing_set: Set of triples that are true positives. 
+    :param testing_set: Set of triples that are true positives.
     :type testing_set: list(mowl.projection.edge.Edge)
     :param eval_method_class: Class that contains placeholders for class and relation embeddings.
     :type eval_method_class: :class:`mowl.evaluation.base.EvaluationMethod`
@@ -326,7 +326,6 @@ will be inserted into the ``eval_method_class``.
     :type device: str
     """
 
-    
     def __init__(self,
                  class_embeddings,
                  testing_set,

@@ -235,7 +235,7 @@ class TestRemoteDataset(TestCase):
         self.good_url = 'https://bio2vec.cbrc.kaust.edu.sa/data/mowl/ppi_yeast.tar.gz'
         self.bad_url = 'https://bio2vec.cbrc.kaust.edu.sa/data/mowl/gda_mouse_el.tar.gzq'
         self.only_training_set_url = 'https://bio2vec.cbrc.kaust.edu.sa/data/mowl/family.tar.gz'
-        
+
         tmp_dir = tempfile.gettempdir()
         self.tmp_dir = os.path.join(tmp_dir, "mowl")
         os.makedirs(self.tmp_dir, exist_ok=True)
@@ -243,15 +243,14 @@ class TestRemoteDataset(TestCase):
     @classmethod
     def tearDownClass(self):
         shutil.rmtree(self.tmp_dir)
-        
-        
-    def setUp(self): 
+
+    def setUp(self):
         for file_ in os.listdir(self.tmp_dir):
             if os.path.isfile(os.path.join(self.tmp_dir, file_)):
                 os.remove(os.path.join(self.tmp_dir, file_))
             elif os.path.isdir(os.path.join(self.tmp_dir, file_)):
                 shutil.rmtree(os.path.join(self.tmp_dir, file_))
-        
+
     def test_successful_download_in_default_path(self):
         """This checks if dataset is downloaded in the default path ./"""
         _ = RemoteDataset(self.good_url)
@@ -269,7 +268,6 @@ class TestRemoteDataset(TestCase):
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "ppi_yeast/valid.owl")))
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "ppi_yeast/test.owl")))
 
-        
     def test_incorrect_url(self):
         """This checks if error is raised for incorrect URL"""
         self.assertRaises(requests.exceptions.HTTPError, RemoteDataset, self.bad_url)
@@ -284,7 +282,6 @@ class TestRemoteDataset(TestCase):
 
         self.assertEqual(file_timestamp1, file_timestamp2)
 
-        
     def test_dataset_with_only_training_set(self):
         """This should check that dataset is downloaded correctly if it has only training set"""
         tmp_dir = self.tmp_dir

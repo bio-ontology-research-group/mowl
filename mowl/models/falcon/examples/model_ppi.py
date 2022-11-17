@@ -36,7 +36,7 @@ class FALCON(EmbeddingALCModel):
         heads_dict = {}
         tails_dict = {}
         for item in ind_triples:
-            h, r, t = item[0] # ,item[0], item[1], item[2]
+            h, r, t = item[0]  # ,item[0], item[1], item[2]
             h, r, t = h.item(), r.item(), t.item()
             if (t, r) not in heads_dict:
                 heads_dict[(t, r)] = [h, ]
@@ -46,7 +46,7 @@ class FALCON(EmbeddingALCModel):
                 tails_dict[(h, r)] = [t, ]
             else:
                 tails_dict[(h, r)].append(t)
-                
+
         self.model = FALCONModule(
             len(self.dataset.classes),
             len(self.dataset.individuals),
@@ -92,7 +92,6 @@ class FALCON(EmbeddingALCModel):
                         loss = torch.mean(self.model(axiom, batch_data[0], anon_e_emb))
                         valid_loss += loss.detach().item()
 
-            checkpoint = 10
             if best_loss > valid_loss:
                 best_loss = valid_loss
                 torch.save(self.model.state_dict(), self.model_filepath)

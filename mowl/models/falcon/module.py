@@ -209,10 +209,14 @@ https://github.com/bio-ontology-research-group/FALCON
                 r_emb = 0
             ex = x[:, :, 0]
             e_emb = self.e_embedding(ex)
-            r_fs = self._get_c_fs_batch((e_emb + r_emb).view(-1, e_emb.shape[-1]), anon_e_emb).view(e_emb.shape[0], e_emb.shape[1], -1)
+            r_fs = self._get_c_fs_batch(
+                (e_emb + r_emb).view(-1, e_emb.shape[-1]), anon_e_emb).view(e_emb.shape[0],
+                                                                            e_emb.shape[1],
+                                                                            -1)
             c_fs = c_fs.unsqueeze(dim=1)
             dofm = self._logical_exist(r_fs, c_fs)
-            return (- th.log(dofm[:, 0] + 1e-10).mean() - th.log(1 - dofm[:, 1:] + 1e-10).mean()) / 2
+            res = (- th.log(dofm[:, 0] + 1e-10).mean() - th.log(1 - dofm[:, 1:] + 1e-10).mean())
+            return res / 2
         elif isinstance(axiom, OWLObjectPropertyAssertionAxiom):
             x = x.unsqueeze(dim=1)
             size = [1] * len(x.size())
@@ -233,7 +237,8 @@ https://github.com/bio-ontology-research-group/FALCON
                     dofm = th.sigmoid(self.fc_0(emb))
                     # dofm = th.sigmoid(self.fc_1(th.nn.functional.leaky_relu(self.fc_0(emb),
                     # negative_slope=0.1))).squeeze(dim=-1)
-                    res = - th.log(dofm[:, 0] + 1e-10).mean() - th.log(1 - dofm[:, 1:] + 1e-10).mean()
+                    res = - th.log(dofm[:, 0] + 1e-10).mean() - \
+                        th.log(1 - dofm[:, 1:] + 1e-10).mean()
                     return res / 2
                 elif self.loss_type == 'r':
                     dofm = self.fc_0(emb).squeeze(dim=-1)

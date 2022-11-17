@@ -32,7 +32,6 @@ class EmbeddingALCModel(EmbeddingModel):
         self._validation_datasets = None
         self._testing_datasets = None
 
-
     def _load_datasets(self):
         """This method will create different data attributes and finally the corresponding \
             DataLoaders for each axiom pattern in each subset (training, validation and testing).

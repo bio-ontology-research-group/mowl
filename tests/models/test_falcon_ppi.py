@@ -7,6 +7,7 @@ from mowl.owlapi import OWLAPIAdapter
 from java.util import HashSet
 from java.io import File
 
+
 class TestFalconPPI(TestCase):
 
     @classmethod
