@@ -24,13 +24,13 @@ class ALCDataset():
     :param ontology: Input ontology
     :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
     :param class_index_dict: Dictionary containing information `class
-    name --> index`. If not provided, a dictionary will be created
-    from the ontology classes. Defaults to ``None``.
+        name --> index`. If not provided, a dictionary will be created
+        from the ontology classes. Defaults to ``None``.
     :type class_index_dict: dict, optional
     :param object_property_index_dict: Dictionary containing
-    information `object property name --> index`. If not provided, a
-    dictionary will be created from the ontology object
-    properties. Defaults to ``None``.
+        information `object property name --> index`. If not provided, a
+        dictionary will be created from the ontology object
+        properties. Defaults to ``None``.
     :type object_property_index_dict: dict, optional
     """
 

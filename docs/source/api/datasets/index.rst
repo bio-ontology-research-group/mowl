@@ -19,3 +19,9 @@ Dataset for :math:`\mathcal{EL}` language
 .. automodule:: mowl.datasets.el
    :members:
    :show-inheritance:
+
+Dataset for :math:`\mathcal{ALC}` language
+--------------------------------------------
+.. automodule:: mowl.datasets.alc
+   :members:
+   :show-inheritance:
