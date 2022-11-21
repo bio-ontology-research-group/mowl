@@ -68,7 +68,7 @@ class TSNE(Visualizer):
         self.class_color_dict = {cl: col for cl, col in zip(self.classes, colors)}
 
     def generate_points(self, epochs, workers=1, verbose=0):
-        """This method will call the :meth:`sklearn.manifold.TSNE.fit_transform` 
+        """This method will call the :meth:`sklearn.manifold.TSNE.fit_transform`
         method to generate the points for the plot.
 
         :param epochs: Number of epochs to run the TSNE algorithm
@@ -99,7 +99,7 @@ class TSNE(Visualizer):
     def show(self):
         """ This method will call the :meth:`matplotlib.pyplot.show` method to show the plot.
         """
-        
+
         fig, ax = plt.subplots(figsize=(20, 20))
 
         for label, (xs, ys) in self.plot_data.items():
@@ -116,7 +116,7 @@ class TSNE(Visualizer):
         :param outfile: Path to the output file
         :type outfile: str
         """
-        
+
         fig, ax = plt.subplots(figsize=(20, 20))
 
         for label, (xs, ys) in self.plot_data.items():

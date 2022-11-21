@@ -46,7 +46,7 @@ from tqdm import trange
 # EL-Embeddings uses GCI 0, 1, 2, 3 and GCI BOT 1 (to express disjointness between classes).
 # In the use case of this example, we will test over a biological problem, which is
 # protein-protein interactions. Given two proteins :math:`p_1,p_2`, the phenomenon
-# ":math:`p_1` interacts with :math:`p_1`" is encoded using GCI 2 as:
+# ":math:`p_1` interacts with :math:`p_2`" is encoded using GCI 2 as:
 #
 # .. math::
 #    p_1 \sqsubseteq interacts\_with. p_2

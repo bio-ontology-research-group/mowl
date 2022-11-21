@@ -35,7 +35,10 @@ class DeepWalk(WalkingModel):
 
         # Type checking
         if not isinstance(alpha, float):
-            raise TypeError("Optional parameter alpha must be a float")
+            if isinstance(alpha, int):
+                alpha = float(alpha)
+            else:
+                raise TypeError("Optional parameter alpha must be a float")
         self.alpha = alpha
         self.seed = seed
 

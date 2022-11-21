@@ -45,7 +45,7 @@ To access any of these datasets you can use:
 Your own dataset
 --------------------------
 
-In case you have your own training, validation and testing ontologies, you can turn them easily to a mOWL dataset as follows:
+In case you have your own :download:`training <training_ontology.owl>`, :download:`validation <validation_ontology.owl>` and :download:`testing <testing_ontology.owl>` ontologies, you can turn them easily to a mOWL dataset as follows:
 
 .. testcode::
 
@@ -53,7 +53,10 @@ In case you have your own training, validation and testing ontologies, you can t
    ds = PathDataset("training_ontology.owl", 
                     validation_path="validation_ontology.owl",
 		    testing_path="testing_ontology.owl")
-   
+
+   training_axioms = ds.ontology.getAxioms()
+   validation_axiom = ds.validation.getAxioms()
+   testing_axioms = ds.testing.getAxioms()
 
 .. note::
    Validation and testing ontologies are optional when using :class:`PathDataset <mowl.datasets.base.PathDataset>`. By default they are set to ``None``.

@@ -20,9 +20,9 @@ Adding annotations to ontologies
 
 To add annotations in the form of axioms there is the method ``insert_annotations``. All the annotations will be inserted into the ontology in the form :math:`C \sqsubseteq \exists R.D`, where :math:`C` is the annotating entity (it can be a new ontology class), :math:`D` is the annotated entity (usually is a class already existing in the ontology) and :math:`R` is the label of the relation. The annotation information must be stored in a ``.tsv`` file.
 
-For example, let's say we have an ontology called ``MyOntology.owl`` where there are ontology classes ``http://some_prefix/class_001``, ``http://some_prefix/class_002`` and ``http://some_prefix/class_003``. Furthermore, we have some other classes ``http://newclass1``, ``http://newclass2`` that are in relation with the already classes in the ontology. The relation must be a proper URI (let's use ``http://has_annotation``).
+For example, let's say we have an ontology called :download:`MyOntology.owl` where there are ontology classes ``http://some_prefix/class_001``, ``http://some_prefix/class_002`` and ``http://some_prefix/class_003``. Furthermore, we have some other classes ``http://newclass1``, ``http://newclass2`` that are in relation with the already classes in the ontology. The relation must be a proper URI (let's use ``http://has_annotation``).
 
-The annotation information must be store in a file with the following format:
+The annotation information must be stored in an :download:`annotations file <annots.tsv>` with the following format:
 
 .. code:: text
 

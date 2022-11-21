@@ -24,13 +24,13 @@ class ALCDataset():
     :param ontology: Input ontology
     :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
     :param class_index_dict: Dictionary containing information `class
-    name --> index`. If not provided, a dictionary will be created
-    from the ontology classes. Defaults to ``None``.
+        name --> index`. If not provided, a dictionary will be created
+        from the ontology classes. Defaults to ``None``.
     :type class_index_dict: dict, optional
     :param object_property_index_dict: Dictionary containing
-    information `object property name --> index`. If not provided, a
-    dictionary will be created from the ontology object
-    properties. Defaults to ``None``.
+        information `object property name --> index`. If not provided, a
+        dictionary will be created from the ontology object
+        properties. Defaults to ``None``.
     :type object_property_index_dict: dict, optional
     """
 
@@ -54,7 +54,7 @@ class ALCDataset():
         self.ind = self.adapter.create_individual(INDIVIDUAL)
         self.obj_prop_assertion_pat = self.adapter.create_object_property_assertion(
             self.r, self.ind, self.ind)
-        
+
     @property
     def class_to_id(self):
         return self._dataset.class_to_id
@@ -172,7 +172,7 @@ class ALCDataset():
             return cexprs
         elif isinstance(axiom, OWLClassAssertionAxiom):
             ind = axiom.getIndividual()
-            vector = [self.individual_to_id[ind],]
+            vector = [self.individual_to_id[ind], ]
             vector += get_cexpr_vector(axiom.getClassExpression())
             return vector
         elif isinstance(axiom, OWLObjectPropertyAssertionAxiom):
@@ -217,7 +217,6 @@ class ALCDataset():
         for the patterns """
         self.load()
         return self._grouped_axioms
-
 
     def get_obj_prop_assertion_data(self):
         return self.get_datasets()[self.obj_prop_assertion_pat]
