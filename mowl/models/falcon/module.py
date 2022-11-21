@@ -82,8 +82,8 @@ https://github.com/bio-ontology-research-group/FALCON
     def _logical_forall(self, r_fs, c_fs):
         return self._logical_residuum(r_fs, c_fs).min(dim=-1)[0]
 
-    def _get_c_fs_batch(self, c_emb, anon_e_emb):
-        e_emb = th.cat([self.e_embedding.weight, anon_e_emb], dim=0).unsqueeze(
+    def _get_c_fs_batch(self, c_emb, e_emb):
+        e_emb = e_emb.unsqueeze(
             dim=0).repeat(c_emb.size()[0], 1, 1)
         c_emb = c_emb.unsqueeze(dim=1).expand_as(e_emb)
         emb = th.cat([c_emb, e_emb], dim=-1)
@@ -91,10 +91,10 @@ https://github.com/bio-ontology-research-group/FALCON
         # negative_slope=0.1))).squeeze(dim=-1)
         return th.sigmoid(self.fc_0(emb)).squeeze(dim=-1)
 
-    def _get_r_fs_batch(self, r_emb, anon_e_emb):
-        e_emb = th.cat([self.e_embedding.weight, anon_e_emb], dim=0).unsqueeze(
+    def _get_r_fs_batch(self, r_emb, e_emb):
+        nentities = e_emb.shape[0]
+        e_emb = e_emb.unsqueeze(
             dim=0).repeat(r_emb.size()[0], 1, 1)
-        nentities = self.nentities + self.anon_e
         l_emb = (e_emb + r_emb.unsqueeze(dim=1).expand_as(e_emb)
                  ).unsqueeze(dim=1).repeat(1, nentities, 1, 1)
         r_emb = e_emb.unsqueeze(dim=2).repeat(1, 1, nentities, 1)
