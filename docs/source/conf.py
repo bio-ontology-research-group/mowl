@@ -47,6 +47,7 @@ extensions = [
     'sphinx.ext.autodoc',
     'sphinx.ext.doctest',
     'sphinx.ext.inheritance_diagram',
+    
     #'numpydoc'
 ]
 
@@ -94,7 +95,7 @@ intersphinx_mapping = {
     'pykeen': ('https://pykeen.readthedocs.io/en/latest/', None),
     'pytorch': ('https://pytorch.org/docs/stable/', None),
     'gensim': ('https://radimrehurek.com/gensim/', None),
-    'sklearn': ('https://scikit-learn.org/stable/', None),
+    'sklearn': ('https://scikit-learn.org/stable/', None)
 }
 
 intersphinx_disabled_domains = ['std']

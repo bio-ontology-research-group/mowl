@@ -9,7 +9,8 @@ def init_jvm(memory):
 
     jars_dir = os.path.join(dirname, "lib/")
     if not os.path.exists(jars_dir):
-        raise Exception(f"Directory {jars_dir} does not exist")
+        raise FileNotFoundError(f"JAR files not found. Make sure that the lib directory exists \
+and contains the JAR dependencies.")
 
     if (platform.system() == 'Windows'):
         jars = f'{str.join(";", [jars_dir + name for name in os.listdir(jars_dir)])}'

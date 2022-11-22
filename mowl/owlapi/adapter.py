@@ -11,6 +11,7 @@ class OWLAPIAdapter():
     Adapter class adapting OWLAPI. Here you can find shortcuts to:
         - ``org.semanticweb.owlapi.apibinding.OWLManager``
         - ``org.semanticweb.owlapi.model.OWLDataFactory``
+        - methods for creating OWLAPI objects
 
     """
 
@@ -41,7 +42,7 @@ class OWLAPIAdapter():
         return self._data_factory
 
     def create_ontology(self, iri):
-        """Create an empty ontology given a valid IRI string"""
+        """Creates an empty ontology given a valid IRI string"""
 
         if not isinstance(iri, str):
             raise TypeError(f"IRI must be a string to use this method. {err.OWLAPI_DIRECT}")

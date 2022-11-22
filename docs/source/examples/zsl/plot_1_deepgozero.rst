@@ -614,6 +614,8 @@ Training the model
 
    **Total running time of the script:** ( 0 minutes  0.000 seconds)
 
+**Estimated memory usage:**  0 MB
+
 
 .. _sphx_glr_download_examples_zsl_plot_1_deepgozero.py:
 
