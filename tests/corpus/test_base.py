@@ -32,9 +32,9 @@ class TestBase(TestCase):
             TypeError, "Optional parameter mode must be of type str",
             extract_and_save_axiom_corpus, self.family_dataset.ontology, out_file, 1)
 
-    def test_extract_annotation_corpus_value_mode(self):
+    def test_extract_and_save_axiom_corpus_value_mode(self):
         """This should test the value of the attribute mode to be correct in the method \
-`extract_annotation_corpus`."""
+`extract_and_save_axiom_corpus`."""
 
         out_file = "/tmp/out_file.txt"
         self.assertRaisesRegex(

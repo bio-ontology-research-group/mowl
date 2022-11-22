@@ -15,8 +15,8 @@ logging.basicConfig(level=logging.INFO)
 
 def count_added_axioms(func):
     @wraps(func)
-    def wrapper(self, owl_classes):
-        axioms = func(self, owl_classes)
+    def wrapper(self, owl_classes, *args, **kwargs):
+        axioms = func(self, owl_classes, *args, **kwargs)
         logging.info(f"Number of inferred axioms: {len(axioms)}.")
         return axioms
     return wrapper
@@ -43,12 +43,13 @@ org.semanticweb.owlapi.reasoner.OWLReasoner")
         self.ont_manager = self.adapter.owl_manager
 
     @count_added_axioms
-    def infer_subclass_axioms(self, owl_classes):
+    def infer_subclass_axioms(self, owl_classes, direct=False):
         """Infers and returns axioms of the type :math:`C \sqsubseteq D`
 
         :param owl_classes: List of OWLClass objects to be used to infer the axioms.
         :type owl_class: list[:class:`org.semanticweb.owlapi.model.OWLClass`]
-
+        :param direct: If True, only direct superclasses will be inferred. Default is False.
+        :type direct: bool, optional
         :rtype: list[:class:`org.semanticweb.owlapi.model.OWLSubClassOfAxiom`]
         """
         owl_classes = list(owl_classes)
@@ -57,9 +58,12 @@ org.semanticweb.owlapi.reasoner.OWLReasoner")
             raise TypeError("All elements in parameter owl_classes must be of type \
 org.semanticweb.owlapi.model.OWLClass")
 
+        if not isinstance(direct, bool):
+            raise TypeError("Optional parameter direct must be of type bool")
+
         axioms = []
         for owl_class in owl_classes:
-            super_classes = self.reasoner.getSuperClasses(owl_class, False).getFlattened()
+            super_classes = self.reasoner.getSuperClasses(owl_class, direct).getFlattened()
             new_axioms = set(map(lambda x: OWLSubClassOfAxiomImpl(owl_class, x, []),
                                  super_classes))
 
@@ -67,7 +71,7 @@ org.semanticweb.owlapi.model.OWLClass")
         return axioms
 
     @count_added_axioms
-    def infer_equiv_class_axioms(self, owl_classes):
+    def infer_equivalent_class_axioms(self, owl_classes):
         """Infers and returns axioms of the form :math:`C \equiv D`
 
         :param owl_classes: List of OWLClass objects to be used to infer the axioms.

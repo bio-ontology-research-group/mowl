@@ -4,15 +4,18 @@ Test Cases for Dataset class and its subclasses
 
 from mowl.owlapi.defaults import BOT, TOP
 from mowl.owlapi import OWLAPIAdapter
-from mowl.datasets.base import Entities, OWLClasses, OWLObjectProperties
+from mowl.datasets.base import Entities, OWLClasses, OWLObjectProperties, OWLIndividuals
 from mowl.datasets import Dataset, PathDataset, RemoteDataset, TarFileDataset
-from tests.datasetFactory import PPIYeastSlimDataset, GDAHumanELDataset
+from tests.datasetFactory import PPIYeastSlimDataset, GDAHumanELDataset, FamilyDataset
 from mowl.owlapi.model import OWLOntology, OWLClass, OWLObjectProperty
 from unittest import TestCase
 from random import randrange, choice
 import os
 import shutil
 import requests
+import tempfile
+
+from org.semanticweb.owlapi.model import IRI
 
 
 class TestDataset(TestCase):
@@ -191,7 +194,7 @@ class TestTarFileDataset(TestCase):
 
     def download(self, url):
         filename = url.split('/')[-1]
-        filepath = os.path.join("/tmp/", filename)
+        filepath = os.path.join(tempfile.gettempdir(), filename)
 
         with requests.get(url, stream=True) as r:
             r.raise_for_status()
@@ -208,17 +211,18 @@ class TestTarFileDataset(TestCase):
 
     @classmethod
     def tearDownClass(self):
-        shutil.rmtree("/tmp/ppi_yeast_slim")
-        os.remove("/tmp/ppi_yeast_slim.tar.gz")
+        tmp_dir = tempfile.gettempdir()
+        shutil.rmtree(os.path.join(tmp_dir, "ppi_yeast_slim"))
+        os.remove(os.path.join(tmp_dir, "ppi_yeast_slim.tar.gz"))
 
     def test_extract_tar_file(self):
         """It should check correct extracting behaviour"""
         _ = TarFileDataset(self.filepath)
-
-        self.assertTrue(os.path.exists("/tmp/ppi_yeast_slim.tar.gz"))
-        self.assertTrue(os.path.exists("/tmp/ppi_yeast_slim/ontology.owl"))
-        self.assertTrue(os.path.exists("/tmp/ppi_yeast_slim/valid.owl"))
-        self.assertTrue(os.path.exists("/tmp/ppi_yeast_slim/test.owl"))
+        tmp_dir = tempfile.gettempdir()
+        self.assertTrue(os.path.exists(os.path.join(tmp_dir, "ppi_yeast_slim.tar.gz")))
+        self.assertTrue(os.path.exists(os.path.join(tmp_dir, "ppi_yeast_slim/ontology.owl")))
+        self.assertTrue(os.path.exists(os.path.join(tmp_dir, "ppi_yeast_slim/valid.owl")))
+        self.assertTrue(os.path.exists(os.path.join(tmp_dir, "ppi_yeast_slim/test.owl")))
 
 #############################################################
 
@@ -232,6 +236,21 @@ class TestRemoteDataset(TestCase):
         self.bad_url = 'https://bio2vec.cbrc.kaust.edu.sa/data/mowl/gda_mouse_el.tar.gzq'
         self.only_training_set_url = 'https://bio2vec.cbrc.kaust.edu.sa/data/mowl/family.tar.gz'
 
+        tmp_dir = tempfile.gettempdir()
+        self.tmp_dir = os.path.join(tmp_dir, "mowl")
+        os.makedirs(self.tmp_dir, exist_ok=True)
+
+    @classmethod
+    def tearDownClass(self):
+        shutil.rmtree(self.tmp_dir)
+
+    def setUp(self):
+        for file_ in os.listdir(self.tmp_dir):
+            if os.path.isfile(os.path.join(self.tmp_dir, file_)):
+                os.remove(os.path.join(self.tmp_dir, file_))
+            elif os.path.isdir(os.path.join(self.tmp_dir, file_)):
+                shutil.rmtree(os.path.join(self.tmp_dir, file_))
+
     def test_successful_download_in_default_path(self):
         """This checks if dataset is downloaded in the default path ./"""
         _ = RemoteDataset(self.good_url)
@@ -242,14 +261,12 @@ class TestRemoteDataset(TestCase):
 
     def test_successful_download_in_custom_path(self):
         """This checks if dataset is downloaded a custom path"""
-        _ = RemoteDataset(self.good_url, data_root="/tmp/")
-        self.assertTrue(os.path.exists("/tmp/ppi_yeast"))
-        self.assertTrue(os.path.exists("/tmp/ppi_yeast/ontology.owl"))
-        self.assertTrue(os.path.exists("/tmp/ppi_yeast/valid.owl"))
-        self.assertTrue(os.path.exists("/tmp/ppi_yeast/test.owl"))
-
-        shutil.rmtree("/tmp/ppi_yeast")
-        os.remove("/tmp/ppi_yeast.tar.gz")
+        tmp_dir = self.tmp_dir
+        _ = RemoteDataset(self.good_url, data_root=tmp_dir)
+        self.assertTrue(os.path.exists(os.path.join(tmp_dir, "ppi_yeast")))
+        self.assertTrue(os.path.exists(os.path.join(tmp_dir, "ppi_yeast/ontology.owl")))
+        self.assertTrue(os.path.exists(os.path.join(tmp_dir, "ppi_yeast/valid.owl")))
+        self.assertTrue(os.path.exists(os.path.join(tmp_dir, "ppi_yeast/test.owl")))
 
     def test_incorrect_url(self):
         """This checks if error is raised for incorrect URL"""
@@ -257,26 +274,23 @@ class TestRemoteDataset(TestCase):
 
     def test_dataset_not_downloaded_if_already_exists(self):
         """This should check that dataset is not downloaded if already exists"""
-        _ = RemoteDataset(self.good_url, data_root="/tmp/")
-        file_timestamp1 = os.path.getmtime("/tmp/ppi_yeast.tar.gz")
-        _ = RemoteDataset(self.good_url, data_root="/tmp/")
-        file_timestamp2 = os.path.getmtime("/tmp/ppi_yeast.tar.gz")
+        tmp_dir = self.tmp_dir
+        _ = RemoteDataset(self.good_url, data_root=tmp_dir)
+        file_timestamp1 = os.path.getmtime(os.path.join(tmp_dir, "ppi_yeast.tar.gz"))
+        _ = RemoteDataset(self.good_url, data_root=tmp_dir)
+        file_timestamp2 = os.path.getmtime(os.path.join(tmp_dir, "ppi_yeast.tar.gz"))
 
         self.assertEqual(file_timestamp1, file_timestamp2)
 
-        shutil.rmtree("/tmp/ppi_yeast")
-        os.remove("/tmp/ppi_yeast.tar.gz")
-
     def test_dataset_with_only_training_set(self):
         """This should check that dataset is downloaded correctly if it has only training set"""
-        _ = RemoteDataset(self.only_training_set_url, data_root="/tmp/")
-        self.assertTrue(os.path.exists("/tmp/family"))
-        self.assertTrue(os.path.exists("/tmp/family/ontology.owl"))
-        self.assertFalse(os.path.exists("/tmp/family/valid.owl"))
-        self.assertFalse(os.path.exists("/tmp/family/test.owl"))
+        tmp_dir = self.tmp_dir
+        _ = RemoteDataset(self.only_training_set_url, data_root=tmp_dir)
+        self.assertTrue(os.path.exists(os.path.join(tmp_dir, "family")))
+        self.assertTrue(os.path.exists(os.path.join(tmp_dir, "family/ontology.owl")))
+        self.assertFalse(os.path.exists(os.path.join(tmp_dir, "family/valid.owl")))
+        self.assertFalse(os.path.exists(os.path.join(tmp_dir, "family/test.owl")))
 
-        shutil.rmtree("/tmp/family")
-        os.remove("/tmp/family.tar.gz")
 #############################################################
 
 
@@ -285,6 +299,16 @@ class TestEntities(TestCase):
     @classmethod
     def setUpClass(self):
         self.ds = PPIYeastSlimDataset()
+        self.family_ds = FamilyDataset()
+
+        adapter = OWLAPIAdapter()
+        manager = adapter.owl_manager
+        data_factory = adapter.data_factory
+
+        individual = data_factory.getOWLNamedIndividual(IRI.create("http://Jhon"))
+        person = data_factory.getOWLClass(IRI.create("http://Person"))
+        assertion = data_factory.getOWLClassAssertionAxiom(person, individual)
+        manager.addAxiom(self.family_ds.ontology, assertion)
 
     def test_method_check_owl_type_not_implemented(self):
         """This checks that NotImplementedError is raised for method check_owl_type"""
@@ -294,17 +318,24 @@ class TestEntities(TestCase):
 
     def test_type_for_classes_method(self):
         """This checks error handling when the OWLClasses class does not receive OWLClass \
-            objects"""
+objects"""
 
         props = self.ds.object_properties.as_owl
         self.assertRaises(TypeError, OWLClasses, props)
 
     def test_type_for_object_property_method(self):
         """This checks error handling when the OWLObjectProperties class does not receive \
-            OWLObjectProperty objects"""
+OWLObjectProperty objects"""
 
         classes = self.ds.classes.as_owl
         self.assertRaises(TypeError, OWLObjectProperties, classes)
+
+    def test_type_for_individuals_method(self):
+        """This check error handling when the OWLIndividuals class does not receive \
+OWLIndividual objects"""
+
+        classes = self.ds.classes.as_owl
+        self.assertRaises(TypeError, OWLIndividuals, classes)
 
     def test_format_of_class_as_str(self):
         """This checks if the format of the class string is correct"""
@@ -323,3 +354,12 @@ class TestEntities(TestCase):
         self.assertFalse(owl_prop_str.startswith("<"))
         self.assertFalse(owl_prop_str.endswith(">"))
         self.assertTrue(owl_prop_str.startswith("http://"))
+
+    def test_format_of_individual_as_str(self):
+        """This checks if the format of the individual string is correct"""
+
+        individuals = self.family_ds.individuals.as_str
+        owl_individual_str = choice(individuals)
+        self.assertFalse(owl_individual_str.startswith("<"))
+        self.assertFalse(owl_individual_str.endswith(">"))
+        self.assertTrue(owl_individual_str.startswith("http://"))

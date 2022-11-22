@@ -1,8 +1,9 @@
 import torch as th
 from torch.utils.data import DataLoader
-from mowl.reasoning.normalize import ELNormalizer, GCI
+from mowl.ontology.normalize import ELNormalizer, GCI
 from mowl.datasets.gci import GCIDataset
 import random
+from org.semanticweb.owlapi.model import OWLOntology
 
 
 class ELDataset():
@@ -35,6 +36,23 @@ class ELDataset():
         extended=True,
         device="cpu"
     ):
+
+        if not isinstance(ontology, OWLOntology):
+            raise TypeError("Parameter ontology must be of type \
+org.semanticweb.owlapi.model.OWLOntology.")
+
+        if not isinstance(class_index_dict, dict) and class_index_dict is not None:
+            raise TypeError("Optional parameter class_index_dict must be of type dict")
+
+        obj = object_property_index_dict
+        if not isinstance(obj, dict) and obj is not None:
+            raise TypeError("Optional parameter object_property_index_dict must be of type dict")
+
+        if not isinstance(extended, bool):
+            raise TypeError("Optional parameter extended must be of type bool")
+
+        if not isinstance(device, str):
+            raise TypeError("Optional parameter device must be of type str")
 
         self._ontology = ontology
         self._loaded = False

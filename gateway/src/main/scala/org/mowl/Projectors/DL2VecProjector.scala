@@ -23,19 +23,20 @@ class DL2VecProjector(var bidirectional_taxonomy: Boolean = false) extends Abstr
 
   val collectors = List("ObjectIntersectionOf", "ObjectUnionOf")
 
-  override def project(ontology: OWLOntology) = {
+  @Override
+  def project(ontology: OWLOntology, withIndividuals: Boolean, verbose: Boolean) = {
     val imports = Imports.fromBoolean(true)
     val axioms = ontology.getAxioms(imports).asScala.toList
 
-    val edges = axioms.foldLeft(List[Triple]()){(acc, x) => acc ::: projectAxiom(x)}
+    val edges = axioms.map(projectAxiom(_, withIndividuals, verbose)).flatten
     edges.asJava
   }
 
   def projectAxiom(ontClass: OWLClass, axiom: OWLClassAxiom): List[Triple] = {Nil}
   def projectAxiom(ontClass: OWLClass, axiom: OWLClassAxiom, ontology: OWLOntology): List[Triple] = {Nil}
   def projectAxiom(axiom: OWLClassAxiom): List[Triple] = {Nil}
-  
-  def projectAxiom(axiom: OWLAxiom): List[Triple] = {
+  def projectAxiom(axiom: OWLAxiom): List[Triple] = {Nil}
+  def projectAxiom(axiom: OWLAxiom, withIndividuals: Boolean, verbose: Boolean): List[Triple] = {
 
     val axiomType = axiom.getAxiomType().getName()
 
@@ -45,33 +46,97 @@ class DL2VecProjector(var bidirectional_taxonomy: Boolean = false) extends Abstr
 	var ax = axiom.asInstanceOf[OWLSubClassOfAxiom]
         ax.getSubClass.isInstanceOf[OWLClass] match {
           case true => 	projectSubClassOrEquivAxiom(ax.getSubClass.asInstanceOf[OWLClass], ax.getSuperClass, "http://subclassof")
-          case false => Nil
-        }
-        
+          case false => Nil}
       }
       case "EquivalentClasses" => {
 	var ax = axiom.asInstanceOf[OWLEquivalentClassesAxiom].getClassExpressionsAsList.asScala
         ax.find(_.isInstanceOf[OWLClass]) match {
           case Some(head) => {
             val rightSide = ax.filter((x) => x != head)
-      	    rightSide.toList.flatMap(projectSubClassOrEquivAxiom(head.asInstanceOf[OWLClass], _:OWLClassExpression, "http://equivalentto"))
-
-          }
+      	    rightSide.toList.flatMap(projectSubClassOrEquivAxiom(head.asInstanceOf[OWLClass], _:OWLClassExpression, "http://equivalentto")) }
           case None => Nil
         }
       }
-      case _ => Nil
+      case "ClassAssertion" => {
+        withIndividuals match {
+          case true => {
+            val ax = axiom.asInstanceOf[OWLClassAssertionAxiom]
+            projectClassAssertionAxiom(ax, verbose)
+          }
+          case false => Nil
+        }
+      }
+      case "ObjectPropertyAssertion" => {
+        withIndividuals match {
+          case true => {
+            val ax = axiom.asInstanceOf[OWLObjectPropertyAssertionAxiom]
+            projectObjectPropertyAssertionAxiom(ax, verbose)
+          }
+          case false => Nil
+        }
+      }
+      case "Declaration" => {
+        Nil
+      }
+      case _ => {
+        if (verbose) println("WARNING: Axiom " + axiom + " not supported")
+        Nil
+      }
+
     }
   }
 
-   def projectSubClassOrEquivAxiom(ontClass: OWLClass, superClass: OWLClassExpression, relName: String): List[Triple] = {
-     var invRelName = ""
+  def projectClassAssertionAxiom(axiom: OWLClassAssertionAxiom,  verbose: Boolean): List[Triple] = {
+    val subject = axiom.getIndividual
+    val ontClass = axiom.getClassExpression
 
-     if (relName == "http://subclassof"){
-       invRelName = "http://superclassof"
-     }else if(relName == "http://equivalentto"){
-       invRelName = relName
-     }
+    ontClass.getClassExpressionType.getName match {
+      case "OWLClass" => {
+        val triple = new Triple(subject.toStringID, "http://type", ontClass.asInstanceOf[OWLClass].toStringID)
+        List(triple)
+      }
+      case "ObjectSomeValuesFrom" => {
+        val ontClassExistential = ontClass.asInstanceOf[OWLObjectSomeValuesFrom]
+        val property = ontClassExistential.getProperty.asInstanceOf[OWLObjectProperty]
+        val filler = ontClassExistential.getFiller
+
+        filler.getClassExpressionType.getName match {
+          case "Class" => {
+            val triple = new Triple(subject.toStringID, property.toStringID, filler.asInstanceOf[OWLClass].toStringID)
+            List(triple)
+          }
+          case _ => {
+            if (verbose) println("WARNING: Assertion axiom, filler " + filler + " in object not supported")
+            Nil
+          }
+        }
+      }
+      case _ => {
+        if (verbose) println("WARNING: Assertion axiom, object " + ontClass + " not supported")
+        Nil
+      }
+    }
+  }
+
+  def projectObjectPropertyAssertionAxiom(axiom: OWLObjectPropertyAssertionAxiom, verbose: Boolean): List[Triple] = {
+    val subject = axiom.getSubject
+    val property = axiom.getProperty.asInstanceOf[OWLObjectProperty]
+    val object_ = axiom.getObject
+
+
+
+    val triple = new Triple(subject.toStringID, property.toStringID, object_.toStringID)
+    List(triple)
+  }
+
+  def projectSubClassOrEquivAxiom(ontClass: OWLClass, superClass: OWLClassExpression, relName: String): List[Triple] = {
+    var invRelName = ""
+
+    if (relName == "http://subclassof"){
+      invRelName = "http://superclassof"
+    }else if(relName == "http://equivalentto"){
+      invRelName = relName
+    }
      
     val superClassType = superClass.getClassExpressionType.getName
 
@@ -107,7 +172,7 @@ class DL2VecProjector(var bidirectional_taxonomy: Boolean = false) extends Abstr
 
   def projectQuantifiedExpression(expr:QuantifiedExpression, relations:List[String]): (List[String], OWLClassExpression) = {
     val rel = expr.getProperty.asInstanceOf[OWLObjectProperty]
-    val relName = rel.toString
+    val relName = rel.toStringID
     var filler = expr.getFiller
 
     defineQuantifiedExpression(filler) match {

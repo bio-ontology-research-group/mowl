@@ -1,6 +1,6 @@
 import pathlib
 
-from ..base import RemoteDataset, PathDataset
+from ..base import RemoteDataset, PathDataset, OWLClasses
 import math
 import random
 import numpy as np
@@ -22,7 +22,7 @@ class GDADataset(RemoteDataset):
     <http://www.informatics.jax.org/downloads/reports/HMD_HumanPhenotype.rpt>`_ document. Disease \
     annotations were obtained from the \
     `HPO annotations for rare disease <http://purl.obolibrary.org/obo/hp/hpoa/phenotype.hpoa>`_ \
-    document. These annotations were added to the *Unified Phenotype Ontology*(uPheno) to build \
+    document. These annotations were added to the *Unified Phenotype Ontology* (uPheno) to build \
     the training ontology. Futhermore, gene-disease associations were obtained from the \
     `Associations of Mouse Genes with DO Diseases \
     <http://www.informatics.jax.org/downloads/reports/MGI_DO.rpt>`_ file, from which associations \
@@ -34,18 +34,31 @@ class GDADataset(RemoteDataset):
     def __init__(self, url=None):
         super().__init__(url=url)
 
-    def _get_evaluation_classes(self):
-        """Classes that are used in evaluation
+    @property
+    def evaluation_classes(self):
+        """List of classes used for evaluation. Depending on the dataset, this method could \
+        return a single :class:`OWLClasses` object \
+        (as in :class:`PPIYeastDataset <mowl.datasets.builtin.PPIYeastDataset>`) \
+        or a tuple of :class:`OWLClasses` objects \
+        (as in :class:`GDAHumanDataset <mowl.datasets.builtin.GDAHumanDataset>`). If not \
+        overriden, this method returns the classes in the testing ontology obtained from the \
+        OWLAPI method ``getClassesInSignature()`` as a :class:`OWLClasses` object.
         """
-        genes = set()
-        diseases = set()
-        for owl_cls in self.classes:
-            if owl_cls[7:].isnumeric():
-                genes.add(owl_cls)
-            if "OMIM_" in owl_cls:
-                diseases.add(owl_cls)
 
-        return genes, diseases
+        if self._evaluation_classes is None:
+            genes = set()
+            diseases = set()
+            for owl_name, owl_cls in self.classes.as_dict.items():
+                if owl_name[7:].isnumeric():
+                    genes.add(owl_cls)
+                if "OMIM_" in owl_name:
+                    diseases.add(owl_cls)
+
+            genes = OWLClasses(genes)
+            diseases = OWLClasses(diseases)
+            self._evaluation_classes = (genes, diseases)
+
+        return self._evaluation_classes
 
     def get_evaluation_property(self):
         return "http://is_associated_with"

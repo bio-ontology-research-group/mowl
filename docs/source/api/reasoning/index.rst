@@ -6,11 +6,3 @@ mowl.reasoning
    :members:
    :show-inheritance:
 
-EL Normalization
--------------------
-
-.. automodule:: mowl.reasoning.normalize
-   :members:
-   :show-inheritance:
-
-   

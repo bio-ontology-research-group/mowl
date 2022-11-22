@@ -10,7 +10,6 @@ mainly in Python, but we have integrated the functionalities of [OWLAPI](https:/
 
 ## Table of contents
   - [Installation](#installation)
-  - [Examples of use](#examples-of-use)
   - [List of contributors](#list-of-contributors)
   - [License](#license)
   - [Documentation](#documentation)
@@ -19,7 +18,7 @@ mainly in Python, but we have integrated the functionalities of [OWLAPI](https:/
 
 ## Installation
 
-### PyPi v0.0.30
+### PyPi
 
 ```
 pip install mowl-borg
@@ -36,59 +35,17 @@ cd mowl
 conda env create -f environment.yml
 conda activate mowl
 
+If you are working from a Linux o Mac OS system:
 ./build_jars.sh
+
+If you are working from a Windows system:
+./build_jars.bat
+
+python -m build
 ```
 
-The last line will generate the necessary `jar` files to bind Python with the code that runs in the JVM
+The last line will generate the necessary `jar` files to bind Python with the code that runs in the JVM. After building, a ``.tar.gz`` file will be generated under `dist` and can be used to install mOWL.
 
-## Examples of use
-
-### Basic example
-
-In this example we use the training data (which is an OWL ontology) from the built-in dataset [PPIYeasSlimDataset](https://mowl.readthedocs.io/en/latest/api/datasets/index.html#mowl.datasets.ppi_yeast.PPIYeastSlimDataset) to build a graph representation using the _subClassOf_ axioms.
-
-```python
-import mowl
-mowl.init_jvm("4g")
-from mowl.datasets.ppi_yeast import PPIYeastSlimDataset
-from mowl.projection.taxonomy.model import TaxonomyProjector
-
-dataset = PPIYeastSlimDataset()
-projector = TaxonomyProjector(bidirectional_taxonomy = True)
-edges = projector.project(dataset.ontology)
-```
-The projected `edges` is an edge list of a graph. One use of this may be to generate random walks:
-
-```python
-from mowl.walking.deepwalk.model import DeepWalk
-walker = DeepWalk(100, # number of walks
-		20, # length of each walk
-		0.2, # probability of restart
-		workers = 4, # number of usable CPUs
-		)
-
-walker.walk(edges)
-walks = walker.walks
-```
-
-### Ontology to graph
-
-In the previous example we called the class `TaxonomyProjector` to perform the graph projection. However, there are more ways to perform the projection. We include the following four:
-
-* [TaxonomyProjector](https://mowl.readthedocs.io/en/latest/api/graph/index.html#subclass-hierarchy): "taxonomy"
-* [TaxonomyWithRelsProjector](https://mowl.readthedocs.io/en/latest/api/graph/index.html#subclass-hierarchy-with-relations): "taxonomy_rels"
-* [DL2VecProjector](https://mowl.readthedocs.io/en/latest/api/graph/index.html#dl2vec-graph): "dl2vec"
-* [OWL2VecProjector](https://mowl.readthedocs.io/en/latest/api/graph/index.html#dl2vec-graph): "owl2vec_star"
-
-Instead of instantianting each of them separately, there is the following _factory_ method:
-```python
-from mowl.projection.factory import projector_factory
-
-projector = projector_factory("taxonomy_rels", bidirectional_taxonomy = True)
-```
-Now `projector` will be an instance of the `TaxonomyWithRelsProjector` class. The string parameters for each method are listed above.
-
-For the random walks method we have a similar factory method that can be found in `mowl.walking.factory` and is called `walking_factory`.
 
 
 ## List of contributors

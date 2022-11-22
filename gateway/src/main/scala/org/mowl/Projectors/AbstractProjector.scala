@@ -17,7 +17,7 @@ trait AbstractProjector{
   val dataFactory = ontManager.getOWLDataFactory()
   val imports = Imports.fromBoolean(true)
 
-
+ 
   def project(ontology: OWLOntology) = {
     val imports = Imports.fromBoolean(true)
 
@@ -30,10 +30,13 @@ trait AbstractProjector{
   }
 
   //Abstract methods
+  def project(ontology: OWLOntology, withIndividuals: Boolean, verbose: Boolean): java.util.List[Triple]
+
   def projectAxiom(ontClass: OWLClass, axiom: OWLClassAxiom): List[Triple]
   def projectAxiom(ontClass: OWLClass, axiom: OWLClassAxiom, ontology: OWLOntology): List[Triple]
   def projectAxiom(axiom: OWLClassAxiom): List[Triple]
   def projectAxiom(axiom: OWLAxiom): List[Triple]
+  def projectAxiom(axiom: OWLAxiom, withIndividuals: Boolean, verbose: Boolean): List[Triple]
   //////////////////////
 
   def processOntClass(ontClass: OWLClass, ontology: OWLOntology): List[Triple] = {

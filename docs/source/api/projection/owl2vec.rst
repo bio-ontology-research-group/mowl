@@ -1,7 +1,3 @@
-OWL2Vec* Graph
-----------------
-
-The OWL2Vec* graph follows the rules described in the paper `OWL2Vec*: embedding of OWL ontologies (2021) <https://link.springer.com/article/10.1007%2Fs10994-021-05997-6>`__. The parsing rules are shown in the table below:
 
 
 +-------------------------------------------------------+-------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------+
@@ -34,9 +30,3 @@ The OWL2Vec* graph follows the rules described in the paper `OWL2Vec*: embedding
 |:math:`r(a, b)`					| :math:`-`												| :math:`\langle a, r, b\rangle`					|
 +-------------------------------------------------------+-------------------------------------------------------------------------------------------------------+-----------------------------------------------------------------------+
 
-
-
-.. automodule:: mowl.projection.owl2vec_star.model
-   :members:
-   :noindex:
-   :show-inheritance:

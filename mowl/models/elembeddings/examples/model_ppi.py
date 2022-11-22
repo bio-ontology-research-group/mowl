@@ -38,7 +38,7 @@ class ELEmbeddings(EmbeddingELModel):
                  model_filepath=None,
                  device='cpu'
                  ):
-        super().__init__(dataset, batch_size, extended=True)
+        super().__init__(dataset, batch_size, extended=True, model_filepath=model_filepath)
 
         self.embed_dim = embed_dim
         self.margin = margin
@@ -46,7 +46,6 @@ class ELEmbeddings(EmbeddingELModel):
         self.learning_rate = learning_rate
         self.epochs = epochs
         self.device = device
-        self.model_filepath = model_filepath
         self._loaded = False
         self._loaded_eval = False
         self.extended = False
@@ -71,13 +70,14 @@ class ELEmbeddings(EmbeddingELModel):
             train_loss = 0
             loss = 0
 
-            for gci_name, gci_dataset in self.training_datasets.get_gci_datasets().items():
+            for gci_name, gci_dataset in self.training_datasets.items():
                 if len(gci_dataset) == 0:
                     continue
 
                 loss += th.mean(self.model(gci_dataset[:], gci_name))
                 if gci_name == "gci2":
-                    prots = [self.class_index_dict[p] for p in self.dataset.evaluation_classes]
+                    prots = [self.class_index_dict[p] for p
+                             in self.dataset.evaluation_classes.as_str]
                     idxs_for_negs = np.random.choice(prots, size=len(gci_dataset), replace=True)
                     rand_index = th.tensor(idxs_for_negs).to(self.device)
                     data = gci_dataset[:]
@@ -93,7 +93,7 @@ class ELEmbeddings(EmbeddingELModel):
             with th.no_grad():
                 self.model.eval()
                 valid_loss = 0
-                gci2_data = self.validation_datasets.get_gci_datasets()["gci2"][:]
+                gci2_data = self.validation_datasets["gci2"][:]
                 loss = th.mean(self.model(gci2_data, "gci2"))
                 valid_loss += loss.detach().item()
 
@@ -103,6 +103,8 @@ class ELEmbeddings(EmbeddingELModel):
                 th.save(self.model.state_dict(), self.model_filepath)
             if (epoch + 1) % checkpoint == 0:
                 print(f'Epoch {epoch}: Train loss: {train_loss} Valid loss: {valid_loss}')
+
+        return 1
 
     def eval_method(self, data):
         return self.model.gci2_loss(data)

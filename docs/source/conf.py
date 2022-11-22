@@ -21,19 +21,52 @@ project = 'MOWL'
 copyright = '2021, BORG'
 author = 'BORG'
 
-release = '0.1.0'
-version = '0.1.0'
+release = '0.1.1'
+version = '0.1.1'
 # -- General configuration
 
 extensions = [
-    'sphinx.ext.duration',
-    'sphinx.ext.doctest',
     'sphinx.ext.autodoc',
     'sphinx.ext.autosummary',
+    'sphinx.ext.coverage',
+    'sphinx.ext.doctest',
+    'sphinx.ext.duration',
     'sphinx.ext.intersphinx',
+    'sphinx.ext.mathjax',
+    'sphinx.ext.todo',
+    'sphinx.ext.viewcode',
     'sphinx_gallery.gen_gallery',
 #    'IPython.sphinxext.ipython_console_highlighting'
+
+    # Matplotlib
+    #'matplotlib.sphinxext.only_directives',
+    'matplotlib.sphinxext.plot_directive',
+    'IPython.sphinxext.ipython_directive',
+    'IPython.sphinxext.ipython_console_highlighting',
+    'sphinx.ext.mathjax',
+    'sphinx.ext.autodoc',
+    'sphinx.ext.doctest',
+    'sphinx.ext.inheritance_diagram',
+    
+    #'numpydoc'
 ]
+
+doctest_global_setup = """
+import jpype
+import jpype.imports
+import os
+dirname = os.path.dirname("../mowl/")
+jars_dir = os.path.join(dirname, "lib/")
+jars = f'{str.join(":", [jars_dir + name for name in os.listdir(jars_dir)])}'
+if not jpype.isJVMStarted():
+    jpype.startJVM(
+           jpype.getDefaultJVMPath(), "-ea",
+	   "-Xmx10g",
+	   "-Djava.class.path=" + jars,
+	   convertStrings=False)
+"""
+
+todo_include_todos = True
 
 examples_dirs = [
     '../../examples/'
@@ -45,8 +78,12 @@ gallery_dirs = [
 sphinx_gallery_conf = {
     'examples_dirs': examples_dirs,   # path to your example scripts
     'gallery_dirs': gallery_dirs,  # path to where to save gallery generated output
-
-    "within_subsection_order": FileNameSortKey
+    'filename_pattern': '/nopattern',
+    "within_subsection_order": FileNameSortKey,
+    "run_stale_examples": True,
+    "abort_on_example_error": False,
+    #"plot_gallery": False,
+    "show_memory": True,
 }
 
 autodoc_member_order = 'bysource'
@@ -55,6 +92,10 @@ autodoc_member_order = 'bysource'
 intersphinx_mapping = {
     'python': ('https://docs.python.org/3/', None),
     'sphinx': ('https://www.sphinx-doc.org/en/master/', None),
+    'pykeen': ('https://pykeen.readthedocs.io/en/latest/', None),
+    'pytorch': ('https://pytorch.org/docs/stable/', None),
+    'gensim': ('https://radimrehurek.com/gensim/', None),
+    'sklearn': ('https://scikit-learn.org/stable/', None)
 }
 
 intersphinx_disabled_domains = ['std']
@@ -81,4 +122,10 @@ source_suffix = ['.rst', '.md']
 # The master toctree document.
 master_doc = 'index'
 
-autodoc_mock_imports = ['org', 'uk', 'java', 'numpy', 'jpype', 'de', 'pandas', 'scipy', 'sklearn', 'owlready2', 'gensim', 'torch', 'rdflib', 'networkx', 'pykeen', 'node2vec', 'matplotlib', 'tqdm', 'click']
+autodoc_mock_imports = ['jpype', 'owlready2', 'rdflib', 'networkx', 'node2vec', 'matplotlib']
+
+#autodoc_mock_imports = ['org', 'uk', 'java', 'numpy', 'jpype', 'de', 'pandas', 'scipy', 'sklearn', 'owlready2', 'gensim', 'torch', 'rdflib', 'networkx', 'pykeen', 'node2vec', 'matplotlib', 'tqdm', 'click']
+
+
+import mowl
+mowl.init_jvm("4g")
