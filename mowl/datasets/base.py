@@ -377,9 +377,11 @@ class Entities():
         return self
 
     def __next__(self):
-        item = self._collection[self.ind]
-        self.ind += 1
-        return item
+        if self.ind < len(self._collection):
+            item = self._collection[self.ind]
+            self.ind += 1
+            return item
+        raise StopIteration
 
     def check_owl_type(self, collection):
         """This method checks whether the elements in the provided collection
