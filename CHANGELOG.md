@@ -13,12 +13,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `DL2VecProjector` includes assertion axioms with named individuals
 - `FastTensorDataLoader` is part of mOWL in the module `mowl.utils.data`
 - `DeepGOZero` implementation in mOWL
+- Module `mowl.owlapi` with shortcuts to the OWLAPI
 - Extended `Dataset` class.
 ### Changed
 ### Deprecated
 ### Removed
 ### Fixed
 ### Security
+- Added Patch for bug CVE-2007-4559. Based on pull request #32
 
 ## [0.1.0]
 
