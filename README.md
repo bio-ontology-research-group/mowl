@@ -47,13 +47,9 @@ cd mowl
 conda env create -f environment.yml
 conda activate mowl
 
-If you are working from a Linux o Mac OS system:
 ./build_jars.sh
 
-If you are working from a Windows system:
-./build_jars.bat
-
-python -m build
+python setup.py install
 ```
 
 The last line will generate the necessary `jar` files to bind Python with the code that runs in the JVM. After building, a ``.tar.gz`` file will be generated under `dist` and can be used to install mOWL.
