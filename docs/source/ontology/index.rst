@@ -78,9 +78,9 @@ In our example, the axioms inserted in the ontology will be the following in XML
 Creating ontology from triples
 -----------------------------------------------
 
-To insert triples from a ``.tsv`` file, we can do using the `create_from_triples <mowl.ontology.create_from_triples>` method. As before, an input triple ``(h,r,t)`` will be inserted as axioms of the form :math:`H \sqsubseteq \exists R.T`.
+To transform a triples from a ``.tsv`` file into a ``.owl``, we can do using the `create_from_triples <mowl.ontology.create_from_triples>` method. As before, an input triple ``(h,r,t)`` will be inserted as axioms of the form :math:`H \sqsubseteq \exists R.T`.
 
-Let's assume we have a triples file called ``my_triples_file.tsv`` of the following form:
+Let's assume we have a triples file called :download:`my_triples_file.tsv`  of the following form:
 
 .. code:: text
 
@@ -101,7 +101,7 @@ To create an ontology from those triples we would do:
    create_from_triples(triples_file, out_file)
 
 
-In case we have a simpler triples file like the following:
+In case we have a :download:`simpler triples file <simpler_triples_file.tsv>` like the following:
 
 .. code:: text
 
@@ -116,7 +116,7 @@ we can create an ontology assuming all the triples will have the same relation a
 
    from mowl.ontology.create import create_from_triples
 
-   triples_file = "my_triples_file.tsv"
+   triples_file = "simpler_triples_file.tsv"
    out_file = "my_new_ontology.owl"
    prefix = "http://mowl/"
    relation = "http://mowl/relation"
@@ -166,8 +166,10 @@ We rely on `JCEL <https://julianmendez.github.io/jcel/>`_ to provide :math:`\mat
 
 .. testcode::
 
+   from mowl.datasets.builtin import FamilyDataset
    from mowl.ontology.normalize import ELNormalizer, GCI
 
+   ontology = FamilyDataset().ontology
    normalizer = ELNormalizer()
    gcis = normalizer.normalize(ontology)
 

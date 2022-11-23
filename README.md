@@ -18,13 +18,25 @@ mainly in Python, but we have integrated the functionalities of [OWLAPI](https:/
 
 ## Installation
 
-### PyPi
+### System dependencies
+
+  - JDK version 8
+  - Python version 3.8
+  - Conda version >= 4.x.x
+
+### Python requirements
+
+  - Gensim >= 4.x.x
+  - PyTorch >= 1.12.x
+  - PyKEEN >= 1.9.x
+
+### Install from PyPi
 
 ```
 pip install mowl-borg
 ```
 
-### From GitHub
+### Build from source
 Installation can be done with the following commands:
 
 ```

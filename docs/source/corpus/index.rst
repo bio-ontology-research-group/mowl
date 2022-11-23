@@ -21,6 +21,9 @@ In this way we will get a list of strings where each one will be a Manchester Sy
 .. testcode::
 
    from mowl.corpus import extract_and_save_axiom_corpus
+   from mowl.datasets.builtin import PPIYeastSlimDataset
+
+   dataset = PPIYeastSlimDataset()
    extract_and_save_axiom_corpus(dataset.ontology,
                                  "/tmp/file_to_save_corpus",
 				 mode="w")
