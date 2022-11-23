@@ -21,9 +21,6 @@ In this way we will get a list of strings where each one will be a Manchester Sy
 .. testcode::
 
    from mowl.corpus import extract_and_save_axiom_corpus
-   from mowl.datasets.builtin import PPIYeastSlimDataset
-
-   dataset = PPIYeastSlimDataset()
    extract_and_save_axiom_corpus(dataset.ontology,
                                  "/tmp/file_to_save_corpus",
 				 mode="w")
@@ -40,7 +37,10 @@ Annotations from ontology can be also rendered in a similar way. To extract the 
 
 .. testcode::
 
+   from mowl.datasets.builtin import PPIYeastSlimDataset
    from mowl.corpus import extract_annotation_corpus
+
+   dataset = PPIYeastSlimDataset()
    corpus = extract_annotation_corpus(dataset.ontology)
 
 And to save into a file:
