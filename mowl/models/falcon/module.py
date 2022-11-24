@@ -72,7 +72,7 @@ https://github.com/bio-ontology-research-group/FALCON
 
     def _logical_residuum(self, r_fs, c_fs):
         if self.residuum == 'notCorD':
-            return self._logical_or(self._logical_not(r_fs), c_fs.unsqueeze(dim=-2))
+            return self._logical_or(self._logical_not(r_fs), c_fs)
         else:
             raise ValueError
 
@@ -92,7 +92,6 @@ https://github.com/bio-ontology-research-group/FALCON
         return th.sigmoid(self.fc_0(emb)).squeeze(dim=-1)
 
     def _get_r_fs_batch(self, r_emb, e_emb):
-        nentities = e_emb.shape[0]
         e_emb = e_emb.unsqueeze(
             dim=0).repeat(r_emb.size()[0], 1, 1)
         r_emb = r_emb.unsqueeze(dim=1).expand_as(e_emb)
