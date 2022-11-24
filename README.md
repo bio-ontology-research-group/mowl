@@ -18,13 +18,25 @@ mainly in Python, but we have integrated the functionalities of [OWLAPI](https:/
 
 ## Installation
 
-### PyPi
+### System dependencies
+
+  - JDK version 8
+  - Python version 3.8
+  - Conda version >= 4.x.x
+
+### Python requirements
+
+  - Gensim >= 4.x.x
+  - PyTorch >= 1.12.x
+  - PyKEEN >= 1.9.x
+
+### Install from PyPi
 
 ```
 pip install mowl-borg
 ```
 
-### From GitHub
+### Build from source
 Installation can be done with the following commands:
 
 ```
@@ -35,13 +47,9 @@ cd mowl
 conda env create -f environment.yml
 conda activate mowl
 
-If you are working from a Linux o Mac OS system:
 ./build_jars.sh
 
-If you are working from a Windows system:
-./build_jars.bat
-
-python -m build
+python setup.py install
 ```
 
 The last line will generate the necessary `jar` files to bind Python with the code that runs in the JVM. After building, a ``.tar.gz`` file will be generated under `dist` and can be used to install mOWL.

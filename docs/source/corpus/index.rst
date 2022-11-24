@@ -37,7 +37,10 @@ Annotations from ontology can be also rendered in a similar way. To extract the 
 
 .. testcode::
 
+   from mowl.datasets.builtin import PPIYeastSlimDataset
    from mowl.corpus import extract_annotation_corpus
+
+   dataset = PPIYeastSlimDataset()
    corpus = extract_annotation_corpus(dataset.ontology)
 
 And to save into a file:

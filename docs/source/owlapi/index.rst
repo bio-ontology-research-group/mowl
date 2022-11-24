@@ -1,16 +1,6 @@
 OWLAPI
 =========
 
-.. testsetup::
-
-   import os
-   from mowl.owlapi import OWLAPIAdapter
-   from org.semanticweb.owlapi.model import IRI
-   manager = OWLAPIAdapter().owl_manager
-   ontology = manager.createOntology()
-   manager.saveOntology(ontology, IRI.create("file:" + os.path.abspath("my_ontology.owl")))
- 
-
 
 mOWL interfaces the OWLAPI by using JPype to connect to the Java Virtual Machine. JPype allows to access Java objects and methods from a Python script. For example, we can use the OWLAPI from Python:
 
@@ -19,11 +9,9 @@ mOWL interfaces the OWLAPI by using JPype to connect to the Java Virtual Machine
    import mowl
    mowl.init_jvm("10g")
    from org.semanticweb.owlapi.apibinding import OWLManager
-   from java.io import File
 
-   input_file = File("my_ontology.owl")
    manager = OWLManager.createOWLOntologyManager()
-   ontology = manager.loadOntologyFromOntologyDocument(input_file)
+   ontology = manager.createOntology()
 
    ontology.getClassesInSignature()
 

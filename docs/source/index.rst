@@ -83,11 +83,17 @@ The package is released under the BSD 3-Clause License.
    visualization/index
    examples/index
    
-   
+.. toctree::
+   :maxdepth: 1
+   :caption: FAQ
+   :hidden:
+   :glob:
+
+   faq/errors/index
    
 .. toctree::
    :maxdepth: 2
-   :caption: API
+   :caption: API reference
    :hidden:
    :glob:
 

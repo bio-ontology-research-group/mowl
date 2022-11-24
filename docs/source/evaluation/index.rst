@@ -15,7 +15,7 @@ Embeddings-based evaluator
 
 This class is intended to be used by models or workflows in which the embedding vectors exist outside some model class. For example, see :doc:`/examples/graph_based/plot_1_dl2vec`. In that example, the embeddings are not enclosed in any model and therefore, some preprocessing is needed to determine the information that the |embbasedevaluator| requires.
 
-Let's use this evaluator with a simpler version of :doc:`Onto2Vec </examples/syntactic/plot_2_onto2vec>` with the protein-protein interaction task:
+Let's use this evaluator with a simpler version of :doc:`Onto2Vec </examples/syntactic/plot_1_onto2vec>` with the protein-protein interaction task:
 
 .. testcode:: eval1
 

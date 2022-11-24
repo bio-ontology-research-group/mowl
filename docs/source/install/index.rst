@@ -9,6 +9,7 @@ System requirements
 
 - JDK version 8
 - Python version 3.8
+- Conda version >= 4.x.x
 
 
 Python requirements
@@ -36,8 +37,7 @@ Installation can be done with the following commands:
 
    conda env create -f environment.yml
    conda activate mowl
-
-   cd mowl
+   
    ./build_jars.sh
 
    python setup.py install
