@@ -172,12 +172,10 @@ https://github.com/bio-ontology-research-group/FALCON
         elif isinstance(axiom, OWLEquivalentClassesAxiom):
             cexprs = axiom.getClassExpressionsAsList()
             C, D = cexprs[0], cexprs[1]
-            cexpr1 = self.adapter.create_object_intersection_of(
-                C, self.adapter.create_complement_of(D))
-            fs1, _ = self.forward_fs(cexpr1, x, e_emb)
-            cexpr2 = self.adapter.create_object_intersection_of(
-                self.adapter.create_complement_of(C), D)
-            fs2, _ = self.forward_fs(cexpr2, x, e_emb)
+            c_fs, next_index = self.forward_fs(C, x, e_emb)
+            d_fs, next_index = self.forward_fs(D, x, e_emb, cur_index=next_index)
+            fs1 = self._logical_and(c_fs, self._logical_not(d_fs))
+            fs2 = self._logical_and(self._logical_not(c_fs), d_fs)
             return self.get_cc_loss(fs1).mean() + self.get_cc_loss(fs2).mean()
         elif isinstance(axiom, OWLDisjointClassesAxiom):
             cexprs = axiom.getClassExpressionsAsList()
