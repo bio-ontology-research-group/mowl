@@ -53,6 +53,7 @@ class TestFalconPPI(TestCase):
         axioms.add(self.adapter.create_object_property_assertion(self.has_child, Jane, Melissa))
         self.adapter.owl_manager.addAxioms(self.ontology, axioms)
 
+        # self.ontology = self.adapter.owl_manager.loadOntologyFromOntologyDocument(File("deepgo/train_data.owl"))
         self.dataset = Dataset(self.ontology, validation=self.ontology)
 
     def test_ppi(self):
