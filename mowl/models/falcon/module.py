@@ -77,11 +77,13 @@ https://github.com/bio-ontology-research-group/FALCON
             raise ValueError
 
     def _logical_exist(self, r_fs, c_fs):
-        return self._logical_and(r_fs, c_fs).max(dim=-1)[0]
-
+        ret = self._logical_and(r_fs, c_fs).max(dim=-1)[0].unsqueeze(-1)
+        return ret.expand_as(r_fs)
+    
     def _logical_forall(self, r_fs, c_fs):
-        return self._logical_residuum(r_fs, c_fs).min(dim=-1)[0]
-
+        ret = self._logical_residuum(r_fs, c_fs).min(dim=-1)[0].unsqueeze(-1)
+        return ret.expand_as(r_fs)
+    
     def _get_c_fs_batch(self, c_emb, e_emb):
         e_emb = e_emb.unsqueeze(
             dim=0).repeat(c_emb.size()[0], 1, 1)
