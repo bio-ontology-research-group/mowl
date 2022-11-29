@@ -97,7 +97,7 @@ https://github.com/bio-ontology-research-group/FALCON
         e_emb = e_emb.unsqueeze(
             dim=0).repeat(r_emb.size()[0], 1, 1)
         r_emb = r_emb.unsqueeze(dim=1).expand_as(e_emb)
-        emb = th.cat([r_emb, e_emb], dim=-1)
+        emb = th.cat([e_emb + r_emb, e_emb], dim=-1)
         # return th.sigmoid(self.fc_1(th.nn.functional.leaky_relu(self.fc_0(emb),
         # negative_slope=0.1))).squeeze(dim=-1)
         return th.sigmoid(self.fc_0(emb)).squeeze(dim=-1)
