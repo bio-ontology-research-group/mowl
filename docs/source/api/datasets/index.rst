@@ -1,4 +1,4 @@
-Datasets
+mowl.datasets
 =====================
 
 Base dataset
@@ -8,17 +8,15 @@ Base dataset
    :members:
    :show-inheritance:
 
-PPI Yeast dataset
--------------------------------
-
-.. automodule:: mowl.datasets.ppi_yeast
+Built-in datasets
+-------------------
+.. automodule:: mowl.datasets.builtin
    :members:
    :show-inheritance:
 
-
-Extending ontologies
-========================
-
-.. automodule:: mowl.datasets.build_ontology
+Dataset for :math:`\mathcal{EL}` language
+------------------------------------------
+.. automodule:: mowl.datasets.el
    :members:
    :show-inheritance:
+

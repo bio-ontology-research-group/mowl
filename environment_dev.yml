@@ -6,13 +6,12 @@ channels:
 dependencies:
   - python=3.9
   - cairo
-  - dglteam::dgl-cuda11.3
+  - deprecated
   - numpy
   - networkx
   - click
   - grpcio
   - JPype1
-  - owlready2
   - pandas
   - protobuf
   - cudnn
@@ -31,9 +30,16 @@ dependencies:
   - pip:
     - pykeen
     - sphinx-rtd-theme
+    - nose
+    - nose-exclude
+    - coverage
+    - flake8
+    - autopep8
   - jupyter
   - ipykernel
   - sphinx
   - sphinx-gallery
   - nbsphinx
   - mock
+  - memory-profiler
+

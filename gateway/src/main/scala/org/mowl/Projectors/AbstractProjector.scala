@@ -17,9 +17,9 @@ trait AbstractProjector{
   val dataFactory = ontManager.getOWLDataFactory()
   val imports = Imports.fromBoolean(true)
 
-
+ 
   def project(ontology: OWLOntology) = {
-    val imports = Imports.fromBoolean(false)
+    val imports = Imports.fromBoolean(true)
 
     val ontClasses = ontology.getClassesInSignature(imports).asScala.toList
     printf("INFO: Number of ontology classes: %d\n", ontClasses.length)
@@ -30,8 +30,13 @@ trait AbstractProjector{
   }
 
   //Abstract methods
+  def project(ontology: OWLOntology, withIndividuals: Boolean, verbose: Boolean): java.util.List[Triple]
+
   def projectAxiom(ontClass: OWLClass, axiom: OWLClassAxiom): List[Triple]
   def projectAxiom(ontClass: OWLClass, axiom: OWLClassAxiom, ontology: OWLOntology): List[Triple]
+  def projectAxiom(axiom: OWLClassAxiom): List[Triple]
+  def projectAxiom(axiom: OWLAxiom): List[Triple]
+  def projectAxiom(axiom: OWLAxiom, withIndividuals: Boolean, verbose: Boolean): List[Triple]
   //////////////////////
 
   def processOntClass(ontClass: OWLClass, ontology: OWLOntology): List[Triple] = {
@@ -39,6 +44,5 @@ trait AbstractProjector{
     val edges = axioms.flatMap(projectAxiom(ontClass, _: OWLClassAxiom))
     edges
   }
-
 
 }

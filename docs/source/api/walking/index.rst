@@ -1,4 +1,4 @@
-Random Walks
+mowl.walking
 ======================
 
 Walking
@@ -19,13 +19,5 @@ Node2Vec
 ----------
 
 .. automodule:: mowl.walking.node2vec.model
-   :members:
-   :show-inheritance:
-
-
-Walk RDF and OWL
-------------------
-
-.. automodule:: mowl.walking.rdf2vec.model
    :members:
    :show-inheritance:
