@@ -28,18 +28,21 @@ dependencies:
   - gradle
   - pip
   - pip:
+    - build
     - pykeen
     - sphinx-rtd-theme
     - nose
     - nose-exclude
     - coverage
+    - pinocchio
     - flake8
     - autopep8
+    - memory-profiler
   - jupyter
   - ipykernel
   - sphinx
   - sphinx-gallery
   - nbsphinx
   - mock
-  - memory-profiler
+
 
