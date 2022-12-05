@@ -39,6 +39,12 @@ https://github.com/bio-ontology-research-group/FALCON
         self.device = device
         self.adapter = OWLAPIAdapter()
 
+    def _mem(self, c_emb, e_emb):
+        emb = th.cat([c_emb, e_emb], dim=-1)
+        # return th.sigmoid(self.fc_1(th.nn.functional.leaky_relu(self.fc_0(emb),
+        # negative_slope=0.1))).squeeze(dim=-1)
+        return th.sigmoid(self.fc_0(emb))
+
     def _logical_and(self, x, y):
         if self.t_norm == 'product':
             return x * y
@@ -88,19 +94,13 @@ https://github.com/bio-ontology-research-group/FALCON
         e_emb = e_emb.unsqueeze(
             dim=0).repeat(c_emb.size()[0], 1, 1)
         c_emb = c_emb.unsqueeze(dim=1).expand_as(e_emb)
-        emb = th.cat([c_emb, e_emb], dim=-1)
-        # return th.sigmoid(self.fc_1(th.nn.functional.leaky_relu(self.fc_0(emb),
-        # negative_slope=0.1))).squeeze(dim=-1)
-        return th.sigmoid(self.fc_0(emb)).squeeze(dim=-1)
+        return self._mem(c_emb, e_emb).squeeze(dim=-1)
 
     def _get_r_fs_batch(self, r_emb, e_emb):
         e_emb = e_emb.unsqueeze(
             dim=0).repeat(r_emb.size()[0], 1, 1)
         r_emb = r_emb.unsqueeze(dim=1).expand_as(e_emb)
-        emb = th.cat([e_emb + r_emb, e_emb], dim=-1)
-        # return th.sigmoid(self.fc_1(th.nn.functional.leaky_relu(self.fc_0(emb),
-        # negative_slope=0.1))).squeeze(dim=-1)
-        return th.sigmoid(self.fc_0(emb)).squeeze(dim=-1)
+        return self._mem(e_emb + r_emb, e_emb).squeeze(dim=-1)
 
     def sample_negatives(self, e, r, used_dict):
         ret = th.zeros((e.shape[0], self.num_negs), dtype=th.int64)
@@ -228,25 +228,20 @@ https://github.com/bio-ontology-research-group/FALCON
             e_1_emb = self.e_embedding(x[:, :, 0])
             r_emb = self.r_embedding(x[:, :, 1])
             e_2_emb = self.e_embedding(x[:, :, 2])
-            emb = th.cat([e_1_emb + r_emb, e_2_emb], dim=-1)
             if stage == 'train':
                 if self.loss_type == 'c':
-                    dofm = th.sigmoid(self.fc_0(emb))
-                    # dofm = th.sigmoid(self.fc_1(th.nn.functional.leaky_relu(self.fc_0(emb),
-                    # negative_slope=0.1))).squeeze(dim=-1)
+                    dofm = self._mem(e_1_emb + r_emb, e_2_emb)
                     res = - th.log(dofm[:, 0] + 1e-10).mean() - \
                         th.log(1 - dofm[:, 1:] + 1e-10).mean()
                     return res / 2
                 elif self.loss_type == 'r':
-                    dofm = self.fc_0(emb).squeeze(dim=-1)
-                    # dofm = self.fc_1(th.nn.functional.leaky_relu(self.fc_0(emb),
-                    # negative_slope=0.1)).squeeze(dim=-1)
+                    dofm = self._mem(e_1_emb + r_emb, e_2_emb).squeeze(dim=-1)
                     diff = dofm[:, 0].unsqueeze(dim=-1) - dofm[:, 1:]
                     return - th.nn.functional.logsigmoid(diff).mean()
                 else:
                     raise NotImplementedError()
             elif stage == 'test':
-                return th.sigmoid(self.fc_0(emb)).flatten()
+                return self._mem(e_1_emb + r_emb, e_2_emb).flatten()
 
         else:
             raise NotImplementedError()
