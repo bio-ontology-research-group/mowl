@@ -7,18 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## Changed
+- Bug fixed in corpus generation methods. Issue #36.
+
+## [0.1.1]
+
 ### Added
 - `Family` dataset: a small ontology containing 12 axioms.
 - Unit tests up to 88% of coverage
 - `DL2VecProjector` includes assertion axioms with named individuals
 - `FastTensorDataLoader` is part of mOWL in the module `mowl.utils.data`
 - `DeepGOZero` implementation in mOWL
+- Module `mowl.owlapi` with shortcuts to the OWLAPI
 - Extended `Dataset` class.
-### Changed
-### Deprecated
-### Removed
-### Fixed
 ### Security
+- Added Patch for bug CVE-2007-4559. Based on pull request #32
 
 ## [0.1.0]
 
@@ -54,6 +57,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Walking methods accept optional `outfile` parameter and corpus extraction methods do not append by default.
 - Documentation updated and fixed some typos.
 
-[unreleased]: https://github.com/bio-ontology-research-group/mowl/compare/v0.1.0...HEAD
+[unreleased]: https://github.com/bio-ontology-research-group/mowl/compare/v0.1.1...HEAD
+[0.1.0]: https://github.com/bio-ontology-research-group/mowl/releases/tag/v0.1.1
 [0.1.0]: https://github.com/bio-ontology-research-group/mowl/releases/tag/v0.1.0
 [0.0.30]: https://github.com/bio-ontology-research-group/mowl/releases/tag/v0.0.30
