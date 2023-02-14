@@ -52,7 +52,7 @@ class ELEmbeddings(EmbeddingELModel):
         self.init_model()
 
     def init_model(self):
-        self.model = ELEmModule(
+        self.module = ELEmModule(
             len(self.class_index_dict),  # number of ontology classes
             len(self.object_property_index_dict),  # number of ontology object properties
             embed_dim=self.embed_dim,
@@ -61,11 +61,11 @@ class ELEmbeddings(EmbeddingELModel):
 
     def train(self):
 
-        optimizer = th.optim.Adam(self.model.parameters(), lr=self.learning_rate)
+        optimizer = th.optim.Adam(self.module.parameters(), lr=self.learning_rate)
         best_loss = float('inf')
 
         for epoch in trange(self.epochs):
-            self.model.train()
+            self.module.train()
 
             train_loss = 0
             loss = 0
@@ -74,7 +74,7 @@ class ELEmbeddings(EmbeddingELModel):
                 if len(gci_dataset) == 0:
                     continue
 
-                loss += th.mean(self.model(gci_dataset[:], gci_name))
+                loss += th.mean(self.module(gci_dataset[:], gci_name))
                 if gci_name == "gci2":
                     prots = [self.class_index_dict[p] for p
                              in self.dataset.evaluation_classes.as_str]
@@ -82,7 +82,7 @@ class ELEmbeddings(EmbeddingELModel):
                     rand_index = th.tensor(idxs_for_negs).to(self.device)
                     data = gci_dataset[:]
                     neg_data = th.cat([data[:, :2], rand_index.unsqueeze(1)], dim=1)
-                    loss += th.mean(self.model(neg_data, gci_name, neg=True))
+                    loss += th.mean(self.module(neg_data, gci_name, neg=True))
 
             optimizer.zero_grad()
             loss.backward()
@@ -91,32 +91,32 @@ class ELEmbeddings(EmbeddingELModel):
 
             loss = 0
             with th.no_grad():
-                self.model.eval()
+                self.module.eval()
                 valid_loss = 0
                 gci2_data = self.validation_datasets["gci2"][:]
-                loss = th.mean(self.model(gci2_data, "gci2"))
+                loss = th.mean(self.module(gci2_data, "gci2"))
                 valid_loss += loss.detach().item()
 
             checkpoint = 100
             if best_loss > valid_loss:
                 best_loss = valid_loss
-                th.save(self.model.state_dict(), self.model_filepath)
+                th.save(self.module.state_dict(), self.module_filepath)
             if (epoch + 1) % checkpoint == 0:
                 print(f'Epoch {epoch}: Train loss: {train_loss} Valid loss: {valid_loss}')
 
         return 1
 
     def eval_method(self, data):
-        return self.model.gci2_loss(data)
+        return self.module.gci2_loss(data)
 
     def evaluate_ppi(self):
         self.init_model()
-        print('Load the best model', self.model_filepath)
-        self.model.load_state_dict(th.load(self.model_filepath))
+        print('Load the best model', self.module_filepath)
+        self.module.load_state_dict(th.load(self.module_filepath))
         with th.no_grad():
-            self.model.eval()
+            self.module.eval()
 
-            eval_method = self.model.gci2_loss
+            eval_method = self.module.gci2_loss
 
             evaluator = ELEmbeddingsPPIEvaluator(
                 self.dataset.testing, eval_method, self.dataset.ontology, self.class_index_dict,
@@ -146,22 +146,22 @@ class ELEmbeddings(EmbeddingELModel):
     def get_embeddings(self):
         self.init_model()
 
-        print('Load the best model', self.model_filepath)
-        self.model.load_state_dict(th.load(self.model_filepath))
-        self.model.eval()
+        print('Load the best model', self.module_filepath)
+        self.module.load_state_dict(th.load(self.module_filepath))
+        self.module.eval()
 
         ent_embeds = {
             k: v for k, v in zip(self.class_index_dict.keys(),
-                                 self.model.class_embed.weight.cpu().detach().numpy())}
+                                 self.module.class_embed.weight.cpu().detach().numpy())}
         rel_embeds = {
             k: v for k, v in zip(self.object_property_index_dict.keys(),
-                                 self.model.rel_embed.weight.cpu().detach().numpy())}
+                                 self.module.rel_embed.weight.cpu().detach().numpy())}
         return ent_embeds, rel_embeds
 
     def load_best_model(self):
         self.init_model()
-        self.model.load_state_dict(th.load(self.model_filepath))
-        self.model.eval()
+        self.module.load_state_dict(th.load(self.module_filepath))
+        self.module.eval()
 
     @property
     def training_set(self):

@@ -1,4 +1,4 @@
-from deprecated.sphinx import deprecated, versionchanged
+from deprecated.sphinx import deprecated, versionchanged, versionadded
 import tempfile
 from mowl.datasets import Dataset
 
@@ -27,13 +27,17 @@ class Model():
         self._individual_index_dict = None
         self._object_property_index_dict = None
 
-    def train(self):
-        '''Abstract method for training the model. This method must be implemented in child classes
+    def train(self, *args, **kwargs):
+        '''Abstract method for training the model. This method must be implemented in children classes
         '''
         raise NotImplementedError("Method train is not implemented.")
 
-    def eval_fn(self):
+    def eval_fn(self, *args, **kwargs):
         raise NotImplementedError("Method eval_fn is not implemented.")
+
+    @versionadded(version="0.1.2", reason="Axiom scoring method added to the base class.")
+    def score(self, *args, **kwargs):
+        raise NotImplementedError("Method score is not implemented.")
 
     @property
     def model_filepath(self):
