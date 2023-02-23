@@ -1,0 +1,47 @@
+name: mowldev38
+channels:
+  - pytorch
+  - conda-forge
+  - anaconda
+dependencies:
+  - python=3.8
+  - cairo
+  - deprecated
+  - numpy
+  - networkx
+  - click
+  - grpcio
+  - JPype1
+  - pandas
+  - pinocchio
+  - protobuf
+  - pytest
+  - pyyaml
+  - requests
+  - scipy
+  - scikit-learn
+  - urllib3
+  - pytorch
+  - gensim
+  - openjdk
+  - gradle
+  - pip
+  - pip:
+    - build
+    - pykeen>=1.9.*
+    - sphinx-rtd-theme
+    - nose
+    - nose-exclude
+    - coverage
+    - pinocchio
+    - flake8
+    - autopep8
+    - memory-profiler
+  - jupyter
+  - ipykernel
+  - sphinx
+  - sphinx-gallery
+  - nbsphinx
+  - mock
+
+

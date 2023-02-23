@@ -1,4 +1,4 @@
-name: mowldev
+name: mowldev39
 channels:
   - pytorch
   - conda-forge
@@ -14,8 +14,6 @@ dependencies:
   - JPype1
   - pandas
   - protobuf
-  - cudnn
-  - cudatoolkit=11.3.*
   - pytest
   - pyyaml
   - requests
@@ -29,7 +27,7 @@ dependencies:
   - pip
   - pip:
     - build
-    - pykeen
+    - pykeen>=1.9.*
     - sphinx-rtd-theme
     - nose
     - nose-exclude

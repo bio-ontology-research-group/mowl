@@ -28,7 +28,7 @@ jobs:
         auto-update-conda: true
         python-version: ${{ matrix.python-version }}
         activate-environment: anaconda-client-env
-        environment-file: environment.yml
+        environment-file: envs/environment_3_8.yml
         auto-activate-base: false
         channels: conda-forge
     - name: Build JAR files

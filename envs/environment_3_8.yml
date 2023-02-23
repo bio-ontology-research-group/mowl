@@ -1,4 +1,4 @@
-name: mowl
+name: mowl38
 channels:
   - conda-forge
 dependencies:
@@ -22,6 +22,6 @@ dependencies:
   - urllib3
   - pip
   - pip:
-    - pykeen==1.9.0
+    - pykeen>=1.9.*
     - temp
     
