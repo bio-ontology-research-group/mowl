@@ -1,7 +1,7 @@
 from unittest import TestCase
 
 from mowl.datasets.builtin import GDAHumanELDataset
-from mowl.models.elboxembeddings.examples.model_gda import ELBoxEmbeddings
+from mowl.models.elboxembeddings.examples.model_gda import ELBoxGDA
 
 
 class TestELBoxEmbeddingsGDA(TestCase):
@@ -11,6 +11,6 @@ class TestELBoxEmbeddingsGDA(TestCase):
 checks the syntax of the code"""
 
         dataset = GDAHumanELDataset()
-        model = ELBoxEmbeddings(dataset, epochs=1, embed_dim=1)
+        model = ELBoxGDA(dataset, epochs=1, embed_dim=1)
         return_value = model.train()
         self.assertEqual(return_value, 1)
