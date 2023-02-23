@@ -21,7 +21,7 @@ mainly in Python, but we have integrated the functionalities of [OWLAPI](https:/
 ### System dependencies
 
   - JDK version 8
-  - Python version 3.8
+  - Python version: 3.8, 3.9
   - Conda version >= 4.x.x
 
 ### Python requirements
@@ -44,15 +44,16 @@ git clone https://github.com/bio-ontology-research-group/mowl.git
 
 cd mowl
 
-conda env create -f environment.yml
+conda env create -f envs/environment_3.8.yml
 conda activate mowl
 
 ./build_jars.sh
 
 python setup.py install
 ```
+For Python 3.9, you can use `envs/environment_3.9.yml`.
 
-The last line will generate the necessary `jar` files to bind Python with the code that runs in the JVM. After building, a ``.tar.gz`` file will be generated under `dist` and can be used to install mOWL.
+The line `./build_jars.sh` will generate the necessary `jar` files to bind Python with the code that runs in the JVM. After building, a ``.tar.gz`` file will be generated under `dist` and can be used to install mOWL.
 
 
 
