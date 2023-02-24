@@ -1,7 +1,7 @@
 Embedding the EL language
 ============================================
 .. |eldataset| replace:: :class:`ELDataset <mowl.datasets.el.ELDataset>`
-.. |elmodule| replace:: :class:`ELModule <mowl.nn.elmodule.ELModule>`
+.. |elmodule| replace:: :class:`ELModule <mowl.nn.el.elmodule.ELModule>`
 .. |el| replace:: :math:`\mathcal{EL}`
 .. |tutorial_elembeddings| replace:: :doc:`../examples/elmodels/plot_1_elembeddings`
 .. |tutorial_elboxembeddings| replace:: :doc:`../examples/elmodels/plot_2_elboxembeddings`
@@ -100,11 +100,11 @@ The ELModule class
 ----------------------
 Previously, we introduced the data-related aspect of this tutorial. Now, let's see how to use the data to train a model.
 
-In the :doc:`/api/nn/index` module, we define the :class:`ELModule <mowl.nn.elmodule.ELModule>` abstract class, which is a subclass of :class:`torch.nn.Module`. To use this class, it is required to define loss functions for the GCIs of interest. For example:
+In the :doc:`/api/nn/index` module, we define the |elmodule| abstract class, which is a subclass of :class:`torch.nn.Module`. To use this class, it is required to define loss functions for the GCIs of interest. For example:
 
 .. testcode:: [eldataset]
 
-   from mowl.nn.elmodule import ELModule
+   from mowl.nn import ELModule
 
    class MyELModule(ELModule):
        def __init__(self):
@@ -177,7 +177,7 @@ Following these procedure is all what is needed. It is not necessary to define t
            loss = loss_fn(gci, neg = neg)
            return loss
 
-We can see that the already implemented forward function takes the data, the GCI name and the ``neg`` parameter. The idea here is that in the training loop we can get the losses for all the GCIs, and their potential negative versions and we can aggregate them appropriately. In the following section we will see an example of how to use use the :class:`ELModule <mowl.nn.elmodule.ELModule>` and how it matches with the |eldataset| class.
+We can see that the already implemented forward function takes the data, the GCI name and the ``neg`` parameter. The idea here is that in the training loop we can get the losses for all the GCIs, and their potential negative versions and we can aggregate them appropriately. In the following section we will see an example of how to use use the |elmodule| and how it matches with the |eldataset| class.
 
 The ELEmbeddingModel class
 ---------------------------------
@@ -188,7 +188,7 @@ At this point, it would be possible to just use the |eldataset| and the |elmodul
 
    from torch.utils.data import DataLoader
    from mowl.datasets.el import ELDataset
-   from mowl.nn.elmodule import ELModule
+   from mowl.nn import ELModule
    from mowl.datasets.builtin import PPIYeastSlimDataset
 
    dataset = PPIYeastSlimDataset()

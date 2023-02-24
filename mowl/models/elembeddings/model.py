@@ -1,7 +1,4 @@
 """
-EL Embeddings
-===============
-
 This example corresponds to the paper `EL Embeddings: Geometric Construction of Models for the \
 Description Logic EL++ <https://www.ijcai.org/proceedings/2019/845>`_.
 

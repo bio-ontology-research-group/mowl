@@ -101,6 +101,7 @@ The package is released under the BSD 3-Clause License.
    api/corpus/index
    api/datasets/index
    api/evaluation/index
+   api/models/index
    api/nn/index
    api/ontology/index
    api/owlapi/index
