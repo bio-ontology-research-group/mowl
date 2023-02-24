@@ -1,7 +1,5 @@
 from mowl.base_models.elmodel import EmbeddingELModel
 
-from mowl.models.elembeddings.module import ELEmModule
-
 from mowl.models.elembeddings.evaluate import ELEmbeddingsPPIEvaluator
 from mowl.projection.factory import projector_factory
 from tqdm import trange, tqdm

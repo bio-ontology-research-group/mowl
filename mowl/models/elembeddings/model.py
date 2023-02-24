@@ -32,9 +32,8 @@ class ELEmbeddings(EmbeddingELModel):
                  model_filepath=None,
                  device='cpu'
                  ):
-        super().__init__(dataset, batch_size, extended=True, model_filepath=model_filepath)
+        super().__init__(dataset, embed_dim, batch_size, extended=True, model_filepath=model_filepath)
 
-        self.embed_dim = embed_dim
         self.margin = margin
         self.reg_norm = reg_norm
         self.learning_rate = learning_rate

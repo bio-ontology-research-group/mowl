@@ -16,6 +16,9 @@ from org.semanticweb.owlapi.apibinding import OWLManager
 from mowl.projection import TaxonomyWithRelationsProjector
 from mowl.owlapi.adapter import OWLAPIAdapter
 from mowl.owlapi.defaults import TOP, BOT
+from deprecated.sphinx import versionadded
+
+from java.util import HashSet
 
 
 class Dataset():
@@ -180,6 +183,21 @@ validation and testing ontologies using the OWLAPI method ``ontology.getIndividu
         return labels
 
 
+    @versionadded(version="0.2.0")
+    def add_axioms(self, *axioms):
+        manager = OWLAPIAdapter().owl_manager
+        axiom_set = HashSet(axioms)
+        manager.addAxioms(self.ontology, axiom_set)
+
+        self._classes = None
+        self._individuals = None
+        self._object_properties = None
+        self._individuals = None
+        self._evaluation_classes = None
+
+        
+
+    
 class PathDataset(Dataset):
     """Loads the dataset from ontology documents.
 

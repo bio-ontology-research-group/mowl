@@ -13,6 +13,7 @@ from gensim.models import KeyedVectors
 # Test if the new entity/entities are there 
 # worst case?
 
+
 class InductiveMethodTest:
 
     def __init__(self, onto_path, model_path):
