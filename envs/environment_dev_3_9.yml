@@ -21,7 +21,7 @@ dependencies:
   - scikit-learn
   - urllib3
   - pytorch
-  - gensim
+  - gensim>=4.3.0
   - openjdk
   - gradle
   - pip
