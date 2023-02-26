@@ -36,6 +36,7 @@ class TestRandomWalkModel(TestCase):
 
         
         model.add_axioms(self.axiom)
+        model.train(epochs=0)
         class_embeddings_after = model.class_embeddings
         property_embeddings_after = model.object_property_embeddings
 

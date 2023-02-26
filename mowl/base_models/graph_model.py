@@ -94,7 +94,9 @@ class RandomWalkPlusW2VModel(RandomWalkModel):
     def __init__(self, *args, **kwargs):
         super(RandomWalkPlusW2VModel, self).__init__(*args, **kwargs)
 
+        self._edges = None
         self.w2v_model = None
+        self.update_w2v_model = False
 
     @property
     def class_embeddings(self):
@@ -140,21 +142,40 @@ class RandomWalkPlusW2VModel(RandomWalkModel):
     def set_w2v_model(self, *args, **kwargs):
         self.w2v_model = Word2Vec(*args, **kwargs)
 
-    def train(self):
+    def train(self, epochs=None):
+        if epochs is None:
+            epochs = self.w2v_model.epochs
         if self.projector is None:
             raise AttributeError(msg.GRAPH_MODEL_PROJECTOR_NOT_SET)
         if self.walker is None:
             raise AttributeError(msg.RANDOM_WALK_MODEL_WALKER_NOT_SET)
         if self.w2v_model is None:
             raise AttributeError(msg.W2V_MODEL_NOT_SET)
-        
-        edges = self.projector.project(self.dataset.ontology)
-        self.walker.walk(edges)
-        sentences = LineSentence(self.walker.outfile)
-        self.w2v_model.build_vocab(sentences)
-        self.w2v_model.train(sentences, total_examples=self.w2v_model.corpus_count, epochs=self.w2v_model.epochs)
-        
 
+        if self._edges is None:
+            self._edges = self.projector.project(self.dataset.ontology)
+            self.walker.walk(self._edges)
+        sentences = LineSentence(self.walker.outfile)
+        self.w2v_model.build_vocab(sentences, update=self.update_w2v_model)
+        if epochs > 0:
+            self.w2v_model.train(sentences, total_examples=self.w2v_model.corpus_count, epochs=epochs)
+        
+    def add_axioms(self, *axioms):
+        classes = set()
+        object_properties = set()
+        individuals = set()
+
+        for axiom in axioms:
+            classes |= set(axiom.getClassesInSignature())
+            object_properties |= set(axiom.getObjectPropertiesInSignature())
+            individuals |= set(axiom.getIndividualsInSignature())
+
+        new_entities = list(classes.union(object_properties).union(individuals))
+            
+        self.dataset.add_axioms(*axioms)
+        self._edges = self.projector.project(self.dataset.ontology)
+        self.walker.walk(self._edges, nodes_of_interest=new_entities)
+        self.update_w2v_model = True
         
 
 class KGEModel(GraphModel):

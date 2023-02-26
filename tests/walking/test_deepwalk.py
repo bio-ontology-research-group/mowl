@@ -79,9 +79,43 @@ Ignoring it."])
         num_walks = 10
         walk_length = 5
         outfile = "test_outfile.txt"
-        node2vec = DeepWalk(num_walks, walk_length, outfile=outfile)
+        deepwalk = DeepWalk(num_walks, walk_length, outfile=outfile)
 
-        node2vec.walk(self.graph)
+        deepwalk.walk(self.graph)
         time.sleep(1)
         self.assertTrue(os.path.exists(outfile))
         os.remove(outfile)
+
+    def test_walking_on_updated_graph(self):
+        """This should test that walks file get updated (not overwritten) when walking on updated graph"""
+        num_walks = 10
+        walk_length = 2
+        
+        deepwalk = DeepWalk(num_walks, walk_length)
+        deepwalk.walk(self.graph)
+        time.sleep(1)
+        with open(deepwalk.outfile, "r") as f:
+            walks = f.readlines()
+
+        current_walks = len(walks)
+
+        edge7 = Edge("E", "http://rel1", "A")
+        self.graph.append(edge7)
+        deepwalk.walk(self.graph, nodes_of_interest=["E"])
+        time.sleep(1)
+        with open(deepwalk.outfile, "r") as f:
+            walks = f.readlines()
+        new_walks = len(walks)
+
+        self.assertEqual(new_walks, current_walks + 10)
+
+        current_walks = new_walks + 10
+        edge8 = Edge("B", "http://rel1", "E")
+        self.graph.append(edge8)
+        deepwalk.walk(self.graph, nodes_of_interest=["E"])
+        time.sleep(1)
+        with open(deepwalk.outfile, "r") as f:
+            walks = f.readlines()
+        new_walks = len(walks)
+
+        self.assertGreater(new_walks, current_walks)
