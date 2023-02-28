@@ -2,9 +2,6 @@ from mowl.base_models.model import Model
 from mowl.projection.base import ProjectionModel
 from mowl.projection import Edge
 from mowl.walking import WalkingModel
-import pykeen
-from gensim.models import Word2Vec
-from gensim.models.word2vec import LineSentence
 import mowl.error.messages as msg
 
 class GraphModel(Model):
@@ -89,114 +86,21 @@ class RandomWalkModel(GraphModel):
         raise NotImplementedError
 
 
-class RandomWalkPlusW2VModel(RandomWalkModel):
-
-    def __init__(self, *args, **kwargs):
-        super(RandomWalkPlusW2VModel, self).__init__(*args, **kwargs)
-
-        self._edges = None
-        self.w2v_model = None
-        self.update_w2v_model = False
-
-    @property
-    def class_embeddings(self):
-        if self.w2v_model is None:
-            raise AttributeError(msg.W2V_MODEL_NOT_SET)
-        if len(self.w2v_model.wv) == 0:
-            raise AttributeError(msg.RANDOM_WALK_MODEL_EMBEDDINGS_NOT_FOUND)
-        
-        cls_embeds = {}
-        for cls in self.dataset.classes.as_str:
-            if cls in self.w2v_model.wv:
-                cls_embeds[cls] = self.w2v_model.wv[cls]
-        return cls_embeds
-
-    @property
-    def object_property_embeddings(self):
-        if self.w2v_model is None:
-            raise AttributeError(msg.W2V_MODEL_NOT_SET)
-        if len(self.w2v_model.wv) == 0:
-            raise AttributeError(msg.RANDOM_WALK_MODEL_EMBEDDINGS_NOT_FOUND)
-
-        obj_prop_embeds = {}
-        for obj_prop in self.dataset.object_properties.as_str:
-            if obj_prop in self.w2v_model.wv:
-                obj_prop_embeds[obj_prop] = self.w2v_model.wv[obj_prop]
-        return obj_prop_embeds
-
-    @property
-    def individual_embeddings(self):
-        if self.w2v_model is None:
-            raise AttributeError(msg.W2V_MODEL_NOT_SET)
-        if len(self.w2v_model.wv) == 0:
-            raise AttributeError(msg.RANDOM_WALK_MODEL_EMBEDDINGS_NOT_FOUND)
-        
-        
-        ind_embeds = {}
-        for ind in self.dataset.individuals.as_str:
-            if ind in self.w2v_model.wv:
-                obj_prop_embeds[ind] = self.w2v_model.wv[ind]
-        return ind_embeds
-
-    
-    def set_w2v_model(self, *args, **kwargs):
-        self.w2v_model = Word2Vec(*args, **kwargs)
-
-    def train(self, epochs=None):
-        if epochs is None:
-            epochs = self.w2v_model.epochs
-        if self.projector is None:
-            raise AttributeError(msg.GRAPH_MODEL_PROJECTOR_NOT_SET)
-        if self.walker is None:
-            raise AttributeError(msg.RANDOM_WALK_MODEL_WALKER_NOT_SET)
-        if self.w2v_model is None:
-            raise AttributeError(msg.W2V_MODEL_NOT_SET)
-
-        if self._edges is None:
-            self._edges = self.projector.project(self.dataset.ontology)
-            self.walker.walk(self._edges)
-        sentences = LineSentence(self.walker.outfile)
-        self.w2v_model.build_vocab(sentences, update=self.update_w2v_model)
-        if epochs > 0:
-            self.w2v_model.train(sentences, total_examples=self.w2v_model.corpus_count, epochs=epochs)
-        
-    def add_axioms(self, *axioms):
-        classes = set()
-        object_properties = set()
-        individuals = set()
-
-        for axiom in axioms:
-            classes |= set(axiom.getClassesInSignature())
-            object_properties |= set(axiom.getObjectPropertiesInSignature())
-            individuals |= set(axiom.getIndividualsInSignature())
-
-        new_entities = list(classes.union(object_properties).union(individuals))
-            
-        self.dataset.add_axioms(*axioms)
-        self._edges = self.projector.project(self.dataset.ontology)
-        self.walker.walk(self._edges, nodes_of_interest=new_entities)
-        self.update_w2v_model = True
-        
 
 class KGEModel(GraphModel):
 
     def __init__(self, *args, **kwargs):
         super(KGEModel, self).__init__(*args, **kwargs)
 
-        self._triples_factory = None
-                        
+        self._kge_method = None
+
     @property
-    def triples_factory(self):
-        if self._triples_factory is not None:
-            return self._triples_factory
-
-        self._triples_factory = Edge.as_pykeen(self.edges, entity_to_id = self.graph_node_to_id, relation_to_id = self.graph_relation_to_id)
-
-        return self._triples_factory
+    def kge_method(self):
+        if self._kge_method is None:
+            raise AttributeError(msg.KGE_METHOD_NOT_SET)
+        return self._kge_method
         
     def set_kge_method(self, kge_method):
-        if not isinstance(kge_method, pykeen.models.ERModel):
-            raise TypeError("Parameter 'kge_method' must be a pykeen.models.ERModel object")
-        self.kge_method = kge_method
-    
+        raise NotImplementedError
+                            
     

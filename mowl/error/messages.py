@@ -10,3 +10,5 @@ RANDOM_WALK_MODEL_EMBEDDINGS_NOT_FOUND = "RandomWalkModel does not contain embed
 RANDOM_WALK_MODEL_WALKER_NOT_SET = "RandomWalkModel does not have a walker. Please add one using the set_walker method."
 
 W2V_MODEL_NOT_SET = "This model requires a Word2Vec model. Please add one using the set_w2v_model method."
+
+KGE_METHOD_NOT_SET = "This model requires a KGE method. Please add one using the 'set_kge_method' method."

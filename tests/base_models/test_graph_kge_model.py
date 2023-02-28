@@ -5,6 +5,7 @@ import pykeen
 from pykeen.models import TransE
 from pykeen.triples import TriplesFactory
 from mowl.projection import TaxonomyProjector
+import mowl.error.messages as msg
 
 class TestRandomWalkModel(TestCase):
 
@@ -13,29 +14,13 @@ class TestRandomWalkModel(TestCase):
         self.dataset = FamilyDataset()
 
 
+    def test_not_kge_method_set(self):
+        """This should check that the method does not have a KGE method"""
+
+        with self.assertRaisesRegex(AttributeError, msg.KGE_METHOD_NOT_SET):
+            kge = KGEModel(self.dataset)
+            kge.kge_method
+        
     def test_instance_of_graph_model(self):
         model = KGEModel(self.dataset)
         self.assertIsInstance(model, GraphModel)
-
-    def test_get_triples_factory(self):
-        model = KGEModel(self.dataset)
-        model.set_projector(TaxonomyProjector())
-        
-        triples_factory = model.triples_factory
-        self.assertIsInstance(triples_factory, TriplesFactory)
-        
-    def test_set_kge_method(self):
-        """This should check the behaviour of the set_kge method"""
-
-        model = KGEModel(self.dataset)
-        model.set_projector(TaxonomyProjector())
-
-        with self.assertRaisesRegex(TypeError,
-                                    "Parameter 'kge_method' must be a pykeen.models.ERModel object"):
-            model.set_kge_method(1)
-
-            
-        transe = TransE(triples_factory = model.triples_factory)
-        model.set_kge_method(transe)
-        self.assertIsInstance(model.kge_method, pykeen.models.ERModel)
-

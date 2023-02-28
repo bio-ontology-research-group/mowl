@@ -1,6 +1,6 @@
 from unittest import TestCase
 from tests.datasetFactory import FamilyDataset
-from mowl.base_models import RandomWalkPlusW2VModel
+from mowl.models import RandomWalkPlusW2VModel
 from mowl.projection import DL2VecProjector
 from mowl.walking import DeepWalk
 
