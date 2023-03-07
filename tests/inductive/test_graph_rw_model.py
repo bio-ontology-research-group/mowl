@@ -6,6 +6,8 @@ from mowl.walking import DeepWalk
 
 from mowl.owlapi import OWLAPIAdapter
 from copy import deepcopy
+import mowl.error.messages as msg
+
 
 class TestRandomWalkModel(TestCase):
 
@@ -50,3 +52,34 @@ class TestRandomWalkModel(TestCase):
         for prop, emb in property_embeddings_before.items():
             with self.subTest(prop=prop):
                 self.assertEqual(emb.tolist(), property_embeddings_after[prop].tolist())
+
+
+    #def test_from_pretrained
+
+    def test_from_pretrained(self):
+        model = RandomWalkPlusW2VModel(self.dataset)
+
+        with self.assertRaisesRegex(TypeError, "Pretrained model path must be a string"):
+            model.from_pretrained(1)
+
+        with self.assertRaisesRegex(FileNotFoundError, "Pretrained model path does not exist"):
+            model.from_pretrained("path")
+
+    
+    def test_train_after_pretrained(self):
+        model = RandomWalkPlusW2VModel(self.dataset)
+        model.from_pretrained()
+
+        with self.assertRaisesRegex(AttributeError, msg.GRAPH_MODEL_PROJECTOR_NOT_SET):
+            model.train()
+
+        model.set_projector(self.projector)
+
+        with self.assertRaisesRegex(AttributeError, msg.RANDOM_WALK_MODEL_WALKER_NOT_SET):
+            model.train()
+
+        
+        model.set_walker(self.walker)
+        model.set_w2v_model(min_count=1)
+        model.train()
+        
