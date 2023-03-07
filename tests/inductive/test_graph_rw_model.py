@@ -54,8 +54,6 @@ class TestRandomWalkModel(TestCase):
                 self.assertEqual(emb.tolist(), property_embeddings_after[prop].tolist())
 
 
-    #def test_from_pretrained
-
     def test_from_pretrained(self):
         model = RandomWalkPlusW2VModel(self.dataset)
 

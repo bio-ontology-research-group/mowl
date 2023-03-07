@@ -94,7 +94,7 @@ class RandomWalkPlusW2VModel(RandomWalkModel):
     #TODO: implement from pretrained
     def from_pretrained(self, model):
         self.is_pretrained = True
-        if not isintance(model, str):
+        if not isinstance(model, str):
             raise TypeError
 
         self.w2v_model = Word2Vec.load(model)
