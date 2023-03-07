@@ -91,4 +91,13 @@ class RandomWalkPlusW2VModel(RandomWalkModel):
         self.walker.walk(self._edges, nodes_of_interest=new_entities)
         self.update_w2v_model = True
         
+    #TODO: implement from pretrained
+    def from_pretrained(self, model):
+        self.is_pretrained = True
+        if not isintance(model, str):
+            raise TypeError
 
+        self.w2v_model = Word2Vec.load(model)
+    #    set_w2v_model(model)
+
+    
