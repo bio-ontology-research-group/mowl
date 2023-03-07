@@ -50,3 +50,29 @@ class TestRandomWalkModel(TestCase):
         for prop, emb in property_embeddings_before.items():
             with self.subTest(prop=prop):
                 self.assertEqual(emb.tolist(), property_embeddings_after[prop].tolist())
+
+
+    def test_pretrained_model(self):
+        model = RandomWalkPlusW2VModel(self.dataset)
+        model.set_projector(self.projector)
+        model.set_walker(self.walker)
+        class_embeddings_before = model
+        
+
+
+        model.add_axioms(self.axiom)
+        
+        model.train(epochs=0)
+        class_embeddings_after = model.class_embeddings
+        property_embeddings_after = model.object_property_embeddings
+
+        self.assertIn("http://Uncle", class_embeddings_after)
+
+        for cls, emb in class_embeddings_before.items():
+            with self.subTest(cls=cls):
+                self.assertEqual(emb.tolist(), class_embeddings_after[cls].tolist())
+
+        self.assertIn("http://hasSibling", property_embeddings_after)
+        for prop, emb in property_embeddings_before.items():
+            with self.subTest(prop=prop):
+                self.assertEqual(emb.tolist(), property_embeddings_after[prop].tolist())
