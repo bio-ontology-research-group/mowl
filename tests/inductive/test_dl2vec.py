@@ -14,7 +14,8 @@ from gensim.models import KeyedVectors
 # worst case?
 
 
-class InductiveMethodTest:
+class InductiveMethodTest():
+
 
     def __init__(self, onto_path, model_path):
         self.onto_path = onto_path
