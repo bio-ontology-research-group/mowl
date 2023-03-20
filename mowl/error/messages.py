@@ -12,3 +12,5 @@ RANDOM_WALK_MODEL_WALKER_NOT_SET = "RandomWalkModel does not have a walker. Plea
 W2V_MODEL_NOT_SET = "This model requires a Word2Vec model. Please add one using the set_w2v_model method."
 
 KGE_METHOD_NOT_SET = "This model requires a KGE method. Please add one using the 'set_kge_method' method."
+
+CORPUS_NOT_GENERATED = "Corpus not generated. Please generate it using the 'generate_corpus' method."
