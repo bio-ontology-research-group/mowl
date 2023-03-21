@@ -13,6 +13,8 @@ class SyntacticModel(Model):
 
         self._corpus_filepath = corpus_filepath
         self._corpus = None
+        self._save_corpus = True
+        self._with_annotations = False
 
     @property
     def corpus_filepath(self):
@@ -58,6 +60,9 @@ class SyntacticModel(Model):
             return corpus
         else:
             print(f"Corpus saved in {self.corpus_filepath}")
+
+        self._save_corpus = save
+        self._with_annotations = with_annotations
 
 
     def train(self):

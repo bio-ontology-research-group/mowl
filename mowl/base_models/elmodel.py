@@ -9,7 +9,8 @@ from org.semanticweb.owlapi.model import OWLClassExpression, OWLClass, OWLObject
 
 import copy
 import numpy as np
-
+import mowl.error.messages as msg
+import os
 
 class EmbeddingELModel(EmbeddingModel):
     """Abstract class that provides basic functionalities for methods that aim to embed EL \
@@ -353,3 +354,26 @@ of :class:`torch.utils.data.DataLoader`
             self.module.ind_embed.weight.data = th.from_numpy(new_individual_embeds).float()
 
             
+
+    def from_pretrained(self, model, overwrite=False):
+        
+        if self.module is not None and not overwrite:
+            raise ValueError(msg.MODEL_ALREADY_SET)
+
+        if not isinstance(model, str):
+            raise TypeError("Parameter model must be a string pointing to the model file.")
+
+        if not os.path.exists(model):
+            raise FileNotFoundError("Pretrained model path does not exist")
+
+        self._model_filepath = model
+
+        
+        self._is_pretrained = True
+        if not isinstance(model, str):
+            raise TypeError
+
+        self.module.load_state_dict(th.load(model))
+        #self._kge_method = kge_method
+    
+

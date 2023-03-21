@@ -55,7 +55,7 @@ class ELEmPPI(ELEmbeddings):
             checkpoint = 100
             if best_loss > valid_loss:
                 best_loss = valid_loss
-                th.save(self.module.state_dict(), self.module_filepath)
+                th.save(self.module.state_dict(), self.model_filepath)
             if (epoch + 1) % checkpoint == 0:
                 print(f'Epoch {epoch}: Train loss: {train_loss} Valid loss: {valid_loss}')
 
@@ -66,8 +66,8 @@ class ELEmPPI(ELEmbeddings):
 
     def evaluate_ppi(self):
         self.init_module()
-        print('Load the best model', self.module_filepath)
-        self.module.load_state_dict(th.load(self.module_filepath))
+        print('Load the best model', self.model_filepath)
+        self.module.load_state_dict(th.load(self.model_filepath))
         with th.no_grad():
             self.module.eval()
 

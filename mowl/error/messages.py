@@ -14,3 +14,19 @@ W2V_MODEL_NOT_SET = "This model requires a Word2Vec model. Please add one using 
 KGE_METHOD_NOT_SET = "This model requires a KGE method. Please add one using the 'set_kge_method' method."
 
 CORPUS_NOT_GENERATED = "Corpus not generated. Please generate it using the 'generate_corpus' method."
+
+W2V_FROM_PRETRAINED_MODEL_ALREADY_SET = "Word2Vec model already set. Please set overwrite to True if you want to overwrite it."
+
+PYKEEN_FROM_PRETRAINED_MODEL_ALREADY_SET = "PyKEEN model already set. Please set overwrite to True if you want to overwrite it."
+
+MODEL_ALREADY_SET = "Model already set. Please set overwrite to True if you want to overwrite it."
+
+PYKEEN_OPTIMIZER_NOT_SET = "PyKEEN optimizer not set. Please set it by doing 'model.optimizer = your_optimizer'."
+
+PYKEEN_LR_NOT_SET = "PyKEEN learning rate not set. Please set it by doing 'model.lr = your_learning_rate'."
+
+PYKEEN_BATCH_SIZE_NOT_SET = "PyKEEN batch size not set. Please set it by doing 'model.batch_size = your_batch_size'."
+
+
+
+                                 

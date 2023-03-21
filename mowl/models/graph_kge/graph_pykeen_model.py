@@ -6,6 +6,10 @@ import torch as th
 import copy
 import numpy as np
 from pykeen.nn.init import PretrainedInitializer
+import os
+import mowl.error.messages as msg
+from pykeen.training import SLCWATrainingLoop
+
 
 class GraphPlusPyKEENModel(KGEModel):
 
@@ -14,6 +18,10 @@ class GraphPlusPyKEENModel(KGEModel):
 
         self._triples_factory = None
         self._kge_method = None
+        self.optimizer = None
+        self.lr = None
+        self.batch_size = None
+        self.epochs = None
                         
 
     @property
@@ -37,7 +45,7 @@ class GraphPlusPyKEENModel(KGEModel):
         cls_graph_id = {cls: self.triples_factory.entity_to_id[cls] for cls in classes if cls in self.triples_factory.entity_to_id}
 
         def get_embedding(idxs):
-            return self.kge_method.entity_representations[0](indices=idxs).cpu().detach().numpy()
+            return self._kge_method.entity_representations[0](indices=idxs).cpu().detach().numpy()
 
         idxs = th.tensor(list(cls_graph_id.values()))
         cls_embeddings = dict(zip(cls_graph_id.keys(), get_embedding(idxs)))
@@ -52,7 +60,7 @@ class GraphPlusPyKEENModel(KGEModel):
         op_graph_id = {op: self.triples_factory.relation_to_id[op] for op in object_properties if op in self.triples_factory.relation_to_id}
 
         def get_embedding(idxs):
-            return self.kge_method.relation_representations[0](indices=idxs).cpu().detach().numpy()
+            return self._kge_method.relation_representations[0](indices=idxs).cpu().detach().numpy()
 
         idxs = th.tensor(list(op_graph_id.values()))
         op_embeddings = dict(zip(op_graph_id.keys(), get_embedding(idxs)))
@@ -67,7 +75,7 @@ class GraphPlusPyKEENModel(KGEModel):
         ind_graph_id = {ind: self.triples_factory.entity_to_id[ind] for ind in individuals if ind in self.triples_factory.entity_to_id}
 
         def get_embedding(idxs):
-            return self.kge_method.entity_representations[0](indices=idxs).cpu().detach().numpy()
+            return self._kge_method.entity_representations[0](indices=idxs).cpu().detach().numpy()
 
         idxs = th.tensor(list(ind_graph_id.values()))
         ind_embeddings = dict(zip(ind_graph_id.keys(), get_embedding(idxs)))
@@ -89,7 +97,29 @@ class GraphPlusPyKEENModel(KGEModel):
         self._kge_method = initialized_kge_method
         self._kge_method_args = args
         self._kge_method_kwargs = kwargs
-                
+
+
+
+    def train(self, epochs=0):
+        if self.optimizer is None:
+            raise ValueError(msg.PYKEEN_OPTIMIZER_NOT_SET)
+        if self.lr is None:
+            raise ValueError(msg.PYKEEN_LR_NOT_SET)
+        if self.batch_size is None:
+            raise ValueError(msg.PYKEEN_BATCH_SIZE_NOT_SET)
+
+        self._kge_method.train()
+        optimizer = self.optimizer(params=self._kge_method.get_grad_params(), lr=self.lr)
+
+        training_loop = SLCWATrainingLoop(model=self._kge_method, triples_factory=self.triples_factory,
+                                          optimizer=optimizer)
+
+        _ = training_loop.train(triples_factory=self.triples_factory, num_epochs=epochs,
+                                batch_size=self.batch_size)
+
+        th.save(self._kge_method, self.model_filepath)
+
+        
     def add_axioms(self, *axioms):
         prev_class_embeds = copy.deepcopy(self.class_embeddings)
         prev_object_property_embeds = copy.deepcopy(self.object_property_embeddings)
@@ -112,7 +142,7 @@ class GraphPlusPyKEENModel(KGEModel):
             elif new_node in prev_individual_embeds:
                 new_class_embeds.append(prev_individual_embeds[new_node])
             else:
-                class_size = self.kge_method.entity_representations[0](indices=None).shape[1]
+                class_size = self._kge_method.entity_representations[0](indices=None).shape[1]
                 new_class_embeds.append(np.random.normal(size=class_size))
                 
         new_class_embeds = np.asarray(new_class_embeds)
@@ -122,7 +152,7 @@ class GraphPlusPyKEENModel(KGEModel):
             if new_relation in prev_object_property_embeds:
                 new_object_property_embeds.append(prev_object_property_embeds[new_relation])
             else:
-                op_size = self.kge_method.relation_representations[0](indices=None).shape[1]
+                op_size = self._kge_method.relation_representations[0](indices=None).shape[1]
                 new_object_property_embeds.append(np.random.normal(size=op_size))
 
         new_object_property_embeds = np.asarray(new_object_property_embeds)
@@ -135,3 +165,26 @@ class GraphPlusPyKEENModel(KGEModel):
                                                         relation_initializer=PretrainedInitializer(tensor=pretrained_op_embeddings),
                                                         *self._kge_method_args, **self._kge_method_kwargs)
         self._kge_method = new_kge_method
+
+
+
+    def from_pretrained(self, model, overwrite=False):
+        if self._kge_method is not None and not overwrite:
+            raise ValueError(msg.PYKEEN_FROM_PRETRAINED_MODEL_ALREADY_SET)
+
+        self._model_filepath = model
+
+        if not isinstance(model, str):
+            raise TypeError("Parameter model must be a string pointing to the PyKEEN model file.")
+
+        if not os.path.exists(model):
+            raise FileNotFoundError("Pretrained model path does not exist")
+        
+        self._is_pretrained = True
+        if not isinstance(model, str):
+            raise TypeError
+
+        self._kge_method = th.load(model)
+        #self._kge_method = kge_method
+    
+

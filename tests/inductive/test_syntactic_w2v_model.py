@@ -1,9 +1,6 @@
 from unittest import TestCase
 from tests.datasetFactory import FamilyDataset
-from mowl.models import RandomWalkPlusW2VModel
-from mowl.projection import DL2VecProjector
-from mowl.walking import DeepWalk
-
+from mowl.models import SyntacticPlusW2VModel
 from mowl.owlapi import OWLAPIAdapter
 from copy import deepcopy
 import mowl.error.messages as msg
@@ -14,9 +11,7 @@ class TestRandomWalkModel(TestCase):
     @classmethod
     def setUpClass(self):
         self.dataset = FamilyDataset()
-        self.projector = DL2VecProjector()
-        self.walker = DeepWalk(10,10)
-        
+                
         adapter = OWLAPIAdapter()
         aunt = adapter.create_class("http://Aunt")
         has_sibling = adapter.create_object_property("http://hasSibling")
@@ -25,19 +20,14 @@ class TestRandomWalkModel(TestCase):
         some_has_sibling = adapter.create_object_some_values_from(has_sibling, aunt)
         self.axiom = adapter.create_subclass_of(father, some_has_sibling)
         
-
-        
     def test_reindex_embeddings(self):
-        model = RandomWalkPlusW2VModel(self.dataset)
-        model.set_projector(self.projector)
-        model.set_walker(self.walker)
+        model = SyntacticPlusW2VModel(self.dataset)
         model.set_w2v_model(min_count=1)
-        
-        model.train(epochs=2)
+        model.generate_corpus(save=True, with_annotations=True)
+        model.train()
         class_embeddings_before = deepcopy(model.class_embeddings)
         property_embeddings_before = deepcopy(model.object_property_embeddings)
 
-        
         model.add_axioms(self.axiom)
         model.train(epochs=0)
         class_embeddings_after = model.class_embeddings
@@ -56,7 +46,7 @@ class TestRandomWalkModel(TestCase):
 
 
     def test_from_pretrained(self):
-        model = RandomWalkPlusW2VModel(self.dataset)
+        model = SyntacticPlusW2VModel(self.dataset)
 
         with self.assertRaisesRegex(TypeError, "Parameter model must be a string pointing to the Word2Vec model file."):
             model.from_pretrained(1)
@@ -64,18 +54,15 @@ class TestRandomWalkModel(TestCase):
         with self.assertRaisesRegex(FileNotFoundError, "Pretrained model path does not exist"):
             model.from_pretrained("path")
 
-        model2 = RandomWalkPlusW2VModel(self.dataset)
+        model2 = SyntacticPlusW2VModel(self.dataset)
         model2.set_w2v_model(min_count=1)
         with self.assertRaisesRegex(ValueError, msg.W2V_FROM_PRETRAINED_MODEL_ALREADY_SET):
             model2.from_pretrained("path")
-
-
-            
+    
     def test_train_after_pretrained(self):
-        first_model = RandomWalkPlusW2VModel(self.dataset, model_filepath="first_rw_w2v_model")
-        first_model.set_projector(self.projector)
-        first_model.set_walker(self.walker)
+        first_model = SyntacticPlusW2VModel(self.dataset, model_filepath="first_syntactic_w2v_model")
         first_model.set_w2v_model(min_count=1)
+        first_model.generate_corpus(save=True, with_annotations=True)
         first_model.train()
 
         first_w2v_model = first_model.model_filepath
@@ -83,12 +70,11 @@ class TestRandomWalkModel(TestCase):
         
         self.assertTrue(os.path.exists(first_w2v_model))
 
-        second_model = RandomWalkPlusW2VModel(self.dataset)
+        second_model = SyntacticPlusW2VModel(self.dataset)
         second_model.from_pretrained(first_w2v_model)
 
         self.assertEqual(second_model.model_filepath, first_w2v_model)
-        second_model.set_projector(self.projector)
-        second_model.set_walker(self.walker)
-        second_model.train(epochs=2)
 
+        second_model.generate_corpus(save=True, with_annotations=True)
+        second_model.train(epochs=2)
 
