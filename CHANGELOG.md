@@ -8,8 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Added
 - [BoxSquaredEL](https://arxiv.org/abs/2301.11118) module added to `mowl.nn`
+- Implemented `model.from_pretrained` method. Related to issue #43
 - Implemented `model.add_axioms` method. Related to issue #43
-- Added models `RandomWalkPlusW2VModel`, `GraphPlusPyKEENModel`, `SyntacticPlusW2VModel`
+- Added models `RandomWalkPlusW2VModel`, `GraphPlusPyKEENModel`, `SyntacticPlusW2VModel`, 
 
 ### Changed
 - Bug fixed in corpus generation methods. Issue #36.

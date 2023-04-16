@@ -1,6 +1,6 @@
 from unittest import TestCase
 
-from mowl.datasets.builtin import GDAHumanELDataset
+from tests.datasetFactory import GDAHumanELDataset
 from mowl.models.elboxembeddings.examples.model_gda import ELBoxGDA
 
 

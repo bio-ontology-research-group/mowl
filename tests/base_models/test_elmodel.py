@@ -2,7 +2,7 @@ from unittest import TestCase
 from mowl.base_models.elmodel import EmbeddingELModel
 from mowl.base_models.model import EmbeddingModel
 from mowl.datasets import Dataset
-from mowl.datasets.builtin import FamilyDataset, PPIYeastSlimDataset
+from tests.datasetFactory import FamilyDataset, PPIYeastSlimDataset
 from mowl.datasets.el import ELDataset
 from mowl.models import ELEmbeddings
 import random
