@@ -13,7 +13,6 @@ dependencies:
   - grpcio
   - JPype1
   - pandas
-  - pinocchio
   - protobuf
   - pytest
   - pyyaml
@@ -30,10 +29,8 @@ dependencies:
     - build
     - pykeen>=1.9.*
     - sphinx-rtd-theme
-    - nose
-    - nose-exclude
+    - pytest
     - coverage
-    - pinocchio
     - flake8
     - autopep8
     - memory-profiler
