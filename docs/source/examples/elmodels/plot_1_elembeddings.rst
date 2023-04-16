@@ -29,16 +29,13 @@ The idea of this paper is to embed EL by modeling ontology classes as :math:`n`-
 
 Let's just define the imports that will be needed along the example:
 
-.. GENERATED FROM PYTHON SOURCE LINES 16-27
+.. GENERATED FROM PYTHON SOURCE LINES 16-24
 
 .. code-block:: default
 
 
     import mowl
     mowl.init_jvm("10g")
-    from mowl.base_models.elmodel import EmbeddingELModel
-    from mowl.models.elembeddings.evaluate import ELEmbeddingsPPIEvaluator
-    from mowl.nn.elmodule import ELModule
     import numpy as np
     import torch as th
     from torch import nn
@@ -51,7 +48,7 @@ Let's just define the imports that will be needed along the example:
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 28-44
+.. GENERATED FROM PYTHON SOURCE LINES 25-41
 
 The EL-Embeddings model, maps ontology classes, object properties and operators into a
 geometric model. The :math:`\mathcal{EL}` description logic is expressed using the
@@ -70,9 +67,18 @@ following General Concept Inclusions (GCIs):
 
 where :math:`C,C_1, C_2,D` are ontology classes and :math:`R` is an ontology object property
 
-.. GENERATED FROM PYTHON SOURCE LINES 46-53
+.. GENERATED FROM PYTHON SOURCE LINES 43-61
 
-EL-Embeddings uses GCI 0, 1, 2, 3 and GCI BOT 1 (to express disjointness between classes).
+EL-Embeddings (PyTorch) module.
+-------------------------------
+
+EL-Embeddings defines a geometric modelling for all the GCIs in the EL language.
+The implementation of ELEmbeddings module can be found at :class:`mowl.nn.el.elem.module.ELEmModule`.
+
+EL-Embeddings model
+-------------------
+
+The module :class:`mowl.nn.el.elem.module.ELEmModule` is used in the :class:`mowl.models.elembeddings.model.ELEmbeddings`.
 In the use case of this example, we will test over a biological problem, which is
 protein-protein interactions. Given two proteins :math:`p_1,p_2`, the phenomenon
 ":math:`p_1` interacts with :math:`p_2`" is encoded using GCI 2 as:
@@ -80,286 +86,33 @@ protein-protein interactions. Given two proteins :math:`p_1,p_2`, the phenomenon
 .. math::
    p_1 \sqsubseteq interacts\_with. p_2
 
-.. GENERATED FROM PYTHON SOURCE LINES 55-61
+For that, we can use the class :class:`mowl.models.elembeddings.examples.model_ppi.ELEmPPI` mode, which uses the :class:`mowl.datasets.builtin.PPIYeastSlimDataset` dataset.
 
-Definition of the model and the loss functions
----------------------------------------------------
-
-In this part we define the neural network part. As mentioned earlier, ontology classes \
-are :math:`n`-dimensional balls. Each ball has a center :math:`c \in \mathbb{R}^n` and \
-radius :math:`r \in \mathbb{R}`. :math:`n` will be the embedding size.
-
-.. GENERATED FROM PYTHON SOURCE LINES 62-185
-
-.. code-block:: default
-
-
-
-    class ELEmModule(ELModule):
-
-        def __init__(self, nb_ont_classes, nb_rels, embed_dim=50, margin=0.1):
-            super().__init__()
-            self.nb_ont_classes = nb_ont_classes
-            self.nb_rels = nb_rels
-
-            self.embed_dim = embed_dim
-
-            # Embedding layer for classes centers.
-            self.class_embed = nn.Embedding(self.nb_ont_classes, embed_dim)
-            nn.init.uniform_(self.class_embed.weight, a=-1, b=1)
-            weight_data = th.linalg.norm(self.class_embed.weight.data, axis=1).reshape(-1, 1)
-            self.class_embed.weight.data /= weight_data
-
-            # Embedding layer for classes radii.
-            self.class_rad = nn.Embedding(self.nb_ont_classes, 1)
-            nn.init.uniform_(self.class_rad.weight, a=-1, b=1)
-            weight_data = th.linalg.norm(self.class_rad.weight.data, axis=1).reshape(-1, 1)
-            self.class_rad.weight.data /= weight_data
-
-            # Embedding layer for ontology object properties
-            self.rel_embed = nn.Embedding(nb_rels, embed_dim)
-            nn.init.uniform_(self.rel_embed.weight, a=-1, b=1)
-            weight_data = th.linalg.norm(self.rel_embed.weight.data, axis=1).reshape(-1, 1)
-            self.rel_embed.weight.data /= weight_data
-
-            self.margin = margin
-
-        # Regularization method to force n-ball to be inside unit ball
-        def class_reg(self, x):
-            res = th.abs(th.linalg.norm(x, axis=1) - 1)
-            res = th.reshape(res, [-1, 1])
-            return res
-
-        # Loss function for normal form :math:`C \sqsubseteq D`
-        def gci0_loss(self, data, neg=False):
-            c = self.class_embed(data[:, 0])
-            d = self.class_embed(data[:, 1])
-            rc = th.abs(self.class_rad(data[:, 0]))
-            rd = th.abs(self.class_rad(data[:, 1]))
-            dist = th.linalg.norm(c - d, dim=1, keepdim=True) + rc - rd
-            loss = th.relu(dist - self.margin)
-            return loss + self.class_reg(c) + self.class_reg(d)
-
-        # Loss function for normal form :math:`C \sqcap D \sqsubseteq E`
-        def gci1_loss(self, data, neg=False):
-            c = self.class_embed(data[:, 0])
-            d = self.class_embed(data[:, 1])
-            e = self.class_embed(data[:, 2])
-            rc = th.abs(self.class_rad(data[:, 0]))
-            rd = th.abs(self.class_rad(data[:, 1]))
-
-            sr = rc + rd
-            dst = th.linalg.norm(d - c, dim=1, keepdim=True)
-            dst2 = th.linalg.norm(e - c, dim=1, keepdim=True)
-            dst3 = th.linalg.norm(e - d, dim=1, keepdim=True)
-            loss = th.relu(dst - sr - self.margin) + th.relu(dst2 - rc - self.margin)
-            loss += th.relu(dst3 - rd - self.margin)
-
-            return loss + self.class_reg(c) + self.class_reg(d) + self.class_reg(e)
-
-        # Loss function for normal form :math:`C \sqcap D \sqsubseteq \bot`
-        def gci1_bot_loss(self, data, neg=False):
-            c = self.class_embed(data[:, 0])
-            d = self.class_embed(data[:, 1])
-            rc = self.class_rad(data[:, 0])
-            rd = self.class_rad(data[:, 1])
-
-            sr = rc + rd
-            dst = th.reshape(th.linalg.norm(d - c, axis=1), [-1, 1])
-            return th.relu(sr - dst + self.margin) + self.class_reg(c) + self.class_reg(d)
-
-        # Loss function for normal form :math:`C \sqsubseteq \exists R. D`
-        def gci2_loss(self, data, neg=False):
-
-            if neg:
-                return self.gci2_loss_neg(data)
-
-            else:
-                # C subSelf.ClassOf R some D
-                c = self.class_embed(data[:, 0])
-                rE = self.rel_embed(data[:, 1])
-                d = self.class_embed(data[:, 2])
-
-                rc = th.abs(self.class_rad(data[:, 0]))
-                rd = th.abs(self.class_rad(data[:, 2]))
-
-                dst = th.linalg.norm(c + rE - d, dim=1, keepdim=True)
-                loss = th.relu(dst + rc - rd - self.margin)
-                return loss + self.class_reg(c) + self.class_reg(d)
-
-        # Loss function for normal form :math:`C \nsqsubseteq \exists R. D`
-        def gci2_loss_neg(self, data):
-
-            c = self.class_embed(data[:, 0])
-            rE = self.rel_embed(data[:, 1])
-
-            d = self.class_embed(data[:, 2])
-            rc = th.abs(self.class_rad(data[:, 1]))
-            rd = th.abs(self.class_rad(data[:, 2]))
-
-            dst = th.linalg.norm(c + rE - d, dim=1, keepdim=True)
-            loss = th.relu(rc + rd - dst + self.margin)
-            return loss + self.class_reg(c) + self.class_reg(d)
-
-        # Loss function for normal form :math:`\exists R. C \sqsubseteq D`
-        def gci3_loss(self, data, neg=False):
-
-            rE = self.rel_embed(data[:, 0])
-            c = self.class_embed(data[:, 1])
-            d = self.class_embed(data[:, 2])
-            rc = th.abs(self.class_rad(data[:, 1]))
-            rd = th.abs(self.class_rad(data[:, 2]))
-
-            euc = th.linalg.norm(c - rE - d, dim=1, keepdim=True)
-            loss = th.relu(euc - rc - rd - self.margin)
-            return loss + self.class_reg(c) + self.class_reg(d)
-
-
-
-
-
-
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 186-189
-
-Now, let's first write the code containing the tranining and validation parts.
-For that, let's use the
-:class:`EmbeddingELModel <mowl.base_models.elmodel.EmbeddingELModel>` class.
-
-.. GENERATED FROM PYTHON SOURCE LINES 189-285
-
-.. code-block:: default
-
-
-    class ELEmbeddings(EmbeddingELModel):
-
-        def __init__(self,
-                     dataset,
-                     embed_dim=50,
-                     margin=0,
-                     reg_norm=1,
-                     learning_rate=0.001,
-                     epochs=1000,
-                     batch_size=4096 * 8,
-                     model_filepath=None,
-                     device='cpu'
-                     ):
-            super().__init__(dataset, batch_size, extended=True, model_filepath=model_filepath)
-
-            self.embed_dim = embed_dim
-            self.margin = margin
-            self.reg_norm = reg_norm
-            self.learning_rate = learning_rate
-            self.epochs = epochs
-            self.device = device
-            self._loaded = False
-            self._loaded_eval = False
-            self.extended = False
-            self.init_model()
-            
-        def init_model(self):
-            self.model = ELEmModule(
-                len(self.class_index_dict),  # number of ontology classes
-                len(self.object_property_index_dict),  # number of ontology object properties
-                embed_dim=self.embed_dim,
-                margin=self.margin
-            ).to(self.device)
-
-        def train(self):
-            optimizer = th.optim.Adam(self.model.parameters(), lr=self.learning_rate)
-            best_loss = float('inf')
-
-            for epoch in trange(self.epochs):
-                self.model.train()
-
-                train_loss = 0
-                loss = 0
-
-                # Notice how we use the ``training_datasets`` variable directly
-                # and every element of it is a pair (GCI name, GCI tensor data).
-                for gci_name, gci_dataset in self.training_datasets.items():
-                    if len(gci_dataset) == 0:
-                        continue
-
-                    loss += th.mean(self.model(gci_dataset[:], gci_name))
-                    if gci_name == "gci2":
-                        prots = [self.class_index_dict[p] for p in self.dataset.evaluation_classes.as_str]
-                        idxs_for_negs = np.random.choice(prots, size=len(gci_dataset), replace=True)
-                        rand_index = th.tensor(idxs_for_negs).to(self.device)
-                        data = gci_dataset[:]
-                        neg_data = th.cat([data[:, :2], rand_index.unsqueeze(1)], dim=1)
-                        loss += th.mean(self.model(neg_data, gci_name, neg=True))
-
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-                train_loss += loss.detach().item()
-
-                loss = 0
-                with th.no_grad():
-                    self.model.eval()
-                    valid_loss = 0
-                    gci2_data = self.validation_datasets["gci2"][:]
-                    loss = th.mean(self.model(gci2_data, "gci2"))
-                    valid_loss += loss.detach().item()
-
-                checkpoint = 1
-                if best_loss > valid_loss:
-                    best_loss = valid_loss
-                    th.save(self.model.state_dict(), self.model_filepath)
-                if (epoch + 1) % checkpoint == 0:
-                    print(f'\nEpoch {epoch}: Train loss: {train_loss:4f} Valid loss: {valid_loss:.4f}')
-
-        def evaluate_ppi(self):
-            self.init_model()
-            print('Load the best model', self.model_filepath)
-            self.model.load_state_dict(th.load(self.model_filepath))
-            with th.no_grad():
-                self.model.eval()
-
-                eval_method = self.model.gci2_loss
-
-                evaluator = ELEmbeddingsPPIEvaluator(
-                    self.dataset.testing, eval_method, self.dataset.ontology,
-                    self.class_index_dict, self.object_property_index_dict, device=self.device)
-                evaluator()
-                evaluator.print_metrics()
-
-
-
-
-
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 286-288
+.. GENERATED FROM PYTHON SOURCE LINES 64-66
 
 Training the model
 -------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 288-305
+.. GENERATED FROM PYTHON SOURCE LINES 66-86
 
 .. code-block:: default
 
 
 
     from mowl.datasets.builtin import PPIYeastSlimDataset
+    from mowl.models.elembeddings.examples.model_ppi import ELEmPPI
 
     dataset = PPIYeastSlimDataset()
 
-    model = ELEmbeddings(dataset,
-                         embed_dim=10,
-                         margin=0.1,
-                         reg_norm=1,
-                         learning_rate=0.001,
-                         epochs=20,
-                         batch_size=4096,
-                         model_filepath=None,
-                         device='cpu')
+    model = ELEmPPI(dataset,
+                    embed_dim=10,
+                    margin=0.1,
+                    reg_norm=1,
+                    learning_rate=0.001,
+                    epochs=20,
+                    batch_size=4096,
+                    model_filepath=None,
+                    device='cpu')
 
     model.train()
 
@@ -368,57 +121,67 @@ Training the model
 
 .. rst-class:: sphx-glr-script-out
 
- .. code-block:: none
+.. code-block:: pytb
 
-      0%|          | 0/20 [00:00<?, ?it/s]
-    Epoch 0: Train loss: 4.123617 Valid loss: 1.6074
-      5%|5         | 1/20 [00:14<04:36, 14.54s/it]
-    Epoch 1: Train loss: 4.124363 Valid loss: 1.6047
-     10%|#         | 2/20 [00:14<01:49,  6.07s/it]
-    Epoch 2: Train loss: 4.109043 Valid loss: 1.6030
-     15%|#5        | 3/20 [00:14<00:57,  3.36s/it]
-    Epoch 3: Train loss: 4.094981 Valid loss: 1.6006
-     20%|##        | 4/20 [00:14<00:33,  2.09s/it]
-    Epoch 4: Train loss: 4.078265 Valid loss: 1.5985
-     25%|##5       | 5/20 [00:15<00:20,  1.38s/it]
-    Epoch 5: Train loss: 4.065317 Valid loss: 1.5963
-     30%|###       | 6/20 [00:15<00:13,  1.04it/s]
-    Epoch 6: Train loss: 4.052018 Valid loss: 1.5947
-     35%|###5      | 7/20 [00:15<00:08,  1.45it/s]
-    Epoch 7: Train loss: 4.039583 Valid loss: 1.5933
-     40%|####      | 8/20 [00:15<00:06,  1.95it/s]
-    Epoch 8: Train loss: 4.027699 Valid loss: 1.5917
-     45%|####5     | 9/20 [00:15<00:04,  2.55it/s]
-    Epoch 9: Train loss: 4.012502 Valid loss: 1.5904
-     50%|#####     | 10/20 [00:15<00:03,  3.21it/s]
-    Epoch 10: Train loss: 3.999578 Valid loss: 1.5892
-     55%|#####5    | 11/20 [00:15<00:02,  3.89it/s]
-    Epoch 11: Train loss: 3.985123 Valid loss: 1.5876
-     60%|######    | 12/20 [00:16<00:01,  4.58it/s]
-    Epoch 12: Train loss: 3.974498 Valid loss: 1.5859
-     65%|######5   | 13/20 [00:16<00:01,  5.20it/s]
-    Epoch 13: Train loss: 3.962286 Valid loss: 1.5842
-     70%|#######   | 14/20 [00:16<00:01,  5.70it/s]
-    Epoch 14: Train loss: 3.947988 Valid loss: 1.5826
-     75%|#######5  | 15/20 [00:16<00:00,  6.12it/s]
-    Epoch 15: Train loss: 3.935778 Valid loss: 1.5810
-     80%|########  | 16/20 [00:16<00:00,  6.49it/s]
-    Epoch 16: Train loss: 3.923309 Valid loss: 1.5794
-     85%|########5 | 17/20 [00:16<00:00,  6.76it/s]
-    Epoch 17: Train loss: 3.910354 Valid loss: 1.5779
-     90%|######### | 18/20 [00:16<00:00,  6.91it/s]
-    Epoch 18: Train loss: 3.898570 Valid loss: 1.5764
-     95%|#########5| 19/20 [00:16<00:00,  7.03it/s]
-    Epoch 19: Train loss: 3.885187 Valid loss: 1.5750
-    100%|##########| 20/20 [00:17<00:00,  6.92it/s]    100%|##########| 20/20 [00:17<00:00,  1.17it/s]
+    Traceback (most recent call last):
+      File "/home/zhapacfp/Git/mowl/examples/elmodels/plot_1_elembeddings.py", line 83, in <module>
+        model.train()
+      File "/home/zhapacfp/Git/mowl/mowl/models/elembeddings/examples/model_ppi.py", line 28, in train
+        for gci_name, gci_dataset in self.training_datasets.items():
+      File "/home/zhapacfp/Git/mowl/mowl/base_models/elmodel.py", line 115, in training_datasets
+        self._load_datasets()
+      File "/home/zhapacfp/Git/mowl/mowl/base_models/elmodel.py", line 66, in _load_datasets
+        self._training_datasets = training_el_dataset.get_gci_datasets()
+      File "/home/zhapacfp/Git/mowl/mowl/datasets/el/el_dataset.py", line 157, in get_gci_datasets
+        "gci0": self.gci0_dataset,
+      File "/home/zhapacfp/Git/mowl/mowl/datasets/el/el_dataset.py", line 191, in gci0_dataset
+        self.load()
+      File "/home/zhapacfp/Git/mowl/mowl/datasets/el/el_dataset.py", line 78, in load
+        gcis = normalizer.normalize(self._ontology)
+      File "/home/zhapacfp/Git/mowl/mowl/ontology/normalize.py", line 43, in normalize
+        ontology = self.preprocess_ontology(ontology)
+      File "/home/zhapacfp/Git/mowl/mowl/ontology/normalize.py", line 121, in preprocess_ontology
+        elif "urn:swrl" in axiom_as_str:
+      File "/home/zhapacfp/miniconda3/envs/mowldev39/lib/python3.9/site-packages/jpype/_jstring.py", line 60, in __contains__
+        return self.contains(other)
+    jpype._core.JVMNotRunning: Java Virtual Machine is not running
 
 
 
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 87-92
+
+Evaluating the model
+----------------------
+
+Now, it is time to evaluate embeddings. For this, we use the
+:class:`ModelRankBasedEvaluator <mowl.evaluation.ModelRankBasedEvaluator>` class.
+
+.. GENERATED FROM PYTHON SOURCE LINES 92-105
+
+.. code-block:: default
+
+
+
+    from mowl.evaluation.rank_based import ModelRankBasedEvaluator
+
+    with th.no_grad():                                                                        
+        model.load_best_model()                                                               
+        evaluator = ModelRankBasedEvaluator(                                                  
+            model,                                                                            
+            device = "cpu",
+            eval_method = model.model.gci2_loss                                               
+        )                                                                                         
+                                                                                                  
+        evaluator.evaluate(show=True)
 
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** ( 0 minutes  23.695 seconds)
+   **Total running time of the script:** ( 0 minutes  14.112 seconds)
+
+**Estimated memory usage:**  531 MB
 
 
 .. _sphx_glr_download_examples_elmodels_plot_1_elembeddings.py:

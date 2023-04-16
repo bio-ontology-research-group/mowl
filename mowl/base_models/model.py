@@ -1,6 +1,9 @@
 from deprecated.sphinx import deprecated, versionchanged, versionadded
 import tempfile
 from mowl.datasets import Dataset
+from mowl.owlapi import OWLAPIAdapter
+from java.util import HashSet
+
 
 
 @versionchanged(version="0.1.0", reason="Parameter ``model_filepath`` added in the base class for \
@@ -23,9 +26,7 @@ class Model():
         self.dataset = dataset
         self._model_filepath = model_filepath
         self._testing_set = None
-        self._class_index_dict = None
-        self._individual_index_dict = None
-        self._object_property_index_dict = None
+                        
 
     def train(self, *args, **kwargs):
         '''Abstract method for training the model. This method must be implemented in children classes
@@ -35,10 +36,11 @@ class Model():
     def eval_fn(self, *args, **kwargs):
         raise NotImplementedError("Method eval_fn is not implemented.")
 
-    @versionadded(version="0.1.2", reason="Axiom scoring method added to the base class.")
+    @versionadded(version="0.2.0", reason="Axiom scoring method added to the base class.")
     def score(self, *args, **kwargs):
         raise NotImplementedError("Method score is not implemented.")
 
+    
     @property
     def model_filepath(self):
         """Path for saving the model.
@@ -56,9 +58,8 @@ class Model():
 
         :rtype: dict
         """
-        if self._class_index_dict is None:
-            self._class_index_dict = {v: k for k, v in enumerate(self.dataset.classes.as_str)}
-        return self._class_index_dict
+        class_to_id = {v: k for k, v in enumerate(self.dataset.classes.as_str)}
+        return class_to_id
 
     @property
     def individual_index_dict(self):
@@ -66,23 +67,37 @@ class Model():
 
         :rtype: dict
         """
-        if self._individual_index_dict is None:
-            self._individual_index_dict = {v: k for k,
-                                           v in enumerate(self.dataset.individuals.as_str)}
-        return self._individual_index_dict
-
+        individual_to_id = {v: k for k, v in enumerate(self.dataset.individuals.as_str)}
+        return individual_to_id
+                            
     @property
     def object_property_index_dict(self):
         """Dictionary with object property names as keys and object property indexes as values.
 
         :rtype: dict
         """
-        if self._object_property_index_dict is None:
-            self._object_property_index_dict = {v: k for k, v in
-                                                enumerate(self.dataset.object_properties.as_str)}
-        return self._object_property_index_dict
+        object_property_to_id = {v: k for k, v in enumerate(self.dataset.object_properties.as_str)}
+        return object_property_to_id
 
+    @versionadded(version="0.2.0")
+    @property
+    def class_embeddings(self):
+        raise NotImplementedError()
 
+    @versionadded(version="0.2.0")
+    @property
+    def object_property_embeddings(self):
+        raise NotImplementedError()
+
+    @versionadded(version="0.2.0")
+    @property
+    def individual_embeddings(self):
+        raise NotImplementedError()
+
+    @versionadded(version="0.2.0")
+    def add_axioms(self, *axioms):
+        raise NotImplementedError()
+    
 class EmbeddingModel(Model):
 
     def __init__(self, *args, **kwargs):

@@ -31,6 +31,8 @@ gda_mouse/
 gda_human_el/
 gda_mouse_el/
 
+mowl_borg.egg-info/
+
 build/
 dist/
 

@@ -4,10 +4,10 @@ from mowl.base_models.model import EmbeddingModel
 from mowl.datasets import Dataset
 from mowl.datasets.builtin import FamilyDataset, PPIYeastSlimDataset
 from mowl.datasets.el import ELDataset
-
+from mowl.models import ELEmbeddings
 import random
 import torch as th
-
+import numpy as np
 
 class TestEmbeddingElModel(TestCase):
 
@@ -24,25 +24,30 @@ class TestEmbeddingElModel(TestCase):
     def test_constructor_param_types(self):
         """This checks if the constructor parameters are of the correct type"""
         with self.assertRaisesRegex(TypeError, "Parameter dataset must be a mOWL Dataset."):
-            EmbeddingELModel(True, 1)
+            EmbeddingELModel(True, 1, 1)
 
+
+        # embedding size
+        with self.assertRaisesRegex(TypeError, "Parameter 'embed_dim' must be of type int."):
+            EmbeddingELModel(self.family_dataset, "1", 1)
+            
         # batch size
         with self.assertRaisesRegex(TypeError, "Parameter batch_size must be of type int."):
-            EmbeddingELModel(self.family_dataset, "1")
+            EmbeddingELModel(self.family_dataset, 1, "1")
 
         # optional extended
         with self.assertRaisesRegex(TypeError, "Optional parameter extended must be of type \
 bool."):
-            EmbeddingELModel(self.family_dataset, 1, "True")
+            EmbeddingELModel(self.family_dataset, 1, 1, "True")
 
         # optional model_filepath
         with self.assertRaisesRegex(TypeError, "Optional parameter model_filepath must be of \
 type str."):
-            EmbeddingELModel(self.family_dataset, 1, True, 1)
+            EmbeddingELModel(self.family_dataset, 1, 1, True, 1)
 
         # optional device
         with self.assertRaisesRegex(TypeError, "Optional parameter device must be of type str."):
-            EmbeddingELModel(self.family_dataset, 1, True, "model_filepath", 1)
+            EmbeddingELModel(self.family_dataset, 1, 1, True, "model_filepath", 1)
 
     def test_class_attribute_training_dataset(self):
         """This should check that the attribute training_datasets is a dictionary of \
@@ -64,7 +69,7 @@ str -> ELDataset"""
         """This should check that the attribute validation_datasets is a dictionary of \
 str -> ELDataset"""
 
-        model = EmbeddingELModel(self.ppi_dataset, 1, False)
+        model = EmbeddingELModel(self.ppi_dataset, 1, 1,  False)
 
         validation_datasets = model.validation_datasets
         self.assertTrue(isinstance(validation_datasets, dict))
@@ -77,7 +82,7 @@ str -> ELDataset"""
         """This should check that the attribute testing_datasets is a dictionary of \
 str -> ELDataset"""
 
-        model = EmbeddingELModel(self.ppi_dataset, 1, False)
+        model = EmbeddingELModel(self.ppi_dataset, 1, 1, False)
 
         testing_datasets = model.testing_datasets
 
@@ -91,7 +96,7 @@ str -> ELDataset"""
         """This should check that the attribute training_dataloaders is a dictionary of \
 str -> DataLoader"""
 
-        model = EmbeddingELModel(self.ppi_dataset, 1, False)
+        model = EmbeddingELModel(self.ppi_dataset, 1, 1, False)
 
         training_dataloaders = model.training_dataloaders
         training_dataloaders = model.training_dataloaders  # this is a hack to get 100% coverage
@@ -106,7 +111,7 @@ str -> DataLoader"""
         """This should check that the attribute validation_dataloaders is a dictionary of \
 str -> DataLoader"""
 
-        model = EmbeddingELModel(self.ppi_dataset, 1, False)
+        model = EmbeddingELModel(self.ppi_dataset, 1, 1, False)
 
         validation_dataloaders = model.validation_dataloaders
 
@@ -120,7 +125,7 @@ str -> DataLoader"""
         """This should check that the attribute testing_dataloaders is a dictionary \
 of str -> DataLoader"""
 
-        model = EmbeddingELModel(self.ppi_dataset, 1, False)
+        model = EmbeddingELModel(self.ppi_dataset, 1, 1, False)
 
         testing_dataloaders = model.testing_dataloaders
 
@@ -134,7 +139,7 @@ of str -> DataLoader"""
         """This should check if the parameter extended works as intended"""
 
         # Without extended
-        model = EmbeddingELModel(self.family_dataset, 1, extended=False)
+        model = EmbeddingELModel(self.family_dataset, 1, 1, extended=False)
         training_datasets = model.training_datasets
         self.assertTrue(len(training_datasets) == 4)
         self.assertIn("gci0", training_datasets)
@@ -143,7 +148,7 @@ of str -> DataLoader"""
         self.assertIn("gci3", training_datasets)
 
         # With extended
-        model = EmbeddingELModel(self.family_dataset, 1, extended=True)
+        model = EmbeddingELModel(self.family_dataset, 1, 1, extended=True)
         training_datasets = model.training_datasets
         self.assertTrue(len(training_datasets) == 7)
         self.assertIn("gci0", training_datasets)
@@ -158,7 +163,7 @@ of str -> DataLoader"""
         """This should check if the model raises an error when trying to access \
 non-existing attributes"""
 
-        model = EmbeddingELModel(self.family_dataset, 1, False)
+        model = EmbeddingELModel(self.family_dataset, 1, 1, False)
 
         with self.assertRaisesRegex(AttributeError, "Validation dataset is None"):
             model.validation_datasets
@@ -171,3 +176,43 @@ non-existing attributes"""
 
         with self.assertRaisesRegex(AttributeError, "Testing dataloader is None"):
             model.testing_dataloaders
+
+    def test_accessing_embeddings_attributes(self):
+        """This should check if the model returns the correct embeddings attributes"""
+        embed_dim = random.randrange(1, 100)
+        model = ELEmbeddings(self.family_dataset, embed_dim = embed_dim)
+
+        num_classes = len(model.dataset.classes)
+        num_relations = len(model.dataset.object_properties)
+        num_individuals = len(model.dataset.individuals)
+
+        if num_classes > 0:
+            class_embeddings = model.class_embeddings
+            self.assertIsInstance(class_embeddings, dict)
+            self.assertTrue(len(class_embeddings) == num_classes)
+            for key, value in class_embeddings.items():
+                with self.subTest(key=key):
+                    self.assertIsInstance(key, str)
+                    self.assertIsInstance(value, np.ndarray)
+                    self.assertEqual(value.shape, (embed_dim,))
+                    
+        if num_relations > 0:
+            object_property_embeddings = model.object_property_embeddings
+            self.assertIsInstance(object_property_embeddings, dict)
+            self.assertTrue(len(object_property_embeddings) == num_relations)
+            for key, value in object_property_embeddings.items():
+                with self.subTest(key=key):
+                    self.assertIsInstance(key, str)
+                    self.assertIsInstance(value, np.ndarray)
+                    self.assertEqual(value.shape, (embed_dim,))
+                    
+
+        if num_individuals > 0:
+            individual_embeddings = model.individual_embeddings
+            self.assertIsInstance(individual_embeddings, dict)
+            self.assertTrue(len(individual_embeddings) == num_individuals)
+            for key, value in individual_embeddings.items():
+                with self.subTest(key=key):
+                    self.assertIsInstance(key, str)
+                    self.assertIsInstance(value, np.ndarray)
+                    self.assertEqual(value.shape, (embed_dim,))

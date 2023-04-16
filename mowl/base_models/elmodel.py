@@ -7,6 +7,11 @@ from deprecated.sphinx import versionadded
 
 from org.semanticweb.owlapi.model import OWLClassExpression, OWLClass, OWLObjectSomeValuesFrom, OWLObjectIntersectionOf
 
+import copy
+import numpy as np
+import mowl.error.messages as msg
+import os
+
 class EmbeddingELModel(EmbeddingModel):
     """Abstract class that provides basic functionalities for methods that aim to embed EL \
     language.
@@ -18,9 +23,12 @@ merging the 3 extra to their corresponding origin normal forms. Defaults to True
     :type extended: bool, optional
     """
 
-    def __init__(self, dataset, batch_size, extended=True, model_filepath=None, device="cpu"):
+    def __init__(self, dataset, embed_dim, batch_size, extended=True, model_filepath=None, device="cpu"):
         super().__init__(dataset, model_filepath=model_filepath)
 
+        if not isinstance(embed_dim, int):
+            raise TypeError("Parameter 'embed_dim' must be of type int.")
+        
         if not isinstance(batch_size, int):
             raise TypeError("Parameter batch_size must be of type int.")
 
@@ -33,6 +41,7 @@ merging the 3 extra to their corresponding origin normal forms. Defaults to True
         self._datasets_loaded = False
         self._dataloaders_loaded = False
         self._extended = extended
+        self.embed_dim = embed_dim
         self.batch_size = batch_size
         self.device = device
 
@@ -169,7 +178,7 @@ of :class:`torch.utils.data.DataLoader`
         self._load_dataloaders()
         return self._testing_dataloaders
 
-    @versionadded(version="0.1.2")
+    @versionadded(version="0.2.0")
     def score(self, axiom):
         def data_point_to_tensor(data_point):
             data_point = th.tensor(data_point, dtype=th.long, device=self.device)
@@ -260,3 +269,111 @@ of :class:`torch.utils.data.DataLoader`
         
         score = self.module(gci_data, gci_name)
         return score
+
+
+    @property
+    def class_embeddings(self):
+        class_embeds = {
+            k: v for k, v in zip(self.class_index_dict.keys(),
+                                 self.module.class_embed.weight.cpu().detach().numpy())}
+        return class_embeds
+
+    @property
+    def object_property_embeddings(self):
+        rel_embeds = {
+            k: v for k, v in zip(self.object_property_index_dict.keys(),
+                                 self.module.rel_embed.weight.cpu().detach().numpy())}
+        
+        return rel_embeds
+        
+    
+    @property
+    def individual_embeddings(self):
+        if self.module.ind_embed is None:
+            return dict()
+        
+        ind_embeds = {
+            k: v for k, v in zip(self.individual_index_dict.keys(),
+                                 self.module.ind_embed.weight.cpu().detach().numpy())}
+        
+        return ind_embeds
+        
+
+
+    def add_axioms(self, *axioms):
+        prev_class_embeds = None
+        prev_object_property_embeds = None
+        prev_individual_embeds = None
+        
+        if len(self.class_embeddings) > 0:
+            prev_class_embeds = copy.deepcopy(self.class_embeddings)
+
+        if len(self.object_property_embeddings) > 0:
+            prev_object_property_embeds = copy.deepcopy(self.object_property_embeddings)
+
+        if len(self.individual_embeddings) > 0:
+            prev_individual_embeds = copy.deepcopy(self.individual_embeddings)
+
+        self.dataset.add_axioms(*axioms)
+
+        if prev_class_embeds is not None:
+            new_class_embeds = []
+            for cls in self.dataset.classes:
+                cls = str(cls.toStringID())
+                if cls in prev_class_embeds:
+                    new_class_embeds.append(prev_class_embeds[cls])
+                else:
+                    new_class_embeds.append(np.random.normal(size=self.embed_dim))
+            
+
+            new_class_embeds = np.asarray(new_class_embeds)
+            self.module.class_embed.weight.data = th.from_numpy(new_class_embeds).float()
+
+        if prev_object_property_embeds is not None:
+            new_object_property_embeds = []
+            for rel in self.dataset.object_properties:
+                rel = str(rel.toStringID())
+                if rel in prev_object_property_embeds:
+                    new_object_property_embeds.append(prev_object_property_embeds[rel])
+                else:
+                    new_object_property_embeds.append(np.random.normal(size=self.embed_dim))
+            
+            new_object_property_embeds = np.asarray(new_object_property_embeds)
+            self.module.rel_embed.weight.data = th.from_numpy(new_object_property_embeds).float()
+
+        if prev_individual_embeds is not None:
+            new_individual_embeds = []
+            for ind in self.dataset.individuals:
+                ind = str(ind.toStringID())
+                if ind in prev_individual_embeds:
+                    new_individual_embeds.append(prev_individual_embeds[ind])
+                else:
+                    new_individual_embeds.append(np.random.normal(size=self.embed_dim))
+            
+            new_individual_embeds = np.asarray(new_individual_embeds)
+            self.module.ind_embed.weight.data = th.from_numpy(new_individual_embeds).float()
+
+            
+
+    def from_pretrained(self, model, overwrite=False):
+        
+        if self.module is not None and not overwrite:
+            raise ValueError(msg.MODEL_ALREADY_SET)
+
+        if not isinstance(model, str):
+            raise TypeError("Parameter model must be a string pointing to the model file.")
+
+        if not os.path.exists(model):
+            raise FileNotFoundError("Pretrained model path does not exist")
+
+        self._model_filepath = model
+
+        
+        self._is_pretrained = True
+        if not isinstance(model, str):
+            raise TypeError
+
+        self.module.load_state_dict(th.load(model))
+        #self._kge_method = kge_method
+    
+
