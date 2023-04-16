@@ -1,0 +1,27 @@
+name: mowl311
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - click
+  - deprecated
+  - gensim>=4.3.0
+  - gradle
+  - JPype1=1.3.0
+  - matplotlib
+  - networkx
+  - numpy
+  - openjdk
+  - pandas
+  - pytorch
+  - pyyaml
+  - requests
+  - scikit-learn
+  - scipy  
+  - tqdm
+  - urllib3
+  - pip
+  - pip:
+    - pykeen>=1.9.*
+    - temp
+    

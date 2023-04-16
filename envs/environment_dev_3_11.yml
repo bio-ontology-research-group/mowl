@@ -1,0 +1,44 @@
+name: mowldev311
+channels:
+  - pytorch
+  - conda-forge
+  - anaconda
+dependencies:
+  - python=3.11
+  - cairo
+  - deprecated
+  - numpy
+  - networkx
+  - click
+  - grpcio
+  - JPype1
+  - pandas
+  - protobuf
+  - pyyaml
+  - requests
+  - scipy
+  - scikit-learn
+  - urllib3
+  - pytorch
+  - gensim>=4.3.0
+  - openjdk
+  - gradle
+  - pip
+  - pip:
+    - build
+    - pykeen>=1.9.*
+    - sphinx-rtd-theme
+    - pytest
+    - pytest-faulthandler
+    - coverage
+    - flake8
+    - autopep8
+    - memory-profiler
+  - jupyter
+  - ipykernel
+  - sphinx
+  - sphinx-gallery
+  - nbsphinx
+  - mock
+
+
