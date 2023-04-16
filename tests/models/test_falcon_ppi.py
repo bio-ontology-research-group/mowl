@@ -1,6 +1,6 @@
 from unittest import TestCase
 
-from mowl.datasets.builtin import PPIYeastSlimDataset
+from tests.datasetFactory import PPIYeastSlimDataset
 from mowl.models.falcon.examples.model_ppi import FALCON
 from mowl.datasets import Dataset
 from mowl.owlapi import OWLAPIAdapter

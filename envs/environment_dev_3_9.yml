@@ -14,7 +14,6 @@ dependencies:
   - JPype1
   - pandas
   - protobuf
-  - pytest
   - pyyaml
   - requests
   - scipy
@@ -29,8 +28,10 @@ dependencies:
     - build
     - pykeen>=1.9.*
     - sphinx-rtd-theme
-    - pytest
+    - nose
+    - nose-exclude
     - coverage
+    - pinocchio
     - flake8
     - autopep8
     - memory-profiler
