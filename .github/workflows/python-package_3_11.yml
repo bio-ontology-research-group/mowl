@@ -25,7 +25,7 @@ jobs:
     - uses: actions/checkout@v2
     - uses: conda-incubator/setup-miniconda@v2
       env:
-          CONDA: ~/miniconda3/condabin/
+          CONDA: ~/miniconda3/bin/
       with:
         auto-update-conda: true
         python-version: ${{ matrix.python-version }}
