@@ -12,7 +12,7 @@ on:
 jobs:
   build:
 
-    runs-on: self-hosted
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -24,8 +24,6 @@ jobs:
     steps:
     - uses: actions/checkout@v2
     - uses: conda-incubator/setup-miniconda@v2
-      env:
-          CONDA:  ${{ secrets.CONDA_PATH_FZ }}
       with:
         auto-update-conda: true
         python-version: ${{ matrix.python-version }}
@@ -49,4 +47,4 @@ jobs:
         flake8 mowl --count --exit-zero --max-complexity=20 --max-line-length=127 --statistics
     - name: Test with pytest
       run: |
-        python -X faulthandler -m pytest -p no:faulthandler -x tests/
+        pytest -p no:faulthandler
