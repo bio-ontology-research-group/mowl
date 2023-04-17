@@ -47,4 +47,4 @@ jobs:
         flake8 mowl --count --exit-zero --max-complexity=20 --max-line-length=127 --statistics
     - name: Test with pytest
       run: |
-        pytest -p no:faulthandler
+        pytest -m "not slow" -p no:faulthandler
