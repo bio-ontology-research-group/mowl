@@ -34,7 +34,7 @@ setuptools.setup(
         "networkx",
         "numpy",
         "pandas",
-        "pykeen>=1.9.1",
+        "pykeen==1.10.1",
         "pyyaml",
         "requests",
         "scikit-learn",
