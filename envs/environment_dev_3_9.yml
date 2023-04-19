@@ -1,0 +1,45 @@
+name: mowldev39
+channels:
+  - pytorch
+  - conda-forge
+  - anaconda
+dependencies:
+  - python=3.9
+  - cairo
+  - deprecated
+  - numpy
+  - networkx
+  - click
+  - grpcio
+  - JPype1=1.4.1
+  - pandas
+  - protobuf
+  - pyyaml
+  - requests
+  - scipy
+  - scikit-learn
+  - urllib3
+  - pytorch
+  - gensim>=4.3.0
+  - openjdk
+  - gradle
+  - pip
+  - pip:
+    - build
+    - pykeen>=1.9.1
+    - sphinx-rtd-theme
+    - nose
+    - nose-exclude
+    - coverage
+    - pinocchio
+    - flake8
+    - autopep8
+    - memory-profiler
+  - jupyter
+  - ipykernel
+  - sphinx
+  - sphinx-gallery
+  - nbsphinx
+  - mock
+
+
