@@ -77,3 +77,21 @@ Full documentation and API reference can be found in our [ReadTheDocs](https://m
 
 ## ChangeLog
 ChangeLog is available in our [changelog file](https://github.com/bio-ontology-research-group/mowl/blob/main/CHANGELOG.md) and also in the [release section](https://github.com/bio-ontology-research-group/mowl/releases/).
+
+## Citation
+If you used mOWL in your work, please consider citing [this article](https://doi.org/10.1093/bioinformatics/btac811):
+
+```bibtex
+@article{10.1093/bioinformatics/btac811,
+    author = {Zhapa-Camacho, Fernando and Kulmanov, Maxat and Hoehndorf, Robert},
+    title = "{mOWL: Python library for machine learning with biomedical ontologies}",
+    journal = {Bioinformatics},
+    year = {2022},
+    month = {12},
+    issn = {1367-4803},
+    doi = {10.1093/bioinformatics/btac811},
+    url = {https://doi.org/10.1093/bioinformatics/btac811},
+    note = {btac811},
+    eprint = {https://academic.oup.com/bioinformatics/advance-article-pdf/doi/10.1093/bioinformatics/btac811/48438324/btac811.pdf},
+}
+```

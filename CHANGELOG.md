@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Implemented `model.from_pretrained` method. Related to issue #43
 - Implemented `model.add_axioms` method. Related to issue #43
 - Added models `RandomWalkPlusW2VModel`, `GraphPlusPyKEENModel`, `SyntacticPlusW2VModel`, 
+- Updated dependencies: JPype-1.3.0 --> JPype-1.4.1, pykeen-1.9.0 --> pykeen-1.10.1
 
 ### Changed
 - Bug fixed in corpus generation methods. Issue #36.
@@ -18,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Deprecated
 
+### Removed
+
+### Fixed
+
+### Security
 
 ## [0.1.1]
 

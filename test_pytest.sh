@@ -1,1 +1,1 @@
- python -X faulthandler -m pytest -p no:faulthandler -x tests/
+pytest -m "not slow" -p no:faulthandler
