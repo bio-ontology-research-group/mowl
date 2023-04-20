@@ -1,8 +1,8 @@
-name: mowl38
+name: mowl310
 channels:
   - conda-forge
 dependencies:
-  - python=3.8
+  - python=3.10
   - click
   - deprecated
   - gensim>=4.3.0

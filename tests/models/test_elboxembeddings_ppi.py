@@ -2,10 +2,11 @@ from unittest import TestCase
 
 from tests.datasetFactory import PPIYeastSlimDataset
 from mowl.models.elboxembeddings.examples.model_ppi import ELBoxPPI
-
+import pytest
 
 class TestELBoxEmbeddingsPPI(TestCase):
 
+    @pytest.mark.slow
     def test_ppi(self):
         """Test ELBoxEmbeddings on PPI dataset. The test is not very strict, it just checks the \
 correct syntax of the code."""

@@ -15,7 +15,7 @@ class TestRandomWalkModel(TestCase):
     def setUpClass(self):
         self.dataset = FamilyDataset()
         self.projector = DL2VecProjector()
-        self.walker = DeepWalk(10,10)
+        self.walker = DeepWalk(20,30)
         
         adapter = OWLAPIAdapter()
         aunt = adapter.create_class("http://Aunt")
