@@ -13,6 +13,7 @@ class RandomWalkPlusW2VModel(RandomWalkModel):
         self._edges = None
         self.w2v_model = None
         self.update_w2v_model = False
+        self.axioms_added = False
 
     @property
     def class_embeddings(self):
@@ -68,9 +69,11 @@ class RandomWalkPlusW2VModel(RandomWalkModel):
         if epochs is None:
             epochs = self.w2v_model.epochs
 
-        if self._edges is None:
+        if self._edges is None or self.axioms_added:
+            self.axioms_added = False
             self._edges = self.projector.project(self.dataset.ontology)
             self.walker.walk(self._edges)
+            
 
             # This loop is needed to make sure the file is written to disk before running Word2Vec
             last_modified = os.path.getmtime(self.walker.outfile)
@@ -105,6 +108,7 @@ class RandomWalkPlusW2VModel(RandomWalkModel):
         #Rebuild vocab
         sentences = LineSentence(self.walker.outfile)
         self.w2v_model.build_vocab(sentences, update=self.update_w2v_model)
+        self.axioms_added = True
         
     def from_pretrained(self, model, overwrite=False):
         if self.w2v_model is not None and not overwrite:

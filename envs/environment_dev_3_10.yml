@@ -1,10 +1,10 @@
-name: mowldev39
+name: mowldev310
 channels:
   - pytorch
   - conda-forge
   - anaconda
 dependencies:
-  - python=3.9
+  - python=3.10
   - cairo
   - deprecated
   - numpy
@@ -28,10 +28,9 @@ dependencies:
     - build
     - pykeen>=1.10.1
     - sphinx-rtd-theme
-    - nose
-    - nose-exclude
+    - pytest
+    - pytest-faulthandler
     - coverage
-    - pinocchio
     - flake8
     - autopep8
     - memory-profiler
