@@ -51,16 +51,12 @@ class TestSemanticModel(TestCase):
         model = ELEmbeddings(self.dataset)
 
         with self.assertRaisesRegex(TypeError, "Parameter model must be a string pointing to the model file."):
-            model.from_pretrained(1, overwrite=True)
+            model.from_pretrained(1)
 
         with self.assertRaisesRegex(FileNotFoundError, "Pretrained model path does not exist"):
-            model.from_pretrained("path", overwrite=True)
+            model.from_pretrained("path")
 
-        model2 = ELEmbeddings(self.dataset)
-        with self.assertRaisesRegex(ValueError, msg.MODEL_ALREADY_SET):
-            model2.from_pretrained("path")
-
-
+        
             
     def test_train_after_pretrained(self):
         first_model = ELEmPPI(self.ppi_dataset, model_filepath="first_kge_model", epochs=3)
@@ -71,9 +67,9 @@ class TestSemanticModel(TestCase):
         self.assertTrue(os.path.exists(first_kge_model))
 
         second_model = ELEmPPI(self.ppi_dataset, epochs=2)
-        second_model.from_pretrained(first_kge_model, overwrite=True)
+        second_model.from_pretrained(first_kge_model)
 
-        self.assertEqual(second_model.model_filepath, first_kge_model)
+        self.assertNotEqual(second_model.model_filepath, first_kge_model)
         second_model.train()
 
 

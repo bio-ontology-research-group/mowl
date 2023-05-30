@@ -355,18 +355,14 @@ of :class:`torch.utils.data.DataLoader`
 
             
 
-    def from_pretrained(self, model, overwrite=False):
-        
-        if self.module is not None and not overwrite:
-            raise ValueError(msg.MODEL_ALREADY_SET)
-
+    def from_pretrained(self, model):
         if not isinstance(model, str):
             raise TypeError("Parameter model must be a string pointing to the model file.")
 
         if not os.path.exists(model):
             raise FileNotFoundError("Pretrained model path does not exist")
 
-        self._model_filepath = model
+        #self._model_filepath = model
 
         
         self._is_pretrained = True

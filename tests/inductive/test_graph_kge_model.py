@@ -67,12 +67,7 @@ class TestKGEPyKEENModel(TestCase):
         with self.assertRaisesRegex(FileNotFoundError, "Pretrained model path does not exist"):
             model.from_pretrained("path")
 
-        model2 = GraphPlusPyKEENModel(self.dataset)
-        model2.set_projector(self.projector)
-        model2.set_kge_method(TransE, random_seed=42)
-        with self.assertRaisesRegex(ValueError, msg.PYKEEN_FROM_PRETRAINED_MODEL_ALREADY_SET):
-            model2.from_pretrained("path")
-
+                                            
 
             
     def test_train_after_pretrained(self):
@@ -91,9 +86,9 @@ class TestKGEPyKEENModel(TestCase):
         second_model = GraphPlusPyKEENModel(self.dataset)
         second_model.set_projector(self.projector)
         second_model.set_kge_method(TransE, random_seed=42)
-        second_model.from_pretrained(first_kge_model, overwrite=True)
+        second_model.from_pretrained(first_kge_model)
 
-        self.assertEqual(second_model.model_filepath, first_kge_model)
+        self.assertNotEqual(second_model.model_filepath, first_kge_model)
         second_model.set_projector(self.projector)
         second_model.optimizer = th.optim.Adam
         second_model.lr = 0.001
