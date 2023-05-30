@@ -97,6 +97,10 @@ class Model():
     @versionadded(version="0.2.0")
     def add_axioms(self, *axioms):
         raise NotImplementedError()
+
+    @versionadded(version="0.2.0")
+    def from_pretrained(self, file_name):
+        raise NotImplementedError()
     
 class EmbeddingModel(Model):
 

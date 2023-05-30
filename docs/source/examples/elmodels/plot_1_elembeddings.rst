@@ -42,12 +42,6 @@ Let's just define the imports that will be needed along the example:
     from tqdm import trange
 
 
-
-
-
-
-
-
 .. GENERATED FROM PYTHON SOURCE LINES 25-41
 
 The EL-Embeddings model, maps ontology classes, object properties and operators into a
@@ -118,38 +112,6 @@ Training the model
 
 
 
-
-.. rst-class:: sphx-glr-script-out
-
-.. code-block:: pytb
-
-    Traceback (most recent call last):
-      File "/home/zhapacfp/Git/mowl/examples/elmodels/plot_1_elembeddings.py", line 83, in <module>
-        model.train()
-      File "/home/zhapacfp/Git/mowl/mowl/models/elembeddings/examples/model_ppi.py", line 28, in train
-        for gci_name, gci_dataset in self.training_datasets.items():
-      File "/home/zhapacfp/Git/mowl/mowl/base_models/elmodel.py", line 115, in training_datasets
-        self._load_datasets()
-      File "/home/zhapacfp/Git/mowl/mowl/base_models/elmodel.py", line 66, in _load_datasets
-        self._training_datasets = training_el_dataset.get_gci_datasets()
-      File "/home/zhapacfp/Git/mowl/mowl/datasets/el/el_dataset.py", line 157, in get_gci_datasets
-        "gci0": self.gci0_dataset,
-      File "/home/zhapacfp/Git/mowl/mowl/datasets/el/el_dataset.py", line 191, in gci0_dataset
-        self.load()
-      File "/home/zhapacfp/Git/mowl/mowl/datasets/el/el_dataset.py", line 78, in load
-        gcis = normalizer.normalize(self._ontology)
-      File "/home/zhapacfp/Git/mowl/mowl/ontology/normalize.py", line 43, in normalize
-        ontology = self.preprocess_ontology(ontology)
-      File "/home/zhapacfp/Git/mowl/mowl/ontology/normalize.py", line 121, in preprocess_ontology
-        elif "urn:swrl" in axiom_as_str:
-      File "/home/zhapacfp/miniconda3/envs/mowldev39/lib/python3.9/site-packages/jpype/_jstring.py", line 60, in __contains__
-        return self.contains(other)
-    jpype._core.JVMNotRunning: Java Virtual Machine is not running
-
-
-
-
-
 .. GENERATED FROM PYTHON SOURCE LINES 87-92
 
 Evaluating the model
@@ -179,9 +141,9 @@ Now, it is time to evaluate embeddings. For this, we use the
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** ( 0 minutes  14.112 seconds)
+   **Total running time of the script:** ( 0 minutes  0.000 seconds)
 
-**Estimated memory usage:**  531 MB
+**Estimated memory usage:**  0 MB
 
 
 .. _sphx_glr_download_examples_elmodels_plot_1_elembeddings.py:

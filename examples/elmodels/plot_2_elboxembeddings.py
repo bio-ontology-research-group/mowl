@@ -23,7 +23,7 @@ property.
 # %%
 # This example is quite similar to the one found in :doc:`/examples/elmodels/plot_1_elembeddings`.
 # There might be slight changes in the training part but the most important changes are in the
-# `Definition of loss functions`_ definition of the loss functions for each normal form.
+# definition of loss functions definition of the loss functions for each normal form.
 
 
 import mowl

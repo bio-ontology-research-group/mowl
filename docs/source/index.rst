@@ -10,11 +10,13 @@ embeddings of ontology entities.
 Background
 ===========
 
-The development of this library was based on the paper: `Semantic
+Several methods to generate vector representations have been developed and identified in: `Semantic
 similarity and machine learning with ontologies
 <https://academic.oup.com/bib/article/22/4/bbaa199/5922325>`_. In this
 work, several tutorials and slides have been created for users that
 are interested on ontologies and machine learning methods. The tutorials can be found as Jupyter notebooks at this `link to the notebooks <https://github.com/bio-ontology-research-group/machine-learning-with-ontologies#notebooks>`_. The slides can be found at this `link to the slides <https://github.com/bio-ontology-research-group/machine-learning-with-ontologies#slides>`_.
+
+`mOWL: Python library for machine learning with biomedical ontologies <https://doi.org/10.1093/bioinformatics/btac811>`_ was developed to provide a standardized framework to use the already existing methods and to ease the development of new ones.
 
 Some of those tutorials can be found in mOWL in the :doc:`/examples/index/` section and, eventually, more examples will be available directly in mOWL.
 
@@ -25,7 +27,7 @@ Getting started
 **mOWL** can be installed from `source code <https://github.com/bio-ontology-research-group/mowl>`_ or from `PyPi <https://pypi.org/project/mowl-borg/>`_. For more details on installation check out the how to :doc:`install/index` section of the project.
 
 .. note::
-   This version of documentation corresponds to mOWL-0.1.1.
+   This version of documentation corresponds to mOWL-0.2.0.
 
 
 mOWL, JPype and the JVM
@@ -57,13 +59,40 @@ Authors
 **mOWL** is a project initiated and developed by the `Bio-Ontology Research Group <https://cemse.kaust.edu.sa/borg>`_ from KAUST.
 Furthermore, mOWL had other collaboration by being part of:
 
+* `Biohackathon MENA 2023 <https://biohackathon-europe.org/>`_ as project ``#20``.
+* `Biohackathon Europe 2022 <https://2022.biohackathon-europe.org/>`_ as project ``#18``.
 * `Biohackathon Europe 2021 <https://2021.biohackathon-europe.org/>`_ as project ``#27``.
-* `Biohackathon Europe 2022 <https://biohackathon-europe.org/>`_ as project ``#18``.
+
 
 License
 =======
 
 The package is released under the BSD 3-Clause License.
+
+Citation 
+==========
+
+If you used mOWL in your work, please consider citing `this article <https://doi.org/10.1093/bioinformatics/btac811>`_.
+
+
+.. code:: bibtex
+	  
+   @article{10.1093/bioinformatics/btac811,
+	  author = {Zhapa-Camacho, Fernando and Kulmanov, Maxat and Hoehndorf, Robert},
+	  title = "{mOWL: Python library for machine learning with biomedical ontologies}",
+	  journal = {Bioinformatics},
+	  year = {2022},
+	  month = {12},
+	  issn = {1367-4803},
+	  doi = {10.1093/bioinformatics/btac811},
+	  url = {https://doi.org/10.1093/bioinformatics/btac811},
+	  note = {btac811},
+	  eprint = {https://academic.oup.com/bioinformatics/advance-article-pdf/doi/10.1093/bioinformatics/btac811/48438324/btac811.pdf},
+	  }
+
+
+
+
 
 
 .. toctree::
