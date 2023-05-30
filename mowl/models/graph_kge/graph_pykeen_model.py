@@ -168,11 +168,8 @@ class GraphPlusPyKEENModel(KGEModel):
 
 
 
-    def from_pretrained(self, model, overwrite=False):
-        if self._kge_method is not None and not overwrite:
-            raise ValueError(msg.PYKEEN_FROM_PRETRAINED_MODEL_ALREADY_SET)
-
-        self._model_filepath = model
+    def from_pretrained(self, model):
+        #self._model_filepath = model
 
         if not isinstance(model, str):
             raise TypeError("Parameter model must be a string pointing to the PyKEEN model file.")

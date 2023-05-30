@@ -66,11 +66,7 @@ class TestRandomWalkModel(TestCase):
 
         model2 = RandomWalkPlusW2VModel(self.dataset)
         model2.set_w2v_model(min_count=1)
-        with self.assertRaisesRegex(ValueError, msg.W2V_FROM_PRETRAINED_MODEL_ALREADY_SET):
-            model2.from_pretrained("path")
-
-
-            
+                    
     def test_train_after_pretrained(self):
         first_model = RandomWalkPlusW2VModel(self.dataset, model_filepath="first_rw_w2v_model")
         first_model.set_projector(self.projector)
@@ -86,7 +82,7 @@ class TestRandomWalkModel(TestCase):
         second_model = RandomWalkPlusW2VModel(self.dataset)
         second_model.from_pretrained(first_w2v_model)
 
-        self.assertEqual(second_model.model_filepath, first_w2v_model)
+        self.assertNotEqual(second_model.model_filepath, first_w2v_model)
         second_model.set_projector(self.projector)
         second_model.set_walker(self.walker)
         second_model.train(epochs=2)

@@ -89,12 +89,7 @@ class SyntacticPlusW2VModel(SyntacticModel):
         self.update_w2v_model = True
         
 
-    def from_pretrained(self, model, overwrite=False):
-        if self.w2v_model is not None and not overwrite:
-            raise ValueError(msg.W2V_FROM_PRETRAINED_MODEL_ALREADY_SET)
-
-        self._model_filepath = model
-
+    def from_pretrained(self, model):
         if not isinstance(model, str):
             raise TypeError("Parameter model must be a string pointing to the Word2Vec model file.")
 
