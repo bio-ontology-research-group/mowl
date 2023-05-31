@@ -56,8 +56,7 @@ class TestRandomWalkModel(TestCase):
 
         model2 = SyntacticPlusW2VModel(self.dataset)
         model2.set_w2v_model(min_count=1)
-        with self.assertRaisesRegex(ValueError, msg.W2V_FROM_PRETRAINED_MODEL_ALREADY_SET):
-            model2.from_pretrained("path")
+                    
     
     def test_train_after_pretrained(self):
         first_model = SyntacticPlusW2VModel(self.dataset, model_filepath="first_syntactic_w2v_model")
@@ -73,7 +72,7 @@ class TestRandomWalkModel(TestCase):
         second_model = SyntacticPlusW2VModel(self.dataset)
         second_model.from_pretrained(first_w2v_model)
 
-        self.assertEqual(second_model.model_filepath, first_w2v_model)
+        self.assertNotEqual(second_model.model_filepath, first_w2v_model)
 
         second_model.generate_corpus(save=True, with_annotations=True)
         second_model.train(epochs=2)

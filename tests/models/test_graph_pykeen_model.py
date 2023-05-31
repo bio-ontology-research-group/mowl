@@ -35,3 +35,16 @@ class TestPyKEENModel(TestCase):
         self.assertIsInstance(model.kge_method, ERModel)
 
 
+    def test_get_embeddings(self):
+        model = GraphPlusPyKEENModel(self.dataset)
+        model.set_projector(TaxonomyProjector())
+
+        class_embs = model.class_embeddings
+        self.assertIsInstance(class_embs, dict)
+
+        role_embs = model.object_property_embeddings
+        self.assertIsInstance(role_embs, dict)
+
+        individual_embs = model.individual_embeddings
+        self.assertIsInstance(individual_embs, dict)
+        
