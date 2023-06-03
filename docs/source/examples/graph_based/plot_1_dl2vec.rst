@@ -79,7 +79,38 @@ is an edgelist.
 
 
 
+.. rst-class:: sphx-glr-script-out
 
+.. code-block:: pytb
+
+    Traceback (most recent call last):
+      File "/home/zhapacfp/Git/mowl/examples/graph_based/plot_1_dl2vec.py", line 45, in <module>
+        dataset = GDAMouseDataset()
+      File "/home/zhapacfp/Git/mowl/mowl/datasets/builtin/gda.py", line 83, in __init__
+        super().__init__(url=DATA_MOUSE_URL)
+      File "/home/zhapacfp/Git/mowl/mowl/datasets/builtin/gda.py", line 35, in __init__
+        super().__init__(url=url)
+      File "/home/zhapacfp/Git/mowl/mowl/datasets/base.py", line 363, in __init__
+        super().__init__(tarfile_path)
+      File "/home/zhapacfp/Git/mowl/mowl/datasets/base.py", line 314, in __init__
+        self._extract()
+      File "/home/zhapacfp/Git/mowl/mowl/datasets/base.py", line 344, in _extract
+        safe_extract(tarf, path=self.data_root)
+      File "/home/zhapacfp/Git/mowl/mowl/datasets/base.py", line 337, in safe_extract
+        for member in tar.getmembers():
+      File "/home/zhapacfp/miniconda3/envs/mowldev38/lib/python3.8/tarfile.py", line 1791, in getmembers
+        self._load()        # all members, we first have to
+      File "/home/zhapacfp/miniconda3/envs/mowldev38/lib/python3.8/tarfile.py", line 2379, in _load
+        tarinfo = self.next()
+      File "/home/zhapacfp/miniconda3/envs/mowldev38/lib/python3.8/tarfile.py", line 2310, in next
+        self.fileobj.seek(self.offset - 1)
+      File "/home/zhapacfp/miniconda3/envs/mowldev38/lib/python3.8/gzip.py", line 384, in seek
+        return self._buffer.seek(offset, whence)
+      File "/home/zhapacfp/miniconda3/envs/mowldev38/lib/python3.8/_compression.py", line 143, in seek
+        data = self.read(min(io.DEFAULT_BUFFER_SIZE, offset))
+      File "/home/zhapacfp/miniconda3/envs/mowldev38/lib/python3.8/gzip.py", line 498, in read
+        raise EOFError("Compressed file ended before the "
+    EOFError: Compressed file ended before the end-of-stream marker was reached
 
 
 
@@ -106,12 +137,6 @@ algorithm with a modification consisting of including the edge labels as part of
 
 
 
-
-
-
-
-
-
 .. GENERATED FROM PYTHON SOURCE LINES 66-70
 
 Training the Word2Vec model
@@ -127,12 +152,6 @@ To train the Word2Vec model, we rely on the Gensim library:
     walks_file = walker.outfile
     sentences = LineSentence(walks_file)
     model = Word2Vec(sentences, vector_size=100, epochs = 20, window=5, min_count=1, workers=4)
-
-
-
-
-
-
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 76-82
@@ -153,12 +172,6 @@ class. We need to do some data preparation.
     from mowl.evaluation.base import CosineSimilarity
     from mowl.projection import TaxonomyWithRelationsProjector
 
-
-
-
-
-
-
 .. GENERATED FROM PYTHON SOURCE LINES 87-89
 
 We are going to evaluate the plausability of an association gene-disease with a gene against all
@@ -177,12 +190,6 @@ possible diseases and check the rank of the true disease association.
     evaluation_edges = projector.project(dataset.testing)
     filtering_edges = projector.project(dataset.ontology)
     assert len(evaluation_edges) > 0
-
-
-
-
-
-
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 100-102
@@ -209,52 +216,27 @@ the ``CosineSimilarity`` class.
     evaluator.evaluate(show=True)
 
 
-
-
-.. rst-class:: sphx-glr-script-out
-
- Out:
-
- .. code-block:: none
-
-      0%|          | 0/371 [00:00<?, ?it/s]      1%|1         | 4/371 [00:00<00:09, 37.57it/s]      3%|3         | 12/371 [00:00<00:06, 59.07it/s]      6%|5         | 22/371 [00:00<00:04, 74.76it/s]      8%|8         | 30/371 [00:00<00:04, 69.34it/s]     10%|9         | 37/371 [00:00<00:05, 63.97it/s]     12%|#1        | 44/371 [00:00<00:05, 64.35it/s]     14%|#3        | 51/371 [00:00<00:05, 60.94it/s]     16%|#5        | 59/371 [00:00<00:04, 64.90it/s]     18%|#7        | 66/371 [00:01<00:04, 61.34it/s]     21%|##        | 77/371 [00:01<00:04, 72.57it/s]     23%|##2       | 85/371 [00:01<00:04, 69.29it/s]     25%|##5       | 94/371 [00:01<00:03, 73.48it/s]     27%|##7       | 102/371 [00:01<00:03, 69.63it/s]     31%|###       | 114/371 [00:01<00:03, 81.56it/s]     33%|###3      | 123/371 [00:01<00:03, 73.78it/s]     35%|###5      | 131/371 [00:01<00:03, 63.87it/s]     37%|###7      | 138/371 [00:02<00:06, 33.66it/s]     39%|###8      | 144/371 [00:02<00:06, 37.23it/s]     41%|####      | 151/371 [00:02<00:05, 42.19it/s]     43%|####3     | 160/371 [00:02<00:04, 50.93it/s]     46%|####5     | 170/371 [00:02<00:03, 60.47it/s]     48%|####7     | 178/371 [00:03<00:03, 61.12it/s]     50%|#####     | 186/371 [00:03<00:03, 61.20it/s]     52%|#####2    | 193/371 [00:03<00:02, 62.22it/s]     54%|#####4    | 201/371 [00:03<00:02, 65.38it/s]     56%|#####6    | 208/371 [00:03<00:02, 61.80it/s]     58%|#####8    | 217/371 [00:03<00:02, 67.84it/s]     61%|######    | 225/371 [00:03<00:02, 69.41it/s]     63%|######2   | 233/371 [00:03<00:01, 71.06it/s]     65%|######4   | 241/371 [00:03<00:02, 64.38it/s]     67%|######7   | 250/371 [00:04<00:01, 69.86it/s]     70%|######9   | 258/371 [00:04<00:01, 67.30it/s]     71%|#######1  | 265/371 [00:04<00:01, 66.97it/s]     74%|#######4  | 275/371 [00:04<00:01, 74.35it/s]     77%|#######6  | 285/371 [00:04<00:01, 55.75it/s]     80%|#######9  | 295/371 [00:04<00:01, 64.31it/s]     82%|########1 | 303/371 [00:04<00:01, 66.69it/s]     84%|########3 | 311/371 [00:05<00:00, 62.47it/s]     86%|########6 | 320/371 [00:05<00:00, 67.60it/s]     88%|########8 | 328/371 [00:05<00:00, 63.15it/s]     92%|#########2| 342/371 [00:05<00:00, 80.15it/s]     95%|#########5| 353/371 [00:05<00:00, 86.11it/s]     98%|#########7| 363/371 [00:05<00:00, 81.69it/s]    100%|##########| 371/371 [00:05<00:00, 64.49it/s]
-    Hits@1:   0.00 Filtered:   0.00
-    Hits@10:  0.00 Filtered:   0.00
-    Hits@100: 0.39 Filtered:   0.39
-    MR:       638.94 Filtered: 638.94
-    AUC:      0.93 Filtered:   0.93
-    Evaluation finished. Access the results using the "metrics" attribute.
-
-
-
-
-
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** ( 29 minutes  34.305 seconds)
+   **Total running time of the script:** ( 0 minutes  1.064 seconds)
 
-**Estimated memory usage:**  3617 MB
+**Estimated memory usage:**  1654 MB
 
 
 .. _sphx_glr_download_examples_graph_based_plot_1_dl2vec.py:
 
+.. only:: html
 
-.. only :: html
-
- .. container:: sphx-glr-footer
-    :class: sphx-glr-footer-example
+  .. container:: sphx-glr-footer sphx-glr-footer-example
 
 
+    .. container:: sphx-glr-download sphx-glr-download-python
 
-  .. container:: sphx-glr-download sphx-glr-download-python
+      :download:`Download Python source code: plot_1_dl2vec.py <plot_1_dl2vec.py>`
 
-     :download:`Download Python source code: plot_1_dl2vec.py <plot_1_dl2vec.py>`
+    .. container:: sphx-glr-download sphx-glr-download-jupyter
 
-
-
-  .. container:: sphx-glr-download sphx-glr-download-jupyter
-
-     :download:`Download Jupyter notebook: plot_1_dl2vec.ipynb <plot_1_dl2vec.ipynb>`
+      :download:`Download Jupyter notebook: plot_1_dl2vec.ipynb <plot_1_dl2vec.ipynb>`
 
 
 .. only:: html

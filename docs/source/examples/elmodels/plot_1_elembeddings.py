@@ -16,10 +16,9 @@ function defined that will work as loss functions in the optimization framework.
 
 import mowl
 mowl.init_jvm("10g")
-import numpy as np
 import torch as th
-from torch import nn
-from tqdm import trange
+
+
 
 # %%
 # The EL-Embeddings model, maps ontology classes, object properties and operators into a
@@ -98,7 +97,7 @@ with th.no_grad():
     evaluator = ModelRankBasedEvaluator(                                                  
         model,                                                                            
         device = "cpu",
-        eval_method = model.model.gci2_loss                                               
+        eval_method = model.eval_method
     )                                                                                         
                                                                                                   
     evaluator.evaluate(show=True)

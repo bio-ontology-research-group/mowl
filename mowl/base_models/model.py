@@ -37,7 +37,14 @@ class Model():
         raise NotImplementedError("Method eval_fn is not implemented.")
 
     @versionadded(version="0.2.0", reason="Axiom scoring method added to the base class.")
-    def score(self, *args, **kwargs):
+    def score(self, axiom):
+        """
+        Returns the score of the given axiom.
+
+        :param axiom: The axiom to score.
+        :type axiom: :class:`org.semanticweb.owlapi.model.OWLAxiom`
+        """
+        
         raise NotImplementedError("Method score is not implemented.")
 
     
@@ -82,24 +89,51 @@ class Model():
     @versionadded(version="0.2.0")
     @property
     def class_embeddings(self):
+        """
+        Returns a dictionary with class names as keys and class embeddings as values.
+        
+        :rtype: dict
+        """
         raise NotImplementedError()
 
     @versionadded(version="0.2.0")
     @property
     def object_property_embeddings(self):
+        """
+        Returns a dictionary with object property names as keys and object property embeddings as values.
+
+        :rtype: dict
+        """
         raise NotImplementedError()
 
     @versionadded(version="0.2.0")
     @property
     def individual_embeddings(self):
+        """
+        Returns a dictionary with individual names as keys and individual embeddings as values.
+
+        :rtype: dict
+        """
         raise NotImplementedError()
 
     @versionadded(version="0.2.0")
     def add_axioms(self, *axioms):
+        """
+        This method adds axioms to the dataset contained in the model and reorders the embedding information for each entity accordingly. New entites are initalized with random embedding.
+        
+        :param axioms: Axioms to be added to the dataset.
+        :type axioms: org.semanticweb.owlapi.model.OWLAxiom
+        """
         raise NotImplementedError()
 
     @versionadded(version="0.2.0")
     def from_pretrained(self, file_name):
+        """
+        This method loads a pretrained model from a file.
+
+        :param file_name: Path to the pretrained model file.
+        :type file_name: str
+        """
         raise NotImplementedError()
     
 class EmbeddingModel(Model):

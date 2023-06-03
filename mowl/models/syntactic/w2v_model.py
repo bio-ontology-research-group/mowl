@@ -53,9 +53,23 @@ class SyntacticPlusW2VModel(SyntacticModel):
         return ind_embeds
         
     def set_w2v_model(self, *args, **kwargs):
+        """
+        This method sets the :class:`gensim.models.word2vec.Word2Vec` model to be used in the syntactic model.
+
+        :param args: Arguments to be passed to the :class:`Word2Vec <gensim.models.word2vec.Word2Vec>` constructor.
+        :param kwargs: Keyword arguments to be passed to the :class:`Word2Vec <gensim.models.word2vec.Word2Vec>` constructor.
+        
+        """
         self.w2v_model = Word2Vec(*args, **kwargs)
 
     def train(self, epochs=None):
+        """
+        Triggers the Word2Vec training process.
+
+        :param epochs: Number of epochs to train the model. If None, the value of the epochs parameter passed to the constructor will be used.
+        :type epochs: int
+        """
+
         if self.w2v_model is None:
             raise AttributeError(msg.W2V_MODEL_NOT_SET)
         if not os.path.exists(self.corpus_filepath):

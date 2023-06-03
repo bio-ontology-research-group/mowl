@@ -1,17 +1,20 @@
 mowl.base_models
 =====================
 
-Base model
--------------------------
+* :doc:`base`
+* :doc:`base_graph`
+* :doc:`base_syntactic`
+* :doc:`base_el`
+  
 
-.. automodule:: mowl.base_models.model
-   :members:
-   :show-inheritance:
+.. toctree::
+   :maxdepth: 0
+   :hidden:
+   :glob:
 
-Base :math:`\mathcal{EL}` model
------------------------------------
-.. automodule:: mowl.base_models.elmodel
-   :members:
-   :show-inheritance:
-
+   base
+   base_graph
+   base_syntactic
+   base_el
+   
 

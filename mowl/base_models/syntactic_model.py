@@ -4,7 +4,14 @@ from mowl.corpus import extract_annotation_corpus, extract_and_save_annotation_c
 import tempfile
 
 class SyntacticModel(Model):
+    """
+    Base class for syntactic methods. By *syntactic*, we mean methods that use the syntax of the ontology to generate the corpus.
 
+    :param corpus_filepath: the filepath where the corpus is saved. If None, the corpus file is saved in a temporary file.
+    :type corpus_filepath: str
+    """
+
+    
     def __init__(self, *args, corpus_filepath=None, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -18,7 +25,7 @@ class SyntacticModel(Model):
 
     @property
     def corpus_filepath(self):
-        """Path for saving the model.
+        """Path for saving the corpus.
 
         :rtype: str
         """
@@ -30,6 +37,11 @@ class SyntacticModel(Model):
         
     @property
     def corpus(self):
+        """
+        Corpus generated from the ontology.
+
+        :rtype: list
+        """
         if self._corpus is None:
             raise AttributeError(msg.CORPUS_NOT_GENERATED)
     

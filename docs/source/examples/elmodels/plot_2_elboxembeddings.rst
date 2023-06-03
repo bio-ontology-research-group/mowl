@@ -36,7 +36,7 @@ This example is quite similar to the one found in :doc:`/examples/elmodels/plot_
 There might be slight changes in the training part but the most important changes are in the
 definition of loss functions definition of the loss functions for each normal form.
 
-.. GENERATED FROM PYTHON SOURCE LINES 27-50
+.. GENERATED FROM PYTHON SOURCE LINES 27-34
 
 .. code-block:: default
 
@@ -44,27 +44,17 @@ definition of loss functions definition of the loss functions for each normal fo
 
     import mowl
     mowl.init_jvm("10g")
-
-    from mowl.base_models.elmodel import EmbeddingELModel
-    import mowl.models.elboxembeddings.losses as L
-    from mowl.nn.elmodule import ELModule
-    import math
-    import logging
-    import numpy as np
-
-    from mowl.models.elboxembeddings.evaluate import ELBoxEmbeddingsPPIEvaluator
-    from mowl.projection import TaxonomyWithRelationsProjector
-    
-    from tqdm import trange, tqdm
-
     import torch as th
-    from torch import nn
 
 
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 51-56
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 35-40
 
 ELBoxEmbeddings (PyTorch) module
 ---------------------------------
@@ -72,7 +62,7 @@ ELBoxEmbeddings (PyTorch) module
 ELBoxEmbeddings defines a geometric modelling for all the GCIs in the EL language.
 The implementation of ELEmbeddings module can be found at :class:`mowl.nn.el.elem.module.ELBoxModule`
 
-.. GENERATED FROM PYTHON SOURCE LINES 59-71
+.. GENERATED FROM PYTHON SOURCE LINES 43-55
 
 ELBoxEmbeddings model
 ----------------------
@@ -87,18 +77,19 @@ protein-protein interactions. Given two proteins :math:`p_1,p_2`, the phenomenon
 
 For that, we can use the class :class:`mowl.models.elembeddings.examples.model_ppi.ELBoxPPI` mode, which uses the :class:`mowl.datasets.builtin.PPIYeastSlimDataset` dataset.
 
-.. GENERATED FROM PYTHON SOURCE LINES 76-78
+.. GENERATED FROM PYTHON SOURCE LINES 60-62
 
 Training the model
 -------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 78-98
+.. GENERATED FROM PYTHON SOURCE LINES 62-83
 
 .. code-block:: default
 
 
 
     from mowl.datasets.builtin import PPIYeastSlimDataset
+    from mowl.models.elboxembeddings.examples.model_ppi import ELBoxPPI
 
     dataset = PPIYeastSlimDataset()
 
@@ -117,7 +108,20 @@ Training the model
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 99-104
+
+.. rst-class:: sphx-glr-script-out
+
+.. code-block:: pytb
+
+    Traceback (most recent call last):
+      File "/home/zhapacfp/Git/mowl/examples/elmodels/plot_2_elboxembeddings.py", line 69, in <module>
+        model = ELBoxEmbeddings(dataset,
+    NameError: name 'ELBoxEmbeddings' is not defined
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 84-89
 
 Evaluating the model
 ----------------------
@@ -125,7 +129,7 @@ Evaluating the model
 Now, it is time to evaluate embeddings. For this, we use the
 :class:`ModelRankBasedEvaluator <mowl.evaluation.ModelRankBasedEvaluator>` class.
 
-.. GENERATED FROM PYTHON SOURCE LINES 104-117
+.. GENERATED FROM PYTHON SOURCE LINES 89-102
 
 .. code-block:: default
 
@@ -138,7 +142,7 @@ Now, it is time to evaluate embeddings. For this, we use the
         evaluator = ModelRankBasedEvaluator(                                                  
             model,                                                                            
             device = "cpu",
-            eval_method = model.model.gci2_loss                                               
+            eval_method = model.eval_method,
         )                                                                                         
                                                                                                   
         evaluator.evaluate(show=True)
@@ -146,9 +150,9 @@ Now, it is time to evaluate embeddings. For this, we use the
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** ( 0 minutes  0.000 seconds)
+   **Total running time of the script:** ( 0 minutes  5.068 seconds)
 
-**Estimated memory usage:**  0 MB
+**Estimated memory usage:**  1207 MB
 
 
 .. _sphx_glr_download_examples_elmodels_plot_2_elboxembeddings.py:

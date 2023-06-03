@@ -28,23 +28,7 @@ property.
 
 import mowl
 mowl.init_jvm("10g")
-
-from mowl.base_models.elmodel import EmbeddingELModel
-import mowl.models.elboxembeddings.losses as L
-from mowl.nn.elmodule import ELModule
-import math
-import logging
-import numpy as np
-
-from mowl.models.elboxembeddings.evaluate import ELBoxEmbeddingsPPIEvaluator
-from mowl.projection import TaxonomyWithRelationsProjector
-    
-from tqdm import trange, tqdm
-
 import torch as th
-from torch import nn
-
-
 
 
 # %%
@@ -78,6 +62,7 @@ from torch import nn
 
 
 from mowl.datasets.builtin import PPIYeastSlimDataset
+from mowl.models.elboxembeddings.examples.model_ppi import ELBoxPPI
 
 dataset = PPIYeastSlimDataset()
 
@@ -110,7 +95,7 @@ with th.no_grad():
     evaluator = ModelRankBasedEvaluator(                                                  
         model,                                                                            
         device = "cpu",
-        eval_method = model.model.gci2_loss                                               
+        eval_method = model.eval_method,
     )                                                                                         
                                                                                                   
     evaluator.evaluate(show=True)

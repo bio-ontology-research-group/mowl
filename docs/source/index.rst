@@ -103,9 +103,10 @@ If you used mOWL in your work, please consider citing `this article <https://doi
 
    install/index
    datasets/index
-   corpus/index
    ontology/index
    owlapi/index
+   model
+   corpus/index
    graphs/index
    embedding_el/index
    evaluation/index

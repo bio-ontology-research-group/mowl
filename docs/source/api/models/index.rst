@@ -1,7 +1,8 @@
 mowl.models
 ============
 
-
+* :doc:`graphs`
+* :doc:`syntactic`
 * :doc:`elembeddings`
 * :doc:`elboxembeddings`
   
@@ -11,6 +12,8 @@ mowl.models
    :hidden:
    :glob:
 
+   graphs
+   syntactic
    elembeddings
    elboxembeddings
 

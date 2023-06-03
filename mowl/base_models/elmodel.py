@@ -180,6 +180,13 @@ of :class:`torch.utils.data.DataLoader`
 
     @versionadded(version="0.2.0")
     def score(self, axiom):
+        """
+        Returns the score of the given axiom.
+
+        :param axiom: The axiom to score.
+        :type axiom: :class:`org.semanticweb.owlapi.model.OWLAxiom`
+        """
+
         def data_point_to_tensor(data_point):
             data_point = th.tensor(data_point, dtype=th.long, device=self.device)
             data_point = data_point.unsqueeze(0)

@@ -12,7 +12,10 @@ from pykeen.training import SLCWATrainingLoop
 
 
 class GraphPlusPyKEENModel(KGEModel):
-
+    """
+    This is a wrapper class of :class:`pykeen.models.ERModel` that allows to use the PyKEEN models in the mOWL framework.
+    """
+    
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -26,6 +29,12 @@ class GraphPlusPyKEENModel(KGEModel):
 
     @property
     def triples_factory(self):
+        """
+        The triples factory of the model.
+
+        :rtype: :class:`pykeen.triples.TriplesFactory`
+        """
+        
         if self._triples_factory is not None:
             return self._triples_factory
 
@@ -82,6 +91,12 @@ class GraphPlusPyKEENModel(KGEModel):
         return ind_embeddings
                      
     def set_kge_method(self, kge_method, *args, **kwargs):
+        """
+        Set the KGE method of the model.
+
+        :param kge_method: The KGE method.
+        :type kge_method: :class:`pykeen.models.ERModel`
+        """
         try:
             self._kge_method_uninitialized = kge_method
             initialized_kge_method = kge_method(triples_factory=self.triples_factory, *args, **kwargs)
@@ -101,6 +116,13 @@ class GraphPlusPyKEENModel(KGEModel):
 
 
     def train(self, epochs=0):
+        """
+        Triggers the PyKEEN training process.
+
+        :param epochs: Number of epochs to train the model. If None, the value of the epochs parameter passed to the constructor will be used.
+        :type epochs: int
+        """
+
         if self.optimizer is None:
             raise ValueError(msg.PYKEEN_OPTIMIZER_NOT_SET)
         if self.lr is None:

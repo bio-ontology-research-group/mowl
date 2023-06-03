@@ -224,6 +224,21 @@ At this point, it would be possible to just use the |eldataset| and the |elmodul
 		# .
 		continue
 
-In the previous script, there are some lines of code dedicated to preprocessing the data. That functionality is what is encoded in the :class:`ELEmbeddingModel <mowl.base_models.elmodel.ELEmbeddingModel>` such that if we use it, we can bypass all the data preprocessing and start directly in the training, validation and testing loops.
+In the previous script, there are some lines of code dedicated to preprocessing the data. That functionality is what is encoded in the :class:`ELEmbeddingModel <mowl.base_models.elmodel.EmbeddingELModel>` such that if we use it, we can bypass all the data preprocessing and start directly in the training, validation and testing loops.
 
 To see actual examples of EL models, let's go to |tutorial_elembeddings| and |tutorial_elboxembeddings|.
+
+
+Just use a mOWL model
+------------------------
+
+We have seen that constructing a |el| model has many steps. However, the main difference between them, is the definition of loss functions and the training loop. Therefore, using the :class:`ELEmbeddingModel <mowl.base_models.elmodel.EmbeddingELModel>` can be useful by just defining the training loop. Here is an example of using ELEmbeddings for protein-protein interaction prediction:
+
+.. testcode::
+
+   from mowl.datasets.builtin import PPIYeastSlimDataset
+   from mowl.models.elembeddings.examples.model_ppi import ELEmPPI
+
+   model = ELEmPPI(PPIYeastSlimDataset(), epochs=2)
+   model.train()
+   

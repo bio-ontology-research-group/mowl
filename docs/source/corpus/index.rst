@@ -52,3 +52,29 @@ And to save into a file:
                                  "/tmp/file_to_save_corpus",
 				 mode="w")
 
+
+
+
+Embedding ontologies
+----------------------
+
+.. note::
+   This feature has been added since version 0.2.0
+
+To train a Word2Vec model with a generated corpus, we can use the class: :class:`SyntacticPlusW2VModel <mowl.models.syntactic.w2v_model.SyntacticPlusW2VModel>`:
+
+.. testcode::
+
+   from mowl.models import SyntacticPlusW2VModel
+   model = SyntacticPlusW2VModel(dataset, corpus_filepath="test")
+   model.set_w2v_model(min_count=1)
+   model.generate_corpus(save=True, with_annotations=True)
+   model.train()
+
+.. testoutput::
+
+   Corpus saved in test
+ 
+.. attention::
+   The ``set_w2v_model`` receives the same arguments as the :class:`gensim.models.word2vec.Word2Vec` model.
+

@@ -61,7 +61,8 @@ class ELEmbeddings(EmbeddingELModel):
             return
 
         eval_property = self.dataset.get_evaluation_property()
-        eval_classes = self.dataset.evaluation_classes
+        eval_classes = self.dataset.evaluation_classes.as_str
+        print(eval_classes)
 
         self._head_entities = set(list(eval_classes)[:])
         self._tail_entities = set(list(eval_classes)[:])
@@ -77,8 +78,8 @@ class ELEmbeddings(EmbeddingELModel):
     def get_embeddings(self):
         self.init_module()
 
-        print('Load the best model', self.module_filepath)
-        self.module.load_state_dict(th.load(self.module_filepath))
+        print('Load the best model', self.model_filepath)
+        self.module.load_state_dict(th.load(self.model_filepath))
         self.module.eval()
 
         ent_embeds = {
@@ -91,7 +92,7 @@ class ELEmbeddings(EmbeddingELModel):
 
     def load_best_model(self):
         self.init_module()
-        self.module.load_state_dict(th.load(self.module_filepath))
+        self.module.load_state_dict(th.load(self.model_filepath))
         self.module.eval()
 
     @property

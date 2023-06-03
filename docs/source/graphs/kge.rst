@@ -46,3 +46,33 @@ At this point, it is possible to continue in either in PyKEEN or mOWL environmen
 
 .. attention::
    PyKEEN might generate more than one embedding vector per entity. However, in mOWL wrapping class only the primary embedding vector is returned.
+
+
+
+  
+Generating embeddings using a mOWL model
+-------------------------------------------------
+
+Although the embedding generations can be done step by step, we also provide a class that performs all the steps internally:
+
+.. testcode::
+
+   from mowl.datasets.builtin import FamilyDataset
+   from mowl.models import GraphPlusPyKEENModel
+   from mowl.projection import DL2VecProjector
+   from pykeen.models import TransE
+   import torch as th
+   
+   model = GraphPlusPyKEENModel(FamilyDataset())
+   model.set_projector(DL2VecProjector())
+   model.set_kge_method(TransE, random_seed=42)
+   model.optimizer = th.optim.Adam
+   model.lr = 0.001
+   model.batch_size = 32
+   model.train(epochs = 2)
+
+   # Get embeddings
+
+   class_embs = model.class_embeddings
+   role_embs = model.object_property_embeddings
+   ind_embs = model.individual_embeddings

@@ -61,6 +61,19 @@ First, we have the necesary imports for this example.
 
 
 
+
+.. rst-class:: sphx-glr-script-out
+
+.. code-block:: pytb
+
+    Traceback (most recent call last):
+      File "/home/zhapacfp/Git/mowl/examples/zsl/plot_1_deepgozero.py", line 32, in <module>
+        from mowl.models.elembeddings.module import ELEmModule
+    ModuleNotFoundError: No module named 'mowl.models.elembeddings.module'
+
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 42-47
 
 Dataset
@@ -612,9 +625,9 @@ Training the model
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** ( 0 minutes  0.000 seconds)
+   **Total running time of the script:** ( 0 minutes  0.056 seconds)
 
-**Estimated memory usage:**  0 MB
+**Estimated memory usage:**  2172 MB
 
 
 .. _sphx_glr_download_examples_zsl_plot_1_deepgozero.py:

@@ -188,3 +188,29 @@ Once the walks are generated, they can be used to generate embeddings using, for
    w2v_model = Word2Vec(sentences)
    w2v_model.save("/tmp/my_word2vec_outfile")
         
+
+
+Generating embeddings using a mOWL model
+-------------------------------------------------
+
+Although the embedding generations can be done step by step, we also provide a class that performs all the steps internally:
+
+.. testcode::
+
+   from mowl.datasets.builtin import FamilyDataset
+   from mowl.models import RandomWalkPlusW2VModel
+   from mowl.projection import DL2VecProjector
+   from mowl.walking import DeepWalk
+
+   # Setup and train
+   model = RandomWalkPlusW2VModel(FamilyDataset())
+   model.set_projector(DL2VecProjector())
+   model.set_walker(DeepWalk(1,1))
+   model.set_w2v_model(min_count=1)
+   model.train()
+
+   # Get embeddings
+
+   class_embs = model.class_embeddings
+   role_embs = model.object_property_embeddings
+   ind_embs = model.individual_embeddings
