@@ -79,9 +79,8 @@ class ELEmbeddings(EmbeddingELModel):
         self.init_module()
 
         print('Load the best model', self.model_filepath)
-        self.module.load_state_dict(th.load(self.model_filepath))
-        self.module.eval()
-
+        self.load_best_model()
+                
         ent_embeds = {
             k: v for k, v in zip(self.class_index_dict.keys(),
                                  self.module.class_embed.weight.cpu().detach().numpy())}

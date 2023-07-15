@@ -70,7 +70,7 @@ from mowl.models.elembeddings.examples.model_ppi import ELEmPPI
 dataset = PPIYeastSlimDataset()
 
 model = ELEmPPI(dataset,
-                embed_dim=10,
+                embed_dim=30,
                 margin=0.1,
                 reg_norm=1,
                 learning_rate=0.001,

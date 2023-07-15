@@ -66,15 +66,15 @@ from mowl.models.elboxembeddings.examples.model_ppi import ELBoxPPI
 
 dataset = PPIYeastSlimDataset()
 
-model = ELBoxEmbeddings(dataset,
-                     embed_dim=50,
-                     margin=-0.05,
-                     reg_norm=1,
-                     learning_rate=0.001,
-                     epochs=10000,
-                     batch_size=4096,
-                     model_filepath=None,
-                     device='cpu')
+model = ELBoxPPI(dataset,
+                 embed_dim=30,
+                 margin=-0.05,
+                 reg_norm=1,
+                 learning_rate=0.001,
+                 epochs=200,
+                 batch_size=4096,
+                 model_filepath=None,
+                 device='cpu')
 
 model.train()
 

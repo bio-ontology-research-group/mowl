@@ -218,9 +218,9 @@ the ``CosineSimilarity`` class.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** ( 0 minutes  1.064 seconds)
+   **Total running time of the script:** ( 0 minutes  1.225 seconds)
 
-**Estimated memory usage:**  1654 MB
+**Estimated memory usage:**  4555 MB
 
 
 .. _sphx_glr_download_examples_graph_based_plot_1_dl2vec.py:

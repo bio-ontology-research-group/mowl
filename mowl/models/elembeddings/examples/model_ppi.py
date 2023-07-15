@@ -67,10 +67,8 @@ class ELEmPPI(ELEmbeddings):
     def evaluate_ppi(self):
         self.init_module()
         print('Load the best model', self.model_filepath)
-        self.module.load_state_dict(th.load(self.model_filepath))
+        self.load_best_model()
         with th.no_grad():
-            self.module.eval()
-
             eval_method = self.module.gci2_loss
 
             evaluator = ELEmbeddingsPPIEvaluator(

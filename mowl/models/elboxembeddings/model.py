@@ -66,7 +66,7 @@ class ELBoxEmbeddings(EmbeddingELModel):
             return
 
         eval_property = self.dataset.get_evaluation_property()
-        eval_classes = self.dataset.evaluation_classes
+        eval_classes = self.dataset.evaluation_classes.as_str
 
         self._head_entities = set(list(eval_classes)[:])
         self._tail_entities = set(list(eval_classes)[:])
@@ -83,16 +83,15 @@ class ELBoxEmbeddings(EmbeddingELModel):
         self.init_module()
 
         print('Load the best model', self.model_filepath)
-        self.module.load_state_dict(th.load(self.model_filepath))
-        self.module.eval()
-
+        self.load_best_model()
+                
         ent_embeds = {k: v for k, v in zip(self.class_index_dict.keys(),
                                            self.module.class_embed.weight.cpu().detach().numpy())}
         rel_embeds = {k: v for k, v in zip(self.object_property_index_dict.keys(),
                                            self.module.rel_embed.weight.cpu().detach().numpy())}
         return ent_embeds, rel_embeds
 
-    def load_best_module(self):
+    def load_best_model(self):
         self.init_module()
         self.module.load_state_dict(th.load(self.model_filepath))
         self.module.eval()
