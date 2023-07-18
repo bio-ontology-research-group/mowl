@@ -21,7 +21,7 @@ def box_intersection(box_a, box_b):
 def inclusion_loss(box_a, box_b, gamma):
     dist_a_b = box_distance(box_a, box_b)
     _, offset_a = box_a
-    loss = th.linalg.norm(th.relu(dist_a_b + offset_a - gamma), dim=1)
+    loss = th.linalg.norm(th.relu(dist_a_b + 2*offset_a - gamma), dim=1)
     return loss
 
 def gci0_loss(data, class_center, class_offset, gamma, neg=False):
@@ -157,7 +157,7 @@ def gci3_loss(data, class_center, class_offset, head_center, head_offset, tail_c
 
     bump_c = bump(data[:, 1])
 
-    bumped_head = (center_head + bump_c, offset_head)
+    bumped_head = (center_head - bump_c, offset_head)
     box_d = (center_d, offset_d)
     loss = inclusion_loss(bumped_head, box_d, gamma)
     reg_loss = reg_factor * th.linalg.norm(bump.weight, dim=1).sum()
