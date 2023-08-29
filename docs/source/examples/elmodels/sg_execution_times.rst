@@ -5,10 +5,10 @@
 
 Computation times
 =================
-**22:10.882** total execution time for **examples_elmodels** files:
+**03:38.765** total execution time for **examples_elmodels** files:
 
 +---------------------------------------------------------------------------------------------+-----------+-----------+
-| :ref:`sphx_glr_examples_elmodels_plot_2_elboxembeddings.py` (``plot_2_elboxembeddings.py``) | 18:40.686 | 1269.2 MB |
+| :ref:`sphx_glr_examples_elmodels_plot_2_elboxembeddings.py` (``plot_2_elboxembeddings.py``) | 03:38.765 | 2996.4 MB |
 +---------------------------------------------------------------------------------------------+-----------+-----------+
-| :ref:`sphx_glr_examples_elmodels_plot_1_elembeddings.py` (``plot_1_elembeddings.py``)       | 03:30.197 | 3654.9 MB |
+| :ref:`sphx_glr_examples_elmodels_plot_1_elembeddings.py` (``plot_1_elembeddings.py``)       | 00:00.000 | 0.0 MB    |
 +---------------------------------------------------------------------------------------------+-----------+-----------+

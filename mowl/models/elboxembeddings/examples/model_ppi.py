@@ -68,13 +68,11 @@ class ELBoxPPI(ELBoxEmbeddings):
                 loss = criterion(dst, th.zeros(dst.shape, requires_grad=False).to(self.device))
                 valid_loss += loss.detach().item()
 
-            checkpoint = 100
-            if best_loss > valid_loss and (epoch + 1) % checkpoint == 0:
+            if best_loss > valid_loss:
                 best_loss = valid_loss
                 print("Saving model..")
                 th.save(self.module.state_dict(), self.model_filepath)
-            if (epoch + 1) % checkpoint == 0:
-                print(f'Epoch {epoch}: Train loss: {train_loss} Valid loss: {valid_loss}')
+            print(f'Epoch {epoch}: Train loss: {train_loss} Valid loss: {valid_loss}')
 
         return 1
 
