@@ -57,7 +57,7 @@ class TestModel(TestCase):
         self.assertIsInstance(list(obj_prop_id_dict.keys())[rnd_idx], str)
 
     def test_get_model_filepath_attribute(self):
-        """This checks if Model.get_model_filepath attribute works correctly"""
+        """This checks if Model.model_filepath attribute works correctly"""
 
         model = Model(self.dataset, model_filepath="test")
         model_filepath = model.model_filepath

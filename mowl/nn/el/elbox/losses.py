@@ -14,6 +14,10 @@ def gci0_loss(data, class_embed, class_offset, margin, neg=False):
 
     return dst
 
+def gci0_bot_loss(data, class_offset, neg=False):
+    off_c = th.abs(class_offset(data[:, 0]))
+    loss = th.linalg.norm(off_c, axis=1)
+    return loss
 
 def gci1_loss(data, class_embed, class_offset, margin, neg=False):
     c = class_embed(data[:, 0])
@@ -88,3 +92,10 @@ def gci3_loss(data, class_embed, class_offset, rel_embed, margin, neg=False):
     euc = th.abs(c - r - d)
     dst = th.reshape(th.linalg.norm(th.relu(euc - off_c - off_d + margin), axis=1), [-1, 1])
     return dst
+
+
+
+def gci3_bot_loss(data, class_offset, neg=False):
+    off_c = th.abs(class_offset(data[:, 1]))
+    loss = th.linalg.norm(off_c, axis=1)
+    return loss

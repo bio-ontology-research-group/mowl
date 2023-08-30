@@ -1,2 +1,4 @@
 from .model import Model, EmbeddingModel
 from .elmodel import EmbeddingELModel
+from .graph_model import GraphModel, RandomWalkModel, KGEModel
+from .syntactic_model import SyntacticModel

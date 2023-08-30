@@ -46,7 +46,7 @@ or
 		10, #num_walks,
 		8, #walk_length,
 		0.1, #alpha
-		outfile = "/tmp/walks.txt", # /optional/path/to/save/walks,
+		outfile = "/tmp/walks2.txt", # /optional/path/to/save/walks,
 		workers = 4)
 
 .. tip::
@@ -119,7 +119,7 @@ Let's see the difference of filtered and non-filtered random walks:
 
    from mowl.walking import DeepWalk
 
-   walker = DeepWalk(6,3,alpha=0,outfile="no_filtered_walks")
+   walker = DeepWalk(6,3,alpha=0,outfile="no_filtered_walks", workers=4)
    walker.walk(edges)
 
 .. code:: python
@@ -145,8 +145,8 @@ The output will include the following walks:
 
    from mowl.walking import DeepWalk
 
-   walker = DeepWalk(3,3,alpha=0,outfile="filtered_walks")
-   walker.walk(edges, nodes_of_interest = ["node_1", "node_2"])
+   walker2 = DeepWalk(3,3,alpha=0,outfile="filtered_walks", workers=4)
+   walker2.walk(edges, nodes_of_interest = ["node_1", "node_2"])
 
 .. code:: python
 	  
@@ -188,3 +188,29 @@ Once the walks are generated, they can be used to generate embeddings using, for
    w2v_model = Word2Vec(sentences)
    w2v_model.save("/tmp/my_word2vec_outfile")
         
+
+
+Generating embeddings using a mOWL model
+-------------------------------------------------
+
+Although the embedding generations can be done step by step, we also provide a class that performs all the steps internally:
+
+.. testcode::
+
+   from mowl.datasets.builtin import FamilyDataset
+   from mowl.models import RandomWalkPlusW2VModel
+   from mowl.projection import DL2VecProjector
+   from mowl.walking import DeepWalk
+
+   # Setup and train
+   model = RandomWalkPlusW2VModel(FamilyDataset())
+   model.set_projector(DL2VecProjector())
+   model.set_walker(DeepWalk(1,1))
+   model.set_w2v_model(min_count=1)
+   model.train()
+
+   # Get embeddings
+
+   class_embs = model.class_embeddings
+   role_embs = model.object_property_embeddings
+   ind_embs = model.individual_embeddings

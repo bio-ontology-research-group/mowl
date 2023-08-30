@@ -3,7 +3,7 @@ from unicodedata import bidirectional
 from unittest import TestCase
 from mowl.owlapi.defaults import TOP
 from mowl.owlapi import OWLAPIAdapter
-from mowl.datasets.builtin import FamilyDataset
+from tests.datasetFactory import FamilyDataset
 from org.semanticweb.owlapi.model import IRI
 
 import jpype.imports

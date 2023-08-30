@@ -6,6 +6,29 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+### Changed 
+### Deprecated
+### Removed
+### Fixed
+### Security
+
+
+## [0.2.0]
+
+### Added
+- [BoxSquaredEL](https://arxiv.org/abs/2301.11118) module added to `mowl.nn`
+- Implemented `model.from_pretrained` method. Related to issue [#43][i43]
+- Implemented `model.add_axioms` method. Related to issue [#43][i43]
+- Added models `RandomWalkPlusW2VModel`, `GraphPlusPyKEENModel`, `SyntacticPlusW2VModel`, 
+- Updated dependencies: JPype-1.3.0 --> JPype-1.4.1, pykeen-1.9.0 --> pykeen-1.10.1
+- Support for Python 3.8, 3.9, 3.10, 3.11. ([#42][i42])
+- 
+### Changed
+- Bug fixed in corpus generation methods. Issue [#36][i36].
+- Updated dependencies to work with Python 3.8 and 3.9. Issue [#42][i42]
+
+## [0.1.1]
 
 ### Added
 - `Family` dataset: a small ontology containing 12 axioms.
@@ -15,12 +38,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `DeepGOZero` implementation in mOWL
 - Module `mowl.owlapi` with shortcuts to the OWLAPI
 - Extended `Dataset` class.
-### Changed
-### Deprecated
-### Removed
-### Fixed
 ### Security
-- Added Patch for bug CVE-2007-4559. Based on pull request #32
+- Added Patch for bug CVE-2007-4559. Based on pull request [#32][i32]
 
 ## [0.1.0]
 
@@ -56,6 +75,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Walking methods accept optional `outfile` parameter and corpus extraction methods do not append by default.
 - Documentation updated and fixed some typos.
 
-[unreleased]: https://github.com/bio-ontology-research-group/mowl/compare/v0.1.0...HEAD
+[unreleased]: https://github.com/bio-ontology-research-group/mowl/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/bio-ontology-research-group/mowl/releases/tag/v0.2.0
+[0.1.1]: https://github.com/bio-ontology-research-group/mowl/releases/tag/v0.1.1
 [0.1.0]: https://github.com/bio-ontology-research-group/mowl/releases/tag/v0.1.0
 [0.0.30]: https://github.com/bio-ontology-research-group/mowl/releases/tag/v0.0.30
+
+
+[i32]: https://github.com/bio-ontology-research-group/mowl/issues/32
+[i36]: https://github.com/bio-ontology-research-group/mowl/issues/36
+[i42]: https://github.com/bio-ontology-research-group/mowl/issues/42
+[i43]: https://github.com/bio-ontology-research-group/mowl/issues/43

@@ -6,7 +6,7 @@ from mowl.projection.factory import projector_factory
 from scipy.stats import rankdata
 import torch as th
 
-
+import sys
 class RankBasedEvaluator(Evaluator):
 
     """
@@ -155,7 +155,6 @@ This is used to compute filtered metrics.
         for c, r, d in tqdm(self.testing_set):
 
             if not (c in self.head_entities) or not (d in self.tail_entities):
-
                 n -= 1
                 if d not in self.tail_entities:
                     worst_rank -= 1

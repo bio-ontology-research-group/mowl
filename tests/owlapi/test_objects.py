@@ -3,7 +3,6 @@ from mowl.owlapi.defaults import BOT, TOP
 from mowl.owlapi import OWLOntology, OWLClass
 from unittest import TestCase
 
-
 class TestObjects(TestCase):
 
     @classmethod
@@ -20,3 +19,5 @@ class TestObjects(TestCase):
         """This checks if defaults TOP and BOT are correct"""
         self.assertEqual(BOT, self.bot_str)
         self.assertEqual(TOP, self.top_str)
+
+        
