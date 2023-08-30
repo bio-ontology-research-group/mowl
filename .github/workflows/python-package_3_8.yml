@@ -33,6 +33,7 @@ jobs:
         channels: conda-forge
     - name: Build JAR files
       run: |
+        conda list
         bash build_jars.sh
     - name: Install dependencies
       run: |
