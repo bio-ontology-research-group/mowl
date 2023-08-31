@@ -4,13 +4,9 @@ dependencies:
   - python=3.8
   - click
   - deprecated
-  - gensim
+  - gensim>=4.3.0
   - gradle
   - JPype1=1.4.1
-  - matplotlib
-  - networkx
-  - numpy
-  - openjdk
   - pandas
   - pytorch
   - pyyaml
@@ -21,7 +17,7 @@ dependencies:
   - urllib3
   - pip
   - pip:
-    - pykeen==1.10.1
+    - pykeen>=1.10.1
     - temp
     - deprecated
     - nbsphinx
