@@ -1,6 +1,6 @@
 name: Add a new model
 description: Suggest a new model for mOWL
-labels: [ "model"]
+labels: [ "model" ]
 body:
   - type: dropdown
     id: models
