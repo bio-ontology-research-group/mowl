@@ -1,5 +1,5 @@
-import mowl.models.elembeddings.losses as L
-from mowl.nn.elmodule import ELModule
+import mowl.nn.el.elem.losses as L
+from mowl.nn import ELModule
 from torch import nn
 import torch as th
 
@@ -44,6 +44,9 @@ class ELEmModule(ELModule):
         return L.gci0_loss(data, self.class_embed, self.class_rad, self.class_reg, self.margin,
                            neg=neg)
 
+    def gci0_bot_loss(self, data, neg=False):
+        return L.gci0_bot_loss(data, self.class_rad)
+        
     def gci1_loss(self, data, neg=False):
         return L.gci1_loss(data, self.class_embed, self.class_rad, self.class_reg, self.margin,
                            neg=neg)
@@ -59,3 +62,6 @@ class ELEmModule(ELModule):
     def gci3_loss(self, data, neg=False):
         return L.gci3_loss(data, self.class_embed, self.class_rad, self.rel_embed, self.class_reg,
                            self.margin, neg=neg)
+
+    def gci3_bot_loss(self, data, neg=False):
+        return L.gci3_bot_loss(data, self.class_rad)

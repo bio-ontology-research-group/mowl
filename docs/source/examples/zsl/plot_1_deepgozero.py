@@ -29,7 +29,7 @@ import mowl
 mowl.init_jvm("10g")
 from mowl.owlapi.defaults import BOT, TOP
 from mowl.datasets import ELDataset, RemoteDataset
-from mowl.models.elembeddings.module import ELEmModule
+from mowl.nn import ELEmModule
 from mowl.owlapi import OWLAPIAdapter
 from mowl.datasets.base import Entities, OWLClasses, OWLIndividuals
 
@@ -541,6 +541,6 @@ def main(ont, batch_size, epochs, device):
 
 ont = "mf"
 batch_size = 16
-epochs = 2
+epochs = 20
 device = "cpu"
 main(ont, batch_size, epochs, device)

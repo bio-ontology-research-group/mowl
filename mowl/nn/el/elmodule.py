@@ -13,6 +13,10 @@ class ELModule(nn.Module):
     def __init__(self):
         super().__init__()
 
+        self.class_embed = None
+        self.rel_embed = None
+        self.ind_embed = None
+
         self.gci_names = ["gci0", "gci1", "gci2", "gci3", "gci0_bot", "gci1_bot", "gci3_bot"]
 
     def gci0_loss(self, gci, neg=False):

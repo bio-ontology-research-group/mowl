@@ -45,7 +45,7 @@ class DeepWalk (
   private[this] val lock = new Object()
 
   val walksFile = new File(outfile)
-  val bw = new BufferedWriter(new FileWriter(walksFile))
+  val bw = new BufferedWriter(new FileWriter(walksFile, true))
 
 
   def processEdges() = {

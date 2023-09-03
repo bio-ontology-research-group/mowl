@@ -11,6 +11,9 @@ def gci0_loss(data, class_embed, class_rad, class_reg, margin, neg=False):
     loss = th.relu(dist - margin)
     return loss + class_reg(c) + class_reg(d)
 
+def gci0_bot_loss(data, class_rad, neg=False):
+    rc = class_rad(data[:, 0])
+    return rc
 
 def gci1_loss(data, class_embed, class_rad, class_reg, margin, neg=False):
     c = class_embed(data[:, 0])
@@ -86,3 +89,7 @@ def gci3_loss(data, class_embed, class_rad, rel_embed, class_reg, margin, neg=Fa
     euc = th.linalg.norm(c - rE - d, dim=1, keepdim=True)
     loss = th.relu(euc - rc - rd - margin)
     return loss + class_reg(c) + class_reg(d)
+
+def gci3_bot_loss(data, class_rad, neg=False):
+    rc = class_rad(data[:, 1])
+    return rc

@@ -28,7 +28,7 @@ setuptools.setup(
     install_requires=[
         "click",
         "deprecated",
-        "gensim",
+        "gensim>=4.3.0",
         "JPype1==1.4.1",
         "matplotlib",
         "networkx",

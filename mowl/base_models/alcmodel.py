@@ -65,7 +65,7 @@ class EmbeddingALCModel(EmbeddingModel):
         self._load_datasets()
 
         self._training_dataloaders = {
-            k: DataLoader(v, batch_size=self.batch_size) for k, v in
+            k: DataLoader(v, batch_size=self.batch_size, shuffle=True) for k, v in
             self._training_datasets.items()}
 
         if self._validation_datasets:

@@ -38,12 +38,11 @@ def extract_and_save_axiom_corpus(ontology, out_file, mode="w"):
     shortFormProvider = MOWLShortFormProvider()
     renderer.setShortFormProvider(shortFormProvider)
     with open(out_file, mode) as f:
-        for owl_class in ontology.getClassesInSignature():
-            axioms = ontology.getAxioms(owl_class)
-            for axiom in axioms:
-                rax = renderer.render(axiom)
-                rax = rax.replaceAll(JString("[\\r\\n|\\r|\\n()|<|>]"), JString(""))
-                f.write(f'{rax}\n')
+        axioms = ontology.getAxioms()
+        for axiom in axioms:
+            rax = renderer.render(axiom)
+            rax = rax.replaceAll(JString("[\\r\\n|\\r|\\n()|<|>]"), JString(""))
+            f.write(f'{rax}\n')
 
 
 def extract_axiom_corpus(ontology):
@@ -66,12 +65,11 @@ def extract_axiom_corpus(ontology):
 
     corpus = []
 
-    for owl_class in ontology.getClassesInSignature():
-        axioms = ontology.getAxioms(owl_class)
-        for axiom in axioms:
-            rax = renderer.render(axiom)
-            rax = rax.replaceAll(JString("[\\r\\n|\\r|\\n()|<|>]"), JString(""))
-            corpus.append(rax)
+    axioms = ontology.getAxioms()
+    for axiom in axioms:
+        rax = renderer.render(axiom)
+        rax = rax.replaceAll(JString("[\\r\\n|\\r|\\n()|<|>]"), JString(""))
+        corpus.append(rax)
     return corpus
 
 
@@ -111,6 +109,17 @@ following the Manchester Syntax.
                     value = str(annotation.getValue().getLiteral()).replace("\n", " ")
                     f.write(f'{cls} {obj_property} {value}\n')
 
+        for owl_individual in ontology.getIndividualsInSignature():
+            ind = str(owl_individual.toStringID())
+
+            annotations = EntitySearcher.getAnnotations(owl_individual, ontology)
+            for annotation in annotations:
+                if isinstance(annotation.getValue(), OWLLiteral):
+                    obj_property = str(annotation.getProperty()).replace("\n", " ")
+                    # could filter on property
+                    value = str(annotation.getValue().getLiteral()).replace("\n", " ")
+                    corpus.append(f'{ind} {obj_property} {value}\n')
+
 
 def extract_annotation_corpus(ontology):
     """This method generates a textual representation of the annotation axioms in an ontology \
@@ -130,7 +139,7 @@ this method returns a list instead saving into a file.
 
     corpus = []
     for owl_class in ontology.getClassesInSignature():
-        cls = str(owl_class)
+        cls = str(owl_class.toStringID())
 
         annotations = EntitySearcher.getAnnotations(owl_class, ontology)
         for annotation in annotations:
@@ -140,4 +149,21 @@ this method returns a list instead saving into a file.
                 value = str(annotation.getValue().getLiteral()).replace("\n", " ")
                 corpus.append(f'{cls} {obj_property} {value}\n')
 
+
+    for owl_individual in ontology.getIndividualsInSignature():
+        ind = str(owl_individual.toStringID())
+
+        annotations = EntitySearcher.getAnnotations(owl_individual, ontology)
+        for annotation in annotations:
+            if isinstance(annotation.getValue(), OWLLiteral):
+                obj_property = str(annotation.getProperty()).replace("\n", " ")
+                # could filter on property
+                value = str(annotation.getValue().getLiteral()).replace("\n", " ")
+                corpus.append(f'{ind} {obj_property} {value}\n')
+                
+                
     return corpus
+
+
+
+
