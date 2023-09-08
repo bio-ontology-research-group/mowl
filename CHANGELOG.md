@@ -78,7 +78,8 @@ Fixed issue related to importing graph-based models due to missing `__init__.py`
 - Walking methods accept optional `outfile` parameter and corpus extraction methods do not append by default.
 - Documentation updated and fixed some typos.
 
-[unreleased]: https://github.com/bio-ontology-research-group/mowl/compare/v0.2.0...HEAD
+[unreleased]: https://github.com/bio-ontology-research-group/mowl/compare/v0.2.1...HEAD
+[0.2.1]: https://github.com/bio-ontology-research-group/mowl/releases/tag/v0.2.1
 [0.2.0]: https://github.com/bio-ontology-research-group/mowl/releases/tag/v0.2.0
 [0.1.1]: https://github.com/bio-ontology-research-group/mowl/releases/tag/v0.1.1
 [0.1.0]: https://github.com/bio-ontology-research-group/mowl/releases/tag/v0.1.0
@@ -89,4 +90,4 @@ Fixed issue related to importing graph-based models due to missing `__init__.py`
 [i36]: https://github.com/bio-ontology-research-group/mowl/issues/36
 [i42]: https://github.com/bio-ontology-research-group/mowl/issues/42
 [i43]: https://github.com/bio-ontology-research-group/mowl/issues/43
-[i43]: https://github.com/bio-ontology-research-group/mowl/issues/60
+[i60]: https://github.com/bio-ontology-research-group/mowl/issues/60
