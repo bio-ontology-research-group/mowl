@@ -13,6 +13,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 ### Security
 
+## [0.2.1]
+### Fixed
+Fixed issue related to importing graph-based models due to missing `__init__.py` files. ([#60][i60])
 
 ## [0.2.0]
 
@@ -86,3 +89,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [i36]: https://github.com/bio-ontology-research-group/mowl/issues/36
 [i42]: https://github.com/bio-ontology-research-group/mowl/issues/42
 [i43]: https://github.com/bio-ontology-research-group/mowl/issues/43
+[i43]: https://github.com/bio-ontology-research-group/mowl/issues/60
