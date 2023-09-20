@@ -21,8 +21,8 @@ project = 'MOWL'
 copyright = '2023, BORG'
 author = 'BORG'
 
-release = '0.2.0'
-version = '0.2.0'
+release = '0.3.0'
+version = '0.3.0'
 # -- General configuration
 
 extensions = [
