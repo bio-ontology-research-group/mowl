@@ -1,5 +1,4 @@
-
-The DL2Vec graph follows the rules described in the paper `Predicting candidate genes from phenotypes, functions, and anatomical site of expression (2020) <https://academic.oup.com/bioinformatics/advance-article/doi/10.1093/bioinformatics/btaa879/5922810>`__. The parsing rules are shown in the table below:
+The parsing rules are shown in the table below:
 
 
 +-------------------------------------------------------+---------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------+
@@ -27,4 +26,4 @@ Initially, DL2Vec projection rules are intended to parse TBox axioms. However, f
 | :math:`R(a,b)`	    | :math:`\left\langle a, R, b \right\rangle`		|
 +---------------------------+-----------------------------------------------------------+
 
-To use the extension, use the ``with_individuals`` parameters in the ``project`` method:
+

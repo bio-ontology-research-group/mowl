@@ -36,6 +36,7 @@ extensions = [
     'sphinx.ext.todo',
     'sphinx.ext.viewcode',
     'sphinx_gallery.gen_gallery',
+    'sphinx_automodapi.automodapi',
 #    'IPython.sphinxext.ipython_console_highlighting'
 
     # Matplotlib

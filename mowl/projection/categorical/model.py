@@ -11,6 +11,7 @@ logger.setLevel(logging.INFO)
 from .edge import Edge, Node
 from .utils import IGNORED_AXIOM_TYPES, IGNORED_EXPRESSION_TYPES, pairs
 
+from mowl.projection.base import ProjectionModel
 from mowl.owlapi import OWLAPIAdapter
 from mowl.owlapi.defaults import BOT, TOP
 
@@ -26,6 +27,10 @@ top_node = Node(owl_class = adapter.create_class(TOP))
 bot_node = Node(owl_class = adapter.create_class(BOT))
 
 class Graph():
+
+    
+
+    
     def __init__(self):
         self._node_to_id = {}
         self._id_to_node = {}
@@ -467,8 +472,16 @@ class Graph():
             for src, rel, dst in tqdm(edges):
                 f.write(f"{src}\t{rel}\t{dst}\n")
 
-class CategoricalProjector():
-    """This class implements the projection of ALC axioms into a graph using categorical diagrams.
+class CategoricalProjector(ProjectionModel):
+    """
+    Implementation of projection rules defined in [zhapa2023]_.
+    
+    This class implements the projection of ALC axioms into a graph using categorical diagrams.
+
+    :param saturation_steps: Number of saturation steps of the graph/category.
+    :type saturation_steps: int
+    :param transitive_closure: If ``True``, every saturation step computes the transitive edges.
+    :type transitive_closure: bool
     """
 
     def __init__(self, saturation_steps = 0, transitive_closure = False):
@@ -487,7 +500,12 @@ class CategoricalProjector():
         self.graph = Graph()
 
     def project(self, ontology):
-        """Project an ontology into a graph using categorical diagrams."""
+        r"""Generates the projection of the ontology.
+
+        :param ontology: The ontology to be processed.
+        :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
+        """
+        
 
         if not isinstance(ontology, OWLOntology):
             raise TypeError(
@@ -503,20 +521,25 @@ class CategoricalProjector():
             self.graph.add_all_edges(*list(self.process_axiom(axiom)))
 
         return self.graph.as_edges()
+
     def process_axiom(self, axiom):
-        """Process an OWLClass and return a list of edges."""
+        """Process an OWLAxiom and return a list of edges.
+
+        :param axiom: Axiom to be parsed.
+        :type axiom: :class:`org.semanticweb.owlapi.model.OWLAxiom`
+        """
 
         axiom_type = axiom.getAxiomType()
         if axiom_type == AxiomType.SUBCLASS_OF:
-            return self.process_subclassof(axiom)
+            return self._process_subclassof(axiom)
         elif axiom_type == AxiomType.EQUIVALENT_CLASSES:
-            return self.process_equivalentclasses(axiom)
+            return self._process_equivalent_classes(axiom)
         elif axiom_type == AxiomType.DISJOINT_CLASSES:
-            return self.process_disjointness(axiom)
+            return self._process_disjointness(axiom)
         elif axiom_type == AxiomType.CLASS_ASSERTION:
-            return self.process_class_assertion(axiom)
+            return self._process_class_assertion(axiom)
         elif axiom_type == AxiomType.OBJECT_PROPERTY_ASSERTION:
-            return self.process_object_property_assertion(axiom)
+            return self._process_object_property_assertion(axiom)
         elif axiom_type in IGNORED_AXIOM_TYPES:
             #Ignore these types of axioms
             return []
@@ -525,40 +548,40 @@ class CategoricalProjector():
             return []
 
 
-    def process_equivalentclasses(self, axiom):
+    def _process_equivalent_classes(self, axiom):
         """Process an EquivalentClasses axiom and return a list of edges."""
 
         subclass_axioms = axiom.asOWLSubClassOfAxioms()
         edges = set()
         for subclass_axiom in subclass_axioms:
-            edges |= self.process_subclassof(subclass_axiom)
+            edges |= self._process_subclassof(subclass_axiom)
         
         if edges == set():
             print(f"No edges found for EquivalentClasses axiom: {axiom}")
         return edges
 
-    def process_disjointness(self, axiom):
+    def _process_disjointness(self, axiom):
         """Process a disjointness axiom"""
         subclass_axioms = axiom.asOWLSubClassOfAxioms()
         edges = set()
         for subclass_axiom in subclass_axioms:
-            edges |= self.process_subclassof(subclass_axiom)
+            edges |= self._process_subclassof(subclass_axiom)
         
         return edges
 
-    def process_class_assertion(self, axiom):
+    def _process_class_assertion(self, axiom):
         """Process a class assertion axiom"""
         individual = axiom.getIndividual()
         class_expression = axiom.getClassExpression()
 
-        node, edges = self.process_expression_and_get_complex_node(class_expression)
+        node, edges = self._process_expression_and_get_complex_node(class_expression)
         ind_as_class = adapter.create_class(str(individual.toStringID()))
         ind_node = Node(owl_class = ind_as_class, individual=True)
-        edges.add(self.assertion_arrow(ind_node, node))
+        edges.add(self._assertion_arrow(ind_node, node))
         
         return edges
 
-    def process_object_property_assertion(self, axiom):
+    def _process_object_property_assertion(self, axiom):
         """Process an object property assertion axiom"""
         subject = axiom.getSubject()
         object_ = axiom.getObject()
@@ -573,44 +596,44 @@ class CategoricalProjector():
         rel_node = Node(owl_class=None, relation=property_)
         
         edges = set()
-        edges.add(self.assertion_arrow(subject_node, domain_rel))
-        edges.add(self.assertion_arrow(object_node, codomain_rel))
-        edges.add(self.domain_functor(rel_node, domain_rel))
-        edges.add(self.codomain_functor(rel_node, codomain_rel))
+        edges.add(self._assertion_arrow(subject_node, domain_rel))
+        edges.add(self._assertion_arrow(object_node, codomain_rel))
+        edges.add(self._domain_functor(rel_node, domain_rel))
+        edges.add(self._codomain_functor(rel_node, codomain_rel))
         return edges
         
-    def process_subclassof(self, axiom):
+    def _process_subclassof(self, axiom):
         """Process a SubClassOf axiom and return a list of edges."""
         sub_class = axiom.getSubClass()
         super_class = axiom.getSuperClass()
         sub_edges = set()
         super_edges = set()
 
-        sub_node, sub_edges = self.process_expression_and_get_complex_node(sub_class)
+        sub_node, sub_edges = self._process_expression_and_get_complex_node(sub_class)
         #print(axiom)
-        super_node, super_edges = self.process_expression_and_get_complex_node(super_class)
+        super_node, super_edges = self._process_expression_and_get_complex_node(super_class)
                                 
         if (sub_node is None) or (super_node is None):
             return set()
 
         edges = set()
-        edges.add(self.subsumption_arrow(sub_node, super_node))
+        edges.add(self._subsumption_arrow(sub_node, super_node))
         edges |= sub_edges
         edges |= super_edges
 
         not_sub_class = self.adapter.create_complement_of(sub_class)
         union = self.adapter.create_object_union_of(not_sub_class, super_class)
-        union_complex_node, union_edges = self.process_expression_and_get_complex_node(union)
+        union_complex_node, union_edges = self._process_expression_and_get_complex_node(union)
 
         
         
         edges |= union_edges
-        edges.add(self.subsumption_arrow(top_node, union_complex_node))
+        edges.add(self._subsumption_arrow(top_node, union_complex_node))
         
         return edges
 
 
-    def process_expression_and_get_complex_node(self, expression):
+    def _process_expression_and_get_complex_node(self, expression):
 
         expr_type = expression.getClassExpressionType()
 
@@ -624,12 +647,12 @@ class CategoricalProjector():
             operands = expression.getOperandsAsList()
                         
             for op in operands:
-                op_complex_node, op_edges = self.process_expression_and_get_complex_node(op)
+                op_complex_node, op_edges = self._process_expression_and_get_complex_node(op)
                 if op_complex_node is None:
                     return None, set()
 
                 edges |= op_edges
-                edges.add(self.product_limit_arrow(prod_complex_node, op_complex_node))
+                edges.add(self._product_limit_arrow(prod_complex_node, op_complex_node))
 
             #TODO: add arrows to fulfill distributivity
 
@@ -640,12 +663,12 @@ class CategoricalProjector():
             operands = expression.getOperandsAsList()
             
             for op in operands:
-                op_complex_node, op_edges = self.process_expression_and_get_complex_node(op)
+                op_complex_node, op_edges = self._process_expression_and_get_complex_node(op)
                 if op_edges == None:
                     return None, set()
                 
                 edges |= op_edges
-                edges.add(self.coproduct_limit_arrow(op_complex_node,
+                edges.add(self._coproduct_limit_arrow(op_complex_node,
                                                      coprod_complex_node))
 
                                                                             
@@ -667,7 +690,7 @@ class CategoricalProjector():
                     return None, set()
                     
             filler = expression.getFiller()
-            filler_info = self.process_expression_and_get_complex_node(filler)
+            filler_info = self._process_expression_and_get_complex_node(filler)
             filler_node, filler_edges = filler_info
             if filler_node is None:
                 return None, set()
@@ -698,12 +721,12 @@ class CategoricalProjector():
             rel_not_filler = self.adapter.create_object_some_values_from(property_, not_filler)
             not_rel_not_filler = self.adapter.create_complement_of(rel_not_filler)
 
-            not_rel_not_filler_info = self.process_expression_and_get_complex_node(not_rel_not_filler)
+            not_rel_not_filler_info = self._process_expression_and_get_complex_node(not_rel_not_filler)
             not_rel_not_filler_node, not_rel_not_filler_edges = not_rel_not_filler_info
             if not_rel_not_filler_node is None:
                 return None, set()
 
-            filler_info = self.process_expression_and_get_complex_node(filler)
+            filler_info = self._process_expression_and_get_complex_node(filler)
             filler_node, filler_edges = filler_info
             if filler_node is None:
                 return None, set()
@@ -711,12 +734,12 @@ class CategoricalProjector():
             edges |= not_rel_not_filler_edges
             edges |= filler_edges
 
-            edges.add(self.subsumption_arrow(universal_complex_node, not_rel_not_filler_node))
-            edges.add(self.subsumption_arrow(not_rel_not_filler_node, universal_complex_node))
+            edges.add(self._subsumption_arrow(universal_complex_node, not_rel_not_filler_node))
+            edges.add(self._subsumption_arrow(not_rel_not_filler_node, universal_complex_node))
 
             not_domain_rel_n_filler = Node(owl_class=rel_not_filler, relation=property_, domain=True, negated_domain=True)
-            edges.add(self.subsumption_arrow(not_domain_rel_n_filler, universal_complex_node))
-            edges.add(self.subsumption_arrow(universal_complex_node, not_domain_rel_n_filler))
+            edges.add(self._subsumption_arrow(not_domain_rel_n_filler, universal_complex_node))
+            edges.add(self._subsumption_arrow(universal_complex_node, not_domain_rel_n_filler))
             return universal_complex_node, edges
 
         elif expr_type == CT.OBJECT_COMPLEMENT_OF:
@@ -724,7 +747,7 @@ class CategoricalProjector():
             negation_complex_node = expression
             operand = expression.getOperand()
             
-            operand_info = self.process_expression_and_get_complex_node(operand)
+            operand_info = self._process_expression_and_get_complex_node(operand)
             operand_node, operand_edges = operand_info
 
             union = self.adapter.create_object_union_of(expression, operand)
@@ -733,10 +756,10 @@ class CategoricalProjector():
             intersection = Node(owl_class=intersection)
             edges |= operand_edges
 
-            edges.add(self.product_limit_arrow(intersection, operand_node))
-            edges.add(self.product_limit_arrow(intersection, negation_complex_node))
-            edges.add(self.coproduct_limit_arrow(operand_node, union))
-            edges.add(self.coproduct_limit_arrow(negation_complex_node, union))
+            edges.add(self._product_limit_arrow(intersection, operand_node))
+            edges.add(self._product_limit_arrow(intersection, negation_complex_node))
+            edges.add(self._coproduct_limit_arrow(operand_node, union))
+            edges.add(self._coproduct_limit_arrow(negation_complex_node, union))
                                                 
             edges.add(Edge(intersection, "http://general_arrow", bot_node))
             edges.add(Edge(top_node, "http://general_arrow", union))
@@ -752,7 +775,7 @@ class CategoricalProjector():
     ####################### MORPHISMS ###########################
 
     # decorator that transforms params as Node
-    def node_params(func):
+    def _node_params(func):
         def wrapper(self, src, dst):
             if not isinstance(src, Node):
                 src = Node(owl_class=src)
@@ -761,53 +784,33 @@ class CategoricalProjector():
             return func(self, src, dst)
         return wrapper
 
-    @node_params
-    def subsumption_arrow(self, src, dst):
+    @_node_params
+    def _subsumption_arrow(self, src, dst):
         rel = "http://subsumption_arrow"
         return Edge(src, rel, dst)
 
-    @node_params
-    def coproduct_limit_arrow(self, src, dst):
+    @_node_params
+    def _coproduct_limit_arrow(self, src, dst):
         rel = "http://injects"
         return Edge(src, rel, dst)
 
-    @node_params
-    def product_limit_arrow(self, src, dst):
+    @_node_params
+    def _product_limit_arrow(self, src, dst):
         rel = "http://projects"
         return Edge(src, "http://projects", dst)
 
-    @node_params
-    def coproduct_weak_arrow(self, src, dst):
-        rel = "http://weak_injects"
-        return Edge(src, rel, dst)
-
-    @node_params
-    def product_weak_arrow(self, src, dst):
-        rel = "http://weak_projects"
-        return Edge(src, rel, dst)
-
-    @node_params
-    def coproduct_factorizer_arrow(self, src, dst):
-        rel = "http://coproduct_factorizer"
-        return Edge(src, rel, dst)
-
-    @node_params
-    def product_factorizer_arrow(self, src, dst):
-        rel = "http://product_factorizer"
-        return Edge(src, rel, dst)
-
-    @node_params
-    def assertion_arrow(self, src, dst):
+    @_node_params
+    def _assertion_arrow(self, src, dst):
         rel = "http://type_arrow"
         return Edge(src, rel, dst)
 
-    @node_params
-    def domain_functor(self, src, dst):
+    @_node_params
+    def _domain_functor(self, src, dst):
         rel = "http://domain_functor"
         return Edge(src, rel, dst)
 
-    @node_params
-    def codomain_functor(self, src, dst):
+    @_node_params
+    def _codomain_functor(self, src, dst):
         rel = "http://codomain_functor"
         return Edge(src, rel, dst)
 

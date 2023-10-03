@@ -10,7 +10,7 @@ from java.util import ArrayList
 class TaxonomyWithRelationsProjector(ProjectionModel):
 
     r'''
-    This class will project the ontology considering the following axioms:
+    Projection of axioms :math:`A \sqsubseteq B` and :math:`A \sqsubseteq \exists R. B`.
 
     * :math:`A \sqsubseteq B` will generate the triple
       :math:`\langle A, subClassOf, B \rangle`
@@ -18,7 +18,8 @@ class TaxonomyWithRelationsProjector(ProjectionModel):
       :math:`\left\langle A, R, B \right\rangle`
 
 
-    :param ontology: The ontology to be processed.
+    :param taxonomy: If ``True`` taxonomy axioms will be included.
+    :type taxonomy: 
     :param bidirectional_taxonomy: If true then per each SubClass edge one SuperClass edge will \
         be generated.
     '''
@@ -48,6 +49,12 @@ relations a non-empty list")
         self.projector = Projector(taxonomy, bidirectional_taxonomy, relationsJ)
 
     def project(self, ontology):
+        r"""Generates the projection of the ontology.
+
+        :param ontology: The ontology to be processed.
+        :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
+        """
+        
         if not isinstance(ontology, OWLOntology):
             raise TypeError('Parameter ontology must be of type \
 org.semanticweb.owlapi.model.OWLOntology')

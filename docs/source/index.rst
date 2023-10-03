@@ -138,8 +138,14 @@ If you used mOWL in your work, please consider citing `this article <https://doi
    api/projection/index
    api/walking/index
    api/reasoning/index
-
    api/visualization/index
 
+.. toctree::
+   :maxdepth: 2
+   :caption: Appendix
+   :hidden:
+   :glob:
+
+   appendix/references
 
 

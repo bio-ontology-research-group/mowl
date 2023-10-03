@@ -7,12 +7,13 @@ import logging
 
 class DL2VecProjector(ProjectionModel):
     '''
-    :param ontology: The ontology to be processed.
-    :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
+    Implementation of projection rules defined in [chen2020]_.
 
+    .. include:: extra/dl2vec.rst
+    
     :param bidirectional_taxonomy: If true then per each SubClass edge one SuperClass
         edge will be generated.
-    :type bidirectional_taxonomy: bool
+    :type bidirectional_taxonomy: bool, optional
     '''
 
     def __init__(self, bidirectional_taxonomy: bool = False):
