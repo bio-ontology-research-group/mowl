@@ -55,7 +55,7 @@ import torch as th
 # ":math:`p_1` interacts with :math:`p_2`" is encoded using GCI 2 as:
 #
 # .. math::
-#    p_1 \sqsubseteq interacts\_with. p_2
+#    p_1 \sqsubseteq \exists interacts\_with. p_2
 #
 # For that, we can use the class :class:`mowl.models.elembeddings.examples.model_ppi.ELEmPPI` mode, which uses the :class:`mowl.datasets.builtin.PPIYeastSlimDataset` dataset.
 
