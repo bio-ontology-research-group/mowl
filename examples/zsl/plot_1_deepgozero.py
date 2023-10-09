@@ -541,6 +541,6 @@ def main(ont, batch_size, epochs, device):
 
 ont = "mf"
 batch_size = 16
-epochs = 2
+epochs = 20
 device = "cpu"
 main(ont, batch_size, epochs, device)

@@ -22,7 +22,7 @@ jobs:
       run:
         shell: bash -l {0}
     steps:
-    - uses: actions/checkout@v2
+    - uses: actions/checkout@v3
     - uses: conda-incubator/setup-miniconda@v2
       with:
         auto-update-conda: true
@@ -33,6 +33,8 @@ jobs:
         channels: conda-forge
     - name: Build JAR files
       run: |
+        java -version
+        conda list
         bash build_jars.sh
     - name: Install dependencies
       run: |

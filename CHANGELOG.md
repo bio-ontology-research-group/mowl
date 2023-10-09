@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+### Changed 
+### Deprecated
+### Removed
+### Fixed
+### Security
+
+
+## [0.2.0]
+
+### Added
 - [BoxSquaredEL](https://arxiv.org/abs/2301.11118) module added to `mowl.nn`
 - Implemented `model.from_pretrained` method. Related to issue [#43][i43]
 - Implemented `model.add_axioms` method. Related to issue [#43][i43]
@@ -17,14 +27,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Bug fixed in corpus generation methods. Issue [#36][i36].
 - Updated dependencies to work with Python 3.8 and 3.9. Issue [#42][i42]
-
-### Deprecated
-
-### Removed
-
-### Fixed
-
-### Security
 
 ## [0.1.1]
 
@@ -73,7 +75,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Walking methods accept optional `outfile` parameter and corpus extraction methods do not append by default.
 - Documentation updated and fixed some typos.
 
-[unreleased]: https://github.com/bio-ontology-research-group/mowl/compare/v0.1.1...HEAD
+[unreleased]: https://github.com/bio-ontology-research-group/mowl/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/bio-ontology-research-group/mowl/releases/tag/v0.2.0
 [0.1.1]: https://github.com/bio-ontology-research-group/mowl/releases/tag/v0.1.1
 [0.1.0]: https://github.com/bio-ontology-research-group/mowl/releases/tag/v0.1.0
 [0.0.30]: https://github.com/bio-ontology-research-group/mowl/releases/tag/v0.0.30

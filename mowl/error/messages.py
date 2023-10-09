@@ -27,6 +27,6 @@ PYKEEN_LR_NOT_SET = "PyKEEN learning rate not set. Please set it by doing 'model
 
 PYKEEN_BATCH_SIZE_NOT_SET = "PyKEEN batch size not set. Please set it by doing 'model.batch_size = your_batch_size'."
 
-
+PYKEEN_MODEL_NOT_SET = "PyKEEN model not set. Please set it by using the 'set_kge_method' method."
 
                                  

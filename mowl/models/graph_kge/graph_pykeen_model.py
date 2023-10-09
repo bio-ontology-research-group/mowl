@@ -46,6 +46,9 @@ class GraphPlusPyKEENModel(KGEModel):
 
     @property
     def class_embeddings(self):
+        if self._kge_method is None:
+            raise ValueError(msg.PYKEEN_MODEL_NOT_SET)
+        
         classes = self.dataset.classes.as_str
         if len(classes) == 0:
             return dict()
@@ -62,6 +65,9 @@ class GraphPlusPyKEENModel(KGEModel):
 
     @property
     def object_property_embeddings(self):
+        if self._kge_method is None:
+            raise ValueError(msg.PYKEEN_MODEL_NOT_SET)
+
         object_properties = self.graph_relation_to_id.keys()
         if len(object_properties) == 0:
             return dict()
@@ -77,6 +83,9 @@ class GraphPlusPyKEENModel(KGEModel):
     
     @property
     def individual_embeddings(self):
+        if self._kge_method is None:
+            raise ValueError(msg.PYKEEN_MODEL_NOT_SET)
+        
         individuals = self.dataset.individuals.as_str
         if len(individuals) == 0:
             return dict()

@@ -4,7 +4,7 @@ from mowl.models import GraphPlusPyKEENModel
 from mowl.projection import TaxonomyProjector
 from pykeen.triples import TriplesFactory
 from pykeen.models import TransE, ERModel
-
+import mowl.error.messages as err
 
 class TestPyKEENModel(TestCase):
 
@@ -39,9 +39,27 @@ class TestPyKEENModel(TestCase):
         model = GraphPlusPyKEENModel(self.dataset)
         model.set_projector(TaxonomyProjector())
 
+        with self.assertRaisesRegex(ValueError,
+                                    err.PYKEEN_MODEL_NOT_SET):
+            class_embs = model.class_embeddings
+
+        with self.assertRaisesRegex(ValueError,
+                                    err.PYKEEN_MODEL_NOT_SET):
+            role_embs = model.object_property_embeddings
+                
+
+        with self.assertRaisesRegex(ValueError,
+                                    err.PYKEEN_MODEL_NOT_SET):
+            ind_embs = model.individual_embeddings
+            
+        
+
+        kge_method = TransE
+        model.set_kge_method(kge_method)
+
         class_embs = model.class_embeddings
         self.assertIsInstance(class_embs, dict)
-
+                
         role_embs = model.object_property_embeddings
         self.assertIsInstance(role_embs, dict)
 

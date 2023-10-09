@@ -7,8 +7,8 @@ mOWL runs on Linux and MAC OS X systems. The library has not been tested on Wind
 System requirements
 -------------------
 
-- JDK version 8
-- Python version 3.8
+- JDK version 17
+- Python version 3.8, 3.9, 3.10, 3.11
 - Conda version >= 4.x.x
 
 
@@ -17,7 +17,7 @@ Python requirements
 
 - Gensim >= 4.x.x
 - PyTorch >= 1.12.x
-- PyKEEN >= 1.9.x
+- PyKEEN >= 1.10.1
 
 
   
@@ -35,7 +35,7 @@ Installation can be done with the following commands:
    
    cd mowl
 
-   conda env create -f environment.yml
+   conda env create -f envs/environment_3_8.yml
    conda activate mowl
    
    ./build_jars.sh
@@ -43,8 +43,6 @@ Installation can be done with the following commands:
    python setup.py install
 
 Since mOWL needs to bind the Java Virtual Machine, the last line will generate the necessary ``.jar`` files.
-
-
 
 Install from PyPi
 ------------------------------

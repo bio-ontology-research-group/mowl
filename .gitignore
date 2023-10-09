@@ -39,3 +39,4 @@ dist/
 .coverage
 *.pickle
 *.zip
+*.log

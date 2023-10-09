@@ -20,15 +20,15 @@ mainly in Python, but we have integrated the functionalities of [OWLAPI](https:/
 
 ### System dependencies
 
-  - JDK version 8
-  - Python version: 3.8, 3.9
+  - JDK version 17
+  - Python version: 3.8, 3.9, 3.10, 3.11
   - Conda version >= 4.x.x
 
 ### Python requirements
 
   - Gensim >= 4.x.x
   - PyTorch >= 1.12.x
-  - PyKEEN >= 1.9.x
+  - PyKEEN >= 1.10.1
 
 ### Install from PyPi
 
@@ -51,7 +51,6 @@ conda activate mowl
 
 python setup.py install
 ```
-For Python 3.9, you can use `envs/environment_3.9.yml`.
 
 The line `./build_jars.sh` will generate the necessary `jar` files to bind Python with the code that runs in the JVM. After building, a ``.tar.gz`` file will be generated under `dist` and can be used to install mOWL.
 

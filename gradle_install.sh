@@ -1,3 +1,5 @@
+#This file is part of the ReadTheDocs workflow
+
 wget https://services.gradle.org/distributions/gradle-7.4.2-bin.zip -P /tmp
 
 unzip -d ~/gradle /tmp/gradle-*.zip
