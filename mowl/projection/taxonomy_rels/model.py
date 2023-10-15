@@ -10,7 +10,7 @@ from java.util import ArrayList
 class TaxonomyWithRelationsProjector(ProjectionModel):
 
     r'''
-    Projection of axioms :math:`A \sqsubseteq B` and :math:`A \sqsubseteq \exists R. B`.
+    Projection of axioms :math:`A \sqsubseteq B` and :math:`A \sqsubseteq \exists R.B`.
 
     * :math:`A \sqsubseteq B` will generate the triple
       :math:`\langle A, subClassOf, B \rangle`

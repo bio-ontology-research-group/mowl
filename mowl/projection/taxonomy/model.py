@@ -9,6 +9,7 @@ class TaxonomyProjector(ProjectionModel):
 
     '''
     Projection of axioms :math:`A \sqsubseteq B`.
+
     :param ontology: The ontology to be processed.
     :param bidirectional_taxonomy: If true then per each SubClass edge one SuperClass edge wil be generated.
     '''
@@ -34,7 +35,4 @@ type org.semanticweb.owlapi.model.OWLOntology")
         edges = [Edge(str(e.src()), str(e.rel()), str(e.dst())) for e in edges]
         return edges
 
-    def projectWithTransClosure(self, ontology):
-        edges = self.projector.projectWithTransClosure(ontology)
-        edges = [Edge(str(e.src()), str(e.rel()), str(e.dst())) for e in edges]
-        return edges
+                            

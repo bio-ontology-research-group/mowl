@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+- Implemented `CategoricalProjector` based on [https://arxiv.org/abs/2305.07163](https://arxiv.org/abs/2305.07163).
+
 ### Changed 
 ### Deprecated
 ### Removed

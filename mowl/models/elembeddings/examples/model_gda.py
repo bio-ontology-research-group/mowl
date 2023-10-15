@@ -7,7 +7,9 @@ import numpy as np
 from mowl.models import ELEmbeddings
 
 class ELEmGDA(ELEmbeddings):
-
+    """
+    Example of ELEmbeddings for gene-disease associations prediction.
+    """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
                                                                                         

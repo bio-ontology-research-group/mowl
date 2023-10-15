@@ -16,9 +16,8 @@ logger = logging.getLogger("deepwalk")
 class DeepWalk(WalkingModel):
 
     '''
-    Implementation of DeepWalk based on \
-    <https://github.com/phanein/deepwalk/blob/master/deepwalk/graph.py>
-
+    Implementation of DeepWalk based on [perozzi2014]_.
+    
     :param alpha: Probability of restart, defaults to 0
     :type alpha: float, optional
     '''

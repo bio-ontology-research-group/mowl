@@ -19,6 +19,7 @@ from org.semanticweb.owlapi.model import  AxiomType, EntityType, OWLObjectInvers
 from org.semanticweb.owlapi.model import ClassExpressionType as CT
 
 import networkx as nx
+from deprecated.sphinx import versionadded
 
 from tqdm import tqdm
 
@@ -472,6 +473,7 @@ class Graph():
             for src, rel, dst in tqdm(edges):
                 f.write(f"{src}\t{rel}\t{dst}\n")
 
+@versionadded(version="0.3.0")
 class CategoricalProjector(ProjectionModel):
     """
     Implementation of projection rules defined in [zhapa2023]_.

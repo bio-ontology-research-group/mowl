@@ -7,4 +7,12 @@ References
 
 .. [chen2020b] Chen, J., Hu, P., Jiménez-Ruiz, E., Holter, O., Antonyrajah, D., & Horrocks, I. (2020). `OWL2Vec*: embedding of OWL ontologies <https://arxiv.org/abs/2009.14654>`_. Machine Learning, 110, 1813 - 1845.
 	      
-.. [zhapa2023] Zhapa-Camacho, F., & Hoehndorf, R. (2023). `CatE: Graph-Based Embeddings of ALC Ontologies Using Category-Theoretical Diagrams <https://arxiv.org/abs/2305.07163>`_. ArXiv, abs/2305.07163. 
+.. [zhapa2023] Zhapa-Camacho, F., & Hoehndorf, R. (2023). `CatE: Graph-Based Embeddings of ALC Ontologies Using Category-Theoretical Diagrams <https://arxiv.org/abs/2305.07163>`_. ArXiv, abs/2305.07163.
+
+.. [perozzi2014] Perozzi, B., Al-Rfou, R., & Skiena, S.S. (2014). `DeepWalk: online learning of social representations <https://arxiv.org/abs/1403.6652>`_. Proceedings of the 20th ACM SIGKDD international conference on Knowledge discovery and data mining.
+
+.. [grover2016] Grover, A., & Leskovec, J. (2016). `node2vec: Scalable Feature Learning for Networks <https://arxiv.org/abs/1607.00653>`_. Proceedings of the 22nd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining.
+
+.. [peng2020] Peng, X., Tang, Z., Kulmanov, M., Niu, K., & Hoehndorf, R. (2022). `Description Logic EL++ Embeddings with Intersectional Closure <https://arxiv.org/abs/2202.14018>`_. ArXiv, abs/2202.14018.
+
+.. [jackermeier2023] Jackermeier, M., Chen, J., & Horrocks, I. (2023). `Box2EL: Concept and Role Box Embeddings for the Description Logic EL++ <https://arxiv.org/abs/2301.11118>`_. ArXiv, abs/2301.11118.

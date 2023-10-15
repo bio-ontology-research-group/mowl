@@ -13,7 +13,9 @@ from torch import nn
 
 
 class ELBoxGDA(ELBoxEmbeddings):
-
+    """
+    Example of ELBoxEmbeddings for gene-disease associations prediction.
+    """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         

@@ -14,12 +14,12 @@ Graph-based models
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper Predicting candidate genes from phenotypes, functions and...">
+    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper `Predicting candidate genes from phenotypes, functions an...">
 
 .. only:: html
 
   .. image:: /examples/graph_based/images/thumb/sphx_glr_plot_1_dl2vec_thumb.png
-    :alt:
+    :alt: DL2Vec
 
   :ref:`sphx_glr_examples_graph_based_plot_1_dl2vec.py`
 
