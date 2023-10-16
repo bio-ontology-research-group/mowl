@@ -6,6 +6,11 @@ import mowl.error.messages as msg
 
 class GraphModel(Model):
 
+    """
+    Abstract class for graph embedding methods.
+    """
+
+    
     def __init__(self, *args, **kwargs):
         super(GraphModel, self).__init__(*args, **kwargs)
 
@@ -93,8 +98,13 @@ class GraphModel(Model):
 
     
 
+
 class RandomWalkModel(GraphModel):
 
+    """
+    Base class for graph embedding methods that use random walks.
+    """
+    
     def __init__(self, *args, **kwargs):
         super(RandomWalkModel, self).__init__(*args, **kwargs)
 
@@ -127,6 +137,10 @@ class RandomWalkModel(GraphModel):
 
 class KGEModel(GraphModel):
 
+    """
+    Base class for graph embedding methods that use knowledge graph embedding methods.
+    """
+    
     def __init__(self, *args, **kwargs):
         super(KGEModel, self).__init__(*args, **kwargs)
 

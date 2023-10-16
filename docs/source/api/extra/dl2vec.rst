@@ -1,5 +1,4 @@
-
-The DL2Vec graph follows the rules described in the paper `Predicting candidate genes from phenotypes, functions, and anatomical site of expression (2020) <https://academic.oup.com/bioinformatics/advance-article/doi/10.1093/bioinformatics/btaa879/5922810>`__. The parsing rules are shown in the table below:
+The parsing rules are shown in the table below:
 
 
 +-------------------------------------------------------+---------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------+
@@ -13,4 +12,18 @@ The DL2Vec graph follows the rules described in the paper `Predicting candidate 
 +-------------------------------------------------------+---------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------+
 | :math:`A \equiv B`					|											| :math:`\left\langle A, EquivalentTo, B \right\rangle`						|
 +-------------------------------------------------------+---------------------------------------------------------------------------------------+-----------------------------------------------------------------------------------------------+
+
+Initially, DL2Vec projection rules are intended to parse TBox axioms. However, for some cases, useful information might be present as ABox axioms of the form :math:`C(a)`, :math:`\exists R.C (a)` and :math:`R(a,b)` where :math:`C` is an atomic concept, :math:`R` is a role and :math:`a, b` are individuals. The extended rules are the following:
+
+
++---------------------------+-----------------------------------------------------------+
+| Condition		    | Triple     						|
++===========================+===========================================================+
+| :math:`C(a)`	            | :math:`\left\langle a, http://type, C \right\rangle`	|
++---------------------------+-----------------------------------------------------------+
+| :math:`\exists R.C (a)`   | :math:`\left\langle a, R, C \right\rangle`		|
++---------------------------+-----------------------------------------------------------+
+| :math:`R(a,b)`	    | :math:`\left\langle a, R, b \right\rangle`		|
++---------------------------+-----------------------------------------------------------+
+
 

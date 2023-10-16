@@ -1,2 +1,2 @@
-http://newclass1	http://some_prefix/class:002
-http://newclass2	http://some_prefix/class:001	http://some_prefix/class:003
+http://prefix1/class1	http://prefix3/class3
+http://prefix2/class2	http://prefix4/class4	http://some_prefix/class5

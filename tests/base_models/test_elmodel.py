@@ -1,6 +1,6 @@
 from unittest import TestCase
 from mowl.base_models.elmodel import EmbeddingELModel
-from mowl.base_models.model import EmbeddingModel
+from mowl.base_models.model import Model
 from mowl.datasets import Dataset
 from tests.datasetFactory import FamilyDataset, PPIYeastSlimDataset
 from mowl.datasets.el import ELDataset
@@ -17,9 +17,9 @@ class TestEmbeddingElModel(TestCase):
         self.ppi_dataset = PPIYeastSlimDataset()
 
     def test_instance_of_embedding_model(self):
-        """This checks if the class EmbeddingELModel is a subclass of EmbeddingModel"""
+        """This checks if the class EmbeddingELModel is a subclass of Model"""
         model = EmbeddingELModel(self.family_dataset, 1, False)
-        self.assertTrue(isinstance(model, EmbeddingModel))
+        self.assertTrue(isinstance(model, Model))
 
     def test_constructor_param_types(self):
         """This checks if the constructor parameters are of the correct type"""

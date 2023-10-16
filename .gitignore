@@ -40,3 +40,5 @@ dist/
 *.pickle
 *.zip
 *.log
+
+docs/source/api/mowl.*

@@ -73,21 +73,3 @@ class TestModel(TestCase):
         import tempfile
         tmppath = tempfile.gettempdir()
         self.assertTrue(model_filepath.startswith(tmppath))
-
-
-class TestEmbeddingModel(TestCase):
-
-    @classmethod
-    def setUpClass(self):
-        self.dataset = FamilyDataset()
-
-    def test_is_instance_of_model(self):
-        """This checks if EmbeddingModel is instance of Model"""
-
-        self.assertIsInstance(mowl.base_models.EmbeddingModel(self.dataset), Model)
-
-    def test_get_embedding_data_not_implemented_error(self):
-        """This checks if EmbeddingModel.get_embedding_data method raises NotImplementedError"""
-
-        model = mowl.base_models.EmbeddingModel(self.dataset)
-        self.assertRaises(NotImplementedError, model.get_embeddings_data)

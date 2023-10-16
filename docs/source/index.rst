@@ -27,7 +27,7 @@ Getting started
 **mOWL** can be installed from `source code <https://github.com/bio-ontology-research-group/mowl>`_ or from `PyPi <https://pypi.org/project/mowl-borg/>`_. For more details on installation check out the how to :doc:`install/index` section of the project.
 
 .. note::
-   This version of documentation corresponds to mOWL-0.2.0.
+   This version of documentation corresponds to mOWL-0.3.0.
 
 
 mOWL, JPype and the JVM
@@ -138,8 +138,14 @@ If you used mOWL in your work, please consider citing `this article <https://doi
    api/projection/index
    api/walking/index
    api/reasoning/index
-
    api/visualization/index
 
+.. toctree::
+   :maxdepth: 2
+   :caption: Appendix
+   :hidden:
+   :glob:
+
+   appendix/references
 
 

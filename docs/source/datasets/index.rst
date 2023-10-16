@@ -21,15 +21,7 @@ mOWL is designed to handle input in OWL format. That is, you can input OWL ontol
 Built-in datasets
 -------------------
 
-There are several built-in datasets related to bioinformatics tasks such as protein-protein interactions prediction and gene-disease association prediction. This datasets are:
-
-* :class:`FamilyDataset <mowl.datasets.builtin.FamilyDataset>`
-* :class:`PPIYeastDataset <mowl.datasets.builtin.PPIYeastDataset>`
-* :class:`PPIYeastSlimDataset <mowl.datasets.builtin.PPIYeastSlimDataset>`
-* :class:`GDAHumanDataset <mowl.datasets.builtin.GDAHumanDataset>`
-* :class:`GDAMouseDataset <mowl.datasets.builtin.GDAMouseDataset>`
-* :class:`GDAHumanELDataset <mowl.datasets.builtin.GDAHumanELDataset>`
-* :class:`GDAMouseELDataset <mowl.datasets.builtin.GDAMouseELDataset>`
+There are several built-in datasets related to bioinformatics tasks such as protein-protein interactions prediction and gene-disease association prediction. Datasets can be found at :doc:`Datasets API docs <../../api/datasets/index>`.
 
 To access any of these datasets you can use:
 

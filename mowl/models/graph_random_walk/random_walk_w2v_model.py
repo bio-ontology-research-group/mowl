@@ -4,9 +4,14 @@ from gensim.models.word2vec import LineSentence
 import mowl.error.messages as msg
 import os
 import time
+from deprecated.sphinx import versionadded
 
+@versionadded(version="0.2.0")
 class RandomWalkPlusW2VModel(RandomWalkModel):
-
+    """
+    Embedding model that combines graph projections + random walks.
+    """
+    
     def __init__(self, *args, **kwargs):
         super(RandomWalkPlusW2VModel, self).__init__(*args, **kwargs)
 

@@ -20,7 +20,7 @@ mainly in Python, but we have integrated the functionalities of [OWLAPI](https:/
 
 ### System dependencies
 
-  - JDK version 17
+  - JDK version >= 11
   - Python version: 3.8, 3.9, 3.10, 3.11
   - Conda version >= 4.x.x
 
