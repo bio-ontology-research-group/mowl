@@ -26,4 +26,4 @@ dependencies:
     - memory-profiler
     - matplotlib
     - sphinx-automodapi
-    
+    - mock
