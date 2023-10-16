@@ -31,12 +31,12 @@ Models embeddings the :math:`\mathcal{EL}` language
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper `EL Embeddings: Geometric Construction of Models for the ...">
+    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper EL Embeddings: Geometric Construction of Models for the D...">
 
 .. only:: html
 
   .. image:: /examples/elmodels/images/thumb/sphx_glr_plot_1_elembeddings_thumb.png
-    :alt: EL Embeddings
+    :alt:
 
   :ref:`sphx_glr_examples_elmodels_plot_1_elembeddings.py`
 
@@ -48,12 +48,12 @@ Models embeddings the :math:`\mathcal{EL}` language
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This example is based on the paper `Description Logic EL++ Embeddings with Intersectional Closu...">
+    <div class="sphx-glr-thumbcontainer" tooltip="This example is based on the paper Description Logic EL++ Embeddings with Intersectional Closur...">
 
 .. only:: html
 
   .. image:: /examples/elmodels/images/thumb/sphx_glr_plot_2_elboxembeddings_thumb.png
-    :alt: ELBoxEmbeddings
+    :alt:
 
   :ref:`sphx_glr_examples_elmodels_plot_2_elboxembeddings.py`
 
@@ -79,12 +79,12 @@ Graph-based models
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper `Predicting candidate genes from phenotypes, functions an...">
+    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper Predicting candidate genes from phenotypes, functions and...">
 
 .. only:: html
 
   .. image:: /examples/graph_based/images/thumb/sphx_glr_plot_1_dl2vec_thumb.png
-    :alt: DL2Vec
+    :alt:
 
   :ref:`sphx_glr_examples_graph_based_plot_1_dl2vec.py`
 
@@ -110,12 +110,12 @@ Syntactic models
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper `Onto2Vec: joint vector-based representation of biologica...">
+    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper Onto2Vec: joint vector-based representation of biological...">
 
 .. only:: html
 
   .. image:: /examples/syntactic/images/thumb/sphx_glr_plot_1_onto2vec_thumb.png
-    :alt: Onto2Vec
+    :alt:
 
   :ref:`sphx_glr_examples_syntactic_plot_1_onto2vec.py`
 
@@ -127,12 +127,12 @@ Syntactic models
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper `OPA2Vec: combining formal and informal content of biomed...">
+    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper OPA2Vec: combining formal and informal content of biomedi...">
 
 .. only:: html
 
   .. image:: /examples/syntactic/images/thumb/sphx_glr_plot_2_opa2vec_thumb.png
-    :alt: OPA2Vec
+    :alt:
 
   :ref:`sphx_glr_examples_syntactic_plot_2_opa2vec.py`
 
@@ -158,12 +158,12 @@ Zero-shot learning based models
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper `DeepGOZero: improving protein function prediction from s...">
+    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper DeepGOZero: improving protein function prediction from se...">
 
 .. only:: html
 
   .. image:: /examples/zsl/images/thumb/sphx_glr_plot_1_deepgozero_thumb.png
-    :alt: DeepGOZero
+    :alt:
 
   :ref:`sphx_glr_examples_zsl_plot_1_deepgozero.py`
 
@@ -181,6 +181,7 @@ Zero-shot learning based models
 .. toctree::
    :hidden:
    :includehidden:
+
 
    /examples//elmodels/index.rst
    /examples//graph_based/index.rst

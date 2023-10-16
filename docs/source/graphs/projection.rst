@@ -9,8 +9,9 @@ Ontologies contain adjacency information that can be projected into a graph. The
    from mowl.datasets.builtin import FamilyDataset
    from mowl.projection import CategoricalProjector
 
+   ds = FamilyDataset()
    projector = CategoricalProjector()
-   edges = projector.project()
+   edges = projector.project(ds.ontology)
 
 The ``edges`` generated is a list of :class:`mowl.projection.Edge`
 

@@ -1,10 +1,10 @@
-from mowl.base_models.model import EmbeddingModel
+from mowl.base_models.model import Model
 import torch as th
 from torch.utils.data import DataLoader, default_collate
 from mowl.datasets.alc import ALCDataset
 
 
-class EmbeddingALCModel(EmbeddingModel):
+class EmbeddingALCModel(Model):
     """Abstract class that provides basic functionalities for methods that aim to embed ALC \
     language.
 
