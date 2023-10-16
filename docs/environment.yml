@@ -22,6 +22,7 @@ dependencies:
     - deprecated
     - nbsphinx
     - sphinx-gallery
+    - sphinx-rtd-theme
     - ipython
     - memory-profiler
     - matplotlib
