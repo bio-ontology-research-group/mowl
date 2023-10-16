@@ -1,7 +1,18 @@
 <p align="center">
   <img src= "https://github.com/bio-ontology-research-group/mowl/blob/main/docs/source/mowl_black_background_colors_2048x2048px.png?raw=true" width="300"/>
 </p>
-  
+
+
+<p align="center">
+	<a href="https://pypi.org/project/mowl-borg/">
+	<img alt="PyPI - Version" src="https://img.shields.io/pypi/v/mowl-borg">
+	</a>
+	<a href='https://mowl.readthedocs.io/en/latest/?badge=latest'>
+		<img src='https://readthedocs.org/projects/mowl/badge/?version=latest' alt='Documentation Status' />
+	</a>
+</p>
+
+
 # mOWL: Machine Learning Library with Ontologies
 
 **mOWL** is a library that provides different machine learning methods in which ontologies are used as background knowledge. **mOWL** is developed 
