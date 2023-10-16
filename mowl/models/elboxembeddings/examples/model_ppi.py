@@ -14,7 +14,9 @@ from torch import nn
 
 
 class ELBoxPPI(ELBoxEmbeddings):
-
+    """
+    Example of ELBoxEmbeddings for protein-protein interaction prediction.
+    """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
                                                                                             

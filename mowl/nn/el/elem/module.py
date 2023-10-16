@@ -5,7 +5,12 @@ import torch as th
 
 
 class ELEmModule(ELModule):
+    """
+    Implementation of ELEmbeddings from [kulmanov2019]_.
 
+    """
+    
+    
     def __init__(self, nb_ont_classes, nb_rels, embed_dim=50, margin=0.1, reg_norm=1):
         super().__init__()
         self.nb_ont_classes = nb_ont_classes

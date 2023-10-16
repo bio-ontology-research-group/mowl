@@ -1,0 +1,431 @@
+#Axioms
+http://Father,http://Male
+http://Father,http://Parent
+http://Female,http://Person
+http://Male,http://Person
+http://Mother,http://Female
+http://Mother,http://Parent
+http://Parent,http://Person
+http://Parent,http://hasChild some owl:Thing
+http://Female and http://Male,owl:Nothing
+http://Female and http://Parent,http://Mother
+http://Male and http://Parent,http://Father
+http://hasChild some http://Person,http://Parent
+#Identity
+http://Father,http://Father
+http://Mother,http://Mother
+http://Male,http://Male
+http://Female,http://Female
+http://Person,http://Person
+http://Parent,http://Parent
+http://Female and http://Male,http://Female and http://Male
+http://Female and http://Parent,http://Female and http://Parent
+http://Male and http://Parent,http://Male and http://Parent
+http://hasChild some http://Person,http://hasChild some http://Person
+http://hasChild some owl:Thing,http://hasChild some owl:Thing
+#Initial object
+owl:Nothing,http://Father
+owl:Nothing,http://Mother
+owl:Nothing,http://Male
+owl:Nothing,http://Female
+owl:Nothing,http://Person
+owl:Nothing,http://Parent
+owl:Nothing,http://Female and http://Male
+owl:Nothing,http://Female and http://Parent
+owl:Nothing,http://Male and http://Parent
+owl:Nothing,http://hasChild some http://Person
+owl:Nothing,http://hasChild some owl:Thing
+#Terminal object
+http://Father,owl:Thing
+http://Mother,owl:Thing
+http://Male,owl:Thing
+http://Female,owl:Thing
+http://Person,owl:Thing
+http://Parent,owl:Thing
+http://Female and http://Male,owl:Thing
+http://Female and http://Parent,owl:Thing
+http://Male and http://Parent,owl:Thing
+http://hasChild some http://Person,owl:Thing
+http://hasChild some owl:Thing,owl:Thing
+#Axiom 1: Father -> Male
+not http://Father,not http://Father
+http://Father and not http://Father,http://Father and not http://Father
+http://Father or not http://Father,http://Father or not http://Father
+http://Male or not http://Father,http://Male or not http://Father
+owl:Thing,http://Male or not http://Father
+owl:Nothing,not http://Father
+owl:Nothing,http://Father and not http://Father
+owl:Nothing,http://Father or not http://Father
+owl:Nothing,http://Male or not http://Father
+not http://Father,owl:Thing
+http://Father and not http://Father,owl:Thing
+http://Father or not http://Father,owl:Thing
+http://Male or not http://Father,owl:Thing
+http://Father and not http://Father,owl:Nothing
+http://Father and not http://Father,http://Father
+http://Father and not http://Father,not http://Father
+owl:Thing,http://Father or not http://Father
+http://Father,http://Father or not http://Father
+not http://Father,http://Father or not http://Father
+not http://Father,http://Male or not http://Father
+http://Male,http://Male or not http://Father
+#Axiom 2: Father -> Parent
+http://Parent or not http://Father,http://Parent or not http://Father
+owl:Thing,http://Parent or not http://Father
+owl:Nothing,http://Parent or not http://Father
+http://Parent or not http://Father,owl:Thing
+not http://Father,http://Parent or not http://Father
+http://Parent,http://Parent or not http://Father
+#Axiom 3: Female -> Person
+not http://Female,not http://Female
+http://Female and not http://Female,http://Female and not http://Female
+http://Female or not http://Female,http://Female or not http://Female
+http://Person or not http://Female,http://Person or not http://Female
+owl:Thing,http://Person or not http://Female
+owl:Nothing,not http://Female
+owl:Nothing,http://Female and not http://Female
+owl:Nothing,http://Female or not http://Female
+owl:Nothing,http://Person or not http://Female
+not http://Female,owl:Thing
+http://Female and not http://Female,owl:Thing
+http://Female or not http://Female,owl:Thing
+http://Person or not http://Female,owl:Thing
+http://Female and not http://Female,owl:Nothing
+http://Female and not http://Female,http://Female
+http://Female and not http://Female,not http://Female
+owl:Thing,http://Female or not http://Female
+http://Female,http://Female or not http://Female
+not http://Female,http://Female or not http://Female
+not http://Female,http://Person or not http://Female
+http://Person,http://Person or not http://Female
+#Axiom 4: Male -> Person
+not http://Male,not http://Male
+http://Male and not http://Male,http://Male and not http://Male
+http://Male or not http://Male,http://Male or not http://Male
+http://Person or not http://Male,http://Person or not http://Male
+owl:Thing,http://Person or not http://Male
+owl:Nothing,not http://Male
+owl:Nothing,http://Male and not http://Male
+owl:Nothing,http://Male or not http://Male
+owl:Nothing,http://Person or not http://Male
+not http://Male,owl:Thing
+http://Male and not http://Male,owl:Thing
+http://Male or not http://Male,owl:Thing
+http://Person or not http://Male,owl:Thing
+http://Male and not http://Male,owl:Nothing
+http://Male and not http://Male,http://Male
+http://Male and not http://Male,not http://Male
+owl:Thing,http://Male or not http://Male
+http://Male,http://Male or not http://Male
+not http://Male,http://Male or not http://Male
+not http://Male,http://Person or not http://Male
+http://Person,http://Person or not http://Male
+#Axiom 5: Mother -> Female
+not http://Mother,not http://Mother
+http://Mother and not http://Mother,http://Mother and not http://Mother
+http://Mother or not http://Mother,http://Mother or not http://Mother
+http://Female or not http://Mother,http://Female or not http://Mother
+owl:Thing,http://Female or not http://Mother
+owl:Nothing,not http://Mother
+owl:Nothing,http://Mother and not http://Mother
+owl:Nothing,http://Mother or not http://Mother
+owl:Nothing,http://Female or not http://Mother
+not http://Mother,owl:Thing
+http://Mother and not http://Mother,owl:Thing
+http://Mother or not http://Mother,owl:Thing
+http://Female or not http://Mother,owl:Thing
+http://Mother and not http://Mother,owl:Nothing
+http://Mother and not http://Mother,http://Mother
+http://Mother and not http://Mother,not http://Mother
+owl:Thing,http://Mother or not http://Mother
+http://Mother,http://Mother or not http://Mother
+not http://Mother,http://Mother or not http://Mother
+not http://Mother,http://Female or not http://Mother
+http://Female,http://Female or not http://Mother
+#Axiom 6: Mother -> Parent
+http://Parent or not http://Mother,http://Parent or not http://Mother
+owl:Thing,http://Parent or not http://Mother
+owl:Nothing,http://Parent or not http://Mother
+http://Parent or not http://Mother,owl:Thing
+not http://Mother,http://Parent or not http://Mother
+http://Parent,http://Parent or not http://Mother
+#Axiom 7: Parent -> Person
+not http://Parent,not http://Parent
+http://Parent and not http://Parent,http://Parent and not http://Parent
+http://Parent or not http://Parent,http://Parent or not http://Parent
+http://Person or not http://Parent,http://Person or not http://Parent
+owl:Thing,http://Person or not http://Parent
+owl:Nothing,not http://Parent
+owl:Nothing,http://Parent and not http://Parent
+owl:Nothing,http://Parent or not http://Parent
+owl:Nothing,http://Person or not http://Parent
+not http://Parent,owl:Thing
+http://Parent and not http://Parent,owl:Thing
+http://Parent or not http://Parent,owl:Thing
+http://Person or not http://Parent,owl:Thing
+http://Parent and not http://Parent,owl:Nothing
+http://Parent and not http://Parent,http://Parent
+http://Parent and not http://Parent,not http://Parent
+owl:Thing,http://Parent or not http://Parent
+http://Parent,http://Parent or not http://Parent
+not http://Parent,http://Parent or not http://Parent
+not http://Parent,http://Person or not http://Parent
+http://Person,http://Person or not http://Parent
+#Axiom 8: Parent -> hasChild some owl:Thing
+not http://Parent,not http://Parent
+http://Parent and not http://Parent,http://Parent and not http://Parent
+http://Parent or not http://Parent,http://Parent or not http://Parent
+not http://Parent or http://hasChild some owl:Thing,not http://Parent or http://hasChild some owl:Thing
+owl:Thing,not http://Parent or http://hasChild some owl:Thing
+owl:Nothing,not http://Parent
+owl:Nothing,http://Parent and not http://Parent
+owl:Nothing,http://Parent or not http://Parent
+owl:Nothing,not http://Parent or http://hasChild some owl:Thing
+not http://Parent,owl:Thing
+http://Parent and not http://Parent,owl:Thing
+http://Parent or not http://Parent,owl:Thing
+not http://Parent or http://hasChild some owl:Thing,owl:Thing
+http://Parent and not http://Parent,owl:Nothing
+http://Parent and not http://Parent,http://Parent
+http://Parent and not http://Parent,not http://Parent
+owl:Thing,http://Parent or not http://Parent
+http://Parent,http://Parent or not http://Parent
+not http://Parent,http://Parent or not http://Parent
+not http://Parent,not http://Parent or http://hasChild some owl:Thing
+http://hasChild some owl:Thing,not http://Parent or http://hasChild some owl:Thing
+#Axiom 9: Female and Male -> owl:Nothing
+not http://Female and http://Male,not http://Female and http://Male
+http://Female and http://Male and not http://Female and http://Male,http://Female and http://Male and not http://Female and http://Male
+http://Female and http://Male or not http://Female and http://Male,http://Female and http://Male or not http://Female and http://Male
+owl:Thing,not http://Female and http://Male
+owl:Nothing,not http://Female and http://Male
+owl:Nothing,http://Female and http://Male and not http://Female and http://Male
+owl:Nothing,http://Female and http://Male or not http://Female and http://Male
+not http://Female and http://Male,owl:Thing
+http://Female and http://Male and not http://Female and http://Male,owl:Thing
+http://Female and http://Male or not http://Female and http://Male,owl:Thing
+http://Female and http://Male and not http://Female and http://Male,owl:Nothing
+http://Female and http://Male and not http://Female and http://Male,http://Female and http://Male
+http://Female and http://Male and not http://Female and http://Male,not http://Female and http://Male
+owl:Thing,http://Female and http://Male or not http://Female and http://Male
+http://Female and http://Male,http://Female and http://Male or not http://Female and http://Male
+not http://Female and http://Male,http://Female and http://Male or not http://Female and http://Male
+#Axiom 9 NNF: Female and Male -> owl:Nothing
+not http://Female or not http://Male,not http://Female or not http://Male
+http://Female and http://Male and not http://Female or not http://Male,http://Female and http://Male and not http://Female or not http://Male
+http://Female and http://Male or not http://Female or not http://Male,http://Female and http://Male or not http://Female or not http://Male
+owl:Nothing,not http://Female or not http://Male
+owl:Nothing,http://Female and http://Male and not http://Female or not http://Male
+owl:Nothing,http://Female and http://Male or not http://Female or not http://Male
+not http://Female or not http://Male,owl:Thing
+http://Female and http://Male and not http://Female or not http://Male,owl:Thing
+http://Female and http://Male or not http://Female or not http://Male,owl:Thing
+#Axiom 10: Female and Parent -> Mother
+not http://Female and http://Parent,not http://Female and http://Parent
+http://Female and http://Parent and not http://Female and http://Parent,http://Female and http://Parent and not http://Female and http://Parent
+http://Female and http://Parent or not http://Female and http://Parent,http://Female and http://Parent or not http://Female and http://Parent
+http://Mother or not http://Female and http://Parent,http://Mother or not http://Female and http://Parent
+owl:Thing,http://Mother or not http://Female and http://Parent
+owl:Nothing,not http://Female and http://Parent
+owl:Nothing,http://Female and http://Parent and not http://Female and http://Parent
+owl:Nothing,http://Female and http://Parent or not http://Female and http://Parent
+owl:Nothing,http://Mother or not http://Female and http://Parent
+not http://Female and http://Parent,owl:Thing
+http://Female and http://Parent and not http://Female and http://Parent,owl:Thing
+http://Female and http://Parent or not http://Female and http://Parent,owl:Thing
+http://Mother or not http://Female and http://Parent,owl:Thing
+http://Female and http://Parent and not http://Female and http://Parent,owl:Nothing
+http://Female and http://Parent and not http://Female and http://Parent,http://Female and http://Parent
+http://Female and http://Parent and not http://Female and http://Parent,not http://Female and http://Parent
+owl:Thing,http://Female and http://Parent or not http://Female and http://Parent
+http://Female and http://Parent,http://Female and http://Parent or not http://Female and http://Parent
+not http://Female and http://Parent,http://Female and http://Parent or not http://Female and http://Parent
+not http://Female and http://Parent,http://Mother or not http://Female and http://Parent
+http://Mother,http://Mother or not http://Female and http://Parent
+#Axiom 10 NNF: Female and Parent -> Mother
+not http://Female or not http://Parent,not http://Female or not http://Parent
+http://Female and http://Parent and not http://Female or not http://Parent,http://Female and http://Parent and not http://Female or not http://Parent
+http://Female and http://Parent or not http://Female or not http://Parent,http://Female and http://Parent or not http://Female or not http://Parent
+http://Mother or not http://Female or not http://Parent,http://Mother or not http://Female or not http://Parent
+owl:Nothing,not http://Female or not http://Parent
+owl:Nothing,http://Female and http://Parent and not http://Female or not http://Parent
+owl:Nothing,http://Female and http://Parent or not http://Female or not http://Parent
+owl:Nothing,http://Mother or not http://Female or not http://Parent
+not http://Female or not http://Parent,owl:Thing
+http://Female and http://Parent and not http://Female or not http://Parent,owl:Thing
+http://Female and http://Parent or not http://Female or not http://Parent,owl:Thing
+http://Mother or not http://Female or not http://Parent,owl:Thing
+#Axiom 11: Male and Parent -> Father
+not http://Male and http://Parent,not http://Male and http://Parent
+http://Male and http://Parent and not http://Male and http://Parent,http://Male and http://Parent and not http://Male and http://Parent
+http://Male and http://Parent or not http://Male and http://Parent,http://Male and http://Parent or not http://Male and http://Parent
+http://Father or not http://Male and http://Parent,http://Father or not http://Male and http://Parent
+owl:Thing,http://Father or not http://Male and http://Parent
+owl:Nothing,not http://Male and http://Parent
+owl:Nothing,http://Male and http://Parent and not http://Male and http://Parent
+owl:Nothing,http://Male and http://Parent or not http://Male and http://Parent
+owl:Nothing,http://Father or not http://Male and http://Parent
+not http://Male and http://Parent,owl:Thing
+http://Male and http://Parent and not http://Male and http://Parent,owl:Thing
+http://Male and http://Parent or not http://Male and http://Parent,owl:Thing
+http://Father or not http://Male and http://Parent,owl:Thing
+http://Male and http://Parent and not http://Male and http://Parent,owl:Nothing
+http://Male and http://Parent and not http://Male and http://Parent,http://Male and http://Parent
+http://Male and http://Parent and not http://Male and http://Parent,not http://Male and http://Parent
+owl:Thing,http://Male and http://Parent or not http://Male and http://Parent
+http://Male and http://Parent,http://Male and http://Parent or not http://Male and http://Parent
+not http://Male and http://Parent,http://Male and http://Parent or not http://Male and http://Parent
+not http://Male and http://Parent,http://Father or not http://Male and http://Parent
+http://Father,http://Father or not http://Male and http://Parent
+#Axiom 11 NNF: Male and Parent -> Father
+not http://Male or not http://Parent,not http://Male or not http://Parent
+http://Male and http://Parent and not http://Male or not http://Parent,http://Male and http://Parent and not http://Male or not http://Parent
+http://Male and http://Parent or not http://Male or not http://Parent,http://Male and http://Parent or not http://Male or not http://Parent
+http://Father or not http://Male or not http://Parent,http://Father or not http://Male or not http://Parent
+owl:Nothing,not http://Male or not http://Parent
+owl:Nothing,http://Male and http://Parent and not http://Male or not http://Parent
+owl:Nothing,http://Male and http://Parent or not http://Male or not http://Parent
+owl:Nothing,http://Father or not http://Male or not http://Parent
+not http://Male or not http://Parent,owl:Thing
+http://Male and http://Parent and not http://Male or not http://Parent,owl:Thing
+http://Male and http://Parent or not http://Male or not http://Parent,owl:Thing
+http://Father or not http://Male or not http://Parent,owl:Thing
+#Axiom 12: hasChild some Person -> Parent
+not http://hasChild some http://Person,not http://hasChild some http://Person
+not http://hasChild some http://Person and http://hasChild some http://Person,not http://hasChild some http://Person and http://hasChild some http://Person
+not http://hasChild some http://Person or http://hasChild some http://Person,not http://hasChild some http://Person or http://hasChild some http://Person
+http://Parent or not http://hasChild some http://Person,http://Parent or not http://hasChild some http://Person
+owl:Thing,http://Parent or not http://hasChild some http://Person
+owl:Nothing,not http://hasChild some http://Person
+owl:Nothing,not http://hasChild some http://Person and http://hasChild some http://Person
+owl:Nothing,not http://hasChild some http://Person or http://hasChild some http://Person
+owl:Nothing,http://Parent or not http://hasChild some http://Person
+not http://hasChild some http://Person,owl:Thing
+not http://hasChild some http://Person and http://hasChild some http://Person,owl:Thing
+not http://hasChild some http://Person or http://hasChild some http://Person,owl:Thing
+http://Parent or not http://hasChild some http://Person,owl:Thing
+not http://hasChild some http://Person and http://hasChild some http://Person,owl:Nothing
+not http://hasChild some http://Person and http://hasChild some http://Person,http://hasChild some http://Person
+not http://hasChild some http://Person and http://hasChild some http://Person,not http://hasChild some http://Person
+owl:Thing,not http://hasChild some http://Person or http://hasChild some http://Person
+http://hasChild some http://Person,not http://hasChild some http://Person or http://hasChild some http://Person
+not http://hasChild some http://Person,not http://hasChild some http://Person or http://hasChild some http://Person
+not http://hasChild some http://Person,http://Parent or not http://hasChild some http://Person
+http://Parent,http://Parent or not http://hasChild some http://Person
+#Axiom 12 NNF: hasChild some Person -> Parent
+http://hasChild only not http://Person,http://hasChild only not http://Person
+http://hasChild some http://Person and http://hasChild only not http://Person,http://hasChild some http://Person and http://hasChild only not http://Person
+http://hasChild some http://Person or http://hasChild only not http://Person,http://hasChild some http://Person or http://hasChild only not http://Person
+http://Parent or http://hasChild only not http://Person,http://Parent or http://hasChild only not http://Person
+owl:Nothing,http://hasChild only not http://Person
+owl:Nothing,http://hasChild some http://Person and http://hasChild only not http://Person
+owl:Nothing,http://hasChild some http://Person or http://hasChild only not http://Person
+owl:Nothing,http://Parent or http://hasChild only not http://Person
+http://hasChild only not http://Person,owl:Thing
+http://hasChild some http://Person and http://hasChild only not http://Person,owl:Thing
+http://hasChild some http://Person or http://hasChild only not http://Person,owl:Thing
+http://Parent or http://hasChild only not http://Person,owl:Thing
+#Projections
+http://Female and http://Male,http://Female
+http://Female and http://Male,http://Male
+http://Female and http://Parent,http://Female
+http://Female and http://Parent,http://Parent
+http://Male and http://Parent,http://Male
+http://Male and http://Parent,http://Parent
+#Existential
+http://hasChild_under_http://hasChild some http://Person,http://hasChild
+CODOMAIN_http://hasChild_under_http://hasChild some http://Person,http://Person
+DOMAIN_http://hasChild_under_http://hasChild some http://Person,http://hasChild some http://Person
+http://hasChild some http://Person,DOMAIN_http://hasChild_under_http://hasChild some http://Person
+http://hasChild_under_http://hasChild some owl:Thing,http://hasChild
+CODOMAIN_http://hasChild_under_http://hasChild some owl:Thing,owl:Thing
+DOMAIN_http://hasChild_under_http://hasChild some owl:Thing,http://hasChild some owl:Thing
+http://hasChild_under_http://hasChild some http://Person,http://hasChild_under_http://hasChild some http://Person
+owl:Nothing,http://hasChild_under_http://hasChild some http://Person
+http://hasChild_under_http://hasChild some http://Person,owl:Thing
+CODOMAIN_http://hasChild_under_http://hasChild some http://Person,CODOMAIN_http://hasChild_under_http://hasChild some http://Person
+owl:Nothing,CODOMAIN_http://hasChild_under_http://hasChild some http://Person
+CODOMAIN_http://hasChild_under_http://hasChild some http://Person,owl:Thing
+DOMAIN_http://hasChild_under_http://hasChild some http://Person,DOMAIN_http://hasChild_under_http://hasChild some http://Person
+owl:Nothing,DOMAIN_http://hasChild_under_http://hasChild some http://Person
+DOMAIN_http://hasChild_under_http://hasChild some http://Person,owl:Thing
+http://hasChild some owl:Thing,DOMAIN_http://hasChild_under_http://hasChild some owl:Thing
+http://hasChild_under_http://hasChild some owl:Thing,http://hasChild_under_http://hasChild some owl:Thing
+owl:Nothing,http://hasChild_under_http://hasChild some owl:Thing
+http://hasChild_under_http://hasChild some owl:Thing,owl:Thing
+CODOMAIN_http://hasChild_under_http://hasChild some owl:Thing,CODOMAIN_http://hasChild_under_http://hasChild some owl:Thing
+owl:Nothing,CODOMAIN_http://hasChild_under_http://hasChild some owl:Thing
+CODOMAIN_http://hasChild_under_http://hasChild some owl:Thing,owl:Thing
+DOMAIN_http://hasChild_under_http://hasChild some owl:Thing,DOMAIN_http://hasChild_under_http://hasChild some owl:Thing
+owl:Nothing,DOMAIN_http://hasChild_under_http://hasChild some owl:Thing
+DOMAIN_http://hasChild_under_http://hasChild some owl:Thing,owl:Thing
+#Not Person (from axiom 12)
+not http://Person,not http://Person
+owl:Nothing,not http://Person
+not http://Person,owl:Thing
+http://Person and not http://Person,http://Person and not http://Person
+owl:Nothing,http://Person and not http://Person
+http://Person and not http://Person,http://Person
+http://Person and not http://Person,not http://Person
+http://Person and not http://Person,owl:Thing
+http://Person and not http://Person,owl:Nothing
+http://Person or not http://Person,http://Person or not http://Person
+owl:Nothing,http://Person or not http://Person
+http://Person,http://Person or not http://Person
+not http://Person,http://Person or not http://Person
+http://Person or not http://Person,owl:Thing
+owl:Thing,http://Person or not http://Person
+#Role
+http://hasChild,http://hasChild
+owl:Nothing,http://hasChild
+http://hasChild,owl:Thing
+#General
+owl:Nothing,owl:Thing
+#From ABox
+# identity
+http://John,http://John
+http://Mary,http://Mary
+http://Peter,http://Peter
+DOMAIN_http://hasChild_under_http://hasChild some http://Male,DOMAIN_http://hasChild_under_http://hasChild some http://Male
+CODOMAIN_http://hasChild_under_http://hasChild some http://Male,CODOMAIN_http://hasChild_under_http://hasChild some http://Male
+http://hasChild some http://Male,http://hasChild some http://Male
+# initial
+owl:Nothing,http://John
+owl:Nothing,http://Mary
+owl:Nothing,http://Peter
+owl:Nothing,DOMAIN_http://hasChild_under_http://hasChild some http://Male
+owl:Nothing,CODOMAIN_http://hasChild_under_http://hasChild some http://Male
+owl:Nothing,http://hasChild some http://Male
+# terminal
+http://John,owl:Thing
+http://Mary,owl:Thing
+http://Peter,owl:Thing
+DOMAIN_http://hasChild_under_http://hasChild some http://Male,owl:Thing
+CODOMAIN_http://hasChild_under_http://hasChild some http://Male,owl:Thing
+http://hasChild some http://Male,owl:Thing
+## exists hasChild. Male (John)
+http://hasChild_under_http://hasChild some http://Male,http://hasChild
+CODOMAIN_http://hasChild_under_http://hasChild some http://Male,http://Male
+DOMAIN_http://hasChild_under_http://hasChild some http://Male,http://hasChild some http://Male
+http://hasChild some http://Male,DOMAIN_http://hasChild_under_http://hasChild some http://Male
+http://hasChild_under_http://hasChild some http://Male,http://hasChild_under_http://hasChild some http://Male
+owl:Nothing,http://hasChild_under_http://hasChild some http://Male
+http://hasChild_under_http://hasChild some http://Male,owl:Thing
+CODOMAIN_http://hasChild_under_http://hasChild some http://Male,CODOMAIN_http://hasChild_under_http://hasChild some http://Male
+owl:Nothing,CODOMAIN_http://hasChild_under_http://hasChild some http://Male
+CODOMAIN_http://hasChild_under_http://hasChild some http://Male,owl:Thing
+DOMAIN_http://hasChild_under_http://hasChild some http://Male,DOMAIN_http://hasChild_under_http://hasChild some http://Male
+http://John,http://hasChild some http://Male
+## hasChild(John,Mary)
+owl:Nothing,DOMAIN_http://hasChild
+DOMAIN_http://hasChild,owl:Thing
+DOMAIN_http://hasChild,DOMAIN_http://hasChild
+owl:Nothing,CODOMAIN_http://hasChild
+CODOMAIN_http://hasChild,owl:Thing
+CODOMAIN_http://hasChild,CODOMAIN_http://hasChild
+http://John,DOMAIN_http://hasChild
+http://Mary,CODOMAIN_http://hasChild
+http://hasChild,DOMAIN_http://hasChild
+http://hasChild,CODOMAIN_http://hasChild
+## Male(Peter)
+http://Peter,http://Male

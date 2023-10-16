@@ -1,5 +1,5 @@
 from mowl.ontology.normalize import ELNormalizer
-from mowl.base_models.model import EmbeddingModel
+from mowl.base_models.model import Model
 import torch as th
 from torch.utils.data import DataLoader, default_collate
 from mowl.datasets.el import ELDataset
@@ -12,9 +12,8 @@ import numpy as np
 import mowl.error.messages as msg
 import os
 
-class EmbeddingELModel(EmbeddingModel):
-    """Abstract class that provides basic functionalities for methods that aim to embed EL \
-    language.
+class EmbeddingELModel(Model):
+    """Abstract class for :math:`\mathcal{EL}` embedding methods.
 
     :param extended: If `True`, the model is supposed with 7 EL normal forms. This will be \
 reflected on the :class:`DataLoaders` that will be generated and also the model must \

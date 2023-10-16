@@ -9,8 +9,9 @@ from pykeen.nn.init import PretrainedInitializer
 import os
 import mowl.error.messages as msg
 from pykeen.training import SLCWATrainingLoop
+from deprecated.sphinx import versionadded
 
-
+@versionadded(version="0.2.0")
 class GraphPlusPyKEENModel(KGEModel):
     """
     This is a wrapper class of :class:`pykeen.models.ERModel` that allows to use the PyKEEN models in the mOWL framework.

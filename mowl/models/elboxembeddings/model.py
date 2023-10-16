@@ -1,7 +1,3 @@
-"""
-This example is based on the paper `Description Logic EL++ Embeddings with Intersectional \
-Closure <https://arxiv.org/abs/2202.14018v1>`_.
-"""
 
 from mowl.nn import ELBoxModule
 from mowl.base_models.elmodel import EmbeddingELModel
@@ -20,6 +16,9 @@ from torch import nn
 
 
 class ELBoxEmbeddings(EmbeddingELModel):
+    """
+    Implementation based on [peng2020]_.
+    """
 
     def __init__(self,
                  dataset,

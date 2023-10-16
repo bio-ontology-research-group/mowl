@@ -1,0 +1,33 @@
+name: Report a bug
+description: Describe any wrong or unexpected behavior of mOWL
+labels: [ "bug" ]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Describe the bug
+      description: Please provide a clear and concise description of the unexpected or erroneous behavior in mOWL that you experienced and what you expected to happen instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: How to reproduce
+      description: Please provide a example of the code that you ran to encounter the bug. This is a crucial aspect in order to find the source of error.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Please, describe the OS, the Python version, mOWL version and JDK version where you ran the code.
+    validations:
+      required: true
+  - type: textarea
+    id: extras
+    attributes:
+      label: Additional information
+      description: Add any other information about the problem here.
+    validations:
+      required: false
+

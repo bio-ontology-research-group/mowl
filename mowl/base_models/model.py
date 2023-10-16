@@ -9,14 +9,16 @@ from java.util import HashSet
 @versionchanged(version="0.1.0", reason="Parameter ``model_filepath`` added in the base class for \
     all models. Optional parameter that will use temporary files in case it is not set.")
 class Model():
-    def __init__(self, dataset, model_filepath=None):
-        """Abstract model class
-        :param dataset: Dataset object.
-        :type dataset: mowl.datasets.base.Dataset
-        :param model_filepath: Path for saving the model. Defaults to a temporary file path.
-        :type model_filepath: str, optional
-        """
+    """Abstract model class.
 
+    :param dataset: Dataset object.
+    :type dataset: mowl.datasets.base.Dataset
+    :param model_filepath: Path for saving the model. Defaults to a temporary file path.
+    :type model_filepath: str, optional
+    """
+
+
+    def __init__(self, dataset, model_filepath=None):
         if not isinstance(dataset, Dataset):
             raise TypeError("Parameter dataset must be a mOWL Dataset.")
 
@@ -136,10 +138,4 @@ class Model():
         """
         raise NotImplementedError()
     
-class EmbeddingModel(Model):
 
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-    def get_embeddings_data(self):
-        raise NotImplementedError()

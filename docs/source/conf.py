@@ -18,11 +18,11 @@ sys.path.insert(0, os.path.abspath('../../gateway/src/main/scala/org'))
 # -- Project information
 
 project = 'MOWL'
-copyright = '2023, BORG'
+copyright = '2023, Bio-Ontology Research Group'
 author = 'BORG'
 
-release = '0.2.0'
-version = '0.2.0'
+release = '0.3.0'
+version = '0.3.0'
 # -- General configuration
 
 extensions = [
@@ -36,6 +36,7 @@ extensions = [
     'sphinx.ext.todo',
     'sphinx.ext.viewcode',
     'sphinx_gallery.gen_gallery',
+    'sphinx_automodapi.automodapi',
 #    'IPython.sphinxext.ipython_console_highlighting'
 
     # Matplotlib

@@ -5,6 +5,8 @@ import tempfile
 class WalkingModel():
 
     '''
+    Base class for walking methods.
+
     :param num_walks: Number of walks per node
     :type num_walks: int
     :param walk_length: Length of each walk
