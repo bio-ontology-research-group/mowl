@@ -28,6 +28,7 @@ dependencies:
     - build
     - pykeen>=1.10.1
     - sphinx-rtd-theme
+    - sphinx-automodapi
     - nose
     - nose-exclude
     - coverage
@@ -37,7 +38,7 @@ dependencies:
     - memory-profiler
   - jupyter
   - ipykernel
-  - sphinx
+  - sphinx<7
   - sphinx-gallery
   - nbsphinx
   - mock

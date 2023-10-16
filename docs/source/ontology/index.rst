@@ -15,20 +15,20 @@ Ontology management
        f.write("node1\trel1\tnode2")
 
    
-Adding annotations to ontologies
+Adding axioms to ontologies
 ----------------------------------
 
-To add annotations in the form of axioms there is the method :func:`insert_annotations <mowl.ontology.extend.insert_annotations>`. All the annotations will be inserted into the ontology in the form :math:`C \sqsubseteq \exists R.D`, where :math:`C` is the annotating entity (it can be a new ontology class), :math:`D` is the annotated entity (usually is a class already existing in the ontology) and :math:`R` is the label of the relation. The annotation information must be stored in a ``.tsv`` file.
+The method :func:`insert_annotations <mowl.ontology.extend.insert_annotations>` allows adding new axioms in the form :math:`C \sqsubseteq \exists R.D`. Entities :math:`C`, :math:`R` and :math:`D` must be stored in a ``.tsv`` file.
 
-For example, let's say we have an ontology called :download:`MyOntology.owl` where there are ontology classes ``http://some_prefix/class_001``, ``http://some_prefix/class_002`` and ``http://some_prefix/class_003``. Furthermore, we have some other classes ``http://newclass1``, ``http://newclass2`` that are in relation with the already classes in the ontology. The relation must be a proper URI (let's use ``http://has_annotation``).
+For example, let's say we have an ontology called :download:`MyOntology.owl` and we want to add new axioms with a relation ``http://has_annotation``.
 
-The annotation information must be stored in an :download:`annotations file <annots.tsv>` with the following format:
+The axiom information must be stored in an :download:`annotations file <annots.tsv>` with the following format:
 
 .. code:: text
 
-   http://newclass1    http://some_prefix/class:002
-   http://newclass2    http://some_prefix/class:001    http://some_prefix/class:003
-
+   http://prefix1/class1    	http://prefix3/class3
+   http://prefix2/class2	    http://prefix4/class4	    http://prefix5/class5
+   
 Then to add that information to the ontology we use the following instructions:
    
 .. testcode:: 
@@ -47,29 +47,29 @@ In our example, the axioms inserted in the ontology will be the following in XML
 
 .. code:: xml
 
-   <Class rdf:about="http://newclass1">
+	  <Class rdf:about="http://prefix1/class1">
         <rdfs:subClassOf>
             <Restriction> 
                 <onProperty rdf:resource="http:///has_annotation"/>
-                <someValuesFrom rdf:resource="http://some_prefix/class:002"/>
+		<someValuesFrom rdf:resource="http://prefix2/class2"/>
             </Restriction>
         </rdfs:subClassOf>
     </Class>
 
-   <Class rdf:about="http:///newclass2">
+   <Class rdf:about="http:///prefix2/class2">
         <rdfs:subClassOf>
             <Restriction>
                 <onProperty rdf:resource="http:///has_annotation"/>
-                <someValuesFrom rdf:resource="http://some_prefix/class:001"/>
+                <someValuesFrom rdf:resource="http://prefix4/class4"/>
             </Restriction>
         </rdfs:subClassOf>
     </Class>
 
-   <Class rdf:about="http:///newclass2">
+   <Class rdf:about="http:///prefix2/class2">
         <rdfs:subClassOf>
             <Restriction>
                 <onProperty rdf:resource="http:///has_annotation"/>
-                <someValuesFrom rdf:resource="http://some_prefix/class:003"/>
+                <someValuesFrom rdf:resource="http://prefix5/class5"/>
             </Restriction>
         </rdfs:subClassOf>
     </Class>

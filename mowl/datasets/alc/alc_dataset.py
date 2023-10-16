@@ -14,22 +14,28 @@ from mowl.owlapi.adapter import OWLAPIAdapter
 
 class ALCDataset():
     """This class provides data-related methods to work with
-    :math:`\mathcal{ALC}` description logic language. In general, it
+    :math:`\mathcal{ALC}` description logic language. 
+
+    In general, it
     receives an ontology, groups axioms by similar patterns and
     returns a :class:`torch.utils.data.Dataset`. In the process, the
     classes and object properties names are mapped to an integer
     values  to create the datasets and the corresponding dictionaries
     can be input or created from scratch.
 
+    .. warning::
+
+        This class is on development.
+
     :param ontology: Input ontology
     :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
-    :param class_index_dict: Dictionary containing information `class
-    name --> index`. If not provided, a dictionary will be created
+    :param class_index_dict: Dictionary containing information `class \
+    name --> index`. If not provided, a dictionary will be created \
     from the ontology classes. Defaults to ``None``.
     :type class_index_dict: dict, optional
-    :param object_property_index_dict: Dictionary containing
-    information `object property name --> index`. If not provided, a
-    dictionary will be created from the ontology object
+    :param object_property_index_dict: Dictionary containing \
+    information `object property name --> index`. If not provided, a \
+    dictionary will be created from the ontology object \
     properties. Defaults to ``None``.
     :type object_property_index_dict: dict, optional
     """

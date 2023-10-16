@@ -3,9 +3,14 @@ import os
 from gensim.models import Word2Vec
 from gensim.models.word2vec import LineSentence
 import mowl.error.messages as msg
+from deprecated.sphinx import versionadded
 
+@versionadded(version="0.2.0")
 class SyntacticPlusW2VModel(SyntacticModel):
-
+    """
+    Model that combines corpus generation with Word2Vec training.
+    """
+    
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.w2v_model = None

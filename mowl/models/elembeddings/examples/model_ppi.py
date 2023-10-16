@@ -9,7 +9,10 @@ import numpy as np
 from mowl.models import ELEmbeddings
 
 class ELEmPPI(ELEmbeddings):
-
+    """
+    Example of ELEmbeddings for protein-protein interaction prediction.
+    """
+    
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 

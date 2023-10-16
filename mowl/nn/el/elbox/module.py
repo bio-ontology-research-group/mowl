@@ -5,7 +5,8 @@ import torch.nn as nn
 
 
 class ELBoxModule(ELModule):
-
+    """Implementation of ELBoxEmbeddings from [peng2020]_.
+    """
     def __init__(self, nb_ont_classes, nb_rels, embed_dim=50, margin=0.1):
         super().__init__()
         self.nb_ont_classes = nb_ont_classes

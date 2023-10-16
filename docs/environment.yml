@@ -25,3 +25,5 @@ dependencies:
     - ipython
     - memory-profiler
     - matplotlib
+    - sphinx-automodapi
+    

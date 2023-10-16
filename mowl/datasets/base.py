@@ -103,6 +103,9 @@ class Dataset():
 
     @property
     def class_to_id(self):
+        """
+        Dictionary mapping :class:`OWLClasses <mowl.datasets.OWLClasses>` to integer ids.
+        """
         return self.classes.as_index_dict
 
     @property
@@ -124,6 +127,10 @@ validation and testing ontologies using the OWLAPI method ``ontology.getIndividu
 
     @property
     def individual_to_id(self):
+        """
+        Dictionary mapping :class:`OWLIndividuals <mowl.datasets.OWLIndividuals>` to integer ids.
+        """
+
         return self.individuals.as_index_dict
 
     @property
@@ -151,6 +158,9 @@ validation and testing ontologies using the OWLAPI method ``ontology.getIndividu
 
     @property
     def object_property_to_id(self):
+        """
+        Dictionary mapping :class:`OWLObjectProperties <mowl.datasets.OWLObjectProperties>` to integer ids.
+        """
         return self.object_properties.as_index_dict
 
     @property
@@ -446,7 +456,9 @@ class Entities():
 
 
 class OWLClasses(Entities):
-    """Class containing OWL classes indexed by they IRIs"""
+    """
+    Iterable for :class:`org.semanticweb.owlapi.model.OWLClass`
+    """
 
     def check_owl_type(self, collection):
         for item in collection:
@@ -460,7 +472,9 @@ class OWLClasses(Entities):
 
 
 class OWLIndividuals(Entities):
-    """Class containing OWL individuals indexed by they IRIs"""
+    """
+    Iterable for :class:`org.semanticweb.owlapi.model.OWLIndividual`
+    """
 
     def check_owl_type(self, collection):
         for item in collection:
@@ -474,7 +488,9 @@ class OWLIndividuals(Entities):
 
 
 class OWLObjectProperties(Entities):
-    """Class containing OWL object properties indexed by they IRIs"""
+    """
+    Iterable for :class:`org.semanticweb.owlapi.model.OWLObjectProperty`
+    """
 
     def check_owl_type(self, collection):
         for item in collection:

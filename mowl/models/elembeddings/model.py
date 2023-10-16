@@ -1,12 +1,3 @@
-"""
-This example corresponds to the paper `EL Embeddings: Geometric Construction of Models for the \
-Description Logic EL++ <https://www.ijcai.org/proceedings/2019/845>`_.
-
-The idea of this paper is to embed EL by modeling ontology classes as :math:`n`-dimensional \
-balls (:math:`n`-balls) and ontology object properties as transformations of those \
-:math:`n`-balls. For each of the normal forms, there is a distance function defined that will \
-work as loss functions in the optimization framework.
-"""
 
 
 from mowl.base_models.elmodel import EmbeddingELModel
@@ -17,7 +8,16 @@ import numpy as np
 from mowl.projection import projector_factory
 
 class ELEmbeddings(EmbeddingELModel):
+    """
+    Implementation based on [kulmanov2019]_.
 
+    The idea of this paper is to embed EL by modeling ontology classes as :math:`n`-dimensional \
+    balls (:math:`n`-balls) and ontology object properties as transformations of those \
+    :math:`n`-balls. For each of the normal forms, there is a distance function defined that will \
+    work as loss functions in the optimization framework.
+    """
+
+    
     def __init__(self,
                  dataset,
                  embed_dim=50,

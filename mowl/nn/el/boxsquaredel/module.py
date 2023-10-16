@@ -5,7 +5,10 @@ import torch.nn as nn
 
 
 class BoxSquaredELModule(ELModule):
-
+    """
+    Implementation of Box :math:`^2` EL from [jackermeier2023]_.
+    """
+    
     def __init__(self, nb_ont_classes, nb_rels, embed_dim=50, gamma=0, delta = 2, reg_factor = 0.05):
         super().__init__()
         self.nb_ont_classes = nb_ont_classes
