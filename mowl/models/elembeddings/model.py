@@ -62,8 +62,7 @@ class ELEmbeddings(EmbeddingELModel):
 
         eval_property = self.dataset.get_evaluation_property()
         eval_classes = self.dataset.evaluation_classes.as_str
-        print(eval_classes)
-
+        
         self._head_entities = set(list(eval_classes)[:])
         self._tail_entities = set(list(eval_classes)[:])
 
