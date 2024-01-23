@@ -11,6 +11,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Deprecated
 ### Removed
 ### Fixed
+
+- Fix bottleneck in ELBE example for PPI.
+- Fix bugs in BoxSquaredEL model.
+
 ### Security
 
 ## [0.3.0]
