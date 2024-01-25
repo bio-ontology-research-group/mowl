@@ -204,3 +204,6 @@ def gci3_bot_loss(data, head_offset):
 def reg_loss(bump, reg_factor):
     reg_loss = reg_factor * th.linalg.norm(bump.weight, dim=1).mean()
     return reg_loss
+
+
+

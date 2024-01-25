@@ -1,8 +1,10 @@
 from mowl.ontology.normalize import ELNormalizer
 from mowl.base_models.model import Model
+from mowl.datasets.el import ELDataset
+from mowl.projection import projector_factory
 import torch as th
 from torch.utils.data import DataLoader, default_collate
-from mowl.datasets.el import ELDataset
+
 from deprecated.sphinx import versionadded
 
 from org.semanticweb.owlapi.model import OWLClassExpression, OWLClass, OWLObjectSomeValuesFrom, OWLObjectIntersectionOf
@@ -48,6 +50,7 @@ merging the 3 extra to their corresponding origin normal forms. Defaults to True
         self._validation_datasets = None
         self._testing_datasets = None
 
+        self._loaded_eval = False
 
     def init_module(self):
         raise NotImplementedError
@@ -379,3 +382,43 @@ of :class:`torch.utils.data.DataLoader`
         #self._kge_method = kge_method
     
 
+
+
+    def load_pairwise_eval_data(self):
+
+        if self._loaded_eval:
+            return
+
+        eval_property = self.dataset.get_evaluation_property()
+        head_classes, tail_classes = self.dataset.evaluation_classes
+        self._head_entities = head_classes.as_str
+        self._tail_entities = tail_classes.as_str
+                        
+        eval_projector = projector_factory('taxonomy_rels', taxonomy=False,
+                                           relations=[eval_property])
+
+        self._training_set = eval_projector.project(self.dataset.ontology)
+        self._testing_set = eval_projector.project(self.dataset.testing)
+
+        self._loaded_eval = True
+
+
+    @property
+    def training_set(self):
+        self.load_pairwise_eval_data()
+        return self._training_set
+
+    @property
+    def testing_set(self):
+        self.load_pairwise_eval_data()
+        return self._testing_set
+
+    @property
+    def head_entities(self):
+        self.load_pairwise_eval_data()
+        return self._head_entities
+
+    @property
+    def tail_entities(self):
+        self.load_pairwise_eval_data()
+        return self._tail_entities
