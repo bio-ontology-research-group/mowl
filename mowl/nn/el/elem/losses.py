@@ -54,7 +54,7 @@ def gci2_score(data, class_embed, class_rad, rel_embed, margin):
     # c should intersect with d + r
 
     dst = th.linalg.norm(c + rE - d, dim=1, keepdim=True)
-    score = th.relu(dst + rc - rd - margin)
+    score = th.relu(dst + rc - rd - margin) + 10e-6
     return score
     
 def gci2_loss(data, class_embed, class_rad, rel_embed, margin, neg=False):
