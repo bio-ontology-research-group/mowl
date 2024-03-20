@@ -59,7 +59,7 @@ class TestSemanticModel(TestCase):
         
             
     def test_train_after_pretrained(self):
-        first_model = ELEmPPI(self.ppi_dataset, model_filepath="first_kge_model", epochs=3)
+        first_model = ELEmPPI(self.ppi_dataset, model_filepath="first_semantic_model", epochs=3)
         first_model.train()
 
         first_kge_model = first_model.model_filepath
