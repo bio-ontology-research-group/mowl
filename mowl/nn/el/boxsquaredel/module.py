@@ -60,3 +60,12 @@ class BoxSquaredELModule(ELModule):
 
     def gci3_bot_loss(self, data, neg=False):
         return L.gci3_bot_loss(data, self.head_offset)
+
+
+    def gci2_score(self, data):
+        return L.gci2_score(data, self.class_center, self.class_offset, self.head_center,
+                            self.head_offset, self.tail_center, self.tail_offset, self.bump,
+                           self.gamma, self.delta)
+
+    def regularization_loss(self):
+        return L.reg_loss(self.bump, self.reg_factor)
