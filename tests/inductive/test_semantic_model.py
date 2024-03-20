@@ -59,17 +59,17 @@ class TestSemanticModel(TestCase):
         
             
     def test_train_after_pretrained(self):
-        first_model = ELEmPPI(self.ppi_dataset, model_filepath="first_kge_model", epochs=3)
-        first_model.train()
+        first_model = ELEmPPI(self.ppi_dataset, model_filepath="first_semantic_model", epochs=3)
+        first_model.train(validate_every=1)
 
-        first_kge_model = first_model.model_filepath
+        first_semantic_model = first_model.model_filepath
         
-        self.assertTrue(os.path.exists(first_kge_model))
+        self.assertTrue(os.path.exists(first_semantic_model))
 
         second_model = ELEmPPI(self.ppi_dataset, epochs=2)
-        second_model.from_pretrained(first_kge_model)
+        second_model.from_pretrained(first_semantic_model)
 
-        self.assertNotEqual(second_model.model_filepath, first_kge_model)
+        self.assertNotEqual(second_model.model_filepath, first_semantic_model)
         second_model.train()
 
 

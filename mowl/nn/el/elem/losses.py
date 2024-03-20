@@ -2,20 +2,20 @@ import torch as th
 import numpy as np
 
 
-def gci0_loss(data, class_embed, class_rad, class_reg, margin, neg=False):
+def gci0_loss(data, class_embed, class_rad, margin, neg=False):
     c = class_embed(data[:, 0])
     d = class_embed(data[:, 1])
     rc = th.abs(class_rad(data[:, 0]))
     rd = th.abs(class_rad(data[:, 1]))
     dist = th.linalg.norm(c - d, dim=1, keepdim=True) + rc - rd
     loss = th.relu(dist - margin)
-    return loss + class_reg(c) + class_reg(d)
+    return loss 
 
 def gci0_bot_loss(data, class_rad, neg=False):
     rc = class_rad(data[:, 0])
     return rc
 
-def gci1_loss(data, class_embed, class_rad, class_reg, margin, neg=False):
+def gci1_loss(data, class_embed, class_rad, margin, neg=False):
     c = class_embed(data[:, 0])
     d = class_embed(data[:, 1])
     e = class_embed(data[:, 2])
@@ -29,10 +29,10 @@ def gci1_loss(data, class_embed, class_rad, class_reg, margin, neg=False):
     dst3 = th.linalg.norm(e - d, dim=1, keepdim=True)
     loss = (th.relu(dst - sr - margin) + th.relu(dst2 - rc - margin) + th.relu(dst3 - rd - margin))
 
-    return loss + class_reg(c) + class_reg(d) + class_reg(e)
+    return loss 
 
 
-def gci1_bot_loss(data, class_embed, class_rad, class_reg, margin, neg=False):
+def gci1_bot_loss(data, class_embed, class_rad, margin, neg=False):
     c = class_embed(data[:, 0])
     d = class_embed(data[:, 1])
     rc = class_rad(data[:, 0])
@@ -40,30 +40,34 @@ def gci1_bot_loss(data, class_embed, class_rad, class_reg, margin, neg=False):
 
     sr = rc + rd
     dst = th.reshape(th.linalg.norm(d - c, axis=1), [-1, 1])
-    return th.relu(sr - dst + margin) + class_reg(c) + class_reg(d)
+    return th.relu(sr - dst + margin) 
 
 
-def gci2_loss(data, class_embed, class_rad, rel_embed, class_reg, margin, neg=False):
+def gci2_score(data, class_embed, class_rad, rel_embed, margin):
+    # C subClassOf R some D
+    c = class_embed(data[:, 0])
+    rE = rel_embed(data[:, 1])
+    d = class_embed(data[:, 2])
+
+    rc = th.abs(class_rad(data[:, 0]))
+    rd = th.abs(class_rad(data[:, 2]))
+    # c should intersect with d + r
+
+    dst = th.linalg.norm(c + rE - d, dim=1, keepdim=True)
+    score = th.relu(dst + rc - rd - margin) + 10e-6
+    return score
+    
+def gci2_loss(data, class_embed, class_rad, rel_embed, margin, neg=False):
 
     if neg:
-        return gci2_loss_neg(data, class_embed, class_rad, rel_embed, class_reg, margin)
+        return gci2_loss_neg(data, class_embed, class_rad, rel_embed, margin)
 
     else:
-        # C subClassOf R some D
-        c = class_embed(data[:, 0])
-        rE = rel_embed(data[:, 1])
-        d = class_embed(data[:, 2])
-
-        rc = th.abs(class_rad(data[:, 0]))
-        rd = th.abs(class_rad(data[:, 2]))
-        # c should intersect with d + r
-
-        dst = th.linalg.norm(c + rE - d, dim=1, keepdim=True)
-        loss = th.relu(dst + rc - rd - margin)
-        return loss + class_reg(c) + class_reg(d)
+        score = gci2_score(data, class_embed, class_rad, rel_embed, margin)
+        return score 
 
 
-def gci2_loss_neg(data, class_embed, class_rad, rel_embed, class_reg, margin):
+def gci2_loss_neg(data, class_embed, class_rad, rel_embed, margin):
     # C subClassOf R some D
     c = class_embed(data[:, 0])
     rE = rel_embed(data[:, 1])
@@ -75,10 +79,10 @@ def gci2_loss_neg(data, class_embed, class_rad, rel_embed, class_reg, margin):
 
     dst = th.linalg.norm(c + rE - d, dim=1, keepdim=True)
     loss = th.relu(rc + rd - dst + margin)
-    return loss + class_reg(c) + class_reg(d)
+    return loss 
 
 
-def gci3_loss(data, class_embed, class_rad, rel_embed, class_reg, margin, neg=False):
+def gci3_loss(data, class_embed, class_rad, rel_embed, margin, neg=False):
     # R some C subClassOf D
     rE = rel_embed(data[:, 0])
     c = class_embed(data[:, 1])
@@ -88,8 +92,15 @@ def gci3_loss(data, class_embed, class_rad, rel_embed, class_reg, margin, neg=Fa
 
     euc = th.linalg.norm(c - rE - d, dim=1, keepdim=True)
     loss = th.relu(euc - rc - rd - margin)
-    return loss + class_reg(c) + class_reg(d)
+    return loss 
 
 def gci3_bot_loss(data, class_rad, neg=False):
     rc = class_rad(data[:, 1])
     return rc
+
+
+def regularization_loss(class_embed, reg_factor):
+    res = th.abs(th.linalg.norm(class_embed.weight, axis=1) - reg_factor).mean()
+    # res = th.reshape(res, [-1, 1])
+    return res
+
