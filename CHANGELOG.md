@@ -11,7 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Deprecated
 ### Removed
 ### Fixed
-
+- Fix bug in GCI2 score for ELEmbeddings
 - Fix bottleneck in ELBE example for PPI.
 - Fix bugs in BoxSquaredEL model.
 
