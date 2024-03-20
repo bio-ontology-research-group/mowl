@@ -44,7 +44,7 @@ git clone https://github.com/bio-ontology-research-group/mowl.git
 
 cd mowl
 
-conda env create -f envs/environment_3.8.yml
+conda env create -f envs/environment_3_8.yml
 conda activate mowl
 
 ./build_jars.sh

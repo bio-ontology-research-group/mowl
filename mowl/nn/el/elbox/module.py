@@ -50,6 +50,10 @@ class ELBoxModule(ELModule):
         return L.gci2_loss(data, self.class_embed, self.class_offset, self.rel_embed,
                            self.margin, neg=neg)
 
+    def gci2_score(self, data):
+        return L.gci2_score(data, self.class_embed, self.class_offset, self.rel_embed,
+                            self.margin)
+    
     def gci3_loss(self, data, neg=False):
         return L.gci3_loss(data, self.class_embed, self.class_offset, self.rel_embed,
                            self.margin, neg=neg)

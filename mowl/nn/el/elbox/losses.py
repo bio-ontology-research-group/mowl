@@ -67,6 +67,8 @@ def gci2_loss(data, class_embed, class_offset, rel_embed, margin, neg=False):
         dst = th.reshape(th.linalg.norm(th.relu(euc + off_c - off_d + margin), axis=1), [-1, 1])
         return dst
 
+def gci2_score(*args, **kwargs):
+    return gci2_loss(*args, **kwargs)
 
 def gci2_loss_neg(data, class_embed, class_offset, rel_embed, margin):
     c = class_embed(data[:, 0])

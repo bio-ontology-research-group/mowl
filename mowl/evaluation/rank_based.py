@@ -125,7 +125,7 @@ This is used to compute filtered metrics.
             c, d = self.head_name_indexemb[c], self.tail_name_indexemb[d]
             c, d = self.head_indexemb_indexsc[c], self.tail_indexemb_indexsc[d]
 
-            self.training_scores[c, d] = 1000000
+            self.training_scores[c, d] = 10000
 
         logging.info("Training scores created")
         self._loaded_tr_scores = True
@@ -231,6 +231,7 @@ This is used to compute filtered metrics.
             print(f'Hits@100: {top100:.2f} Filtered:   {ftop100:.2f}')
             print(f'MR:       {mean_rank:.2f} Filtered: {fmean_rank:.2f}')
             print(f'AUC:      {rank_auc:.2f} Filtered:   {frank_auc:.2f}')
+            print(f"Tail entities: {num_tail_entities}")
 
         self.metrics = {
             "hits@1": top1,

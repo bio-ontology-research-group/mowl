@@ -39,34 +39,35 @@ class ELEmModule(ELModule):
 
         self.margin = margin
 
-    def class_reg(self, x):
-        # force n-ball to be inside unit ball
-        res = th.abs(th.linalg.norm(x, axis=1) - self.reg_norm)
-        res = th.reshape(res, [-1, 1])
-        return res
-
     def gci0_loss(self, data, neg=False):
-        return L.gci0_loss(data, self.class_embed, self.class_rad, self.class_reg, self.margin,
+        return L.gci0_loss(data, self.class_embed, self.class_rad, self.margin,
                            neg=neg)
 
     def gci0_bot_loss(self, data, neg=False):
         return L.gci0_bot_loss(data, self.class_rad)
         
     def gci1_loss(self, data, neg=False):
-        return L.gci1_loss(data, self.class_embed, self.class_rad, self.class_reg, self.margin,
+        return L.gci1_loss(data, self.class_embed, self.class_rad, self.margin,
                            neg=neg)
 
     def gci1_bot_loss(self, data, neg=False):
-        return L.gci1_bot_loss(data, self.class_embed, self.class_rad, self.class_reg, self.margin,
+        return L.gci1_bot_loss(data, self.class_embed, self.class_rad, self.margin,
                                neg=neg)
 
     def gci2_loss(self, data, neg=False, idxs_for_negs=None):
-        return L.gci2_loss(data, self.class_embed, self.class_rad, self.rel_embed, self.class_reg,
+        return L.gci2_loss(data, self.class_embed, self.class_rad, self.rel_embed,
                            self.margin, neg=neg)
 
     def gci3_loss(self, data, neg=False):
-        return L.gci3_loss(data, self.class_embed, self.class_rad, self.rel_embed, self.class_reg,
+        return L.gci3_loss(data, self.class_embed, self.class_rad, self.rel_embed,
                            self.margin, neg=neg)
 
     def gci3_bot_loss(self, data, neg=False):
         return L.gci3_bot_loss(data, self.class_rad)
+
+
+    def gci2_score(self, data):
+        return L.gci2_score(data, self.class_embed, self.class_rad, self.rel_embed, self.margin)
+
+    def regularization_loss(self):
+        return L.regularization_loss(self.class_embed, self.reg_norm)
