@@ -12,7 +12,6 @@ gateway/.gradle/
 
 *.err
 *.out
-*.jar
 
 .ipynb_checkpoints/
 *.tar.gz

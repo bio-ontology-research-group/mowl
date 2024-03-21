@@ -47,25 +47,12 @@ mainly in Python, but we have integrated the functionalities of [OWLAPI](https:/
 pip install mowl-borg
 ```
 
-### Build from source
-Installation can be done with the following commands:
+### Install from source
 
 ```
-git clone https://github.com/bio-ontology-research-group/mowl.git
+pip install git+https://github.com/bio-ontology-research-group/mowl
 
-cd mowl
-
-conda env create -f envs/environment_3_8.yml
-conda activate mowl
-
-./build_jars.sh
-
-python setup.py install
 ```
-
-The line `./build_jars.sh` will generate the necessary `jar` files to bind Python with the code that runs in the JVM. After building, a ``.tar.gz`` file will be generated under `dist` and can be used to install mOWL.
-
-
 
 ## List of contributors
 * [Fernando Zhapa](https://github.com/ferzcam)
