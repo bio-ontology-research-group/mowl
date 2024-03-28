@@ -1,4 +1,4 @@
-import mowl.nn.el.elbox.losses as L
+import mowl.nn.el.elbe.losses as L
 from mowl.nn import ELModule
 import torch as th
 import torch.nn as nn
