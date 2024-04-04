@@ -36,7 +36,7 @@ def gci0_score(data, class_center, class_offset, gamma):
 
 def gci0_loss(data, class_center, class_offset, gamma, neg=False):
     score = gci0_score(data, class_center, class_offset, gamma)
-    loss = score.square().mean()
+    loss = score.square()
     return loss
 
 def gci0_bot_score(data, class_offset):
@@ -46,7 +46,7 @@ def gci0_bot_score(data, class_offset):
 
 def gci0_bot_loss(data, class_offset):
     score = gci0_bot_score(data, class_offset)
-    loss = score.square().mean()
+    loss = score.square()
     return loss
 
 def gci1_score(data, class_center, class_offset, gamma):
@@ -70,7 +70,7 @@ def gci1_score(data, class_center, class_offset, gamma):
 
 def gci1_loss(data, class_center, class_offset, gamma, neg=False):
     score = gci1_score(data, class_center, class_offset, gamma)
-    loss = score.square().mean()
+    loss = score.square()
     return loss
 
 def gci1_bot_score(data, class_center, class_offset, gamma):
@@ -90,7 +90,7 @@ def gci1_bot_score(data, class_center, class_offset, gamma):
 
 def gci1_bot_loss(data, class_center, class_offset, gamma, neg=False):
     score = gci1_bot_score(data, class_center, class_offset, gamma)
-    loss = score.square().mean()
+    loss = score.square()
     return loss
 
 def gci2_score(data, class_center, class_offset, head_center, head_offset, tail_center, tail_offset, bump, gamma, delta):
@@ -129,8 +129,8 @@ def gci2_loss(data, class_center, class_offset, head_center, head_offset, tail_c
         return gci2_loss_neg(data, class_center, class_offset, head_center, head_offset, tail_center, tail_offset, bump, gamma, delta, reg_factor)
     else:
         score = gci2_score(data, class_center, class_offset, head_center, head_offset, tail_center, tail_offset, bump, gamma, delta)
-        loss = score.square().mean()
-        reg_loss = 0#reg_factor * th.linalg.norm(bump.weight, dim=1).mean()
+        loss = score.square()
+        reg_loss = 0#reg_factor * th.linalg.norm(bump.weight, dim=1)
         return loss + reg_loss
         
         
@@ -160,11 +160,11 @@ def gci2_loss_neg(data, class_center, class_offset, head_center, head_offset, ta
     bumped_c = (center_c + bump_d, offset_c)
     bumped_d = (center_d + bump_c, offset_d)
     
-    first_part = (delta - minimal_distance(bumped_c, box_head, gamma)).square().mean()
-    second_part = (delta - minimal_distance(bumped_d, box_tail, gamma)).square().mean()
+    first_part = (delta - minimal_distance(bumped_c, box_head, gamma)).square()
+    second_part = (delta - minimal_distance(bumped_d, box_tail, gamma)).square()
 
     loss = first_part + second_part
-    reg_loss = 0#reg_factor * th.linalg.norm(bump.weight, dim=1).mean()
+    reg_loss = 0#reg_factor * th.linalg.norm(bump.weight, dim=1)
     return loss + reg_loss
 
 
@@ -184,8 +184,8 @@ def gci3_score(data, class_center, class_offset, head_center, head_offset, tail_
 
 def gci3_loss(data, class_center, class_offset, head_center, head_offset, tail_center, tail_offset, bump, gamma, reg_factor, neg=False):
     score = gci3_score(data, class_center, class_offset, head_center, head_offset, tail_center, tail_offset, bump, gamma)
-    loss = score.square().mean()
-    reg_loss =0# reg_factor * th.linalg.norm(bump.weight, dim=1).mean()
+    loss = score.square()
+    reg_loss =0# reg_factor * th.linalg.norm(bump.weight, dim=1)
 
     return loss + reg_loss
 
@@ -197,7 +197,7 @@ def gci3_bot_score(data, head_offset):
 
 def gci3_bot_loss(data, head_offset):
     score = gci3_bot_score(data, head_offset)
-    loss = score.square().mean()
+    loss = score.square()
     return loss
 
 
