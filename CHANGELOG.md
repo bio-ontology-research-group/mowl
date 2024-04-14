@@ -10,7 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `.jar` files to enable pip install from GitHub
 ### Changed 
 - Removed `.mean()` for GCI losses in BoxSquaredELModule
+- Property `evaluation_classes` in `mowl.datasets.builtin.PPIYeastDataset` returns a pair of `OWLClasses` objects instead of a single `OWLClasses` object.
 ### Deprecated
+- `mowl.nn.ELBoxModule` changed name to `mowl.nn.ELBEModule`
 ### Removed
 ### Fixed
 - Fix bug in GCI2 score for ELEmbeddings

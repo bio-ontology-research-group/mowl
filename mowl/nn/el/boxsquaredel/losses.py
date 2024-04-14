@@ -21,7 +21,7 @@ def box_intersection(box_a, box_b):
 def inclusion_score(box_a, box_b, gamma):
     dist_a_b = box_distance(box_a, box_b)
     _, offset_a = box_a
-    score = th.linalg.norm(th.relu(dist_a_b + 2*offset_a - gamma), dim=1)
+    score = th.linalg.norm(th.relu(dist_a_b + 2*offset_a - gamma))
     return score
 
 def gci0_score(data, class_center, class_offset, gamma):
