@@ -31,11 +31,6 @@ jobs:
         environment-file: envs/environment_3_10.yml
         auto-activate-base: false
         channels: conda-forge
-    - name: Build JAR files
-      run: |
-        java -version
-        conda list
-        bash build_jars.sh
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
