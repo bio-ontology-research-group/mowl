@@ -11,12 +11,12 @@ dependencies:
   - networkx
   - click
   - grpcio
-  - JPype1=1.4.1
+  - JPype1=1.5.0
   - pandas
   - protobuf
   - pyyaml
   - requests
-  - scipy
+  - scipy<1.13.0
   - scikit-learn
   - urllib3
   - pytorch
@@ -26,7 +26,7 @@ dependencies:
   - pip
   - pip:
     - build
-    - pykeen>=1.10.1
+    - pykeen==1.10.2
     - sphinx-rtd-theme
     - sphinx-automodapi
     - nose

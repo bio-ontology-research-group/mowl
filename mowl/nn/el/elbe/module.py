@@ -1,9 +1,11 @@
-import mowl.nn.el.elbox.losses as L
+import mowl.nn.el.elbe.losses as L
 from mowl.nn import ELModule
 import torch as th
 import torch.nn as nn
+from deprecated.sphinx import deprecated
 
 
+@deprecated(version="0.4.0", reason="Use ELBEModule instead")
 class ELBoxModule(ELModule):
     """Implementation of ELBoxEmbeddings from [peng2020]_.
     """
@@ -60,3 +62,8 @@ class ELBoxModule(ELModule):
 
     def gci3_bot_loss(self, data, neg=False):
         return L.gci3_bot_loss(data, self.class_offset, neg=neg)
+
+
+class ELBEModule(ELBoxModule):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
