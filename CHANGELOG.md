@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 ### Added
 - Added `.jar` files to enable pip install from GitHub
+- Tested with Python 3.12
 ### Changed 
 - Removed `.mean()` for GCI losses in BoxSquaredELModule
 ### Deprecated
