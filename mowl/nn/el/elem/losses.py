@@ -35,8 +35,8 @@ def gci1_loss(data, class_embed, class_rad, margin, neg=False):
 def gci1_bot_loss(data, class_embed, class_rad, margin, neg=False):
     c = class_embed(data[:, 0])
     d = class_embed(data[:, 1])
-    rc = class_rad(data[:, 0])
-    rd = class_rad(data[:, 1])
+    rc = th.abs(class_rad(data[:, 0]))
+    rd = th.abs(class_rad(data[:, 1]))
 
     sr = rc + rd
     dst = th.reshape(th.linalg.norm(d - c, axis=1), [-1, 1])
