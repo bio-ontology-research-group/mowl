@@ -23,3 +23,27 @@ python download_ontologies.py
 | FoodOn   | 59385      | 45137                   | 45844    | 4513       | 9028    | 194031                     | 126348                                              |
 
 
+
+# Running
+
+```
+cd elembeddings
+python subsumption.py -ns -e 100
+```
+
+We can use the same trained model to evaluate under different settings:
+
+
+```
+# To filter the deductive closure
+python subsumption.py -ns -e 100 -ot -filterded
+```
+
+
+```
+# To use the deductive closure as positives
+python subsumption.py -ns -e 100 -evalded
+```
+
+
+
