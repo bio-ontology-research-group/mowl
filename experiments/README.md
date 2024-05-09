@@ -47,3 +47,24 @@ python subsumption.py -ns -e 100 -evalded
 
 
 
+# Preliminary Results
+
+
+## ELEmbeddings
+
+### Testing set only (ignoring deductive closure axioms)
+
+
+| MR    | MRR    | AUC    | Hits@1 | Hits@3 | Hits@10 | Hits@50 | Hits@100 |
+|-------|--------|--------|--------|--------|---------|---------|----------|
+| 10561 | 0.0177 | 0.7948 | 0.0015 | 0.0183 | 0.0467  | 0.1119  | 0.1525   |
+
+
+### Testing set including deductive closure axioms
+
+| MR   | MRR    | AUC    | Hits@1 | Hits@3 | Hits@10 | Hits@50 | Hits@100 |
+|------|--------|--------|--------|--------|---------|---------|----------|
+| 8492 | 0.0307 | 0.8350 | 0.0052 | 0.0302 | 0.0786  | 0.1916  | 0.2550   |
+
+
+
