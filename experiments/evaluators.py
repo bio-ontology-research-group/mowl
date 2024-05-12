@@ -259,7 +259,8 @@ class SubsumptionEvaluator(Evaluator):
         
         return filtering_labels
     
-        
+
+
 
 def compute_rank_roc(ranks, num_entities):
     n_tails = num_entities

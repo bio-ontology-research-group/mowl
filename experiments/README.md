@@ -50,7 +50,7 @@ python subsumption.py -ns -e 100 -evalded
 # Preliminary Results
 
 
-## ELEmbeddings
+## ELEmbeddings - Gene Ontology
 
 ### Testing set only (ignoring deductive closure axioms)
 
