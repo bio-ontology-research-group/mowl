@@ -3,6 +3,13 @@ import mowl.error.messages as msg
 from mowl.corpus import extract_annotation_corpus, extract_and_save_annotation_corpus, extract_axiom_corpus, extract_and_save_axiom_corpus
 import tempfile
 
+from deprecated.sphinx import versionadded
+
+
+import logging
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
 class SyntacticModel(Model):
     """
     Base class for syntactic methods. By *syntactic*, we mean methods that use the syntax of the ontology to generate the corpus.
@@ -47,13 +54,13 @@ class SyntacticModel(Model):
     
         return self._corpus
 
-
     def generate_corpus(self, save = True, with_annotations=False):
         """Generates the corpus of the training ontology. It uses the Manchester OWL Syntax.
         
         :param save: if True, the corpus is saved into the model filepath, otherwise, the corpus is returned as a list of sentences. Default is True.
-        :type save: bool
+        :type save: bool, optional
         :param with_annotations: if True, the corpus is generated with the annotations, otherwise, the corpus is generated only with the axioms. Default is False.
+        :type with_annotations: bool, optional
         """
         if save:
             extract_and_save_axiom_corpus(self.dataset.ontology,
@@ -77,5 +84,19 @@ class SyntacticModel(Model):
         self._with_annotations = with_annotations
 
 
+    @versionadded(version="0.4.0")
+    def load_corpus(self):
+        """Loads the corpus from the corpus filepath.
+
+        :rtype: list
+        """
+        if self._corpus is None:
+            with open(self.corpus_filepath, "r") as f:
+                corpus = f.readlines()
+                corpus = [sentence.strip() for sentence in corpus]
+                self._corpus = corpus
+                
+        return self._corpus
+        
     def train(self):
         raise NotImplementedError

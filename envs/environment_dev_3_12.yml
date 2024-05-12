@@ -1,10 +1,10 @@
-name: mowldev311
+name: mowldev312
 channels:
   - pytorch
   - conda-forge
   - anaconda
 dependencies:
-  - python=3.11
+  - python=3.12
   - cairo
   - deprecated
   - numpy
