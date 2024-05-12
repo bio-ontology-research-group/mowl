@@ -2,6 +2,26 @@ import torch as th
 import numpy as np
 
 
+def class_assertion_loss(data, class_embed, class_offset, ind_embed, margin, neg=False):
+    c = class_embed(data[:, 0])
+    off_c = th.abs(class_offset(data[:, 0]))
+    i = ind_embed(data[:, 1])
+
+    euc = th.abs(c - i)
+    dst = th.reshape(th.linalg.norm(th.relu(euc - off_c + margin), axis=1), [-1, 1])
+    return dst
+
+def object_property_assertion_loss(data, rel_embed, ind_embed, margin, neg=False):
+    subj = ind_embed(data[:, 0])
+    rel = rel_embed(data[:, 1])
+    obj = ind_embed(data[:, 2])
+                                    
+    euc = th.abs(subj + rel - obj)
+    dst = th.reshape(th.linalg.norm(th.relu(euc + margin), axis=1), [-1, 1])
+    return dst
+
+
+    
 def gci0_loss(data, class_embed, class_offset, margin, neg=False):
     c = class_embed(data[:, 0])
     d = class_embed(data[:, 1])

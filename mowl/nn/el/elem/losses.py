@@ -2,6 +2,26 @@ import torch as th
 import numpy as np
 
 
+def class_assertion_loss(data, class_embed, class_rad, ind_embed, margin, neg=False):
+    c = class_embed(data[:, 0])
+    rc = th.abs(class_rad(data[:, 0]))
+    i = ind_embed(data[:, 1])
+
+    dist = th.linalg.norm(c - i, dim=1, keepdim=True) - rc
+    loss = th.relu(dist - margin)
+    return loss
+
+
+def object_property_assertion_loss(data, rel_embed, ind_embed, margin, neg=False):
+    # C subClassOf R some D
+    subj = ind_embed(data[:, 0])
+    rel = rel_embed(data[:, 1])
+    obj = ind_embed(data[:, 2])
+                        
+    dst = th.linalg.norm(subj + rel - obj, dim=1, keepdim=True)
+    score = th.relu(dst  - margin) + 10e-6
+    return score
+
 def gci0_loss(data, class_embed, class_rad, margin, neg=False):
     c = class_embed(data[:, 0])
     d = class_embed(data[:, 1])
@@ -14,6 +34,7 @@ def gci0_loss(data, class_embed, class_rad, margin, neg=False):
 def gci0_bot_loss(data, class_rad, neg=False):
     rc = class_rad(data[:, 0])
     return rc
+
 
 def gci1_loss(data, class_embed, class_rad, margin, neg=False):
     c = class_embed(data[:, 0])
