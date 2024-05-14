@@ -42,15 +42,13 @@ def main(dataset_name, evaluator_name, embed_dim, batch_size, epochs,
 
     if no_sweep:
         wandb_logger.log({"dataset_name": dataset_name,
-                          "evaluator_name": evaluator_name,
                           "embed_dim": embed_dim,
-                          "batch_size": batch_size
+                          "epochs": epochs
                           })
     else:
         dataset_name = wandb.config.dataset_name
-        evaluator_name = wandb.config.evaluator_name
         embed_dim = wandb.config.embed_dim
-        batch_size = wandb.config.batch_size
+        epochs = wandb.config.epochs
                         
     root_dir, dataset = dataset_resolver(dataset_name)
 
@@ -60,8 +58,8 @@ def main(dataset_name, evaluator_name, embed_dim, batch_size, epochs,
     corpora_dir = f"{root_dir}/../corpora/"
     os.makedirs(corpora_dir, exist_ok=True)
     
-    model_filepath = f"{model_dir}/{embed_dim}_{batch_size}.pt"
-    corpus_filepath = f"{corpora_dir}/{embed_dim}_{batch_size}.txt"
+    model_filepath = f"{model_dir}/{embed_dim}_{epochs}.pt"
+    corpus_filepath = f"{corpora_dir}/{embed_dim}_{epochs}.txt"
 
     model = OPA2VecModel(evaluator_name, dataset, batch_size,
                          embed_dim, model_filepath, corpus_filepath, epochs,
@@ -140,7 +138,7 @@ class OPA2VecModel(SyntacticPlusW2VModel):
         
         self.embed_dim = embed_dim
         self.evaluator = evaluator_resolver(evaluator_name, dataset,
-                                            device, batch_size=64,
+                                            device, batch_size=16,
                                             evaluate_with_deductive_closure=evaluate_deductive,
                                             filter_deductive_closure=filter_deductive)
         self.epochs = epochs
@@ -206,6 +204,7 @@ class EvaluationModel(nn.Module):
         logger.debug(f"Y shape: {y.shape}")
         
         dot_product = th.sum(x * y, dim=1)
+        logger.debug(f"Dot product shape: {dot_product.shape}")
         return 1 - th.sigmoid(dot_product)
         
 class DummyLogger():
