@@ -12,6 +12,8 @@ from org.semanticweb.owlapi.model.parameters import Imports
 from org.semanticweb.owlapi.formats import RDFXMLDocumentFormat
 from java.util import HashSet
 
+import sys
+
 import logging
 logger = logging.getLogger(__name__)
 handler = logging.StreamHandler()
@@ -48,32 +50,80 @@ def main(input_ontology, percentage, random_seed):
     logger.info("Number of initial axioms: {}".format(len(tbox_axioms)))
         
     selected_axioms = []
+    other_axioms = []
 
+    all_classes_to_axioms = dict()
+    
     for axiom in tqdm(tbox_axioms, desc="Getting C subclassof D axioms"):
-        if axiom.getAxiomType() != AxiomType.SUBCLASS_OF:
-            continue
-        if axiom.getSubClass().getClassExpressionType() != CT.OWL_CLASS:
-            continue
-        if axiom.getSuperClass().getClassExpressionType() != CT.OWL_CLASS:
-            continue
-        selected_axioms.append(axiom)
+        classes_in_axiom = axiom.getClassesInSignature()
+        for c in classes_in_axiom:
+            if c not in all_classes_to_axioms:
+                all_classes_to_axioms[c] = []
+            all_classes_to_axioms[c].append(axiom)
 
-    num_axioms = len(selected_axioms)
         
+        if axiom.getAxiomType() == AxiomType.SUBCLASS_OF:
+            sub = axiom.getSubClass()
+            sup = axiom.getSuperClass()
+
+            if sub.getClassExpressionType() == CT.OWL_CLASS and sup.getClassExpressionType() == CT.OWL_CLASS:
+                selected_axioms.append(axiom)
+
+            else:
+                other_axioms.append(axiom)
+        else:
+            other_axioms.append(axiom)
+
+    logger.info("Number of selected axioms: {}".format(len(selected_axioms)))
+    logger.info("Number of other axioms: {}".format(len(other_axioms)))
+
+
     random.shuffle(selected_axioms)
-    axioms_to_remove = selected_axioms[:int(num_axioms*percentage)]
+    split_index = 1 - int(len(selected_axioms)*percentage)
+    num_testing_axioms = len(selected_axioms[split_index:])
+    
+    testing_axioms = []
+    selected_axioms = iter(selected_axioms)
+    while len(testing_axioms) < num_testing_axioms:
+        axiom = next(selected_axioms)
+        classes_in_axiom = axiom.getClassesInSignature()
+
+        elegible = True
+        for c in classes_in_axiom:
+            if len(all_classes_to_axioms[c]) < 2:
+                elegible = False
+                break
+
+        if elegible:
+            testing_axioms.append(axiom)
+            for c in classes_in_axiom:
+                all_classes_to_axioms[c].remove(axiom)
+                                
+
+    testing_classes_to_axioms = dict()
+    for axiom in testing_axioms:
+        classes_in_axiom = axiom.getClassesInSignature()
+        for c in classes_in_axiom:
+            if c not in testing_classes_to_axioms:
+                testing_classes_to_axioms[c] = []
+            testing_classes_to_axioms[c].append(axiom)
+                
+    diff_classes = set(testing_classes_to_axioms.keys()) - set(all_classes_to_axioms.keys())
+    if len(diff_classes) > 0:
+        logger.warning(f"{len(diff_classes)} classes in the test set that are not in the training set")
+    
+    axioms_to_remove = testing_axioms
     axioms_to_remove_j = HashSet()
     axioms_to_remove_j.addAll(axioms_to_remove)
-    print(f"Removing {len(axioms_to_remove)} axioms from a total of {num_axioms}")
+    print(f"Removing {len(axioms_to_remove)} axioms from a total of {len(tbox_axioms)} axioms")
     manager.removeAxioms(ontology, axioms_to_remove_j)
 
-    
     valid_axioms = HashSet()
     test_axioms = HashSet()
     num_axioms = len(axioms_to_remove)//3
     valid_axioms.addAll(axioms_to_remove[:num_axioms])
     test_axioms.addAll(axioms_to_remove[num_axioms:])
-                            
+    
     num_axioms = len(ontology.getTBoxAxioms(Imports.fromBoolean(True)))
     print(f"Number of training axioms: {num_axioms}")
                      

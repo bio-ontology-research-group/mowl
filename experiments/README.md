@@ -19,8 +19,9 @@ python download_ontologies.py
 
 | Ontology | All Axioms | All axioms C subclass D | Traninig | Validation | Testing | Training Deductive Closure | Traning Deductive Closure with no Top as superclass |
 |----------|------------|-------------------------|----------|------------|---------|----------------------------|-----------------------------------------------------|
-| GO       | 95249      | 66810                   | 75206    | 6681       | 13362   | 314557                     | 216319                                              |
-| FoodOn   | 59385      | 45137                   | 45844    | 4513       | 9028    | 194031                     | 126348                                              |
+| GO       | 95249      | 66810                   | 75206    | 6681       | 13362   | 303272                     | 251801                                              |
+| FoodOn   | 59385      | 45137                   | 45844    | 4513       | 9028    | 150481                     | 112849                                              |
+
 
 
 
