@@ -21,8 +21,99 @@ def box_intersection(box_a, box_b):
 def inclusion_score(box_a, box_b, gamma):
     dist_a_b = box_distance(box_a, box_b)
     _, offset_a = box_a
-    score = th.linalg.norm(th.relu(dist_a_b + 2*offset_a - gamma))
+    score = th.linalg.norm(th.relu(dist_a_b + 2*offset_a - gamma), dim=1)
     return score
+
+def class_assertion_loss(data, class_center, class_offset, ind_center, gamma, neg = False):
+    center_c = class_center(data[:, 0])
+    offset_c = th.abs(class_offset(data[:, 0]))
+    center_ind = ind_center(data[:, 1])
+
+    box_c = (center_c, offset_c)
+    box_d = (center_ind, th.zeros_like(offset_c, device=offset_c.device))
+    score = inclusion_score(box_d, box_c, gamma)
+    return score
+
+
+def object_property_assertion_score(data, head_center, head_offset, tail_center, tail_offset, ind_center, bump_individuals, gamma, delta):
+    center_c = ind_center(data[:, 0])
+    
+    center_head = head_center(data[:, 1])
+    offset_head = th.abs(head_offset(data[:, 1]))
+
+    center_tail = tail_center(data[:, 1])
+    offset_tail = th.abs(tail_offset(data[:, 1]))
+
+    center_d = ind_center(data[:, 2])
+    
+    offset_c = th.zeros_like(offset_head, device=offset_head.device)
+    offset_d = th.zeros_like(offset_head, device=offset_head.device)
+    
+    bump_c = bump_individuals(data[:, 0])
+    bump_d = bump_individuals(data[:, 2])
+
+    box_c = (center_c, offset_c)
+    box_head = (center_head, offset_head)
+    box_tail = (center_tail, offset_tail)
+    box_d = (center_d, offset_d)
+
+    bumped_c = (center_c + bump_d, offset_c)
+    bumped_d = (center_d + bump_c, offset_d)
+
+    inclussion_1 = inclusion_score(bumped_c, box_head, gamma)
+    inclussion_2 = inclusion_score(bumped_d, box_tail, gamma)
+
+    score = (inclussion_1 + inclussion_2)/2
+    return score
+
+def object_property_assertion_loss(data, head_center, head_offset, tail_center, tail_offset, ind_center, bump_individuals, gamma, delta, reg_factor, neg=False):
+    if neg:
+        return object_property_assertion_loss_neg(data, head_center, head_offset, tail_center, tail_offset, ind_center, bump_individuals, gamma, delta, reg_factor)
+    else:
+        score = object_property_assertion_score(data, head_center, head_offset, tail_center, tail_offset, ind_center, bump_individuals, gamma, delta)
+        loss = score.square()
+        reg_loss = 0#reg_factor * th.linalg.norm(bump.weight, dim=1)
+        return loss + reg_loss
+        
+        
+def object_property_assertion_loss_neg(data, head_center, head_offset, tail_center, tail_offset, ind_center, bump_individuals, gamma, delta, reg_factor):
+
+    def minimal_distance(box_a, box_b, gamma):
+        dist = box_distance(box_a, box_b)
+        min_dist = th.linalg.norm(th.relu(dist + gamma), dim=1)
+        return min_dist
+
+    center_c = ind_center(data[:, 0])
+    
+    center_head = head_center(data[:, 1])
+    offset_head = th.abs(head_offset(data[:, 1]))
+    center_tail = tail_center(data[:, 1])
+    offset_tail = th.abs(tail_offset(data[:, 1]))
+    center_d = ind_center(data[:, 2])
+
+    offset_c = th.zeros_like(offset_head, device=offset_head.device)
+    offset_d = th.zeros_like(offset_head, device=offset_head.device)
+    
+    bump_c = bump(data[:, 0])
+    bump_d = bump(data[:, 2])
+
+    box_c = (center_c, offset_c)
+    box_head = (center_head, offset_head)
+    box_tail = (center_tail, offset_tail)
+    box_d = (center_d, offset_d)
+
+    bumped_c = (center_c + bump_d, offset_c)
+    bumped_d = (center_d + bump_c, offset_d)
+    
+    first_part = (delta - minimal_distance(bumped_c, box_head, gamma)).square()
+    second_part = (delta - minimal_distance(bumped_d, box_tail, gamma)).square()
+
+    loss = first_part + second_part
+    reg_loss = 0#reg_factor * th.linalg.norm(bump.weight, dim=1)
+    return loss + reg_loss
+
+
+
 
 def gci0_score(data, class_center, class_offset, gamma):
     center_c = class_center(data[:, 0])

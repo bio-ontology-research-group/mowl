@@ -19,7 +19,7 @@ class ELModule(nn.Module):
         self.rel_embed = None
         self.ind_embed = None
 
-        self.gci_names = ["gci0", "gci1", "gci2", "gci3", "gci0_bot", "gci1_bot", "gci3_bot"]
+        self.gci_names = ["gci0", "gci1", "gci2", "gci3", "gci0_bot", "gci1_bot", "gci3_bot", "class_assertion", "object_property_assertion"]
 
     def gci0_loss(self, gci, neg=False):
         """Loss function for GCI0: :math:`C \sqsubseteq D`.
@@ -119,6 +119,33 @@ class ELModule(nn.Module):
 
         raise NotImplementedError()
 
+
+    def class_assertion_loss(self, axiom_data, neg=False):
+        """Loss function for class assertion: :math:`C(a)`.
+        :param axiom_data: Input tensor of shape \(\*,2\) where ``C`` classes will be at \
+        ``axiom_data[:,0]`` and ``a`` individuals will be at ``axiom_data[:,1]``. It is \
+        recommended to use the :class:`ELDataset <mowl.datasets.el.ELDataset>`.
+        :type axiom_data: :class:`torch.Tensor`
+        :param neg: Parameter indicating that the negative version of this loss function must be \
+        used. Defaults to ``False``.
+        :type neg: bool, optional.
+        """
+
+        raise NotImplementedError()
+        
+    def object_property_assertion_loss(self, axiom_data, neg=False):
+        """Loss function for role assertion: :math:`R(a,b)`.
+        :param axiom_data: Input tensor of shape \(\*,3\) where ``a`` object properties will be at \
+        ``axiom_data[0], ``R`` object properties will be at ``axiom_data[:,1]`` and ``b`` individuals \
+        will be at ``axiom_data[:,2]``. It is recommended to use the :class:`ELDataset <mowl.datasets.el.ELDataset>`.
+        :type axiom_data: :class:`torch.Tensor`
+        :param neg: Parameter indicating that the negative version of this loss function must be \
+        used. Defaults to ``False``.
+        :type neg: bool, optional.
+        """
+
+        return NotImplementedError()
+    
     def get_loss_function(self, gci_name):
         """
         This chooses the corresponding loss fuction given the name of the GCI.
@@ -141,7 +168,9 @@ class ELModule(nn.Module):
             "gci0": self.gci0_loss,
             "gci1": self.gci1_loss,
             "gci2": self.gci2_loss,
-            "gci3": self.gci3_loss
+            "gci3": self.gci3_loss,
+            "class_assertion": self.class_assertion_loss,
+            "object_property_assertion": self.object_property_assertion_loss
         }[gci_name]
 
     def forward(self, gci, gci_name, neg=False):
