@@ -140,7 +140,7 @@ class OPA2VecModel(SyntacticPlusW2VModel):
         
         self.embed_dim = embed_dim
         self.evaluator = evaluator_resolver(evaluator_name, dataset,
-                                            device, batch_size=64,
+                                            device, batch_size=16,
                                             evaluate_with_deductive_closure=evaluate_deductive,
                                             filter_deductive_closure=filter_deductive)
         self.epochs = epochs
