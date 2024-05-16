@@ -17,10 +17,11 @@ We used Gene Ontology at version 2024-04-24 and FoodOn at version 2024-04-07. Yo
 python download_ontologies.py
 ```
 
-| Ontology | All Axioms | All axioms C subclass D | Traninig | Validation | Testing | Training Deductive Closure | Traning Deductive Closure with no Top as superclass |
-|----------|------------|-------------------------|----------|------------|---------|----------------------------|-----------------------------------------------------|
-| GO       | 95249      | 66810                   | 75206    | 6681       | 13362   | 303272                     | 251801                                              |
-| FoodOn   | 59385      | 45137                   | 45844    | 4513       | 9028    | 150481                     | 112849                                              |
+| Ontology | All Axioms | All axioms C subclass D | Traninig | Validation | Testing | Training Deductive Closure | Traning Deductive Closure with no Top as superclass | Dreprecated Classes |
+|----------|------------|-------------------------|----------|------------|---------|----------------------------|-----------------------------------------------------|---------------------|
+| GO       | 95249      | 66810                   | 75207    | 6680       | 13362   | 276709                     | 222275                                              | 9216                |
+| FoodOn   | 59385      | 45137                   | 45844    | 4513       | 9028    | 150481                     | 112849                                              | 2178                |
+
 
 
 

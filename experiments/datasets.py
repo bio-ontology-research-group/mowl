@@ -20,6 +20,14 @@ class SubsumptionDataset(PathDataset):
     @property
     def evaluation_classes(self):
         if self._evaluation_classes is None:
+
+            train_classes = self.ontology.getClassesInSignature()
+            valid_classes = self.validation.getClassesInSignature()
+            test_classes = self.testing.getClassesInSignature()
+
+            assert set(valid_classes) - set(train_classes) == set(), f"Valid classes not in train: {set(valid_classes) - set(train_classes)}"
+            assert set(test_classes) - set(train_classes) == set(), f"Test classes not in train: {set(test_classes) - set(train_classes)}"
+            
             classes = self.ontology.getClassesInSignature()
             classes = OWLClasses(classes)
             self._evaluation_classes = classes, classes

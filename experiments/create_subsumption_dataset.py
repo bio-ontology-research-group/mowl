@@ -90,7 +90,7 @@ def main(input_ontology, percentage, random_seed):
 
         elegible = True
         for c in classes_in_axiom:
-            if len(all_classes_to_axioms[c]) < 2:
+            if len(all_classes_to_axioms[c]) < 3:
                 elegible = False
                 break
 
