@@ -114,7 +114,15 @@ class OWL2VecStarProjector(
       }
     }
 
-    val subclassOfTriples = subclassOfAxioms.flatMap(x => processSubClassAxiom(x.getSubClass, x.getSuperClass, ontology))
+    try {
+      val subclassOfTriples = subclassOfAxioms.flatMap(x => processSubClassAxiom(x.getSubClass, x.getSuperClass, ontology))
+
+    } catch {
+      case e: Exception => {
+        println("Error: ", e)
+      }
+    }
+    
     val equivalenceTriples = equivalenceAxioms.flatMap(
       x => {
         val subClass::superClass::rest= x.getClassExpressionsAsList.asScala.toList
