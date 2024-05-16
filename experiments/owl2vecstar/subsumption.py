@@ -137,6 +137,10 @@ class OWL2VecStarModel(GraphPlusPyKEENModel):
                  model_filepath, epochs,
                  evaluate_deductive, filter_deductive, device,
                  wandb_logger):
+
+        classes = dataset.classes.as_str
+        class_to_id = {class_: i for i, class_ in enumerate(classes)}
+        
         super().__init__(dataset, model_filepath=model_filepath)
 
 
@@ -151,7 +155,7 @@ class OWL2VecStarModel(GraphPlusPyKEENModel):
         self.device = device
         self.wandb_logger = wandb_logger
 
-        self.set_projector(mowl.projection.OWL2VecStarProjector())
+        self.set_projector(mowl.projection.OWL2VecStarProjector(include_literals=False))
         self.set_kge_method(TransE, embedding_dim=self.embed_dim, random_seed=42)
         self._kge_method = self._kge_method.to(self.device)
         self.optimizer = th.optim.Adam
@@ -165,7 +169,10 @@ class OWL2VecStarModel(GraphPlusPyKEENModel):
             
     def test(self):
         self.from_pretrained(self.model_filepath)
-        evaluation_module = EvaluationModel(self.class_embeddings, self.dataset, self.embed_dim, self.device)
+        self._kge_method = self._kge_method.to(self.device)
+
+        
+        evaluation_module = EvaluationModel(self.kge_method, self.triples_factory, self.dataset, self.embed_dim, self.device)
         
         return self.evaluator.evaluate(evaluation_module)
 
@@ -173,63 +180,48 @@ class OWL2VecStarModel(GraphPlusPyKEENModel):
 
 
 class EvaluationModel(nn.Module):
-    def __init__(self, class_embeddings, dataset, embedding_size, device):
+    def __init__(self, kge_method, triples_factory, dataset, embedding_size, device):
         super().__init__()
         self.embedding_size = embedding_size
         self.device = device
+
+        self.kge_method = kge_method
         
-        self.embeddings = self.init_module(class_embeddings, dataset)
-
-
-    def init_module(self, class_embeddings, dataset):
         classes = dataset.classes.as_str
         class_to_id = {class_: i for i, class_ in enumerate(classes)}
-                
-        embeddings_list = []
-        not_found = 0
-        not_found_classes = set()
+
+        ont_id_to_graph_id = dict()
+
         for class_ in classes:
-            if class_ in class_embeddings:
-                embeddings_list.append(class_embeddings[class_])
+            if class_ not in triples_factory.entity_to_id:
+                ont_id_to_graph_id[class_to_id[class_]] = -1
+                logger.warning(f"Class {class_} not found in graph")
             else:
-                not_found += 1
-                not_found_classes.add(class_)
-                embeddings_list.append(np.random.rand(self.embedding_size))
-        logger.warning(f"Found only {len(classes) - not_found} out of {len(classes)} embeddings")
-
-
-        test_classes = dataset.testing.getClassesInSignature()
-        missing_test_classes = 0
-        for class_ in test_classes:
-            class_str = str(class_.toStringID())
-            if class_str in not_found_classes:
-                missing_test_classes += 1
-                logger.warning(f"Class {class_} missing in training")
-
-        logger.warning(f"Missing {missing_test_classes} out of {len(test_classes)} test classes")
-            
-        embeddings_list = np.array(embeddings_list)
-        embeddings = th.tensor(embeddings_list).to(self.device)
-        return nn.Embedding.from_pretrained(embeddings)
+                ont_id_to_graph_id[class_to_id[class_]] = triples_factory.entity_to_id[class_]
         
+        assert list(ont_id_to_graph_id.keys()) == list(range(len(classes)))
+        self.graph_ids = th.tensor(list(ont_id_to_graph_id.values())).to(self.device)
+        
+        relation_id = triples_factory.relation_to_id["http://subclassof"]
+        self.rel_embedding = th.tensor(relation_id).to(self.device)
         
     def forward(self, data, *args, **kwargs):
 
-        x = data[:, 0]
-        y = data[:, 1]
+        x = self.graph_ids[data[:, 0]].unsqueeze(1)
+        y = self.graph_ids[data[:, 1]].unsqueeze(1)
 
-        logger.debug(f"X shape: {x.shape}")
-        logger.debug(f"Y shape: {y.shape}")
+        x_unique = self.graph_ids[data[:, 0].unique()]
+        y_unique = self.graph_ids[data[:, 1].unique()]
+        assert th.min(x_unique) >= 0, f"sum: {(x_unique==-1).sum()} min: {th.min(x_unique)} len: {len(x_unique)}"
+        assert th.min(y_unique) >= 0, f"sum: {(y_unique==-1).sum()} min: {th.min(y_unique)} len: {len(y_unique)}"
+                        
+        r = self.rel_embedding.expand_as(x)
         
-        x = self.embeddings(x)
-        y = self.embeddings(y)
-
-        logger.debug(f"X shape: {x.shape}")
-        logger.debug(f"Y shape: {y.shape}")
-        
-        dot_product = th.sum(x * y, dim=1)
-        logger.debug(f"Dot product shape: {dot_product.shape}")
-        return 1 - th.sigmoid(dot_product)
+        triples = th.cat([x, r, y], dim=1)
+        assert triples.shape[1] == 3
+        scores = - self.kge_method.score_hrt(triples)
+        # print(scores.min(), scores.max())
+        return scores
         
 class DummyLogger():
     def __init__(self, *args, **kwargs):
