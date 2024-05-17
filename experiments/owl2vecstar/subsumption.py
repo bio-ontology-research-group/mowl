@@ -155,7 +155,7 @@ class OWL2VecStarModel(GraphPlusPyKEENModel):
         self.device = device
         self.wandb_logger = wandb_logger
 
-        self.set_projector(mowl.projection.OWL2VecStarProjector(include_literals=False))
+        self.set_projector(mowl.projection.OWL2VecStarProjector(include_literals=True))
         self.set_kge_method(TransE, embedding_dim=self.embed_dim, random_seed=42)
         self._kge_method = self._kge_method.to(self.device)
         self.optimizer = th.optim.Adam
@@ -196,6 +196,7 @@ class EvaluationModel(nn.Module):
             if class_ not in triples_factory.entity_to_id:
                 ont_id_to_graph_id[class_to_id[class_]] = -1
                 logger.warning(f"Class {class_} not found in graph")
+                
             else:
                 ont_id_to_graph_id[class_to_id[class_]] = triples_factory.entity_to_id[class_]
         
