@@ -90,4 +90,4 @@ class BoxSquaredELModule(ELModule):
         loss = L.reg_loss(self.bump, self.reg_factor)
         if self.bump_individuals is not None:
             loss += L.reg_loss(self.bump_individuals, self.reg_factor)
-        return lossx
+        return loss
