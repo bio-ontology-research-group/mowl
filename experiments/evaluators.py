@@ -12,7 +12,7 @@ logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
 class Evaluator:
-    def __init__(self, dataset, device, batch_size=256, evaluate_with_deductive_closure=False, filter_deductive_closure=False):
+    def __init__(self, dataset, device, batch_size=16, evaluate_with_deductive_closure=False, filter_deductive_closure=False):
 
         if evaluate_with_deductive_closure and filter_deductive_closure:
             raise ValueError("Cannot evaluate with deductive closure and filter it at the same time. Set either evaluate_with_deductive_closure or filter_deductive_closure to False.")

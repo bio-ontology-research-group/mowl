@@ -34,7 +34,7 @@ th.autograd.set_detect_anomaly(True)
 @ck.option("--module_margin", "-mm", default=0.1, help="Margin for the module")
 @ck.option("--loss_margin", "-lm", default=0.1, help="Margin for the loss function")
 @ck.option("--learning_rate", "-lr", default=0.001, help="Learning rate")
-@ck.option("--epochs", "-e", default=4000, help="Number of epochs")
+@ck.option("--epochs", "-ep", default=10000, help="Number of epochs")
 @ck.option("--evaluate_every", "-every", default=50, help="Evaluate every n epochs")
 @ck.option("--evaluate_deductive", "-evalded", is_flag=True, help="Use deductive closure as positive examples for evaluation")
 @ck.option("--filter_deductive", "-filterded", is_flag=True, help="Filter out examples from deductive closure")
@@ -51,9 +51,14 @@ def main(dataset_name, evaluator_name, embed_dim, batch_size,
     
     wandb_logger = wandb.init(entity="zhapacfp_team", project="ontoem", group="f{dataset_name}_{evaluate_deductive}_{filter_deductive}", name=wandb_description)
 
+
+    if loss_margin == int(loss_margin):
+        loss_margin = int(loss_margin)
+    if module_margin == int(module_margin):
+        module_margin = int(module_margin)
+    
     if no_sweep:
         wandb_logger.log({"dataset_name": dataset_name,
-                          "evaluator_name": evaluator_name,
                           "embed_dim": embed_dim,
                           "batch_size": batch_size,
                           "module_margin": module_margin,
@@ -62,7 +67,6 @@ def main(dataset_name, evaluator_name, embed_dim, batch_size,
                           })
     else:
         dataset_name = wandb.config.dataset_name
-        evaluator_name = wandb.config.evaluator_name
         embed_dim = wandb.config.embed_dim
         batch_size = wandb.config.batch_size
         module_margin = wandb.config.module_margin
@@ -150,9 +154,10 @@ class GeometricELModel(EmbeddingELModel):
         super().__init__(dataset, embed_dim, batch_size, model_filepath=model_filepath)
 
         self.module = ELEmModule(len(self.dataset.classes),
-                                  len(self.dataset.object_properties),
-                                  self.embed_dim,
-                                  module_margin)
+                                 len(self.dataset.object_properties),
+                                 len(self.dataset.individuals),
+                                 self.embed_dim,
+                                 module_margin)
 
         self.evaluator = evaluator_resolver(evaluator_name, dataset, device, evaluate_with_deductive_closure=evaluate_deductive, filter_deductive_closure=filter_deductive)
         self.learning_rate = learning_rate
@@ -189,10 +194,7 @@ class GeometricELModel(EmbeddingELModel):
         max_lr = self.learning_rate
         train_steps = int(math.ceil(len(main_dl) / self.batch_size))
         step_size_up = 2 * train_steps
-        scheduler = CyclicLR(optimizer, base_lr=min_lr, max_lr=max_lr, step_size_up=step_size_up, cycle_momentum=False)
-
-        scheduler = th.optim.lr_scheduler.CyclicLR(optimizer, base_lr=min_lr, max_lr=max_lr, step_size_up=1000, step_size_down=1000, cycle_momentum=False)
-        
+                
         best_mrr = 0
         best_loss = float("inf")
         
@@ -233,8 +235,6 @@ class GeometricELModel(EmbeddingELModel):
                 loss.backward()
                 optimizer.step()
                 
-                scheduler.step()
-
                 total_train_loss += loss.item()
                                     
             if epoch % self.evaluate_every == 0:

@@ -22,9 +22,10 @@ logger.setLevel(logging.INFO)
     
 @ck.command()
 @ck.option("--input_ontology", "-i", type=ck.Path(exists=True), required=True)
+@ck.option('--min_number', "-min", default=3, help='Minimum number of axioms per class')
 @ck.option("--percentage", "-p", type=float, default=0.3)
 @ck.option("--random_seed", "-seed", type=int, default=0)
-def main(input_ontology, percentage, random_seed):
+def main(input_ontology, min_number, percentage, random_seed):
     """Remove axioms from an ontology. It will remove subclass axioms of
         the form C subclassof D.  C and D are concept names and
         R is a role. The percentage value indicates the amount of
@@ -90,7 +91,7 @@ def main(input_ontology, percentage, random_seed):
 
         elegible = True
         for c in classes_in_axiom:
-            if len(all_classes_to_axioms[c]) < 3:
+            if len(all_classes_to_axioms[c]) < min_number:
                 elegible = False
                 break
 
