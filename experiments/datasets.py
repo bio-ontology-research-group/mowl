@@ -29,6 +29,29 @@ class SubsumptionDataset(PathDataset):
             assert set(test_classes) - set(train_classes) == set(), f"Test classes not in train: {set(test_classes) - set(train_classes)}"
             
             classes = self.ontology.getClassesInSignature()
+
+            bot_in_classes = False
+            top_in_classes = False
+
+            for cls in classes:
+                if cls.isOWLNothing():
+                    bot_in_classes = True
+                    continue
+                if cls.isOWLThing():
+                    top_in_classes = True
+                    continue
+
+            if not bot_in_classes:
+                print("Did not find owl:Nothing in ontology classes. Adding it")
+                classes.add(self.ontology.getOWLOntologyManager().getOWLDataFactory().getOWLNothing())
+            if not top_in_classes:
+                print("Did not find owl:Thing in classes. Adding it")
+                classes.add(self.ontology.getOWLOntologyManager().getOWLDataFactory().getOWLThing())
+
+            
+                
+
+            
             classes = OWLClasses(classes)
             self._evaluation_classes = classes, classes
 

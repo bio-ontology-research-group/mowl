@@ -12,7 +12,7 @@ logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
 class Evaluator:
-    def __init__(self, dataset, device, batch_size=16, evaluate_with_deductive_closure=False, filter_deductive_closure=False):
+    def __init__(self, dataset, device, batch_size=64, evaluate_with_deductive_closure=False, filter_deductive_closure=False):
 
         if evaluate_with_deductive_closure and filter_deductive_closure:
             raise ValueError("Cannot evaluate with deductive closure and filter it at the same time. Set either evaluate_with_deductive_closure or filter_deductive_closure to False.")
@@ -63,7 +63,8 @@ class Evaluator:
             mask = mask1 | mask2
             deductive_closure_tuples = self.deductive_closure_tuples[~mask]
             
-            eval_tuples = th.cat([eval_tuples, deductive_closure_tuples], dim=0)
+            # eval_tuples = th.cat([eval_tuples, deductive_closure_tuples], dim=0)
+            eval_tuples = deductive_closure_tuples
         dataloader = FastTensorDataLoader(eval_tuples, batch_size=self.batch_size, shuffle=False)
 
         metrics = dict()
@@ -76,6 +77,7 @@ class Evaluator:
             f_hits_k = dict({"1": 0, "3": 0, "10": 0, "50": 0, "100": 0})
         
             filtering_labels = self.get_filtering_labels(num_heads, num_tails, **kwargs)
+            deductive_labels = self.get_deductive_labels(num_heads, num_tails, **kwargs)
             
         with th.no_grad():
             for batch, in dataloader:
@@ -95,6 +97,13 @@ class Evaluator:
                     tail = tails[i]
                     tail = th.where(self.evaluation_tails == tail)[0].item()
                     preds = logits_heads[i]
+
+                    if self.evaluate_with_deductive_closure:
+                        ded_labels = deductive_labels[head].to(preds.device)
+                        ded_labels[tail] = 1
+                        preds = preds * ded_labels
+
+                    
                     order = th.argsort(preds, descending=False)
                     rank = th.where(order == tail)[0].item() + 1
                     mr += rank
@@ -102,6 +111,12 @@ class Evaluator:
 
                     if mode == "test":
                         f_preds = preds * filtering_labels[head].to(preds.device)
+
+                        if self.evaluate_with_deductive_closure:
+                            ded_labels = deductive_labels[head].to(preds.device)
+                            ded_labels[tail] = 1
+                            f_preds = f_preds * ded_labels
+
                         f_order = th.argsort(f_preds, descending=False)
                         f_rank = th.where(f_order == tail)[0].item() + 1
                         fmr += f_rank
@@ -129,6 +144,12 @@ class Evaluator:
                     head = aux_heads[i]
                     head = th.where(self.evaluation_heads == head)[0].item()
                     preds = logits_tails[i]
+
+                    if self.evaluate_with_deductive_closure:
+                        ded_labels = deductive_labels[:, tail].to(preds.device)
+                        ded_labels[head] = 1
+                        preds = preds * ded_labels
+                    
                     order = th.argsort(preds, descending=False)
                     rank = th.where(order == head)[0].item() + 1
                     mr += rank
@@ -136,6 +157,13 @@ class Evaluator:
 
                     if mode == "test":
                         f_preds = preds * filtering_labels[:, tail].to(preds.device)
+
+                        if self.evaluate_with_deductive_closure:
+                            ded_labels = deductive_labels[:, tail].to(preds.device)
+                            ded_labels[head] = 1
+                            f_preds = f_preds * ded_labels
+
+                        
                         f_order = th.argsort(f_preds, descending=False)
                         f_rank = th.where(f_order == head)[0].item() + 1
                         fmr += f_rank
@@ -261,6 +289,14 @@ class SubsumptionEvaluator(Evaluator):
     
 
 
+    def get_deductive_labels(self, num_heads, num_tails):
+        deductive_labels = th.ones((num_heads, num_tails), dtype=th.float)
+
+        for head, tail in self.deductive_closure_tuples:
+            deductive_labels[head, tail] = 10000
+        
+        return deductive_labels
+    
 
 def compute_rank_roc(ranks, num_entities):
     n_tails = num_entities

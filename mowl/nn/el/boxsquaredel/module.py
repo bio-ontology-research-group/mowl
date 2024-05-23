@@ -27,7 +27,7 @@ class BoxSquaredELModule(ELModule):
 
         self.bump = self.init_embeddings(nb_ont_classes, embed_dim)
 
-        if self.nb_inds is not None:
+        if self.nb_inds is not None and self.nb_inds > 0:
             self.bump_individuals = self.init_embeddings(nb_inds, embed_dim)
             self.ind_center = self.init_embeddings(nb_inds, embed_dim)
 

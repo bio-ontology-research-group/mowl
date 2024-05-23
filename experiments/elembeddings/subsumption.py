@@ -79,7 +79,7 @@ def main(dataset_name, evaluator_name, embed_dim, batch_size,
     model_dir = f"{root_dir}/../models/"
     os.makedirs(model_dir, exist_ok=True)
 
-    model_filepath = f"{model_dir}/{embed_dim}_{batch_size}_{module_margin}_{loss_margin}_{learning_rate}.pt"
+    model_filepath = f"{model_dir}/elembeddings_{embed_dim}_{batch_size}_{module_margin}_{loss_margin}_{learning_rate}.pt"
     model = GeometricELModel(evaluator_name, dataset, batch_size,
                              embed_dim, module_margin, loss_margin,
                              learning_rate, model_filepath, epochs,

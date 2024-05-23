@@ -133,6 +133,25 @@ type org.semanticweb.owlapi.model.OWLOntology")
                 continue
             elif "ObjectOneOf" in axiom_as_str:
                 continue
+            elif "ObjectHasValue" in axiom_as_str:
+                continue
+            elif "DataSomeValuesFrom" in axiom_as_str:
+                continue
+            elif "DataAllValuesFrom" in axiom_as_str:
+                continue
+            elif "DataHasValue" in axiom_as_str:
+                continue
+            elif "DataPropertyRange" in axiom_as_str:
+                continue
+            elif "DataPropertyDomain" in axiom_as_str:
+                continue
+            elif "FunctionalDataProperty" in axiom_as_str:
+                continue
+            elif "DisjointUnion" in axiom_as_str:
+                continue
+            elif "HasKey" in axiom_as_str:
+                continue
+            
             else:
                 new_tbox_axioms.add(axiom)
 
