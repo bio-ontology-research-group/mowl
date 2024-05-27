@@ -26,7 +26,7 @@ class Evaluator:
         self.train_tuples = self.create_tuples(dataset.ontology)
         self.valid_tuples = self.create_tuples(dataset.validation)
         self.test_tuples = self.create_tuples(dataset.testing)
-        self.deductive_closure_tuples = self.create_tuples(dataset.deductive_closure_ontology)
+        self._deductive_closure_tuples = None
 
         self.evaluate_with_deductive_closure = evaluate_with_deductive_closure
         self.filter_deductive_closure = filter_deductive_closure
@@ -42,6 +42,13 @@ class Evaluator:
         print(f"Number of evaluation classes: {len(eval_heads)}")
         self.evaluation_heads = th.tensor([self.class_to_id[c] for c in eval_heads.as_str], dtype=th.long)
         self.evaluation_tails = th.tensor([self.class_to_id[c] for c in eval_tails.as_str], dtype=th.long)
+
+
+    @property
+    def deductive_closure_tuples(self):
+        if self._deductive_closure_tuples is None:
+            self._deductive_closure_tuples = self.create_tuples(self.dataset.deductive_closure_ontology)
+        return self._deductive_closure_tuples
         
     def create_tuples(self, ontology):
         raise NotImplementedError
@@ -77,7 +84,8 @@ class Evaluator:
             f_hits_k = dict({"1": 0, "3": 0, "10": 0, "50": 0, "100": 0})
         
             filtering_labels = self.get_filtering_labels(num_heads, num_tails, **kwargs)
-            deductive_labels = self.get_deductive_labels(num_heads, num_tails, **kwargs)
+            if self.evaluate_with_deductive_closure:
+                deductive_labels = self.get_deductive_labels(num_heads, num_tails, **kwargs)
             
         with th.no_grad():
             for batch, in dataloader:
@@ -296,6 +304,61 @@ class SubsumptionEvaluator(Evaluator):
             deductive_labels[head, tail] = 10000
         
         return deductive_labels
+
+
+
+class PPIEvaluator(Evaluator):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def create_tuples(self, ontology):
+        projector = TaxonomyWithRelationsProjector(relations=["http://interacts_with"])
+        edges = projector.project(ontology)
+
+        classes, relations = Edge.get_entities_and_relations(edges)
+
+        class_str2owl = self.dataset.classes.to_dict()
+        class_owl2idx = self.dataset.classes.to_index_dict()
+        relation_str2owl = self.dataset.object_properties.to_dict()
+        relation_owl2idx = self.dataset.object_properties.to_index_dict()
+        
+        edges_indexed = []
+        
+        for e in edges:
+            head = class_owl2idx[class_str2owl[e.src]]
+            relation = relation_owl2idx[relation_str2owl[e.rel]]
+            tail = class_owl2idx[class_str2owl[e.dst]]
+            edges_indexed.append((head, relation, tail))
+        
+        return th.tensor(edges_indexed, dtype=th.long)
+
+    def get_logits(self, model, batch):
+        heads, rels, tails = batch[:, 0], batch[:, 1], batch[:, 2]
+        num_heads, num_tails = len(heads), len(tails)
+
+        heads = heads.repeat_interleave(len(self.evaluation_tails)).unsqueeze(1)
+        rels = rels.repeat_interleave(len(self.evaluation_tails)).unsqueeze(1)
+        eval_tails = th.arange(len(self.evaluation_tails), device=heads.device).repeat(num_heads).unsqueeze(1)
+        logits_heads = model(th.cat([heads, rels, eval_tails], dim=-1), "gci2")
+        logits_heads = logits_heads.view(-1, len(self.evaluation_tails))
+        
+        tails = tails.repeat_interleave(len(self.evaluation_heads)).unsqueeze(1)
+        eval_heads = th.arange(len(self.evaluation_heads), device=tails.device).repeat(num_tails).unsqueeze(1)
+        logits_tails = model(th.cat([eval_heads, rels, tails], dim=-1), "gci2")
+        logits_tails = logits_tails.view(-1, len(self.evaluation_heads))
+        # print(logits_heads, logits_tails)
+        return logits_heads, logits_tails
+
+    
+    def get_filtering_labels(self, num_heads, num_tails):
+
+        filtering_tuples = th.cat([self.train_tuples, self.valid_tuples], dim=0)
+        filtering_labels = th.ones((num_heads, num_tails), dtype=th.float)
+
+        for head, rel, tail in filtering_tuples:
+            filtering_labels[head, tail] = 10000
+        
+        return filtering_labels
     
 
 def compute_rank_roc(ranks, num_entities):

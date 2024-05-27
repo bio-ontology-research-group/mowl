@@ -56,3 +56,22 @@ class SubsumptionDataset(PathDataset):
             self._evaluation_classes = classes, classes
 
         return self._evaluation_classes
+
+
+class PPIDataset(PathDataset):
+    def __init__(self, root_dir):
+        super().__init__(root_dir + "ontology.owl", root_dir + "valid.owl", root_dir + "test.owl")
+
+        self.root_dir = root_dir
+        self._deductive_closure_ontology = None
+        
+    @property
+    def evaluation_classes(self):
+        if self._evaluation_classes is None:
+            proteins = set()
+            for owl_name, owl_cls in self.classes.as_dict.items():
+                if "http://4932" in owl_name:
+                    proteins.add(owl_cls)
+            self._evaluation_classes = OWLClasses(proteins), OWLClasses(proteins)
+
+        return self._evaluation_classes
