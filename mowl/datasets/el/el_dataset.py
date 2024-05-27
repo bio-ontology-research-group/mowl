@@ -92,6 +92,12 @@ org.semanticweb.owlapi.model.OWLOntology.")
             classes |= set(new_classes)
             relations |= set(new_relations)
             individuals |= set(new_individuals)
+
+        classes = sorted(list(classes))
+        relations = sorted(list(relations))
+        individuals = sorted(list(individuals))
+
+        
         if self._class_index_dict is None:
             self._class_index_dict = {v: k for k, v in enumerate(classes)}
         if self._object_property_index_dict is None:
