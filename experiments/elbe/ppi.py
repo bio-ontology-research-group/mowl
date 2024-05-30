@@ -10,7 +10,7 @@ from org.semanticweb.owlapi.model import AxiomType as Ax
 from evaluators import PPIEvaluator
 from datasets import PPIDataset
 from tqdm import tqdm
-from mowl.nn import ELEmModule
+from mowl.nn import ELBEModule
 import torch as th
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -66,7 +66,7 @@ def main(dataset_name, evaluator_name, embed_dim, batch_size,
     model_dir = f"{root_dir}/../models/"
     os.makedirs(model_dir, exist_ok=True)
 
-    model_filepath = f"{model_dir}/{embed_dim}_{batch_size}_{module_margin}_{loss_margin}_{learning_rate}.pt"
+    model_filepath = f"{model_dir}/elbe_{embed_dim}_{batch_size}_{module_margin}_{loss_margin}_{learning_rate}.pt"
     model = GeometricELModel(evaluator_name, dataset, batch_size,
                              embed_dim, module_margin, loss_margin,
                              learning_rate, model_filepath,
@@ -138,7 +138,7 @@ class GeometricELModel(EmbeddingELModel):
                  evaluate_every, device, wandb_logger):
         super().__init__(dataset, embed_dim, batch_size, model_filepath=model_filepath)
 
-        self.module = ELEmModule(len(self.dataset.classes),
+        self.module = ELBEModule(len(self.dataset.classes),
                                  len(self.dataset.object_properties),
                                  len(self.dataset.individuals),
                                  self.embed_dim,
@@ -171,7 +171,9 @@ class GeometricELModel(EmbeddingELModel):
         curr_tolerance = tolerance
 
         optimizer = th.optim.Adam(self.module.parameters(), lr=self.learning_rate)
+        criterion = nn.MSELoss()
 
+        
         best_mrr = 0
         best_loss = float("inf")
         
@@ -193,13 +195,20 @@ class GeometricELModel(EmbeddingELModel):
             for batch_data in main_dl:
 
                 batch_data = batch_data.to(self.device)
-                pos_logits = self.module(batch_data, "gci2").mean()
+                pos_logits = self.module(batch_data, "gci2")
+                mse_loss = criterion(pos_logits, th.zeros(pos_logits.shape, requires_grad=False).to(self.device))
+
+                loss += mse_loss
+
                 neg_idxs = th.randint(0, len(protein_ids), (len(batch_data),), device=self.device)
                 neg_idxs = protein_ids[neg_idxs]
                 neg_batch = th.cat([batch_data[:, :-1], neg_idxs.unsqueeze(1)], dim=1)
                 # neg_logits = self.module(neg_batch, "gci2").mean()
-                neg_logits = self.module(neg_batch, "gci2", neg=True).mean()
-                loss += pos_logits + neg_logits
+                neg_logits = self.module(neg_batch, "gci2", neg=True)
+
+                mse_loss = criterion(neg_logits, th.ones(neg_logits.shape, requires_grad=False).to(self.device))
+                loss += mse_loss
+
                 # loss = - F.logsigmoid(-pos_logits + neg_logits - self.loss_margin).mean() * dls_weights["gci2"]
 
                 for gci_name, gci_dl in dls.items():
@@ -207,15 +216,15 @@ class GeometricELModel(EmbeddingELModel):
                         continue
 
                     batch_data = next(gci_dl).to(self.device)
-                    pos_logits = self.module(batch_data, gci_name).mean()
+                    pos_logits = self.module(batch_data, gci_name)
                     # neg_idxs = th.randint(0, num_classes, (len(batch_data),), device=self.device)
                     # neg_batch = th.cat([batch_data[:, :-1], neg_idxs.unsqueeze(1)], dim=1)
                     # neg_logits = self.module(neg_batch, gci_name)
                     # loss += - F.logsigmoid(-pos_logits + neg_logits - self.loss_margin).mean() * dls_weights[gci_name]
-                    loss += pos_logits
+                    mse_loss = criterion(pos_logits, th.zeros(pos_logits.shape, requires_grad=False).to(self.device))
+                    loss += mse_loss
 
-                loss += self.module.regularization_loss()
-                                                
+                # loss += self.module.regularization_loss()
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()

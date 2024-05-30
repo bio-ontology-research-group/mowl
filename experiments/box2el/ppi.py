@@ -10,7 +10,7 @@ from org.semanticweb.owlapi.model import AxiomType as Ax
 from evaluators import PPIEvaluator
 from datasets import PPIDataset
 from tqdm import tqdm
-from mowl.nn import ELEmModule
+from mowl.nn import BoxSquaredELModule
 import torch as th
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -53,14 +53,18 @@ def main(dataset_name, evaluator_name, embed_dim, batch_size,
         wandb_logger.log({"dataset_name": dataset_name,
                           "embed_dim": embed_dim,
                           "module_margin": module_margin,
+                          "loss_margin": loss_margin,
                           "learning_rate": learning_rate
                           })
     else:
         dataset_name = wandb.config.dataset_name
         embed_dim = wandb.config.embed_dim
         module_margin = wandb.config.module_margin
+        loss_margin = wandb.config.loss_margin
         learning_rate = wandb.config.learning_rate
 
+        
+    
     root_dir, dataset = dataset_resolver(dataset_name)
 
     model_dir = f"{root_dir}/../models/"
@@ -138,7 +142,7 @@ class GeometricELModel(EmbeddingELModel):
                  evaluate_every, device, wandb_logger):
         super().__init__(dataset, embed_dim, batch_size, model_filepath=model_filepath)
 
-        self.module = ELEmModule(len(self.dataset.classes),
+        self.module = BoxSquaredELModule(len(self.dataset.classes),
                                  len(self.dataset.object_properties),
                                  len(self.dataset.individuals),
                                  self.embed_dim,
