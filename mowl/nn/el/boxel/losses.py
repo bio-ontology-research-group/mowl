@@ -119,8 +119,13 @@ def gci2_loss(data, min_embed, delta_embed, relation_embed, scaling_embed, tempe
     trans_c_min = boxes_c.min_embed*(scaling + eps) + relation
     trans_c_max = boxes_c.max_embed*(scaling + eps) + relation
     trans_boxes = Box(trans_c_min, max_embed=trans_c_max)
-    
-    return inclusion_loss(trans_boxes, boxes_d, temperature)
+
+    if neg:
+        loss = 1 - inclusion_loss(trans_boxes, boxes_d, temperature)
+    else:
+        loss = inclusion_loss(trans_boxes, boxes_d, temperature)
+
+    return loss
 
 def gci3_loss(data, min_embed, delta_embed, relation_embed, scaling_embed, temperature, neg=False):
     c_min = min_embed(data[:, 1])
