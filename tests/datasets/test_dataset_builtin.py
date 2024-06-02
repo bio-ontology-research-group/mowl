@@ -35,9 +35,9 @@ class TestInstanceOfDataset(TestCase):
         """This should check the correct behaviour of evaluation_classes_method in ppi dataset"""
         dataset = PPIYeastSlimDataset()
 
-        str_classes = dataset.evaluation_classes.as_str
-        owl_classes = dataset.evaluation_classes.as_owl
-        dict_classes = dataset.evaluation_classes.as_dict
+        str_classes = dataset.evaluation_classes[0].as_str
+        owl_classes = dataset.evaluation_classes[0].as_owl
+        dict_classes = dataset.evaluation_classes[0].as_dict
 
         self.assertEqual(str_classes, list(dict_classes.keys()))
         self.assertEqual(owl_classes, list(dict_classes.values()))
