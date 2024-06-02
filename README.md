@@ -1,7 +1,18 @@
 <p align="center">
   <img src= "https://github.com/bio-ontology-research-group/mowl/blob/main/docs/source/mowl_black_background_colors_2048x2048px.png?raw=true" width="300"/>
 </p>
-  
+
+
+<p align="center">
+	<a href="https://pypi.org/project/mowl-borg/">
+	<img alt="PyPI - Version" src="https://img.shields.io/pypi/v/mowl-borg">
+	</a>
+	<a href='https://mowl.readthedocs.io/en/latest/?badge=latest'>
+		<img src='https://readthedocs.org/projects/mowl/badge/?version=latest' alt='Documentation Status' />
+	</a>
+</p>
+
+
 # mOWL: Machine Learning Library with Ontologies
 
 **mOWL** is a library that provides different machine learning methods in which ontologies are used as background knowledge. **mOWL** is developed 
@@ -36,25 +47,12 @@ mainly in Python, but we have integrated the functionalities of [OWLAPI](https:/
 pip install mowl-borg
 ```
 
-### Build from source
-Installation can be done with the following commands:
+### Install from source
 
 ```
-git clone https://github.com/bio-ontology-research-group/mowl.git
+pip install git+https://github.com/bio-ontology-research-group/mowl
 
-cd mowl
-
-conda env create -f envs/environment_3_8.yml
-conda activate mowl
-
-./build_jars.sh
-
-python setup.py install
 ```
-
-The line `./build_jars.sh` will generate the necessary `jar` files to bind Python with the code that runs in the JVM. After building, a ``.tar.gz`` file will be generated under `dist` and can be used to install mOWL.
-
-
 
 ## List of contributors
 * [Fernando Zhapa](https://github.com/ferzcam)

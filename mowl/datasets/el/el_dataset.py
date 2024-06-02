@@ -1,7 +1,7 @@
 import torch as th
 from torch.utils.data import DataLoader
 from mowl.ontology.normalize import ELNormalizer, GCI
-from mowl.datasets.gci import GCIDataset
+from mowl.datasets.gci import GCIDataset, ClassAssertionDataset, ObjectPropertyAssertionDataset
 import random
 from org.semanticweb.owlapi.model import OWLOntology
 
@@ -28,14 +28,14 @@ class ELDataset():
     :type object_property_index_dict: dict, optional
     """
 
-    def __init__(
-        self,
-        ontology,
-        class_index_dict=None,
-        object_property_index_dict=None,
-        extended=True,
-        device="cpu"
-    ):
+    def __init__(self,
+                 ontology,
+                 class_index_dict=None,
+                 object_property_index_dict=None,
+                 individual_index_dict=None,
+                 extended=True,
+                 device="cpu"
+                 ):
 
         if not isinstance(ontology, OWLOntology):
             raise TypeError("Parameter ontology must be of type \
@@ -48,6 +48,10 @@ org.semanticweb.owlapi.model.OWLOntology.")
         if not isinstance(obj, dict) and obj is not None:
             raise TypeError("Optional parameter object_property_index_dict must be of type dict")
 
+        ind = individual_index_dict
+        if not isinstance(ind, dict) and ind is not None:
+            raise TypeError("Optional parameter individual_index_dict must be of type dict")
+
         if not isinstance(extended, bool):
             raise TypeError("Optional parameter extended must be of type bool")
 
@@ -59,6 +63,7 @@ org.semanticweb.owlapi.model.OWLOntology.")
         self._extended = extended
         self._class_index_dict = class_index_dict
         self._object_property_index_dict = object_property_index_dict
+        self._individual_index_dict = individual_index_dict
         self.device = device
 
         self._gci0_dataset = None
@@ -68,6 +73,8 @@ org.semanticweb.owlapi.model.OWLOntology.")
         self._gci0_bot_dataset = None
         self._gci1_bot_dataset = None
         self._gci3_bot_dataset = None
+        self._class_assertion_dataset = None
+        self._object_property_assertion_dataset = None
 
     def load(self):
         if self._loaded:
@@ -79,14 +86,24 @@ org.semanticweb.owlapi.model.OWLOntology.")
 
         classes = set()
         relations = set()
+        individuals = set()
         for k, v in gcis.items():
-            new_classes, new_relations = GCI.get_entities(v)
+            new_classes, new_relations, new_individuals = GCI.get_entities(v)
             classes |= set(new_classes)
             relations |= set(new_relations)
+            individuals |= set(new_individuals)
+
+        classes = sorted(list(classes))
+        relations = sorted(list(relations))
+        individuals = sorted(list(individuals))
+
+        
         if self._class_index_dict is None:
             self._class_index_dict = {v: k for k, v in enumerate(classes)}
         if self._object_property_index_dict is None:
             self._object_property_index_dict = {v: k for k, v in enumerate(relations)}
+        if self._individual_index_dict is None:
+            self._individual_index_dict = {v: k for k, v in enumerate(individuals)}
         if not self._extended:
             gci0 = gcis["gci0"] + gcis["gci0_bot"]
             gci1 = gcis["gci1"] + gcis["gci1_bot"]
@@ -144,6 +161,18 @@ org.semanticweb.owlapi.model.OWLOntology.")
                 object_property_index_dict=self._object_property_index_dict,
                 device=self.device)
 
+        if len(gcis["class_assertion"]) > 0:
+            gci_class_assertion = gcis["class_assertion"]
+            random.shuffle(gci_class_assertion)
+            self._class_assertion_dataset = ClassAssertionDataset(
+                gci_class_assertion, self._class_index_dict, self._individual_index_dict, device=self.device)
+
+        if len(gcis["object_property_assertion"]) > 0:
+            gci_object_property_assertion = gcis["object_property_assertion"]
+            random.shuffle(gci_object_property_assertion)
+            self._object_property_assertion_dataset = ObjectPropertyAssertionDataset(
+                gci_object_property_assertion, self._object_property_index_dict, self._individual_index_dict, device=self.device)
+            
         self._loaded = True
 
     def get_gci_datasets(self):
@@ -165,6 +194,12 @@ org.semanticweb.owlapi.model.OWLOntology.")
             datasets["gci1_bot"] = self.gci1_bot_dataset
             datasets["gci3_bot"] = self.gci3_bot_dataset
 
+        if self.class_assertion_dataset is not None:
+            datasets["class_assertion"] = self.class_assertion_dataset
+
+        if self.object_property_assertion_dataset is not None:
+            datasets["object_property_assertion"] = self.object_property_assertion_dataset
+            
         return datasets
 
     @property
@@ -234,6 +269,15 @@ org.semanticweb.owlapi.model.OWLOntology.")
         return self._gci3_bot_dataset
 
 
+    @property
+    def class_assertion_dataset(self):
+        self.load()
+        return self._class_assertion_dataset
+
+    @property
+    def object_property_assertion_dataset(self):
+        return self._object_property_assertion_dataset
+    
 class GCI0Dataset(GCIDataset):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -319,3 +363,6 @@ class GCI3Dataset(GCIDataset):
             filler = self.class_index_dict[gci.filler]
             superclass = self.class_index_dict[gci.superclass]
             yield object_property, filler, superclass
+
+
+

@@ -1,15 +1,7 @@
 
 from mowl.nn import ELBoxModule
 from mowl.base_models.elmodel import EmbeddingELModel
-from mowl.projection.factory import projector_factory
-from mowl.projection.edge import Edge
-import math
-import logging
-import numpy as np
-
 from mowl.models.elboxembeddings.evaluate import ELBoxEmbeddingsPPIEvaluator
-
-from tqdm import trange, tqdm
 
 import torch as th
 from torch import nn
@@ -40,7 +32,6 @@ class ELBoxEmbeddings(EmbeddingELModel):
         self.epochs = epochs
         self.device = device
         self._loaded = False
-        self._loaded_eval = False
         self.extended = False
         self.init_module()
 
@@ -59,24 +50,6 @@ class ELBoxEmbeddings(EmbeddingELModel):
     def eval_method(self, data):
         return self.module.gci2_loss(data)
 
-    def load_eval_data(self):
-
-        if self._loaded_eval:
-            return
-
-        eval_property = self.dataset.get_evaluation_property()
-        eval_classes = self.dataset.evaluation_classes.as_str
-
-        self._head_entities = set(list(eval_classes)[:])
-        self._tail_entities = set(list(eval_classes)[:])
-
-        eval_projector = projector_factory('taxonomy_rels', taxonomy=False,
-                                           relations=[eval_property])
-
-        self._training_set = eval_projector.project(self.dataset.ontology)
-        self._testing_set = eval_projector.project(self.dataset.testing)
-
-        self._loaded_eval = True
 
     def get_embeddings(self):
         self.init_module()
@@ -95,24 +68,4 @@ class ELBoxEmbeddings(EmbeddingELModel):
         self.module.load_state_dict(th.load(self.model_filepath))
         self.module.eval()
 
-    @property
-    def training_set(self):
-        self.load_eval_data()
-        return self._training_set
 
-#        self.load_eval_data()
-
-    @property
-    def testing_set(self):
-        self.load_eval_data()
-        return self._testing_set
-
-    @property
-    def head_entities(self):
-        self.load_eval_data()
-        return self._head_entities
-
-    @property
-    def tail_entities(self):
-        self.load_eval_data()
-        return self._tail_entities

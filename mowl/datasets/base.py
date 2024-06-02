@@ -16,7 +16,8 @@ from org.semanticweb.owlapi.apibinding import OWLManager
 from mowl.projection import TaxonomyWithRelationsProjector
 from mowl.owlapi.adapter import OWLAPIAdapter
 from mowl.owlapi.defaults import TOP, BOT
-from deprecated.sphinx import versionadded
+from deprecated.sphinx import versionadded, versionchanged
+
 
 from java.util import HashSet
 
@@ -163,21 +164,18 @@ validation and testing ontologies using the OWLAPI method ``ontology.getIndividu
         """
         return self.object_properties.as_index_dict
 
+
+    @versionchanged(version='0.4.0', reason='Delegate implementation to subclasses.')
     @property
     def evaluation_classes(self):
-        """List of classes used for evaluation. Depending on the dataset, this method could \
-        return a single :class:`OWLClasses` object \
-        (as in :class:`PPIYeastDataset <mowl.datasets.builtin.PPIYeastDataset>`) \
-        or a tuple of :class:`OWLClasses` objects \
-        (as in :class:`GDAHumanDataset <mowl.datasets.builtin.GDAHumanDataset>`). If not \
-        overriden, this method returns the classes in the testing ontology obtained from the \
-        OWLAPI method ``getClassesInSignature()`` as a :class:`OWLClasses` object.
+        """Pair of lists of classes used for evaluation.  The return type is a tuple \
+        of :class:`OWLClasses` objects.
+
+        :rtype: tuple
         """
 
-        if self._evaluation_classes is None:
-            classes = self._testing.getClassesInSignature()
-            self._evaluation_classes = OWLClasses(classes)
-        return self._evaluation_classes
+        raise NotImplementedError("This method must be implemented in a subclass.")
+                                        
 
     @property
     def labels(self):

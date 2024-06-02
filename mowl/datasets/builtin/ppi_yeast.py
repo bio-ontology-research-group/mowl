@@ -7,6 +7,8 @@ import numpy as np
 import gzip
 import os
 from java.util import HashSet
+from deprecated.sphinx import versionchanged
+
 
 DATA_URL = 'https://bio2vec.cbrc.kaust.edu.sa/data/mowl/ppi_yeast.tar.gz'
 SLIM_DATA_URL = 'https://bio2vec.cbrc.kaust.edu.sa/data/mowl/ppi_yeast_slim.tar.gz'
@@ -30,6 +32,7 @@ class PPIYeastDataset(RemoteDataset):
     def __init__(self, url=None):
         super().__init__(url=DATA_URL if not url else url)
 
+    @versionchanged(reason="Return pair of classes for evaluation", version="0.4.0")
     @property
     def evaluation_classes(self):
         """Classes that are used in evaluation
@@ -40,7 +43,7 @@ class PPIYeastDataset(RemoteDataset):
             for owl_name, owl_cls in self.classes.as_dict.items():
                 if "http://4932" in owl_name:
                     proteins.add(owl_cls)
-            self._evaluation_classes = OWLClasses(proteins)
+            self._evaluation_classes = OWLClasses(proteins), OWLClasses(proteins)
 
         return self._evaluation_classes
 
