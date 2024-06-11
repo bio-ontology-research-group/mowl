@@ -6,7 +6,7 @@ from copy import deepcopy
 import mowl.error.messages as msg
 import os
 
-class TestRandomWalkModel(TestCase):
+class TestSyntacticModel(TestCase):
 
     @classmethod
     def setUpClass(self):

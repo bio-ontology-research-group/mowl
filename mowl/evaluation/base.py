@@ -1,293 +1,287 @@
 import numpy as np
 import torch as th
 
-import torch.nn as nn
-import click as ck
-from mowl.projection.edge import Edge
+from mowl.utils.data import FastTensorDataLoader
 
-from mowl.projection.factory import projector_factory
-from gensim.models import Word2Vec
-from gensim.models.keyedvectors import KeyedVectors
 import logging
-from tqdm import tqdm
+from deprecated.sphinx import versionchanged
+import logging
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.StreamHandler())
+logger.setLevel(logging.INFO)
 
-
-class Evaluator():
+@versionchanged(version="1.0.0", reason="Updated Evaluator with a new API.")
+class Evaluator:
     """
-    Abstract class for evaluation of models.
+    Base evaluation class for ontology embedding methods.
 
-    :param class_embeddings: Embeddings dictionary for ontology classes
-    :type class_embeddings: dict or :class:`gensim.models.keyedvectors.KeyedVectors`
-    :param testing_set: List of triples in the testing set.
-    :type testing_set: list of :class:`mowl.projection.Edge`
-    :param eval_method: Function that computes the score of the predictions
-    :type eval_method: callable
-    :param relation_embeddings: Embeddings dictionary for ontology classes
-    :type relation_embeddings: dict or :class:`gensim.models.keyedvectors.KeyedVectors`, optional
-    :param training_set: List of triples in the training set. If not set, filtered metrics will \
-    not be computed
-    :type training_set: list of :class:`mowl.projection.Edge`, optional
-    :param head_entities: Entities, that are the head of each triple, to be considered in the \
-    evaluation
-    :type head_entities: list of str
-    :param filter_fn_head: Criterion to filter the head entities
-    :type filter_fn_head: callable, optional
-    :param filter_fn_tail: Criterion to filter the tail entities
-    :type filter_fn_tail: callable, optional
-    """
-
-    def __init__(self,
-                 device="cpu"
-                 ):
-        self.device = device
-
-    def embeddings_to_dict(self, embeddings):
-        embeddings_dict = dict()
-        if isinstance(embeddings, KeyedVectors):
-            for idx, word in enumerate(embeddings.index_to_key):
-                embeddings_dict[word] = embeddings[word]
-        elif isinstance(embeddings, dict):
-            embeddings_dict = embeddings
-        else:
-            raise TypeError("Embeddings type {type(embeddings)} not recognized. Expected types \
-            are dict or gensim.models.keyedvectors.KeyedVectors")
-
-        return embeddings_dict
-
-    def load_data(self):
-        raise NotImplementedError()
-
-    def evaluate(self, show=False):
-        raise NotImplementedError()
-
-
-class EvaluationMethod(nn.Module):
-
-    def __init__(self, embeddings, embeddings_relation=None, device="cpu"):
-        super().__init__()
-        num_classes = len(embeddings)
-        embedding_size = len(embeddings[0])
-
-        if isinstance(embeddings, list):
-            embeddings = th.tensor(embeddings, device=device)
-        if isinstance(embeddings_relation, list):
-            embeddings_relation = th.tensor(embeddings_relation, device=device)
-
-        self.embeddings = nn.Embedding(num_classes, embedding_size)
-        self.embeddings.weight = nn.parameter.Parameter(embeddings)
-        if embeddings_relation is not None:
-            num_rels = len(embeddings_relation)
-            self.embeddings_relation = nn.Embedding(num_rels, embedding_size)
-            self.embeddings_relation.weight = nn.parameter.Parameter(embeddings_relation)
-
-    def forward(self):
-        raise NotImplementedError()
-
-
-class AxiomsRankBasedEvaluator():
-
-    """ Abstract method for evaluating axioms in a rank-based manner. To inherit from this class, \
-        3 methods must be defined (dee the corresponding docstrings for each of them).
-
-    :param eval_method: The evaluation method for the axioms.
-    :type eval_method: function
-    :param axioms_to_filter: Axioms to be put at the bottom of the rankings. If the axioms are \
-    empty, filtered metrics will not be computed. The input type of this parameter will depend \
-    on the signature of the ``_init_axioms_to_filter`` method. Defaults to ``None``.
-    :type axioms_to_filter: any, optional
-    :param device: Device to run the evaluation. Defaults to "cpu".
+    :param dataset: mOWL dataset object. Required to obtain the ontology entities (classes, individuals, object properties, etc.).
+    :type dataset: :class:`mowl.datasets.base.Dataset`
+    :param device: Device to use for the evaluation. Defaults to 'cpu'.
     :type device: str, optional
+    :param batch_size: Batch size for evaluation. Defaults to 16.
+    :type batch_size: int, optional
+    :param exclude_testing_set: Whether to exclude the testing set from the evaluation. Defaults to False.
+    :type exclude_testing_set: bool, optional
+    :param evaluate_with_deductive_closure: Whether to evaluate using deductive closure axioms as positives. Defaults to False.
+    :type evaluate_with_deductive_closure: bool, optional
+    :param filter_deductive_closure: Whether to filter deductive closure axioms from the evaluation. Defaults to False.
+    :type filter_deductive_closure: bool, optional
     """
+    
+    def __init__(self, dataset, device="cpu", batch_size=16, exclude_testing_set=False,
+                 evaluate_with_deductive_closure=False,
+                 filter_deductive_closure=False):
 
-    def __init__(
-            self,
-            eval_method,
-            axioms_to_filter=None,
-            device="cpu",
-    ):
 
-        self._metrics = None
-        self._fmetrics = None
+        
+        if evaluate_with_deductive_closure and filter_deductive_closure:
+            raise ValueError("Cannot evaluate with deductive closure and filter it at the same time. Set either evaluate_with_deductive_closure or filter_deductive_closure to False.")
 
-        self.eval_method = eval_method
+        if exclude_testing_set and not evaluate_with_deductive_closure:
+            raise ValueError("Cannot exclude testing set without evaluating with deductive closure. Evaluation set is empty.")
+
+        
+        logger.info(f"Evaluating in device: {device}")
+        logger.info(f"Evaluating with deductive closure: {evaluate_with_deductive_closure}")
+        logger.info(f"Filtering deductive closure: {filter_deductive_closure}")
+        
+        
+        self.dataset = dataset
         self.device = device
+        self.batch_size = batch_size
+        self.train_tuples = self.create_tuples(dataset.ontology)
+        self.valid_tuples = self.create_tuples(dataset.validation)
+        self.test_tuples = self.create_tuples(dataset.testing)
+        self._deductive_closure_tuples = None
 
-        if axioms_to_filter is None:
-            self._compute_filtered_metrics = False
-        else:
-            self._compute_filtered_metrics = True
+        self.exclude_testing_set = exclude_testing_set
+        self.evaluate_with_deductive_closure = evaluate_with_deductive_closure
+        self.filter_deductive_closure = filter_deductive_closure
+        
+        self.class_to_id = {c: i for i, c in enumerate(self.dataset.classes.as_str)}
+        self.id_to_class = {i: c for c, i in self.class_to_id.items()}
 
-        self.axioms_to_filter = self._init_axioms_to_filter(axioms_to_filter)
+        self.relation_to_id = {r: i for i, r in enumerate(self.dataset.object_properties.as_str)}
+        self.id_to_relation = {i: r for r, i in self.relation_to_id.items()}
 
-        return
+        eval_heads, eval_tails = self.dataset.evaluation_classes
+        
+        print(f"Number of evaluation classes: {len(eval_heads)}")
+        self.evaluation_heads = th.tensor([self.class_to_id[c] for c in eval_heads.as_str], dtype=th.long)
+        self.evaluation_tails = th.tensor([self.class_to_id[c] for c in eval_tails.as_str], dtype=th.long)
+
 
     @property
-    def metrics(self):
-        """Metrics as a dictionary with string metric names as keys and metrics as values.
+    def deductive_closure_tuples(self):
+        if self._deductive_closure_tuples is None:
+            self._deductive_closure_tuples = self.create_tuples(self.dataset.deductive_closure_ontology)
+        return self._deductive_closure_tuples
+        
+    def create_tuples(self, ontology):
+        raise NotImplementedError
 
-        :rtype: dict
-        """
-        if self._metrics is None:
-            raise ValueError("Metrics have not been computed yet.")
+    def get_logits(self, batch):
+        raise NotImplementedError
+
+    
+    def evaluate_base(self, model, eval_tuples, mode="test", **kwargs):
+        num_heads, num_tails = len(self.evaluation_heads), len(self.evaluation_tails)
+        model.eval()
+        if not mode in ["valid", "test"]:
+            raise ValueError(f"Mode must be either 'valid' or 'test', not {mode}")
+
+
+        if self.evaluate_with_deductive_closure:
+            mask1 = (self.deductive_closure_tuples.unsqueeze(1) == self.train_tuples).all(dim=-1).any(dim=-1)
+            mask2 = (self.deductive_closure_tuples.unsqueeze(1) == self.valid_tuples).all(dim=-1).any(dim=-1)
+            mask = mask1 | mask2
+            deductive_closure_tuples = self.deductive_closure_tuples[~mask]
+
+            if self.exclude_testing_set:
+                eval_tuples = deductive_closure_tuples # only deductive closure
+            else:
+                eval_tuples = th.cat([eval_tuples, deductive_closure_tuples], dim=0)
+            
+        dataloader = FastTensorDataLoader(eval_tuples, batch_size=self.batch_size, shuffle=False)
+
+        metrics = dict()
+        mrr, fmrr = 0, 0
+        mr, fmr = 0, 0
+        ranks, franks = dict(), dict()
+
+        if mode == "test":
+            hits_k = dict({"1": 0, "3": 0, "10": 0, "50": 0, "100": 0})
+            f_hits_k = dict({"1": 0, "3": 0, "10": 0, "50": 0, "100": 0})
+        
+            filtering_labels = self.get_filtering_labels(num_heads, num_tails, **kwargs)
+            if self.evaluate_with_deductive_closure:
+                deductive_labels = self.get_deductive_labels(num_heads, num_tails, **kwargs)
+            
+        with th.no_grad():
+            for batch, in dataloader:
+                if batch.shape[1] == 2:
+                    heads, tails = batch[:, 0], batch[:, 1]
+                elif batch.shape[1] == 3:
+                    heads, tails = batch[:, 0], batch[:, 2]
+                else:
+                    raise ValueError("Batch shape must be either (n, 2) or (n, 3)")
+                aux_heads = heads.clone()
+                aux_tails = tails.clone()
+        
+                batch = batch.to(self.device)
+                logits_heads, logits_tails = self.get_logits(model, batch, *kwargs)
+    
+                for i, head in enumerate(aux_heads):
+                    tail = tails[i]
+                    tail = th.where(self.evaluation_tails == tail)[0].item()
+                    preds = logits_heads[i]
+
+                    if self.evaluate_with_deductive_closure:
+                        ded_labels = deductive_labels[head].to(preds.device)
+                        ded_labels[tail] = 1
+                        preds = preds * ded_labels
+
+                    
+                    order = th.argsort(preds, descending=False)
+                    rank = th.where(order == tail)[0].item() + 1
+                    mr += rank
+                    mrr += 1 / rank
+
+                    if mode == "test":
+                        f_preds = preds * filtering_labels[head].to(preds.device)
+
+                        if self.evaluate_with_deductive_closure:
+                            ded_labels = deductive_labels[head].to(preds.device)
+                            ded_labels[tail] = 1
+                            f_preds = f_preds * ded_labels
+
+                        f_order = th.argsort(f_preds, descending=False)
+                        f_rank = th.where(f_order == tail)[0].item() + 1
+                        fmr += f_rank
+                        fmrr += 1 / f_rank
+                    
+                                                                
+                    if mode == "test":
+                        for k in hits_k:
+                            if rank <= int(k):
+                                hits_k[k] += 1
+
+                        for k in f_hits_k:
+                            if f_rank <= int(k):
+                                f_hits_k[k] += 1
+
+                        if rank not in ranks:
+                            ranks[rank] = 0
+                        ranks[rank] += 1
+                                
+                        if f_rank not in franks:
+                            franks[f_rank] = 0
+                        franks[f_rank] += 1
+
+                for i, tail in enumerate(aux_tails):
+                    head = aux_heads[i]
+                    head = th.where(self.evaluation_heads == head)[0].item()
+                    preds = logits_tails[i]
+
+                    if self.evaluate_with_deductive_closure:
+                        ded_labels = deductive_labels[:, tail].to(preds.device)
+                        ded_labels[head] = 1
+                        preds = preds * ded_labels
+                    
+                    order = th.argsort(preds, descending=False)
+                    rank = th.where(order == head)[0].item() + 1
+                    mr += rank
+                    mrr += 1 / rank
+
+                    if mode == "test":
+                        f_preds = preds * filtering_labels[:, tail].to(preds.device)
+
+                        if self.evaluate_with_deductive_closure:
+                            ded_labels = deductive_labels[:, tail].to(preds.device)
+                            ded_labels[head] = 1
+                            f_preds = f_preds * ded_labels
+
+                        
+                        f_order = th.argsort(f_preds, descending=False)
+                        f_rank = th.where(f_order == head)[0].item() + 1
+                        fmr += f_rank
+                        fmrr += 1 / f_rank
+                    
+
+                    if mode == "test":
+                        for k in hits_k:
+                            if rank <= int(k):
+                                hits_k[k] += 1
+
+                        for k in f_hits_k:
+                            if f_rank <= int(k):
+                                f_hits_k[k] += 1
+
+                        if rank not in ranks:
+                            ranks[rank] = 0
+                        ranks[rank] += 1
+                                
+                        if f_rank not in franks:
+                            franks[f_rank] = 0
+                        franks[f_rank] += 1
+                                
+            mr = mr / (2 * len(eval_tuples))
+            mrr = mrr / (2 * len(eval_tuples))
+
+            metrics["mr"] = mr
+            metrics["mrr"] = mrr
+
+            if mode == "test":
+                fmr = fmr / (2 * len(eval_tuples))
+                fmrr = fmrr / (2 * len(eval_tuples))
+                auc = compute_rank_roc(ranks, num_tails)
+                f_auc = compute_rank_roc(franks, num_tails)
+
+                metrics["f_mr"] = fmr
+                metrics["f_mrr"] = fmrr
+                metrics["auc"] = auc
+                metrics["f_auc"] = f_auc
+                
+                for k in hits_k:
+                    hits_k[k] = hits_k[k] / (2 * len(eval_tuples))
+                    metrics[f"hits@{k}"] = hits_k[k]
+                    
+                for k in f_hits_k:
+                    f_hits_k[k] = f_hits_k[k] / (2 * len(eval_tuples))
+                    metrics[f"f_hits@{k}"] = f_hits_k[k]
+
+            metrics = {f"{mode}_{k}": v for k, v in metrics.items()}
+            return metrics
+
+        
+    def evaluate(self, *args, **kwargs):
+        model = args[0]
+        mode = kwargs.get("mode")
+        
+        if mode == "valid":
+            eval_tuples = self.valid_tuples
         else:
-            return self._metrics
+            eval_tuples = self.test_tuples
 
-    @property
-    def fmetrics(self):
-        """Filtered metrics as a dictionary with string metric names as keys and metrics as values.
-
-        :rtype: dict
-        """
-
-        if self._fmetrics is None:
-            raise ValueError("Metrics have not been computed yet.")
-        else:
-            return self._fmetrics
-
-    def _init_axioms(self, axioms):
-        """This method must transform the axioms into the appropriate data structure to be used \
-        by the ``eval_method``. This method accesses the ``axioms`` variable, which can be an OWL \
-        file or a list of OWLAxioms.
-
-        :param: axioms: Collection of axioms to be transformed. The choice of type for this \
-        parameter is up to the user but it is recommended to use either a OWL file, OWLOntology \
-        or a collection of OWLAxioms.
-        """
-        raise NotImplementedError()
-
-    def _init_axioms_to_filter(self, axioms):
-        """ This method transforms the axioms that would be used in filtered metrics. The final \
-        type and format of the transformed axioms must be congruent to the signature of the \
-        ``eval_method`` parameter.
-
-        :param: axioms: Collection of axioms to be transformed. The choice of type for this \
-        parameter is up to the user but it is recommended to use either a OWL file, OWLOntology \
-        or a collection of OWLAxioms.
-        """
-        raise NotImplementedError()
-
-    def compute_axiom_rank(self, axiom):
-        """This function should compute the rank of a single axiom. This method will be used \
-        iteratively by the ``__call__`` method. This method returns a 3-tuple: rank of the \
-        axiom, frank of the axiom and the possible achievable worst rank.
-
-        :param axiom: Axiom of the type congruent to the ``eval_method`` signature.
-        :rtype: (int, int, int)
+        return self.evaluate_base(model, eval_tuples, **kwargs)
+    
+    
 
 
-        """
-        raise NotImplementedError()
 
-    def __call__(self, axioms):
-        self.axioms = self._init_axioms(axioms)
-        tops = {1: 0, 3: 0, 5: 0, 10: 0, 100: 0, 1000: 0}
-        ftops = {1: 0, 3: 0, 5: 0, 10: 0, 100: 0, 1000: 0}
-        mean_rank = 0
-        fmean_rank = 0
-        ranks = {}
-        franks = {}
-
-        n = 0
-        for axiom in tqdm(self.axioms):
-            rank, frank, worst_rank = self.compute_axiom_rank(axiom)
-
-            if rank is None:
-                continue
-
-            n = n + 1
-            for top in tops:
-                if rank <= top:
-                    tops[top] += 1
-
-            mean_rank += rank
-
-            if rank not in ranks:
-                ranks[rank] = 0
-            ranks[rank] += 1
-
-            # Filtered rank
-            if self._compute_filtered_metrics:
-                for ftop in ftops:
-                    if frank <= ftop:
-                        ftops[ftop] += 1
-
-                if rank not in franks:
-                    franks[rank] = 0
-                franks[rank] += 1
-
-                fmean_rank += frank
-
-        tops = {k: v / n for k, v in tops.items()}
-        ftops = {k: v / n for k, v in ftops.items()}
-
-        mean_rank, fmean_rank = mean_rank / n, fmean_rank / n
-
-        rank_auc = compute_rank_roc(ranks, worst_rank)
-        frank_auc = compute_rank_roc(franks, worst_rank)
-
-        self._metrics = {f"hits@{k}": tops[k] for k in tops}
-        self._metrics["mean_rank"] = mean_rank
-        self._metrics["rank_auc"] = rank_auc
-        self._fmetrics = {f"hits@{k}": ftops[k] for k in ftops}
-        self._fmetrics["mean_rank"] = fmean_rank
-        self._fmetrics["rank_auc"] = frank_auc
-
-        return
-
-    def print_metrics(self):
-
-        to_print = "Normal:\t"
-        for name, value in self._metrics.items():
-            to_print += f"{name}: {value:.2f}\t"
-
-        to_print += "\nFiltered:\t"
-        for name, value in self._fmetrics.items():
-            to_print += f"{name}: {value:.2f}\t"
-
-        print(to_print)
-
-
-class CosineSimilarity(EvaluationMethod):
-
-    def __init__(self, embeddings, embeddings_relation=None, method=None, device="cpu"):
-        super().__init__(embeddings, embeddings_relation=embeddings_relation, device=device)
-
-    def method(self, x):
-        s, d = x[:, 0], x[:, 2]
-        srcs = self.embeddings(s)
-        dsts = self.embeddings(d)
-
-        x = th.sum(srcs * dsts, dim=1)
-        return 1 - th.sigmoid(x)
-
-    def forward(self, x):
-        return self.method(x)
-
-
-class TranslationalScore(EvaluationMethod):
-
-    def __init__(self, embeddings, embeddings_relation, method, device="cpu"):
-        super().__init__(embeddings, embeddings_relation=embeddings_relation, device=device)
-
-        self.method = method
-
-    def forward(self, x):
-        return self.method(x)
-
-
-def compute_rank_roc(ranks, worst_rank):
-
+def compute_rank_roc(ranks, num_entities):
+    n_tails = num_entities
+                    
     auc_x = list(ranks.keys())
     auc_x.sort()
     auc_y = []
     tpr = 0
-    sum_rank = sum(ranks.values())  # number of evaluation points
-
+    sum_rank = sum(ranks.values())
     for x in auc_x:
         tpr += ranks[x]
         auc_y.append(tpr / sum_rank)
-
-    auc_x.append(worst_rank)
+    auc_x.append(n_tails)
     auc_y.append(1)
-    auc = np.trapz(auc_y, auc_x) / worst_rank
+    auc = np.trapz(auc_y, auc_x) / n_tails
     return auc

@@ -1,7 +1,7 @@
 
 from mowl.nn import ELBoxModule
 from mowl.base_models.elmodel import EmbeddingELModel
-from mowl.models.elboxembeddings.evaluate import ELBoxEmbeddingsPPIEvaluator
+from mowl.evaluation import PPIEvaluator
 
 import torch as th
 from torch import nn
@@ -35,6 +35,8 @@ class ELBoxEmbeddings(EmbeddingELModel):
         self.extended = False
         self.init_module()
 
+        self.set_evaluator(PPIEvaluator)
+        
     def init_module(self):
         self.module = ELBoxModule(
             len(self.class_index_dict),
