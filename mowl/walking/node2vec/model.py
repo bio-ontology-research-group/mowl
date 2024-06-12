@@ -70,3 +70,5 @@ class Node2Vec(WalkingModel):
                      self.outfile, nodes_of_interest)
 
         walker.walk()
+
+        self.wait_for_all_walks()
