@@ -5,14 +5,14 @@ from de.tudresden.inf.lat.jcel.owlapi.translator import Translator
 from org.semanticweb.owlapi.model.parameters import Imports
 from uk.ac.manchester.cs.owl.owlapi import OWLClassImpl, OWLObjectSomeValuesFromImpl, \
     OWLObjectIntersectionOfImpl
-from org.semanticweb.owlapi.model import OWLAxiom, OWLOntology
+from org.semanticweb.owlapi.model import OWLAxiom, OWLOntology, AxiomType
 
 from java.util import HashSet
 
 import logging
 logging.basicConfig(level=logging.INFO)
 from mowl.owlapi import OWLAPIAdapter
-
+from deprecated.sphinx import versionchanged
 
 class ELNormalizer():
 
@@ -40,6 +40,9 @@ type org.semanticweb.owlapi.model.OWLOntology. Found: {type(ontology)}")
 
         # jreasoner = JcelReasoner(ontology, False)
         # root_ont = jreasoner.getRootOntology()
+
+        abox = ontology.getABoxAxioms(Imports.fromBoolean(True))
+        
         ontology = self.preprocess_ontology(ontology)
         root_ont = ontology
         translator = Translator(ontology.getOWLOntologyManager().getOWLDataFactory(),
@@ -62,13 +65,15 @@ type org.semanticweb.owlapi.model.OWLOntology. Found: {type(ontology)}")
         self.rTranslator = ReverseAxiomTranslator(translator, ontology)
 
         axioms_dict = self.__revert_translation(normalized_ontology)
+        axioms_dict["class_assertion"] = [ClassAssertion(axiom) for axiom in abox if axiom.getAxiomType() == AxiomType.CLASS_ASSERTION and axiom.getClassExpression().isOWLClass()]
+        axioms_dict["object_property_assertion"] = [ObjectPropertyAssertion(axiom) for axiom in abox if axiom.getAxiomType() == AxiomType.OBJECT_PROPERTY_ASSERTION]
 
         return axioms_dict
 
     def __revert_translation(self, normalized_ontology):
         axioms_dict = {
             "gci0": [], "gci1": [], "gci2": [], "gci3": [], "gci0_bot": [], "gci1_bot": [],
-            "gci3_bot": []}
+            "gci3_bot": [], "class_assertion": [], "object_property_assertion": []}
 
         for ax in normalized_ontology:
             try:
@@ -128,6 +133,25 @@ type org.semanticweb.owlapi.model.OWLOntology")
                 continue
             elif "ObjectOneOf" in axiom_as_str:
                 continue
+            elif "ObjectHasValue" in axiom_as_str:
+                continue
+            elif "DataSomeValuesFrom" in axiom_as_str:
+                continue
+            elif "DataAllValuesFrom" in axiom_as_str:
+                continue
+            elif "DataHasValue" in axiom_as_str:
+                continue
+            elif "DataPropertyRange" in axiom_as_str:
+                continue
+            elif "DataPropertyDomain" in axiom_as_str:
+                continue
+            elif "FunctionalDataProperty" in axiom_as_str:
+                continue
+            elif "DisjointUnion" in axiom_as_str:
+                continue
+            elif "HasKey" in axiom_as_str:
+                continue
+            
             else:
                 new_tbox_axioms.add(axiom)
 
@@ -177,8 +201,9 @@ def process_axiom(axiom: OWLAxiom):
         logging.info("Subclass type not recognized. Ignoring axiom: %s", axiom)
 
 
-class GCI():
-    """Base class for all GCI types in the :math:`\\mathcal{EL}` language"""
+
+class Axiom():
+    """Base class for all axioms in the :math:`\\mathcal{EL}` language"""
 
     def __init__(self, axiom):
         self._axiom = axiom
@@ -186,6 +211,47 @@ class GCI():
 
     def __eq__(self, other):
         return self._axiom.equals(other._axiom)
+
+            
+    @property
+    def owl_axiom(self):
+        """Returns the axiom
+
+        :rtype: :class:`org.semanticweb.owlapi.model.OWLAxiom`
+        """
+        return self._axiom
+
+    @versionchanged(version="0.4.0", reason="Included individuals in the return of this method.")
+    @staticmethod
+    def get_entities(gcis):
+        """Returns all the classes and object properties that appear in the GCIs
+
+        :param gcis: List of GCIs
+        :type gcis: list
+
+        :rtype: tuple(set, set)
+        """
+
+        classes = set()
+        object_properties = set()
+        individuals = set()
+        
+        for gci in gcis:
+            new_classes, new_obj_props, new_inds = gci.get_entities()
+            classes |= new_classes
+            object_properties |= new_obj_props
+            individuals |= new_inds
+        return classes, object_properties, individuals
+
+
+        
+class GCI(Axiom):
+    """Base class for all GCI types in the :math:`\\mathcal{EL}` language"""
+
+    def __init__(self, axiom):
+        super().__init__(axiom)
+                
+
 
     @property
     def owl_subclass(self):
@@ -203,35 +269,90 @@ class GCI():
         """
         return self._axiom.getSuperClass()
 
+    
+class ClassAssertion(Axiom):
+    """Class assertion axiom of the form :math:`A(a)`
+    :param axiom: Axiom of the form :math:`A(a)`
+    :type axiom: :class:`org.semanticweb.owlapi.model.OWLAxiom`
+    """
+
+    def __init__(self, axiom):
+        super().__init__(axiom)
+        self._class_ = None
+        self._individual = None
+
     @property
-    def owl_axiom(self):
-        """Returns the axiom of the GCI
+    def class_(self):
+        """Returns the class of the class assertion
 
-        :rtype: :class:`org.semanticweb.owlapi.model.OWLAxiom`
+        :rtype: :class:`org.semanticweb.owlapi.model.OWLClass`
         """
-        return self._axiom
+        if not self._class_:
+            self._class_ = str(self._axiom.getClassExpression().toStringID())
+        return self._class_
 
-    @staticmethod
-    def get_entities(gcis):
-        """Returns all the classes and object properties that appear in the GCIs
+    @property
+    def individual(self):
+        """Returns the individual of the class assertion
 
-        :param gcis: List of GCIs
-        :type gcis: list
-
-        :rtype: tuple(set, set)
+        :rtype: :class:`org.semanticweb.owlapi.model.OWLNamedIndividual`
         """
 
-        classes = set()
-        object_properties = set()
+        if not self._individual:
+            self._individual = str(self._axiom.getIndividual().toStringID())
+        return self._individual
 
-        for gci in gcis:
-            new_classes, new_obj_props = gci.get_entities()
-            classes |= new_classes
-            object_properties |= new_obj_props
+    def get_entities(self):
+        return set([self.class_]), set(), set([self.individual])
+        
+    
+class ObjectPropertyAssertion(Axiom):
+    """Object property assertion axiom of the form :math:`R(a,b)`
+    :param axiom: Axiom of the form :math:`R(a,b)`
+    :type axiom: :class:`org.semanticweb.owlapi.model.OWLAxiom`
+    """
 
-        return classes, object_properties
+    def __init__(self, axiom):
+        super().__init__(axiom)
+        self._object_property = None
+        self._subject = None
+        self._object = None
 
+    @property
+    def object_property(self):
+        """Returns the object property of the object property assertion
 
+        :rtype: :class:`org.semanticweb.owlapi.model.OWLObjectProperty`
+        """
+        if not self._object_property:
+            self._object_property = str(self._axiom.getProperty().toStringID())
+        return self._object_property
+
+    @property
+    def subject(self):
+        """Returns the subject of the object property assertion
+
+        :rtype: :class:`org.semanticweb.owlapi.model.OWLNamedIndividual`
+        """
+
+        if not self._subject:
+            self._subject = str(self._axiom.getSubject().toStringID())
+        return self._subject
+
+    @property
+    def object_(self):
+        """Returns the object of the object property assertion
+
+        :rtype: :class:`org.semanticweb.owlapi.model.OWLNamedIndividual`
+        """
+
+        if not self._object:
+            self._object = str(self._axiom.getObject().toStringID())
+        return self._object
+
+    def get_entities(self):
+        return set(), set([self.object_property]), set([self.subject, self.object_])
+    
 class GCI0(GCI):
     """
     GCI of the form :math:`C \\sqsubseteq D`
@@ -268,7 +389,7 @@ class GCI0(GCI):
         return self._superclass
 
     def get_entities(self):
-        return set([self.subclass, self.superclass]), set()
+        return set([self.subclass, self.superclass]), set(), set()
 
 
 class GCI0_BOT(GCI0):
@@ -343,7 +464,7 @@ class GCI1(GCI):
         return self._superclass
 
     def get_entities(self):
-        return set([self.left_subclass, self.right_subclass, self.superclass]), set()
+        return set([self.left_subclass, self.right_subclass, self.superclass]), set(), set()
 
 
 class GCI1_BOT(GCI1):
@@ -420,7 +541,7 @@ class GCI2(GCI):
         return self._filler
 
     def get_entities(self):
-        return set([self.subclass, self.filler]), set([self.object_property])
+        return set([self.subclass, self.filler]), set([self.object_property]), set()
 
 
 class GCI3(GCI):
@@ -482,7 +603,7 @@ class GCI3(GCI):
         return self._superclass
 
     def get_entities(self):
-        return set([self.filler, self.superclass]), set([self.object_property])
+        return set([self.filler, self.superclass]), set([self.object_property]), set()
 
 
 class GCI3_BOT(GCI3):
@@ -497,3 +618,5 @@ class GCI3_BOT(GCI3):
         super().__init__(axiom)
         if "owl#Nothing" not in self.superclass:
             raise ValueError("Superclass in GCI3_BOT must be the bottom concept.")
+
+

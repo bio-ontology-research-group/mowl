@@ -89,8 +89,8 @@ class OWL2VecStarProjector(
       }
     }
 
-    println("subRoles: " + subRoles)
-    println("inverseRoles: " + inverseRoles)
+    // println("subRoles: " + subRoles)
+    // println("inverseRoles: " + inverseRoles)
 
     val axioms = tboxAxioms ++ aboxAxioms ++ rboxAxioms
 
@@ -325,7 +325,7 @@ class OWL2VecStarProjector(
 
   def projectQuantifiedExpression(expr:QuantifiedExpression, ontology: OWLOntology): Option[(String, List[String], List[String], OWLClassExpression)] = {
 
-    val rel = expr.getProperty.asInstanceOf[OWLObjectProperty]
+    val rel = expr.getProperty.getNamedProperty
     val relName = rel.toStringID
     val rel_ = Left(rel)
     val inverseRelName = getRelationInverseNames(rel_, ontology)

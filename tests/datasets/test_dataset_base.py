@@ -96,16 +96,12 @@ class TestPathDataset(TestCase):
 
     def test_return_evaluation_classes_default(self):
         """It should check the default behaviour of evaluation classes property"""
+
         ds = self.dataset_full
         testing_classes_from_owlapi = ds.testing.getClassesInSignature()
-        eval_classes = ds.evaluation_classes.as_str
 
-        eval_classes_owl = [x.toString()[1:-1] for x in testing_classes_from_owlapi]
-        eval_classes.sort()
-        eval_classes_owl.sort()
-
-        idx = randrange(0, len(eval_classes))
-        self.assertEqual(eval_classes[idx], eval_classes_owl[idx])
+        with self.assertRaisesRegex(NotImplementedError, "This method must be implemented in a subclass."):
+            ds.evaluation_classes
 
     def test_attribute_classes(self):
         """Test types of dataset.classes.as_owl attribute"""

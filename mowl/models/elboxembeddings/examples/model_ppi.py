@@ -30,7 +30,7 @@ class ELBoxPPI(ELBoxEmbeddings):
         validation_dataset = self.validation_datasets["gci2"][:]
 
         prots = [self.class_index_dict[p] for p
-                 in self.dataset.evaluation_classes.as_str]
+                 in self.dataset.evaluation_classes[0].as_str]
         
         for epoch in trange(self.epochs):
             self.module.train()
