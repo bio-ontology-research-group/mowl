@@ -2,6 +2,7 @@ import numpy as np
 import torch as th
 
 from mowl.utils.data import FastTensorDataLoader
+from mowl.error import messages as msg
 
 import logging
 from deprecated.sphinx import versionchanged
@@ -21,32 +22,11 @@ class Evaluator:
     :type device: str, optional
     :param batch_size: Batch size for evaluation. Defaults to 16.
     :type batch_size: int, optional
-    :param exclude_testing_set: Whether to exclude the testing set from the evaluation. Defaults to False.
-    :type exclude_testing_set: bool, optional
-    :param evaluate_with_deductive_closure: Whether to evaluate using deductive closure axioms as positives. Defaults to False.
-    :type evaluate_with_deductive_closure: bool, optional
-    :param filter_deductive_closure: Whether to filter deductive closure axioms from the evaluation. Defaults to False.
-    :type filter_deductive_closure: bool, optional
     """
     
-    def __init__(self, dataset, device="cpu", batch_size=16, exclude_testing_set=False,
-                 evaluate_with_deductive_closure=False,
-                 filter_deductive_closure=False):
+    def __init__(self, dataset, device="cpu", batch_size=16):
 
 
-        
-        if evaluate_with_deductive_closure and filter_deductive_closure:
-            raise ValueError("Cannot evaluate with deductive closure and filter it at the same time. Set either evaluate_with_deductive_closure or filter_deductive_closure to False.")
-
-        if exclude_testing_set and not evaluate_with_deductive_closure:
-            raise ValueError("Cannot exclude testing set without evaluating with deductive closure. Evaluation set is empty.")
-
-        
-        logger.info(f"Evaluating in device: {device}")
-        logger.info(f"Evaluating with deductive closure: {evaluate_with_deductive_closure}")
-        logger.info(f"Filtering deductive closure: {filter_deductive_closure}")
-        
-        
         self.dataset = dataset
         self.device = device
         self.batch_size = batch_size
@@ -55,10 +35,6 @@ class Evaluator:
         self.test_tuples = self.create_tuples(dataset.testing)
         self._deductive_closure_tuples = None
 
-        self.exclude_testing_set = exclude_testing_set
-        self.evaluate_with_deductive_closure = evaluate_with_deductive_closure
-        self.filter_deductive_closure = filter_deductive_closure
-        
         self.class_to_id = {c: i for i, c in enumerate(self.dataset.classes.as_str)}
         self.id_to_class = {i: c for c, i in self.class_to_id.items()}
 
@@ -85,20 +61,25 @@ class Evaluator:
         raise NotImplementedError
 
     
-    def evaluate_base(self, model, eval_tuples, mode="test", **kwargs):
+    def evaluate_base(self, model, eval_tuples, mode="test",
+                      include_deductive_closure=False,
+                      exclude_testing_set=False,
+                      filter_deductive_closure=False,
+                      **kwargs):
+
         num_heads, num_tails = len(self.evaluation_heads), len(self.evaluation_tails)
         model.eval()
         if not mode in ["valid", "test"]:
             raise ValueError(f"Mode must be either 'valid' or 'test', not {mode}")
 
 
-        if self.evaluate_with_deductive_closure:
+        if include_deductive_closure:
             mask1 = (self.deductive_closure_tuples.unsqueeze(1) == self.train_tuples).all(dim=-1).any(dim=-1)
             mask2 = (self.deductive_closure_tuples.unsqueeze(1) == self.valid_tuples).all(dim=-1).any(dim=-1)
             mask = mask1 | mask2
             deductive_closure_tuples = self.deductive_closure_tuples[~mask]
 
-            if self.exclude_testing_set:
+            if exclude_testing_set:
                 eval_tuples = deductive_closure_tuples # only deductive closure
             else:
                 eval_tuples = th.cat([eval_tuples, deductive_closure_tuples], dim=0)
@@ -114,8 +95,8 @@ class Evaluator:
             hits_k = dict({"1": 0, "3": 0, "10": 0, "50": 0, "100": 0})
             f_hits_k = dict({"1": 0, "3": 0, "10": 0, "50": 0, "100": 0})
         
-            filtering_labels = self.get_filtering_labels(num_heads, num_tails, **kwargs)
-            if self.evaluate_with_deductive_closure:
+            filtering_labels = self.get_filtering_labels(num_heads, num_tails, filter_deductive_closure=filter_deductive_closure)
+            if include_deductive_closure:
                 deductive_labels = self.get_deductive_labels(num_heads, num_tails, **kwargs)
             
         with th.no_grad():
@@ -130,14 +111,14 @@ class Evaluator:
                 aux_tails = tails.clone()
         
                 batch = batch.to(self.device)
-                logits_heads, logits_tails = self.get_logits(model, batch, *kwargs)
+                logits_heads, logits_tails = self.get_logits(model, batch, **kwargs)
     
                 for i, head in enumerate(aux_heads):
                     tail = tails[i]
                     tail = th.where(self.evaluation_tails == tail)[0].item()
                     preds = logits_heads[i]
 
-                    if self.evaluate_with_deductive_closure:
+                    if include_deductive_closure:
                         ded_labels = deductive_labels[head].to(preds.device)
                         ded_labels[tail] = 1
                         preds = preds * ded_labels
@@ -151,7 +132,14 @@ class Evaluator:
                     if mode == "test":
                         f_preds = preds * filtering_labels[head].to(preds.device)
 
-                        if self.evaluate_with_deductive_closure:
+                        if include_deductive_closure:
+                            # when evaluating with deductive closure
+                            # axioms, for a testing axiom we need to
+                            # filter the other deductive closure
+                            # axioms. Otherwise, we could, in the best
+                            # case, score many true axioms at the top
+                            # and will never get, for example, good
+                            # hits@1.
                             ded_labels = deductive_labels[head].to(preds.device)
                             ded_labels[tail] = 1
                             f_preds = f_preds * ded_labels
@@ -184,7 +172,7 @@ class Evaluator:
                     head = th.where(self.evaluation_heads == head)[0].item()
                     preds = logits_tails[i]
 
-                    if self.evaluate_with_deductive_closure:
+                    if include_deductive_closure:
                         ded_labels = deductive_labels[:, tail].to(preds.device)
                         ded_labels[head] = 1
                         preds = preds * ded_labels
@@ -197,7 +185,7 @@ class Evaluator:
                     if mode == "test":
                         f_preds = preds * filtering_labels[:, tail].to(preds.device)
 
-                        if self.evaluate_with_deductive_closure:
+                        if include_deductive_closure:
                             ded_labels = deductive_labels[:, tail].to(preds.device)
                             ded_labels[head] = 1
                             f_preds = f_preds * ded_labels
@@ -255,7 +243,41 @@ class Evaluator:
             return metrics
 
         
-    def evaluate(self, *args, **kwargs):
+    def evaluate(self, *args,
+                 include_deductive_closure=False,
+                 exclude_testing_set=False,
+                 filter_deductive_closure=False,
+                 **kwargs):
+
+        """
+        :param include_deductive_closure: Whether to evaluate using deductive closure axioms as positives. Defaults to False.
+        :type include_deductive_closure: bool, optional
+        
+        :param exclude_testing_set: Whether to exclude the testing set from the evaluation. Defaults to False.
+        :type exclude_testing_set: bool, optional
+        :param filter_deductive_closure: Whether to filter deductive closure axioms from the evaluation. Defaults to False.
+        :type filter_deductive_closure: bool, optional
+        """
+
+
+        
+        if not isinstance(include_deductive_closure, bool):
+            raise TypeError(msg.get_type_error_message("include_deductive_closure", "bool", type(include_deductive_closure)))
+
+        if not isinstance(exclude_testing_set, bool):
+            raise TypeError(msg.get_type_error_message("exclude_testing_set", "bool", type(exclude_testing_set)))
+
+        if not isinstance(filter_deductive_closure, bool):
+            raise TypeError(msg.get_type_error_message("filter_deductive_closure", "bool", type(filter_deductive_closure)))
+
+
+        logger.info(f"Evaluating in device: {self.device}")
+        logger.info(f"Evaluating with deductive closure: {include_deductive_closure}")
+        logger.info(f"Excluding testing set: {exclude_testing_set}")
+        logger.info(f"Filtering deductive closure: {filter_deductive_closure}")
+
+
+        
         model = args[0]
         mode = kwargs.get("mode")
         
@@ -264,7 +286,11 @@ class Evaluator:
         else:
             eval_tuples = self.test_tuples
 
-        return self.evaluate_base(model, eval_tuples, **kwargs)
+        return self.evaluate_base(model, eval_tuples,
+                                  include_deductive_closure=include_deductive_closure,
+                                  exclude_testing_set=exclude_testing_set,
+                                  filter_deductive_closure=filter_deductive_closure,
+                                  **kwargs)
     
     
 
