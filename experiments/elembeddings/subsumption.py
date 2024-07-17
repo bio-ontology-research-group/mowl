@@ -49,7 +49,7 @@ def main(dataset_name, evaluator_name, embed_dim, batch_size,
 
     seed_everything(42)
     
-    wandb_logger = wandb.init(entity="zhapacfp_team", project="ontoem", group="f{dataset_name}_{evaluate_deductive}_{filter_deductive}", name=wandb_description)
+    wandb_logger = wandb.init(entity="zhapacfp_team", project="ontoem", group=f"elembeddings_{dataset_name}_{evaluate_deductive}_{filter_deductive}", name=wandb_description)
 
 
     if loss_margin == int(loss_margin):

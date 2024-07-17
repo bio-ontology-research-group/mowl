@@ -7,8 +7,8 @@ from mowl.base_models.elmodel import EmbeddingELModel
 from mowl.utils.random import seed_everything
 from org.semanticweb.owlapi.model.parameters import Imports
 from org.semanticweb.owlapi.model import AxiomType as Ax
-from evaluators import PPIEvaluator
-from datasets import PPIDataset
+from evaluators import PPIEvaluator, SubsumptionFromPPIEvaluator
+from datasets import PPIDataset, PPIDatasetV2
 from tqdm import tqdm
 from mowl.nn import ELBEModule
 import torch as th
@@ -28,7 +28,7 @@ th.autograd.set_detect_anomaly(True)
 
 @ck.command()
 @ck.option("--dataset_name", "-ds", type=ck.Choice(["ppi_yeast", "ppi_yeast_slim"]), default="ppi_yeast_slim")
-@ck.option("--evaluator_name", "-e", default="ppi", help="Evaluator to use")
+@ck.option("--evaluator_name", "-ev", default="ppi", help="Evaluator to use")
 @ck.option("--embed_dim", "-dim", default=50, help="Embedding dimension")
 @ck.option("--batch_size", "-bs", default=300000, help="Batch size")
 @ck.option("--module_margin", "-mm", default=0.1, help="Margin for the module")
@@ -122,11 +122,16 @@ def dataset_resolver(dataset_name):
     else:
         raise ValueError(f"Dataset {dataset_name} not found")
 
-    return root_dir, PPIDataset(root_dir)
+    return root_dir, PPIDatasetV2(root_dir)
 
 def evaluator_resolver(evaluator_name, *args, **kwargs):
     if evaluator_name.lower() == "ppi":
         return PPIEvaluator(*args, **kwargs)
+    elif evaluator_name.lower() == "subsumption":
+        return SubsumptionFromPPIEvaluator(*args,
+                                           batch_size = 64,
+                                           evaluate_with_deductive_closure=True,
+                                           **kwargs)
     else:
         raise ValueError(f"Evaluator {evaluator_name} not found")
 
