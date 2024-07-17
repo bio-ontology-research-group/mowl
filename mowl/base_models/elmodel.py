@@ -24,7 +24,7 @@ merging the 3 extra to their corresponding origin normal forms. Defaults to True
     :type extended: bool, optional
     """
 
-    def __init__(self, dataset, embed_dim, batch_size, extended=True, model_filepath=None, device="cpu"):
+    def __init__(self, dataset, embed_dim, batch_size, extended=True, model_filepath=None, load_normalized=False, device="cpu"):
         super().__init__(dataset, model_filepath=model_filepath)
 
         if not isinstance(embed_dim, int):
@@ -45,7 +45,8 @@ merging the 3 extra to their corresponding origin normal forms. Defaults to True
         self.embed_dim = embed_dim
         self.batch_size = batch_size
         self.device = device
-
+        self.load_normalized = load_normalized
+        
         self._training_datasets = None
         self._validation_datasets = None
         self._testing_datasets = None
@@ -62,9 +63,12 @@ merging the 3 extra to their corresponding origin normal forms. Defaults to True
         if self._datasets_loaded:
             return
 
-        training_el_dataset = ELDataset(self.dataset.ontology, self.class_index_dict,
+        training_el_dataset = ELDataset(self.dataset.ontology,
+                                        self.class_index_dict,
                                         self.object_property_index_dict,
-                                        extended=self._extended, device=self.device)
+                                        extended=self._extended,
+                                        load_normalized = self.load_normalized,
+                                        device=self.device)
 
         self._training_datasets = training_el_dataset.get_gci_datasets()
 

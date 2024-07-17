@@ -204,7 +204,7 @@ class Model():
         if isinstance(evaluator, Evaluator):
             self._evaluator = evaluator
         else:
-            self._evaluator = evaluator(self.dataset, **kwargs)
+            self._evaluator = evaluator(self.dataset, *args, **kwargs)
 
         
             

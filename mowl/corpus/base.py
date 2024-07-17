@@ -118,7 +118,7 @@ following the Manchester Syntax.
                     obj_property = str(annotation.getProperty()).replace("\n", " ")
                     # could filter on property
                     value = str(annotation.getValue().getLiteral()).replace("\n", " ")
-                    corpus.append(f'{ind} {obj_property} {value}\n')
+                    f.write(f'{ind} {obj_property} {value}\n')
 
 
 def extract_annotation_corpus(ontology):

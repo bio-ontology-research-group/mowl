@@ -5,12 +5,16 @@ from de.tudresden.inf.lat.jcel.owlapi.translator import Translator
 from org.semanticweb.owlapi.model.parameters import Imports
 from uk.ac.manchester.cs.owl.owlapi import OWLClassImpl, OWLObjectSomeValuesFromImpl, \
     OWLObjectIntersectionOfImpl
-from org.semanticweb.owlapi.model import OWLAxiom, OWLOntology, AxiomType
+from org.semanticweb.owlapi.model import OWLAxiom, OWLOntology, AxiomType, ClassExpressionType
 
 from java.util import HashSet
 
 import logging
-logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+handler = logging.StreamHandler()
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+
 from mowl.owlapi import OWLAPIAdapter
 from deprecated.sphinx import versionchanged
 
@@ -24,11 +28,13 @@ logic EL language.
     def __init__(self):
         return
 
-    def normalize(self, ontology):
+    def normalize(self, ontology, load=False):
         """Performs the normalization.
         :param ontology: Input ontology
         :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
-
+        :param load: Load the GCIs if the ontology is already normalized. Default is False.
+        :type load: bool, optional
+        
         :rtype: Dictionary where the keys are labels for each normal form and the values are a \
             list of axioms of each normal form.
         """
@@ -41,35 +47,55 @@ type org.semanticweb.owlapi.model.OWLOntology. Found: {type(ontology)}")
         # jreasoner = JcelReasoner(ontology, False)
         # root_ont = jreasoner.getRootOntology()
 
-        abox = ontology.getABoxAxioms(Imports.fromBoolean(True))
+
         
-        ontology = self.preprocess_ontology(ontology)
-        root_ont = ontology
-        translator = Translator(ontology.getOWLOntologyManager().getOWLDataFactory(),
-                                IntegerOntologyObjectFactoryImpl())
-        # translator = jreasoner.getTranslator()
-        axioms = HashSet()
-        axioms.addAll(root_ont.getAxioms())
-        translator.getTranslationRepository().addAxiomEntities(root_ont)
+        abox = ontology.getABoxAxioms(Imports.fromBoolean(True))
 
-        for ont in root_ont.getImportsClosure():
-            axioms.addAll(ont.getAxioms())
-            translator.getTranslationRepository().addAxiomEntities(ont)
+        if load:
+            logger.info("Loading normalized ontology")
+            axioms_dict = self.__load_normalized_ontology(ontology)
+        else:
+            ontology = self.preprocess_ontology(ontology)
+            root_ont = ontology
+            translator = Translator(ontology.getOWLOntologyManager().getOWLDataFactory(),
+                                    IntegerOntologyObjectFactoryImpl())
+            # translator = jreasoner.getTranslator()
+            axioms = HashSet()
+            axioms.addAll(root_ont.getAxioms())
+            translator.getTranslationRepository().addAxiomEntities(root_ont)
 
-        intAxioms = translator.translateSA(axioms)
+            for ont in root_ont.getImportsClosure():
+                axioms.addAll(ont.getAxioms())
+                translator.getTranslationRepository().addAxiomEntities(ont)
 
-        normalizer = OntologyNormalizer()
+            intAxioms = translator.translateSA(axioms)
 
-        factory = IntegerOntologyObjectFactoryImpl()
-        normalized_ontology = normalizer.normalize(intAxioms, factory)
-        self.rTranslator = ReverseAxiomTranslator(translator, ontology)
+            normalizer = OntologyNormalizer()
 
-        axioms_dict = self.__revert_translation(normalized_ontology)
-        axioms_dict["class_assertion"] = [ClassAssertion(axiom) for axiom in abox if axiom.getAxiomType() == AxiomType.CLASS_ASSERTION and axiom.getClassExpression().isOWLClass()]
+            factory = IntegerOntologyObjectFactoryImpl()
+            normalized_ontology = normalizer.normalize(intAxioms, factory)
+            self.rTranslator = ReverseAxiomTranslator(translator, ontology)
+
+            axioms_dict = self.__revert_translation(normalized_ontology)
+
+        axioms_dict["class_assertion"] = [ClassAssertion(axiom) for axiom in abox if axiom.getAxiomType() == AxiomType.CLASS_ASSERTION and axiom.getClassExpression().getClassExpressionType() == ClassExpressionType.OWL_CLASS]
         axioms_dict["object_property_assertion"] = [ObjectPropertyAssertion(axiom) for axiom in abox if axiom.getAxiomType() == AxiomType.OBJECT_PROPERTY_ASSERTION]
 
         return axioms_dict
 
+    def __load_normalized_ontology(self, ontology):
+        axioms_dict = {
+            "gci0": [], "gci1": [], "gci2": [], "gci3": [], "gci0_bot": [], "gci1_bot": [],
+            "gci3_bot": [], "class_assertion": [], "object_property_assertion": []}
+
+        axioms = ontology.getTBoxAxioms(Imports.fromBoolean(True))
+        for axiom in axioms:
+            key, value = process_axiom(axiom)
+            axioms_dict[key].append(value)
+
+        return axioms_dict
+        
+        
     def __revert_translation(self, normalized_ontology):
         axioms_dict = {
             "gci0": [], "gci1": [], "gci2": [], "gci3": [], "gci0_bot": [], "gci1_bot": [],
