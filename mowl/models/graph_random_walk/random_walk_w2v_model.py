@@ -194,10 +194,15 @@ class EvaluationModel(th.nn.Module):
         
         
     def forward(self, data, *args, **kwargs):
-
-        x = data[:, 0]
-        y = data[:, 1]
-
+        if data.shape[1] == 2:
+            x = data[:, 0]
+            y = data[:, 1]
+        elif data.shape[1] == 3:
+            x = data[:, 0]
+            y = data[:, 2]
+        else:
+            raise ValueError("Data must have 2 or 3 columns")
+                
         logger.debug(f"X shape: {x.shape}")
         logger.debug(f"Y shape: {y.shape}")
         
