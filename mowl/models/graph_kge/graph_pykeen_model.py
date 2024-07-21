@@ -124,12 +124,11 @@ class GraphPlusPyKEENModel(KGEModel):
         """
         try:
             self._kge_method_uninitialized = kge_method
-            initialized_kge_method = kge_method(triples_factory=self.triples_factory, *args, **kwargs)
+            initialized_kge_method = kge_method(*args, triples_factory=self.triples_factory, **kwargs)
             
-        except TypeError:
-            raise TypeError(f"Parameter 'kge_method' must be a pykeen.models.ERModel object. Got {type(kge_method)} instead.")
-
-            
+        except Exception as e:
+            raise Exception(f"Error initializing the KGE method: {e}")
+                        
         if not isinstance(initialized_kge_method, ERModel):
             raise TypeError(f"Parameter 'kge_method' must be a pykeen.models.ERModel object. Got {type(kge_method)} instead.")
 
