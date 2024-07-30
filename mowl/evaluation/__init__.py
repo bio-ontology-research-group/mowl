@@ -1,4 +1,5 @@
-from mowl.evaluation.base import Evaluator, AxiomsRankBasedEvaluator
-from mowl.evaluation.rank_based import RankBasedEvaluator, ModelRankBasedEvaluator, EmbeddingsRankBasedEvaluator
+from mowl.evaluation.base import Evaluator
+from mowl.evaluation.subsumption import SubsumptionEvaluator
+from mowl.evaluation.ppi import PPIEvaluator
 
 

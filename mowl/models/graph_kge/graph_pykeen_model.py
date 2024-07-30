@@ -10,6 +10,12 @@ import os
 import mowl.error.messages as msg
 from pykeen.training import SLCWATrainingLoop
 from deprecated.sphinx import versionadded
+import logging
+logger = logging.getLogger(__name__)
+handler = logging.StreamHandler()
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+
 
 @versionadded(version="0.2.0")
 class GraphPlusPyKEENModel(KGEModel):
@@ -17,7 +23,7 @@ class GraphPlusPyKEENModel(KGEModel):
     This is a wrapper class of :class:`pykeen.models.ERModel` that allows to use the PyKEEN models in the mOWL framework.
     """
     
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, device="cpu", **kwargs):
         super().__init__(*args, **kwargs)
 
         self._triples_factory = None
@@ -26,6 +32,7 @@ class GraphPlusPyKEENModel(KGEModel):
         self.lr = None
         self.batch_size = None
         self.epochs = None
+        self.device = device
                         
 
     @property
@@ -48,7 +55,7 @@ class GraphPlusPyKEENModel(KGEModel):
     @property
     def class_embeddings(self):
         if self._kge_method is None:
-            raise ValueError(msg.PYKEEN_MODEL_NOT_SET)
+            raise AttributeError(msg.MODEL_NOT_TRAINED_OR_LOADED)
         
         classes = self.dataset.classes.as_str
         if len(classes) == 0:
@@ -67,7 +74,7 @@ class GraphPlusPyKEENModel(KGEModel):
     @property
     def object_property_embeddings(self):
         if self._kge_method is None:
-            raise ValueError(msg.PYKEEN_MODEL_NOT_SET)
+            raise AttributeError(msg.MODEL_NOT_TRAINED_OR_LOADED)
 
         object_properties = self.graph_relation_to_id.keys()
         if len(object_properties) == 0:
@@ -85,7 +92,7 @@ class GraphPlusPyKEENModel(KGEModel):
     @property
     def individual_embeddings(self):
         if self._kge_method is None:
-            raise ValueError(msg.PYKEEN_MODEL_NOT_SET)
+            raise AttributeError(msg.MODEL_NOT_TRAINED_OR_LOADED)
         
         individuals = self.dataset.individuals.as_str
         if len(individuals) == 0:
@@ -99,7 +106,15 @@ class GraphPlusPyKEENModel(KGEModel):
         idxs = th.tensor(list(ind_graph_id.values()))
         ind_embeddings = dict(zip(ind_graph_id.keys(), get_embedding(idxs)))
         return ind_embeddings
-                     
+
+    @property
+    def evaluation_model(self):
+        if self._evaluation_model is None:
+            self._evaluation_model = EvaluationModel(self._kge_method, self.device)
+
+        return self._evaluation_model
+
+    
     def set_kge_method(self, kge_method, *args, **kwargs):
         """
         Set the KGE method of the model.
@@ -109,17 +124,15 @@ class GraphPlusPyKEENModel(KGEModel):
         """
         try:
             self._kge_method_uninitialized = kge_method
-            initialized_kge_method = kge_method(triples_factory=self.triples_factory, *args, **kwargs)
-            
+            initialized_kge_method = kge_method(*args, triples_factory=self.triples_factory, **kwargs)
         except TypeError:
             raise TypeError(f"Parameter 'kge_method' must be a pykeen.models.ERModel object. Got {type(kge_method)} instead.")
-
-            
+                    
         if not isinstance(initialized_kge_method, ERModel):
             raise TypeError(f"Parameter 'kge_method' must be a pykeen.models.ERModel object. Got {type(kge_method)} instead.")
 
         
-        self._kge_method = initialized_kge_method
+        self._kge_method = initialized_kge_method.to(self.device)
         self._kge_method_args = args
         self._kge_method_kwargs = kwargs
 
@@ -133,12 +146,14 @@ class GraphPlusPyKEENModel(KGEModel):
         :type epochs: int
         """
 
+        if self._kge_method is None:
+            raise AttributeError(msg.PYKEEN_MODEL_NOT_SET)
         if self.optimizer is None:
-            raise ValueError(msg.PYKEEN_OPTIMIZER_NOT_SET)
+            raise AttributeError(msg.PYKEEN_OPTIMIZER_NOT_SET)
         if self.lr is None:
-            raise ValueError(msg.PYKEEN_LR_NOT_SET)
+            raise AttributeError(msg.PYKEEN_LR_NOT_SET)
         if self.batch_size is None:
-            raise ValueError(msg.PYKEEN_BATCH_SIZE_NOT_SET)
+            raise AttributeError(msg.PYKEEN_BATCH_SIZE_NOT_SET)
 
         self._kge_method.train()
         optimizer = self.optimizer(params=self._kge_method.get_grad_params(), lr=self.lr)
@@ -217,3 +232,17 @@ class GraphPlusPyKEENModel(KGEModel):
         #self._kge_method = kge_method
     
 
+
+
+class EvaluationModel(th.nn.Module):
+    def __init__(self, kge_model, device):
+        logger.warning("A custom EvaluationModel should be created depending on the task. This is a generic one.")
+        super().__init__()
+
+        self.kge_model = kge_model
+        self.device = device
+        
+    def forward(self, data, *args, **kwargs):
+        logits = self.kge_model.score_hrt(data)
+        return - logits
+    

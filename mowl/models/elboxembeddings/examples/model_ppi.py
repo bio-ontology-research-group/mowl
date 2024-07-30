@@ -5,7 +5,7 @@ import math
 import logging
 import numpy as np
 
-from mowl.models.elboxembeddings.evaluate import ELBoxEmbeddingsPPIEvaluator
+from mowl.evaluation import PPIEvaluator
 
 from tqdm import trange, tqdm
 
@@ -85,13 +85,9 @@ class ELBoxPPI(ELBoxEmbeddings):
         print('Load the best model', self.model_filepath)
         self.load_best_model()
         with th.no_grad():
-            eval_method = self.module.gci2_loss
+            metrics = self.evaluate()
+            print(metrics)
 
-            evaluator = ELBoxEmbeddingsPPIEvaluator(
-                self.dataset.testing, eval_method, self.dataset.ontology, self.class_index_dict,
-                self.object_property_index_dict, device=self.device)
-            evaluator()
-            evaluator.print_metrics()
 
 
             

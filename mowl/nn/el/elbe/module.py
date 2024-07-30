@@ -5,7 +5,7 @@ import torch.nn as nn
 from deprecated.sphinx import deprecated
 
 
-@deprecated(version="0.4.0", reason="Use ELBEModule instead")
+@deprecated(version="1.0.0", reason="Use ELBEModule instead")
 class ELBoxModule(ELModule):
     """Implementation of ELBoxEmbeddings from [peng2020]_.
     """

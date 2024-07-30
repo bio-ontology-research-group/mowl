@@ -26,6 +26,8 @@ class ELDataset():
     name --> index`. If not provided, a dictionary will be created from the ontology object \
     properties. Defaults to ``None``.
     :type object_property_index_dict: dict, optional
+    :param load_normalized: If true, the ontology is assumed to be already normalized and the normalization process will be skipped. Defaults to ``False``.
+    :type load_normalized: bool, optional
     """
 
     def __init__(self,
@@ -34,6 +36,7 @@ class ELDataset():
                  object_property_index_dict=None,
                  individual_index_dict=None,
                  extended=True,
+                 load_normalized = False,
                  device="cpu"
                  ):
 
@@ -65,7 +68,8 @@ org.semanticweb.owlapi.model.OWLOntology.")
         self._object_property_index_dict = object_property_index_dict
         self._individual_index_dict = individual_index_dict
         self.device = device
-
+        self.load_normalized = load_normalized
+        
         self._gci0_dataset = None
         self._gci1_dataset = None
         self._gci2_dataset = None
@@ -82,7 +86,7 @@ org.semanticweb.owlapi.model.OWLOntology.")
 
         normalizer = ELNormalizer()
 
-        gcis = normalizer.normalize(self._ontology)
+        gcis = normalizer.normalize(self._ontology, load=self.load_normalized)
 
         classes = set()
         relations = set()

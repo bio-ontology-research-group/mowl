@@ -1,4 +1,3 @@
-import time
 from mowl.walking import Node2Vec
 from mowl.projection import Edge
 from unittest import TestCase
@@ -65,7 +64,6 @@ class TestNode2Vec(TestCase):
         walk_length = 5
         node2vec = Node2Vec(num_walks, walk_length)
         node2vec.walk(self.graph)
-        time.sleep(1)
         with open(node2vec.outfile, "r") as f:
             walks = f.readlines()
 

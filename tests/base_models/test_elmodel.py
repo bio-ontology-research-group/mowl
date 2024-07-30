@@ -45,9 +45,14 @@ bool."):
 type str."):
             EmbeddingELModel(self.family_dataset, 1, 1, True, 1)
 
+        # optional load_normalized
+        with self.assertRaisesRegex(TypeError, "Optional parameter load_normalized must be of \
+type bool."):
+            EmbeddingELModel(self.family_dataset, 1, 1, True, "model_filepath", 1)
+            
         # optional device
         with self.assertRaisesRegex(TypeError, "Optional parameter device must be of type str."):
-            EmbeddingELModel(self.family_dataset, 1, 1, True, "model_filepath", 1)
+            EmbeddingELModel(self.family_dataset, 1, 1, True, "model_filepath", False, 1)
 
     def test_class_attribute_training_dataset(self):
         """This should check that the attribute training_datasets is a dictionary of \

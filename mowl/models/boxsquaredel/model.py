@@ -1,7 +1,7 @@
 
 from mowl.nn import BoxSquaredELModule
 from mowl.base_models.elmodel import EmbeddingELModel
-from mowl.models.boxsquaredel.evaluate import BoxSquaredELPPIEvaluator
+
 import torch as th
 from torch import nn
 
