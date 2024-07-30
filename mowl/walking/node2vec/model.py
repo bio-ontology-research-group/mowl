@@ -14,7 +14,7 @@ logger = logging.getLogger("node2vec")
 class Node2Vec(WalkingModel):
 
     '''
-    Implementation of DeepWalk based on [grover2016]_.
+    Implementation of Node2Vec based on [grover2016]_.
 
     :param p: Return hyperparameter. Default is 1.
     :type p: float
