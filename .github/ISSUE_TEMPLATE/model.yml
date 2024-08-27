@@ -1,0 +1,45 @@
+name: Add a new model
+description: Suggest a new model for mOWL
+labels: [ "model" ]
+body:
+  - type: dropdown
+    id: models
+    attributes:
+      label: mOWL support different types of models. Select which type fits better for your suggestion.
+      multiple: false
+      options:
+        - Ontology graph projection
+        - Random walker
+        - Syntactic model
+        - Model-theoretic model
+        - Other
+  - type: input
+    id: arxiv
+    attributes:
+      label: Publication Link
+      description: Link to the academic text of record where the model was first proposed (e.g., from _arXiv_)
+      placeholder: e.g., https://arxiv.org/abs/1902.10499
+    validations:
+      required: true
+  - type: input
+    id: reference_implementation
+    attributes:
+      label: Reference Implementation
+      description: Link to the publicly available reference implementation, preferrably from the authors of the publication
+      placeholder: e.g., https://github.com/bio-ontology-research-group/el-embeddings
+    validations:
+      required: false
+  - type: textarea
+    id: additional_implementations
+    attributes:
+      label: Additional Implementations
+      description: Links to any additional publicly available implementations
+    validations:
+      required: false
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Information
+      description: Additional information related to this model.
+    validations:
+        required: false

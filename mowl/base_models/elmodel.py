@@ -1,9 +1,11 @@
 from mowl.ontology.normalize import ELNormalizer
-from mowl.base_models.model import EmbeddingModel
+from mowl.base_models.model import Model
+from mowl.datasets.el import ELDataset
+from mowl.projection import projector_factory
 import torch as th
 from torch.utils.data import DataLoader, default_collate
-from mowl.datasets.el import ELDataset
-from deprecated.sphinx import versionadded
+
+from deprecated.sphinx import versionadded, versionchanged
 
 from org.semanticweb.owlapi.model import OWLClassExpression, OWLClass, OWLObjectSomeValuesFrom, OWLObjectIntersectionOf
 
@@ -12,18 +14,28 @@ import numpy as np
 import mowl.error.messages as msg
 import os
 
-class EmbeddingELModel(EmbeddingModel):
-    """Abstract class that provides basic functionalities for methods that aim to embed EL \
-    language.
+@versionchanged(version="1.0.0", reason="Added the 'load_normalized' parameter.")
+class EmbeddingELModel(Model):
+    """Abstract class for :math:`\mathcal{EL}` embedding methods.
 
+    :param dataset: mOWL dataset to use for training and evaluation.
+    :type dataset: :class:`mowl.datasets.Dataset`
+    :param embed_dim: The embedding dimension.
+    :type embed_dim: int
+    :param batch_size: The batch size to use for training.
+    :type batch_size: int
     :param extended: If `True`, the model is supposed with 7 EL normal forms. This will be \
 reflected on the :class:`DataLoaders` that will be generated and also the model must \
     contain 7 loss functions. If `False`, the model will work with 4 normal forms only, \
 merging the 3 extra to their corresponding origin normal forms. Defaults to True
     :type extended: bool, optional
+    :param load_normalized: If `True`, the ontology is assumed to be normalized and GCIs are extracted directly. Defaults to False.
+    :type load_normalized: bool, optional
+    :param device: The device to use for training. Defaults to "cpu".
+    :type device: str, optional
     """
 
-    def __init__(self, dataset, embed_dim, batch_size, extended=True, model_filepath=None, device="cpu"):
+    def __init__(self, dataset, embed_dim, batch_size, extended=True, model_filepath=None, load_normalized=False, device="cpu"):
         super().__init__(dataset, model_filepath=model_filepath)
 
         if not isinstance(embed_dim, int):
@@ -35,6 +47,9 @@ merging the 3 extra to their corresponding origin normal forms. Defaults to True
         if not isinstance(extended, bool):
             raise TypeError("Optional parameter extended must be of type bool.")
 
+        if not isinstance(load_normalized, bool):
+            raise TypeError("Optional parameter load_normalized must be of type bool.")
+        
         if not isinstance(device, str):
             raise TypeError("Optional parameter device must be of type str.")
 
@@ -44,11 +59,13 @@ merging the 3 extra to their corresponding origin normal forms. Defaults to True
         self.embed_dim = embed_dim
         self.batch_size = batch_size
         self.device = device
-
+        self.load_normalized = load_normalized
+        
         self._training_datasets = None
         self._validation_datasets = None
         self._testing_datasets = None
 
+        self._loaded_eval = False
 
     def init_module(self):
         raise NotImplementedError
@@ -60,9 +77,12 @@ merging the 3 extra to their corresponding origin normal forms. Defaults to True
         if self._datasets_loaded:
             return
 
-        training_el_dataset = ELDataset(self.dataset.ontology, self.class_index_dict,
+        training_el_dataset = ELDataset(self.dataset.ontology,
+                                        self.class_index_dict,
                                         self.object_property_index_dict,
-                                        extended=self._extended, device=self.device)
+                                        extended=self._extended,
+                                        load_normalized = self.load_normalized,
+                                        device=self.device)
 
         self._training_datasets = training_el_dataset.get_gci_datasets()
 
@@ -380,3 +400,43 @@ of :class:`torch.utils.data.DataLoader`
         #self._kge_method = kge_method
     
 
+
+
+    def load_pairwise_eval_data(self):
+
+        if self._loaded_eval:
+            return
+
+        eval_property = self.dataset.get_evaluation_property()
+        head_classes, tail_classes = self.dataset.evaluation_classes
+        self._head_entities = head_classes.as_str
+        self._tail_entities = tail_classes.as_str
+                        
+        eval_projector = projector_factory('taxonomy_rels', taxonomy=False,
+                                           relations=[eval_property])
+
+        self._training_set = eval_projector.project(self.dataset.ontology)
+        self._testing_set = eval_projector.project(self.dataset.testing)
+
+        self._loaded_eval = True
+
+
+    @property
+    def training_set(self):
+        self.load_pairwise_eval_data()
+        return self._training_set
+
+    @property
+    def testing_set(self):
+        self.load_pairwise_eval_data()
+        return self._testing_set
+
+    @property
+    def head_entities(self):
+        self.load_pairwise_eval_data()
+        return self._head_entities
+
+    @property
+    def tail_entities(self):
+        self.load_pairwise_eval_data()
+        return self._tail_entities

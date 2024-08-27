@@ -65,8 +65,34 @@ class PPIYeastDataset(PathDataset):
         super().__init__("ppi_yeast/ontology.owl", validation_path="ppi_yeast/valid.owl",
                          testing_path="ppi_yeast/test.owl")
 
+    @property
+    def evaluation_classes(self):
+        """Classes that are used in evaluation
+        """
+
+        if self._evaluation_classes is None:
+            proteins = set()
+            for owl_name, owl_cls in self.classes.as_dict.items():
+                if "http://4932" in owl_name:
+                    proteins.add(owl_cls)
+            self._evaluation_classes = OWLClasses(proteins), OWLClasses(proteins)
+
+        return self._evaluation_classes
 
 class PPIYeastSlimDataset(PathDataset):
     def __init__(self):
         super().__init__("ppi_yeast_slim/ontology.owl", validation_path="ppi_yeast_slim/valid.owl",
                          testing_path="ppi_yeast_slim/test.owl")
+    @property
+    def evaluation_classes(self):
+        """Classes that are used in evaluation
+        """
+
+        if self._evaluation_classes is None:
+            proteins = set()
+            for owl_name, owl_cls in self.classes.as_dict.items():
+                if "http://4932" in owl_name:
+                    proteins.add(owl_cls)
+            self._evaluation_classes = OWLClasses(proteins), OWLClasses(proteins)
+
+        return self._evaluation_classes

@@ -5,18 +5,18 @@ from org.semanticweb.owlapi.model import OWLOntology
 
 
 class OWL2VecStarProjector(ProjectionModel):
-
     '''
-    :param ontology: The ontology to be processed.
-    :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
-    :param bidirectional_taxonomy: If true then per each SubClass edge one SuperClass edge will \
-        be generated. Default is False.
-    :type bidirectional_taxonomy: bool
-    :param include_literals: If true the graph will also include triples involving data property \
-        assertions and annotations. Default is False.
-    :type include_literals: bool
-    :param only_taxonomy: If true, the projection will only include subClass edges
-    :type only_taxonomy: bool
+    Implementation of projection rules defined in [chen2020b]_.
+
+    .. include:: extra/owl2vec.rst
+
+    
+    :param bidirectional_taxonomy: If ``True`` then per each SubClass edge one SuperClass edge will be generated. Default is False.
+    :type bidirectional_taxonomy: bool, optional
+    :param include_literals: If ``True`` the graph will also include triples involving data property assertions and annotations. Default is False.
+    :type include_literals: bool, optional
+    :param only_taxonomy: If ``True``, the projection will only include subClass edges
+    :type only_taxonomy: bool, optional
     '''
 
     def __init__(self, bidirectional_taxonomy=False, only_taxonomy=False, include_literals=False):
@@ -36,6 +36,12 @@ class OWL2VecStarProjector(ProjectionModel):
                                    self.include_literals)
 
     def project(self, ontology):
+        r"""Generates the projection of the ontology.
+
+        :param ontology: The ontology to be processed.
+        :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
+        """
+        
         if not isinstance(ontology, OWLOntology):
             raise TypeError(
                 "Parameter ontology must be of type org.semanticweb.owlapi.model.OWLOntology")

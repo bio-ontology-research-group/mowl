@@ -45,7 +45,7 @@ class OWL2VecStarProjector(
     var objectPropertyAssertionAxiom = ListBuffer[OWLObjectPropertyAssertionAxiom]()
     var subclassOfAxioms = ListBuffer[OWLSubClassOfAxiom]()
     var equivalenceAxioms = ListBuffer[OWLEquivalentClassesAxiom]()
-    var annotationAxioms = ListBuffer[OWLAnnotationAssertionAxiom]()
+    var annotationAxioms = ListBuffer[(OWLAnnotation, OWLClass)]()
     var domainAxioms = ListBuffer[OWLObjectPropertyDomainAxiom]()
     var rangeAxioms = ListBuffer[OWLObjectPropertyRangeAxiom]()
     var otherAxioms = ListBuffer[OWLAxiom]()
@@ -89,8 +89,8 @@ class OWL2VecStarProjector(
       }
     }
 
-    println("subRoles: " + subRoles)
-    println("inverseRoles: " + inverseRoles)
+    // println("subRoles: " + subRoles)
+    // println("inverseRoles: " + inverseRoles)
 
     val axioms = tboxAxioms ++ aboxAxioms ++ rboxAxioms
 
@@ -98,10 +98,6 @@ class OWL2VecStarProjector(
 
       axiom.getAxiomType.getName match {
         case "SubClassOf" => subclassOfAxioms += axiom.asInstanceOf[OWLSubClassOfAxiom]
-        case "AnnotationAssertion" => {
-          if (include_literals)
-          annotationAxioms += axiom.asInstanceOf[OWLAnnotationAssertionAxiom]
-        }
         case "EquivalentClasses" => equivalenceAxioms += axiom.asInstanceOf[OWLEquivalentClassesAxiom]
         case "ClassAssertion" => classAssertionAxiom += axiom.asInstanceOf[OWLClassAssertionAxiom]
         case "ObjectPropertyAssertion" => objectPropertyAssertionAxiom += axiom.asInstanceOf[OWLObjectPropertyAssertionAxiom]
@@ -113,6 +109,23 @@ class OWL2VecStarProjector(
         }
       }
     }
+
+    
+    if (include_literals) {
+      for (owl_class <- ontology.getClassesInSignature(imports).asScala.toList){
+        val annotations = EntitySearcher.getAnnotations(owl_class, ontology).asScala.toList
+        for (annotation <- annotations){
+          annotationAxioms += ((annotation, owl_class))
+        }
+      }
+    }
+      // val annotAxioms = ontology.getAnnotations.asScala.toList
+      // println("Annotations: ", annotAxioms.size)
+      // for (axiom <- annotAxioms)
+        // annotationAxioms += axiom.asInstanceOf[OWLAnnotationAssertionAxiom]
+    // }
+  
+    
 
     val subclassOfTriples = subclassOfAxioms.flatMap(x => processSubClassAxiom(x.getSubClass, x.getSuperClass, ontology))
     val equivalenceTriples = equivalenceAxioms.flatMap(
@@ -126,10 +139,18 @@ class OWL2VecStarProjector(
         }
       }
     )
-    val annotationTriples = annotationAxioms.map(processAnnotationAxiom(_)).flatten
+    val annotationTriples = annotationAxioms.map{ case (x,y) => processAnnotationAxiom(x,y)}.flatten
     val classAssertionTriples = classAssertionAxiom.map(processClassAssertionAxiom(_)).flatten
     val objectPropertyAssertionTriples = objectPropertyAssertionAxiom.map(processObjectPropertyAssertionAxiom(_, ontology)).flatten
     val domainAndRangeTriples = processDomainAndRangeAxioms(domainAxioms, rangeAxioms, ontology)
+
+    println("OWL2VecStar projection done!")
+    println("\tSubclassOf triples: " + subclassOfTriples.size)
+    println("\tEquivalence triples: " + equivalenceTriples.size)
+    println("\tClass assertion triples: " + classAssertionTriples.size)
+    println("\tObject property assertion triples: " + objectPropertyAssertionTriples.size)
+    println("\tDomain and range triples: " + domainAndRangeTriples.size)
+    println("\tAnnotation triples: " + annotationTriples.size)
     (subclassOfTriples.toList ::: equivalenceTriples.toList ::: annotationTriples.toList ::: classAssertionTriples.toList ::: objectPropertyAssertionTriples.toList ::: domainAndRangeTriples.toList).distinct.asJava
   }
 
@@ -261,12 +282,12 @@ class OWL2VecStarProjector(
 
 
 
-  def processAnnotationAxiom(axiom: OWLAnnotationAssertionAxiom): Option[Triple]= {
+  def processAnnotationAxiom(axiom: OWLAnnotation, owl_class: OWLClass): Option[Triple]= {
     val property = stripValue(axiom.getProperty.toString)
 
     property match {
       case m if (lexicalAnnotationURIs contains m) => {
-        val subject = axiom.getSubject.toString
+        // val subject = axiom.getSubject.toString
         val value = axiom.getValue
        
         val valueStr = value.isLiteral match {
@@ -282,7 +303,7 @@ class OWL2VecStarProjector(
           }
           case false => stripValue(axiom.getValue.toString)
         }
-        Some(new Triple(subject, m, valueStr))
+        Some(new Triple(owl_class, m, valueStr))
       }
       case _ => {
         //println("C ",property)
@@ -325,7 +346,7 @@ class OWL2VecStarProjector(
 
   def projectQuantifiedExpression(expr:QuantifiedExpression, ontology: OWLOntology): Option[(String, List[String], List[String], OWLClassExpression)] = {
 
-    val rel = expr.getProperty.asInstanceOf[OWLObjectProperty]
+    val rel = expr.getProperty.getNamedProperty
     val relName = rel.toStringID
     val rel_ = Left(rel)
     val inverseRelName = getRelationInverseNames(rel_, ontology)

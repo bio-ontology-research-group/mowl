@@ -1,6 +1,6 @@
 from unittest import TestCase
 from mowl.base_models.elmodel import EmbeddingELModel
-from mowl.base_models.model import EmbeddingModel
+from mowl.base_models.model import Model
 from mowl.datasets import Dataset
 from tests.datasetFactory import FamilyDataset, PPIYeastSlimDataset
 from mowl.datasets.el import ELDataset
@@ -17,9 +17,9 @@ class TestEmbeddingElModel(TestCase):
         self.ppi_dataset = PPIYeastSlimDataset()
 
     def test_instance_of_embedding_model(self):
-        """This checks if the class EmbeddingELModel is a subclass of EmbeddingModel"""
+        """This checks if the class EmbeddingELModel is a subclass of Model"""
         model = EmbeddingELModel(self.family_dataset, 1, False)
-        self.assertTrue(isinstance(model, EmbeddingModel))
+        self.assertTrue(isinstance(model, Model))
 
     def test_constructor_param_types(self):
         """This checks if the constructor parameters are of the correct type"""
@@ -45,9 +45,14 @@ bool."):
 type str."):
             EmbeddingELModel(self.family_dataset, 1, 1, True, 1)
 
+        # optional load_normalized
+        with self.assertRaisesRegex(TypeError, "Optional parameter load_normalized must be of \
+type bool."):
+            EmbeddingELModel(self.family_dataset, 1, 1, True, "model_filepath", 1)
+            
         # optional device
         with self.assertRaisesRegex(TypeError, "Optional parameter device must be of type str."):
-            EmbeddingELModel(self.family_dataset, 1, 1, True, "model_filepath", 1)
+            EmbeddingELModel(self.family_dataset, 1, 1, True, "model_filepath", False, 1)
 
     def test_class_attribute_training_dataset(self):
         """This should check that the attribute training_datasets is a dictionary of \

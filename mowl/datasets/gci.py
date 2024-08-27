@@ -45,3 +45,67 @@ class GCIDataset(Dataset):
 
     def __len__(self):
         return len(self.data)
+
+
+class ClassAssertionDataset(Dataset):
+    def __init__(self, data, class_index_dict, individual_index_dict, device="cpu"):
+        super().__init__()
+        self.class_index_dict = class_index_dict
+        self.individual_index_dict = individual_index_dict
+        self.device = device
+        self._data = self.push_to_device(data)
+
+    @property
+    def data(self):
+        return self._data
+
+    def push_to_device(self, data):
+        pretensor = []
+        for gci in data:
+            class_ = self.class_index_dict[gci.class_]
+            individual = self.individual_index_dict[gci.individual]
+            pretensor.append([class_, individual])
+        tensor = th.tensor(pretensor).to(self.device)
+        return tensor
+
+    def get_data(self):
+        raise NotImplementedError()
+
+    def __getitem__(self, idx):
+        return self.data[idx]
+
+    def __len__(self):
+        return len(self.data)
+
+
+
+class ObjectPropertyAssertionDataset(Dataset):
+    def __init__(self, data, object_property_index_dict, individual_index_dict, device="cpu"):
+        super().__init__()
+        self.object_property_index_dict = object_property_index_dict
+        self.individual_index_dict = individual_index_dict
+        self.device = device
+        self._data = self.push_to_device(data)
+
+    @property
+    def data(self):
+        return self._data
+
+    def push_to_device(self, data):
+        pretensor = []
+        for gci in data:
+            object_property = self.object_property_index_dict[gci.object_property]
+            subject = self.individual_index_dict[gci.subject]
+            object_ = self.individual_index_dict[gci.object_]
+            pretensor.append([subject, object_property, object_])
+        tensor = th.tensor(pretensor).to(self.device)
+        return tensor
+        
+    def get_data(self):
+        raise NotImplementedError()
+
+    def __getitem__(self, idx):
+        return self.data[idx]
+
+    def __len__(self):
+        return len(self.data)

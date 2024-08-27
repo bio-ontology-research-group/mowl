@@ -1,10 +1,14 @@
-from deprecated.sphinx import versionchanged
+import os
+import time
+from deprecated.sphinx import versionchanged, versionadded
 import tempfile
 
 
 class WalkingModel():
 
     '''
+    Base class for walking methods.
+
     :param num_walks: Number of walks per node
     :type num_walks: int
     :param walk_length: Length of each walk
@@ -50,3 +54,27 @@ class WalkingModel():
         '''
 
         raise NotImplementedError()
+
+
+    def wait_for_all_walks(self):
+        """
+        This method waits until all the walks are written to the output file.
+        """
+        cooldown_period = 1
+        stable_since = None
+        last_modified = os.path.getmtime(self.outfile)
+        while True:
+            time.sleep(0.1)
+            current_modified = os.path.getmtime(self.outfile)
+            if current_modified == last_modified:
+                if stable_since is None:
+                    stable_since = time.time()
+                elif time.time() - stable_since > cooldown_period:
+                    break
+
+            else:
+                stable_since = None
+
+            last_modified = current_modified
+
+        return

@@ -224,7 +224,8 @@ org.semanticweb.owlapi.model.OWLOntology"):
         # Flattened entities
         classes = {"http://class1", "http://class2"}
         roles = set()
-        self.assertEqual(axiom.get_entities(), (classes, roles))
+        inds = set()
+        self.assertEqual(axiom.get_entities(), (classes, roles, inds))
 
     def test_gci1(self):
         """"This should check the correct behaviour of GCI1"""
@@ -240,7 +241,8 @@ org.semanticweb.owlapi.model.OWLOntology"):
         # Flattened entities
         classes = {"http://class1", "http://class2", "http://class3"}
         roles = set()
-        self.assertEqual(axiom.get_entities(), (classes, roles))
+        inds = set()
+        self.assertEqual(axiom.get_entities(), (classes, roles, inds))
 
     def test_gci2(self):
         """"This should check the correct behaviour of GCI2"""
@@ -256,7 +258,8 @@ org.semanticweb.owlapi.model.OWLOntology"):
         # Flattened entities
         classes = {"http://class1", "http://class2"}
         roles = {"http://role"}
-        self.assertEqual(axiom.get_entities(), (classes, roles))
+        inds = set()
+        self.assertEqual(axiom.get_entities(), (classes, roles, inds))
 
     def test_gci3(self):
         """"This should check the correct behaviour of GCI3"""
@@ -272,7 +275,8 @@ org.semanticweb.owlapi.model.OWLOntology"):
         # Flattened entities
         classes = {"http://class1", "http://class2"}
         roles = {"http://role"}
-        self.assertEqual(axiom.get_entities(), (classes, roles))
+        inds = set()
+        self.assertEqual(axiom.get_entities(), (classes, roles, inds))
 
     # Test bot axioms
 
@@ -323,8 +327,9 @@ org.semanticweb.owlapi.model.OWLOntology"):
         gci = GCI(self.gci0_axiom)
         self.assertEqual(gci.owl_axiom, self.gci0_axiom)
 
-        classes, roles = GCI.get_entities([GCI0(self.gci0_axiom), GCI1(self.gci1_axiom),
+        classes, roles, inds = GCI.get_entities([GCI0(self.gci0_axiom), GCI1(self.gci1_axiom),
                                            GCI2(self.gci2_axiom), GCI3(self.gci3_axiom)])
 
         self.assertEqual(classes, {"http://class1", "http://class2", "http://class3"})
         self.assertEqual(roles, {"http://role"})
+        self.assertEqual(inds, set())

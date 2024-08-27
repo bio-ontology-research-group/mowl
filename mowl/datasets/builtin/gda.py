@@ -15,7 +15,9 @@ DATA_MOUSE_EL_URL = 'https://bio2vec.cbrc.kaust.edu.sa/data/mowl/gda_mouse_el.ta
 
 
 class GDADataset(RemoteDataset):
-    """Abstract class for Gene--Disease association datasets. This dataset represent the \
+    """Abstract class for gene-disease association datasets.
+
+    This dataset represents the \
     gene-disease association in a particular species. This dataset is built using phenotypic \
     annotations of genes and diseases. For genes annotations we used the `Mouse/Human Orthology \
     with Phenotype Annotations \
@@ -65,6 +67,11 @@ class GDADataset(RemoteDataset):
 
 
 class GDAHumanDataset(GDADataset):
+    """
+    Dataset containing gene-disease associations in human.
+    """
+
+    
     def __init__(self):
         super().__init__(url=DATA_HUMAN_URL)
 
@@ -79,6 +86,10 @@ class GDAHumanELDataset(GDADataset):
 
 
 class GDAMouseDataset(GDADataset):
+    """
+    Dataset containing gene-disease associations in mouse.
+    """
+    
     def __init__(self):
         super().__init__(url=DATA_MOUSE_URL)
 

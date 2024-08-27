@@ -7,12 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+- Added `load_corpus` to `mowl.base_models.SyntacticModel`
+- Added `.jar` files to enable pip install from GitHub
+- Tested with Python 3.12
 ### Changed 
+- Removed `.mean()` for GCI losses in BoxSquaredELModule
+- Property `evaluation_classes` in `mowl.datasets.builtin.PPIYeastDataset` returns a pair of `OWLClasses` objects instead of a single `OWLClasses` object.
 ### Deprecated
+- `mowl.nn.ELBoxModule` changed name to `mowl.nn.ELBEModule`
 ### Removed
 ### Fixed
+- Fix bug in GCI2 score for ELEmbeddings
+- Fix bottleneck in ELBE example for PPI.
+- Fix bugs in BoxSquaredEL model.
+- Fix bug on OWL2VecStarProjector about projecting with literals
+
 ### Security
 
+## [0.3.0]
+### Added
+- Implemented `CategoricalProjector` based on [https://arxiv.org/abs/2305.07163](https://arxiv.org/abs/2305.07163). ([#59][i59])
+
+### Removed
+- Removed redundant class `based_models.EmbeddingModel`
+
+
+## [0.2.1]
+### Fixed
+Fixed issue related to importing graph-based models due to missing `__init__.py` files. ([#60][i60])
 
 ## [0.2.0]
 
@@ -75,7 +97,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Walking methods accept optional `outfile` parameter and corpus extraction methods do not append by default.
 - Documentation updated and fixed some typos.
 
-[unreleased]: https://github.com/bio-ontology-research-group/mowl/compare/v0.2.0...HEAD
+[unreleased]: https://github.com/bio-ontology-research-group/mowl/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/bio-ontology-research-group/mowl/releases/tag/v0.3.0
+[0.2.1]: https://github.com/bio-ontology-research-group/mowl/releases/tag/v0.2.1
 [0.2.0]: https://github.com/bio-ontology-research-group/mowl/releases/tag/v0.2.0
 [0.1.1]: https://github.com/bio-ontology-research-group/mowl/releases/tag/v0.1.1
 [0.1.0]: https://github.com/bio-ontology-research-group/mowl/releases/tag/v0.1.0
@@ -86,3 +110,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 [i36]: https://github.com/bio-ontology-research-group/mowl/issues/36
 [i42]: https://github.com/bio-ontology-research-group/mowl/issues/42
 [i43]: https://github.com/bio-ontology-research-group/mowl/issues/43
+[i59]: https://github.com/bio-ontology-research-group/mowl/issues/59
+[i60]: https://github.com/bio-ontology-research-group/mowl/issues/60
+

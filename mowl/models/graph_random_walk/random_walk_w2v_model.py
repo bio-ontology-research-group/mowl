@@ -4,9 +4,23 @@ from gensim.models.word2vec import LineSentence
 import mowl.error.messages as msg
 import os
 import time
+import numpy as np
+import torch as th
 
+from deprecated.sphinx import versionadded
+import logging
+logger = logging.getLogger(__name__)
+handler = logging.StreamHandler()
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+
+
+@versionadded(version="0.2.0")
 class RandomWalkPlusW2VModel(RandomWalkModel):
-
+    """
+    Embedding model that combines graph projections + random walks.
+    """
+    
     def __init__(self, *args, **kwargs):
         super(RandomWalkPlusW2VModel, self).__init__(*args, **kwargs)
 
@@ -15,6 +29,8 @@ class RandomWalkPlusW2VModel(RandomWalkModel):
         self.update_w2v_model = False
         self.axioms_added = False
 
+        self.device = th.device("cuda" if th.cuda.is_available() else "cpu")
+        
     @property
     def class_embeddings(self):
         if self.w2v_model is None:
@@ -52,8 +68,16 @@ class RandomWalkPlusW2VModel(RandomWalkModel):
         ind_embeds = {}
         for ind in self.dataset.individuals.as_str:
             if ind in self.w2v_model.wv:
-                obj_prop_embeds[ind] = self.w2v_model.wv[ind]
+                ind_embeds[ind] = self.w2v_model.wv[ind]
         return ind_embeds
+
+
+    @property
+    def evaluation_model(self):
+        if self._evaluation_model is None:
+            self._evaluation_model = EvaluationModel(self.w2v_model, self.dataset, self.embed_dim, self.device)
+
+        return self._evaluation_model
 
     
     def set_w2v_model(self, *args, **kwargs):
@@ -64,6 +88,7 @@ class RandomWalkPlusW2VModel(RandomWalkModel):
         :param kwargs: Keyword arguments to be passed to the :class:`Word2Vec <gensim.models.word2vec.Word2Vec>` constructor.
         """
         self.w2v_model = Word2Vec(*args, **kwargs)
+        self.embed_dim = self.w2v_model.vector_size
 
     def train(self, epochs=None):
         """
@@ -81,20 +106,24 @@ class RandomWalkPlusW2VModel(RandomWalkModel):
         if epochs is None:
             epochs = self.w2v_model.epochs
 
+        print("in train")
+            
         if self._edges is None or self.axioms_added:
             self.axioms_added = False
             self._edges = self.projector.project(self.dataset.ontology)
-            self.walker.walk(self._edges)
             
-
+            self.walker.walk(self._edges)
+            # time.sleep(0.1)
+            # last_modified = os.path.getmtime(self.walker.outfile)
             # This loop is needed to make sure the file is written to disk before running Word2Vec
-            last_modified = os.path.getmtime(self.walker.outfile)
-            while True:
-                current_modified = os.path.getmtime(self.walker.outfile)
-                if current_modified != last_modified:
-                    break
-                time.sleep(0.1)
-                last_modified = current_modified
+            
+            # while True:
+                # print("in loop")
+                # current_modified = os.path.getmtime(self.walker.outfile)
+                # if current_modified != last_modified:
+                    # break
+                
+                # last_modified = current_modified
             
         sentences = LineSentence(self.walker.outfile)
         self.w2v_model.build_vocab(sentences, update=self.update_w2v_model)
@@ -137,3 +166,52 @@ class RandomWalkPlusW2VModel(RandomWalkModel):
         self.w2v_model = Word2Vec.load(model)
     
 
+class EvaluationModel(th.nn.Module):
+    def __init__(self, w2v_model, dataset, embedding_size, device):
+        super().__init__()
+        self.embedding_size = embedding_size
+        self.device = device
+        
+        self.embeddings = self.init_module(w2v_model, dataset)
+
+
+    def init_module(self, w2v_model, dataset):
+        classes = dataset.classes.as_str
+        class_to_id = {class_: i for i, class_ in enumerate(classes)}
+
+        w2v_vectors = w2v_model.wv
+        embeddings_list = []
+        for class_ in classes:
+            if class_ in w2v_vectors:
+                embeddings_list.append(w2v_vectors[class_])
+            else:
+                logger.warning(f"Class {class_} not found in w2v model")
+                embeddings_list.append(np.random.rand(self.embedding_size))
+
+        embeddings_list = np.array(embeddings_list)
+        embeddings = th.tensor(embeddings_list).to(self.device)
+        return th.nn.Embedding.from_pretrained(embeddings)
+        
+        
+    def forward(self, data, *args, **kwargs):
+        if data.shape[1] == 2:
+            x = data[:, 0]
+            y = data[:, 1]
+        elif data.shape[1] == 3:
+            x = data[:, 0]
+            y = data[:, 2]
+        else:
+            raise ValueError("Data must have 2 or 3 columns")
+                
+        logger.debug(f"X shape: {x.shape}")
+        logger.debug(f"Y shape: {y.shape}")
+        
+        x = self.embeddings(x)
+        y = self.embeddings(y)
+
+        logger.debug(f"X shape: {x.shape}")
+        logger.debug(f"Y shape: {y.shape}")
+        
+        dot_product = th.sum(x * y, dim=1)
+        logger.debug(f"Dot product shape: {dot_product.shape}")
+        return 1 - th.sigmoid(dot_product)

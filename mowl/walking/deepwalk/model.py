@@ -1,6 +1,7 @@
 from mowl.walking.walking import WalkingModel
 import random
 import os
+import time
 import logging
 from org.mowl.Walking import DeepWalk as DW
 from java.util import HashMap
@@ -16,9 +17,8 @@ logger = logging.getLogger("deepwalk")
 class DeepWalk(WalkingModel):
 
     '''
-    Implementation of DeepWalk based on \
-    <https://github.com/phanein/deepwalk/blob/master/deepwalk/graph.py>
-
+    Implementation of DeepWalk based on [perozzi2014]_.
+    
     :param alpha: Probability of restart, defaults to 0
     :type alpha: float, optional
     '''
@@ -67,3 +67,7 @@ class DeepWalk(WalkingModel):
                     self.outfile, nodes_of_interest, self.seed)
 
         walker.walk()
+
+        self.wait_for_all_walks()
+        
+

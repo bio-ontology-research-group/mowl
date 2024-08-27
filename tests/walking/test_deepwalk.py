@@ -1,4 +1,3 @@
-import time
 from mowl.walking import DeepWalk
 from mowl.projection import Edge
 from unittest import TestCase
@@ -56,7 +55,6 @@ class TestDeepWalk(TestCase):
         walk_length = 5
         deepwalk = DeepWalk(num_walks, walk_length)
         deepwalk.walk(self.graph)
-        time.sleep(1)
         with open(deepwalk.outfile, "r") as f:
             walks = f.readlines()
 
@@ -82,7 +80,6 @@ Ignoring it."])
         deepwalk = DeepWalk(num_walks, walk_length, outfile=outfile)
 
         deepwalk.walk(self.graph)
-        time.sleep(1)
         self.assertTrue(os.path.exists(outfile))
         os.remove(outfile)
 
@@ -93,7 +90,6 @@ Ignoring it."])
         
         deepwalk = DeepWalk(num_walks, walk_length)
         deepwalk.walk(self.graph)
-        time.sleep(1)
         with open(deepwalk.outfile, "r") as f:
             walks = f.readlines()
 
@@ -102,7 +98,6 @@ Ignoring it."])
         edge7 = Edge("E", "http://rel1", "A")
         self.graph.append(edge7)
         deepwalk.walk(self.graph, nodes_of_interest=["E"])
-        time.sleep(2)
         with open(deepwalk.outfile, "r") as f:
             walks = f.readlines()
         new_walks = len(walks)
@@ -113,7 +108,6 @@ Ignoring it."])
         edge8 = Edge("B", "http://rel1", "E")
         self.graph.append(edge8)
         deepwalk.walk(self.graph, nodes_of_interest=["E"])
-        time.sleep(2)
         with open(deepwalk.outfile, "r") as f:
             walks = f.readlines()
         new_walks = len(walks)

@@ -14,6 +14,8 @@ logger = logging.getLogger("node2vec")
 class Node2Vec(WalkingModel):
 
     '''
+    Implementation of Node2Vec based on [grover2016]_.
+
     :param p: Return hyperparameter. Default is 1.
     :type p: float
     :param q: In-out hyperparameter. Default is 1.
@@ -68,3 +70,5 @@ class Node2Vec(WalkingModel):
                      self.outfile, nodes_of_interest)
 
         walker.walk()
+
+        self.wait_for_all_walks()

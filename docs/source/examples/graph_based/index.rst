@@ -11,15 +11,16 @@ Graph-based models
 
     <div class="sphx-glr-thumbnails">
 
+.. thumbnail-parent-div-open
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper `Predicting candidate genes from phenotypes, functions an...">
+    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper Predicting candidate genes from phenotypes, functions and anatomical site of expression. ">
 
 .. only:: html
 
   .. image:: /examples/graph_based/images/thumb/sphx_glr_plot_1_dl2vec_thumb.png
-    :alt: DL2Vec
+    :alt:
 
   :ref:`sphx_glr_examples_graph_based_plot_1_dl2vec.py`
 
@@ -28,6 +29,8 @@ Graph-based models
       <div class="sphx-glr-thumbnail-title">DL2Vec</div>
     </div>
 
+
+.. thumbnail-parent-div-close
 
 .. raw:: html
 

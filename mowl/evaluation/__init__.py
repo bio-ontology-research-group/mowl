@@ -1,3 +1,5 @@
-from mowl.evaluation.base import AxiomsRankBasedEvaluator
+from mowl.evaluation.base import Evaluator
+from mowl.evaluation.subsumption import SubsumptionEvaluator
+from mowl.evaluation.ppi import PPIEvaluator
 
-__all__ = ["AxiomsRankBasedEvaluator"]
+

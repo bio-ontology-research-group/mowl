@@ -14,6 +14,9 @@ Welcome to the paper study section with mOWL. Here you will find examples of dif
 
     <div class="sphx-glr-thumbnails">
 
+.. thumbnail-parent-div-open
+
+.. thumbnail-parent-div-close
 
 .. raw:: html
 
@@ -28,15 +31,16 @@ Models embeddings the :math:`\mathcal{EL}` language
 
     <div class="sphx-glr-thumbnails">
 
+.. thumbnail-parent-div-open
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper `EL Embeddings: Geometric Construction of Models for the ...">
+    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper EL Embeddings: Geometric Construction of Models for the Description Logic EL++.">
 
 .. only:: html
 
   .. image:: /examples/elmodels/images/thumb/sphx_glr_plot_1_elembeddings_thumb.png
-    :alt: EL Embeddings
+    :alt:
 
   :ref:`sphx_glr_examples_elmodels_plot_1_elembeddings.py`
 
@@ -48,12 +52,12 @@ Models embeddings the :math:`\mathcal{EL}` language
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This example is based on the paper `Description Logic EL++ Embeddings with Intersectional Closu...">
+    <div class="sphx-glr-thumbcontainer" tooltip="This example is based on the paper Description Logic EL++ Embeddings with Intersectional Closure. This paper is based on the idea of /examples/elmodels/plot_1_elembeddings, but in this work the main point is to solve the intersectional closure problem.">
 
 .. only:: html
 
   .. image:: /examples/elmodels/images/thumb/sphx_glr_plot_2_elboxembeddings_thumb.png
-    :alt: ELBoxEmbeddings
+    :alt:
 
   :ref:`sphx_glr_examples_elmodels_plot_2_elboxembeddings.py`
 
@@ -62,6 +66,8 @@ Models embeddings the :math:`\mathcal{EL}` language
       <div class="sphx-glr-thumbnail-title">ELBoxEmbeddings</div>
     </div>
 
+
+.. thumbnail-parent-div-close
 
 .. raw:: html
 
@@ -76,15 +82,16 @@ Graph-based models
 
     <div class="sphx-glr-thumbnails">
 
+.. thumbnail-parent-div-open
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper `Predicting candidate genes from phenotypes, functions an...">
+    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper Predicting candidate genes from phenotypes, functions and anatomical site of expression. ">
 
 .. only:: html
 
   .. image:: /examples/graph_based/images/thumb/sphx_glr_plot_1_dl2vec_thumb.png
-    :alt: DL2Vec
+    :alt:
 
   :ref:`sphx_glr_examples_graph_based_plot_1_dl2vec.py`
 
@@ -93,6 +100,8 @@ Graph-based models
       <div class="sphx-glr-thumbnail-title">DL2Vec</div>
     </div>
 
+
+.. thumbnail-parent-div-close
 
 .. raw:: html
 
@@ -107,15 +116,16 @@ Syntactic models
 
     <div class="sphx-glr-thumbnails">
 
+.. thumbnail-parent-div-open
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper `Onto2Vec: joint vector-based representation of biologica...">
+    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper Onto2Vec: joint vector-based representation of biological entities and their ontology-based annotations. ">
 
 .. only:: html
 
   .. image:: /examples/syntactic/images/thumb/sphx_glr_plot_1_onto2vec_thumb.png
-    :alt: Onto2Vec
+    :alt:
 
   :ref:`sphx_glr_examples_syntactic_plot_1_onto2vec.py`
 
@@ -127,12 +137,12 @@ Syntactic models
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper `OPA2Vec: combining formal and informal content of biomed...">
+    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper OPA2Vec: combining formal and informal content of biomedical ontologies to improve similarity-based prediction. ">
 
 .. only:: html
 
   .. image:: /examples/syntactic/images/thumb/sphx_glr_plot_2_opa2vec_thumb.png
-    :alt: OPA2Vec
+    :alt:
 
   :ref:`sphx_glr_examples_syntactic_plot_2_opa2vec.py`
 
@@ -141,6 +151,8 @@ Syntactic models
       <div class="sphx-glr-thumbnail-title">OPA2Vec</div>
     </div>
 
+
+.. thumbnail-parent-div-close
 
 .. raw:: html
 
@@ -155,15 +167,16 @@ Zero-shot learning based models
 
     <div class="sphx-glr-thumbnails">
 
+.. thumbnail-parent-div-open
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper `DeepGOZero: improving protein function prediction from s...">
+    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper DeepGOZero: improving protein function prediction from sequence and zero-shot learning based on ontology axioms. DeepGOZero is a machine learning model that performs protein function prediction for functions that have small number or zero annotations.">
 
 .. only:: html
 
   .. image:: /examples/zsl/images/thumb/sphx_glr_plot_1_deepgozero_thumb.png
-    :alt: DeepGOZero
+    :alt:
 
   :ref:`sphx_glr_examples_zsl_plot_1_deepgozero.py`
 
@@ -173,6 +186,8 @@ Zero-shot learning based models
     </div>
 
 
+.. thumbnail-parent-div-close
+
 .. raw:: html
 
     </div>
@@ -181,6 +196,7 @@ Zero-shot learning based models
 .. toctree::
    :hidden:
    :includehidden:
+
 
    /examples//elmodels/index.rst
    /examples//graph_based/index.rst
