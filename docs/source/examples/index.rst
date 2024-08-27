@@ -14,6 +14,9 @@ Welcome to the paper study section with mOWL. Here you will find examples of dif
 
     <div class="sphx-glr-thumbnails">
 
+.. thumbnail-parent-div-open
+
+.. thumbnail-parent-div-close
 
 .. raw:: html
 
@@ -28,10 +31,11 @@ Models embeddings the :math:`\mathcal{EL}` language
 
     <div class="sphx-glr-thumbnails">
 
+.. thumbnail-parent-div-open
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper EL Embeddings: Geometric Construction of Models for the D...">
+    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper EL Embeddings: Geometric Construction of Models for the Description Logic EL++.">
 
 .. only:: html
 
@@ -48,7 +52,7 @@ Models embeddings the :math:`\mathcal{EL}` language
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This example is based on the paper Description Logic EL++ Embeddings with Intersectional Closur...">
+    <div class="sphx-glr-thumbcontainer" tooltip="This example is based on the paper Description Logic EL++ Embeddings with Intersectional Closure. This paper is based on the idea of /examples/elmodels/plot_1_elembeddings, but in this work the main point is to solve the intersectional closure problem.">
 
 .. only:: html
 
@@ -63,6 +67,8 @@ Models embeddings the :math:`\mathcal{EL}` language
     </div>
 
 
+.. thumbnail-parent-div-close
+
 .. raw:: html
 
     </div>
@@ -76,10 +82,11 @@ Graph-based models
 
     <div class="sphx-glr-thumbnails">
 
+.. thumbnail-parent-div-open
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper Predicting candidate genes from phenotypes, functions and...">
+    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper Predicting candidate genes from phenotypes, functions and anatomical site of expression. ">
 
 .. only:: html
 
@@ -94,6 +101,8 @@ Graph-based models
     </div>
 
 
+.. thumbnail-parent-div-close
+
 .. raw:: html
 
     </div>
@@ -107,10 +116,11 @@ Syntactic models
 
     <div class="sphx-glr-thumbnails">
 
+.. thumbnail-parent-div-open
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper Onto2Vec: joint vector-based representation of biological...">
+    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper Onto2Vec: joint vector-based representation of biological entities and their ontology-based annotations. ">
 
 .. only:: html
 
@@ -127,7 +137,7 @@ Syntactic models
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper OPA2Vec: combining formal and informal content of biomedi...">
+    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper OPA2Vec: combining formal and informal content of biomedical ontologies to improve similarity-based prediction. ">
 
 .. only:: html
 
@@ -142,6 +152,8 @@ Syntactic models
     </div>
 
 
+.. thumbnail-parent-div-close
+
 .. raw:: html
 
     </div>
@@ -155,10 +167,11 @@ Zero-shot learning based models
 
     <div class="sphx-glr-thumbnails">
 
+.. thumbnail-parent-div-open
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper DeepGOZero: improving protein function prediction from se...">
+    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper DeepGOZero: improving protein function prediction from sequence and zero-shot learning based on ontology axioms. DeepGOZero is a machine learning model that performs protein function prediction for functions that have small number or zero annotations.">
 
 .. only:: html
 
@@ -172,6 +185,8 @@ Zero-shot learning based models
       <div class="sphx-glr-thumbnail-title">DeepGOZero</div>
     </div>
 
+
+.. thumbnail-parent-div-close
 
 .. raw:: html
 

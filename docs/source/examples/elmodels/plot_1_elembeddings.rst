@@ -11,7 +11,7 @@
         :class: sphx-glr-download-link-note
 
         :ref:`Go to the end <sphx_glr_download_examples_elmodels_plot_1_elembeddings.py>`
-        to download the full example code
+        to download the full example code.
 
 .. rst-class:: sphx-glr-example-title
 
@@ -153,6 +153,10 @@ Now, it is time to evaluate embeddings. For this, we use the
     .. container:: sphx-glr-download sphx-glr-download-python
 
       :download:`Download Python source code: plot_1_elembeddings.py <plot_1_elembeddings.py>`
+
+    .. container:: sphx-glr-download sphx-glr-download-zip
+
+      :download:`Download zipped: plot_1_elembeddings.zip <plot_1_elembeddings.zip>`
 
 
 .. only:: html

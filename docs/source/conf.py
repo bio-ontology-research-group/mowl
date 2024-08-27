@@ -21,8 +21,8 @@ project = 'MOWL'
 copyright = '2023, Bio-Ontology Research Group'
 author = 'BORG'
 
-release = '0.3.0'
-version = '0.3.0'
+release = '1.0.0'
+version = '1.0.0'
 # -- General configuration
 
 extensions = [
@@ -66,6 +66,8 @@ if not jpype.isJVMStarted():
 	   "-Djava.class.path=" + jars,
 	   convertStrings=False)
 """
+
+doctest_test_doctest_blocks = 'default'
 
 todo_include_todos = True
 
