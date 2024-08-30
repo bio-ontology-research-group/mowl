@@ -46,12 +46,14 @@ class PPIEvaluator(Evaluator):
         return logits_heads, logits_tails
 
     
-    def get_filtering_labels(self, num_heads, num_tails, **kwargs):
+    def get_filtering_labels(self, num_heads, num_tails, class_id_to_head_id, class_id_to_tail_id, **kwargs):
 
         filtering_tuples = th.cat([self.train_tuples, self.valid_tuples], dim=0)
         filtering_labels = th.ones((num_heads, num_tails), dtype=th.float)
 
         for head, rel, tail in filtering_tuples:
+            head = class_id_to_head_id[head.item()]
+            tail = class_id_to_tail_id[tail.item()]
             filtering_labels[head, tail] = 10000
         
         return filtering_labels
