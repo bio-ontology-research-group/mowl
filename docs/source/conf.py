@@ -9,6 +9,7 @@
 import os
 import sys
 import mock
+import doctest
 from sphinx_gallery.sorting import FileNameSortKey
 
 sys.path.insert(0, os.path.abspath('../../..'))
@@ -68,6 +69,7 @@ if not jpype.isJVMStarted():
 """
 
 doctest_test_doctest_blocks = 'default'
+doctest_default_flags = doctest.REPORT_ONLY_FIRST_FAILURE
 
 todo_include_todos = True
 
@@ -78,14 +80,15 @@ examples_dirs = [
 gallery_dirs = [
     'examples/']
 
+file_name_sort_key = FileNameSortKey
 sphinx_gallery_conf = {
     'examples_dirs': examples_dirs,   # path to your example scripts
     'gallery_dirs': gallery_dirs,  # path to where to save gallery generated output
     'filename_pattern': 'none',
-    "within_subsection_order": FileNameSortKey,
+    "within_subsection_order": file_name_sort_key,
     "run_stale_examples": True,
-    "abort_on_example_error": False,
-    #"plot_gallery": False,
+    "abort_on_example_error": True,
+    "plot_gallery": True,
     "show_memory": True,
 }
 
@@ -132,3 +135,4 @@ autodoc_mock_imports = ['jpype', 'owlready2', 'rdflib', 'networkx', 'node2vec', 
 
 import mowl
 mowl.init_jvm("4g")
+
