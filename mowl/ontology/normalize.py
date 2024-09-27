@@ -58,7 +58,7 @@ type org.semanticweb.owlapi.model.OWLOntology. Found: {type(ontology)}")
             ontology = self.preprocess_ontology(ontology)
             root_ont = ontology
             translator = Translator(ontology.getOWLOntologyManager().getOWLDataFactory(),
-                                    IntegerOntologyObjectFactoryImpl())
+                                    IntegerOntologyObjectFactoryImpl(6))
             # translator = jreasoner.getTranslator()
             axioms = HashSet()
             axioms.addAll(root_ont.getAxioms())
@@ -72,7 +72,10 @@ type org.semanticweb.owlapi.model.OWLOntology. Found: {type(ontology)}")
 
             normalizer = OntologyNormalizer()
 
-            factory = IntegerOntologyObjectFactoryImpl()
+            num_classes = len(list(root_ont.getClassesInSignature()))
+            num_object_properties = len(list(root_ont.getObjectPropertiesInSignature()))
+            num_individuals = len(list(root_ont.getIndividualsInSignature()))
+            factory = IntegerOntologyObjectFactoryImpl(6 + num_classes + num_object_properties + num_individuals + 1)
             normalized_ontology = normalizer.normalize(intAxioms, factory)
             self.rTranslator = ReverseAxiomTranslator(translator, ontology)
 
@@ -197,7 +200,7 @@ def process_axiom(axiom: OWLAxiom):
 
     if type(subclass) == OWLObjectIntersectionOfImpl:
         superclass = superclass.toStringID()
-        if superclass.contains("owl#Nothing"):
+        if superclass.contains("Nothing"):
             return "gci1_bot", GCI1_BOT(axiom)
         return "gci1", GCI1(axiom)
 
