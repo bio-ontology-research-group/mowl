@@ -33,6 +33,11 @@ To access any of these datasets you can use:
    valid_ontology = ds.validation
    test_ontology = ds.testing
 
+   evaluation_classes = ds.evaluation_classes
+
+Built-in datasets already contain the attribute `evaluation_classes`, which is used to evaluate a model on the dataset. In the PPI example, the evaluation classes correspong to ontology classes representing proteins.
+
+
    
 Your own dataset
 --------------------------
@@ -53,3 +58,19 @@ In case you have your own :download:`training <training_ontology.owl>`, :downloa
 .. note::
    Validation and testing ontologies are optional when using :class:`PathDataset <mowl.datasets.base.PathDataset>`. By default they are set to ``None``.
    
+.. attention::
+
+   Custom datasets require the implementation of the `evaluation_classes` attribute. This can be done as:
+
+.. code:: python
+
+   class CustomDataset(PathDataset):
+       def __init__(self, *args, **kwargs):
+           super().__init__(train_path, valid_path, test_path)
+
+      @property
+      def evaluation_classes(self):
+          #################
+	  # your code here
+	  #################
+          

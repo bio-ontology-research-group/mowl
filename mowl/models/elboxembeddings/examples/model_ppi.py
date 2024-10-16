@@ -20,6 +20,13 @@ class ELBoxPPI(ELBoxEmbeddings):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
                                                                                             
+    @property
+    def evaluation_model(self):
+        if self._evaluation_model is None:
+            self._evaluation_model = self.module
+
+        return self._evaluation_model
+
     def train(self, validate_every=1000):
         criterion = nn.MSELoss()
         optimizer = th.optim.Adam(self.module.parameters(), lr=self.learning_rate)

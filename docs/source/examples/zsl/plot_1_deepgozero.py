@@ -9,7 +9,8 @@ performs protein function prediction for functions that have small number or zer
 """
 # %%
 # First, we have the necesary imports for this example.
-
+import mowl
+mowl.init_jvm("10g")
 import click as ck
 import pandas as pd
 import torch as th
@@ -25,8 +26,6 @@ import os
 import pickle as pkl
 from tqdm import tqdm
 
-import mowl
-mowl.init_jvm("10g")
 from mowl.owlapi.defaults import BOT, TOP
 from mowl.datasets import ELDataset, RemoteDataset
 from mowl.nn import ELEmModule
@@ -47,6 +46,7 @@ from org.semanticweb.owlapi.reasoner.structural import StructuralReasonerFactory
 
 MF_URL = "https://deepgo.cbrc.kaust.edu.sa/data/deepgozero/mowl/molecular_function.tar.gz"
 BP_URL = "https://deepgo.cbrc.kaust.edu.sa/data/deepgozero/mowl/biological_process.tar.gz"
+
 CC_URL = "https://deepgo.cbrc.kaust.edu.sa/data/deepgozero/mowl/cellular_component.tar.gz"
 
 # %%
@@ -267,7 +267,7 @@ class DGELModel(nn.Module):
         return self.forward(features, data=data)
     
     def el_loss(self, go_normal_forms):
-        gci0, gci1, gci2, gci3 = go_normal_forms
+        gci0, gci1, gci2, gci3, _ = go_normal_forms
         
         gci0_loss = self.elembeddings(gci0, "gci0")
         gci1_loss = self.elembeddings(gci1, "gci1")
@@ -373,7 +373,6 @@ def main(ont, batch_size, epochs, device):
         print("Loading normal forms from disk...")
         with open(nfs_file, "rb") as f:
             nfs = pkl.load(f)
-            gci0_ds, gci1_ds, gci2_ds, gci3_ds = nfs
     else:
         print("Generating EL dataset...")
         el_dataset = ELDataset(dataset.ontology, 
@@ -541,6 +540,6 @@ def main(ont, batch_size, epochs, device):
 
 ont = "mf"
 batch_size = 16
-epochs = 20
+epochs = 3
 device = "cpu"
 main(ont, batch_size, epochs, device)

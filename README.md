@@ -54,6 +54,15 @@ pip install git+https://github.com/bio-ontology-research-group/mowl
 
 ```
 
+### Relevant papers:
+
+* [mOWL: Python library for machine learning with biomedical ontologies](https://doi.org/10.1093/bioinformatics/btac811)
+* [Ontology Embedding: A Survey of Methods, Applications and Resources](https://arxiv.org/abs/2406.10964)
+* [Evaluating Different Methods for Semantic Reasoning Over Ontologies](https://ceur-ws.org/Vol-3592/paper9.pdf)
+* [Prioritizing genomic variants through neuro-symbolic, knowledge-enhanced learning](https://doi.org/10.1093/bioinformatics/btae301)
+
+
+
 ## List of contributors
 * [Fernando Zhapa](https://github.com/ferzcam)
 * [Maxat Kulmanov](https://github.com/coolmaksat)

@@ -7,7 +7,7 @@ import time
 import numpy as np
 import torch as th
 
-from deprecated.sphinx import versionadded
+from deprecated.sphinx import versionadded, versionchanged
 import logging
 logger = logging.getLogger(__name__)
 handler = logging.StreamHandler()
@@ -15,7 +15,7 @@ logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
 
-@versionadded(version="0.2.0")
+@versionchanged(version='1.0.0')
 class RandomWalkPlusW2VModel(RandomWalkModel):
     """
     Embedding model that combines graph projections + random walks.
@@ -106,24 +106,11 @@ class RandomWalkPlusW2VModel(RandomWalkModel):
         if epochs is None:
             epochs = self.w2v_model.epochs
 
-        print("in train")
-            
         if self._edges is None or self.axioms_added:
             self.axioms_added = False
             self._edges = self.projector.project(self.dataset.ontology)
             
             self.walker.walk(self._edges)
-            # time.sleep(0.1)
-            # last_modified = os.path.getmtime(self.walker.outfile)
-            # This loop is needed to make sure the file is written to disk before running Word2Vec
-            
-            # while True:
-                # print("in loop")
-                # current_modified = os.path.getmtime(self.walker.outfile)
-                # if current_modified != last_modified:
-                    # break
-                
-                # last_modified = current_modified
             
         sentences = LineSentence(self.walker.outfile)
         self.w2v_model.build_vocab(sentences, update=self.update_w2v_model)

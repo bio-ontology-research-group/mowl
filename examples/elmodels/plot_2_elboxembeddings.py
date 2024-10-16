@@ -88,14 +88,7 @@ model.train()
 # :class:`ModelRankBasedEvaluator <mowl.evaluation.ModelRankBasedEvaluator>` class.
 
 
-from mowl.evaluation.rank_based import ModelRankBasedEvaluator
+from mowl.evaluation import PPIEvaluator
 
-with th.no_grad():                                                                        
-    model.load_best_model()                                                               
-    evaluator = ModelRankBasedEvaluator(                                                  
-        model,                                                                            
-        device = "cpu",
-        eval_method = model.eval_method,
-    )                                                                                         
-                                                                                                  
-    evaluator.evaluate(show=True)
+model.set_evaluator(PPIEvaluator)
+model.evaluate()

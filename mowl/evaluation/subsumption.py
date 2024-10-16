@@ -64,10 +64,12 @@ class SubsumptionEvaluator(Evaluator):
     
 
 
-    def get_deductive_labels(self, num_heads, num_tails):
+    def get_deductive_labels(self, num_heads, num_tails, class_id_to_head_id, class_id_to_tail_id):
         deductive_labels = th.ones((num_heads, num_tails), dtype=th.float)
 
         for head, tail in self.deductive_closure_tuples:
+            head = class_id_to_head_id[head.item()]
+            tail = class_id_to_tail_id[tail.item()]
             deductive_labels[head, tail] = 10000
         
         return deductive_labels

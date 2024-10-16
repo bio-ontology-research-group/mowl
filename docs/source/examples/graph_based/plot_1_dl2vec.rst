@@ -10,8 +10,8 @@
     .. note::
         :class: sphx-glr-download-link-note
 
-        Click :ref:`here <sphx_glr_download_examples_graph_based_plot_1_dl2vec.py>`
-        to download the full example code
+        :ref:`Go to the end <sphx_glr_download_examples_graph_based_plot_1_dl2vec.py>`
+        to download the full example code.
 
 .. rst-class:: sphx-glr-example-title
 
@@ -36,7 +36,7 @@ To show an example of DL2Vec, we need 3 components:
 
 .. GENERATED FROM PYTHON SOURCE LINES 24-37
 
-.. code-block:: default
+.. code-block:: Python
 
 
     import sys
@@ -44,7 +44,8 @@ To show an example of DL2Vec, we need 3 components:
     import mowl
     mowl.init_jvm("10g")
 
-    from mowl.datasets.builtin import GDAMouseDataset
+    from mowl.datasets.builtin import GDADatasetV2
+    from mowl.models import RandomWalkPlusW2VModel
     from mowl.projection import DL2VecProjector
     from mowl.walking import DeepWalk
     from gensim.models.word2vec import LineSentence
@@ -57,156 +58,24 @@ To show an example of DL2Vec, we need 3 components:
 
 
 
+.. GENERATED FROM PYTHON SOURCE LINES 38-39
 
-.. GENERATED FROM PYTHON SOURCE LINES 38-44
+Instantiating the dataset and the model
 
-Projecting the ontology
------------------------
+.. GENERATED FROM PYTHON SOURCE LINES 39-49
 
-We project the ontology using the DL2VecProjector class. The rules used to project the 
-ontology can be found at :doc:`/graphs/projection`. The outcome of the projection algorithm
-is an edgelist.
+.. code-block:: Python
 
-.. GENERATED FROM PYTHON SOURCE LINES 44-50
 
-.. code-block:: default
+    dataset = GDADatasetV2()
 
+    print(f"Number of classes: f{len(dataset.classes)}")
 
-    dataset = GDAMouseDataset()
-
-    projector = DL2VecProjector(bidirectional_taxonomy=True)
-    edges = projector.project(dataset.ontology)
-
-
-
-
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 51-56
-
-Generating random walks
------------------------
-
-The random walks are generated using the DeepWalk class. This class implements the DeepWalk
-algorithm with a modification consisting of including the edge labels as part of the walks.
-
-.. GENERATED FROM PYTHON SOURCE LINES 56-65
-
-.. code-block:: default
-
-
-    walker = DeepWalk(20, # number of walks per node
-                      20, # walk length
-                      0.1, # restart probability
-                      workers=4) # number of threads
-
-    walks = walker.walk(edges)
-
-
-
-
-
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 66-70
-
-Training the Word2Vec model
----------------------------
-
-To train the Word2Vec model, we rely on the Gensim library:
-
-.. GENERATED FROM PYTHON SOURCE LINES 70-75
-
-.. code-block:: default
-
-
-    walks_file = walker.outfile
-    sentences = LineSentence(walks_file)
-    model = Word2Vec(sentences, vector_size=100, epochs = 20, window=5, min_count=1, workers=4)
-
-
-
-
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 76-82
-
-Evaluating the embeddings
-------------------------------
-
-We can evaluate the embeddings using the
-:class:`EmbeddingsRankBasedEvaluator <mowl.evaluation.rank_based.EmbeddingsRankBasedEvaluator>`
-class. We need to do some data preparation.
-
-.. GENERATED FROM PYTHON SOURCE LINES 82-86
-
-.. code-block:: default
-
-
-    from mowl.evaluation.rank_based import EmbeddingsRankBasedEvaluator
-    from mowl.evaluation.base import CosineSimilarity
-    from mowl.projection import TaxonomyWithRelationsProjector
-
-
-
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 87-89
-
-We are going to evaluate the plausability of an association gene-disease with a gene against all
-possible diseases and check the rank of the true disease association.
-
-.. GENERATED FROM PYTHON SOURCE LINES 89-99
-
-.. code-block:: default
-
-
-    genes, diseases = dataset.evaluation_classes
-
-    projector = TaxonomyWithRelationsProjector(taxonomy=False,
-                                               relations=["http://is_associated_with"])
-
-    evaluation_edges = projector.project(dataset.testing)
-    filtering_edges = projector.project(dataset.ontology)
-    assert len(evaluation_edges) > 0
-
-
-
-
-
-
-
-
-.. GENERATED FROM PYTHON SOURCE LINES 100-102
-
-The gene-disease associations will be scoredc using cosine similarity. For that reason we use
-the ``CosineSimilarity`` class.
-
-.. GENERATED FROM PYTHON SOURCE LINES 102-115
-
-.. code-block:: default
-
-
-    vectors = model.wv
-    evaluator = EmbeddingsRankBasedEvaluator(
-        vectors,
-        evaluation_edges,
-        CosineSimilarity,
-        training_set=filtering_edges,
-        head_entities = genes.as_str,
-        tail_entities = diseases.as_str,
-        device = 'cpu'
-    )
-
-    evaluator.evaluate(show=True)
+    model = RandomWalkPlusW2VModel(dataset)
+    model.set_projector(DL2VecProjector())
+    model.set_walker(DeepWalk(5, 5, 0.1, workers=4))
+    model.set_w2v_model(vector_size=5, epochs=2, window=5, min_count=1, workers=4)
+    model.train()
 
 
 
@@ -215,13 +84,115 @@ the ``CosineSimilarity`` class.
 
  .. code-block:: none
 
-      0%|          | 0/371 [00:00<?, ?it/s]      2%|2         | 8/371 [00:00<00:04, 75.09it/s]      8%|7         | 28/371 [00:00<00:02, 142.19it/s]     12%|#1        | 43/371 [00:00<00:02, 137.91it/s]     16%|#6        | 60/371 [00:00<00:02, 146.28it/s]     22%|##1       | 81/371 [00:00<00:01, 165.17it/s]     26%|##6       | 98/371 [00:00<00:01, 164.43it/s]     32%|###2      | 119/371 [00:00<00:01, 175.76it/s]     37%|###6      | 137/371 [00:00<00:01, 157.53it/s]     42%|####1     | 154/371 [00:01<00:03, 72.26it/s]      48%|####7     | 177/371 [00:01<00:02, 95.32it/s]     52%|#####2    | 193/371 [00:01<00:01, 105.91it/s]     57%|#####6    | 210/371 [00:01<00:01, 117.52it/s]     62%|######1   | 229/371 [00:01<00:01, 131.65it/s]     66%|######6   | 246/371 [00:01<00:00, 136.49it/s]     71%|#######1  | 265/371 [00:02<00:00, 147.93it/s]     78%|#######8  | 291/371 [00:02<00:00, 175.36it/s]     84%|########3 | 311/371 [00:02<00:00, 109.60it/s]     88%|########8 | 328/371 [00:02<00:00, 120.05it/s]     95%|#########5| 354/371 [00:02<00:00, 148.90it/s]    100%|##########| 371/371 [00:02<00:00, 128.54it/s]
-    Hits@1:   0.00 Filtered:   0.00
-    Hits@10:  0.01 Filtered:   0.01
-    Hits@100: 0.37 Filtered:   0.37
-    MR:       574.23 Filtered: 574.23
-    AUC:      0.93 Filtered:   0.93
-    Evaluation finished. Access the results using the "metrics" attribute.
+    Number of classes: f197774
+
+
+
+
+.. GENERATED FROM PYTHON SOURCE LINES 50-51
+
+Evaluating the model
+
+.. GENERATED FROM PYTHON SOURCE LINES 51-56
+
+.. code-block:: Python
+
+
+    from mowl.evaluation import GDAEvaluator
+    model.set_evaluator(GDAEvaluator)
+    model.evaluate()
+
+
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    Number of evaluation classes: 13302
+    Class http://purl.obolibrary.org/obo/PLANA_0000110 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003100 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003102 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003103 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003104 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003106 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003107 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003108 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003109 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003110 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003111 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003112 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003113 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003114 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003115 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003200 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003201 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003202 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003203 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003204 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003205 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003206 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003207 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003208 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003209 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003210 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003211 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003212 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003213 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003214 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003215 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003216 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003217 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003218 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003219 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003220 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003221 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003222 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003223 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003224 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003225 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003226 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003227 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003228 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003229 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003230 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003231 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003232 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003233 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003234 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003235 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003236 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003237 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003238 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003239 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003240 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003241 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003242 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003243 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003244 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003245 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003246 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003247 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003248 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003249 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003250 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003251 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003252 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003253 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003300 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003301 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003302 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003303 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003401 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003402 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003500 not found in w2v model
+    Class http://purl.obolibrary.org/obo/PLANA_0003502 not found in w2v model
+    Class http://www.w3.org/2002/07/owl#Nothing not found in w2v model
+    Evaluating in device: cpu
+    Evaluating with deductive closure: False
+    Excluding testing set: False
+    Filtering deductive closure: False
 
 
 
@@ -229,9 +200,9 @@ the ``CosineSimilarity`` class.
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** ( 29 minutes  50.812 seconds)
+   **Total running time of the script:** (1 minutes 12.265 seconds)
 
-**Estimated memory usage:**  4769 MB
+**Estimated memory usage:**  5020 MB
 
 
 .. _sphx_glr_download_examples_graph_based_plot_1_dl2vec.py:
@@ -240,14 +211,17 @@ the ``CosineSimilarity`` class.
 
   .. container:: sphx-glr-footer sphx-glr-footer-example
 
+    .. container:: sphx-glr-download sphx-glr-download-jupyter
+
+      :download:`Download Jupyter notebook: plot_1_dl2vec.ipynb <plot_1_dl2vec.ipynb>`
 
     .. container:: sphx-glr-download sphx-glr-download-python
 
       :download:`Download Python source code: plot_1_dl2vec.py <plot_1_dl2vec.py>`
 
-    .. container:: sphx-glr-download sphx-glr-download-jupyter
+    .. container:: sphx-glr-download sphx-glr-download-zip
 
-      :download:`Download Jupyter notebook: plot_1_dl2vec.ipynb <plot_1_dl2vec.ipynb>`
+      :download:`Download zipped: plot_1_dl2vec.zip <plot_1_dl2vec.zip>`
 
 
 .. only:: html
