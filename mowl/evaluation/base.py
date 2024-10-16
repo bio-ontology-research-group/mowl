@@ -48,8 +48,8 @@ class Evaluator:
         eval_heads, eval_tails = self.dataset.evaluation_classes
         
         print(f"Number of evaluation classes: {len(eval_heads)}")
-        self.evaluation_heads = th.tensor([self.class_to_id[c] for c in eval_heads.as_str], dtype=th.long)
-        self.evaluation_tails = th.tensor([self.class_to_id[c] for c in eval_tails.as_str], dtype=th.long)
+        self.evaluation_heads = th.tensor([self.class_to_id[c] for c in eval_heads.as_str], dtype=th.long).to(self.device)
+        self.evaluation_tails = th.tensor([self.class_to_id[c] for c in eval_tails.as_str], dtype=th.long).to(self.device)
 
 
     @property
@@ -71,6 +71,7 @@ class Evaluator:
                       filter_deductive_closure=False,
                       **kwargs):
 
+        model = model.to(self.device)
         num_heads, num_tails = len(self.evaluation_heads), len(self.evaluation_tails)
         model.eval()
         if not mode in ["valid", "test"]:
