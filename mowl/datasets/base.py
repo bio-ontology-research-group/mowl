@@ -313,9 +313,6 @@ class TarFileDataset(PathDataset):
         validation_path = os.path.join(dataset_root, 'valid.owl')
         testing_path = os.path.join(dataset_root, 'test.owl')
 
-        if not os.path.exists(ontology_path):
-            ontology_path = os.path.join(dataset_root, 'train.owl')
-
         ontology_exists = os.path.exists(ontology_path)
         validation_exists = os.path.exists(validation_path)
         testing_exists = os.path.exists(testing_path)
