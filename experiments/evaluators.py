@@ -354,10 +354,13 @@ class PPIEvaluator(Evaluator):
 
         filtering_tuples = th.cat([self.train_tuples, self.valid_tuples], dim=0)
         filtering_labels = th.ones((num_heads, num_tails), dtype=th.float)
-
+        diagonal = th.eye(num_heads, dtype=th.float) * 10000
+        
         for head, rel, tail in filtering_tuples:
             filtering_labels[head, tail] = 10000
-        
+
+        filtering_labels = th.max(filtering_labels, diagonal)
+            
         return filtering_labels
     
 
