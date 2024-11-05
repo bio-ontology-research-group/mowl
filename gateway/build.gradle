@@ -79,3 +79,8 @@ sourceCompatibility = '1.8'
 targetCompatibility = '1.8'
 
 mainClassName = "Main"
+
+application {
+    // JVM argument to set logging level
+    applicationDefaultJvmArgs = ["-Dlogging.level.root=INFO"]
+}
