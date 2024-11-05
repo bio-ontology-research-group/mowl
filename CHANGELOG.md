@@ -20,6 +20,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Fix bug in GCI2 score for ELEmbeddings
 - Fix bottleneck in ELBE example for PPI.
 - Fix bugs in BoxSquaredEL model.
+- Fix bug on OWL2VecStarProjector about projecting with literals
 
 ### Security
 

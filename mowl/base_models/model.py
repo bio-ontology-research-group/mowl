@@ -2,6 +2,8 @@ from deprecated.sphinx import deprecated, versionchanged, versionadded
 import tempfile
 from mowl.datasets import Dataset
 from mowl.owlapi import OWLAPIAdapter
+from mowl.evaluation import Evaluator
+from mowl.error import messages as msg
 from java.util import HashSet
 
 
@@ -28,13 +30,48 @@ class Model():
         self.dataset = dataset
         self._model_filepath = model_filepath
         self._testing_set = None
-                        
+        self._evaluator = None
+        self._evaluation_model = None
+        self._metrics = None
 
     def train(self, *args, **kwargs):
         '''Abstract method for training the model. This method must be implemented in children classes
         '''
         raise NotImplementedError("Method train is not implemented.")
 
+    def evaluate(self, *args,
+                 include_deductive_closure=False,
+                 exclude_testing_set=False,
+                 filter_deductive_closure=False,
+                 **kwargs):
+        if self._evaluator is None:
+            raise AttributeError(msg.EVALUATOR_NOT_SET)
+
+
+        if not isinstance(include_deductive_closure, bool):
+            raise TypeError(msg.get_type_error_message("include_deductive_closure", "bool", type(include_deductive_closure)))
+
+        if not isinstance(exclude_testing_set, bool):
+            raise TypeError(msg.get_type_error_message("exclude_testing_set", "bool", type(exclude_testing_set)))
+
+        if not isinstance(filter_deductive_closure, bool):
+            raise TypeError(msg.get_type_error_message("filter_deductive_closure", "bool", type(filter_deductive_closure)))
+
+        if not include_deductive_closure and exclude_testing_set:
+            raise ValueError("Parameter 'include_deductive_closure' cannot be False if 'exclude_testing_set' is True. Evaluation set will be empty.")
+
+        if include_deductive_closure and filter_deductive_closure:
+            raise ValueError("Parameter 'filter_deductive_closure' cannot be True if 'include_deductive_closure' is True.")
+        
+        
+        self._metrics = self._evaluator.evaluate(self.evaluation_model,
+                                                 include_deductive_closure=include_deductive_closure,
+                                                 exclude_testing_set=exclude_testing_set,
+                                                 filter_deductive_closure=filter_deductive_closure,
+                                                 **kwargs)
+        
+        
+    
     def eval_fn(self, *args, **kwargs):
         raise NotImplementedError("Method eval_fn is not implemented.")
 
@@ -118,6 +155,21 @@ class Model():
         """
         raise NotImplementedError()
 
+    @versionadded(version="1.0.0")
+    @property
+    def evaluation_model(self):
+        """Returns the evaluation model. In models relying on Word2Vec embeddings, this method calls an auxiliary evaluation model for scoring. Methods using KGEs or Geometric Embeddings would return the model itself."""
+        raise NotImplementedError("Method evaluation_model must be implemented in a subclass.")
+
+    @versionadded(version="1.0.0")
+    @property
+    def metrics(self):
+        if self._metrics is None:
+            raise AttributeError("Model has not been evaluated yet.")
+        else:
+            return self._metrics
+
+    
     @versionadded(version="0.2.0")
     def add_axioms(self, *axioms):
         """
@@ -139,3 +191,20 @@ class Model():
         raise NotImplementedError()
     
 
+
+    @versionadded(version="1.0.0")
+    def set_evaluator(self, evaluator, *args, **kwargs):
+        """
+        This method sets the evaluator for the model.
+
+        :param evaluator: Evaluator object.
+        :type evaluator: mowl.evaluation.base.Evaluator
+        """
+        
+        if isinstance(evaluator, Evaluator):
+            self._evaluator = evaluator
+        else:
+            self._evaluator = evaluator(self.dataset, *args, **kwargs)
+
+        
+            

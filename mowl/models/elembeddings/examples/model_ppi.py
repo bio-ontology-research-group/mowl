@@ -1,6 +1,5 @@
 from mowl.base_models.elmodel import EmbeddingELModel
-
-from mowl.models.elembeddings.evaluate import ELEmbeddingsPPIEvaluator
+from mowl.evaluation import PPIEvaluator
 from mowl.projection.factory import projector_factory
 from tqdm import trange, tqdm
 import torch as th
@@ -16,7 +15,9 @@ class ELEmPPI(ELEmbeddings):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
+        self.set_evaluator(PPIEvaluator)
 
+        
     def train(self, validate_every=1000):
 
         optimizer = th.optim.Adam(self.module.parameters(), lr=self.learning_rate)
@@ -74,11 +75,7 @@ class ELEmPPI(ELEmbeddings):
         print('Load the best model', self.model_filepath)
         self.load_best_model()
         with th.no_grad():
-            eval_method = self.module.gci2_loss
-
-            evaluator = ELEmbeddingsPPIEvaluator(
-                self.dataset.testing, eval_method, self.dataset.ontology, self.class_index_dict,
-                self.object_property_index_dict, device=self.device)
-            evaluator()
-            evaluator.print_metrics()
-
+            metrics = self.evaluate()
+            print(metrics)
+                                    
+            

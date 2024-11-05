@@ -5,6 +5,7 @@ from mowl.projection import TaxonomyProjector
 from pykeen.triples import TriplesFactory
 from pykeen.models import TransE, ERModel
 import mowl.error.messages as err
+import torch as th
 
 class TestPyKEENModel(TestCase):
 
@@ -35,21 +36,31 @@ class TestPyKEENModel(TestCase):
         self.assertIsInstance(model.kge_method, ERModel)
 
 
+    def test_kge_method_not_set(self):
+        """This checks if the exception is raised when the kge method is not set"""
+
+        model = GraphPlusPyKEENModel(self.dataset)
+        model.set_projector(TaxonomyProjector())
+                        
+        with self.assertRaisesRegex(AttributeError,
+                                    err.PYKEEN_MODEL_NOT_SET):
+            model.train(epochs=1)
+        
     def test_get_embeddings(self):
         model = GraphPlusPyKEENModel(self.dataset)
         model.set_projector(TaxonomyProjector())
-
-        with self.assertRaisesRegex(ValueError,
-                                    err.PYKEEN_MODEL_NOT_SET):
+        
+        with self.assertRaisesRegex(AttributeError,
+                                    err.MODEL_NOT_TRAINED_OR_LOADED):
             class_embs = model.class_embeddings
 
-        with self.assertRaisesRegex(ValueError,
-                                    err.PYKEEN_MODEL_NOT_SET):
+        with self.assertRaisesRegex(AttributeError,
+                                    err.MODEL_NOT_TRAINED_OR_LOADED):
             role_embs = model.object_property_embeddings
                 
 
-        with self.assertRaisesRegex(ValueError,
-                                    err.PYKEEN_MODEL_NOT_SET):
+        with self.assertRaisesRegex(AttributeError,
+                                    err.MODEL_NOT_TRAINED_OR_LOADED):
             ind_embs = model.individual_embeddings
             
         

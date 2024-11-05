@@ -56,6 +56,17 @@ class Evaluator:
     def get_logits(self, batch):
         raise NotImplementedError
 
+    def evaluate(self, *args, **kwargs):
+        model = args[0]
+        mode = kwargs.get("mode")
+        
+        if mode == "valid":
+            eval_tuples = self.valid_tuples
+        else:
+            eval_tuples = self.test_tuples
+
+        return self.evaluate_base(model, eval_tuples, **kwargs)
+
     
     def evaluate_base(self, model, eval_tuples, mode="test", **kwargs):
         num_heads, num_tails = len(self.evaluation_heads), len(self.evaluation_tails)
@@ -70,8 +81,8 @@ class Evaluator:
             mask = mask1 | mask2
             deductive_closure_tuples = self.deductive_closure_tuples[~mask]
             
-            # eval_tuples = th.cat([eval_tuples, deductive_closure_tuples], dim=0)
-            eval_tuples = deductive_closure_tuples
+            eval_tuples = th.cat([eval_tuples, deductive_closure_tuples], dim=0)
+            # eval_tuples = deductive_closure_tuples
         dataloader = FastTensorDataLoader(eval_tuples, batch_size=self.batch_size, shuffle=False)
 
         metrics = dict()
@@ -224,16 +235,6 @@ class Evaluator:
             return metrics
 
         
-    def evaluate(self, *args, **kwargs):
-        model = args[0]
-        mode = kwargs.get("mode")
-        
-        if mode == "valid":
-            eval_tuples = self.valid_tuples
-        else:
-            eval_tuples = self.test_tuples
-
-        return self.evaluate_base(model, eval_tuples, **kwargs)
     
     
 class SubsumptionEvaluator(Evaluator):

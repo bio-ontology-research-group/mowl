@@ -5,7 +5,7 @@ from mowl.projection import projector_factory
 import torch as th
 from torch.utils.data import DataLoader, default_collate
 
-from deprecated.sphinx import versionadded
+from deprecated.sphinx import versionadded, versionchanged
 
 from org.semanticweb.owlapi.model import OWLClassExpression, OWLClass, OWLObjectSomeValuesFrom, OWLObjectIntersectionOf
 
@@ -14,17 +14,28 @@ import numpy as np
 import mowl.error.messages as msg
 import os
 
+@versionchanged(version="1.0.0", reason="Added the 'load_normalized' parameter.")
 class EmbeddingELModel(Model):
     """Abstract class for :math:`\mathcal{EL}` embedding methods.
 
+    :param dataset: mOWL dataset to use for training and evaluation.
+    :type dataset: :class:`mowl.datasets.Dataset`
+    :param embed_dim: The embedding dimension.
+    :type embed_dim: int
+    :param batch_size: The batch size to use for training.
+    :type batch_size: int
     :param extended: If `True`, the model is supposed with 7 EL normal forms. This will be \
 reflected on the :class:`DataLoaders` that will be generated and also the model must \
     contain 7 loss functions. If `False`, the model will work with 4 normal forms only, \
 merging the 3 extra to their corresponding origin normal forms. Defaults to True
     :type extended: bool, optional
+    :param load_normalized: If `True`, the ontology is assumed to be normalized and GCIs are extracted directly. Defaults to False.
+    :type load_normalized: bool, optional
+    :param device: The device to use for training. Defaults to "cpu".
+    :type device: str, optional
     """
 
-    def __init__(self, dataset, embed_dim, batch_size, extended=True, model_filepath=None, device="cpu"):
+    def __init__(self, dataset, embed_dim, batch_size, extended=True, model_filepath=None, load_normalized=False, device="cpu"):
         super().__init__(dataset, model_filepath=model_filepath)
 
         if not isinstance(embed_dim, int):
@@ -36,6 +47,9 @@ merging the 3 extra to their corresponding origin normal forms. Defaults to True
         if not isinstance(extended, bool):
             raise TypeError("Optional parameter extended must be of type bool.")
 
+        if not isinstance(load_normalized, bool):
+            raise TypeError("Optional parameter load_normalized must be of type bool.")
+        
         if not isinstance(device, str):
             raise TypeError("Optional parameter device must be of type str.")
 
@@ -45,7 +59,8 @@ merging the 3 extra to their corresponding origin normal forms. Defaults to True
         self.embed_dim = embed_dim
         self.batch_size = batch_size
         self.device = device
-
+        self.load_normalized = load_normalized
+        
         self._training_datasets = None
         self._validation_datasets = None
         self._testing_datasets = None
@@ -62,9 +77,12 @@ merging the 3 extra to their corresponding origin normal forms. Defaults to True
         if self._datasets_loaded:
             return
 
-        training_el_dataset = ELDataset(self.dataset.ontology, self.class_index_dict,
+        training_el_dataset = ELDataset(self.dataset.ontology,
+                                        self.class_index_dict,
                                         self.object_property_index_dict,
-                                        extended=self._extended, device=self.device)
+                                        extended=self._extended,
+                                        load_normalized = self.load_normalized,
+                                        device=self.device)
 
         self._training_datasets = training_el_dataset.get_gci_datasets()
 

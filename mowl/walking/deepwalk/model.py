@@ -1,6 +1,7 @@
 from mowl.walking.walking import WalkingModel
 import random
 import os
+import time
 import logging
 from org.mowl.Walking import DeepWalk as DW
 from java.util import HashMap
@@ -66,3 +67,7 @@ class DeepWalk(WalkingModel):
                     self.outfile, nodes_of_interest, self.seed)
 
         walker.walk()
+
+        self.wait_for_all_walks()
+        
+

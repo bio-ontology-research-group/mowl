@@ -29,4 +29,10 @@ PYKEEN_BATCH_SIZE_NOT_SET = "PyKEEN batch size not set. Please set it by doing '
 
 PYKEEN_MODEL_NOT_SET = "PyKEEN model not set. Please set it by using the 'set_kge_method' method."
 
-                                 
+EVALUATOR_NOT_SET = "Evaluator not set. Please set it using the 'set_evaluator' method."
+
+MODEL_NOT_TRAINED_OR_LOADED = "Model has not been trained or loaded yet. Use 'model.train' or 'model.from_pretrained'."
+
+
+def get_type_error_message(parameter_name, expected_type, parameter_type):
+    return f"Parameter {parameter_name} must be of type {expected_type}. Got {parameter_type} instead."
