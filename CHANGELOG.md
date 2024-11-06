@@ -10,6 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `load_corpus` to `mowl.base_models.SyntacticModel`
 - Added `.jar` files to enable pip install from GitHub
 - Tested with Python 3.12
+- Refactored Evaluation module.
+- Added PPIEvaluator, GDAEvaluator, SubsumptionEvaluator
+- Refactored `model` object and introduced `model.train()` and `model.evaluate()` methods.
+- Added `GDADatasetV2` and `GDADatasetV2EL`. Datasets were introduced in [https://github.com/bio-ontology-research-group/gda_analysis](https://github.com/bio-ontology-research-group/gda_analysis)
+
 ### Changed 
 - Removed `.mean()` for GCI losses in BoxSquaredELModule
 - Property `evaluation_classes` in `mowl.datasets.builtin.PPIYeastDataset` returns a pair of `OWLClasses` objects instead of a single `OWLClasses` object.

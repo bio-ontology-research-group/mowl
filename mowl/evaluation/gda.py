@@ -1,14 +1,19 @@
 from mowl.evaluation import Evaluator
 from mowl.projection import TaxonomyWithRelationsProjector, Edge
-
 import torch as th
+import logging
+logger = logging.getLogger(__name__)
+handler = logging.StreamHandler()
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
 
-class PPIEvaluator(Evaluator):
+
+class GDAEvaluator(Evaluator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
     def create_tuples(self, ontology):
-        projector = TaxonomyWithRelationsProjector(relations=["http://interacts_with"])
+        projector = TaxonomyWithRelationsProjector(relations=[self.dataset.evaluation_object_property])
         edges = projector.project(ontology)
 
         classes, relations = Edge.get_entities_and_relations(edges)
@@ -19,7 +24,7 @@ class PPIEvaluator(Evaluator):
         relation_owl2idx = self.dataset.object_properties.to_index_dict()
         
         edges_indexed = []
-        
+
         for e in edges:
             head = class_owl2idx[class_str2owl[e.src]]
             relation = relation_owl2idx[relation_str2owl[e.rel]]
@@ -32,22 +37,17 @@ class PPIEvaluator(Evaluator):
         heads, rels, tails = batch[:, 0], batch[:, 1], batch[:, 2]
         num_heads, num_tails = len(heads), len(tails)
 
-        heads = heads.repeat_interleave(len(self.evaluation_tails)).unsqueeze(1)
-        rels = rels.repeat_interleave(len(self.evaluation_tails)).unsqueeze(1)
-        eval_tails = th.arange(len(self.evaluation_tails), device=heads.device).repeat(num_heads).unsqueeze(1)
-        logits_heads = model(th.cat([heads, rels, eval_tails], dim=-1), "gci2")
-        logits_heads = logits_heads.view(-1, len(self.evaluation_tails))
-        
+        rels = rels.repeat_interleave(len(self.evaluation_heads)).unsqueeze(1)
         tails = tails.repeat_interleave(len(self.evaluation_heads)).unsqueeze(1)
-        eval_heads = th.arange(len(self.evaluation_heads), device=tails.device).repeat(num_tails).unsqueeze(1)
+        eval_heads = self.evaluation_heads.repeat(num_tails).unsqueeze(1)
+        assert rels.shape == tails.shape == eval_heads.shape, f"{rels.shape} != {tails.shape} != {eval_heads.shape}"
+        
         logits_tails = model(th.cat([eval_heads, rels, tails], dim=-1), "gci2")
         logits_tails = logits_tails.view(-1, len(self.evaluation_heads))
-        # print(logits_heads, logits_tails)
-        return logits_heads, logits_tails
+        return None, logits_tails
 
     
     def get_filtering_labels(self, num_heads, num_tails, class_id_to_head_id, class_id_to_tail_id, **kwargs):
-
         filtering_tuples = th.cat([self.train_tuples, self.valid_tuples], dim=0)
         filtering_labels = th.ones((num_heads, num_tails), dtype=th.float)
 
@@ -57,4 +57,3 @@ class PPIEvaluator(Evaluator):
             filtering_labels[head, tail] = 10000
         
         return filtering_labels
-    

@@ -11,7 +11,7 @@
         :class: sphx-glr-download-link-note
 
         :ref:`Go to the end <sphx_glr_download_examples_elmodels_plot_2_elboxembeddings.py>`
-        to download the full example code
+        to download the full example code.
 
 .. rst-class:: sphx-glr-example-title
 
@@ -45,6 +45,12 @@ definition of loss functions definition of the loss functions for each normal fo
     import mowl
     mowl.init_jvm("10g")
     import torch as th
+
+
+
+
+
+
 
 
 
@@ -102,6 +108,20 @@ Training the model
 
 
 
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    Number of evaluation classes: 6039
+      0%|          | 0/20 [00:00<?, ?it/s]      5%|▌         | 1/20 [00:00<00:06,  2.99it/s]     10%|█         | 2/20 [00:00<00:05,  3.08it/s]     15%|█▌        | 3/20 [00:00<00:05,  3.06it/s]     20%|██        | 4/20 [00:01<00:05,  2.99it/s]     25%|██▌       | 5/20 [00:01<00:04,  3.02it/s]     30%|███       | 6/20 [00:02<00:04,  2.96it/s]     35%|███▌      | 7/20 [00:02<00:04,  2.95it/s]     40%|████      | 8/20 [00:02<00:04,  2.94it/s]     45%|████▌     | 9/20 [00:03<00:03,  2.94it/s]     50%|█████     | 10/20 [00:03<00:03,  2.97it/s]     55%|█████▌    | 11/20 [00:03<00:03,  2.95it/s]     60%|██████    | 12/20 [00:04<00:02,  2.95it/s]     65%|██████▌   | 13/20 [00:04<00:02,  2.95it/s]     70%|███████   | 14/20 [00:04<00:02,  2.99it/s]     75%|███████▌  | 15/20 [00:05<00:01,  2.93it/s]     80%|████████  | 16/20 [00:05<00:01,  2.94it/s]     85%|████████▌ | 17/20 [00:05<00:01,  2.93it/s]     90%|█████████ | 18/20 [00:06<00:00,  2.94it/s]     95%|█████████▌| 19/20 [00:06<00:00,  2.93it/s]    100%|██████████| 20/20 [00:06<00:00,  2.95it/s]    100%|██████████| 20/20 [00:06<00:00,  2.96it/s]
+
+    1
+
+
+
 .. GENERATED FROM PYTHON SOURCE LINES 84-89
 
 Evaluating the model
@@ -110,25 +130,35 @@ Evaluating the model
 Now, it is time to evaluate embeddings. For this, we use the
 :class:`ModelRankBasedEvaluator <mowl.evaluation.ModelRankBasedEvaluator>` class.
 
-.. GENERATED FROM PYTHON SOURCE LINES 89-102
+.. GENERATED FROM PYTHON SOURCE LINES 89-95
 
 .. code-block:: Python
 
 
 
-    from mowl.evaluation.rank_based import ModelRankBasedEvaluator
+    from mowl.evaluation import PPIEvaluator
 
-    with th.no_grad():                                                                        
-        model.load_best_model()                                                               
-        evaluator = ModelRankBasedEvaluator(                                                  
-            model,                                                                            
-            device = "cpu",
-            eval_method = model.eval_method,
-        )                                                                                         
-                                                                                                  
-        evaluator.evaluate(show=True)
+    model.set_evaluator(PPIEvaluator)
+    model.evaluate()
 
-**Estimated memory usage:**  0 MB
+
+
+
+.. rst-class:: sphx-glr-script-out
+
+ .. code-block:: none
+
+    Number of evaluation classes: 6039
+
+
+
+
+
+.. rst-class:: sphx-glr-timing
+
+   **Total running time of the script:** (1 minutes 30.418 seconds)
+
+**Estimated memory usage:**  3174 MB
 
 
 .. _sphx_glr_download_examples_elmodels_plot_2_elboxembeddings.py:
@@ -144,6 +174,10 @@ Now, it is time to evaluate embeddings. For this, we use the
     .. container:: sphx-glr-download sphx-glr-download-python
 
       :download:`Download Python source code: plot_2_elboxembeddings.py <plot_2_elboxembeddings.py>`
+
+    .. container:: sphx-glr-download sphx-glr-download-zip
+
+      :download:`Download zipped: plot_2_elboxembeddings.zip <plot_2_elboxembeddings.zip>`
 
 
 .. only:: html

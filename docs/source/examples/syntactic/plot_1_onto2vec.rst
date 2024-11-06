@@ -10,8 +10,8 @@
     .. note::
         :class: sphx-glr-download-link-note
 
-        Click :ref:`here <sphx_glr_download_examples_syntactic_plot_1_onto2vec.py>`
-        to download the full example code
+        :ref:`Go to the end <sphx_glr_download_examples_syntactic_plot_1_onto2vec.py>`
+        to download the full example code.
 
 .. rst-class:: sphx-glr-example-title
 
@@ -36,7 +36,7 @@ For this algorithm, we need three components:
 
 .. GENERATED FROM PYTHON SOURCE LINES 20-38
 
-.. code-block:: default
+.. code-block:: Python
 
 
 
@@ -73,7 +73,7 @@ paper, the authors used the HermiT reasoner. For this example, we use the ELK re
 
 .. GENERATED FROM PYTHON SOURCE LINES 44-51
 
-.. code-block:: default
+.. code-block:: Python
 
 
     dataset = PPIYeastSlimDataset()
@@ -101,7 +101,7 @@ provides such as:
 
 .. GENERATED FROM PYTHON SOURCE LINES 59-64
 
-.. code-block:: default
+.. code-block:: Python
 
 
     classes = dataset.ontology.getClassesInSignature()
@@ -121,7 +121,7 @@ We can now add the inferred axioms to the ontology.
 
 .. GENERATED FROM PYTHON SOURCE LINES 66-77
 
-.. code-block:: default
+.. code-block:: Python
 
 
     adapter = OWLAPIAdapter()
@@ -157,13 +157,13 @@ can train the Word2Vec model.
 
 .. GENERATED FROM PYTHON SOURCE LINES 83-89
 
-.. code-block:: default
+.. code-block:: Python
 
 
     extract_and_save_axiom_corpus(dataset.ontology, "onto2vec_corpus.txt")
 
     sentences = LineSentence("onto2vec_corpus.txt")
-    model = Word2Vec(sentences, vector_size=5, window=2, min_count=1, workers=4)
+    model = Word2Vec(sentences, vector_size=5, window=2, min_count=1, workers=4, epochs=2)
 
 
 
@@ -178,7 +178,7 @@ Cleaning up memory
 
 .. GENERATED FROM PYTHON SOURCE LINES 91-93
 
-.. code-block:: default
+.. code-block:: Python
 
 
     os.remove("onto2vec_corpus.txt")
@@ -192,9 +192,9 @@ Cleaning up memory
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** ( 0 minutes  22.449 seconds)
+   **Total running time of the script:** (0 minutes 14.702 seconds)
 
-**Estimated memory usage:**  165 MB
+**Estimated memory usage:**  758 MB
 
 
 .. _sphx_glr_download_examples_syntactic_plot_1_onto2vec.py:
@@ -203,14 +203,17 @@ Cleaning up memory
 
   .. container:: sphx-glr-footer sphx-glr-footer-example
 
+    .. container:: sphx-glr-download sphx-glr-download-jupyter
+
+      :download:`Download Jupyter notebook: plot_1_onto2vec.ipynb <plot_1_onto2vec.ipynb>`
 
     .. container:: sphx-glr-download sphx-glr-download-python
 
       :download:`Download Python source code: plot_1_onto2vec.py <plot_1_onto2vec.py>`
 
-    .. container:: sphx-glr-download sphx-glr-download-jupyter
+    .. container:: sphx-glr-download sphx-glr-download-zip
 
-      :download:`Download Jupyter notebook: plot_1_onto2vec.ipynb <plot_1_onto2vec.ipynb>`
+      :download:`Download zipped: plot_1_onto2vec.zip <plot_1_onto2vec.zip>`
 
 
 .. only:: html

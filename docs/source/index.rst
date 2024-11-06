@@ -33,7 +33,7 @@ Getting started
 mOWL, JPype and the JVM
 =============================
 
-mOWL is a Python library. However, it interfaces the OWLAPI, which is written in Java. For that reason, mOWL uses JPype to use the JVM and access Java code from Python scripts.
+mOWL is a Python library. Furtheremore, it binds the OWLAPI, which is written in Java. For that reason, mOWL uses JPype to enable JVM and access Java code from Python scripts.
 
 .. image:: imgs/architecture.png
 	   
@@ -51,7 +51,12 @@ In the above piece of code, we specify the amount of memory given to the JVM. Th
 
    The function ``init_jvm`` can only be called once during running time. This means that the JVM cannot be restarted and this is a limitation of JPype as stated in this `section <https://jpype.readthedocs.io/en/latest/api.html#jpype.shutdownJVM>`_ of their documentation.
 
-
+Relevant papers:
+==========================
+- `mOWL: Python library for machine learning with biomedical ontologies <https://doi.org/10.1093/bioinformatics/btac811>`_
+- `Ontology Embedding: A Survey of Methods, Applications and Resources <https://arxiv.org/abs/2406.10964>`_
+- `Evaluating Different Methods for Semantic Reasoning Over Ontologies <https://ceur-ws.org/Vol-3592/paper9.pdf>`_
+- `Prioritizing genomic variants through neuro-symbolic, knowledge-enhanced learning <https://doi.org/10.1093/bioinformatics/btae301>`_
    
 Authors
 =======
@@ -59,6 +64,7 @@ Authors
 **mOWL** is a project initiated and developed by the `Bio-Ontology Research Group <https://cemse.kaust.edu.sa/borg>`_ from KAUST.
 Furthermore, mOWL had other collaboration by being part of:
 
+* `Biohackathon Japan 2024 <http://2024.biohackathon.org/>`_
 * `Biohackathon MENA 2023 <https://biohackathon-europe.org/>`_ as project ``#20``.
 * `Biohackathon Europe 2022 <https://2022.biohackathon-europe.org/>`_ as project ``#18``.
 * `Biohackathon Europe 2021 <https://2021.biohackathon-europe.org/>`_ as project ``#27``.
@@ -105,7 +111,7 @@ If you used mOWL in your work, please consider citing `this article <https://doi
    datasets/index
    ontology/index
    owlapi/index
-   model
+   models/index
    corpus/index
    graphs/index
    embedding_el/index
