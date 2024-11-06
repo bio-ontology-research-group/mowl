@@ -54,8 +54,8 @@ merging the 3 extra to their corresponding origin normal forms. Defaults to True
         if not isinstance(extended, bool):
             raise TypeError("Optional parameter extended must be of type bool.")
 
-        if not isinstance(load_normalized, bool):
-            raise TypeError("Optional parameter load_normalized must be of type bool.")
+        # if not isinstance(load_normalized, bool):
+        #     raise TypeError("Optional parameter load_normalized must be of type bool.")
         
         if not isinstance(device, str):
             raise TypeError("Optional parameter device must be of type str.")

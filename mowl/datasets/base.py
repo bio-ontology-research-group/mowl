@@ -17,6 +17,7 @@ from mowl.projection import TaxonomyWithRelationsProjector
 from mowl.owlapi.adapter import OWLAPIAdapter
 from mowl.owlapi.defaults import TOP, BOT
 from deprecated.sphinx import versionadded, versionchanged
+from mowl.ontology.normalize import ELNormalizer
 
 
 from java.util import HashSet
