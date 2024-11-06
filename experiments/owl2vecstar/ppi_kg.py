@@ -44,14 +44,12 @@ def main(embed_dim, batch_size, learning_rate, epochs, device,
     wandb_logger = wandb.init(entity="zhapacfp_team", project="ontoem", group=f"owl2vecstar_kg_{dataset_name}", name=wandb_description)
 
     if no_sweep:
-        wandb_logger.log({"dataset_name": dataset_name,
-                          "embed_dim": embed_dim,
+        wandb_logger.log({"embed_dim": embed_dim,
                           "epochs": epochs,
                           "batch_size": batch_size,
                           "learning_rate": learning_rate
                           })
     else:
-        dataset_name = wandb.config.dataset_name
         embed_dim = wandb.config.embed_dim
         epochs = wandb.config.epochs
         batch_size = wandb.config.batch_size
