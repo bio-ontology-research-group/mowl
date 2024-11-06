@@ -3,6 +3,12 @@ from mowl.projection.base import ProjectionModel
 from mowl.projection import Edge
 from mowl.walking import WalkingModel
 import mowl.error.messages as msg
+import logging
+logger = logging.getLogger(__name__)
+handler = logging.StreamHandler()
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+
 
 class GraphModel(Model):
 
@@ -24,8 +30,15 @@ class GraphModel(Model):
         if self.projector is None:
             raise ValueError(msg.GRAPH_MODEL_PROJECTOR_NOT_SET)
 
+        all_classes = set(self.dataset.classes.as_str)
+
         self._edges = self.projector.project(self.dataset.ontology)
         nodes, relations = Edge.get_entities_and_relations(self._edges)
+        nodes = set(nodes)
+
+        missing_classes = all_classes - nodes
+        logger.warning(f"There are {len(missing_classes)} classes not found in the graph. They might be ignored in the projection or they might be in the validation/testing set but not in the training set.")
+        nodes = nodes.union(missing_classes)
         nodes = list(set(nodes))
         relations = list(set(relations))
         nodes.sort()
