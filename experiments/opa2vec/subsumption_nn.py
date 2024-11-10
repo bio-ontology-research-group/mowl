@@ -135,7 +135,7 @@ class MLPBlock(nn.Module):
         return x
 
  
-class GONet(nn.Module):
+class SubsumptionNet(nn.Module):
     def __init__(self, embedding_layer, embed_dim):
         super().__init__()
 
@@ -150,7 +150,7 @@ class GONet(nn.Module):
             input_length = hidden_dim
         net.append(nn.Linear(input_length, 1))
         net.append(nn.Sigmoid())
-        self.go_net = nn.Sequential(*net)
+        self.subsumption_net = nn.Sequential(*net)
 
     def forward(self, data, *args):
         if data.shape[1] == 2:
@@ -166,7 +166,7 @@ class GONet(nn.Module):
         tail_embs = self.embedding_layer(t)
 
         data = th.cat([head_embs, tail_embs], dim=1)
-        return self.go_net(data)
+        return self.subsumption_net(data)
     
 class OPA2VecModel(SyntacticPlusW2VModel):
     def __init__(self, evaluator_name, dataset, batch_size,
@@ -213,8 +213,10 @@ class OPA2VecModel(SyntacticPlusW2VModel):
         
         embeddings_dict = {}
         for class_ in classes:
-            if not ("GO_" in class_ or "Thing" in class_ or "Nothing" in class_):
-                continue
+            # if not (class_.startswith("http://purl.obolibrary.org/obo/") or "Thing" in class_ or "Nothing" in class_):
+                # continue
+
+            
             if class_ in w2v_vectors:
                 embeddings_dict[class_] = w2v_vectors[class_]
             else:
@@ -230,7 +232,7 @@ class OPA2VecModel(SyntacticPlusW2VModel):
         embedding_layer = nn.Embedding.from_pretrained(embeddings)
         embedding_layer.weight.requires_grad = False
 
-        go_net = GONet(embedding_layer, self.embed_dim)
+        subsumption_net = SubsumptionNet(embedding_layer, self.embed_dim)
         
         projector = TaxonomyProjector(bidirectional_taxonomy=False)
 
@@ -251,19 +253,19 @@ class OPA2VecModel(SyntacticPlusW2VModel):
         valid_data = th.tensor(valid_data, dtype=th.long).to(self.device)
         test_data = th.tensor(test_data, dtype=th.long).to(self.device)
         
-        return go_net, train_data, train_labels, valid_data, test_data
+        return subsumption_net, train_data, train_labels, valid_data, test_data
 
     def train(self):
         super().train()
         self.w2v_model.save(self.model_filepath)
 
-        go_net, train_data, train_labels, valid_data, test_data = self.load_subsumption_embeddings_data()
+        subsumption_net, train_data, train_labels, valid_data, test_data = self.load_subsumption_embeddings_data()
         
         train_dataloader = FastTensorDataLoader(train_data, train_labels, batch_size=self.batch_size, shuffle=True)
 
-        optimizer = th.optim.AdamW(go_net.parameters(), lr = self.learning_rate)
+        optimizer = th.optim.AdamW(subsumption_net.parameters(), lr = self.learning_rate)
 
-        go_net = go_net.to(self.device)
+        subsumption_net = subsumption_net.to(self.device)
 
         criterion = nn.BCELoss()
 
@@ -281,7 +283,7 @@ class OPA2VecModel(SyntacticPlusW2VModel):
                 tail = batch_data[:, 1]
                 data = th.vstack([head, tail]).T
                 
-                logits = go_net(data).squeeze()
+                logits = subsumption_net(data).squeeze()
                 loss = criterion(logits, batch_labels.float())
 
                 optimizer.zero_grad()
@@ -294,15 +296,15 @@ class OPA2VecModel(SyntacticPlusW2VModel):
                 
             
 
-            go_net.eval()
+            subsumption_net.eval()
 
-            metrics = self.evaluator.evaluate(go_net, mode="valid")
+            metrics = self.evaluator.evaluate(subsumption_net, mode="valid")
             valid_mr = metrics["valid_mr"]
             valid_mrr = metrics["valid_mrr"]
 
             if valid_mrr > best_mrr:
                 best_mrr = valid_mrr
-                th.save(go_net.state_dict(), self.nn_model_filepath)
+                th.save(subsumption_net.state_dict(), self.nn_model_filepath)
                 curr_tolerance = tolerance
                 logger.info(f"New best model found: {valid_mr:1f} - {valid_mrr:4f}")
             else:
@@ -317,12 +319,12 @@ class OPA2VecModel(SyntacticPlusW2VModel):
             
     def test(self):
         self.from_pretrained(self.model_filepath)
-        go_net, _, _, _, _ = self.load_subsumption_embeddings_data()
-        go_net.to(self.device)
-        go_net.load_state_dict(th.load(self.nn_model_filepath))
-        go_net.eval()
+        subsumption_net, _, _, _, _ = self.load_subsumption_embeddings_data()
+        subsumption_net.to(self.device)
+        subsumption_net.load_state_dict(th.load(self.nn_model_filepath))
+        subsumption_net.eval()
 
-        return self.evaluator.evaluate(go_net, mode="test")
+        return self.evaluator.evaluate(subsumption_net, mode="test")
         
         
         # evaluation_module = EvaluationModel(self.w2v_model, self.dataset, self.embed_dim, self.device)
