@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 @ck.command()
+@ck.option("--dataset_name", "-ds", type=ck.Choice(["ppi_yeast", "ppi_human"]), default="ppi_yeast")
 @ck.option("--embed_dim", "-dim", default=50, help="Embedding dimension")
 @ck.option("--batch_size", "-bs", default=32, help="Batch size")
 @ck.option("--learning_rate", "-lr", default=0.001, help="Learning rate")
@@ -34,24 +35,25 @@ logger.setLevel(logging.INFO)
 @ck.option("--wandb_description", "-desc", default="default")
 @ck.option("--no_sweep", "-ns", is_flag=True)
 @ck.option("--only_test", "-ot", is_flag=True)
-def main(embed_dim, batch_size, learning_rate, window_size, epochs,
+def main(dataset_name, embed_dim, batch_size, learning_rate, window_size, epochs,
          device, wandb_description, no_sweep, only_test):
 
     seed_everything(42)
 
-    dataset_name = "ppi_yeast"
     evaluator_name = "ppi"
     
     wandb_logger = wandb.init(entity="zhapacfp_team", project="ontoem", group=f"opa2vec_nn_{dataset_name}", name=wandb_description)
 
     if no_sweep:
-        wandb_logger.log({"embed_dim": embed_dim,
+        wandb_logger.log({"dataset_name": dataset_name,
+                          "embed_dim": embed_dim,
                           "epochs": epochs,
                           "window_size": window_size,
                           "batch_size": batch_size,
                           "learning_rate": learning_rate,
                           })
     else:
+        dataset_name = wandb.config.dataset_name
         embed_dim = wandb.config.embed_dim
         epochs = wandb.config.epochs
         window_size = wandb.config.window_size
@@ -69,7 +71,15 @@ def main(embed_dim, batch_size, learning_rate, window_size, epochs,
     model_filepath = f"{model_dir}/opa2vec_nn_{embed_dim}_{epochs}_{window_size}_{batch_size}_{learning_rate}.pt"
     corpus_filepath = f"{corpora_dir}/opa2vec_nn_{embed_dim}_{epochs}_{window_size}_{batch_size}_{learning_rate}.txt"
 
-    model = OPA2VecModel(evaluator_name, dataset, batch_size,
+
+    if "yeast" in dataset_name:
+        organism = "yeast"
+    elif "human" in dataset_name:
+        organism = "human"
+    else:
+        raise ValueError(f"Organism not found for dataset {dataset_name}")
+    
+    model = OPA2VecModel(organism, evaluator_name, dataset, batch_size,
                          learning_rate, window_size, embed_dim,
                          model_filepath, corpus_filepath, epochs,
                          device, wandb_logger)
@@ -88,12 +98,14 @@ def main(embed_dim, batch_size, learning_rate, window_size, epochs,
 def dataset_resolver(dataset_name):
     if dataset_name.lower() == "ppi_yeast":
         root_dir = "../use_cases/ppi_yeast/data/"
-    elif dataset_name.lower() == "ppi_yeast_slim":
-        root_dir = "../use_cases/ppi_yeast_slim/data/"
+        organism = "yeast"
+    elif dataset_name.lower() == "ppi_human":
+        root_dir = "../use_cases/ppi_human/data/"
+        organism = "human"
     else:
         raise ValueError(f"Dataset {dataset_name} not found")
 
-    return root_dir, PPIDataset(root_dir)
+    return root_dir, PPIDataset(root_dir, organism)
 
 def evaluator_resolver(evaluator_name, *args, **kwargs):
     if evaluator_name.lower() == "ppi":
@@ -163,7 +175,7 @@ class PPINet(nn.Module):
         return self.ppi_net(data)
     
 class OPA2VecModel(SyntacticPlusW2VModel):
-    def __init__(self, evaluator_name, dataset, batch_size,
+    def __init__(self, organism, evaluator_name, dataset, batch_size,
                  learning_rate, window_size, embed_dim,
                  model_filepath, corpus_filepath, epochs, device,
                  wandb_logger):
@@ -171,7 +183,7 @@ class OPA2VecModel(SyntacticPlusW2VModel):
 
 
         
-        
+        self.organism = organism
         self.embed_dim = embed_dim
         self.batch_size = batch_size
         self.learning_rate = learning_rate
@@ -201,10 +213,17 @@ class OPA2VecModel(SyntacticPlusW2VModel):
             
         w2v_vectors = self.w2v_model.wv
         
-        
+
+        if self.organism == "yeast":
+            org_id = "4932."
+        elif self.organism == "human":
+            org_id = "9606."
+        else:
+            raise ValueError(f"Organism {self.organism} not found")
+            
         embeddings_dict = {}
         for class_ in classes:
-            if not "4932." in class_:
+            if not org_id in class_:
                 continue
             if class_ in w2v_vectors:
                 embeddings_dict[class_] = w2v_vectors[class_]
@@ -366,12 +385,6 @@ class EvaluationModel(nn.Module):
         logger.debug(f"Dot product shape: {dot_product.shape}")
         return 1 - th.sigmoid(dot_product)
         
-class DummyLogger():
-    def __init__(self, *args, **kwargs):
-        pass
-
-    def log(self, *args, **kwargs):
-        pass
-    
+                     
 if __name__ == "__main__":
     main()
