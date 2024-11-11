@@ -1,5 +1,4 @@
 import sys
-sys.path.append("../../")
 sys.path.append("../")
 import mowl
 mowl.init_jvm("10g")
@@ -28,63 +27,66 @@ logger.setLevel(logging.INFO)
 th.autograd.set_detect_anomaly(True)
 
 @ck.command()
-@ck.option("--dataset_name", "-ds", type=ck.Choice(["goslim", "go", "goplus"]), default="goslim")
+@ck.option("--dataset_name", "-ds", type=ck.Choice(["go", "foodon"]), default="go")
 @ck.option("--evaluator_name", "-e", default="subsumption", help="Evaluator to use")
 @ck.option("--embed_dim", "-dim", default=50, help="Embedding dimension")
 @ck.option("--batch_size", "-bs", default=78000, help="Batch size")
 @ck.option("--module_margin", "-mm", default=0.1, help="Margin for the module")
 @ck.option("--loss_margin", "-lm", default=0.1, help="Margin for the loss function")
 @ck.option("--learning_rate", "-lr", default=0.001, help="Learning rate")
-@ck.option("--epochs", "-e", default=4000, help="Number of epochs")
+@ck.option("--epochs", "-ep", default=10000, help="Number of epochs")
 @ck.option("--evaluate_every", "-every", default=50, help="Evaluate every n epochs")
+@ck.option("--exclude_testing_set", "-ets", is_flag=True, help="Exclude testing set from test")
+@ck.option("--evaluate_deductive", "-evalded", is_flag=True, help="Use deductive closure as positive examples for evaluation")
+@ck.option("--filter_deductive", "-filterded", is_flag=True, help="Filter out examples from deductive closure")
 @ck.option("--device", "-d", default="cuda", help="Device to use")
 @ck.option("--wandb_description", "-desc", default="default")
-@ck.option("--no_wandb", "-nw", is_flag=True)
+@ck.option("--no_sweep", "-ns", is_flag=True)
 @ck.option("--only_test", "-ot", is_flag=True)
 def main(dataset_name, evaluator_name, embed_dim, batch_size,
          module_margin, loss_margin, learning_rate, epochs,
-         evaluate_every, device, wandb_description, no_wandb,
-         only_test):
+         evaluate_every, exclude_testing_set, evaluate_deductive, filter_deductive, device,
+         wandb_description, no_sweep, only_test):
 
     seed_everything(42)
     
-    if no_wandb:
-        wandb_logger = DummyLogger()
+    wandb_logger = wandb.init(entity="zhapacfp_team", project="ontoem", group=f"box2el{dataset_name}_{evaluate_deductive}_{filter_deductive}", name=wandb_description)
+
+
+    if loss_margin == int(loss_margin):
+        loss_margin = int(loss_margin)
+    if module_margin == int(module_margin):
+        module_margin = int(module_margin)
+    
+    if no_sweep:
+        wandb_logger.log({"dataset_name": dataset_name,
+                          "embed_dim": embed_dim,
+                          "batch_size": batch_size,
+                          "module_margin": module_margin,
+                          "loss_margin": loss_margin,
+                          "learning_rate": learning_rate
+                          })
     else:
-        wandb_logger = wandb.init(project="onto-em", group="f{dataset_name}_{evaluator_name}", name=wandb_description)
-
-        from_sweep = True
-
-        if from_sweep:
-            dataset_name = wandb.config.dataset_name
-            evaluator_name = wandb.config.evaluator_name
-            embed_dim = wandb.config.embed_dim
-            batch_size = wandb.config.batch_size
-            module_margin = wandb.config.module_margin
-            loss_margin = wandb.config.loss_margin
-            learning_rate = wandb.config.learning_rate
-
-        else:
-            wandb_logger.log({"dataset_name": dataset_name,
-                              "evaluator_name": evaluator_name,
-                              "embed_dim": embed_dim,
-                              "batch_size": batch_size,
-                              "module_margin": module_margin,
-                              "loss_margin": loss_margin,
-                              "learning_rate": learning_rate
-                              })
-
+        dataset_name = wandb.config.dataset_name
+        embed_dim = wandb.config.embed_dim
+        batch_size = wandb.config.batch_size
+        module_margin = wandb.config.module_margin
+        loss_margin = wandb.config.loss_margin
+        learning_rate = wandb.config.learning_rate
+ 
     
     root_dir, dataset = dataset_resolver(dataset_name)
 
-    model_dir = f"{root_dir}/models/"
+    model_dir = f"{root_dir}/../models/"
     os.makedirs(model_dir, exist_ok=True)
 
-    model_filepath = f"{model_dir}/{embed_dim}_{batch_size}_{module_margin}_{loss_margin}_{learning_rate}.pt"
+    model_filepath = f"{model_dir}/box2el_{embed_dim}_{batch_size}_{module_margin}_{loss_margin}_{learning_rate}.pt"
     model = GeometricELModel(evaluator_name, dataset, batch_size,
                              embed_dim, module_margin, loss_margin,
-                             learning_rate, model_filepath,
-                             epochs, evaluate_every, device, wandb_logger)
+                             learning_rate, model_filepath, epochs,
+                             evaluate_every, not exclude_testing_set,
+                             evaluate_deductive, filter_deductive,
+                             device, wandb_logger)
 
     
     if not only_test:
@@ -129,12 +131,10 @@ def print_as_md(overall_metrics):
 
     
 def dataset_resolver(dataset_name):
-    if dataset_name.lower() == "goslim":
-        root_dir = "../data/goslim_generic_subsumption/"
-    elif dataset_name.lower() == "go":
-        root_dir = "../data/go_subsumption/"
-    elif dataset_name.lower() == "goplus":
-        root_dir = "../data/go-plus_subsumption/"
+    if dataset_name.lower() == "go":
+        root_dir = "../use_cases/go/data/"
+    elif dataset_name.lower() == "foodon":
+        root_dir = "../use_cases/foodon/data/"
     else:
         raise ValueError(f"Dataset {dataset_name} not found")
 
@@ -148,18 +148,20 @@ def evaluator_resolver(evaluator_name, *args, **kwargs):
 
 
 class GeometricELModel(EmbeddingELModel):
-    def __init__(self, evaluator_name, dataset,
-                 batch_size, embed_dim, module_margin, loss_margin,
-                 learning_rate, model_filepath, epochs,
-                 evaluate_every, device, wandb_logger):
+    def __init__(self, evaluator_name, dataset, batch_size, embed_dim,
+                 module_margin, loss_margin, learning_rate,
+                 model_filepath, epochs, evaluate_every,
+                 evaluate_testing_set, evaluate_deductive, filter_deductive, device,
+                 wandb_logger):
         super().__init__(dataset, embed_dim, batch_size, model_filepath=model_filepath)
 
         self.module = BoxSquaredELModule(len(self.dataset.classes),
-                                  len(self.dataset.object_properties),
-                                  self.embed_dim,
-                                  module_margin)
+                                 len(self.dataset.object_properties),
+                                 len(self.dataset.individuals),
+                                 self.embed_dim,
+                                 module_margin)
 
-        self.evaluator = evaluator_resolver(evaluator_name, dataset, device)
+        self.evaluator = evaluator_resolver(evaluator_name, dataset, device, evaluate_testing_set = evaluate_testing_set, evaluate_with_deductive_closure=evaluate_deductive, filter_deductive_closure=filter_deductive)
         self.learning_rate = learning_rate
         self.epochs = epochs
         self.evaluate_every = evaluate_every
@@ -194,10 +196,7 @@ class GeometricELModel(EmbeddingELModel):
         max_lr = self.learning_rate
         train_steps = int(math.ceil(len(main_dl) / self.batch_size))
         step_size_up = 2 * train_steps
-        scheduler = CyclicLR(optimizer, base_lr=min_lr, max_lr=max_lr, step_size_up=step_size_up, cycle_momentum=False)
-
-        scheduler = th.optim.lr_scheduler.CyclicLR(optimizer, base_lr=min_lr, max_lr=max_lr, step_size_up=1000, step_size_down=1000, cycle_momentum=False)
-        
+                
         best_mrr = 0
         best_loss = float("inf")
         
@@ -227,18 +226,17 @@ class GeometricELModel(EmbeddingELModel):
                     pos_logits = self.tbox_forward(batch_data, gci_name)
                     neg_idxs = th.randint(0, num_classes, (len(batch_data),), device=self.device)
                     neg_batch = th.cat([batch_data[:, :2], neg_idxs.unsqueeze(1)], dim=1)
+                        
                     neg_logits = self.tbox_forward(neg_batch, gci_name)
                     loss += - F.logsigmoid(-pos_logits + neg_logits - self.loss_margin).mean() * dls_weights[gci_name]
-
-
+                    
+                
                 loss += self.module.regularization_loss()
                                                 
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
                 
-                scheduler.step()
-
                 total_train_loss += loss.item()
                                     
             if epoch % self.evaluate_every == 0:
