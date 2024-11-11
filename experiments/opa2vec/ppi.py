@@ -46,11 +46,13 @@ def main(dataset_name, embed_dim, window_size, epochs, device,
     wandb_logger = wandb.init(entity="zhapacfp_team", project="ontoem", group=f"opa2vec_{dataset_name}", name=wandb_description)
 
     if no_sweep:
-        wandb_logger.log({"embed_dim": embed_dim,
+        wandb_logger.log({"dataset_name": dataset_name,
+                          "embed_dim": embed_dim,
                           "epochs": epochs,
                           "window_size": window_size,
                           })
     else:
+        dataset_name = wandb.config.dataset_name
         embed_dim = wandb.config.embed_dim
         epochs = wandb.config.epochs
         window_size = wandb.config.window_size
@@ -63,8 +65,8 @@ def main(dataset_name, embed_dim, window_size, epochs, device,
     corpora_dir = f"{root_dir}/../corpora/"
     os.makedirs(corpora_dir, exist_ok=True)
     
-    model_filepath = f"{model_dir}/{embed_dim}_{epochs}_{window_size}.pt"
-    corpus_filepath = f"{corpora_dir}/{embed_dim}_{epochs}_{window_size}.txt"
+    model_filepath = f"{model_dir}/opa2vec_{dataset_name}_{embed_dim}_{epochs}_{window_size}.pt"
+    corpus_filepath = f"{corpora_dir}/opa2vec_{dataset_name}_{embed_dim}_{epochs}_{window_size}.txt"
 
     model = OPA2VecModel(evaluator_name, dataset, window_size,
                          embed_dim, model_filepath, corpus_filepath,
