@@ -62,17 +62,14 @@ def main(dataset_name, embed_dim, batch_size, module_margin,
         wandb_logger.log({"dataset_name": dataset_name,
                           "embed_dim": embed_dim,
                           "module_margin": module_margin,
-                          "loss_margin": loss_margin,
                           "learning_rate": learning_rate
                           })
     else:
         dataset_name = wandb.config.dataset_name
         embed_dim = wandb.config.embed_dim
         module_margin = wandb.config.module_margin
-        loss_margin = wandb.config.loss_margin
         learning_rate = wandb.config.learning_rate
- 
-    
+
     root_dir, dataset = dataset_resolver(dataset_name)
 
     model_dir = f"{root_dir}/../models/"
@@ -137,10 +134,7 @@ class GeometricELModel(EmbeddingELModel):
         self.wandb_logger = wandb_logger
 
 
-    def tbox_forward(self, *args, **kwargs):
-        return self.module(*args, **kwargs)
-
- 
+            
     def train(self):
 
         dls = {gci_name: DataLoader(ds, batch_size=self.batch_size, shuffle=True)
@@ -174,10 +168,10 @@ class GeometricELModel(EmbeddingELModel):
             for batch_data in main_dl:
 
                 batch_data = batch_data.to(self.device)
-                pos_logits = self.tbox_forward(batch_data, "gci0")
+                pos_logits = self.module(batch_data, "gci0")
                 neg_idxs = th.randint(0, num_classes, (len(batch_data),), device=self.device)
                 neg_batch = th.cat([batch_data[:, :1], neg_idxs.unsqueeze(1)], dim=1)
-                neg_logits = self.tbox_forward(neg_batch, "gci0")
+                neg_logits = self.module(neg_batch, "gci0")
                 loss = - F.logsigmoid(-pos_logits + neg_logits - self.loss_margin).mean() * dls_weights["gci0"]
 
                 for gci_name, gci_dl in dls.items():
@@ -185,11 +179,11 @@ class GeometricELModel(EmbeddingELModel):
                         continue
 
                     batch_data = next(gci_dl).to(self.device)
-                    pos_logits = self.tbox_forward(batch_data, gci_name)
+                    pos_logits = self.module(batch_data, gci_name)
                     neg_idxs = th.randint(0, num_classes, (len(batch_data),), device=self.device)
                     neg_batch = th.cat([batch_data[:, :2], neg_idxs.unsqueeze(1)], dim=1)
                         
-                    neg_logits = self.tbox_forward(neg_batch, gci_name)
+                    neg_logits = self.module(neg_batch, gci_name)
                     loss += - F.logsigmoid(-pos_logits + neg_logits - self.loss_margin).mean() * dls_weights[gci_name]
 
 
