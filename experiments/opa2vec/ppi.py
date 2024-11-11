@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 @ck.command()
+@ck.option("--dataset_name", "-ds", type=ck.Choice(["ppi_yeast", "ppi_human"]), default="ppi_yeast")
 @ck.option("--embed_dim", "-dim", default=50, help="Embedding dimension")
 @ck.option("--window_size", "-ws", default=5, help="Batch size")
 @ck.option("--epochs", "-e", default=10, help="Number of epochs")
@@ -35,12 +36,11 @@ logger.setLevel(logging.INFO)
 @ck.option("--wandb_description", "-desc", default="default")
 @ck.option("--no_sweep", "-ns", is_flag=True)
 @ck.option("--only_test", "-ot", is_flag=True)
-def main(embed_dim, window_size, epochs, device, wandb_description,
-         no_sweep, only_test):
+def main(dataset_name, embed_dim, window_size, epochs, device,
+         wandb_description, no_sweep, only_test):
 
     seed_everything(42)
 
-    dataset_name = "ppi_yeast"
     evaluator_name = "ppi"
     
     wandb_logger = wandb.init(entity="zhapacfp_team", project="ontoem", group=f"opa2vec_{dataset_name}", name=wandb_description)
@@ -84,12 +84,14 @@ def main(embed_dim, window_size, epochs, device, wandb_description,
 def dataset_resolver(dataset_name):
     if dataset_name.lower() == "ppi_yeast":
         root_dir = "../use_cases/ppi_yeast/data/"
-    elif dataset_name.lower() == "ppi_yeast_slim":
-        root_dir = "../use_cases/ppi_yeast_slim/data/"
+        organism = "yeast"
+    elif dataset_name.lower() == "ppi_human":
+        root_dir = "../use_cases/ppi_human/data/"
+        organism = "human"
     else:
         raise ValueError(f"Dataset {dataset_name} not found")
 
-    return root_dir, PPIDataset(root_dir)
+    return root_dir, PPIDataset(root_dir, organism)
 
 def evaluator_resolver(evaluator_name, *args, **kwargs):
     if evaluator_name.lower() == "ppi":
