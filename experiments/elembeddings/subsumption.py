@@ -179,7 +179,7 @@ class GeometricELModel(EmbeddingELModel):
                     if gci_name == "gci2":
                         neg_idxs = th.randint(0, num_classes, (len(batch_data),), device=self.device)
                         neg_batch = th.cat([batch_data[:, :2], neg_idxs.unsqueeze(1)], dim=1)
-                        neg_logits = self.module(neg_batch, gci_name)
+                        neg_logits = self.module(neg_batch, gci_name, neg = True)
                         loss += neg_logits.mean()
                         
                 loss += self.module.regularization_loss()
