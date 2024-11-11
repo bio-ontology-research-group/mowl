@@ -169,8 +169,6 @@ class GeometricELModel(EmbeddingELModel):
         curr_tolerance = tolerance
 
         optimizer = th.optim.Adam(self.module.parameters(), lr=self.learning_rate)
-        criterion = nn.MSELoss()
-
         
         best_mrr = 0
         best_loss = float("inf")
