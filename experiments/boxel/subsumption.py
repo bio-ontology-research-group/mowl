@@ -10,7 +10,7 @@ from evaluators import SubsumptionEvaluator
 from datasets import SubsumptionDataset
 from utils import print_as_md
 from tqdm import tqdm
-from mowl.nn import ELEmModule
+from mowl.nn import BoxELModule
 import torch as th
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -50,8 +50,7 @@ def main(dataset_name, embed_dim, batch_size, module_margin,
 
     evaluator_name = "subsumption"
     
-    wandb_logger = wandb.init(entity="zhapacfp_team", project="ontoem", group=f"elembeddings_{dataset_name}", name=wandb_description)
-
+    wandb_logger = wandb.init(entity="zhapacfp_team", project="ontoem", group=f"boxel_{dataset_name}", name=wandb_description)
 
     if loss_margin == int(loss_margin):
         loss_margin = int(loss_margin)
@@ -73,7 +72,7 @@ def main(dataset_name, embed_dim, batch_size, module_margin,
     model_dir = f"{root_dir}/../models/"
     os.makedirs(model_dir, exist_ok=True)
 
-    model_filepath = f"{model_dir}/elembeddings_{embed_dim}_{module_margin}_{loss_margin}_{learning_rate}.pt"
+    model_filepath = f"{model_dir}/boxel_{embed_dim}_{module_margin}_{loss_margin}_{learning_rate}.pt"
     model = GeometricELModel(evaluator_name, dataset, batch_size,
                              embed_dim, module_margin, loss_margin,
                              learning_rate, model_filepath, epochs,
@@ -117,7 +116,7 @@ class GeometricELModel(EmbeddingELModel):
                  wandb_logger):
         super().__init__(dataset, embed_dim, batch_size, model_filepath=model_filepath)
 
-        self.module = ELEmModule(len(self.dataset.classes),
+        self.module = BoxELModule(len(self.dataset.classes),
                                  len(self.dataset.object_properties),
                                  len(self.dataset.individuals),
                                  embed_dim=self.embed_dim
