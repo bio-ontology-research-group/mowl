@@ -25,6 +25,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 @ck.command()
+@ck.option("--dataset_name", "-ds", type=ck.Choice(["ppi_yeast", "ppi_human"]), default="ppi_yeast")
 @ck.option("--embed_dim", "-dim", default=50, help="Embedding dimension")
 @ck.option("--batch_size", "-bs", default=128, help="Batch size")
 @ck.option("--learning_rate", "-lr", default=0.001, help="Learning rate")
@@ -33,23 +34,24 @@ logger.setLevel(logging.INFO)
 @ck.option("--wandb_description", "-desc", default="default")
 @ck.option("--no_sweep", "-ns", is_flag=True)
 @ck.option("--only_test", "-ot", is_flag=True)
-def main(embed_dim, batch_size, learning_rate, epochs, device,
+def main(dataset_name, embed_dim, batch_size, learning_rate, epochs, device,
          wandb_description, no_sweep, only_test):
 
     seed_everything(42)
 
-    dataset_name = "ppi_yeast"
     evaluator_name = "ppi"
     
     wandb_logger = wandb.init(entity="zhapacfp_team", project="ontoem", group=f"owl2vecstar_kg_{dataset_name}", name=wandb_description)
 
     if no_sweep:
-        wandb_logger.log({"embed_dim": embed_dim,
+        wandb_logger.log({"dataset_name": dataset_name,
+                          "embed_dim": embed_dim,
                           "epochs": epochs,
                           "batch_size": batch_size,
                           "learning_rate": learning_rate
                           })
     else:
+        dataset_name = wandb.config.dataset_name
         embed_dim = wandb.config.embed_dim
         epochs = wandb.config.epochs
         batch_size = wandb.config.batch_size
@@ -60,7 +62,7 @@ def main(embed_dim, batch_size, learning_rate, epochs, device,
     model_dir = f"{root_dir}/../models/"
     os.makedirs(model_dir, exist_ok=True)
 
-    model_filepath = f"{model_dir}/{embed_dim}_{epochs}_{batch_size}_{learning_rate}.pt"
+    model_filepath = f"{model_dir}/owl2vecstar_kg_{embed_dim}_{epochs}_{batch_size}_{learning_rate}.pt"
     
     model = OWL2VecStarModel(evaluator_name, dataset, batch_size,
                              learning_rate, embed_dim, model_filepath,
@@ -79,12 +81,14 @@ def main(embed_dim, batch_size, learning_rate, epochs, device,
 def dataset_resolver(dataset_name):
     if dataset_name.lower() == "ppi_yeast":
         root_dir = "../use_cases/ppi_yeast/data/"
-    elif dataset_name.lower() == "ppi_yeast_slim":
-        root_dir = "../use_cases/ppi_yeast_slim/data/"
+        organism = "yeast"
+    elif dataset_name.lower() == "ppi_human":
+        root_dir = "../use_cases/ppi_human/data/"
+        organism = "human"
     else:
         raise ValueError(f"Dataset {dataset_name} not found")
 
-    return root_dir, PPIDataset(root_dir)
+    return root_dir, PPIDataset(root_dir, organism)
 
 def evaluator_resolver(evaluator_name, *args, **kwargs):
     if evaluator_name.lower() == "ppi":
