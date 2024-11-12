@@ -1,5 +1,4 @@
 import sys
-sys.path.append("../../")
 sys.path.append("../")
 import mowl
 mowl.init_jvm("10g")
@@ -9,6 +8,7 @@ from org.semanticweb.owlapi.model.parameters import Imports
 from org.semanticweb.owlapi.model import AxiomType as Ax
 from evaluators import PPIEvaluator
 from datasets import PPIDataset
+from utils import print_as_md
 from tqdm import tqdm
 from mowl.nn import BoxELModule
 import torch as th
@@ -27,8 +27,7 @@ logger.setLevel(logging.INFO)
 th.autograd.set_detect_anomaly(True)
 
 @ck.command()
-@ck.option("--dataset_name", "-ds", type=ck.Choice(["ppi_yeast", "ppi_yeast_slim"]), default="ppi_yeast_slim")
-@ck.option("--evaluator_name", "-e", default="ppi", help="Evaluator to use")
+@ck.option("--dataset_name", "-ds", type=ck.Choice(["ppi_yeast", "ppi_human"]), default="ppi_yeast")
 @ck.option("--embed_dim", "-dim", default=50, help="Embedding dimension")
 @ck.option("--batch_size", "-bs", default=300000, help="Batch size")
 @ck.option("--module_margin", "-mm", default=0.1, help="Margin for the module")
@@ -40,15 +39,23 @@ th.autograd.set_detect_anomaly(True)
 @ck.option("--wandb_description", "-desc", default="default")
 @ck.option("--no_sweep", "-ns", is_flag=True)
 @ck.option("--only_test", "-ot", is_flag=True)
-def main(dataset_name, evaluator_name, embed_dim, batch_size,
+def main(dataset_name, embed_dim, batch_size,
          module_margin, loss_margin, learning_rate, epochs,
          evaluate_every, device, wandb_description, no_sweep,
          only_test):
 
     seed_everything(42)
-    
-    wandb_logger = wandb.init(entity="zhapacfp_team", project="ontoem", group=f"ppi", name=wandb_description)
 
+    evaluator_name = "ppi"
+    
+    wandb_logger = wandb.init(entity="zhapacfp_team", project="ontoem", group=f"boxel_{dataset_name}", name=wandb_description)
+
+
+    if loss_margin == int(loss_margin):
+        loss_margin = int(loss_margin)
+    if module_margin == int(module_margin):
+        module_margin = int(module_margin)
+    
     if no_sweep:
         wandb_logger.log({"dataset_name": dataset_name,
                           "embed_dim": embed_dim,
@@ -64,7 +71,7 @@ def main(dataset_name, evaluator_name, embed_dim, batch_size,
     model_dir = f"{root_dir}/../models/"
     os.makedirs(model_dir, exist_ok=True)
 
-    model_filepath = f"{model_dir}/boxel_{embed_dim}_{batch_size}_{module_margin}_{loss_margin}_{learning_rate}.pt"
+    model_filepath = f"{model_dir}/boxel_{embed_dim}_{module_margin}_{loss_margin}_{learning_rate}.pt"
     model = GeometricELModel(evaluator_name, dataset, batch_size,
                              embed_dim, module_margin, loss_margin,
                              learning_rate, model_filepath,
@@ -81,46 +88,19 @@ def main(dataset_name, evaluator_name, embed_dim, batch_size,
     wandb_logger.log(metrics)
         
 
-def print_as_md(overall_metrics):
-    
-    metrics = ["test_mr", "test_mrr", "test_auc", "test_hits@1", "test_hits@3", "test_hits@10", "test_hits@50", "test_hits@100"]
-    filt_metrics = [k.replace("_", "_f_") for k in metrics]
-
-    string_metrics = "| Property | MR | MRR | AUC | Hits@1 | Hits@3 | Hits@10 | Hits@50 | Hits@100 | \n"
-    string_metrics += "| --- | --- | --- | --- | --- | --- | --- | --- | --- | \n"
-    string_filtered_metrics = "| Property | MR | MRR | AUC | Hits@1 | Hits@3 | Hits@10 | Hits@50 | Hits@100 | \n"
-    string_filtered_metrics += "| --- | --- | --- | --- | --- | --- | --- | --- | --- | \n"
-    
-    string_metrics += "| Overall | "
-    string_filtered_metrics += "| Overall | "
-    for metric in metrics:
-        if metric == "test_mr":
-            string_metrics += f"{int(overall_metrics[metric])} | "
-        else:
-            string_metrics += f"{overall_metrics[metric]:.4f} | "
-    for metric in filt_metrics:
-        if metric == "test_f_mr":
-            string_filtered_metrics += f"{int(overall_metrics[metric])} | "
-        else:
-            string_filtered_metrics += f"{overall_metrics[metric]:.4f} | "
-
-
-    print(string_metrics)
-    print("\n\n")
-    print(string_filtered_metrics)
-        
-    
 
     
 def dataset_resolver(dataset_name):
     if dataset_name.lower() == "ppi_yeast":
         root_dir = "../use_cases/ppi_yeast/data/"
-    elif dataset_name.lower() == "ppi_yeast_slim":
-        root_dir = "../use_cases/ppi_yeast_slim/data/"
+        organism = "yeast"
+    elif dataset_name.lower() == "ppi_human":
+        root_dir = "../use_cases/ppi_human/data/"
+        organism = "human"
     else:
         raise ValueError(f"Dataset {dataset_name} not found")
 
-    return root_dir, PPIDataset(root_dir)
+    return root_dir, PPIDataset(root_dir, organism)
 
 def evaluator_resolver(evaluator_name, *args, **kwargs):
     if evaluator_name.lower() == "ppi":
@@ -187,9 +167,9 @@ class GeometricELModel(EmbeddingELModel):
 
             total_train_loss = 0
 
-            loss = 0
+            
             for batch_data in main_dl:
-
+                loss = 0
                 batch_data = batch_data.to(self.device)
                 pos_logits = self.module(batch_data, "gci2").mean()
                 loss += pos_logits
@@ -254,20 +234,5 @@ class GeometricELModel(EmbeddingELModel):
         
         return self.evaluator.evaluate(self.module)
 
-
-    def test_by_property(self):
-        self.module.load_state_dict(th.load(self.model_filepath))
-        self.module.to(self.device)
-        self.module.eval()
-        return self.evaluator.evaluate_by_property(self.module)
-
-
-class DummyLogger():
-    def __init__(self, *args, **kwargs):
-        pass
-
-    def log(self, *args, **kwargs):
-        pass
-    
 if __name__ == "__main__":
     main()
