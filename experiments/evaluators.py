@@ -12,7 +12,7 @@ logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
 class Evaluator:
-    def __init__(self, dataset, device, batch_size=64, evaluate_with_deductive_closure=False, filter_deductive_closure=False):
+    def __init__(self, dataset, device, batch_size=64, evaluate_testing_set=True, evaluate_with_deductive_closure=False, filter_deductive_closure=False):
 
         if evaluate_with_deductive_closure and filter_deductive_closure:
             raise ValueError("Cannot evaluate with deductive closure and filter it at the same time. Set either evaluate_with_deductive_closure or filter_deductive_closure to False.")
@@ -28,6 +28,7 @@ class Evaluator:
         self.test_tuples = self.create_tuples(dataset.testing)
         self._deductive_closure_tuples = None
 
+        self.evaluate_testing_set = evaluate_testing_set
         self.evaluate_with_deductive_closure = evaluate_with_deductive_closure
         self.filter_deductive_closure = filter_deductive_closure
         
@@ -77,8 +78,12 @@ class Evaluator:
 
         if self.evaluate_with_deductive_closure:
             mask1 = (self.deductive_closure_tuples.unsqueeze(1) == self.train_tuples).all(dim=-1).any(dim=-1)
-            mask2 = (self.deductive_closure_tuples.unsqueeze(1) == self.valid_tuples).all(dim=-1).any(dim=-1)
-            mask = mask1 | mask2
+
+            mask = mask1
+
+            if len(self.valid_tuples) > 0:
+                mask2 = (self.deductive_closure_tuples.unsqueeze(1) == self.valid_tuples).all(dim=-1).any(dim=-1)
+                mask = mask1 | mask2
             deductive_closure_tuples = self.deductive_closure_tuples[~mask]
             
             eval_tuples = th.cat([eval_tuples, deductive_closure_tuples], dim=0)
@@ -360,7 +365,98 @@ class PPIEvaluator(Evaluator):
             filtering_labels[head, tail] = 10000
         
         return filtering_labels
+
+class SubsumptionFromPPIEvaluator(Evaluator):
+    def __init__(self, *args, **kwargs):
+
+        super().__init__(*args, **kwargs)
+
+        classes = self.dataset.classes.as_str
+        classes = [c for c in classes if "GO_" in c]
+        class_to_id = {c: i for i, c in enumerate(classes)}
+        self.evaluation_heads = th.tensor([class_to_id[c] for c in classes], dtype=th.long)
+        self.evaluation_tails = th.tensor([class_to_id[c] for c in classes], dtype=th.long)
+        
+                                          
+        
+    def create_tuples(self, ontology):
+        classes = self.dataset.classes.as_str
+        classes = [c for c in classes if "GO_" in c]
+        class_to_id = {c: i for i, c in enumerate(classes)}
+        
+        projector = TaxonomyProjector()
+        edges = projector.project(ontology)
+
+        classes, relations = Edge.get_entities_and_relations(edges)
+
+        
+        
+        class_str2owl = self.dataset.classes.to_dict()
+        class_owl2idx = self.dataset.classes.to_index_dict()
+
+        edges_indexed = []
+
+        count = 0
+        for e in edges:
+            head = e.src
+            tail = e.dst
+            if head in classes and tail in classes:
+                head = class_to_id[head]
+                tail = class_to_id[tail]
+                edges_indexed.append((head, tail))
+                count += 1
+        logger.info(f"Taking {count} edges out of {len(edges)}")
+                
+        return th.tensor(edges_indexed, dtype=th.long)
+
+    def get_logits(self, model, batch):
+        heads, tails = batch[:, 0], batch[:, 1]
+        num_heads, num_tails = len(heads), len(tails)
+
+        heads = heads.repeat_interleave(len(self.evaluation_tails)).unsqueeze(1)
+        eval_tails = th.arange(len(self.evaluation_tails), device=heads.device).repeat(num_heads).unsqueeze(1)
+        logits_heads = model(th.cat([heads, eval_tails], dim=-1), "gci0")
+        logits_heads = logits_heads.view(-1, len(self.evaluation_tails))
+        
+        tails = tails.repeat_interleave(len(self.evaluation_heads)).unsqueeze(1)
+        eval_heads = th.arange(len(self.evaluation_heads), device=tails.device).repeat(num_tails).unsqueeze(1)
+        logits_tails = model(th.cat([eval_heads, tails], dim=-1), "gci0")
+        logits_tails = logits_tails.view(-1, len(self.evaluation_heads))
+        # print(logits_heads, logits_tails)
+        return logits_heads, logits_tails
+
     
+    def get_filtering_labels(self, num_heads, num_tails):
+
+        if self.filter_deductive_closure:
+            # take deductive closure tuples that are not in the testing tuples
+
+            mask = (self.deductive_closure_tuples.unsqueeze(1) == self.test_tuples).all(dim=-1).any(dim=-1)
+            deductive_closure_tuples = self.deductive_closure_tuples[~mask]
+            
+            
+            filtering_tuples = th.cat([self.train_tuples, self.valid_tuples, deductive_closure_tuples], dim=0)
+        else:
+            filtering_tuples = th.cat([self.train_tuples, self.valid_tuples], dim=0)
+
+        filtering_labels = th.ones((num_heads, num_tails), dtype=th.float)
+
+        for head, tail in filtering_tuples:
+            filtering_labels[head, tail] = 10000
+        
+        return filtering_labels
+    
+
+
+    def get_deductive_labels(self, num_heads, num_tails):
+        deductive_labels = th.ones((num_heads, num_tails), dtype=th.float)
+
+        for head, tail in self.deductive_closure_tuples:
+            deductive_labels[head, tail] = 10000
+        
+        return deductive_labels
+
+
 
 def compute_rank_roc(ranks, num_entities):
     n_tails = num_entities

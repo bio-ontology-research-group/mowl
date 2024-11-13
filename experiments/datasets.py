@@ -2,6 +2,7 @@ import mowl
 from mowl.datasets import PathDataset
 from mowl.datasets.builtin import PPIYeastSlimDataset
 from mowl.datasets.base import OWLClasses
+import os
 
 class SubsumptionDataset(PathDataset):
     def __init__(self, root_dir):
@@ -75,3 +76,21 @@ class PPIDataset(PathDataset):
             self._evaluation_classes = OWLClasses(proteins), OWLClasses(proteins)
 
         return self._evaluation_classes
+
+class PPIDatasetV2(PPIDataset):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._deductive_closure_ontology = None
+        
+    @property
+    def deductive_closure_ontology(self):
+        if self._deductive_closure_ontology is None:
+            root_dir = os.path.dirname(os.path.abspath(self.ontology_path))
+            ontology_path = os.path.join(root_dir, "ontology_deductive_closure.owl")
+            self._deductive_closure_ontology = PathDataset(ontology_path).ontology
+
+        return self._deductive_closure_ontology
+
+
+
+
