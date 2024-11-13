@@ -4,13 +4,11 @@ import mowl
 mowl.init_jvm("10g")
 from mowl.models import GraphPlusPyKEENModel
 from mowl.utils.random import seed_everything
-from mowl.projection import Edge
-from mowl.error import messages as msg
-from org.semanticweb.owlapi.model.parameters import Imports
-from org.semanticweb.owlapi.model import AxiomType as Ax
-from evaluators import SubsumptionEvaluator
-from datasets import SubsumptionDataset
-
+from mowl.projection import Edge, TaxonomyWithRelationsProjector
+from mowl.utils.data import FastTensorDataLoader
+from evaluators import PPICatEEvaluator
+from datasets import PPIDatasetExtended
+from itertools import cycle
 from utils import print_as_md
 from data import create_graph_train_dataloader
 
@@ -21,35 +19,33 @@ import click as ck
 import os
 import torch as th
 import torch.nn as nn
-import numpy as np
 import pickle as pkl
 
 import wandb
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
+
 @ck.command()
-@ck.option("--dataset_name", "-ds", type=ck.Choice(["go", "foodon"]), default="go")
+@ck.option("--dataset_name", "-ds", type=ck.Choice(["ppi_yeast", "ppi_human"]), default="ppi_yeast")
 @ck.option("--embed_dim", "-dim", default=50, help="Embedding dimension")
-@ck.option("--batch_size", "-bs", default=128, help="Batch size")
+@ck.option("--batch_size", "-bs", default=32768, help="Batch size")
 @ck.option("--learning_rate", "-lr", default=0.001, help="Learning rate")
 @ck.option("--num_negs", "-negs", default=1, help="Number of negative samples")
 @ck.option("--margin", "-m", default=1.0, help="Margin for pairwise loss")
 @ck.option("--epochs", "-e", default=10000, help="Number of epochs")
-@ck.option("--evaluate_deductive", "-evalded", is_flag=True, help="Use deductive closure as positive examples for evaluation")
-@ck.option("--filter_deductive", "-filterded", is_flag=True, help="Filter out examples from deductive closure")
 @ck.option("--device", "-d", default="cuda", help="Device to use")
 @ck.option("--wandb_description", "-desc", default="default")
 @ck.option("--no_sweep", "-ns", is_flag=True)
 @ck.option("--only_test", "-ot", is_flag=True)
-def main(dataset_name, embed_dim, batch_size, learning_rate, num_negs,
-         margin, epochs, evaluate_deductive, filter_deductive, device,
-         wandb_description, no_sweep, only_test):
+def main(dataset_name, embed_dim, batch_size, learning_rate,
+         num_negs, margin, epochs, device, wandb_description, no_sweep,
+         only_test):
 
     seed_everything(42)
 
-    evaluator_name = "subsumption"
-    
+    evaluator_name = "ppi"
+
     wandb_logger = wandb.init(entity="zhapacfp_team", project="ontoem", group=f"cate_kg_{dataset_name}", name=wandb_description)
 
     if no_sweep:
@@ -65,7 +61,7 @@ def main(dataset_name, embed_dim, batch_size, learning_rate, num_negs,
         epochs = wandb.config.epochs
         batch_size = wandb.config.batch_size
         learning_rate = wandb.config.learning_rate
-                        
+
     root_dir, dataset = dataset_resolver(dataset_name)
 
     model_dir = f"{root_dir}/../models/"
@@ -73,45 +69,85 @@ def main(dataset_name, embed_dim, batch_size, learning_rate, num_negs,
 
     model_filepath = f"{model_dir}/{embed_dim}_{epochs}_{batch_size}_{learning_rate}.pt"
     graph_filepath = f"{root_dir}/cat_projection.edgelist"
-    
+
     model = CatEModel(evaluator_name, dataset, batch_size,
-                      learning_rate, num_negs, embed_dim, model_filepath,
-                      graph_filepath, margin, epochs, evaluate_deductive,
-                      filter_deductive, device, wandb_logger)
+                      learning_rate, num_negs, embed_dim,
+                      model_filepath, graph_filepath, margin, epochs,
+                      device, wandb_logger)
 
     if not only_test:
         model.train()
-        
+
     metrics = model.test()
     print_as_md(metrics)
 
-             
     wandb_logger.log(metrics)
-        
+
 
 def dataset_resolver(dataset_name):
-    if dataset_name.lower() == "go":
-        root_dir = "../use_cases/go/data/"
-    elif dataset_name.lower() == "foodon":
-        root_dir = "../use_cases/foodon/data/"
+    if dataset_name.lower() == "ppi_yeast":
+        root_dir = "../use_cases/ppi_yeast/data/"
+        organism = "yeast"
+    elif dataset_name.lower() == "ppi_human":
+        root_dir = "../use_cases/ppi_human/data/"
+        organism = "human"
     else:
         raise ValueError(f"Dataset {dataset_name} not found")
 
-    return root_dir, SubsumptionDataset(root_dir)
-    
+    return root_dir, PPIDatasetExtended(root_dir, organism)
+
+
 def evaluator_resolver(evaluator_name, *args, **kwargs):
-    if evaluator_name.lower() == "subsumption":
-        return SubsumptionEvaluator(*args, **kwargs)
+    if evaluator_name.lower() == "ppi":
+        return PPICatEEvaluator(*args, **kwargs)
     else:
         raise ValueError(f"Evaluator {evaluator_name} not found")
+
+
+def get_existential_node(node):
+    rel = "http://interacts_with"
+    return f"{rel} some {node}"
+
+
+def create_ppi_dataloader(ontology, node_to_id, relation_to_id, batch_size):
+    projector = TaxonomyWithRelationsProjector(relations=["http://interacts_with"])
+    edges = projector.project(ontology)
+
+    logger.info(f"Found {len(edges)} training PPI triples")
+
+    rel_name = "http://interacts_with"
+
+    heads = [edge.src for edge in edges]
+    rels = [edge.rel for edge in edges]
+    tails = [edge.dst for edge in edges]
+
+    relations = set(rels)
+    assert len(relations) == 1, f"Found {len(relations)} relations in PPI triples"
+    assert list(relations)[0] == rel_name
+
+
+    pairs = [(h, t) for h, t in zip(heads, tails)]
+
+    heads, tails = zip(*pairs)
+
+    heads = [node_to_id[h] for h in heads]
+    tails = [node_to_id[get_existential_node(t)] for t in tails]
+
+    heads = th.tensor(heads, dtype=th.long)
+    tails = th.tensor(tails, dtype=th.long)
+
+    morphism_id = relation_to_id["http://arrow"]
+    rels = morphism_id * th.ones_like(heads)
+
+    dataloader = FastTensorDataLoader(heads, rels, tails, batch_size=batch_size, shuffle=True)
+    return dataloader
 
 
 
 class CatEModel(GraphPlusPyKEENModel):
     def __init__(self, evaluator_name, dataset, batch_size,
                  learning_rate, num_negs, embed_dim, model_filepath,
-                 graph_filepath, margin, epochs, evaluate_deductive,
-                 filter_deductive, device, wandb_logger):
+                 graph_filepath, margin, epochs, device, wandb_logger):
 
         self.classes = dataset.classes.as_str
         class_to_id = {class_: i for i, class_ in enumerate(self.classes)}
@@ -123,9 +159,7 @@ class CatEModel(GraphPlusPyKEENModel):
         self.num_negs = num_negs
         self.margin = margin
         self.evaluator = evaluator_resolver(evaluator_name, dataset,
-                                            device, batch_size=16,
-                                            evaluate_with_deductive_closure=evaluate_deductive,
-                                            filter_deductive_closure=filter_deductive)
+                                            device, batch_size=16)
         self.epochs = epochs
         self.device = device
         self.wandb_logger = wandb_logger
@@ -140,12 +174,15 @@ class CatEModel(GraphPlusPyKEENModel):
         ##### Properties #####
 
         self._ontology_classes_idxs = None
-    
+        self._protein_names = None
+        self._protein_idxs = None
+        self._existential_protein_idxs = None
+
+        logger.info(f"Number of proteins: {len(self.protein_idxs)}")
+        logger.info(f"Number of existential proteins: {len(self.existential_protein_idxs)}")
+        
         
     def _load_edges(self):
-        if self.projector is None:
-            raise ValueError(msg.GRAPH_MODEL_PROJECTOR_NOT_SET)
-
         all_classes = set(self.dataset.classes.as_str)
 
         if os.path.exists(self.graph_filepath):
@@ -199,6 +236,38 @@ class CatEModel(GraphPlusPyKEENModel):
         self._ontology_classes_idxs = ontology_classes_idxs
         return self._ontology_classes_idxs
 
+    @property
+    def protein_names(self):
+        if self._protein_names is None:
+            self._protein_names = self.dataset.evaluation_classes[0].as_str
+
+        return self._protein_names
+        
+    @property
+    def protein_idxs(self):
+        if not self._protein_idxs is None:
+            return self._protein_idxs
+
+        
+        protein_idxs = th.tensor([self._graph_node_to_id[p] for p in self.protein_names], dtype=th.long, device=self.device)
+
+        self._protein_idxs = protein_idxs
+        return self._protein_idxs
+        
+    @property
+    def existential_protein_idxs(self):
+        if not self._existential_protein_idxs is None:
+            return self._existential_protein_idxs
+
+        existentials = [get_existential_node(p) for p in self.protein_names]
+        ex_protein_idxs = th.tensor([self._graph_node_to_id[p] for p in existentials], dtype=th.long, device=self.device)
+
+        self._existential_protein_idxs = ex_protein_idxs
+        return self._existential_protein_idxs
+
+
+
+    
     def train(self):
         # super().train(epochs = self.epochs)
 
@@ -212,11 +281,12 @@ class CatEModel(GraphPlusPyKEENModel):
                                                    max_lr=max_lr, step_size_up = 20,
                                                    cycle_momentum = False)
 
-        criterion_bpr = nn.LogSigmoid()
         
         self._kge_method = self._kge_method.to(self.device)
 
         graph_dataloader = create_graph_train_dataloader(self._edges, self._graph_node_to_id, self._graph_relation_to_id, self.batch_size)
+        train_ppi_dataloader = create_ppi_dataloader(self.dataset.ontology, self._graph_node_to_id, self._graph_relation_to_id, self.batch_size)
+        train_ppi_dataloader = cycle(train_ppi_dataloader)
 
         initial_tolerance = 10
         tolerance = 0
@@ -243,16 +313,18 @@ class CatEModel(GraphPlusPyKEENModel):
                     neg_logits += self._kge_method.forward(head, rel, neg_tail)
                 neg_logits /= self.num_negs
 
- 
-                # if self.loss_type == "bpr":
-                    # batch_loss = -criterion_bpr(self.margin + pos_logits).mean() - criterion_bpr(-neg_logits - self.margin).mean()
-                # elif self.loss_type == "normal":
-                batch_loss = -pos_logits.mean() + th.relu(self.margin + neg_logits).mean()
+                
 
-                    
-                # batch_loss += self._kge_method.collect_regularization_term().mean()
-                
-                
+                mask = th.isin(head, self.protein_idxs)
+                pos_prot_logits = pos_logits[mask]
+                head_prots = head[mask]
+                neg_ids = th.randint(0, len(self.existential_protein_idxs), (len(head_prots),), device=self.device)
+                neg_prots = self.existential_protein_idxs[neg_ids]
+                neg_prot_logits = self._kge_method.forward(head_prots, rel, neg_prots)
+                                                                    
+                batch_loss = -pos_logits.mean() + th.relu(self.margin + neg_logits).mean()
+                batch_loss += -pos_prot_logits.mean() + th.relu(self.margin + neg_prot_logits).mean()
+
                 optimizer.zero_grad()
                 batch_loss.backward()
                 optimizer.step()
@@ -283,9 +355,6 @@ class CatEModel(GraphPlusPyKEENModel):
                 else:
                     tolerance -= 1
 
-
-                    
-                    
                 print(f"Training loss: {graph_loss:.6f}\tValidation mean rank: {valid_mr:.6f}\tValidation MRR: {valid_mrr:.6f}")
                 self.wandb_logger.log({"epoch": epoch, "train_loss": graph_loss, "valid_mr": valid_mr, "valid_mrr": valid_mrr})
             
@@ -294,11 +363,6 @@ class CatEModel(GraphPlusPyKEENModel):
                 print("Early stopping")
                 break
 
-                
-
-
-
-        
     def test(self):
         self.from_pretrained(self.model_filepath)
         self._kge_method = self._kge_method.to(self.device)
@@ -316,28 +380,36 @@ class EvaluationModel(nn.Module):
         self.device = device
 
         self.kge_method = kge_method
+
+        node_to_id = triples_factory.entity_to_id
         
-        classes = dataset.classes.as_str
-        class_to_id = {class_: i for i, class_ in enumerate(classes)}
+        evaluation_heads, evaluation_tails = dataset.evaluation_classes
+        evaluation_heads = evaluation_heads.as_str
+
+        class_to_id = {class_: i for i, class_ in enumerate(evaluation_heads)}
 
         ont_id_to_graph_id = dict()
-
+        ont_id_to_existential_id = dict()
+        
         num_not_found = 0
-        for class_ in classes:
+        for class_ in evaluation_heads:
             if class_ not in triples_factory.entity_to_id:
                 ont_id_to_graph_id[class_to_id[class_]] = -1
                 logger.warning(f"Class {class_} not found in graph")
                 num_not_found += 1
             else:
                 ont_id_to_graph_id[class_to_id[class_]] = triples_factory.entity_to_id[class_]
-
+                ont_id_to_existential_id[class_to_id[class_]] = node_to_id[get_existential_node(class_)]
+        
         logger.warning(f"Number of classes not found: {num_not_found}")
-        assert list(ont_id_to_graph_id.keys()) == list(range(len(classes)))
+        assert list(ont_id_to_graph_id.keys()) == list(range(len(evaluation_heads)))
         self.graph_ids = th.tensor(list(ont_id_to_graph_id.values())).to(self.device)
+        self.existential_ids = th.tensor(list(ont_id_to_existential_id.values())).to(self.device)
         
         relation_id = triples_factory.relation_to_id["http://arrow"]
         self.rel_embedding = th.tensor(relation_id).to(self.device)
-        
+
+
     def forward(self, data, *args, **kwargs):
         if data.shape[1] == 2:
             x = data[:, 0]
@@ -349,7 +421,7 @@ class EvaluationModel(nn.Module):
             raise ValueError(f"Data shape {data.shape} not recognized")
 
         x = self.graph_ids[x].unsqueeze(1)
-        y = self.graph_ids[y].unsqueeze(1)
+        y = self.existential_ids[y].unsqueeze(1)
 
         x_unique = self.graph_ids[data[:, 0].unique()]
         y_unique = self.graph_ids[data[:, 1].unique()]
