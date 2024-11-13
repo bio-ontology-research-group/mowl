@@ -1,4 +1,8 @@
 #!/usr/bin/env python
+import sys
+sys.path.append("../")
+import mowl
+mowl.init_jvm("10g")
 
 import click as ck
 import numpy as np
@@ -8,12 +12,12 @@ import logging
 from jpype import *
 import jpype.imports
 import os
+import copy
 
-logging.basicConfig(level=logging.INFO)
-
-jars_dir = "gateway/build/distributions/gateway/lib/"
-jars = f'{str.join(":", [jars_dir+name for name in os.listdir(jars_dir)])}'
-startJVM(getDefaultJVMPath(), "-ea",  "-Djava.class.path=" + jars,  convertStrings=False)
+logger = logging.getLogger(__name__)
+handler = logging.StreamHandler()
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
 
 
 from org.semanticweb.owlapi.apibinding import OWLManager
@@ -35,18 +39,25 @@ from org.apache.jena.util import FileManager
     '--ont-file', '-ont', default='data/go.owl',
     help='Ontology file (GO by default)')
 @ck.option(
-    '--data-file', '-df', default='data/4932.protein.links.v11.5.txt.gz',
-    help='STRING PPI file')
-@ck.option(
-    '--annots-file', '-af', default='data/annotations.tsv',
-    help='Annotations file extracted from Uniprot (using uni2pandas.py and annotations.py)')
+    '--org', '-org', type=ck.Choice(["yeast", "human"]),
+    help='Organism')
 @ck.option(
     '--go-annots-file', '-gf',
     help='as an alternative to --annots-file, specify the sdf.gaf from http://current.geneontology.org/products/pages/downloads.html, mapping uniprot proteins to GO annotations')
-@ck.option(
-    '--out-dir', '-od', default='datasets/ppi_yeast',
-    help='Dataset directory')
-def main(ont_file, data_file, annots_file, go_annots_file, out_dir):
+def main(ont_file, org, go_annots_file):
+    if org == 'yeast':
+        data_file = 'data/4932.protein.links.v11.5.txt.gz'
+        annots_file = 'data/4932.annotations.tsv'
+        out_dir = 'datasets/ppi_yeast'
+        org_id = '4932'
+    elif org == 'human':
+        data_file = 'data/9606.protein.links.v12.0.txt.gz'
+        annots_file = 'data/9606.annotations.tsv'
+        out_dir = 'datasets/ppi_human'
+        org_id = '9606'
+    else:
+        raise ValueError(f"Organism {org} not supported")
+        
     train, valid, test = load_and_split_interactions(data_file)
     manager = OWLManager.createOWLOntologyManager()
     ont = manager.loadOntologyFromOntologyDocument(java.io.File(ont_file))
@@ -63,7 +74,7 @@ def main(ont_file, data_file, annots_file, go_annots_file, out_dir):
                 if not line.startswith('!'):
                     try:
                         items = line.strip().split('\t')
-                        p_id = '4932.' + items[10] # e.g. '4932.YKL020C'
+                        p_id = f'{org_id}.' + items[10] # e.g. '4932.YKL020C'
                         protein = factory.getOWLClass(IRI.create(f'http://{p_id}'))
                         go_id = items[4].replace(':', '_')
                         go_class = factory.getOWLClass(
@@ -167,6 +178,48 @@ def load_and_split_interactions(data_file, ratio=(0.9, 0.05, 0.05)):
     train = inters[index[:train_n]]
     valid = inters[index[train_n: train_n + valid_n]]
     test = inters[index[train_n + valid_n:]]
+
+    train_entities = set(train.flatten())
+    valid_entities = set(valid.flatten())
+    test_entities = set(test.flatten())
+
+    only_valid = valid_entities - train_entities
+    only_test = test_entities - train_entities
+
+    if len(only_valid) > 0:
+        initial_valid_n = len(valid)
+        logger.warning(f"Valid entities not in train: {len(only_valid)}. Removing them")
+        aux_valid = copy.deepcopy(valid)
+
+        for (p1, p2) in aux_valid:
+                if p1 in only_valid or p2 in only_valid:
+                    valid = valid[~((valid[:, 0] == p1) & (valid[:, 1] == p2))]
+
+        final_valid_n = len(valid)
+        logger.info(f"Valid triples removed: {initial_valid_n - final_valid_n}. Remaining: {final_valid_n}")
+        
+
+    if len(only_test) > 0:
+        initial_test_n = len(test)
+        logger.warning(f"Test entities not in train: {len(only_test)}. Removing them")
+        aux_test = copy.deepcopy(test)
+
+        for (p1, p2) in aux_test:
+            if p1 in only_test or p2 in only_test:
+                test = test[~((test[:, 0] == p1) & (test[:, 1] == p2))]
+
+        final_test_n = len(test)
+        logger.info(f"Test triples removed: {initial_test_n - final_test_n}. Remaining: {final_test_n}")
+
+    valid_entities = set(valid.flatten())
+    test_entities = set(test.flatten())
+    only_valid = valid_entities - train_entities
+    only_test = test_entities - train_entities
+        
+    assert len(valid_entities - train_entities) == 0, f"Valid entities not in train: {len(valid_entities - train_entities)} out of {len(valid_entities)}"
+    assert len(test_entities - train_entities) == 0, f"Test entities not in train: {len(test_entities - train_entities)} out of {len(test_entities)}"
+    
+    
     return train, valid, test
 
 if __name__ == '__main__':
