@@ -1,9 +1,3 @@
-import jpype
-@jpype.JImplementationFor('java.lang.Comparable')
-class _JComparableHash(object):
-    def __hash__(self):
-        return self.hashCode()
-
 import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -24,20 +18,22 @@ from deprecated.sphinx import versionadded
 from tqdm import tqdm
 
 adapter = OWLAPIAdapter()
+
 top_node = Node(owl_class = adapter.create_class(TOP))
 bot_node = Node(owl_class = adapter.create_class(BOT))
 
 class Graph():
-
-    
-
-    
-    def __init__(self):
+    def __init__(self, abox_edges = None):
         self._node_to_id = {}
         self._id_to_node = {}
         self._out_edges = dict()
         self._in_edges = dict()
 
+        if abox_edges is None:
+            self.abox_edges = []
+        else:
+            self.abox_edges = abox_edges
+        
     @property
     def node_to_id(self):
         return self._node_to_id
@@ -147,6 +143,10 @@ class Graph():
             for target in targets:
                 target = str(target)
                 edges.append((source, "http://arrow", target))
+        for source, target in self.abox_edges:
+            source = str(source)
+            target = str(target)
+            edges.append((source, "http://type", target))
         return edges
 
     def as_edges(self):
@@ -154,6 +154,9 @@ class Graph():
             for target in targets:
                 yield Edge(source, "http://arrow", target)
 
+        for source, target in self.abox_edges:
+            yield Edge(source, "http://type", target)
+            
     def _lemma_6(self):
         # First equation, nothing to do
         # Second equation and left side of third equation and left side of fourth equation
@@ -162,17 +165,19 @@ class Graph():
             if node.is_negated() and not node.negated_domain:
                 negated_nodes.add(node)
             
-        for neg_node in negated_nodes:
+        for neg_node in tqdm(negated_nodes, desc="Lemma 6: Processing negated nodes"):
             in_edges = list(self.in_edges[neg_node])
             for in_node in in_edges:
                 if in_node.is_owl_nothing() or in_node.is_owl_thing():
                     continue
                 if in_node.domain:
                     continue
+
+                node = neg_node.get_operand()
+                
                 if node == in_node:
                     continue
                 
-                node = neg_node.get_operand()
                 neg_in_node = in_node.negate()
                 op_edge = Edge(node, "saturation_lemma6", neg_in_node)
 
@@ -193,9 +198,11 @@ class Graph():
                     continue
                 if out_node.domain:
                     continue
+                
+                node = neg_node.get_operand()
                 if node == out_node:
                     continue
-                node = neg_node.get_operand()
+                
 
                 union = adapter.create_object_union_of(node.owl_class, out_node.owl_class)
                 if len(union.getNNF().getOperandsAsList()) == 1:
@@ -215,7 +222,7 @@ class Graph():
             if node.is_intersection():
                 intersection_nodes.add(node)
 
-        for int_node in intersection_nodes:
+        for int_node in tqdm(intersection_nodes, desc="Lemma 6: Processing intersection nodes"):
             if not bot_node in self.out_edges[int_node]:
                 continue
 
@@ -245,7 +252,7 @@ class Graph():
                 
                 union_nodes.add(node)
 
-        for un_node in union_nodes:
+        for un_node in tqdm(union_nodes, desc="Lemma 6: Processing union nodes"):
             
             if not top_node in self.in_edges[un_node]:
                 continue
@@ -315,34 +322,63 @@ class Graph():
             if node.is_whole_relation():
                 relations.add(node)
 
-        for rel in relations:
-            #print("\tWhole relation: {}".format(rel))
+        for rel in tqdm(relations, desc="Definition 7: Processing relations"):
             for in_rel in self.in_edges[rel]:
                 if not in_rel.in_relation_category():
                     continue
                 in_rel_codomain = in_rel.to_codomain()
                 if not in_rel_codomain in self.nodes:
                     continue
-
-                #print(f"\t\tIn relation: {in_rel}")
-                #print(f"\t\tIn relation codomain: {in_rel_codomain}")
+                 
                 for cod in self.out_edges[in_rel_codomain]:
                     if cod.domain or cod.codomain or cod.in_relation_category():
                         continue
-                    #print(f"\t\t\tCodomain: {cod}")
                     in_rel_domain = in_rel.to_domain()
 
                     ex_rel_cod = adapter.create_object_some_values_from(rel.relation, cod.owl_class)
                     node = Node(owl_class = ex_rel_cod, relation = rel.relation, domain = True)
                     edge = Edge(in_rel_domain, "saturation_definition7", node)
-                    #print(f"\t\t\t\tAdding edge: {edge.src} -> {edge.dst}")
                     self.add_edge(edge)
                     
                 
                     
-
-                
     def _lemma_8(self):
+        relations = set()
+        for node in self.nodes:
+            if node.is_whole_relation():
+                relations.add(node)
+
+        for node in tqdm(self.nodes, desc="Lemma 8: Processing nodes"):
+            if not node.in_object_category():
+                continue
+            if node.is_intersection() or node.is_union() or node.is_existential():
+                continue
+            if node.domain or node.codomain:
+                continue
+            if node.is_owl_thing() or node.is_owl_nothing():
+                continue
+
+            out_edges = list(self.out_edges[node])
+
+            for out_node in out_edges:
+                if not out_node.in_object_category():
+                    continue
+                if out_node.is_intersection() or out_node.is_union() or out_node.is_existential():
+                    continue
+                if out_node.domain or out_node.codomain:
+                    continue
+                if out_node.is_owl_thing():
+                    continue
+                
+                for relation in relations:
+                    ex_class = adapter.create_object_some_values_from(relation.relation, node.owl_class)
+                    ox_out_class = adapter.create_object_some_values_from(relation.relation, out_node.owl_class)
+                    ex_node = Node(owl_class = ex_class)
+                    ox_out_node = Node(owl_class = ox_out_class)
+                    edge = Edge(node, "saturation_lemma8", ex_node)
+                    self.add_edge(edge)
+                
+    def _lemma_8_bk(self):
         existential_nodes = set()
         for node in self.nodes:
             if node.is_existential():
@@ -394,7 +430,7 @@ class Graph():
 
         
     def as_nx(self):
-        logger.debug("Converting to networkx")
+        logging.debug("Converting to networkx")
         G = nx.DiGraph()
         G.add_nodes_from(list(self.node_to_id.values()))
         for edge in self.as_edgelist():
@@ -404,26 +440,46 @@ class Graph():
                 if src == bot_node or dst == top_node:
                     continue
                 G.add_edge(self.node_to_id[src], self.node_to_id[dst])
-        logger.debug("Done converting to networkx")
+        logging.debug("Done converting to networkx")
         return G
                 
     def transitive_closure(self):
-        logger.debug("Computing transitive closure")
+        logging.debug("Computing transitive closure")
         G = self.as_nx()
         G = nx.transitive_closure(G)
-        logger.debug("Done computing transitive closure in NetworkX")
-        for src, dst in tqdm(G.edges()):
+        logging.debug("Done computing transitive closure in NetworkX")
+        for src, dst in tqdm(G.edges(), desc="Adding transitive closure edges to graph"):
             src = self.id_to_node[src]
             dst = self.id_to_node[dst]
             self.add_edge(Edge(src, "transitive_closure", dst))
-        logger.debug("Done computing transitive closure")
+        logging.debug("Done computing transitive closure")
 
                 
-    def saturate(self):
-        self._definition_6()
-        self._lemma_6()
-        self._definition_7()
-        self._lemma_8()
+    def saturate(self, def_6 = True, lemma_6 = True, def_7 = True, lemma_8 = True):
+        """
+        This function saturates the graph using the rules defined in [brieulle2022]_.
+
+        :param def_6: If ``True``, apply definition 6. Default is ``True``.
+        :type def_6: bool, optional
+        :param lemma_6: If ``True``, apply lemma 6. Default is ``True``.
+        :type lemma_6: bool, optional
+        :param def_7: If ``True``, apply definition 7. Default is ``True``.
+        :type def_7: bool, optional
+        :param lemma_8: If ``True``, apply lemma 8. Default is ``True``.
+        :type lemma_8: bool, optional
+        """
+
+        if def_6:
+            self._definition_6()
+
+        if lemma_6:
+            self._lemma_6()
+
+        if def_7:
+            self._definition_7()
+
+        if lemma_8:
+            self._lemma_8()
 
     def is_unsatisfiable(self, node):
         if not isinstance(node, Node):
@@ -470,7 +526,7 @@ class Graph():
     def write_to_file(self, outfile):
         with open(outfile, "w") as f:
             edges = self.as_str_edgelist()
-            for src, rel, dst in tqdm(edges):
+            for src, rel, dst in tqdm(edges, desc="Writing to file"):
                 f.write(f"{src}\t{rel}\t{dst}\n")
 
 @versionadded(version="0.3.0")
@@ -478,29 +534,53 @@ class CategoricalProjector(ProjectionModel):
     """
     Implementation of projection rules defined in [zhapa2023]_.
     
-    This class implements the projection of ALC axioms into a graph using categorical diagrams.
+    This class implements the projection of ALC axioms into a graph using categorical diagrams. Saturation steps can be applied following [brieulle2022]_.
 
     :param saturation_steps: Number of saturation steps of the graph/category.
     :type saturation_steps: int
     :param transitive_closure: If ``True``, every saturation step computes the transitive edges.
     :type transitive_closure: bool
+    :param def_6: If ``True``, apply definition 6. Default is ``True``.
+    :type def_6: bool, optional
+    :param lemma_6: If ``True``, apply lemma 6. Default is ``True``.
+    :type lemma_6: bool, optional
+    :param def_7: If ``True``, apply definition 7. Default is ``True``.
+    :type def_7: bool, optional
+    :param lemma_8: If ``True``, apply lemma 8. Default is ``True``.
+    :type lemma_8: bool, optional
     """
 
-    def __init__(self, saturation_steps = 0, transitive_closure = False):
+    def __init__(self, output_type, saturation_steps = 0, transitive_closure = False, def_6 = True, lemma_6 = True, def_7 = True, lemma_8 = True):
 
+
+        if not isinstance(output_type, str):
+            raise TypeError("Parameter output_type must be of type str")
         if not isinstance(saturation_steps, int):
             raise TypeError("Optional parameter saturation_steps must be of type int")
         if saturation_steps < 0:
            raise ValueError("Optional parameter saturation_steps must be non-negative")
         if not isinstance(transitive_closure, bool):
             raise TypeError("Optional parameter transitive_closure must be of type bool")
-                    
+
+        if not output_type in ["str", "owl"]:
+            raise ValueError("Invalid output type. Must be 'str' or 'owl'")
+
         
+        self.output_type = output_type
+        self.saturation_steps = saturation_steps
+        self.transitive_closure = transitive_closure
+        self.def_6 = def_6
+        self.lemma_6 = lemma_6
+        self.def_7 = def_7
+        self.lemma_8 = lemma_8
+
         self.adapter = OWLAPIAdapter()
         self.ont_manager = self.adapter.owl_manager
         self.data_factory = self.adapter.data_factory
         self.graph = Graph()
 
+
+        
     def project(self, ontology):
         r"""Generates the projection of the ontology.
 
@@ -515,15 +595,38 @@ class CategoricalProjector(ProjectionModel):
 
         
         all_classes = ontology.getClassesInSignature()
-        for cls in tqdm(all_classes):
+        #get class assertion axioms
+        abox_edges = []
+        for cls in all_classes:
+            cls_str = str(cls.toStringID())
+            cls_assertions = list(ontology.getClassAssertionAxioms(cls))
+            for axiom in cls_assertions:
+                ind = str(axiom.getIndividual().toStringID())
+                abox_edges.append((ind, cls_str))
+        
+        self.graph = Graph(abox_edges = abox_edges)
+        
+        
+        for cls in tqdm(all_classes, desc="Adding nodes to graph"):
             self.graph.add_node(Node(owl_class = cls))
         all_axioms = ontology.getAxioms(True)
         
-        for axiom in tqdm(all_axioms, total = len(all_axioms)):
+        for axiom in tqdm(all_axioms, total = len(all_axioms), desc="Processing axioms"):
             self.graph.add_all_edges(*list(self.process_axiom(axiom)))
 
-        return self.graph.as_edges()
+        if self.saturation_steps > 0:
+            for i in range(self.saturation_steps):
+                self.graph.saturate(def_6 = self.def_6, lemma_6 = self.lemma_6, def_7 = self.def_7, lemma_8 = self.lemma_8)
+                if self.transitive_closure:
+                    self.graph.transitive_closure()
 
+        if self.output_type == "str":
+            return self.graph.as_str_edgelist()
+        elif self.output_type == "owl":
+            return self.graph.as_edges()
+        else:
+            raise ValueError("Invalid output type. Must be 'str' or 'owl'")
+        
     def process_axiom(self, axiom):
         """Process an OWLAxiom and return a list of edges.
 
@@ -578,7 +681,7 @@ class CategoricalProjector(ProjectionModel):
 
         node, edges = self._process_expression_and_get_complex_node(class_expression)
         ind_as_class = adapter.create_class(str(individual.toStringID()))
-        ind_node = Node(owl_class = ind_as_class, individual=True)
+        ind_node = Node(owl_class = ind_as_class, is_individual=True)
         edges.add(self._assertion_arrow(ind_node, node))
         
         return edges
@@ -591,17 +694,19 @@ class CategoricalProjector(ProjectionModel):
 
         subject_as_class = adapter.create_class(str(subject.toStringID()))
         object_as_class = adapter.create_class(str(object_.toStringID()))
-        subject_node = Node(owl_class = subject_as_class, individual=True)
-        object_node = Node(owl_class = object_as_class, individual = True)
-        codomain_rel = Node(owl_class=None, relation=property_, codomain=True)
-        domain_rel = Node(owl_class=None, relation=property_, domain=True)
-        rel_node = Node(owl_class=None, relation=property_)
+        subject_node = Node(owl_class = subject_as_class, is_individual=True)
+        object_node = Node(owl_class = object_as_class, is_individual=True)
+        
+        domain_node = Node(relation=property_, domain=True)
+        codomain_node = Node(relation=property_, codomain=True)
+
+        some_values_from = adapter.create_object_some_values_from(property_, object_as_class)
         
         edges = set()
-        edges.add(self._assertion_arrow(subject_node, domain_rel))
-        edges.add(self._assertion_arrow(object_node, codomain_rel))
-        edges.add(self._domain_functor(rel_node, domain_rel))
-        edges.add(self._codomain_functor(rel_node, codomain_rel))
+        edges.add(self._subsumption_arrow(subject_node, domain_node))
+        edges.add(self._subsumption_arrow(object_node, codomain_node))
+        edges.add(self._subsumption_arrow(subject_node, some_values_from))
+        
         return edges
         
     def _process_subclassof(self, axiom):
@@ -758,10 +863,6 @@ class CategoricalProjector(ProjectionModel):
             intersection = Node(owl_class=intersection)
             edges |= operand_edges
 
-            edges.add(self._product_limit_arrow(intersection, operand_node))
-            edges.add(self._product_limit_arrow(intersection, negation_complex_node))
-            edges.add(self._coproduct_limit_arrow(operand_node, union))
-            edges.add(self._coproduct_limit_arrow(negation_complex_node, union))
                                                 
             edges.add(Edge(intersection, "http://general_arrow", bot_node))
             edges.add(Edge(top_node, "http://general_arrow", union))
@@ -787,6 +888,11 @@ class CategoricalProjector(ProjectionModel):
         return wrapper
 
     @_node_params
+    def _assertion_arrow(self, src, dst):
+        rel = "http://type_arrow"
+        return Edge(src, rel, dst)
+
+    @_node_params
     def _subsumption_arrow(self, src, dst):
         rel = "http://subsumption_arrow"
         return Edge(src, rel, dst)
@@ -800,21 +906,6 @@ class CategoricalProjector(ProjectionModel):
     def _product_limit_arrow(self, src, dst):
         rel = "http://projects"
         return Edge(src, "http://projects", dst)
-
-    @_node_params
-    def _assertion_arrow(self, src, dst):
-        rel = "http://type_arrow"
-        return Edge(src, rel, dst)
-
-    @_node_params
-    def _domain_functor(self, src, dst):
-        rel = "http://domain_functor"
-        return Edge(src, rel, dst)
-
-    @_node_params
-    def _codomain_functor(self, src, dst):
-        rel = "http://codomain_functor"
-        return Edge(src, rel, dst)
 
 def add_extra_existential_axioms(ontology):
     adapter = OWLAPIAdapter()
