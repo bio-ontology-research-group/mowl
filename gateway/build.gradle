@@ -46,11 +46,14 @@ repositories {
     mavenCentral()
 }
 
+
+configurations.all {
+    exclude group: 'org.slf4j', module: 'slf4j-log4j12'
+}
+
 // In this section you declare the dependencies for your production and test code
 dependencies {
-    // The production code uses the SLF4J logging API at compile time
-    implementation 'org.slf4j:slf4j-api:1.7.25'
-    // implementation 'org.slf4j:slf4j-simple:1.7.25'
+    implementation 'org.slf4j:slf4j-simple:1.7.25'
     implementation 'com.beust:jcommander:1.72'
     implementation 'org.apache.jena:apache-jena-libs:3.17.0'
     implementation 'de.tu-dresden.inf.lat.jcel:jcel-owlapi:0.24.1'
@@ -75,8 +78,8 @@ run {
     }
 }
 
-sourceCompatibility = '1.8'
-targetCompatibility = '1.8'
+sourceCompatibility = '11'
+targetCompatibility = '11'
 
 mainClassName = "Main"
 
