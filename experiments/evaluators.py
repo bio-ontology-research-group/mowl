@@ -100,7 +100,10 @@ class Evaluator:
 
         
         heads_and_tails = True
-                
+
+        if self.evaluate_with_deductive_closure:
+            dataloader = tqdm(dataloader, desc="Evaluating with deductive closure")
+        
         with th.no_grad():
             for batch, in dataloader:
                 if batch.shape[1] == 2:
