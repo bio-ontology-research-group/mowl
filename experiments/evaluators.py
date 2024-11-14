@@ -102,7 +102,13 @@ class Evaluator:
             filtering_labels = self.get_filtering_labels(num_heads, num_tails, **kwargs)
             if self.evaluate_with_deductive_closure:
                 deductive_labels = self.get_deductive_labels(num_heads, num_tails, **kwargs)
-            
+
+        
+        heads_and_tails = True
+
+        if self.evaluate_with_deductive_closure:
+            dataloader = tqdm(dataloader, desc="Evaluating with deductive closure")
+        
         with th.no_grad():
             for batch, in dataloader:
                 if batch.shape[1] == 2:
@@ -116,7 +122,11 @@ class Evaluator:
         
                 batch = batch.to(self.device)
                 logits_heads, logits_tails = self.get_logits(model, batch, *kwargs)
-    
+
+                if logits_tails is None:
+                    heads_and_tails = False
+                
+                
                 for i, head in enumerate(aux_heads):
                     tail = tails[i]
                     tail = th.where(self.evaluation_tails == tail)[0].item()
@@ -164,62 +174,69 @@ class Evaluator:
                             franks[f_rank] = 0
                         franks[f_rank] += 1
 
-                for i, tail in enumerate(aux_tails):
-                    head = aux_heads[i]
-                    head = th.where(self.evaluation_heads == head)[0].item()
-                    preds = logits_tails[i]
+                if not logits_tails is None:
 
-                    if self.evaluate_with_deductive_closure:
-                        ded_labels = deductive_labels[:, tail].to(preds.device)
-                        ded_labels[head] = 1
-                        preds = preds * ded_labels
-                    
-                    order = th.argsort(preds, descending=False)
-                    rank = th.where(order == head)[0].item() + 1
-                    mr += rank
-                    mrr += 1 / rank
-
-                    if mode == "test":
-                        f_preds = preds * filtering_labels[:, tail].to(preds.device)
+                    for i, tail in enumerate(aux_tails):
+                        head = aux_heads[i]
+                        head = th.where(self.evaluation_heads == head)[0].item()
+                        preds = logits_tails[i]
 
                         if self.evaluate_with_deductive_closure:
                             ded_labels = deductive_labels[:, tail].to(preds.device)
                             ded_labels[head] = 1
-                            f_preds = f_preds * ded_labels
+                            preds = preds * ded_labels
 
-                        
-                        f_order = th.argsort(f_preds, descending=False)
-                        f_rank = th.where(f_order == head)[0].item() + 1
-                        fmr += f_rank
-                        fmrr += 1 / f_rank
-                    
+                        order = th.argsort(preds, descending=False)
+                        rank = th.where(order == head)[0].item() + 1
+                        mr += rank
+                        mrr += 1 / rank
 
-                    if mode == "test":
-                        for k in hits_k:
-                            if rank <= int(k):
-                                hits_k[k] += 1
+                        if mode == "test":
+                            f_preds = preds * filtering_labels[:, tail].to(preds.device)
 
-                        for k in f_hits_k:
-                            if f_rank <= int(k):
-                                f_hits_k[k] += 1
+                            if self.evaluate_with_deductive_closure:
+                                ded_labels = deductive_labels[:, tail].to(preds.device)
+                                ded_labels[head] = 1
+                                f_preds = f_preds * ded_labels
 
-                        if rank not in ranks:
-                            ranks[rank] = 0
-                        ranks[rank] += 1
-                                
-                        if f_rank not in franks:
-                            franks[f_rank] = 0
-                        franks[f_rank] += 1
-                                
-            mr = mr / (2 * len(eval_tuples))
-            mrr = mrr / (2 * len(eval_tuples))
+
+                            f_order = th.argsort(f_preds, descending=False)
+                            f_rank = th.where(f_order == head)[0].item() + 1
+                            fmr += f_rank
+                            fmrr += 1 / f_rank
+
+
+                        if mode == "test":
+                            for k in hits_k:
+                                if rank <= int(k):
+                                    hits_k[k] += 1
+
+                            for k in f_hits_k:
+                                if f_rank <= int(k):
+                                    f_hits_k[k] += 1
+
+                            if rank not in ranks:
+                                ranks[rank] = 0
+                            ranks[rank] += 1
+
+                            if f_rank not in franks:
+                                franks[f_rank] = 0
+                            franks[f_rank] += 1
+
+            if heads_and_tails:
+                factor = 2
+            else:
+                factor = 1
+                            
+            mr = mr / (factor * len(eval_tuples))
+            mrr = mrr / (factor * len(eval_tuples))
 
             metrics["mr"] = mr
             metrics["mrr"] = mrr
 
             if mode == "test":
-                fmr = fmr / (2 * len(eval_tuples))
-                fmrr = fmrr / (2 * len(eval_tuples))
+                fmr = fmr / (factor * len(eval_tuples))
+                fmrr = fmrr / (factor * len(eval_tuples))
                 auc = compute_rank_roc(ranks, num_tails)
                 f_auc = compute_rank_roc(franks, num_tails)
 
@@ -229,11 +246,11 @@ class Evaluator:
                 metrics["f_auc"] = f_auc
                 
                 for k in hits_k:
-                    hits_k[k] = hits_k[k] / (2 * len(eval_tuples))
+                    hits_k[k] = hits_k[k] / (factor * len(eval_tuples))
                     metrics[f"hits@{k}"] = hits_k[k]
                     
                 for k in f_hits_k:
-                    f_hits_k[k] = f_hits_k[k] / (2 * len(eval_tuples))
+                    f_hits_k[k] = f_hits_k[k] / (factor * len(eval_tuples))
                     metrics[f"f_hits@{k}"] = f_hits_k[k]
 
             metrics = {f"{mode}_{k}": v for k, v in metrics.items()}
@@ -278,7 +295,7 @@ class SubsumptionEvaluator(Evaluator):
         logits_tails = model(th.cat([eval_heads, tails], dim=-1), "gci0")
         logits_tails = logits_tails.view(-1, len(self.evaluation_heads))
         # print(logits_heads, logits_tails)
-        return logits_heads, logits_tails
+        return logits_heads, None
 
     
     def get_filtering_labels(self, num_heads, num_tails):
@@ -294,11 +311,15 @@ class SubsumptionEvaluator(Evaluator):
         else:
             filtering_tuples = th.cat([self.train_tuples, self.valid_tuples], dim=0)
 
+
+        diagonal = th.eye(num_heads, dtype=th.float) * 10000
         filtering_labels = th.ones((num_heads, num_tails), dtype=th.float)
 
         for head, tail in filtering_tuples:
             filtering_labels[head, tail] = 10000
-        
+
+        filtering_labels = th.max(filtering_labels, diagonal)
+            
         return filtering_labels
     
 
@@ -360,67 +381,57 @@ class PPIEvaluator(Evaluator):
 
         filtering_tuples = th.cat([self.train_tuples, self.valid_tuples], dim=0)
         filtering_labels = th.ones((num_heads, num_tails), dtype=th.float)
-
+        diagonal = th.eye(num_heads, dtype=th.float) * 10000
+        
         for head, rel, tail in filtering_tuples:
             filtering_labels[head, tail] = 10000
-        
+
+        filtering_labels = th.max(filtering_labels, diagonal)
+            
         return filtering_labels
 
-class SubsumptionFromPPIEvaluator(Evaluator):
-    def __init__(self, *args, **kwargs):
 
+
+class PPICatEEvaluator(Evaluator):
+    def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        classes = self.dataset.classes.as_str
-        classes = [c for c in classes if "GO_" in c]
-        class_to_id = {c: i for i, c in enumerate(classes)}
-        self.evaluation_heads = th.tensor([class_to_id[c] for c in classes], dtype=th.long)
-        self.evaluation_tails = th.tensor([class_to_id[c] for c in classes], dtype=th.long)
-        
-                                          
-        
     def create_tuples(self, ontology):
-        classes = self.dataset.classes.as_str
-        classes = [c for c in classes if "GO_" in c]
-        class_to_id = {c: i for i, c in enumerate(classes)}
-        
-        projector = TaxonomyProjector()
+        projector = TaxonomyWithRelationsProjector(relations=["http://interacts_with"])
         edges = projector.project(ontology)
 
         classes, relations = Edge.get_entities_and_relations(edges)
 
-        
-        
         class_str2owl = self.dataset.classes.to_dict()
         class_owl2idx = self.dataset.classes.to_index_dict()
-
+        relation_str2owl = self.dataset.object_properties.to_dict()
+        relation_owl2idx = self.dataset.object_properties.to_index_dict()
+        
         edges_indexed = []
-
-        count = 0
+        
         for e in edges:
-            head = e.src
-            tail = e.dst
-            if head in classes and tail in classes:
-                head = class_to_id[head]
-                tail = class_to_id[tail]
-                edges_indexed.append((head, tail))
-                count += 1
-        logger.info(f"Taking {count} edges out of {len(edges)}")
-                
+            if "Nothing" in e.src or "Nothing" in e.dst:
+                continue
+            head = class_owl2idx[class_str2owl[e.src]]
+            relation = relation_owl2idx[relation_str2owl[e.rel]]
+            tail = class_owl2idx[class_str2owl[e.dst]]
+            edges_indexed.append((head, relation, tail))
+        
         return th.tensor(edges_indexed, dtype=th.long)
 
     def get_logits(self, model, batch):
-        heads, tails = batch[:, 0], batch[:, 1]
+        heads, rels, tails = batch[:, 0], batch[:, 1], batch[:, 2]
         num_heads, num_tails = len(heads), len(tails)
 
         heads = heads.repeat_interleave(len(self.evaluation_tails)).unsqueeze(1)
+        rels = rels.repeat_interleave(len(self.evaluation_tails)).unsqueeze(1)
         eval_tails = th.arange(len(self.evaluation_tails), device=heads.device).repeat(num_heads).unsqueeze(1)
-        logits_heads = model(th.cat([heads, eval_tails], dim=-1), "gci0")
+        logits_heads = model(th.cat([heads, rels, eval_tails], dim=-1), "gci2")
         logits_heads = logits_heads.view(-1, len(self.evaluation_tails))
         
         tails = tails.repeat_interleave(len(self.evaluation_heads)).unsqueeze(1)
         eval_heads = th.arange(len(self.evaluation_heads), device=tails.device).repeat(num_tails).unsqueeze(1)
-        logits_tails = model(th.cat([eval_heads, tails], dim=-1), "gci0")
+        logits_tails = model(th.cat([eval_heads, rels, tails], dim=-1), "gci2")
         logits_tails = logits_tails.view(-1, len(self.evaluation_heads))
         # print(logits_heads, logits_tails)
         return logits_heads, logits_tails
@@ -428,34 +439,16 @@ class SubsumptionFromPPIEvaluator(Evaluator):
     
     def get_filtering_labels(self, num_heads, num_tails):
 
-        if self.filter_deductive_closure:
-            # take deductive closure tuples that are not in the testing tuples
-
-            mask = (self.deductive_closure_tuples.unsqueeze(1) == self.test_tuples).all(dim=-1).any(dim=-1)
-            deductive_closure_tuples = self.deductive_closure_tuples[~mask]
-            
-            
-            filtering_tuples = th.cat([self.train_tuples, self.valid_tuples, deductive_closure_tuples], dim=0)
-        else:
-            filtering_tuples = th.cat([self.train_tuples, self.valid_tuples], dim=0)
-
+        filtering_tuples = th.cat([self.train_tuples, self.valid_tuples], dim=0)
         filtering_labels = th.ones((num_heads, num_tails), dtype=th.float)
-
-        for head, tail in filtering_tuples:
+        diagonal = th.eye(num_heads, dtype=th.float) * 10000
+        
+        for head, rel, tail in filtering_tuples:
             filtering_labels[head, tail] = 10000
-        
+
+        filtering_labels = th.max(filtering_labels, diagonal)
+            
         return filtering_labels
-    
-
-
-    def get_deductive_labels(self, num_heads, num_tails):
-        deductive_labels = th.ones((num_heads, num_tails), dtype=th.float)
-
-        for head, tail in self.deductive_closure_tuples:
-            deductive_labels[head, tail] = 10000
-        
-        return deductive_labels
-
 
 
 def compute_rank_roc(ranks, num_entities):

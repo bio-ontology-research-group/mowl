@@ -11,16 +11,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `.jar` files to enable pip install from GitHub
 - Tested with Python 3.12
 - Refactored Evaluation module.
-- Added PPIEvaluator, GDAEvaluator, SubsumptionEvaluator
 - Refactored `model` object and introduced `model.train()` and `model.evaluate()` methods.
 - Added `GDADatasetV2` and `GDADatasetV2EL`. Datasets were introduced in [https://github.com/bio-ontology-research-group/gda_analysis](https://github.com/bio-ontology-research-group/gda_analysis)
+- Extended experiment set to match [Ontology Embeddings Survey paper](https://arxiv.org/html/2406.10964v1).
+- Added mOWL format of GO and FoodOn datasets from [OWL2VecStar repository](https://github.com/KRR-Oxford/OWL2Vec-Star)
+- Added PPI Human dataset (String v12.0)
+- Added `ontology_extended.owl` version to PPI Yeast and PPI Human datasets. This extensions are required for `CatE`.
+- Added `PPIEvaluator`, `PPICatEEvaluator`, `GDAEvaluator` and `SubsumptionEvaluator`
 
 ### Changed 
 - Removed `.mean()` for GCI losses in BoxSquaredELModule
 - Property `evaluation_classes` in `mowl.datasets.builtin.PPIYeastDataset` returns a pair of `OWLClasses` objects instead of a single `OWLClasses` object.
+- Updated CatE projection method based on latest version of paper (Nesy 2024 submission) ([#59][i59])
 ### Deprecated
 - `mowl.nn.ELBoxModule` changed name to `mowl.nn.ELBEModule`
 ### Removed
+- End of support for Python 3.8 based on https://endoflife.date/python
 ### Fixed
 - Fix bug in GCI2 score for ELEmbeddings
 - Fix bottleneck in ELBE example for PPI.

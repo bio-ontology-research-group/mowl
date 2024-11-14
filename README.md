@@ -21,7 +21,6 @@ mainly in Python, but we have integrated the functionalities of [OWLAPI](https:/
 
 ## Table of contents
   - [Installation](#installation)
-  - [List of contributors](#list-of-contributors)
   - [License](#license)
   - [Documentation](#documentation)
   - [Changelog](#changelog)
@@ -32,7 +31,7 @@ mainly in Python, but we have integrated the functionalities of [OWLAPI](https:/
 ### System dependencies
 
   - JDK version >= 11
-  - Python version: 3.8, 3.9, 3.10, 3.11
+  - Python version: 3.9, 3.10, 3.11, 3.12
   - Conda version >= 4.x.x
 
 ### Python requirements
@@ -60,20 +59,6 @@ pip install git+https://github.com/bio-ontology-research-group/mowl
 * [Ontology Embedding: A Survey of Methods, Applications and Resources](https://arxiv.org/abs/2406.10964)
 * [Evaluating Different Methods for Semantic Reasoning Over Ontologies](https://ceur-ws.org/Vol-3592/paper9.pdf)
 * [Prioritizing genomic variants through neuro-symbolic, knowledge-enhanced learning](https://doi.org/10.1093/bioinformatics/btae301)
-
-
-
-## List of contributors
-* [Fernando Zhapa](https://github.com/ferzcam)
-* [Maxat Kulmanov](https://github.com/coolmaksat)
-* [Sarah Alghamdi](https://github.com/smalghamdi)
-* [Robert Hoehndorf](https://github.com/leechuck)
-* [Carsten Jahn](https://github.com/carsten-jahn)
-* [Sonja Katz](https://github.com/sonjakatz)
-* [Marco Anteghini](https://github.com/MarcoAnteghini)
-* Francesco Gualdi
-* [luis-sribeiro](https://github.com/luis-sribeiro)
-* [Leduin Cuenca](https://github.com/leduin) (logo)
 
 ## License
 This software library is distributed under the [BSD-3-Clause license](https://github.com/bio-ontology-research-group/mowl/blob/main/LICENSE)

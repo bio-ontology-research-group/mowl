@@ -2,17 +2,13 @@ import sys
 sys.path.append("../")
 import mowl
 mowl.init_jvm("10g")
-from mowl.models import SyntacticPlusW2VModel
+from mowl.models import RandomWalkPlusW2VModel
+from mowl.walking import Node2Vec
 from mowl.utils.random import seed_everything
-from mowl.reasoning import MOWLReasoner
-from mowl.owlapi import OWLAPIAdapter
 from org.semanticweb.owlapi.model.parameters import Imports
 from org.semanticweb.owlapi.model import AxiomType as Ax
-from org.semanticweb.elk.owlapi import ElkReasonerFactory
-from java.util import HashSet
-
-from evaluators import SubsumptionEvaluator
-from datasets import SubsumptionDataset
+from evaluators import PPIEvaluator
+from datasets import PPIDataset
 from utils import print_as_md
 from tqdm import tqdm
 import logging
@@ -28,38 +24,47 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 @ck.command()
-@ck.option("--dataset_name", "-ds", type=ck.Choice(["go", "foodon"]), default="go")
+@ck.option("--dataset_name", "-ds", type=ck.Choice(["ppi_yeast", "ppi_human"]), default="ppi_yeast")
 @ck.option("--embed_dim", "-dim", default=50, help="Embedding dimension")
 @ck.option("--window_size", "-ws", default=5, help="Batch size")
 @ck.option("--epochs", "-e", default=10, help="Number of epochs")
-@ck.option("--evaluate_deductive", "-evalded", is_flag=True, help="Use deductive closure as positive examples for evaluation")
-@ck.option("--filter_deductive", "-filterded", is_flag=True, help="Filter out examples from deductive closure")
+@ck.option("--walk_length", "-wl", default=20, help="Walk length")
+@ck.option("--number_of_walks", "-nw", default=10, help="Number of walks per each node")
+@ck.option("--p", "-p", required=True, type=float)
+@ck.option("--q", "-q", required=True, type=float)
 @ck.option("--device", "-d", default="cuda", help="Device to use")
 @ck.option("--wandb_description", "-desc", default="default")
 @ck.option("--no_sweep", "-ns", is_flag=True)
 @ck.option("--only_test", "-ot", is_flag=True)
-def main(dataset_name, embed_dim, window_size, epochs,
-         evaluate_deductive, filter_deductive, device,
-         wandb_description, no_sweep, only_test):
+def main(dataset_name, embed_dim, window_size, epochs, walk_length, number_of_walks,
+         p, q, device, wandb_description, no_sweep, only_test):
 
     seed_everything(42)
 
-    evaluator_name = "subsumption"
+    evaluator_name = "ppi"
     
-    wandb_logger = wandb.init(entity="zhapacfp_team", project="ontoem", group=f"opa2vec_{dataset_name}", name=wandb_description)
+    wandb_logger = wandb.init(entity="zhapacfp_team", project="ontoem", group=f"owl2vecstar_sim_{dataset_name}", name=wandb_description)
 
     if no_sweep:
         wandb_logger.log({"dataset_name": dataset_name,
                           "embed_dim": embed_dim,
-                          "epochs": epochs,
                           "window_size": window_size,
+                          "epochs": epochs,
+                          "walk_length": walk_length,
+                          "number_of_walks": number_of_walks,
+                          "p": p,
+                          "q": q
                           })
     else:
         dataset_name = wandb.config.dataset_name
         embed_dim = wandb.config.embed_dim
-        epochs = wandb.config.epochs
         window_size = wandb.config.window_size
-                
+        epochs = wandb.config.epochs
+        walk_length = wandb.config.walk_length
+        number_of_walks = wandb.config.number_of_walks
+        p = wandb.config.p
+        q = wandb.config.q
+        
     root_dir, dataset = dataset_resolver(dataset_name)
 
     model_dir = f"{root_dir}/../models/"
@@ -68,18 +73,18 @@ def main(dataset_name, embed_dim, window_size, epochs,
     corpora_dir = f"{root_dir}/../corpora/"
     os.makedirs(corpora_dir, exist_ok=True)
     
-    model_filepath = f"{model_dir}/{embed_dim}_{epochs}_{window_size}.pt"
-    corpus_filepath = f"{corpora_dir}/{embed_dim}_{epochs}_{window_size}.txt"
-
-    model = OPA2VecModel(evaluator_name, dataset, window_size,
-                         embed_dim, model_filepath, corpus_filepath, epochs,
-                         evaluate_deductive, filter_deductive,
-                         device, wandb_logger)
+    model_filepath = f"{model_dir}/owl2vecstar_sim_{embed_dim}_{window_size}_{epochs}_{walk_length}_{number_of_walks}_{p}_{q}.pt"
+    corpus_filepath = f"{corpora_dir}/owl2vecstar_sim_{embed_dim}_{window_size}_{epochs}_{walk_length}_{number_of_walks}_{p}_{q}.txt"
+    
+    model = OWL2VecStarModel(evaluator_name, dataset, window_size,
+                             embed_dim, walk_length, number_of_walks,
+                             p, q, model_filepath, corpus_filepath, epochs, device,
+                             wandb_logger)
 
     
     if not only_test:
         model.train()
-        model.w2v_model.save(model_filepath)
+        
         
     metrics = model.test()
     print_as_md(metrics)
@@ -88,79 +93,59 @@ def main(dataset_name, embed_dim, window_size, epochs,
     wandb_logger.log(metrics)
         
 def dataset_resolver(dataset_name):
-    if dataset_name.lower() == "go":
-        root_dir = "../use_cases/go/data/"
-    elif dataset_name.lower() == "foodon":
-        root_dir = "../use_cases/foodon/data/"
+    if dataset_name.lower() == "ppi_yeast":
+        root_dir = "../use_cases/ppi_yeast/data/"
+        organism = "yeast"
+    elif dataset_name.lower() == "ppi_human":
+        root_dir = "../use_cases/ppi_human/data/"
+        organism = "human"
     else:
         raise ValueError(f"Dataset {dataset_name} not found")
 
-    return root_dir, SubsumptionDataset(root_dir)
-    
+    return root_dir, PPIDataset(root_dir, organism)
+
 def evaluator_resolver(evaluator_name, *args, **kwargs):
-    if evaluator_name.lower() == "subsumption":
-        return SubsumptionEvaluator(*args, **kwargs)
+    if evaluator_name.lower() == "ppi":
+        return PPIEvaluator(*args, **kwargs)
     else:
         raise ValueError(f"Evaluator {evaluator_name} not found")
 
-
-class OPA2VecModel(SyntacticPlusW2VModel):
-    def __init__(self, evaluator_name, dataset, window_size, embed_dim,
-                 model_filepath, corpus_filepath, epochs,
-                 evaluate_deductive, filter_deductive, device,
+class OWL2VecStarModel(RandomWalkPlusW2VModel):
+    def __init__(self, evaluator_name, dataset, window_size,
+                 embed_dim, walk_length, number_of_walks, p, q,
+                 model_filepath, corpus_filepath, epochs, device,
                  wandb_logger):
-        super().__init__(dataset, model_filepath=model_filepath, corpus_filepath=corpus_filepath)
 
+        classes = dataset.classes.as_str
+        class_to_id = {class_: i for i, class_ in enumerate(classes)}
+        
+        super().__init__(dataset, model_filepath=model_filepath)
+
+
+        
+        
         self.embed_dim = embed_dim
         self.evaluator = evaluator_resolver(evaluator_name, dataset,
-                                            device, batch_size=64,
-                                            evaluate_with_deductive_closure=evaluate_deductive,
-                                            filter_deductive_closure=filter_deductive)
+                                            device, batch_size=16)
         self.epochs = epochs
         self.device = device
         self.wandb_logger = wandb_logger
 
-        self.set_w2v_model(vector_size=embed_dim, min_count=1, window=window_size, epochs=self.epochs, sg=1, negative=5)
+        self.set_projector(mowl.projection.OWL2VecStarProjector(include_literals=True))
+        self.set_walker(Node2Vec(number_of_walks, walk_length, p=p, q=q, workers=10, outfile=corpus_filepath))
+        self.set_w2v_model(vector_size=embed_dim, workers=16, epochs=epochs, min_count=1, window=window_size, sg=1, negative=5)
+
 
     def train(self):
-        initial_axiom_count = len(self.dataset.ontology.getAxioms())
-        logger.info(f"Ontology axioms before reasoning step: {initial_axiom_count}")
+        super().train(epochs = self.epochs)
+        self.w2v_model.save(self.model_filepath)
 
-        reasoner_factory = ElkReasonerFactory()
-        reasoner = reasoner_factory.createReasoner(self.dataset.ontology)
-        mowl_reasoner = MOWLReasoner(reasoner)
-
-        classes = self.dataset.ontology.getClassesInSignature()
-        subclass_axioms = mowl_reasoner.infer_subclass_axioms(classes)
-        equivalent_class_axioms = mowl_reasoner.infer_equivalent_class_axioms(classes)
-
-        adapter = OWLAPIAdapter()
-        manager = adapter.owl_manager
-
-        axioms = HashSet()
-        axioms.addAll(subclass_axioms)
-        axioms.addAll(equivalent_class_axioms)
-
-        manager.addAxioms(self.dataset.ontology, axioms)
-
-        final_axiom_count = len(self.dataset.ontology.getAxioms())
-        logger.info(f"Ontology axioms after reasoning step: {final_axiom_count}")
-
-        if os.path.exists(self.corpus_filepath):
-            logger.warning("Corpus already exists in file. Loading it...")
-            self.load_corpus()
-        else:
-            self.generate_corpus(save=True, with_annotations=True)
-
-        super().train()
+        
             
     def test(self):
         self.from_pretrained(self.model_filepath)
         evaluation_module = EvaluationModel(self.w2v_model, self.dataset, self.embed_dim, self.device)
-        
         return self.evaluator.evaluate(evaluation_module)
-
-
 
 
 class EvaluationModel(nn.Module):
@@ -207,7 +192,7 @@ class EvaluationModel(nn.Module):
         dot_product = th.sum(x * y, dim=1)
         logger.debug(f"Dot product shape: {dot_product.shape}")
         return 1 - th.sigmoid(dot_product)
-        
-                     
+
+    
 if __name__ == "__main__":
     main()

@@ -11,8 +11,8 @@ from org.semanticweb.owlapi.model import AxiomType as Ax
 from org.semanticweb.elk.owlapi import ElkReasonerFactory
 from java.util import HashSet
 
-from evaluators import SubsumptionEvaluator
-from datasets import SubsumptionDataset
+from evaluators import PPIEvaluator
+from datasets import PPIDataset
 from utils import print_as_md
 from tqdm import tqdm
 import logging
@@ -28,23 +28,20 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 @ck.command()
-@ck.option("--dataset_name", "-ds", type=ck.Choice(["go", "foodon"]), default="go")
+@ck.option("--dataset_name", "-ds", type=ck.Choice(["ppi_yeast", "ppi_human"]), default="ppi_yeast")
 @ck.option("--embed_dim", "-dim", default=50, help="Embedding dimension")
 @ck.option("--window_size", "-ws", default=5, help="Batch size")
 @ck.option("--epochs", "-e", default=10, help="Number of epochs")
-@ck.option("--evaluate_deductive", "-evalded", is_flag=True, help="Use deductive closure as positive examples for evaluation")
-@ck.option("--filter_deductive", "-filterded", is_flag=True, help="Filter out examples from deductive closure")
 @ck.option("--device", "-d", default="cuda", help="Device to use")
 @ck.option("--wandb_description", "-desc", default="default")
 @ck.option("--no_sweep", "-ns", is_flag=True)
 @ck.option("--only_test", "-ot", is_flag=True)
-def main(dataset_name, embed_dim, window_size, epochs,
-         evaluate_deductive, filter_deductive, device,
+def main(dataset_name, embed_dim, window_size, epochs, device,
          wandb_description, no_sweep, only_test):
 
     seed_everything(42)
 
-    evaluator_name = "subsumption"
+    evaluator_name = "ppi"
     
     wandb_logger = wandb.init(entity="zhapacfp_team", project="ontoem", group=f"opa2vec_{dataset_name}", name=wandb_description)
 
@@ -68,13 +65,12 @@ def main(dataset_name, embed_dim, window_size, epochs,
     corpora_dir = f"{root_dir}/../corpora/"
     os.makedirs(corpora_dir, exist_ok=True)
     
-    model_filepath = f"{model_dir}/{embed_dim}_{epochs}_{window_size}.pt"
-    corpus_filepath = f"{corpora_dir}/{embed_dim}_{epochs}_{window_size}.txt"
+    model_filepath = f"{model_dir}/opa2vec_{dataset_name}_{embed_dim}_{epochs}_{window_size}.pt"
+    corpus_filepath = f"{corpora_dir}/opa2vec_{dataset_name}_{embed_dim}_{epochs}_{window_size}.txt"
 
     model = OPA2VecModel(evaluator_name, dataset, window_size,
-                         embed_dim, model_filepath, corpus_filepath, epochs,
-                         evaluate_deductive, filter_deductive,
-                         device, wandb_logger)
+                         embed_dim, model_filepath, corpus_filepath,
+                         epochs, device, wandb_logger)
 
     
     if not only_test:
@@ -88,34 +84,34 @@ def main(dataset_name, embed_dim, window_size, epochs,
     wandb_logger.log(metrics)
         
 def dataset_resolver(dataset_name):
-    if dataset_name.lower() == "go":
-        root_dir = "../use_cases/go/data/"
-    elif dataset_name.lower() == "foodon":
-        root_dir = "../use_cases/foodon/data/"
+    if dataset_name.lower() == "ppi_yeast":
+        root_dir = "../use_cases/ppi_yeast/data/"
+        organism = "yeast"
+    elif dataset_name.lower() == "ppi_human":
+        root_dir = "../use_cases/ppi_human/data/"
+        organism = "human"
     else:
         raise ValueError(f"Dataset {dataset_name} not found")
 
-    return root_dir, SubsumptionDataset(root_dir)
-    
+    return root_dir, PPIDataset(root_dir, organism)
+
 def evaluator_resolver(evaluator_name, *args, **kwargs):
-    if evaluator_name.lower() == "subsumption":
-        return SubsumptionEvaluator(*args, **kwargs)
+    if evaluator_name.lower() == "ppi":
+        return PPIEvaluator(*args, **kwargs)
     else:
         raise ValueError(f"Evaluator {evaluator_name} not found")
 
 
 class OPA2VecModel(SyntacticPlusW2VModel):
-    def __init__(self, evaluator_name, dataset, window_size, embed_dim,
-                 model_filepath, corpus_filepath, epochs,
-                 evaluate_deductive, filter_deductive, device,
-                 wandb_logger):
+    def __init__(self, evaluator_name, dataset, window_size,
+                 embed_dim, model_filepath, corpus_filepath, epochs,
+                 device, wandb_logger):
         super().__init__(dataset, model_filepath=model_filepath, corpus_filepath=corpus_filepath)
 
         self.embed_dim = embed_dim
         self.evaluator = evaluator_resolver(evaluator_name, dataset,
-                                            device, batch_size=64,
-                                            evaluate_with_deductive_closure=evaluate_deductive,
-                                            filter_deductive_closure=filter_deductive)
+                                            device, batch_size=32)
+        
         self.epochs = epochs
         self.device = device
         self.wandb_logger = wandb_logger

@@ -60,18 +60,48 @@ class SubsumptionDataset(PathDataset):
 
 
 class PPIDataset(PathDataset):
-    def __init__(self, root_dir):
+    def __init__(self, root_dir, organism="yeast"):
         super().__init__(root_dir + "ontology.owl", root_dir + "valid.owl", root_dir + "test.owl")
 
         self.root_dir = root_dir
         self._deductive_closure_ontology = None
+        if organism == "yeast":
+            self.prefix = "http://4932"
+        elif organism == "human":
+            self.prefix = "http://9606"
+        else:
+            raise ValueError(f"Organism {organism} not found")
         
     @property
     def evaluation_classes(self):
         if self._evaluation_classes is None:
             proteins = set()
             for owl_name, owl_cls in self.classes.as_dict.items():
-                if "http://4932" in owl_name:
+                if self.prefix in owl_name:
+                    proteins.add(owl_cls)
+            self._evaluation_classes = OWLClasses(proteins), OWLClasses(proteins)
+
+        return self._evaluation_classes
+
+class PPIDatasetExtended(PathDataset):
+    def __init__(self, root_dir, organism="yeast"):
+        super().__init__(root_dir + "ontology_extended.owl", root_dir + "valid.owl", root_dir + "test.owl")
+
+        self.root_dir = root_dir
+        self._deductive_closure_ontology = None
+        if organism == "yeast":
+            self.prefix = "http://4932"
+        elif organism == "human":
+            self.prefix = "http://9606"
+        else:
+            raise ValueError(f"Organism {organism} not found")
+        
+    @property
+    def evaluation_classes(self):
+        if self._evaluation_classes is None:
+            proteins = set()
+            for owl_name, owl_cls in self.classes.as_dict.items():
+                if self.prefix in owl_name:
                     proteins.add(owl_cls)
             self._evaluation_classes = OWLClasses(proteins), OWLClasses(proteins)
 
