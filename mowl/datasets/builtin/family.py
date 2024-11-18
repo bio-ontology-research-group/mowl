@@ -1,6 +1,6 @@
 from ..base import RemoteDataset, PathDataset
 
-DATA_URL = 'https://bio2vec.cbrc.kaust.edu.sa/data/mowl/family.tar.gz'
+DATA_URL = 'https://bio2vec.net/data/mowl/family.tar.gz'
 
 
 class FamilyDataset(RemoteDataset):

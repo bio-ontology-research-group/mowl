@@ -41,3 +41,5 @@ dist/
 *.log
 
 docs/source/api/mowl.*
+
+**/wandb

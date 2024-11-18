@@ -5,7 +5,7 @@ import mowl
 
 mowl.init_jvm("5g")
 from mowl.datasets.builtin import FamilyDataset, GDAHumanELDataset, GDAMouseELDataset, \
-    PPIYeastSlimDataset
+    PPIYeastSlimDataset, GOSubsumptionDataset, FoodOnSubsumptionDataset, GDADatasetV2
 
 logger = logging.getLogger("Downloader")
 
@@ -19,8 +19,13 @@ def setUpModule():
     GDAMouseELDataset()
     logger.info("Downloading ppi_yeast_slim dataset")
     PPIYeastSlimDataset()
-
-
+    logger.info("Downloading go_subsumption dataset")
+    GOSubsumptionDataset()
+    logger.info("Downloading foodon_subsumption dataset")
+    FoodOnSubsumptionDataset()
+    logger.info("Downloading gda_v2 dataset")
+    GDADatasetV2()
+    
 # def tearDownModule():
     # os.remove('ppi_yeast_slim.tar.gz')
     # os.remove('gda_human_el.tar.gz')

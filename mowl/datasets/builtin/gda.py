@@ -8,10 +8,10 @@ import gzip
 import os
 from java.util import HashSet
 
-DATA_HUMAN_URL = 'https://bio2vec.cbrc.kaust.edu.sa/data/mowl/gda_human.tar.gz'
-DATA_HUMAN_EL_URL = 'https://bio2vec.cbrc.kaust.edu.sa/data/mowl/gda_human_el.tar.gz'
-DATA_MOUSE_URL = 'https://bio2vec.cbrc.kaust.edu.sa/data/mowl/gda_mouse.tar.gz'
-DATA_MOUSE_EL_URL = 'https://bio2vec.cbrc.kaust.edu.sa/data/mowl/gda_mouse_el.tar.gz'
+DATA_HUMAN_URL = 'https://bio2vec.net/data/mowl/gda_human.tar.gz'
+DATA_HUMAN_EL_URL = 'https://bio2vec.net/data/mowl/gda_human_el.tar.gz'
+DATA_MOUSE_URL = 'https://bio2vec.net/data/mowl/gda_mouse.tar.gz'
+DATA_MOUSE_EL_URL = 'https://bio2vec.net/data/mowl/gda_mouse_el.tar.gz'
 
 
 class GDADataset(RemoteDataset):

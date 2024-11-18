@@ -34,5 +34,10 @@ EVALUATOR_NOT_SET = "Evaluator not set. Please set it using the 'set_evaluator' 
 MODEL_NOT_TRAINED_OR_LOADED = "Model has not been trained or loaded yet. Use 'model.train' or 'model.from_pretrained'."
 
 
-def get_type_error_message(parameter_name, expected_type, parameter_type):
-    return f"Parameter {parameter_name} must be of type {expected_type}. Got {parameter_type} instead."
+def type_error(parameter_name, expected_type, parameter_type, optional=False):
+    if optional:
+        prefix = "Optional parameter"
+    else:
+        prefix = "Parameter"
+    
+    return f"{prefix} {parameter_name} must be of type {expected_type}. Got {parameter_type} instead."

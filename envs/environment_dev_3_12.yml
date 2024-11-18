@@ -7,7 +7,6 @@ dependencies:
   - python=3.12
   - cairo
   - deprecated
-  - numpy
   - networkx
   - click
   - grpcio
@@ -16,17 +15,18 @@ dependencies:
   - protobuf
   - pyyaml
   - requests
-  - scipy<1.13.0
   - scikit-learn
   - urllib3
   - pytorch
-  - gensim>=4.3.0
   - openjdk
   - gradle
   - pip
   - pip:
+    - gensim>=4.3.0
+    - scipy<1.15.0	    
     - build
     - pykeen==1.10.2
+    - numpy
     - sphinx-rtd-theme
     - pytest
     - pytest-faulthandler

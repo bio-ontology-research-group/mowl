@@ -1,4 +1,4 @@
-from mowl.evaluation import Evaluator
+from mowl.evaluation import Evaluator, RankingEvaluator
 from mowl.projection import TaxonomyWithRelationsProjector, Edge
 import torch as th
 import logging
@@ -8,7 +8,7 @@ logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
 
-class GDAEvaluator(Evaluator):
+class GDAEvaluatorOld(Evaluator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -57,3 +57,34 @@ class GDAEvaluator(Evaluator):
             filtering_labels[head, tail] = 10000
         
         return filtering_labels
+
+
+
+class GDAEvaluator(RankingEvaluator):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def create_tuples(self, ontology):
+        projector = TaxonomyWithRelationsProjector(relations=[self.dataset.evaluation_object_property])
+        edges = projector.project(ontology)
+
+        classes, relations = Edge.get_entities_and_relations(edges)
+
+        class_str2owl = self.dataset.classes.to_dict()
+        class_owl2idx = self.dataset.classes.to_index_dict()
+        relation_str2owl = self.dataset.object_properties.to_dict()
+        relation_owl2idx = self.dataset.object_properties.to_index_dict()
+        
+        edges_indexed = []
+
+        for e in edges:
+            head = class_owl2idx[class_str2owl[e.src]]
+            relation = relation_owl2idx[relation_str2owl[e.rel]]
+            tail = class_owl2idx[class_str2owl[e.dst]]
+            edges_indexed.append((head, relation, tail))
+        
+        return th.tensor(edges_indexed, dtype=th.long)
+
+    def get_scores(self, model, batch):
+        scores = model(batch, "gci2")
+        return scores

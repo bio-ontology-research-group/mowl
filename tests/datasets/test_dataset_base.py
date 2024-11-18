@@ -203,7 +203,7 @@ class TestTarFileDataset(TestCase):
     def setUpClass(self):
         self.filepath = self.download(
             self,
-            'https://bio2vec.cbrc.kaust.edu.sa/data/mowl/ppi_yeast_slim.tar.gz')
+            'https://bio2vec.net/data/mowl/ppi_yeast_slim.tar.gz')
 
     @classmethod
     def tearDownClass(self):
@@ -228,9 +228,9 @@ class TestRemoteDataset(TestCase):
     @classmethod
     def setUpClass(self):
 
-        self.good_url = 'https://bio2vec.cbrc.kaust.edu.sa/data/mowl/ppi_yeast.tar.gz'
+        self.good_url = 'https://bio2vec.net/data/mowl/ppi_yeast.tar.gz'
         self.bad_url = 'https://bio2vec.cbrc.kaust.edu.sa/data/mowl/gda_mouse_el.tar.gzq'
-        self.only_training_set_url = 'https://bio2vec.cbrc.kaust.edu.sa/data/mowl/family.tar.gz'
+        self.only_training_set_url = 'https://bio2vec.net/data/mowl/family.tar.gz'
 
         tmp_dir = tempfile.gettempdir()
         self.tmp_dir = os.path.join(tmp_dir, "mowl")

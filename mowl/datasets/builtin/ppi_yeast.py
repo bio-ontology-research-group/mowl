@@ -1,17 +1,9 @@
-import pathlib
-
-from ..base import RemoteDataset, PathDataset, OWLClasses
-import math
-import random
-import numpy as np
-import gzip
-import os
-from java.util import HashSet
+from ..base import RemoteDataset, OWLClasses
 from deprecated.sphinx import versionchanged
 
 
-DATA_URL = 'https://bio2vec.cbrc.kaust.edu.sa/data/mowl/ppi_yeast.tar.gz'
-SLIM_DATA_URL = 'https://bio2vec.cbrc.kaust.edu.sa/data/mowl/ppi_yeast_slim.tar.gz'
+DATA_URL = 'https://bio2vec.net/data/mowl/ppi_yeast.tar.gz'
+SLIM_DATA_URL = 'https://bio2vec.net/data/mowl/ppi_yeast_slim.tar.gz'
 
 
 class PPIYeastDataset(RemoteDataset):

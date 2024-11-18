@@ -12,6 +12,12 @@ from mowl.owlapi.constants import R, THING, INDIVIDUAL
 from mowl.owlapi.adapter import OWLAPIAdapter
 
 
+import logging
+logger = logging.getLogger(__name__)
+handler = logging.StreamHandler()
+logger.addHandler(handler)
+logger.setLevel(logging.INFO)
+
 class ALCDataset():
     """This class provides data-related methods to work with
     :math:`\mathcal{ALC}` description logic language. 
@@ -74,7 +80,7 @@ class ALCDataset():
         return self._dataset.object_property_to_id
 
     def get_grouped_axioms(self):
-        res = {}
+        res = dict()
         for axiom in self._ontology.getAxioms(Imports.INCLUDED):
             axioms = [axiom, ]
             if isinstance(axiom, OWLNaryAxiom):
@@ -198,23 +204,30 @@ class ALCDataset():
 
         self._loaded = True
 
-    def get_datasets(self):
+    def get_datasets(self, min_count=0):
         """Returns a dictionary containing the name of the axiom
-        pattern as keys and the corresponding TensorDatasets as values.
+        pattern as keys and the corresponding TensorDatasets as values. If the number of axioms for a given pattern is less than min_count, the pattern is not included in the dictionary and axioms is 
 
-        :rtype: dict
+        :param min_count: The minimum number of occurrences of an axiom pattern.
+        :type min_count: int
+        :rtype: tuple(dict, list)
         """
         datasets = {}
+        rest_of_axioms = []
         for ax_pattern, axioms in self.grouped_axioms.items():
-            axiom_vectors = []
-            for axiom in axioms:
-                vector = self.get_axiom_vector(axiom)
-                axiom_vectors.append(vector)
-            axiom_tensor = torch.tensor(axiom_vectors, dtype=torch.int64)
-            datasets[ax_pattern] = TensorDataset(
-                axiom_tensor)
+            if len(axioms) < min_count:
+                rest_of_axioms += axioms
+                logger.debug(f"Skipping {ax_pattern} with {len(axioms)} axioms")
+            else:
+                logger.debug(f"Creating dataset for {ax_pattern} with {len(axioms)} axioms")
+                axiom_vectors = []
+                for axiom in axioms:
+                    vector = self.get_axiom_vector(axiom)
+                    axiom_vectors.append(vector)
+                axiom_tensor = torch.tensor(axiom_vectors, dtype=torch.int64)
+                datasets[ax_pattern] = TensorDataset(axiom_tensor)
 
-        return datasets
+        return datasets, rest_of_axioms
 
     @property
     def grouped_axioms(self):

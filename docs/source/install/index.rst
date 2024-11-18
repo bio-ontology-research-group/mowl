@@ -1,38 +1,29 @@
 Installation and Setup
 ===================================
 
-System requirements
--------------------
+System dependencies
+---------------------
 
-- JDK version 17
-- Python version 3.8, 3.9, 3.10, 3.11, 3.12
-- Conda version >= 4.x.x
-
+- JDK version >= 22.x.x
+- Python version: 3.9, 3.10, 3.11, 3.12
+- Conda version >= 24.x.x
 
 Python requirements
-----------------------
+-----------------------
 
-- Gensim >= 4.x.x
-- PyTorch >= 1.12.x
-- PyKEEN >= 1.10.1
+- torch
+- gensim >= 4.3.0
+- JPype1 == 1.5.0
+- pykeen == 1.10.2
+- scipy < 1.15.0
 
 
-  
 Install from source code
 --------------------------
 
-Before installing from source, make sure to meet the dependencies.
-
-  
-Installation can be done with the following commands:
-
 .. code:: bash
-	  
-   git clone https://github.com/bio-ontology-research-group/mowl.git
-   
-   cd mowl
 
-   pip install .
+   pip install git+https://github.com/bio-ontology-research-group/mowl
 
 Install from PyPi
 ------------------------------

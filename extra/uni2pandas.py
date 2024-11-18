@@ -15,7 +15,7 @@ ORGS = set(['HUMAN', 'MOUSE', ])
 @ck.option(
     '--swissprot-file', '-sf', default='data/uniprot_sprot.dat.gz',
     help='UniProt/SwissProt knowledgebase file in text format (archived)')
-ck.option(
+@ck.option(
     '--out-file', '-o', default='data/swissprot.pkl',
     help='Result file with a list of proteins, sequences and annotations')
 @ck.option(
