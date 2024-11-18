@@ -15,7 +15,7 @@ Python requirements
 - gensim >= 4.3.0
 - JPype1 == 1.5.0
 - pykeen == 1.10.2
-- scipy < 1.13.0
+- scipy < 1.15.0
 
 
 Install from source code

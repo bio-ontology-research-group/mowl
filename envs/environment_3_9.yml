@@ -13,7 +13,7 @@ dependencies:
   - pyyaml
   - requests
   - scikit-learn
-  - scipy<1.13.0  
+  - scipy<1.15.0  
   - tqdm
   - urllib3
   - pip
