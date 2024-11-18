@@ -24,7 +24,7 @@ setuptools.setup(
     package_dir={"": "."},
     packages=setuptools.find_packages(where=".", exclude=("tests",)),
     package_data={"mowl": ["lib/*.jar"]},
-    python_requires=">=3.9"
+    python_requires=">=3.9",
     install_requires=[
         "click",
         "deprecated",
