@@ -2,7 +2,7 @@ from deprecated.sphinx import deprecated, versionchanged, versionadded
 import tempfile
 from mowl.datasets import Dataset
 from mowl.owlapi import OWLAPIAdapter
-from mowl.evaluation import Evaluator
+from mowl.evaluation import RankingEvaluator
 from mowl.error import messages as msg
 from java.util import HashSet
 
@@ -39,36 +39,12 @@ class Model():
         '''
         raise NotImplementedError("Method train is not implemented.")
 
-    def evaluate(self, *args,
-                 include_deductive_closure=False,
-                 exclude_testing_set=False,
-                 filter_deductive_closure=False,
-                 **kwargs):
+    def evaluate(self, *args, **kwargs):
         if self._evaluator is None:
             raise AttributeError(msg.EVALUATOR_NOT_SET)
 
-
-        if not isinstance(include_deductive_closure, bool):
-            raise TypeError(msg.get_type_error_message("include_deductive_closure", "bool", type(include_deductive_closure)))
-
-        if not isinstance(exclude_testing_set, bool):
-            raise TypeError(msg.get_type_error_message("exclude_testing_set", "bool", type(exclude_testing_set)))
-
-        if not isinstance(filter_deductive_closure, bool):
-            raise TypeError(msg.get_type_error_message("filter_deductive_closure", "bool", type(filter_deductive_closure)))
-
-        if not include_deductive_closure and exclude_testing_set:
-            raise ValueError("Parameter 'include_deductive_closure' cannot be False if 'exclude_testing_set' is True. Evaluation set will be empty.")
-
-        if include_deductive_closure and filter_deductive_closure:
-            raise ValueError("Parameter 'filter_deductive_closure' cannot be True if 'include_deductive_closure' is True.")
-        
-        
         self._metrics = self._evaluator.evaluate(self.evaluation_model,
-                                                 include_deductive_closure=include_deductive_closure,
-                                                 exclude_testing_set=exclude_testing_set,
-                                                 filter_deductive_closure=filter_deductive_closure,
-                                                 **kwargs)
+                                                 *args, **kwargs)
         
         
     
@@ -201,7 +177,7 @@ class Model():
         :type evaluator: mowl.evaluation.base.Evaluator
         """
         
-        if isinstance(evaluator, Evaluator):
+        if isinstance(evaluator, RankingEvaluator):
             self._evaluator = evaluator
         else:
             self._evaluator = evaluator(self.dataset, *args, **kwargs)
