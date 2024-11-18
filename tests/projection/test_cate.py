@@ -6,6 +6,7 @@ from mowl.owlapi import OWLAPIAdapter
 from org.semanticweb.owlapi.model import IRI
 from unittest import TestCase
 
+import mowl.error.messages as msg
 
 class TestCat(TestCase):
 
@@ -45,20 +46,49 @@ class TestCat(TestCase):
         
     def test_constructor_parameter_types(self):
         """This should check if the constructor parameters are of the correct type"""
+        output_type = 1
         self.assertRaisesRegex(
-            TypeError, "Optional parameter saturation_steps must be of type int",
-            CategoricalProjector, "0")
+            TypeError, msg.type_error("output_type", "str", type(output_type)),
+            CategoricalProjector, output_type)
+
+        saturation_steps = "1"
+        self.assertRaisesRegex(
+            TypeError, msg.type_error("saturation_steps", "int", type(saturation_steps), optional=True),
+            CategoricalProjector, "str", saturation_steps=saturation_steps)
+
         self.assertRaisesRegex(
             ValueError, "Optional parameter saturation_steps must be non-negative",
-            CategoricalProjector, -1)
+            CategoricalProjector, "str", saturation_steps = -1)
+
+        transitive_closure = "True"
         self.assertRaisesRegex(
-            TypeError, "Optional parameter transitive_closure must be of type bool",
-            CategoricalProjector, 1, {"a"})
+            TypeError, msg.type_error("transitive_closure", "bool", type(transitive_closure), optional=True),
+            CategoricalProjector, "str", transitive_closure=transitive_closure)
+
+        def_6 = 1
+        self.assertRaisesRegex(
+            TypeError, msg.type_error("def_6", "bool", type(def_6), optional=True),
+            CategoricalProjector, "str", def_6=def_6)
+
+        def_7 = "True"
+        self.assertRaisesRegex(
+            TypeError, msg.type_error("def_7", "bool", type(def_7), optional=True),
+            CategoricalProjector, "str", def_7=def_7)
+
+        lemma_6 = 1
+        self.assertRaisesRegex(
+            TypeError, msg.type_error("lemma_6", "bool", type(lemma_6), optional=True),
+            CategoricalProjector, "str", lemma_6=lemma_6)
+
+        lemma_8 = "True"
+        self.assertRaisesRegex(
+            TypeError, msg.type_error("lemma_8", "bool", type(lemma_8), optional=True),
+            CategoricalProjector, "str", lemma_8=lemma_8)
         
         
     def test_project_method_parameter_types(self):
         """This should check if the project method parameters are of the correct type"""
-        projector = CategoricalProjector()
+        projector = CategoricalProjector("str")
         self.assertRaisesRegex(
             TypeError,
             "Parameter ontology must be of type org.semanticweb.owlapi.model.OWLOntology",
@@ -66,9 +96,10 @@ class TestCat(TestCase):
 
     def test_project_family_ontology(self):
         """This should check if the projection result is correct"""
-        projector = CategoricalProjector()
+        projector = CategoricalProjector("str")
         edges = projector.project(self.ontology)
         edges = set([e.astuple() for e in edges])
+        edges = set([get_edge(e[0], e[2]) for e in edges])
 
         ground_truth_edges = set()
         with open("tests/projection/fixtures/cate_family.csv") as f:
@@ -78,9 +109,9 @@ class TestCat(TestCase):
                     continue
                 line = line.strip()
                 sub, super_ = line.split(",")
-                ground_truth_edges.add(edge(sub, super_))
+                ground_truth_edges.add(get_edge(sub, super_))
         
         self.assertEqual(set(edges), ground_truth_edges)
 
-def edge(a, b):
+def get_edge(a, b):
     return (a, "http://arrow", b)

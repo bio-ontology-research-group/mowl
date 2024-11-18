@@ -8,6 +8,8 @@ from .utils import IGNORED_AXIOM_TYPES, IGNORED_EXPRESSION_TYPES, pairs
 from mowl.projection.base import ProjectionModel
 from mowl.owlapi import OWLAPIAdapter
 from mowl.owlapi.defaults import BOT, TOP
+import mowl.error.messages as msg
+from mowl.projection import Edge as mEdge
 
 from org.semanticweb.owlapi.model import  AxiomType, EntityType, OWLObjectInverseOf, OWLOntology
 from org.semanticweb.owlapi.model import ClassExpressionType as CT
@@ -147,6 +149,8 @@ class Graph():
             source = str(source)
             target = str(target)
             edges.append((source, "http://type", target))
+
+        edges  = [mEdge(*edge) for edge in edges]
         return edges
 
     def as_edges(self):
@@ -554,14 +558,23 @@ class CategoricalProjector(ProjectionModel):
 
 
         if not isinstance(output_type, str):
-            raise TypeError("Parameter output_type must be of type str")
+            raise TypeError(msg.type_error("output_type", "str", type(output_type)))
         if not isinstance(saturation_steps, int):
-            raise TypeError("Optional parameter saturation_steps must be of type int")
+            raise TypeError(msg.type_error("saturation_steps", "int", type(saturation_steps), optional=True))
         if saturation_steps < 0:
-           raise ValueError("Optional parameter saturation_steps must be non-negative")
+            raise ValueError("Optional parameter saturation_steps must be non-negative")
         if not isinstance(transitive_closure, bool):
-            raise TypeError("Optional parameter transitive_closure must be of type bool")
+            raise TypeError(msg.type_error("transitive_closure", "bool", type(transitive_closure), optional=True))
+        if not isinstance(def_6, bool):
+            raise TypeError(msg.type_error("def_6", "bool", type(def_6), optional=True))
+        if not isinstance(lemma_6, bool):
+              raise TypeError(msg.type_error("lemma_6", "bool", type(lemma_6), optional=True))
+        if not isinstance(def_7, bool):
+            raise TypeError(msg.type_error("def_7", "bool", type(def_7), optional=True))
+        if not isinstance(lemma_8, bool):
+            raise TypeError(msg.type_error("lemma_8", "bool", type(lemma_8), optional=True))
 
+        
         if not output_type in ["str", "owl"]:
             raise ValueError("Invalid output type. Must be 'str' or 'owl'")
 
