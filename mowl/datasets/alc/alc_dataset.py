@@ -16,7 +16,7 @@ import logging
 logger = logging.getLogger(__name__)
 handler = logging.StreamHandler()
 logger.addHandler(handler)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 class ALCDataset():
     """This class provides data-related methods to work with
@@ -80,7 +80,7 @@ class ALCDataset():
         return self._dataset.object_property_to_id
 
     def get_grouped_axioms(self):
-        res = {}
+        res = dict()
         for axiom in self._ontology.getAxioms(Imports.INCLUDED):
             axioms = [axiom, ]
             if isinstance(axiom, OWLNaryAxiom):

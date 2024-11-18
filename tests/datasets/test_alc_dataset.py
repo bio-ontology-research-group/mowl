@@ -89,8 +89,9 @@ org.semanticweb.owlapi.model.OWLOntology."):
     def test_get_datasets(self):
         """This should check grouped axiom patterns"""
         alc_dataset = ALCDataset(self.ontology, self.dataset)
-        grouped_datasets = alc_dataset.get_datasets()
+        grouped_datasets, rest_of_axioms = alc_dataset.get_datasets()
         self.assertIsInstance(grouped_datasets, dict)
+        self.assertIsInstance(rest_of_axioms, list)
         for axiom, dataset in grouped_datasets.items():
             self.assertIsInstance(axiom, OWLAxiom)
             self.assertIsInstance(dataset, TensorDataset)

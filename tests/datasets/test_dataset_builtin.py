@@ -1,6 +1,5 @@
 import mowl
-from tests.datasetFactory import PPIYeastSlimDataset, GDAHumanELDataset, GDAMouseELDataset, \
-    FamilyDataset
+from tests.datasetFactory import PPIYeastSlimDataset, GDAHumanELDataset, GDAMouseELDataset, FamilyDataset, GOSubsumptionDataset, FoodOnSubsumptionDataset
 from unittest import TestCase
 import os
 import shutil
@@ -31,6 +30,17 @@ class TestInstanceOfDataset(TestCase):
         dataset = GDAMouseELDataset()
         self.assertIsInstance(dataset, mowl.datasets.Dataset)
 
+    def test_go_subsumption_is_instance_of_dataset(self):
+        """This should check if GOSubsumptionDataset is an instance of Dataset"""
+        dataset = GOSubsumptionDataset()
+        self.assertIsInstance(dataset, mowl.datasets.Dataset)
+
+    def test_foodon_subsumption_is_instance_of_dataset(self):
+        """This should check if FoodOnSubsumptionDataset is an instance of Dataset"""
+        dataset = FoodOnSubsumptionDataset()
+        self.assertIsInstance(dataset, mowl.datasets.Dataset)
+
+        
     def test_evaluation_classes_ppi(self):
         """This should check the correct behaviour of evaluation_classes_method in ppi dataset"""
         dataset = PPIYeastSlimDataset()
@@ -74,3 +84,5 @@ dataset"""
         rand_index = random.randint(0, len(str_classes_diseases) - 1)
         self.assertIsInstance(str_classes_diseases[rand_index], str)
         self.assertIsInstance(owl_classes_diseases[rand_index], OWLClass)
+
+
