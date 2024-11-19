@@ -1,5 +1,5 @@
 from pykeen.triples import TriplesFactory
-from deprecated.sphinx import versionadded, deprecated
+from deprecated.sphinx import versionadded, deprecated, versionchanged
 import numpy as np
 import torch as th
 
