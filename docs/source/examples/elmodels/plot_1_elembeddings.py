@@ -75,9 +75,9 @@ model = ELEmPPI(dataset,
                 reg_norm=1,
                 learning_rate=0.001,
                 epochs=20,
-                batch_size=4096,
+                batch_size=20000,
                 model_filepath=None,
-                device='cpu')
+                device='cuda')
 
 model.train()
 
@@ -93,5 +93,6 @@ model.train()
 from mowl.evaluation import PPIEvaluator
 
 model.set_evaluator(PPIEvaluator)
-model.evaluate()
+model.evaluate(dataset.testing)
 
+print(model.metrics)

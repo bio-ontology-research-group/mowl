@@ -71,10 +71,6 @@ To train a Word2Vec model with a generated corpus, we can use the class: :class:
    model.generate_corpus(save=True, with_annotations=True)
    model.train()
 
-.. testoutput::
-
-   Corpus saved in test
- 
 .. attention::
    The ``set_w2v_model`` receives the same arguments as the :class:`gensim.models.word2vec.Word2Vec` model.
 
