@@ -5,7 +5,6 @@ dependencies:
   - python=3.11
   - click
   - deprecated
-  - gensim>=4.3.0
   - gradle
   - JPype1=1.5.0
   - pandas
@@ -13,11 +12,12 @@ dependencies:
   - pyyaml
   - requests
   - scikit-learn
-  - scipy<1.13.0  
   - tqdm
   - urllib3
   - pip
   - pip:
-    - pykeen==1.10.2
+    - gensim>=4.3.0
+    - scipy<1.15.0	    
+    - pykeen==1.11.0
     - temp
     

@@ -2,14 +2,14 @@ import sys
 sys.path.append("../")
 import mowl
 mowl.init_jvm("10g")
-from mowl.models import GraphPlusPyKEENModel
+from mowl.models import RandomWalkPlusW2VModel
+from mowl.walking import Node2Vec
 from mowl.utils.random import seed_everything
 from org.semanticweb.owlapi.model.parameters import Imports
 from org.semanticweb.owlapi.model import AxiomType as Ax
 from evaluators import SubsumptionEvaluator
 from datasets import SubsumptionDataset
-
-from pykeen.models import TransE
+from utils import print_as_md
 from tqdm import tqdm
 import logging
 import click as ck
@@ -17,6 +17,7 @@ import os
 import torch as th
 import torch.nn as nn
 import numpy as np
+import random
 
 import wandb
 logger = logging.getLogger(__name__)
@@ -24,39 +25,49 @@ logger.setLevel(logging.INFO)
 
 @ck.command()
 @ck.option("--dataset_name", "-ds", type=ck.Choice(["go", "foodon"]), default="go")
-@ck.option("--evaluator_name", "-e", default="subsumption", help="Evaluator to use")
 @ck.option("--embed_dim", "-dim", default=50, help="Embedding dimension")
-@ck.option("--batch_size", "-bs", default=78000, help="Batch size")
-@ck.option("--learning_rate", "-lr", default=0.001, help="Learning rate")
+@ck.option("--window_size", "-ws", default=5, help="Batch size")
 @ck.option("--epochs", "-e", default=10, help="Number of epochs")
+@ck.option("--walk_length", "-wl", default=20, help="Walk length")
+@ck.option("--number_of_walks", "-nw", default=10, help="Number of walks per each node")
+@ck.option("--p", "-p", required=True, type=float)
+@ck.option("--q", "-q", required=True, type=float)
 @ck.option("--evaluate_deductive", "-evalded", is_flag=True, help="Use deductive closure as positive examples for evaluation")
 @ck.option("--filter_deductive", "-filterded", is_flag=True, help="Filter out examples from deductive closure")
 @ck.option("--device", "-d", default="cuda", help="Device to use")
 @ck.option("--wandb_description", "-desc", default="default")
 @ck.option("--no_sweep", "-ns", is_flag=True)
 @ck.option("--only_test", "-ot", is_flag=True)
-def main(dataset_name, evaluator_name, embed_dim, batch_size,
-         learning_rate, epochs, evaluate_deductive, filter_deductive,
+def main(dataset_name, embed_dim, window_size, epochs, walk_length,
+         number_of_walks, p, q, evaluate_deductive, filter_deductive,
          device, wandb_description, no_sweep, only_test):
 
     seed_everything(42)
+
+    evaluator_name = "subsumption"
     
-    wandb_logger = wandb.init(entity="zhapacfp_team", project="ontoem", group="f{dataset_name}_{evaluate_deductive}_{filter_deductive}", name=wandb_description)
+    wandb_logger = wandb.init(entity="zhapacfp_team", project="ontoem", group=f"owl2vecstar_sim_{dataset_name}", name=wandb_description)
 
     if no_sweep:
         wandb_logger.log({"dataset_name": dataset_name,
                           "embed_dim": embed_dim,
+                          "window_size": window_size,
                           "epochs": epochs,
-                          "batch_size": batch_size,
-                          "learning_rate": learning_rate
+                          "walk_length": walk_length,
+                          "number_of_walks": number_of_walks,
+                          "p": p,
+                          "q": q
                           })
     else:
         dataset_name = wandb.config.dataset_name
         embed_dim = wandb.config.embed_dim
+        window_size = wandb.config.window_size
         epochs = wandb.config.epochs
-        batch_size = wandb.config.batch_size
-        learning_rate = wandb.config.learning_rate
-                        
+        walk_length = wandb.config.walk_length
+        number_of_walks = wandb.config.number_of_walks
+        p = wandb.config.p
+        q = wandb.config.q
+        
     root_dir, dataset = dataset_resolver(dataset_name)
 
     model_dir = f"{root_dir}/../models/"
@@ -65,10 +76,12 @@ def main(dataset_name, evaluator_name, embed_dim, batch_size,
     corpora_dir = f"{root_dir}/../corpora/"
     os.makedirs(corpora_dir, exist_ok=True)
     
-    model_filepath = f"{model_dir}/{embed_dim}_{epochs}_{batch_size}_{learning_rate}.pt"
+    model_filepath = f"{model_dir}/owl2vecstar_sim_{embed_dim}_{window_size}_{epochs}_{walk_length}_{number_of_walks}_{p}_{q}.pt"
+    corpus_filepath = f"{corpora_dir}/owl2vecstar_sim_{embed_dim}_{window_size}_{epochs}_{walk_length}_{number_of_walks}_{p}_{q}.txt"
     
-    model = OWL2VecStarModel(evaluator_name, dataset, batch_size,
-                             learning_rate, embed_dim, model_filepath,
+    model = OWL2VecStarModel(evaluator_name, dataset, window_size,
+                             embed_dim, walk_length, number_of_walks,
+                             p, q, model_filepath, corpus_filepath,
                              epochs, evaluate_deductive,
                              filter_deductive, device, wandb_logger)
 
@@ -83,38 +96,6 @@ def main(dataset_name, evaluator_name, embed_dim, batch_size,
              
     wandb_logger.log(metrics)
         
-
-def print_as_md(overall_metrics):
-    
-    metrics = ["test_mr", "test_mrr", "test_auc", "test_hits@1", "test_hits@3", "test_hits@10", "test_hits@50", "test_hits@100"]
-    filt_metrics = [k.replace("_", "_f_") for k in metrics]
-
-    string_metrics = "| Property | MR | MRR | AUC | Hits@1 | Hits@3 | Hits@10 | Hits@50 | Hits@100 | \n"
-    string_metrics += "| --- | --- | --- | --- | --- | --- | --- | --- | --- | \n"
-    string_filtered_metrics = "| Property | MR | MRR | AUC | Hits@1 | Hits@3 | Hits@10 | Hits@50 | Hits@100 | \n"
-    string_filtered_metrics += "| --- | --- | --- | --- | --- | --- | --- | --- | --- | \n"
-    
-    string_metrics += "| Overall | "
-    string_filtered_metrics += "| Overall | "
-    for metric in metrics:
-        if metric == "test_mr":
-            string_metrics += f"{int(overall_metrics[metric])} | "
-        else:
-            string_metrics += f"{overall_metrics[metric]:.4f} | "
-    for metric in filt_metrics:
-        if metric == "test_f_mr":
-            string_filtered_metrics += f"{int(overall_metrics[metric])} | "
-        else:
-            string_filtered_metrics += f"{overall_metrics[metric]:.4f} | "
-
-
-    print(string_metrics)
-    print("\n\n")
-    print(string_filtered_metrics)
-        
-    
-
-    
 def dataset_resolver(dataset_name):
     if dataset_name.lower() == "go":
         root_dir = "../use_cases/go/data/"
@@ -131,10 +112,10 @@ def evaluator_resolver(evaluator_name, *args, **kwargs):
     else:
         raise ValueError(f"Evaluator {evaluator_name} not found")
 
-
-class OWL2VecStarModel(GraphPlusPyKEENModel):
-    def __init__(self, evaluator_name, dataset, batch_size, learning_rate, embed_dim,
-                 model_filepath, epochs,
+class OWL2VecStarModel(RandomWalkPlusW2VModel):
+    def __init__(self, evaluator_name, dataset, window_size,
+                 embed_dim, walk_length, number_of_walks, p, q,
+                 model_filepath, corpus_filepath, epochs,
                  evaluate_deductive, filter_deductive, device,
                  wandb_logger):
 
@@ -156,80 +137,67 @@ class OWL2VecStarModel(GraphPlusPyKEENModel):
         self.wandb_logger = wandb_logger
 
         self.set_projector(mowl.projection.OWL2VecStarProjector(include_literals=True))
-        self.set_kge_method(TransE, embedding_dim=self.embed_dim, random_seed=42)
-        self._kge_method = self._kge_method.to(self.device)
-        self.optimizer = th.optim.Adam
-        self.lr = learning_rate
-        self.batch_size = batch_size
+        self.set_walker(Node2Vec(number_of_walks, walk_length, p=p, q=q, workers=10, outfile=corpus_filepath))
+        self.set_w2v_model(vector_size=embed_dim, workers=16, epochs=epochs, min_count=1, window=window_size, sg=1, negative=5)
+
 
     def train(self):
         super().train(epochs = self.epochs)
-        
+        self.w2v_model.save(self.model_filepath)
+
         
             
     def test(self):
         self.from_pretrained(self.model_filepath)
-        self._kge_method = self._kge_method.to(self.device)
-
-        
-        evaluation_module = EvaluationModel(self.kge_method, self.triples_factory, self.dataset, self.embed_dim, self.device)
-        
+        evaluation_module = EvaluationModel(self.w2v_model, self.dataset, self.embed_dim, self.device)
         return self.evaluator.evaluate(evaluation_module)
 
 
-
-
 class EvaluationModel(nn.Module):
-    def __init__(self, kge_method, triples_factory, dataset, embedding_size, device):
+    def __init__(self, w2v_model, dataset, embedding_size, device):
         super().__init__()
         self.embedding_size = embedding_size
         self.device = device
-
-        self.kge_method = kge_method
         
+        self.embeddings = self.init_module(w2v_model, dataset)
+
+
+    def init_module(self, w2v_model, dataset):
         classes = dataset.classes.as_str
         class_to_id = {class_: i for i, class_ in enumerate(classes)}
 
-        ont_id_to_graph_id = dict()
-
+        w2v_vectors = w2v_model.wv
+        embeddings_list = []
         for class_ in classes:
-            if class_ not in triples_factory.entity_to_id:
-                ont_id_to_graph_id[class_to_id[class_]] = -1
-                logger.warning(f"Class {class_} not found in graph")
-                
+            if class_ in w2v_vectors:
+                embeddings_list.append(w2v_vectors[class_])
             else:
-                ont_id_to_graph_id[class_to_id[class_]] = triples_factory.entity_to_id[class_]
+                logger.warning(f"Class {class_} not found in w2v model")
+                embeddings_list.append(np.random.rand(self.embedding_size))
+
+        embeddings_list = np.array(embeddings_list)
+        embeddings = th.tensor(embeddings_list).to(self.device)
+        return nn.Embedding.from_pretrained(embeddings)
         
-        assert list(ont_id_to_graph_id.keys()) == list(range(len(classes)))
-        self.graph_ids = th.tensor(list(ont_id_to_graph_id.values())).to(self.device)
-        
-        relation_id = triples_factory.relation_to_id["http://subclassof"]
-        self.rel_embedding = th.tensor(relation_id).to(self.device)
         
     def forward(self, data, *args, **kwargs):
+        if data.shape[1] == 2:
+            x = data[:, 0]
+            y = data[:, 1]
+        elif data.shape[1] == 3:
+            x = data[:, 0]
+            y = data[:, 2]
+        else:
+            raise ValueError(f"Data shape {data.shape} not recognized")
 
-        x = self.graph_ids[data[:, 0]].unsqueeze(1)
-        y = self.graph_ids[data[:, 1]].unsqueeze(1)
-
-        x_unique = self.graph_ids[data[:, 0].unique()]
-        y_unique = self.graph_ids[data[:, 1].unique()]
-        assert th.min(x_unique) >= 0, f"sum: {(x_unique==-1).sum()} min: {th.min(x_unique)} len: {len(x_unique)}"
-        assert th.min(y_unique) >= 0, f"sum: {(y_unique==-1).sum()} min: {th.min(y_unique)} len: {len(y_unique)}"
-                        
-        r = self.rel_embedding.expand_as(x)
         
-        triples = th.cat([x, r, y], dim=1)
-        assert triples.shape[1] == 3
-        scores = - self.kge_method.score_hrt(triples)
-        # print(scores.min(), scores.max())
-        return scores
-        
-class DummyLogger():
-    def __init__(self, *args, **kwargs):
-        pass
+        x = self.embeddings(x)
+        y = self.embeddings(y)
 
-    def log(self, *args, **kwargs):
-        pass
+        dot_product = th.sum(x * y, dim=1)
+        logger.debug(f"Dot product shape: {dot_product.shape}")
+        return 1 - th.sigmoid(dot_product)
+
     
 if __name__ == "__main__":
     main()

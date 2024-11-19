@@ -205,11 +205,7 @@ not http://Female and http://Male,owl:Thing
 http://Female and http://Male and not http://Female and http://Male,owl:Thing
 http://Female and http://Male or not http://Female and http://Male,owl:Thing
 http://Female and http://Male and not http://Female and http://Male,owl:Nothing
-http://Female and http://Male and not http://Female and http://Male,http://Female and http://Male
-http://Female and http://Male and not http://Female and http://Male,not http://Female and http://Male
 owl:Thing,http://Female and http://Male or not http://Female and http://Male
-http://Female and http://Male,http://Female and http://Male or not http://Female and http://Male
-not http://Female and http://Male,http://Female and http://Male or not http://Female and http://Male
 #Axiom 9 NNF: Female and Male -> owl:Nothing
 not http://Female or not http://Male,not http://Female or not http://Male
 http://Female and http://Male and not http://Female or not http://Male,http://Female and http://Male and not http://Female or not http://Male
@@ -235,11 +231,7 @@ http://Female and http://Parent and not http://Female and http://Parent,owl:Thin
 http://Female and http://Parent or not http://Female and http://Parent,owl:Thing
 http://Mother or not http://Female and http://Parent,owl:Thing
 http://Female and http://Parent and not http://Female and http://Parent,owl:Nothing
-http://Female and http://Parent and not http://Female and http://Parent,http://Female and http://Parent
-http://Female and http://Parent and not http://Female and http://Parent,not http://Female and http://Parent
 owl:Thing,http://Female and http://Parent or not http://Female and http://Parent
-http://Female and http://Parent,http://Female and http://Parent or not http://Female and http://Parent
-not http://Female and http://Parent,http://Female and http://Parent or not http://Female and http://Parent
 not http://Female and http://Parent,http://Mother or not http://Female and http://Parent
 http://Mother,http://Mother or not http://Female and http://Parent
 #Axiom 10 NNF: Female and Parent -> Mother
@@ -270,11 +262,7 @@ http://Male and http://Parent and not http://Male and http://Parent,owl:Thing
 http://Male and http://Parent or not http://Male and http://Parent,owl:Thing
 http://Father or not http://Male and http://Parent,owl:Thing
 http://Male and http://Parent and not http://Male and http://Parent,owl:Nothing
-http://Male and http://Parent and not http://Male and http://Parent,http://Male and http://Parent
-http://Male and http://Parent and not http://Male and http://Parent,not http://Male and http://Parent
 owl:Thing,http://Male and http://Parent or not http://Male and http://Parent
-http://Male and http://Parent,http://Male and http://Parent or not http://Male and http://Parent
-not http://Male and http://Parent,http://Male and http://Parent or not http://Male and http://Parent
 not http://Male and http://Parent,http://Father or not http://Male and http://Parent
 http://Father,http://Father or not http://Male and http://Parent
 #Axiom 11 NNF: Male and Parent -> Father
@@ -305,11 +293,7 @@ not http://hasChild some http://Person and http://hasChild some http://Person,ow
 not http://hasChild some http://Person or http://hasChild some http://Person,owl:Thing
 http://Parent or not http://hasChild some http://Person,owl:Thing
 not http://hasChild some http://Person and http://hasChild some http://Person,owl:Nothing
-not http://hasChild some http://Person and http://hasChild some http://Person,http://hasChild some http://Person
-not http://hasChild some http://Person and http://hasChild some http://Person,not http://hasChild some http://Person
 owl:Thing,not http://hasChild some http://Person or http://hasChild some http://Person
-http://hasChild some http://Person,not http://hasChild some http://Person or http://hasChild some http://Person
-not http://hasChild some http://Person,not http://hasChild some http://Person or http://hasChild some http://Person
 not http://hasChild some http://Person,http://Parent or not http://hasChild some http://Person
 http://Parent,http://Parent or not http://hasChild some http://Person
 #Axiom 12 NNF: hasChild some Person -> Parent
@@ -425,7 +409,9 @@ CODOMAIN_http://hasChild,owl:Thing
 CODOMAIN_http://hasChild,CODOMAIN_http://hasChild
 http://John,DOMAIN_http://hasChild
 http://Mary,CODOMAIN_http://hasChild
-http://hasChild,DOMAIN_http://hasChild
-http://hasChild,CODOMAIN_http://hasChild
+http://John,http://hasChild some http://Mary
+owl:Nothing,http://hasChild some http://Mary
+http://hasChild some http://Mary,owl:Thing
+http://hasChild some http://Mary,http://hasChild some http://Mary
 ## Male(Peter)
 http://Peter,http://Male

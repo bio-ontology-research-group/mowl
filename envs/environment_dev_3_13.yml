@@ -1,10 +1,10 @@
-name: mowldev38
+name: mowldev313
 channels:
   - pytorch
   - conda-forge
   - anaconda
 dependencies:
-  - python=3.8
+  - python=3.13
   - cairo
   - deprecated
   - numpy
@@ -16,7 +16,7 @@ dependencies:
   - protobuf
   - pyyaml
   - requests
-  - scipy<1.13.0
+  - scipy<1.15.0
   - scikit-learn
   - urllib3
   - pytorch
@@ -26,19 +26,17 @@ dependencies:
   - pip
   - pip:
     - build
-    - pykeen==1.10.2
+    - pykeen==1.11.0
     - sphinx-rtd-theme
-    - sphinx-automodapi
-    - nose
-    - nose-exclude
+    - pytest
+    - pytest-faulthandler
     - coverage
-    - pinocchio
     - flake8
     - autopep8
     - memory-profiler
   - jupyter
   - ipykernel
-  - sphinx<7
+  - sphinx
   - sphinx-gallery
   - nbsphinx
   - mock

@@ -20,8 +20,7 @@ bot_class = adapter.create_class(BOT)
 import logging
 
 class Node():
-    def __init__(self, owl_class = None, relation = None, domain=False, codomain=False, negated_domain=False, individual=False):
-        self.individual = individual
+    def __init__(self, owl_class = None, relation = None, domain=False, codomain=False, negated_domain=False, is_individual=False):
         bad_class = False
         bad_relation = False
         if owl_class is not None and  not isinstance(owl_class, (OWLClassExpression)):
@@ -108,7 +107,7 @@ class Node():
         self.negated_domain = negated_domain
         self.owl_class = owl_class
         self.relation = relation
-
+        self.is_individual = is_individual
 
         if not owl_class is None and self.relation is None and not self.domain and not self.codomain:
             tmp_class = None
@@ -171,9 +170,6 @@ class Node():
             return repr_
 
 
-    def is_individual(self):
-        return self.individual
-    
     def is_negated(self):
         is_negated = False
         if self.owl_class is not None and self.relation is None:
@@ -259,7 +255,7 @@ class Node():
         """Determines if the node is in the category of objects, not relations"""
         in_object_category = False
 
-        if self.individual:
+        if self.is_individual:
             return False
         
         if self.owl_class is not None:

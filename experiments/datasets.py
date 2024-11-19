@@ -2,6 +2,7 @@ import mowl
 from mowl.datasets import PathDataset
 from mowl.datasets.builtin import PPIYeastSlimDataset
 from mowl.datasets.base import OWLClasses
+import os
 
 class SubsumptionDataset(PathDataset):
     def __init__(self, root_dir):
@@ -59,19 +60,67 @@ class SubsumptionDataset(PathDataset):
 
 
 class PPIDataset(PathDataset):
-    def __init__(self, root_dir):
+    def __init__(self, root_dir, organism="yeast"):
         super().__init__(root_dir + "ontology.owl", root_dir + "valid.owl", root_dir + "test.owl")
 
         self.root_dir = root_dir
         self._deductive_closure_ontology = None
+        if organism == "yeast":
+            self.prefix = "http://4932"
+        elif organism == "human":
+            self.prefix = "http://9606"
+        else:
+            raise ValueError(f"Organism {organism} not found")
         
     @property
     def evaluation_classes(self):
         if self._evaluation_classes is None:
             proteins = set()
             for owl_name, owl_cls in self.classes.as_dict.items():
-                if "http://4932" in owl_name:
+                if self.prefix in owl_name:
                     proteins.add(owl_cls)
             self._evaluation_classes = OWLClasses(proteins), OWLClasses(proteins)
 
         return self._evaluation_classes
+
+class PPIDatasetExtended(PathDataset):
+    def __init__(self, root_dir, organism="yeast"):
+        super().__init__(root_dir + "ontology_extended.owl", root_dir + "valid.owl", root_dir + "test.owl")
+
+        self.root_dir = root_dir
+        self._deductive_closure_ontology = None
+        if organism == "yeast":
+            self.prefix = "http://4932"
+        elif organism == "human":
+            self.prefix = "http://9606"
+        else:
+            raise ValueError(f"Organism {organism} not found")
+        
+    @property
+    def evaluation_classes(self):
+        if self._evaluation_classes is None:
+            proteins = set()
+            for owl_name, owl_cls in self.classes.as_dict.items():
+                if self.prefix in owl_name:
+                    proteins.add(owl_cls)
+            self._evaluation_classes = OWLClasses(proteins), OWLClasses(proteins)
+
+        return self._evaluation_classes
+
+class PPIDatasetV2(PPIDataset):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._deductive_closure_ontology = None
+        
+    @property
+    def deductive_closure_ontology(self):
+        if self._deductive_closure_ontology is None:
+            root_dir = os.path.dirname(os.path.abspath(self.ontology_path))
+            ontology_path = os.path.join(root_dir, "ontology_deductive_closure.owl")
+            self._deductive_closure_ontology = PathDataset(ontology_path).ontology
+
+        return self._deductive_closure_ontology
+
+
+
+

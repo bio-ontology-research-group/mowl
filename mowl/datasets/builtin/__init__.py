@@ -3,7 +3,10 @@ from mowl.datasets.builtin.gda import GDADataset, GDAHumanDataset, GDAMouseDatas
     GDAMouseELDataset, GDAHumanELDataset
 from mowl.datasets.builtin.gda2 import GDADatasetV2, GDADatasetV2EL
 from mowl.datasets.builtin.family import FamilyDataset
+from mowl.datasets.builtin.subsumption import GOSubsumptionDataset, FoodOnSubsumptionDataset
 __all__ = [
+    "GOSubsumptionDataset",
+    "FoodOnSubsumptionDataset",
     "PPIYeastDataset",
     "PPIYeastSlimDataset",
     "GDADataset",

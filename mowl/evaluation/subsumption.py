@@ -1,8 +1,9 @@
-from mowl.evaluation import Evaluator
+from mowl.evaluation import Evaluator, RankingEvaluator
 from mowl.projection import TaxonomyProjector, Edge
 import torch as th
 
-class SubsumptionEvaluator(Evaluator):
+
+class SubsumptionEvaluatorOld(Evaluator):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -74,3 +75,30 @@ class SubsumptionEvaluator(Evaluator):
         
         return deductive_labels
 
+
+
+class SubsumptionEvaluator(RankingEvaluator):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def create_tuples(self, ontology):
+        projector = TaxonomyProjector()
+        edges = projector.project(ontology)
+
+        classes, relations = Edge.get_entities_and_relations(edges)
+
+        class_str2owl = self.dataset.classes.to_dict()
+        class_owl2idx = self.dataset.classes.to_index_dict()
+
+        edges_indexed = []
+        
+        for e in edges:
+            head = class_owl2idx[class_str2owl[e.src]]
+            tail = class_owl2idx[class_str2owl[e.dst]]
+            edges_indexed.append((head, tail))
+        
+        return th.tensor(edges_indexed, dtype=th.long)
+
+    def get_scores(self, model, batch):
+        scores = model(batch, "gci0")
+        return scores
