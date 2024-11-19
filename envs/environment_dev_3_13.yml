@@ -26,7 +26,7 @@ dependencies:
   - pip
   - pip:
     - build
-    - pykeen==1.10.2
+    - pykeen==1.11.0
     - sphinx-rtd-theme
     - pytest
     - pytest-faulthandler

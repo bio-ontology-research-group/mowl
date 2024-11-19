@@ -14,7 +14,7 @@ Python requirements
 - torch
 - gensim >= 4.3.0
 - JPype1 == 1.5.0
-- pykeen == 1.10.2
+- pykeen == 1.11.0
 - scipy < 1.15.0
 
 
