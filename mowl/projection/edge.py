@@ -69,6 +69,7 @@ class Edge:
         return Edge.get_entities_and_relations(edges)
 
     @staticmethod
+    @versionchanged(version="1.0.2", reason="Method return type changed to tuple of lists")
     def get_entities_and_relations(edges):
         '''
         :param edges: list of edges
@@ -76,7 +77,7 @@ class Edge:
 
         :returns: Returns a 2-tuple containing the list of entities (heads and tails) and the \
             list of relations
-        :rtype: (Set of str, Set of str)
+        :rtype: (list of str, list of str)
         '''
 
         entities = set()
@@ -86,6 +87,9 @@ class Edge:
             entities |= {edge.src, edge.dst}
             relations |= {edge.rel}
 
+        entities = sorted(list(entities))
+        relations = sorted(list(relations))
+            
         return (entities, relations)
 
     @staticmethod
@@ -109,12 +113,11 @@ class Edge:
         """
         if entity_to_id is None or relation_to_id is None:
             classes, relations = Edge.getEntitiesAndRelations(edges)
-            classes, relations = set(classes), set(relations)
 
         if entity_to_id is None:
-            entity_to_id = {v: k for k, v in enumerate(list(classes))}
+            entity_to_id = {v: k for k, v in enumerate(classes)}
         if relation_to_id is None:
-            relation_to_id = {v: k for k, v in enumerate(list(relations))}
+            relation_to_id = {v: k for k, v in enumerate(relations)}
 
         def map_edge(edge):
             return [entity_to_id[edge.src], relation_to_id[edge.rel], entity_to_id[edge.dst]]
