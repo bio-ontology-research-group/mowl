@@ -100,99 +100,11 @@ Evaluating the model
 
     from mowl.evaluation import GDAEvaluator
     model.set_evaluator(GDAEvaluator)
-    model.evaluate()
+    model.evaluate(dataset.testing)
 
 
 
 
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    Number of evaluation classes: 13302
-    Class http://purl.obolibrary.org/obo/PLANA_0000110 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003100 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003102 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003103 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003104 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003106 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003107 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003108 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003109 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003110 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003111 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003112 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003113 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003114 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003115 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003200 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003201 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003202 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003203 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003204 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003205 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003206 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003207 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003208 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003209 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003210 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003211 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003212 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003213 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003214 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003215 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003216 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003217 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003218 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003219 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003220 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003221 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003222 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003223 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003224 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003225 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003226 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003227 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003228 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003229 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003230 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003231 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003232 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003233 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003234 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003235 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003236 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003237 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003238 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003239 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003240 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003241 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003242 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003243 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003244 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003245 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003246 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003247 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003248 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003249 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003250 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003251 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003252 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003253 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003300 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003301 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003302 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003303 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003401 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003402 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003500 not found in w2v model
-    Class http://purl.obolibrary.org/obo/PLANA_0003502 not found in w2v model
-    Class http://www.w3.org/2002/07/owl#Nothing not found in w2v model
-    Evaluating in device: cpu
-    Evaluating with deductive closure: False
-    Excluding testing set: False
-    Filtering deductive closure: False
 
 
 
@@ -200,9 +112,9 @@ Evaluating the model
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (1 minutes 12.265 seconds)
+   **Total running time of the script:** (1 minutes 11.823 seconds)
 
-**Estimated memory usage:**  5020 MB
+**Estimated memory usage:**  5145 MB
 
 
 .. _sphx_glr_download_examples_graph_based_plot_1_dl2vec.py:

@@ -109,9 +109,9 @@ Training the model
                     reg_norm=1,
                     learning_rate=0.001,
                     epochs=20,
-                    batch_size=4096,
+                    batch_size=20000,
                     model_filepath=None,
-                    device='cpu')
+                    device='cuda')
 
     model.train()
 
@@ -124,8 +124,7 @@ Training the model
 
  .. code-block:: none
 
-    Number of evaluation classes: 6039
-      0%|          | 0/20 [00:00<?, ?it/s]      5%|▌         | 1/20 [00:15<04:55, 15.58s/it]     10%|█         | 2/20 [00:15<01:57,  6.53s/it]     15%|█▌        | 3/20 [00:15<01:01,  3.63s/it]     20%|██        | 4/20 [00:16<00:36,  2.28s/it]     25%|██▌       | 5/20 [00:16<00:22,  1.52s/it]     30%|███       | 6/20 [00:16<00:14,  1.07s/it]     35%|███▌      | 7/20 [00:16<00:10,  1.28it/s]     40%|████      | 8/20 [00:16<00:07,  1.68it/s]     45%|████▌     | 9/20 [00:17<00:05,  2.13it/s]     50%|█████     | 10/20 [00:17<00:03,  2.60it/s]     55%|█████▌    | 11/20 [00:17<00:02,  3.07it/s]     60%|██████    | 12/20 [00:17<00:02,  3.51it/s]     65%|██████▌   | 13/20 [00:17<00:01,  3.89it/s]     70%|███████   | 14/20 [00:18<00:01,  4.20it/s]     75%|███████▌  | 15/20 [00:18<00:01,  4.45it/s]     80%|████████  | 16/20 [00:18<00:00,  4.64it/s]     85%|████████▌ | 17/20 [00:18<00:00,  4.76it/s]     90%|█████████ | 18/20 [00:18<00:00,  4.87it/s]     95%|█████████▌| 19/20 [00:19<00:00,  4.92it/s]    100%|██████████| 20/20 [00:19<00:00,  4.98it/s]    100%|██████████| 20/20 [00:19<00:00,  1.04it/s]
+      0%|          | 0/20 [00:00<?, ?it/s]      5%|▌         | 1/20 [00:14<04:42, 14.84s/it]     70%|███████   | 14/20 [00:14<00:04,  1.31it/s]    100%|██████████| 20/20 [00:14<00:00,  1.33it/s]
 
     1
 
@@ -139,7 +138,7 @@ Evaluating the model
 Now, it is time to evaluate embeddings. For this, we use the
 :class:`ModelRankBasedEvaluator <mowl.evaluation.ModelRankBasedEvaluator>` class.
 
-.. GENERATED FROM PYTHON SOURCE LINES 91-98
+.. GENERATED FROM PYTHON SOURCE LINES 91-99
 
 .. code-block:: Python
 
@@ -148,8 +147,9 @@ Now, it is time to evaluate embeddings. For this, we use the
     from mowl.evaluation import PPIEvaluator
 
     model.set_evaluator(PPIEvaluator)
-    model.evaluate()
+    model.evaluate(dataset.testing)
 
+    print(model.metrics)
 
 
 
@@ -158,11 +158,7 @@ Now, it is time to evaluate embeddings. For this, we use the
 
  .. code-block:: none
 
-    Number of evaluation classes: 6039
-    Evaluating in device: cpu
-    Evaluating with deductive closure: False
-    Excluding testing set: False
-    Filtering deductive closure: False
+    {'mr': 2464.669435215947, 'mrr': 0.0024686094502139495, 'f_mr': 2464.669435215947, 'f_mrr': 0.0024686094502139495, 'auc': 0.5919726009910654, 'f_auc': 0.5919726009910654, 'hits@1': 0.00016611295681063124, 'hits@3': 0.0009966777408637873, 'hits@10': 0.0027408637873754154, 'hits@50': 0.016777408637873754, 'hits@100': 0.03106312292358804, 'f_hits@1': 0.00016611295681063124, 'f_hits@3': 0.0009966777408637873, 'f_hits@10': 0.0027408637873754154, 'f_hits@50': 0.016777408637873754, 'f_hits@100': 0.03106312292358804}
 
 
 
@@ -170,9 +166,9 @@ Now, it is time to evaluate embeddings. For this, we use the
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (1 minutes 19.804 seconds)
+   **Total running time of the script:** (0 minutes 36.813 seconds)
 
-**Estimated memory usage:**  4175 MB
+**Estimated memory usage:**  2066 MB
 
 
 .. _sphx_glr_download_examples_elmodels_plot_1_elembeddings.py:

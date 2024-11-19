@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**00:27.688** total execution time for 2 files **from examples/syntactic**:
+**00:30.119** total execution time for 2 files **from examples/syntactic**:
 
 .. container::
 
@@ -33,8 +33,8 @@ Computation times
      - Time
      - Mem (MB)
    * - :ref:`sphx_glr_examples_syntactic_plot_1_onto2vec.py` (``plot_1_onto2vec.py``)
-     - 00:14.702
-     - 758.5
+     - 00:15.920
+     - 499.1
    * - :ref:`sphx_glr_examples_syntactic_plot_2_opa2vec.py` (``plot_2_opa2vec.py``)
-     - 00:12.985
-     - 554.4
+     - 00:14.199
+     - 404.8

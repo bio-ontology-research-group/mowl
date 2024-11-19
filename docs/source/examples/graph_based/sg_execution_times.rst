@@ -6,7 +6,7 @@
 
 Computation times
 =================
-**01:12.265** total execution time for 1 file **from examples/graph_based**:
+**01:11.823** total execution time for 1 file **from examples/graph_based**:
 
 .. container::
 
@@ -33,5 +33,5 @@ Computation times
      - Time
      - Mem (MB)
    * - :ref:`sphx_glr_examples_graph_based_plot_1_dl2vec.py` (``plot_1_dl2vec.py``)
-     - 01:12.265
-     - 5020.3
+     - 01:11.823
+     - 5145.2

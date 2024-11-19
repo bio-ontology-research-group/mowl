@@ -51,5 +51,5 @@ model.train()
 
 from mowl.evaluation import GDAEvaluator
 model.set_evaluator(GDAEvaluator)
-model.evaluate()
+model.evaluate(dataset.testing)
 

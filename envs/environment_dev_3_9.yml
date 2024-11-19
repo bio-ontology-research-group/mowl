@@ -1,8 +1,6 @@
 name: mowldev39
 channels:
-  - pytorch
   - conda-forge
-  - anaconda
 dependencies:
   - python=3.9
   - cairo
@@ -23,7 +21,7 @@ dependencies:
   - pip
   - pip:
     - gensim>=4.3.0
-    - scipy<1.15.0	    
+    - scipy<1.15.0
     - build
     - pykeen==1.11.0
     - numpy
@@ -36,6 +34,7 @@ dependencies:
     - flake8
     - autopep8
     - memory-profiler
+    - matplotlib
   - jupyter
   - ipykernel
   - sphinx

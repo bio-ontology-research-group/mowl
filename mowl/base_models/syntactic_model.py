@@ -78,7 +78,7 @@ class SyntacticModel(Model):
         if not save:
             return corpus
         else:
-            print(f"Corpus saved in {self.corpus_filepath}")
+            logger.info(f"Corpus saved in {self.corpus_filepath}")
 
         self._save_corpus = save
         self._with_annotations = with_annotations
