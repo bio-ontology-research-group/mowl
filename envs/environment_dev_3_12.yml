@@ -25,7 +25,7 @@ dependencies:
     - gensim>=4.3.0
     - scipy<1.15.0	    
     - build
-    - pykeen==1.10.2
+    - pykeen==1.11.0
     - numpy
     - sphinx-rtd-theme
     - pytest
