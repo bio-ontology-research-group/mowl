@@ -22,8 +22,8 @@ project = 'MOWL'
 copyright = '2023, Bio-Ontology Research Group'
 author = 'BORG'
 
-release = '1.0.1'
-version = '1.0.1'
+release = '1.0.2-dev'
+version = '1.0.2-dev'
 # -- General configuration
 
 extensions = [
