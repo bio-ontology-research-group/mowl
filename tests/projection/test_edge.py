@@ -37,8 +37,8 @@ class TestEdge(TestCase):
 
         ents, rels = Edge.get_entities_and_relations([edge1, edge2])
 
-        self.assertEqual(ents, {"src1", "src2", "dst1", "dst2"})
-        self.assertEqual(rels, {"rel1", "rel2"})
+        self.assertEqual(ents, ["dst1", "dst2", "src1", "src2"])
+        self.assertEqual(rels, ["rel1", "rel2"])
 
     def test_zip_method(self):
         """This checks if Edge.zip method works correctly"""
