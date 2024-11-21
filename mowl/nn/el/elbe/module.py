@@ -2,12 +2,9 @@ import mowl.nn.el.elbe.losses as L
 from mowl.nn import ELModule
 import torch as th
 import torch.nn as nn
-from deprecated.sphinx import deprecated
 
-
-@deprecated(version="1.0.0", reason="Use ELBEModule instead")
-class ELBoxModule(ELModule):
-    """Implementation of ELBoxEmbeddings from [peng2020]_.
+class ELBEModule(ELModule):
+    """Implementation of ELBE from [peng2020]_.
     """
     def __init__(self, nb_ont_classes, nb_rels, nb_inds=None, embed_dim=50, margin=0.1):
         super().__init__()
@@ -40,9 +37,14 @@ class ELBoxModule(ELModule):
             nn.init.uniform_(self.ind_embed.weight, a=-1, b=1)
             weight_data_normalized = th.linalg.norm(self.ind_embed.weight.data, axis=1).reshape(-1, 1)
             self.ind_embed.weight.data /= weight_data_normalized
+
+            self.ind_offset = nn.Embedding(self.nb_inds, embed_dim)
+            nn.init.uniform_(self.ind_offset.weight, a=-1, b=1)
+            weight_data_normalized = th.linalg.norm(self.ind_offset.weight.data, axis=1).reshape(-1, 1)
+            self.ind_offset.weight.data /= weight_data_normalized
         else:
             self.ind_embed = None
-
+            self.ind_offset = None
         
         self.margin = margin
 
@@ -76,13 +78,9 @@ class ELBoxModule(ELModule):
     def class_assertion_loss(self, data, neg=False):
         if self.ind_embed is None:
             raise ValueError("The number of individuals must be specified to use this loss function.")
-        return L.class_assertion_loss(data, self.class_embed, self.class_offset, self.ind_embed, self.margin, neg=neg)
+        return L.class_assertion_loss(data, self.ind_embed, self.ind_offset, self.class_embed, self.class_offset, self.margin, neg=neg)
 
     def object_property_assertion_loss(self, data, neg=False):
         if self.ind_embed is None:
             raise ValueError("The number of individuals must be specified to use this loss function.")
-        return L.object_property_assertion_loss(data, self.rel_embed, self.ind_embed, self.margin, neg=neg)
-
-class ELBEModule(ELBoxModule):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
+        return L.object_property_assertion_loss(data, self.ind_embed, self.ind_offset, self.rel_embed, self.margin, neg=neg)

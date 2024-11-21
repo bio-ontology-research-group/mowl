@@ -1,17 +1,18 @@
 from tests.nn.fixtures import ELAxioms
 from unittest import TestCase
-from mowl.nn import ELBoxModule
+from mowl.nn import ELBEModule
 from tests.datasetFactory import FamilyDataset
 import torch as th
 
-class TestELBoxModule(TestCase):
+class TestELBEModule(TestCase):
 
     @classmethod
     def setUpClass(self):
         ds = FamilyDataset()
         nb_classes = len(ds.classes)
         nb_relations = len(ds.object_properties)
-        self.module = ELBoxModule(nb_classes, nb_relations)
+        nb_individuals = len(ds.individuals)
+        self.module = ELBEModule(nb_classes, nb_relations, nb_individuals)
         self.axioms = ELAxioms()
         
     def test_gci_0(self):

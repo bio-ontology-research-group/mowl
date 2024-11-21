@@ -396,7 +396,7 @@ of :class:`torch.utils.data.DataLoader`
         if not isinstance(model, str):
             raise TypeError
 
-        self.module.load_state_dict(th.load(model))
+        self.module.load_state_dict(th.load(model, weights_only=True))
         #self._kge_method = kge_method
     
 

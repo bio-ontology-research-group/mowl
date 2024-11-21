@@ -25,15 +25,17 @@ class BoxSquaredELModule(ELModule):
         self.tail_center = self.init_embeddings(nb_rels, embed_dim)
         self.tail_offset = self.init_embeddings(nb_rels, embed_dim)
 
-        self.bump = self.init_embeddings(nb_ont_classes, embed_dim)
+        self.bump_classes = self.init_embeddings(nb_ont_classes, embed_dim)
 
         if self.nb_inds is not None and self.nb_inds > 0:
             self.bump_individuals = self.init_embeddings(nb_inds, embed_dim)
             self.ind_center = self.init_embeddings(nb_inds, embed_dim)
-
+            self.ind_offset = self.init_embeddings(nb_inds, embed_dim)
+            
         else:
             self.bump_individuals = None
             self.ind_center = None
+            self.ind_offset = None
             
         self.gamma = gamma
         self.delta = delta
@@ -59,35 +61,30 @@ class BoxSquaredELModule(ELModule):
 
     def gci2_loss(self, data, neg=False):
         return L.gci2_loss(data, self.class_center, self.class_offset, self.head_center,
-                            self.head_offset, self.tail_center, self.tail_offset, self.bump,
-                           self.gamma, self.delta, self.reg_factor, neg=neg)
+                            self.head_offset, self.tail_center, self.tail_offset, self.bump_classes,
+                           self.gamma, self.delta, neg=neg)
 
     def gci3_loss(self, data, neg=False):
         return L.gci3_loss(data, self.class_center, self.class_offset, self.head_center,
-                            self.head_offset, self.tail_center, self.tail_offset, self.bump,
-                            self.gamma, self.reg_factor, neg=neg)
+                            self.head_offset, self.tail_center, self.tail_offset, self.bump_classes,
+                            self.gamma, neg=neg)
 
     def gci3_bot_loss(self, data, neg=False):
         return L.gci3_bot_loss(data, self.head_offset)
 
 
-    def gci2_score(self, data):
-        return L.gci2_score(data, self.class_center, self.class_offset, self.head_center,
-                            self.head_offset, self.tail_center, self.tail_offset, self.bump,
-                           self.gamma, self.delta)
-
     def class_assertion_loss(self, data, neg=False):
         if self.ind_center is None:
             raise ValueError("The number of individuals must be specified to use this loss function.")
-        return L.class_assertion_loss(data, self.class_center, self.class_offset, self.ind_center, self.gamma, neg=neg)
+        return L.class_assertion_loss(data, self.ind_center, self.ind_offset, self.class_center, self.class_offset, self.gamma, neg=neg)
 
     def object_property_assertion_loss(self, data, neg=False):
         if self.ind_center is None:
             raise ValueError("The number of individuals must be specified to use this loss function.")
-        return L.object_property_assertion_loss(data, self.head_center, self.head_offset, self.tail_center, self.tail_offset, self.ind_center, self.bump_individuals, self.gamma, self.delta, self.reg_factor, neg=neg)
+        return L.object_property_assertion_loss(data, self.ind_center, self.ind_offset, self.head_center, self.head_offset, self.tail_center, self.tail_offset, self.bump_individuals, self.gamma, self.delta, neg=neg)
 
     def regularization_loss(self):
-        loss = L.reg_loss(self.bump, self.reg_factor)
+        loss = L.reg_loss(self.bump_classes, self.reg_factor)
         if self.bump_individuals is not None:
             loss += L.reg_loss(self.bump_individuals, self.reg_factor)
         return loss

@@ -11,7 +11,8 @@ class TestBoxSquaredELModule(TestCase):
         ds = FamilyDataset()
         nb_classes = len(ds.classes)
         nb_rels = len(ds.object_properties)
-        self.module = BoxSquaredELModule(nb_classes, nb_rels)
+        nb_inds = len(ds.individuals)
+        self.module = BoxSquaredELModule(nb_classes, nb_rels, nb_inds)
         self.axioms = ELAxioms()
         
     def test_gci_0(self):
