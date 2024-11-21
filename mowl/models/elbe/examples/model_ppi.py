@@ -1,4 +1,4 @@
-from mowl.models import ELBoxEmbeddings
+from mowl.models import ELBE
 from mowl.projection.factory import projector_factory
 from mowl.projection.edge import Edge
 import math
@@ -13,7 +13,7 @@ import torch as th
 from torch import nn
 
 
-class ELBoxPPI(ELBoxEmbeddings):
+class ELBEPPI(ELBE):
     """
     Example of ELBoxEmbeddings for protein-protein interaction prediction.
     """

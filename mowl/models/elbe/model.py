@@ -1,8 +1,9 @@
 from mowl.base_models.elmodel import EmbeddingELModel
-from mowl.nn import ELEmModule
+from mowl.nn import ELBEModule
 from tqdm import trange, tqdm
 import torch as th
 import numpy as np
+from deprecated.sphinx import deprecated
 import logging
 
 logger = logging.getLogger(__name__)
@@ -10,18 +11,11 @@ handler = logging.StreamHandler()
 logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
-
-class ELEmbeddings(EmbeddingELModel):
+class ELBE(EmbeddingELModel):
     """
-    Implementation based on [kulmanov2019]_.
-
-    The idea of this paper is to embed EL by modeling ontology classes as :math:`n`-dimensional \
-    balls (:math:`n`-balls) and ontology object properties as transformations of those \
-    :math:`n`-balls. For each of the normal forms, there is a distance function defined that will \
-    work as loss functions in the optimization framework.
+    Implementation based on [peng2020]_.
     """
 
-    
     def __init__(self,
                  dataset,
                  embed_dim=50,
@@ -45,10 +39,10 @@ class ELEmbeddings(EmbeddingELModel):
         self.init_module()
 
     def init_module(self):
-        self.module = ELEmModule(
-            len(self.class_index_dict),  # number of ontology classes
-            len(self.object_property_index_dict),  # number of ontology object properties
-            len(self.individual_index_dict),  # number of individuals
+        self.module = ELBEModule(
+            len(self.class_index_dict),
+            len(self.object_property_index_dict),
+            len(self.individual_index_dict),
             embed_dim=self.embed_dim,
             margin=self.margin
         ).to(self.device)
@@ -64,6 +58,7 @@ class ELEmbeddings(EmbeddingELModel):
         logger.info(string)
             
         optimizer = th.optim.Adam(self.module.parameters(), lr=self.learning_rate)
+        criterion = th.nn.MSELoss()
         best_loss = float('inf')
 
         all_classes_ids = list(self.class_index_dict.values())
@@ -82,22 +77,24 @@ class ELEmbeddings(EmbeddingELModel):
                 if len(gci_dataset) == 0:
                     continue
 
-                loss += th.mean(self.module(gci_dataset[:], gci_name))
+                scores = th.mean(self.module(gci_dataset[:], gci_name)) 
+                loss += criterion(scores, th.zeros_like(scores, requires_grad=False))
+                
                 if gci_name == "gci2":
                     idxs_for_negs = np.random.choice(all_classes_ids, size=len(gci_dataset), replace=True)
                     rand_index = th.tensor(idxs_for_negs).to(self.device)
                     data = gci_dataset[:]
                     neg_data = th.cat([data[:, :2], rand_index.unsqueeze(1)], dim=1)
-                    loss += th.mean(self.module(neg_data, gci_name, neg=True))
+                    scores = th.mean(self.module(neg_data, gci_name, neg=True)) 
+                    loss += criterion(scores, th.ones_like(scores, requires_grad=False))
 
                 if gci_name == "object_property_assertion":
                     idxs_for_negs = np.random.choice(all_inds_ids, size=len(gci_dataset), replace=True)
                     rand_index = th.tensor(idxs_for_negs).to(self.device)
                     data = gci_dataset[:]
                     neg_data = th.cat([data[:, :2], rand_index.unsqueeze(1)], dim=1)
-                    loss += th.mean(self.module(neg_data, gci_name, neg=True))
-                    
-            loss += self.module.regularization_loss()
+                    scores = th.mean(self.module(neg_data, gci_name, neg=True))
+                    loss += criterion(scores, th.ones_like(scores, requires_grad=False))
                     
             optimizer.zero_grad()
             loss.backward()
@@ -150,4 +147,10 @@ class ELEmbeddings(EmbeddingELModel):
         self.init_module()
         self.module.load_state_dict(th.load(self.model_filepath))
         self.module.eval()
+
+
+@deprecated(version='1.0.2', reason="Use ELBoxEmbeddings instead.")
+class ELBoxEmbeddings(ELBE):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
 

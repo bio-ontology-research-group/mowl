@@ -11,7 +11,8 @@ class TestELEmModule(TestCase):
         ds = FamilyDataset()
         nb_classes = len(ds.classes)
         nb_relations = len(ds.object_properties)
-        self.module = ELEmModule(nb_classes, nb_relations)
+        nb_individuals = len(ds.individuals)
+        self.module = ELEmModule(nb_classes, nb_relations, nb_individuals)
         self.axioms = ELAxioms()
         
     def test_gci_0(self):

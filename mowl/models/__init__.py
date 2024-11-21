@@ -2,9 +2,9 @@ from mowl.models.elembeddings.model import ELEmbeddings
 from mowl.models.elembeddings.examples.model_ppi import ELEmPPI
 from mowl.models.elembeddings.examples.model_gda import ELEmGDA
 
-from mowl.models.elboxembeddings.model import ELBoxEmbeddings
-from mowl.models.elboxembeddings.examples.model_ppi import ELBoxPPI
-from mowl.models.elboxembeddings.examples.model_gda import ELBoxGDA
+from mowl.models.elbe.model import ELBoxEmbeddings, ELBE
+from mowl.models.elbe.examples.model_ppi import ELBEPPI
+from mowl.models.elbe.examples.model_gda import ELBEGDA
 
 from mowl.models.boxsquaredel.model import BoxSquaredEL
 

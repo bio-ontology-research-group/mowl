@@ -61,8 +61,7 @@ str -> ELDataset"""
         model = EmbeddingELModel(self.family_dataset, 1, False)
 
         training_datasets = model.training_datasets
-        training_datasets = model.training_datasets  # this is a hack to get 100% coverage
-
+ 
         self.assertTrue(isinstance(training_datasets, dict))
 
         idx = random.randrange(0, len(training_datasets))
@@ -104,8 +103,7 @@ str -> DataLoader"""
         model = EmbeddingELModel(self.ppi_dataset, 1, 1, False)
 
         training_dataloaders = model.training_dataloaders
-        training_dataloaders = model.training_dataloaders  # this is a hack to get 100% coverage
-
+   
         self.assertTrue(isinstance(training_dataloaders, dict))
         idx = random.randrange(0, len(training_dataloaders))
         random_item = list(training_dataloaders.items())[idx]
@@ -191,33 +189,29 @@ non-existing attributes"""
         num_relations = len(model.dataset.object_properties)
         num_individuals = len(model.dataset.individuals)
 
-        if num_classes > 0:
-            class_embeddings = model.class_embeddings
-            self.assertIsInstance(class_embeddings, dict)
-            self.assertTrue(len(class_embeddings) == num_classes)
-            for key, value in class_embeddings.items():
-                with self.subTest(key=key):
-                    self.assertIsInstance(key, str)
-                    self.assertIsInstance(value, np.ndarray)
-                    self.assertEqual(value.shape, (embed_dim,))
-                    
-        if num_relations > 0:
-            object_property_embeddings = model.object_property_embeddings
-            self.assertIsInstance(object_property_embeddings, dict)
-            self.assertTrue(len(object_property_embeddings) == num_relations)
-            for key, value in object_property_embeddings.items():
-                with self.subTest(key=key):
-                    self.assertIsInstance(key, str)
-                    self.assertIsInstance(value, np.ndarray)
-                    self.assertEqual(value.shape, (embed_dim,))
-                    
+        class_embeddings = model.class_embeddings
+        self.assertIsInstance(class_embeddings, dict)
+        self.assertTrue(len(class_embeddings) == num_classes)
+        for key, value in class_embeddings.items():
+            with self.subTest(key=key):
+                self.assertIsInstance(key, str)
+                self.assertIsInstance(value, np.ndarray)
+                self.assertEqual(value.shape, (embed_dim,))
 
-        if num_individuals > 0:
-            individual_embeddings = model.individual_embeddings
-            self.assertIsInstance(individual_embeddings, dict)
-            self.assertTrue(len(individual_embeddings) == num_individuals)
-            for key, value in individual_embeddings.items():
-                with self.subTest(key=key):
-                    self.assertIsInstance(key, str)
-                    self.assertIsInstance(value, np.ndarray)
-                    self.assertEqual(value.shape, (embed_dim,))
+        object_property_embeddings = model.object_property_embeddings
+        self.assertIsInstance(object_property_embeddings, dict)
+        self.assertTrue(len(object_property_embeddings) == num_relations)
+        for key, value in object_property_embeddings.items():
+            with self.subTest(key=key):
+                self.assertIsInstance(key, str)
+                self.assertIsInstance(value, np.ndarray)
+                self.assertEqual(value.shape, (embed_dim,))
+
+        individual_embeddings = model.individual_embeddings
+        self.assertIsInstance(individual_embeddings, dict)
+        self.assertTrue(len(individual_embeddings) == num_individuals)
+        for key, value in individual_embeddings.items():
+            with self.subTest(key=key):
+                self.assertIsInstance(key, str)
+                self.assertIsInstance(value, np.ndarray)
+                self.assertEqual(value.shape, (embed_dim,))

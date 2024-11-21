@@ -64,7 +64,7 @@ class ClassAssertionDataset(Dataset):
         for gci in data:
             class_ = self.class_index_dict[gci.class_]
             individual = self.individual_index_dict[gci.individual]
-            pretensor.append([class_, individual])
+            pretensor.append([individual, class_])
         tensor = th.tensor(pretensor).to(self.device)
         return tensor
 
