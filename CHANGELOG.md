@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Upgraded JPype1 dependency from 1.5.0 to 1.5.1
+
 ## [1.0.1]
 ### Fixed 
 - Fix bug on CI pipeline to publish on PyPI
