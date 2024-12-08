@@ -4,6 +4,7 @@ from mowl.ontology.normalize import ELNormalizer, GCI
 from mowl.datasets.gci import GCIDataset, ClassAssertionDataset, ObjectPropertyAssertionDataset
 import random
 from org.semanticweb.owlapi.model import OWLOntology
+from mowl.datasets.base import Dataset
 
 
 class ELDataset():
