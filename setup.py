@@ -38,7 +38,7 @@ setuptools.setup(
         "pyyaml",
         "requests",
         "scikit-learn",
-        "scipy<1.15.0",
+        "scipy<1.16.0",
         "temp",
         "tqdm",
         "torch",
