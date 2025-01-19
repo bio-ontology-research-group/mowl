@@ -17,7 +17,7 @@ dependencies:
   - pip
   - pip:
     - gensim>=4.3.0
-    - scipy<1.15.0	    
+    - scipy<1.16.0
     - pykeen==1.11.0
     - temp
     

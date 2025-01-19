@@ -6,7 +6,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="mowl-borg",
-    version="1.0.2-dev.5",
+    version="1.0.2-dev.6",
     author="Bio-Ontology Research Group",
     author_email="fernando.zhapacamacho@kaust.edu.sa",
     description="mOWL: A machine learning library with ontologies",
@@ -38,7 +38,7 @@ setuptools.setup(
         "pyyaml",
         "requests",
         "scikit-learn",
-        "scipy<1.15.0",
+        "scipy<1.16.0",
         "temp",
         "tqdm",
         "torch",
