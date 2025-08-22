@@ -20,4 +20,5 @@ dependencies:
     - scipy<1.15.0	    
     - pykeen==1.11.0
     - temp
+    - class-resolver==0.5.4
     

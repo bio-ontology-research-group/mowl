@@ -7,7 +7,6 @@ dependencies:
   - python=3.13
   - cairo
   - deprecated
-  - numpy
   - networkx
   - click
   - grpcio
@@ -30,6 +29,8 @@ dependencies:
     - sphinx-rtd-theme
     - pytest
     - pytest-faulthandler
+    - numpy
+    - class-resolver==0.5.4
     - coverage
     - flake8
     - autopep8
