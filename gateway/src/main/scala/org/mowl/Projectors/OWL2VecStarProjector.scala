@@ -535,24 +535,38 @@ class OWL2VecStarProjector(
   // Process assertion axioms
 
   def processClassAssertionAxiom(axiom: OWLClassAssertionAxiom): List[Triple] = {
+    val individual = axiom.getIndividual
+  
+    // Only process named individuals
+    individual match {
+      case named: OWLNamedIndividual => {
+        val subject = named.toStringID
+        val predicate = "http://type"
+        val obj = axiom.getClassExpression
 
-    val subject = axiom.getIndividual.asInstanceOf[OWLNamedIndividual].toStringID
-    val predicate = "http://type"
-
-    val obj = axiom.getClassExpression
-
-    obj match {
-      case c: OWLClass => {
-        val objectStr = c.toStringID
-        List(new Triple(subject, predicate, objectStr))
+        obj match {
+          case c: OWLClass => {
+            val objectStr = c.toStringID
+            List(new Triple(subject, predicate, objectStr))
+          }
+          case _ => {
+            println("Class assertion axiom not handled: ", axiom)
+            Nil
+          }
+        }
+      }
+      case _: OWLAnonymousIndividual => {
+        // Skip anonymous individuals as they don't have meaningful IRIs
+        println(s"Skipping anonymous individual in class assertion: $axiom")
+        Nil
       }
       case _ => {
-        println("Class assertion axiom not handled: ", axiom)
+        println(s"Unexpected individual type: ${individual.getClass}")
         Nil
       }
     }
-
   }
+
 
   def processObjectPropertyAssertionAxiom(axiom: OWLObjectPropertyAssertionAxiom, ontology: OWLOntology): List[Triple] = {
 
