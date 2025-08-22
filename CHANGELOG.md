@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.2]
 ### Changed
 - Upgraded JPype1 dependency from 1.5.0 to 1.5.1
+- Pinned class-resolver to version 0.5.4 [#97][i97]
 ### Fixed
 - Fix bug handling anonymous individuals in the OWL2VecStarProjector class
 
@@ -138,4 +139,5 @@ Fixed issue related to importing graph-based models due to missing `__init__.py`
 [i43]: https://github.com/bio-ontology-research-group/mowl/issues/43
 [i59]: https://github.com/bio-ontology-research-group/mowl/issues/59
 [i60]: https://github.com/bio-ontology-research-group/mowl/issues/60
+[i97]: https://github.com/bio-ontology-research-group/mowl/issues/97
 
