@@ -27,6 +27,7 @@ dependencies:
     - build
     - pykeen==1.11.0
     - numpy
+    - class-resolver==0.5.4
     - sphinx-rtd-theme
     - pytest
     - pytest-faulthandler
