@@ -26,7 +26,7 @@ setuptools.setup(
     package_data={"mowl": ["lib/*.jar"]},
     python_requires=">=3.9",
     install_requires=[
-        "class-resolver==0.5.4"
+        "class-resolver==0.5.4",
         "click",
         "deprecated",
         "gensim>=4.3.0",
