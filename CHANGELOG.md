@@ -7,9 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.0.2]
 ### Changed
 - Upgraded scipy dependency from 1.15.0 to 1.16.0
 - Upgraded JPype1 dependency from 1.5.0 to 1.5.1
+- Pinned class-resolver to version 0.5.4 [#97][i97]
+### Fixed
+- Fix bug handling anonymous individuals in the OWL2VecStarProjector class
 
 ## [1.0.1]
 ### Fixed 
@@ -118,8 +122,9 @@ Fixed issue related to importing graph-based models due to missing `__init__.py`
 - Walking methods accept optional `outfile` parameter and corpus extraction methods do not append by default.
 - Documentation updated and fixed some typos.
 
-[unreleased]: https://github.com/bio-ontology-research-group/mowl/compare/v1.0.1...HEAD
-[1.0.0]: https://github.com/bio-ontology-research-group/mowl/releases/tag/v1.0.1
+[unreleased]: https://github.com/bio-ontology-research-group/mowl/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/bio-ontology-research-group/mowl/releases/tag/v1.0.2
+[1.0.1]: https://github.com/bio-ontology-research-group/mowl/releases/tag/v1.0.1
 [1.0.0]: https://github.com/bio-ontology-research-group/mowl/releases/tag/v1.0.0
 [0.3.0]: https://github.com/bio-ontology-research-group/mowl/releases/tag/v0.3.0
 [0.2.1]: https://github.com/bio-ontology-research-group/mowl/releases/tag/v0.2.1
@@ -135,4 +140,5 @@ Fixed issue related to importing graph-based models due to missing `__init__.py`
 [i43]: https://github.com/bio-ontology-research-group/mowl/issues/43
 [i59]: https://github.com/bio-ontology-research-group/mowl/issues/59
 [i60]: https://github.com/bio-ontology-research-group/mowl/issues/60
+[i97]: https://github.com/bio-ontology-research-group/mowl/issues/97
 
