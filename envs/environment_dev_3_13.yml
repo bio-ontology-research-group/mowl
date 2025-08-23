@@ -15,7 +15,7 @@ dependencies:
   - protobuf
   - pyyaml
   - requests
-  - scipy<1.15.0
+  - scipy<1.16.0
   - scikit-learn
   - urllib3
   - pytorch
