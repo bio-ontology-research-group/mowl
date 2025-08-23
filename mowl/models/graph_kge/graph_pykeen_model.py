@@ -228,7 +228,7 @@ class GraphPlusPyKEENModel(KGEModel):
         if not isinstance(model, str):
             raise TypeError
 
-        self._kge_method = th.load(model)
+        self._kge_method = th.load(model, weights_only=False)
         #self._kge_method = kge_method
     
 
