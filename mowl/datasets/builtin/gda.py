@@ -58,7 +58,7 @@ class GDADataset(RemoteDataset):
 
             genes = OWLClasses(genes)
             diseases = OWLClasses(diseases)
-            self._evaluation_classes = (genes, diseases)
+            self._evaluation_classes = (diseases, genes)
 
         return self._evaluation_classes
 
