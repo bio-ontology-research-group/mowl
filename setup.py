@@ -30,7 +30,7 @@ setuptools.setup(
         "click",
         "deprecated",
         "gensim>=4.3.0",
-        "JPype1==1.5.2",
+        "JPype1==1.6.0",
         "matplotlib",
         "networkx",
         "numpy",
