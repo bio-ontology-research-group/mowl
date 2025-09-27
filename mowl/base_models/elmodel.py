@@ -35,7 +35,14 @@ merging the 3 extra to their corresponding origin normal forms. Defaults to True
     :type device: str, optional
     """
 
-    def __init__(self, dataset, embed_dim, batch_size, extended=True, model_filepath=None, load_normalized=False, device="cpu"):
+    def __init__(self, 
+                 dataset, 
+                 embed_dim, 
+                 batch_size, 
+                 extended=True, 
+                 model_filepath=None, 
+                 # load_normalized=False, 
+                 device="cpu"):
         super().__init__(dataset, model_filepath=model_filepath)
 
         if not isinstance(embed_dim, int):
@@ -47,8 +54,8 @@ merging the 3 extra to their corresponding origin normal forms. Defaults to True
         if not isinstance(extended, bool):
             raise TypeError("Optional parameter extended must be of type bool.")
 
-        if not isinstance(load_normalized, bool):
-            raise TypeError("Optional parameter load_normalized must be of type bool.")
+        # if not isinstance(load_normalized, bool):
+        #     raise TypeError("Optional parameter load_normalized must be of type bool.")
         
         if not isinstance(device, str):
             raise TypeError("Optional parameter device must be of type str.")
@@ -59,7 +66,7 @@ merging the 3 extra to their corresponding origin normal forms. Defaults to True
         self.embed_dim = embed_dim
         self.batch_size = batch_size
         self.device = device
-        self.load_normalized = load_normalized
+        # self.load_normalized = load_normalized
         
         self._training_datasets = None
         self._validation_datasets = None
@@ -78,27 +85,37 @@ merging the 3 extra to their corresponding origin normal forms. Defaults to True
             return
 
         training_el_dataset = ELDataset(self.dataset.ontology,
+                                        self.dataset.normalized,
+                                        self.dataset._normalized_flag,
                                         self.class_index_dict,
                                         self.object_property_index_dict,
                                         extended=self._extended,
-                                        load_normalized = self.load_normalized,
+                                        # load_normalized = self.load_normalized,
                                         device=self.device)
 
         self._training_datasets = training_el_dataset.get_gci_datasets()
 
         self._validation_datasets = None
         if self.dataset.validation:
-            validation_el_dataset = ELDataset(self.dataset.validation, self.class_index_dict,
+            validation_el_dataset = ELDataset(self.dataset.validation, 
+                                              self.dataset._normalized,
+                                              self.dataset._normalized_flag,
+                                              self.class_index_dict,
                                               self.object_property_index_dict,
-                                              extended=self._extended, device=self.device)
+                                              extended=self._extended, 
+                                              device=self.device)
 
             self._validation_datasets = validation_el_dataset.get_gci_datasets()
 
         self._testing_datasets = None
         if self.dataset.testing:
-            testing_el_dataset = ELDataset(self.dataset.testing, self.class_index_dict,
+            testing_el_dataset = ELDataset(self.dataset.testing, 
+                                           self.dataset._normalized,
+                                           self.dataset._normalized_flag,
+                                           self.class_index_dict,
                                            self.object_property_index_dict,
-                                           extended=self._extended, device=self.device)
+                                           extended=self._extended, 
+                                           device=self.device)
 
             self._testing_datasets = testing_el_dataset.get_gci_datasets()
 

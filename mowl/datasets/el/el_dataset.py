@@ -4,6 +4,7 @@ from mowl.ontology.normalize import ELNormalizer, GCI
 from mowl.datasets.gci import GCIDataset, ClassAssertionDataset, ObjectPropertyAssertionDataset
 import random
 from org.semanticweb.owlapi.model import OWLOntology
+from mowl.datasets.base import Dataset
 
 
 class ELDataset():
@@ -32,11 +33,13 @@ class ELDataset():
 
     def __init__(self,
                  ontology,
+                 normalized=None,
+                 normalized_flag=False,
                  class_index_dict=None,
                  object_property_index_dict=None,
                  individual_index_dict=None,
                  extended=True,
-                 load_normalized = False,
+                 # load_normalized = False,
                  device="cpu"
                  ):
 
@@ -62,13 +65,15 @@ org.semanticweb.owlapi.model.OWLOntology.")
             raise TypeError("Optional parameter device must be of type str")
 
         self._ontology = ontology
+        self.normalized = normalized
+        self.normalized_flag = normalized_flag
         self._loaded = False
         self._extended = extended
         self._class_index_dict = class_index_dict
         self._object_property_index_dict = object_property_index_dict
         self._individual_index_dict = individual_index_dict
         self.device = device
-        self.load_normalized = load_normalized
+        # self.load_normalized = load_normalized
         
         self._gci0_dataset = None
         self._gci1_dataset = None
@@ -84,9 +89,11 @@ org.semanticweb.owlapi.model.OWLOntology.")
         if self._loaded:
             return
 
-        normalizer = ELNormalizer()
+        # normalizer = ELNormalizer()
 
-        gcis = normalizer.normalize(self._ontology, load=self.load_normalized)
+        # gcis = normalizer.normalize(self._ontology, load=self.load_normalized)
+
+        gcis = Dataset(ontology=self._ontology, normalized=self.normalized, normalized_flag=self.normalized_flag).normalized
 
         classes = set()
         relations = set()

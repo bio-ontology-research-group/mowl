@@ -17,6 +17,7 @@ from mowl.projection import TaxonomyWithRelationsProjector
 from mowl.owlapi.adapter import OWLAPIAdapter
 from mowl.owlapi.defaults import TOP, BOT
 from deprecated.sphinx import versionadded, versionchanged
+from mowl.ontology.normalize import ELNormalizer
 
 
 from java.util import HashSet
@@ -34,7 +35,7 @@ class Dataset():
     :type testing: :class:`org.semanticweb.owlapi.model.OWLOntology`, optional
     """
 
-    def __init__(self, ontology, validation=None, testing=None):
+    def __init__(self, ontology, normalized=None, normalized_flag=False, validation=None, testing=None):
 
         if not isinstance(ontology, OWLOntology):
             raise TypeError("Parameter ontology must be an OWLOntology.")
@@ -49,11 +50,16 @@ class Dataset():
         self._validation = validation
         self._testing = testing
 
+        self._normalized = normalized
         self._classes = None
         self._individuals = None
         self._object_properties = None
         self._individuals = None
         self._evaluation_classes = None
+        self._normalized_flag = normalized_flag
+
+    def normalized_flag(self):
+        return self._normalized_flag
 
     @property
     def ontology(self):
@@ -80,6 +86,19 @@ class Dataset():
         return self._testing
 
     @property
+    def normalized(self):
+        if self._normalized_flag:
+            return self._normalized
+        if self._normalized is not None:
+            self._normalized_flag = True
+            return self._normalized
+        
+        elnorm = ELNormalizer()
+        self._normalized = elnorm.normalize(self._ontology)
+        self._normalized_flag = True
+        return self._normalized
+
+    @property
     def classes(self):
         """List of classes in the dataset. The classes are collected from training, validation and
         testing ontologies using the OWLAPI method ``ontology.getClassesInSignature()``.
@@ -91,7 +110,10 @@ class Dataset():
             top = adapter.create_class(TOP)
             bot = adapter.create_class(BOT)
             classes = set([top, bot])
-            classes |= set(self._ontology.getClassesInSignature())
+            for k in self.normalized.keys():
+                for ax in self.normalized[k]:
+                    classes |= set(ax.owl_axiom.getClassesInSignature())
+            # classes |= set(self._ontology.getClassesInSignature())
 
             if self._validation:
                 classes |= set(self._validation.getClassesInSignature())
@@ -202,6 +224,8 @@ validation and testing ontologies using the OWLAPI method ``ontology.getIndividu
         self._object_properties = None
         self._individuals = None
         self._evaluation_classes = None
+        self._normalized = None
+        self._normalized_flag = False
 
         
 
