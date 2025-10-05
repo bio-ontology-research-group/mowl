@@ -15,7 +15,7 @@ dependencies:
   - requests
   - scikit-learn
   - urllib3
-  - pytorch
+  - pytorch-cpu
   - openjdk
   - gradle
   - pip
