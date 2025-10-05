@@ -18,7 +18,7 @@ dependencies:
   - pip:
     - gensim>=4.3.0
     - scipy<1.16.0
-    - pykeen==1.11.0
+    - pykeen==1.11.1
     - temp
     - class-resolver==0.6.1
     
