@@ -1,11 +1,12 @@
 # https://packaging.python.org/en/latest/guides/publishing-package-distribution-releases-using-github-actions-ci-cd-workflows/
 
 name: Publish Python 🐍 distribution 📦 to PyPI and TestPyPI
-
 on:
   push:
     branches:
       - main
+    tags:
+      - 'v*'  # Push events to tags matching v*, i.e. v1.0, v20.15.10
 
 jobs:
   build:
@@ -14,6 +15,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
@@ -58,8 +61,9 @@ jobs:
     name: >-
       Sign the Python 🐍 distribution 📦 with Sigstore
       and upload them to GitHub Release
+    if: startsWith(github.ref, 'refs/tags/')  # run on tag pushes
     needs:
-    - publish-to-pypi
+    - publish-to-pypi  # Changed back to depend on publish-to-pypi since both run on tag pushes
     runs-on: ubuntu-latest
 
     permissions:
@@ -85,7 +89,7 @@ jobs:
         gh release create
         '${{ github.ref_name }}'
         --repo '${{ github.repository }}'
-        --notes ""
+        --generate-notes
     - name: Upload artifact signatures to GitHub Release
       env:
         GITHUB_TOKEN: ${{ github.token }}
@@ -99,6 +103,7 @@ jobs:
 
   publish-to-testpypi:
     name: Publish Python 🐍 distribution 📦 to TestPyPI
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'  # only publish to TestPyPI on push to main
     needs:
     - build
     runs-on: ubuntu-latest

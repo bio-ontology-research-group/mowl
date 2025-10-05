@@ -6,7 +6,8 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setuptools.setup(
     name="mowl-borg",
-    version="1.0.2",
+    use_scm_version=True,
+    setup_requires=['setuptools_scm'],
     author="Bio-Ontology Research Group",
     author_email="fernando.zhapacamacho@kaust.edu.sa",
     description="mOWL: A machine learning library with ontologies",
@@ -30,7 +31,7 @@ setuptools.setup(
         "click",
         "deprecated",
         "gensim>=4.3.0",
-        "JPype1==1.5.1",
+        "JPype1==1.6.0",
         "matplotlib",
         "networkx",
         "numpy",
