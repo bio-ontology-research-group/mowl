@@ -1,5 +1,5 @@
 import mowl
-mowl.init_jvm("10g")
+# mowl.init_jvm("10g")
 from mowl.datasets import PathDataset
 from mowl.datasets.base import OWLClasses
 
@@ -131,6 +131,55 @@ class GDADatasetV2(PathDataset):
             genes = OWLClasses(genes)
             diseases = OWLClasses(diseases)
             self._evaluation_classes = (genes, diseases)
+
+        return self._evaluation_classes
+
+    @property
+    def evaluation_object_property(self):
+        return "http://mowl.borg/associated_with"
+
+
+class PPIHumanDataset(PathDataset):
+    def __init__(self):
+        super().__init__("ppi_human/ontology.owl", validation_path="ppi_human/valid.owl",
+                         testing_path="ppi_human/test.owl")
+
+    @property
+    def evaluation_classes(self):
+        """Classes that are used in evaluation
+        """
+
+        if self._evaluation_classes is None:
+            proteins = set()
+            for owl_name, owl_cls in self.classes.as_dict.items():
+                if "http://9606" in owl_name:
+                    proteins.add(owl_cls)
+            self._evaluation_classes = OWLClasses(proteins), OWLClasses(proteins)
+
+        return self._evaluation_classes
+
+class HPIDataset(PathDataset):
+
+    def __init__(self):
+        super().__init__("hpi/ontology.owl", validation_path="hpi/valid.owl",
+                         testing_path="hpi/test.owl")
+
+    @property
+    def evaluation_classes(self):
+        
+        if self._evaluation_classes is None:
+            genes = set()
+            viruses = set()
+            for owl_name, owl_cls in self.classes.as_dict.items():
+                
+                if "mowl.borg" in owl_name:
+                    genes.add(owl_cls)
+                if "NCBITaxon_" in owl_name:
+                    viruses.add(owl_cls)
+
+            genes = OWLClasses(genes)
+            viruses = OWLClasses(viruses)
+            self._evaluation_classes = (genes, viruses)
 
         return self._evaluation_classes
 

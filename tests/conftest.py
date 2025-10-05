@@ -4,7 +4,7 @@ import logging
 import mowl
 
 from mowl.datasets.builtin import FamilyDataset, GDAHumanELDataset, GDAMouseELDataset, \
-    PPIYeastSlimDataset
+    PPIYeastSlimDataset, PPIHumanDataset, HPIDataset
 
 logger = logging.getLogger("Downloader")
 print("Initializing datasets")
@@ -20,7 +20,10 @@ def pytest_configure(config):
     GDAMouseELDataset()
     print("Downloading ppi_yeast_slim dataset")
     PPIYeastSlimDataset()
-
+    print("Downloading ppi_human dataset")
+    PPIHumanDataset()
+    print("Downloading hpi dataset")
+    HPIDataset()
 
 # def pytest_unconfigure(config):
     # os.remove('ppi_yeast_slim.tar.gz')

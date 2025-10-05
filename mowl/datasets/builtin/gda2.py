@@ -1,10 +1,13 @@
 from mowl.datasets import RemoteDataset, PathDataset, OWLClasses
-import os
 
 GDA2_URL = 'https://bio2vec.net/data/mowl/gda2.tar.gz'
 GDA2_EL_URL = 'https://bio2vec.net/data/mowl/gda2_el.tar.gz'
 
 class GDADatasetV2(RemoteDataset):
+    """Gene--Disease Association Dataset version 2. This dataset was
+    used as benchmark in [hoehndorf2025]_.
+    """
+    
     def __init__(self, url=GDA2_URL):
         super().__init__(url=url)
 

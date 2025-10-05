@@ -1,5 +1,5 @@
 import mowl
-from tests.datasetFactory import PPIYeastSlimDataset, GDAHumanELDataset, GDAMouseELDataset, FamilyDataset, GOSubsumptionDataset, FoodOnSubsumptionDataset
+from tests.datasetFactory import PPIYeastSlimDataset, GDAHumanELDataset, GDAMouseELDataset, FamilyDataset, GOSubsumptionDataset, FoodOnSubsumptionDataset, PPIHumanDataset, HPIDataset
 from unittest import TestCase
 import os
 import shutil
@@ -20,6 +20,11 @@ class TestInstanceOfDataset(TestCase):
         dataset = PPIYeastSlimDataset()
         self.assertIsInstance(dataset, mowl.datasets.Dataset)
 
+    def test_ppi_human_is_instance_of_dataset(self):
+        """This should check if PPIYeastSlimDataset is an instance of Dataset"""
+        dataset = PPIHumanDataset()
+        self.assertIsInstance(dataset, mowl.datasets.Dataset)
+        
     def test_gda_human_el_is_instance_of_dataset(self):
         """This should check if GDAHumanELDataset is an instance of Dataset"""
         dataset = GDAHumanELDataset()
@@ -40,6 +45,10 @@ class TestInstanceOfDataset(TestCase):
         dataset = FoodOnSubsumptionDataset()
         self.assertIsInstance(dataset, mowl.datasets.Dataset)
 
+    def test_hpi_is_instance_of_dataset(self):
+        """This should check if HPIDataset is an instance of Dataset"""
+        dataset = HPIDataset()
+        self.assertIsInstance(dataset, mowl.datasets.Dataset)
         
     def test_evaluation_classes_ppi(self):
         """This should check the correct behaviour of evaluation_classes_method in ppi dataset"""
