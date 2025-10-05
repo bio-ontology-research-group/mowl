@@ -111,7 +111,6 @@ If you used mOWL in your work, please consider citing `this article <https://doi
    datasets/index
    ontology/index
    owlapi/index
-   models/index
    corpus/index
    graphs/index
    embedding_el/index

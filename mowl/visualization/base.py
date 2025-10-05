@@ -83,7 +83,7 @@ class TSNE(Visualizer):
                 warnings.warn("Complex numpy array detected. Only real part will be considered",
                               UserWarning)
             points = points.real
-        self.points = SKTSNE(n_components=2, verbose=verbose, n_iter=epochs, n_jobs=workers)
+        self.points = SKTSNE(n_components=2, verbose=verbose, max_iter=epochs, n_jobs=workers)
         self.points = self.points.fit_transform(points)
         self.plot_data = {}
 
