@@ -13,6 +13,7 @@ dependencies:
   - scikit-learn
   - tqdm
   - urllib3
+  - scipy<1.16.0  
   - pip
   - pip:
     - pykeen>=1.11.1
@@ -27,5 +28,4 @@ dependencies:
     - matplotlib
     - sphinx-automodapi
     - mock
-    - scipy<1.16.0  
     - gensim>=4.3.0
