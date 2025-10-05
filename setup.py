@@ -26,7 +26,7 @@ setuptools.setup(
     package_data={"mowl": ["lib/*.jar"]},
     python_requires=">=3.9",
     install_requires=[
-        "class-resolver==0.5.4",
+        "class-resolver==0.6.1",
         "click",
         "deprecated",
         "gensim>=4.3.0",
@@ -35,7 +35,7 @@ setuptools.setup(
         "networkx",
         "numpy",
         "pandas",
-        "pykeen==1.11.0",
+        "pykeen==1.11.1",
         "pyyaml",
         "requests",
         "scikit-learn",

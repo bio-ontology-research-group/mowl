@@ -27,7 +27,7 @@ dependencies:
     - build
     - pykeen==1.11.0
     - numpy
-    - class-resolver==0.5.4
+    - class-resolver==0.6.1
     - sphinx-rtd-theme
     - pytest
     - pytest-faulthandler
@@ -35,10 +35,12 @@ dependencies:
     - flake8
     - autopep8
     - memory-profiler
+    - matplotlib
   - jupyter
   - ipykernel
   - sphinx
   - sphinx-gallery
+  - sphinx-automodapi
   - nbsphinx
   - mock
 
