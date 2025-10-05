@@ -5,7 +5,7 @@ System dependencies
 ---------------------
 
 - JDK version >= 22.x.x
-- Python version: 3.9, 3.10, 3.11, 3.12
+- Python version: 3.10, 3.11, 3.12
 - Conda version >= 24.x.x
 
 Python requirements
