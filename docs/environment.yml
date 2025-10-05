@@ -4,15 +4,13 @@ dependencies:
   - python=3.13
   - click
   - deprecated
-  - gensim>=4.3.0
   - gradle
-  - JPype1=1.4.1
+  - JPype1=1.5.1
   - pandas
   - pytorch
   - pyyaml
   - requests
   - scikit-learn
-  - scipy  
   - tqdm
   - urllib3
   - pip
@@ -29,3 +27,5 @@ dependencies:
     - matplotlib
     - sphinx-automodapi
     - mock
+    - scipy<1.16.0  
+    - gensim>=4.3.0
