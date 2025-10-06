@@ -1,0 +1,80 @@
+changelog:
+  exclude:
+    labels:
+      - skip-changelog
+      - duplicate
+      - invalid
+      - wontfix
+    # authors:
+      # - dependabot
+      # - renovate
+
+  categories:
+    - title: 💥 Breaking Changes
+      labels:
+        - breaking-change
+        - breaking
+
+    - title: 📊 Datasets
+      labels:
+        - dataset
+        - datasets
+        - data
+    
+    - title: 🤖 Models
+      labels:
+        - model
+        - models
+        - ml-model
+        
+    - title: 🚀 Features
+      labels:
+        - enhancement
+        - feature
+        - new-feature
+    
+    - title: 🐛 Bug Fixes
+      labels:
+        - bug
+        - bugfix
+        - fix
+    
+    - title: 🔒 Security
+      labels:
+        - security
+    
+    - title: 📝 Documentation
+      labels:
+        - documentation
+        - docs
+    
+    - title: 🧪 Testing
+      labels:
+        - test
+        - tests
+    
+    - title: ⚡ Performance
+      labels:
+        - performance
+        - optimization
+    
+    - title: 🎨 Style
+      labels:
+        - style
+        - formatting
+    
+    - title: ♻️ Refactoring
+      labels:
+        - refactor
+        - refactoring
+    
+    - title: 🔧 Maintenance
+      labels:
+        - chore
+        - maintenance
+        - dependencies
+    
+    # Always include this as last category to catch unlabeled PRs
+    - title: 📦 Other Changes
+      labels:
+        - "*"
