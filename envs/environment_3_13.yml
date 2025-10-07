@@ -3,22 +3,9 @@ channels:
   - conda-forge
 dependencies:
   - python=3.13
-  - click
-  - deprecated
   - gradle
-  - JPype1=1.5.1
-  - pandas
   - pytorch
-  - pyyaml
-  - requests
-  - scikit-learn
-  - scipy<1.16.0  
-  - tqdm
-  - urllib3
   - pip
   - pip:
-    - gensim>=4.3.0
-    - pykeen==1.11.1
-    - temp
-    - class-resolver==0.6.1
+    - -e ..  # installs mowl-borg with all dependencies from setup.py
     
