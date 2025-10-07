@@ -7,5 +7,5 @@ dependencies:
   - pytorch
   - pip
   - pip:
-    - -e .  # installs mowl-borg with all dependencies from setup.py
+    - -e ..  # installs mowl-borg with all dependencies from setup.py
     
