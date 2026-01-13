@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added tests for EL models (ELBE, ELBEPPI, ELBEGDA, ELEmGDA, BoxSquaredEL)
 ### Fixed
 - ELBEPPI now automatically sets PPIEvaluator in `__init__`, matching ELEmPPI behavior
+- Fixed `evaluate_ppi()` in ELBEPPI and ELEmPPI to pass required `testing_ontology` argument
 
 ## [1.0.2]
 ### Changed
