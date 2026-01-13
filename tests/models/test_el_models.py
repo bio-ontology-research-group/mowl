@@ -1,7 +1,6 @@
 from unittest import TestCase
 from tests.datasetFactory import PPIYeastSlimDataset, FamilyDataset, GDAHumanELDataset
 from mowl.models import ELBE, ELBEPPI, ELBEGDA, ELEmGDA, BoxSquaredEL
-from mowl.evaluation import PPIEvaluator
 
 
 class TestELBE(TestCase):
@@ -51,9 +50,10 @@ class TestELBEPPI(TestCase):
         self.assertTrue(True)
 
     def test_elbeppi_with_evaluator(self):
-        """Test ELBEPPI model with PPIEvaluator"""
+        """Test ELBEPPI model evaluation.
+        Note: ELBEPPI automatically sets PPIEvaluator in __init__.
+        """
         model = ELBEPPI(self.ppi_dataset, embed_dim=30, epochs=1)
-        model.set_evaluator(PPIEvaluator)
         model.train(validate_every=1)
         model.evaluate(
             self.ppi_dataset.testing, filter_ontologies=[self.ppi_dataset.ontology]

@@ -19,6 +19,7 @@ class ELBEPPI(ELBE):
     """
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
+        self.set_evaluator(PPIEvaluator)
                                                                                             
     @property
     def evaluation_model(self):
