@@ -11,6 +11,9 @@ from mowl.datasets.builtin import (
     PPIYeastSlimDataset as BuiltinPPIYeastSlimDataset,
     PPIHumanDataset,
     HPIDataset,
+    GOSubsumptionDataset as BuiltinGOSubsumptionDataset,
+    FoodOnSubsumptionDataset as BuiltinFoodOnSubsumptionDataset,
+    GDADatasetV2 as BuiltinGDADatasetV2,
 )
 from tests.datasetFactory import FamilyDataset, PPIYeastSlimDataset, GDADatasetV2
 
@@ -32,6 +35,12 @@ def pytest_configure(config):
     PPIHumanDataset()
     print("Downloading hpi dataset")
     HPIDataset()
+    print("Downloading go_subsumption dataset")
+    BuiltinGOSubsumptionDataset()
+    print("Downloading foodon_subsumption dataset")
+    BuiltinFoodOnSubsumptionDataset()
+    print("Downloading gda_v2 dataset")
+    BuiltinGDADatasetV2()
 
 
 # Session-scoped fixtures for commonly used datasets
