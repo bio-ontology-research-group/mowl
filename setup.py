@@ -7,7 +7,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 setuptools.setup(
     name="mowl-borg",
     use_scm_version=True,
-    setup_requires=['setuptools_scm'],
+    setup_requires=["setuptools_scm"],
     author="Bio-Ontology Research Group",
     author_email="fernando.zhapacamacho@kaust.edu.sa",
     description="mOWL: A machine learning library with ontologies",
@@ -19,13 +19,17 @@ setuptools.setup(
     },
     classifiers=[
         "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
         "License :: OSI Approved :: BSD License",
         "Operating System :: OS Independent",
     ],
     package_dir={"": "."},
     packages=setuptools.find_packages(where=".", exclude=("tests",)),
     package_data={"mowl": ["lib/*.jar"]},
-    python_requires=">=3.10",
+    python_requires=">=3.10, <3.14", # Due to JPype1 compatibility
     install_requires=[
         "class-resolver==0.7.1",
         "click",
@@ -44,7 +48,6 @@ setuptools.setup(
         "temp",
         "tqdm",
         "torch",
-        "urllib3"
+        "urllib3",
     ],
-
 )

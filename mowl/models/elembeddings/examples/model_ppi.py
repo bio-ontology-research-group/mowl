@@ -7,11 +7,12 @@ import torch as th
 import numpy as np
 from mowl.models import ELEmbeddings
 
+
 class ELEmPPI(ELEmbeddings):
     """
     Example of ELEmbeddings for protein-protein interaction prediction.
     """
-    
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -23,14 +24,14 @@ class ELEmPPI(ELEmbeddings):
             self._evaluation_model = self.module
 
         return self._evaluation_model
-        
+
     def train(self, validate_every=1000):
-
         optimizer = th.optim.Adam(self.module.parameters(), lr=self.learning_rate)
-        best_loss = float('inf')
+        best_loss = float("inf")
 
-        prots = [self.class_index_dict[p] for p
-                 in self.dataset.evaluation_classes[0].as_str]
+        prots = [
+            self.class_index_dict[p] for p in self.dataset.evaluation_classes[0].as_str
+        ]
 
         for epoch in trange(self.epochs):
             self.module.train()
@@ -44,14 +45,16 @@ class ELEmPPI(ELEmbeddings):
 
                 loss += th.mean(self.module(gci_dataset[:], gci_name))
                 if gci_name == "gci2":
-                    idxs_for_negs = np.random.choice(prots, size=len(gci_dataset), replace=True)
+                    idxs_for_negs = np.random.choice(
+                        prots, size=len(gci_dataset), replace=True
+                    )
                     rand_index = th.tensor(idxs_for_negs).to(self.device)
                     data = gci_dataset[:]
                     neg_data = th.cat([data[:, :2], rand_index.unsqueeze(1)], dim=1)
                     loss += th.mean(self.module(neg_data, gci_name, neg=True))
 
             loss += self.module.regularization_loss()
-                    
+
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -69,7 +72,9 @@ class ELEmPPI(ELEmbeddings):
                 if valid_loss < best_loss:
                     best_loss = valid_loss
                     th.save(self.module.state_dict(), self.model_filepath)
-                print(f'Epoch {epoch+1}: Train loss: {train_loss} Valid loss: {valid_loss}')
+                print(
+                    f"Epoch {epoch + 1}: Train loss: {train_loss} Valid loss: {valid_loss}"
+                )
 
         return 1
 
@@ -78,10 +83,10 @@ class ELEmPPI(ELEmbeddings):
 
     def evaluate_ppi(self):
         self.init_module()
-        print('Load the best model', self.model_filepath)
+        print("Load the best model", self.model_filepath)
         self.load_best_model()
         with th.no_grad():
-            metrics = self.evaluate()
-            print(metrics)
-                                    
-
+            self.evaluate(
+                self.dataset.testing, filter_ontologies=[self.dataset.ontology]
+            )
+            print(self.metrics)
