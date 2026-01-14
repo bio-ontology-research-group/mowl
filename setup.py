@@ -23,14 +23,13 @@ setuptools.setup(
         "Programming Language :: Python :: 3.11",
         "Programming Language :: Python :: 3.12",
         "Programming Language :: Python :: 3.13",
-        "Programming Language :: Python :: 3.14",
         "License :: OSI Approved :: BSD License",
         "Operating System :: OS Independent",
     ],
     package_dir={"": "."},
     packages=setuptools.find_packages(where=".", exclude=("tests",)),
     package_data={"mowl": ["lib/*.jar"]},
-    python_requires=">=3.10",
+    python_requires=">=3.10, <3.14", # Due to JPype1 compatibility
     install_requires=[
         "class-resolver==0.6.1",
         "click",
