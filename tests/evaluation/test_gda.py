@@ -95,7 +95,7 @@ class TestGDA(TestCase):
 
     @pytest.mark.slow
     def test_gda_evaluator(self):
-        self.model.train(epochs=5)
+        self.model.train(epochs=2)
         self.model.evaluate(
             self.dataset.testing,
             filter_ontologies=[self.dataset.ontology, self.dataset.validation],

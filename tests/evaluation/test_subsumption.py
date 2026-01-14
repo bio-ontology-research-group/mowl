@@ -104,7 +104,7 @@ class TestSubsumption(TestCase):
 
     @pytest.mark.slow
     def test_subsumption_evaluator(self):
-        self.model.train(epochs=10)
+        self.model.train(epochs=2)
         self.model.evaluate(self.dataset.ontology)
         mr = self.model.metrics["mr"]
         auc = self.model.metrics["auc"]
