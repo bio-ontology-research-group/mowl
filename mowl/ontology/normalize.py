@@ -5,10 +5,13 @@ from de.tudresden.inf.lat.jcel.owlapi.translator import Translator
 from org.semanticweb.owlapi.model.parameters import Imports
 from uk.ac.manchester.cs.owl.owlapi import OWLClassImpl, OWLObjectSomeValuesFromImpl, \
     OWLObjectIntersectionOfImpl
-from org.semanticweb.owlapi.model import OWLAxiom, OWLOntology, AxiomType, ClassExpressionType
+from org.semanticweb.owlapi.model import OWLAxiom, OWLOntology, AxiomType, ClassExpressionType, IRI
+from org.semanticweb.owlapi.apibinding import OWLManager
 
 from java.util import HashSet
+from jpype import java
 
+import os
 import logging
 logger = logging.getLogger(__name__)
 handler = logging.StreamHandler()
@@ -28,13 +31,63 @@ logic EL language.
     def __init__(self):
         return
 
-    def normalize(self, ontology, load=False):
+    def get_cache_path(self, ontology_path):
+        """Generate the cache file path for a given ontology path.
+
+        :param ontology_path: Path to the original ontology file
+        :type ontology_path: str
+        :rtype: str
+        """
+        if ontology_path.endswith(".owl"):
+            return ontology_path[:-4] + "_mowl_el_normalized.owl"
+        else:
+            return ontology_path + "_mowl_el_normalized.owl"
+
+    def _save_normalized_ontology(self, axioms_dict, cache_path):
+        """Save normalized axioms to an OWL file.
+
+        :param axioms_dict: Dictionary of normalized axioms
+        :type axioms_dict: dict
+        :param cache_path: Path to save the normalized ontology
+        :type cache_path: str
+        """
+        manager = OWLManager.createOWLOntologyManager()
+        normalized_ont = manager.createOntology()
+
+        # Collect all OWL axioms from the normalized axioms dictionary
+        for key in ["gci0", "gci1", "gci2", "gci3", "gci0_bot", "gci1_bot", "gci3_bot"]:
+            for axiom in axioms_dict.get(key, []):
+                manager.addAxiom(normalized_ont, axiom.owl_axiom)
+
+        # Save to file
+        manager.saveOntology(normalized_ont, IRI.create("file:" + os.path.abspath(cache_path)))
+        logger.info(f"Saved normalized ontology to cache: {cache_path}")
+
+    def _load_cached_ontology(self, cache_path):
+        """Load a cached normalized ontology from file.
+
+        :param cache_path: Path to the cached ontology file
+        :type cache_path: str
+        :rtype: OWLOntology
+        """
+        manager = OWLManager.createOWLOntologyManager()
+        cached_ont = manager.loadOntologyFromOntologyDocument(java.io.File(cache_path))
+        return cached_ont
+
+    def normalize(self, ontology, load=False, ontology_path=None, use_cache=True):
         """Performs the normalization.
         :param ontology: Input ontology
         :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
         :param load: Load the GCIs if the ontology is already normalized. Default is False.
         :type load: bool, optional
-        
+        :param ontology_path: Path to the original ontology file. If provided and use_cache is \
+            True, the normalized ontology will be cached to avoid re-normalization on subsequent \
+            calls. The cache file will be named ``<ontology_path>_mowl_el_normalized.owl``.
+        :type ontology_path: str, optional
+        :param use_cache: Whether to use caching. Default is True. If False, the ontology will \
+            be re-normalized even if a cache file exists.
+        :type use_cache: bool, optional
+
         :rtype: Dictionary where the keys are labels for each normal form and the values are a \
             list of axioms of each normal form.
         """
@@ -44,11 +97,31 @@ logic EL language.
             raise TypeError(f"Parameter 'ontology' must be of \
 type org.semanticweb.owlapi.model.OWLOntology. Found: {type(ontology)}")
 
+        if ontology_path is not None and not isinstance(ontology_path, str):
+            raise TypeError("Parameter 'ontology_path' must be of type str")
+
+        if not isinstance(use_cache, bool):
+            raise TypeError("Parameter 'use_cache' must be of type bool")
+
+        # Check for cached normalized ontology
+        cache_path = None
+        if ontology_path is not None and use_cache:
+            cache_path = self.get_cache_path(ontology_path)
+            if os.path.exists(cache_path):
+                logger.info(f"Loading normalized ontology from cache: {cache_path}")
+                cached_ont = self._load_cached_ontology(cache_path)
+                axioms_dict = self.__load_normalized_ontology(cached_ont)
+
+                # Add ABox axioms from original ontology
+                abox = ontology.getABoxAxioms(Imports.fromBoolean(True))
+                axioms_dict["class_assertion"] = [ClassAssertion(axiom) for axiom in abox if axiom.getAxiomType() == AxiomType.CLASS_ASSERTION and axiom.getClassExpression().getClassExpressionType() == ClassExpressionType.OWL_CLASS]
+                axioms_dict["object_property_assertion"] = [ObjectPropertyAssertion(axiom) for axiom in abox if axiom.getAxiomType() == AxiomType.OBJECT_PROPERTY_ASSERTION]
+
+                return axioms_dict
+
         # jreasoner = JcelReasoner(ontology, False)
         # root_ont = jreasoner.getRootOntology()
 
-
-        
         abox = ontology.getABoxAxioms(Imports.fromBoolean(True))
 
         if load:
@@ -80,6 +153,11 @@ type org.semanticweb.owlapi.model.OWLOntology. Found: {type(ontology)}")
 
         axioms_dict["class_assertion"] = [ClassAssertion(axiom) for axiom in abox if axiom.getAxiomType() == AxiomType.CLASS_ASSERTION and axiom.getClassExpression().getClassExpressionType() == ClassExpressionType.OWL_CLASS]
         axioms_dict["object_property_assertion"] = [ObjectPropertyAssertion(axiom) for axiom in abox if axiom.getAxiomType() == AxiomType.OBJECT_PROPERTY_ASSERTION]
+
+        # Save normalized ontology to cache if ontology_path is provided
+        if ontology_path is not None and use_cache and not load:
+            cache_path = self.get_cache_path(ontology_path)
+            self._save_normalized_ontology(axioms_dict, cache_path)
 
         return axioms_dict
 

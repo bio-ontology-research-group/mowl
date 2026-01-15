@@ -26,8 +26,17 @@ class ELDataset():
     name --> index`. If not provided, a dictionary will be created from the ontology object \
     properties. Defaults to ``None``.
     :type object_property_index_dict: dict, optional
-    :param load_normalized: If true, the ontology is assumed to be already normalized and the normalization process will be skipped. Defaults to ``False``.
+    :param load_normalized: If true, the ontology is assumed to be already normalized and the \
+    normalization process will be skipped. Defaults to ``False``.
     :type load_normalized: bool, optional
+    :param ontology_path: Path to the original ontology file. If provided, the normalized \
+    ontology will be cached to ``<ontology_path>_mowl_el_normalized.owl`` and loaded from cache \
+    on subsequent calls. This significantly speeds up repeated normalization of the same \
+    ontology. Defaults to ``None``.
+    :type ontology_path: str, optional
+    :param use_cache: Whether to use caching when ``ontology_path`` is provided. Defaults to \
+    ``True``.
+    :type use_cache: bool, optional
     """
 
     def __init__(self,
@@ -36,8 +45,10 @@ class ELDataset():
                  object_property_index_dict=None,
                  individual_index_dict=None,
                  extended=True,
-                 load_normalized = False,
-                 device="cpu"
+                 load_normalized=False,
+                 device="cpu",
+                 ontology_path=None,
+                 use_cache=True
                  ):
 
         if not isinstance(ontology, OWLOntology):
@@ -61,6 +72,12 @@ org.semanticweb.owlapi.model.OWLOntology.")
         if not isinstance(device, str):
             raise TypeError("Optional parameter device must be of type str")
 
+        if ontology_path is not None and not isinstance(ontology_path, str):
+            raise TypeError("Optional parameter ontology_path must be of type str")
+
+        if not isinstance(use_cache, bool):
+            raise TypeError("Optional parameter use_cache must be of type bool")
+
         self._ontology = ontology
         self._loaded = False
         self._extended = extended
@@ -69,6 +86,8 @@ org.semanticweb.owlapi.model.OWLOntology.")
         self._individual_index_dict = individual_index_dict
         self.device = device
         self.load_normalized = load_normalized
+        self.ontology_path = ontology_path
+        self.use_cache = use_cache
         
         self._gci0_dataset = None
         self._gci1_dataset = None
@@ -86,7 +105,12 @@ org.semanticweb.owlapi.model.OWLOntology.")
 
         normalizer = ELNormalizer()
 
-        gcis = normalizer.normalize(self._ontology, load=self.load_normalized)
+        gcis = normalizer.normalize(
+            self._ontology,
+            load=self.load_normalized,
+            ontology_path=self.ontology_path,
+            use_cache=self.use_cache
+        )
 
         classes = set()
         relations = set()

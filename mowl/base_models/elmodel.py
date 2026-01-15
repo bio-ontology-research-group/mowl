@@ -77,12 +77,18 @@ merging the 3 extra to their corresponding origin normal forms. Defaults to True
         if self._datasets_loaded:
             return
 
+        # Get ontology paths for caching if available (PathDataset provides these)
+        ontology_path = getattr(self.dataset, 'ontology_path', None)
+        validation_path = getattr(self.dataset, 'validation_path', None)
+        testing_path = getattr(self.dataset, 'testing_path', None)
+
         training_el_dataset = ELDataset(self.dataset.ontology,
                                         self.class_index_dict,
                                         self.object_property_index_dict,
                                         extended=self._extended,
-                                        load_normalized = self.load_normalized,
-                                        device=self.device)
+                                        load_normalized=self.load_normalized,
+                                        device=self.device,
+                                        ontology_path=ontology_path)
 
         self._training_datasets = training_el_dataset.get_gci_datasets()
 
@@ -90,7 +96,8 @@ merging the 3 extra to their corresponding origin normal forms. Defaults to True
         if self.dataset.validation:
             validation_el_dataset = ELDataset(self.dataset.validation, self.class_index_dict,
                                               self.object_property_index_dict,
-                                              extended=self._extended, device=self.device)
+                                              extended=self._extended, device=self.device,
+                                              ontology_path=validation_path)
 
             self._validation_datasets = validation_el_dataset.get_gci_datasets()
 
@@ -98,7 +105,8 @@ merging the 3 extra to their corresponding origin normal forms. Defaults to True
         if self.dataset.testing:
             testing_el_dataset = ELDataset(self.dataset.testing, self.class_index_dict,
                                            self.object_property_index_dict,
-                                           extended=self._extended, device=self.device)
+                                           extended=self._extended, device=self.device,
+                                           ontology_path=testing_path)
 
             self._testing_datasets = testing_el_dataset.get_gci_datasets()
 
