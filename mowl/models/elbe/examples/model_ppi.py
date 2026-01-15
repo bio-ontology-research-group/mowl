@@ -1,105 +1,61 @@
 from mowl.models import ELBE
-from mowl.projection.factory import projector_factory
-from mowl.projection.edge import Edge
-import math
-import logging
-import numpy as np
-
 from mowl.evaluation import PPIEvaluator
-
-from tqdm import trange, tqdm
-
 import torch as th
-from torch import nn
+import numpy as np
 
 
 class ELBEPPI(ELBE):
     """
-    Example of ELBoxEmbeddings for protein-protein interaction prediction.
+    Example of ELBE for protein-protein interaction prediction.
+
+    This model customizes negative sampling to use only protein IDs
+    from the evaluation classes instead of all ontology classes.
     """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.set_evaluator(PPIEvaluator)
+        self.eval_gci_name = "gci2"
+        # Cache protein IDs for negative sampling
+        self._protein_ids = None
+
+    @property
+    def protein_ids(self):
+        """Get protein IDs from evaluation classes (cached)."""
+        if self._protein_ids is None:
+            self._protein_ids = [
+                self.class_index_dict[p]
+                for p in self.dataset.evaluation_classes[0].as_str
+            ]
+        return self._protein_ids
 
     @property
     def evaluation_model(self):
         if self._evaluation_model is None:
             self._evaluation_model = self.module
-
         return self._evaluation_model
 
-    def train(self, validate_every=1000):
-        criterion = nn.MSELoss()
-        optimizer = th.optim.Adam(self.module.parameters(), lr=self.learning_rate)
-        best_loss = float("inf")
+    def get_negative_sampling_config(self):
+        """Only do negative sampling for gci2 (not object_property_assertion)."""
+        return {
+            "gci2": {"corrupt_column": 2}
+        }
 
-        training_datasets = {k: v.data for k, v in self.training_datasets.items()}
-        validation_dataset = self.validation_datasets["gci2"][:]
+    def generate_negatives(self, gci_name, gci_dataset):
+        """Generate negatives using only protein IDs for gci2."""
+        if gci_name != "gci2":
+            return None
 
-        prots = [
-            self.class_index_dict[p] for p in self.dataset.evaluation_classes[0].as_str
-        ]
-
-        for epoch in trange(self.epochs):
-            self.module.train()
-
-            train_loss = 0
-            loss = 0
-            for gci_name, gci_dataset in training_datasets.items():
-                if len(gci_dataset) == 0:
-                    continue
-                dst = self.module(gci_dataset, gci_name)
-
-                mse_loss = criterion(
-                    dst, th.zeros(dst.shape, requires_grad=False).to(self.device)
-                )
-                loss += mse_loss
-
-                if gci_name == "gci2":
-                    gci_batch = gci_dataset
-                    idxs_for_negs = np.random.choice(
-                        prots, size=len(gci_batch), replace=True
-                    )
-                    rand_prot_ids = th.tensor(idxs_for_negs).to(self.device)
-                    neg_data = th.cat(
-                        [gci_batch[:, :2], rand_prot_ids.unsqueeze(1)], dim=1
-                    )
-
-                    dst = self.module(neg_data, gci_name, neg=True)
-                    mse_loss = criterion(
-                        dst, th.ones(dst.shape, requires_grad=False).to(self.device)
-                    )
-                    loss += mse_loss
-
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            train_loss += loss.detach().item()
-
-            if (epoch + 1) % validate_every == 0:
-                with th.no_grad():
-                    self.module.eval()
-                    valid_loss = 0
-                    gci2_data = validation_dataset
-
-                    dst = self.module(gci2_data, "gci2")
-                    loss = criterion(
-                        dst, th.zeros(dst.shape, requires_grad=False).to(self.device)
-                    )
-                    valid_loss += loss.detach().item()
-
-                if valid_loss < best_loss:
-                    best_loss = valid_loss
-                    print("Saving model..")
-                    th.save(self.module.state_dict(), self.model_filepath)
-                print(
-                    f"Epoch {epoch + 1}: Train loss: {train_loss} Valid loss: {valid_loss}"
-                )
-
-        return 1
+        data = gci_dataset[:]
+        idxs_for_negs = np.random.choice(
+            self.protein_ids, size=len(gci_dataset), replace=True
+        )
+        rand_index = th.tensor(idxs_for_negs, dtype=th.long, device=self.device)
+        neg_data = th.cat([data[:, :2], rand_index.unsqueeze(1)], dim=1)
+        return neg_data
 
     def evaluate_ppi(self):
+        """Convenience method to evaluate PPI prediction."""
         self.init_module()
         print("Load the best model", self.model_filepath)
         self.load_best_model()

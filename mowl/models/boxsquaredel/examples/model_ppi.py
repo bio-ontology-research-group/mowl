@@ -1,15 +1,16 @@
-from mowl.models import ELEmbeddings
+from mowl.models import BoxSquaredEL
 from mowl.evaluation import PPIEvaluator
 import torch as th
 import numpy as np
 
 
-class ELEmPPI(ELEmbeddings):
+class BoxSquaredELPPI(BoxSquaredEL):
     """
-    Example of ELEmbeddings for protein-protein interaction prediction.
+    Example of BoxSquaredEL for protein-protein interaction prediction.
 
     This model customizes negative sampling to use only protein IDs
-    from the evaluation classes instead of all ontology classes.
+    from the evaluation classes and generates multiple negatives per positive
+    using the num_negs parameter.
     """
 
     def __init__(self, *args, **kwargs):
@@ -41,16 +42,21 @@ class ELEmPPI(ELEmbeddings):
         }
 
     def generate_negatives(self, gci_name, gci_dataset):
-        """Generate negatives using only protein IDs for gci2."""
+        """Generate multiple negatives per positive using protein IDs."""
         if gci_name != "gci2":
             return None
 
         data = gci_dataset[:]
+        # Generate num_negs negatives per positive sample
         idxs_for_negs = np.random.choice(
-            self.protein_ids, size=len(gci_dataset), replace=True
+            self.protein_ids, size=(self.num_negs, len(data)), replace=True
         )
         rand_index = th.tensor(idxs_for_negs, dtype=th.long, device=self.device)
-        neg_data = th.cat([data[:, :2], rand_index.unsqueeze(1)], dim=1)
+        rand_index = rand_index.reshape(-1)
+
+        # Repeat positive data to match negatives
+        data_repeated = data.repeat(self.num_negs, 1)
+        neg_data = th.cat([data_repeated[:, :2], rand_index.unsqueeze(1)], dim=1)
         return neg_data
 
     def evaluate_ppi(self):
@@ -59,7 +65,5 @@ class ELEmPPI(ELEmbeddings):
         print("Load the best model", self.model_filepath)
         self.load_best_model()
         with th.no_grad():
-            self.evaluate(
-                self.dataset.testing, filter_ontologies=[self.dataset.ontology]
-            )
-            print(self.metrics)
+            metrics = self.evaluate()
+            print(metrics)

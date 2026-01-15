@@ -1,12 +1,12 @@
-from mowl.models import ELEmbeddings
+from mowl.models import BoxSquaredEL
 
 
-class ELEmGDA(ELEmbeddings):
+class BoxSquaredELGDA(BoxSquaredEL):
     """
-    Example of ELEmbeddings for gene-disease associations prediction.
+    Example of BoxSquaredEL for gene-disease associations prediction.
 
     Uses default negative sampling (all classes for gci2) and direct loss
-    with regularization inherited from ELEmbeddings.
+    with regularization inherited from BoxSquaredEL.
     """
 
     def __init__(self, *args, **kwargs):
@@ -18,3 +18,8 @@ class ELEmGDA(ELEmbeddings):
         return {
             "gci2": {"index_pool": "classes", "corrupt_column": 2}
         }
+
+
+# Backward compatibility alias
+ELBoxGDA = BoxSquaredELGDA
+
