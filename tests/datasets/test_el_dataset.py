@@ -42,6 +42,12 @@ must be of type dict"):
         with self.assertRaisesRegex(TypeError, "Optional parameter device must be of type str"):
             ELDataset(self.dataset_family.ontology, device=1)
 
+        with self.assertRaisesRegex(TypeError, "Optional parameter ontology_path must be of type str"):
+            ELDataset(self.dataset_family.ontology, ontology_path=123)
+
+        with self.assertRaisesRegex(TypeError, "Optional parameter use_cache must be of type bool"):
+            ELDataset(self.dataset_family.ontology, use_cache="yes")
+
     def test_extended_parameter_false(self):
         """This should check if the extended parameter works as expected when set to false"""
 

@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+- Added caching support for `ELNormalizer`: normalized ontologies can now be saved to disk and loaded on subsequent runs, significantly speeding up repeated normalization of the same ontology.
+- Added `ontology_path` and `use_cache` parameters to `ELNormalizer.normalize()` and `ELDataset`.
+- `EmbeddingELModel` now automatically uses caching when the dataset provides ontology paths (e.g., `PathDataset`).
 - Added tests for EL models (ELBE, ELBEPPI, ELBEGDA, ELEmGDA, BoxSquaredEL)
 ### Fixed
 - ELBEPPI now automatically sets PPIEvaluator in `__init__`, matching ELEmPPI behavior

@@ -333,3 +333,160 @@ org.semanticweb.owlapi.model.OWLOntology"):
         self.assertEqual(classes, {"http://class1", "http://class2", "http://class3"})
         self.assertEqual(roles, {"http://role"})
         self.assertEqual(inds, set())
+
+
+class TestElNormalizerCaching(TestCase):
+    """Tests for ELNormalizer caching functionality"""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.family_dataset = FamilyDataset()
+        cls.adapter = OWLAPIAdapter()
+
+    def setUp(self):
+        """Create a temporary directory for cache files"""
+        import tempfile
+        self.temp_dir = tempfile.mkdtemp()
+
+    def tearDown(self):
+        """Clean up temporary directory"""
+        import shutil
+        shutil.rmtree(self.temp_dir, ignore_errors=True)
+
+    def test_normalize_creates_cache_file(self):
+        """Test that normalize creates a cache file when ontology_path is provided"""
+        import os
+
+        # Create a test ontology file path
+        ontology_path = os.path.join(self.temp_dir, "test_ontology.owl")
+        expected_cache_path = os.path.join(self.temp_dir, "test_ontology_mowl_el_normalized.owl")
+
+        normalizer = ELNormalizer()
+        normalized_axioms = normalizer.normalize(
+            self.family_dataset.ontology,
+            ontology_path=ontology_path
+        )
+
+        # Check that the cache file was created
+        self.assertTrue(os.path.exists(expected_cache_path),
+                        f"Cache file should be created at {expected_cache_path}")
+
+        # Verify normalization still works correctly
+        self.assertEqual(len(normalized_axioms["gci0"]), 7)
+        self.assertEqual(len(normalized_axioms["gci1"]), 2)
+
+    def test_normalize_loads_from_cache(self):
+        """Test that normalize loads from cache file when it exists"""
+        import os
+
+        ontology_path = os.path.join(self.temp_dir, "test_ontology.owl")
+        expected_cache_path = os.path.join(self.temp_dir, "test_ontology_mowl_el_normalized.owl")
+
+        normalizer = ELNormalizer()
+
+        # First call: normalize and create cache
+        normalized_axioms_1 = normalizer.normalize(
+            self.family_dataset.ontology,
+            ontology_path=ontology_path
+        )
+
+        self.assertTrue(os.path.exists(expected_cache_path))
+
+        # Second call: should load from cache
+        with self.assertLogs(level="INFO") as log:
+            normalized_axioms_2 = normalizer.normalize(
+                self.family_dataset.ontology,
+                ontology_path=ontology_path
+            )
+            # Check that loading from cache was logged
+            log_messages = [record.getMessage() for record in log.records]
+            self.assertTrue(
+                any("Loading normalized ontology from cache" in msg for msg in log_messages),
+                f"Should log loading from cache. Got: {log_messages}"
+            )
+
+        # Results should be equivalent
+        self.assertEqual(len(normalized_axioms_1["gci0"]), len(normalized_axioms_2["gci0"]))
+        self.assertEqual(len(normalized_axioms_1["gci1"]), len(normalized_axioms_2["gci1"]))
+        self.assertEqual(len(normalized_axioms_1["gci2"]), len(normalized_axioms_2["gci2"]))
+        self.assertEqual(len(normalized_axioms_1["gci3"]), len(normalized_axioms_2["gci3"]))
+
+    def test_normalize_no_cache_without_ontology_path(self):
+        """Test that normalize does not create cache when ontology_path is not provided"""
+        import os
+
+        normalizer = ELNormalizer()
+
+        # Normalize without ontology_path
+        normalized_axioms = normalizer.normalize(self.family_dataset.ontology)
+
+        # No cache files should be created in temp_dir
+        cache_files = [f for f in os.listdir(self.temp_dir) if f.endswith("_mowl_el_normalized.owl")]
+        self.assertEqual(len(cache_files), 0, "No cache files should be created without ontology_path")
+
+        # Normalization should still work
+        self.assertEqual(len(normalized_axioms["gci0"]), 7)
+
+    def test_normalize_use_cache_false_skips_cache(self):
+        """Test that normalize skips cache when use_cache=False"""
+        import os
+
+        ontology_path = os.path.join(self.temp_dir, "test_ontology.owl")
+        expected_cache_path = os.path.join(self.temp_dir, "test_ontology_mowl_el_normalized.owl")
+
+        normalizer = ELNormalizer()
+
+        # First call: normalize and create cache
+        normalizer.normalize(
+            self.family_dataset.ontology,
+            ontology_path=ontology_path
+        )
+        self.assertTrue(os.path.exists(expected_cache_path))
+
+        # Second call with use_cache=False: should re-normalize
+        normalized_axioms = normalizer.normalize(
+            self.family_dataset.ontology,
+            ontology_path=ontology_path,
+            use_cache=False
+        )
+
+        # Normalization should still produce correct results
+        self.assertEqual(len(normalized_axioms["gci0"]), 7)
+
+    def test_get_cache_path(self):
+        """Test the cache path generation logic"""
+        import os
+
+        test_cases = [
+            ("ontology.owl", "ontology_mowl_el_normalized.owl"),
+            ("/path/to/ontology.owl", "/path/to/ontology_mowl_el_normalized.owl"),
+            ("my_ontology.owl", "my_ontology_mowl_el_normalized.owl"),
+            ("/data/test.owl", "/data/test_mowl_el_normalized.owl"),
+        ]
+
+        normalizer = ELNormalizer()
+        for input_path, expected_cache_path in test_cases:
+            cache_path = normalizer.get_cache_path(input_path)
+            self.assertEqual(cache_path, expected_cache_path,
+                             f"Cache path for '{input_path}' should be '{expected_cache_path}'")
+
+    def test_normalize_ontology_path_type_checking(self):
+        """Test type checking for ontology_path parameter"""
+        normalizer = ELNormalizer()
+
+        with self.assertRaisesRegex(TypeError, "Parameter 'ontology_path' must be of type str"):
+            normalizer.normalize(self.family_dataset.ontology, ontology_path=123)
+
+    def test_normalize_use_cache_type_checking(self):
+        """Test type checking for use_cache parameter"""
+        import os
+
+        normalizer = ELNormalizer()
+        ontology_path = os.path.join(self.temp_dir, "test.owl")
+
+        with self.assertRaisesRegex(TypeError, "Parameter 'use_cache' must be of type bool"):
+            normalizer.normalize(
+                self.family_dataset.ontology,
+                ontology_path=ontology_path,
+                use_cache="yes"
+            )
