@@ -2,7 +2,7 @@ from mowl.models.elembeddings.model import ELEmbeddings
 from mowl.models.elembeddings.examples.model_ppi import ELEmPPI
 from mowl.models.elembeddings.examples.model_gda import ELEmGDA
 
-from mowl.models.elbe.model import ELBoxEmbeddings, ELBE
+from mowl.models.elbe.model import ELBE
 from mowl.models.elbe.examples.model_ppi import ELBEPPI
 from mowl.models.elbe.examples.model_gda import ELBEGDA
 
