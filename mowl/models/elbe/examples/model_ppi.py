@@ -15,6 +15,7 @@ class ELBEPPI(ELBE):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.set_evaluator(PPIEvaluator)
+        self.eval_gci_name = "gci2"
         # Cache protein IDs for negative sampling
         self._protein_ids = None
 

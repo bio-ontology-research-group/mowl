@@ -9,6 +9,10 @@ class BoxSquaredELGDA(BoxSquaredEL):
     with regularization inherited from BoxSquaredEL.
     """
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.eval_gci_name = "gci2"
+
     def get_negative_sampling_config(self):
         """Only do negative sampling for gci2."""
         return {

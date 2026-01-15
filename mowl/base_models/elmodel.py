@@ -74,6 +74,25 @@ merging the 3 extra to their corresponding origin normal forms. Defaults to True
         self._testing_datasets = None
 
         self._loaded_eval = False
+        self._eval_gci_name = None
+
+    @property
+    def eval_gci_name(self):
+        """The GCI type to use for evaluation (e.g., 'gci0', 'gci1', 'gci2', 'gci3').
+        Must be explicitly set before evaluation.
+
+        :rtype: str
+        """
+        return self._eval_gci_name
+
+    @eval_gci_name.setter
+    def eval_gci_name(self, value):
+        valid_gci_names = ["gci0", "gci1", "gci2", "gci3"]
+        if self._extended:
+            valid_gci_names.extend(["gci0_bot", "gci1_bot", "gci3_bot"])
+        if value not in valid_gci_names:
+            raise ValueError(f"eval_gci_name must be one of {valid_gci_names}, got '{value}'")
+        self._eval_gci_name = value
 
     def init_module(self):
         raise NotImplementedError
@@ -381,11 +400,16 @@ of :class:`torch.utils.data.DataLoader`
             # Validation
             if (epoch + 1) % validate_every == 0:
                 if self.dataset.validation is not None:
+                    if self._eval_gci_name is None:
+                        raise ValueError(
+                            "eval_gci_name must be set before training with validation. "
+                            "Set model.eval_gci_name to one of: 'gci0', 'gci1', 'gci2', 'gci3'"
+                        )
                     with th.no_grad():
                         self.module.eval()
                         valid_loss = 0
-                        gci2_data = self.validation_datasets["gci2"][:]
-                        vloss = th.mean(self.module(gci2_data, "gci2"))
+                        gci_data = self.validation_datasets[self._eval_gci_name][:]
+                        vloss = th.mean(self.module(gci_data, self._eval_gci_name))
                         valid_loss += vloss.detach().item()
 
                         if valid_loss < best_loss:
@@ -402,8 +426,14 @@ of :class:`torch.utils.data.DataLoader`
         :type data: torch.Tensor
         :return: Evaluation scores
         :rtype: torch.Tensor
+        :raises ValueError: If eval_gci_name has not been set
         """
-        return self.module.gci2_loss(data)
+        if self._eval_gci_name is None:
+            raise ValueError(
+                "eval_gci_name must be set before evaluation. "
+                "Set model.eval_gci_name to one of: 'gci0', 'gci1', 'gci2', 'gci3'"
+            )
+        return self.module(data, self._eval_gci_name)
 
     def get_embeddings(self):
         """Get trained embeddings for entities, relations, and individuals.

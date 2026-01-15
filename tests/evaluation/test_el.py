@@ -16,9 +16,10 @@ class TestELModel(TestCase):
         self.ppi_dataset = PPIYeastSlimDataset()
 
     def test_evaluation_without_instantiating_evaluation_class(self):
-        model = ELEmPPI(self.ppi_dataset, epochs=1)
+        model = ELEmPPI(self.ppi_dataset)
+        model.eval_gci_name = "gci2"
         model.set_evaluator(PPIEvaluator)
-        model.train(validate_every=1)
+        model.train(epochs=1, validate_every=1)
         model.evaluate(
             self.ppi_dataset.testing, filter_ontologies=[self.ppi_dataset.ontology]
         )
@@ -28,10 +29,11 @@ class TestELModel(TestCase):
         self.assertTrue(mr > fmr)
 
     def test_evaluation_instantiating_evaluation_class(self):
-        model = ELEmPPI(self.ppi_dataset, epochs=1)
+        model = ELEmPPI(self.ppi_dataset)
+        model.eval_gci_name = "gci2"
         evaluator = PPIEvaluator(self.ppi_dataset)
         model.set_evaluator(evaluator)
-        model.train(validate_every=1)
+        model.train(epochs=1, validate_every=1)
         model.evaluate(
             self.ppi_dataset.testing, filter_ontologies=[self.ppi_dataset.ontology]
         )

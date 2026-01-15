@@ -26,6 +26,7 @@ class TestELBE(TestCase):
     def test_elbe_train_ppi_dataset(self):
         """Test ELBE model can train on PPI dataset with validation"""
         model = ELBE(self.ppi_dataset, embed_dim=30)
+        model.eval_gci_name = "gci2"
         model.train(epochs=1, validate_every=1)
         self.assertTrue(True)
 
@@ -54,6 +55,7 @@ class TestELBEPPI(TestCase):
         Note: ELBEPPI automatically sets PPIEvaluator in __init__.
         """
         model = ELBEPPI(self.ppi_dataset, embed_dim=30)
+        model.eval_gci_name = "gci2"
         model.train(epochs=1, validate_every=1)
         model.evaluate(
             self.ppi_dataset.testing, filter_ontologies=[self.ppi_dataset.ontology]
@@ -127,5 +129,6 @@ class TestBoxSquaredEL(TestCase):
     def test_boxsquaredel_train_ppi_dataset(self):
         """Test BoxSquaredEL model can train on PPI dataset with validation"""
         model = BoxSquaredEL(self.ppi_dataset, embed_dim=30)
+        model.eval_gci_name = "gci2"
         model.train(epochs=1, validate_every=1)
         self.assertTrue(True)
