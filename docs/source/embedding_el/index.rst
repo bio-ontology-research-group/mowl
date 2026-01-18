@@ -261,9 +261,10 @@ We have seen that constructing a |el| model has many steps. However, the main di
    from mowl.evaluation import PPIEvaluator
 
    dataset = PPIYeastSlimDataset()
-   model = ELEmbeddings(dataset, embed_dim=30, epochs=2)
+   model = ELEmbeddings(dataset, embed_dim=30)
+   model.eval_gci_name = "gci2"
    model.set_evaluator(PPIEvaluator)
-   model.train()
+   model.train(epochs=1, validate_every=1)
 
 After training, you can evaluate the model on the testing set:
 

@@ -28,12 +28,6 @@ class ELEmPPI(ELEmbeddings):
             ]
         return self._protein_ids
 
-    @property
-    def evaluation_model(self):
-        if self._evaluation_model is None:
-            self._evaluation_model = self.module
-        return self._evaluation_model
-
     def get_negative_sampling_config(self):
         """Only do negative sampling for gci2."""
         return {
