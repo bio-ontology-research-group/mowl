@@ -14,7 +14,7 @@ import numpy as np
 import mowl.error.messages as msg
 import os
 
-@versionchanged(version="1.0.0", reason="Added the 'load_normalized' parameter.")
+@versionchanged(version="2.0.0", reason="Added the 'load_normalized' parameter.")
 class EmbeddingELModel(Model):
     """Abstract class for :math:`\mathcal{EL}` embedding methods.
 
