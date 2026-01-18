@@ -4,6 +4,7 @@ from mowl.datasets.el import ELDataset
 from mowl.projection import projector_factory
 import torch as th
 from torch.utils.data import DataLoader, default_collate
+from tqdm import trange
 
 from deprecated.sphinx import versionadded, versionchanged
 
@@ -13,6 +14,11 @@ import copy
 import numpy as np
 import mowl.error.messages as msg
 import os
+import logging
+
+logger = logging.getLogger(__name__)
+logger.addHandler(logging.StreamHandler())
+logger.setLevel(logging.INFO)
 
 @versionchanged(version="2.0.0", reason="Added the 'load_normalized' parameter.")
 class EmbeddingELModel(Model):
@@ -35,12 +41,13 @@ merging the 3 extra to their corresponding origin normal forms. Defaults to True
     :type device: str, optional
     """
 
-    def __init__(self, dataset, embed_dim, batch_size, extended=True, model_filepath=None, load_normalized=False, device="cpu"):
+    def __init__(self, dataset, embed_dim, batch_size, extended=True, model_filepath=None,
+                 load_normalized=False, device="cpu", learning_rate=0.001):
         super().__init__(dataset, model_filepath=model_filepath)
 
         if not isinstance(embed_dim, int):
             raise TypeError("Parameter 'embed_dim' must be of type int.")
-        
+
         if not isinstance(batch_size, int):
             raise TypeError("Parameter batch_size must be of type int.")
 
@@ -49,7 +56,7 @@ merging the 3 extra to their corresponding origin normal forms. Defaults to True
 
         if not isinstance(load_normalized, bool):
             raise TypeError("Optional parameter load_normalized must be of type bool.")
-        
+
         if not isinstance(device, str):
             raise TypeError("Optional parameter device must be of type str.")
 
@@ -60,12 +67,32 @@ merging the 3 extra to their corresponding origin normal forms. Defaults to True
         self.batch_size = batch_size
         self.device = device
         self.load_normalized = load_normalized
-        
+        self.learning_rate = learning_rate
+
         self._training_datasets = None
         self._validation_datasets = None
         self._testing_datasets = None
 
         self._loaded_eval = False
+        self._eval_gci_name = None
+
+    @property
+    def eval_gci_name(self):
+        """The GCI type to use for evaluation (e.g., 'gci0', 'gci1', 'gci2', 'gci3').
+        Must be explicitly set before evaluation.
+
+        :rtype: str
+        """
+        return self._eval_gci_name
+
+    @eval_gci_name.setter
+    def eval_gci_name(self, value):
+        valid_gci_names = ["gci0", "gci1", "gci2", "gci3"]
+        if self._extended:
+            valid_gci_names.extend(["gci0_bot", "gci1_bot", "gci3_bot"])
+        if value not in valid_gci_names:
+            raise ValueError(f"eval_gci_name must be one of {valid_gci_names}, got '{value}'")
+        self._eval_gci_name = value
 
     def init_module(self):
         raise NotImplementedError
@@ -205,6 +232,238 @@ of :class:`torch.utils.data.DataLoader`
 
         self._load_dataloaders()
         return self._testing_dataloaders
+
+    # ==================== Training Methods ====================
+
+    def get_negative_sampling_config(self):
+        """Returns configuration for negative sampling.
+
+        Override this method to customize which GCI types require negative sampling
+        and how negatives should be generated.
+
+        :return: Dictionary mapping GCI names to their negative sampling config.
+            Each config should have:
+            - 'index_pool': str, either 'classes' or 'individuals'
+            - 'corrupt_column': int, which column to corrupt with random indices
+        :rtype: dict
+
+        Example::
+
+            {
+                "gci2": {"index_pool": "classes", "corrupt_column": 2},
+                "object_property_assertion": {"index_pool": "individuals", "corrupt_column": 2}
+            }
+        """
+        return {
+            "gci2": {"index_pool": "classes", "corrupt_column": 2},
+            "object_property_assertion": {"index_pool": "individuals", "corrupt_column": 2}
+        }
+
+    def generate_negatives(self, gci_name, gci_dataset):
+        """Generate negative samples for a given GCI type.
+
+        Override this method for custom negative sampling strategies.
+
+        :param gci_name: Name of the GCI type (e.g., 'gci2')
+        :type gci_name: str
+        :param gci_dataset: The dataset containing positive samples
+        :type gci_dataset: torch.Tensor
+        :return: Negative samples tensor, or None if no negatives for this GCI type
+        :rtype: torch.Tensor or None
+        """
+        config = self.get_negative_sampling_config()
+        if gci_name not in config:
+            return None
+
+        cfg = config[gci_name]
+        index_pool = cfg["index_pool"]
+        corrupt_column = cfg["corrupt_column"]
+
+        if index_pool == "classes":
+            all_ids = list(self.class_index_dict.values())
+        elif index_pool == "individuals":
+            all_ids = list(self.individual_index_dict.values())
+        else:
+            raise ValueError(f"Unknown index_pool: {index_pool}")
+
+        data = gci_dataset[:]
+        idxs_for_negs = np.random.choice(all_ids, size=len(gci_dataset), replace=True)
+        rand_index = th.tensor(idxs_for_negs, dtype=th.long, device=self.device)
+
+        # Build negative data by replacing the specified column
+        neg_data = th.cat([data[:, :corrupt_column], rand_index.unsqueeze(1)], dim=1)
+        if corrupt_column + 1 < data.shape[1]:
+            neg_data = th.cat([neg_data, data[:, corrupt_column + 1:]], dim=1)
+
+        return neg_data
+
+    def compute_loss(self, pos_scores, neg_scores=None):
+        """Compute loss from positive and negative scores.
+
+        Override this method to use different loss functions (e.g., MSE loss).
+
+        :param pos_scores: Scores for positive samples (should be minimized)
+        :type pos_scores: torch.Tensor
+        :param neg_scores: Scores for negative samples (should be maximized), or None
+        :type neg_scores: torch.Tensor or None
+        :return: Combined loss value
+        :rtype: torch.Tensor
+        """
+        loss = th.mean(pos_scores)
+        if neg_scores is not None:
+            loss += th.mean(neg_scores)
+        return loss
+
+    def get_regularization_loss(self):
+        """Get regularization loss from the module.
+
+        Override this method if your module has a regularization loss.
+
+        :return: Regularization loss value
+        :rtype: torch.Tensor
+        """
+        if hasattr(self.module, 'regularization_loss'):
+            return self.module.regularization_loss()
+        return 0
+
+    def get_optimizer(self):
+        """Create and return the optimizer.
+
+        Override this method to use a different optimizer or configuration.
+
+        :return: Optimizer instance
+        :rtype: torch.optim.Optimizer
+        """
+        return th.optim.Adam(self.module.parameters(), lr=self.learning_rate)
+
+    def train(self, epochs, validate_every=1):
+        """Train the model.
+
+        This is the generic training loop for EL embedding models. Subclasses can
+        customize behavior by overriding:
+        - :meth:`get_negative_sampling_config`: Configure which GCIs need negatives
+        - :meth:`generate_negatives`: Custom negative sampling strategy
+        - :meth:`compute_loss`: Custom loss computation (e.g., MSE loss)
+        - :meth:`get_regularization_loss`: Add regularization
+        - :meth:`get_optimizer`: Use different optimizer
+
+        :param epochs: Number of training epochs
+        :type epochs: int
+        :param validate_every: Validate and log every N epochs. Defaults to 1.
+        :type validate_every: int, optional
+        """
+        logger.warning(
+            'You are using the default training method. If you want to use a customized '
+            'training method (e.g., different negative sampling, etc.), please override '
+            'the appropriate methods in a subclass.'
+        )
+
+        # Log dataset sizes
+        points_per_dataset = {k: len(v) for k, v in self.training_datasets.items()}
+        string = "Training datasets: \n"
+        for k, v in points_per_dataset.items():
+            string += f"\t{k}: {v}\n"
+        logger.info(string)
+
+        optimizer = self.get_optimizer()
+        best_loss = float('inf')
+
+        for epoch in trange(epochs):
+            self.module.train()
+
+            train_loss = 0
+            loss = th.tensor(0.0, device=self.device)
+
+            for gci_name, gci_dataset in self.training_datasets.items():
+                if len(gci_dataset) == 0:
+                    continue
+
+                # Compute positive loss
+                pos_scores = self.module(gci_dataset[:], gci_name)
+
+                # Generate and compute negative loss if applicable
+                neg_data = self.generate_negatives(gci_name, gci_dataset)
+                neg_scores = None
+                if neg_data is not None:
+                    neg_scores = self.module(neg_data, gci_name, neg=True)
+
+                loss = loss + self.compute_loss(pos_scores, neg_scores)
+
+            # Add regularization loss
+            loss = loss + self.get_regularization_loss()
+
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
+            train_loss += loss.detach().item()
+
+            # Validation
+            if (epoch + 1) % validate_every == 0:
+                if self.dataset.validation is not None:
+                    if self._eval_gci_name is None:
+                        raise ValueError(
+                            "eval_gci_name must be set before training with validation. "
+                            "Set model.eval_gci_name to one of: 'gci0', 'gci1', 'gci2', 'gci3'"
+                        )
+                    with th.no_grad():
+                        self.module.eval()
+                        valid_loss = 0
+                        gci_data = self.validation_datasets[self._eval_gci_name][:]
+                        vloss = th.mean(self.module(gci_data, self._eval_gci_name))
+                        valid_loss += vloss.detach().item()
+
+                        if valid_loss < best_loss:
+                            best_loss = valid_loss
+                            th.save(self.module.state_dict(), self.model_filepath)
+                    print(f'Epoch {epoch+1}: Train loss: {train_loss} Valid loss: {valid_loss}')
+                else:
+                    print(f'Epoch {epoch+1}: Train loss: {train_loss}')
+
+    def eval_method(self, data):
+        """Evaluation method used for scoring. Override if needed.
+
+        :param data: Input data for evaluation
+        :type data: torch.Tensor
+        :return: Evaluation scores
+        :rtype: torch.Tensor
+        :raises ValueError: If eval_gci_name has not been set
+        """
+        if self._eval_gci_name is None:
+            raise ValueError(
+                "eval_gci_name must be set before evaluation. "
+                "Set model.eval_gci_name to one of: 'gci0', 'gci1', 'gci2', 'gci3'"
+            )
+        return self.module(data, self._eval_gci_name)
+
+    def get_embeddings(self):
+        """Get trained embeddings for entities, relations, and individuals.
+
+        :return: Tuple of (entity_embeddings, relation_embeddings, individual_embeddings)
+        :rtype: tuple
+        """
+        self.init_module()
+        print('Load the best model', self.model_filepath)
+        self.load_best_model()
+
+        ent_embeds = {
+            k: v for k, v in zip(self.class_index_dict.keys(),
+                                 self.module.class_embed.weight.cpu().detach().numpy())}
+        rel_embeds = {
+            k: v for k, v in zip(self.object_property_index_dict.keys(),
+                                 self.module.rel_embed.weight.cpu().detach().numpy())}
+        if self.module.ind_embed is not None:
+            ind_embeds = {
+                k: v for k, v in zip(self.individual_index_dict.keys(),
+                                     self.module.ind_embed.weight.cpu().detach().numpy())}
+        else:
+            ind_embeds = None
+        return ent_embeds, rel_embeds, ind_embeds
+
+    def load_best_model(self):
+        """Load the best model from the model filepath."""
+        self.init_module()
+        self.module.load_state_dict(th.load(self.model_filepath, weights_only=True))
+        self.module.eval()
 
     @versionadded(version="0.2.0")
     def score(self, axiom):
