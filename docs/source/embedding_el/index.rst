@@ -9,12 +9,12 @@ Embedding the EL language
 The :math:`\mathcal{EL}` language is part of the Description Logics family. Concept descriptions in :math:`\mathcal{EL}` can be expressed in the following normal forms:
 
 .. math::
-   \begin{align}
+   \begin{aligned}
    C &\sqsubseteq D & (\text{GCI 0}) \\
    C_1 \sqcap C_2 &\sqsubseteq D & (\text{GCI 1}) \\
    C &\sqsubseteq \exists R. D & (\text{GCI 2})\\
-   \exists R. C &\sqsubseteq D & (\text{GCI 3}) 
-   \end{align}
+   \exists R. C &\sqsubseteq D & (\text{GCI 3})
+   \end{aligned}
 
    
 .. hint::
@@ -24,11 +24,11 @@ The :math:`\mathcal{EL}` language is part of the Description Logics family. Conc
 The bottom concept can exist in the right side of GCIs 0,1,3 only, which can be considered as special cases and extend the normal forms to include the following:
 
 .. math::
-   \begin{align}
+   \begin{aligned}
    C &\sqsubseteq \bot & (\text{GCI BOT 0}) \\
    C_1 \sqcap C_2 &\sqsubseteq \bot & (\text{GCI BOT 1}) \\
-   \exists R. C &\sqsubseteq \bot & (\text{GCI BOT 3}) 
-   \end{align}
+   \exists R. C &\sqsubseteq \bot & (\text{GCI BOT 3})
+   \end{aligned}
 
 
 mOWL provides different functionalities to generate models that aim to embed axioms in :math:`\mathcal{EL}`. Let's start!
