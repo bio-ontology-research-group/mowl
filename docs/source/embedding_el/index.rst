@@ -134,13 +134,17 @@ In the :doc:`/api/nn/index` module, we define the |elmodule| abstract class, whi
            loss = 3
 	   return loss
 
-	
+
 We have created an ELModule that computes losses for axioms in the GCI0 normal form. Notice that if negative loss is required, it should be encoded inside the original loss function and accesed through the ``neg`` parameter.
+
+.. note::
+
+   The |elmodule| also supports ABox axioms through ``class_assertion_loss`` for :math:`C(a)` and ``object_property_assertion_loss`` for :math:`R(a, b)`.
 
 Following these procedure is all what is needed. It is not necessary to define the forward function. However, let's see how this works by looking at the implementation in the parent class:
 
 .. testcode:: [eldataset]
-	      
+
    import torch.nn as nn
 
    class ELModule(nn.Module):
@@ -168,12 +172,14 @@ Following these procedure is all what is needed. It is not necessary to define t
                "gci0"    : self.gci0_loss,
                "gci1"    : self.gci1_loss,
                "gci2"    : self.gci2_loss,
-               "gci3"    : self.gci3_loss
+               "gci3"    : self.gci3_loss,
+               "class_assertion": self.class_assertion_loss,
+               "object_property_assertion": self.object_property_assertion_loss
            }[gci_name]
 
        def forward(self, gci, gci_name, neg = False):
            loss_fn = self.get_loss_function(gci_name)
-        
+
            loss = loss_fn(gci, neg = neg)
            return loss
 
@@ -182,7 +188,21 @@ We can see that the already implemented forward function takes the data, the GCI
 The ELEmbeddingModel class
 ---------------------------------
 
-At this point, it would be possible to just use the |eldataset| and the |elmodule| together in a script to train a model. Something like this:
+At this point, it would be possible to just use the |eldataset| and the |elmodule| together in a script to train a model.
+
+.. versionchanged:: 2.0.0
+   Added the ``load_normalized`` parameter.
+
+The :class:`EmbeddingELModel <mowl.base_models.elmodel.EmbeddingELModel>` class accepts the following parameters:
+
+- ``dataset``: mOWL dataset to use for training and evaluation.
+- ``embed_dim``: The embedding dimension.
+- ``batch_size``: The batch size to use for training.
+- ``extended``: If ``True``, the model works with 7 EL normal forms (including bottom concept forms). Defaults to ``True``.
+- ``load_normalized``: If ``True``, the ontology is assumed to be already normalized and GCIs are extracted directly without running the normalizer. Defaults to ``False``.
+- ``device``: The device to use for training. Defaults to ``"cpu"``.
+
+Something like this:
 
 .. testcode:: [eldataset]
 
@@ -237,8 +257,33 @@ We have seen that constructing a |el| model has many steps. However, the main di
 .. testcode::
 
    from mowl.datasets.builtin import PPIYeastSlimDataset
-   from mowl.models.elembeddings.examples.model_ppi import ELEmPPI
+   from mowl.models import ELEmbeddings
+   from mowl.evaluation import PPIEvaluator
 
-   model = ELEmPPI(PPIYeastSlimDataset(), epochs=2)
-   model.train()
-   
+   dataset = PPIYeastSlimDataset()
+   model = ELEmbeddings(dataset, embed_dim=30)
+   model.eval_gci_name = "gci2"
+   model.set_evaluator(PPIEvaluator)
+   model.train(epochs=1, validate_every=1)
+
+After training, you can evaluate the model on the testing set:
+
+.. testcode::
+
+   model.evaluate(dataset.testing, filter_ontologies=[dataset.ontology])
+   print(model.metrics)
+
+.. testoutput::
+   :hide:
+
+   ...
+
+The ``metrics`` dictionary contains ranking-based metrics such as mean rank (``mr``), filtered mean rank (``f_mr``), and AUC (``auc``).
+
+You can also access the learned embeddings:
+
+.. testcode::
+
+   class_embeddings = model.class_embeddings
+   object_property_embeddings = model.object_property_embeddings
+

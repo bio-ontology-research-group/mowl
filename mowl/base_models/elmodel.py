@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
 logger.setLevel(logging.INFO)
 
-@versionchanged(version="1.0.0", reason="Added the 'load_normalized' parameter.")
+@versionchanged(version="2.0.0", reason="Added the 'load_normalized' parameter.")
 class EmbeddingELModel(Model):
     """Abstract class for :math:`\mathcal{EL}` embedding methods.
 
@@ -434,6 +434,35 @@ of :class:`torch.utils.data.DataLoader`
                 "Set model.eval_gci_name to one of: 'gci0', 'gci1', 'gci2', 'gci3'"
             )
         return self.module(data, self._eval_gci_name)
+
+    @property
+    def evaluation_model(self):
+        """Returns the evaluation model for use with evaluators.
+
+        If a custom evaluation model has been set via the setter, it is returned.
+        Otherwise, for EL models, this returns the module which can be called
+        with (data, gci_name). Requires eval_gci_name to be set in the latter case.
+
+        :rtype: torch.nn.Module
+        :raises ValueError: If no custom model is set and eval_gci_name has not been set
+        """
+        if self._evaluation_model is not None:
+            return self._evaluation_model
+        if self._eval_gci_name is None:
+            raise ValueError(
+                "eval_gci_name must be set before evaluation. "
+                "Set model.eval_gci_name to one of: 'gci0', 'gci1', 'gci2', 'gci3'"
+            )
+        return self.module
+
+    @evaluation_model.setter
+    def evaluation_model(self, value):
+        """Set a custom evaluation model.
+
+        :param value: The custom evaluation model to use
+        :type value: torch.nn.Module
+        """
+        self._evaluation_model = value
 
     def get_embeddings(self):
         """Get trained embeddings for entities, relations, and individuals.
