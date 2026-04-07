@@ -19,7 +19,7 @@ class SubsumptionDataset(RemoteDataset):
     def __init__(self, url):
         super().__init__(url)
 
-        self.dataset_dir = os.path.basename(self.ontology_path)
+        self.dataset_dir = os.path.dirname(self.ontology_path)
         self.deductive_closure_ontology_path = os.path.join(self.dataset_dir,
                                                             "ontology_deductive_closure.owl")
         self._deductive_closure_ontology = None
