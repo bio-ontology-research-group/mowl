@@ -41,13 +41,11 @@ merging the 3 extra to their corresponding origin normal forms. Defaults to True
     :param device: The device to use for training. Defaults to "cpu".
     :type device: str, optional
     :param neg_sampling_gcis: List of GCI names for which negative sampling should be applied \
-during training. If ``None`` (default), negative sampling is applied to all non-bot GCI types \
-(``"gci0"``, ``"gci1"``, ``"gci2"``, ``"gci3"``, ``"class_assertion"``, \
-``"object_property_assertion"``). Bot GCIs (``"gci0_bot"``, ``"gci1_bot"``, ``"gci3_bot"``) \
-are never included by default because their semantics (subsumption by :math:`\\bot`) do not \
-benefit from negative sampling. A :class:`NotImplementedError` is raised at the start of \
-training if any requested GCI is not listed in the module's \
-:attr:`~mowl.nn.ELModule.neg_capable_gcis`.
+during training. If ``None`` (default), negative sampling is applied automatically to all GCIs \
+declared in the module's :attr:`~mowl.nn.ELModule.neg_capable_gcis` (i.e. only what the module \
+actually supports). Pass an explicit list to override this — a :class:`NotImplementedError` is \
+raised at the start of training if any requested GCI is not in ``neg_capable_gcis``. Bot GCIs \
+(``"gci0_bot"``, ``"gci1_bot"``, ``"gci3_bot"``) are never subject to negative sampling.
     :type neg_sampling_gcis: list of str, optional
     """
 
@@ -263,9 +261,14 @@ of :class:`torch.utils.data.DataLoader`
     def get_negative_sampling_config(self):
         """Returns the active negative sampling configuration.
 
-        By default, negative sampling is applied to all non-bot GCI types listed in
-        :attr:`_DEFAULT_NEG_SAMPLING_CONFIG`. This can be restricted to a subset by
-        passing ``neg_sampling_gcis`` to the constructor.
+        When ``neg_sampling_gcis`` is ``None`` (the default), the configuration is derived
+        automatically from the intersection of :attr:`_DEFAULT_NEG_SAMPLING_CONFIG` and the
+        module's :attr:`~mowl.nn.ELModule.neg_capable_gcis` — so only GCIs that the module
+        genuinely supports are included.
+
+        When ``neg_sampling_gcis`` is set explicitly, only those GCIs are included. Training
+        will raise :class:`NotImplementedError` if any of them are absent from
+        ``neg_capable_gcis``.
 
         Override this method to customise which GCI types require negative sampling
         and how negatives should be generated.
@@ -279,7 +282,8 @@ of :class:`torch.utils.data.DataLoader`
         :rtype: dict
         """
         if self.neg_sampling_gcis is None:
-            return dict(self._DEFAULT_NEG_SAMPLING_CONFIG)
+            return {k: v for k, v in self._DEFAULT_NEG_SAMPLING_CONFIG.items()
+                    if k in self.module.neg_capable_gcis}
         return {k: v for k, v in self._DEFAULT_NEG_SAMPLING_CONFIG.items()
                 if k in self.neg_sampling_gcis}
 
