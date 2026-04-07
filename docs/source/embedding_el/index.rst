@@ -107,6 +107,12 @@ In the :doc:`/api/nn/index` module, we define the |elmodule| abstract class, whi
    from mowl.nn import ELModule
 
    class MyELModule(ELModule):
+
+       # Declare which GCIs have a true negative loss implementation.
+       # Training will raise NotImplementedError for any other GCI that is
+       # configured for negative sampling.
+       neg_capable_gcis = frozenset({"gci2"})
+
        def __init__(self):
            super().__init__()
 
@@ -114,11 +120,7 @@ In the :doc:`/api/nn/index` module, we define the |elmodule| abstract class, whi
            """
 	   your code here
 	   """
-	   if neg:
-	       """
-	       your code in case this loss function has a negative version
-	       """
-	       pass
+	   # neg=True is NOT handled — gci0 is not in neg_capable_gcis
 	   loss = 0
 	   return loss
 
@@ -127,7 +129,13 @@ In the :doc:`/api/nn/index` module, we define the |elmodule| abstract class, whi
 	   return loss
 
        def gci2_loss(self, gci, neg = False):
-           loss = 2
+           """
+	   your code here
+	   """
+	   if neg:
+	       # negative loss for GCI2
+	       pass
+	   loss = 2
 	   return loss
 
        def gci3_loss(self, gci, neg = False):
@@ -135,7 +143,11 @@ In the :doc:`/api/nn/index` module, we define the |elmodule| abstract class, whi
 	   return loss
 
 
-We have created an ELModule that computes losses for axioms in the GCI0 normal form. Notice that if negative loss is required, it should be encoded inside the original loss function and accesed through the ``neg`` parameter.
+We have created an ELModule that computes losses for the GCI normal forms. Notice that negative sampling is **opt-in per GCI**: only GCIs listed in ``neg_capable_gcis`` will be used with negative samples during training. If negative sampling is requested for a GCI not in ``neg_capable_gcis``, a :class:`NotImplementedError` is raised at the start of training to prevent silent incorrect behaviour.
+
+.. note::
+
+   Bot GCIs (``gci0_bot``, ``gci1_bot``, ``gci3_bot``) express subsumption by :math:`\bot` and are never subject to negative sampling, since the concept of a "negative" disjointness axiom is not meaningful in this context.
 
 .. note::
 
@@ -201,8 +213,25 @@ The :class:`EmbeddingELModel <mowl.base_models.elmodel.EmbeddingELModel>` class 
 - ``extended``: If ``True``, the model works with 7 EL normal forms (including bottom concept forms). Defaults to ``True``.
 - ``load_normalized``: If ``True``, the ontology is assumed to be already normalized and GCIs are extracted directly without running the normalizer. Defaults to ``False``.
 - ``device``: The device to use for training. Defaults to ``"cpu"``.
+- ``neg_sampling_gcis``: List of GCI names for which negative sampling is applied during training. Defaults to ``None``, which automatically uses only the GCIs declared in the module's ``neg_capable_gcis``. Pass an explicit list to override — a :class:`NotImplementedError` is raised at the start of training if any requested GCI is not in ``neg_capable_gcis``.
 
-Something like this:
+.. testcode::
+
+   from mowl.datasets.builtin import PPIYeastSlimDataset
+   from mowl.models import ELEmbeddings
+
+   dataset = PPIYeastSlimDataset()
+
+   # Default: negative sampling is applied automatically for all GCIs declared in
+   # the module's neg_capable_gcis — no NotImplementedError will be raised.
+   model = ELEmbeddings(dataset, embed_dim=30)
+
+   # Explicit override: restrict to a specific subset.
+   # A NotImplementedError is raised at train() time if a requested GCI is not
+   # in the module's neg_capable_gcis.
+   model = ELEmbeddings(dataset, embed_dim=30, neg_sampling_gcis=["gci2"])
+
+Alternatively, you can use |eldataset| and |elmodule| directly without :class:`EmbeddingELModel <mowl.base_models.elmodel.EmbeddingELModel>`:
 
 .. testcode:: [eldataset]
 

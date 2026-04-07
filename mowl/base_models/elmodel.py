@@ -5,6 +5,7 @@ from mowl.projection import projector_factory
 import torch as th
 from torch.utils.data import DataLoader, default_collate
 from tqdm import trange
+import warnings
 
 from deprecated.sphinx import versionadded, versionchanged
 
@@ -39,10 +40,31 @@ merging the 3 extra to their corresponding origin normal forms. Defaults to True
     :type load_normalized: bool, optional
     :param device: The device to use for training. Defaults to "cpu".
     :type device: str, optional
+    :param neg_sampling_gcis: List of GCI names for which negative sampling should be applied \
+during training. If ``None`` (default), negative sampling is applied automatically to all GCIs \
+declared in the module's :attr:`~mowl.nn.ELModule.neg_capable_gcis` (i.e. only what the module \
+actually supports). Pass an explicit list to override this — a :class:`NotImplementedError` is \
+raised at the start of training if any requested GCI is not in ``neg_capable_gcis``. Bot GCIs \
+(``"gci0_bot"``, ``"gci1_bot"``, ``"gci3_bot"``) are never subject to negative sampling.
+    :type neg_sampling_gcis: list of str, optional
     """
 
+    #: Default per-GCI negative sampling configuration used by :meth:`get_negative_sampling_config`.
+    #: Bot GCIs are intentionally excluded — subsumption by bottom has no meaningful negative.
+    #: Each entry specifies the entity pool to sample from (``"classes"`` or ``"individuals"``)
+    #: and which column of the data tensor to corrupt with random indices.
+    _DEFAULT_NEG_SAMPLING_CONFIG = {
+        "gci0":     {"index_pool": "classes",     "corrupt_column": 1},
+        "gci1":     {"index_pool": "classes",     "corrupt_column": 2},
+        "gci2":     {"index_pool": "classes",     "corrupt_column": 2},
+        "gci3":     {"index_pool": "classes",     "corrupt_column": 2},
+        "class_assertion":           {"index_pool": "classes",     "corrupt_column": 1},
+        "object_property_assertion": {"index_pool": "individuals", "corrupt_column": 2},
+    }
+
     def __init__(self, dataset, embed_dim, batch_size, extended=True, model_filepath=None,
-                 load_normalized=False, device="cpu", learning_rate=0.001):
+                 load_normalized=False, device="cpu", learning_rate=0.001,
+                 neg_sampling_gcis=None):
         super().__init__(dataset, model_filepath=model_filepath)
 
         if not isinstance(embed_dim, int):
@@ -68,6 +90,7 @@ merging the 3 extra to their corresponding origin normal forms. Defaults to True
         self.device = device
         self.load_normalized = load_normalized
         self.learning_rate = learning_rate
+        self.neg_sampling_gcis = neg_sampling_gcis
 
         self._training_datasets = None
         self._validation_datasets = None
@@ -236,28 +259,33 @@ of :class:`torch.utils.data.DataLoader`
     # ==================== Training Methods ====================
 
     def get_negative_sampling_config(self):
-        """Returns configuration for negative sampling.
+        """Returns the active negative sampling configuration.
 
-        Override this method to customize which GCI types require negative sampling
+        When ``neg_sampling_gcis`` is ``None`` (the default), the configuration is derived
+        automatically from the intersection of :attr:`_DEFAULT_NEG_SAMPLING_CONFIG` and the
+        module's :attr:`~mowl.nn.ELModule.neg_capable_gcis` — so only GCIs that the module
+        genuinely supports are included.
+
+        When ``neg_sampling_gcis`` is set explicitly, only those GCIs are included. Training
+        will raise :class:`NotImplementedError` if any of them are absent from
+        ``neg_capable_gcis``.
+
+        Override this method to customise which GCI types require negative sampling
         and how negatives should be generated.
 
         :return: Dictionary mapping GCI names to their negative sampling config.
-            Each config should have:
-            - 'index_pool': str, either 'classes' or 'individuals'
-            - 'corrupt_column': int, which column to corrupt with random indices
+            Each entry has:
+
+            - ``'index_pool'``: ``'classes'`` or ``'individuals'`` — pool to sample from
+            - ``'corrupt_column'``: int — which column of the data tensor to replace
+
         :rtype: dict
-
-        Example::
-
-            {
-                "gci2": {"index_pool": "classes", "corrupt_column": 2},
-                "object_property_assertion": {"index_pool": "individuals", "corrupt_column": 2}
-            }
         """
-        return {
-            "gci2": {"index_pool": "classes", "corrupt_column": 2},
-            "object_property_assertion": {"index_pool": "individuals", "corrupt_column": 2}
-        }
+        if self.neg_sampling_gcis is None:
+            return {k: v for k, v in self._DEFAULT_NEG_SAMPLING_CONFIG.items()
+                    if k in self.module.neg_capable_gcis}
+        return {k: v for k, v in self._DEFAULT_NEG_SAMPLING_CONFIG.items()
+                if k in self.neg_sampling_gcis}
 
     def generate_negatives(self, gci_name, gci_dataset):
         """Generate negative samples for a given GCI type.
@@ -357,6 +385,23 @@ of :class:`torch.utils.data.DataLoader`
             'training method (e.g., different negative sampling, etc.), please override '
             'the appropriate methods in a subclass.'
         )
+
+        # Verify that every GCI configured for negative sampling has a true negative loss
+        neg_config = self.get_negative_sampling_config()
+        if neg_config:
+            incapable = [gci for gci in neg_config
+                         if gci not in self.module.neg_capable_gcis]
+            if incapable:
+                capable = sorted(self.module.neg_capable_gcis) or ["none"]
+                raise NotImplementedError(
+                    f"Negative sampling was requested for GCI(s) {incapable}, but "
+                    f"'{type(self.module).__name__}' does not implement a negative loss "
+                    f"for these GCIs (i.e. their loss function ignores neg=True). "
+                    f"Either implement the negative loss by handling 'neg=True' in the "
+                    f"corresponding loss function(s), or restrict negative sampling to "
+                    f"the supported GCIs via the 'neg_sampling_gcis' parameter. "
+                    f"GCIs with negative loss support in this module: {capable}."
+                )
 
         # Log dataset sizes
         points_per_dataset = {k: len(v) for k, v in self.training_datasets.items()}

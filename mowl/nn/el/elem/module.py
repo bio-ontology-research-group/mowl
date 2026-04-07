@@ -10,6 +10,8 @@ class ELEmModule(ELModule):
     Implementation of ELEmbeddings from [kulmanov2019]_.
 
     """
+
+    neg_capable_gcis = frozenset({"gci2", "object_property_assertion"})
     
     
     def __init__(self, nb_ont_classes, nb_rels, nb_inds, embed_dim=50, margin=0.1, reg_norm=1):
