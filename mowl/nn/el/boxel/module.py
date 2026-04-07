@@ -12,6 +12,8 @@ class BoxELModule(ELModule):
         `Original implementation: <https://github.com/Box-EL/BoxEL>`_
 
     """
+
+    neg_capable_gcis = frozenset({"gci2"})
     def __init__(self, nb_ont_classes, nb_rels, nb_inds=None, embed_dim=50,
                  min_bounds=[1e-4, 0.2], delta_bounds=[-0.1, 0],
                  relation_bounds=[-0.1, 0.1],

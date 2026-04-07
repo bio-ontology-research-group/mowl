@@ -6,6 +6,8 @@ import torch.nn as nn
 class ELBEModule(ELModule):
     """Implementation of ELBE from [peng2020]_.
     """
+
+    neg_capable_gcis = frozenset({"gci2", "object_property_assertion"})
     def __init__(self, nb_ont_classes, nb_rels, nb_inds=None, embed_dim=50, margin=0.1):
         super().__init__()
         self.nb_ont_classes = nb_ont_classes
