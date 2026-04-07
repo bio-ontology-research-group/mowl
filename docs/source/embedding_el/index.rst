@@ -231,7 +231,7 @@ The :class:`EmbeddingELModel <mowl.base_models.elmodel.EmbeddingELModel>` class 
    # in the module's neg_capable_gcis.
    model = ELEmbeddings(dataset, embed_dim=30, neg_sampling_gcis=["gci2"])
 
-Something like this:
+Alternatively, you can use |eldataset| and |elmodule| directly without :class:`EmbeddingELModel <mowl.base_models.elmodel.EmbeddingELModel>`:
 
 .. testcode:: [eldataset]
 
