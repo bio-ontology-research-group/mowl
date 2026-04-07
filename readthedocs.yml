@@ -7,7 +7,7 @@ version: 2
 
 # Set the version of Python and other tools you might need
 build:
-  os: ubuntu-20.04
+  os: ubuntu-24.04
   apt_packages:
     - openjdk-11-jre
     - openjdk-11-jdk
