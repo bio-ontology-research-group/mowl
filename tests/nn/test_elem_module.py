@@ -15,56 +15,39 @@ class TestELEmModule(TestCase):
         self.module = ELEmModule(nb_classes, nb_relations, nb_individuals)
         self.axioms = ELAxioms()
         
-    def test_gci_0(self):
-        """This should test the correct behavior of the module when the input is a GCI0"""
-
-        gci0 = self.axioms.gci0_data
-        result = self.module(gci0, "gci0")
+    def _assert_loss(self, result):
+        """Loss tensor must be finite and contain one value per sample in the batch."""
         self.assertIsInstance(result, th.Tensor)
+        self.assertEqual(result.numel(), 1)
+        self.assertTrue(th.isfinite(result).all(), "Loss contains NaN or Inf")
 
+    def test_gci_0(self):
+        result = self.module(self.axioms.gci0_data, "gci0")
+        self._assert_loss(result)
 
     def test_gci_1(self):
-        """This should test the correct behavior of the module when the input is a GCI1"""
-
-        gci1 = self.axioms.gci1_data
-        result = self.module(gci1, "gci1")
-        self.assertIsInstance(result, th.Tensor)
-
+        result = self.module(self.axioms.gci1_data, "gci1")
+        self._assert_loss(result)
 
     def test_gci_2(self):
-        """This should test the correct behavior of the module when the input is a GCI2"""
-
-        gci2 = self.axioms.gci2_data
-        result = self.module(gci2, "gci2")
-        self.assertIsInstance(result, th.Tensor)
+        result = self.module(self.axioms.gci2_data, "gci2")
+        self._assert_loss(result)
 
     def test_gci_3(self):
-        """This should test the correct behavior of the module when the input is a GCI3"""
-
-        gci3 = self.axioms.gci3_data
-        result = self.module(gci3, "gci3")
-        self.assertIsInstance(result, th.Tensor)
+        result = self.module(self.axioms.gci3_data, "gci3")
+        self._assert_loss(result)
 
     def test_gci_0_bot(self):
-        """This should test the correct behavior of the module when the input is a GCI0 with a bottom element"""
-
-        gci0_bot = self.axioms.gci0_bot_data
-        result = self.module(gci0_bot, "gci0_bot")
-        self.assertIsInstance(result, th.Tensor)
+        result = self.module(self.axioms.gci0_bot_data, "gci0_bot")
+        self._assert_loss(result)
 
     def test_gci_1_bot(self):
-        """This should test the correct behavior of the module when the input is a GCI1 with a bottom element"""
-
-        gci1_bot = self.axioms.gci1_bot_data
-        result = self.module(gci1_bot, "gci1_bot")
-        self.assertIsInstance(result, th.Tensor)
+        result = self.module(self.axioms.gci1_bot_data, "gci1_bot")
+        self._assert_loss(result)
 
     def test_gci_3_bot(self):
-        """This should test the correct behavior of the module when the input is a GCI3 with a bottom element"""
-
-        gci3_bot = self.axioms.gci3_bot_data
-        result = self.module(gci3_bot, "gci3_bot")
-        self.assertIsInstance(result, th.Tensor)
+        result = self.module(self.axioms.gci3_bot_data, "gci3_bot")
+        self._assert_loss(result)
 
         
 

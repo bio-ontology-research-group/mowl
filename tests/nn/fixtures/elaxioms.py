@@ -1,8 +1,8 @@
 from tests.datasetFactory import FamilyDataset
 from mowl.owlapi import OWLAPIAdapter
-import random
 from mowl.owlapi.defaults import BOT
 import torch as th
+
 
 class ELAxioms():
 
@@ -14,11 +14,12 @@ class ELAxioms():
         self.classes = self.dataset.classes
         self.properties = self.dataset.object_properties
 
-        class_1 = random.choice(self.classes)
-        class_2 = random.choice(self.classes)
-        class_3 = random.choice(self.classes)
-        class_4 = random.choice(self.classes)
-        relation_1 = random.choice(self.properties)
+        # Use fixed indices so the fixture is deterministic across runs.
+        class_1 = self.classes[0]
+        class_2 = self.classes[1]
+        class_3 = self.classes[2]
+        class_4 = self.classes[3]
+        relation_1 = self.properties[0]
 
         class_1_id = self.dataset.class_to_id[class_1]
         class_2_id = self.dataset.class_to_id[class_2]
@@ -34,4 +35,3 @@ class ELAxioms():
         self.gci0_bot_data = th.LongTensor([[class_1_id, bot_id]])
         self.gci1_bot_data = th.LongTensor([[class_1_id, class_2_id, bot_id]])
         self.gci3_bot_data = th.LongTensor([[relation_1_id, class_1_id, bot_id]])
-        
