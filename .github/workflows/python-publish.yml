@@ -9,9 +9,36 @@ on:
       - 'v*'  # Push events to tags matching v*, i.e. v1.0, v20.15.10
 
 jobs:
+  run-tests:
+    name: Run tests before publishing
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -l {0}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: conda-incubator/setup-miniconda@v2
+        with:
+          auto-update-conda: true
+          python-version: "3.12"
+          activate-environment: anaconda-client-env
+          environment-file: envs/environment_3_12.yml
+          auto-activate-base: false
+          channels: conda-forge
+          use-mamba: true
+      - name: Install test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest pytest-faulthandler
+      - name: Test with pytest
+        run: pytest -m "not slow" -p no:faulthandler
+
   build:
     name: Build distribution 📦
     runs-on: ubuntu-latest
+    needs: [run-tests]
 
     steps:
     - uses: actions/checkout@v4
@@ -44,7 +71,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/p/mowl-borg  # Replace <package-name> with your PyPI project name
+      url: https://pypi.org/p/mowl-borg
     permissions:
       id-token: write  # IMPORTANT: mandatory for trusted publishing
 
@@ -63,7 +90,7 @@ jobs:
       and upload them to GitHub Release
     if: startsWith(github.ref, 'refs/tags/')  # run on tag pushes
     needs:
-    - publish-to-pypi  # Changed back to depend on publish-to-pypi since both run on tag pushes
+    - publish-to-pypi
     runs-on: ubuntu-latest
 
     permissions:
@@ -93,9 +120,6 @@ jobs:
     - name: Upload artifact signatures to GitHub Release
       env:
         GITHUB_TOKEN: ${{ github.token }}
-      # Upload to GitHub Release using the `gh` CLI.
-      # `dist/` contains the built packages, and the
-      # sigstore-produced signatures and certificates.
       run: >-
         gh release upload
         '${{ github.ref_name }}' dist/**
@@ -103,7 +127,7 @@ jobs:
 
   publish-to-testpypi:
     name: Publish Python 🐍 distribution 📦 to TestPyPI
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'  # only publish to TestPyPI on push to main
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     needs:
     - build
     runs-on: ubuntu-latest

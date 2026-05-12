@@ -22,8 +22,12 @@ project = 'MOWL'
 copyright = '2023, Bio-Ontology Research Group'
 author = 'BORG'
 
-release = '1.0.2-dev'
-version = '1.0.2-dev'
+try:
+    from importlib.metadata import version as _get_version
+    release = _get_version("mowl-borg")
+except Exception:
+    release = "dev"
+version = ".".join(release.split(".")[:2])
 # -- General configuration
 
 extensions = [
