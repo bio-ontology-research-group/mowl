@@ -1,0 +1,58 @@
+name: Quarterly Release Reminder
+
+on:
+  schedule:
+    # First day of Jan, Apr, Jul, Oct at 09:00 UTC
+    - cron: '0 9 1 1,4,7,10 *'
+  workflow_dispatch:
+
+jobs:
+  open-release-issue:
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+
+    steps:
+      - name: Determine quarter
+        id: version
+        run: |
+          MONTH=$(date +%-m)
+          YEAR=$(date +%Y)
+          echo "quarter=Q$((($MONTH - 1) / 3 + 1)) $YEAR" >> "$GITHUB_OUTPUT"
+
+      - name: Open release checklist issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const quarter = '${{ steps.version.outputs.quarter }}';
+            await github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Minor/major release checklist – ${quarter}`,
+              labels: ['release'],
+              body: [
+                '## Quarterly minor/major release checklist',
+                '',
+                'Time for a scheduled minor or major release. Follow [CLAUDE.md](../blob/main/CLAUDE.md#release-process).',
+                '',
+                '> **Patch releases** (`x.y.Z`) do not follow this schedule — cut them on demand whenever a critical fix is ready.',
+                '',
+                '### Pre-release',
+                '- [ ] All pending PRs merged into `main`',
+                '- [ ] Full test suite passes: `pytest`',
+                '- [ ] Docs build cleanly: `cd docs && make html`',
+                '- [ ] All testcode blocks pass: `cd docs && make doctest`',
+                '',
+                '### Release',
+                '- [ ] `CHANGELOG.md` updated: `[Unreleased]` → `[X.Y.Z]` with date',
+                '- [ ] `docs/source/conf.py` version strings updated',
+                '- [ ] Commit: `git commit -m "Release vX.Y.Z"`',
+                '- [ ] Tag: `git tag vX.Y.Z && git push origin main --tags`',
+                '- [ ] `python-publish.yml` workflow completes successfully',
+                '',
+                '### Post-release',
+                '- [ ] Verify package on https://pypi.org/project/mowl-borg/',
+                '- [ ] Verify ReadTheDocs reflects new version',
+                '- [ ] Close this issue',
+              ].join('\n'),
+            });

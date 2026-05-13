@@ -931,7 +931,7 @@ def add_extra_existential_axioms(ontology):
     top_class = adapter.create_class(TOP)
 
     
-    axioms = HashSet()
+    axioms = HashSet()  # noqa: F821 — Java class injected by JPype at runtime
     for role in roles:
         for cls in classes:
             existential = adapter.create_object_some_values_from(role, cls)
