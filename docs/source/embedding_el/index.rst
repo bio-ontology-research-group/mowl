@@ -266,6 +266,11 @@ We have seen that constructing a |el| model has many steps. However, the main di
    model.set_evaluator(PPIEvaluator)
    model.train(epochs=1, validate_every=1)
 
+.. testoutput::
+   :hide:
+
+   ...
+
 After training, you can evaluate the model on the testing set:
 
 .. testcode::

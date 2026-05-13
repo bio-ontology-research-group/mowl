@@ -73,7 +73,7 @@ if not jpype.isJVMStarted():
 """
 
 doctest_test_doctest_blocks = 'default'
-doctest_default_flags = doctest.REPORT_ONLY_FIRST_FAILURE
+doctest_default_flags = doctest.REPORT_ONLY_FIRST_FAILURE | doctest.ELLIPSIS
 
 todo_include_todos = True
 
