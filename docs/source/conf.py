@@ -26,7 +26,7 @@ try:
     from importlib.metadata import version as _get_version
     release = _get_version("mowl-borg")
 except Exception:
-    release = "dev"
+    release = "2.0.0"
 version = ".".join(release.split(".")[:2])
 # -- General configuration
 
