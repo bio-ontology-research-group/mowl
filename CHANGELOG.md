@@ -6,14 +6,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [2.0.0] - 2026-05-12
 ### Added
 - Added caching support for `ELNormalizer`: normalized ontologies can now be saved to disk and loaded on subsequent runs, significantly speeding up repeated normalization of the same ontology.
 - Added `ontology_path` and `use_cache` parameters to `ELNormalizer.normalize()` and `ELDataset`.
 - `EmbeddingELModel` now automatically uses caching when the dataset provides ontology paths (e.g., `PathDataset`).
-- Added tests for EL models (ELBE, ELBEPPI, ELBEGDA, ELEmGDA, BoxSquaredEL)
+- Added `BoxSquaredELGDA` and `BoxSquaredELPPI` model classes.
+- Added `evaluate_ppi()` convenience method on PPI models (`ELBEPPI`, `ELEmPPI`).
+- Added `neg_capable_gcis` property to `ELModule`; negative sampling now extended to all non-bot GCIs.
+- Added tests for EL models (ELBE, ELBEPPI, ELBEGDA, ELEmGDA, BoxSquaredEL).
+### Changed
+- Refactored EL model training loop: `train(epochs, validate_every=1)` now has a standardised signature across all EL models.
+- `eval_gci_name` is now a validated property on `EmbeddingELModel`; it must be set explicitly before calling `train` with validation or `evaluate`.
+### Removed
+- `ELBoxEmbeddings` alias removed. Use `ELBE` directly.
+- `epochs` parameter removed from EL model `__init__`. Pass `epochs` to `train()` instead.
 ### Fixed
-- ELBEPPI now automatically sets PPIEvaluator in `__init__`, matching ELEmPPI behavior
-- Fixed `evaluate_ppi()` in ELBEPPI and ELEmPPI to pass required `testing_ontology` argument
+- `ELBEPPI` now automatically sets `PPIEvaluator` in `__init__`, matching `ELEmPPI` behavior.
+- Fixed `evaluate_ppi()` in `ELBEPPI` and `ELEmPPI` to pass required `testing_ontology` argument.
 
 ## [1.0.2]
 ### Changed
@@ -130,7 +141,9 @@ Fixed issue related to importing graph-based models due to missing `__init__.py`
 - Walking methods accept optional `outfile` parameter and corpus extraction methods do not append by default.
 - Documentation updated and fixed some typos.
 
-[unreleased]: https://github.com/bio-ontology-research-group/mowl/compare/v1.0.2...HEAD
+[unreleased]: https://github.com/bio-ontology-research-group/mowl/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/bio-ontology-research-group/mowl/compare/v1.0.3...v2.0.0
+[1.0.3]: https://github.com/bio-ontology-research-group/mowl/releases/tag/v1.0.3
 [1.0.2]: https://github.com/bio-ontology-research-group/mowl/releases/tag/v1.0.2
 [1.0.1]: https://github.com/bio-ontology-research-group/mowl/releases/tag/v1.0.1
 [1.0.0]: https://github.com/bio-ontology-research-group/mowl/releases/tag/v1.0.0
