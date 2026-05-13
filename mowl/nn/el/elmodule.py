@@ -3,14 +3,22 @@ import torch.nn as nn
 
 
 class ELModule(nn.Module):
-    """Subclass of :class:`torch.nn.Module` for :math:`\mathcal{EL}` models. 
+    """Subclass of :class:`torch.nn.Module` for :math:`\mathcal{EL}` models.
 
     This class provides \
     an interface for loss functions of the 7 possible normal forms existing in the \
     :math:`\mathcal{EL}` language. In case a negative version of one of the loss function exist, \
     it must be placed inside the original loss function and be accesed through the ``neg`` \
     parameter. More information of this can be found at :doc:`/embedding_el/index`
+
+    Subclasses should override :attr:`neg_capable_gcis` to declare which GCI loss functions
+    genuinely implement a different code path when ``neg=True``.
     """
+
+    #: Set of GCI names for which this module implements a true negative loss (i.e. the loss
+    #: function behaves differently when called with ``neg=True``). Subclasses must override
+    #: this to declare their capabilities.
+    neg_capable_gcis = frozenset()
 
     def __init__(self):
         super().__init__()
