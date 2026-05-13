@@ -18,11 +18,13 @@ class BoxSquaredEL(EmbeddingELModel):
                  reg_factor=0.2,
                  num_negs=4,
                  model_filepath=None,
-                 device='cpu'
+                 device='cpu',
+                 neg_sampling_gcis=None
                  ):
         super().__init__(dataset, embed_dim, batch_size, extended=True,
                          model_filepath=model_filepath, device=device,
-                         learning_rate=learning_rate)
+                         learning_rate=learning_rate,
+                         neg_sampling_gcis=neg_sampling_gcis)
 
         self.margin = margin
         self.reg_norm = reg_norm
