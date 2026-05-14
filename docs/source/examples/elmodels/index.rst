@@ -47,6 +47,23 @@ Models embeddings the :math:`\mathcal{EL}` language
     </div>
 
 
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="All three geometric EL models embed ontology classes as 2-D shapes when trained with embed_dim=2, letting us watch the geometry evolve directly — no dimensionality reduction needed.">
+
+.. only:: html
+
+  .. image:: /examples/elmodels/images/thumb/sphx_glr_plot_3_el_geometry_thumb.png
+    :alt:
+
+  :ref:`sphx_glr_examples_elmodels_plot_3_el_geometry.py`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Geometric EL Embeddings: Training Animation</div>
+    </div>
+
+
 .. thumbnail-parent-div-close
 
 .. raw:: html
@@ -59,4 +76,5 @@ Models embeddings the :math:`\mathcal{EL}` language
 
    /examples/elmodels/plot_1_elembeddings
    /examples/elmodels/plot_2_elboxembeddings
+   /examples/elmodels/plot_3_el_geometry
 
