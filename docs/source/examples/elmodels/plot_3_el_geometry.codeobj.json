@@ -517,6 +517,15 @@
    "name": "_local_name"
   }
  ],
+ "_role_indices": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
  "all_snaps": [
   {
    "is_class": false,
@@ -1321,6 +1330,29 @@
    "name": "linspace"
   }
  ],
+ "plt.cm.Set1": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.colors",
+   "module_short": "matplotlib.colors",
+   "name": "ListedColormap"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "ListedColormap"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot.cm",
+   "module_short": "matplotlib.pyplot.cm",
+   "name": "Set1"
+  }
+ ],
  "plt.cm.tab10": [
   {
    "is_class": false,
@@ -1358,6 +1390,42 @@
    "module": "matplotlib.pyplot",
    "module_short": "matplotlib.pyplot",
    "name": "subplots"
+  }
+ ],
+ "role_colors": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "ndarray"
+  }
+ ],
+ "role_idxs": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Tensor"
+  }
+ ],
+ "role_iris": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "list"
+  }
+ ],
+ "role_labels": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "list"
   }
  ],
  "th.no_grad": [
