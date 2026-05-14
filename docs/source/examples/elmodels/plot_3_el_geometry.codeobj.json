@@ -366,6 +366,78 @@
    "name": "FamilyDataset"
   }
  ],
+ "HTML": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "IPython.core.display",
+   "module_short": "IPython.core.display",
+   "name": "HTML"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "IPython.core",
+   "module_short": "IPython.core",
+   "name": "HTML"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "IPython",
+   "module_short": "IPython",
+   "name": "HTML"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "IPython.core.display",
+   "module_short": "IPython.core.display",
+   "name": "TextDisplayObject"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "IPython.core",
+   "module_short": "IPython.core",
+   "name": "TextDisplayObject"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "IPython",
+   "module_short": "IPython",
+   "name": "TextDisplayObject"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "IPython.core.display",
+   "module_short": "IPython.core.display",
+   "name": "DisplayObject"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "IPython.core",
+   "module_short": "IPython.core",
+   "name": "DisplayObject"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "IPython",
+   "module_short": "IPython",
+   "name": "DisplayObject"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "IPython.display",
+   "module_short": "IPython.display",
+   "name": "HTML"
+  }
+ ],
  "N_CLASSES": [
   {
    "is_class": false,
@@ -470,48 +542,48 @@
    "name": "FuncAnimation"
   }
  ],
- "ani.save": [
+ "ani.to_jshtml": [
   {
    "is_class": false,
    "is_explicit": false,
    "module": "matplotlib.animation",
    "module_short": "matplotlib.animation",
-   "name": "FuncAnimation.save"
+   "name": "FuncAnimation.to_jshtml"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "matplotlib",
    "module_short": "matplotlib",
-   "name": "FuncAnimation.save"
+   "name": "FuncAnimation.to_jshtml"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "matplotlib.animation",
    "module_short": "matplotlib.animation",
-   "name": "TimedAnimation.save"
+   "name": "TimedAnimation.to_jshtml"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "matplotlib",
    "module_short": "matplotlib",
-   "name": "TimedAnimation.save"
+   "name": "TimedAnimation.to_jshtml"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "matplotlib.animation",
    "module_short": "matplotlib.animation",
-   "name": "Animation.save"
+   "name": "Animation.to_jshtml"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "matplotlib",
    "module_short": "matplotlib",
-   "name": "Animation.save"
+   "name": "Animation.to_jshtml"
   }
  ],
  "animation.FuncAnimation": [
@@ -563,50 +635,6 @@
    "module": "matplotlib.animation",
    "module_short": "matplotlib.animation",
    "name": "FuncAnimation"
-  }
- ],
- "animation.PillowWriter": [
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "matplotlib.animation",
-   "module_short": "matplotlib.animation",
-   "name": "PillowWriter"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "PillowWriter"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "matplotlib.animation",
-   "module_short": "matplotlib.animation",
-   "name": "AbstractMovieWriter"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "AbstractMovieWriter"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "abc",
-   "module_short": "abc",
-   "name": "ABC"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.animation",
-   "module_short": "matplotlib.animation",
-   "name": "PillowWriter"
   }
  ],
  "axes": [
@@ -1059,59 +1087,6 @@
    "name": "Artist.suptitle"
   }
  ],
- "fig.tight_layout": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.figure",
-   "module_short": "matplotlib.figure",
-   "name": "Figure.tight_layout"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "Figure.tight_layout"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.figure",
-   "module_short": "matplotlib.figure",
-   "name": "FigureBase.tight_layout"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "FigureBase.tight_layout"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.artist",
-   "module_short": "matplotlib.artist",
-   "name": "Artist.tight_layout"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib",
-   "module_short": "matplotlib",
-   "name": "Artist.tight_layout"
-  }
- ],
- "gif_path": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "str"
-  }
- ],
  "idxs": [
   {
    "is_class": false,
@@ -1367,22 +1342,6 @@
    "module": "matplotlib.pyplot.cm",
    "module_short": "matplotlib.pyplot.cm",
    "name": "tab10"
-  }
- ],
- "plt.show": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "builtins",
-   "module_short": "builtins",
-   "name": "function"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "matplotlib.pyplot",
-   "module_short": "matplotlib.pyplot",
-   "name": "show"
   }
  ],
  "plt.subplots": [
