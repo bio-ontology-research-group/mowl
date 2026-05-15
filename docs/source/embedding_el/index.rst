@@ -6,7 +6,15 @@ Embedding the EL language
 .. |tutorial_elembeddings| replace:: :doc:`../examples/elmodels/plot_1_elembeddings`
 .. |tutorial_elboxembeddings| replace:: :doc:`../examples/elmodels/plot_2_elboxembeddings`
 
-The :math:`\mathcal{EL}` language is part of the Description Logics family. Concept descriptions in :math:`\mathcal{EL}` can be expressed in the following normal forms:
+The :math:`\mathcal{EL}` language is part of the Description Logics family. When trained with ``embed_dim=2``, mOWL's geometric EL models place classes as circles (ELEm), rectangles (ELBE), or rectangle pairs (Box²EL) and you can watch the geometry evolve during training — no dimensionality reduction needed:
+
+.. image:: el_geometry_training.gif
+   :alt: ELEm, ELBE, and Box²EL shapes optimizing on the Family ontology across epochs
+   :align: center
+
+See :doc:`/examples/elmodels/plot_3_el_geometry` for the full interactive animation and code.
+
+Concept descriptions in :math:`\mathcal{EL}` can be expressed in the following normal forms:
 
 .. math::
    \begin{aligned}
