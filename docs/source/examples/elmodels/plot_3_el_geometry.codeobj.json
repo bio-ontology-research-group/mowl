@@ -1,0 +1,1555 @@
+{
+ "BoxSquaredEL": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.models.boxsquaredel.model",
+   "module_short": "mowl.models.boxsquaredel.model",
+   "name": "BoxSquaredEL"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.models.boxsquaredel",
+   "module_short": "mowl.models.boxsquaredel",
+   "name": "BoxSquaredEL"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.models",
+   "module_short": "mowl.models",
+   "name": "BoxSquaredEL"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "BoxSquaredEL"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.base_models.elmodel",
+   "module_short": "mowl.base_models",
+   "name": "EmbeddingELModel"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.base_models",
+   "module_short": "mowl.base_models",
+   "name": "EmbeddingELModel"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "EmbeddingELModel"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.base_models.model",
+   "module_short": "mowl.base_models",
+   "name": "Model"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.base_models",
+   "module_short": "mowl.base_models",
+   "name": "Model"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "Model"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models",
+   "module_short": "mowl.models",
+   "name": "BoxSquaredEL"
+  }
+ ],
+ "ELBE": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.models.elbe.model",
+   "module_short": "mowl.models.elbe.model",
+   "name": "ELBE"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.models.elbe",
+   "module_short": "mowl.models.elbe",
+   "name": "ELBE"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.models",
+   "module_short": "mowl.models",
+   "name": "ELBE"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "ELBE"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.base_models.elmodel",
+   "module_short": "mowl.base_models",
+   "name": "EmbeddingELModel"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.base_models",
+   "module_short": "mowl.base_models",
+   "name": "EmbeddingELModel"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "EmbeddingELModel"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.base_models.model",
+   "module_short": "mowl.base_models",
+   "name": "Model"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.base_models",
+   "module_short": "mowl.base_models",
+   "name": "Model"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "Model"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models",
+   "module_short": "mowl.models",
+   "name": "ELBE"
+  }
+ ],
+ "ELEmbeddings": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.models.elembeddings.model",
+   "module_short": "mowl.models.elembeddings.model",
+   "name": "ELEmbeddings"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.models.elembeddings",
+   "module_short": "mowl.models.elembeddings",
+   "name": "ELEmbeddings"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.models",
+   "module_short": "mowl.models",
+   "name": "ELEmbeddings"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "ELEmbeddings"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.base_models.elmodel",
+   "module_short": "mowl.base_models",
+   "name": "EmbeddingELModel"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.base_models",
+   "module_short": "mowl.base_models",
+   "name": "EmbeddingELModel"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "EmbeddingELModel"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.base_models.model",
+   "module_short": "mowl.base_models",
+   "name": "Model"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.base_models",
+   "module_short": "mowl.base_models",
+   "name": "Model"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "Model"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models",
+   "module_short": "mowl.models",
+   "name": "ELEmbeddings"
+  }
+ ],
+ "EPOCHS": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "int"
+  }
+ ],
+ "FamilyDataset": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.datasets.builtin.family",
+   "module_short": "mowl.datasets.builtin",
+   "name": "FamilyDataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.datasets.builtin",
+   "module_short": "mowl.datasets.builtin",
+   "name": "FamilyDataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.datasets",
+   "module_short": "mowl.datasets",
+   "name": "FamilyDataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "FamilyDataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.datasets.base",
+   "module_short": "mowl.datasets",
+   "name": "RemoteDataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.datasets",
+   "module_short": "mowl.datasets",
+   "name": "RemoteDataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "RemoteDataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.datasets.base",
+   "module_short": "mowl.datasets",
+   "name": "TarFileDataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.datasets",
+   "module_short": "mowl.datasets",
+   "name": "TarFileDataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "TarFileDataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.datasets.base",
+   "module_short": "mowl.datasets",
+   "name": "PathDataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.datasets",
+   "module_short": "mowl.datasets",
+   "name": "PathDataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "PathDataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.datasets.base",
+   "module_short": "mowl.datasets",
+   "name": "Dataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.datasets",
+   "module_short": "mowl.datasets",
+   "name": "Dataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "Dataset"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.datasets.builtin",
+   "module_short": "mowl.datasets.builtin",
+   "name": "FamilyDataset"
+  }
+ ],
+ "HTML": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "IPython.core.display",
+   "module_short": "IPython.core.display",
+   "name": "HTML"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "IPython.core",
+   "module_short": "IPython.core",
+   "name": "HTML"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "IPython",
+   "module_short": "IPython",
+   "name": "HTML"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "IPython.core.display",
+   "module_short": "IPython.core.display",
+   "name": "TextDisplayObject"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "IPython.core",
+   "module_short": "IPython.core",
+   "name": "TextDisplayObject"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "IPython",
+   "module_short": "IPython",
+   "name": "TextDisplayObject"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "IPython.core.display",
+   "module_short": "IPython.core.display",
+   "name": "DisplayObject"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "IPython.core",
+   "module_short": "IPython.core",
+   "name": "DisplayObject"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "IPython",
+   "module_short": "IPython",
+   "name": "DisplayObject"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "IPython.display",
+   "module_short": "IPython.display",
+   "name": "HTML"
+  }
+ ],
+ "N_CLASSES": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "int"
+  }
+ ],
+ "SNAPSHOT_EVERY": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "int"
+  }
+ ],
+ "_axis_limits": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "_box_snapshot_box2": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "_box_snapshot_elbe": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "_elem_snapshot": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "_indices": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "_local_name": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.visualization.el.base",
+   "module_short": "mowl.visualization.el.base",
+   "name": "_local_name"
+  }
+ ],
+ "_role_indices": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "all_snaps": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "list"
+  }
+ ],
+ "ani": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.animation",
+   "module_short": "matplotlib.animation",
+   "name": "FuncAnimation"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "FuncAnimation"
+  }
+ ],
+ "ani.to_jshtml": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.animation",
+   "module_short": "matplotlib.animation",
+   "name": "FuncAnimation.to_jshtml"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "FuncAnimation.to_jshtml"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.animation",
+   "module_short": "matplotlib.animation",
+   "name": "TimedAnimation.to_jshtml"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "TimedAnimation.to_jshtml"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.animation",
+   "module_short": "matplotlib.animation",
+   "name": "Animation.to_jshtml"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "Animation.to_jshtml"
+  }
+ ],
+ "animation.FuncAnimation": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matplotlib.animation",
+   "module_short": "matplotlib.animation",
+   "name": "FuncAnimation"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "FuncAnimation"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matplotlib.animation",
+   "module_short": "matplotlib.animation",
+   "name": "TimedAnimation"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "TimedAnimation"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matplotlib.animation",
+   "module_short": "matplotlib.animation",
+   "name": "Animation"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "Animation"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.animation",
+   "module_short": "matplotlib.animation",
+   "name": "FuncAnimation"
+  }
+ ],
+ "axes": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "ndarray"
+  }
+ ],
+ "box2_model": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.boxsquaredel.model",
+   "module_short": "mowl.models.boxsquaredel.model",
+   "name": "BoxSquaredEL"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.boxsquaredel",
+   "module_short": "mowl.models.boxsquaredel",
+   "name": "BoxSquaredEL"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models",
+   "module_short": "mowl.models",
+   "name": "BoxSquaredEL"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "BoxSquaredEL"
+  }
+ ],
+ "box2_model.train": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.boxsquaredel.model",
+   "module_short": "mowl.models.boxsquaredel.model",
+   "name": "BoxSquaredEL.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.boxsquaredel",
+   "module_short": "mowl.models.boxsquaredel",
+   "name": "BoxSquaredEL.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models",
+   "module_short": "mowl.models",
+   "name": "BoxSquaredEL.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "BoxSquaredEL.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.base_models.elmodel",
+   "module_short": "mowl.base_models",
+   "name": "EmbeddingELModel.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.base_models",
+   "module_short": "mowl.base_models",
+   "name": "EmbeddingELModel.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "EmbeddingELModel.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.base_models.model",
+   "module_short": "mowl.base_models",
+   "name": "Model.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.base_models",
+   "module_short": "mowl.base_models",
+   "name": "Model.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "Model.train"
+  }
+ ],
+ "box2_snapshots": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "list"
+  }
+ ],
+ "colors": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "ndarray"
+  }
+ ],
+ "dataset": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.datasets.builtin.family",
+   "module_short": "mowl.datasets.builtin",
+   "name": "FamilyDataset"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.datasets.builtin",
+   "module_short": "mowl.datasets.builtin",
+   "name": "FamilyDataset"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.datasets",
+   "module_short": "mowl.datasets",
+   "name": "FamilyDataset"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "FamilyDataset"
+  }
+ ],
+ "draw_frame": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "elbe_model": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.elbe.model",
+   "module_short": "mowl.models.elbe.model",
+   "name": "ELBE"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.elbe",
+   "module_short": "mowl.models.elbe",
+   "name": "ELBE"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models",
+   "module_short": "mowl.models",
+   "name": "ELBE"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "ELBE"
+  }
+ ],
+ "elbe_model.train": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.elbe.model",
+   "module_short": "mowl.models.elbe.model",
+   "name": "ELBE.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.elbe",
+   "module_short": "mowl.models.elbe",
+   "name": "ELBE.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models",
+   "module_short": "mowl.models",
+   "name": "ELBE.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "ELBE.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.base_models.elmodel",
+   "module_short": "mowl.base_models",
+   "name": "EmbeddingELModel.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.base_models",
+   "module_short": "mowl.base_models",
+   "name": "EmbeddingELModel.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "EmbeddingELModel.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.base_models.model",
+   "module_short": "mowl.base_models",
+   "name": "Model.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.base_models",
+   "module_short": "mowl.base_models",
+   "name": "Model.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "Model.train"
+  }
+ ],
+ "elbe_snapshots": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "list"
+  }
+ ],
+ "elem_model": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.elembeddings.model",
+   "module_short": "mowl.models.elembeddings.model",
+   "name": "ELEmbeddings"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.elembeddings",
+   "module_short": "mowl.models.elembeddings",
+   "name": "ELEmbeddings"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models",
+   "module_short": "mowl.models",
+   "name": "ELEmbeddings"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "ELEmbeddings"
+  }
+ ],
+ "elem_model.train": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.elembeddings.model",
+   "module_short": "mowl.models.elembeddings.model",
+   "name": "ELEmbeddings.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.elembeddings",
+   "module_short": "mowl.models.elembeddings",
+   "name": "ELEmbeddings.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models",
+   "module_short": "mowl.models",
+   "name": "ELEmbeddings.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "ELEmbeddings.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.base_models.elmodel",
+   "module_short": "mowl.base_models",
+   "name": "EmbeddingELModel.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.base_models",
+   "module_short": "mowl.base_models",
+   "name": "EmbeddingELModel.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "EmbeddingELModel.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.base_models.model",
+   "module_short": "mowl.base_models",
+   "name": "Model.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.base_models",
+   "module_short": "mowl.base_models",
+   "name": "Model.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "Model.train"
+  }
+ ],
+ "elem_snapshots": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "list"
+  }
+ ],
+ "fig": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.figure",
+   "module_short": "matplotlib.figure",
+   "name": "Figure"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "Figure"
+  }
+ ],
+ "fig.suptitle": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.figure",
+   "module_short": "matplotlib.figure",
+   "name": "Figure.suptitle"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "Figure.suptitle"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.figure",
+   "module_short": "matplotlib.figure",
+   "name": "FigureBase.suptitle"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "FigureBase.suptitle"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.artist",
+   "module_short": "matplotlib.artist",
+   "name": "Artist.suptitle"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "Artist.suptitle"
+  }
+ ],
+ "idxs": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Tensor"
+  }
+ ],
+ "iris": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "list"
+  }
+ ],
+ "labels": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "list"
+  }
+ ],
+ "make_callback": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  }
+ ],
+ "matplotlib.use": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "use"
+  }
+ ],
+ "model_titles": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "list"
+  }
+ ],
+ "mowl.init_jvm": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "init_jvm"
+  }
+ ],
+ "mpatches.Circle": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matplotlib.patches",
+   "module_short": "matplotlib.patches",
+   "name": "Circle"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "Circle"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matplotlib.patches",
+   "module_short": "matplotlib.patches",
+   "name": "Ellipse"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "Ellipse"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matplotlib.patches",
+   "module_short": "matplotlib.patches",
+   "name": "Patch"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "Patch"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matplotlib.artist",
+   "module_short": "matplotlib.artist",
+   "name": "Artist"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "Artist"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.patches",
+   "module_short": "matplotlib.patches",
+   "name": "Circle"
+  }
+ ],
+ "mpatches.Rectangle": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matplotlib.patches",
+   "module_short": "matplotlib.patches",
+   "name": "Rectangle"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "Rectangle"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matplotlib.patches",
+   "module_short": "matplotlib.patches",
+   "name": "Patch"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "Patch"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matplotlib.artist",
+   "module_short": "matplotlib.artist",
+   "name": "Artist"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "Artist"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.patches",
+   "module_short": "matplotlib.patches",
+   "name": "Rectangle"
+  }
+ ],
+ "n_frames": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "int"
+  }
+ ],
+ "np.abs": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "ufunc"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "abs"
+  }
+ ],
+ "np.linspace": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "_ArrayFunctionDispatcher"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "linspace"
+  }
+ ],
+ "plt.cm.Set1": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.colors",
+   "module_short": "matplotlib.colors",
+   "name": "ListedColormap"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "ListedColormap"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot.cm",
+   "module_short": "matplotlib.pyplot.cm",
+   "name": "Set1"
+  }
+ ],
+ "plt.cm.tab10": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.colors",
+   "module_short": "matplotlib.colors",
+   "name": "ListedColormap"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib",
+   "module_short": "matplotlib",
+   "name": "ListedColormap"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot.cm",
+   "module_short": "matplotlib.pyplot.cm",
+   "name": "tab10"
+  }
+ ],
+ "plt.subplots": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "matplotlib.pyplot",
+   "module_short": "matplotlib.pyplot",
+   "name": "subplots"
+  }
+ ],
+ "role_colors": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "numpy",
+   "module_short": "numpy",
+   "name": "ndarray"
+  }
+ ],
+ "role_idxs": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "Tensor"
+  }
+ ],
+ "role_iris": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "list"
+  }
+ ],
+ "role_labels": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "list"
+  }
+ ],
+ "th.no_grad": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.autograd.grad_mode",
+   "module_short": "torch",
+   "name": "no_grad"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.autograd",
+   "module_short": "torch",
+   "name": "no_grad"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "no_grad"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.utils._contextlib",
+   "module_short": "torch.utils._contextlib",
+   "name": "_NoParamDecoratorContextManager"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.utils",
+   "module_short": "torch.utils",
+   "name": "_NoParamDecoratorContextManager"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "_NoParamDecoratorContextManager"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.utils._contextlib",
+   "module_short": "torch.utils._contextlib",
+   "name": "_DecoratorContextManager"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch.utils",
+   "module_short": "torch.utils",
+   "name": "_DecoratorContextManager"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "_DecoratorContextManager"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "no_grad"
+  }
+ ],
+ "th.tensor": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "builtin_function_or_method"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch",
+   "module_short": "torch",
+   "name": "tensor"
+  }
+ ],
+ "xmax": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
+ "xmin": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
+ "ymax": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ],
+ "ymin": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "float"
+  }
+ ]
+}

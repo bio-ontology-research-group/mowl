@@ -364,7 +364,7 @@ of :class:`torch.utils.data.DataLoader`
         """
         return th.optim.Adam(self.module.parameters(), lr=self.learning_rate)
 
-    def train(self, epochs, validate_every=1):
+    def train(self, epochs, validate_every=1, epoch_callback=None):
         """Train the model.
 
         This is the generic training loop for EL embedding models. Subclasses can
@@ -379,6 +379,11 @@ of :class:`torch.utils.data.DataLoader`
         :type epochs: int
         :param validate_every: Validate and log every N epochs. Defaults to 1.
         :type validate_every: int, optional
+        :param epoch_callback: Optional callable invoked after each epoch as
+            ``epoch_callback(epoch, model)``, where *epoch* is the 0-based epoch
+            index and *model* is this model instance. Use it to capture snapshots
+            for animation, custom logging, or early stopping. Defaults to ``None``.
+        :type epoch_callback: callable, optional
         """
         logger.warning(
             'You are using the default training method. If you want to use a customized '
@@ -441,6 +446,9 @@ of :class:`torch.utils.data.DataLoader`
             loss.backward()
             optimizer.step()
             train_loss += loss.detach().item()
+
+            if epoch_callback is not None:
+                epoch_callback(epoch, self)
 
             # Validation
             if (epoch + 1) % validate_every == 0:

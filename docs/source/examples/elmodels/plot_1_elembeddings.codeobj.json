@@ -1,0 +1,772 @@
+{
+ "ELEmPPI": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.models.elembeddings.examples.model_ppi",
+   "module_short": "mowl.models.elembeddings.examples.model_ppi",
+   "name": "ELEmPPI"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.models.elembeddings.examples",
+   "module_short": "mowl.models.elembeddings.examples",
+   "name": "ELEmPPI"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.models.elembeddings",
+   "module_short": "mowl.models.elembeddings",
+   "name": "ELEmPPI"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.models",
+   "module_short": "mowl.models",
+   "name": "ELEmPPI"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "ELEmPPI"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.models.elembeddings.model",
+   "module_short": "mowl.models.elembeddings.model",
+   "name": "ELEmbeddings"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.models.elembeddings",
+   "module_short": "mowl.models.elembeddings",
+   "name": "ELEmbeddings"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.models",
+   "module_short": "mowl.models",
+   "name": "ELEmbeddings"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "ELEmbeddings"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.base_models.elmodel",
+   "module_short": "mowl.base_models",
+   "name": "EmbeddingELModel"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.base_models",
+   "module_short": "mowl.base_models",
+   "name": "EmbeddingELModel"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "EmbeddingELModel"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.base_models.model",
+   "module_short": "mowl.base_models",
+   "name": "Model"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.base_models",
+   "module_short": "mowl.base_models",
+   "name": "Model"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "Model"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.elembeddings.examples.model_ppi",
+   "module_short": "mowl.models.elembeddings.examples.model_ppi",
+   "name": "ELEmPPI"
+  }
+ ],
+ "PPIEvaluator": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.evaluation.ppi",
+   "module_short": "mowl.evaluation",
+   "name": "PPIEvaluator"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.evaluation",
+   "module_short": "mowl.evaluation",
+   "name": "PPIEvaluator"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "PPIEvaluator"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.evaluation.base",
+   "module_short": "mowl.evaluation",
+   "name": "Evaluator"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.evaluation",
+   "module_short": "mowl.evaluation",
+   "name": "Evaluator"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "Evaluator"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.evaluation",
+   "module_short": "mowl.evaluation",
+   "name": "PPIEvaluator"
+  }
+ ],
+ "PPIYeastSlimDataset": [
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.datasets.builtin.ppi_yeast",
+   "module_short": "mowl.datasets.builtin",
+   "name": "PPIYeastSlimDataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.datasets.builtin",
+   "module_short": "mowl.datasets.builtin",
+   "name": "PPIYeastSlimDataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.datasets",
+   "module_short": "mowl.datasets",
+   "name": "PPIYeastSlimDataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "PPIYeastSlimDataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.datasets.builtin.ppi_yeast",
+   "module_short": "mowl.datasets.builtin",
+   "name": "PPIYeastDataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.datasets.builtin",
+   "module_short": "mowl.datasets.builtin",
+   "name": "PPIYeastDataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.datasets",
+   "module_short": "mowl.datasets",
+   "name": "PPIYeastDataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "PPIYeastDataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.datasets.base",
+   "module_short": "mowl.datasets",
+   "name": "RemoteDataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.datasets",
+   "module_short": "mowl.datasets",
+   "name": "RemoteDataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "RemoteDataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.datasets.base",
+   "module_short": "mowl.datasets",
+   "name": "TarFileDataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.datasets",
+   "module_short": "mowl.datasets",
+   "name": "TarFileDataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "TarFileDataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.datasets.base",
+   "module_short": "mowl.datasets",
+   "name": "PathDataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.datasets",
+   "module_short": "mowl.datasets",
+   "name": "PathDataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "PathDataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.datasets.base",
+   "module_short": "mowl.datasets",
+   "name": "Dataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.datasets",
+   "module_short": "mowl.datasets",
+   "name": "Dataset"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "Dataset"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.datasets.builtin",
+   "module_short": "mowl.datasets.builtin",
+   "name": "PPIYeastSlimDataset"
+  }
+ ],
+ "dataset": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.datasets.builtin.ppi_yeast",
+   "module_short": "mowl.datasets.builtin",
+   "name": "PPIYeastSlimDataset"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.datasets.builtin",
+   "module_short": "mowl.datasets.builtin",
+   "name": "PPIYeastSlimDataset"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.datasets",
+   "module_short": "mowl.datasets",
+   "name": "PPIYeastSlimDataset"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "PPIYeastSlimDataset"
+  }
+ ],
+ "model": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.elembeddings.examples.model_ppi",
+   "module_short": "mowl.models.elembeddings.examples.model_ppi",
+   "name": "ELEmPPI"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.elembeddings.examples",
+   "module_short": "mowl.models.elembeddings.examples",
+   "name": "ELEmPPI"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.elembeddings",
+   "module_short": "mowl.models.elembeddings",
+   "name": "ELEmPPI"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models",
+   "module_short": "mowl.models",
+   "name": "ELEmPPI"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "ELEmPPI"
+  }
+ ],
+ "model.evaluate": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.elembeddings.examples.model_ppi",
+   "module_short": "mowl.models.elembeddings.examples.model_ppi",
+   "name": "ELEmPPI.evaluate"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.elembeddings.examples",
+   "module_short": "mowl.models.elembeddings.examples",
+   "name": "ELEmPPI.evaluate"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.elembeddings",
+   "module_short": "mowl.models.elembeddings",
+   "name": "ELEmPPI.evaluate"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models",
+   "module_short": "mowl.models",
+   "name": "ELEmPPI.evaluate"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "ELEmPPI.evaluate"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.elembeddings.model",
+   "module_short": "mowl.models.elembeddings.model",
+   "name": "ELEmbeddings.evaluate"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.elembeddings",
+   "module_short": "mowl.models.elembeddings",
+   "name": "ELEmbeddings.evaluate"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models",
+   "module_short": "mowl.models",
+   "name": "ELEmbeddings.evaluate"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "ELEmbeddings.evaluate"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.base_models.elmodel",
+   "module_short": "mowl.base_models",
+   "name": "EmbeddingELModel.evaluate"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.base_models",
+   "module_short": "mowl.base_models",
+   "name": "EmbeddingELModel.evaluate"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "EmbeddingELModel.evaluate"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.base_models.model",
+   "module_short": "mowl.base_models",
+   "name": "Model.evaluate"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.base_models",
+   "module_short": "mowl.base_models",
+   "name": "Model.evaluate"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "Model.evaluate"
+  }
+ ],
+ "model.set_evaluator": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.elembeddings.examples.model_ppi",
+   "module_short": "mowl.models.elembeddings.examples.model_ppi",
+   "name": "ELEmPPI.set_evaluator"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.elembeddings.examples",
+   "module_short": "mowl.models.elembeddings.examples",
+   "name": "ELEmPPI.set_evaluator"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.elembeddings",
+   "module_short": "mowl.models.elembeddings",
+   "name": "ELEmPPI.set_evaluator"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models",
+   "module_short": "mowl.models",
+   "name": "ELEmPPI.set_evaluator"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "ELEmPPI.set_evaluator"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.elembeddings.model",
+   "module_short": "mowl.models.elembeddings.model",
+   "name": "ELEmbeddings.set_evaluator"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.elembeddings",
+   "module_short": "mowl.models.elembeddings",
+   "name": "ELEmbeddings.set_evaluator"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models",
+   "module_short": "mowl.models",
+   "name": "ELEmbeddings.set_evaluator"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "ELEmbeddings.set_evaluator"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.base_models.elmodel",
+   "module_short": "mowl.base_models",
+   "name": "EmbeddingELModel.set_evaluator"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.base_models",
+   "module_short": "mowl.base_models",
+   "name": "EmbeddingELModel.set_evaluator"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "EmbeddingELModel.set_evaluator"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.base_models.model",
+   "module_short": "mowl.base_models",
+   "name": "Model.set_evaluator"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.base_models",
+   "module_short": "mowl.base_models",
+   "name": "Model.set_evaluator"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "Model.set_evaluator"
+  }
+ ],
+ "model.train": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.elembeddings.examples.model_ppi",
+   "module_short": "mowl.models.elembeddings.examples.model_ppi",
+   "name": "ELEmPPI.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.elembeddings.examples",
+   "module_short": "mowl.models.elembeddings.examples",
+   "name": "ELEmPPI.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.elembeddings",
+   "module_short": "mowl.models.elembeddings",
+   "name": "ELEmPPI.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models",
+   "module_short": "mowl.models",
+   "name": "ELEmPPI.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "ELEmPPI.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.elembeddings.model",
+   "module_short": "mowl.models.elembeddings.model",
+   "name": "ELEmbeddings.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.elembeddings",
+   "module_short": "mowl.models.elembeddings",
+   "name": "ELEmbeddings.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models",
+   "module_short": "mowl.models",
+   "name": "ELEmbeddings.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "ELEmbeddings.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.base_models.elmodel",
+   "module_short": "mowl.base_models",
+   "name": "EmbeddingELModel.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.base_models",
+   "module_short": "mowl.base_models",
+   "name": "EmbeddingELModel.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "EmbeddingELModel.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.base_models.model",
+   "module_short": "mowl.base_models",
+   "name": "Model.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.base_models",
+   "module_short": "mowl.base_models",
+   "name": "Model.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "Model.train"
+  }
+ ],
+ "mowl.datasets.builtin.PPIYeastSlimDataset": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "mowl.datasets.builtin",
+   "module_short": "mowl.datasets.builtin",
+   "name": "PPIYeastSlimDataset"
+  }
+ ],
+ "mowl.evaluation.ModelRankBasedEvaluator": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "mowl.evaluation",
+   "module_short": "mowl.evaluation",
+   "name": "ModelRankBasedEvaluator"
+  }
+ ],
+ "mowl.init_jvm": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "init_jvm"
+  }
+ ],
+ "mowl.models.elembeddings.examples.model_ppi.ELEmPPI": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "mowl.models.elembeddings.examples.model_ppi",
+   "module_short": "mowl.models.elembeddings.examples.model_ppi",
+   "name": "ELEmPPI"
+  }
+ ],
+ "mowl.models.elembeddings.model.ELEmbeddings": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "mowl.models.elembeddings.model",
+   "module_short": "mowl.models.elembeddings.model",
+   "name": "ELEmbeddings"
+  }
+ ],
+ "mowl.nn.el.elem.module.ELEmModule": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "mowl.nn.el.elem.module",
+   "module_short": "mowl.nn.el.elem.module",
+   "name": "ELEmModule"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "mowl.nn.el.elem.module",
+   "module_short": "mowl.nn.el.elem.module",
+   "name": "ELEmModule"
+  }
+ ]
+}
