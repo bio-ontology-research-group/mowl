@@ -14,11 +14,6 @@ from jpype import java
 import os
 import logging
 logger = logging.getLogger(__name__)
-
-# Keyed by absolute cache path → TBox axioms_dict (no ABox).
-# Prevents calling loadOntologyFromOntologyDocument more than once per file
-# per JVM session, which causes a JVM abort on the second call.
-_tbox_cache = {}
 handler = logging.StreamHandler()
 logger.addHandler(handler)
 logger.setLevel(logging.INFO)
@@ -111,14 +106,11 @@ type org.semanticweb.owlapi.model.OWLOntology. Found: {type(ontology)}")
         # Check for cached normalized ontology
         cache_path = None
         if ontology_path is not None and use_cache:
-            cache_path = os.path.abspath(self.get_cache_path(ontology_path))
+            cache_path = self.get_cache_path(ontology_path)
             if os.path.exists(cache_path):
                 logger.info(f"Loading normalized ontology from cache: {cache_path}")
-                if cache_path not in _tbox_cache:
-                    cached_ont = self._load_cached_ontology(cache_path)
-                    _tbox_cache[cache_path] = self.__load_normalized_ontology(cached_ont)
-
-                axioms_dict = {k: list(v) for k, v in _tbox_cache[cache_path].items()}
+                cached_ont = self._load_cached_ontology(cache_path)
+                axioms_dict = self.__load_normalized_ontology(cached_ont)
 
                 # Add ABox axioms from original ontology
                 abox = ontology.getABoxAxioms(Imports.fromBoolean(True))
