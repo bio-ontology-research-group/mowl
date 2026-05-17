@@ -32,8 +32,10 @@ class BoxELModule(ELModule):
 
         if self.nb_inds is not None:
             self.ind_embedding = self.init_entity_embedding(nb_inds, embed_dim, min_bounds)
+            self.ind_delta_embedding = self.init_entity_embedding(nb_inds, embed_dim, delta_bounds)
         else:
             self.ind_embedding = None
+            self.ind_delta_embedding = None
         
 
     def init_entity_embedding(self, num_entities, embed_dim, bounds):
@@ -63,6 +65,16 @@ class BoxELModule(ELModule):
 
     def gci3_bot_loss(self, data, neg=False):
         return L.gci3_bot_loss(data, self.min_embedding, self.delta_embedding, self.relation_embedding, self.scaling_embedding, self.temperature, neg=neg)
+
+    def class_assertion_loss(self, data, neg=False):
+        if self.ind_embedding is None:
+            raise ValueError("The number of individuals must be specified to use this loss function.")
+        return L.class_assertion_loss(data, self.ind_embedding, self.ind_delta_embedding, self.min_embedding, self.delta_embedding, self.temperature, neg=neg)
+
+    def object_property_assertion_loss(self, data, neg=False):
+        if self.ind_embedding is None:
+            raise ValueError("The number of individuals must be specified to use this loss function.")
+        return L.object_property_assertion_loss(data, self.ind_embedding, self.ind_delta_embedding, self.relation_embedding, self.scaling_embedding, self.temperature, neg=neg)
 
     def regularization_loss(self):
         return L.regularization_loss(self.min_embedding, self.delta_embedding)

@@ -61,7 +61,7 @@ def gci0_loss(data, min_embed, delta_embed, temperature, neg=False):
 
     boxes_c = Box(c_min, delta_embed=c_delta)
     boxes_d = Box(d_min, delta_embed=d_delta)
-    
+
     return inclusion_loss(boxes_c, boxes_d, temperature)
 
 def gci0_bot_loss(*args, **kwargs):
@@ -147,6 +147,39 @@ def gci3_loss(data, min_embed, delta_embed, relation_embed, scaling_embed, tempe
 
 def gci3_bot_loss(*args, **kwargs):
     return gci3_loss(*args, **kwargs)
+
+
+def class_assertion_loss(data, ind_embed, ind_delta_embed, min_embed, delta_embed, temperature, neg=False):
+    i_min = ind_embed(data[:, 0])
+    i_delta = ind_delta_embed(data[:, 0])
+    c_min = min_embed(data[:, 1])
+    c_delta = delta_embed(data[:, 1])
+
+    box_i = Box(i_min, delta_embed=i_delta)
+    box_c = Box(c_min, delta_embed=c_delta)
+    return inclusion_loss(box_i, box_c, temperature)
+
+
+def object_property_assertion_loss(data, ind_embed, ind_delta_embed, relation_embed, scaling_embed, temperature, neg=False):
+    a_min = ind_embed(data[:, 0])
+    a_delta = ind_delta_embed(data[:, 0])
+    b_min = ind_embed(data[:, 2])
+    b_delta = ind_delta_embed(data[:, 2])
+
+    relation = relation_embed(data[:, 1])
+    scaling = scaling_embed(data[:, 1])
+
+    box_a = Box(a_min, delta_embed=a_delta)
+    box_b = Box(b_min, delta_embed=b_delta)
+
+    trans_a_min = box_a.min_embed * (scaling + eps) + relation
+    trans_a_max = box_a.max_embed * (scaling + eps) + relation
+    trans_box = Box(trans_a_min, max_embed=trans_a_max)
+
+    if neg:
+        return 1 - inclusion_loss(trans_box, box_b, temperature)
+    return inclusion_loss(trans_box, box_b, temperature)
+
 
 def role_inclusion_loss(data, relation_embed, scaling_embed):
     r_translation = relation_embed(data[:, 0])

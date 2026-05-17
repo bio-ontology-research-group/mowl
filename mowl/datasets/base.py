@@ -21,6 +21,11 @@ from deprecated.sphinx import versionadded, versionchanged
 
 from java.util import HashSet
 
+# Keyed by absolute path → OWLOntology.
+# Prevents calling loadOntologyFromOntologyDocument more than once per file
+# per JVM session, which causes a JVM abort on the second call.
+_ontology_cache = {}
+
 
 class Dataset():
     """This class represents an mOWL dataset.
@@ -266,19 +271,17 @@ class PathDataset(Dataset):
 
     def _load(self):
 
-        ont_manager = OWLManager.createOWLOntologyManager()
-        ontology = ont_manager.loadOntologyFromOntologyDocument(
-            java.io.File(self.ontology_path))
+        def _load_owl(path):
+            abs_path = os.path.abspath(path)
+            if abs_path not in _ontology_cache:
+                manager = OWLManager.createOWLOntologyManager()
+                _ontology_cache[abs_path] = manager.loadOntologyFromOntologyDocument(
+                    java.io.File(path))
+            return _ontology_cache[abs_path]
 
-        validation = None
-        if self.validation_path is not None:
-            validation = ont_manager.loadOntologyFromOntologyDocument(
-                java.io.File(self.validation_path))
-
-        testing = None
-        if self.testing_path is not None:
-            testing = ont_manager.loadOntologyFromOntologyDocument(
-                java.io.File(self.testing_path))
+        ontology = _load_owl(self.ontology_path)
+        validation = _load_owl(self.validation_path) if self.validation_path else None
+        testing = _load_owl(self.testing_path) if self.testing_path else None
 
         return ontology, validation, testing
 
