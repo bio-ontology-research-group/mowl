@@ -1,0 +1,35 @@
+name: Changelog
+
+on:
+  pull_request:
+    branches: [ "main", "develop" ]
+
+jobs:
+  changelog:
+    # Dependabot cannot edit CHANGELOG.md, so don't block its PRs.
+    if: github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install git-cliff
+        run: pip install git-cliff
+
+      - name: Validate cliff.toml
+        run: git-cliff --unreleased
+
+      - name: Ensure [Unreleased] has entries
+        run: |
+          section=$(awk '/^## \[Unreleased\]/{flag=1; next} /^## \[/{flag=0} flag' CHANGELOG.md)
+          if ! echo "$section" | grep -q '^- '; then
+            echo "::error file=CHANGELOG.md::The [Unreleased] section is empty. Run 'git-cliff --unreleased' to draft entries, then polish them in CHANGELOG.md."
+            exit 1
+          fi
+          echo "[Unreleased] section has entries."

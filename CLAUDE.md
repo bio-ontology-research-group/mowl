@@ -66,6 +66,7 @@ The version is derived from git tags via `setuptools_scm` — **do not set versi
 
 1. **Merge** all pending PRs (feature branches) into `main`.
 2. **Update `CHANGELOG.md`**: rename `[Unreleased]` to `[X.Y.Z]` with today's date. Add a new empty `[Unreleased]` section at the top. Update the comparison link at the bottom.
+   - To draft the entries from git history, run `git-cliff --unreleased` (config in `cliff.toml`). It groups commits into Keep a Changelog sections by their leading verb (Add/Fix/Remove/...). Treat the output as a **draft**: polish wording and add issue links (`[#NN][iNN]`) by hand. Install with `pip install git-cliff`.
 3. **Update `docs/source/conf.py`**: set `release` and `version` to `X.Y.Z`.
 4. **Commit** the above two files:
    ```bash
