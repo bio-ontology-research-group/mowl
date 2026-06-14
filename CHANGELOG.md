@@ -6,6 +6,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+- Added `BoxEL` model (with `BoxELPPI` and `BoxELGDA` examples) wrapping `BoxELModule` [#70][i70].
+- Added 2-D geometric EL visualizers for ELEm, ELBE, and Box²EL, plus a role-visualization API showing Box²EL relation pairs.
+- Added an `epoch_callback` argument to `train()` and a geometric EL training animation gallery example.
+- Exposed `neg_sampling_gcis` in `ELEmbeddings`, `ELBE`, and `BoxSquaredEL`.
+- Added tests for all 13 previously untested `OWLAPIAdapter` methods.
+### Changed
+- Documented the available EL models (`ELEmbeddings`, `ELBE`, `BoxSquaredEL`, `BoxEL`) in the embedding guide.
+- Replaced the interactive jshtml animation with an autoplaying GIF in the gallery and docs.
+- Bumped CI GitHub Actions (setup-java, setup-python, checkout, upload-artifact, download-artifact, github-script, sigstore, conda setup-miniconda).
+### Removed
+- Removed ontology load caches that polluted shared test fixtures.
 
 ## [2.0.0] - 2026-05-12
 ### Added
@@ -161,5 +173,6 @@ Fixed issue related to importing graph-based models due to missing `__init__.py`
 [i43]: https://github.com/bio-ontology-research-group/mowl/issues/43
 [i59]: https://github.com/bio-ontology-research-group/mowl/issues/59
 [i60]: https://github.com/bio-ontology-research-group/mowl/issues/60
+[i70]: https://github.com/bio-ontology-research-group/mowl/issues/70
 [i97]: https://github.com/bio-ontology-research-group/mowl/issues/97
 

@@ -1,0 +1,57 @@
+# git-cliff configuration for mOWL
+#
+# Generates Keep a Changelog-style entries from git history. mOWL does NOT use
+# Conventional Commits, so commits are grouped by their imperative-mood verb
+# (Add/Fix/Remove/...) instead of `feat:`/`fix:` prefixes.
+#
+# Usage:
+#   git-cliff --unreleased                     # preview entries since last tag
+#   git-cliff --unreleased --prepend CHANGELOG.md   # draft them into the file
+#   git-cliff --tag vX.Y.Z -o CHANGELOG.md     # regenerate the whole file
+#
+# The generated text is a *draft*: refine wording and add issue links by hand
+# before release (see the release checklist in CLAUDE.md).
+
+[changelog]
+header = """
+# Changelog
+
+All notable changes to this project will be documented in this file.
+
+The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
+and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+"""
+body = """
+{% if version %}\
+    ## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else %}\
+    ## [Unreleased]
+{% endif %}\
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | striptags | trim | upper_first }}
+{% for commit in commits %}
+- {{ commit.message | split(pat="\n") | first | upper_first }}\
+{% endfor %}
+{% endfor %}\n
+"""
+footer = ""
+trim = true
+
+[git]
+conventional_commits = false
+filter_unconventional = false
+split_commits = false
+# Group commits into Keep a Changelog sections by their leading verb.
+# The `<!-- N -->` prefixes only control section ordering and are stripped in
+# the template via `striptags`.
+commit_parsers = [
+  { message = "^[Mm]erge ", skip = true },
+  { message = "^(Add|Added|Expose|Introduce|Implement|Support|Enable|Create)", group = "<!-- 0 -->Added" },
+  { message = "^(Deprecate)", group = "<!-- 2 -->Deprecated" },
+  { message = "^(Remove|Removed|Delete|Drop)", group = "<!-- 3 -->Removed" },
+  { message = "^(Fix|Fixed|Correct)", group = "<!-- 4 -->Fixed" },
+  { message = ".*", group = "<!-- 1 -->Changed" },
+]
+filter_commits = false
+tag_pattern = "v[0-9]*"
+sort_commits = "oldest"

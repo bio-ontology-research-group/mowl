@@ -287,7 +287,16 @@ To see actual examples of EL models, let's go to |tutorial_elembeddings| and |tu
 Just use a mOWL model
 ------------------------
 
-We have seen that constructing a |el| model has many steps. However, the main difference between them, is the definition of loss functions and the training loop. Therefore, using the :class:`ELEmbeddingModel <mowl.base_models.elmodel.EmbeddingELModel>` can be useful by just defining the training loop. Here is an example of using ELEmbeddings for protein-protein interaction prediction:
+We have seen that constructing a |el| model has many steps. However, the main difference between them, is the definition of loss functions and the training loop. Therefore, using the :class:`ELEmbeddingModel <mowl.base_models.elmodel.EmbeddingELModel>` can be useful by just defining the training loop.
+
+mOWL ships several ready-to-use :math:`\mathcal{EL}` models that share this interface, so they can be swapped in without changing the surrounding code:
+
+- :class:`ELEmbeddings <mowl.models.ELEmbeddings>` — classes as balls [kulmanov2019]_
+- :class:`ELBE <mowl.models.ELBE>` — classes as axis-aligned boxes [peng2020]_
+- :class:`BoxSquaredEL <mowl.models.BoxSquaredEL>` — boxes with bumps for relations (Box²EL) [jackermeier2023]_
+- :class:`BoxEL <mowl.models.BoxEL>` — box embeddings for EL++ knowledge bases [xiong2022]_
+
+Here is an example of using ELEmbeddings for protein-protein interaction prediction:
 
 .. testcode::
 
