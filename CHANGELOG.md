@@ -7,6 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+- Added the `FALCON` model (`FALCONModel`) for embedding the ALC language, with an `ALCModule` neural base class, a `FALCONSubsumptionEvaluator`, and a `FALCONVisualizer` membership heatmap [#71][i71].
 - Added `BoxEL` model (with `BoxELPPI` and `BoxELGDA` examples) wrapping `BoxELModule` [#70][i70].
 - Added 2-D geometric EL visualizers for ELEm, ELBE, and Box²EL, plus a role-visualization API showing Box²EL relation pairs.
 - Added an `epoch_callback` argument to `train()` and a geometric EL training animation gallery example.
@@ -174,5 +175,6 @@ Fixed issue related to importing graph-based models due to missing `__init__.py`
 [i59]: https://github.com/bio-ontology-research-group/mowl/issues/59
 [i60]: https://github.com/bio-ontology-research-group/mowl/issues/60
 [i70]: https://github.com/bio-ontology-research-group/mowl/issues/70
+[i71]: https://github.com/bio-ontology-research-group/mowl/issues/71
 [i97]: https://github.com/bio-ontology-research-group/mowl/issues/97
 

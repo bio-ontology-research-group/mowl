@@ -238,4 +238,5 @@ class ALCDataset():
         return self._grouped_axioms
 
     def get_obj_prop_assertion_data(self):
-        return self.get_datasets()[self.obj_prop_assertion_pat]
+        datasets, _ = self.get_datasets()
+        return datasets.get(self.obj_prop_assertion_pat)
