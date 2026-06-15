@@ -65,11 +65,6 @@ concept — and train FALCON on it.
                        learning_rate=0.01, num_negs=8)
    model.train(epochs=300, validate_every=100)
 
-.. testoutput::
-   :hide:
-
-   ...
-
 The learned fuzzy model can be inspected with
 :class:`FALCONVisualizer <mowl.visualization.FALCONVisualizer>`, which computes the
 membership degree :math:`\mu(C, e)` of every concept ``C`` over the named individuals
@@ -81,12 +76,6 @@ and a number of sampled anonymous entities, and renders it as a heatmap:
 
    visualizer = FALCONVisualizer(model)
    matrix, concepts, entities = visualizer.membership_matrix(n_anon=2)
-   ax = visualizer.plot(n_anon=2)
-
-.. testoutput::
-   :hide:
-
-   ...
 
 .. figure:: falcon_family_heatmap.png
    :alt: FALCON concept-by-entity membership heatmap on the Family ontology
