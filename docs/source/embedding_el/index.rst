@@ -362,6 +362,14 @@ The learned fuzzy model can be inspected with :class:`FALCONVisualizer <mowl.vis
 
    ...
 
+The :doc:`FALCON Family example <../examples/elmodels/plot_4_falcon>` reproduces Figure 1 of the FALCON paper: training on a family ontology with one individual per concept yields a model in which each individual is a member of its asserted concept *and* of every super-concept entailed by the TBox.
+
+.. figure:: ../examples/elmodels/images/falcon_family_heatmap.png
+   :alt: FALCON concept-by-entity membership heatmap on the Family ontology
+   :align: center
+
+   FALCON membership degrees on the Family ontology (dark = membership close to 1). For example, ``boy_0`` is a member of ``Boy``, ``Child``, ``Male`` and ``Person``, while ``Nothing`` is empty and ``Thing`` is universal.
+
 You can also access the learned embeddings:
 
 .. testcode::

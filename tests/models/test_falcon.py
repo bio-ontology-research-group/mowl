@@ -42,6 +42,44 @@ class TestFALCON(TestCase):
         self.assertTrue((fs >= 0).all() and (fs <= 1).all())
 
 
+class TestFALCONWithABox(TestCase):
+    """Exercises the concept-assertion (ABox-EC) training path and the heatmap over
+    named individuals."""
+
+    @classmethod
+    def setUpClass(cls):
+        from java.util import HashSet
+        from mowl.datasets import Dataset
+        from mowl.owlapi.adapter import OWLAPIAdapter
+
+        adapter = OWLAPIAdapter()
+        onto = adapter.create_ontology("http://mowl/abox")
+        male = adapter.create_class("http://Male")
+        person = adapter.create_class("http://Person")
+        axioms = HashSet()
+        axioms.add(adapter.create_subclass_of(male, person))
+        axioms.add(adapter.create_class_assertion(
+            male, adapter.create_individual("http://john")))
+        axioms.add(adapter.create_class_assertion(
+            person, adapter.create_individual("http://mary")))
+        adapter.owl_manager.addAxioms(onto, axioms)
+        cls.dataset = Dataset(onto, validation=onto, testing=onto)
+        cls.model = FALCONModel(cls.dataset, embed_dim=10, anon_e=2)
+        cls.model.train(epochs=1, validate_every=1)
+
+    def test_trains_with_individuals(self):
+        self.assertEqual(len(self.dataset.individuals), 2)
+        for param in self.model.module.parameters():
+            self.assertTrue(th.isfinite(param).all())
+
+    def test_heatmap_includes_named_individuals(self):
+        viz = FALCONVisualizer(self.model)
+        fs, concepts, entities = viz.membership_matrix(n_anon=2)
+        # two named individuals + two anonymous entities
+        self.assertEqual(len(entities), 4)
+        self.assertEqual(fs.shape, (len(concepts), 4))
+
+
 class TestFALCONValidation(TestCase):
 
     @classmethod

@@ -209,8 +209,21 @@ class FALCONModule(ALCModule):
             neg_x[:, :, 0] = neg_ents
             x = th.cat([x, neg_x], dim=1)
             cexpr = axiom.getClassExpression()
+            expr_type = cexpr.getClassExpressionType()
+            if expr_type == ClassExpressionType.OWL_CLASS:
+                # Plain concept assertion ``e : C`` — directly push the membership
+                # μ(C, e) towards 1 for the asserted individual and towards 0 for the
+                # corrupted negatives (cf. ``forward_abox_ec_created`` in the original
+                # FALCON implementation).
+                c_emb = self.c_embedding(x[:, 0, 1]).unsqueeze(dim=1)
+                ex_emb = self.e_embedding(x[:, :, 0])
+                dofm = self._mem(c_emb.expand_as(ex_emb), ex_emb).squeeze(dim=-1)
+                res = (- th.log(dofm[:, 0] + 1e-10).mean()
+                       - th.log(1 - dofm[:, 1:] + 1e-10).mean())
+                return res / 2
+            # Relational or complex assertion (e.g. ``e : ∃R.C``) — exist-based loss.
             r = None
-            if cexpr.getClassExpressionType() == ClassExpressionType.OBJECT_SOME_VALUES_FROM:
+            if expr_type == ClassExpressionType.OBJECT_SOME_VALUES_FROM:
                 r = cexpr.getProperty()
                 rx = x[:, :, 1]
                 cexpr = cexpr.getFiller()

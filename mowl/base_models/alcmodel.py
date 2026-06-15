@@ -90,6 +90,28 @@ class EmbeddingALCModel(Model):
             self.init_module()
         return self.module
 
+    def _embeddings_dict(self, embedding, index_dict):
+        if self.module is None:
+            self.init_module()
+        weight = embedding.weight.detach().cpu().numpy()
+        return {name: weight[idx] for name, idx in index_dict.items()}
+
+    @property
+    def class_embeddings(self):
+        """Returns a dictionary mapping class names to their embeddings."""
+        return self._embeddings_dict(self.module.c_embedding, self.class_index_dict)
+
+    @property
+    def object_property_embeddings(self):
+        """Returns a dictionary mapping object property names to their embeddings."""
+        return self._embeddings_dict(self.module.r_embedding,
+                                     self.object_property_index_dict)
+
+    @property
+    def individual_embeddings(self):
+        """Returns a dictionary mapping individual names to their embeddings."""
+        return self._embeddings_dict(self.module.e_embedding, self.individual_index_dict)
+
     def _load_datasets(self):
         """This method will create different data attributes and finally the corresponding \
             DataLoaders for each axiom pattern in each subset (training, validation and testing).
