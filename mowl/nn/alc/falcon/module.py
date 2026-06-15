@@ -1,13 +1,19 @@
 import torch as th
 from torch.utils import checkpoint
+from mowl.nn.alc.module import ALCModule
 from mowl.owlapi import OWLAPIAdapter, ClassExpressionType, OWLSubClassOfAxiom, \
     OWLEquivalentClassesAxiom, OWLDisjointClassesAxiom, OWLClassAssertionAxiom, \
     OWLObjectPropertyAssertionAxiom
 
 
-class FALCONModule(th.nn.Module):
-    """Based on the original implementation at \
-https://github.com/bio-ontology-research-group/FALCON
+class FALCONModule(ALCModule):
+    """Implementation of the FALCON model [falcon2022]_, a fuzzy
+    :math:`\\mathcal{ALC}` neural reasoner. Each class expression is mapped to a
+    *fuzzy set* over a collection of (named and anonymous) entity embeddings, and
+    axioms are scored through fuzzy logical operators.
+
+    Based on the original implementation at
+    https://github.com/bio-ontology-research-group/FALCON
     """
 
     def __init__(
@@ -22,12 +28,15 @@ https://github.com/bio-ontology-research-group/FALCON
         self.c_embedding = th.nn.Embedding(nclasses, embed_dim)
         self.r_embedding = th.nn.Embedding(nrelations, embed_dim)
         self.e_embedding = th.nn.Embedding(nentities, embed_dim)
-        self.fc_0 = th.nn.Linear(embed_dim * 2, 1)
+        # Two-layer membership network, matching the original FALCON implementation.
+        self.fc_0 = th.nn.Linear(embed_dim * 2, embed_dim)
+        self.fc_1 = th.nn.Linear(embed_dim, 1)
 
         th.nn.init.xavier_uniform_(self.c_embedding.weight.data)
         th.nn.init.xavier_uniform_(self.r_embedding.weight.data)
         th.nn.init.xavier_uniform_(self.e_embedding.weight.data)
         th.nn.init.xavier_uniform_(self.fc_0.weight.data)
+        th.nn.init.xavier_uniform_(self.fc_1.weight.data)
 
         self.max_measure = max_measure
         self.t_norm = t_norm
@@ -40,10 +49,11 @@ https://github.com/bio-ontology-research-group/FALCON
         self.adapter = OWLAPIAdapter()
 
     def _mem(self, c_emb, e_emb):
+        """Membership-degree network: maps a (concept, entity) embedding pair to a
+        fuzzy membership degree in ``[0, 1]``."""
         emb = th.cat([c_emb, e_emb], dim=-1)
-        # return th.sigmoid(self.fc_1(th.nn.functional.leaky_relu(self.fc_0(emb),
-        # negative_slope=0.1))).squeeze(dim=-1)
-        return th.sigmoid(self.fc_0(emb))
+        hidden = th.nn.functional.leaky_relu(self.fc_0(emb), negative_slope=0.1)
+        return th.sigmoid(self.fc_1(hidden))
 
     def _logical_and(self, x, y):
         if self.t_norm == 'product':
@@ -85,11 +95,11 @@ https://github.com/bio-ontology-research-group/FALCON
     def _logical_exist(self, r_fs, c_fs):
         ret = self._logical_and(r_fs, c_fs).max(dim=-1)[0].unsqueeze(-1)
         return ret.expand_as(r_fs)
-    
+
     def _logical_forall(self, r_fs, c_fs):
         ret = self._logical_residuum(r_fs, c_fs).min(dim=-1)[0].unsqueeze(-1)
         return ret.expand_as(r_fs)
-    
+
     def _get_c_fs_batch(self, c_emb, e_emb):
         e_emb = e_emb.unsqueeze(
             dim=0).repeat(c_emb.size()[0], 1, 1)
@@ -120,15 +130,15 @@ https://github.com/bio-ontology-research-group/FALCON
             return self._get_c_fs_batch(c_emb, e_emb), cur_index + 1
         elif expr_type == ClassExpressionType.OBJECT_SOME_VALUES_FROM:
             r_emb = self.r_embedding(x[:, cur_index])
-            # r_fs = self._get_r_fs(r_emb, e_emb)
-            r_fs = checkpoint.checkpoint(self._get_r_fs_batch, r_emb, e_emb)
+            r_fs = checkpoint.checkpoint(self._get_r_fs_batch, r_emb, e_emb,
+                                         use_reentrant=False)
             c_fs, next_index = self.forward_fs(
                 cexpr.getFiller(), x, e_emb, cur_index=cur_index + 1)
             return self._logical_exist(r_fs, c_fs), next_index
         elif expr_type == ClassExpressionType.OBJECT_ALL_VALUES_FROM:
             r_emb = self.r_embedding(x[:, cur_index])
-            # r_fs = self._get_r_fs(r_emb, e_emb)
-            r_fs = checkpoint.checkpoint(self._get_r_fs_batch, r_emb, e_emb)
+            r_fs = checkpoint.checkpoint(self._get_r_fs_batch, r_emb, e_emb,
+                                         use_reentrant=False)
             c_fs, next_index = self.forward_fs(
                 cexpr.getFiller(), x, e_emb, cur_index=cur_index + 1)
             return self._logical_forall(r_fs, c_fs), next_index
@@ -163,11 +173,15 @@ https://github.com/bio-ontology-research-group/FALCON
 
     def forward(self, axiom, x, e_emb, stage='train'):
         if isinstance(axiom, OWLSubClassOfAxiom):
-            C = axiom.getSubClass(),
+            # C ⊑ D is violated where C holds and D does not, i.e. on C ⊓ ¬D. We walk
+            # the sub- and super-class expressions sequentially (rather than rebuilding
+            # an intersection, whose operands OWLAPI would reorder) so that the columns
+            # of ``x`` are consumed in the same order they were produced.
+            C = axiom.getSubClass()
             D = axiom.getSuperClass()
-            cexpr = self.adapter.create_object_intersection_of(
-                C[0], self.adapter.create_complement_of(D))
-            fs, _ = self.forward_fs(cexpr, x, e_emb)
+            c_fs, next_index = self.forward_fs(C, x, e_emb)
+            d_fs, _ = self.forward_fs(D, x, e_emb, cur_index=next_index)
+            fs = self._logical_and(c_fs, self._logical_not(d_fs))
             return self.get_cc_loss(fs).mean()
         elif isinstance(axiom, OWLEquivalentClassesAxiom):
             cexprs = axiom.getClassExpressionsAsList()
@@ -178,10 +192,13 @@ https://github.com/bio-ontology-research-group/FALCON
             fs2 = self._logical_and(self._logical_not(c_fs), d_fs)
             return self.get_cc_loss(fs1).mean() + self.get_cc_loss(fs2).mean()
         elif isinstance(axiom, OWLDisjointClassesAxiom):
+            # C and D are disjoint iff their intersection C ⊓ D is unsatisfiable. Walk the
+            # two expressions sequentially to consume the columns of ``x`` in order.
             cexprs = axiom.getClassExpressionsAsList()
             C, D = cexprs[0], cexprs[1]
-            cexpr = self.adapter.create_object_intersection_of(C, D)
-            fs, _ = self.forward_fs(cexpr, x, e_emb)
+            c_fs, next_index = self.forward_fs(C, x, e_emb)
+            d_fs, _ = self.forward_fs(D, x, e_emb, cur_index=next_index)
+            fs = self._logical_and(c_fs, d_fs)
             return self.get_cc_loss(fs).mean()
         elif isinstance(axiom, OWLClassAssertionAxiom):
             x = x.unsqueeze(dim=1)

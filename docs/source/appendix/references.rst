@@ -19,6 +19,8 @@ References
 
 .. [xiong2022] Xiong, B., Potyka, N., Tran, TK., Nayyeri, M., Staab, S. (2022). Faithful Embeddings for EL++ Knowledge Bases. In: Sattler, U., et al. The Semantic Web – ISWC 2022. ISWC 2022. Lecture Notes in Computer Science, vol 13489. Springer, Cham. https://doi.org/10.1007/978-3-031-19433-7_2
 
+.. [falcon2022] Hinnerichs, T., Tang, Z., Peng, X., Zhang, X., & Hoehndorf, R. (2022). `FALCON: Sound and Complete Neural Semantic Entailment over ALC Ontologies <https://arxiv.org/abs/2208.07628>`_. ArXiv, abs/2208.07628.
+
 .. [brieulle2022] Ludovic Brieulle, Chan Le Duc, & Pascal Vaillant (2022). Reasoning in the Description Logic ALC under Category Semantics (Extended Abstract). In Proceedings of the 35th International Workshop on Description Logics (DL 2022) co-located with Federated Logic Conference (FLoC 2022), Haifa, Israel, August 7th to 10th, 2022. CEUR-WS.org.
 
 .. [chen2025] J. Chen, O. Mashkova, F. Zhapa-Camacho, R. Hoehndorf, Y. He and I. Horrocks, "Ontology Embedding: A Survey of Methods, Applications and Resources," in IEEE Transactions on Knowledge and Data Engineering, vol. 37, no. 7, pp. 4193-4212, July 2025, doi: 10.1109/TKDE.2025.3559023
