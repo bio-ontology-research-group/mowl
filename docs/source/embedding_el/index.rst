@@ -329,47 +329,6 @@ After training, you can evaluate the model on the testing set:
 
 The ``metrics`` dictionary contains ranking-based metrics such as mean rank (``mr``), filtered mean rank (``f_mr``), and AUC (``auc``).
 
-Embedding the ALC language with FALCON
----------------------------------------
-
-Beyond :math:`\mathcal{EL}`, mOWL provides :class:`FALCON <mowl.models.FALCONModel>` [falcon2022]_, a model for the more expressive :math:`\mathcal{ALC}` description logic (which adds negation, disjunction and universal restrictions). FALCON interprets every class expression as a *fuzzy set* over a collection of named and sampled anonymous entities, and scores axioms through fuzzy logical operators. Its training objective combines a TBox term and two ABox terms, weighted by ``alpha`` and ``beta``:
-
-.. testcode::
-
-   from mowl.datasets.builtin import FamilyDataset
-   from mowl.models import FALCONModel
-
-   dataset = FamilyDataset()
-   model = FALCONModel(dataset, embed_dim=20, anon_e=4, alpha=0.5, beta=0.5)
-   model.train(epochs=2, validate_every=1)
-
-.. testoutput::
-   :hide:
-
-   ...
-
-The learned fuzzy model can be inspected with :class:`FALCONVisualizer <mowl.visualization.FALCONVisualizer>`, which renders a membership heatmap in the style of Figure 1 of the FALCON paper — the degree to which each concept holds for each (named or anonymous) entity:
-
-.. testcode::
-
-   from mowl.visualization import FALCONVisualizer
-
-   visualizer = FALCONVisualizer(model)
-   matrix, concepts, entities = visualizer.membership_matrix(n_anon=4)
-
-.. testoutput::
-   :hide:
-
-   ...
-
-The :doc:`FALCON Family example <../examples/elmodels/plot_4_falcon>` reproduces Figure 1 of the FALCON paper: training on a family ontology with one individual per concept yields a model in which each individual is a member of its asserted concept *and* of every super-concept entailed by the TBox.
-
-.. figure:: ../examples/elmodels/images/falcon_family_heatmap.png
-   :alt: FALCON concept-by-entity membership heatmap on the Family ontology
-   :align: center
-
-   FALCON membership degrees on the Family ontology (dark = membership close to 1). For example, ``boy_0`` is a member of ``Boy``, ``Child``, ``Male`` and ``Person``, while ``Nothing`` is empty and ``Thing`` is universal.
-
 You can also access the learned embeddings:
 
 .. testcode::
