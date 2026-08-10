@@ -26,3 +26,5 @@ References
 .. [chen2025] J. Chen, O. Mashkova, F. Zhapa-Camacho, R. Hoehndorf, Y. He and I. Horrocks, "Ontology Embedding: A Survey of Methods, Applications and Resources," in IEEE Transactions on Knowledge and Data Engineering, vol. 37, no. 7, pp. 4193-4212, July 2025, doi: 10.1109/TKDE.2025.3559023
 
 .. [hoehndorf2025] Hoehndorf, R., Pesquita, C., & Zhapa-Camacho, F. (2025). Neuro-Symbolic AI in Life Sciences. In Frontiers in Artificial Intelligence and Applications. Frontiers in Artificial Intelligence and Applications. doi:10.3233/faia250239
+
+.. [zhapa2026] Zhapa-Camacho, F., Muhammed, N., & Hoehndorf, R. Beyond similarity: inductive gene--disease associations as link prediction. Manuscript in preparation. *(Placeholder — update on publication, see* `#143 <https://github.com/bio-ontology-research-group/mowl/issues/143>`_ *.)*
