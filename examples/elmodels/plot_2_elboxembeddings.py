@@ -37,14 +37,14 @@ import torch as th
 # ---------------------------------
 #
 # ELBoxEmbeddings defines a geometric modelling for all the GCIs in the EL language.
-# The implementation of ELEmbeddings module can be found at :class:`mowl.nn.el.elem.module.ELBoxModule`
+# The implementation of the module can be found at :class:`mowl.nn.ELBEModule`
 
 # %%
 #
 # ELBoxEmbeddings model
 # ----------------------
 #
-# The module :class:`mowl.nn.el.elem.module.ELBoxModule` is used in the :class:`mowl.models.elboxembeddings.model.ELBoxEmbeddings`.
+# The module :class:`mowl.nn.ELBEModule` is used in the :class:`mowl.models.ELBE`.
 # In the use case of this example, we will test over a biological problem, which is
 # protein-protein interactions. Given two proteins :math:`p_1,p_2`, the phenomenon
 # ":math:`p_1` interacts with :math:`p_2`" is encoded using GCI 2 as:
@@ -52,7 +52,7 @@ import torch as th
 # .. math::
 #    p_1 \sqsubseteq \exists interacts\_with. p_2
 #
-# For that, we can use the class :class:`mowl.models.elembeddings.examples.model_ppi.ELBoxPPI` mode, which uses the :class:`mowl.datasets.builtin.PPIYeastSlimDataset` dataset.
+# For that, we can use the class :class:`mowl.models.elbe.examples.model_ppi.ELBEPPI`, which uses the :class:`mowl.datasets.builtin.PPIYeastSlimDataset` dataset.
 
 
 
@@ -62,21 +62,20 @@ import torch as th
 
 
 from mowl.datasets.builtin import PPIYeastSlimDataset
-from mowl.models.elboxembeddings.examples.model_ppi import ELBoxPPI
+from mowl.models.elbe.examples.model_ppi import ELBEPPI
 
 dataset = PPIYeastSlimDataset()
 
-model = ELBoxPPI(dataset,
-                 embed_dim=30,
-                 margin=-0.05,
-                 reg_norm=1,
-                 learning_rate=0.001,
-                 epochs=20,
-                 batch_size=20000,
-                 model_filepath=None,
-                 device='cpu')
+model = ELBEPPI(dataset,
+                embed_dim=30,
+                margin=-0.05,
+                reg_norm=1,
+                learning_rate=0.001,
+                batch_size=20000,
+                model_filepath=None,
+                device='cuda' if th.cuda.is_available() else 'cpu')
 
-model.train()
+model.train(epochs=20)
 
 
 
@@ -85,10 +84,9 @@ model.train()
 # ----------------------
 #
 # Now, it is time to evaluate embeddings. For this, we use the
-# :class:`ModelRankBasedEvaluator <mowl.evaluation.ModelRankBasedEvaluator>` class.
+# :class:`PPIEvaluator <mowl.evaluation.PPIEvaluator>` class, which
+# :class:`ELBEPPI <mowl.models.elbe.examples.model_ppi.ELBEPPI>` already sets up
+# for us.
 
 
-from mowl.evaluation import PPIEvaluator
-
-model.set_evaluator(PPIEvaluator)
 model.evaluate(dataset.testing)
