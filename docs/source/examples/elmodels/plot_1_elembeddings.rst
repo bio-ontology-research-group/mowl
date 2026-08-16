@@ -92,7 +92,7 @@ For that, we can use the class :class:`mowl.models.elembeddings.examples.model_p
 Training the model
 -------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 65-85
+.. GENERATED FROM PYTHON SOURCE LINES 65-84
 
 .. code-block:: Python
 
@@ -108,12 +108,11 @@ Training the model
                     margin=0.1,
                     reg_norm=1,
                     learning_rate=0.001,
-                    epochs=20,
                     batch_size=20000,
                     model_filepath=None,
-                    device='cuda')
+                    device='cuda' if th.cuda.is_available() else 'cpu')
 
-    model.train()
+    model.train(epochs=20)
 
 
 
@@ -124,29 +123,57 @@ Training the model
 
  .. code-block:: none
 
-      0%|          | 0/20 [00:00<?, ?it/s]      5%|▌         | 1/20 [00:14<04:42, 14.84s/it]     70%|███████   | 14/20 [00:14<00:04,  1.31it/s]    100%|██████████| 20/20 [00:14<00:00,  1.33it/s]
+    You are using the default training method. If you want to use a customized training method (e.g., different negative sampling, etc.), please override the appropriate methods in a subclass.
+    Training datasets: 
+            gci0: 161
+            gci1: 1
+            gci2: 250030
+            gci3: 1
+            gci0_bot: 0
+            gci1_bot: 0
+            gci3_bot: 0
 
-    1
+      0%|          | 0/20 [00:00<?, ?it/s]Epoch 1: Train loss: 4.032718658447266 Valid loss: 1.6189810037612915
+      5%|▌         | 1/20 [00:03<01:11,  3.79s/it]Epoch 2: Train loss: 4.002584934234619 Valid loss: 1.6152640581130981
+     10%|█         | 2/20 [00:04<00:30,  1.69s/it]Epoch 3: Train loss: 3.9678056240081787 Valid loss: 1.6116418838500977
+     15%|█▌        | 3/20 [00:04<00:17,  1.02s/it]Epoch 4: Train loss: 3.93521785736084 Valid loss: 1.6081664562225342
+     20%|██        | 4/20 [00:04<00:11,  1.35it/s]Epoch 5: Train loss: 3.902604341506958 Valid loss: 1.6048774719238281
+     25%|██▌       | 5/20 [00:04<00:08,  1.79it/s]Epoch 6: Train loss: 3.8699162006378174 Valid loss: 1.6018649339675903
+     30%|███       | 6/20 [00:04<00:06,  2.33it/s]Epoch 7: Train loss: 3.837048053741455 Valid loss: 1.5991085767745972
+     35%|███▌      | 7/20 [00:05<00:04,  2.66it/s]Epoch 8: Train loss: 3.803450107574463 Valid loss: 1.59657621383667
+     40%|████      | 8/20 [00:05<00:03,  3.11it/s]Epoch 9: Train loss: 3.7711679935455322 Valid loss: 1.5941896438598633
+     45%|████▌     | 9/20 [00:05<00:03,  3.53it/s]Epoch 10: Train loss: 3.7386820316314697 Valid loss: 1.5919206142425537
+     50%|█████     | 10/20 [00:05<00:02,  3.83it/s]Epoch 11: Train loss: 3.7056777477264404 Valid loss: 1.589721441268921
+     55%|█████▌    | 11/20 [00:06<00:02,  4.29it/s]Epoch 12: Train loss: 3.673570394515991 Valid loss: 1.5875935554504395
+     60%|██████    | 12/20 [00:06<00:01,  4.42it/s]Epoch 13: Train loss: 3.641126871109009 Valid loss: 1.585521936416626
+     65%|██████▌   | 13/20 [00:06<00:01,  4.71it/s]Epoch 14: Train loss: 3.6087262630462646 Valid loss: 1.5835174322128296
+     70%|███████   | 14/20 [00:06<00:01,  5.02it/s]Epoch 15: Train loss: 3.5768685340881348 Valid loss: 1.5815916061401367
+     75%|███████▌  | 15/20 [00:06<00:00,  5.10it/s]Epoch 16: Train loss: 3.544750213623047 Valid loss: 1.5797454118728638
+     80%|████████  | 16/20 [00:06<00:00,  5.24it/s]Epoch 17: Train loss: 3.512906074523926 Valid loss: 1.5779705047607422
+     85%|████████▌ | 17/20 [00:07<00:00,  5.25it/s]Epoch 18: Train loss: 3.4807231426239014 Valid loss: 1.5762771368026733
+     90%|█████████ | 18/20 [00:07<00:00,  5.28it/s]Epoch 19: Train loss: 3.44852352142334 Valid loss: 1.5746604204177856
+     95%|█████████▌| 19/20 [00:07<00:00,  5.27it/s]Epoch 20: Train loss: 3.4168152809143066 Valid loss: 1.5730987787246704
+    100%|██████████| 20/20 [00:07<00:00,  5.34it/s]    100%|██████████| 20/20 [00:07<00:00,  2.60it/s]
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 86-91
+
+.. GENERATED FROM PYTHON SOURCE LINES 85-92
 
 Evaluating the model
 ----------------------
 
 Now, it is time to evaluate embeddings. For this, we use the
-:class:`ModelRankBasedEvaluator <mowl.evaluation.ModelRankBasedEvaluator>` class.
+:class:`PPIEvaluator <mowl.evaluation.PPIEvaluator>` class, which
+:class:`ELEmPPI <mowl.models.elembeddings.examples.model_ppi.ELEmPPI>` already
+sets up for us.
 
-.. GENERATED FROM PYTHON SOURCE LINES 91-99
+.. GENERATED FROM PYTHON SOURCE LINES 92-97
 
 .. code-block:: Python
 
 
 
-    from mowl.evaluation import PPIEvaluator
-
-    model.set_evaluator(PPIEvaluator)
     model.evaluate(dataset.testing)
 
     print(model.metrics)
@@ -158,7 +185,7 @@ Now, it is time to evaluate embeddings. For this, we use the
 
  .. code-block:: none
 
-    {'mr': 2464.669435215947, 'mrr': 0.0024686094502139495, 'f_mr': 2464.669435215947, 'f_mrr': 0.0024686094502139495, 'auc': 0.5919726009910654, 'f_auc': 0.5919726009910654, 'hits@1': 0.00016611295681063124, 'hits@3': 0.0009966777408637873, 'hits@10': 0.0027408637873754154, 'hits@50': 0.016777408637873754, 'hits@100': 0.03106312292358804, 'f_hits@1': 0.00016611295681063124, 'f_hits@3': 0.0009966777408637873, 'f_hits@10': 0.0027408637873754154, 'f_hits@50': 0.016777408637873754, 'f_hits@100': 0.03106312292358804}
+    {'mr': 2522.8355481727576, 'mrr': 0.0020318507143382647, 'f_mr': 2522.8355481727576, 'f_mrr': 0.0020318507143382647, 'auc': 0.5823392599912623, 'f_auc': 0.5823392599912623, 'hits@1': 0.0, 'hits@3': 0.0004983388704318936, 'hits@10': 0.002325581395348837, 'hits@50': 0.013953488372093023, 'hits@100': 0.027990033222591363, 'f_hits@1': 0.0, 'f_hits@3': 0.0004983388704318936, 'f_hits@10': 0.002325581395348837, 'f_hits@50': 0.013953488372093023, 'f_hits@100': 0.027990033222591363}
 
 
 
@@ -166,9 +193,9 @@ Now, it is time to evaluate embeddings. For this, we use the
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 36.813 seconds)
+   **Total running time of the script:** (0 minutes 41.451 seconds)
 
-**Estimated memory usage:**  2066 MB
+**Estimated memory usage:**  3119 MB
 
 
 .. _sphx_glr_download_examples_elmodels_plot_1_elembeddings.py:

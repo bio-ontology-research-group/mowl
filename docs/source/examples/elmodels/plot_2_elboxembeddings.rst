@@ -60,14 +60,14 @@ ELBoxEmbeddings (PyTorch) module
 ---------------------------------
 
 ELBoxEmbeddings defines a geometric modelling for all the GCIs in the EL language.
-The implementation of ELEmbeddings module can be found at :class:`mowl.nn.el.elem.module.ELBoxModule`
+The implementation of the module can be found at :class:`mowl.nn.ELBEModule`
 
 .. GENERATED FROM PYTHON SOURCE LINES 43-55
 
 ELBoxEmbeddings model
 ----------------------
 
-The module :class:`mowl.nn.el.elem.module.ELBoxModule` is used in the :class:`mowl.models.elboxembeddings.model.ELBoxEmbeddings`.
+The module :class:`mowl.nn.ELBEModule` is used in the :class:`mowl.models.ELBE`.
 In the use case of this example, we will test over a biological problem, which is
 protein-protein interactions. Given two proteins :math:`p_1,p_2`, the phenomenon
 ":math:`p_1` interacts with :math:`p_2`" is encoded using GCI 2 as:
@@ -75,35 +75,34 @@ protein-protein interactions. Given two proteins :math:`p_1,p_2`, the phenomenon
 .. math::
    p_1 \sqsubseteq \exists interacts\_with. p_2
 
-For that, we can use the class :class:`mowl.models.elembeddings.examples.model_ppi.ELBoxPPI` mode, which uses the :class:`mowl.datasets.builtin.PPIYeastSlimDataset` dataset.
+For that, we can use the class :class:`mowl.models.elbe.examples.model_ppi.ELBEPPI`, which uses the :class:`mowl.datasets.builtin.PPIYeastSlimDataset` dataset.
 
 .. GENERATED FROM PYTHON SOURCE LINES 60-62
 
 Training the model
 -------------------
 
-.. GENERATED FROM PYTHON SOURCE LINES 62-83
+.. GENERATED FROM PYTHON SOURCE LINES 62-82
 
 .. code-block:: Python
 
 
 
     from mowl.datasets.builtin import PPIYeastSlimDataset
-    from mowl.models.elboxembeddings.examples.model_ppi import ELBoxPPI
+    from mowl.models.elbe.examples.model_ppi import ELBEPPI
 
     dataset = PPIYeastSlimDataset()
 
-    model = ELBoxPPI(dataset,
-                     embed_dim=30,
-                     margin=-0.05,
-                     reg_norm=1,
-                     learning_rate=0.001,
-                     epochs=20,
-                     batch_size=20000,
-                     model_filepath=None,
-                     device='cpu')
+    model = ELBEPPI(dataset,
+                    embed_dim=30,
+                    margin=-0.05,
+                    reg_norm=1,
+                    learning_rate=0.001,
+                    batch_size=20000,
+                    model_filepath=None,
+                    device='cuda' if th.cuda.is_available() else 'cpu')
 
-    model.train()
+    model.train(epochs=20)
 
 
 
@@ -115,29 +114,47 @@ Training the model
 
  .. code-block:: none
 
-      0%|          | 0/20 [00:00<?, ?it/s]      5%|▌         | 1/20 [00:00<00:05,  3.60it/s]     10%|█         | 2/20 [00:00<00:04,  4.13it/s]     15%|█▌        | 3/20 [00:00<00:03,  4.37it/s]     20%|██        | 4/20 [00:00<00:03,  4.53it/s]     25%|██▌       | 5/20 [00:01<00:03,  4.65it/s]     30%|███       | 6/20 [00:01<00:02,  4.70it/s]     35%|███▌      | 7/20 [00:01<00:02,  4.50it/s]     40%|████      | 8/20 [00:01<00:02,  4.57it/s]     45%|████▌     | 9/20 [00:01<00:02,  4.60it/s]     50%|█████     | 10/20 [00:02<00:02,  4.57it/s]     55%|█████▌    | 11/20 [00:02<00:01,  4.61it/s]     60%|██████    | 12/20 [00:02<00:01,  4.66it/s]     65%|██████▌   | 13/20 [00:02<00:01,  4.55it/s]     70%|███████   | 14/20 [00:03<00:01,  4.60it/s]     75%|███████▌  | 15/20 [00:03<00:01,  4.64it/s]     80%|████████  | 16/20 [00:03<00:00,  4.50it/s]     85%|████████▌ | 17/20 [00:03<00:00,  4.59it/s]     90%|█████████ | 18/20 [00:03<00:00,  4.46it/s]     95%|█████████▌| 19/20 [00:04<00:00,  4.42it/s]    100%|██████████| 20/20 [00:04<00:00,  4.33it/s]    100%|██████████| 20/20 [00:04<00:00,  4.49it/s]
+      0%|          | 0/20 [00:00<?, ?it/s]Epoch 1: Train loss: 7.06326961517334 Valid loss: 1.6271698474884033
+      5%|▌         | 1/20 [00:03<01:13,  3.86s/it]Epoch 2: Train loss: 6.909432888031006 Valid loss: 1.6166011095046997
+     10%|█         | 2/20 [00:04<00:31,  1.74s/it]Epoch 3: Train loss: 6.758185863494873 Valid loss: 1.6060813665390015
+     15%|█▌        | 3/20 [00:04<00:18,  1.06s/it]Epoch 4: Train loss: 6.609779357910156 Valid loss: 1.5956122875213623
+     20%|██        | 4/20 [00:04<00:11,  1.35it/s]Epoch 5: Train loss: 6.46437931060791 Valid loss: 1.5851964950561523
+     25%|██▌       | 5/20 [00:04<00:08,  1.79it/s]Epoch 6: Train loss: 6.321709632873535 Valid loss: 1.5748381614685059
+     30%|███       | 6/20 [00:05<00:06,  2.22it/s]Epoch 7: Train loss: 6.182257175445557 Valid loss: 1.5645393133163452
+     35%|███▌      | 7/20 [00:05<00:05,  2.45it/s]Epoch 8: Train loss: 6.045461177825928 Valid loss: 1.5543031692504883
+     40%|████      | 8/20 [00:05<00:04,  2.80it/s]Epoch 9: Train loss: 5.911707878112793 Valid loss: 1.544130563735962
+     45%|████▌     | 9/20 [00:05<00:03,  2.85it/s]Epoch 10: Train loss: 5.780357360839844 Valid loss: 1.5340238809585571
+     50%|█████     | 10/20 [00:06<00:03,  3.21it/s]Epoch 11: Train loss: 5.652266979217529 Valid loss: 1.5239850282669067
+     55%|█████▌    | 11/20 [00:06<00:02,  3.61it/s]Epoch 12: Train loss: 5.526937961578369 Valid loss: 1.5140175819396973
+     60%|██████    | 12/20 [00:06<00:02,  3.65it/s]Epoch 13: Train loss: 5.404212951660156 Valid loss: 1.5041214227676392
+     65%|██████▌   | 13/20 [00:06<00:01,  3.71it/s]Epoch 14: Train loss: 5.284252166748047 Valid loss: 1.4942982196807861
+     70%|███████   | 14/20 [00:07<00:01,  3.78it/s]Epoch 15: Train loss: 5.166965961456299 Valid loss: 1.4845489263534546
+     75%|███████▌  | 15/20 [00:07<00:01,  3.89it/s]Epoch 16: Train loss: 5.052529811859131 Valid loss: 1.4748753309249878
+     80%|████████  | 16/20 [00:07<00:01,  3.97it/s]Epoch 17: Train loss: 4.940925598144531 Valid loss: 1.4652786254882812
+     85%|████████▌ | 17/20 [00:07<00:00,  4.06it/s]Epoch 18: Train loss: 4.831562042236328 Valid loss: 1.4557602405548096
+     90%|█████████ | 18/20 [00:08<00:00,  3.44it/s]Epoch 19: Train loss: 4.725268840789795 Valid loss: 1.4463204145431519
+     95%|█████████▌| 19/20 [00:08<00:00,  3.10it/s]Epoch 20: Train loss: 4.6211981773376465 Valid loss: 1.4369593858718872
+    100%|██████████| 20/20 [00:09<00:00,  3.10it/s]    100%|██████████| 20/20 [00:09<00:00,  2.22it/s]
 
-    1
 
 
 
-.. GENERATED FROM PYTHON SOURCE LINES 84-89
+.. GENERATED FROM PYTHON SOURCE LINES 83-90
 
 Evaluating the model
 ----------------------
 
 Now, it is time to evaluate embeddings. For this, we use the
-:class:`ModelRankBasedEvaluator <mowl.evaluation.ModelRankBasedEvaluator>` class.
+:class:`PPIEvaluator <mowl.evaluation.PPIEvaluator>` class, which
+:class:`ELBEPPI <mowl.models.elbe.examples.model_ppi.ELBEPPI>` already sets up
+for us.
 
-.. GENERATED FROM PYTHON SOURCE LINES 89-95
+.. GENERATED FROM PYTHON SOURCE LINES 90-93
 
 .. code-block:: Python
 
 
 
-    from mowl.evaluation import PPIEvaluator
-
-    model.set_evaluator(PPIEvaluator)
     model.evaluate(dataset.testing)
 
 
@@ -149,9 +166,9 @@ Now, it is time to evaluate embeddings. For this, we use the
 
 .. rst-class:: sphx-glr-timing
 
-   **Total running time of the script:** (0 minutes 37.188 seconds)
+   **Total running time of the script:** (0 minutes 36.113 seconds)
 
-**Estimated memory usage:**  1681 MB
+**Estimated memory usage:**  638 MB
 
 
 .. _sphx_glr_download_examples_elmodels_plot_2_elboxembeddings.py:
