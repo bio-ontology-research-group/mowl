@@ -366,78 +366,6 @@
    "name": "FamilyDataset"
   }
  ],
- "HTML": [
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "IPython.core.display",
-   "module_short": "IPython.core.display",
-   "name": "HTML"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "IPython.core",
-   "module_short": "IPython.core",
-   "name": "HTML"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "IPython",
-   "module_short": "IPython",
-   "name": "HTML"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "IPython.core.display",
-   "module_short": "IPython.core.display",
-   "name": "TextDisplayObject"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "IPython.core",
-   "module_short": "IPython.core",
-   "name": "TextDisplayObject"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "IPython",
-   "module_short": "IPython",
-   "name": "TextDisplayObject"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "IPython.core.display",
-   "module_short": "IPython.core.display",
-   "name": "DisplayObject"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "IPython.core",
-   "module_short": "IPython.core",
-   "name": "DisplayObject"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "IPython",
-   "module_short": "IPython",
-   "name": "DisplayObject"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "IPython.display",
-   "module_short": "IPython.display",
-   "name": "HTML"
-  }
- ],
  "N_CLASSES": [
   {
    "is_class": false,
@@ -517,6 +445,54 @@
    "name": "_local_name"
   }
  ],
+ "_os.path.abspath": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "os.path",
+   "module_short": "os.path",
+   "name": "abspath"
+  }
+ ],
+ "_os.path.dirname": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "os.path",
+   "module_short": "os.path",
+   "name": "dirname"
+  }
+ ],
+ "_os.path.join": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "os.path",
+   "module_short": "os.path",
+   "name": "join"
+  }
+ ],
  "_role_indices": [
   {
    "is_class": false,
@@ -551,48 +527,48 @@
    "name": "FuncAnimation"
   }
  ],
- "ani.to_jshtml": [
+ "ani.save": [
   {
    "is_class": false,
    "is_explicit": false,
    "module": "matplotlib.animation",
    "module_short": "matplotlib.animation",
-   "name": "FuncAnimation.to_jshtml"
+   "name": "FuncAnimation.save"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "matplotlib",
    "module_short": "matplotlib",
-   "name": "FuncAnimation.to_jshtml"
+   "name": "FuncAnimation.save"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "matplotlib.animation",
    "module_short": "matplotlib.animation",
-   "name": "TimedAnimation.to_jshtml"
+   "name": "TimedAnimation.save"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "matplotlib",
    "module_short": "matplotlib",
-   "name": "TimedAnimation.to_jshtml"
+   "name": "TimedAnimation.save"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "matplotlib.animation",
    "module_short": "matplotlib.animation",
-   "name": "Animation.to_jshtml"
+   "name": "Animation.save"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "matplotlib",
    "module_short": "matplotlib",
-   "name": "Animation.to_jshtml"
+   "name": "Animation.save"
   }
  ],
  "animation.FuncAnimation": [
