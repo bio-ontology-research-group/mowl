@@ -6,6 +6,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+## [2.1.0] - 2026-08-16
 ### Added
 - Added the `GDAProjector`, which unfolds nested existential restrictions into edges whose relation is the composition of the roles traversed, for gene-disease association graphs [#142][i142].
 - Added the `FALCON` model (`FALCONModel`) for embedding the ALC language, with an `ALCModule` neural base class, a `FALCONSubsumptionEvaluator`, and a `FALCONVisualizer` membership heatmap [#71][i71].
@@ -18,8 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Documented the available EL models (`ELEmbeddings`, `ELBE`, `BoxSquaredEL`, `BoxEL`) in the embedding guide.
 - Replaced the interactive jshtml animation with an autoplaying GIF in the gallery and docs.
 - Bumped CI GitHub Actions (setup-java, setup-python, checkout, upload-artifact, download-artifact, github-script, sigstore, conda setup-miniconda).
+- Raised build requirements to `setuptools >=83.0.0` and `setuptools-scm >=10.2.1`.
 ### Removed
 - Removed ontology load caches that polluted shared test fixtures.
+### Fixed
+- Fixed `BaseRankingEvaluator` scoring the wrong entities when the evaluation pool is a subset of the ontology's classes. The swept column carried pool positions where the evaluation model expected global entity ids, so `GDAEvaluator`, `PPIEvaluator` and `SubsumptionEvaluator` silently produced meaningless ranking metrics [#146][i146].
+- Fixed the ALC documentation doctest by dropping empty `testoutput` blocks.
+- Repaired the `ELEmbeddings` and `ELBE` gallery examples, which had not been updated for the 2.0.0 API and could not run: `epochs` was passed to `__init__` instead of `train()`, and the ELBE example still imported `ELBoxPPI` from the removed `mowl.models.elboxembeddings` module. Their published evaluation metrics have been regenerated.
 
 ## [2.0.0] - 2026-05-12
 ### Added
@@ -155,7 +162,8 @@ Fixed issue related to importing graph-based models due to missing `__init__.py`
 - Walking methods accept optional `outfile` parameter and corpus extraction methods do not append by default.
 - Documentation updated and fixed some typos.
 
-[unreleased]: https://github.com/bio-ontology-research-group/mowl/compare/v2.0.0...HEAD
+[unreleased]: https://github.com/bio-ontology-research-group/mowl/compare/v2.1.0...HEAD
+[2.1.0]: https://github.com/bio-ontology-research-group/mowl/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/bio-ontology-research-group/mowl/compare/v1.0.3...v2.0.0
 [1.0.3]: https://github.com/bio-ontology-research-group/mowl/releases/tag/v1.0.3
 [1.0.2]: https://github.com/bio-ontology-research-group/mowl/releases/tag/v1.0.2
@@ -178,5 +186,6 @@ Fixed issue related to importing graph-based models due to missing `__init__.py`
 [i70]: https://github.com/bio-ontology-research-group/mowl/issues/70
 [i71]: https://github.com/bio-ontology-research-group/mowl/issues/71
 [i142]: https://github.com/bio-ontology-research-group/mowl/issues/142
+[i146]: https://github.com/bio-ontology-research-group/mowl/issues/146
 [i97]: https://github.com/bio-ontology-research-group/mowl/issues/97
 

@@ -86,7 +86,7 @@ The version is derived from git tags via `setuptools_scm` — **do not set versi
 - **MINOR** (`1.x.0`): new backwards-compatible features (new model, new dataset, new option) — released on the quarterly schedule.
 - **MAJOR** (`x.0.0`): breaking API changes (renamed classes, removed parameters, changed return types) — released on the quarterly schedule.
 
-Current released version: **v1.0.3** (see `CHANGELOG.md` and latest git tag).
+Current released version: **v2.1.0** (see `CHANGELOG.md` and latest git tag).
 
 ### Release cadence
 
