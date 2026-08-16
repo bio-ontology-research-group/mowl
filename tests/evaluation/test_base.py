@@ -458,7 +458,7 @@ class TestBaseRankingEvaluatorSomeEntitiesOnly(TestCase):
         true_fmrr = (f_mrr_c_c_head + f_mrr_c_d_head + f_mrr_c_c_tail + f_mrr_c_d_tail) / 4
 
         true_fauc = auc_from_mr(true_fmr, len(self.entities_of_interest))
-        
+
         self.assertEqual(mr, true_mr)
         self.assertEqual(fmr, true_fmr)
         self.assertEqual(mrr, true_mrr)
@@ -466,3 +466,98 @@ class TestBaseRankingEvaluatorSomeEntitiesOnly(TestCase):
 
         diff_fauc = abs(fauc - true_fauc)
         self.assertLess(diff_fauc, allowed_diff)
+
+
+class NonMonotonePredictionModel(th.nn.Module):
+    """Scores are deliberately not monotone in the entity index.
+
+    `PredictionModel` above increases with the entity index, which makes pool
+    positions and global entity ids order-isomorphic: swapping one id space for
+    the other shifts the scores but leaves the ranking untouched. The rows and
+    columns here are shuffled so that scoring the wrong id space reorders the
+    ranking, which is what [#146] needs in order to be observable.
+    """
+
+    def __init__(self):
+        super().__init__()
+
+        scores_matrix = {"a": [11, 12, 3, 4],
+                         "b": [13, 14, 7, 6],
+                         "c": [15, 16, 8, 10],
+                         "d": [1, 9, 2, 5]}
+
+        scores_tensor = th.tensor(list(scores_matrix.values()))
+        self.scores_tensor = th.nn.Parameter(scores_tensor, requires_grad=False)
+
+    def forward(self, x):
+        assert x.shape[1] == 2
+        head, tail = x[:, 0], x[:, 1]
+        return self.scores_tensor[head, tail]
+
+
+class TestBaseRankingEvaluatorSubsetIdSpace(TestCase):
+    """Regression tests for [#146].
+
+    When the evaluation pool is a subset of the entities, the swept column must
+    carry the pool's *global* entity ids, not its positions `0..n-1`. Feeding
+    positions makes the model score arbitrary entities while the metrics stay
+    plausible, so the failure is silent.
+    """
+
+    def setUp(self):
+        self.entities = ["a", "b", "c", "d"]
+        # Excludes "a", so pool position and global id differ by a non-zero offset.
+        self.entities_of_interest = ["b", "c", "d"]
+        self.test_set = [("d", "c"), ("d", "d")]
+
+        self.entity_to_id = {entity: i for i, entity in enumerate(self.entities)}
+        self.entities_of_interest_tensor = th.tensor(
+            [self.entity_to_id[entity] for entity in self.entities_of_interest], dtype=th.long)
+
+        self.test_set_tensor = th.tensor(
+            [(self.entity_to_id[head], self.entity_to_id[tail]) for head, tail in self.test_set])
+
+        self.evaluation_model = NonMonotonePredictionModel()
+
+    def test_head_centric_sweeps_global_tail_ids(self):
+        evaluator = BaseRankingEvaluator(self.entities_of_interest_tensor,
+                                         self.entities_of_interest_tensor, 2, "cpu")
+
+        metrics = evaluator.compute_ranking_metrics(self.evaluation_model,
+                                                    self.test_set_tensor,
+                                                    mode="head_centric")
+
+        # Row "d" restricted to the pool ids (b, c, d) is [9, 2, 5]. Scoring pool
+        # positions (a, b, c) instead would give [1, 9, 2] and a mean rank of 2.5.
+        rank_d_c = 1
+        rank_d_d = 2
+
+        true_mr = (rank_d_c + rank_d_d) / 2
+        true_mrr = (1 / rank_d_c + 1 / rank_d_d) / 2
+        true_auc = auc_from_mr(true_mr, len(self.entities_of_interest))
+
+        self.assertEqual(metrics["mr"], true_mr)
+        self.assertEqual(metrics["mrr"], true_mrr)
+        self.assertLess(abs(metrics["auc"] - true_auc), allowed_diff)
+
+    def test_tail_centric_sweeps_global_head_ids(self):
+        evaluator = BaseRankingEvaluator(self.entities_of_interest_tensor,
+                                         self.entities_of_interest_tensor, 2, "cpu")
+
+        metrics = evaluator.compute_ranking_metrics(self.evaluation_model,
+                                                    self.test_set_tensor,
+                                                    mode="tail_centric")
+
+        # Columns "c" and "d" restricted to the pool ids are [7, 8, 2] and
+        # [6, 10, 5]; the gold head "d" is lowest in both. Scoring pool positions
+        # instead ranks it last in both, for a mean rank of 3.
+        rank_d_c = 1
+        rank_d_d = 1
+
+        true_mr = (rank_d_c + rank_d_d) / 2
+        true_mrr = (1 / rank_d_c + 1 / rank_d_d) / 2
+        true_auc = auc_from_mr(true_mr, len(self.entities_of_interest))
+
+        self.assertEqual(metrics["mr"], true_mr)
+        self.assertEqual(metrics["mrr"], true_mrr)
+        self.assertLess(abs(metrics["auc"] - true_auc), allowed_diff)

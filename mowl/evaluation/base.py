@@ -110,7 +110,7 @@ class BaseRankingEvaluator():
 
         if mode in ["head_centric", "both"]:
             batch_heads = batch_heads.repeat_interleave(len(self.tails)).unsqueeze(1)
-            eval_tails = th.arange(len(self.tails), device=self.device).repeat(num_batch_heads).unsqueeze(1)
+            eval_tails = self.tails.repeat(num_batch_heads).unsqueeze(1)
             if batch_rels is None:
                 data = th.cat([batch_heads, eval_tails], dim=1)
             else:
@@ -122,7 +122,7 @@ class BaseRankingEvaluator():
 
         if mode in ["tail_centric", "both"]:
             batch_tails = batch_tails.repeat_interleave(len(self.heads)).unsqueeze(1)
-            eval_heads = th.arange(len(self.heads), device=self.device).repeat(num_batch_tails).unsqueeze(1)
+            eval_heads = self.heads.repeat(num_batch_tails).unsqueeze(1)
 
             if batch_rels is None:
                 data = th.cat([eval_heads, batch_tails], dim=1)
