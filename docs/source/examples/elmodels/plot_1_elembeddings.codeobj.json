@@ -113,57 +113,6 @@
    "name": "ELEmPPI"
   }
  ],
- "PPIEvaluator": [
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "mowl.evaluation.ppi",
-   "module_short": "mowl.evaluation",
-   "name": "PPIEvaluator"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "mowl.evaluation",
-   "module_short": "mowl.evaluation",
-   "name": "PPIEvaluator"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "mowl",
-   "module_short": "mowl",
-   "name": "PPIEvaluator"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "mowl.evaluation.base",
-   "module_short": "mowl.evaluation",
-   "name": "Evaluator"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "mowl.evaluation",
-   "module_short": "mowl.evaluation",
-   "name": "Evaluator"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "mowl",
-   "module_short": "mowl",
-   "name": "Evaluator"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "mowl.evaluation",
-   "module_short": "mowl.evaluation",
-   "name": "PPIEvaluator"
-  }
- ],
  "PPIYeastSlimDataset": [
   {
    "is_class": true,
@@ -343,6 +292,148 @@
    "name": "PPIYeastSlimDataset"
   }
  ],
+ "dataset.testing": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.datasets.builtin.ppi_yeast",
+   "module_short": "mowl.datasets.builtin",
+   "name": "PPIYeastSlimDataset.testing"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.datasets.builtin",
+   "module_short": "mowl.datasets.builtin",
+   "name": "PPIYeastSlimDataset.testing"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.datasets",
+   "module_short": "mowl.datasets",
+   "name": "PPIYeastSlimDataset.testing"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "PPIYeastSlimDataset.testing"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.datasets.builtin.ppi_yeast",
+   "module_short": "mowl.datasets.builtin",
+   "name": "PPIYeastDataset.testing"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.datasets.builtin",
+   "module_short": "mowl.datasets.builtin",
+   "name": "PPIYeastDataset.testing"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.datasets",
+   "module_short": "mowl.datasets",
+   "name": "PPIYeastDataset.testing"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "PPIYeastDataset.testing"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.datasets.base",
+   "module_short": "mowl.datasets",
+   "name": "RemoteDataset.testing"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.datasets",
+   "module_short": "mowl.datasets",
+   "name": "RemoteDataset.testing"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "RemoteDataset.testing"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.datasets.base",
+   "module_short": "mowl.datasets",
+   "name": "TarFileDataset.testing"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.datasets",
+   "module_short": "mowl.datasets",
+   "name": "TarFileDataset.testing"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "TarFileDataset.testing"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.datasets.base",
+   "module_short": "mowl.datasets",
+   "name": "PathDataset.testing"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.datasets",
+   "module_short": "mowl.datasets",
+   "name": "PathDataset.testing"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "PathDataset.testing"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.datasets.base",
+   "module_short": "mowl.datasets",
+   "name": "Dataset.testing"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.datasets",
+   "module_short": "mowl.datasets",
+   "name": "Dataset.testing"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "Dataset.testing"
+  }
+ ],
  "model": [
   {
    "is_class": false,
@@ -487,111 +578,111 @@
    "name": "Model.evaluate"
   }
  ],
- "model.set_evaluator": [
+ "model.metrics": [
   {
    "is_class": false,
    "is_explicit": false,
    "module": "mowl.models.elembeddings.examples.model_ppi",
    "module_short": "mowl.models.elembeddings.examples.model_ppi",
-   "name": "ELEmPPI.set_evaluator"
+   "name": "ELEmPPI.metrics"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "mowl.models.elembeddings.examples",
    "module_short": "mowl.models.elembeddings.examples",
-   "name": "ELEmPPI.set_evaluator"
+   "name": "ELEmPPI.metrics"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "mowl.models.elembeddings",
    "module_short": "mowl.models.elembeddings",
-   "name": "ELEmPPI.set_evaluator"
+   "name": "ELEmPPI.metrics"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "mowl.models",
    "module_short": "mowl.models",
-   "name": "ELEmPPI.set_evaluator"
+   "name": "ELEmPPI.metrics"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "mowl",
    "module_short": "mowl",
-   "name": "ELEmPPI.set_evaluator"
+   "name": "ELEmPPI.metrics"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "mowl.models.elembeddings.model",
    "module_short": "mowl.models.elembeddings.model",
-   "name": "ELEmbeddings.set_evaluator"
+   "name": "ELEmbeddings.metrics"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "mowl.models.elembeddings",
    "module_short": "mowl.models.elembeddings",
-   "name": "ELEmbeddings.set_evaluator"
+   "name": "ELEmbeddings.metrics"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "mowl.models",
    "module_short": "mowl.models",
-   "name": "ELEmbeddings.set_evaluator"
+   "name": "ELEmbeddings.metrics"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "mowl",
    "module_short": "mowl",
-   "name": "ELEmbeddings.set_evaluator"
+   "name": "ELEmbeddings.metrics"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "mowl.base_models.elmodel",
    "module_short": "mowl.base_models",
-   "name": "EmbeddingELModel.set_evaluator"
+   "name": "EmbeddingELModel.metrics"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "mowl.base_models",
    "module_short": "mowl.base_models",
-   "name": "EmbeddingELModel.set_evaluator"
+   "name": "EmbeddingELModel.metrics"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "mowl",
    "module_short": "mowl",
-   "name": "EmbeddingELModel.set_evaluator"
+   "name": "EmbeddingELModel.metrics"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "mowl.base_models.model",
    "module_short": "mowl.base_models",
-   "name": "Model.set_evaluator"
+   "name": "Model.metrics"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "mowl.base_models",
    "module_short": "mowl.base_models",
-   "name": "Model.set_evaluator"
+   "name": "Model.metrics"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "mowl",
    "module_short": "mowl",
-   "name": "Model.set_evaluator"
+   "name": "Model.metrics"
   }
  ],
  "model.train": [
@@ -710,13 +801,13 @@
    "name": "PPIYeastSlimDataset"
   }
  ],
- "mowl.evaluation.ModelRankBasedEvaluator": [
+ "mowl.evaluation.PPIEvaluator": [
   {
    "is_class": false,
    "is_explicit": true,
    "module": "mowl.evaluation",
    "module_short": "mowl.evaluation",
-   "name": "ModelRankBasedEvaluator"
+   "name": "PPIEvaluator"
   }
  ],
  "mowl.init_jvm": [
@@ -736,6 +827,13 @@
   }
  ],
  "mowl.models.elembeddings.examples.model_ppi.ELEmPPI": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "mowl.models.elembeddings.examples.model_ppi",
+   "module_short": "mowl.models.elembeddings.examples.model_ppi",
+   "name": "ELEmPPI"
+  },
   {
    "is_class": false,
    "is_explicit": true,
@@ -767,6 +865,22 @@
    "module": "mowl.nn.el.elem.module",
    "module_short": "mowl.nn.el.elem.module",
    "name": "ELEmModule"
+  }
+ ],
+ "th.cuda.is_available": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.cuda",
+   "module_short": "torch.cuda",
+   "name": "is_available"
   }
  ]
 }

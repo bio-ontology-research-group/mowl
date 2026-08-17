@@ -1,67 +1,67 @@
 {
- "ELBoxPPI": [
+ "ELBEPPI": [
   {
    "is_class": true,
    "is_explicit": false,
-   "module": "mowl.models.elboxembeddings.examples.model_ppi",
-   "module_short": "mowl.models.elboxembeddings.examples.model_ppi",
-   "name": "ELBoxPPI"
+   "module": "mowl.models.elbe.examples.model_ppi",
+   "module_short": "mowl.models.elbe.examples.model_ppi",
+   "name": "ELBEPPI"
   },
   {
    "is_class": true,
    "is_explicit": false,
-   "module": "mowl.models.elboxembeddings.examples",
-   "module_short": "mowl.models.elboxembeddings.examples",
-   "name": "ELBoxPPI"
+   "module": "mowl.models.elbe.examples",
+   "module_short": "mowl.models.elbe.examples",
+   "name": "ELBEPPI"
   },
   {
    "is_class": true,
    "is_explicit": false,
-   "module": "mowl.models.elboxembeddings",
-   "module_short": "mowl.models.elboxembeddings",
-   "name": "ELBoxPPI"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "mowl.models",
-   "module_short": "mowl.models",
-   "name": "ELBoxPPI"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "mowl",
-   "module_short": "mowl",
-   "name": "ELBoxPPI"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "mowl.models.elboxembeddings.model",
-   "module_short": "mowl.models.elboxembeddings.model",
-   "name": "ELBoxEmbeddings"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "mowl.models.elboxembeddings",
-   "module_short": "mowl.models.elboxembeddings",
-   "name": "ELBoxEmbeddings"
+   "module": "mowl.models.elbe",
+   "module_short": "mowl.models.elbe",
+   "name": "ELBEPPI"
   },
   {
    "is_class": true,
    "is_explicit": false,
    "module": "mowl.models",
    "module_short": "mowl.models",
-   "name": "ELBoxEmbeddings"
+   "name": "ELBEPPI"
   },
   {
    "is_class": true,
    "is_explicit": false,
    "module": "mowl",
    "module_short": "mowl",
-   "name": "ELBoxEmbeddings"
+   "name": "ELBEPPI"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.models.elbe.model",
+   "module_short": "mowl.models.elbe.model",
+   "name": "ELBE"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.models.elbe",
+   "module_short": "mowl.models.elbe",
+   "name": "ELBE"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl.models",
+   "module_short": "mowl.models",
+   "name": "ELBE"
+  },
+  {
+   "is_class": true,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "ELBE"
   },
   {
    "is_class": true,
@@ -108,60 +108,9 @@
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "mowl.models.elboxembeddings.examples.model_ppi",
-   "module_short": "mowl.models.elboxembeddings.examples.model_ppi",
-   "name": "ELBoxPPI"
-  }
- ],
- "PPIEvaluator": [
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "mowl.evaluation.ppi",
-   "module_short": "mowl.evaluation",
-   "name": "PPIEvaluator"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "mowl.evaluation",
-   "module_short": "mowl.evaluation",
-   "name": "PPIEvaluator"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "mowl",
-   "module_short": "mowl",
-   "name": "PPIEvaluator"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "mowl.evaluation.base",
-   "module_short": "mowl.evaluation",
-   "name": "Evaluator"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "mowl.evaluation",
-   "module_short": "mowl.evaluation",
-   "name": "Evaluator"
-  },
-  {
-   "is_class": true,
-   "is_explicit": false,
-   "module": "mowl",
-   "module_short": "mowl",
-   "name": "Evaluator"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "mowl.evaluation",
-   "module_short": "mowl.evaluation",
-   "name": "PPIEvaluator"
+   "module": "mowl.models.elbe.examples.model_ppi",
+   "module_short": "mowl.models.elbe.examples.model_ppi",
+   "name": "ELBEPPI"
   }
  ],
  "PPIYeastSlimDataset": [
@@ -343,106 +292,248 @@
    "name": "PPIYeastSlimDataset"
   }
  ],
- "model": [
+ "dataset.testing": [
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "mowl.models.elboxembeddings.examples.model_ppi",
-   "module_short": "mowl.models.elboxembeddings.examples.model_ppi",
-   "name": "ELBoxPPI"
+   "module": "mowl.datasets.builtin.ppi_yeast",
+   "module_short": "mowl.datasets.builtin",
+   "name": "PPIYeastSlimDataset.testing"
   },
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "mowl.models.elboxembeddings.examples",
-   "module_short": "mowl.models.elboxembeddings.examples",
-   "name": "ELBoxPPI"
+   "module": "mowl.datasets.builtin",
+   "module_short": "mowl.datasets.builtin",
+   "name": "PPIYeastSlimDataset.testing"
   },
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "mowl.models.elboxembeddings",
-   "module_short": "mowl.models.elboxembeddings",
-   "name": "ELBoxPPI"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "mowl.models",
-   "module_short": "mowl.models",
-   "name": "ELBoxPPI"
+   "module": "mowl.datasets",
+   "module_short": "mowl.datasets",
+   "name": "PPIYeastSlimDataset.testing"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "mowl",
    "module_short": "mowl",
-   "name": "ELBoxPPI"
+   "name": "PPIYeastSlimDataset.testing"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.datasets.builtin.ppi_yeast",
+   "module_short": "mowl.datasets.builtin",
+   "name": "PPIYeastDataset.testing"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.datasets.builtin",
+   "module_short": "mowl.datasets.builtin",
+   "name": "PPIYeastDataset.testing"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.datasets",
+   "module_short": "mowl.datasets",
+   "name": "PPIYeastDataset.testing"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "PPIYeastDataset.testing"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.datasets.base",
+   "module_short": "mowl.datasets",
+   "name": "RemoteDataset.testing"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.datasets",
+   "module_short": "mowl.datasets",
+   "name": "RemoteDataset.testing"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "RemoteDataset.testing"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.datasets.base",
+   "module_short": "mowl.datasets",
+   "name": "TarFileDataset.testing"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.datasets",
+   "module_short": "mowl.datasets",
+   "name": "TarFileDataset.testing"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "TarFileDataset.testing"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.datasets.base",
+   "module_short": "mowl.datasets",
+   "name": "PathDataset.testing"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.datasets",
+   "module_short": "mowl.datasets",
+   "name": "PathDataset.testing"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "PathDataset.testing"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.datasets.base",
+   "module_short": "mowl.datasets",
+   "name": "Dataset.testing"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.datasets",
+   "module_short": "mowl.datasets",
+   "name": "Dataset.testing"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "Dataset.testing"
+  }
+ ],
+ "model": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.elbe.examples.model_ppi",
+   "module_short": "mowl.models.elbe.examples.model_ppi",
+   "name": "ELBEPPI"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.elbe.examples",
+   "module_short": "mowl.models.elbe.examples",
+   "name": "ELBEPPI"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.elbe",
+   "module_short": "mowl.models.elbe",
+   "name": "ELBEPPI"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models",
+   "module_short": "mowl.models",
+   "name": "ELBEPPI"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "ELBEPPI"
   }
  ],
  "model.evaluate": [
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "mowl.models.elboxembeddings.examples.model_ppi",
-   "module_short": "mowl.models.elboxembeddings.examples.model_ppi",
-   "name": "ELBoxPPI.evaluate"
+   "module": "mowl.models.elbe.examples.model_ppi",
+   "module_short": "mowl.models.elbe.examples.model_ppi",
+   "name": "ELBEPPI.evaluate"
   },
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "mowl.models.elboxembeddings.examples",
-   "module_short": "mowl.models.elboxembeddings.examples",
-   "name": "ELBoxPPI.evaluate"
+   "module": "mowl.models.elbe.examples",
+   "module_short": "mowl.models.elbe.examples",
+   "name": "ELBEPPI.evaluate"
   },
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "mowl.models.elboxembeddings",
-   "module_short": "mowl.models.elboxembeddings",
-   "name": "ELBoxPPI.evaluate"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "mowl.models",
-   "module_short": "mowl.models",
-   "name": "ELBoxPPI.evaluate"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "mowl",
-   "module_short": "mowl",
-   "name": "ELBoxPPI.evaluate"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "mowl.models.elboxembeddings.model",
-   "module_short": "mowl.models.elboxembeddings.model",
-   "name": "ELBoxEmbeddings.evaluate"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "mowl.models.elboxembeddings",
-   "module_short": "mowl.models.elboxembeddings",
-   "name": "ELBoxEmbeddings.evaluate"
+   "module": "mowl.models.elbe",
+   "module_short": "mowl.models.elbe",
+   "name": "ELBEPPI.evaluate"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "mowl.models",
    "module_short": "mowl.models",
-   "name": "ELBoxEmbeddings.evaluate"
+   "name": "ELBEPPI.evaluate"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "mowl",
    "module_short": "mowl",
-   "name": "ELBoxEmbeddings.evaluate"
+   "name": "ELBEPPI.evaluate"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.elbe.model",
+   "module_short": "mowl.models.elbe.model",
+   "name": "ELBE.evaluate"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.elbe",
+   "module_short": "mowl.models.elbe",
+   "name": "ELBE.evaluate"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models",
+   "module_short": "mowl.models",
+   "name": "ELBE.evaluate"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "ELBE.evaluate"
   },
   {
    "is_class": false,
@@ -485,178 +576,71 @@
    "module": "mowl",
    "module_short": "mowl",
    "name": "Model.evaluate"
-  }
- ],
- "model.set_evaluator": [
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "mowl.models.elboxembeddings.examples.model_ppi",
-   "module_short": "mowl.models.elboxembeddings.examples.model_ppi",
-   "name": "ELBoxPPI.set_evaluator"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "mowl.models.elboxembeddings.examples",
-   "module_short": "mowl.models.elboxembeddings.examples",
-   "name": "ELBoxPPI.set_evaluator"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "mowl.models.elboxembeddings",
-   "module_short": "mowl.models.elboxembeddings",
-   "name": "ELBoxPPI.set_evaluator"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "mowl.models",
-   "module_short": "mowl.models",
-   "name": "ELBoxPPI.set_evaluator"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "mowl",
-   "module_short": "mowl",
-   "name": "ELBoxPPI.set_evaluator"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "mowl.models.elboxembeddings.model",
-   "module_short": "mowl.models.elboxembeddings.model",
-   "name": "ELBoxEmbeddings.set_evaluator"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "mowl.models.elboxembeddings",
-   "module_short": "mowl.models.elboxembeddings",
-   "name": "ELBoxEmbeddings.set_evaluator"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "mowl.models",
-   "module_short": "mowl.models",
-   "name": "ELBoxEmbeddings.set_evaluator"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "mowl",
-   "module_short": "mowl",
-   "name": "ELBoxEmbeddings.set_evaluator"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "mowl.base_models.elmodel",
-   "module_short": "mowl.base_models",
-   "name": "EmbeddingELModel.set_evaluator"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "mowl.base_models",
-   "module_short": "mowl.base_models",
-   "name": "EmbeddingELModel.set_evaluator"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "mowl",
-   "module_short": "mowl",
-   "name": "EmbeddingELModel.set_evaluator"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "mowl.base_models.model",
-   "module_short": "mowl.base_models",
-   "name": "Model.set_evaluator"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "mowl.base_models",
-   "module_short": "mowl.base_models",
-   "name": "Model.set_evaluator"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "mowl",
-   "module_short": "mowl",
-   "name": "Model.set_evaluator"
   }
  ],
  "model.train": [
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "mowl.models.elboxembeddings.examples.model_ppi",
-   "module_short": "mowl.models.elboxembeddings.examples.model_ppi",
-   "name": "ELBoxPPI.train"
+   "module": "mowl.models.elbe.examples.model_ppi",
+   "module_short": "mowl.models.elbe.examples.model_ppi",
+   "name": "ELBEPPI.train"
   },
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "mowl.models.elboxembeddings.examples",
-   "module_short": "mowl.models.elboxembeddings.examples",
-   "name": "ELBoxPPI.train"
+   "module": "mowl.models.elbe.examples",
+   "module_short": "mowl.models.elbe.examples",
+   "name": "ELBEPPI.train"
   },
   {
    "is_class": false,
    "is_explicit": false,
-   "module": "mowl.models.elboxembeddings",
-   "module_short": "mowl.models.elboxembeddings",
-   "name": "ELBoxPPI.train"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "mowl.models",
-   "module_short": "mowl.models",
-   "name": "ELBoxPPI.train"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "mowl",
-   "module_short": "mowl",
-   "name": "ELBoxPPI.train"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "mowl.models.elboxembeddings.model",
-   "module_short": "mowl.models.elboxembeddings.model",
-   "name": "ELBoxEmbeddings.train"
-  },
-  {
-   "is_class": false,
-   "is_explicit": false,
-   "module": "mowl.models.elboxembeddings",
-   "module_short": "mowl.models.elboxembeddings",
-   "name": "ELBoxEmbeddings.train"
+   "module": "mowl.models.elbe",
+   "module_short": "mowl.models.elbe",
+   "name": "ELBEPPI.train"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "mowl.models",
    "module_short": "mowl.models",
-   "name": "ELBoxEmbeddings.train"
+   "name": "ELBEPPI.train"
   },
   {
    "is_class": false,
    "is_explicit": false,
    "module": "mowl",
    "module_short": "mowl",
-   "name": "ELBoxEmbeddings.train"
+   "name": "ELBEPPI.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.elbe.model",
+   "module_short": "mowl.models.elbe.model",
+   "name": "ELBE.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models.elbe",
+   "module_short": "mowl.models.elbe",
+   "name": "ELBE.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl.models",
+   "module_short": "mowl.models",
+   "name": "ELBE.train"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "mowl",
+   "module_short": "mowl",
+   "name": "ELBE.train"
   },
   {
    "is_class": false,
@@ -710,13 +694,13 @@
    "name": "PPIYeastSlimDataset"
   }
  ],
- "mowl.evaluation.ModelRankBasedEvaluator": [
+ "mowl.evaluation.PPIEvaluator": [
   {
    "is_class": false,
    "is_explicit": true,
    "module": "mowl.evaluation",
    "module_short": "mowl.evaluation",
-   "name": "ModelRankBasedEvaluator"
+   "name": "PPIEvaluator"
   }
  ],
  "mowl.init_jvm": [
@@ -735,38 +719,61 @@
    "name": "init_jvm"
   }
  ],
- "mowl.models.elboxembeddings.model.ELBoxEmbeddings": [
+ "mowl.models.ELBE": [
   {
    "is_class": false,
    "is_explicit": true,
-   "module": "mowl.models.elboxembeddings.model",
-   "module_short": "mowl.models.elboxembeddings.model",
-   "name": "ELBoxEmbeddings"
+   "module": "mowl.models",
+   "module_short": "mowl.models",
+   "name": "ELBE"
   }
  ],
- "mowl.models.elembeddings.examples.model_ppi.ELBoxPPI": [
+ "mowl.models.elbe.examples.model_ppi.ELBEPPI": [
   {
    "is_class": false,
    "is_explicit": true,
-   "module": "mowl.models.elembeddings.examples.model_ppi",
-   "module_short": "mowl.models.elembeddings.examples.model_ppi",
-   "name": "ELBoxPPI"
-  }
- ],
- "mowl.nn.el.elem.module.ELBoxModule": [
-  {
-   "is_class": false,
-   "is_explicit": true,
-   "module": "mowl.nn.el.elem.module",
-   "module_short": "mowl.nn.el.elem.module",
-   "name": "ELBoxModule"
+   "module": "mowl.models.elbe.examples.model_ppi",
+   "module_short": "mowl.models.elbe.examples.model_ppi",
+   "name": "ELBEPPI"
   },
   {
    "is_class": false,
    "is_explicit": true,
-   "module": "mowl.nn.el.elem.module",
-   "module_short": "mowl.nn.el.elem.module",
-   "name": "ELBoxModule"
+   "module": "mowl.models.elbe.examples.model_ppi",
+   "module_short": "mowl.models.elbe.examples.model_ppi",
+   "name": "ELBEPPI"
+  }
+ ],
+ "mowl.nn.ELBEModule": [
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "mowl.nn",
+   "module_short": "mowl.nn",
+   "name": "ELBEModule"
+  },
+  {
+   "is_class": false,
+   "is_explicit": true,
+   "module": "mowl.nn",
+   "module_short": "mowl.nn",
+   "name": "ELBEModule"
+  }
+ ],
+ "th.cuda.is_available": [
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "builtins",
+   "module_short": "builtins",
+   "name": "function"
+  },
+  {
+   "is_class": false,
+   "is_explicit": false,
+   "module": "torch.cuda",
+   "module_short": "torch.cuda",
+   "name": "is_available"
   }
  ]
 }

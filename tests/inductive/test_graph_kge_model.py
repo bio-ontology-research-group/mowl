@@ -41,16 +41,23 @@ class TestKGEPyKEENModel(TestCase):
 
         self.assertIn("http://Aunt", class_embeddings_after)
 
+        # Reindexing copies the existing weights, so the embeddings survive it
+        # to within float32 precision. Comparing rounded values instead made the
+        # test flip whenever a coordinate happened to sit on a rounding boundary.
         for cls, emb in class_embeddings_before.items():
             with self.subTest(cls=cls):
-                before = [round(x, 5) for x in emb]
-                after = [round(x, 5) for x in class_embeddings_after[cls]]
-                self.assertEqual(before, after)
+                after = class_embeddings_after[cls]
+                self.assertTrue(
+                    th.allclose(th.as_tensor(emb), th.as_tensor(after), atol=1e-6),
+                    f"embedding for {cls} changed by more than float32 precision")
 
         self.assertIn("http://hasSibling", property_embeddings_after)
         for prop, emb in property_embeddings_before.items():
             with self.subTest(prop=prop):
-                self.assertEqual(emb.tolist(), property_embeddings_after[prop].tolist())
+                after = property_embeddings_after[prop]
+                self.assertTrue(
+                    th.allclose(th.as_tensor(emb), th.as_tensor(after), atol=1e-6),
+                    f"embedding for {prop} changed by more than float32 precision")
 
     def test_from_pretrained(self):
         model = GraphPlusPyKEENModel(self.dataset)

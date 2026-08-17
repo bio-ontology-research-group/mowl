@@ -27,6 +27,15 @@ jobs:
 
       - name: Ensure [Unreleased] has entries
         run: |
+          # A release PR promotes [Unreleased] to a version section and leaves a
+          # new empty [Unreleased] behind, so the check below would always fail
+          # on it. Detect that by looking for an added version heading.
+          releases=$(git diff origin/${{ github.base_ref }}...HEAD -- CHANGELOG.md \
+            | grep -cE '^\+## \[[0-9]+\.[0-9]+\.[0-9]+\]' || true)
+          if [ "$releases" -gt 0 ]; then
+            echo "Release PR: new version section added, skipping the [Unreleased] check."
+            exit 0
+          fi
           section=$(awk '/^## \[Unreleased\]/{flag=1; next} /^## \[/{flag=0} flag' CHANGELOG.md)
           if ! echo "$section" | grep -q '^- '; then
             echo "::error file=CHANGELOG.md::The [Unreleased] section is empty. Run 'git-cliff --unreleased' to draft entries, then polish them in CHANGELOG.md."

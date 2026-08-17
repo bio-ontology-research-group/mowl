@@ -74,12 +74,11 @@ model = ELEmPPI(dataset,
                 margin=0.1,
                 reg_norm=1,
                 learning_rate=0.001,
-                epochs=20,
                 batch_size=20000,
                 model_filepath=None,
-                device='cuda')
+                device='cuda' if th.cuda.is_available() else 'cpu')
 
-model.train()
+model.train(epochs=20)
 
 
 # %%
@@ -87,12 +86,11 @@ model.train()
 # ----------------------
 #
 # Now, it is time to evaluate embeddings. For this, we use the
-# :class:`ModelRankBasedEvaluator <mowl.evaluation.ModelRankBasedEvaluator>` class.
+# :class:`PPIEvaluator <mowl.evaluation.PPIEvaluator>` class, which
+# :class:`ELEmPPI <mowl.models.elembeddings.examples.model_ppi.ELEmPPI>` already
+# sets up for us.
 
 
-from mowl.evaluation import PPIEvaluator
-
-model.set_evaluator(PPIEvaluator)
 model.evaluate(dataset.testing)
 
 print(model.metrics)

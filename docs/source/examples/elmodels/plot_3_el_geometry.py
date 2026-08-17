@@ -235,7 +235,21 @@ n_frames = len(elem_snapshots)
 ani = animation.FuncAnimation(fig, draw_frame, frames=n_frames, interval=150)
 
 # %%
-# Sphinx-Gallery picks up the IPython HTML output and embeds it as an
-# interactive animation with play/pause controls.
+# Save as an animated GIF that autoplays in browsers and docs pages.
+# When run as a standalone script, the GIF is saved next to the docs images.
+# In a Sphinx Gallery build the file is pre-committed; __file__ is not available.
 
-HTML(ani.to_jshtml())
+try:
+    import os as _os
+    _gif_path = _os.path.join(
+        _os.path.dirname(_os.path.abspath(__file__)),
+        "../../docs/source/examples/elmodels/images/el_geometry_training.gif"
+    )
+    ani.save(_gif_path, writer="pillow", fps=6)
+except NameError:
+    pass
+
+# %%
+# .. image:: images/el_geometry_training.gif
+#    :alt: ELEm, ELBE, and Box²EL shapes optimizing on the Family ontology across epochs
+#    :align: center
