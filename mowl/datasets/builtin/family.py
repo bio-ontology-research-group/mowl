@@ -28,8 +28,8 @@ class FamilyDataset(RemoteDataset):
 
     """
 
-    def __init__(self, url=None):
-        super().__init__(url=DATA_URL if not url else url)
+    def __init__(self, url=None, data_root=None):
+        super().__init__(url=DATA_URL if not url else url, data_root=data_root)
         self._evaluation_classes = None
         self._loaded_eval_data = False
 

@@ -6,6 +6,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Added
+- Added `mowl.datasets.default_data_root`, which resolves the dataset cache directory, and a `MOWL_DATA_ROOT` environment variable to override it [#150][i150].
+- Added a `data_root` argument to every builtin dataset, so the download location stays overridable per dataset [#150][i150].
+### Changed
+- Changed `RemoteDataset` to cache datasets under `$XDG_CACHE_HOME/mowl/datasets` (falling back to `~/.cache/mowl/datasets`) instead of the current working directory. Datasets are now shared between working directories rather than re-downloaded per directory, and running the tests or an example no longer scatters dataset directories through the checkout. Existing downloads in a working directory are not picked up and will be fetched once into the cache [#150][i150].
+- Changed the test suite to resolve dataset files through the cache instead of assuming pytest runs from the repository root.
+### Fixed
+- Fixed `RemoteDataset._download` hanging forever on a connection that goes silent mid-transfer. `requests` has no default timeout, so a stalled socket never raised; the request now sets a connect and read timeout and retries with backoff [#149][i149].
+- Fixed an interrupted download leaving a truncated tarball that later runs mistook for a complete one. The transfer now writes to a temporary file and is renamed into place only once it finishes [#149][i149].
 
 ## [2.1.0] - 2026-08-16
 ### Added

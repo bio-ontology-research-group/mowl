@@ -8,8 +8,8 @@ class GDADatasetV2(RemoteDataset):
     used as benchmark in [hoehndorf2025]_.
     """
     
-    def __init__(self, url=GDA2_URL):
-        super().__init__(url=url)
+    def __init__(self, url=GDA2_URL, data_root=None):
+        super().__init__(url=url, data_root=data_root)
 
     @property
     def evaluation_classes(self):
@@ -35,8 +35,8 @@ class GDADatasetV2(RemoteDataset):
         return "http://mowl.borg/associated_with"
 
 class GDADatasetV2EL(GDADatasetV2):
-    def __init__(self, url=GDA2_EL_URL):
-        super().__init__(url=url)
+    def __init__(self, url=GDA2_EL_URL, data_root=None):
+        super().__init__(url=url, data_root=data_root)
                                             
 
 

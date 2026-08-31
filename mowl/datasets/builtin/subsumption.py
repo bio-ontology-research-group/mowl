@@ -16,8 +16,8 @@ class SubsumptionDataset(RemoteDataset):
     Dataset for subsumption reasoning tasts of axioms :math:`A \sqsubseteq B` where :math:`A` and :math:`B` are concept names.
     """
     
-    def __init__(self, url):
-        super().__init__(url)
+    def __init__(self, url, data_root=None):
+        super().__init__(url, data_root=data_root)
 
         self.dataset_dir = os.path.dirname(self.ontology_path)
         self.deductive_closure_ontology_path = os.path.join(self.dataset_dir,
@@ -84,13 +84,13 @@ class GOSubsumptionDataset(SubsumptionDataset):
     """
     Dataset for subsumption prediction in the Gene Ontology. Axioms to be predicted are of the form :math:`A \sqsubseteq B` where :math:`A` and :math:`B` are GO terms. This dataset is based on [chen2020b]_.
     """
-    def __init__(self):
-        super().__init__(GO_DATA_URL)
+    def __init__(self, data_root=None):
+        super().__init__(GO_DATA_URL, data_root=data_root)
 
 
 class FoodOnSubsumptionDataset(SubsumptionDataset):
     """
     Dataset for subsumption prediction in the Gene Ontology. Axioms to be predicted are of the form :math:`A \sqsubseteq B` where :math:`A` and :math:`B` are GO terms. This dataset is based on [chen2020b]_.
     """
-    def __init__(self):
-        super().__init__(FOODON_DATA_URL)
+    def __init__(self, data_root=None):
+        super().__init__(FOODON_DATA_URL, data_root=data_root)
