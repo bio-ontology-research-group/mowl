@@ -4,8 +4,8 @@ HPI_URL = 'https://bio2vec.net/data/mowl/hpi.tar.gz'
 
 class HPIDataset(RemoteDataset):
 
-    def __init__(self, url=HPI_URL):
-        super().__init__(url=url)
+    def __init__(self, url=HPI_URL, data_root=None):
+        super().__init__(url=url, data_root=data_root)
 
     @property
     def evaluation_classes(self):

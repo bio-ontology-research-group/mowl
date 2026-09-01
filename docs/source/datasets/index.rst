@@ -38,7 +38,34 @@ To access any of these datasets you can use:
 Built-in datasets already contain the attribute `evaluation_classes`, which is used to evaluate a model on the dataset. In the PPI example, the evaluation classes correspong to ontology classes representing proteins.
 
 
-   
+Where datasets are stored
+---------------------------
+
+.. versionchanged:: 2.2.0
+   Built-in datasets used to be downloaded into the current working directory. They are now cached in a user-level directory, shared by every working directory.
+
+A built-in dataset is downloaded once and reused afterwards. The download location is resolved by :func:`default_data_root <mowl.datasets.default_data_root>`:
+
+.. testcode::
+
+   from mowl.datasets import default_data_root
+   cache_dir = default_data_root()
+
+This is ``$XDG_CACHE_HOME/mowl/datasets``, falling back to ``~/.cache/mowl/datasets``. Set the ``MOWL_DATA_ROOT`` environment variable to override it globally:
+
+.. code-block:: bash
+
+   export MOWL_DATA_ROOT=/data/shared/mowl
+
+Or pass ``data_root`` to a single dataset:
+
+.. testcode::
+
+   import tempfile
+   from mowl.datasets.builtin import FamilyDataset
+   ds = FamilyDataset(data_root=tempfile.mkdtemp())
+
+
 Your own dataset
 --------------------------
 

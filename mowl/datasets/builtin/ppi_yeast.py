@@ -24,8 +24,8 @@ class PPIYeastDataset(RemoteDataset):
 
     """
 
-    def __init__(self, url=None):
-        super().__init__(url=YEAST_DATA_URL if not url else url)
+    def __init__(self, url=None, data_root=None):
+        super().__init__(url=YEAST_DATA_URL if not url else url, data_root=data_root)
 
     @versionchanged(reason="Return pair of classes for evaluation", version="0.4.0")
     @property
@@ -54,8 +54,8 @@ class PPIYeastSlimDataset(PPIYeastDataset):
 
     """
 
-    def __init__(self):
-        super().__init__(url=YEAST_SLIM_DATA_URL)
+    def __init__(self, data_root=None):
+        super().__init__(url=YEAST_SLIM_DATA_URL, data_root=data_root)
 
 
 
@@ -65,8 +65,8 @@ class PPIHumanDataset(RemoteDataset):
 
     """
 
-    def __init__(self, url=None):
-        super().__init__(url=HUMAN_DATA_URL if not url else url)
+    def __init__(self, url=None, data_root=None):
+        super().__init__(url=HUMAN_DATA_URL if not url else url, data_root=data_root)
 
     @versionchanged(reason="Return pair of classes for evaluation", version="0.4.0")
     @property

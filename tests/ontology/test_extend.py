@@ -1,11 +1,24 @@
 from mowl.ontology.extend import insert_annotations
 from unittest import TestCase
-from tests.datasetFactory import FamilyDataset
+from tests.datasetFactory import FamilyDataset, data_path
 from mowl.datasets import PathDataset
 from mowl.projection import TaxonomyWithRelationsProjector
+import os
+import shutil
+import tempfile
 
 
 class TestExtend(TestCase):
+
+    def setUp(self):
+        # Read the family ontology from the dataset cache, but write the extended
+        # copy somewhere disposable rather than back into the cache.
+        self.source_ontology = data_path("family/ontology.owl")
+        self.out_dir = tempfile.mkdtemp(prefix="mowl-extend-")
+        self.out_file = os.path.join(self.out_dir, "ontology_extended.owl")
+
+    def tearDown(self):
+        shutil.rmtree(self.out_dir, ignore_errors=True)
 
     def test_parameter_type_checking_method_insert_annotations(self):
         """This should test the type checking for parameters of the method insert_anootations"""
@@ -33,11 +46,10 @@ class TestExtend(TestCase):
         root = "tests/ontology/"
         annotation_data_1 = (root + "fixtures/family.tsv", "http://should_have", True)
         annotations = [annotation_data_1]  # There  could be more than 1 annotations file.
-        insert_annotations("family/ontology.owl",
-                           annotations, out_file="family/ontology_extended.owl")
+        insert_annotations(self.source_ontology, annotations, out_file=self.out_file)
 
         # Check if the ontology has been extended
-        new_dataset = PathDataset("family/ontology_extended.owl")
+        new_dataset = PathDataset(self.out_file)
         projector = TaxonomyWithRelationsProjector(taxonomy=False,
                                                    relations=["http://should_have"])
         edges = projector.project(new_dataset.ontology)
@@ -58,11 +70,10 @@ edges"""
         root = "tests/ontology/"
         annotation_data_1 = (root + "fixtures/family.tsv", "http://should_have", False)
         annotations = [annotation_data_1]  # There  could be more than 1 annotations file.
-        insert_annotations("family/ontology.owl",
-                           annotations, out_file="family/ontology_extended.owl")
+        insert_annotations(self.source_ontology, annotations, out_file=self.out_file)
 
         # Check if the ontology has been extended
-        new_dataset = PathDataset("family/ontology_extended.owl")
+        new_dataset = PathDataset(self.out_file)
         projector = TaxonomyWithRelationsProjector(taxonomy=False,
                                                    relations=["http://should_have"])
         edges = projector.project(new_dataset.ontology)
@@ -87,11 +98,10 @@ annotation files"""
         annotation_data_1 = (root + "fixtures/family.tsv", "http://should_have", True)
         annotation_data_2 = (root + "fixtures/family2.tsv", "http://should_be", True)
         annotations = [annotation_data_1, annotation_data_2]
-        insert_annotations("family/ontology.owl",
-                           annotations, out_file="family/ontology_extended.owl")
+        insert_annotations(self.source_ontology, annotations, out_file=self.out_file)
 
         # Check if the ontology has been extended
-        new_dataset = PathDataset("family/ontology_extended.owl")
+        new_dataset = PathDataset(self.out_file)
         projector = TaxonomyWithRelationsProjector(taxonomy=False,
                                                    relations=["http://should_have",
                                                               "http://should_be"])

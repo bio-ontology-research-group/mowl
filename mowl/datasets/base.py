@@ -8,6 +8,8 @@ import os
 
 from jpype import java
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # OWLAPI imports
 from org.semanticweb.owlapi.model import OWLOntology, OWLClass, OWLObjectProperty, OWLIndividual
@@ -20,6 +22,34 @@ from deprecated.sphinx import versionadded, versionchanged
 
 
 from java.util import HashSet
+
+#: Seconds to wait for the connection to the dataset host to be established.
+DOWNLOAD_CONNECT_TIMEOUT = 10
+#: Seconds to wait between two chunks of the response body. ``requests`` has no
+#: default timeout, so without this a socket that goes silent mid-transfer
+#: blocks forever instead of failing.
+DOWNLOAD_READ_TIMEOUT = 60
+#: How many times a stalled or server-side-failed download is retried.
+DOWNLOAD_RETRIES = 3
+
+
+def default_data_root():
+    """Directory where remote datasets are cached.
+
+    ``MOWL_DATA_ROOT`` overrides everything. Otherwise this follows the XDG
+    base directory specification: ``$XDG_CACHE_HOME/mowl/datasets``, falling
+    back to ``~/.cache/mowl/datasets``.
+
+    :rtype: str
+    """
+    env_root = os.environ.get('MOWL_DATA_ROOT')
+    if env_root:
+        return os.path.expanduser(env_root)
+
+    cache_home = os.environ.get('XDG_CACHE_HOME')
+    if not cache_home:
+        cache_home = os.path.join(os.path.expanduser('~'), '.cache')
+    return os.path.join(cache_home, 'mowl', 'datasets')
 
 
 class Dataset():
@@ -352,34 +382,70 @@ class TarFileDataset(PathDataset):
             safe_extract(tarf, path=self.data_root)
 
 
+@versionchanged(
+    reason="Datasets are cached under :func:`default_data_root` instead of the current "
+           "working directory, and downloads have a timeout, retries and are atomic.",
+    version="2.2.0")
 class RemoteDataset(TarFileDataset):
     """Loads the dataset from a remote URL.
 
+    The dataset is downloaded once and reused on later instantiations.
+
     :param url: URL location of the dataset
     :type url: str
-    :param data_root: Root directory
-    :type data_root: str
+    :param data_root: Directory the dataset is downloaded into and extracted \
+        in. Defaults to :func:`default_data_root`, a user-level cache shared \
+        by every working directory.
+    :type data_root: str, optional
     """
 
     url: str
     data_root: str
 
-    def __init__(self, url: str, data_root='./'):
+    def __init__(self, url: str, data_root=None):
         self.url = url
-        self.data_root = data_root
+        self.data_root = default_data_root() if data_root is None else data_root
+        os.makedirs(self.data_root, exist_ok=True)
         tarfile_path = self._download()
         super().__init__(tarfile_path)
+
+    @staticmethod
+    def _session():
+        """A :class:`requests.Session` that retries stalled downloads with backoff."""
+        retry = Retry(total=DOWNLOAD_RETRIES, backoff_factor=1,
+                      status_forcelist=(429, 500, 502, 503, 504))
+        adapter = HTTPAdapter(max_retries=retry)
+        session = requests.Session()
+        session.mount('https://', adapter)
+        session.mount('http://', adapter)
+        return session
 
     def _download(self):
         filename = self.url.split('/')[-1]
         filepath = os.path.join(self.data_root, filename)
         if os.path.exists(filepath):
             return filepath
-        with requests.get(self.url, stream=True) as req:
-            req.raise_for_status()
-            with open(filepath, 'wb') as writer:
-                for chunk in req.iter_content(chunk_size=8192):
-                    writer.write(chunk)
+
+        # Write to a temporary name and rename only once the transfer finished,
+        # so an interrupted download cannot leave a truncated file that the
+        # check above would later mistake for a complete one. The name carries
+        # the pid so that two processes sharing a cache cannot write to the
+        # same partial file; os.replace makes the last one to finish win.
+        partial_path = '{}.{}.part'.format(filepath, os.getpid())
+        timeout = (DOWNLOAD_CONNECT_TIMEOUT, DOWNLOAD_READ_TIMEOUT)
+        try:
+            with self._session() as session:
+                with session.get(self.url, stream=True, timeout=timeout) as req:
+                    req.raise_for_status()
+                    with open(partial_path, 'wb') as writer:
+                        for chunk in req.iter_content(chunk_size=8192):
+                            writer.write(chunk)
+        except BaseException:
+            if os.path.exists(partial_path):
+                os.remove(partial_path)
+            raise
+
+        os.replace(partial_path, filepath)
         return filepath
 
 

@@ -33,8 +33,8 @@ class GDADataset(RemoteDataset):
     testing ontologies, respectively.
     """
 
-    def __init__(self, url=None):
-        super().__init__(url=url)
+    def __init__(self, url=None, data_root=None):
+        super().__init__(url=url, data_root=data_root)
 
     @property
     def evaluation_classes(self):
@@ -72,8 +72,8 @@ class GDAHumanDataset(GDADataset):
     """
 
     
-    def __init__(self):
-        super().__init__(url=DATA_HUMAN_URL)
+    def __init__(self, data_root=None):
+        super().__init__(url=DATA_HUMAN_URL, data_root=data_root)
 
 
 class GDAHumanELDataset(GDADataset):
@@ -81,8 +81,8 @@ class GDAHumanELDataset(GDADataset):
     contains axioms in the :math:`\mathcal{EL}` language.
     """
 
-    def __init__(self):
-        super().__init__(url=DATA_HUMAN_EL_URL)
+    def __init__(self, data_root=None):
+        super().__init__(url=DATA_HUMAN_EL_URL, data_root=data_root)
 
 
 class GDAMouseDataset(GDADataset):
@@ -90,8 +90,8 @@ class GDAMouseDataset(GDADataset):
     Dataset containing gene-disease associations in mouse.
     """
     
-    def __init__(self):
-        super().__init__(url=DATA_MOUSE_URL)
+    def __init__(self, data_root=None):
+        super().__init__(url=DATA_MOUSE_URL, data_root=data_root)
 
 
 class GDAMouseELDataset(GDADataset):
@@ -99,5 +99,5 @@ class GDAMouseELDataset(GDADataset):
     contains axioms in the :math:`\mathcal{EL}` language.
     """
 
-    def __init__(self):
-        super().__init__(url=DATA_MOUSE_EL_URL)
+    def __init__(self, data_root=None):
+        super().__init__(url=DATA_MOUSE_EL_URL, data_root=data_root)

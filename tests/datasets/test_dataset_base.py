@@ -4,11 +4,12 @@ Test Cases for Dataset class and its subclasses
 
 from mowl.owlapi.defaults import BOT, TOP
 from mowl.owlapi import OWLAPIAdapter
-from mowl.datasets.base import Entities, OWLClasses, OWLObjectProperties, OWLIndividuals
-from mowl.datasets import Dataset, PathDataset, RemoteDataset, TarFileDataset
-from tests.datasetFactory import PPIYeastSlimDataset, GDAHumanELDataset, FamilyDataset
+from mowl.datasets.base import Entities, OWLClasses, OWLObjectProperties, OWLIndividuals, \
+    DOWNLOAD_CONNECT_TIMEOUT, DOWNLOAD_READ_TIMEOUT, DOWNLOAD_RETRIES
+from mowl.datasets import Dataset, PathDataset, RemoteDataset, TarFileDataset, default_data_root
+from tests.datasetFactory import PPIYeastSlimDataset, GDAHumanELDataset, FamilyDataset, data_path
 from mowl.owlapi.model import OWLOntology, OWLClass, OWLObjectProperty
-from unittest import TestCase
+from unittest import TestCase, mock
 from random import randrange, choice
 import os
 import shutil
@@ -65,9 +66,9 @@ class TestPathDataset(TestCase):
         # Data for PathDataset
         self.ppi_dataset = PPIYeastSlimDataset()
         self.gda_dataset = GDAHumanELDataset()
-        self.training_ont_path = "ppi_yeast_slim/ontology.owl"
-        self.validation_ont_path = "ppi_yeast_slim/valid.owl"
-        self.testing_ont_path = "ppi_yeast_slim/test.owl"
+        self.training_ont_path = data_path("ppi_yeast_slim/ontology.owl")
+        self.validation_ont_path = data_path("ppi_yeast_slim/valid.owl")
+        self.testing_ont_path = data_path("ppi_yeast_slim/test.owl")
 
         self.dataset_full = PathDataset(self.training_ont_path, self.validation_ont_path,
                                         self.testing_ont_path)
@@ -248,12 +249,17 @@ class TestRemoteDataset(TestCase):
                 shutil.rmtree(os.path.join(self.tmp_dir, file_))
 
     def test_successful_download_in_default_path(self):
-        """This checks if dataset is downloaded in the default path ./"""
-        _ = RemoteDataset(self.good_url)
-        self.assertTrue(os.path.exists("./ppi_yeast"))
-        self.assertTrue(os.path.exists("./ppi_yeast/ontology.owl"))
-        self.assertTrue(os.path.exists("./ppi_yeast/valid.owl"))
-        self.assertTrue(os.path.exists("./ppi_yeast/test.owl"))
+        """This checks that the dataset lands in the default cache, not the working directory"""
+        tmp_dir = self.tmp_dir
+        with mock.patch.dict(os.environ, {'MOWL_DATA_ROOT': tmp_dir}):
+            _ = RemoteDataset(self.good_url)
+        self.assertTrue(os.path.exists(os.path.join(tmp_dir, "ppi_yeast")))
+        self.assertTrue(os.path.exists(os.path.join(tmp_dir, "ppi_yeast/ontology.owl")))
+        self.assertTrue(os.path.exists(os.path.join(tmp_dir, "ppi_yeast/valid.owl")))
+        self.assertTrue(os.path.exists(os.path.join(tmp_dir, "ppi_yeast/test.owl")))
+        # That the default is not the working directory is asserted in
+        # TestDefaultDataRoot; a checkout may already hold a stale ./ppi_yeast
+        # from before the cache existed, so it cannot be checked from here.
 
     def test_successful_download_in_custom_path(self):
         """This checks if dataset is downloaded a custom path"""
@@ -266,7 +272,66 @@ class TestRemoteDataset(TestCase):
 
     def test_incorrect_url(self):
         """This checks if error is raised for incorrect URL"""
-        self.assertRaises(requests.exceptions.HTTPError, RemoteDataset, self.bad_url)
+        self.assertRaises(requests.exceptions.HTTPError, RemoteDataset, self.bad_url,
+                          self.tmp_dir)
+
+    def test_no_partial_file_left_behind_on_failure(self):
+        """A download that fails must not leave a truncated file behind"""
+        tmp_dir = self.tmp_dir
+        self.assertRaises(requests.exceptions.HTTPError, RemoteDataset, self.bad_url, tmp_dir)
+        leftovers = [f for f in os.listdir(tmp_dir) if f.startswith("gda_mouse_el.tar.gz")]
+        self.assertEqual(leftovers, [])
+
+    def test_interrupted_download_is_not_reused(self):
+        """A transfer that dies mid-stream leaves no file the next run would trust"""
+        tmp_dir = self.tmp_dir
+        filename = self.good_url.split('/')[-1]
+
+        def die_after_one_chunk(*args, **kwargs):
+            yield b'partial payload'
+            raise requests.exceptions.ReadTimeout("connection went silent")
+
+        response = mock.MagicMock()
+        response.__enter__.return_value = response
+        response.iter_content.side_effect = die_after_one_chunk
+        session = mock.MagicMock()
+        session.__enter__.return_value = session
+        session.get.return_value = response
+
+        with mock.patch.object(RemoteDataset, '_session', return_value=session):
+            self.assertRaises(requests.exceptions.ReadTimeout,
+                              RemoteDataset, self.good_url, tmp_dir)
+
+        leftovers = [f for f in os.listdir(tmp_dir) if f.startswith(filename)]
+        self.assertEqual(leftovers, [])
+
+    def test_download_passes_a_timeout(self):
+        """``requests`` has no default timeout, so the call must set one explicitly"""
+        # Drive _download directly: the point is the arguments of the request,
+        # not the extraction that follows it.
+        dataset = RemoteDataset.__new__(RemoteDataset)
+        dataset.url = self.good_url
+        dataset.data_root = self.tmp_dir
+
+        response = mock.MagicMock()
+        response.__enter__.return_value = response
+        response.iter_content.return_value = [b'payload']
+        session = mock.MagicMock()
+        session.__enter__.return_value = session
+        session.get.return_value = response
+
+        with mock.patch.object(RemoteDataset, '_session', return_value=session):
+            dataset._download()
+
+        _, kwargs = session.get.call_args
+        self.assertEqual(kwargs['timeout'],
+                         (DOWNLOAD_CONNECT_TIMEOUT, DOWNLOAD_READ_TIMEOUT))
+
+    def test_download_is_retried(self):
+        """The session must mount an adapter that retries stalled transfers"""
+        adapter = RemoteDataset._session().get_adapter('https://bio2vec.net/')
+        self.assertEqual(adapter.max_retries.total, DOWNLOAD_RETRIES)
+        self.assertGreater(adapter.max_retries.backoff_factor, 0)
 
     def test_dataset_not_downloaded_if_already_exists(self):
         """This should check that dataset is not downloaded if already exists"""
@@ -286,6 +351,45 @@ class TestRemoteDataset(TestCase):
         self.assertTrue(os.path.exists(os.path.join(tmp_dir, "family/ontology.owl")))
         self.assertFalse(os.path.exists(os.path.join(tmp_dir, "family/valid.owl")))
         self.assertFalse(os.path.exists(os.path.join(tmp_dir, "family/test.owl")))
+
+#############################################################
+
+
+class TestDefaultDataRoot(TestCase):
+    """Resolution of the directory remote datasets are cached in. No network."""
+
+    def _resolve(self, **env):
+        """Resolve the default root with only ``env`` set among the vars we read."""
+        patched = {'MOWL_DATA_ROOT': '', 'XDG_CACHE_HOME': ''}
+        patched.update(env)
+        with mock.patch.dict(os.environ, patched):
+            for name, value in patched.items():
+                if not value:
+                    os.environ.pop(name, None)
+            return default_data_root()
+
+    def test_is_not_the_working_directory(self):
+        """The regression this guards: datasets used to land wherever python was run"""
+        root = self._resolve()
+        self.assertNotEqual(os.path.abspath(root), os.path.abspath('.'))
+        self.assertTrue(os.path.isabs(root))
+
+    def test_mowl_data_root_wins(self):
+        root = self._resolve(MOWL_DATA_ROOT='/custom/place', XDG_CACHE_HOME='/xdg')
+        self.assertEqual(root, '/custom/place')
+
+    def test_mowl_data_root_expands_user(self):
+        root = self._resolve(MOWL_DATA_ROOT='~/somewhere')
+        self.assertEqual(root, os.path.join(os.path.expanduser('~'), 'somewhere'))
+
+    def test_xdg_cache_home_is_honoured(self):
+        root = self._resolve(XDG_CACHE_HOME='/xdg')
+        self.assertEqual(root, os.path.join('/xdg', 'mowl', 'datasets'))
+
+    def test_falls_back_to_home_cache(self):
+        root = self._resolve()
+        self.assertEqual(root, os.path.join(os.path.expanduser('~'), '.cache', 'mowl',
+                                            'datasets'))
 
 #############################################################
 

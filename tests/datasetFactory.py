@@ -1,12 +1,24 @@
+import os
+
 import mowl
 # mowl.init_jvm("10g")
-from mowl.datasets import PathDataset
+from mowl.datasets import PathDataset, default_data_root
 from mowl.datasets.base import OWLClasses
+
+# The builtin datasets that conftest downloads land in the user-level cache, not
+# in the working directory, so resolve every path against the same root instead
+# of assuming pytest runs from the repository root.
+DATA_ROOT = default_data_root()
+
+
+def data_path(*parts):
+    """Path of a file inside the dataset cache."""
+    return os.path.join(DATA_ROOT, *parts)
 
 
 class FamilyDataset(PathDataset):
     def __init__(self):
-        super().__init__("family/ontology.owl")
+        super().__init__(data_path("family/ontology.owl"))
 
 
 class GDADataset(PathDataset):
@@ -37,32 +49,37 @@ class GDADataset(PathDataset):
 
 class GDAHumanDataset(GDADataset):
     def __init__(self):
-        super().__init__("gda_human/ontology.owl", validation_path="gda_human/valid.owl",
-                         testing_path="gda_human/test.owl")
+        super().__init__(data_path("gda_human/ontology.owl"),
+                         validation_path=data_path("gda_human/valid.owl"),
+                         testing_path=data_path("gda_human/test.owl"))
 
 
 class GDAHumanELDataset(GDADataset):
     def __init__(self):
-        super().__init__("gda_human_el/ontology.owl", validation_path="gda_human_el/valid.owl",
-                         testing_path="gda_human_el/test.owl")
+        super().__init__(data_path("gda_human_el/ontology.owl"),
+                         validation_path=data_path("gda_human_el/valid.owl"),
+                         testing_path=data_path("gda_human_el/test.owl"))
 
 
 class GDAMouseDataset(GDADataset):
     def __init__(self):
-        super().__init__("gda_mouse/ontology.owl", validation_path="gda_mouse/valid.owl",
-                         testing_path="gda_mouse/test.owl")
+        super().__init__(data_path("gda_mouse/ontology.owl"),
+                         validation_path=data_path("gda_mouse/valid.owl"),
+                         testing_path=data_path("gda_mouse/test.owl"))
 
 
 class GDAMouseELDataset(GDADataset):
     def __init__(self):
-        super().__init__("gda_mouse_el/ontology.owl", validation_path="gda_mouse_el/valid.owl",
-                         testing_path="gda_mouse_el/test.owl")
+        super().__init__(data_path("gda_mouse_el/ontology.owl"),
+                         validation_path=data_path("gda_mouse_el/valid.owl"),
+                         testing_path=data_path("gda_mouse_el/test.owl"))
 
 
 class PPIYeastDataset(PathDataset):
     def __init__(self):
-        super().__init__("ppi_yeast/ontology.owl", validation_path="ppi_yeast/valid.owl",
-                         testing_path="ppi_yeast/test.owl")
+        super().__init__(data_path("ppi_yeast/ontology.owl"),
+                         validation_path=data_path("ppi_yeast/valid.owl"),
+                         testing_path=data_path("ppi_yeast/test.owl"))
 
     @property
     def evaluation_classes(self):
@@ -80,8 +97,9 @@ class PPIYeastDataset(PathDataset):
 
 class PPIYeastSlimDataset(PathDataset):
     def __init__(self):
-        super().__init__("ppi_yeast_slim/ontology.owl", validation_path="ppi_yeast_slim/valid.owl",
-                         testing_path="ppi_yeast_slim/test.owl")
+        super().__init__(data_path("ppi_yeast_slim/ontology.owl"),
+                         validation_path=data_path("ppi_yeast_slim/valid.owl"),
+                         testing_path=data_path("ppi_yeast_slim/test.owl"))
     @property
     def evaluation_classes(self):
         """Classes that are used in evaluation
@@ -99,21 +117,22 @@ class PPIYeastSlimDataset(PathDataset):
 
 class GOSubsumptionDataset(PathDataset):
     def __init__(self):
-        super().__init__("go_subsumption/ontology.owl",
-                         validation_path="go_subsumption/valid.owl",
-                         testing_path="go_subsumption/test.owl")
+        super().__init__(data_path("go_subsumption/ontology.owl"),
+                         validation_path=data_path("go_subsumption/valid.owl"),
+                         testing_path=data_path("go_subsumption/test.owl"))
 
 class FoodOnSubsumptionDataset(PathDataset):
     def __init__(self):
-        super().__init__("foodon_subsumption/ontology.owl",
-                         validation_path="foodon_subsumption/valid.owl",
-                         testing_path="foodon_subsumption/test.owl")
+        super().__init__(data_path("foodon_subsumption/ontology.owl"),
+                         validation_path=data_path("foodon_subsumption/valid.owl"),
+                         testing_path=data_path("foodon_subsumption/test.owl"))
 
 
 class GDADatasetV2(PathDataset):
     def __init__(self):
-        super().__init__("gda2/ontology.owl", validation_path="gda2/valid.owl",
-                         testing_path="gda2/test.owl")
+        super().__init__(data_path("gda2/ontology.owl"),
+                         validation_path=data_path("gda2/valid.owl"),
+                         testing_path=data_path("gda2/test.owl"))
 
     @property
     def evaluation_classes(self):
@@ -141,8 +160,9 @@ class GDADatasetV2(PathDataset):
 
 class PPIHumanDataset(PathDataset):
     def __init__(self):
-        super().__init__("ppi_human/ontology.owl", validation_path="ppi_human/valid.owl",
-                         testing_path="ppi_human/test.owl")
+        super().__init__(data_path("ppi_human/ontology.owl"),
+                         validation_path=data_path("ppi_human/valid.owl"),
+                         testing_path=data_path("ppi_human/test.owl"))
 
     @property
     def evaluation_classes(self):
@@ -161,8 +181,9 @@ class PPIHumanDataset(PathDataset):
 class HPIDataset(PathDataset):
 
     def __init__(self):
-        super().__init__("hpi/ontology.owl", validation_path="hpi/valid.owl",
-                         testing_path="hpi/test.owl")
+        super().__init__(data_path("hpi/ontology.owl"),
+                         validation_path=data_path("hpi/valid.owl"),
+                         testing_path=data_path("hpi/test.owl"))
 
     @property
     def evaluation_classes(self):
