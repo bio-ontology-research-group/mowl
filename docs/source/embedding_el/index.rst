@@ -41,7 +41,7 @@ mOWL provides different functionalities to generate models that aim to embed axi
 
 The ELDataset class
 ------------------------
-The :class:`ELDataset <mowl.datasets.el.ELDataset>` class is the first thing you should know about. mOWL first entry point are ontologies. However, not all of them are normalized in the |el| language. For that reason, we have to normalize the ontology. To do so, we rely on the `Jcel <https://julianmendez.github.io/jcel/>`_ library.
+The :class:`ELDataset <mowl.datasets.el.ELDataset>` class is the first thing you should know about. mOWL first entry point are ontologies. However, not all of them are normalized in the |el| language. For that reason, we have to normalize the ontology. To do so, we rely on the `Jcel <https://julianmendez.github.io/jcel/>`_ library. The normalization itself, the auxiliary concepts it introduces and the choice of normalizer are described in :doc:`/ontology/index`.
 
 To create a |el| dataset use the following code:
 
@@ -211,6 +211,9 @@ At this point, it would be possible to just use the |eldataset| and the |elmodul
 .. versionchanged:: 2.0.0
    Added the ``load_normalized`` parameter.
 
+.. versionchanged:: 2.2.0
+   Added the ``normalizer`` parameter.
+
 The :class:`EmbeddingELModel <mowl.base_models.elmodel.EmbeddingELModel>` class accepts the following parameters:
 
 - ``dataset``: mOWL dataset to use for training and evaluation.
@@ -220,6 +223,11 @@ The :class:`EmbeddingELModel <mowl.base_models.elmodel.EmbeddingELModel>` class 
 - ``load_normalized``: If ``True``, the ontology is assumed to be already normalized and GCIs are extracted directly without running the normalizer. Defaults to ``False``.
 - ``device``: The device to use for training. Defaults to ``"cpu"``.
 - ``neg_sampling_gcis``: List of GCI names for which negative sampling is applied during training. Defaults to ``None``, which automatically uses only the GCIs declared in the module's ``neg_capable_gcis``. Pass an explicit list to override — a :class:`NotImplementedError` is raised at the start of training if any requested GCI is not in ``neg_capable_gcis``.
+- ``normalizer``: Normalizer used to turn the ontologies into normal forms, passed through to |eldataset|. Defaults to ``None``, which uses :class:`ELNormalizer <mowl.ontology.normalize.ELNormalizer>`. See :ref:`choosing-a-normalizer`.
+
+.. note::
+
+   The normalization introduces auxiliary concepts, and this class embeds them alongside the classes of the ontology: ``class_index_dict`` contains one extra entry per auxiliary concept, appended after the ontology classes, so ``module.class_embed`` has one extra row for each. See :ref:`auxiliary-concepts`.
 
 .. testcode::
 

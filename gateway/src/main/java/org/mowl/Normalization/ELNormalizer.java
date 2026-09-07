@@ -42,8 +42,8 @@ import de.tudresden.inf.lat.jcel.owlapi.translator.Translator;
  * C ⊑ ∃r.A,  A ⊑ D,  A ⊑ E
  * </pre>
  *
- * — asserting {@code D ⊑ E} between two classes of the source ontology, which
- * the input does not entail.
+ * (asserting {@code D ⊑ E} between two classes of the source ontology, which
+ * the input does not entail).
  *
  * <p>
  * The fix has two halves, and both are needed:
@@ -55,7 +55,7 @@ import de.tudresden.inf.lat.jcel.owlapi.translator.Translator;
  * class. (jcel pull request #12 achieves the same by adding a {@code startId}
  * to {@code IntegerEntityManagerImpl}; sharing the factory needs no fork.)</li>
  * <li>Reverse translation resolves those auxiliary identifiers instead of
- * failing on them — see {@link ReverseAxiomTranslator}. Without this, the fix
+ * failing on them: see {@link ReverseAxiomTranslator}. Without this, the fix
  * above would merely turn silently wrong axioms into silently missing
  * ones.</li>
  * </ol>

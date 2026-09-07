@@ -196,6 +196,8 @@ The resulting variable ``gcis`` is a dictionary of the form:
 
 
 
+.. _auxiliary-concepts:
+
 Auxiliary concepts
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -229,13 +231,24 @@ Those fresh concepts are called *auxiliary*. :class:`ELNormalizer
    ontology, but adding or removing entities shifts them, so treat them as opaque rather than as
    persistent identifiers.
 
+.. _choosing-a-normalizer:
+
 Choosing a normalizer
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
 Before mOWL 2.2.0 the auxiliary concepts collided with classes of the input ontology, so
-normalization could assert subsumptions that the input does not entail. The previous behaviour is
+normalization could assert subsumptions that the input does not entail. The previous behavior is
 kept as :class:`ELNormalizerOld <mowl.ontology.normalize.ELNormalizerOld>` so that earlier results
 can be reproduced. It should not be used for new work.
+
+.. note::
+
+   The identifier collision and its fix are described in `mOWL pull request #153
+   <https://github.com/bio-ontology-research-group/mowl/pull/153>`_, which closes `issue #126
+   <https://github.com/bio-ontology-research-group/mowl/issues/126>`_. The same two defects are
+   fixed upstream in `jcel pull request #12 <https://github.com/julianmendez/jcel/pull/12>`_;
+   mOWL does not depend on that pull request being merged, because it shares one entity manager
+   between the translator and the normalizer instead of changing jcel.
 
 The difference is visible on exactly the axiom above:
 
@@ -277,7 +290,7 @@ The difference is visible on exactly the axiom above:
    ELNormalizer   : ['A <= D', 'A <= E', 'C <= exists r.A']
    ELNormalizerOld: ['C <= exists r.D', 'D <= D', 'D <= E']
 
-``ELNormalizerOld`` reuses ``D`` as the auxiliary concept, so it emits ``D <= E`` --- a
+``ELNormalizerOld`` reuses ``D`` as the auxiliary concept, so it emits ``D <= E``, a
 subsumption between two classes of the input ontology that the input does not entail.
 
 A normalizer is selected through the ``normalizer`` parameter of :class:`ELDataset
@@ -293,4 +306,4 @@ A normalizer is selected through the ``normalizer`` parameter of :class:`ELDatas
    ontology = FamilyDataset().ontology
 
    dataset = ELDataset(ontology)                                # ELNormalizer, the default
-   dataset = ELDataset(ontology, normalizer=ELNormalizerOld())  # previous behaviour
+   dataset = ELDataset(ontology, normalizer=ELNormalizerOld())  # previous behavior

@@ -31,8 +31,8 @@ AUX_NAMESPACE = str(JcelReverseAxiomTranslator.AUX_NAMESPACE)
 class ELNormalizerBase():
 
     """Base class for the :math:`\\mathcal{EL}` normalizers. It provides everything that is \
-common to them --- preprocessing, caching, ABox extraction and the grouping of the resulting \
-axioms into normal forms --- and leaves the translate/normalize/reverse-translate step to \
+common to them (preprocessing, caching, ABox extraction and the grouping of the resulting \
+axioms into normal forms) and leaves the translate/normalize/reverse-translate step to \
 subclasses via :meth:`_normalize_axioms`.
 
 Subclass this to plug a custom normalizer into :class:`~mowl.datasets.el.ELDataset` or \
@@ -299,7 +299,7 @@ normalizes to :math:`C \\sqsubseteq \\exists r.A`, :math:`A \\sqsubseteq D` and 
 
 .. versionchanged:: 2.2.0
     Fixed an identifier collision that made auxiliary concepts alias classes of the input \
-    ontology, which produced axioms not entailed by the input. The previous behaviour is \
+    ontology, which produced axioms not entailed by the input. The previous behavior is \
     available as :class:`ELNormalizerOld`.
     """
 
@@ -324,7 +324,7 @@ results can be reproduced.
     normalization collide with classes of the input ontology. For \
     :math:`C \\sqsubseteq \\exists r.(D \\sqcap E)` it returns \
     :math:`C \\sqsubseteq \\exists r.D`, :math:`D \\sqsubseteq D` and \
-    :math:`D \\sqsubseteq E` --- asserting :math:`D \\sqsubseteq E` \
+    :math:`D \\sqsubseteq E`, asserting :math:`D \\sqsubseteq E` \
     between two classes of the input ontology, which the input does not entail. Use \
     :class:`ELNormalizer` instead.
 
