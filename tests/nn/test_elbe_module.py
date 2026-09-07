@@ -53,3 +53,27 @@ class TestELBEModule(TestCase):
 
 
 
+
+    def test_loss_has_one_value_per_sample(self):
+        """A batch of n samples must produce n loss values.
+
+        ``gci1_loss`` added a column of shape ``(n, 1)`` to a flat vector of shape ``(n,)``,
+        which broadcasts to an ``(n, n)`` matrix rather than summing the two scores of each
+        sample. Every other fixture here holds a single row, where the mistake is invisible
+        because ``(1, 1)`` and ``(1,)`` broadcast to ``(1, 1)``.
+        """
+        batches = {
+            "gci0": self.axioms.gci0_data,
+            "gci1": self.axioms.gci1_data,
+            "gci2": self.axioms.gci2_data,
+            "gci3": self.axioms.gci3_data,
+            "gci0_bot": self.axioms.gci0_bot_data,
+            "gci1_bot": self.axioms.gci1_bot_data,
+            "gci3_bot": self.axioms.gci3_bot_data,
+        }
+
+        for gci_name, single_row in batches.items():
+            with self.subTest(gci=gci_name):
+                batch = th.cat([single_row] * 3, dim=0)
+                result = self.module(batch, gci_name)
+                self.assertEqual(result.numel(), 3)
