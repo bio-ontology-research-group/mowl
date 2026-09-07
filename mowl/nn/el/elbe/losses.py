@@ -57,8 +57,11 @@ def gci1_loss(data, class_embed, class_offset, margin, neg=False):
     cen1 = (startAll + endAll) / 2
     euc = th.abs(cen1 - e)
 
+    # Both terms are reshaped to a column. Adding a column to a flat vector would broadcast
+    # to an (n, n) matrix instead of summing the two scores of each sample.
     dst = th.reshape(th.linalg.norm(th.relu(euc + new_offset - off_e + margin), axis=1),
-                     [-1, 1]) + th.linalg.norm(th.relu(startAll - endAll), axis=1)
+                     [-1, 1]) + th.reshape(th.linalg.norm(th.relu(startAll - endAll), axis=1),
+                                           [-1, 1])
     return dst
 
 
