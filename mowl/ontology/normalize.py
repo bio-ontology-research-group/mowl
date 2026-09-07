@@ -7,6 +7,8 @@ from uk.ac.manchester.cs.owl.owlapi import OWLClassImpl, OWLObjectSomeValuesFrom
     OWLObjectIntersectionOfImpl
 from org.semanticweb.owlapi.model import OWLAxiom, OWLOntology, AxiomType, ClassExpressionType, IRI
 from org.semanticweb.owlapi.apibinding import OWLManager
+from org.mowl.Normalization import ELNormalizer as JcelELNormalizer
+from org.mowl.Normalization import ReverseAxiomTranslator as JcelReverseAxiomTranslator
 
 from java.util import HashSet
 from jpype import java
@@ -21,15 +23,42 @@ logger.setLevel(logging.INFO)
 from mowl.owlapi import OWLAPIAdapter
 from deprecated.sphinx import versionchanged
 
-class ELNormalizer():
+#: Namespace of the auxiliary concepts that :class:`ELNormalizer` introduces. Kept in sync with
+#: ``org.mowl.Normalization.ReverseAxiomTranslator.AUX_NAMESPACE`` on the Java side.
+AUX_NAMESPACE = str(JcelReverseAxiomTranslator.AUX_NAMESPACE)
 
-    """This class wraps the normalization functionality found in the Java library :class:`Jcel`. \
-The normalization process transforms an ontology into 7 normal forms in the description \
-logic EL language.
+
+class ELNormalizerBase():
+
+    """Base class for the :math:`\\mathcal{EL}` normalizers. It provides everything that is \
+common to them --- preprocessing, caching, ABox extraction and the grouping of the resulting \
+axioms into normal forms --- and leaves the translate/normalize/reverse-translate step to \
+subclasses via :meth:`_normalize_axioms`.
+
+Subclass this to plug a custom normalizer into :class:`~mowl.datasets.el.ELDataset` or \
+:class:`~mowl.base_models.elmodel.EmbeddingELModel` through their ``normalizer`` parameter.
+
+.. versionadded:: 2.2.0
     """
+
+    #: Suffix of the file caching the normalized ontology. Normalizers that disagree on the
+    #: normalization of an ontology must use different suffixes, so that a cache written by
+    #: one is never read back by another.
+    CACHE_SUFFIX = "_mowl_el_normalized"
 
     def __init__(self):
         return
+
+    def _normalize_axioms(self, ontology):
+        """Normalizes a preprocessed ontology into a collection of OWL axioms in normal form.
+
+        :param ontology: Preprocessed ontology, containing only axioms that the underlying \
+            normalizer can translate
+        :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
+
+        :rtype: iterable of :class:`org.semanticweb.owlapi.model.OWLAxiom`
+        """
+        raise NotImplementedError
 
     def get_cache_path(self, ontology_path):
         """Generate the cache file path for a given ontology path.
@@ -39,9 +68,9 @@ logic EL language.
         :rtype: str
         """
         if ontology_path.endswith(".owl"):
-            return ontology_path[:-4] + "_mowl_el_normalized.owl"
+            return ontology_path[:-4] + self.CACHE_SUFFIX + ".owl"
         else:
-            return ontology_path + "_mowl_el_normalized.owl"
+            return ontology_path + self.CACHE_SUFFIX + ".owl"
 
     def _save_normalized_ontology(self, axioms_dict, cache_path):
         """Save normalized axioms to an OWL file.
@@ -128,28 +157,8 @@ type org.semanticweb.owlapi.model.OWLOntology. Found: {type(ontology)}")
             logger.info("Loading normalized ontology")
             axioms_dict = self.__load_normalized_ontology(ontology)
         else:
-            ontology = self.preprocess_ontology(ontology)
-            root_ont = ontology
-            translator = Translator(ontology.getOWLOntologyManager().getOWLDataFactory(),
-                                    IntegerOntologyObjectFactoryImpl())
-            # translator = jreasoner.getTranslator()
-            axioms = HashSet()
-            axioms.addAll(root_ont.getAxioms())
-            translator.getTranslationRepository().addAxiomEntities(root_ont)
-
-            for ont in root_ont.getImportsClosure():
-                axioms.addAll(ont.getAxioms())
-                translator.getTranslationRepository().addAxiomEntities(ont)
-
-            intAxioms = translator.translateSA(axioms)
-
-            normalizer = OntologyNormalizer()
-
-            factory = IntegerOntologyObjectFactoryImpl()
-            normalized_ontology = normalizer.normalize(intAxioms, factory)
-            self.rTranslator = ReverseAxiomTranslator(translator, ontology)
-
-            axioms_dict = self.__revert_translation(normalized_ontology)
+            preprocessed_ontology = self.preprocess_ontology(ontology)
+            axioms_dict = self._group_axioms(self._normalize_axioms(preprocessed_ontology))
 
         axioms_dict["class_assertion"] = [ClassAssertion(axiom) for axiom in abox if axiom.getAxiomType() == AxiomType.CLASS_ASSERTION and axiom.getClassExpression().getClassExpressionType() == ClassExpressionType.OWL_CLASS]
         axioms_dict["object_property_assertion"] = [ObjectPropertyAssertion(axiom) for axiom in abox if axiom.getAxiomType() == AxiomType.OBJECT_PROPERTY_ASSERTION]
@@ -174,18 +183,24 @@ type org.semanticweb.owlapi.model.OWLOntology. Found: {type(ontology)}")
         return axioms_dict
         
         
-    def __revert_translation(self, normalized_ontology):
+    def _group_axioms(self, axioms):
+        """Groups normalized OWL axioms by normal form.
+
+        :param axioms: Axioms in :math:`\\mathcal{EL}` normal form
+        :type axioms: iterable of :class:`org.semanticweb.owlapi.model.OWLAxiom`
+
+        :rtype: dict
+        """
         axioms_dict = {
             "gci0": [], "gci1": [], "gci2": [], "gci3": [], "gci0_bot": [], "gci1_bot": [],
             "gci3_bot": [], "class_assertion": [], "object_property_assertion": []}
 
-        for ax in normalized_ontology:
+        for axiom in axioms:
             try:
-                axiom = self.rTranslator.visit(ax)
                 key, value = process_axiom(axiom)
                 axioms_dict[key].append(value)
             except Exception as e:
-                logging.info("Reverse translation. Ignoring axiom: %s", ax)
+                logging.info("Ignoring axiom: %s", axiom)
                 logging.info(e)
 
         return axioms_dict
@@ -262,6 +277,92 @@ type org.semanticweb.owlapi.model.OWLOntology")
         owl_manager = OWLAPIAdapter().owl_manager
         new_ontology = owl_manager.createOntology(new_tbox_axioms)
         return new_ontology
+
+
+class ELNormalizer(ELNormalizerBase):
+
+    """This class wraps the normalization functionality found in the Java library :class:`Jcel`. \
+The normalization process transforms an ontology into 7 normal forms in the description \
+logic EL language.
+
+The normalization rules introduce fresh *auxiliary* concept names whenever a nested class \
+expression has to be broken up. For example, :math:`C \\sqsubseteq \\exists r.(D \\sqcap E)` \
+normalizes to :math:`C \\sqsubseteq \\exists r.A`, :math:`A \\sqsubseteq D` and \
+:math:`A \\sqsubseteq E`, where :math:`A` is auxiliary. Those concepts are named in the \
+:data:`AUX_NAMESPACE` namespace, e.g. ``http://mowl.borg/el_normalization#aux_15``.
+
+.. note::
+
+    Auxiliary names are derived from jcel's internal entity identifiers. They are stable for a \
+    given ontology, but adding or removing entities shifts them, so they should be treated as \
+    opaque rather than as persistent identifiers.
+
+.. versionchanged:: 2.2.0
+    Fixed an identifier collision that made auxiliary concepts alias classes of the input \
+    ontology, which produced axioms not entailed by the input. The previous behaviour is \
+    available as :class:`ELNormalizerOld`.
+    """
+
+    # Distinct from the base suffix: a cache written before mOWL 2.2.0, or by
+    # ELNormalizerOld, holds the axioms of the unfixed normalization and must not be reused.
+    CACHE_SUFFIX = "_mowl_el_normalized_v2"
+
+    def _normalize_axioms(self, ontology):
+        return JcelELNormalizer().normalize(ontology)
+
+
+class ELNormalizerOld(ELNormalizerBase):
+
+    """The :math:`\\mathcal{EL}` normalizer as it behaved before mOWL 2.2.0, kept so that earlier \
+results can be reproduced.
+
+.. warning::
+
+    This normalizer is unsound and should not be used for new work. It gives the translator and \
+    the normalizer separate ``IntegerOntologyObjectFactory`` instances, so both number their \
+    entities from the same starting point and the auxiliary concepts introduced during \
+    normalization collide with classes of the input ontology. For \
+    :math:`C \\sqsubseteq \\exists r.(D \\sqcap E)` it returns \
+    :math:`C \\sqsubseteq \\exists r.D`, :math:`D \\sqsubseteq D` and \
+    :math:`D \\sqsubseteq E` --- asserting :math:`D \\sqsubseteq E` \
+    between two classes of the input ontology, which the input does not entail. Use \
+    :class:`ELNormalizer` instead.
+
+.. versionadded:: 2.2.0
+    """
+
+    # The output is unchanged from earlier mOWL versions, so caches written by them are
+    # still valid and keep the original name.
+    CACHE_SUFFIX = "_mowl_el_normalized"
+
+    def _normalize_axioms(self, ontology):
+        translator = Translator(ontology.getOWLOntologyManager().getOWLDataFactory(),
+                                IntegerOntologyObjectFactoryImpl())
+        axioms = HashSet()
+        axioms.addAll(ontology.getAxioms())
+        translator.getTranslationRepository().addAxiomEntities(ontology)
+
+        for ont in ontology.getImportsClosure():
+            axioms.addAll(ont.getAxioms())
+            translator.getTranslationRepository().addAxiomEntities(ont)
+
+        int_axioms = translator.translateSA(axioms)
+
+        # The bug: this second factory restarts entity numbering from scratch, so the auxiliary
+        # concepts it mints reuse identifiers that the translator already gave to real classes.
+        factory = IntegerOntologyObjectFactoryImpl()
+        normalized_ontology = OntologyNormalizer().normalize(int_axioms, factory)
+        reverse_translator = ReverseAxiomTranslator(translator, ontology)
+
+        owl_axioms = []
+        for ax in normalized_ontology:
+            try:
+                owl_axioms.append(reverse_translator.visit(ax))
+            except Exception as e:
+                logging.info("Reverse translation. Ignoring axiom: %s", ax)
+                logging.info(e)
+
+        return owl_axioms
 
 
 def process_axiom(axiom: OWLAxiom):

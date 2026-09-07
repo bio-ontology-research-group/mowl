@@ -3,6 +3,7 @@ from unittest import TestCase
 
 from tests.datasetFactory import FamilyDataset
 from mowl.datasets import ELDataset
+from mowl.ontology.normalize import ELNormalizer, ELNormalizerOld
 from mowl.owlapi.defaults import BOT, TOP
 
 
@@ -96,3 +97,20 @@ must be of type dict"):
         true_gci3 = set()
         true_gci3.add((object_property_index_dict[self.has_child], class_index_dict[self.person],
                       class_index_dict[self.parent]))
+
+    def test_normalizer_param(self):
+        """This should check that ELDataset accepts a custom normalizer object"""
+
+        with self.assertRaisesRegex(TypeError, "Optional parameter normalizer must be a \
+subclass of mowl.ontology.normalize.ELNormalizerBase"):
+            ELDataset(self.dataset_family.ontology, normalizer="normalizer")
+
+        # Defaults to the fixed normalizer
+        dataset = ELDataset(self.dataset_family.ontology)
+        self.assertIsInstance(dataset.normalizer, ELNormalizer)
+
+        # An explicit normalizer is used as given
+        normalizer = ELNormalizerOld()
+        dataset = ELDataset(self.dataset_family.ontology, normalizer=normalizer)
+        self.assertIs(dataset.normalizer, normalizer)
+        self.assertEqual(len(dataset.get_gci_datasets()["gci0"]), 7)

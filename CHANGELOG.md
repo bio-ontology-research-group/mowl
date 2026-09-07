@@ -7,12 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+- Added `ELNormalizerOld`, which preserves the `EL` normalization as it behaved before this release, so earlier results can be reproduced. It is unsound and should not be used for new work [#126][i126].
+- Added `ELNormalizerBase`, the shared base class of the normalizers. Subclass it to plug a custom normalizer into `ELDataset` or `EmbeddingELModel` [#126][i126].
+- Added a `normalizer` parameter to `ELDataset` and `EmbeddingELModel`, defaulting to `ELNormalizer` [#126][i126].
+- Added `mowl.ontology.normalize.AUX_NAMESPACE`, the namespace of the auxiliary concepts that normalization introduces [#126][i126].
+- Added `org.mowl.Normalization.ELNormalizer` and `org.mowl.Normalization.ReverseAxiomTranslator` to the Java gateway [#126][i126].
 - Added `mowl.datasets.default_data_root`, which resolves the dataset cache directory, and a `MOWL_DATA_ROOT` environment variable to override it [#150][i150].
 - Added a `data_root` argument to every builtin dataset, so the download location stays overridable per dataset [#150][i150].
 ### Changed
+- Changed `EmbeddingELModel.class_index_dict` and `.object_property_index_dict` to include the auxiliary entities introduced during normalization. They are appended after the ontology entities, so the index of every ontology entity is unchanged, but the embedding tables are one row larger per auxiliary entity. Reading these properties now normalizes the ontologies [#126][i126].
+- Changed `ELDataset` to add auxiliary entities to a caller-supplied index dictionary instead of raising `KeyError`. Non-auxiliary entities missing from a supplied dictionary still raise, since that indicates a genuine mismatch [#126][i126].
+- Changed the normalized-ontology cache file for `ELNormalizer` to `<ontology>_mowl_el_normalized_v2.owl`. Caches written before this release hold the unfixed normalization and are no longer read; they remain valid for `ELNormalizerOld`, which keeps the original name [#126][i126].
 - Changed `RemoteDataset` to cache datasets under `$XDG_CACHE_HOME/mowl/datasets` (falling back to `~/.cache/mowl/datasets`) instead of the current working directory. Datasets are now shared between working directories rather than re-downloaded per directory, and running the tests or an example no longer scatters dataset directories through the checkout. Existing downloads in a working directory are not picked up and will be fetched once into the cache [#150][i150].
 - Changed the test suite to resolve dataset files through the cache instead of assuming pytest runs from the repository root.
 ### Fixed
+- Fixed `ELNormalizer` producing axioms that the input ontology does not entail. jcel numbers entities from 6 upwards, and the translator and the normalizer were each given their own `IntegerOntologyObjectFactory`, so both counters started at 6 and the auxiliary concepts introduced during normalization aliased classes of the input ontology. `C ⊑ ∃r.(D ⊓ E)` normalized to `C ⊑ ∃r.D`, `D ⊑ D` and `D ⊑ E`, asserting `D ⊑ E` between two real classes, instead of `C ⊑ ∃r.A`, `A ⊑ D` and `A ⊑ E`. The two now share one factory, and reverse translation resolves auxiliary identifiers rather than failing on them, which previously made the affected axioms disappear. Output changes for any ontology whose normalization needs auxiliary concepts [#126][i126].
 - Fixed `ELBE`'s `gci1_loss` returning an `(n, n)` matrix instead of one loss per sample. It added a column of shape `(n, 1)` to a flat vector of shape `(n,)`, which broadcasts, so every GCI1 score was combined with every other sample's score and the loss minimised was not the intended one. Training still ran, because the mean of the matrix is a scalar. The bug dates from 2023 and was invisible to the tests, which only ever passed single-row batches, where `(1, 1)` and `(1,)` broadcast to `(1, 1)`. `ELEmModule` and `BoxSquaredELModule` were checked and are unaffected.
 - Fixed `RemoteDataset._download` hanging forever on a connection that goes silent mid-transfer. `requests` has no default timeout, so a stalled socket never raised; the request now sets a connect and read timeout and retries with backoff [#149][i149].
 - Fixed an interrupted download leaving a truncated tarball that later runs mistook for a complete one. The transfer now writes to a temporary file and is renamed into place only once it finishes [#149][i149].
@@ -195,6 +204,9 @@ Fixed issue related to importing graph-based models due to missing `__init__.py`
 [i60]: https://github.com/bio-ontology-research-group/mowl/issues/60
 [i70]: https://github.com/bio-ontology-research-group/mowl/issues/70
 [i71]: https://github.com/bio-ontology-research-group/mowl/issues/71
+[i126]: https://github.com/bio-ontology-research-group/mowl/issues/126
+[i149]: https://github.com/bio-ontology-research-group/mowl/issues/149
+[i150]: https://github.com/bio-ontology-research-group/mowl/issues/150
 [i142]: https://github.com/bio-ontology-research-group/mowl/issues/142
 [i146]: https://github.com/bio-ontology-research-group/mowl/issues/146
 [i97]: https://github.com/bio-ontology-research-group/mowl/issues/97

@@ -4,6 +4,7 @@ from mowl.base_models.model import Model
 from mowl.datasets import Dataset
 from tests.datasetFactory import FamilyDataset, PPIYeastSlimDataset
 from mowl.datasets.el import ELDataset
+from mowl.ontology.normalize import AUX_NAMESPACE, ELNormalizerOld
 from mowl.models import ELEmbeddings
 import random
 import torch as th
@@ -215,3 +216,46 @@ non-existing attributes"""
                 self.assertIsInstance(key, str)
                 self.assertIsInstance(value, np.ndarray)
                 self.assertEqual(value.shape, (embed_dim,))
+
+    def test_normalizer_param(self):
+        """This checks that EmbeddingELModel accepts a custom normalizer and passes it on"""
+
+        with self.assertRaisesRegex(TypeError, "Optional parameter normalizer must be a \
+subclass of mowl.ontology.normalize.ELNormalizerBase"):
+            EmbeddingELModel(self.family_dataset, 1, 1, normalizer="normalizer")
+
+        # An explicit normalizer is kept as given, and None defers to ELDataset's default
+        normalizer = ELNormalizerOld()
+        self.assertIs(EmbeddingELModel(self.ppi_dataset, 1, 1, normalizer=normalizer).normalizer,
+                      normalizer)
+        self.assertIsNone(EmbeddingELModel(self.ppi_dataset, 1, 1).normalizer)
+
+        # The normalizer reaches the underlying ELDatasets, which is observable through the
+        # class vocabulary: the default normalizer introduces auxiliary concepts for this
+        # ontology and extends the vocabulary with them, ELNormalizerOld introduces none.
+        n_classes = len(self.ppi_dataset.classes)
+
+        model = EmbeddingELModel(self.ppi_dataset, 1, 1)
+        aux = [c for c in model.class_index_dict if c.startswith(AUX_NAMESPACE)]
+        self.assertEqual(len(aux), 1)
+        self.assertEqual(len(model.class_index_dict), n_classes + 1)
+
+        model = EmbeddingELModel(self.ppi_dataset, 1, 1, normalizer=ELNormalizerOld())
+        self.assertEqual([c for c in model.class_index_dict if c.startswith(AUX_NAMESPACE)], [])
+        self.assertEqual(len(model.class_index_dict), n_classes)
+
+    def test_auxiliary_concepts_appended_to_class_index_dict(self):
+        """Auxiliary concepts must not disturb the indexes of the ontology classes"""
+
+        model = EmbeddingELModel(self.ppi_dataset, 1, 1)
+        class_index_dict = model.class_index_dict
+
+        # Every ontology class keeps the index it has without normalization
+        for index, name in enumerate(self.ppi_dataset.classes.as_str):
+            self.assertEqual(class_index_dict[name], index)
+
+        # Auxiliary concepts come after them, contiguously
+        aux_indexes = sorted(v for k, v in class_index_dict.items()
+                             if k.startswith(AUX_NAMESPACE))
+        self.assertEqual(aux_indexes, list(range(len(self.ppi_dataset.classes),
+                                                 len(class_index_dict))))
