@@ -1,4 +1,6 @@
 from unittest import TestCase
+from copy import deepcopy
+from mowl.owlapi import OWLAPIAdapter
 from mowl.base_models.elmodel import EmbeddingELModel
 from mowl.base_models.model import Model
 from mowl.datasets import Dataset
@@ -259,3 +261,32 @@ subclass of mowl.ontology.normalize.ELNormalizerBase"):
                              if k.startswith(AUX_NAMESPACE))
         self.assertEqual(aux_indexes, list(range(len(self.ppi_dataset.classes),
                                                  len(class_index_dict))))
+
+    def test_add_axioms_keeps_auxiliary_concepts_aligned(self):
+        """add_axioms must rebuild embeddings over the vocabulary including auxiliary concepts.
+
+        The embedding rows are rebuilt in index-dictionary order, which includes the
+        auxiliary concepts, while dataset.classes does not. Rebuilding over dataset.classes
+        instead leaves the rows misaligned with the names they are read back through.
+        """
+
+        adapter = OWLAPIAdapter()
+        new_class = adapter.create_class("http://mowl.test/NewProtein")
+        axiom = adapter.create_subclass_of(
+            new_class, adapter.create_class("http://mowl.test/OtherProtein"))
+
+        model = ELEmbeddings(self.ppi_dataset, embed_dim=5)
+
+        before = deepcopy(model.class_embeddings)
+        aux_before = [c for c in before if c.startswith(AUX_NAMESPACE)]
+        self.assertEqual(len(aux_before), 1)
+
+        model.add_axioms(axiom)
+        after = model.class_embeddings
+
+        # The auxiliary concept survives, and so does every embedding, by name
+        self.assertIn(aux_before[0], after)
+        self.assertIn("http://mowl.test/NewProtein", after)
+        for name, emb in before.items():
+            with self.subTest(name=name):
+                self.assertEqual(emb.tolist(), after[name].tolist())

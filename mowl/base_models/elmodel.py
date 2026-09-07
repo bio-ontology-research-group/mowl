@@ -756,28 +756,37 @@ of :class:`torch.utils.data.DataLoader`
 
         self.dataset.add_axioms(*axioms)
 
+        # The new axioms change the signature of the ontology, and can change which
+        # auxiliary concepts normalization introduces, so the datasets and the index
+        # dictionaries built from them are stale. Dropping them makes the next read of
+        # class_index_dict renormalize.
+        self._datasets_loaded = False
+        self._dataloaders_loaded = False
+        self._el_class_index_dict = None
+        self._el_object_property_index_dict = None
+
+        # The rows are rebuilt in index-dictionary order rather than dataset.classes order,
+        # so that they stay aligned with the vocabulary class_embeddings reads them back
+        # through. The two differ by the auxiliary entities appended to the dictionaries.
         if prev_class_embeds is not None:
             new_class_embeds = []
-            for cls in self.dataset.classes:
-                cls = str(cls.toStringID())
+            for cls in self.class_index_dict:
                 if cls in prev_class_embeds:
                     new_class_embeds.append(prev_class_embeds[cls])
                 else:
                     new_class_embeds.append(np.random.normal(size=self.embed_dim))
-            
 
             new_class_embeds = np.asarray(new_class_embeds)
             self.module.class_embed.weight.data = th.from_numpy(new_class_embeds).float()
 
         if prev_object_property_embeds is not None:
             new_object_property_embeds = []
-            for rel in self.dataset.object_properties:
-                rel = str(rel.toStringID())
+            for rel in self.object_property_index_dict:
                 if rel in prev_object_property_embeds:
                     new_object_property_embeds.append(prev_object_property_embeds[rel])
                 else:
                     new_object_property_embeds.append(np.random.normal(size=self.embed_dim))
-            
+
             new_object_property_embeds = np.asarray(new_object_property_embeds)
             self.module.rel_embed.weight.data = th.from_numpy(new_object_property_embeds).float()
 
