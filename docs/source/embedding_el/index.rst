@@ -335,6 +335,7 @@ mOWL ships several ready-to-use :math:`\mathcal{EL}` models that share this inte
 - :class:`ELBE <mowl.models.ELBE>` — classes as axis-aligned boxes [peng2020]_
 - :class:`BoxSquaredEL <mowl.models.BoxSquaredEL>` — boxes with bumps for relations (Box²EL) [jackermeier2023]_
 - :class:`BoxEL <mowl.models.BoxEL>` — box embeddings for EL++ knowledge bases [xiong2022]_
+- :class:`TransBox <mowl.models.TransBox>` — EL++-closed ontology embeddings with box roles [yang2025]_
 
 Here is an example of using ELEmbeddings for protein-protein interaction prediction:
 
