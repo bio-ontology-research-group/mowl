@@ -58,8 +58,11 @@ raised at the start of training. Defaults to False.
 
     #: Default per-GCI negative sampling configuration used by :meth:`get_negative_sampling_config`.
     #: Bot GCIs are intentionally excluded — subsumption by bottom has no meaningful negative.
-    #: Each entry specifies the entity pool to sample from (``"classes"`` or ``"individuals"``)
-    #: and which column of the data tensor to corrupt with random indices.
+    #: Each entry specifies the entity pool(s) to sample from (``"classes"`` or
+    #: ``"individuals"``) and which column(s) of the data tensor to corrupt with random
+    #: indices. ``corrupt_column`` may be a single int or a list of ints (one set of
+    #: negatives is generated per column); ``index_pool`` may be a single pool name applied
+    #: to all columns or a list of pool names, one per column.
     _DEFAULT_NEG_SAMPLING_CONFIG = {
         "gci0":     {"index_pool": "classes",     "corrupt_column": 1},
         "gci1":     {"index_pool": "classes",     "corrupt_column": 2},
@@ -294,8 +297,13 @@ of :class:`torch.utils.data.DataLoader`
         :return: Dictionary mapping GCI names to their negative sampling config.
             Each entry has:
 
-            - ``'index_pool'``: ``'classes'`` or ``'individuals'`` — pool to sample from
-            - ``'corrupt_column'``: int — which column of the data tensor to replace
+            - ``'index_pool'``: ``'classes'`` or ``'individuals'`` — pool(s) to sample
+              from. A single name applies to all corrupted columns, or a list of names
+              (one per column, must match the length of ``'corrupt_column'``).
+            - ``'corrupt_column'``: int or list of ints — which column(s) of the data
+              tensor to replace with random indices. When a list is given, one set of
+              negative samples is generated per column and concatenated, so the model
+              sees K negatives per positive.
 
         :rtype: dict
         """
@@ -307,6 +315,13 @@ of :class:`torch.utils.data.DataLoader`
 
     def generate_negatives(self, gci_name, gci_dataset):
         """Generate negative samples for a given GCI type.
+
+        One or more columns of the data tensor are corrupted with random entity
+        indices, according to the GCI's negative sampling configuration (see
+        :meth:`get_negative_sampling_config`). When ``'corrupt_column'`` holds
+        several columns, one set of negative samples is generated per column
+        (each corrupting only its own column) and the sets are concatenated,
+        i.e. K negatives per positive for K columns.
 
         Override this method for custom negative sampling strategies.
 
@@ -325,23 +340,45 @@ of :class:`torch.utils.data.DataLoader`
         index_pool = cfg["index_pool"]
         corrupt_column = cfg["corrupt_column"]
 
-        if index_pool == "classes":
-            all_ids = list(self.class_index_dict.values())
-        elif index_pool == "individuals":
-            all_ids = list(self.individual_index_dict.values())
+        columns = [corrupt_column] if isinstance(corrupt_column, int) else list(corrupt_column)
+        if isinstance(index_pool, str):
+            pools = [index_pool] * len(columns)
         else:
-            raise ValueError(f"Unknown index_pool: {index_pool}")
+            pools = list(index_pool)
+            if len(pools) != len(columns):
+                raise ValueError(
+                    f"Negative sampling config for '{gci_name}': 'index_pool' has "
+                    f"{len(pools)} entries but 'corrupt_column' has {len(columns)}. "
+                    "Either give a single pool name or one pool per corrupted column."
+                )
 
         data = gci_dataset[:]
-        idxs_for_negs = np.random.choice(all_ids, size=len(gci_dataset), replace=True)
-        rand_index = th.tensor(idxs_for_negs, dtype=th.long, device=self.device)
+        for column in columns:
+            if not isinstance(column, int) or not 0 <= column < data.shape[1]:
+                raise ValueError(
+                    f"Negative sampling config for '{gci_name}': corrupt column "
+                    f"{column!r} is out of range (the data tensor has {data.shape[1]} columns)."
+                )
 
-        # Build negative data by replacing the specified column
-        neg_data = th.cat([data[:, :corrupt_column], rand_index.unsqueeze(1)], dim=1)
-        if corrupt_column + 1 < data.shape[1]:
-            neg_data = th.cat([neg_data, data[:, corrupt_column + 1:]], dim=1)
+        neg_blocks = []
+        for pool, column in zip(pools, columns):
+            if pool == "classes":
+                all_ids = list(self.class_index_dict.values())
+            elif pool == "individuals":
+                all_ids = list(self.individual_index_dict.values())
+            else:
+                raise ValueError(f"Unknown index_pool: {pool}")
 
-        return neg_data
+            idxs_for_negs = np.random.choice(all_ids, size=len(gci_dataset), replace=True)
+            rand_index = th.tensor(idxs_for_negs, dtype=th.long, device=self.device)
+
+            # Build negative data by replacing the specified column
+            neg_block = th.cat([data[:, :column], rand_index.unsqueeze(1)], dim=1)
+            if column + 1 < data.shape[1]:
+                neg_block = th.cat([neg_block, data[:, column + 1:]], dim=1)
+            neg_blocks.append(neg_block)
+
+        return th.cat(neg_blocks, dim=0)
 
     def compute_loss(self, pos_scores, neg_scores=None):
         """Compute loss from positive and negative scores.
