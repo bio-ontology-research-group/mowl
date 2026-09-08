@@ -39,6 +39,27 @@ class TestTransBox(TestCase):
         self.assertEqual(module.relation_center_embedding.weight.shape, (nb_rels, embed_dim))
         self.assertEqual(module.relation_offset_embedding.weight.shape, (nb_rels, embed_dim))
 
+    def test_negative_sampling_corrupts_both_sides_of_gci2(self):
+        """The paper negates C ⊑ ∃R.D on both sides (C and D), not D only."""
+        config = self.model.get_negative_sampling_config()
+        self.assertEqual(
+            config["gci2"], {"index_pool": "classes", "corrupt_column": [0, 2]})
+
+        data = self.model.training_datasets["gci2"][:]
+        neg = self.model.generate_negatives("gci2", self.model.training_datasets["gci2"])
+        n = len(data)
+        self.assertEqual(neg.shape, (2 * n, 3))
+        class_ids = set(self.model.class_index_dict.values())
+        block_c, block_d = neg[:n], neg[n:]
+        # Block C: role and D untouched, C from the class pool
+        self.assertTrue(th.equal(block_c[:, 1], data[:, 1]))
+        self.assertTrue(th.equal(block_c[:, 2], data[:, 2]))
+        self.assertTrue(set(block_c[:, 0].tolist()) <= class_ids)
+        # Block D: class C and role untouched, D from the class pool
+        self.assertTrue(th.equal(block_d[:, 0], data[:, 0]))
+        self.assertTrue(th.equal(block_d[:, 1], data[:, 1]))
+        self.assertTrue(set(block_d[:, 2].tolist()) <= class_ids)
+
 
 class TestTransBoxLosses(TestCase):
     """Unit tests for the TransBox loss functions on hand-crafted boxes."""

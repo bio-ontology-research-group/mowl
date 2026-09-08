@@ -16,6 +16,12 @@ class TransBox(EmbeddingELModel):
         The paper's benchmarks use ``embed_dim=200``, ``learning_rate=0.0005``,
         ``margin=0`` and ``reg_factor=0`` for GALEN, GO and Anatomy.
 
+    .. note::
+        Following the paper (Section 4.1), GCIs of the form ``C \sqsubseteq \exists R.D``
+        are negated on **both sides**: the negative sampling config corrupts the ``C``
+        and the ``D`` columns separately (two negatives per positive), and the module's
+        gci2 negative loss implements the paper's :math:`L_{\nsubseteq}`.
+
     """
 
     def __init__(self,
@@ -34,6 +40,12 @@ class TransBox(EmbeddingELModel):
                          model_filepath=model_filepath, device=device,
                          learning_rate=learning_rate,
                          neg_sampling_gcis=neg_sampling_gcis)
+
+        # Paper-faithful negative sampling: negate both sides of C ⊑ ∃R.D
+        # (corrupt C and D separately instead of D only).
+        self._DEFAULT_NEG_SAMPLING_CONFIG = {
+            "gci2": {"index_pool": "classes", "corrupt_column": [0, 2]},
+        }
 
         self.margin = margin
         self.use_enhancement = use_enhancement
