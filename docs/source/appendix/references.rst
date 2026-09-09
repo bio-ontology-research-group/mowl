@@ -17,6 +17,8 @@ References
 
 .. [jackermeier2023] Jackermeier, M., Chen, J., & Horrocks, I. (2023). `Box2EL: Concept and Role Box Embeddings for the Description Logic EL++ <https://arxiv.org/abs/2301.11118>`_. ArXiv, abs/2301.11118.
 
+.. [jackermeier2024] Jackermeier, M., Chen, J., & Horrocks, I. (2024). `Dual Box Embeddings for the Description Logic EL++ <https://doi.org/10.1145/3589334.3645648>`_. In: Proceedings of the ACM Web Conference 2024 (WWW '24), 2250–2258. Published version of the preprint cited as [jackermeier2023]_.
+
 .. [xiong2022] Xiong, B., Potyka, N., Tran, TK., Nayyeri, M., Staab, S. (2022). Faithful Embeddings for EL++ Knowledge Bases. In: Sattler, U., et al. The Semantic Web – ISWC 2022. ISWC 2022. Lecture Notes in Computer Science, vol 13489. Springer, Cham. https://doi.org/10.1007/978-3-031-19433-7_2
 
 .. [falcon2022] Hinnerichs, T., Tang, Z., Peng, X., Zhang, X., & Hoehndorf, R. (2022). `FALCON: Sound and Complete Neural Semantic Entailment over ALC Ontologies <https://arxiv.org/abs/2208.07628>`_. ArXiv, abs/2208.07628.

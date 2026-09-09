@@ -36,6 +36,27 @@ The bottom concept can exist in the right side of GCIs 0,1,3 only, which can be 
    \exists R. C &\sqsubseteq \bot & (\text{GCI BOT 3})
    \end{aligned}
 
+Besides concept axioms, :class:`ELDataset <mowl.datasets.el.ELDataset>` can also extract the
+two role axiom normal forms of the :math:`\mathcal{EL}^{++}` language, when they are present in
+the ontology:
+
+.. math::
+   \begin{aligned}
+   R &\sqsubseteq S & (\text{role inclusion}) \\
+   R \circ T &\sqsubseteq S & (\text{role chain})
+   \end{aligned}
+
+Transitive property declarations are represented as role chains of the form
+:math:`R \circ R \sqsubseteq R`.
+
+Only a module that implements ``role_inclusion_loss`` and ``role_chain_loss`` can train on
+them, so they are **opt-in**: pass ``load_role_axioms=True`` to
+:class:`ELDataset <mowl.datasets.el.ELDataset>` or to
+:class:`EmbeddingELModel <mowl.base_models.EmbeddingELModel>`, and they appear under the
+``role_inclusion`` and ``role_chain`` keys of
+:meth:`get_gci_datasets <mowl.datasets.el.ELDataset.get_gci_datasets>` alongside the concept
+normal forms. A model that loads them without a module declaring
+``role_axiom_capable = True`` raises :class:`NotImplementedError` at the start of training.
 
 mOWL provides different functionalities to generate models that aim to embed axioms in :math:`\mathcal{EL}`. Let's start!
 
@@ -262,8 +283,9 @@ Alternatively, you can use |eldataset| and |elmodule| directly without :class:`E
    #validation_dataloaders = ..
    #testing_dataloaders = ...
 
-   
+
    model = MyELModule() #Let's reuse the module of the example before.
+
 
    for epoch in range(10):
        for gci_name, gci_dataloader in training_dataloaders.items():

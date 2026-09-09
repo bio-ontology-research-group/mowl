@@ -47,6 +47,13 @@ actually supports). Pass an explicit list to override this — a :class:`NotImpl
 raised at the start of training if any requested GCI is not in ``neg_capable_gcis``. Bot GCIs \
 (``"gci0_bot"``, ``"gci1_bot"``, ``"gci3_bot"``) are never subject to negative sampling.
     :type neg_sampling_gcis: list of str, optional
+    :param load_role_axioms: If `True`, the :math:`\\mathcal{EL}^{++}` role axioms of the \
+ontology (role inclusions and role chains) are loaded as the ``role_inclusion`` and \
+``role_chain`` datasets and trained on like any other normal form. The module must implement \
+``role_inclusion_loss`` and ``role_chain_loss`` and declare \
+:attr:`~mowl.nn.ELModule.role_axiom_capable`, otherwise a :class:`NotImplementedError` is \
+raised at the start of training. Defaults to False.
+    :type load_role_axioms: bool, optional
     """
 
     #: Default per-GCI negative sampling configuration used by :meth:`get_negative_sampling_config`.
@@ -62,9 +69,13 @@ raised at the start of training if any requested GCI is not in ``neg_capable_gci
         "object_property_assertion": {"index_pool": "individuals", "corrupt_column": 2},
     }
 
+    #: Normal forms that are loaded only when ``load_role_axioms=True`` and that require a
+    #: module declaring :attr:`role_axiom_capable <mowl.nn.ELModule.role_axiom_capable>`.
+    ROLE_AXIOM_GCIS = ("role_inclusion", "role_chain")
+
     def __init__(self, dataset, embed_dim, batch_size, extended=True, model_filepath=None,
                  load_normalized=False, device="cpu", learning_rate=0.001,
-                 neg_sampling_gcis=None):
+                 neg_sampling_gcis=None, load_role_axioms=False):
         super().__init__(dataset, model_filepath=model_filepath)
 
         if not isinstance(embed_dim, int):
@@ -79,6 +90,9 @@ raised at the start of training if any requested GCI is not in ``neg_capable_gci
         if not isinstance(load_normalized, bool):
             raise TypeError("Optional parameter load_normalized must be of type bool.")
 
+        if not isinstance(load_role_axioms, bool):
+            raise TypeError("Optional parameter load_role_axioms must be of type bool.")
+
         if not isinstance(device, str):
             raise TypeError("Optional parameter device must be of type str.")
 
@@ -91,6 +105,7 @@ raised at the start of training if any requested GCI is not in ``neg_capable_gci
         self.load_normalized = load_normalized
         self.learning_rate = learning_rate
         self.neg_sampling_gcis = neg_sampling_gcis
+        self.load_role_axioms = load_role_axioms
 
         self._training_datasets = None
         self._validation_datasets = None
@@ -138,7 +153,8 @@ raised at the start of training if any requested GCI is not in ``neg_capable_gci
                                         extended=self._extended,
                                         load_normalized=self.load_normalized,
                                         device=self.device,
-                                        ontology_path=ontology_path)
+                                        ontology_path=ontology_path,
+                                        load_role_axioms=self.load_role_axioms)
 
         self._training_datasets = training_el_dataset.get_gci_datasets()
 
@@ -147,7 +163,8 @@ raised at the start of training if any requested GCI is not in ``neg_capable_gci
             validation_el_dataset = ELDataset(self.dataset.validation, self.class_index_dict,
                                               self.object_property_index_dict,
                                               extended=self._extended, device=self.device,
-                                              ontology_path=validation_path)
+                                              ontology_path=validation_path,
+                                              load_role_axioms=self.load_role_axioms)
 
             self._validation_datasets = validation_el_dataset.get_gci_datasets()
 
@@ -156,7 +173,8 @@ raised at the start of training if any requested GCI is not in ``neg_capable_gci
             testing_el_dataset = ELDataset(self.dataset.testing, self.class_index_dict,
                                            self.object_property_index_dict,
                                            extended=self._extended, device=self.device,
-                                           ontology_path=testing_path)
+                                           ontology_path=testing_path,
+                                           load_role_axioms=self.load_role_axioms)
 
             self._testing_datasets = testing_el_dataset.get_gci_datasets()
 
@@ -390,6 +408,19 @@ of :class:`torch.utils.data.DataLoader`
             'training method (e.g., different negative sampling, etc.), please override '
             'the appropriate methods in a subclass.'
         )
+
+        # Verify that the module can consume the EL++ role axioms, if they were loaded
+        role_axiom_gcis = [gci for gci in self.ROLE_AXIOM_GCIS
+                           if gci in self.training_datasets]
+        if role_axiom_gcis and not self.module.role_axiom_capable:
+            raise NotImplementedError(
+                f"'load_role_axioms=True' loaded the EL++ role axiom dataset(s) "
+                f"{role_axiom_gcis}, but '{type(self.module).__name__}' does not declare "
+                f"'role_axiom_capable = True'. Implement 'role_inclusion_loss' and "
+                f"'role_chain_loss' on the module and set the flag, or construct the model "
+                f"with 'load_role_axioms=False' (the default) to train on the concept "
+                f"normal forms only."
+            )
 
         # Verify that every GCI configured for negative sampling has a true negative loss
         neg_config = self.get_negative_sampling_config()
