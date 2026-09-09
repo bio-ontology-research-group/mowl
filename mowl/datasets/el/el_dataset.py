@@ -1,7 +1,8 @@
 import torch as th
-from torch.utils.data import DataLoader
-from mowl.ontology.normalize import ELNormalizer, GCI
+from torch.utils.data import DataLoader, Dataset
+from mowl.ontology.normalize import ELNormalizer, GCI, extract_role_axioms
 from mowl.datasets.gci import GCIDataset, ClassAssertionDataset, ObjectPropertyAssertionDataset
+import logging
 import random
 from org.semanticweb.owlapi.model import OWLOntology
 
@@ -98,6 +99,8 @@ org.semanticweb.owlapi.model.OWLOntology.")
         self._gci3_bot_dataset = None
         self._class_assertion_dataset = None
         self._object_property_assertion_dataset = None
+        self._role_inclusion_dataset = None
+        self._role_chain_dataset = None
 
     def load(self):
         if self._loaded:
@@ -120,6 +123,14 @@ org.semanticweb.owlapi.model.OWLOntology.")
             classes |= set(new_classes)
             relations |= set(new_relations)
             individuals |= set(new_individuals)
+
+        # Role inclusions/chains are not EL GCIs, so the normalizer does not return them.
+        # They are extracted directly from the ontology (EL++ language).
+        self._role_inclusions, self._role_chains = extract_role_axioms(self._ontology)
+        _, role_relations, _ = GCI.get_entities(self._role_inclusions)
+        relations |= role_relations
+        _, role_relations, _ = GCI.get_entities(self._role_chains)
+        relations |= role_relations
 
         classes = sorted(list(classes))
         relations = sorted(list(relations))
@@ -200,7 +211,25 @@ org.semanticweb.owlapi.model.OWLOntology.")
             random.shuffle(gci_object_property_assertion)
             self._object_property_assertion_dataset = ObjectPropertyAssertionDataset(
                 gci_object_property_assertion, self._object_property_index_dict, self._individual_index_dict, device=self.device)
-            
+
+        if len(self._role_inclusions) > 0:
+            random.shuffle(self._role_inclusions)
+            self._role_inclusion_dataset = RoleInclusionDataset(
+                self._role_inclusions, object_property_index_dict=self._object_property_index_dict, device=self.device)
+
+        if len(self._role_chains) > 0:
+            filtered_chains = []
+            for chain in self._role_chains:
+                if len(chain.sub_chain) <= 2:
+                    filtered_chains.append(chain)
+                else:
+                    logging.warning("Role chain with more than 2 properties is not supported "
+                                    "and will be ignored: %s", chain)
+            self._role_chains = filtered_chains
+            random.shuffle(self._role_chains)
+            self._role_chain_dataset = RoleChainDataset(
+                self._role_chains, object_property_index_dict=self._object_property_index_dict, device=self.device)
+
         self._loaded = True
 
     def get_gci_datasets(self):
@@ -227,7 +256,13 @@ org.semanticweb.owlapi.model.OWLOntology.")
 
         if self.object_property_assertion_dataset is not None:
             datasets["object_property_assertion"] = self.object_property_assertion_dataset
-            
+
+        if self.role_inclusion_dataset is not None:
+            datasets["role_inclusion"] = self.role_inclusion_dataset
+
+        if self.role_chain_dataset is not None:
+            datasets["role_chain"] = self.role_chain_dataset
+
         return datasets
 
     @property
@@ -305,6 +340,24 @@ org.semanticweb.owlapi.model.OWLOntology.")
     @property
     def object_property_assertion_dataset(self):
         return self._object_property_assertion_dataset
+
+    @property
+    def role_inclusion_dataset(self):
+        """Returns the dataset with the role inclusion axioms :math:`R \sqsubseteq S`, if any.
+
+        :rtype: :class:`RoleInclusionDataset` or ``None``
+        """
+        self.load()
+        return self._role_inclusion_dataset
+
+    @property
+    def role_chain_dataset(self):
+        """Returns the dataset with the role chain axioms :math:`R \circ T \sqsubseteq S`, if any.
+
+        :rtype: :class:`RoleChainDataset` or ``None``
+        """
+        self.load()
+        return self._role_chain_dataset
     
 class GCI0Dataset(GCIDataset):
     def __init__(self, *args, **kwargs):
@@ -391,6 +444,68 @@ class GCI3Dataset(GCIDataset):
             filler = self.class_index_dict[gci.filler]
             superclass = self.class_index_dict[gci.superclass]
             yield object_property, filler, superclass
+
+
+class RoleInclusionDataset(GCIDataset):
+    """Dataset of role inclusion axioms :math:`R \sqsubseteq S`.
+
+    The data tensor has shape \(\ast, 2\) where ``R`` is at ``[:,0]`` and ``S`` at ``[:,1]``.
+    """
+
+    def __init__(self, data, object_property_index_dict, device="cpu"):
+        Dataset.__init__(self)
+        self.object_property_index_dict = object_property_index_dict
+        self.device = device
+        self._data = self.push_to_device(data)
+
+    def push_to_device(self, data):
+        pretensor = []
+        for role_inclusion in data:
+            sub_property = self.object_property_index_dict[role_inclusion.sub_property]
+            super_property = self.object_property_index_dict[role_inclusion.super_property]
+            pretensor.append([sub_property, super_property])
+        tensor = th.tensor(pretensor).to(self.device)
+        return tensor
+
+    def get_data_(self):
+        for role_inclusion in self.data:
+            sub_property = self.object_property_index_dict[role_inclusion.sub_property]
+            super_property = self.object_property_index_dict[role_inclusion.super_property]
+            yield sub_property, super_property
+
+
+class RoleChainDataset(GCIDataset):
+    """Dataset of role chain axioms :math:`R \circ T \sqsubseteq S` (transitive property 
+    declarations are represented as :math:`R \circ R \sqsubseteq R`).
+
+    The data tensor has shape \(\ast, 3\) where ``R`` is at ``[:,0]``, ``T`` at ``[:,1]`` 
+    and ``S`` at ``[:,2]``.
+    """
+
+    def __init__(self, data, object_property_index_dict, device="cpu"):
+        Dataset.__init__(self)
+        self.object_property_index_dict = object_property_index_dict
+        self.device = device
+        self._data = self.push_to_device(data)
+
+    def push_to_device(self, data):
+        pretensor = []
+        for role_chain in data:
+            sub1, sub2 = role_chain.sub_chain
+            super_property = role_chain.super_property
+            pretensor.append([self.object_property_index_dict[sub1],
+                              self.object_property_index_dict[sub2],
+                              self.object_property_index_dict[super_property]])
+        tensor = th.tensor(pretensor).to(self.device)
+        return tensor
+
+    def get_data_(self):
+        for role_chain in self.data:
+            sub1, sub2 = role_chain.sub_chain
+            super_property = role_chain.super_property
+            yield (self.object_property_index_dict[sub1],
+                   self.object_property_index_dict[sub2],
+                   self.object_property_index_dict[super_property])
 
 
 

@@ -27,7 +27,7 @@ class ELModule(nn.Module):
         self.rel_embed = None
         self.ind_embed = None
 
-        self.gci_names = ["gci0", "gci1", "gci2", "gci3", "gci0_bot", "gci1_bot", "gci3_bot", "class_assertion", "object_property_assertion"]
+        self.gci_names = ["gci0", "gci1", "gci2", "gci3", "gci0_bot", "gci1_bot", "gci3_bot", "class_assertion", "object_property_assertion", "role_inclusion", "role_chain"]
 
     def gci0_loss(self, gci, neg=False):
         """Loss function for GCI0: :math:`C \sqsubseteq D`.
@@ -153,6 +153,35 @@ class ELModule(nn.Module):
         """
 
         return NotImplementedError()
+
+    def role_inclusion_loss(self, gci, neg=False):
+        """Loss function for role inclusion: :math:`R \sqsubseteq S`.
+
+        :param gci: Input tensor of shape \(\ast, 2\) where ``R`` object properties will be at \
+        ``gci[:,0]`` and ``S`` object properties will be at ``gci[:,1]``. It is recommended to use \
+        the :class:`ELDataset <mowl.datasets.el.ELDataset>`.
+        :type gci: :class:`torch.Tensor`
+        :param neg: Parameter indicating that the negative version of this loss function must be \
+        used. Defaults to ``False``.
+        :type neg: bool, optional.
+        """
+
+        raise NotImplementedError()
+
+    def role_chain_loss(self, gci, neg=False):
+        """Loss function for role chain: :math:`R \circ T \sqsubseteq S`.
+
+        :param gci: Input tensor of shape \(\ast, 3\) where ``R`` object properties will be at \
+        ``gci[:,0]``, ``T`` object properties will be at ``gci[:,1]`` and ``S`` object properties \
+        will be at ``gci[:,2]``. It is recommended to use the \
+        :class:`ELDataset <mowl.datasets.el.ELDataset>`.
+        :type gci: :class:`torch.Tensor`
+        :param neg: Parameter indicating that the negative version of this loss function must be \
+        used. Defaults to ``False``.
+        :type neg: bool, optional.
+        """
+
+        raise NotImplementedError()
     
     def get_loss_function(self, gci_name):
         """
@@ -178,7 +207,9 @@ class ELModule(nn.Module):
             "gci2": self.gci2_loss,
             "gci3": self.gci3_loss,
             "class_assertion": self.class_assertion_loss,
-            "object_property_assertion": self.object_property_assertion_loss
+            "object_property_assertion": self.object_property_assertion_loss,
+            "role_inclusion": self.role_inclusion_loss,
+            "role_chain": self.role_chain_loss
         }[gci_name]
 
     def forward(self, gci, gci_name, neg=False):
