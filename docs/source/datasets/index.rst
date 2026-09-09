@@ -23,6 +23,19 @@ Built-in datasets
 
 There are several built-in datasets related to bioinformatics tasks such as protein-protein interactions prediction and gene-disease association prediction. Datasets can be found at :doc:`Datasets API docs <../../api/datasets/index>`.
 
+For :math:`\mathcal{EL}^{++}` subsumption prediction, mOWL provides the GALEN, GO and Anatomy ontologies with the 80/10/10 benchmark introduced by Jackermeier, Chen and Horrocks (WWW 2024) and used by the TransBox paper (WWW 2025):
+
+.. code-block:: python
+
+   from mowl.datasets.builtin import GALENJackermeier2024Dataset
+   ds = GALENJackermeier2024Dataset()
+   train_ontology = ds.ontology
+   valid_ontology = ds.validation
+   test_ontology = ds.testing
+
+:math:`\mathcal{EL}^{++}` models built on top of :class:`EmbeddingELModel <mowl.base_models.EmbeddingELModel>` automatically make use of the role inclusion and role chain axioms contained in these ontologies when their module sets ``role_axiom_capable = True`` (see :doc:`the EL guide </embedding_el/index>`).
+
+
 To access any of these datasets you can use:
 
 .. testcode::
