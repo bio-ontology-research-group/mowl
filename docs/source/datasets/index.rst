@@ -23,9 +23,9 @@ Built-in datasets
 
 There are several built-in datasets related to bioinformatics tasks such as protein-protein interactions prediction and gene-disease association prediction. Datasets can be found at :doc:`Datasets API docs <../../api/datasets/index>`.
 
-For :math:`\mathcal{EL}^{++}` subsumption prediction, mOWL provides the GALEN, GO and Anatomy ontologies with the 80/10/10 benchmark introduced by Jackermeier, Chen and Horrocks (WWW 2024) and used by the TransBox paper (WWW 2025):
+For :math:`\mathcal{EL}^{++}` subsumption prediction, mOWL provides the GALEN, GO and Anatomy ontologies with the 80/10/10 benchmark introduced by [jackermeier2024]_ and used by the TransBox paper (WWW 2025):
 
-.. code-block:: python
+.. testcode::
 
    from mowl.datasets.builtin import GALENJackermeier2024Dataset
    ds = GALENJackermeier2024Dataset()
