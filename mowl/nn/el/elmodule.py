@@ -20,6 +20,11 @@ class ELModule(nn.Module):
     #: this to declare their capabilities.
     neg_capable_gcis = frozenset()
 
+    #: Whether this module implements the EL++ role axiom losses (``role_inclusion`` and
+    #: ``role_chain``). Models that do not set this to ``True`` will skip the role axiom
+    #: datasets provided by :class:`ELDataset <mowl.datasets.el.ELDataset>`.
+    role_axiom_capable = False
+
     def __init__(self):
         super().__init__()
 

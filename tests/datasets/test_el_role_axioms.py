@@ -79,6 +79,32 @@ org.semanticweb.owlapi.model.OWLOntology."):
                          {"http://test/R2", "http://test/R3", "http://test/R1"})
         self.assertEqual(individuals, set())
 
+    def test_non_atomic_role_expressions_are_ignored(self):
+        adapter = OWLAPIAdapter()
+        factory = adapter.data_factory
+        r1 = factory.getOWLObjectProperty(IRI.create("http://test/S1"))
+        r2 = factory.getOWLObjectProperty(IRI.create("http://test/S2"))
+        r3 = factory.getOWLObjectProperty(IRI.create("http://test/S3"))
+        ont = adapter.owl_manager.createOntology(IRI.create("http://test/inverse_roles"))
+        # role inclusion with an inverse sub property: (R1 o) ⊑ R2
+        ont.addAxiom(factory.getOWLSubObjectPropertyOfAxiom(factory.getOWLObjectInverseOf(r1), r2))
+        # role chain with an inverse property in the chain: (R2 o) ∘ R3 ⊑ R1
+        chain = java.util.ArrayList()
+        chain.add(factory.getOWLObjectInverseOf(r2))
+        chain.add(r3)
+        ont.addAxiom(factory.getOWLSubPropertyChainOfAxiom(chain, r1))
+        # an atomic chain: R3 ∘ R3 ⊑ R2
+        chain2 = java.util.ArrayList()
+        chain2.add(r3)
+        chain2.add(r3)
+        ont.addAxiom(factory.getOWLSubPropertyChainOfAxiom(chain2, r2))
+
+        role_inclusions, role_chains = extract_role_axioms(ont)
+        self.assertEqual(role_inclusions, [])
+        self.assertEqual(len(role_chains), 1)
+        self.assertEqual(role_chains[0].sub_chain, ("http://test/S3", "http://test/S3"))
+        self.assertEqual(role_chains[0].super_property, "http://test/S2")
+
     def test_ontology_without_role_axioms(self):
         adapter = OWLAPIAdapter()
         factory = adapter.data_factory

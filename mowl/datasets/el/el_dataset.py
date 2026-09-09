@@ -127,10 +127,13 @@ org.semanticweb.owlapi.model.OWLOntology.")
         # Role inclusions/chains are not EL GCIs, so the normalizer does not return them.
         # They are extracted directly from the ontology (EL++ language).
         self._role_inclusions, self._role_chains = extract_role_axioms(self._ontology)
-        _, role_relations, _ = GCI.get_entities(self._role_inclusions)
-        relations |= role_relations
-        _, role_relations, _ = GCI.get_entities(self._role_chains)
-        relations |= role_relations
+        if self._object_property_index_dict is None:
+            # A new index dictionary is created below; make sure it covers the
+            # properties appearing in the role axioms as well.
+            _, role_relations, _ = GCI.get_entities(self._role_inclusions)
+            relations |= role_relations
+            _, role_relations, _ = GCI.get_entities(self._role_chains)
+            relations |= role_relations
 
         classes = sorted(list(classes))
         relations = sorted(list(relations))
@@ -143,6 +146,20 @@ org.semanticweb.owlapi.model.OWLOntology.")
             self._object_property_index_dict = {v: k for k, v in enumerate(relations)}
         if self._individual_index_dict is None:
             self._individual_index_dict = {v: k for k, v in enumerate(individuals)}
+
+        if self._role_inclusions or self._role_chains:
+            # An externally provided index dictionary may not cover all the properties
+            # used by the role axioms (e.g. owl:topObjectProperty); drop the ones that
+            # cannot be indexed instead of failing.
+            index_dict = self._object_property_index_dict
+            self._role_inclusions = [
+                role_inclusion for role_inclusion in self._role_inclusions
+                if {role_inclusion.sub_property, role_inclusion.super_property} <= set(index_dict)
+            ]
+            self._role_chains = [
+                role_chain for role_chain in self._role_chains
+                if set(role_chain.sub_chain) | {role_chain.super_property} <= set(index_dict)
+            ]
         if not self._extended:
             gci0 = gcis["gci0"] + gcis["gci0_bot"]
             gci1 = gcis["gci1"] + gcis["gci1_bot"]

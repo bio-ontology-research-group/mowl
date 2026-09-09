@@ -140,7 +140,8 @@ raised at the start of training if any requested GCI is not in ``neg_capable_gci
                                         device=self.device,
                                         ontology_path=ontology_path)
 
-        self._training_datasets = training_el_dataset.get_gci_datasets()
+        self._training_datasets = self._filter_gci_datasets(
+            training_el_dataset.get_gci_datasets())
 
         self._validation_datasets = None
         if self.dataset.validation:
@@ -149,7 +150,8 @@ raised at the start of training if any requested GCI is not in ``neg_capable_gci
                                               extended=self._extended, device=self.device,
                                               ontology_path=validation_path)
 
-            self._validation_datasets = validation_el_dataset.get_gci_datasets()
+            self._validation_datasets = self._filter_gci_datasets(
+                validation_el_dataset.get_gci_datasets())
 
         self._testing_datasets = None
         if self.dataset.testing:
@@ -158,9 +160,23 @@ raised at the start of training if any requested GCI is not in ``neg_capable_gci
                                            extended=self._extended, device=self.device,
                                            ontology_path=testing_path)
 
-            self._testing_datasets = testing_el_dataset.get_gci_datasets()
+            self._testing_datasets = self._filter_gci_datasets(
+                testing_el_dataset.get_gci_datasets())
 
         self._datasets_loaded = True
+
+    def _filter_gci_datasets(self, datasets):
+        """Filters the GCI datasets returned by \
+        :class:`ELDataset <mowl.datasets.el.ELDataset>` so that only the normal forms the \
+        model's module can actually train on are kept. Currently, the EL++ role axiom \
+        datasets (``role_inclusion`` and ``role_chain``) are dropped for modules that do \
+        not declare :attr:`role_axiom_capable <mowl.nn.el.ELModule.role_axiom_capable>`.
+        """
+        module = getattr(self, "module", None)
+        if module is not None and not getattr(module, "role_axiom_capable", False):
+            datasets.pop("role_inclusion", None)
+            datasets.pop("role_chain", None)
+        return datasets
 
     def _load_dataloaders(self):
         if self._dataloaders_loaded:

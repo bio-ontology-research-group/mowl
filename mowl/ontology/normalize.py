@@ -5,7 +5,8 @@ from de.tudresden.inf.lat.jcel.owlapi.translator import Translator
 from org.semanticweb.owlapi.model.parameters import Imports
 from uk.ac.manchester.cs.owl.owlapi import OWLClassImpl, OWLObjectSomeValuesFromImpl, \
     OWLObjectIntersectionOfImpl
-from org.semanticweb.owlapi.model import OWLAxiom, OWLOntology, AxiomType, ClassExpressionType, IRI
+from org.semanticweb.owlapi.model import OWLAxiom, OWLOntology, AxiomType, ClassExpressionType, IRI, \
+    OWLObjectProperty
 from org.semanticweb.owlapi.apibinding import OWLManager
 
 from java.util import HashSet
@@ -832,10 +833,24 @@ org.semanticweb.owlapi.model.OWLOntology. Found: {}".format(type(ontology)))
     for axiom in ontology.getAxioms(Imports.fromBoolean(True)):
         axiom_type = axiom.getAxiomType()
         if axiom_type == AxiomType.SUB_OBJECT_PROPERTY:
-            role_inclusions.append(RoleInclusion(axiom))
+            # Only atomic property expressions are supported (inverse and chain
+            # expressions are skipped, as they do not map to object property indices).
+            if isinstance(axiom.getSubProperty(), OWLObjectProperty) and \
+                    isinstance(axiom.getSuperProperty(), OWLObjectProperty):
+                role_inclusions.append(RoleInclusion(axiom))
+            else:
+                logging.warning("Role inclusion with non-atomic properties is not supported "
+                                "and will be ignored: %s", axiom)
         elif axiom_type == AxiomType.TRANSITIVE_OBJECT_PROPERTY:
             role_chains.append(RoleChain(axiom))
         elif axiom_type == AxiomType.SUB_PROPERTY_CHAIN_OF:
-            role_chains.append(RoleChain(axiom))
+            # Only chains of atomic object properties (length >= 1) are supported.
+            properties = list(axiom.getPropertyChain())
+            if all(isinstance(prop, OWLObjectProperty) for prop in properties) and \
+                    isinstance(axiom.getSuperProperty(), OWLObjectProperty):
+                role_chains.append(RoleChain(axiom))
+            else:
+                logging.warning("Role chain with non-atomic properties is not supported "
+                                "and will be ignored: %s", axiom)
 
     return role_inclusions, role_chains
