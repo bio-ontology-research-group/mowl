@@ -123,8 +123,23 @@ class TestEldatasetRoleAxioms(TestCase):
     def setUp(self):
         self.ont = create_ontology_with_role_axioms()
 
-    def test_role_datasets(self):
+    def test_role_axioms_are_opt_in(self):
+        """Without ``load_role_axioms`` the role axioms of the ontology are not touched:
+        no module can train on them unless it implements the two extra losses."""
         dataset = ELDataset(self.ont, extended=True, load_normalized=False)
+
+        self.assertIsNone(dataset.role_inclusion_dataset)
+        self.assertIsNone(dataset.role_chain_dataset)
+        datasets = dataset.get_gci_datasets()
+        self.assertNotIn("role_inclusion", datasets)
+        self.assertNotIn("role_chain", datasets)
+        # the concept normal forms are unaffected
+        self.assertEqual(len(datasets["gci0"]), 1)
+        self.assertEqual(len(datasets["gci2"]), 1)
+
+    def test_role_datasets(self):
+        dataset = ELDataset(self.ont, extended=True, load_normalized=False,
+                            load_role_axioms=True)
 
         inclusion_dataset = dataset.role_inclusion_dataset
         self.assertIsNotNone(inclusion_dataset)
@@ -148,7 +163,8 @@ class TestEldatasetRoleAxioms(TestCase):
                          sorted([(r2, r2, r2), (r2, r3, r1)]))
 
     def test_get_gci_datasets_includes_role_axioms(self):
-        dataset = ELDataset(self.ont, extended=True, load_normalized=False)
+        dataset = ELDataset(self.ont, extended=True, load_normalized=False,
+                            load_role_axioms=True)
         datasets = dataset.get_gci_datasets()
 
         self.assertIn("role_inclusion", datasets)
@@ -167,27 +183,53 @@ class TestEldatasetRoleAxioms(TestCase):
         ont = adapter.owl_manager.createOntology(IRI.create("http://test/no_roles"))
         ont.addAxiom(factory.getOWLSubClassOfAxiom(c1, c2))
 
-        dataset = ELDataset(ont, extended=True, load_normalized=False)
+        dataset = ELDataset(ont, extended=True, load_normalized=False,
+                            load_role_axioms=True)
         self.assertIsNone(dataset.role_inclusion_dataset)
         self.assertIsNone(dataset.role_chain_dataset)
         datasets = dataset.get_gci_datasets()
         self.assertNotIn("role_inclusion", datasets)
         self.assertNotIn("role_chain", datasets)
 
+    def test_properties_missing_from_the_index_dict_are_dropped(self):
+        """An externally provided object property index dictionary need not cover every
+        property of the ontology (``owl:topObjectProperty`` in GDA, for instance). The role
+        axioms that cannot be indexed are dropped rather than raising a ``KeyError``."""
+        object_property_index_dict = {"http://test/R1": 0, "http://test/R2": 1}
 
-class TestElModuleRoleAxioms(TestCase):
+        dataset = ELDataset(self.ont, object_property_index_dict=object_property_index_dict,
+                            extended=True, load_normalized=False, load_role_axioms=True)
 
-    def test_loss_function_dispatch(self):
-        from mowl.nn import ELModule
-        import torch as th
+        # R1 ⊑ R2 survives, R2 ∘ R3 ⊑ R1 does not because R3 has no index, and the
+        # transitive R2 ∘ R2 ⊑ R2 does.
+        self.assertEqual(dataset.role_inclusion_dataset.data.tolist(), [[0, 1]])
+        self.assertEqual(dataset.role_chain_dataset.data.tolist(), [[1, 1, 1]])
 
-        module = ELModule()
-        self.assertIn("role_inclusion", module.gci_names)
-        self.assertIn("role_chain", module.gci_names)
-        self.assertEqual(module.get_loss_function("role_inclusion"), module.role_inclusion_loss)
-        self.assertEqual(module.get_loss_function("role_chain"), module.role_chain_loss)
+    def test_chains_longer_than_two_properties_are_dropped(self):
+        """A chain of three properties has no representation in the (*, 3) tensor. When it
+        is the only chain of the ontology, no role chain dataset is built at all -- an empty
+        one would carry a tensor of the wrong shape."""
+        adapter = OWLAPIAdapter()
+        factory = adapter.data_factory
+        c1 = factory.getOWLClass(IRI.create("http://test/E1"))
+        c2 = factory.getOWLClass(IRI.create("http://test/E2"))
+        props = [factory.getOWLObjectProperty(IRI.create(f"http://test/T{i}")) for i in range(4)]
+        ont = adapter.owl_manager.createOntology(IRI.create("http://test/long_chain"))
+        ont.addAxiom(factory.getOWLSubClassOfAxiom(c1, c2))
+        chain = java.util.ArrayList()
+        for prop in props[:3]:
+            chain.add(prop)
+        ont.addAxiom(factory.getOWLSubPropertyChainOfAxiom(chain, props[3]))
 
-        with self.assertRaises(NotImplementedError):
-            module.forward(th.tensor([[0, 1]]), "role_inclusion")
-        with self.assertRaises(NotImplementedError):
-            module.forward(th.tensor([[0, 1, 2]]), "role_chain")
+        dataset = ELDataset(ont, extended=True, load_normalized=False,
+                            load_role_axioms=True)
+
+        self.assertIsNone(dataset.role_chain_dataset)
+        self.assertNotIn("role_chain", dataset.get_gci_datasets())
+
+    def test_empty_role_axiom_dataset_keeps_its_arity(self):
+        """Guards the shape of the data tensor independently of ELDataset."""
+        from mowl.datasets.el import RoleChainDataset, RoleInclusionDataset
+
+        self.assertEqual(tuple(RoleInclusionDataset([], {}).data.shape), (0, 2))
+        self.assertEqual(tuple(RoleChainDataset([], {}).data.shape), (0, 3))

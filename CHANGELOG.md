@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+- Added the `GALENJackermeier2024Dataset`, `GOJackermeier2024Dataset` and `AnatomyJackermeier2024Dataset` builtin datasets: the GALEN, GO and ANATOMY ontologies with the 80/10/10 subsumption prediction split distributed with the Box²EL reference implementation, also used by TransBox (WWW 2025). The class IRIs of the Anatomy dataset are opaque generated IRIs, because the reference benchmark ships no class names for ANATOMY [#157][i157].
+- Added extraction of the two EL++ role axiom normal forms — role inclusion (`R ⊑ S`) and role chain (`R ∘ T ⊑ S`, which is also how transitive property declarations are represented). New `RoleInclusion` and `RoleChain` axiom classes and an `extract_role_axioms()` function in `mowl.ontology.normalize`; new `RoleAxiomDataset`, `RoleInclusionDataset` and `RoleChainDataset` in `mowl.datasets.el`. Role axioms over non-atomic property expressions (e.g. inverses) are skipped with a warning, as are chains of more than two properties [#157][i157].
+- Added a `load_role_axioms` argument to `ELDataset` and `EmbeddingELModel`, defaulting to `False`. When enabled, `get_gci_datasets()` also returns the `role_inclusion` and `role_chain` datasets; when left at the default nothing changes for existing code, including for the shipped ontologies that do contain role axioms (PPI yeast, for instance, has 3 role inclusions and 6 role chains) [#157][i157].
+- Added `ELModule.role_inclusion_loss` and `ELModule.role_chain_loss` (not implemented in the base class) and the `ELModule.role_axiom_capable` class flag. Loading the role axioms with a module that does not declare the flag raises `NotImplementedError` at the start of training rather than failing mid-epoch, so `ELEmbeddings`, `ELBE`, `BoxSquaredEL` and `BoxEL` are unaffected [#157][i157].
 - Added `mowl.datasets.default_data_root`, which resolves the dataset cache directory, and a `MOWL_DATA_ROOT` environment variable to override it [#150][i150].
 - Added a `data_root` argument to every builtin dataset, so the download location stays overridable per dataset [#150][i150].
 ### Changed
@@ -197,5 +201,8 @@ Fixed issue related to importing graph-based models due to missing `__init__.py`
 [i71]: https://github.com/bio-ontology-research-group/mowl/issues/71
 [i142]: https://github.com/bio-ontology-research-group/mowl/issues/142
 [i146]: https://github.com/bio-ontology-research-group/mowl/issues/146
+[i149]: https://github.com/bio-ontology-research-group/mowl/issues/149
+[i150]: https://github.com/bio-ontology-research-group/mowl/issues/150
+[i157]: https://github.com/bio-ontology-research-group/mowl/issues/157
 [i97]: https://github.com/bio-ontology-research-group/mowl/issues/97
 

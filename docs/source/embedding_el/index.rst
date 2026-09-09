@@ -36,9 +36,9 @@ The bottom concept can exist in the right side of GCIs 0,1,3 only, which can be 
    \exists R. C &\sqsubseteq \bot & (\text{GCI BOT 3})
    \end{aligned}
 
-Besides concept axioms, :class:`ELDataset <mowl.datasets.el.ELDataset>` also extracts the two
-role axiom normal forms of the :math:`\mathcal{EL}^{++}` language, when they are present in the
-ontology:
+Besides concept axioms, :class:`ELDataset <mowl.datasets.el.ELDataset>` can also extract the
+two role axiom normal forms of the :math:`\mathcal{EL}^{++}` language, when they are present in
+the ontology:
 
 .. math::
    \begin{aligned}
@@ -47,10 +47,16 @@ ontology:
    \end{aligned}
 
 Transitive property declarations are represented as role chains of the form
-:math:`R \circ R \sqsubseteq R`. These datasets are available under the keys
-``role_inclusion`` and ``role_chain`` of :meth:`ELDataset.get_gci_datasets <mowl.datasets.el.ELDataset.get_gci_datasets>`,
-and are only loaded by :class:`EmbeddingELModel <mowl.base_models.EmbeddingELModel>` subclasses
-whose module sets ``role_axiom_capable = True``.
+:math:`R \circ R \sqsubseteq R`.
+
+Only a module that implements ``role_inclusion_loss`` and ``role_chain_loss`` can train on
+them, so they are **opt-in**: pass ``load_role_axioms=True`` to
+:class:`ELDataset <mowl.datasets.el.ELDataset>` or to
+:class:`EmbeddingELModel <mowl.base_models.EmbeddingELModel>`, and they appear under the
+``role_inclusion`` and ``role_chain`` keys of
+:meth:`get_gci_datasets <mowl.datasets.el.ELDataset.get_gci_datasets>` alongside the concept
+normal forms. A model that loads them without a module declaring
+``role_axiom_capable = True`` raises :class:`NotImplementedError` at the start of training.
 
 mOWL provides different functionalities to generate models that aim to embed axioms in :math:`\mathcal{EL}`. Let's start!
 
@@ -273,18 +279,14 @@ Alternatively, you can use |eldataset| and |elmodule| directly without :class:`E
    Furthermore if we need DataLoaders (which might not be always the case)
    """
 
-   model = MyELModule() #Let's reuse the module of the example before.
-
-   # MyELModule does not implement the EL++ role axiom losses, so we drop those
-   # datasets (modules that do implement them set ``role_axiom_capable = True``).
-   gci_datasets = training_datasets.get_gci_datasets()
-   gci_datasets = {k: v for k, v in gci_datasets.items()
-                   if not (k in ("role_inclusion", "role_chain") and not model.role_axiom_capable)}
-   training_dataloaders = {k: DataLoader(v, batch_size = 64) for k,v in gci_datasets.items()}
+   training_dataloaders = {k: DataLoader(v, batch_size = 64) for k,v in training_datasets.get_gci_datasets().items()}
    #validation_dataloaders = ..
    #testing_dataloaders = ...
 
-   
+
+   model = MyELModule() #Let's reuse the module of the example before.
+
+
    for epoch in range(10):
        for gci_name, gci_dataloader in training_dataloaders.items():
            for i, batch in enumerate(gci_dataloader):

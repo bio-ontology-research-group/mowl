@@ -21,8 +21,9 @@ class ELModule(nn.Module):
     neg_capable_gcis = frozenset()
 
     #: Whether this module implements the EL++ role axiom losses (``role_inclusion`` and
-    #: ``role_chain``). Models that do not set this to ``True`` will skip the role axiom
-    #: datasets provided by :class:`ELDataset <mowl.datasets.el.ELDataset>`.
+    #: ``role_chain``). A model constructed with ``load_role_axioms=True`` raises
+    #: :class:`NotImplementedError` at the start of training unless its module declares
+    #: this, so that the axioms are never silently dropped nor silently unusable.
     role_axiom_capable = False
 
     def __init__(self):
@@ -32,7 +33,9 @@ class ELModule(nn.Module):
         self.rel_embed = None
         self.ind_embed = None
 
-        self.gci_names = ["gci0", "gci1", "gci2", "gci3", "gci0_bot", "gci1_bot", "gci3_bot", "class_assertion", "object_property_assertion", "role_inclusion", "role_chain"]
+        self.gci_names = ["gci0", "gci1", "gci2", "gci3", "gci0_bot", "gci1_bot", "gci3_bot",
+                          "class_assertion", "object_property_assertion",
+                          "role_inclusion", "role_chain"]
 
     def gci0_loss(self, gci, neg=False):
         """Loss function for GCI0: :math:`C \sqsubseteq D`.
@@ -163,15 +166,15 @@ class ELModule(nn.Module):
         """Loss function for role inclusion: :math:`R \sqsubseteq S`.
 
         :param gci: Input tensor of shape \(\ast, 2\) where ``R`` object properties will be at \
-        ``gci[:,0]`` and ``S`` object properties will be at ``gci[:,1]``. It is recommended to use \
-        the :class:`ELDataset <mowl.datasets.el.ELDataset>`.
+        ``gci[:,0]`` and ``S`` object properties will be at ``gci[:,1]``. It is recommended \
+        to use the :class:`ELDataset <mowl.datasets.el.ELDataset>`.
         :type gci: :class:`torch.Tensor`
         :param neg: Parameter indicating that the negative version of this loss function must be \
         used. Defaults to ``False``.
         :type neg: bool, optional.
         """
 
-        raise NotImplementedError()
+        raise NotImplementedError(self._role_axiom_error("role_inclusion"))
 
     def role_chain_loss(self, gci, neg=False):
         """Loss function for role chain: :math:`R \circ T \sqsubseteq S`.
@@ -186,8 +189,16 @@ class ELModule(nn.Module):
         :type neg: bool, optional.
         """
 
-        raise NotImplementedError()
-    
+        raise NotImplementedError(self._role_axiom_error("role_chain"))
+
+    def _role_axiom_error(self, gci_name):
+        """Message for a role axiom loss that the module does not implement."""
+        return (f"'{type(self).__name__}' does not implement the '{gci_name}' loss, so it "
+                f"cannot train on the EL++ role axioms of this ontology. Implement "
+                f"'{gci_name}_loss' and set 'role_axiom_capable = True' on the module, or "
+                f"do not load the role axioms in the first place (ELDataset and "
+                f"EmbeddingELModel take 'load_role_axioms', which defaults to False).")
+
     def get_loss_function(self, gci_name):
         """
         This chooses the corresponding loss fuction given the name of the GCI.
