@@ -1,12 +1,35 @@
 import torch as th
-from torch.utils.data import Dataset
-from mowl.ontology.normalize import ELNormalizer, GCI, extract_role_axioms
+from torch.utils.data import DataLoader, Dataset
+from mowl.ontology.normalize import AUX_NAMESPACE, ELNormalizer, ELNormalizerBase, GCI
+from mowl.ontology.normalize import extract_role_axioms
 from mowl.datasets.gci import GCIDataset, ClassAssertionDataset, ObjectPropertyAssertionDataset
 import logging
 import random
 from org.semanticweb.owlapi.model import OWLOntology
 
 logger = logging.getLogger(__name__)
+
+
+def _extend_with_auxiliary(index_dict, names):
+    """Adds the auxiliary entities of ``names`` that are missing from ``index_dict``.
+
+    Normalization introduces auxiliary entities that are not in the signature of the input
+    ontology, so a caller-supplied index dictionary cannot know about them. They are appended,
+    which leaves the index of every entity already in the dictionary untouched. The dictionary
+    is modified in place, so that datasets sharing it stay consistent.
+
+    Entities that are not auxiliary are deliberately left out: a non-auxiliary name missing
+    from a supplied index dictionary means the caller passed the wrong dictionary, and that
+    should still surface as a ``KeyError``.
+
+    :param index_dict: Dictionary `entity name --> index`, modified in place
+    :type index_dict: dict
+    :param names: Entity names occurring in the normalized axioms
+    :type names: iterable of str
+    """
+    for name in names:
+        if name.startswith(AUX_NAMESPACE) and name not in index_dict:
+            index_dict[name] = len(index_dict)
 
 
 class ELDataset():
@@ -40,6 +63,15 @@ class ELDataset():
     :param use_cache: Whether to use caching when ``ontology_path`` is provided. Defaults to \
     ``True``.
     :type use_cache: bool, optional
+    :param normalizer: Normalizer used to transform the ontology into normal forms. If not \
+    provided, an :class:`~mowl.ontology.normalize.ELNormalizer` is used. Pass \
+    :class:`~mowl.ontology.normalize.ELNormalizerOld` to reproduce results obtained before \
+    mOWL 2.2.0. Defaults to ``None``.
+    :type normalizer: :class:`~mowl.ontology.normalize.ELNormalizerBase`, optional
+
+    .. versionchanged:: 2.2.0
+        Added the ``normalizer`` parameter.
+
     :param load_role_axioms: Whether to also extract the two :math:`\\mathcal{EL}^{++}` role \
     axiom normal forms of the ontology -- role inclusions :math:`R \\sqsubseteq S` and role \
     chains :math:`R \\circ T \\sqsubseteq S` -- and expose them through \
@@ -59,6 +91,7 @@ class ELDataset():
                  device="cpu",
                  ontology_path=None,
                  use_cache=True,
+                 normalizer=None,
                  load_role_axioms=False
                  ):
 
@@ -89,9 +122,14 @@ org.semanticweb.owlapi.model.OWLOntology.")
         if not isinstance(use_cache, bool):
             raise TypeError("Optional parameter use_cache must be of type bool")
 
+        if normalizer is not None and not isinstance(normalizer, ELNormalizerBase):
+            raise TypeError("Optional parameter normalizer must be a subclass of \
+mowl.ontology.normalize.ELNormalizerBase")
+
         if not isinstance(load_role_axioms, bool):
             raise TypeError("Optional parameter load_role_axioms must be of type bool")
 
+        self.normalizer = ELNormalizer() if normalizer is None else normalizer
         self._ontology = ontology
         self._loaded = False
         self._extended = extended
@@ -122,9 +160,7 @@ org.semanticweb.owlapi.model.OWLOntology.")
         if self._loaded:
             return
 
-        normalizer = ELNormalizer()
-
-        gcis = normalizer.normalize(
+        gcis = self.normalizer.normalize(
             self._ontology,
             load=self.load_normalized,
             ontology_path=self.ontology_path,
@@ -162,8 +198,12 @@ org.semanticweb.owlapi.model.OWLOntology.")
         
         if self._class_index_dict is None:
             self._class_index_dict = {v: k for k, v in enumerate(classes)}
+        else:
+            _extend_with_auxiliary(self._class_index_dict, classes)
         if self._object_property_index_dict is None:
             self._object_property_index_dict = {v: k for k, v in enumerate(relations)}
+        else:
+            _extend_with_auxiliary(self._object_property_index_dict, relations)
         if self._individual_index_dict is None:
             self._individual_index_dict = {v: k for k, v in enumerate(individuals)}
 

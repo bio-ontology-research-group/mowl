@@ -195,3 +195,115 @@ The resulting variable ``gcis`` is a dictionary of the form:
 +------------+--------------------------------------------------------------+
 
 
+
+.. _auxiliary-concepts:
+
+Auxiliary concepts
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Not every axiom fits a normal form directly. When a class expression is nested too deeply, the
+normalization rules break it up by introducing a fresh concept name. For example,
+
+.. math::
+   C \sqsubseteq \exists r. (D \sqcap E)
+
+is not in any of the forms above, because the filler of the existential restriction is a
+conjunction rather than a concept name. Normalization replaces that filler by a fresh concept
+:math:`A`:
+
+.. math::
+   \begin{align}
+   C &\sqsubseteq \exists r. A \\
+   A &\sqsubseteq D \\
+   A &\sqsubseteq E
+   \end{align}
+
+Those fresh concepts are called *auxiliary*. :class:`ELNormalizer
+<mowl.ontology.normalize.ELNormalizer>` names them in the
+:data:`AUX_NAMESPACE <mowl.ontology.normalize.AUX_NAMESPACE>` namespace, for example
+``http://mowl.borg/el_normalization#aux_11``. They are ordinary concept names in the output, and
+:class:`ELDataset <mowl.datasets.el.ELDataset>` adds them to the class vocabulary so that
+:math:`\mathcal{EL}` models learn an embedding for them.
+
+.. note::
+
+   Auxiliary names are derived from internal entity identifiers. They are stable for a given
+   ontology, but adding or removing entities shifts them, so treat them as opaque rather than as
+   persistent identifiers.
+
+.. _choosing-a-normalizer:
+
+Choosing a normalizer
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Before mOWL 2.2.0 the auxiliary concepts collided with classes of the input ontology, so
+normalization could assert subsumptions that the input does not entail. The previous behavior is
+kept as :class:`ELNormalizerOld <mowl.ontology.normalize.ELNormalizerOld>` so that earlier results
+can be reproduced. It should not be used for new work.
+
+.. note::
+
+   The identifier collision and its fix are described in `mOWL pull request #153
+   <https://github.com/bio-ontology-research-group/mowl/pull/153>`_, which closes `issue #126
+   <https://github.com/bio-ontology-research-group/mowl/issues/126>`_. The same two defects are
+   fixed upstream in `jcel pull request #12 <https://github.com/julianmendez/jcel/pull/12>`_;
+   mOWL does not depend on that pull request being merged, because it shares one entity manager
+   between the translator and the normalizer instead of changing jcel.
+
+The difference is visible on exactly the axiom above:
+
+.. testcode::
+
+   from java.util import HashSet
+   from org.semanticweb.owlapi.model import IRI
+
+   from mowl.owlapi import OWLAPIAdapter
+   from mowl.ontology.normalize import AUX_NAMESPACE, ELNormalizer, ELNormalizerOld
+
+   adapter = OWLAPIAdapter()
+   factory = adapter.data_factory
+
+   c = adapter.create_class("http://example.org/C")
+   d = adapter.create_class("http://example.org/D")
+   e = adapter.create_class("http://example.org/E")
+   r = factory.getOWLObjectProperty(IRI.create("http://example.org/r"))
+
+   # C ⊑ ∃r.(D ⊓ E)
+   filler = factory.getOWLObjectIntersectionOf(HashSet([d, e]))
+   axiom = factory.getOWLSubClassOfAxiom(c, factory.getOWLObjectSomeValuesFrom(r, filler))
+   ontology = adapter.owl_manager.createOntology(HashSet([axiom]))
+
+   def short(name):
+       """Renders auxiliary concepts as A, and every other concept by its last IRI segment."""
+       return "A" if name.startswith(AUX_NAMESPACE) else name.split("/")[-1]
+
+   def show(gcis):
+       lines = [f"{short(g.subclass)} <= {short(g.superclass)}" for g in gcis["gci0"]]
+       lines += [f"{short(g.subclass)} <= exists r.{short(g.filler)}" for g in gcis["gci2"]]
+       return sorted(lines)
+
+   print("ELNormalizer   :", show(ELNormalizer().normalize(ontology)))
+   print("ELNormalizerOld:", show(ELNormalizerOld().normalize(ontology)))
+
+.. testoutput::
+
+   ELNormalizer   : ['A <= D', 'A <= E', 'C <= exists r.A']
+   ELNormalizerOld: ['C <= exists r.D', 'D <= D', 'D <= E']
+
+``ELNormalizerOld`` reuses ``D`` as the auxiliary concept, so it emits ``D <= E``, a
+subsumption between two classes of the input ontology that the input does not entail.
+
+A normalizer is selected through the ``normalizer`` parameter of :class:`ELDataset
+<mowl.datasets.el.ELDataset>` and :class:`EmbeddingELModel
+<mowl.base_models.elmodel.EmbeddingELModel>`:
+
+.. testcode::
+
+   from mowl.datasets.builtin import FamilyDataset
+   from mowl.datasets.el import ELDataset
+   from mowl.ontology.normalize import ELNormalizerOld
+
+   ontology = FamilyDataset().ontology
+
+   dataset = ELDataset(ontology)                                # ELNormalizer, the default
+   dataset = ELDataset(ontology, normalizer=ELNormalizerOld())  # previous behavior

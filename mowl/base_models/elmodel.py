@@ -1,4 +1,4 @@
-from mowl.ontology.normalize import ELNormalizer
+from mowl.ontology.normalize import ELNormalizerBase
 from mowl.base_models.model import Model
 from mowl.datasets.el import ELDataset
 from mowl.projection import projector_factory
@@ -48,6 +48,16 @@ actually supports). Pass an explicit list to override this — a :class:`NotImpl
 raised at the start of training if any requested GCI is not in ``neg_capable_gcis``. Bot GCIs \
 (``"gci0_bot"``, ``"gci1_bot"``, ``"gci3_bot"``) are never subject to negative sampling.
     :type neg_sampling_gcis: list of str, optional
+    :param normalizer: Normalizer used to transform the ontologies into normal forms. Passed \
+through to :class:`~mowl.datasets.el.ELDataset`. If not provided, an \
+:class:`~mowl.ontology.normalize.ELNormalizer` is used. Pass \
+:class:`~mowl.ontology.normalize.ELNormalizerOld` to reproduce results obtained before \
+mOWL 2.2.0. Defaults to ``None``.
+    :type normalizer: :class:`~mowl.ontology.normalize.ELNormalizerBase`, optional
+
+    .. versionchanged:: 2.2.0
+        Added the ``normalizer`` parameter.
+
     :param load_role_axioms: If `True`, the :math:`\\mathcal{EL}^{++}` role axioms of the \
 ontology (role inclusions and role chains) are loaded as the ``role_inclusion`` and \
 ``role_chain`` datasets and trained on like any other normal form. The module must implement \
@@ -79,7 +89,7 @@ raised at the start of training. Defaults to False.
 
     def __init__(self, dataset, embed_dim, batch_size, extended=True, model_filepath=None,
                  load_normalized=False, device="cpu", learning_rate=0.001,
-                 neg_sampling_gcis=None, load_role_axioms=False):
+                 neg_sampling_gcis=None, normalizer=None, load_role_axioms=False):
         super().__init__(dataset, model_filepath=model_filepath)
 
         if not isinstance(embed_dim, int):
@@ -99,6 +109,17 @@ raised at the start of training. Defaults to False.
 
         if not isinstance(device, str):
             raise TypeError("Optional parameter device must be of type str.")
+
+        if normalizer is not None and not isinstance(normalizer, ELNormalizerBase):
+            raise TypeError("Optional parameter normalizer must be a subclass of \
+mowl.ontology.normalize.ELNormalizerBase")
+
+        self.normalizer = normalizer
+
+        # Index dictionaries extended with the auxiliary entities that normalization
+        # introduces. Populated by _load_datasets and shared by every ELDataset it builds.
+        self._el_class_index_dict = None
+        self._el_object_property_index_dict = None
 
         self._datasets_loaded = False
         self._dataloaders_loaded = False
@@ -136,6 +157,37 @@ raised at the start of training. Defaults to False.
             raise ValueError(f"eval_gci_name must be one of {valid_gci_names}, got '{value}'")
         self._eval_gci_name = value
 
+    @property
+    def class_index_dict(self):
+        """Dictionary with class names as keys and class indexes as values, extended with the \
+auxiliary concepts that normalization introduces.
+
+        Those concepts are not in the signature of the ontology, so they are absent from
+        :attr:`mowl.base_models.Model.class_index_dict`, but the model still has to embed
+        them. They are appended after the ontology classes, which leaves the index of every
+        ontology class unchanged. Reading this property normalizes the ontologies.
+
+        :rtype: dict
+
+        .. versionchanged:: 2.2.0
+            Includes the auxiliary concepts introduced during normalization.
+        """
+        self._load_datasets()
+        return self._el_class_index_dict
+
+    @property
+    def object_property_index_dict(self):
+        """Dictionary with object property names as keys and indexes as values, extended with \
+the auxiliary object properties that normalization introduces.
+
+        :rtype: dict
+
+        .. versionchanged:: 2.2.0
+            Includes the auxiliary object properties introduced during normalization.
+        """
+        self._load_datasets()
+        return self._el_object_property_index_dict
+
     def init_module(self):
         raise NotImplementedError
 
@@ -151,33 +203,46 @@ raised at the start of training. Defaults to False.
         validation_path = getattr(self.dataset, 'validation_path', None)
         testing_path = getattr(self.dataset, 'testing_path', None)
 
+        # One index dictionary per entity kind, shared by the three ELDatasets below so that
+        # the auxiliary entities any of them introduces are visible to all of them and to the
+        # model. Seeded from the ontology signature, hence the base-class properties: reading
+        # the overridden ones here would recurse back into this method. Individuals are left
+        # to ELDataset, as before: normalization introduces no auxiliary individuals.
+        self._el_class_index_dict = Model.class_index_dict.fget(self)
+        self._el_object_property_index_dict = Model.object_property_index_dict.fget(self)
+
         training_el_dataset = ELDataset(self.dataset.ontology,
-                                        self.class_index_dict,
-                                        self.object_property_index_dict,
+                                        self._el_class_index_dict,
+                                        self._el_object_property_index_dict,
                                         extended=self._extended,
                                         load_normalized=self.load_normalized,
                                         device=self.device,
                                         ontology_path=ontology_path,
+                                        normalizer=self.normalizer,
                                         load_role_axioms=self.load_role_axioms)
 
         self._training_datasets = training_el_dataset.get_gci_datasets()
 
         self._validation_datasets = None
         if self.dataset.validation:
-            validation_el_dataset = ELDataset(self.dataset.validation, self.class_index_dict,
-                                              self.object_property_index_dict,
+            validation_el_dataset = ELDataset(self.dataset.validation,
+                                              self._el_class_index_dict,
+                                              self._el_object_property_index_dict,
                                               extended=self._extended, device=self.device,
                                               ontology_path=validation_path,
+                                              normalizer=self.normalizer,
                                               load_role_axioms=self.load_role_axioms)
 
             self._validation_datasets = validation_el_dataset.get_gci_datasets()
 
         self._testing_datasets = None
         if self.dataset.testing:
-            testing_el_dataset = ELDataset(self.dataset.testing, self.class_index_dict,
-                                           self.object_property_index_dict,
+            testing_el_dataset = ELDataset(self.dataset.testing,
+                                           self._el_class_index_dict,
+                                           self._el_object_property_index_dict,
                                            extended=self._extended, device=self.device,
                                            ontology_path=testing_path,
+                                           normalizer=self.normalizer,
                                            load_role_axioms=self.load_role_axioms)
 
             self._testing_datasets = testing_el_dataset.get_gci_datasets()
@@ -850,28 +915,37 @@ of :class:`torch.utils.data.DataLoader`
 
         self.dataset.add_axioms(*axioms)
 
+        # The new axioms change the signature of the ontology, and can change which
+        # auxiliary concepts normalization introduces, so the datasets and the index
+        # dictionaries built from them are stale. Dropping them makes the next read of
+        # class_index_dict renormalize.
+        self._datasets_loaded = False
+        self._dataloaders_loaded = False
+        self._el_class_index_dict = None
+        self._el_object_property_index_dict = None
+
+        # The rows are rebuilt in index-dictionary order rather than dataset.classes order,
+        # so that they stay aligned with the vocabulary class_embeddings reads them back
+        # through. The two differ by the auxiliary entities appended to the dictionaries.
         if prev_class_embeds is not None:
             new_class_embeds = []
-            for cls in self.dataset.classes:
-                cls = str(cls.toStringID())
+            for cls in self.class_index_dict:
                 if cls in prev_class_embeds:
                     new_class_embeds.append(prev_class_embeds[cls])
                 else:
                     new_class_embeds.append(np.random.normal(size=self.embed_dim))
-            
 
             new_class_embeds = np.asarray(new_class_embeds)
             self.module.class_embed.weight.data = th.from_numpy(new_class_embeds).float()
 
         if prev_object_property_embeds is not None:
             new_object_property_embeds = []
-            for rel in self.dataset.object_properties:
-                rel = str(rel.toStringID())
+            for rel in self.object_property_index_dict:
                 if rel in prev_object_property_embeds:
                     new_object_property_embeds.append(prev_object_property_embeds[rel])
                 else:
                     new_object_property_embeds.append(np.random.normal(size=self.embed_dim))
-            
+
             new_object_property_embeds = np.asarray(new_object_property_embeds)
             self.module.rel_embed.weight.data = th.from_numpy(new_object_property_embeds).float()
 

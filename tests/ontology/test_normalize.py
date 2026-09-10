@@ -1,5 +1,6 @@
 from unittest import TestCase
-from mowl.ontology.normalize import ELNormalizer, GCI, GCI0, GCI1, GCI2, GCI3, GCI0_BOT, \
+from mowl.ontology.normalize import AUX_NAMESPACE, ELNormalizer, ELNormalizerBase, \
+    ELNormalizerOld, GCI, GCI0, GCI1, GCI2, GCI3, GCI0_BOT, \
     GCI1_BOT, GCI3_BOT, process_axiom
 from tests.datasetFactory import FamilyDataset
 from mowl.owlapi import OWLAPIAdapter
@@ -152,11 +153,14 @@ org.semanticweb.owlapi.model.OWLOntology. Found: <class 'str'>"):
         self.assertEqual(len(normalized_axioms["gci1_bot"]), 1)
         self.assertEqual(len(normalized_axioms["gci3_bot"]), 0)
 
-        # Test _revert_translations method
+        # Test that _group_axioms skips axioms that are not in any normal form
+        not_a_gci = OWLEquivalentObjectPropertiesAxiomImpl(
+            HashSet([self.data_factory.getOWLObjectProperty(IRI.create("http://role1")),
+                     self.data_factory.getOWLObjectProperty(IRI.create("http://role2"))]),
+            HashSet())
         with self.assertLogs(level="INFO") as log:
-            normalizer._ELNormalizer__revert_translation([self.gci0_axiom])
-            message = f"Reverse translation. Ignoring axiom: {self.gci0_axiom}"
-            self.assertEqual(log.records[0].getMessage(), message)
+            normalizer._group_axioms([not_a_gci])
+            self.assertEqual(log.records[0].getMessage(), f"Ignoring axiom: {not_a_gci}")
 
     def test_process_axiom_type_checking(self):
         """This performs type checking on the process_axiom method"""
@@ -359,7 +363,8 @@ class TestElNormalizerCaching(TestCase):
 
         # Create a test ontology file path
         ontology_path = os.path.join(self.temp_dir, "test_ontology.owl")
-        expected_cache_path = os.path.join(self.temp_dir, "test_ontology_mowl_el_normalized.owl")
+        expected_cache_path = os.path.join(
+            self.temp_dir, f"test_ontology{ELNormalizer.CACHE_SUFFIX}.owl")
 
         normalizer = ELNormalizer()
         normalized_axioms = normalizer.normalize(
@@ -380,7 +385,8 @@ class TestElNormalizerCaching(TestCase):
         import os
 
         ontology_path = os.path.join(self.temp_dir, "test_ontology.owl")
-        expected_cache_path = os.path.join(self.temp_dir, "test_ontology_mowl_el_normalized.owl")
+        expected_cache_path = os.path.join(
+            self.temp_dir, f"test_ontology{ELNormalizer.CACHE_SUFFIX}.owl")
 
         normalizer = ELNormalizer()
 
@@ -421,7 +427,8 @@ class TestElNormalizerCaching(TestCase):
         normalized_axioms = normalizer.normalize(self.family_dataset.ontology)
 
         # No cache files should be created in temp_dir
-        cache_files = [f for f in os.listdir(self.temp_dir) if f.endswith("_mowl_el_normalized.owl")]
+        cache_files = [f for f in os.listdir(self.temp_dir)
+                       if f.endswith(f"{ELNormalizer.CACHE_SUFFIX}.owl")]
         self.assertEqual(len(cache_files), 0, "No cache files should be created without ontology_path")
 
         # Normalization should still work
@@ -432,7 +439,8 @@ class TestElNormalizerCaching(TestCase):
         import os
 
         ontology_path = os.path.join(self.temp_dir, "test_ontology.owl")
-        expected_cache_path = os.path.join(self.temp_dir, "test_ontology_mowl_el_normalized.owl")
+        expected_cache_path = os.path.join(
+            self.temp_dir, f"test_ontology{ELNormalizer.CACHE_SUFFIX}.owl")
 
         normalizer = ELNormalizer()
 
@@ -458,10 +466,10 @@ class TestElNormalizerCaching(TestCase):
         import os
 
         test_cases = [
-            ("ontology.owl", "ontology_mowl_el_normalized.owl"),
-            ("/path/to/ontology.owl", "/path/to/ontology_mowl_el_normalized.owl"),
-            ("my_ontology.owl", "my_ontology_mowl_el_normalized.owl"),
-            ("/data/test.owl", "/data/test_mowl_el_normalized.owl"),
+            ("ontology.owl", f"ontology{ELNormalizer.CACHE_SUFFIX}.owl"),
+            ("/path/to/ontology.owl", f"/path/to/ontology{ELNormalizer.CACHE_SUFFIX}.owl"),
+            ("my_ontology.owl", f"my_ontology{ELNormalizer.CACHE_SUFFIX}.owl"),
+            ("/data/test.owl", f"/data/test{ELNormalizer.CACHE_SUFFIX}.owl"),
         ]
 
         normalizer = ELNormalizer()
@@ -490,3 +498,107 @@ class TestElNormalizerCaching(TestCase):
                 ontology_path=ontology_path,
                 use_cache="yes"
             )
+
+
+class TestAuxiliaryConcepts(TestCase):
+    """Tests for the auxiliary concepts that the normalization rules introduce.
+
+    ``C ⊑ ∃r.(D ⊓ E)`` is not in any EL normal form: the filler ``D ⊓ E`` has to be
+    replaced by a fresh concept name ``A``, giving ``C ⊑ ∃r.A``, ``A ⊑ D`` and ``A ⊑ E``.
+    Getting that fresh name wrong is the bug reported in issue #126.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.adapter = OWLAPIAdapter()
+        cls.data_factory = cls.adapter.data_factory
+
+        cls.c = cls.adapter.create_class("http://mowl.test/C")
+        cls.d = cls.adapter.create_class("http://mowl.test/D")
+        cls.e = cls.adapter.create_class("http://mowl.test/E")
+        role = cls.data_factory.getOWLObjectProperty(IRI.create("http://mowl.test/r"))
+
+        # The GCI classes expose entity names as bare IRIs, unlike str() on an OWLClass
+        cls.c_name = str(cls.c.toStringID())
+        cls.d_name = str(cls.d.toStringID())
+        cls.e_name = str(cls.e.toStringID())
+
+        filler = cls.data_factory.getOWLObjectIntersectionOf(HashSet([cls.d, cls.e]))
+        axiom = cls.data_factory.getOWLSubClassOfAxiom(
+            cls.c, cls.data_factory.getOWLObjectSomeValuesFrom(role, filler))
+
+        cls.ontology = cls.adapter.owl_manager.createOntology(HashSet([axiom]))
+
+    def test_old_normalizer_aliases_auxiliary_concepts(self):
+        """ELNormalizerOld maps the auxiliary concept onto a class of the input ontology.
+
+        This documents the bug of issue #126. The translator numbers the entities of the
+        ontology from 6 upwards, and the normalizer is handed a second, independent
+        IntegerOntologyObjectFactory whose counter also starts at 6, so the auxiliary
+        concept reuses an identifier that already belongs to a real class.
+        """
+
+        gcis = ELNormalizerOld().normalize(self.ontology)
+
+        gci0 = {(g.subclass, g.superclass) for g in gcis["gci0"]}
+        gci2 = {(g.subclass, g.object_property, g.filler) for g in gcis["gci2"]}
+
+        # No auxiliary concept is introduced at all; every name comes from the input.
+        names = {name for pair in gci0 for name in pair}
+        names |= {gci[0] for gci in gci2} | {gci[2] for gci in gci2}
+        self.assertTrue(all(not name.startswith(AUX_NAMESPACE) for name in names))
+
+        # Instead, one of the input classes is used as the auxiliary concept, which makes
+        # the output assert a subsumption between two classes of the input ontology that
+        # the input does not entail: either D ⊑ E or E ⊑ D.
+        self.assertTrue(
+            (self.d_name, self.e_name) in gci0 or (self.e_name, self.d_name) in gci0,
+            f"expected a spurious subsumption between D and E, got {gci0}")
+
+    def test_normalizer_introduces_auxiliary_concept(self):
+        """ELNormalizer introduces a fresh auxiliary concept instead of reusing a class."""
+
+        gcis = ELNormalizer().normalize(self.ontology)
+
+        self.assertEqual(len(gcis["gci0"]), 2)
+        self.assertEqual(len(gcis["gci2"]), 1)
+
+        # C ⊑ ∃r.A, with A auxiliary
+        gci2 = gcis["gci2"][0]
+        self.assertEqual(gci2.subclass, self.c_name)
+        self.assertTrue(gci2.filler.startswith(AUX_NAMESPACE))
+        aux = gci2.filler
+
+        # A ⊑ D and A ⊑ E, i.e. the same auxiliary concept on the left of both GCI0s
+        self.assertEqual({(g.subclass, g.superclass) for g in gcis["gci0"]},
+                         {(aux, self.d_name), (aux, self.e_name)})
+
+    def test_normalizer_does_not_relate_input_classes(self):
+        """No subsumption between two classes of the input ontology is invented."""
+
+        gcis = ELNormalizer().normalize(self.ontology)
+        input_names = {self.c_name, self.d_name, self.e_name}
+
+        for gci in gcis["gci0"]:
+            self.assertNotIn((gci.subclass, gci.superclass),
+                             {(a, b) for a in input_names for b in input_names})
+
+    def test_auxiliary_concepts_are_shared_across_axioms(self):
+        """The same auxiliary identifier maps to the same OWL class everywhere."""
+
+        gcis = ELNormalizer().normalize(self.ontology)
+        aux_subclasses = {g.subclass for g in gcis["gci0"]}
+        self.assertEqual(len(aux_subclasses), 1)
+        self.assertEqual(aux_subclasses.pop(), gcis["gci2"][0].filler)
+
+    def test_normalizers_share_the_base_class(self):
+        """Both normalizers satisfy the interface that ELDataset expects."""
+
+        self.assertIsInstance(ELNormalizer(), ELNormalizerBase)
+        self.assertIsInstance(ELNormalizerOld(), ELNormalizerBase)
+
+    def test_base_class_normalize_axioms_is_abstract(self):
+        """ELNormalizerBase cannot normalize on its own."""
+
+        with self.assertRaises(NotImplementedError):
+            ELNormalizerBase().normalize(self.ontology)
