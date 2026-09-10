@@ -3,7 +3,7 @@ from mowl.nn import TransBoxModule
 
 
 class TransBox(EmbeddingELModel):
-    """
+    r"""
     Implementation based on [yang2025]_.
 
     TransBox is an EL++-closed ontology embedding method: atomic concepts and
@@ -22,6 +22,11 @@ class TransBox(EmbeddingELModel):
         and the ``D`` columns separately (two negatives per positive), and the module's
         gci2 negative loss implements the paper's :math:`L_{\nsubseteq}`.
 
+    .. note::
+        The module implements the EL++ role axiom losses and declares
+        ``role_axiom_capable``, so ``TransBox`` accepts ``load_role_axioms=True`` to
+        train on role inclusions and chains alongside the concept normal forms.
+
     """
 
     def __init__(self,
@@ -34,12 +39,14 @@ class TransBox(EmbeddingELModel):
                  device='cpu',
                  neg_sampling_gcis=None,
                  use_enhancement=True,
-                 reg_factor=0.1
+                 reg_factor=0.1,
+                 load_role_axioms=False
                  ):
         super().__init__(dataset, embed_dim, batch_size, extended=True,
                          model_filepath=model_filepath, device=device,
                          learning_rate=learning_rate,
-                         neg_sampling_gcis=neg_sampling_gcis)
+                         neg_sampling_gcis=neg_sampling_gcis,
+                         load_role_axioms=load_role_axioms)
 
         # Paper-faithful negative sampling: negate both sides of C ⊑ ∃R.D
         # (corrupt C and D separately instead of D only).

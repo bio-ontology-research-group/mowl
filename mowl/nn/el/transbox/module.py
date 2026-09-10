@@ -21,6 +21,10 @@ class TransBoxModule(ELModule):
 
     neg_capable_gcis = frozenset({"gci2"})
 
+    #: TransBox implements the EL++ role axiom losses, so a model built with
+    #: ``load_role_axioms=True`` can train on role inclusions and chains.
+    role_axiom_capable = True
+
     def __init__(self, nb_ont_classes, nb_rels, nb_inds=None, embed_dim=50,
                  margin=0.1, use_enhancement=True, reg_factor=0.1):
         super().__init__()

@@ -1,6 +1,7 @@
 from unittest import TestCase
+import pytest
 import torch as th
-from tests.datasetFactory import FamilyDataset
+from tests.datasetFactory import FamilyDataset, PPIYeastSlimDataset
 from mowl.models import TransBox
 from mowl.nn import TransBoxModule
 
@@ -25,6 +26,15 @@ class TestTransBox(TestCase):
     def test_initialization(self):
         self.assertIsNotNone(self.model)
         self.assertIsNotNone(self.model.module)
+
+    def test_module_declares_role_axiom_capable(self):
+        """The module implements the role axiom losses, so it must declare the flag.
+
+        Without it, a model built with ``load_role_axioms=True`` would raise
+        ``NotImplementedError`` at the start of training even though the losses
+        exist.
+        """
+        self.assertTrue(self.model.module.role_axiom_capable)
 
     def test_parameters_finite_and_correct_dim(self):
         _assert_trained(self, self.model, embed_dim=30)
@@ -59,6 +69,18 @@ class TestTransBox(TestCase):
         self.assertTrue(th.equal(block_d[:, 0], data[:, 0]))
         self.assertTrue(th.equal(block_d[:, 1], data[:, 1]))
         self.assertTrue(set(block_d[:, 2].tolist()) <= class_ids)
+
+    @pytest.mark.slow
+    def test_trains_with_role_axioms(self):
+        """TransBox can train on the EL++ role axioms (PPI yeast has 3 role
+        inclusions and 6 role chains), exercising ``role_inclusion_loss`` and
+        ``role_chain_loss`` end to end."""
+        model = TransBox(PPIYeastSlimDataset(), embed_dim=30, load_role_axioms=True)
+        self.assertTrue(model.load_role_axioms)
+        self.assertIn("role_inclusion", model.training_datasets)
+        self.assertIn("role_chain", model.training_datasets)
+        model.train(epochs=1, validate_every=2)
+        _assert_trained(self, model, embed_dim=30)
 
 
 class TestTransBoxLosses(TestCase):
