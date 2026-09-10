@@ -5,7 +5,8 @@ from de.tudresden.inf.lat.jcel.owlapi.translator import Translator
 from org.semanticweb.owlapi.model.parameters import Imports
 from uk.ac.manchester.cs.owl.owlapi import OWLClassImpl, OWLObjectSomeValuesFromImpl, \
     OWLObjectIntersectionOfImpl
-from org.semanticweb.owlapi.model import OWLAxiom, OWLOntology, AxiomType, ClassExpressionType, IRI
+from org.semanticweb.owlapi.model import OWLAxiom, OWLOntology, AxiomType, \
+    ClassExpressionType, IRI, OWLObjectProperty
 from org.semanticweb.owlapi.apibinding import OWLManager
 from org.mowl.Normalization import ELNormalizer as JcelELNormalizer
 from org.mowl.Normalization import ReverseAxiomTranslator as JcelReverseAxiomTranslator
@@ -825,3 +826,139 @@ class GCI3_BOT(GCI3):
             raise ValueError("Superclass in GCI3_BOT must be the bottom concept.")
 
 
+class RoleInclusion(Axiom):
+    """Role inclusion axiom of the form :math:`R \\sqsubseteq S`
+    (part of the :math:`\\mathcal{EL}^{++}` language).
+
+    :param axiom: Axiom of the form :math:`R \\sqsubseteq S`
+    :type axiom: :class:`org.semanticweb.owlapi.model.OWLAxiom`
+    """
+
+    def __init__(self, axiom):
+        super().__init__(axiom)
+        self._sub_property = None
+        self._super_property = None
+
+    @property
+    def sub_property(self):
+        """Returns the sub property :math:`R`
+
+        :rtype: str
+        """
+        if not self._sub_property:
+            self._sub_property = str(self._axiom.getSubProperty().toStringID())
+        return self._sub_property
+
+    @property
+    def super_property(self):
+        """Returns the super property :math:`S`
+
+        :rtype: str
+        """
+        if not self._super_property:
+            self._super_property = str(self._axiom.getSuperProperty().toStringID())
+        return self._super_property
+
+    def get_entities(self):
+        return set(), set([self.sub_property, self.super_property]), set()
+
+    def __repr__(self):
+        return "RoleInclusion({} ⊑ {})".format(self.sub_property, self.super_property)
+
+
+class RoleChain(Axiom):
+    """Role chain axiom of the form :math:`R \\circ T \\sqsubseteq S`
+    (part of the :math:`\\mathcal{EL}^{++}` language). Transitive property
+    declarations are represented as :math:`R \\circ R \\sqsubseteq R`.
+
+    :param axiom: Axiom of the form :math:`R \\circ T \\sqsubseteq S` or a \
+    transitive property declaration.
+    :type axiom: :class:`org.semanticweb.owlapi.model.OWLAxiom`
+    """
+
+    def __init__(self, axiom):
+        super().__init__(axiom)
+        self._sub_chain = None
+        self._super_property = None
+
+    @property
+    def sub_chain(self):
+        """Returns the tuple of properties in the chain
+
+        :rtype: tuple
+        """
+        if not self._sub_chain:
+            if self._axiom.getAxiomType() == AxiomType.TRANSITIVE_OBJECT_PROPERTY:
+                prop = str(self._axiom.getProperty().toStringID())
+                self._sub_chain = (prop, prop)
+            else:
+                self._sub_chain = tuple(
+                    str(p.toStringID()) for p in list(self._axiom.getPropertyChain()))
+        return self._sub_chain
+
+    @property
+    def super_property(self):
+        """Returns the super property :math:`S`
+
+        :rtype: str
+        """
+        if not self._super_property:
+            if self._axiom.getAxiomType() == AxiomType.TRANSITIVE_OBJECT_PROPERTY:
+                self._super_property = str(self._axiom.getProperty().toStringID())
+            else:
+                self._super_property = str(self._axiom.getSuperProperty().toStringID())
+        return self._super_property
+
+    def get_entities(self):
+        return set(), set(list(self.sub_chain) + [self.super_property]), set()
+
+    def __repr__(self):
+        return "RoleChain({} ⊑ {})".format(" ∘ ".join(self.sub_chain), self.super_property)
+
+
+def extract_role_axioms(ontology):
+    """Extracts the role inclusion and role chain axioms from an ontology.
+
+    These axioms are not :math:`\\mathcal{EL}` GCIs and are therefore not returned by \
+    :meth:`ELNormalizer.normalize`. This function scans all the axioms of the ontology and \
+    returns the ones corresponding to role inclusions (:math:`R \\sqsubseteq S`), role chains \
+    (:math:`R \\circ T \\sqsubseteq S`) and transitive property declarations.
+
+    :param ontology: Input ontology
+    :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
+
+    :rtype: tuple(list, list)
+    """
+
+    if not isinstance(ontology, OWLOntology):
+        raise TypeError("Parameter 'ontology' must be of type \
+org.semanticweb.owlapi.model.OWLOntology. Found: {}".format(type(ontology)))
+
+    role_inclusions = []
+    role_chains = []
+    for axiom in ontology.getAxioms(Imports.fromBoolean(True)):
+        axiom_type = axiom.getAxiomType()
+        if axiom_type == AxiomType.SUB_OBJECT_PROPERTY:
+            # Only atomic property expressions are supported (inverse and chain
+            # expressions are skipped, as they do not map to object property indices).
+            if isinstance(axiom.getSubProperty(), OWLObjectProperty) and \
+                    isinstance(axiom.getSuperProperty(), OWLObjectProperty):
+                role_inclusions.append(RoleInclusion(axiom))
+            else:
+                logger.warning("Role inclusion with non-atomic properties is not supported "
+                               "and will be ignored: %s", axiom)
+        elif axiom_type == AxiomType.TRANSITIVE_OBJECT_PROPERTY:
+            role_chains.append(RoleChain(axiom))
+        elif axiom_type == AxiomType.SUB_PROPERTY_CHAIN_OF:
+            # Chains of atomic object properties of any length are returned; restricting
+            # the length is up to the consumer (see RoleChainDataset, which only
+            # represents chains of two properties).
+            properties = list(axiom.getPropertyChain())
+            if all(isinstance(prop, OWLObjectProperty) for prop in properties) and \
+                    isinstance(axiom.getSuperProperty(), OWLObjectProperty):
+                role_chains.append(RoleChain(axiom))
+            else:
+                logger.warning("Role chain with non-atomic properties is not supported "
+                               "and will be ignored: %s", axiom)
+
+    return role_inclusions, role_chains

@@ -23,6 +23,31 @@ Built-in datasets
 
 There are several built-in datasets related to bioinformatics tasks such as protein-protein interactions prediction and gene-disease association prediction. Datasets can be found at :doc:`Datasets API docs <../../api/datasets/index>`.
 
+For :math:`\mathcal{EL}^{++}` subsumption prediction, mOWL provides the GALEN, GO and Anatomy ontologies with the 80/10/10 benchmark split distributed with the reference implementation of [jackermeier2024]_, also used by the TransBox paper (WWW 2025):
+
+.. testcode::
+
+   from mowl.datasets.builtin import GALENJackermeier2024Dataset
+   ds = GALENJackermeier2024Dataset()
+   train_ontology = ds.ontology
+   valid_ontology = ds.validation
+   test_ontology = ds.testing
+
+The training ontologies also contain :math:`\mathcal{EL}^{++}` role inclusion and role chain axioms. Models built on top of :class:`EmbeddingELModel <mowl.base_models.EmbeddingELModel>` train on them when constructed with ``load_role_axioms=True`` and their module implements the two role axiom losses (see :doc:`the EL guide </embedding_el/index>`).
+
+The axioms and the split are the frozen release of the reference benchmark, which distributes
+them as integer-indexed splits plus the class and relation index files; mOWL serves the same
+axioms serialized as OWL. The terms of the underlying ontologies and of the reference
+benchmark apply to this redistribution.
+
+.. warning::
+   In ``AnatomyJackermeier2024Dataset`` the class IRIs are **not** anatomy identifiers: the
+   reference benchmark ships no class names for ANATOMY, so every class is an opaque
+   generated IRI under ``http://bio2vec.net/data/mowl/anatomy_jackermeier2024/aux/``. The
+   axioms and the split are faithful, so ranking metrics are comparable, but predictions
+   cannot be mapped back to anatomical terms. GALEN and GO keep their original IRIs.
+
+
 To access any of these datasets you can use:
 
 .. testcode::

@@ -36,6 +36,27 @@ The bottom concept can exist in the right side of GCIs 0,1,3 only, which can be 
    \exists R. C &\sqsubseteq \bot & (\text{GCI BOT 3})
    \end{aligned}
 
+Besides concept axioms, :class:`ELDataset <mowl.datasets.el.ELDataset>` can also extract the
+two role axiom normal forms of the :math:`\mathcal{EL}^{++}` language, when they are present in
+the ontology:
+
+.. math::
+   \begin{aligned}
+   R &\sqsubseteq S & (\text{role inclusion}) \\
+   R \circ T &\sqsubseteq S & (\text{role chain})
+   \end{aligned}
+
+Transitive property declarations are represented as role chains of the form
+:math:`R \circ R \sqsubseteq R`.
+
+Only a module that implements ``role_inclusion_loss`` and ``role_chain_loss`` can train on
+them, so they are **opt-in**: pass ``load_role_axioms=True`` to
+:class:`ELDataset <mowl.datasets.el.ELDataset>` or to
+:class:`EmbeddingELModel <mowl.base_models.EmbeddingELModel>`, and they appear under the
+``role_inclusion`` and ``role_chain`` keys of
+:meth:`get_gci_datasets <mowl.datasets.el.ELDataset.get_gci_datasets>` alongside the concept
+normal forms. A model that loads them without a module declaring
+``role_axiom_capable = True`` raises :class:`NotImplementedError` at the start of training.
 
 mOWL provides different functionalities to generate models that aim to embed axioms in :math:`\mathcal{EL}`. Let's start!
 
@@ -245,6 +266,24 @@ The :class:`EmbeddingELModel <mowl.base_models.elmodel.EmbeddingELModel>` class 
    # in the module's neg_capable_gcis.
    model = ELEmbeddings(dataset, embed_dim=30, neg_sampling_gcis=["gci2"])
 
+Customising negative sampling
+------------------------------
+
+For each configured GCI, :meth:`generate_negatives <mowl.base_models.elmodel.EmbeddingELModel.generate_negatives>` replaces one or more columns of the GCI data tensor with random entity indices sampled from a configured pool. The per-GCI configuration is provided by :meth:`get_negative_sampling_config <mowl.base_models.elmodel.EmbeddingELModel.get_negative_sampling_config>` (by default derived from the class attribute ``_DEFAULT_NEG_SAMPLING_CONFIG``), and each entry has two keys:
+
+- ``index_pool``: ``'classes'`` or ``'individuals'`` — the pool of entity indices to sample from. A single name applies to all corrupted columns; alternatively, pass a list of names with one pool per corrupted column.
+- ``corrupt_column``: an int or a list of ints — the column(s) of the data tensor to replace with random indices. For a list of *K* columns, one set of negative samples is generated per column (each corrupting only its own column) and the sets are concatenated, so each positive sample is paired with *K* negatives.
+
+Single-column configurations are handled exactly as before, so existing models and training scripts are unaffected. Multi-column corruption is useful for models that, for example, corrupt both concepts of a ``C ⊑ ∃R.D`` GCI (subject and filler) with separate negative sets, as in the gci2 loss of TransBox (Yang et al., WWW 2025):
+
+.. testcode::
+
+   class TransBoxStyleELEmbeddings(ELEmbeddings):
+       """Corrupts both concepts of gci2 with separate negative sets."""
+
+       def get_negative_sampling_config(self):
+           return {"gci2": {"index_pool": "classes", "corrupt_column": [0, 2]}}
+
 Alternatively, you can use |eldataset| and |elmodule| directly without :class:`EmbeddingELModel <mowl.base_models.elmodel.EmbeddingELModel>`:
 
 .. testcode:: [eldataset]
@@ -270,8 +309,9 @@ Alternatively, you can use |eldataset| and |elmodule| directly without :class:`E
    #validation_dataloaders = ..
    #testing_dataloaders = ...
 
-   
+
    model = MyELModule() #Let's reuse the module of the example before.
+
 
    for epoch in range(10):
        for gci_name, gci_dataloader in training_dataloaders.items():
@@ -303,6 +343,7 @@ mOWL ships several ready-to-use :math:`\mathcal{EL}` models that share this inte
 - :class:`ELBE <mowl.models.ELBE>` — classes as axis-aligned boxes [peng2020]_
 - :class:`BoxSquaredEL <mowl.models.BoxSquaredEL>` — boxes with bumps for relations (Box²EL) [jackermeier2023]_
 - :class:`BoxEL <mowl.models.BoxEL>` — box embeddings for EL++ knowledge bases [xiong2022]_
+- :class:`TransBox <mowl.models.TransBox>` — EL++-closed ontology embeddings with box roles [yang2025]_
 
 Here is an example of using ELEmbeddings for protein-protein interaction prediction:
 

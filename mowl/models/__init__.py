@@ -12,6 +12,8 @@ from mowl.models.boxel.examples.model_gda import BoxELGDA
 
 from mowl.models.boxsquaredel.model import BoxSquaredEL
 
+from mowl.models.transbox.model import TransBox
+
 from mowl.models.falcon.model import FALCONModel
 
 from mowl.models.graph_random_walk.random_walk_w2v_model import RandomWalkPlusW2VModel
