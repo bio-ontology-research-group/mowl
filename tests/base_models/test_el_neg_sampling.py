@@ -169,6 +169,88 @@ class TestGenerateNegatives(TestCase):
         finally:
             self._reset_config()
 
+    def test_numpy_integer_columns_are_accepted(self):
+        """Column indices computed from numpy (a tensor shape, an array) are integers too,
+        and must not be mistaken for something out of range."""
+        self._set_config({"gci2": {"index_pool": "classes",
+                                   "corrupt_column": [np.int64(0), np.int64(2)]}})
+        try:
+            data = self.model.training_datasets["gci2"][:]
+            neg = self.model.generate_negatives(
+                "gci2", self.model.training_datasets["gci2"])
+            self.assertEqual(neg.shape, th.Size([2 * len(data), 3]))
+        finally:
+            self._reset_config()
+
+        self._set_config({"gci2": {"index_pool": "classes", "corrupt_column": np.int64(2)}})
+        try:
+            neg = self.model.generate_negatives(
+                "gci2", self.model.training_datasets["gci2"])
+            self.assertEqual(neg.shape, th.Size([len(data), 3]))
+        finally:
+            self._reset_config()
+
+    def test_boolean_column_raises(self):
+        """A bool is an int in Python, but it is never a column index."""
+        self._set_config({"gci2": {"index_pool": "classes", "corrupt_column": True}})
+        try:
+            with self.assertRaisesRegex(ValueError, "must be an integer"):
+                self.model.generate_negatives(
+                    "gci2", self.model.training_datasets["gci2"])
+        finally:
+            self._reset_config()
+
+    def test_non_integer_column_raises(self):
+        self._set_config({"gci2": {"index_pool": "classes", "corrupt_column": 2.0}})
+        try:
+            with self.assertRaisesRegex(ValueError, "must be an integer"):
+                self.model.generate_negatives(
+                    "gci2", self.model.training_datasets["gci2"])
+        finally:
+            self._reset_config()
+
+    def test_empty_column_list_raises(self):
+        """An empty list must be a configuration error, not a torch.cat crash."""
+        self._set_config({"gci2": {"index_pool": "classes", "corrupt_column": []}})
+        try:
+            with self.assertRaisesRegex(ValueError, "'corrupt_column' is empty"):
+                self.model.generate_negatives(
+                    "gci2", self.model.training_datasets["gci2"])
+        finally:
+            self._reset_config()
+
+    def test_missing_index_pool_raises_a_readable_error(self):
+        """The base implementation needs a pool; several shipped examples omit the key and
+        override generate_negatives instead, so the message has to point at both options."""
+        self._set_config({"gci2": {"corrupt_column": 2}})
+        try:
+            with self.assertRaisesRegex(ValueError, "no 'index_pool' key"):
+                self.model.generate_negatives(
+                    "gci2", self.model.training_datasets["gci2"])
+        finally:
+            self._reset_config()
+
+    def test_unknown_pool_in_a_list_raises(self):
+        self._set_config({"gci2": {"index_pool": ["classes", "nope"],
+                                   "corrupt_column": [0, 2]}})
+        try:
+            with self.assertRaisesRegex(ValueError, "Unknown index_pool"):
+                self.model.generate_negatives(
+                    "gci2", self.model.training_datasets["gci2"])
+        finally:
+            self._reset_config()
+
+    def test_three_columns(self):
+        """Nothing in the implementation is specific to K = 2."""
+        self._set_config({"gci2": {"index_pool": "classes", "corrupt_column": [0, 1, 2]}})
+        try:
+            data = self.model.training_datasets["gci2"][:]
+            neg = self.model.generate_negatives(
+                "gci2", self.model.training_datasets["gci2"])
+            self.assertEqual(neg.shape, th.Size([3 * len(data), 3]))
+        finally:
+            self._reset_config()
+
 
 class TestMultiColumnTraining(TestCase):
     """End-to-end: one training epoch with multi-column negatives stays finite."""
@@ -178,6 +260,43 @@ class TestMultiColumnTraining(TestCase):
         model._DEFAULT_NEG_SAMPLING_CONFIG = {
             "gci2": {"index_pool": "classes", "corrupt_column": [0, 2]},
         }
+        model.train(epochs=1)
+        param = next(model.module.parameters())
+        self.assertTrue(th.isfinite(param).all().item())
+
+    def test_bad_config_is_rejected_before_the_first_epoch(self):
+        """A malformed entry must be reported before training starts, not once the loop
+        reaches that normal form."""
+        model = ELEmbeddings(FamilyDataset(), embed_dim=8, batch_size=16)
+        model._DEFAULT_NEG_SAMPLING_CONFIG = {
+            "gci2": {"index_pool": "classes", "corrupt_column": 7},
+        }
+
+        def fail_if_called(*args, **kwargs):
+            raise AssertionError("training started despite a malformed config")
+
+        model.generate_negatives = fail_if_called
+
+        with self.assertRaisesRegex(ValueError, "out of range"):
+            model.train(epochs=1)
+
+    def test_config_without_index_pool_still_trains(self):
+        """Several shipped examples (ELEmPPI and friends) configure only 'corrupt_column'
+        and sample from their own pool, so the eager validation must tolerate the missing
+        key even though the base implementation requires it."""
+
+        class CustomPoolELEmbeddings(ELEmbeddings):
+            def get_negative_sampling_config(self):
+                return {"gci2": {"corrupt_column": 2}}
+
+            def generate_negatives(self, gci_name, gci_dataset):
+                data = gci_dataset[:]
+                ids = np.random.choice(list(self.class_index_dict.values()),
+                                       size=len(gci_dataset), replace=True)
+                rand_index = th.tensor(ids, dtype=th.long, device=self.device)
+                return th.cat([data[:, :2], rand_index.unsqueeze(1)], dim=1)
+
+        model = CustomPoolELEmbeddings(FamilyDataset(), embed_dim=8, batch_size=16)
         model.train(epochs=1)
         param = next(model.module.parameters())
         self.assertTrue(th.isfinite(param).all().item())
