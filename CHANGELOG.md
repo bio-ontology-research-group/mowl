@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added `mowl.datasets.default_data_root`, which resolves the dataset cache directory, and a `MOWL_DATA_ROOT` environment variable to override it [#150][i150].
 - Added a `data_root` argument to every builtin dataset, so the download location stays overridable per dataset [#150][i150].
 - Added support for multi-column negative sampling in `EmbeddingELModel`: a GCI's `corrupt_column` now accepts a single column index or a list of column indices, and `index_pool` accepts a single pool name or a list with one pool per corrupted column. For *K* corrupted columns, the returned negative set is the concatenation of the *K* single-column negative sets (one per column, each corrupting only its own column), so each positive sample is paired with *K* negatives. Single-column configurations behave exactly as before. The configuration is validated at the start of `train()` rather than mid-epoch [#156][i156].
+- Added the `TransBox` model (`mowl.models.TransBox`) with `TransBoxModule` (`mowl.nn.el.transbox`): concept box embeddings with translational role embeddings for :math:`\mathcal{EL}^{++}` following Yang, Chen and Sattler (WWW 2025). Atomic concepts and roles are embedded as axis-aligned boxes and individuals as points, so complex :math:`\mathcal{EL}^{++}` concepts are embedded by composing the atomic boxes; GCIs of the form `C ⊑ ∃R.D` are trained against the ∃rall-enhanced right-hand side and negated on both sides (two negatives per positive), and the module implements the role axiom losses, so the model accepts `load_role_axioms=True` [#155][i155].
 ### Changed
 - Changed `RemoteDataset` to cache datasets under `$XDG_CACHE_HOME/mowl/datasets` (falling back to `~/.cache/mowl/datasets`) instead of the current working directory. Datasets are now shared between working directories rather than re-downloaded per directory, and running the tests or an example no longer scatters dataset directories through the checkout. Existing downloads in a working directory are not picked up and will be fetched once into the cache [#150][i150].
 - Changed the test suite to resolve dataset files through the cache instead of assuming pytest runs from the repository root.
@@ -204,6 +205,7 @@ Fixed issue related to importing graph-based models due to missing `__init__.py`
 [i146]: https://github.com/bio-ontology-research-group/mowl/issues/146
 [i149]: https://github.com/bio-ontology-research-group/mowl/issues/149
 [i150]: https://github.com/bio-ontology-research-group/mowl/issues/150
+[i155]: https://github.com/bio-ontology-research-group/mowl/issues/155
 [i156]: https://github.com/bio-ontology-research-group/mowl/issues/156
 [i157]: https://github.com/bio-ontology-research-group/mowl/issues/157
 [i97]: https://github.com/bio-ontology-research-group/mowl/issues/97
