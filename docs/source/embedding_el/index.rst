@@ -258,6 +258,24 @@ The :class:`EmbeddingELModel <mowl.base_models.elmodel.EmbeddingELModel>` class 
    # in the module's neg_capable_gcis.
    model = ELEmbeddings(dataset, embed_dim=30, neg_sampling_gcis=["gci2"])
 
+Customising negative sampling
+------------------------------
+
+For each configured GCI, :meth:`generate_negatives <mowl.base_models.elmodel.EmbeddingELModel.generate_negatives>` replaces one or more columns of the GCI data tensor with random entity indices sampled from a configured pool. The per-GCI configuration is provided by :meth:`get_negative_sampling_config <mowl.base_models.elmodel.EmbeddingELModel.get_negative_sampling_config>` (by default derived from the class attribute ``_DEFAULT_NEG_SAMPLING_CONFIG``), and each entry has two keys:
+
+- ``index_pool``: ``'classes'`` or ``'individuals'`` — the pool of entity indices to sample from. A single name applies to all corrupted columns; alternatively, pass a list of names with one pool per corrupted column.
+- ``corrupt_column``: an int or a list of ints — the column(s) of the data tensor to replace with random indices. For a list of *K* columns, one set of negative samples is generated per column (each corrupting only its own column) and the sets are concatenated, so each positive sample is paired with *K* negatives.
+
+Single-column configurations are handled exactly as before, so existing models and training scripts are unaffected. Multi-column corruption is useful for models that, for example, corrupt both concepts of a ``C ⊑ ∃R.D`` GCI (subject and filler) with separate negative sets, as in the gci2 loss of TransBox (Yang et al., WWW 2025):
+
+.. testcode::
+
+   class TransBoxStyleELEmbeddings(ELEmbeddings):
+       """Corrupts both concepts of gci2 with separate negative sets."""
+
+       def get_negative_sampling_config(self):
+           return {"gci2": {"index_pool": "classes", "corrupt_column": [0, 2]}}
+
 Alternatively, you can use |eldataset| and |elmodule| directly without :class:`EmbeddingELModel <mowl.base_models.elmodel.EmbeddingELModel>`:
 
 .. testcode:: [eldataset]
