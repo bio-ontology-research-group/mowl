@@ -334,8 +334,11 @@ mOWL ships several ready-to-use :math:`\mathcal{EL}` models that share this inte
 - :class:`ELEmbeddings <mowl.models.ELEmbeddings>` — classes as balls [kulmanov2019]_
 - :class:`ELBE <mowl.models.ELBE>` — classes as axis-aligned boxes [peng2020]_
 - :class:`BoxSquaredEL <mowl.models.BoxSquaredEL>` — boxes with bumps for relations (Box²EL) [jackermeier2023]_
+- :class:`MultiBoxEL <mowl.models.MultiBoxEL>` — unions of :math:`k` boxes per class with Box²EL semantics (see :doc:`/geometric/index`)
 - :class:`BoxEL <mowl.models.BoxEL>` — box embeddings for EL++ knowledge bases [xiong2022]_
 - :class:`TransBox <mowl.models.TransBox>` — EL++-closed ontology embeddings with box roles [yang2025]_
+
+:class:`ELBE <mowl.models.ELBE>`, :class:`BoxSquaredEL <mowl.models.BoxSquaredEL>`, and :class:`MultiBoxEL <mowl.models.MultiBoxEL>` also accept optional ``init_boxes`` (:class:`~mowl.geometric.init.ExactBoxInit`) and ``anchor_weight`` keyword arguments to initialise class boxes from the canonical model of the training ontology and optionally regularise towards that initialisation during training (defaults leave behaviour unchanged; see :doc:`/geometric/examples`).
 
 Here is an example of using ELEmbeddings for protein-protein interaction prediction:
 
