@@ -44,9 +44,14 @@ Guarantees:
   equal to the :math:`k = 1` box.
 - **MILP mode and fallback:** When ``method="milp"``, :class:`~mowl.geometric.boxes.BoxModelBuilder`
   searches for a verified :math:`d'`-dimensional box model (:math:`d' \\le d`).
-  If found, coordinates :math:`0 .. d' - 1` hold the MILP boxes unchanged (preserving
-  both containment and disjointness) and coordinates :math:`d' .. d - 1` hold the
-  shared interval :math:`[-1 - \\text{pad},\\; 1 + \\text{pad}]`. On
+  If found, coordinates :math:`0 .. d' - 1` hold the MILP boxes mapped from the
+  solver's universe :math:`[0, M]` onto :math:`[-\\text{scale}, \\text{scale}]`
+  by the coordinate-wise affine map
+  :math:`x \\mapsto \\text{scale} \\cdot (2x / M - 1)` (so that they live on the
+  same unit scale as the padding, the role boxes and the bumps; an increasing
+  affine map preserves both containment and disjointness), and coordinates
+  :math:`d' .. d - 1` hold the shared interval
+  :math:`[-\\text{scale} - \\text{pad},\\; \\text{scale} + \\text{pad}]`. On
   :class:`~mowl.geometric.errors.NotBoxRepresentable` or
   :class:`~mowl.geometric.errors.BoxModelNotFound`, construction falls back to
   ``"projected"`` and records ``report["fallback"] = "<ExceptionClass>: <message>"``.
@@ -251,7 +256,10 @@ class ExactBoxInit:
             mode.
         scale : float, default 1.0
             Positive scaling factor for Gaussian element coordinates
-            :math:`p_e = \\text{scale} \\cdot g_e / \\sqrt{d}`.
+            :math:`p_e = \\text{scale} \\cdot g_e / \\sqrt{d}` in
+            ``"projected"`` mode; in ``"milp"`` mode the MILP universe
+            :math:`[0, M]` is mapped affinely onto
+            :math:`[-\\text{scale}, \\text{scale}]` in every coordinate.
         milp_time_limit : float, default 60.0
             Time limit in seconds forwarded to :class:`~mowl.geometric.boxes.BoxModelBuilder`
             when ``method="milp"``.
@@ -314,6 +322,7 @@ class ExactBoxInit:
                     d=d,
                     k=k,
                     pad=pad_f,
+                    scale=scale_f,
                 )
                 milp_dim = int(box_model.dimension)
 
@@ -464,14 +473,20 @@ class ExactBoxInit:
         d: int,
         k: int,
         pad: float,
+        scale: float,
     ) -> Tuple[np.ndarray, np.ndarray, int, int]:
-        """Compute ``(centers, offsets, n_initialised, n_skipped)`` from a solved :class:`BoxModel`."""
+        """Compute ``(centers, offsets, n_initialised, n_skipped)`` from a solved :class:`BoxModel`.
+
+        MILP coordinates in :math:`[0, M]` are mapped to
+        :math:`\\text{scale} \\cdot (2x / M - 1) \\in [-\\text{scale}, \\text{scale}]`.
+        """
         n_classes = len(c2i)
         centers = np.full((n_classes, k, d), np.nan, dtype=np.float32)
         offsets = np.full((n_classes, k, d), np.nan, dtype=np.float32)
 
         d_prime = int(box_model.dimension)
         model_boxes = box_model.boxes()
+        big_m = float(box_model.M)
         known_concepts = set(cm.concept_names) | set(cm.names) | {TOP, BOTTOM}
 
         n_init = 0
@@ -494,10 +509,10 @@ class ExactBoxInit:
                 )
 
             lo_m, hi_m = model_boxes[name]
-            lo = np.full(d, -1.0 - pad, dtype=np.float64)
-            hi = np.full(d, 1.0 + pad, dtype=np.float64)
-            lo[:d_prime] = lo_m[:d_prime]
-            hi[:d_prime] = hi_m[:d_prime]
+            lo = np.full(d, -scale - pad, dtype=np.float64)
+            hi = np.full(d, scale + pad, dtype=np.float64)
+            lo[:d_prime] = scale * (2.0 * np.asarray(lo_m[:d_prime], dtype=np.float64) / big_m - 1.0)
+            hi[:d_prime] = scale * (2.0 * np.asarray(hi_m[:d_prime], dtype=np.float64) / big_m - 1.0)
 
             c_vec, o_vec = _padded_bbox(np.stack([lo, hi], axis=0), 0.0)
             centers[idx, :, :] = c_vec

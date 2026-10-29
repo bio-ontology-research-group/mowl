@@ -416,26 +416,30 @@ def test_milp_on_helly_ok_preserves_disjointness(helly_ok_dataset: PathDataset) 
     assert d_prime == box_model.dimension
     model_boxes = box_model.boxes()
     c2i = init.class_to_id
+    big_m = float(box_model.M)
+
+    def to_unit(x: np.ndarray) -> np.ndarray:
+        # Affine map [0, M] -> [-scale, scale] (scale = 1.0) applied by ExactBoxInit
+        return 2.0 * np.asarray(x, dtype=np.float64) / big_m - 1.0
 
     for name in cm.names:
         if name not in c2i:
             continue
         lo_m, hi_m = model_boxes[name]
         lo_i, hi_i = box(init, c2i[name])
+        np.testing.assert_allclose(lo_i[:d_prime], to_unit(lo_m), atol=1e-6)
+        np.testing.assert_allclose(hi_i[:d_prime], to_unit(hi_m), atol=1e-6)
         np.testing.assert_allclose(
-            lo_i[:d_prime], lo_m.astype(np.float32), atol=1e-6
-        )
-        np.testing.assert_allclose(
-            hi_i[:d_prime], hi_m.astype(np.float32), atol=1e-6
-        )
-        np.testing.assert_array_equal(
             init.centers[c2i[name], 0, :d_prime],
-            (0.5 * (lo_m + hi_m)).astype(np.float32),
+            0.5 * (to_unit(lo_m) + to_unit(hi_m)),
+            atol=1e-6,
         )
-        np.testing.assert_array_equal(
+        np.testing.assert_allclose(
             init.offsets[c2i[name], 0, :d_prime],
-            np.maximum(0.0, 0.5 * (hi_m - lo_m)).astype(np.float32),
+            0.5 * (to_unit(hi_m) - to_unit(lo_m)),
+            atol=1e-6,
         )
+        assert (lo_i[:d_prime] >= -1.0 - 1e-6).all() and (hi_i[:d_prime] <= 1.0 + 1e-6).all()
         np.testing.assert_allclose(
             lo_i[d_prime:], np.float32(-1.0 - pad), atol=1e-6
         )
