@@ -1,9 +1,13 @@
 """Shared test helpers for mowl.geometric test suite."""
 from __future__ import annotations
 
+import os
 import random
 from typing import List, Set, Tuple
 
+import pytest
+
+from mowl.datasets import PathDataset
 from mowl.geometric.completion import CanonicalModel
 from mowl.geometric.normal_forms import (
     BOTTOM,
@@ -18,6 +22,60 @@ from mowl.geometric.normal_forms import (
 )
 
 NS = "http://mowl.borg/geo#"
+FIXTURES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
+
+
+def fixture_path(name: str) -> str:
+    """Return absolute path to a fixture OWL file in ``tests/geometric/fixtures``."""
+    return os.path.join(FIXTURES_DIR, name)
+
+
+@pytest.fixture
+def t3_dataset() -> PathDataset:
+    """Return a :class:`PathDataset` for ``t3.owl``."""
+    return PathDataset(fixture_path("t3.owl"))
+
+
+@pytest.fixture
+def helly_ok_dataset() -> PathDataset:
+    """Return a :class:`PathDataset` for ``helly_ok.owl``."""
+    return PathDataset(fixture_path("helly_ok.owl"))
+
+
+@pytest.fixture
+def roles_dataset() -> PathDataset:
+    """Return a :class:`PathDataset` for ``roles.owl``."""
+    return PathDataset(fixture_path("roles.owl"))
+
+
+@pytest.fixture
+def top_lhs_dataset() -> PathDataset:
+    """Return a :class:`PathDataset` for ``top_lhs.owl``."""
+    return PathDataset(fixture_path("top_lhs.owl"))
+
+
+@pytest.fixture
+def t3_cm(t3_dataset: PathDataset) -> CanonicalModel:
+    """Return the :class:`CanonicalModel` for ``t3.owl``."""
+    return CanonicalModel.from_dataset(t3_dataset)
+
+
+@pytest.fixture
+def helly_ok_cm(helly_ok_dataset: PathDataset) -> CanonicalModel:
+    """Return the :class:`CanonicalModel` for ``helly_ok.owl``."""
+    return CanonicalModel.from_dataset(helly_ok_dataset)
+
+
+@pytest.fixture
+def roles_cm(roles_dataset: PathDataset) -> CanonicalModel:
+    """Return the :class:`CanonicalModel` for ``roles.owl``."""
+    return CanonicalModel.from_dataset(roles_dataset)
+
+
+@pytest.fixture
+def top_lhs_cm(top_lhs_dataset: PathDataset) -> CanonicalModel:
+    """Return the :class:`CanonicalModel` for ``top_lhs.owl``."""
+    return CanonicalModel.from_dataset(top_lhs_dataset)
 
 
 def random_el_tbox(

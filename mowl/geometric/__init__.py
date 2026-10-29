@@ -46,7 +46,12 @@ from mowl.geometric.export import (
     class_points,
     to_bounding_boxes,
 )
-from mowl.geometric.helly import HellyCertificate, HellyReport, helly_check
+from mowl.geometric.helly import (
+    HellyCertificate,
+    HellyReport,
+    certificate_triangles,
+    helly_check,
+)
 from mowl.geometric.intervals import IntervalUnionModel
 from mowl.geometric.normal_forms import (
     BOTTOM,
@@ -129,6 +134,7 @@ __all__ = [
     "UnsupportedRegion",
     "boxes",
     "boxes_as_tensors",
+    "certificate_triangles",
     "checker",
     "class_points",
     "completion",

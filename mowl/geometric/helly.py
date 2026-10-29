@@ -128,9 +128,20 @@ References:
 """
 from __future__ import annotations
 
+from collections import defaultdict
 from dataclasses import dataclass
 import itertools
-from typing import TYPE_CHECKING, Iterable, Iterator, List, Optional, Set, Tuple
+from typing import (
+    TYPE_CHECKING,
+    Dict,
+    FrozenSet,
+    Iterable,
+    Iterator,
+    List,
+    Optional,
+    Set,
+    Tuple,
+)
 
 from mowl.geometric.normal_forms import (
     Axiom,
@@ -480,3 +491,116 @@ def helly_check(
         has_roles=has_roles,
         k_max=k_max,
     )
+
+
+def certificate_triangles(
+    cm: CanonicalModel, *, max_triangles: Optional[int] = None
+) -> List[HellyCertificate]:
+    """Find non-degenerate singleton Helly certificates via triangle enumeration on direct ``NF2`` definitions.
+
+    Constructs the undirected graph of concept names in which an edge
+    ``{A, B}`` labelled ``N`` exists whenever ``cm.axioms`` contains an
+    :class:`~mowl.geometric.normal_forms.NF2` axiom ``A ⊓ B ⊑ N`` with
+    ``A != B``, ``N != BOTTOM``, ``A, B, N != TOP``, all three satisfiable in
+    ``cm``, and ``cm.entails(N, A) and cm.entails(N, B)`` (so
+    :math:`\\mathcal{O} \\models N \\equiv A \\sqcap B`). Enumerates triangles
+    ``(X1, X2, X3)`` with ``X1 < X2 < X3`` lexicographically and retains those
+    whose pairwise conjunctions ``{X1, X2}``, ``{X1, X3}``, ``{X2, X3}`` are
+    jointly satisfiable and whose triple ``{X1, X2, X3}`` is jointly
+    unsatisfiable.
+
+    Guarantees
+    ----------
+    - Every returned :class:`HellyCertificate` is a sound non-degenerate
+      certificate with ``c1=(X1,)``, ``c2=(X2,)``, ``c3=(X3,)``,
+      ``X1 < X2 < X3`` lexicographically, and ``pairwise_names=(N12, N13, N23)``
+      all non-``None`` and satisfiable, excluding every non-degenerate
+      axis-parallel box model of :math:`\\mathcal{O}` in any dimension.
+    - Returns every singleton non-degenerate certificate whose three pairwise
+      conjunctions are direct :class:`~mowl.geometric.normal_forms.NF2`
+      definitions in ``cm.axioms`` (up to ``max_triangles`` if specified).
+    - The returned list is sorted lexicographically by ``(c1, c2, c3)``.
+    - Triangle enumeration over the named-conjunction graph takes
+      :math:`O(\\sum_v \\deg(v)^2)` time in the vertex degrees of that graph
+      (plus the joint-satisfiability checks on candidate triangles).
+
+    Non-guarantees
+    --------------
+    - Not complete for all non-degenerate or strong Helly certificates:
+      pairwise conjunctions defined through chains of equivalences or
+      multi-step normalisations without a direct ``NF2(A, B, N)`` axiom, as
+      well as higher-arity certificates where :math:`|C_i| > 1`, are not found.
+
+    Parameters
+    ----------
+    cm : CanonicalModel
+        Canonical model of the normalised ontology.
+    max_triangles : int, optional
+        If given, stop after collecting ``max_triangles`` certificates
+        (returns ``[]`` if ``max_triangles <= 0``).
+
+    Returns
+    ------
+    List[HellyCertificate]
+        Sorted list of non-degenerate singleton certificates.
+    """
+    if max_triangles is not None and max_triangles <= 0:
+        return []
+
+    edge_map: Dict[FrozenSet[str], str] = {}
+    for ax in cm.axioms:
+        if not isinstance(ax, NF2):
+            continue
+        a, b, n = ax.sub1, ax.sub2, ax.sup
+        if a == b or n == BOTTOM or TOP in (a, b, n):
+            continue
+        if (
+            cm.is_satisfiable(a)
+            and cm.is_satisfiable(b)
+            and cm.is_satisfiable(n)
+            and cm.entails(n, a)
+            and cm.entails(n, b)
+        ):
+            key: FrozenSet[str] = frozenset((a, b))
+            if key not in edge_map or n < edge_map[key]:
+                edge_map[key] = n
+
+    adj: Dict[str, Set[str]] = defaultdict(set)
+    for pair in edge_map:
+        u, v = tuple(pair)
+        adj[u].add(v)
+        adj[v].add(u)
+
+    triangles: List[HellyCertificate] = []
+    for a in sorted(adj.keys()):
+        higher = sorted(v for v in adj[a] if v > a)
+        m = len(higher)
+        for i in range(m):
+            b = higher[i]
+            adj_b = adj[b]
+            for j in range(i + 1, m):
+                c = higher[j]
+                if c not in adj_b:
+                    continue
+                if (
+                    cm.joint_satisfiable((a, b))
+                    and cm.joint_satisfiable((a, c))
+                    and cm.joint_satisfiable((b, c))
+                    and not cm.joint_satisfiable((a, b, c))
+                ):
+                    n12 = edge_map[frozenset((a, b))]
+                    n13 = edge_map[frozenset((a, c))]
+                    n23 = edge_map[frozenset((b, c))]
+                    triangles.append(
+                        HellyCertificate(
+                            c1=(a,),
+                            c2=(b,),
+                            c3=(c,),
+                            pairwise_names=(n12, n13, n23),
+                        )
+                    )
+                    if max_triangles is not None and len(triangles) >= max_triangles:
+                        return triangles
+
+    return triangles
+
