@@ -43,3 +43,4 @@ dist/
 docs/source/api/mowl.*
 
 **/wandb
+tests/geometric/_scratch/
