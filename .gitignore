@@ -40,3 +40,4 @@ dist/
 *.pickle
 *.zip
 *.log
+tests/geometric/_scratch/
