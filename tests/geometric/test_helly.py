@@ -116,7 +116,7 @@ class TestHellyCheck(TestCase):
         )
         self.assertEqual(rep_oneway.certificates_nondegenerate, [])
         self.assertIs(rep_oneway.box_representable_strong, False)
-        self.assertIs(rep_oneway.box_representable_nondegenerate, True)
+        self.assertIs(rep_oneway.box_representable_nondegenerate, None)
 
     def test_helly_ok(self) -> None:
         ds = PathDataset(_fixture_path("helly_ok.owl"))
@@ -200,7 +200,7 @@ class TestHellyCheck(TestCase):
         self.assertTrue(report5.complete)
         self.assertEqual(report5.certificates_strong, [expected_cert3, expected_cert4])
         self.assertEqual(report5.certificates_nondegenerate, [])
-        self.assertIs(report5.box_representable_nondegenerate, True)
+        self.assertIs(report5.box_representable_nondegenerate, None)
         self.assertIs(report5.box_representable_strong, False)
 
         # max_certificates = 1 cuts off after the first strong certificate
@@ -308,6 +308,87 @@ class TestHellyCheck(TestCase):
         self.assertGreaterEqual(len(rep_custom.certificates_strong), 2)
         for cert in rep_custom.certificates_strong:
             _assert_certificate_confirmed(self, cm_custom, cert)
+
+    def test_nondegenerate_property_is_conservative(self) -> None:
+        a, b, c, d = NS + "a", NS + "b", NS + "c", NS + "d"
+        AC, BD = NS + "AC", NS + "BD"
+        N1, N2, N3 = NS + "N1", NS + "N2", NS + "N3"
+
+        no = NormalisedOntology(
+            axioms=[
+                NF2(a, c, AC),
+                NF2(AC, b, N1),
+                NF2(b, d, BD),
+                NF2(BD, a, N2),
+                NF2(c, d, N3),
+                NF1(N1, a),
+                NF1(N1, b),
+                NF1(N1, c),
+                NF1(N2, a),
+                NF1(N2, b),
+                NF1(N2, d),
+                NF1(N3, c),
+                NF1(N3, d),
+                NF2(N1, d, BOTTOM),
+            ],
+            concept_names={a, b, c, d, AC, BD, N1, N2, N3, TOP, BOTTOM},
+            role_names=set(),
+            dropped_axioms=0,
+        )
+        cm = CanonicalModel.from_normalised(no)
+        report = helly_check(cm, k_max=9)
+
+        self.assertTrue(report.complete)
+        self.assertTrue(len(report.certificates_strong) > 0)
+        self.assertIs(report.box_representable_strong, False)
+        self.assertIn(report.box_representable_nondegenerate, (None, False))
+        self.assertIsNot(report.box_representable_nondegenerate, True)
+        for cert in report.certificates_strong:
+            _assert_certificate_confirmed(self, cm, cert)
+
+    def test_subclass_chain_without_bottom(self) -> None:
+        names = [f"{NS}C{i}" for i in range(6)]
+        no = NormalisedOntology(
+            axioms=[NF1(names[i], names[i + 1]) for i in range(5)],
+            concept_names=set(names) | {TOP, BOTTOM},
+            role_names=set(),
+            dropped_axioms=0,
+        )
+        cm = CanonicalModel.from_normalised(no)
+        report = helly_check(cm)
+
+        self.assertTrue(report.complete)
+        self.assertFalse(report.has_roles)
+        self.assertEqual(report.certificates_strong, [])
+        self.assertEqual(report.certificates_nondegenerate, [])
+        self.assertIs(report.box_representable_strong, True)
+        self.assertIs(report.box_representable_nondegenerate, True)
+
+    def test_relevance_pruning_ignores_irrelevant_names(self) -> None:
+        ds_t3 = PathDataset(_fixture_path("t3.owl"))
+        cm_t3 = CanonicalModel.from_dataset(ds_t3)
+        expected_report = helly_check(cm_t3)
+
+        extra_names = [f"{NS}Extra{i}" for i in range(20)]
+        extra_axioms = [NF1(extra_names[i], extra_names[i + 1]) for i in range(19)]
+        no_padded = NormalisedOntology(
+            axioms=list(cm_t3.axioms) + extra_axioms,
+            concept_names=set(cm_t3.concept_names) | set(extra_names),
+            role_names=set(),
+            dropped_axioms=0,
+        )
+        cm_padded = CanonicalModel.from_normalised(no_padded)
+        report = helly_check(cm_padded)
+
+        self.assertTrue(report.complete)
+        self.assertFalse(report.has_roles)
+        self.assertEqual(report.certificates_strong, expected_report.certificates_strong)
+        self.assertEqual(
+            report.certificates_nondegenerate,
+            expected_report.certificates_nondegenerate,
+        )
+        self.assertIs(report.box_representable_strong, False)
+        self.assertIs(report.box_representable_nondegenerate, False)
 
     def test_import_without_jvm(self) -> None:
         cmd = [
