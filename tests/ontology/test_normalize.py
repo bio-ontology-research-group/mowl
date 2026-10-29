@@ -717,3 +717,43 @@ class TestAuxiliaryIriPrefix(TestCase):
         # different TBox -> different namespace
         prefix = lambda iri: iri.split("#")[0]
         self.assertNotEqual({prefix(i) for i in aux1}, {prefix(i) for i in aux3})
+
+
+class TestInverseRolesAreDropped(TestCase):
+    """jcel represents r^- by an auxiliary object property unrelated to r in the GCIs, so axioms
+    with ObjectInverseOf are dropped by preprocessing."""
+
+    def test_inverse_role_axiom_is_dropped(self):
+        ad = OWLAPIAdapter()
+        ns = "http://test.org/inverse#"
+        ont = ad.create_ontology("http://test.org/inverse")
+        A, B, C, D = [ad.create_class(ns + x) for x in "ABCD"]
+        r = ad.create_object_property(ns + "r")
+        inv = ad.data_factory.getOWLObjectInverseOf(r)
+        ad.owl_manager.addAxiom(ont, ad.create_subclass_of(
+            A, ad.create_object_some_values_from(inv, B)))
+        ad.owl_manager.addAxiom(ont, ad.create_subclass_of(C, D))
+
+        normalizer = ELNormalizer()
+        with self.assertLogs("mowl.ontology.normalize", level="WARNING") as log:
+            normalized = normalizer.normalize(ont)
+        self.assertEqual(normalizer.num_dropped_axioms, 1)
+        self.assertTrue(any("1 TBox axioms" in r.getMessage() for r in log.records))
+        self.assertEqual(normalized["gci2"], [])
+        self.assertEqual(normalized["gci3"], [])
+        self.assertEqual(len(normalized["gci0"]), 1)
+
+    def test_inverse_role_reaching_jcel_raises(self):
+        """Defence in depth: if an inverse role bypasses preprocessing, the GCI using jcel's
+        auxiliary inverse property is rejected instead of being returned."""
+        from unittest import mock
+        ad = OWLAPIAdapter()
+        ns = "http://test.org/inverse2#"
+        ont = ad.create_ontology("http://test.org/inverse2")
+        A, B = ad.create_class(ns + "A"), ad.create_class(ns + "B")
+        inv = ad.data_factory.getOWLObjectInverseOf(ad.create_object_property(ns + "r"))
+        ad.owl_manager.addAxiom(ont, ad.create_subclass_of(
+            A, ad.create_object_some_values_from(inv, B)))
+        with mock.patch.object(ELNormalizer, "preprocess_ontology", lambda self, o: o):
+            with self.assertRaisesRegex(RuntimeError, "auxiliary inverse object property"):
+                ELNormalizer().normalize(ont)

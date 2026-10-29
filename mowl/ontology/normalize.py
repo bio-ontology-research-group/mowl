@@ -59,6 +59,20 @@ OWL axioms.
 from mowl.owlapi import OWLAPIAdapter
 from deprecated.sphinx import versionchanged
 
+#: Substrings of the string form of a TBox axiom that mark constructs the normaliser does not
+#: support; such axioms are dropped by :meth:`ELNormalizer.preprocess_ontology`.
+#: ``ObjectInverseOf`` is among them because jcel would represent an inverse role by an
+#: auxiliary object property, which carries no link to the original role in the GCIs.
+UNSUPPORTED_CONSTRUCT_MARKERS = (
+    "UnionOf", "MinCardinality", "ComplementOf", "AllValuesFrom", "MaxCardinality",
+    "ExactCardinality", "Annotation", "ObjectHasSelf", "urn:swrl", "EquivalentObjectProperties",
+    "SymmetricObjectProperty", "AsymmetricObjectProperty", "ObjectOneOf", "ObjectHasValue",
+    "DataSomeValuesFrom", "DataAllValuesFrom", "DataHasValue", "DataPropertyRange",
+    "DataPropertyDomain", "FunctionalDataProperty", "DisjointUnion", "HasKey",
+    "ObjectInverseOf",
+)
+
+
 class ELNormalizer():
 
     """This class wraps the normalization functionality found in the Java library :class:`Jcel`. \
@@ -67,7 +81,9 @@ logic EL language.
     """
 
     def __init__(self):
-        return
+        #: Number of TBox axioms dropped by the last call to :meth:`preprocess_ontology`
+        #: because they use unsupported constructs.
+        self.num_dropped_axioms = 0
 
     def get_cache_path(self, ontology_path):
         """Generate the cache file path for a given ontology path.
@@ -219,8 +235,14 @@ type org.semanticweb.owlapi.model.OWLOntology. Found: {type(ontology)}")
         
     @staticmethod
     def __put_private_map_entry(repository, field_name, key, value):
-        field = repository.getClass().getDeclaredField(field_name)
-        field.setAccessible(True)
+        try:
+            field = repository.getClass().getDeclaredField(field_name)
+            field.setAccessible(True)
+        except Exception as e:
+            raise RuntimeError(
+                f"Cannot access the private field '{field_name}' of jcel's TranslationRepository. "
+                "Registering auxiliary entities relies on the internals of jcel 0.24.1; check "
+                "the jcel version on the classpath.") from e
         field.get(repository).put(key, value)
 
     def __register_auxiliary_entities(self, translator, data_factory, ontology):
@@ -237,6 +259,11 @@ type org.semanticweb.owlapi.model.OWLOntology. Found: {type(ontology)}")
         entity_manager = translator.getOntologyObjectFactory().getEntityManager()
         existing_iris = {str(e.toStringID()) for e in ontology.getSignature(Imports.INCLUDED)}
         prefix = auxiliary_iri_prefix(ontology.getTBoxAxioms(Imports.INCLUDED))
+
+        # jcel creates an auxiliary inverse for every object property, so their existence is
+        # normal; a GCI that *uses* one would mean an inverse role reached the normaliser.
+        inverse_ids = set(entity_manager.getAuxiliaryInverseObjectProperties())
+        self._auxiliary_inverse_iris = set()
 
         def fresh_iri(identifier):
             name = str(entity_manager.getName(identifier))
@@ -260,6 +287,8 @@ type org.semanticweb.owlapi.model.OWLOntology. Found: {type(ontology)}")
                                    "already bound to "
                                    f"{repository.getOWLObjectProperty(identifier)}")
             owl_prop = data_factory.getOWLObjectProperty(fresh_iri(identifier))
+            if identifier in inverse_ids:
+                self._auxiliary_inverse_iris.add(str(owl_prop.toStringID()))
             self.__put_private_map_entry(repository, "objectPropertyMap", identifier, owl_prop)
             self.__put_private_map_entry(repository, "objectPropertyInvMap", owl_prop,
                                          identifier)
@@ -282,6 +311,14 @@ type org.semanticweb.owlapi.model.OWLOntology. Found: {type(ontology)}")
                 axiom_type = str(axiom.getAxiomType().getName())
                 skipped[axiom_type] = skipped.get(axiom_type, 0) + 1
                 continue
+
+            used_inverses = {str(p.toStringID()) for p in axiom.getObjectPropertiesInSignature()} \
+                & getattr(self, "_auxiliary_inverse_iris", set())
+            if used_inverses:
+                raise RuntimeError(
+                    f"Normalised axiom {axiom} uses the auxiliary inverse object property "
+                    f"{used_inverses.pop()}; inverse roles are not supported by the EL normal "
+                    "forms and should have been removed by preprocess_ontology.")
 
             processed = process_axiom(axiom)
             if processed is None:
@@ -313,56 +350,18 @@ type org.semanticweb.owlapi.model.OWLOntology")
 
         tbox_axioms = ontology.getTBoxAxioms(Imports.fromBoolean(True))
         new_tbox_axioms = HashSet()
+        dropped = 0
         for axiom in tbox_axioms:
             axiom_as_str = axiom.toString()
-
-            if "UnionOf" in axiom_as_str:
-                continue
-            elif "MinCardinality" in axiom_as_str:
-                continue
-            elif "ComplementOf" in axiom_as_str:
-                continue
-            elif "AllValuesFrom" in axiom_as_str:
-                continue
-            elif "MaxCardinality" in axiom_as_str:
-                continue
-            elif "ExactCardinality" in axiom_as_str:
-                continue
-            elif "Annotation" in axiom_as_str:
-                continue
-            elif "ObjectHasSelf" in axiom_as_str:
-                continue
-            elif "urn:swrl" in axiom_as_str:
-                continue
-            elif "EquivalentObjectProperties" in axiom_as_str:
-                continue
-            elif "SymmetricObjectProperty" in axiom_as_str:
-                continue
-            elif "AsymmetricObjectProperty" in axiom_as_str:
-                continue
-            elif "ObjectOneOf" in axiom_as_str:
-                continue
-            elif "ObjectHasValue" in axiom_as_str:
-                continue
-            elif "DataSomeValuesFrom" in axiom_as_str:
-                continue
-            elif "DataAllValuesFrom" in axiom_as_str:
-                continue
-            elif "DataHasValue" in axiom_as_str:
-                continue
-            elif "DataPropertyRange" in axiom_as_str:
-                continue
-            elif "DataPropertyDomain" in axiom_as_str:
-                continue
-            elif "FunctionalDataProperty" in axiom_as_str:
-                continue
-            elif "DisjointUnion" in axiom_as_str:
-                continue
-            elif "HasKey" in axiom_as_str:
-                continue
-            
+            if any(marker in axiom_as_str for marker in UNSUPPORTED_CONSTRUCT_MARKERS):
+                dropped += 1
             else:
                 new_tbox_axioms.add(axiom)
+
+        self.num_dropped_axioms = dropped
+        if dropped > 0:
+            logger.warning("%d TBox axioms using constructs outside the supported EL fragment "
+                           "were dropped before normalisation.", dropped)
 
         owl_manager = OWLAPIAdapter().owl_manager
         new_ontology = owl_manager.createOntology(new_tbox_axioms)
