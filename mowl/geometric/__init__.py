@@ -16,7 +16,7 @@ References:
 """
 from __future__ import annotations
 
-from mowl.geometric import checker, intervals, normal_forms
+from mowl.geometric import checker, intervals, normal_forms, polyhedral
 from mowl.geometric.checker import (
     DictInterpretation,
     GeometricInterpretation,
@@ -47,6 +47,7 @@ from mowl.geometric.normal_forms import (
     normalise,
     to_owl,
 )
+from mowl.geometric.polyhedral import ConvexPolyhedralModel
 from mowl.geometric.regions import (
     EMPTY_1D,
     Box,
@@ -54,6 +55,7 @@ from mowl.geometric.regions import (
     IntervalUnion,
     PairHull,
     RectUnion,
+    ThickFace,
     simplex_points,
 )
 
@@ -80,6 +82,7 @@ __all__ = [
     "CanonicalModel",
     "Completion",
     "CompletionResult",
+    "ConvexPolyhedralModel",
     "DictInterpretation",
     "EMPTY_1D",
     "Face",
@@ -102,6 +105,7 @@ __all__ = [
     "PairHull",
     "RectUnion",
     "TOP",
+    "ThickFace",
     "UnsupportedAxiom",
     "UnsupportedRegion",
     "checker",
@@ -109,6 +113,7 @@ __all__ = [
     "intervals",
     "normal_forms",
     "normalise",
+    "polyhedral",
     "simplex_points",
     "to_owl",
 ]
