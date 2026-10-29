@@ -21,7 +21,9 @@ class ELBE(EmbeddingELModel):
                  batch_size=4096 * 8,
                  model_filepath=None,
                  device='cpu',
-                 neg_sampling_gcis=None
+                 neg_sampling_gcis=None,
+                 init_boxes=None,
+                 anchor_weight=0.0
                  ):
         super().__init__(dataset, embed_dim, batch_size, extended=True,
                          model_filepath=model_filepath, device=device,
@@ -30,6 +32,8 @@ class ELBE(EmbeddingELModel):
 
         self.margin = margin
         self.reg_norm = reg_norm
+        self.init_boxes = init_boxes
+        self.anchor_weight = float(anchor_weight)
         self._loaded = False
         self.extended = False
         self._mse_criterion = th.nn.MSELoss()
@@ -43,6 +47,14 @@ class ELBE(EmbeddingELModel):
             embed_dim=self.embed_dim,
             margin=self.margin
         ).to(self.device)
+        if self.init_boxes is not None:
+            self.init_boxes.apply_to_module(self.module)
+
+    def get_regularization_loss(self):
+        loss = super().get_regularization_loss()
+        if self.init_boxes is not None and self.anchor_weight > 0:
+            loss = loss + self.anchor_weight * self.init_boxes.anchor_loss(self.module)
+        return loss
 
     def compute_loss(self, pos_scores, neg_scores=None):
         """Compute MSE loss for ELBE.

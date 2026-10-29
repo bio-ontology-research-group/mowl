@@ -19,7 +19,9 @@ class BoxSquaredEL(EmbeddingELModel):
                  num_negs=4,
                  model_filepath=None,
                  device='cpu',
-                 neg_sampling_gcis=None
+                 neg_sampling_gcis=None,
+                 init_boxes=None,
+                 anchor_weight=0.0
                  ):
         super().__init__(dataset, embed_dim, batch_size, extended=True,
                          model_filepath=model_filepath, device=device,
@@ -31,6 +33,8 @@ class BoxSquaredEL(EmbeddingELModel):
         self.delta = delta
         self.reg_factor = reg_factor
         self.num_negs = num_negs
+        self.init_boxes = init_boxes
+        self.anchor_weight = float(anchor_weight)
         self._loaded = False
         self.extended = False
         self.init_module()
@@ -45,4 +49,12 @@ class BoxSquaredEL(EmbeddingELModel):
             delta=self.delta,
             reg_factor=self.reg_factor
         ).to(self.device)
+        if self.init_boxes is not None:
+            self.init_boxes.apply_to_module(self.module)
+
+    def get_regularization_loss(self):
+        loss = super().get_regularization_loss()
+        if self.init_boxes is not None and self.anchor_weight > 0:
+            loss = loss + self.anchor_weight * self.init_boxes.anchor_loss(self.module)
+        return loss
 
