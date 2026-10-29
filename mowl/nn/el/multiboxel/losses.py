@@ -23,10 +23,17 @@ Guarantees:
     pair with non-empty intersection is contained in some component :math:`E_m`;
     disjoint component pairs :math:`(C_i, D_j)` are gated out and impose no
     inclusion penalty.
-  - ``gci1_bot_loss`` is zero if and only if all :math:`k^2` pairs
-    :math:`(C_i, D_j)` are disjoint.
+  - ``gci1_bot_loss`` is zero if and only if all :math:`k^2` component pairs
+    :math:`(C_i, D_j)` satisfy :math:`\\text{dist}(C_i, D_j) \\ge 0` (separated or
+    touching) in *every* coordinate (inherited from Box²EL): zero loss implies
+    disjointness (up to boundary contact), but disjointness does not imply zero
+    loss (zero :math:`\\Rightarrow` disjoint, disjoint :math:`\\nRightarrow` zero).
 
 Non-guarantees:
+- **Disjointness vs. coordinatewise separation in ``gci1_bot_loss``:** Two boxes
+  that are disjoint in :math:`\\mathbb{R}^d` because they are separated along one
+  coordinate still incur a positive ``gci1_bot_loss`` if their projections
+  overlap along any other coordinate.
 - **Non-convexity across components:** Taking minima over target components
   :math:`\\min_j \\text{incl}(C_i, D_j)` and gating over pairwise intersections makes
   the objective piecewise smooth rather than convex; gradient descent is not
@@ -42,12 +49,37 @@ import mowl.nn.el.boxsquaredel.losses as B2L
 
 
 def _resolve_n_components(
-    emb: th.nn.Embedding, n_components: Optional[int] = None
+    emb: th.nn.Embedding,
+    n_components: Optional[int] = None,
+    embed_dim: Optional[int] = None,
 ) -> int:
-    """Resolve the number of components ``k`` from explicit argument or embedding attribute."""
+    """Resolve the number of components ``k`` from explicit argument, embedding attribute, or exact ``embed_dim`` match."""
     if n_components is not None:
-        return int(n_components)
-    return int(getattr(emb, "n_components", 1))
+        if isinstance(n_components, bool) or not isinstance(n_components, int) or n_components < 1:
+            raise ValueError(f"n_components must be an int >= 1, got {n_components!r}")
+        k = int(n_components)
+    elif hasattr(emb, "n_components"):
+        k = int(getattr(emb, "n_components"))
+    else:
+        known_d = embed_dim if embed_dim is not None else getattr(emb, "embed_dim", None)
+        if known_d is not None and int(emb.embedding_dim) == int(known_d):
+            k = 1
+        else:
+            raise ValueError(
+                "Cannot resolve n_components: pass n_components explicitly, set "
+                "emb.n_components on the embedding, or provide an embedding whose "
+                "width equals embed_dim (k = 1)."
+            )
+    if emb.embedding_dim % k != 0:
+        raise ValueError(
+            f"Embedding width {emb.embedding_dim} is not divisible by n_components={k}."
+        )
+    if embed_dim is not None and emb.embedding_dim != k * int(embed_dim):
+        raise ValueError(
+            f"Embedding width {emb.embedding_dim} does not equal "
+            f"n_components ({k}) * embed_dim ({embed_dim})."
+        )
+    return k
 
 
 def _unpack_boxes(
@@ -55,10 +87,11 @@ def _unpack_boxes(
     class_center: th.nn.Embedding,
     class_offset: th.nn.Embedding,
     n_components: Optional[int] = None,
+    embed_dim: Optional[int] = None,
 ) -> Tuple[th.Tensor, th.Tensor]:
     """Look up and reshape ``(centers, |offsets|)`` to ``(B, k, d)``."""
     b_size = idx.shape[0]
-    k = _resolve_n_components(class_center, n_components)
+    k = _resolve_n_components(class_center, n_components, embed_dim=embed_dim)
     raw_c = class_center(idx)
     raw_o = th.abs(class_offset(idx))
     d = raw_c.shape[-1] // k
@@ -350,12 +383,19 @@ def gci1_bot_score(
 
     Guarantees:
     - Matches :func:`mowl.nn.el.boxsquaredel.losses.gci1_bot_score` at ``k = 1``.
-    - At ``gamma = 0``, equals ``0`` iff all component pairs :math:`(C_i, D_j)`
-      are disjoint inevery coordinate where ``dist < 0``.
+    - At ``gamma = 0``, equals ``0`` if and only if every component pair
+      :math:`(C_i, D_j)` satisfies :math:`\\text{dist}(C_i, D_j) \\ge 0` (separated
+      or touching) in *every* coordinate (inherited from Box²EL); thus zero
+      score implies all :math:`k^2` pairs are disjoint (up to boundary contact),
+      whereas disjointness does not imply zero score (zero :math:`\\Rightarrow`
+      disjoint, disjoint :math:`\\nRightarrow` zero).
 
     Non-guarantees:
-    - When two boxes touch only on their boundary (:math:`\\text{dist} = 0` in one
-      coordinate and :math:`\\le 0` in others), the score at ``gamma = 0`` is zero.
+    - Disjoint component pairs separated in one coordinate whose projections
+      overlap in another coordinate (:math:`\\text{dist} < 0` in that coordinate)
+      still incur a positive score at ``gamma = 0``.
+    - When two boxes touch on their boundary (:math:`\\text{dist} = 0` in one
+      coordinate and :math:`\\ge 0` in all others), the score at ``gamma = 0`` is zero.
     """
     cen_c, off_c = _unpack_boxes(data[:, 0], class_center, class_offset, n_components)
     cen_d, off_d = _unpack_boxes(data[:, 1], class_center, class_offset, n_components)
@@ -490,8 +530,13 @@ def gci2_loss(
     Non-guarantees:
     - Roles remain single head/tail boxes rather than multi-box relations.
     """
-    cen_c, off_c = _unpack_boxes(data[:, 0], class_center, class_offset, n_components)
-    cen_d, off_d = _unpack_boxes(data[:, 2], class_center, class_offset, n_components)
+    d_single = int(bump.embedding_dim)
+    cen_c, off_c = _unpack_boxes(
+        data[:, 0], class_center, class_offset, n_components, embed_dim=d_single
+    )
+    cen_d, off_d = _unpack_boxes(
+        data[:, 2], class_center, class_offset, n_components, embed_dim=d_single
+    )
     bump_c = bump(data[:, 0])
     bump_d = bump(data[:, 2])
 
@@ -538,7 +583,10 @@ def gci3_score(
     - ``tail_center`` and ``tail_offset`` are accepted for signature compatibility
       with Box²EL and are not used in the score.
     """
-    cen_d, off_d = _unpack_boxes(data[:, 2], class_center, class_offset, n_components)
+    d_single = int(head_center.embedding_dim)
+    cen_d, off_d = _unpack_boxes(
+        data[:, 2], class_center, class_offset, n_components, embed_dim=d_single
+    )
     cen_head = head_center(data[:, 0])
     off_head = th.abs(head_offset(data[:, 0]))
     bump_c = bump(data[:, 1])
@@ -635,7 +683,10 @@ def class_assertion_loss(
     """
     cen_i = ind_center(data[:, 0]).unsqueeze(1)  # (B, 1, d)
     off_i = th.abs(ind_offset(data[:, 0])).unsqueeze(1)  # (B, 1, d)
-    cen_c, off_c = _unpack_boxes(data[:, 1], class_center, class_offset, n_components)
+    d_single = int(ind_center.embedding_dim)
+    cen_c, off_c = _unpack_boxes(
+        data[:, 1], class_center, class_offset, n_components, embed_dim=d_single
+    )
     incl = multi_inclusion(cen_i, off_i, cen_c, off_c, gamma).squeeze(1)  # (B, k)
     return th.amin(incl, dim=1)
 

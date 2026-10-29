@@ -136,7 +136,9 @@ def test_k1_identity_gci1_with_empty_intersections() -> None:
         cen_d, off_d = mb.class_boxes(batch[:, 1])
         lo, up = MBL.multi_intersection(cen_c, off_c, cen_d, off_d)
         empty_rows = (lo[:, 0, 0, :] > up[:, 0, 0, :]).any(dim=-1)
+        non_empty_rows = ~empty_rows
         assert int(empty_rows.sum().item()) >= 128
+        assert int(non_empty_rows.sum().item()) >= 1
 
         out_b2 = b2(batch, "gci1", neg=False)
         out_mb = mb(batch, "gci1", neg=False)
@@ -382,4 +384,17 @@ def test_exact_box_init_and_gradients_with_multiboxel() -> None:
         mb(torch.tensor([[0, 1]]), "class_assertion")
     with pytest.raises(ValueError):
         mb(torch.tensor([[0, 0, 1]]), "object_property_assertion")
+
+
+def test_resolve_n_components_rejects_ambiguous_embedding() -> None:
+    bare_emb = torch.nn.Embedding(6, 8)
+    with pytest.raises(ValueError):
+        MBL._resolve_n_components(bare_emb)
+    with pytest.raises(ValueError):
+        MBL._resolve_n_components(bare_emb, embed_dim=4)
+    assert MBL._resolve_n_components(bare_emb, embed_dim=8) == 1
+    assert MBL._resolve_n_components(bare_emb, n_components=2, embed_dim=4) == 2
+    bare_emb.embed_dim = 8
+    assert MBL._resolve_n_components(bare_emb) == 1
+
 
