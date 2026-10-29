@@ -606,4 +606,3 @@ def certificate_triangles(
                         return triangles
 
     return triangles
-
