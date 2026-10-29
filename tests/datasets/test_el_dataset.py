@@ -96,3 +96,35 @@ must be of type dict"):
         true_gci3 = set()
         true_gci3.add((object_property_index_dict[self.has_child], class_index_dict[self.person],
                       class_index_dict[self.parent]))
+
+
+class TestElDatasetUnindexedAxioms(TestCase):
+    """Axioms mentioning entities missing from given index dictionaries are skipped with a
+    single warning instead of raising KeyError."""
+
+    def test_unindexed_auxiliary_classes_are_skipped(self):
+        from mowl.owlapi import OWLAPIAdapter
+        ad = OWLAPIAdapter()
+        ont = ad.create_ontology("http://test.org/unindexed")
+        A, B, C, D = [ad.create_class(f"http://test.org/unindexed#{x}") for x in "ABCD"]
+        r = ad.create_object_property("http://test.org/unindexed#r")
+        ad.owl_manager.addAxiom(ont, ad.create_subclass_of(
+            ad.create_object_intersection_of(B, ad.create_object_some_values_from(r, C)), A))
+        ad.owl_manager.addAxiom(ont, ad.create_subclass_of(D, B))
+        names = [str(c.toStringID()) for c in (A, B, C, D)]
+        class_index = {n: i for i, n in enumerate(names)}
+        prop_index = {str(r.toStringID()): 0}
+
+        el_dataset = ELDataset(ont, class_index, prop_index)
+        with self.assertLogs("mowl.datasets.el.el_dataset", level="WARNING") as log:
+            datasets = el_dataset.get_gci_datasets()
+        warnings = [rec for rec in log.records if "were skipped" in rec.getMessage()]
+        self.assertEqual(len(warnings), 1)
+        self.assertIn("2 normalized axioms", warnings[0].getMessage())
+        self.assertEqual(el_dataset.num_skipped_axioms, 2)
+        self.assertEqual(len(datasets["gci0"]), 1)  # D SubClassOf B is kept
+
+    def test_no_axioms_skipped_without_index_dictionaries(self):
+        el_dataset = ELDataset(FamilyDataset().ontology)
+        el_dataset.get_gci_datasets()
+        self.assertEqual(el_dataset.num_skipped_axioms, 0)
