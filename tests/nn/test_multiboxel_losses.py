@@ -1,4 +1,4 @@
-"""Unit tests for MultiBoxEL losses and MultiBoxELModule (Task 3, Spec §4.1–4.2)."""
+"""Unit tests for MultiBoxEL losses and MultiBoxELModule."""
 from __future__ import annotations
 
 import pytest

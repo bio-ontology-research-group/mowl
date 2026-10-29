@@ -1,4 +1,4 @@
-"""MultiBoxEL neural module (Spec §4.1, R2)."""
+"""MultiBoxEL neural module."""
 from __future__ import annotations
 
 from typing import Optional, Tuple
@@ -13,7 +13,7 @@ import mowl.nn.el.multiboxel.losses as L
 
 
 class MultiBoxELModule(ELModule):
-    """Multi-component Box\\ :math:`^2`\\ EL neural module (Spec §4.1, R2).
+    """Multi-component Box\\ :math:`^2`\\ EL neural module.
 
     Every ontology class :math:`C` is represented as a union of
     :math:`k = \\text{n\\_components}` axis-parallel boxes in :math:`\\mathbb{R}^d`,

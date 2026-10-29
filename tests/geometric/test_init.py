@@ -91,7 +91,7 @@ def test_projected_k1_containment_roles_and_random_200(roles_dataset: PathDatase
                 lo_b, hi_b = box(init_r, c2i_r[b])
                 assert (lo_b - 1e-6 <= lo_a).all() and (hi_a <= hi_b + 1e-6).all()
 
-    # Containment guarantee on a 200-class random TBox (Spec §6.3)
+    # Containment guarantee on a 200-class random TBox
     rng = random.Random(42)
     names = [f"{NS}C{i}" for i in range(200)]
     axioms = []

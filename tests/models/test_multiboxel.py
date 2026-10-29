@@ -279,10 +279,12 @@ def test_t3_local_learnability_multibox(
 def test_t3_random_init_multibox_optimisation_gap(
     t3_dataset: PathDataset, tmp_path: Path
 ) -> None:
-    """A zero-loss configuration exists (test 1) but Adam from random init plateaus near 1e-3.
+    """Adam from random init plateaus near 1e-3 although a zero-loss configuration exists.
 
+    The zero-loss configuration is the one of
+    :func:`test_t3_expressivity_multibox_zero_loss`.
     Floored 1-D MultiBoxEL(k=2), margin 0, w_min 0.05, ``neg_sampling_gcis=[]``.
-    Round-4 sweep, axiom loss at 3000 / 6000 epochs (floor 0 unless noted)::
+    Sweep of the axiom loss at 3000 / 6000 epochs (floor 0 unless noted)::
 
         lr     seed 0                      seed 1                      seed 2
         0.01   1.50e-3 / 1.77e-3           1.56e-3 / 1.79e-3           6.00e-3 / 5.92e-3

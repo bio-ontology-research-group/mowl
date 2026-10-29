@@ -1,4 +1,4 @@
-"""Loss functions for MultiBoxEL (Spec §4.2, R2).
+"""Loss functions for MultiBoxEL.
 
 Every concept name :math:`C` is represented as a union of :math:`k` axis-parallel
 boxes :math:`C = \\bigcup_{i=1}^k C_i` with :math:`C_i = (c_{C,i}, |o_{C,i}|) \\subset \\mathbb{R}^d`,
@@ -294,7 +294,7 @@ def gci1_score(
     gamma: float,
     n_components: Optional[int] = None,
 ) -> th.Tensor:
-    """Unsquared gated GCI1 score for :math:`C \\sqcap D \\sqsubseteq E` (Spec §4.2).
+    """Unsquared gated GCI1 score for :math:`C \\sqcap D \\sqsubseteq E`.
 
     For each batch row:
     - :math:`(i^*, j^*) = \\arg\\min_{i,j} \\text{empt}(C_i, D_j)` (chosen on detached

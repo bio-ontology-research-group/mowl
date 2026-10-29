@@ -1,4 +1,4 @@
-"""MultiBoxEL model class (Spec §4.3, R2)."""
+"""MultiBoxEL model class."""
 from __future__ import annotations
 
 from mowl.base_models.elmodel import EmbeddingELModel
@@ -6,7 +6,7 @@ from mowl.nn import MultiBoxELModule
 
 
 class MultiBoxEL(EmbeddingELModel):
-    """Multi-component Box\\ :math:`^2`\\ EL embedding model (Spec §4.3, R2).
+    """Multi-component Box\\ :math:`^2`\\ EL embedding model.
 
     Represents every ontology class as a union of ``n_components`` (:math:`k`)
     axis-parallel boxes in :math:`\\mathbb{R}^d` under Box\\ :math:`^2`\\ EL
