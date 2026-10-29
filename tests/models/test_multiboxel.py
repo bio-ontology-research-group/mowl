@@ -94,37 +94,42 @@ def test_multiboxel_trains_on_t3(t3_dataset: PathDataset, tmp_path: Path) -> Non
 @pytest.mark.xfail(
     strict=True,
     reason=(
-        "In Box2EL/MultiBoxEL losses, gamma (margin) is subtracted inside relu: "
-        "inclusion_score = ||relu(dist + 2*off_a - gamma)||_2 and "
-        "gci1_bot_score = ||relu(-box_dist - gamma)||_2. Thus margin=0.05 (gamma=+0.05) "
-        "relaxes containment by 0.05 and allows disjoint boxes to overlap by up to 0.05 "
-        "(box_dist >= -0.05) at zero loss. Measured across component_reg in {0.0, 0.01}, "
-        "seeds 0..2, epochs in {3000, 6000} (d=2, lr=0.01, neg_sampling_gcis=[]): "
-        "MultiBoxEL(k=2) reaches loss < 1e-4 and deg={'A': False, 'B': False, 'C': False} "
-        "on all runs (seed=0, comp_reg=0.0, epochs=3000: loss=2.26e-15; epochs=6000: "
-        "loss=1.76e-17; seed=1, 3000: 3.45e-15, 6000: 9.08e-17; seed=2, comp_reg=0.0, "
-        "3000: 1.54e-15, 6000: 2.34e-17; seed=2, comp_reg=0.01, 3000: 1.90e-15, "
-        "6000: 2.86e-17), but triple_nonempty=True in all 12 runs and BoxSquaredEL "
-        "also reaches zero loss (seed=0,1 epochs=3000,6000: loss=0.00e+00; seed=2 "
-        "epochs=3000: loss=6.38e-15, epochs=6000: loss=8.33e-17, not > 1e-3)."
+        "With margin=-0.05 (gamma=-0.05), BoxSquaredEL satisfies loss > 1e-3 on all "
+        "runs (seed=0: 1.27e-02 at 3000 epochs, 1.26e-02 at 6000; seed=1: 1.27e-02 at "
+        "3000, 1.35e-02 at 6000; seed=2: 1.31e-02 at 3000, 1.32e-02 at 6000), and "
+        "MultiBoxEL(k=2) satisfies triple_nonempty=False and deg={'A': False, 'B': False, "
+        "'C': False} on seeds 0 and 2, but because T3 contains both directions of the "
+        "equivalences A == X1 and X2 (A <= X1, A <= X2 in gci0 requiring o_{X1 cap X2} >= "
+        "o_A + 0.05, and X1 and X2 <= A in gci1 requiring o_A >= o_{X1 cap X2} + 0.05), "
+        "gamma=-0.05 imposes a positive lower bound on gci0_loss + gci1_loss for any "
+        "finite k, so MultiBoxEL(k=2) does not reach < 1e-4 across seeds 0..2 and epochs "
+        "in {3000, 6000} (seed=0: 4.91e-03 at 3000 epochs [gci0=3.13e-03, gci1=1.41e-03, "
+        "gci1_bot=3.69e-04], 4.76e-03 at 6000; seed=1: 9.72e-03 at 3000, 9.87e-03 at 6000, "
+        "triple_nonempty=True; seed=2: 8.99e-03 at 3000, 7.05e-03 at 6000)."
     ),
 )
 def test_t3_solvability_multibox_vs_box2el(
     t3_dataset: PathDataset, tmp_path: Path
 ) -> None:
-    """Compare MultiBoxEL(k=2) and BoxSquaredEL on the Helly-violating T3 TBox at margin=0.05.
+    """Compare MultiBoxEL(k=2) and BoxSquaredEL on the Helly-violating T3 TBox at margin=-0.05.
+
+    In Box²EL and MultiBoxEL, ``gamma`` (``margin``) is subtracted inside ``relu`` in
+    ``inclusion_score(a, b, gamma) = ||relu(dist + 2*o_a - gamma)||_2`` and
+    ``gci1_bot_score = ||relu(-box_dist - gamma)||_2``. Consequently, a positive
+    ``gamma`` relaxes containment and disjointness by ``gamma``, whereas a negative
+    ``gamma`` enforces a strict interior containment margin and a strict separation gap.
 
     Measured final total positive losses (seed=0, embed_dim=2, lr=0.01, epochs=3000,
-    margin=0.05, component_reg=0.0, neg_sampling_gcis=[]):
-    - MultiBoxEL(k=2): ``2.26e-15`` (``1.76e-17`` at 6000 epochs)
-    - BoxSquaredEL: ``0.00e+00`` (``0.00e+00`` at 6000 epochs)
+    margin=-0.05, component_reg=0.0, neg_sampling_gcis=[]):
+    - MultiBoxEL(k=2): ``4.91e-03`` (``4.76e-03`` at 6000 epochs; ``triple_nonempty=False``, non-degenerate)
+    - BoxSquaredEL: ``1.27e-02`` (``1.26e-02`` at 6000 epochs)
     """
     torch.manual_seed(0)
     mb = MultiBoxEL(
         t3_dataset,
         embed_dim=2,
         n_components=2,
-        margin=0.05,
+        margin=-0.05,
         learning_rate=0.01,
         neg_sampling_gcis=[],
         model_filepath=str(tmp_path / "mb_t3.pt"),
@@ -136,7 +141,7 @@ def test_t3_solvability_multibox_vs_box2el(
     b2 = BoxSquaredEL(
         t3_dataset,
         embed_dim=2,
-        margin=0.05,
+        margin=-0.05,
         learning_rate=0.01,
         neg_sampling_gcis=[],
         model_filepath=str(tmp_path / "b2_t3.pt"),
