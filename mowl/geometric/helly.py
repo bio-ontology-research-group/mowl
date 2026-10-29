@@ -508,9 +508,10 @@ def certificate_triangles(
     same conjunction), the edge is labelled with the lexicographically smallest
     IRI string, so the reported ``pairwise_names`` are deterministic. Enumerates triangles
     ``(X1, X2, X3)`` with ``X1 < X2 < X3`` lexicographically and retains those
-    whose pairwise conjunctions ``{X1, X2}``, ``{X1, X3}``, ``{X2, X3}`` are
-    jointly satisfiable and whose triple ``{X1, X2, X3}`` is jointly
-    unsatisfiable.
+    whose triple ``{X1, X2, X3}`` is jointly unsatisfiable. The pairwise
+    conjunctions ``{X1, X2}``, ``{X1, X3}``, ``{X2, X3}`` need no separate
+    check: each is equivalent to its satisfiable edge label, so it is jointly
+    satisfiable.
 
     Guarantees
     ----------
@@ -525,7 +526,7 @@ def certificate_triangles(
     - The returned list is sorted lexicographically by ``(c1, c2, c3)``.
     - Triangle enumeration over the named-conjunction graph takes
       :math:`O(\\sum_v \\deg(v)^2)` time in the vertex degrees of that graph
-      (plus the joint-satisfiability checks on candidate triangles).
+      (plus one joint-satisfiability check per candidate triangle).
 
     Non-guarantees
     --------------
@@ -585,12 +586,9 @@ def certificate_triangles(
                 c = higher[j]
                 if c not in adj_b:
                     continue
-                if (
-                    cm.joint_satisfiable((a, b))
-                    and cm.joint_satisfiable((a, c))
-                    and cm.joint_satisfiable((b, c))
-                    and not cm.joint_satisfiable((a, b, c))
-                ):
+                # The pairs are jointly satisfiable because their edge labels
+                # N with N ≡ X ⊓ Y are satisfiable; only the triple is checked.
+                if not cm.joint_satisfiable((a, b, c)):
                     n12 = edge_map[frozenset((a, b))]
                     n13 = edge_map[frozenset((a, c))]
                     n23 = edge_map[frozenset((b, c))]
