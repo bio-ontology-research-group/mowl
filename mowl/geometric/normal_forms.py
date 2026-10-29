@@ -30,26 +30,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import itertools
-from typing import List, Set, Union
+from typing import TYPE_CHECKING, List, Set, Union
 
-from java.util import ArrayList, HashSet
-from org.semanticweb.owlapi.model import AxiomType, IRI, OWLOntology
-from org.semanticweb.owlapi.model.parameters import Imports
-
-from mowl.datasets import Dataset
-from mowl.ontology.normalize import ELNormalizer
-from mowl.owlapi import OWLAPIAdapter
+if TYPE_CHECKING:  # pragma: no cover
+    from org.semanticweb.owlapi.model import OWLOntology
+    from mowl.datasets import Dataset
 
 BOTTOM = "http://www.w3.org/2002/07/owl#Nothing"
 TOP = "http://www.w3.org/2002/07/owl#Thing"
 AUX_NS = "http://mowl.borg/geo/aux#"
-
-_SUPPORTED_TBOX_TYPES = {
-    AxiomType.SUBCLASS_OF,
-    AxiomType.EQUIVALENT_CLASSES,
-    AxiomType.DISJOINT_CLASSES,
-    AxiomType.OBJECT_PROPERTY_DOMAIN,
-}
 
 
 @dataclass(frozen=True)
@@ -194,6 +183,21 @@ def normalise(source: Union[Dataset, OWLOntology]) -> NormalisedOntology:
     :return: :class:`NormalisedOntology` with NF1–NF4, NF6, NF7 axioms, concept
         and role signatures, and total dropped TBox + RBox axiom count.
     """
+    from java.util import HashSet
+    from org.semanticweb.owlapi.model import AxiomType, OWLOntology
+    from org.semanticweb.owlapi.model.parameters import Imports
+
+    from mowl.datasets import Dataset
+    from mowl.ontology.normalize import ELNormalizer
+    from mowl.owlapi import OWLAPIAdapter
+
+    supported_tbox_types = {
+        AxiomType.SUBCLASS_OF,
+        AxiomType.EQUIVALENT_CLASSES,
+        AxiomType.DISJOINT_CLASSES,
+        AxiomType.OBJECT_PROPERTY_DOMAIN,
+    }
+
     if isinstance(source, Dataset):
         ontology = source.ontology
     elif isinstance(source, OWLOntology):
@@ -212,7 +216,7 @@ def normalise(source: Union[Dataset, OWLOntology]) -> NormalisedOntology:
     filtered_tbox = HashSet()
     for ax in prep_tbox:
         ax_type = ax.getAxiomType()
-        if ax_type not in _SUPPORTED_TBOX_TYPES or "ObjectInverseOf" in str(ax.toString()):
+        if ax_type not in supported_tbox_types or "ObjectInverseOf" in str(ax.toString()):
             dropped_axioms += 1
         else:
             filtered_tbox.add(ax)
@@ -349,6 +353,10 @@ def normalise(source: Union[Dataset, OWLOntology]) -> NormalisedOntology:
 
 def to_owl(no: NormalisedOntology) -> OWLOntology:
     """Re-serialise a :class:`NormalisedOntology` into an OWLAPI ``OWLOntology``."""
+    from java.util import ArrayList
+
+    from mowl.owlapi import OWLAPIAdapter
+
     adapter = OWLAPIAdapter()
     mgr = adapter.owl_manager
     df = adapter.data_factory
