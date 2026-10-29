@@ -18,7 +18,7 @@ region models exist:
 * **Convex polyhedra** can model every EL++ ontology with a finite canonical model,
   exactly, using one dimension per canonical-model element (Gutiérrez-Basulto &
   Schockaert, KR 2018, Prop. 3; Lacerda, Ozaki & Guimarães, TGDK 2024, Sec. 5), and
-  the dimension cannot in general be reduced below (model size − 1) (Helly).
+  a dimension linear in the number of concept names is unavoidable in the worst case for convex models that realise the relevant conjunctions (Helly; GB&S 2018 Prop. 4).
 * **Unions of intervals on the real line** model every finite interpretation exactly
   (Lacerda et al. 2024, Sec. 4). More generally, *multiboxes* (finite unions of boxes)
   model every satisfiable ELHO(∘)⊥ ontology in any dimension n ≥ 1 (Federico, Leemhuis &
