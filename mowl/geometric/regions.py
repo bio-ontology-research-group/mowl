@@ -47,7 +47,7 @@ Semantics and guarantees:
 """
 from __future__ import annotations
 
-from typing import FrozenSet, Iterable, List, Optional, Sequence, Tuple, Union
+from typing import FrozenSet, Iterable, List, Sequence, Tuple
 import numpy as np
 
 _INTERVAL_EQ_TOL: float = 1e-12
@@ -373,16 +373,6 @@ def simplex_points(n: int) -> np.ndarray:
     return pts
 
 
-def _canonical_simplex_vertex(dim: int, vid: int) -> np.ndarray:
-    """Return vertex ``vid`` of ``simplex_points(dim + 1)``."""
-    v = np.zeros(dim, dtype=float)
-    if 0 <= vid < dim:
-        v[vid] = 1.0
-    elif vid != dim:
-        raise ValueError(f"Vertex id {vid} out of range for ambient dimension {dim} (n={dim + 1})")
-    return v
-
-
 class Face:
     """Face of the standard simplex in :math:`\\mathbb{R}^{\\text{dim}}` (:math:`n = \\text{dim} + 1`).
 
@@ -406,69 +396,85 @@ class Face:
 
     def __init__(
         self,
-        dim: Union[int, np.ndarray],
-        vertices: Optional[Union[np.ndarray, Iterable[int]]] = None,
-        vertex_ids: Optional[Iterable[int]] = None,
+        dim: int,
+        vertices: np.ndarray,
+        vertex_ids: Iterable[int],
     ) -> None:
-        # Support both Face(dim, vertices, vertex_ids) and Face(simplex_pts, vertex_ids)
-        if isinstance(dim, np.ndarray):
-            simplex_arr = np.asarray(dim, dtype=float)
-            if simplex_arr.ndim != 2:
-                raise ValueError(f"Expected 2-D simplex array, got shape {simplex_arr.shape}")
-            self.dim: int = int(simplex_arr.shape[1])
-            vids_iter: Iterable[int] = (
-                vertices if vertex_ids is None else vertex_ids  # type: ignore[assignment]
+        if isinstance(dim, bool) or not isinstance(dim, (int, np.integer)) or int(dim) < 0:
+            raise ValueError(f"Face.dim must be a non-negative int, got {dim!r}")
+        self.dim: int = int(dim)
+
+        try:
+            raw_ids = list(vertex_ids)
+        except TypeError as exc:
+            raise ValueError(
+                f"Face.vertex_ids must be an iterable of ints, got {vertex_ids!r}"
+            ) from exc
+
+        id_list: List[int] = []
+        for item in raw_ids:
+            if isinstance(item, bool) or not isinstance(item, (int, np.integer)):
+                raise ValueError(
+                    f"Vertex id must be an int in [0, {self.dim}], got {item!r}"
+                )
+            vid = int(item)
+            if vid < 0 or vid > self.dim:
+                raise ValueError(
+                    f"Vertex id {vid} out of range [0, {self.dim}] for ambient dimension {self.dim}"
+                )
+            id_list.append(vid)
+
+        vids = frozenset(id_list)
+        if len(vids) != len(id_list):
+            raise ValueError(f"Duplicate vertex_ids are not allowed: {id_list!r}")
+
+        arr = np.asarray(vertices, dtype=float)
+        if arr.ndim != 2 or arr.shape != (len(vids), self.dim):
+            raise ValueError(
+                f"Face.vertices must have shape ({len(vids)}, {self.dim}), got {arr.shape}"
             )
-            sorted_ids = sorted(int(i) for i in (vids_iter or ()))
-            self.vertex_ids: FrozenSet[int] = frozenset(sorted_ids)
-            if sorted_ids:
-                self.vertices: np.ndarray = np.asarray(
-                    simplex_arr[sorted_ids], dtype=float
-                ).reshape((len(sorted_ids), self.dim))
-            else:
-                self.vertices = np.zeros((0, self.dim), dtype=float)
-            return
 
-        self.dim = int(dim)
-        if vertex_ids is None and vertices is not None and not isinstance(vertices, np.ndarray):
-            # Called as Face(dim, vertex_ids_set)
-            sorted_ids = sorted(int(i) for i in vertices)
-            self.vertex_ids = frozenset(sorted_ids)
-            if sorted_ids:
-                self.vertices = np.vstack(
-                    [_canonical_simplex_vertex(self.dim, i) for i in sorted_ids]
-                )
-            else:
-                self.vertices = np.zeros((0, self.dim), dtype=float)
-            return
-
-        self.vertex_ids = frozenset(int(i) for i in (vertex_ids or ()))
-        if vertices is None:
-            sorted_ids = sorted(self.vertex_ids)
-            if sorted_ids:
-                self.vertices = np.vstack(
-                    [_canonical_simplex_vertex(self.dim, i) for i in sorted_ids]
-                )
-            else:
-                self.vertices = np.zeros((0, self.dim), dtype=float)
-        else:
-            arr = np.asarray(vertices, dtype=float)
-            if arr.size == 0:
-                self.vertices = np.zeros((0, self.dim), dtype=float)
-            else:
-                self.vertices = arr.reshape((-1, self.dim))
+        self.vertices: np.ndarray = arr
+        self.vertex_ids: FrozenSet[int] = vids
 
     @classmethod
     def from_simplex(
-        cls, simplex: np.ndarray, vertex_ids: Iterable[int]
+        cls, points: np.ndarray, vertex_ids: Iterable[int]
     ) -> Face:
         """Construct a :class:`Face` from ``simplex_points(n)`` and ``vertex_ids``."""
-        simplex_arr = np.asarray(simplex, dtype=float)
-        k = int(simplex_arr.shape[1])
-        sorted_ids = sorted(int(i) for i in vertex_ids)
-        vids = frozenset(sorted_ids)
+        pts = np.asarray(points, dtype=float)
+        if pts.ndim != 2 or pts.shape[0] != pts.shape[1] + 1:
+            raise ValueError(
+                f"Simplex points must have 2-D shape (dim + 1, dim), got {pts.shape}"
+            )
+        k = int(pts.shape[1])
+        try:
+            raw_ids = list(vertex_ids)
+        except TypeError as exc:
+            raise ValueError(
+                f"vertex_ids must be an iterable of ints, got {vertex_ids!r}"
+            ) from exc
+
+        id_list: List[int] = []
+        for item in raw_ids:
+            if isinstance(item, bool) or not isinstance(item, (int, np.integer)):
+                raise ValueError(
+                    f"Vertex id must be an int in [0, {k}], got {item!r}"
+                )
+            vid = int(item)
+            if vid < 0 or vid > k:
+                raise ValueError(
+                    f"Vertex id {vid} out of range [0, {k}] for ambient dimension {k}"
+                )
+            id_list.append(vid)
+
+        vids = frozenset(id_list)
+        if len(vids) != len(id_list):
+            raise ValueError(f"Duplicate vertex_ids are not allowed: {id_list!r}")
+
+        sorted_ids = sorted(vids)
         if sorted_ids:
-            verts = simplex_arr[sorted_ids].reshape((len(sorted_ids), k))
+            verts = pts[sorted_ids].reshape((len(sorted_ids), k))
         else:
             verts = np.zeros((0, k), dtype=float)
         return cls(k, verts, vids)
@@ -492,8 +498,12 @@ class Face:
                 np.zeros((0, self.dim), dtype=float),
                 frozenset(),
             )
-        verts = np.vstack(
-            [_canonical_simplex_vertex(self.dim, i) for i in sorted_ids]
+        row_by_id = {
+            vid: self.vertices[idx]
+            for idx, vid in enumerate(sorted(self.vertex_ids))
+        }
+        verts = np.vstack([row_by_id[i] for i in sorted_ids]).reshape(
+            (len(sorted_ids), self.dim)
         )
         return Face(self.dim, verts, common_ids)
 

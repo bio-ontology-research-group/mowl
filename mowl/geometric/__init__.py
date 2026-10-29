@@ -36,36 +36,9 @@ from mowl.geometric.regions import (
     simplex_points,
 )
 
-try:
-    from mowl.geometric.completion import (
-        CanonicalModel,
-        Completion,
-        CompletionResult,
-    )
-    from mowl.geometric.normal_forms import (
-        BOTTOM,
-        NF1,
-        NF2,
-        NF3,
-        NF4,
-        NF6,
-        NF7,
-        TOP,
-        Axiom,
-        NormalisedOntology,
-        normalise,
-        to_owl,
-    )
-except ImportError:  # pragma: no cover - allows importing regions without starting JVM
-    pass
-
-
-def __getattr__(name: str) -> object:
-    if name in {"CanonicalModel", "Completion", "CompletionResult"}:
-        from mowl.geometric import completion
-
-        return getattr(completion, name)
-    if name in {
+_COMPLETION_NAMES = frozenset({"CanonicalModel", "Completion", "CompletionResult"})
+_NORMAL_FORMS_NAMES = frozenset(
+    {
         "Axiom",
         "BOTTOM",
         "NF1",
@@ -78,7 +51,24 @@ def __getattr__(name: str) -> object:
         "TOP",
         "normalise",
         "to_owl",
-    }:
+    }
+)
+
+
+def __getattr__(name: str) -> object:
+    if name == "completion":
+        import importlib
+
+        return importlib.import_module("mowl.geometric.completion")
+    if name == "normal_forms":
+        import importlib
+
+        return importlib.import_module("mowl.geometric.normal_forms")
+    if name in _COMPLETION_NAMES:
+        from mowl.geometric import completion
+
+        return getattr(completion, name)
+    if name in _NORMAL_FORMS_NAMES:
         from mowl.geometric import normal_forms
 
         return getattr(normal_forms, name)
@@ -113,6 +103,8 @@ __all__ = [
     "TOP",
     "UnsupportedAxiom",
     "UnsupportedRegion",
+    "completion",
+    "normal_forms",
     "normalise",
     "simplex_points",
     "to_owl",

@@ -1,6 +1,9 @@
 """Tests for pure-geometry region types in mowl.geometric.regions."""
 from __future__ import annotations
 
+import subprocess
+import sys
+
 import numpy as np
 import pytest
 
@@ -223,6 +226,53 @@ def test_face_algebra() -> None:
     f_1d_emp = Face.from_simplex(pts1, frozenset())
     assert not f_1d_emp.contains(np.zeros((0,)))
 
+    # Canonical constructor Face(dim, vertices, vertex_ids) matches from_simplex
+    f01_direct = Face(3, pts4[[0, 1]], {0, 1})
+    assert f01_direct == f01
+    np.testing.assert_array_equal(f01_direct.vertices, f01.vertices)
+    assert f01_direct.vertex_ids == frozenset({0, 1})
+
+
+def test_face_validation_and_from_simplex() -> None:
+    pts4 = simplex_points(4)  # dim = 3, vertex ids in [0, 3]
+
+    # Face.from_simplex row selection and order normalisation
+    f20 = Face.from_simplex(pts4, [2, 0])
+    assert f20.dim == 3
+    assert f20.vertex_ids == frozenset({0, 2})
+    np.testing.assert_array_equal(f20.vertices, pts4[[0, 2]])
+
+    # Validation errors on Face(dim, vertices, vertex_ids)
+    # 1. vertices.shape != (len(vertex_ids), dim)
+    with pytest.raises(ValueError):
+        Face(3, pts4[[0]], {0, 1})
+    with pytest.raises(ValueError):
+        Face(3, pts4[[0, 1]], set())
+    with pytest.raises(ValueError):
+        Face(2, pts4[[0, 1]], {0, 1})
+    with pytest.raises(ValueError):
+        Face(3, np.zeros(3), {0})
+
+    # 2. vertex id out of range [0, dim]
+    with pytest.raises(ValueError):
+        Face(3, pts4[[0]], {-1})
+    with pytest.raises(ValueError):
+        Face(3, pts4[[0]], {4})
+
+    # 3. duplicate vertex_ids or negative dim
+    with pytest.raises(ValueError):
+        Face(3, pts4[[0, 0]], [0, 0])
+    with pytest.raises(ValueError):
+        Face(-1, np.zeros((0, 0)), set())
+
+    # 4. Validation errors on Face.from_simplex
+    with pytest.raises(ValueError):
+        Face.from_simplex(pts4, {-1})
+    with pytest.raises(ValueError):
+        Face.from_simplex(pts4, {4})
+    with pytest.raises(ValueError):
+        Face.from_simplex(np.zeros((3, 3)), {0})
+
 
 def test_pair_hull() -> None:
     pts4 = simplex_points(4)
@@ -242,3 +292,17 @@ def test_pair_hull() -> None:
     assert ph_emp.is_empty
     assert ph_emp.left().shape == (0, 3)
     assert ph_emp.right().shape == (0, 3)
+
+
+def test_import_without_jvm() -> None:
+    proc = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "import mowl.geometric; from mowl.geometric import IntervalUnion, Box, Face",
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode == 0, f"stderr: {proc.stderr}"
