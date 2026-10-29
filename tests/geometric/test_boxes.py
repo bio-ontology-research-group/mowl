@@ -363,6 +363,48 @@ class TestBoxes(TestCase):
             with self.assertRaises(InternalConsistencyError):
                 BoxModelBuilder(cm, d_max=1).build()
 
+    def test_top_forced_boxes_are_representable(self) -> None:
+        A, B, C = NS + "A", NS + "B", NS + "C"
+        no = NormalisedOntology(
+            axioms=[
+                NF1(TOP, A),
+                NF1(TOP, B),
+                NF2(A, B, C),
+            ],
+            concept_names={A, B, C, TOP, BOTTOM},
+            role_names=set(),
+            dropped_axioms=0,
+        )
+        cm = CanonicalModel.from_normalised(no)
+        model = BoxModelBuilder(cm).build()
+        self.assertEqual(model.dimension, 1)
+        self.assertEqual(model.class_region(A), model.universe)
+        self.assertEqual(model.class_region(B), model.universe)
+        self.assertEqual(model.class_region(C), model.universe)
+        self.assertTrue(model.is_model())
+        self.assertTrue(model.is_nondegenerate())
+
+        # Second regression: NF1(TOP, A), NF2(A, B, BOTTOM) -> B <= BOTTOM follows
+        # (since A = TOP), so B is unsatisfiable and gets no box; builder returns a model.
+        no2 = NormalisedOntology(
+            axioms=[
+                NF1(TOP, A),
+                NF2(A, B, BOTTOM),
+            ],
+            concept_names={A, B, TOP, BOTTOM},
+            role_names=set(),
+            dropped_axioms=0,
+        )
+        cm2 = CanonicalModel.from_normalised(no2)
+        self.assertFalse(cm2.is_satisfiable(B))
+        model2 = BoxModelBuilder(cm2).build()
+        self.assertIsInstance(model2, BoxModel)
+        self.assertEqual(model2.class_region(A), model2.universe)
+        self.assertTrue(model2.class_region(B).is_empty)
+        self.assertNotIn(B, model2.boxes())
+        self.assertTrue(model2.is_model())
+        self.assertTrue(model2.is_nondegenerate())
+
     def test_import_without_jvm(self) -> None:
         cmd = [
             "/home/leechuck/.venvs/mowl-dev/bin/python",

@@ -289,6 +289,13 @@ class BoxModelBuilder:
         non-entailed ordered pair of satisfiable names).
     M : float, default 100.0
         Big-M and coordinate upper bound for the bounding box :math:`[0, M]^d`.
+        Separation constraints on ``e`` and strong-faithfulness witness
+        constraints on ``o`` use big-M coefficient :math:`(M + \\delta)` so
+        they are strictly vacuous when their binary is 0:
+        :math:`U_A + \\delta \\le L_B + (M + \\delta)(1 - e_{i,0})`,
+        :math:`U_B + \\delta \\le L_A + (M + \\delta)(1 - e_{i,1})`,
+        :math:`w_{A,B,i} \\le L_B - \\delta + (M + \\delta)(1 - o_{i,0})`, and
+        :math:`w_{A,B,i} \\ge U_B + \\delta - (M + \\delta)(1 - o_{i,1})`.
     delta : float, default 1.0
         Strict separation margin :math:`\\delta > 0` for disjointness and
         strong-faithfulness outside-box constraints.
@@ -546,20 +553,20 @@ class BoxModelBuilder:
                     e_i1 = add_var(0.0, 1.0, is_binary=True, obj=0.0)
                     e_vars.extend([e_i0, e_i1])
 
-                    # U[A, i] + delta <= L[B, i] + M * (1 - e[i, 0])
-                    # <=> U[A, i] - L[B, i] + M * e[i, 0] <= M - delta
+                    # U[A, i] + delta <= L[B, i] + (M + delta) * (1 - e[i, 0])
+                    # <=> U[A, i] - L[B, i] + (M + delta) * e[i, 0] <= M
                     ta, ca = U_term(sub1, i, 1.0)
                     tb, cb = L_term(sub2, i, -1.0)
                     add_expr_le(
-                        ta + tb + [(e_i0, M)], ca + cb, M - delta
+                        ta + tb + [(e_i0, M + delta)], ca + cb, M
                     )
 
-                    # U[B, i] + delta <= L[A, i] + M * (1 - e[i, 1])
-                    # <=> U[B, i] - L[A, i] + M * e[i, 1] <= M - delta
+                    # U[B, i] + delta <= L[A, i] + (M + delta) * (1 - e[i, 1])
+                    # <=> U[B, i] - L[A, i] + (M + delta) * e[i, 1] <= M
                     tb_u, cb_u = U_term(sub2, i, 1.0)
                     ta_l, ca_l = L_term(sub1, i, -1.0)
                     add_expr_le(
-                        tb_u + ta_l + [(e_i1, M)], cb_u + ca_l, M - delta
+                        tb_u + ta_l + [(e_i1, M + delta)], cb_u + ca_l, M
                     )
 
                 # sum_i (e[i, 0] + e[i, 1]) >= z  <=>  z - sum(e) <= 0
@@ -636,18 +643,18 @@ class BoxModelBuilder:
                         o_i1 = add_var(0.0, 1.0, is_binary=True, obj=0.0)
                         o_vars.extend([o_i0, o_i1])
 
-                        # w[A,B,i] <= L[B,i] - delta + M(1 - o[i,0])
-                        # <=> w[A,B,i] - L[B,i] + M o[i,0] <= M - delta
+                        # w[A,B,i] <= L[B,i] - delta + (M + delta)(1 - o[i,0])
+                        # <=> w[A,B,i] - L[B,i] + (M + delta) o[i,0] <= M
                         add_le(
-                            [(w_abi, 1.0), (L_idx[(b, i)], -1.0), (o_i0, M)],
-                            M - delta,
+                            [(w_abi, 1.0), (L_idx[(b, i)], -1.0), (o_i0, M + delta)],
+                            M,
                         )
 
-                        # w[A,B,i] >= U[B,i] + delta - M(1 - o[i,1])
-                        # <=> U[B,i] - w[A,B,i] + M o[i,1] <= M - delta
+                        # w[A,B,i] >= U[B,i] + delta - (M + delta)(1 - o[i,1])
+                        # <=> U[B,i] - w[A,B,i] + (M + delta) o[i,1] <= M
                         add_le(
-                            [(U_idx[(b, i)], 1.0), (w_abi, -1.0), (o_i1, M)],
-                            M - delta,
+                            [(U_idx[(b, i)], 1.0), (w_abi, -1.0), (o_i1, M + delta)],
+                            M,
                         )
 
                     # sum_i (o[i, 0] + o[i, 1]) >= 1  <=>  -sum(o) <= -1
