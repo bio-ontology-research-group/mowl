@@ -264,8 +264,26 @@ completion run, or incrementally), restricted to candidate sets whose members ar
 pairwise satisfiable, up to size `k_max` (default 4) and `max_certificates` (default
 10). `HellyReport.complete` is `True` only when the enumeration was not cut off by
 `k_max`/`max_certificates` and the ontology has no role axioms; the "exact for the
-propositional fragment" claim holds only in that case and the docstring says so. The
-auxiliary names introduced by the normaliser count as names (they are in `N_C`).
+propositional fragment" claim holds only in that case, **and only for the strong
+reading**, and the docstring says so. The auxiliary names introduced by the normaliser
+count as names (they are in `N_C`).
+
+**[v3, after Task 7 review]** The Lemma is complete for *strong* certificates only.
+Whether a certificate is nondegenerate depends on how the minimal set is split into
+`C₁, C₂, C₃`, and the union of a nondegenerate certificate need not itself be a minimal
+set (counterexample found in review: `a⊓c ⊑ AC, AC⊓b ⊑ N1, b⊓d ⊑ BD, BD⊓a ⊑ N2,
+c⊓d ⊑ N3, N1 ⊑ a,b,c, N2 ⊑ a,b,d, N3 ⊑ c,d, N1⊓d ⊑ ⊥` has the nondegenerate
+certificate `(a⊓b, c, d)` but the enumeration's splits classify every minimal set as
+strong-only). Therefore `box_representable_nondegenerate` is `False` if nondegenerate
+certificates were found, `True` only if `complete` and `certificates_strong` is empty
+(nondegenerate ⊆ strong), and `None` otherwise. Pruning that keeps the enumeration
+sound and makes `complete` reachable: only *⊥-relevant* names are candidates, where
+relevance is the backward closure from the ⊥-axioms through NF1/NF2 (a name is relevant
+if it is a left-hand name of an NF2 with ⊥ on the right, or the `sub` of an NF1 / a
+`sub1`/`sub2` of an NF2 whose `sup` is relevant); in the propositional fragment every
+derivation of `Z ⊑ ⊥` uses only relevant names, so minimal unsatisfiable sets consist
+of relevant names. If there is no ⊥-axiom, `𝒰 = ∅` and the report is complete with no
+certificates.
 
 With roles: run the same enumeration over the *occurring* definable concepts
 (names, left-hand conjunctions of NF2, `∃r.A` of NF4) and report `complete=False`
