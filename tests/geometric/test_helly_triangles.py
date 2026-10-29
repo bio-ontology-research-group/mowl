@@ -1,6 +1,7 @@
 """Tests for scalable Helly certificate triangle enumeration in mowl.geometric.helly."""
 from __future__ import annotations
 
+import itertools
 import random
 from typing import FrozenSet, Set
 
@@ -57,8 +58,25 @@ def _augment_with_named_conjunctions(
     axioms = list(no.axioms)
     concept_names = set(no.concept_names)
 
-    # Choose a triple and 1 extra pair to name as binary conjunctions P0..P3 (6 + 4 = 10 <= 12 names)
-    triple = rng.sample(base_names, 3)
+    # Choose a triple and 1 extra pair to name as binary conjunctions P0..P3 (6 + 4 = 10 <= 12 names).
+    # Prefer triples that are jointly satisfiable in the base TBox and in which no
+    # pairwise conjunction entails the third name: then the pairwise conjunctions
+    # survive the disjointness P0 ⊓ P1 ⊑ ⊥ added below (which only removes the
+    # triple's joint conjunction), so the triple has a chance to be a certificate.
+    try:
+        base_cm = CanonicalModel.from_normalised(no)
+        candidates = [
+            list(t)
+            for t in itertools.combinations(base_names, 3)
+            if base_cm.joint_satisfiable(t)
+            and not any(
+                base_cm.entails_conjunction((t[i], t[j]), t[k])
+                for i, j, k in ((0, 1, 2), (0, 2, 1), (1, 2, 0))
+            )
+        ]
+    except InconsistentOntology:
+        candidates = []
+    triple = rng.choice(candidates) if candidates else rng.sample(base_names, 3)
     pairs = [
         (triple[0], triple[1]),
         (triple[0], triple[2]),
@@ -77,10 +95,13 @@ def _augment_with_named_conjunctions(
         axioms.append(NF1(p_name, u))
         axioms.append(NF1(p_name, v))
 
-    # Add random disjointness between some named conjunctions
+    # P0 ⊓ P1 ⊑ ⊥ always, so the triple's joint conjunction is unsatisfiable and the
+    # triple is a certificate whenever its pairwise conjunctions stay satisfiable
+    # under the random base TBox; add random disjointness between the other pairs.
+    axioms.append(NF2(p_names[0], p_names[1], BOTTOM))
     for i in range(len(p_names)):
         for j in range(i + 1, len(p_names)):
-            if rng.random() < 0.6:
+            if (i, j) != (0, 1) and rng.random() < 0.6:
                 axioms.append(NF2(p_names[i], p_names[j], BOTTOM))
 
     assert len(concept_names - {TOP, BOTTOM}) <= 12
@@ -117,11 +138,13 @@ def test_random_propositional_subset_of_helly_check() -> None:
     # every helly_check nondegenerate certificate whose three pairwise names are direct
     # NF2 definitions must be returned.
     total_triangles = 0
+    seeds_with_triangles = 0
     for seed in range(30):
         rng = random.Random(seed)
         base_no = random_el_tbox(rng, allow_roles=False)
         aug_no = _augment_with_named_conjunctions(base_no, rng)
 
+        seed_has_triangle = False
         for no in (base_no, aug_no):
             assert len(no.concept_names - {TOP, BOTTOM}) <= 12
             try:
@@ -131,6 +154,7 @@ def test_random_propositional_subset_of_helly_check() -> None:
 
             tri = certificate_triangles(cm)
             total_triangles += len(tri)
+            seed_has_triangle = seed_has_triangle or bool(tri)
 
             # Verify sorted order and lexicographical X1 < X2 < X3
             tri_keys = [(c.c1, c.c2, c.c3) for c in tri]
@@ -168,7 +192,12 @@ def test_random_propositional_subset_of_helly_check() -> None:
             }
             assert direct_helly_triples == tri_triples
 
+        seeds_with_triangles += seed_has_triangle
+
+    # The soundness/completeness checks above are vacuous on seeds without
+    # triangles; require that a non-trivial share of the sample exercises them.
     assert total_triangles > 0
+    assert seeds_with_triangles >= 3, seeds_with_triangles
 
 
 def test_max_triangles_truncates(t3_cm: CanonicalModel) -> None:
