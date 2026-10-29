@@ -171,8 +171,10 @@ class ExactBoxInit:
         Float32 array of shape ``(n_classes, k, d)`` with ``offsets >= 0`` on
         all non-``NaN`` entries.
     class_to_id : Dict[str, int]
-        Mapping from concept IRI strings to contiguous embedding row indices
-        ``0 .. n_classes - 1``.
+        Mapping from concept IRI strings to contiguous row indices
+        ``0 .. n_classes - 1`` of ``centers`` and ``offsets`` (typically
+        ``dataset.class_to_id``). These rows are matched to the rows of a
+        module by IRI in :meth:`apply_to_module`.
     method : str
         Actual initialisation method used: ``"projected"`` or ``"milp"``.
     n_components : int
