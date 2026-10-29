@@ -27,7 +27,14 @@ SCRATCH_DIR = os.path.join(
 
 @pytest.fixture
 def tmp_path(request: pytest.FixtureRequest, t3_dataset: PathDataset) -> Path:
-    """Return a per-test scratch directory inside the repo's gitignored scratch folder."""
+    """Return a per-test scratch directory inside the repo's gitignored scratch folder.
+
+    Overrides pytest's built-in ``tmp_path`` (which would live under /tmp) and also
+    points ``t3_dataset.ontology_path`` at a path in the scratch folder: the models
+    write the EL normaliser cache (``<ontology>_mowl_el_normalized_v2.owl``) next to
+    ``dataset.ontology_path``, and that cache must not be written into
+    ``tests/geometric/fixtures``, which holds only tracked source fixtures.
+    """
     path = Path(SCRATCH_DIR) / request.node.name
     path.mkdir(parents=True, exist_ok=True)
     t3_dataset.ontology_path = str(Path(SCRATCH_DIR) / "t3.owl")

@@ -26,10 +26,16 @@ SCRATCH_DIR = os.path.join(
 
 
 @pytest.fixture
-def tmp_path(request: pytest.FixtureRequest) -> Path:
-    """Return a per-test scratch directory inside the repo's gitignored scratch folder."""
+def tmp_path(request: pytest.FixtureRequest, t3_dataset: PathDataset) -> Path:
+    """Return a per-test scratch directory inside the repo's gitignored scratch folder.
+
+    Also points ``t3_dataset.ontology_path`` into the scratch folder so that the EL
+    normaliser cache is not written into ``tests/geometric/fixtures`` (see the
+    same fixture in ``test_multiboxel.py``).
+    """
     path = Path(SCRATCH_DIR) / request.node.name
     path.mkdir(parents=True, exist_ok=True)
+    t3_dataset.ontology_path = str(Path(SCRATCH_DIR) / "t3.owl")
     return path
 
 
@@ -78,12 +84,11 @@ def test_init_boxes_applied_multiboxel(t3_dataset: PathDataset, tmp_path: Path) 
     )
 
 
-def test_anchor_weight_adds_to_regularisation(
+def test_anchor_weight_zero_leaves_regularisation_unchanged(
     t3_dataset: PathDataset, tmp_path: Path
 ) -> None:
     init_k1 = ExactBoxInit.from_dataset(t3_dataset, embed_dim=7)
 
-    # BoxSquaredEL: anchor_weight=0 -> equals module.regularization_loss()
     b2_zero = BoxSquaredEL(
         t3_dataset,
         embed_dim=7,
@@ -97,24 +102,6 @@ def test_anchor_weight_adds_to_regularisation(
         b2_zero.get_regularization_loss(), b2_zero.module.regularization_loss()
     )
 
-    # BoxSquaredEL: anchor_weight=1 -> increases by anchor_loss
-    b2_anc = BoxSquaredEL(
-        t3_dataset,
-        embed_dim=7,
-        init_boxes=init_k1,
-        anchor_weight=1.0,
-        model_filepath=str(tmp_path / "b2_a.pt"),
-    )
-    base_b2 = b2_anc.module.regularization_loss()
-    with torch.no_grad():
-        b2_anc.module.class_center.weight.add_(1.0)
-    expected_anc_b2 = init_k1.anchor_loss(b2_anc.module)
-    assert float(expected_anc_b2.item()) > 0.0
-    assert torch.allclose(
-        b2_anc.get_regularization_loss() - base_b2, expected_anc_b2, atol=1e-6
-    )
-
-    # ELBE: anchor_weight=0 -> 0; anchor_weight=1 -> equals anchor_loss
     elbe_zero = ELBE(
         t3_dataset,
         embed_dim=7,
@@ -126,37 +113,64 @@ def test_anchor_weight_adds_to_regularisation(
         elbe_zero.module.class_embed.weight.add_(1.0)
     assert elbe_zero.get_regularization_loss() == 0
 
-    elbe_anc = ELBE(
+
+@pytest.mark.parametrize("weight", [0.5, 2.0])
+def test_anchor_weight_adds_weighted_anchor_loss(
+    t3_dataset: PathDataset, tmp_path: Path, weight: float
+) -> None:
+    """get_regularization_loss() == module.regularization_loss() + weight * anchor_loss.
+
+    Both terms are recomputed after perturbing the class centres, so the test does
+    not assume that the module regulariser ignores ``class_center``.
+    """
+    init_k1 = ExactBoxInit.from_dataset(t3_dataset, embed_dim=7)
+
+    b2 = BoxSquaredEL(
         t3_dataset,
         embed_dim=7,
         init_boxes=init_k1,
-        anchor_weight=1.0,
+        anchor_weight=weight,
+        model_filepath=str(tmp_path / "b2_a.pt"),
+    )
+    with torch.no_grad():
+        b2.module.class_center.weight.add_(1.0)
+    anchor_b2 = init_k1.anchor_loss(b2.module)
+    assert float(anchor_b2.item()) > 0.0
+    expected_b2 = b2.module.regularization_loss() + weight * anchor_b2
+    assert torch.allclose(b2.get_regularization_loss(), expected_b2, atol=1e-6)
+
+    # ELBEModule defines no regularization_loss, so the base term is 0
+    # (EmbeddingELModel.get_regularization_loss falls back to 0).
+    assert not hasattr(ELBEModule, "regularization_loss")
+    elbe = ELBE(
+        t3_dataset,
+        embed_dim=7,
+        init_boxes=init_k1,
+        anchor_weight=weight,
         model_filepath=str(tmp_path / "elbe_a.pt"),
     )
     with torch.no_grad():
-        elbe_anc.module.class_embed.weight.add_(1.0)
-    expected_anc_elbe = init_k1.anchor_loss(elbe_anc.module)
-    assert torch.allclose(
-        elbe_anc.get_regularization_loss(), expected_anc_elbe, atol=1e-6
-    )
+        elbe.module.class_embed.weight.add_(1.0)
+    anchor_elbe = init_k1.anchor_loss(elbe.module)
+    assert float(anchor_elbe.item()) > 0.0
+    expected_elbe = weight * anchor_elbe
+    assert torch.allclose(elbe.get_regularization_loss(), expected_elbe, atol=1e-6)
 
-    # MultiBoxEL: anchor_weight=1 -> increases by anchor_loss
     init_k2 = ExactBoxInit.from_dataset(t3_dataset, embed_dim=5, n_components=2)
-    mb_anc = MultiBoxEL(
+    mb = MultiBoxEL(
         t3_dataset,
         embed_dim=5,
         n_components=2,
         init_boxes=init_k2,
-        anchor_weight=1.0,
+        anchor_weight=weight,
         model_filepath=str(tmp_path / "mb_a.pt"),
     )
-    base_mb = mb_anc.module.regularization_loss()
     with torch.no_grad():
-        mb_anc.module.class_center.weight.add_(1.0)
-    expected_anc_mb = init_k2.anchor_loss(mb_anc.module)
-    assert torch.allclose(
-        mb_anc.get_regularization_loss() - base_mb, expected_anc_mb, atol=1e-6
-    )
+        mb.module.class_center.weight.add_(1.0)
+    anchor_mb = init_k2.anchor_loss(mb.module)
+    assert float(anchor_mb.item()) > 0.0
+    expected_mb = mb.module.regularization_loss() + weight * anchor_mb
+    assert torch.allclose(mb.get_regularization_loss(), expected_mb, atol=1e-6)
 
 
 def test_defaults_unchanged(t3_dataset: PathDataset, tmp_path: Path) -> None:
