@@ -21,6 +21,7 @@ from mowl.geometric import (
     checker,
     export,
     helly,
+    init,
     intervals,
     normal_forms,
     polyhedral,
@@ -52,6 +53,7 @@ from mowl.geometric.helly import (
     certificate_triangles,
     helly_check,
 )
+from mowl.geometric.init import ExactBoxInit
 from mowl.geometric.intervals import IntervalUnionModel
 from mowl.geometric.normal_forms import (
     BOTTOM,
@@ -107,6 +109,7 @@ __all__ = [
     "ConvexPolyhedralModel",
     "DictInterpretation",
     "EMPTY_1D",
+    "ExactBoxInit",
     "Face",
     "GeometricError",
     "GeometricInterpretation",
@@ -141,6 +144,7 @@ __all__ = [
     "export",
     "helly",
     "helly_check",
+    "init",
     "intervals",
     "normal_forms",
     "normalise",
