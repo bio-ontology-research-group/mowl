@@ -342,7 +342,7 @@ class TestCompletion(TestCase):
         )
         self.assertGreater(n_consistent, 0)
 
-    def test_saturate_edges_in_matches_bruteforce(self) -> None:
+    def test_edge_indexed_saturation_agrees_with_elk(self) -> None:
         """Verify inverse-edge indexed saturation against ELK on ``roles.owl`` and 20 seeded random role-bearing TBoxes.
 
         ELK's OWLAPI ``OWLReasoner`` interface exposes class satisfiability and
@@ -356,8 +356,11 @@ class TestCompletion(TestCase):
             rng = random.Random(seed)
             tboxes.append((f"seed_{seed}", random_el_tbox(rng, allow_roles=True)))
 
+        n_random_with_edges = 0
         for label, no in tboxes:
             comp = Completion(no.axioms, no.concept_names, no.role_names).saturate()
+            if label.startswith("seed_") and any(comp.edges.values()):
+                n_random_with_edges += 1
             ont = to_owl(no)
 
             reasoner = ElkReasonerFactory().createReasoner(ont)
@@ -413,3 +416,7 @@ class TestCompletion(TestCase):
                             elk_target_sups,
                             f"Edge target subsumers mismatch on {label} for {target}",
                         )
+
+        # The edge-driven rules (and the inverse-edge index) are only exercised if
+        # the random sample actually derives role edges.
+        self.assertGreater(n_random_with_edges, 0)
