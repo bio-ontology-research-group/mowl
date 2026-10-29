@@ -36,12 +36,14 @@ Guarantees:
   inconsistent.
 
 References:
-- Lacerda, Ozaki & Guimarães, *Geometric Models for Expressive Description
-  Logics*, Transactions on Graph Data and Knowledge (TGDK) 2(3):2, 2024,
+- V. Lacerda, A. Ozaki & R. Guimarães, *Strong Faithfulness for ELH Ontology
+  Embeddings*, Transactions on Graph Data and Knowledge (TGDK) 2(3):2, 2024,
   Definitions 2, 8, 12, Theorems 13, 16, 18, 25.
-- Federico, Leemhuis & Kutz, *Multibox Embeddings for ELHO(o)_bot*, JOWO 2026,
-  Theorem 3 (1-D case).
-- Gutiérrez-Basulto & Schockaert, KR 2018 (arXiv:1805.10461), Props. 3, 4.
+- G. Federico, M. Leemhuis & O. Kutz, *Introducing Multiboxes: Increasing the
+  Trustworthiness of Ontology Embeddings*, JOWO 2026, Theorem 3 (1-D case).
+- V. Gutiérrez-Basulto & S. Schockaert, *From Knowledge Graph Embedding to
+  Ontology Embedding? An Analysis of the Compatibility between Vector Space
+  Representations and Rules*, KR 2018 (arXiv:1805.10461), Props. 3, 4.
 - Kazakov, Krötzsch & Simančík, JAR 2014 (The Incredible ELK).
 """
 from __future__ import annotations

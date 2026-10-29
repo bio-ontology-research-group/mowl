@@ -61,10 +61,18 @@ Decision procedures by family:
     :math:`(v, u)` of :math:`r` and :math:`(u', w)` of :math:`s` whose stored
     intermediate points match (:math:`\\|u - u'\\|_\\infty \\le \\text{tol}`),
     checks :math:`(v, w) \\in \\text{conv}(\\text{PairHull}(t).\\text{points})`
-    by the same LP. This is exact for the Gutiérrez-Basulto & Schockaert (2018)
-    construction where role hulls are spanned by canonical element-pair points;
-    raises :class:`~mowl.geometric.errors.UnsupportedRegion` if a role region
-    lacks stored ``points``.
+    by the same LP. This is exact when role hulls are spanned by canonical
+    element-pair points, as in the Gutiérrez-Basulto & Schockaert (2018)
+    construction (the barycentric coordinates of an intermediate point are then
+    unique); raises :class:`~mowl.geometric.errors.UnsupportedRegion` if a role
+    region lacks stored ``points``.
+  - Role-axiom checking (:class:`NF3`, :class:`NF4`, :class:`NF6`,
+    :class:`NF7`) is exact only for simplex-vertex regions: every
+    :class:`~mowl.geometric.regions.Face` vertex row and every
+    :class:`~mowl.geometric.regions.PairHull` left/right half must be a row of
+    the canonical simplex (a one-hot unit vector or the zero vector, see
+    :func:`~mowl.geometric.regions.is_simplex_vertex_rows`); otherwise these
+    checks raise :class:`~mowl.geometric.errors.UnsupportedRegion`.
 
 References:
 - Gutiérrez-Basulto & Schockaert, KR 2018 (arXiv:1805.10461), Props. 3, 4.
@@ -99,6 +107,7 @@ from mowl.geometric.regions import (
     IntervalUnion,
     PairHull,
     RectUnion,
+    is_simplex_vertex_rows,
 )
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -269,6 +278,11 @@ class ModelChecker:
         role regions are convex hulls of canonical element-pair points; raises
         :class:`~mowl.geometric.errors.UnsupportedRegion` if a role region lacks
         stored ``points``.
+      - All four role-axiom checks raise
+        :class:`~mowl.geometric.errors.UnsupportedRegion` unless every
+        :class:`Face` vertex row and every :class:`PairHull` left/right half is
+        a canonical simplex vertex (one-hot or zero); role-axiom checking is
+        exact only for such simplex-vertex regions.
     """
 
     def __init__(self, eta: GeometricInterpretation, tol: float = 1e-9) -> None:
@@ -608,10 +622,46 @@ class ModelChecker:
             )
         return role_reg
 
+    @staticmethod
+    def _require_simplex_vertex_regions(
+        axiom_kind: str, faces: Iterable[Any] = (), hulls: Iterable[PairHull] = ()
+    ) -> None:
+        """Raise :class:`UnsupportedRegion` unless all Face rows and PairHull halves are canonical simplex vertices.
+
+        Role-axiom checking (NF3, NF4, NF6, NF7) composes and tests generating
+        points of :class:`~mowl.geometric.regions.PairHull` regions; this is
+        exact only when every generating half is a vertex of the canonical
+        simplex (a one-hot unit vector or the zero vector), because then the
+        barycentric coordinates of intermediate points are unique.
+        """
+        bad = False
+        for reg in faces:
+            if isinstance(reg, Face) and not is_simplex_vertex_rows(
+                reg.vertices, reg.dim
+            ):
+                bad = True
+        for hull in hulls:
+            k = int(hull.points.shape[1]) // 2
+            if not (
+                is_simplex_vertex_rows(hull.left(), k)
+                and is_simplex_vertex_rows(hull.right(), k)
+            ):
+                bad = True
+        if bad:
+            raise UnsupportedRegion(
+                f"polyhedral family: {axiom_kind} role-axiom checking is exact only "
+                f"for simplex-vertex regions (every Face vertex row and every "
+                f"PairHull left/right half must be a one-hot unit vector or the "
+                f"zero vector of the canonical simplex)"
+            )
+
     def _poly_nf3(self, reg_sub: Any, role_reg: Any, reg_fill: Any) -> bool:
         """Decide ``A <= exists r.B`` by checking each vertex of ``Face(A)`` via LP."""
         face_a = self._validate_face_for_nf3(reg_sub)
         ph_r = self._validate_pair_hull(role_reg)
+        self._require_simplex_vertex_regions(
+            "NF3", faces=(face_a, reg_fill), hulls=(ph_r,)
+        )
         if not hasattr(reg_fill, "h_rep"):
             raise UnsupportedRegion(
                 f"polyhedral family: filler region {reg_fill!r} must provide h_rep()"
@@ -670,6 +720,9 @@ class ModelChecker:
             raise UnsupportedRegion(
                 "polyhedral family: NF4 requires filler and superclass regions to provide h_rep()"
             )
+        self._require_simplex_vertex_regions(
+            "NF4", faces=(reg_fill, reg_sup), hulls=(ph_r,)
+        )
 
         if ph_r.is_empty or getattr(reg_fill, "is_empty", False):
             return True
@@ -761,6 +814,7 @@ class ModelChecker:
         """Decide ``r <= s`` by testing every generating point of ``PairHull(r)`` in ``PairHull(s)``."""
         ph_sub = self._validate_pair_hull(r_sub)
         ph_sup = self._validate_pair_hull(r_sup)
+        self._require_simplex_vertex_regions("NF6", hulls=(ph_sub, ph_sup))
         if ph_sub.is_empty:
             return True
         if ph_sup.is_empty:
@@ -775,6 +829,7 @@ class ModelChecker:
         ph_1 = self._validate_pair_hull(r1)
         ph_2 = self._validate_pair_hull(r2)
         ph_sup = self._validate_pair_hull(r_sup)
+        self._require_simplex_vertex_regions("NF7", hulls=(ph_1, ph_2, ph_sup))
         if ph_1.is_empty or ph_2.is_empty:
             return True
 

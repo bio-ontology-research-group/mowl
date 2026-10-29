@@ -90,7 +90,9 @@ model:
 Constructing and exporting a box model on a Helly-satisfiable ontology
 ----------------------------------------------------------------------
 
-When a propositional ontology has no Helly certificate,
+When a propositional ontology has no non-degenerate Helly certificate
+(it is *obstruction-free*; ``box_representable_nondegenerate`` being ``True``
+means exactly this and does not imply that a box model exists),
 :class:`~mowl.geometric.boxes.BoxModelBuilder` searches for an axis-parallel box
 model via mixed-integer linear programming (`scipy.optimize.milp`) over
 :math:`d = 1, 2, 4, \dots, d_{\max}` and verifies any solution with
@@ -113,9 +115,11 @@ by :attr:`mowl.datasets.Dataset.class_to_id` using
    ds_ok = PathDataset("tests/geometric/fixtures/helly_ok.owl")
    cm_ok = CanonicalModel.from_dataset(ds_ok)
 
+   # The Helly check finds no obstruction ("obstruction-free"). This does NOT
+   # imply that a box model exists; only building one (below) shows that.
    report_ok = helly_check(cm_ok)
    assert report_ok.complete is True
-   assert report_ok.box_representable_nondegenerate is True
+   assert not report_ok.certificates_nondegenerate  # obstruction-free
 
    box_model = BoxModelBuilder(cm_ok, d_max=4, time_limit=30.0).build()
    assert box_model.is_model() and box_model.is_nondegenerate()

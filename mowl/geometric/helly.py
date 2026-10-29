@@ -37,10 +37,22 @@ What a certificate proves (Spec §5.3):
     :math:`X_1 \\sqcap X_3 \\equiv C`). Note that :math:`T_3` without the names
     :math:`A, B, C` is Helly-satisfiable in the sense of Leemhuis & Kutz (2025)
     because a model need not realise the pairwise conjunctions unless they are
-    named or forced by strong faithfulness.
-  - ``certificates_strong``: all certificates found. They exclude *strongly
-    faithful box models* (in which every satisfiable conjunction of concept
-    names is non-empty).
+    named or required to be non-empty (conjunction faithfulness).
+  - ``certificates_strong``: all certificates found. They exclude
+    *conjunction-faithful* box models, i.e. box models in which every
+    satisfiable conjunction of concept names is non-empty. This is stronger
+    than strong faithfulness on names, so a strong certificate does **not**
+    exclude box models that are strongly faithful on names: for
+    :math:`\\{X_1 \\sqcap X_2 \\sqsubseteq Y, Y \\sqcap X_3 \\sqsubseteq \\bot\\}`,
+    :math:`(X_1, X_2, X_3)` is a strong certificate, yet the 1-D boxes
+    :math:`X_1 = [0, 1], X_2 = [2, 3], X_3 = [4, 5], Y = [6, 7]` form a
+    non-degenerate box model that is strongly faithful on names.
+- **What** ``box_representable_* = True`` **means.**
+  :attr:`HellyReport.box_representable_nondegenerate` and
+  :attr:`HellyReport.box_representable_strong` being ``True`` means "no Helly
+  obstruction of this kind was found" (obstruction-free), **not** that a box
+  model exists; no sufficiency theorem is known. Use
+  :class:`~mowl.geometric.boxes.BoxModelBuilder` to search for a model.
 
 Propositional exactness lemma, relevance pruning, and completeness (Spec §5.3):
 - **Lemma (strong reading only).** In the propositional fragment (no
@@ -85,7 +97,8 @@ Propositional exactness lemma, relevance pruning, and completeness (Spec §5.3):
   role axioms (``has_roles == False``). The guarantee that the check is exact
   for the propositional fragment holds only when ``complete=True``, and **only
   for the strong reading** (``certificates_strong`` /
-  :attr:`HellyReport.box_representable_strong`).
+  :attr:`HellyReport.box_representable_strong`): it then decides exactly
+  whether a Helly obstruction to conjunction-faithful box models exists.
 - **Roles caveat:** When the ontology contains role axioms
   (:class:`~mowl.geometric.normal_forms.NF3`,
   :class:`~mowl.geometric.normal_forms.NF4`,
@@ -96,17 +109,19 @@ Propositional exactness lemma, relevance pruning, and completeness (Spec §5.3):
   is necessary but not sufficient for box representability. Any certificate
   returned when ``has_roles=True`` remains a sound proof of
   non-box-representability.
-- **Scalability note:** The levelwise subset enumeration is intended for small
-  to medium ontologies; its runtime cost is dominated by re-saturations in
-  :meth:`~mowl.geometric.completion.CanonicalModel.joint_satisfiable` for
-  candidate sets whose canonical extensions are disjoint.
+- **Scalability note:** The check re-saturates the ontology per candidate set
+  (in :meth:`~mowl.geometric.completion.CanonicalModel.joint_satisfiable`, for
+  candidate sets whose canonical extensions are disjoint) and is intended for
+  small to medium ontologies. Incremental joint satisfiability is future work.
 
 References:
-- Leemhuis & Kutz, *Wait, That's Not a Box! On the Box-Representability of
-  Description Logic Ontologies*, NeSy 2025 (PMLR 284:303–321), Definitions 3, 6;
-  Propositions 4, 5.
-- Leemhuis & Kutz, NAI 2026, Proposition 38 (incompleteness of ABox-closure
-  Helly tests in the presence of roles).
+- M. Leemhuis & O. Kutz, *Understanding the Expressive Capabilities of
+  Knowledge Base Embeddings under Box Semantics*, NeSy 2025 (PMLR
+  284:303–321), Definitions 3, 6; Propositions 4, 5.
+- M. Leemhuis & O. Kutz, *Trustworthy Knowledge Base Embeddings: A
+  Foundational Study of Box Semantics*, Neurosymbolic Artificial Intelligence
+  (NAI), 2026, Proposition 38 (incompleteness of ABox-closure Helly tests in
+  the presence of roles).
 - Eckhoff, *Intersection properties of boxes. Part I: An upper-bound theorem*,
   Israel Journal of Mathematics 62(3):283–301, 1988 (Helly number 2 for
   axis-parallel boxes in :math:`\\mathbb{R}^d`).
@@ -186,12 +201,19 @@ class HellyReport:
     not a complete one (Spec §5.3 v3). With roles, ``complete`` is always
     ``False`` (Leemhuis & Kutz, NAI 2026, Prop. 38), though any returned
     certificate remains a sound proof of non-box-representability (Eckhoff 1988;
-    Leemhuis & Kutz, NeSy 2025, Defs. 3, 6; Props. 4, 5).
+    Leemhuis & Kutz, NeSy 2025, Defs. 3, 6; Props. 4, 5) of its kind:
+    non-degenerate certificates exclude every non-degenerate box model, strong
+    certificates exclude conjunction-faithful box models. ``True`` from
+    :attr:`box_representable_nondegenerate` or :attr:`box_representable_strong`
+    means "no Helly obstruction of this kind was found", not that a box model
+    exists.
 
     Attributes
     ----------
     certificates_strong : List[HellyCertificate]
-        All certificates found (each excludes strongly faithful box models).
+        All certificates found. Each excludes *conjunction-faithful* box models
+        (every satisfiable conjunction of concept names non-empty); it does not
+        exclude box models that are merely strongly faithful on names.
     certificates_nondegenerate : List[HellyCertificate]
         Subset of ``certificates_strong`` whose ``pairwise_names`` contain no
         ``None`` (each is a sound sufficient certificate excluding every
@@ -214,7 +236,13 @@ class HellyReport:
 
     @property
     def box_representable_nondegenerate(self) -> Optional[bool]:
-        """Return ``False`` if non-degenerate certificates exist, ``True`` only if ``complete`` and ``certificates_strong`` is empty, else ``None``."""
+        """Return ``False`` if non-degenerate certificates exist, ``True`` only if ``complete`` and ``certificates_strong`` is empty, else ``None``.
+
+        ``False`` proves that no non-degenerate box model exists in any
+        dimension. ``True`` means only that no Helly obstruction to
+        non-degenerate box models was found (obstruction-free), not that a box
+        model exists.
+        """
         if self.certificates_nondegenerate:
             return False
         if self.complete and not self.certificates_strong:
@@ -223,7 +251,14 @@ class HellyReport:
 
     @property
     def box_representable_strong(self) -> Optional[bool]:
-        """Return ``False`` if strong certificates exist, ``None`` if ``not complete``, else ``True``."""
+        """Return ``False`` if strong certificates exist, ``None`` if ``not complete``, else ``True``.
+
+        ``False`` proves that no *conjunction-faithful* box model (every
+        satisfiable conjunction of concept names non-empty) exists; it does not
+        exclude box models that are strongly faithful on names. ``True`` means
+        only that no Helly obstruction of this kind was found
+        (obstruction-free), not that a box model exists.
+        """
         if self.certificates_strong:
             return False
         if not self.complete:
@@ -355,10 +390,16 @@ def helly_check(
       though not a complete one (whether a certificate is non-degenerate depends
       on the split of :math:`U` into :math:`(C_1, C_2, C_3)` and the union of a
       non-degenerate certificate need not be minimal; Spec §5.3 v3).
-    - A certificate in ``certificates_strong`` proves that no *strongly faithful*
-      box model of :math:`\\mathcal{O}` exists in any dimension; when
-      ``complete=True``, this check is exact for the strong reading in the
-      propositional fragment.
+    - A certificate in ``certificates_strong`` proves that no
+      *conjunction-faithful* box model of :math:`\\mathcal{O}` (one in which
+      every satisfiable conjunction of concept names is non-empty) exists in
+      any dimension; it does not exclude box models that are strongly faithful
+      on names. When ``complete=True``, this check is exact for the strong
+      reading in the propositional fragment.
+    - ``box_representable_* = True`` on the returned report means "no Helly
+      obstruction of this kind was found", not that a box model exists.
+    - The check re-saturates per candidate set and is intended for small to
+      medium ontologies; incremental joint satisfiability is future work.
     - ``complete=True`` holds if and only if the enumeration was not cut off by
       ``k_max`` or ``max_certificates`` and the ontology has no role axioms
       (:class:`~mowl.geometric.normal_forms.NF3`,

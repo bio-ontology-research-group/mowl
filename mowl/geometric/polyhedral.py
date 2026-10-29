@@ -53,20 +53,26 @@ Guarantees:
   ``cm.names``,
   :math:`\\eta(A) \\subseteq \\eta(B) \\iff \\mathcal{O} \\models A \\sqsubseteq B`.
 - **Dimension**: ``dimension == len(cm.names) - 1`` (canonical-model size
-  :math:`- 1`), and that bound is tight in general (Gutiérrez-Basulto &
-  Schockaert, KR 2018, Proposition 4).
+  :math:`- 1`). This includes auxiliary names and :math:`\\top` and is an upper
+  bound; a dimension linear in the number of concept names is unavoidable in
+  the worst case for convex models that realise the relevant conjunctions
+  (Gutiérrez-Basulto & Schockaert, KR 2018, Proposition 4).
 - :class:`~mowl.geometric.errors.InconsistentOntology` propagates from
   :class:`~mowl.geometric.completion.CanonicalModel` when the ontology is
   inconsistent.
 
 References:
-- Gutiérrez-Basulto & Schockaert, *From Knowledge Graph Embedding to Ontology
-  Embedding? An Analysis of the Compatibility between Vector Space
+- V. Gutiérrez-Basulto & S. Schockaert, *From Knowledge Graph Embedding to
+  Ontology Embedding? An Analysis of the Compatibility between Vector Space
   Representations and Rules*, KR 2018 (arXiv:1805.10461), Propositions 3, 4.
-- Lacerda, Ozaki & Guimarães, *Geometric Models for Expressive Description
-  Logics*, TGDK 2(3):2, 2024, Definitions 2, 8, 12, Theorems 13, 16, 18, 25.
-- Leemhuis & Kutz, NeSy 2025 (PMLR 284:303–321), Defs. 1, 3, 6, Props. 4, 5, 8.
-- Bourgaux, Guimarães, Koudijs, Lacerda & Ozaki, KR 2024, Defs. 5–6, Remark 2.
+- V. Lacerda, A. Ozaki & R. Guimarães, *Strong Faithfulness for ELH Ontology
+  Embeddings*, TGDK 2(3):2, 2024, Definitions 2, 8, 12, Theorems 13, 16, 18, 25.
+- M. Leemhuis & O. Kutz, *Understanding the Expressive Capabilities of
+  Knowledge Base Embeddings under Box Semantics*, NeSy 2025 (PMLR
+  284:303–321), Defs. 1, 3, 6, Props. 4, 5, 8.
+- C. Bourgaux, R. Guimarães, R. Koudijs, V. Lacerda & A. Ozaki, *Knowledge
+  Base Embeddings: Semantics and Theoretical Properties*, KR 2024, Defs. 5–6,
+  Remark 2.
 - Kazakov, Krötzsch & Simančík, JAR 2014 (The Incredible ELK).
 """
 from __future__ import annotations
@@ -106,9 +112,11 @@ class ConvexPolyhedralModel(GeometricInterpretation):
     - Non-degenerate (non-empty, lower-dimensional simplex faces) on all
       satisfiable concept names in ``cm.names``.
     - Strongly faithful on concept names in ``cm.names``.
-    - ``dimension == len(cm.names) - 1`` (canonical-model size :math:`- 1`),
-      which is tight in general (Gutiérrez-Basulto & Schockaert, KR 2018,
-      Proposition 4).
+    - ``dimension == len(cm.names) - 1`` (canonical-model size :math:`- 1`).
+      This includes auxiliary names and :math:`\\top` and is an upper bound; a
+      dimension linear in the number of concept names is unavoidable in the
+      worst case for convex models that realise the relevant conjunctions
+      (Gutiérrez-Basulto & Schockaert, KR 2018, Proposition 4).
     """
 
     family: str = "polyhedral"

@@ -25,6 +25,10 @@ Semantics and guarantees:
   row :math:`i` (:math:`0 \\le i < n-1`) is the unit vector :math:`e_i` and
   whose last row :math:`n-1` is the zero vector (shape ``(1, 0)`` when
   :math:`n = 1`).
+- :func:`is_simplex_vertex_rows`: tests whether every row of an array is a
+  vertex of the canonical simplex (one-hot unit vector or zero vector); the
+  model checker uses it to restrict polyhedral role-axiom checks to
+  simplex-vertex regions, for which they are exact.
 - :class:`Face`: face of the standard simplex in :math:`\\mathbb{R}^k`
   (:math:`k = n - 1`) spanned by a subset of vertex indices
   ``vertex_ids``. Set inclusion (:meth:`Face.is_subset`) and intersection
@@ -373,6 +377,33 @@ def simplex_points(n: int) -> np.ndarray:
     return pts
 
 
+def is_simplex_vertex_rows(points: np.ndarray, dim: int) -> bool:
+    """Return ``True`` iff every row of ``points`` is a vertex of the canonical simplex in :math:`\\mathbb{R}^{\\text{dim}}`.
+
+    The canonical simplex is the one of :func:`simplex_points` (``dim + 1``
+    vertices): a row qualifies iff it is a one-hot unit vector :math:`e_i`
+    (:math:`0 \\le i < \\text{dim}`) or the zero vector, compared exactly.
+    ``points`` must have shape ``(m, dim)``; any other shape returns ``False``.
+    An array with no rows returns ``True``.
+    """
+    arr = np.asarray(points, dtype=float)
+    if arr.ndim != 2 or arr.shape[1] != int(dim):
+        return False
+    if arr.shape[0] == 0 or arr.shape[1] == 0:
+        return True
+    is_binary = np.all((arr == 0.0) | (arr == 1.0), axis=1)
+    at_most_one = np.sum(arr == 1.0, axis=1) <= 1
+    return bool(np.all(is_binary & at_most_one))
+
+
+def _simplex_row(vid: int, dim: int) -> np.ndarray:
+    """Return the canonical simplex vertex of id ``vid`` (``e_vid`` if ``vid < dim``, else zero)."""
+    row = np.zeros(dim, dtype=float)
+    if vid < dim:
+        row[vid] = 1.0
+    return row
+
+
 class Face:
     """Face of the standard simplex in :math:`\\mathbb{R}^{\\text{dim}}` (:math:`n = \\text{dim} + 1`).
 
@@ -380,6 +411,10 @@ class Face:
     - Represents :math:`F(S) = \\text{conv}\\{v_j : j \\in S\\}` where
       :math:`S = \\text{vertex\\_ids} \\subseteq \\{0, \\dots, n - 1\\}` and
       :math:`v_0, \\dots, v_{n-1}` are the rows of :func:`simplex_points`.
+    - The constructor requires ``vertices`` to be exactly
+      ``simplex_points(dim + 1)[sorted(vertex_ids)]`` and raises
+      :class:`ValueError` otherwise, so ``vertices`` and ``vertex_ids`` cannot
+      disagree.
     - :meth:`is_subset` and :meth:`intersection` are computed as exact set
       operations on ``vertex_ids`` (:math:`F(S) \\subseteq F(S') \\iff S \\subseteq S'`
       and :math:`F(S) \\cap F(S') = F(S \\cap S')`); this is exact for faces of
@@ -433,6 +468,14 @@ class Face:
             raise ValueError(
                 f"Face.vertices must have shape ({len(vids)}, {self.dim}), got {arr.shape}"
             )
+
+        for row, vid in zip(arr, sorted(vids)):
+            if not np.array_equal(row, _simplex_row(vid, self.dim)):
+                raise ValueError(
+                    f"Face vertex row {row.tolist()!r} does not equal the canonical "
+                    f"simplex vertex of id {vid} in dimension {self.dim}; rows must be "
+                    f"simplex_points(dim + 1)[sorted(vertex_ids)]"
+                )
 
         self.vertices: np.ndarray = arr
         self.vertex_ids: FrozenSet[int] = vids
