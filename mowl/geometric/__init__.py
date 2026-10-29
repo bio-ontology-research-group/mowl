@@ -36,6 +36,9 @@ from mowl.geometric.regions import (
     simplex_points,
 )
 
+_CHECKER_NAMES = frozenset(
+    {"DictInterpretation", "GeometricInterpretation", "ModelChecker"}
+)
 _COMPLETION_NAMES = frozenset({"CanonicalModel", "Completion", "CompletionResult"})
 _NORMAL_FORMS_NAMES = frozenset(
     {
@@ -56,6 +59,10 @@ _NORMAL_FORMS_NAMES = frozenset(
 
 
 def __getattr__(name: str) -> object:
+    if name == "checker":
+        import importlib
+
+        return importlib.import_module("mowl.geometric.checker")
     if name == "completion":
         import importlib
 
@@ -64,6 +71,10 @@ def __getattr__(name: str) -> object:
         import importlib
 
         return importlib.import_module("mowl.geometric.normal_forms")
+    if name in _CHECKER_NAMES:
+        from mowl.geometric import checker
+
+        return getattr(checker, name)
     if name in _COMPLETION_NAMES:
         from mowl.geometric import completion
 
@@ -83,13 +94,16 @@ __all__ = [
     "CanonicalModel",
     "Completion",
     "CompletionResult",
+    "DictInterpretation",
     "EMPTY_1D",
     "Face",
     "GeometricError",
+    "GeometricInterpretation",
     "InconsistentOntology",
     "InternalConsistencyError",
     "IntervalUnion",
     "MissingDependency",
+    "ModelChecker",
     "NF1",
     "NF2",
     "NF3",
@@ -103,6 +117,7 @@ __all__ = [
     "TOP",
     "UnsupportedAxiom",
     "UnsupportedRegion",
+    "checker",
     "completion",
     "normal_forms",
     "normalise",
