@@ -16,7 +16,7 @@ References:
 """
 from __future__ import annotations
 
-from mowl.geometric import checker, intervals, normal_forms, polyhedral
+from mowl.geometric import checker, helly, intervals, normal_forms, polyhedral
 from mowl.geometric.checker import (
     DictInterpretation,
     GeometricInterpretation,
@@ -32,6 +32,7 @@ from mowl.geometric.errors import (
     UnsupportedAxiom,
     UnsupportedRegion,
 )
+from mowl.geometric.helly import HellyCertificate, HellyReport, helly_check
 from mowl.geometric.intervals import IntervalUnionModel
 from mowl.geometric.normal_forms import (
     BOTTOM,
@@ -88,6 +89,8 @@ __all__ = [
     "Face",
     "GeometricError",
     "GeometricInterpretation",
+    "HellyCertificate",
+    "HellyReport",
     "InconsistentOntology",
     "InternalConsistencyError",
     "IntervalUnion",
@@ -110,6 +113,8 @@ __all__ = [
     "UnsupportedRegion",
     "checker",
     "completion",
+    "helly",
+    "helly_check",
     "intervals",
     "normal_forms",
     "normalise",
