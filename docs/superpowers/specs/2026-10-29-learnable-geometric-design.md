@@ -105,11 +105,11 @@ extension `E_C` (`cm.extension(C)`, element indices):
 * Classes in `class_to_id` absent from `cm.names`: NaN rows (left untouched by
   `apply_to_module`; counted in `report["n_skipped"]`).
 
-Guarantee (tested): with `k = 1`, for every entailed atomic subsumption `C ⊑ D`
+Guarantee (tested): with `k = 1`, for every entailed atomic subsumption `C ⊑ D` with `C` satisfiable
 (`cm.entails(C, D)`), `box_C ⊆ box_D` exactly, because `E_C ⊆ E_D` and padded bounding
 boxes are monotone; hence every `gci0` training axiom has zero Box²EL/ELBE loss at
 margin 0 immediately after initialisation. Disjointness is **not** guaranteed (bounding
-boxes overlap); that is the point of the experiment.
+boxes overlap); that is the point of the experiment. Axioms whose subclass is unsatisfiable are not covered (unsatisfiable names are points at the origin), and no placement can cover them in general.
 
 ### 3.3 MILP initialisation (`method="milp"`)
 

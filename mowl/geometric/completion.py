@@ -365,17 +365,21 @@ class CanonicalModel:
             name: idx for idx, name in enumerate(self.names)
         }
 
-        # Precompute extensions for all known concept names
-        self._extensions: Dict[str, FrozenSet[int]] = {}
-        for cname in all_concepts:
-            if completion.is_unsatisfiable(cname):
-                self._extensions[cname] = frozenset()
-            else:
-                self._extensions[cname] = frozenset(
-                    idx
-                    for idx, b_name in enumerate(self.names)
-                    if cname in completion.sub_super.get(b_name, set())
-                )
+        # Precompute extensions for all known concept names by inverting completion.sub_super
+        ext_lists: Dict[str, List[int]] = {cname: [] for cname in all_concepts}
+        for idx, b_name in enumerate(self.names):
+            for cname in completion.sub_super.get(b_name, ()):
+                bucket = ext_lists.get(cname)
+                if bucket is not None:
+                    bucket.append(idx)
+        self._extensions: Dict[str, FrozenSet[int]] = {
+            cname: (
+                frozenset()
+                if completion.is_unsatisfiable(cname)
+                else frozenset(idxs)
+            )
+            for cname, idxs in ext_lists.items()
+        }
         self._extensions[BOTTOM] = frozenset()
 
         # Precompute role interpretations for all known roles

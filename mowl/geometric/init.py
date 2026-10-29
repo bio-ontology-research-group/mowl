@@ -16,9 +16,11 @@ Guarantees:
   bounding box :math:`[\\min_{e \\in E_C} p_e - \\text{pad},\\; \\max_{e \\in E_C} p_e + \\text{pad}]`.
   Because :math:`\\mathcal{O} \\models C \\sqsubseteq D \\implies E_C \\subseteq E_D`
   and bounding boxes are monotone under set inclusion, :math:`\\text{box}(C) \\subseteq \\text{box}(D)`
-  holds for every entailed atomic subsumption with satisfiable :math:`C`.
-  Consequently, every ``gci0`` training axiom has zero :class:`BoxSquaredELModule`
-  and :class:`ELBEModule` loss at margin :math:`0` immediately after
+  holds exactly (up to ``float32`` rounding; tests use ``1e-6``) for every
+  entailed atomic subsumption with satisfiable :math:`C`.
+  Consequently, every ``gci0`` training axiom whose subclass is satisfiable has
+  zero :class:`BoxSquaredELModule` and :class:`ELBEModule` loss (up to
+  ``float32`` rounding, ``<= 1e-6``) at margin :math:`0` immediately after
   :meth:`ExactBoxInit.apply_to_module`.
 - **Degenerate point boxes for unsatisfiable concepts:** ``BOTTOM``
   (``owl:Nothing``) and any concept name in the canonical model's signature that
@@ -35,9 +37,11 @@ Guarantees:
   ``"projected"`` mode, deterministic k-means (``scipy.cluster.vq.kmeans2`` with
   ``minit="++"`` and ``seed``) partitions :math:`\\{p_e : e \\in E_C\\}` into
   :math:`k' = \\min(k, |E_C|)` clusters, forms one padded bounding box per
-  cluster, and duplicates the first component box into the remaining
-  :math:`k - k'` components. In particular, when :math:`|E_C| = 1`, all
-  :math:`k` components are identical and equal to the :math:`k = 1` box.
+  non-empty cluster, records in ``report["n_degenerate_kmeans"]`` the count of
+  classes where k-means produced fewer than :math:`k'` non-empty clusters, and
+  duplicates the first component box into the remaining components. In
+  particular, when :math:`|E_C| = 1`, all :math:`k` components are identical and
+  equal to the :math:`k = 1` box.
 - **MILP mode and fallback:** When ``method="milp"``, :class:`~mowl.geometric.boxes.BoxModelBuilder`
   searches for a verified :math:`d'`-dimensional box model (:math:`d' \\le d`).
   If found, coordinates :math:`0 .. d' - 1` hold the MILP boxes unchanged (preserving
@@ -48,6 +52,13 @@ Guarantees:
   ``"projected"`` and records ``report["fallback"] = "<ExceptionClass>: <message>"``.
 
 Non-guarantees:
+- **Unsatisfiable-subclass ``gci0`` axioms:** Axioms :math:`U \\sqsubseteq A`
+  whose subclass :math:`U` is unsatisfiable are not covered by the zero-loss
+  ``gci0`` guarantee: unsatisfiable names are placed as points at the origin,
+  which in general lies outside :math:`\\text{box}(A)`, and no point placement
+  can cover them in general (e.g. :math:`U \\sqsubseteq A` and
+  :math:`U \\sqsubseteq B` with :math:`A \\sqcap B \\sqsubseteq \\bot` have no
+  common point).
 - **Disjointness under projected initialisation:** Axis-parallel bounding boxes
   of projected simplex vertices intersect strictly more often than the simplex
   faces themselves (and satisfy Helly number 2 for :math:`k = 1`), so
@@ -74,6 +85,7 @@ import torch
 from mowl.geometric.boxes import BoxModelBuilder
 from mowl.geometric.errors import (
     BoxModelNotFound,
+    InternalConsistencyError,
     NotBoxRepresentable,
     UnsupportedRegion,
 )
@@ -82,6 +94,15 @@ from mowl.geometric.normal_forms import BOTTOM, TOP
 if TYPE_CHECKING:  # pragma: no cover
     from mowl.datasets import Dataset
     from mowl.geometric.completion import CanonicalModel
+
+
+def _padded_bbox(pts: np.ndarray, pad: float) -> Tuple[np.ndarray, np.ndarray]:
+    """Return ``(center, offset)`` float32 vectors for the ``pad``-expanded bounding box of ``pts``."""
+    lo = np.min(pts, axis=0) - pad
+    hi = np.max(pts, axis=0) + pad
+    c_vec = (0.5 * (lo + hi)).astype(np.float32)
+    o_vec = np.maximum(0.0, 0.5 * (hi - lo)).astype(np.float32)
+    return c_vec, o_vec
 
 
 def _iri_key(key: Any) -> str:
@@ -153,8 +174,9 @@ class ExactBoxInit:
         Random seed used for Gaussian projection and k-means clustering.
     report : Dict[str, Any]
         Diagnostic dictionary recording ``n_classes``, ``n_canonical_names``,
-        ``n_initialised``, ``n_skipped``, ``embed_dim``, ``n_components``,
-        ``elapsed_s``, and optional ``fallback`` or ``milp_dimension``.
+        ``n_initialised``, ``n_skipped``, ``n_degenerate_kmeans``,
+        ``embed_dim``, ``n_components``, ``elapsed_s``, and optional
+        ``fallback`` or ``milp_dimension``.
     """
 
     centers: np.ndarray
@@ -186,6 +208,15 @@ class ExactBoxInit:
         milp_d_max: Optional[int] = None,
     ) -> ExactBoxInit:
         """Construct an :class:`ExactBoxInit` from a :class:`~mowl.geometric.completion.CanonicalModel`.
+
+        With ``method="projected"`` and ``n_components=1``, for every entailed
+        atomic subsumption :math:`C \\sqsubseteq D` with :math:`C` satisfiable,
+        :math:`\\text{box}(C) \\subseteq \\text{box}(D)` holds exactly (up to
+        ``float32`` rounding; tests use ``1e-6``), so every ``gci0`` training
+        axiom whose subclass is satisfiable has zero loss at margin :math:`0`
+        immediately after :meth:`apply_to_module`. Axioms whose subclass is
+        unsatisfiable are not covered (unsatisfiable names are points at the
+        origin), and no placement can cover them in general.
 
         Parameters
         ----------
@@ -250,6 +281,7 @@ class ExactBoxInit:
         fallback_msg: Optional[str] = None
         actual_method = method
         milp_dim: Optional[int] = None
+        n_deg_kmeans = 0
 
         if method == "milp":
             eff_d_max = (
@@ -278,7 +310,7 @@ class ExactBoxInit:
                 milp_dim = int(box_model.dimension)
 
         if actual_method == "projected":
-            centers, offsets, n_init, n_skip = cls._build_projected(
+            centers, offsets, n_init, n_skip, n_deg_kmeans = cls._build_projected(
                 cm=cm,
                 c2i=c2i,
                 d=d,
@@ -294,6 +326,7 @@ class ExactBoxInit:
             "n_canonical_names": len(cm.names),
             "n_initialised": n_init,
             "n_skipped": n_skip,
+            "n_degenerate_kmeans": n_deg_kmeans,
             "embed_dim": d,
             "n_components": k,
             "requested_method": method,
@@ -337,8 +370,8 @@ class ExactBoxInit:
         seed: Optional[int],
         pad: float,
         scale: float,
-    ) -> Tuple[np.ndarray, np.ndarray, int, int]:
-        """Compute ``(centers, offsets, n_initialised, n_skipped)`` for ``method='projected'``."""
+    ) -> Tuple[np.ndarray, np.ndarray, int, int, int]:
+        """Compute ``(centers, offsets, n_initialised, n_skipped, n_degenerate_kmeans)`` for ``method='projected'``."""
         n_classes = len(c2i)
         centers = np.full((n_classes, k, d), np.nan, dtype=np.float32)
         offsets = np.full((n_classes, k, d), np.nan, dtype=np.float32)
@@ -354,6 +387,7 @@ class ExactBoxInit:
         known_concepts = set(cm.concept_names) | set(cm.names) | {TOP, BOTTOM}
         n_init = 0
         n_skip = 0
+        n_deg_kmeans = 0
 
         for name, idx in c2i.items():
             if name not in known_concepts:
@@ -371,10 +405,7 @@ class ExactBoxInit:
                     centers[idx, :, :] = 0.0
                     offsets[idx, :, :] = 0.0
                 else:
-                    lo = np.min(p, axis=0) - pad
-                    hi = np.max(p, axis=0) + pad
-                    c_vec = (0.5 * (lo + hi)).astype(np.float32)
-                    o_vec = np.maximum(0.0, 0.5 * (hi - lo)).astype(np.float32)
+                    c_vec, o_vec = _padded_bbox(p, pad)
                     centers[idx, :, :] = c_vec
                     offsets[idx, :, :] = o_vec
                 continue
@@ -388,10 +419,7 @@ class ExactBoxInit:
             pts = p[ext]
             k_prime = min(k, len(ext))
             if k_prime == 1:
-                lo = np.min(pts, axis=0) - pad
-                hi = np.max(pts, axis=0) + pad
-                c_vec = (0.5 * (lo + hi)).astype(np.float32)
-                o_vec = np.maximum(0.0, 0.5 * (hi - lo)).astype(np.float32)
+                c_vec, o_vec = _padded_bbox(pts, pad)
                 centers[idx, :, :] = c_vec
                 offsets[idx, :, :] = o_vec
             else:
@@ -403,22 +431,13 @@ class ExactBoxInit:
                 for cluster_id in range(k_prime):
                     mask_c = labels == cluster_id
                     if np.any(mask_c):
-                        c_pts = pts[mask_c]
-                        lo = np.min(c_pts, axis=0) - pad
-                        hi = np.max(c_pts, axis=0) + pad
-                        c_vec = (0.5 * (lo + hi)).astype(np.float32)
-                        o_vec = np.maximum(0.0, 0.5 * (hi - lo)).astype(np.float32)
-                        comp_boxes.append((c_vec, o_vec))
+                        comp_boxes.append(_padded_bbox(pts[mask_c], pad))
+
+                if len(comp_boxes) < k_prime:
+                    n_deg_kmeans += 1
 
                 if not comp_boxes:  # pragma: no cover
-                    lo = np.min(pts, axis=0) - pad
-                    hi = np.max(pts, axis=0) + pad
-                    comp_boxes.append(
-                        (
-                            (0.5 * (lo + hi)).astype(np.float32),
-                            np.maximum(0.0, 0.5 * (hi - lo)).astype(np.float32),
-                        )
-                    )
+                    comp_boxes.append(_padded_bbox(pts, pad))
 
                 while len(comp_boxes) < k:
                     comp_boxes.append(comp_boxes[0])
@@ -427,7 +446,7 @@ class ExactBoxInit:
                     centers[idx, comp_idx, :] = comp_boxes[comp_idx][0]
                     offsets[idx, comp_idx, :] = comp_boxes[comp_idx][1]
 
-        return centers, offsets, n_init, n_skip
+        return centers, offsets, n_init, n_skip, n_deg_kmeans
 
     @staticmethod
     def _build_from_milp(
@@ -456,10 +475,15 @@ class ExactBoxInit:
                 continue
 
             n_init += 1
-            if name == BOTTOM or not cm.is_satisfiable(name) or name not in model_boxes:
+            if name == BOTTOM or not cm.is_satisfiable(name):
                 centers[idx, :, :] = 0.0
                 offsets[idx, :, :] = 0.0
                 continue
+
+            if name not in model_boxes:
+                raise InternalConsistencyError(
+                    f"Satisfiable concept {name!r} is missing from BoxModel.boxes()."
+                )
 
             lo_m, hi_m = model_boxes[name]
             lo = np.full(d, -1.0 - pad, dtype=np.float64)
@@ -467,8 +491,7 @@ class ExactBoxInit:
             lo[:d_prime] = lo_m[:d_prime]
             hi[:d_prime] = hi_m[:d_prime]
 
-            c_vec = (0.5 * (lo + hi)).astype(np.float32)
-            o_vec = np.maximum(0.0, 0.5 * (hi - lo)).astype(np.float32)
+            c_vec, o_vec = _padded_bbox(np.stack([lo, hi], axis=0), 0.0)
             centers[idx, :, :] = c_vec
             offsets[idx, :, :] = o_vec
 
