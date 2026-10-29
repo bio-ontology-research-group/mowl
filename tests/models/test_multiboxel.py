@@ -108,97 +108,190 @@ def test_multiboxel_trains_on_t3(t3_dataset: PathDataset, tmp_path: Path) -> Non
     assert np.isfinite(loss_val)
 
 
-@pytest.mark.slow
-@pytest.mark.xfail(
-    strict=True,
-    reason=(
-        "embed_dim=1, margin=0.0, width floor w_min=0.05: the exact multibox "
-        "configuration (X1=[0,1]u[2,3], X2=[0,1]u[4,5], X3=[2,3]u[4,5], A=[0,1], "
-        "C=[2,3], B=[4,5]) has gci0/gci1/gci1_bot loss exactly 0 and floor 0, but "
-        "Adam does not reach it: MultiBoxEL(k=2) axiom loss stays above 1e-4 for "
-        "every lr in {0.005, 0.01, 0.02}, seed in {0, 1, 2}, epochs in {3000, 6000} "
-        "(best 7.99e-04 at lr=0.005/seed=0/3000 with floor 1.03e-03; lr=0.01: "
-        "seed0 1.50e-03/1.77e-03, seed1 1.56e-03/1.79e-03, seed2 6.00e-03/5.92e-03 "
-        "at 3000/6000), and triple_nonempty=True on all runs except "
-        "lr=0.005/seed=1/3000 (axiom 1.12e-03). BoxSquaredEL (lr=0.01, 3000) "
-        "stays above 1e-3 as required (seed0 4.13e-03, seed1 2.02e-03, seed2 "
-        "2.02e-03, floor 0)."
-    ),
-)
-def test_t3_solvability_multibox_vs_box2el(
-    t3_dataset: PathDataset, tmp_path: Path
-) -> None:
-    """Compare MultiBoxEL(k=2) and BoxSquaredEL on the Helly-violating T3 TBox at margin=0.0 with a width floor.
+_OWL_THING = "http://www.w3.org/2002/07/owl#Thing"
 
-    At ``gamma = 0`` both directions of each equivalence ``A == X1 and X2`` are
-    simultaneously satisfiable by exact box equality, while adding the width-floor
-    regulariser ``sum(relu(0.05 - |offset|))`` prevents single-box models from
-    escaping Helly's theorem by collapsing ``A, B, C`` to zero-width points.
+# Exact zero-loss 1-D configuration for MultiBoxEL(k=2) on T3, as intervals per component.
+_T3_EXACT_1D = {
+    "X1": [(0.0, 1.0), (2.0, 3.0)],
+    "X2": [(0.0, 1.0), (4.0, 5.0)],
+    "X3": [(2.0, 3.0), (4.0, 5.0)],
+    "A": [(0.0, 1.0), (0.0, 1.0)],
+    "C": [(2.0, 3.0), (2.0, 3.0)],
+    "B": [(4.0, 5.0), (4.0, 5.0)],
+    "Z": [(0.0, 1.0), (0.0, 1.0)],
+}
 
-    The test runs with ``embed_dim=1`` for both models. The disjointness loss
-    ``gci1_bot`` (``||relu(-dist - gamma)||``, inherited from Box²EL) is zero only
-    if the two boxes are separated or touching in *every* coordinate, not merely
-    disjoint (a documented limitation, see the ``gci1_bot`` docstrings in
-    ``mowl/nn/el/multiboxel/losses.py``). In ``d = 2`` this conflicts with the
-    component layouts the optimiser finds (at ``d = 2`` MultiBoxEL plateaued at
-    axiom loss ``1.31e-03``). In ``d = 1`` disjointness and
-    every-coordinate separation coincide, and an exact solution exists:
-    ``X1 = [0,1] u [2,3]``, ``X2 = [0,1] u [4,5]``, ``X3 = [2,3] u [4,5]``,
-    ``A = [0,1]``, ``C = [2,3]``, ``B = [4,5]`` (all axiom losses 0, floor 0,
-    ``X1 cap X2 cap X3`` empty). Box²EL cannot reach zero: pairwise intersecting
-    intervals share a point (Helly in ``d = 1``), so ``A`` and ``B``, each of width
-    ``>= w_min``, overlap.
 
-    Measured final losses (embed_dim=1, margin=0.0, w_min=0.05, neg_sampling_gcis=[]):
-    - MultiBoxEL(k=2), lr=0.01, seed=0: axiom ``1.50e-03``, floor ``0``,
-      ``min_d |offset| = 0.0676``, ``triple_nonempty=True`` at 3000 epochs
-      (axiom ``1.77e-03`` at 6000). No lr in {0.005, 0.01, 0.02} x seed in {0, 1, 2}
-      x epochs in {3000, 6000} gets below 1e-4 (best ``7.99e-04``), hence xfail.
-    - BoxSquaredEL, lr=0.01, seed=0: axiom ``4.13e-03``, floor ``0`` at 3000 epochs.
-    """
-    torch.manual_seed(0)
-    mb = _FlooredMultiBoxEL(
-        t3_dataset,
+def _make_t3_multibox(
+    dataset: PathDataset, path: Path, learning_rate: float = 0.01
+) -> _FlooredMultiBoxEL:
+    """Return a floored 1-D MultiBoxEL(k=2) on T3 at margin 0 without negative sampling."""
+    return _FlooredMultiBoxEL(
+        dataset,
         embed_dim=1,
         n_components=2,
         margin=0.0,
-        learning_rate=0.01,
+        learning_rate=learning_rate,
         neg_sampling_gcis=[],
-        model_filepath=str(tmp_path / "mb_t3.pt"),
+        model_filepath=str(path),
     )
-    mb.train(epochs=3000, validate_every=4000)
-    mb_loss = _total_positive_loss(mb)
-    mb_min_offset = float(torch.abs(mb.module.class_offset.weight).min().item())
 
-    torch.manual_seed(0)
+
+def _write_t3_exact(model: MultiBoxEL) -> None:
+    """Write the exact 1-D configuration into the class boxes (owl:Thing = [-1, 6] in both components)."""
+    intervals = dict(_T3_EXACT_1D)
+    with torch.no_grad():
+        for name, comps in list(intervals.items()) + [(None, [(-1.0, 6.0), (-1.0, 6.0)])]:
+            iri = _OWL_THING if name is None else NS + name
+            idx = model.class_index_dict[iri]
+            model.module.class_center.weight[idx] = torch.tensor(
+                [(lo + hi) / 2 for lo, hi in comps]
+            )
+            model.module.class_offset.weight[idx] = torch.tensor(
+                [(hi - lo) / 2 for lo, hi in comps]
+            )
+
+
+def _mb_boxes(model: MultiBoxEL, name: str) -> Tuple[np.ndarray, np.ndarray]:
+    idx = torch.tensor([model.class_index_dict[NS + name]], dtype=torch.long)
+    cen, off = model.module.class_boxes(idx)
+    return cen[0].detach().cpu().numpy(), off[0].detach().cpu().numpy()
+
+
+def _assert_t3_multibox_separates(model: MultiBoxEL) -> None:
+    for name in ("A", "B", "C"):
+        assert not _is_degenerate(_mb_boxes(model, name)), f"{name} is degenerate"
+    assert not _triple_nonempty(
+        _mb_boxes(model, "X1"), _mb_boxes(model, "X2"), _mb_boxes(model, "X3")
+    ), "Expected X1 cap X2 cap X3 to be empty component-wise"
+
+
+@pytest.mark.slow
+def test_t3_expressivity_multibox_zero_loss(
+    t3_dataset: PathDataset, tmp_path: Path
+) -> None:
+    """MultiBoxEL(k=2) in one dimension represents the Helly-violating T3 TBox with zero loss.
+
+    Writes ``X1 = [0,1] u [2,3]``, ``X2 = [0,1] u [4,5]``, ``X3 = [2,3] u [4,5]``,
+    ``A = [0,1]``, ``C = [2,3]``, ``B = [4,5]`` (components duplicated), ``Z = [0,1]``,
+    ``owl:Thing = [-1,6]`` into the model and checks that at margin 0 every positive
+    ``gci0``/``gci1``/``gci1_bot`` row has zero loss, the width floor is zero, and
+    ``X1 cap X2 cap X3`` is empty. The test is 1-D because the inherited Box²EL
+    disjointness loss demands separation in every coordinate (see the ``gci1_bot``
+    docstrings in ``mowl/nn/el/multiboxel/losses.py``); in one dimension
+    disjointness and separation coincide.
+
+    Measured: total axiom loss ``0.0``, floor ``0.0``.
+    """
+    mb = _make_t3_multibox(t3_dataset, tmp_path / "mb_exact.pt")
+    _write_t3_exact(mb)
+
+    bad = []
+    with torch.no_grad():
+        for gci_name in ("gci0", "gci1", "gci1_bot"):
+            gci_ds = mb.training_datasets[gci_name]
+            rows = gci_ds[:]
+            scores = mb.module(rows, gci_name).reshape(-1)
+            for row, score in zip(rows.tolist(), scores.tolist()):
+                if score > 1e-12:
+                    bad.append((gci_name, row, score))
+    assert not bad, f"Rows with non-zero loss: {bad}"
+    assert _total_positive_loss(mb) <= 1e-12
+    assert float(_width_floor(mb.module).item()) == 0.0
+    _assert_t3_multibox_separates(mb)
+
+
+@pytest.mark.slow
+@pytest.mark.parametrize("seed", [0, 1, 2])
+def test_t3_box2el_cannot_reach_zero(
+    t3_dataset: PathDataset, tmp_path: Path, seed: int
+) -> None:
+    """Floored BoxSquaredEL in one dimension cannot reach zero loss on T3.
+
+    The pairwise intersections ``X1 cap X2``, ``X1 cap X3``, ``X2 cap X3`` contain
+    ``A``, ``C``, ``B`` of width ``>= 2 * w_min``, so the intervals ``X1, X2, X3``
+    intersect pairwise and by Helly's theorem in ``d = 1`` share a common point.
+    With ``A == X1 and X2`` and ``B == X2 and X3`` exact, ``A`` and ``B`` then
+    overlap, contradicting ``A and B SubClassOf Nothing``; some of the axiom loss or
+    the width floor must therefore be positive.
+
+    Measured (lr 0.01, 3000 epochs, margin 0, w_min 0.05): axiom + floor
+    ``4.13e-03`` / ``2.02e-03`` / ``2.02e-03`` for seeds 0 / 1 / 2 (floor 0).
+    """
+    torch.manual_seed(seed)
     b2 = _FlooredBoxSquaredEL(
         t3_dataset,
         embed_dim=1,
         margin=0.0,
         learning_rate=0.01,
         neg_sampling_gcis=[],
-        model_filepath=str(tmp_path / "b2_t3.pt"),
+        model_filepath=str(tmp_path / f"b2_t3_{seed}.pt"),
     )
     b2.train(epochs=3000, validate_every=4000)
     b2_loss = _total_positive_loss(b2) + float(_width_floor(b2.module).item())
+    assert b2_loss > 1e-3, f"Expected BoxSquaredEL axiom loss + floor > 1e-3, got {b2_loss}"
 
-    def _get_mb_boxes(iri: str) -> Tuple[np.ndarray, np.ndarray]:
-        idx = torch.tensor([mb.class_index_dict[iri]], dtype=torch.long)
-        cen, off = mb.module.class_boxes(idx)
-        return (
-            cen[0].detach().cpu().numpy(),
-            off[0].detach().cpu().numpy(),
-        )
 
+@pytest.mark.slow
+def test_t3_local_learnability_multibox(
+    t3_dataset: PathDataset, tmp_path: Path
+) -> None:
+    """Adam recovers a zero-loss MultiBoxEL(k=2) solution from a perturbed exact configuration.
+
+    Starts from the configuration of :func:`test_t3_expressivity_multibox_zero_loss`
+    with ``N(0, 0.1^2)`` noise added to every centre and offset (generator seed 0)
+    and trains the floored 1-D model with Adam (lr 0.005, 2000 epochs, margin 0).
+
+    Measured: initial axiom loss ``4.03e-02``, final ``1.48e-16``, floor ``0``
+    (noise seeds 1 and 2 also reach ``< 2e-15``; ``sigma = 0.05`` reaches ``0``).
+    """
+    torch.manual_seed(0)
+    mb = _make_t3_multibox(t3_dataset, tmp_path / "mb_local.pt", learning_rate=0.005)
+    _write_t3_exact(mb)
+    gen = torch.Generator().manual_seed(0)
+    with torch.no_grad():
+        for weight in (mb.module.class_center.weight, mb.module.class_offset.weight):
+            weight.add_(0.1 * torch.randn(weight.shape, generator=gen))
+    mb.train(epochs=2000, validate_every=4000)
+    mb_loss = _total_positive_loss(mb)
+    assert mb_loss < 1e-4, f"Expected MultiBoxEL axiom loss < 1e-4, got {mb_loss}"
+    _assert_t3_multibox_separates(mb)
+
+
+@pytest.mark.slow
+@pytest.mark.xfail(
+    strict=True,
+    reason=(
+        "Optimisation gap: a zero-loss configuration exists "
+        "(test_t3_expressivity_multibox_zero_loss) but Adam from random init "
+        "plateaus near 1e-3 (best 7.99e-04 over lr {0.005, 0.01, 0.02} x seed "
+        "{0, 1, 2} x epochs {3000, 6000}; seed 0, lr 0.01, 3000 epochs: axiom "
+        "1.50e-03, X1 cap X2 cap X3 non-empty)."
+    ),
+)
+def test_t3_random_init_multibox_optimisation_gap(
+    t3_dataset: PathDataset, tmp_path: Path
+) -> None:
+    """A zero-loss configuration exists (test 1) but Adam from random init plateaus near 1e-3.
+
+    Floored 1-D MultiBoxEL(k=2), margin 0, w_min 0.05, ``neg_sampling_gcis=[]``.
+    Round-4 sweep, axiom loss at 3000 / 6000 epochs (floor 0 unless noted)::
+
+        lr     seed 0                      seed 1                      seed 2
+        0.01   1.50e-3 / 1.77e-3           1.56e-3 / 1.79e-3           6.00e-3 / 5.92e-3
+        0.005  7.99e-4 (fl 1.03e-3)/1.34e-3 1.12e-3 / 1.19e-3          4.19e-3 / 3.48e-3 (fl 3.2e-4)
+        0.02   3.41e-3 / 3.42e-3           1.67e-3 / 2.55e-3           5.22e-3 / 6.83e-3
+
+    ``X1 cap X2 cap X3`` is non-empty in every run except lr 0.005 / seed 1 / 3000.
+    The test (seed 0, lr 0.01, 3000 epochs) fails first on the empty-triple check.
+    """
+    torch.manual_seed(0)
+    mb = _make_t3_multibox(t3_dataset, tmp_path / "mb_t3.pt")
+    mb.train(epochs=3000, validate_every=4000)
+    mb_loss = _total_positive_loss(mb)
+    mb_min_offset = float(torch.abs(mb.module.class_offset.weight).min().item())
     assert mb_min_offset >= 0.045, (
         f"Expected MultiBoxEL min_d |offset| >= 0.045, got {mb_min_offset}"
     )
-    for name in ("A", "B", "C"):
-        assert not _is_degenerate(_get_mb_boxes(NS + name)), f"{name} is degenerate"
-    assert not _triple_nonempty(
-        _get_mb_boxes(NS + "X1"),
-        _get_mb_boxes(NS + "X2"),
-        _get_mb_boxes(NS + "X3"),
-    )
-    assert b2_loss > 1e-3, f"Expected BoxSquaredEL axiom loss + floor > 1e-3, got {b2_loss}"
+    _assert_t3_multibox_separates(mb)
     assert mb_loss < 1e-4, f"Expected MultiBoxEL axiom loss < 1e-4, got {mb_loss}"
