@@ -42,8 +42,9 @@ What a certificate proves (Spec §5.3):
     faithful box models* (in which every satisfiable conjunction of concept
     names is non-empty).
 
-Propositional exactness lemma and completeness (Spec §5.3):
-- **Lemma.** In the propositional fragment (no :class:`~mowl.geometric.normal_forms.NF3`,
+Propositional exactness lemma, relevance pruning, and completeness (Spec §5.3):
+- **Lemma (strong reading only).** In the propositional fragment (no
+  :class:`~mowl.geometric.normal_forms.NF3`,
   :class:`~mowl.geometric.normal_forms.NF4`,
   :class:`~mowl.geometric.normal_forms.NF6`, or
   :class:`~mowl.geometric.normal_forms.NF7` role axioms), let :math:`\\mathcal{U}`
@@ -55,10 +56,36 @@ Propositional exactness lemma and completeness (Spec §5.3):
   :math:`(\\{u_1\\}, \\{u_2\\}, U \\setminus \\{u_1, u_2\\})` has satisfiable
   pairwise conjunctions (proper subsets of :math:`U`) and unsatisfiable triple
   conjunction :math:`\\sqcap U`.
+- **Soundness vs. completeness for non-degenerate certificates (Spec §5.3 v3).**
+  The Lemma is complete for *strong* certificates only. Non-degenerate
+  certificates are a sound sufficient condition for non-box-representability,
+  not a complete one: whether a certificate is non-degenerate depends on how a
+  minimal set is split into :math:`(C_1, C_2, C_3)`, and the union of names in a
+  non-degenerate certificate need not itself be an inclusion-minimal
+  unsatisfiable set. Consequently,
+  :attr:`HellyReport.box_representable_nondegenerate` returns ``False`` when
+  ``certificates_nondegenerate`` is non-empty, ``True`` only when ``complete``
+  is ``True`` and ``certificates_strong`` is empty (since every non-degenerate
+  certificate is also a strong certificate), and ``None`` otherwise.
+- **Relevance pruning (Spec §5.3 v3).** Only :math:`\\bot`-relevant concept names
+  are enumerated as candidates, where relevance is the backward closure from the
+  :math:`\\bot`-axioms through :class:`~mowl.geometric.normal_forms.NF1` and
+  :class:`~mowl.geometric.normal_forms.NF2` (a name is relevant if it is a
+  left-hand name ``sub1``/``sub2`` of an ``NF2`` with ``sup == BOTTOM`` or the
+  ``sub`` of an ``NF1`` with ``sup == BOTTOM``, or the ``sub`` of an ``NF1`` /
+  ``sub1`` or ``sub2`` of an ``NF2`` whose ``sup`` is relevant). In the
+  propositional fragment every derivation of :math:`Z \\sqsubseteq \\bot` uses
+  only :math:`\\bot`-relevant names, so every inclusion-minimal jointly
+  unsatisfiable set consists entirely of :math:`\\bot`-relevant names. If the
+  ontology contains no :math:`\\bot`-axiom (no ``NF1``, ``NF2``, or ``NF4`` with
+  ``sup == BOTTOM``), :math:`\\mathcal{U} = \\emptyset` and :func:`helly_check`
+  returns immediately with no certificates and ``complete = (not has_roles)``.
 - ``HellyReport.complete`` is ``True`` **if and only if** the enumeration was
   not cut off by ``k_max`` or ``max_certificates`` **and** the ontology has no
   role axioms (``has_roles == False``). The guarantee that the check is exact
-  for the propositional fragment holds only when ``complete=True``.
+  for the propositional fragment holds only when ``complete=True``, and **only
+  for the strong reading** (``certificates_strong`` /
+  :attr:`HellyReport.box_representable_strong`).
 - **Roles caveat:** When the ontology contains role axioms
   (:class:`~mowl.geometric.normal_forms.NF3`,
   :class:`~mowl.geometric.normal_forms.NF4`,
@@ -69,6 +96,10 @@ Propositional exactness lemma and completeness (Spec §5.3):
   is necessary but not sufficient for box representability. Any certificate
   returned when ``has_roles=True`` remains a sound proof of
   non-box-representability.
+- **Scalability note:** The levelwise subset enumeration is intended for small
+  to medium ontologies; its runtime cost is dominated by re-saturations in
+  :meth:`~mowl.geometric.completion.CanonicalModel.joint_satisfiable` for
+  candidate sets whose canonical extensions are disjoint.
 
 References:
 - Leemhuis & Kutz, *Wait, That's Not a Box! On the Box-Representability of
@@ -84,9 +115,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import itertools
-from typing import TYPE_CHECKING, Iterator, List, Optional, Tuple
+from typing import TYPE_CHECKING, Iterable, Iterator, List, Optional, Set, Tuple
 
-from mowl.geometric.normal_forms import NF3, NF4, NF6, NF7, TOP
+from mowl.geometric.normal_forms import (
+    Axiom,
+    BOTTOM,
+    NF1,
+    NF2,
+    NF3,
+    NF4,
+    NF6,
+    NF7,
+    TOP,
+)
 
 if TYPE_CHECKING:  # pragma: no cover
     from mowl.geometric.completion import CanonicalModel
@@ -138,8 +179,12 @@ class HellyReport:
     ontology has no role axioms (:class:`~mowl.geometric.normal_forms.NF3`,
     :class:`~mowl.geometric.normal_forms.NF4`,
     :class:`~mowl.geometric.normal_forms.NF6`,
-    :class:`~mowl.geometric.normal_forms.NF7`). With roles, ``complete`` is
-    always ``False`` (Leemhuis & Kutz, NAI 2026, Prop. 38), though any returned
+    :class:`~mowl.geometric.normal_forms.NF7`). When ``complete=True``, the
+    check is exact for the **strong reading** only
+    (:attr:`box_representable_strong` / ``certificates_strong``); non-degenerate
+    certificates are a sound sufficient condition for non-box-representability,
+    not a complete one (Spec §5.3 v3). With roles, ``complete`` is always
+    ``False`` (Leemhuis & Kutz, NAI 2026, Prop. 38), though any returned
     certificate remains a sound proof of non-box-representability (Eckhoff 1988;
     Leemhuis & Kutz, NeSy 2025, Defs. 3, 6; Props. 4, 5).
 
@@ -149,7 +194,8 @@ class HellyReport:
         All certificates found (each excludes strongly faithful box models).
     certificates_nondegenerate : List[HellyCertificate]
         Subset of ``certificates_strong`` whose ``pairwise_names`` contain no
-        ``None`` (each excludes every non-degenerate box model).
+        ``None`` (each is a sound sufficient certificate excluding every
+        non-degenerate box model).
     complete : bool
         ``True`` iff enumeration was not cut off by ``k_max`` or
         ``max_certificates`` and ``not has_roles``.
@@ -168,12 +214,12 @@ class HellyReport:
 
     @property
     def box_representable_nondegenerate(self) -> Optional[bool]:
-        """Return ``False`` if non-degenerate certificates exist, ``None`` if ``not complete``, else ``True``."""
+        """Return ``False`` if non-degenerate certificates exist, ``True`` only if ``complete`` and ``certificates_strong`` is empty, else ``None``."""
         if self.certificates_nondegenerate:
             return False
-        if not self.complete:
-            return None
-        return True
+        if self.complete and not self.certificates_strong:
+            return True
+        return None
 
     @property
     def box_representable_strong(self) -> Optional[bool]:
@@ -183,6 +229,43 @@ class HellyReport:
         if not self.complete:
             return None
         return True
+
+
+def _bottom_relevant_names(axioms: Iterable[Axiom]) -> Set[str]:
+    """Compute the backward closure of :math:`\\bot`-relevant concept names through ``NF1`` and ``NF2``.
+
+    A concept name is :math:`\\bot`-relevant if it is ``sub1`` or ``sub2`` of an
+    :class:`~mowl.geometric.normal_forms.NF2` with ``sup == BOTTOM`` (or ``sub``
+    of an :class:`~mowl.geometric.normal_forms.NF1` with ``sup == BOTTOM``), or
+    if it is the ``sub`` of an ``NF1`` or ``sub1``/``sub2`` of an ``NF2`` whose
+    ``sup`` is relevant, iterated to a fixpoint.
+    """
+    relevant: Set[str] = set()
+    for ax in axioms:
+        if isinstance(ax, NF2) and ax.sup == BOTTOM:
+            relevant.add(ax.sub1)
+            relevant.add(ax.sub2)
+        elif isinstance(ax, NF1) and ax.sup == BOTTOM:
+            relevant.add(ax.sub)
+    if not relevant:
+        return relevant
+
+    changed = True
+    while changed:
+        changed = False
+        for ax in axioms:
+            if isinstance(ax, NF1) and ax.sup in relevant:
+                if ax.sub not in relevant:
+                    relevant.add(ax.sub)
+                    changed = True
+            elif isinstance(ax, NF2) and ax.sup in relevant:
+                if ax.sub1 not in relevant:
+                    relevant.add(ax.sub1)
+                    changed = True
+                if ax.sub2 not in relevant:
+                    relevant.add(ax.sub2)
+                    changed = True
+    return relevant
 
 
 def _find_equivalent_name(
@@ -242,9 +325,18 @@ def helly_check(
 ) -> HellyReport:
     """Run the Helly-satisfiability check on ``cm`` and return a :class:`HellyReport`.
 
-    Enumerates inclusion-minimal jointly-unsatisfiable sets of satisfiable
-    concept names (``cm.names`` minus ``TOP``) of size :math:`3 \\dots k_{\\max}`
-    using levelwise frontier construction over satisfiable :math:`(s - 1)`-subsets.
+    Enumerates inclusion-minimal jointly-unsatisfiable sets of :math:`\\bot`-relevant
+    satisfiable concept names (``relevant & set(cm.names)`` minus ``TOP``) of size
+    :math:`3 \\dots k_{\\max}` using levelwise frontier construction over
+    satisfiable :math:`(s - 1)`-subsets. In the propositional fragment every
+    derivation of :math:`Z \\sqsubseteq \\bot` uses only :math:`\\bot`-relevant
+    names (backward closure from :math:`\\bot`-axioms through ``NF1`` and ``NF2``),
+    so restricting candidates to :math:`\\bot`-relevant names preserves soundness
+    and completeness of minimal unsatisfiable set enumeration (Spec §5.3 v3).
+    If the ontology contains no :math:`\\bot`-axiom (no ``NF1``, ``NF2``, or
+    ``NF4`` with ``sup == BOTTOM``), returns immediately with no certificates
+    and ``complete = (not has_roles)``.
+
     For each minimal unsatisfiable set :math:`U = (u_1, \\dots, u_s)` (:math:`s \\ge 3`),
     emits ``HellyCertificate(c1=(u1,), c2=(u2,), c3=tuple(U[2:]), pairwise_names=(p12, p13, p23))``,
     where ``p_ij`` is a satisfiable concept name :math:`N` satisfying
@@ -258,10 +350,15 @@ def helly_check(
       :math:`C_1 \\sqcap C_3`, and :math:`C_2 \\sqcap C_3` are all non-empty
       (Eckhoff 1988; Leemhuis & Kutz, NeSy 2025, Defs. 3, 6; Props. 4, 5).
     - A certificate in ``certificates_nondegenerate`` (all three ``pairwise_names``
-      not ``None``) proves that no *non-degenerate* box model of :math:`\\mathcal{O}`
-      exists in any dimension.
+      not ``None``) is a sound sufficient condition proving that no
+      *non-degenerate* box model of :math:`\\mathcal{O}` exists in any dimension,
+      though not a complete one (whether a certificate is non-degenerate depends
+      on the split of :math:`U` into :math:`(C_1, C_2, C_3)` and the union of a
+      non-degenerate certificate need not be minimal; Spec §5.3 v3).
     - A certificate in ``certificates_strong`` proves that no *strongly faithful*
-      box model of :math:`\\mathcal{O}` exists in any dimension.
+      box model of :math:`\\mathcal{O}` exists in any dimension; when
+      ``complete=True``, this check is exact for the strong reading in the
+      propositional fragment.
     - ``complete=True`` holds if and only if the enumeration was not cut off by
       ``k_max`` or ``max_certificates`` and the ontology has no role axioms
       (:class:`~mowl.geometric.normal_forms.NF3`,
@@ -271,7 +368,20 @@ def helly_check(
       ``complete`` is ``False`` (Leemhuis & Kutz, NAI 2026, Prop. 38).
     """
     has_roles = any(isinstance(ax, (NF3, NF4, NF6, NF7)) for ax in cm.axioms)
-    candidates = [name for name in cm.names if name != TOP]
+    has_bottom_axiom = any(
+        isinstance(ax, (NF1, NF2, NF4)) and ax.sup == BOTTOM for ax in cm.axioms
+    )
+    if not has_bottom_axiom:
+        return HellyReport(
+            certificates_strong=[],
+            certificates_nondegenerate=[],
+            complete=not has_roles,
+            has_roles=has_roles,
+            k_max=k_max,
+        )
+
+    relevant = _bottom_relevant_names(cm.axioms)
+    candidates = [name for name in cm.names if name != TOP and name in relevant]
     exts = {name: cm.extension(name) for name in candidates}
 
     frontier: List[Tuple[str, ...]] = []
