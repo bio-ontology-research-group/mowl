@@ -112,6 +112,7 @@ If you used mOWL in your work, please consider citing `this article <https://doi
    graphs/index
    embedding_el/index
    embedding_alc/index
+   geometric/index
    evaluation/index
    visualization/index
    examples/index
