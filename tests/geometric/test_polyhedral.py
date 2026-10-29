@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import random
 import subprocess
+import sys
 from unittest import TestCase
 from unittest.mock import patch
 
@@ -326,7 +327,7 @@ class TestConvexPolyhedralModel(TestCase):
 
     def test_import_without_jvm(self) -> None:
         cmd = [
-            "/home/leechuck/.venvs/mowl-dev/bin/python",
+            sys.executable,
             "-c",
             "import mowl.geometric; from mowl.geometric import ConvexPolyhedralModel, ThickFace; print('ok')",
         ]

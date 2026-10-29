@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 import numpy as np
 import pytest
 
@@ -366,7 +367,7 @@ def test_polyhedral_0d_and_hrep_fallback() -> None:
 
 def test_checker_imports_without_jvm() -> None:
     cmd = [
-        "/home/leechuck/.venvs/mowl-dev/bin/python",
+        sys.executable,
         "-c",
         "import mowl.geometric.checker, mowl.geometric.normal_forms; from mowl.geometric.normal_forms import NF1, TOP; print('ok')",
     ]

@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import subprocess
+import sys
 from unittest import TestCase
 
 import mowl
@@ -88,7 +89,7 @@ class TestPublicAPI(TestCase):
                 "print('ok')",
             ]
         )
-        cmd = ["/home/leechuck/.venvs/mowl-dev/bin/python", "-c", script]
+        cmd = [sys.executable, "-c", script]
         res = subprocess.run(cmd, capture_output=True, text=True, check=False)
         self.assertEqual(res.returncode, 0, f"stderr: {res.stderr}")
         self.assertIn("ok", res.stdout)
