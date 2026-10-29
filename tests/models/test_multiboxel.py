@@ -94,47 +94,54 @@ def test_multiboxel_trains_on_t3(t3_dataset: PathDataset, tmp_path: Path) -> Non
 @pytest.mark.xfail(
     strict=True,
     reason=(
-        "At margin=0.0, Box2EL/MultiBoxEL gci1 (relu(lower-upper)) and gci1_bot "
-        "(relu(-dist)) losses vanish on zero-width degenerate boxes touching at a "
-        "single boundary point. Measured with seed=0, lr=0.01, neg_sampling_gcis=[]: "
-        "(d=2, epochs=1500) MultiBoxEL(k=2) loss=4.365351e-14 (<1e-4), "
-        "triple_nonempty=False, deg={'A': False, 'B': False, 'C': True}, "
-        "BoxSquaredEL loss=5.937442e-15 (not >1e-3, collapses A,B,C to degenerate "
-        "boxes with triple_nonempty=True, deg={'A': True, 'B': True, 'C': True}); "
-        "(d=2, epochs=3000) MultiBoxEL(k=2) loss=8.873576e-15, triple_nonempty=False, "
-        "deg={'A': False, 'B': False, 'C': True}, BoxSquaredEL loss=4.690546e-16; "
-        "(d=3, epochs=1500) MultiBoxEL(k=2) loss=3.962315e-14, triple_nonempty=True, "
-        "deg={'A': True, 'B': True, 'C': True}, BoxSquaredEL loss=9.879257e-15; "
-        "(d=3, epochs=3000) MultiBoxEL(k=2) loss=8.629650e-14, triple_nonempty=True, "
-        "deg={'A': True, 'B': False, 'C': True}, BoxSquaredEL loss=9.259586e-16."
+        "In Box2EL/MultiBoxEL losses, gamma (margin) is subtracted inside relu: "
+        "inclusion_score = ||relu(dist + 2*off_a - gamma)||_2 and "
+        "gci1_bot_score = ||relu(-box_dist - gamma)||_2. Thus margin=0.05 (gamma=+0.05) "
+        "relaxes containment by 0.05 and allows disjoint boxes to overlap by up to 0.05 "
+        "(box_dist >= -0.05) at zero loss. Measured across component_reg in {0.0, 0.01}, "
+        "seeds 0..2, epochs in {3000, 6000} (d=2, lr=0.01, neg_sampling_gcis=[]): "
+        "MultiBoxEL(k=2) reaches loss < 1e-4 and deg={'A': False, 'B': False, 'C': False} "
+        "on all runs (seed=0, comp_reg=0.0, epochs=3000: loss=2.26e-15; epochs=6000: "
+        "loss=1.76e-17; seed=1, 3000: 3.45e-15, 6000: 9.08e-17; seed=2, comp_reg=0.0, "
+        "3000: 1.54e-15, 6000: 2.34e-17; seed=2, comp_reg=0.01, 3000: 1.90e-15, "
+        "6000: 2.86e-17), but triple_nonempty=True in all 12 runs and BoxSquaredEL "
+        "also reaches zero loss (seed=0,1 epochs=3000,6000: loss=0.00e+00; seed=2 "
+        "epochs=3000: loss=6.38e-15, epochs=6000: loss=8.33e-17, not > 1e-3)."
     ),
 )
 def test_t3_solvability_multibox_vs_box2el(
     t3_dataset: PathDataset, tmp_path: Path
 ) -> None:
+    """Compare MultiBoxEL(k=2) and BoxSquaredEL on the Helly-violating T3 TBox at margin=0.05.
+
+    Measured final total positive losses (seed=0, embed_dim=2, lr=0.01, epochs=3000,
+    margin=0.05, component_reg=0.0, neg_sampling_gcis=[]):
+    - MultiBoxEL(k=2): ``2.26e-15`` (``1.76e-17`` at 6000 epochs)
+    - BoxSquaredEL: ``0.00e+00`` (``0.00e+00`` at 6000 epochs)
+    """
     torch.manual_seed(0)
     mb = MultiBoxEL(
         t3_dataset,
         embed_dim=2,
         n_components=2,
-        margin=0.0,
+        margin=0.05,
         learning_rate=0.01,
         neg_sampling_gcis=[],
         model_filepath=str(tmp_path / "mb_t3.pt"),
     )
-    mb.train(epochs=1500, validate_every=2000)
+    mb.train(epochs=3000, validate_every=4000)
     mb_loss = _total_positive_loss(mb)
 
     torch.manual_seed(0)
     b2 = BoxSquaredEL(
         t3_dataset,
         embed_dim=2,
-        margin=0.0,
+        margin=0.05,
         learning_rate=0.01,
         neg_sampling_gcis=[],
         model_filepath=str(tmp_path / "b2_t3.pt"),
     )
-    b2.train(epochs=1500, validate_every=2000)
+    b2.train(epochs=3000, validate_every=4000)
     b2_loss = _total_positive_loss(b2)
 
     assert mb_loss < 1e-4, f"Expected MultiBoxEL loss < 1e-4, got {mb_loss}"
