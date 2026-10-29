@@ -16,7 +16,7 @@ References:
 """
 from __future__ import annotations
 
-from mowl.geometric import checker, normal_forms
+from mowl.geometric import checker, intervals, normal_forms
 from mowl.geometric.checker import (
     DictInterpretation,
     GeometricInterpretation,
@@ -32,6 +32,7 @@ from mowl.geometric.errors import (
     UnsupportedAxiom,
     UnsupportedRegion,
 )
+from mowl.geometric.intervals import IntervalUnionModel
 from mowl.geometric.normal_forms import (
     BOTTOM,
     NF1,
@@ -87,6 +88,7 @@ __all__ = [
     "InconsistentOntology",
     "InternalConsistencyError",
     "IntervalUnion",
+    "IntervalUnionModel",
     "MissingDependency",
     "ModelChecker",
     "NF1",
@@ -104,6 +106,7 @@ __all__ = [
     "UnsupportedRegion",
     "checker",
     "completion",
+    "intervals",
     "normal_forms",
     "normalise",
     "simplex_points",
