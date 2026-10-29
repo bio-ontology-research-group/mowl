@@ -64,6 +64,9 @@ class MultiBoxEL(EmbeddingELModel):
         the module's ``neg_capable_gcis``.
     init_boxes : mowl.geometric.init.ExactBoxInit, optional
         Optional exact-model box initialisation applied in :meth:`init_module`.
+        Rows are matched by IRI against :attr:`class_index_dict`; rows of the
+        auxiliary classes introduced by normalisation keep their random
+        initialisation.
     anchor_weight : float, default 0.0
         Non-negative weight multiplying ``init_boxes.anchor_loss(self.module)``
         in :meth:`get_regularization_loss` when ``init_boxes`` is provided.
@@ -121,7 +124,8 @@ class MultiBoxEL(EmbeddingELModel):
             component_reg=self.component_reg
         ).to(self.device)
         if self.init_boxes is not None:
-            self.init_boxes.apply_to_module(self.module)
+            self.init_boxes.apply_to_module(
+                self.module, class_index_dict=self.class_index_dict)
 
     def get_regularization_loss(self):
         """Return module regularisation loss plus weighted anchor loss when active."""

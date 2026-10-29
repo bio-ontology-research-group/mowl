@@ -1,6 +1,6 @@
 """Exact-model initialisation and anchor regularisation for learnable box embeddings.
 
-Provides :class:`ExactBoxInit` (Spec §3, R1), which initialises the class boxes
+Provides :class:`ExactBoxInit`, which initialises the class boxes
 of axis-parallel box-embedding modules (:class:`~mowl.nn.el.boxsquaredel.module.BoxSquaredELModule`,
 :class:`~mowl.nn.el.elbe.module.ELBEModule`, and ``MultiBoxELModule``) from the
 canonical model of a normalised :math:`\\mathcal{EL}^{++}` ontology, and computes
@@ -50,6 +50,14 @@ Guarantees:
   :class:`~mowl.geometric.errors.NotBoxRepresentable` or
   :class:`~mowl.geometric.errors.BoxModelNotFound`, construction falls back to
   ``"projected"`` and records ``report["fallback"] = "<ExceptionClass>: <message>"``.
+- **Row matching by IRI:** Initialisation rows are indexed by the dataset's
+  ``class_to_id``. :meth:`ExactBoxInit.apply_to_module` matches them to module
+  rows through the ``class_index_dict`` passed by the model (the dataset
+  classes followed by the auxiliary classes created by normalisation, with
+  IRIs under ``http://mowl.borg/aux/``). Module rows without an
+  initialisation entry, in particular all auxiliary classes, keep their
+  random initialisation and are excluded from
+  :meth:`ExactBoxInit.anchor_loss`.
 
 Non-guarantees:
 - **Unsatisfiable-subclass ``gci0`` axioms:** Axioms :math:`U \\sqsubseteq A`
@@ -64,16 +72,10 @@ Non-guarantees:
   faces themselves (and satisfy Helly number 2 for :math:`k = 1`), so
   ``method="projected"`` does *not* guarantee disjoint boxes for disjoint
   concepts :math:`A \\sqcap B \\sqsubseteq \\bot`.
-- **MultiBoxEL duck-typed branch:** :meth:`ExactBoxInit.apply_to_module` and
-  :meth:`ExactBoxInit.anchor_loss` support ``MultiBoxELModule`` via duck typing
-  (checking ``hasattr(module, "n_components")`` and expecting ``class_center`` /
-  ``class_offset`` of width ``n_components * embed_dim`` with flattened
-  ``(k, d)`` row layout); integration tests with ``MultiBoxELModule`` are run in
-  the MultiBoxEL tasks (Tasks 3–4).
 """
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import time
 from typing import TYPE_CHECKING, Any, Dict, List, Mapping, Optional, Tuple
 import warnings
@@ -151,7 +153,7 @@ def _normalise_class_to_id(class_to_id: Mapping[Any, int]) -> Dict[str, int]:
     return norm
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, eq=False)
 class ExactBoxInit:
     """Exact-model box initialisation and anchor state for :math:`\\mathcal{EL}` box modules.
 
@@ -186,6 +188,12 @@ class ExactBoxInit:
     n_components: int
     seed: Optional[int]
     report: Dict[str, Any]
+    _row_maps: Dict[int, Tuple[int, np.ndarray]] = field(
+        default_factory=dict, init=False, repr=False, compare=False
+    )
+    _ref_cache: Dict[Tuple[str, str, Any], Tuple[torch.Tensor, torch.Tensor]] = field(
+        default_factory=dict, init=False, repr=False, compare=False
+    )
 
     @property
     def embed_dim(self) -> int:
@@ -525,8 +533,11 @@ class ExactBoxInit:
     def _resolve_module_embeddings(
         self, module: Any
     ) -> Tuple[torch.nn.Embedding, torch.nn.Embedding, str]:
-        """Inspect ``module`` and return ``(center_embedding, offset_embedding, layout)``."""
-        n_classes = int(self.centers.shape[0])
+        """Inspect ``module`` and return ``(center_embedding, offset_embedding, layout)``.
+
+        Checks the embedding widths against ``(n_components, embed_dim)``; the
+        number of rows is checked against the row map in :meth:`_row_map_for`.
+        """
         k = int(self.n_components)
         d = int(self.embed_dim)
 
@@ -545,77 +556,161 @@ class ExactBoxInit:
                 )
             c_emb = module.class_center
             o_emb = module.class_offset
-            expected_shape = (n_classes, k * d)
-            if (
-                tuple(c_emb.weight.shape) != expected_shape
-                or tuple(o_emb.weight.shape) != expected_shape
-            ):
-                raise UnsupportedRegion(
-                    f"Embedding weight shape mismatch for MultiBoxEL layout: expected "
-                    f"{expected_shape}, got {tuple(c_emb.weight.shape)} and "
-                    f"{tuple(o_emb.weight.shape)}."
-                )
-            return c_emb, o_emb, "multiboxel"
-
-        if hasattr(module, "class_center"):
-            if not hasattr(module, "class_offset"):
-                raise UnsupportedRegion(
-                    f"Module {type(module).__name__!r} has class_center but lacks class_offset."
-                )
-            c_emb = module.class_center
-            o_emb = module.class_offset
-        elif hasattr(module, "class_embed"):
-            if not hasattr(module, "class_offset"):
-                raise UnsupportedRegion(
-                    f"Module {type(module).__name__!r} has class_embed but lacks class_offset."
-                )
-            c_emb = module.class_embed
-            o_emb = module.class_offset
+            width = k * d
+            layout = "multiboxel"
         else:
-            raise UnsupportedRegion(
-                f"Module {type(module).__name__!r} exposes neither "
-                f"(class_center, class_offset) nor (class_embed, class_offset)."
-            )
+            if hasattr(module, "class_center"):
+                if not hasattr(module, "class_offset"):
+                    raise UnsupportedRegion(
+                        f"Module {type(module).__name__!r} has class_center but lacks class_offset."
+                    )
+                c_emb = module.class_center
+                o_emb = module.class_offset
+            elif hasattr(module, "class_embed"):
+                if not hasattr(module, "class_offset"):
+                    raise UnsupportedRegion(
+                        f"Module {type(module).__name__!r} has class_embed but lacks class_offset."
+                    )
+                c_emb = module.class_embed
+                o_emb = module.class_offset
+            else:
+                raise UnsupportedRegion(
+                    f"Module {type(module).__name__!r} exposes neither "
+                    f"(class_center, class_offset) nor (class_embed, class_offset)."
+                )
 
-        if k != 1:
+            if k != 1:
+                raise UnsupportedRegion(
+                    f"Single-box module {type(module).__name__!r} requires "
+                    f"ExactBoxInit.n_components == 1, got n_components={k}."
+                )
+            mod_d = int(getattr(module, "embed_dim", c_emb.weight.shape[1]))
+            if mod_d != d:
+                raise UnsupportedRegion(
+                    f"Dimension mismatch for {type(module).__name__!r}: ExactBoxInit has "
+                    f"d={d}, module has embed_dim={mod_d}."
+                )
+            width = d
+            layout = "single"
+
+        c_shape = tuple(c_emb.weight.shape)
+        o_shape = tuple(o_emb.weight.shape)
+        if len(c_shape) != 2 or c_shape[1] != width or c_shape != o_shape:
             raise UnsupportedRegion(
-                f"Single-box module {type(module).__name__!r} requires "
-                f"ExactBoxInit.n_components == 1, got n_components={k}."
+                f"Embedding shape mismatch for {type(module).__name__!r} ({layout} layout): "
+                f"expected two (n_rows, {width}) tables, got {c_shape} and {o_shape}."
             )
-        mod_d = int(getattr(module, "embed_dim", c_emb.weight.shape[1]))
-        expected_shape = (n_classes, d)
-        if (
-            mod_d != d
-            or tuple(c_emb.weight.shape) != expected_shape
-            or tuple(o_emb.weight.shape) != expected_shape
-        ):
+        return c_emb, o_emb, layout
+
+    def _init_rows(self) -> np.ndarray:
+        """Return the sorted indices of initialised (non-``NaN``) rows of ``centers``."""
+        return np.flatnonzero(~np.isnan(self.centers).any(axis=(1, 2)))
+
+    def _build_row_map(
+        self, n_module_rows: int, class_index_dict: Optional[Mapping[Any, int]]
+    ) -> np.ndarray:
+        """Return module row indices for the initialised rows in :meth:`_init_rows` order."""
+        init_rows = self._init_rows()
+        n_classes = int(self.centers.shape[0])
+        if class_index_dict is None:
+            if n_module_rows != n_classes:
+                raise UnsupportedRegion(
+                    f"Module has {n_module_rows} class rows but ExactBoxInit has "
+                    f"{n_classes}; pass class_index_dict (e.g. the model's "
+                    f"class_index_dict) so that rows can be matched by IRI."
+                )
+            return init_rows.astype(np.int64)
+
+        module_index = {_iri_key(key): int(idx) for key, idx in class_index_dict.items()}
+        id_to_name = {idx: name for name, idx in self.class_to_id.items()}
+        rows = np.empty(len(init_rows), dtype=np.int64)
+        missing: List[str] = []
+        for pos, init_row in enumerate(init_rows):
+            name = id_to_name[int(init_row)]
+            mod_row = module_index.get(name)
+            if mod_row is None:
+                missing.append(name)
+                continue
+            if not 0 <= mod_row < n_module_rows:
+                raise UnsupportedRegion(
+                    f"class_index_dict maps {name!r} to row {mod_row}, but the module "
+                    f"has {n_module_rows} class rows."
+                )
+            rows[pos] = mod_row
+        if missing:
             raise UnsupportedRegion(
-                f"Embedding shape mismatch for {type(module).__name__!r}: expected "
-                f"{expected_shape}, got {tuple(c_emb.weight.shape)} and "
-                f"{tuple(o_emb.weight.shape)}."
+                f"{len(missing)} initialised classes are absent from class_index_dict "
+                f"(e.g. {missing[:3]!r})."
             )
-        return c_emb, o_emb, "single"
+        return rows
+
+    def _row_map_for(self, module: Any, n_module_rows: int) -> np.ndarray:
+        """Return the cached row map for ``module`` (identity if none and sizes match)."""
+        cached = self._row_maps.get(id(module))
+        if cached is not None and cached[0] == n_module_rows:
+            return cached[1]
+        return self._build_row_map(n_module_rows, None)
+
+    def _reference(
+        self, layout: str, device: torch.device, dtype: torch.dtype
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Return cached ``(c_ref, o_ref)`` of the initialised rows on ``device``."""
+        key = (layout, str(device), dtype)
+        ref = self._ref_cache.get(key)
+        if ref is None:
+            init_rows = self._init_rows()
+            k = int(self.n_components)
+            d = int(self.embed_dim)
+            c_np = self.centers[init_rows]
+            o_np = self.offsets[init_rows]
+            if layout == "multiboxel":
+                c_np = c_np.reshape(len(init_rows), k * d)
+                o_np = o_np.reshape(len(init_rows), k * d)
+            else:
+                c_np = c_np[:, 0, :]
+                o_np = o_np[:, 0, :]
+            ref = (
+                torch.from_numpy(np.ascontiguousarray(c_np)).to(device=device, dtype=dtype),
+                torch.from_numpy(np.ascontiguousarray(o_np)).to(device=device, dtype=dtype),
+            )
+            self._ref_cache[key] = ref
+        return ref
 
     def apply_to_module(
-        self, module: Any, *, device: Optional[Any] = None
+        self, module: Any, class_index_dict: Optional[Mapping[Any, int]] = None
     ) -> int:
         """Write initialised class boxes into ``module`` under ``torch.no_grad()``.
 
         Supports :class:`~mowl.nn.el.boxsquaredel.module.BoxSquaredELModule`
         (``class_center``, ``class_offset``),
         :class:`~mowl.nn.el.elbe.module.ELBEModule` (``class_embed``,
-        ``class_offset``), and ``MultiBoxELModule`` via duck typing
-        (``hasattr(module, "n_components")`` with ``class_center`` and
+        ``class_offset``), and :class:`~mowl.nn.el.multiboxel.module.MultiBoxELModule`
+        (detected by ``hasattr(module, "n_components")``; ``class_center`` and
         ``class_offset`` of width ``n_components * embed_dim`` storing flattened
-        ``(k, d)`` rows; tested with ``MultiBoxELModule`` in Tasks 3–4).
-        Rows where ``centers`` is ``NaN`` are left untouched.
+        ``(k, d)`` rows).
+
+        Rows are matched by IRI: initialisation row ``class_to_id[C]`` is
+        written to module row ``class_index_dict[C]``. Module rows without an
+        initialisation entry -- in particular the auxiliary classes that
+        :class:`~mowl.base_models.elmodel.EmbeddingELModel` appends to its
+        ``class_index_dict`` for the fresh names introduced by normalisation
+        (IRIs under ``http://mowl.borg/aux/``) -- keep their random
+        initialisation, and so do module rows of classes whose
+        initialisation row is ``NaN``. The tensors are written on the
+        module's device and dtype; the module is not moved.
+
+        The row map is cached on this object (per module) and reused by
+        :meth:`anchor_loss`.
 
         Parameters
         ----------
         module : torch.nn.Module
             Target box-embedding module.
-        device : Optional[Any], default None
-            Optional target device override.
+        class_index_dict : Optional[Mapping[Any, int]], default None
+            Mapping from class IRIs (or ``OWLClass`` objects) to module rows,
+            typically ``model.class_index_dict``. If ``None``, the module must
+            have exactly ``len(class_to_id)`` class rows, and rows are matched
+            by index.
 
         Returns
         -------
@@ -625,40 +720,33 @@ class ExactBoxInit:
         Raises
         ------
         UnsupportedRegion
-            If ``module`` does not expose supported box embeddings or its
-            dimensions / component count do not match ``self``.
+            If ``module`` does not expose supported box embeddings, its
+            dimensions / component count do not match ``self``, an initialised
+            class is missing from ``class_index_dict``, or
+            ``class_index_dict`` is ``None`` and the row counts differ.
         """
         c_emb, o_emb, layout = self._resolve_module_embeddings(module)
-        if device is not None:
-            module.to(device)
-        target_device = c_emb.weight.device
-        target_dtype = c_emb.weight.dtype
+        n_module_rows = int(c_emb.weight.shape[0])
+        rows_np = self._build_row_map(n_module_rows, class_index_dict)
+        self._row_maps[id(module)] = (n_module_rows, rows_np)
 
-        centers_t, offsets_t, mask_t = self.as_tensors(device=target_device)
-        centers_t = centers_t.to(dtype=target_dtype)
-        offsets_t = offsets_t.to(dtype=target_dtype)
-
-        n_classes = int(self.centers.shape[0])
-        k = int(self.n_components)
-        d = int(self.embed_dim)
-
+        c_ref, o_ref = self._reference(layout, c_emb.weight.device, c_emb.weight.dtype)
+        rows = torch.from_numpy(rows_np).to(device=c_emb.weight.device)
         with torch.no_grad():
-            if layout == "multiboxel":
-                flat_c = centers_t.reshape(n_classes, k * d)
-                flat_o = offsets_t.reshape(n_classes, k * d)
-                c_emb.weight[mask_t] = flat_c[mask_t]
-                o_emb.weight[mask_t] = flat_o[mask_t]
-            else:
-                c_emb.weight[mask_t] = centers_t[mask_t, 0, :]
-                o_emb.weight[mask_t] = offsets_t[mask_t, 0, :]
+            c_emb.weight[rows] = c_ref
+            o_emb.weight[rows] = o_ref
 
-        return int(mask_t.sum().item())
+        return int(len(rows_np))
 
     def anchor_loss(self, module: Any) -> torch.Tensor:
         """Return unweighted mean :math:`\\|c - c_0\\|_2^2 + \\||o| - o_0\\|_2^2` over initialised rows.
 
-        Uninitialised (``NaN``) rows are excluded from the slice so they neither
-        contribute ``NaN`` values nor receive gradients from the anchor.
+        Uses the row map cached by :meth:`apply_to_module` for ``module``
+        (identity when ``module`` has not been seen and has exactly
+        ``len(class_to_id)`` rows). Uninitialised (``NaN``) rows and module
+        rows without an initialisation entry (auxiliary classes) are excluded,
+        so they neither contribute ``NaN`` values nor receive gradients from
+        the anchor. Reference tensors are cached per device and dtype.
 
         Parameters
         ----------
@@ -669,31 +757,25 @@ class ExactBoxInit:
         -------
         torch.Tensor
             Scalar unweighted anchor loss tensor on ``module``'s device.
+
+        Raises
+        ------
+        UnsupportedRegion
+            If ``module`` is incompatible, or has a different number of class
+            rows than ``class_to_id`` and :meth:`apply_to_module` was not
+            called on it with a ``class_index_dict``.
         """
         c_emb, o_emb, layout = self._resolve_module_embeddings(module)
-        target_device = c_emb.weight.device
-        target_dtype = c_emb.weight.dtype
-
-        centers_t, offsets_t, mask_t = self.as_tensors(device=target_device)
-        centers_t = centers_t.to(dtype=target_dtype)
-        offsets_t = offsets_t.to(dtype=target_dtype)
-
-        if not bool(torch.any(mask_t).item()):
+        rows_np = self._row_map_for(module, int(c_emb.weight.shape[0]))
+        if len(rows_np) == 0:
             return c_emb.weight.sum() * 0.0
 
-        n_classes = int(self.centers.shape[0])
-        k = int(self.n_components)
-        d = int(self.embed_dim)
+        device = c_emb.weight.device
+        c_ref, o_ref = self._reference(layout, device, c_emb.weight.dtype)
+        rows = torch.from_numpy(rows_np).to(device=device)
 
-        if layout == "multiboxel":
-            c_ref = centers_t.reshape(n_classes, k * d)[mask_t]
-            o_ref = offsets_t.reshape(n_classes, k * d)[mask_t]
-        else:
-            c_ref = centers_t[mask_t, 0, :]
-            o_ref = offsets_t[mask_t, 0, :]
-
-        c_cur = c_emb.weight[mask_t]
-        o_cur = torch.abs(o_emb.weight[mask_t])
+        c_cur = c_emb.weight[rows]
+        o_cur = torch.abs(o_emb.weight[rows])
 
         row_loss = (c_cur - c_ref).square().sum(dim=-1) + (
             o_cur - o_ref

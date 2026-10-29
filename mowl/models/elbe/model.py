@@ -15,7 +15,9 @@ class ELBE(EmbeddingELModel):
     ----------
     init_boxes : mowl.geometric.init.ExactBoxInit, optional
         Optional exact-model box initialisation applied in :meth:`init_module`.
-        Defaults leave behaviour unchanged.
+        Rows are matched by IRI against :attr:`class_index_dict`; rows of the
+        auxiliary classes introduced by normalisation keep their random
+        initialisation. Defaults leave behaviour unchanged.
     anchor_weight : float, default 0.0
         Non-negative weight multiplying ``init_boxes.anchor_loss(self.module)``
         in :meth:`get_regularization_loss` when ``init_boxes`` is provided.
@@ -60,7 +62,8 @@ class ELBE(EmbeddingELModel):
             margin=self.margin
         ).to(self.device)
         if self.init_boxes is not None:
-            self.init_boxes.apply_to_module(self.module)
+            self.init_boxes.apply_to_module(
+                self.module, class_index_dict=self.class_index_dict)
 
     def get_regularization_loss(self):
         loss = super().get_regularization_loss()
