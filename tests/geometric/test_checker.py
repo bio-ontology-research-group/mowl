@@ -1,6 +1,7 @@
 """Tests for exact geometric model checker in mowl.geometric.checker."""
 from __future__ import annotations
 
+import subprocess
 import numpy as np
 import pytest
 
@@ -361,4 +362,16 @@ def test_polyhedral_0d_and_hrep_fallback() -> None:
     assert chk_thick.satisfies(NF2("T01", "T0", "T0")) is True
     assert chk_thick.satisfies(NF2("T01", "T2", BOTTOM)) is True
     assert chk_thick.satisfies(NF2("T01", "T0", BOTTOM)) is False
+
+
+def test_checker_imports_without_jvm() -> None:
+    cmd = [
+        "/home/leechuck/.venvs/mowl-dev/bin/python",
+        "-c",
+        "import mowl.geometric.checker, mowl.geometric.normal_forms; from mowl.geometric.normal_forms import NF1, TOP; print('ok')",
+    ]
+    res = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    assert res.returncode == 0, f"stderr: {res.stderr}"
+    assert "ok" in res.stdout
+
 
