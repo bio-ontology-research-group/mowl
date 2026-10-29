@@ -16,7 +16,8 @@ References:
 """
 from __future__ import annotations
 
-from mowl.geometric import checker, helly, intervals, normal_forms, polyhedral
+from mowl.geometric import boxes, checker, helly, intervals, normal_forms, polyhedral
+from mowl.geometric.boxes import BoxModel, BoxModelBuilder
 from mowl.geometric.checker import (
     DictInterpretation,
     GeometricInterpretation,
@@ -79,6 +80,8 @@ __all__ = [
     "Axiom",
     "BOTTOM",
     "Box",
+    "BoxModel",
+    "BoxModelBuilder",
     "BoxModelNotFound",
     "CanonicalModel",
     "Completion",
@@ -111,6 +114,7 @@ __all__ = [
     "ThickFace",
     "UnsupportedAxiom",
     "UnsupportedRegion",
+    "boxes",
     "checker",
     "completion",
     "helly",
