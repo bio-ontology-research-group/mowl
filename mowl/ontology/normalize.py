@@ -2,6 +2,7 @@ from de.tudresden.inf.lat.jcel.ontology.normalization import OntologyNormalizer
 from de.tudresden.inf.lat.jcel.ontology.axiom.extension import IntegerOntologyObjectFactoryImpl
 from de.tudresden.inf.lat.jcel.owlapi.translator import ReverseAxiomTranslator
 from de.tudresden.inf.lat.jcel.owlapi.translator import Translator
+from de.tudresden.inf.lat.jcel.coreontology.datatype import IntegerEntityType
 from org.semanticweb.owlapi.model.parameters import Imports
 from uk.ac.manchester.cs.owl.owlapi import OWLClassImpl, OWLObjectSomeValuesFromImpl, \
     OWLObjectIntersectionOfImpl
@@ -18,6 +19,11 @@ logger = logging.getLogger(__name__)
 handler = logging.StreamHandler()
 logger.addHandler(handler)
 logger.setLevel(logging.INFO)
+
+AUXILIARY_IRI_PREFIX = "http://mowl.borg/aux#"
+"""Namespace of the fresh classes (and object properties) that the normaliser introduces \
+to flatten nested class expressions. The local name is jcel's name for the auxiliary entity, \
+e.g. ``http://mowl.borg/aux#AuxiliaryEntity42``."""
 
 from mowl.owlapi import OWLAPIAdapter
 from deprecated.sphinx import versionchanged
@@ -131,8 +137,8 @@ type org.semanticweb.owlapi.model.OWLOntology. Found: {type(ontology)}")
         else:
             ontology = self.preprocess_ontology(ontology)
             root_ont = ontology
-            translator = Translator(ontology.getOWLOntologyManager().getOWLDataFactory(),
-                                    IntegerOntologyObjectFactoryImpl())
+            data_factory = ontology.getOWLOntologyManager().getOWLDataFactory()
+            translator = Translator(data_factory, IntegerOntologyObjectFactoryImpl())
             # translator = jreasoner.getTranslator()
             axioms = HashSet()
             axioms.addAll(root_ont.getAxioms())
@@ -146,8 +152,13 @@ type org.semanticweb.owlapi.model.OWLOntology. Found: {type(ontology)}")
 
             normalizer = OntologyNormalizer()
 
-            factory = IntegerOntologyObjectFactoryImpl()
+            # The normaliser must use the translator's own object factory: its entity
+            # manager already holds the identifiers of all named entities, so the
+            # auxiliary entities it creates get fresh identifiers. A separate factory
+            # would restart the counter and hand out identifiers of named classes.
+            factory = translator.getOntologyObjectFactory()
             normalized_ontology = normalizer.normalize(intAxioms, factory)
+            self.__register_auxiliary_entities(translator, data_factory, root_ont)
             self.rTranslator = ReverseAxiomTranslator(translator, ontology)
 
             axioms_dict = self.__revert_translation(normalized_ontology)
@@ -175,19 +186,80 @@ type org.semanticweb.owlapi.model.OWLOntology. Found: {type(ontology)}")
         return axioms_dict
         
         
+    @staticmethod
+    def __put_private_map_entry(repository, field_name, key, value):
+        field = repository.getClass().getDeclaredField(field_name)
+        field.setAccessible(True)
+        field.get(repository).put(key, value)
+
+    def __register_auxiliary_entities(self, translator, data_factory, ontology):
+        """Map every auxiliary class and object property created by jcel during normalisation
+        to a fresh OWL entity in the translation repository, so that the reverse translation
+        can resolve them. The fresh entities have IRIs
+        ``AUXILIARY_IRI_PREFIX + <jcel entity name>``.
+
+        :class:`TranslationRepository` offers no public method to bind an existing integer
+        identifier to an OWL entity (``addClass`` always creates a new identifier), so the
+        entries are added to its private maps directly.
+        """
+        repository = translator.getTranslationRepository()
+        entity_manager = translator.getOntologyObjectFactory().getEntityManager()
+        existing_iris = {str(e.toStringID()) for e in ontology.getSignature(Imports.INCLUDED)}
+
+        def fresh_iri(identifier):
+            name = str(entity_manager.getName(identifier))
+            iri = AUXILIARY_IRI_PREFIX + name
+            if iri in existing_iris:
+                raise ValueError(f"Auxiliary entity IRI {iri} clashes with an entity of the "
+                                 "input ontology")
+            return IRI.create(iri)
+
+        for identifier in entity_manager.getEntities(IntegerEntityType.CLASS, True):
+            if repository.getOptOWLClass(identifier).isPresent():
+                raise RuntimeError(f"Auxiliary class identifier {identifier} is already bound "
+                                   f"to {repository.getOWLClass(identifier)}")
+            owl_class = data_factory.getOWLClass(fresh_iri(identifier))
+            self.__put_private_map_entry(repository, "classMap", identifier, owl_class)
+            self.__put_private_map_entry(repository, "classInvMap", owl_class, identifier)
+
+        for identifier in entity_manager.getEntities(IntegerEntityType.OBJECT_PROPERTY, True):
+            if repository.getOptOWLObjectProperty(identifier).isPresent():
+                raise RuntimeError(f"Auxiliary object property identifier {identifier} is "
+                                   "already bound to "
+                                   f"{repository.getOWLObjectProperty(identifier)}")
+            owl_prop = data_factory.getOWLObjectProperty(fresh_iri(identifier))
+            self.__put_private_map_entry(repository, "objectPropertyMap", identifier, owl_prop)
+            self.__put_private_map_entry(repository, "objectPropertyInvMap", owl_prop,
+                                         identifier)
+
     def __revert_translation(self, normalized_ontology):
         axioms_dict = {
             "gci0": [], "gci1": [], "gci2": [], "gci3": [], "gci0_bot": [], "gci1_bot": [],
             "gci3_bot": [], "class_assertion": [], "object_property_assertion": []}
 
+        skipped = {}
         for ax in normalized_ontology:
             try:
-                axiom = self.rTranslator.visit(ax)
-                key, value = process_axiom(axiom)
-                axioms_dict[key].append(value)
+                axiom = ax.accept(self.rTranslator)
             except Exception as e:
-                logging.info("Reverse translation. Ignoring axiom: %s", ax)
-                logging.info(e)
+                raise RuntimeError(f"Reverse translation of normalised axiom {ax} failed") from e
+
+            if axiom.getAxiomType() != AxiomType.SUBCLASS_OF:
+                # Role inclusions, functionality, range and nominal axioms have no slot in
+                # the GCI dictionary.
+                axiom_type = str(axiom.getAxiomType().getName())
+                skipped[axiom_type] = skipped.get(axiom_type, 0) + 1
+                continue
+
+            processed = process_axiom(axiom)
+            if processed is None:
+                raise ValueError(f"Normalised axiom {axiom} is not in any EL normal form")
+            key, value = processed
+            axioms_dict[key].append(value)
+
+        if skipped:
+            logger.warning("Normalised axioms that are not GCIs were not included: %s",
+                           ", ".join(f"{n} {t}" for t, n in sorted(skipped.items())))
 
         return axioms_dict
 

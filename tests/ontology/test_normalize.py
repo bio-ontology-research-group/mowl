@@ -152,11 +152,9 @@ org.semanticweb.owlapi.model.OWLOntology. Found: <class 'str'>"):
         self.assertEqual(len(normalized_axioms["gci1_bot"]), 1)
         self.assertEqual(len(normalized_axioms["gci3_bot"]), 0)
 
-        # Test _revert_translations method
-        with self.assertLogs(level="INFO") as log:
+        # A normalised axiom that cannot be reverse-translated must not be silently dropped
+        with self.assertRaisesRegex(RuntimeError, "Reverse translation of normalised axiom"):
             normalizer._ELNormalizer__revert_translation([self.gci0_axiom])
-            message = f"Reverse translation. Ignoring axiom: {self.gci0_axiom}"
-            self.assertEqual(log.records[0].getMessage(), message)
 
     def test_process_axiom_type_checking(self):
         """This performs type checking on the process_axiom method"""
@@ -490,3 +488,189 @@ class TestElNormalizerCaching(TestCase):
                 ontology_path=ontology_path,
                 use_cache="yes"
             )
+
+
+class TestElNormalizerAuxiliaryClasses(TestCase):
+    """Regression tests for auxiliary classes introduced by jcel while flattening nested
+    class expressions. Auxiliary classes used to receive integer identifiers that collided
+    with the identifiers of named classes, so they were reverse-translated into unrelated
+    named classes (or the axiom was dropped)."""
+
+    NS = "http://test.org/aux#"
+
+    @classmethod
+    def setUpClass(cls):
+        cls.adapter = OWLAPIAdapter()
+        cls.manager = cls.adapter.owl_manager
+        cls.df = cls.adapter.data_factory
+
+    def _cls(self, name):
+        return self.adapter.create_class(self.NS + name)
+
+    def _prop(self, name):
+        return self.adapter.create_object_property(self.NS + name)
+
+    def _named(self, ce):
+        return ce.getClassExpressionType().toString() == "Class"
+
+    def _normalized_owl_axioms(self, normalized):
+        return {key: {str(ax.owl_axiom.toString()) for ax in axs}
+                for key, axs in normalized.items()
+                if key not in ("class_assertion", "object_property_assertion")}
+
+    def _fresh_classes(self, normalized, ontology):
+        original = {str(c.toStringID()) for c in ontology.getClassesInSignature()}
+        fresh = set()
+        for key, axs in normalized.items():
+            if key in ("class_assertion", "object_property_assertion"):
+                continue
+            for ax in axs:
+                for c in ax.owl_axiom.getClassesInSignature():
+                    if not c.isOWLThing() and not c.isOWLNothing() and \
+                       str(c.toStringID()) not in original:
+                        fresh.add(str(c.toStringID()))
+        return fresh
+
+    def test_nested_existential_in_conjunction(self):
+        """B and r some C SubClassOf A, D SubClassOf B normalises to
+        r some C SubClassOf X, B and X SubClassOf A, D SubClassOf B (X fresh)."""
+        ont = self.adapter.create_ontology("http://test.org/aux/repro")
+        A, B, C, D = [self._cls(x) for x in "ABCD"]
+        r = self._prop("r")
+        self.manager.addAxiom(ont, self.adapter.create_subclass_of(
+            self.adapter.create_object_intersection_of(
+                B, self.adapter.create_object_some_values_from(r, C)), A))
+        self.manager.addAxiom(ont, self.adapter.create_subclass_of(D, B))
+
+        normalized = ELNormalizer().normalize(ont)
+        fresh = self._fresh_classes(normalized, ont)
+        self.assertEqual(len(fresh), 1, f"Expected exactly one fresh class, got {fresh}")
+        X = self.df.getOWLClass(IRI.create(fresh.pop()))
+
+        expected = {
+            "gci0": {self.adapter.create_subclass_of(D, B)},
+            "gci1": {self.adapter.create_subclass_of(
+                self.adapter.create_object_intersection_of(B, X), A)},
+            "gci2": set(), "gci0_bot": set(), "gci1_bot": set(), "gci3_bot": set(),
+            "gci3": {self.adapter.create_subclass_of(
+                self.adapter.create_object_some_values_from(r, C), X)},
+        }
+        expected = {k: {str(ax.toString()) for ax in v} for k, v in expected.items()}
+        self.assertEqual(self._normalized_owl_axioms(normalized), expected)
+
+    def test_cheesey_pizza_definition(self):
+        """CheeseyPizza EquivalentTo Pizza and hasTopping some CheeseTopping must not produce
+        axioms mentioning unrelated named classes."""
+        ont = self.adapter.create_ontology("http://test.org/aux/pizza")
+        pizza, cheesey, cheese = self._cls("Pizza"), self._cls("CheeseyPizza"), \
+            self._cls("CheeseTopping")
+        unrelated = [self._cls(n) for n in ("CajunSpiceTopping", "IceCream", "Unrelated1",
+                                           "Unrelated2", "Unrelated3")]
+        has_topping = self._prop("hasTopping")
+        defn = self.adapter.create_object_intersection_of(
+            pizza, self.adapter.create_object_some_values_from(has_topping, cheese))
+        self.manager.addAxiom(ont, self.adapter.create_equivalent_classes(cheesey, defn))
+        for c in [pizza, cheese] + unrelated:
+            self.manager.addAxiom(ont, self.df.getOWLDeclarationAxiom(c))
+
+        normalized = ELNormalizer().normalize(ont)
+        fresh = self._fresh_classes(normalized, ont)
+        self.assertEqual(len(fresh), 1, f"Expected exactly one fresh class, got {fresh}")
+        X = self.df.getOWLClass(IRI.create(fresh.pop()))
+
+        unrelated_iris = {str(c.toStringID()) for c in unrelated}
+        for key, axs in normalized.items():
+            for ax in axs:
+                sig = {str(c.toStringID()) for c in ax.owl_axiom.getClassesInSignature()}
+                self.assertFalse(sig & unrelated_iris, f"Unrelated class in {ax.owl_axiom}")
+
+        some = self.adapter.create_object_some_values_from(has_topping, cheese)
+        expected = {
+            "gci0": {self.adapter.create_subclass_of(cheesey, pizza)},
+            "gci1": {self.adapter.create_subclass_of(
+                self.adapter.create_object_intersection_of(pizza, X), cheesey)},
+            "gci2": {self.adapter.create_subclass_of(cheesey, some)},
+            "gci3": {self.adapter.create_subclass_of(some, X)},
+            "gci0_bot": set(), "gci1_bot": set(), "gci3_bot": set(),
+        }
+        expected = {k: {str(ax.toString()) for ax in v} for k, v in expected.items()}
+        self.assertEqual(self._normalized_owl_axioms(normalized), expected)
+
+    def _random_concept(self, rng, classes, roles, depth):
+        if depth == 0 or rng.random() < 0.3:
+            return rng.choice(classes)
+        if rng.random() < 0.5:
+            n = rng.choice([2, 3])
+            operands = [self._random_concept(rng, classes, roles, depth - 1) for _ in range(n)]
+            if len({str(o.toString()) for o in operands}) < 2:
+                return operands[0]
+            return self.adapter.create_object_intersection_of(*operands)
+        return self.adapter.create_object_some_values_from(
+            rng.choice(roles), self._random_concept(rng, classes, roles, depth - 1))
+
+    def _random_ontology(self, seed):
+        import random
+        rng = random.Random(seed)
+        ont = self.adapter.create_ontology(f"http://test.org/aux/random{seed}")
+        n_classes = rng.randint(6, 15)
+        n_roles = rng.randint(1, 3)
+        classes = [self._cls(f"R{seed}_C{i}") for i in range(n_classes)]
+        roles = [self._prop(f"R{seed}_r{i}") for i in range(n_roles)]
+        for c in classes:
+            self.manager.addAxiom(ont, self.df.getOWLDeclarationAxiom(c))
+        for _ in range(rng.randint(8, 20)):
+            sub = self._random_concept(rng, classes, roles, 3)
+            sup = self._random_concept(rng, classes, roles, 3)
+            if rng.random() < 0.2 and self._named(sub):
+                axiom = self.adapter.create_equivalent_classes(sub, sup)
+            else:
+                axiom = self.adapter.create_subclass_of(sub, sup)
+            self.manager.addAxiom(ont, axiom)
+        for _ in range(rng.randint(0, 2)):
+            a, b = rng.sample(classes, 2)
+            self.manager.addAxiom(ont, self.adapter.create_disjoint_classes(a, b))
+        return ont, classes
+
+    def _entailments(self, ontology, classes):
+        from org.semanticweb.elk.owlapi import ElkReasonerFactory
+        reasoner = ElkReasonerFactory().createReasoner(ontology)
+        try:
+            names = [str(c.toStringID()) for c in classes]
+            sat = {str(c.toStringID()): bool(reasoner.isSatisfiable(c)) for c in classes}
+            subs = set()
+            for a in classes:
+                a_name = str(a.toStringID())
+                if not sat[a_name]:
+                    # an unsatisfiable class is subsumed by every class
+                    subs |= {(a_name, b) for b in names}
+                    continue
+                supers = {str(c.toStringID())
+                          for c in reasoner.getSuperClasses(a, False).getFlattened()}
+                supers |= {str(c.toStringID())
+                           for c in reasoner.getEquivalentClasses(a).getEntities()}
+                subs |= {(a_name, b) for b in names if b in supers or b == a_name}
+        finally:
+            reasoner.dispose()
+        return sat, subs
+
+    def test_random_nested_ontologies_conservative_extension(self):
+        """Normalisation must be a conservative extension over the original signature:
+        satisfiability and subsumption between original named classes agree."""
+        for seed in range(20):
+            with self.subTest(seed=seed):
+                ont, classes = self._random_ontology(seed)
+                normalized = ELNormalizer().normalize(ont)
+
+                norm_ont = self.adapter.create_ontology(f"http://test.org/aux/norm{seed}")
+                for c in classes:
+                    self.manager.addAxiom(norm_ont, self.df.getOWLDeclarationAxiom(c))
+                for key, axs in normalized.items():
+                    if key in ("class_assertion", "object_property_assertion"):
+                        continue
+                    for ax in axs:
+                        self.manager.addAxiom(norm_ont, ax.owl_axiom)
+
+                sat_o, subs_o = self._entailments(ont, classes)
+                sat_n, subs_n = self._entailments(norm_ont, classes)
+                self.assertEqual(sat_o, sat_n)
+                self.assertEqual(subs_o, subs_n)
