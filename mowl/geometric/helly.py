@@ -503,7 +503,10 @@ def certificate_triangles(
     :class:`~mowl.geometric.normal_forms.NF2` axiom ``A ⊓ B ⊑ N`` with
     ``A != B``, ``N != BOTTOM``, ``A, B, N != TOP``, all three satisfiable in
     ``cm``, and ``cm.entails(N, A) and cm.entails(N, B)`` (so
-    :math:`\\mathcal{O} \\models N \\equiv A \\sqcap B`). Enumerates triangles
+    :math:`\\mathcal{O} \\models N \\equiv A \\sqcap B`). If several names
+    ``N`` qualify for the same pair ``{A, B}`` (equivalent definitions of the
+    same conjunction), the edge is labelled with the lexicographically smallest
+    IRI string, so the reported ``pairwise_names`` are deterministic. Enumerates triangles
     ``(X1, X2, X3)`` with ``X1 < X2 < X3`` lexicographically and retains those
     whose pairwise conjunctions ``{X1, X2}``, ``{X1, X3}``, ``{X2, X3}`` are
     jointly satisfiable and whose triple ``{X1, X2, X3}`` is jointly
