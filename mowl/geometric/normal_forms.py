@@ -7,15 +7,17 @@ Guarantees:
   ``A1 and A2 <= bot``), :class:`NF3` (``A <= exists r.B``), :class:`NF4`
   (``exists r.A <= B`` and ``exists r.A <= bot``), :class:`NF6` (``r <= s``), and
   :class:`NF7` (``r1 o r2 <= s``).
-- Extracts role hierarchy (``SubObjectPropertyOf``) and role chain
-  (``SubPropertyChainOf``) axioms directly from the OWLAPI ontology, splitting
-  role chains of length > 2 using fresh auxiliary role IRIs
+- Extracts role hierarchy (``SubObjectPropertyOf``), role equivalence
+  (``EquivalentObjectProperties``), role transitivity
+  (``TransitiveObjectProperty``), and role chain (``SubPropertyChainOf``)
+  axioms directly from the OWLAPI ontology, splitting role chains of length > 2
+  using fresh auxiliary role IRIs
   ``http://mowl.borg/geo/aux#<sup_local>_chain_<i>``.
 - Collects all class IRIs in the ontology signature, all auxiliary class IRIs
   produced by :class:`~mowl.ontology.normalize.ELNormalizer`, ``TOP``, and
   ``BOTTOM`` into ``concept_names``.
-- Records the number of TBox axioms dropped during :class:`ELNormalizer`
-  preprocessing in ``dropped_axioms``.
+- Records the number of TBox and RBox axioms dropped during normalisation in
+  ``dropped_axioms``.
 
 References:
 - Baader, Brandt & Lutz, IJCAI 2005 (Pushing the EL Envelope — EL++ normal forms).
@@ -27,9 +29,10 @@ References:
 from __future__ import annotations
 
 from dataclasses import dataclass
+import itertools
 from typing import List, Set, Union
 
-from java.util import ArrayList
+from java.util import ArrayList, HashSet
 from org.semanticweb.owlapi.model import AxiomType, IRI, OWLOntology
 from org.semanticweb.owlapi.model.parameters import Imports
 
@@ -40,6 +43,13 @@ from mowl.owlapi import OWLAPIAdapter
 BOTTOM = "http://www.w3.org/2002/07/owl#Nothing"
 TOP = "http://www.w3.org/2002/07/owl#Thing"
 AUX_NS = "http://mowl.borg/geo/aux#"
+
+_SUPPORTED_TBOX_TYPES = {
+    AxiomType.SUBCLASS_OF,
+    AxiomType.EQUIVALENT_CLASSES,
+    AxiomType.DISJOINT_CLASSES,
+    AxiomType.OBJECT_PROPERTY_DOMAIN,
+}
 
 
 @dataclass(frozen=True)
@@ -130,9 +140,59 @@ def _local_name(iri: str) -> str:
 def normalise(source: Union[Dataset, OWLOntology]) -> NormalisedOntology:
     """Normalise a mOWL :class:`~mowl.datasets.Dataset` or OWLAPI ``OWLOntology``.
 
+    **Converted axioms:**
+
+    - *TBox (via* :class:`~mowl.ontology.normalize.ELNormalizer` *):*
+      ``SubClassOf``, ``EquivalentClasses``, ``DisjointClasses``, and
+      ``ObjectPropertyDomain(r, C)`` (which ``ELNormalizer`` translates into the
+      GCI ``exists r.owl:Thing <= C``, producing :class:`NF4` ``(r, TOP, A)``
+      when ``C`` is a concept name ``A``) constructed over ``EL_bot`` concepts
+      (named classes, ``owl:Thing``, ``owl:Nothing``, ``ObjectIntersectionOf``,
+      and ``ObjectSomeValuesFrom`` over named object properties) are normalised
+      into :class:`NF1`, :class:`NF2`, :class:`NF3`, and :class:`NF4`.
+    - *RBox (extracted across the imports closure):*
+      - ``SubObjectPropertyOf(r, s)`` with named ``r, s`` -> :class:`NF6` ``(r, s)``.
+      - ``EquivalentObjectProperties(r_1, ..., r_k)`` with named ``r_i`` ->
+        pairwise :class:`NF6` ``(r_i, r_j)`` and :class:`NF6` ``(r_j, r_i)`` for
+        all ``i != j``.
+      - ``TransitiveObjectProperty(r)`` with named ``r`` -> :class:`NF7` ``(r, r, r)``.
+      - ``SubPropertyChainOf([r], s)`` with named ``r, s`` -> :class:`NF6` ``(r, s)``.
+      - ``SubPropertyChainOf([r_1, r_2], s)`` with named ``r_1, r_2, s`` ->
+        :class:`NF7` ``(r_1, r_2, s)``.
+      - ``SubPropertyChainOf([r_1, ..., r_k], s)`` (``k > 2``) with named roles ->
+        split into ``k - 1`` :class:`NF7` axioms using fresh auxiliary roles
+        ``http://mowl.borg/geo/aux#<s_local>_chain_<i>``.
+
+    **Dropped axioms (each increments ``dropped_axioms`` by 1):**
+
+    - *TBox:*
+      - Any TBox axiom filtered out by :meth:`ELNormalizer.preprocess_ontology`
+        (axioms containing ``ObjectUnionOf``, ``ObjectComplementOf``,
+        ``ObjectAllValuesFrom``, ``ObjectMinCardinality``, ``ObjectMaxCardinality``,
+        ``ObjectExactCardinality``, ``ObjectHasSelf``, ``ObjectOneOf``, SWRL rules,
+        etc.).
+      - Any TBox axiom containing an inverse/anonymous object property expression
+        (``ObjectInverseOf``).
+      - ``ObjectPropertyRange`` axioms and any other OWLAPI TBox axiom type not
+        converted by ``ELNormalizer`` (``FunctionalObjectProperty``,
+        ``InverseFunctionalObjectProperty``, ``DisjointUnion``, ``HasKey``,
+        ``DatatypeDefinition``, ``DataPropertyDomain``, ``DataPropertyRange``,
+        ``FunctionalDataProperty``).
+    - *RBox:*
+      - ``SubObjectPropertyOf``, ``EquivalentObjectProperties``,
+        ``TransitiveObjectProperty``, or ``SubPropertyChainOf`` axioms that
+        contain any inverse/anonymous object property expression, or
+        ``EquivalentObjectProperties`` with fewer than 2 properties, or
+        ``SubPropertyChainOf`` with an empty property chain.
+      - Any other OWLAPI RBox axiom type (``InverseObjectProperties``,
+        ``SymmetricObjectProperty``, ``AsymmetricObjectProperty``,
+        ``ReflexiveObjectProperty``, ``IrreflexiveObjectProperty``,
+        ``DisjointObjectProperties``, ``SubDataPropertyOf``,
+        ``EquivalentDataProperties``, ``DisjointDataProperties``).
+
     :param source: Input dataset or OWLAPI ontology.
     :return: :class:`NormalisedOntology` with NF1–NF4, NF6, NF7 axioms, concept
-        and role signatures, and dropped TBox axiom count.
+        and role signatures, and total dropped TBox + RBox axiom count.
     """
     if isinstance(source, Dataset):
         ontology = source.ontology
@@ -149,7 +209,16 @@ def normalise(source: Union[Dataset, OWLOntology]) -> NormalisedOntology:
     prep_tbox = preprocessed.getTBoxAxioms(Imports.fromBoolean(True))
     dropped_axioms = max(0, int(orig_tbox.size()) - int(prep_tbox.size()))
 
-    gci_dict = normalizer.normalize(ontology)
+    filtered_tbox = HashSet()
+    for ax in prep_tbox:
+        ax_type = ax.getAxiomType()
+        if ax_type not in _SUPPORTED_TBOX_TYPES or "ObjectInverseOf" in str(ax.toString()):
+            dropped_axioms += 1
+        else:
+            filtered_tbox.add(ax)
+
+    clean_tbox_ont = OWLAPIAdapter().owl_manager.createOntology(filtered_tbox)
+    gci_dict = normalizer.normalize(clean_tbox_ont)
 
     axioms: List[Axiom] = []
     concept_names: Set[str] = {TOP, BOTTOM}
@@ -195,28 +264,52 @@ def normalise(source: Union[Dataset, OWLOntology]) -> NormalisedOntology:
         concept_names.add(sup)
         role_names.add(role)
 
-    # Extract role inclusions (NF6) across imports closure
-    for ont in ontology.getImportsClosure():
-        for ax in ont.getAxioms(AxiomType.SUB_OBJECT_PROPERTY):
+    # Extract RBox axioms across the imports closure and count unsupported RBox axioms
+    rbox_axioms = ontology.getRBoxAxioms(Imports.fromBoolean(True))
+    chain_counters: dict = {}
+    for ax in rbox_axioms:
+        ax_type = ax.getAxiomType()
+        if ax_type == AxiomType.SUB_OBJECT_PROPERTY:
             sub_p = ax.getSubProperty()
             sup_p = ax.getSuperProperty()
             if sub_p.isAnonymous() or sup_p.isAnonymous():
+                dropped_axioms += 1
                 continue
             sub_r = _clean_iri(sub_p)
             sup_r = _clean_iri(sup_p)
             axioms.append(NF6(sub_r, sup_r))
             role_names.add(sub_r)
             role_names.add(sup_r)
-
-    # Extract role chains (NF7) across imports closure, splitting chains of length > 2
-    chain_counters: dict = {}
-    for ont in ontology.getImportsClosure():
-        for ax in ont.getAxioms(AxiomType.SUB_PROPERTY_CHAIN_OF):
-            sup_p = ax.getSuperProperty()
-            if sup_p.isAnonymous():
+        elif ax_type == AxiomType.EQUIVALENT_OBJECT_PROPERTIES:
+            props = list(ax.getProperties())
+            if len(props) < 2 or any(p.isAnonymous() for p in props):
+                dropped_axioms += 1
                 continue
+            prop_iris = sorted({_clean_iri(p) for p in props})
+            if len(prop_iris) < 2:
+                dropped_axioms += 1
+                continue
+            for r_iri in prop_iris:
+                role_names.add(r_iri)
+            for r1, r2 in itertools.permutations(prop_iris, 2):
+                axioms.append(NF6(r1, r2))
+        elif ax_type == AxiomType.TRANSITIVE_OBJECT_PROPERTY:
+            prop = ax.getProperty()
+            if prop.isAnonymous():
+                dropped_axioms += 1
+                continue
+            r_iri = _clean_iri(prop)
+            axioms.append(NF7(r_iri, r_iri, r_iri))
+            role_names.add(r_iri)
+        elif ax_type == AxiomType.SUB_PROPERTY_CHAIN_OF:
+            sup_p = ax.getSuperProperty()
             chain_props = list(ax.getPropertyChain())
-            if any(p.isAnonymous() for p in chain_props):
+            if (
+                sup_p.isAnonymous()
+                or len(chain_props) == 0
+                or any(p.isAnonymous() for p in chain_props)
+            ):
+                dropped_axioms += 1
                 continue
             chain_iris = [_clean_iri(p) for p in chain_props]
             sup_r = _clean_iri(sup_p)
@@ -224,9 +317,7 @@ def normalise(source: Union[Dataset, OWLOntology]) -> NormalisedOntology:
                 role_names.add(r_iri)
             role_names.add(sup_r)
 
-            if len(chain_iris) == 0:
-                continue
-            elif len(chain_iris) == 1:
+            if len(chain_iris) == 1:
                 axioms.append(NF6(chain_iris[0], sup_r))
             elif len(chain_iris) == 2:
                 axioms.append(NF7(chain_iris[0], chain_iris[1], sup_r))
@@ -245,6 +336,8 @@ def normalise(source: Union[Dataset, OWLOntology]) -> NormalisedOntology:
                     axioms.append(NF7(prev, chain_iris[idx], fresh_role))
                     prev = fresh_role
                 axioms.append(NF7(prev, chain_iris[-1], sup_r))
+        else:
+            dropped_axioms += 1
 
     return NormalisedOntology(
         axioms=axioms,
