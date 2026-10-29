@@ -9,6 +9,7 @@ import torch.nn as nn
 
 from mowl.nn import ELModule
 import mowl.nn.el.boxsquaredel.losses as B2L
+from mowl.nn.el.boxsquaredel.module import BoxSquaredELModule
 import mowl.nn.el.multiboxel.losses as L
 
 
@@ -123,17 +124,8 @@ class MultiBoxELModule(ELModule):
         self.reg_factor = reg_factor
         self.component_reg = component_reg
 
-    def init_embeddings(
-        self, num_entities: int, embed_dim: int, min: float = -1.0, max: float = 1.0
-    ) -> nn.Embedding:
-        """Initialise a single-component embedding table normalised per row."""
-        embeddings = nn.Embedding(num_entities, embed_dim)
-        nn.init.uniform_(embeddings.weight, a=min, b=max)
-        if num_entities > 0:
-            embeddings.weight.data /= th.linalg.norm(
-                embeddings.weight.data, dim=1, keepdim=True
-            )
-        return embeddings
+    # Single-component tables (roles, bumps, individuals) use the Box²EL initialiser.
+    init_embeddings = BoxSquaredELModule.init_embeddings
 
     def init_class_embeddings(
         self,
