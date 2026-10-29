@@ -44,3 +44,4 @@ docs/source/api/mowl.*
 
 **/wandb
 tests/geometric/_scratch/
+*_mowl_el_normalized*.owl

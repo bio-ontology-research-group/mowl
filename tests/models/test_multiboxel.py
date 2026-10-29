@@ -64,6 +64,24 @@ def _is_degenerate(boxes: Tuple[np.ndarray, np.ndarray], eps: float = 1e-3) -> b
     return not bool(np.any(valid_components))
 
 
+_W_MIN = 0.05
+
+
+def _width_floor(module: torch.nn.Module, w_min: float = _W_MIN) -> torch.Tensor:
+    """Sum over all class boxes (all components) and all coordinates of relu(w_min - |offset|)."""
+    return torch.relu(w_min - torch.abs(module.class_offset.weight)).sum()
+
+
+class _FlooredMultiBoxEL(MultiBoxEL):
+    def get_regularization_loss(self) -> torch.Tensor:
+        return super().get_regularization_loss() + _width_floor(self.module)
+
+
+class _FlooredBoxSquaredEL(BoxSquaredEL):
+    def get_regularization_loss(self) -> torch.Tensor:
+        return super().get_regularization_loss() + _width_floor(self.module)
+
+
 def _total_positive_loss(model: MultiBoxEL | BoxSquaredEL) -> float:
     """Sum over all non-empty training GCI datasets of the mean positive loss."""
     total = 0.0
@@ -94,63 +112,69 @@ def test_multiboxel_trains_on_t3(t3_dataset: PathDataset, tmp_path: Path) -> Non
 @pytest.mark.xfail(
     strict=True,
     reason=(
-        "With margin=-0.05 (gamma=-0.05), BoxSquaredEL satisfies loss > 1e-3 on all "
-        "runs (seed=0: 1.27e-02 at 3000 epochs, 1.26e-02 at 6000; seed=1: 1.27e-02 at "
-        "3000, 1.35e-02 at 6000; seed=2: 1.31e-02 at 3000, 1.32e-02 at 6000), and "
-        "MultiBoxEL(k=2) satisfies triple_nonempty=False and deg={'A': False, 'B': False, "
-        "'C': False} on seeds 0 and 2, but because T3 contains both directions of the "
-        "equivalences A == X1 and X2 (A <= X1, A <= X2 in gci0 requiring o_{X1 cap X2} >= "
-        "o_A + 0.05, and X1 and X2 <= A in gci1 requiring o_A >= o_{X1 cap X2} + 0.05), "
-        "gamma=-0.05 imposes a positive lower bound on gci0_loss + gci1_loss for any "
-        "finite k, so MultiBoxEL(k=2) does not reach < 1e-4 across seeds 0..2 and epochs "
-        "in {3000, 6000} (seed=0: 4.91e-03 at 3000 epochs [gci0=3.13e-03, gci1=1.41e-03, "
-        "gci1_bot=3.69e-04], 4.76e-03 at 6000; seed=1: 9.72e-03 at 3000, 9.87e-03 at 6000, "
-        "triple_nonempty=True; seed=2: 8.99e-03 at 3000, 7.05e-03 at 6000)."
+        "With margin=0.0 and width-floor regulariser w_min=0.05 (weight 1.0), "
+        "BoxSquaredEL satisfies axiom_loss + floor > 1e-3 on all runs (seed=0: "
+        "7.68e-03 + 0.00e+00 = 7.68e-03 at 3000 epochs, 8.10e-03 + 1.11e-03 = "
+        "9.21e-03 at 6000; seed=1: 6.05e-03 at 3000, 6.82e-03 at 6000; seed=2: "
+        "3.89e-03 at 3000, 3.78e-03 at 6000), and MultiBoxEL(k=2) at seed=0 "
+        "satisfies min_d |offset| = 0.0662 >= 0.045 (floor=0.00e+00, deg={'A': "
+        "False, 'B': False, 'C': False}) and triple_nonempty=False, but because "
+        "gci1_score gates pairwise intersections by 2-D non-emptiness while "
+        "gci1_bot_score penalises 1-D overlap in every coordinate independently, "
+        "Adam (lr=0.01) plateaus in a local minimum / non-smooth hinge oscillation "
+        "above 1e-4 across seeds 0..2 and epochs in {3000, 6000} (seed=0: "
+        "axiom=1.31e-03 [gci0=3.62e-04, gci1=1.51e-04, gci1_bot=7.95e-04], "
+        "floor=0.00e+00, min_off=0.0662 at 3000 epochs, axiom=1.65e-03 at 6000; "
+        "seed=1: axiom=3.30e-03 at 3000, 4.38e-03 at 6000, triple_nonempty=True; "
+        "seed=2: axiom=5.70e-03 at 3000, 5.43e-03 at 6000, triple_nonempty=True)."
     ),
 )
 def test_t3_solvability_multibox_vs_box2el(
     t3_dataset: PathDataset, tmp_path: Path
 ) -> None:
-    """Compare MultiBoxEL(k=2) and BoxSquaredEL on the Helly-violating T3 TBox at margin=-0.05.
+    """Compare MultiBoxEL(k=2) and BoxSquaredEL on the Helly-violating T3 TBox at margin=0.0 with a width floor.
 
-    In Box²EL and MultiBoxEL, ``gamma`` (``margin``) is subtracted inside ``relu`` in
-    ``inclusion_score(a, b, gamma) = ||relu(dist + 2*o_a - gamma)||_2`` and
-    ``gci1_bot_score = ||relu(-box_dist - gamma)||_2``. Consequently, a positive
-    ``gamma`` relaxes containment and disjointness by ``gamma``, whereas a negative
-    ``gamma`` enforces a strict interior containment margin and a strict separation gap.
+    At ``gamma = 0`` both directions of each equivalence ``A == X1 and X2`` are
+    simultaneously satisfiable by exact box equality, while adding the width-floor
+    regulariser ``sum(relu(0.05 - |offset|))`` prevents single-box models from
+    escaping Helly's theorem by collapsing ``A, B, C`` to zero-width points.
+    Consequently, any single-box embedding with widths ``>= 0.05`` must overlap on
+    ``X1 cap X2 cap X3 != empty`` and incur strictly positive ``gci1_bot`` or
+    width-floor loss, whereas a 2-component multibox model admits an exact zero-loss
+    configuration with all half-widths ``>= 0.05`` and ``X1 cap X2 cap X3 == empty``.
 
-    Measured final total positive losses (seed=0, embed_dim=2, lr=0.01, epochs=3000,
-    margin=-0.05, component_reg=0.0, neg_sampling_gcis=[]):
-    - MultiBoxEL(k=2): ``4.91e-03`` (``4.76e-03`` at 6000 epochs; ``triple_nonempty=False``, non-degenerate)
-    - BoxSquaredEL: ``1.27e-02`` (``1.26e-02`` at 6000 epochs)
+    Measured final losses (seed=0, embed_dim=2, lr=0.01, epochs=3000, margin=0.0,
+    w_min=0.05, neg_sampling_gcis=[]):
+    - MultiBoxEL(k=2): axiom ``1.31e-03``, floor ``0.00e+00``, ``min_d |offset| = 0.0662``
+      (``1.65e-03`` at 6000 epochs; ``triple_nonempty=False``, non-degenerate)
+    - BoxSquaredEL: axiom ``7.68e-03``, floor ``0.00e+00``, total ``7.68e-03``
+      (axiom ``8.10e-03``, floor ``1.11e-03``, total ``9.21e-03`` at 6000 epochs)
     """
     torch.manual_seed(0)
-    mb = MultiBoxEL(
+    mb = _FlooredMultiBoxEL(
         t3_dataset,
         embed_dim=2,
         n_components=2,
-        margin=-0.05,
+        margin=0.0,
         learning_rate=0.01,
         neg_sampling_gcis=[],
         model_filepath=str(tmp_path / "mb_t3.pt"),
     )
     mb.train(epochs=3000, validate_every=4000)
     mb_loss = _total_positive_loss(mb)
+    mb_min_offset = float(torch.abs(mb.module.class_offset.weight).min().item())
 
     torch.manual_seed(0)
-    b2 = BoxSquaredEL(
+    b2 = _FlooredBoxSquaredEL(
         t3_dataset,
         embed_dim=2,
-        margin=-0.05,
+        margin=0.0,
         learning_rate=0.01,
         neg_sampling_gcis=[],
         model_filepath=str(tmp_path / "b2_t3.pt"),
     )
     b2.train(epochs=3000, validate_every=4000)
-    b2_loss = _total_positive_loss(b2)
-
-    assert mb_loss < 1e-4, f"Expected MultiBoxEL loss < 1e-4, got {mb_loss}"
-    assert b2_loss > 1e-3, f"Expected BoxSquaredEL loss > 1e-3, got {b2_loss}"
+    b2_loss = _total_positive_loss(b2) + float(_width_floor(b2.module).item())
 
     def _get_mb_boxes(iri: str) -> Tuple[np.ndarray, np.ndarray]:
         idx = torch.tensor([mb.class_index_dict[iri]], dtype=torch.long)
@@ -160,10 +184,15 @@ def test_t3_solvability_multibox_vs_box2el(
             off[0].detach().cpu().numpy(),
         )
 
+    assert mb_min_offset >= 0.045, (
+        f"Expected MultiBoxEL min_d |offset| >= 0.045, got {mb_min_offset}"
+    )
+    for name in ("A", "B", "C"):
+        assert not _is_degenerate(_get_mb_boxes(NS + name)), f"{name} is degenerate"
     assert not _triple_nonempty(
         _get_mb_boxes(NS + "X1"),
         _get_mb_boxes(NS + "X2"),
         _get_mb_boxes(NS + "X3"),
     )
-    for name in ("A", "B", "C"):
-        assert not _is_degenerate(_get_mb_boxes(NS + name)), f"{name} is degenerate"
+    assert b2_loss > 1e-3, f"Expected BoxSquaredEL axiom loss + floor > 1e-3, got {b2_loss}"
+    assert mb_loss < 1e-4, f"Expected MultiBoxEL axiom loss < 1e-4, got {mb_loss}"
