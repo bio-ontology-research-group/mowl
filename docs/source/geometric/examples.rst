@@ -30,10 +30,14 @@ obtain the non-box-representability certificate, verifies that
 bounding-box export :func:`~mowl.geometric.export.to_bounding_boxes` is not a
 model:
 
-.. code-block:: python
+.. testcode::
+
+   import pathlib
 
    import mowl
-   mowl.init_jvm("2g")
+   mowl.init_jvm("2g")  # no-op if the JVM is already running
+
+   FIXTURES = pathlib.Path(mowl.__file__).resolve().parents[1] / "tests" / "geometric" / "fixtures"
 
    from mowl.datasets import PathDataset
    from mowl.geometric import (
@@ -47,7 +51,7 @@ model:
    )
 
    NS = "http://mowl.borg/geo#"
-   ds = PathDataset("tests/geometric/fixtures/t3.owl")
+   ds = PathDataset(str(FIXTURES / "t3.owl"))
 
    # 1. Canonical model via ELK-style completion
    cm = CanonicalModel.from_dataset(ds)
@@ -101,7 +105,14 @@ model via mixed-integer linear programming (`scipy.optimize.milp`) over
 by :attr:`mowl.datasets.Dataset.class_to_id` using
 :func:`~mowl.geometric.export.boxes_as_tensors`:
 
-.. code-block:: python
+.. testcode::
+
+   import pathlib
+
+   import mowl
+   mowl.init_jvm("2g")  # no-op if the JVM is already running
+
+   FIXTURES = pathlib.Path(mowl.__file__).resolve().parents[1] / "tests" / "geometric" / "fixtures"
 
    import numpy as np
    from mowl.datasets import PathDataset
@@ -112,7 +123,7 @@ by :attr:`mowl.datasets.Dataset.class_to_id` using
        helly_check,
    )
 
-   ds_ok = PathDataset("tests/geometric/fixtures/helly_ok.owl")
+   ds_ok = PathDataset(str(FIXTURES / "helly_ok.owl"))
    cm_ok = CanonicalModel.from_dataset(ds_ok)
 
    # The Helly check finds no obstruction ("obstruction-free"). This does NOT
@@ -167,14 +178,28 @@ behaviour unchanged):
   :meth:`~mowl.geometric.init.ExactBoxInit.apply_to_module`, and are ignored by
   :meth:`~mowl.geometric.init.ExactBoxInit.anchor_loss`.
 
-.. code-block:: python
+.. testcode::
+
+   import shutil
+   import tempfile
+   import pathlib
+
+   import mowl
+   mowl.init_jvm("2g")  # no-op if the JVM is already running
+
+   FIXTURES = pathlib.Path(mowl.__file__).resolve().parents[1] / "tests" / "geometric" / "fixtures"
 
    import torch
    from mowl.datasets import PathDataset
    from mowl.geometric import CanonicalModel, ExactBoxInit
    from mowl.models import BoxSquaredEL, ELBE
 
-   t3_dataset = PathDataset("tests/geometric/fixtures/t3.owl")
+   # Work on a copy so that the EL normaliser's cache file
+   # (<name>_mowl_el_normalized_v2.owl) is written next to the copy,
+   # not into the source tree.
+   workdir = pathlib.Path(tempfile.mkdtemp())
+   shutil.copy(FIXTURES / "t3.owl", workdir / "t3.owl")
+   t3_dataset = PathDataset(str(workdir / "t3.owl"))
    cm = CanonicalModel.from_dataset(t3_dataset)
    init = ExactBoxInit.from_dataset(t3_dataset, embed_dim=7, seed=0)
 
@@ -215,7 +240,10 @@ MultiBoxEL on :math:`T_3`
 
 :class:`~mowl.models.MultiBoxEL` (:class:`~mowl.nn.MultiBoxELModule`) represents
 every ontology class as a union of :math:`k = \text{n\_components}` axis-parallel
-boxes in :math:`\mathbb{R}^d` under Box²EL semantics:
+boxes in :math:`\mathbb{R}^d` under Box²EL semantics. MultiBoxEL does not
+support role axioms: its constructor has no ``load_role_axioms`` parameter, so
+passing ``load_role_axioms=True`` raises ``TypeError``. Its losses have the
+following properties:
 
 * **Exact** :math:`k = 1` **identity:** When ``n_components=1`` and
   ``component_reg=0.0``, every GCI loss (positive and negative, including
@@ -244,7 +272,16 @@ boxes in :math:`\mathbb{R}^d` under Box²EL semantics:
   :math:`(A, B, C)`, which no non-degenerate single-box model (:math:`k = 1`) can
   satisfy, whereas :class:`~mowl.models.MultiBoxEL` with ``n_components=2`` can:
 
-.. code-block:: python
+.. testcode::
+
+   import shutil
+   import tempfile
+   import pathlib
+
+   import mowl
+   mowl.init_jvm("2g")  # no-op if the JVM is already running
+
+   FIXTURES = pathlib.Path(mowl.__file__).resolve().parents[1] / "tests" / "geometric" / "fixtures"
 
    import numpy as np
    import torch
@@ -253,7 +290,12 @@ boxes in :math:`\mathbb{R}^d` under Box²EL semantics:
    from mowl.models import MultiBoxEL
 
    NS = "http://mowl.borg/geo#"
-   t3_dataset = PathDataset("tests/geometric/fixtures/t3.owl")
+   # Work on a copy so that the EL normaliser's cache file
+   # (<name>_mowl_el_normalized_v2.owl) is written next to the copy,
+   # not into the source tree.
+   workdir = pathlib.Path(tempfile.mkdtemp())
+   shutil.copy(FIXTURES / "t3.owl", workdir / "t3.owl")
+   t3_dataset = PathDataset(str(workdir / "t3.owl"))
    cm = CanonicalModel.from_dataset(t3_dataset)
 
    # 1. Scalable NF2 triangle finder detects the T3 Helly obstruction
