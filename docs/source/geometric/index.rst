@@ -47,9 +47,14 @@ Recent theoretical results characterise when *exact* geometric region models of
 The :mod:`mowl.geometric` package implements these constructive models, an exact
 geometric model checker (:class:`~mowl.geometric.checker.ModelChecker`), a
 Helly-satisfiability diagnostic with non-box-representability certificates
-(:func:`~mowl.geometric.helly.helly_check`), and a mixed-integer linear
+(:func:`~mowl.geometric.helly.helly_check` and the scalable triangle finder
+:func:`~mowl.geometric.helly.certificate_triangles`), a mixed-integer linear
 programming builder for axis-parallel box models
-(:class:`~mowl.geometric.boxes.BoxModelBuilder`).
+(:class:`~mowl.geometric.boxes.BoxModelBuilder`), and exact-model box
+initialisation and anchoring for learnable box embeddings
+(:class:`~mowl.geometric.init.ExactBoxInit`, integrated with
+:class:`~mowl.models.BoxSquaredEL`, :class:`~mowl.models.ELBE`, and the
+multi-component :class:`~mowl.models.MultiBoxEL` model).
 
 
 Guarantees by model and procedure
@@ -86,6 +91,18 @@ constructed model ever fails verification, construction raises
      - Propositional :math:`\mathcal{EL}_\bot` (exact for strong reading when ``complete=True``); sound necessary condition with roles
      - Every :class:`~mowl.geometric.helly.HellyCertificate` is a sound proof that no box model realises its three pairwise conjunctions simultaneously (`Eckhoff, 1988`; `Leemhuis & Kutz, NeSy 2025, Props. 4, 5`). Non-degenerate certificates exclude every non-degenerate box model; strong certificates exclude *conjunction-faithful* box models (every satisfiable conjunction of names non-empty), not box models that are merely strongly faithful on names. ``box_representable_* = True`` means "no Helly obstruction of this kind was found", not that a box model exists. Re-saturates per candidate set; intended for small to medium ontologies.
      - Dimension-independent (excludes box models in *any* :math:`\mathbb{R}^d`)
+   * - :func:`~mowl.geometric.helly.certificate_triangles`
+     - Any normalised :math:`\mathcal{EL}^{++}` canonical model (graph of direct :class:`~mowl.geometric.normal_forms.NF2` definitions)
+     - Sound non-degenerate singleton certificates :math:`(X_1, X_2, X_3)` with :math:`X_1 < X_2 < X_3` lexicographically and all three ``pairwise_names`` non-``None`` and satisfiable. Returns every singleton non-degenerate certificate whose pairwise conjunctions are direct ``NF2`` definitions in :math:`O(\sum_v \deg(v)^2)` triangle-enumeration time; **not complete** for conjunctions defined through chains of equivalences or higher-arity certificates (:math:`|C_i| > 1`).
+     - Dimension-independent (excludes non-degenerate box models in *any* :math:`\mathbb{R}^d`)
+   * - :class:`~mowl.geometric.init.ExactBoxInit`
+     - Normalised :math:`\mathcal{EL}^{++}` (``method="projected"``) or propositional :math:`\mathcal{EL}_\bot` with fallback to ``"projected"`` (``method="milp"``)
+     - In ``"projected"`` mode with :math:`k = 1`, guarantees :math:`\text{box}(C) \subseteq \text{box}(D)` (up to ``float32`` tolerance ``1e-6``) and zero ``gci0`` loss at margin :math:`0` for every entailed atomic subsumption :math:`C \sqsubseteq D` with **satisfiable** :math:`C` (unsatisfiable subclasses are points at the origin and are not covered; disjointness is not guaranteed). In ``"milp"`` mode, preserves both containment and disjointness when a box model is found, and falls back to ``"projected"`` on :class:`~mowl.geometric.errors.NotBoxRepresentable` or :class:`~mowl.geometric.errors.BoxModelNotFound`. Skips classes absent from the canonical model (``NaN`` rows left untouched by :meth:`~mowl.geometric.init.ExactBoxInit.apply_to_module` and ignored by :meth:`~mowl.geometric.init.ExactBoxInit.anchor_loss`).
+     - Target :math:`(k, d)` matching :class:`~mowl.models.BoxSquaredEL`, :class:`~mowl.models.ELBE` (:math:`k = 1`), or :class:`~mowl.models.MultiBoxEL` (:math:`k \ge 1`)
+   * - :class:`~mowl.models.MultiBoxEL` / :class:`~mowl.nn.MultiBoxELModule`
+     - :math:`\mathcal{EL}^{++}` concept normal forms (``gci0``, ``gci1``, ``gci2``, ``gci3``, ``gci0_bot``, ``gci1_bot``, ``gci3_bot``) and ABox assertions (``role_axiom_capable = False``)
+     - Every class is a union of :math:`k = \text{n\_components}` axis-parallel boxes with shared class bump and Box²EL role semantics. At :math:`k = 1` with ``component_reg=0.0``, every GCI loss (positive and negative, including ``gci1`` batches with empty intersections) and regularisation loss equal :class:`~mowl.models.BoxSquaredEL` to within ``1e-6``. In ``gci1``, a detached argmin over emptiness selects a designated pair :math:`(i^*, j^*)` and a detached gate :math:`g_{ij} = 1` iff :math:`\text{lo}_{ij} \le \text{up}_{ij}` in all coordinates or :math:`(i, j) = (i^*, j^*)` imposes inclusion only on non-empty (plus the designated) component intersections. In ``gci1_bot``, zero loss at :math:`\gamma = 0` requires :math:`\text{dist}(C_i, D_j) \ge 0` in *every* coordinate across all :math:`k^2` pairs (zero loss implies disjointness up to boundary contact, but disjointness does not imply zero loss).
+     - :math:`k` boxes in :math:`\mathbb{R}^d` per class (:math:`k \ge 2` escapes the Helly number 2 obstruction on :math:`T_3`)
    * - :class:`~mowl.geometric.boxes.BoxModelBuilder`
      - Propositional :math:`\mathcal{EL}_\bot` only (:class:`~mowl.geometric.normal_forms.NF1`, :class:`~mowl.geometric.normal_forms.NF2`, and :math:`\bot` forms)
      - Runs :func:`~mowl.geometric.helly.helly_check` first and, in both ``faithful`` modes, raises :class:`~mowl.geometric.errors.NotBoxRepresentable` iff a non-degenerate certificate is found (a proof that no non-degenerate box model exists); searches via MILP (`scipy.optimize.milp`) and verifies any found :class:`~mowl.geometric.boxes.BoxModel` with :class:`~mowl.geometric.checker.ModelChecker` (a time-limited incumbent is post-checked and returned only if it passes). Raises :class:`~mowl.geometric.errors.BoxModelNotFound` when inconclusive.
@@ -202,6 +219,63 @@ Limitations and caveats
    simplex faces intersect strictly more often than the faces themselves, the
    resulting boxes **do not satisfy the ontology's disjointness or conjunction
    axioms** and must never be treated as a model.
+
+6. **Projected box initialisation (:class:`~mowl.geometric.init.ExactBoxInit`) and ``certificate_triangles``**
+
+   * *Satisfiable subclasses only; no disjointness under projected init:* With
+     ``method="projected"`` and ``n_components=1``, :class:`~mowl.geometric.init.ExactBoxInit`
+     places each canonical domain element at a Gaussian point in :math:`\mathbb{R}^d`
+     and assigns each satisfiable concept name the padded bounding box of its
+     extension. Because bounding boxes are monotone under set inclusion,
+     :math:`\text{box}(C) \subseteq \text{box}(D)` holds (up to ``float32``
+     rounding, ``1e-6``) for every entailed atomic subsumption :math:`C \sqsubseteq D`
+     with a **satisfiable** subclass :math:`C` (giving zero ``gci0`` loss at
+     margin :math:`0` immediately after :meth:`~mowl.geometric.init.ExactBoxInit.apply_to_module`).
+     Axioms :math:`U \sqsubseteq A` with an **unsatisfiable** subclass :math:`U`
+     are not covered (unsatisfiable concepts and ``BOTTOM`` are placed as point
+     boxes at the origin, and no single point placement can satisfy subsumptions
+     into mutually disjoint superclasses). Disjointness (:math:`A \sqcap B \sqsubseteq \bot`)
+     is **not** guaranteed under ``method="projected"`` because projected
+     bounding boxes overlap.
+   * *Incompleteness of* :func:`~mowl.geometric.helly.certificate_triangles`:
+     :func:`~mowl.geometric.helly.certificate_triangles` enumerates triangles in
+     the graph of direct :class:`~mowl.geometric.normal_forms.NF2` definitions
+     (:math:`A \sqcap B \sqsubseteq N` with :math:`\mathcal{O} \models N \equiv A \sqcap B`).
+     Every returned certificate is a sound non-degenerate singleton
+     :class:`~mowl.geometric.helly.HellyCertificate`, but the procedure is **not
+     complete**: pairwise conjunctions defined through chains of equivalences or
+     multi-step normalisations without a direct ``NF2(A, B, N)`` axiom, as well
+     as higher-arity certificates where :math:`|C_i| > 1`, are not found.
+
+7. **MultiBoxEL (:class:`~mowl.models.MultiBoxEL`, :class:`~mowl.nn.MultiBoxELModule`)**
+
+   * *Exact* :math:`k = 1` *identity:* When ``n_components=1`` and
+     ``component_reg=0.0``, every GCI loss (positive and negative, including
+     ``gci1`` batches containing empty pairwise intersections) and
+     :meth:`~mowl.nn.MultiBoxELModule.regularization_loss` agree with
+     :class:`~mowl.nn.el.boxsquaredel.module.BoxSquaredELModule` to within
+     ``1e-6``.
+   * *Gated pairwise intersections in* ``gci1``: For :math:`C \sqcap D \sqsubseteq E`,
+     let :math:`(i^*, j^*) = \arg\min_{i,j} \text{empt}(C_i, D_j)` be the
+     designated component pair (selected without gradient). The detached gate
+     :math:`g_{ij} = 1` if :math:`\text{lo}_{ij} \le \text{up}_{ij}` in every
+     coordinate or :math:`(i, j) = (i^*, j^*)`, else :math:`0`, enforces
+     inclusion into some component :math:`E_m` only on intersecting pairs (plus
+     the designated pair, which also receives the non-emptiness penalty
+     :math:`\text{empt}(C_{i^*}, D_{j^*})`), while disjoint non-designated pairs
+     impose no penalty.
+   * *Coordinatewise separation in* ``gci1_bot``: Inherited from Box²EL,
+     ``gci1_bot_loss`` for :math:`C \sqcap D \sqsubseteq \bot` sums
+     :math:`\text{relu}(-\text{dist}(C_i, D_j) - \gamma)` across all coordinates
+     and all :math:`k^2` pairs. At :math:`\gamma = 0`, zero loss implies that
+     all component pairs are disjoint (up to boundary contact), **but not
+     conversely**: two boxes separated in one coordinate whose projections
+     overlap in another coordinate are disjoint in :math:`\mathbb{R}^d` yet
+     incur positive ``gci1_bot_loss``.
+   * *Non-convexity:* Taking minima over target components and gating over
+     pairwise intersections yields a piecewise-smooth non-convex objective;
+     gradient-based training is not guaranteed to converge to a global optimum
+     from arbitrary random initialisations.
 
 
 References

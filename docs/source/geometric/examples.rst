@@ -134,3 +134,154 @@ by :attr:`mowl.datasets.Dataset.class_to_id` using
    # frequently have lo == hi (offsets == 0). If seeding a gradient-based trainer
    # that requires positive box volume, clamp offsets from below before training:
    offsets_with_volume = np.maximum(offsets, 1e-3)
+
+
+Initialising box embeddings from the exact model
+------------------------------------------------
+
+:class:`~mowl.geometric.init.ExactBoxInit` initialises the class boxes of
+:class:`~mowl.models.BoxSquaredEL`, :class:`~mowl.models.ELBE`, and
+:class:`~mowl.models.MultiBoxEL` directly from the canonical model of the
+training ontology (and optionally adds an :math:`L_2^2` anchor regulariser via
+``anchor_weight > 0``; defaults ``init_boxes=None, anchor_weight=0.0`` leave
+behaviour unchanged):
+
+* **Containment guarantee (projected mode,** :math:`k = 1` **):** When
+  ``method="projected"`` and ``n_components=1``, every entailed atomic
+  subsumption :math:`C \sqsubseteq D` with a **satisfiable** subclass :math:`C`
+  satisfies :math:`\text{box}(C) \subseteq \text{box}(D)` (up to ``float32``
+  tolerance ``1e-6``), so every ``gci0`` training axiom whose subclass is
+  satisfiable has zero :class:`~mowl.models.BoxSquaredEL` /
+  :class:`~mowl.models.ELBE` loss at margin :math:`0` immediately after
+  :meth:`~mowl.geometric.init.ExactBoxInit.apply_to_module`.
+* **Non-guarantees:** Axioms :math:`U \sqsubseteq A` whose subclass :math:`U` is
+  **unsatisfiable** are not covered (unsatisfiable concepts and ``BOTTOM`` are
+  initialised to the point box at the origin, ``center = 0, offset = 0``), and
+  projected bounding boxes do **not** guarantee disjointness
+  (:math:`A \sqcap B \sqsubseteq \bot`). When ``method="milp"`` is requested on
+  an ontology with a non-degenerate Helly certificate (such as :math:`T_3`) or
+  when the MILP search is inconclusive, construction automatically falls back to
+  ``"projected"`` and records ``report["fallback"]``. Classes present in
+  ``dataset.class_to_id`` but absent from the canonical model receive ``NaN`` in
+  ``init.centers`` / ``init.offsets``, are left untouched by
+  :meth:`~mowl.geometric.init.ExactBoxInit.apply_to_module`, and are ignored by
+  :meth:`~mowl.geometric.init.ExactBoxInit.anchor_loss`.
+
+.. code-block:: python
+
+   import torch
+   from mowl.datasets import PathDataset
+   from mowl.geometric import CanonicalModel, ExactBoxInit
+   from mowl.models import BoxSquaredEL, ELBE
+
+   t3_dataset = PathDataset("tests/geometric/fixtures/t3.owl")
+   cm = CanonicalModel.from_dataset(t3_dataset)
+   init = ExactBoxInit.from_dataset(t3_dataset, embed_dim=7, seed=0)
+
+   # 1. Containment guarantee for every entailed subsumption with satisfiable subclass
+   c2i = init.class_to_id
+   for a in cm.names:
+       for b in cm.names:
+           if cm.entails(a, b) and cm.is_satisfiable(a):
+               lo_a = init.centers[c2i[a], 0] - init.offsets[c2i[a], 0]
+               hi_a = init.centers[c2i[a], 0] + init.offsets[c2i[a], 0]
+               lo_b = init.centers[c2i[b], 0] - init.offsets[c2i[b], 0]
+               hi_b = init.centers[c2i[b], 0] + init.offsets[c2i[b], 0]
+               assert (lo_b - 1e-6 <= lo_a).all() and (hi_a <= hi_b + 1e-6).all()
+
+   # 2. Apply via init_boxes and anchor_weight hooks on BoxSquaredEL and ELBE
+   b2 = BoxSquaredEL(
+       t3_dataset, embed_dim=7, margin=0.0, init_boxes=init, anchor_weight=0.1
+   )
+   elbe = ELBE(
+       t3_dataset, embed_dim=7, margin=0.0, init_boxes=init, anchor_weight=0.1
+   )
+
+   # Every gci0 training axiom (all subclasses in t3.owl are satisfiable) has zero loss at margin 0
+   gci0_data = b2.training_datasets["gci0"].data
+   with torch.no_grad():
+       assert torch.all(b2.module(gci0_data, "gci0") <= 1e-6)
+
+   # MILP mode falls back to "projected" when NotBoxRepresentable is raised on T3
+   init_milp = ExactBoxInit.from_dataset(
+       t3_dataset, embed_dim=4, method="milp", milp_time_limit=20.0
+   )
+   assert init_milp.method == "projected"
+   assert init_milp.report["fallback"].startswith("NotBoxRepresentable")
+
+
+MultiBoxEL on :math:`T_3`
+-------------------------
+
+:class:`~mowl.models.MultiBoxEL` (:class:`~mowl.nn.MultiBoxELModule`) represents
+every ontology class as a union of :math:`k = \text{n\_components}` axis-parallel
+boxes in :math:`\mathbb{R}^d` under Box²EL semantics:
+
+* **Exact** :math:`k = 1` **identity:** When ``n_components=1`` and
+  ``component_reg=0.0``, every GCI loss (positive and negative, including
+  ``gci1`` batches with empty intersections) and
+  :meth:`~mowl.nn.MultiBoxELModule.regularization_loss` equal
+  :class:`~mowl.models.BoxSquaredEL` to within ``1e-6``.
+* **Gated** ``gci1`` **and coordinatewise** ``gci1_bot``: In ``gci1``
+  (:math:`C \sqcap D \sqsubseteq E`), a detached argmin over emptiness selects a
+  designated component pair :math:`(i^*, j^*) = \arg\min_{i,j} \text{empt}(C_i, D_j)`,
+  and the detached gate :math:`g_{ij} = 1` iff :math:`\text{lo}_{ij} \le \text{up}_{ij}`
+  in every coordinate or :math:`(i, j) = (i^*, j^*)` enforces inclusion into some
+  component :math:`E_m` only on intersecting pairs (plus the designated pair), so
+  disjoint non-designated pairs impose nothing. In ``gci1_bot``
+  (:math:`C \sqcap D \sqsubseteq \bot`), zero loss at :math:`\gamma = 0` holds
+  iff :math:`\text{dist}(C_i, D_j) \ge 0` in *every* coordinate across all
+  :math:`k^2` pairs (zero loss implies disjointness up to boundary contact,
+  **but not conversely**).
+* **Certificate triangles and** :math:`T_3`:
+  :func:`~mowl.geometric.helly.certificate_triangles` enumerates non-degenerate
+  singleton certificates on the graph of direct
+  :class:`~mowl.geometric.normal_forms.NF2` definitions in
+  :math:`O(\sum_v \deg(v)^2)` time (it is sound on all returned triangles,
+  though **not complete** for conjunctions defined through chains of equivalences
+  or higher-arity certificates). On ``tests/geometric/fixtures/t3.owl`` it
+  returns the single triangle :math:`(X_1, X_2, X_3)` with pairwise names
+  :math:`(A, B, C)`, which no non-degenerate single-box model (:math:`k = 1`) can
+  satisfy, whereas :class:`~mowl.models.MultiBoxEL` with ``n_components=2`` can:
+
+.. code-block:: python
+
+   import numpy as np
+   import torch
+   from mowl.datasets import PathDataset
+   from mowl.geometric import CanonicalModel, ExactBoxInit, certificate_triangles
+   from mowl.models import MultiBoxEL
+
+   NS = "http://mowl.borg/geo#"
+   t3_dataset = PathDataset("tests/geometric/fixtures/t3.owl")
+   cm = CanonicalModel.from_dataset(t3_dataset)
+
+   # 1. Scalable NF2 triangle finder detects the T3 Helly obstruction
+   triangles = certificate_triangles(cm)
+   assert len(triangles) == 1
+   cert = triangles[0]
+   assert (cert.c1, cert.c2, cert.c3) == ((NS + "X1",), (NS + "X2",), (NS + "X3",))
+   assert set(cert.pairwise_names) == {NS + "A", NS + "B", NS + "C"}
+
+   # 2. Train MultiBoxEL (k = 2) with k-means projected initialisation
+   init_k2 = ExactBoxInit.from_dataset(
+       t3_dataset, embed_dim=2, n_components=2, seed=0
+   )
+   model = MultiBoxEL(
+       t3_dataset,
+       embed_dim=2,
+       n_components=2,
+       margin=0.0,
+       learning_rate=0.01,
+       neg_sampling_gcis=[],
+       init_boxes=init_k2,
+   )
+   model.train(epochs=3, validate_every=10)
+
+   # Inspect the learned (B, k, d) component boxes and effective component counts
+   idx = torch.tensor([model.class_index_dict[NS + "X1"]], dtype=torch.long)
+   centers, offsets = model.module.class_boxes(idx)
+   assert centers.shape == (1, 2, 2) and offsets.shape == (1, 2, 2)
+   eff = model.module.effective_components(eps=1e-3)
+   assert eff.shape == (len(model.class_index_dict),)
+   assert all(torch.isfinite(p).all() for p in model.module.parameters())

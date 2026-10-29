@@ -73,6 +73,34 @@ Embedding exports
    :show-inheritance:
 
 
+Exact-model box initialisation and anchor
+-----------------------------------------
+
+.. automodule:: mowl.geometric.init
+   :members:
+   :show-inheritance:
+
+
+MultiBoxEL neural module and losses
+-----------------------------------
+
+.. automodule:: mowl.nn.el.multiboxel.module
+   :members:
+   :show-inheritance:
+
+.. automodule:: mowl.nn.el.multiboxel.losses
+   :members:
+   :show-inheritance:
+
+
+MultiBoxEL model
+----------------
+
+.. automodule:: mowl.models.multiboxel.model
+   :members:
+   :show-inheritance:
+
+
 Exceptions
 ----------
 
