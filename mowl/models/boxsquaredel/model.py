@@ -5,6 +5,16 @@ from mowl.nn import BoxSquaredELModule
 class BoxSquaredEL(EmbeddingELModel):
     """
     Implementation based on [jackermeier2023]_.
+
+    Parameters
+    ----------
+    init_boxes : mowl.geometric.init.ExactBoxInit, optional
+        Optional exact-model box initialisation applied in :meth:`init_module`.
+        Defaults leave behaviour unchanged.
+    anchor_weight : float, default 0.0
+        Non-negative weight multiplying ``init_boxes.anchor_loss(self.module)``
+        in :meth:`get_regularization_loss` when ``init_boxes`` is provided.
+        Defaults leave behaviour unchanged.
     """
 
     def __init__(self,
@@ -23,6 +33,8 @@ class BoxSquaredEL(EmbeddingELModel):
                  init_boxes=None,
                  anchor_weight=0.0
                  ):
+        if float(anchor_weight) < 0:
+            raise ValueError(f"anchor_weight must be >= 0, got {anchor_weight!r}")
         super().__init__(dataset, embed_dim, batch_size, extended=True,
                          model_filepath=model_filepath, device=device,
                          learning_rate=learning_rate,

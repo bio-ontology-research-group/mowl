@@ -87,6 +87,8 @@ class MultiBoxEL(EmbeddingELModel):
                  init_boxes=None,
                  anchor_weight=0.0
                  ):
+        if float(anchor_weight) < 0:
+            raise ValueError(f"anchor_weight must be >= 0, got {anchor_weight!r}")
         super().__init__(dataset, embed_dim, batch_size, extended=True,
                          model_filepath=model_filepath, device=device,
                          learning_rate=learning_rate,

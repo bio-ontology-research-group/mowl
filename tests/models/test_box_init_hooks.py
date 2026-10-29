@@ -191,3 +191,28 @@ def test_defaults_unchanged(t3_dataset: PathDataset, tmp_path: Path) -> None:
     )
     for k, v in elbe_model.module.state_dict().items():
         assert torch.equal(v, elbe_raw.state_dict()[k]), f"Mismatch in ELBE key {k}"
+
+
+def test_negative_anchor_weight_raises(t3_dataset: PathDataset, tmp_path: Path) -> None:
+    with pytest.raises(ValueError, match="anchor_weight"):
+        BoxSquaredEL(
+            t3_dataset,
+            embed_dim=5,
+            anchor_weight=-0.1,
+            model_filepath=str(tmp_path / "b2_neg.pt"),
+        )
+    with pytest.raises(ValueError, match="anchor_weight"):
+        ELBE(
+            t3_dataset,
+            embed_dim=5,
+            anchor_weight=-0.1,
+            model_filepath=str(tmp_path / "elbe_neg.pt"),
+        )
+    with pytest.raises(ValueError, match="anchor_weight"):
+        MultiBoxEL(
+            t3_dataset,
+            embed_dim=5,
+            anchor_weight=-0.1,
+            model_filepath=str(tmp_path / "mb_neg.pt"),
+        )
+
