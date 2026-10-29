@@ -176,7 +176,11 @@ behaviour unchanged):
   ``dataset.class_to_id`` but absent from the canonical model receive ``NaN`` in
   ``init.centers`` / ``init.offsets``, are left untouched by
   :meth:`~mowl.geometric.init.ExactBoxInit.apply_to_module`, and are ignored by
-  :meth:`~mowl.geometric.init.ExactBoxInit.anchor_loss`.
+  :meth:`~mowl.geometric.init.ExactBoxInit.anchor_loss`. The models pass their
+  ``class_index_dict`` to ``apply_to_module``, which matches rows by IRI; the
+  auxiliary classes that normalisation appends to ``class_index_dict`` (IRIs
+  under ``http://mowl.borg/aux/``) keep their random initialisation and are
+  ignored by the anchor.
 
 .. testcode::
 
@@ -197,7 +201,8 @@ behaviour unchanged):
    # Work on a copy so that the EL normaliser's cache file
    # (<name>_mowl_el_normalized_v2.owl) is written next to the copy,
    # not into the source tree.
-   workdir = pathlib.Path(tempfile.mkdtemp())
+   tmpdir = tempfile.TemporaryDirectory()
+   workdir = pathlib.Path(tmpdir.name)
    shutil.copy(FIXTURES / "t3.owl", workdir / "t3.owl")
    t3_dataset = PathDataset(str(workdir / "t3.owl"))
    cm = CanonicalModel.from_dataset(t3_dataset)
@@ -234,6 +239,8 @@ behaviour unchanged):
    assert init_milp.method == "projected"
    assert init_milp.report["fallback"].startswith("NotBoxRepresentable")
 
+   tmpdir.cleanup()
+
 
 MultiBoxEL on :math:`T_3`
 -------------------------
@@ -241,8 +248,7 @@ MultiBoxEL on :math:`T_3`
 :class:`~mowl.models.MultiBoxEL` (:class:`~mowl.nn.MultiBoxELModule`) represents
 every ontology class as a union of :math:`k = \text{n\_components}` axis-parallel
 boxes in :math:`\mathbb{R}^d` under Box²EL semantics. MultiBoxEL does not
-support role axioms: its constructor has no ``load_role_axioms`` parameter, so
-passing ``load_role_axioms=True`` raises ``TypeError``. Its losses have the
+support role axioms (``role_axiom_capable = False``). Its losses have the
 following properties:
 
 * **Exact** :math:`k = 1` **identity:** When ``n_components=1`` and
@@ -293,7 +299,8 @@ following properties:
    # Work on a copy so that the EL normaliser's cache file
    # (<name>_mowl_el_normalized_v2.owl) is written next to the copy,
    # not into the source tree.
-   workdir = pathlib.Path(tempfile.mkdtemp())
+   tmpdir = tempfile.TemporaryDirectory()
+   workdir = pathlib.Path(tmpdir.name)
    shutil.copy(FIXTURES / "t3.owl", workdir / "t3.owl")
    t3_dataset = PathDataset(str(workdir / "t3.owl"))
    cm = CanonicalModel.from_dataset(t3_dataset)
@@ -327,3 +334,5 @@ following properties:
    eff = model.module.effective_components(eps=1e-3)
    assert eff.shape == (len(model.class_index_dict),)
    assert all(torch.isfinite(p).all() for p in model.module.parameters())
+
+   tmpdir.cleanup()
