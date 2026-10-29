@@ -306,3 +306,27 @@ def test_import_without_jvm() -> None:
         check=False,
     )
     assert proc.returncode == 0, f"stderr: {proc.stderr}"
+
+
+def test_face_rejects_rows_that_disagree_with_vertex_ids() -> None:
+    pts4 = simplex_points(4)
+    # Rows of vertices 0 and 2 claimed to be vertices 0 and 1.
+    with pytest.raises(ValueError, match="canonical simplex vertex"):
+        Face(3, pts4[[0, 2]], {0, 1})
+    # A non-vertex point claimed to be vertex 3 (the zero vector).
+    with pytest.raises(ValueError, match="canonical simplex vertex"):
+        Face(3, np.array([[0.25, 0.25, 0.25]]), {3})
+    # Rows in sorted-id order are accepted.
+    assert Face(3, pts4[[1, 3]], {3, 1}).vertex_ids == frozenset({1, 3})
+
+
+def test_is_simplex_vertex_rows() -> None:
+    from mowl.geometric.regions import is_simplex_vertex_rows
+
+    pts4 = simplex_points(4)
+    assert is_simplex_vertex_rows(pts4, 3) is True
+    assert is_simplex_vertex_rows(np.zeros((0, 3)), 3) is True
+    assert is_simplex_vertex_rows(np.array([[0.5, 0.5, 0.0]]), 3) is False
+    assert is_simplex_vertex_rows(np.array([[1.0, 1.0, 0.0]]), 3) is False
+    assert is_simplex_vertex_rows(np.array([[2.0, 0.0, 0.0]]), 3) is False
+    assert is_simplex_vertex_rows(pts4, 2) is False

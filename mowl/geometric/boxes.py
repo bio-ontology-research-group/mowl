@@ -19,21 +19,35 @@ Contract and mathematical guarantees (Spec §5.3 [v2, contract corrected]):
   :class:`~mowl.geometric.normal_forms.NF7`), :meth:`BoxModelBuilder.build`
   raises :class:`~mowl.geometric.errors.UnsupportedAxiom`.
 - Before running the MILP, :meth:`BoxModelBuilder.build` runs
-  :func:`~mowl.geometric.helly.helly_check`. When the resulting
-  :class:`~mowl.geometric.helly.HellyReport` contains certificates of the
-  requested faithfulness kind (``report.certificates_nondegenerate`` when
-  ``faithful="weak"``, ``report.certificates_strong`` when
-  ``faithful="strong"``), :meth:`BoxModelBuilder.build` raises
-  :class:`~mowl.geometric.errors.NotBoxRepresentable` carrying ``report`` (a
-  sound proof of non-box-representability).
+  :func:`~mowl.geometric.helly.helly_check`. In both faithfulness modes it
+  raises :class:`~mowl.geometric.errors.NotBoxRepresentable` carrying
+  ``report`` if and only if ``report.certificates_nondegenerate`` is non-empty.
+  Such a certificate is a sound proof that no non-degenerate box model exists
+  in any dimension; since every model returned in either mode is
+  non-degenerate, it also rules out a strongly faithful one.
+- ``report.certificates_strong`` is deliberately *not* used to reject
+  ``faithful="strong"``: a strong certificate only excludes
+  *conjunction-faithful* box models (every satisfiable conjunction of concept
+  names non-empty), which is stronger than strong faithfulness on names. For
+  example, :math:`\\{X_1 \\sqcap X_2 \\sqsubseteq Y, Y \\sqcap X_3 \\sqsubseteq \\bot\\}`
+  has the strong certificate :math:`(X_1, X_2, X_3)`, yet the 1-D boxes
+  :math:`X_1 = [0, 1], X_2 = [2, 3], X_3 = [4, 5], Y = [6, 7]` form a
+  non-degenerate model that is strongly faithful on names.
 - A passing Helly check does *not* guarantee that an axis-parallel box model
-  exists (no such sufficiency theorem is known to us). When no certificate of
-  the requested kind is found, :class:`BoxModelBuilder` searches for a box
+  exists (no such sufficiency theorem is known to us; ``box_representable_* =
+  True`` means only that no Helly obstruction of that kind was found). When no
+  non-degenerate certificate is found, :class:`BoxModelBuilder` searches for a box
   model by mixed-integer linear programming (`scipy.optimize.milp`, HiGHS) over
   the dimension schedule :math:`d = 1, 2, 4, \\dots, d_{\\max}` (capped at
   ``d_max``).
+- If the solver time limit is hit at some :math:`d` with a feasible incumbent,
+  the incumbent is turned into a :class:`BoxModel` and post-checked; it is
+  returned if it passes, otherwise the search continues with the next
+  :math:`d`. Solver status 4 (other problem) is logged at ``logging.INFO``
+  and treated as no model found at that :math:`d`.
 - If the MILP is infeasible for every :math:`d` in the schedule or the solver
-  time limit is exceeded, :meth:`BoxModelBuilder.build` raises
+  time limit is exceeded without a passing incumbent,
+  :meth:`BoxModelBuilder.build` raises
   :class:`~mowl.geometric.errors.BoxModelNotFound` (an *inconclusive* outcome
   whose message states ``d_max``, ``time_limit``, and that no theorem
   guarantees existence of a box model when the Helly check passes).
@@ -50,16 +64,20 @@ Contract and mathematical guarantees (Spec §5.3 [v2, contract corrected]):
   concept names).
 
 References:
-- Leemhuis & Kutz, *Wait, That's Not a Box! On the Box-Representability of
-  Description Logic Ontologies*, NeSy 2025 (PMLR 284:303–321), Definitions 1,
-  3, 6; Propositions 4, 5, 8.
+- M. Leemhuis & O. Kutz, *Understanding the Expressive Capabilities of
+  Knowledge Base Embeddings under Box Semantics*, NeSy 2025 (PMLR
+  284:303–321), Definitions 1, 3, 6; Propositions 4, 5, 8.
 - Eckhoff, *Intersection properties of boxes. Part I: An upper-bound theorem*,
   Israel Journal of Mathematics 62(3):283–301, 1988.
-- Lacerda, Ozaki & Guimarães, TGDK 2(3):2, 2024, Defs. 2, 8, 12.
-- Gutiérrez-Basulto & Schockaert, KR 2018 (arXiv:1805.10461), Props. 3, 4.
+- V. Lacerda, A. Ozaki & R. Guimarães, *Strong Faithfulness for ELH Ontology
+  Embeddings*, TGDK 2(3):2, 2024, Defs. 2, 8, 12.
+- V. Gutiérrez-Basulto & S. Schockaert, *From Knowledge Graph Embedding to
+  Ontology Embedding? An Analysis of the Compatibility between Vector Space
+  Representations and Rules*, KR 2018 (arXiv:1805.10461), Props. 3, 4.
 """
 from __future__ import annotations
 
+import logging
 import time
 from typing import TYPE_CHECKING, Any, Dict, Iterable, List, Optional, Tuple
 import numpy as np
@@ -96,6 +114,8 @@ from mowl.geometric.regions import Box
 
 if TYPE_CHECKING:  # pragma: no cover
     from mowl.geometric.completion import CanonicalModel
+
+logger = logging.getLogger(__name__)
 
 
 def _dimension_schedule(d_max: int) -> List[int]:
@@ -247,23 +267,28 @@ class BoxModelBuilder:
       :class:`~mowl.geometric.normal_forms.NF4`,
       :class:`~mowl.geometric.normal_forms.NF6`, or
       :class:`~mowl.geometric.normal_forms.NF7`).
-    - Runs :func:`~mowl.geometric.helly.helly_check` first; raises
+    - Runs :func:`~mowl.geometric.helly.helly_check` first; in both
+      faithfulness modes raises
       :class:`~mowl.geometric.errors.NotBoxRepresentable` carrying the
-      :class:`~mowl.geometric.helly.HellyReport` when the report has
-      certificates of the requested faithfulness kind
-      (``certificates_nondegenerate`` for ``faithful="weak"``,
-      ``certificates_strong`` for ``faithful="strong"``). By Leemhuis & Kutz
+      :class:`~mowl.geometric.helly.HellyReport` iff
+      ``report.certificates_nondegenerate`` is non-empty. By Leemhuis & Kutz
       (NeSy 2025, Prop. 4), box semantics satisfy Helly's property (Helly
-      number 2), so such a certificate is a proof that no box model of the
-      requested kind exists in any dimension.
-    - When no certificate of the requested kind is found, encodes box
+      number 2), so such a certificate is a proof that no non-degenerate box
+      model (hence none of either requested kind) exists in any dimension.
+      Strong certificates alone do not reject ``faithful="strong"``: they
+      exclude only *conjunction-faithful* box models (every satisfiable
+      conjunction of names non-empty), not models strongly faithful on names.
+    - When no non-degenerate certificate is found, encodes box
       feasibility as a mixed-integer linear program (`scipy.optimize.milp`;
       raises :class:`~mowl.geometric.errors.MissingDependency` naming
       ``scipy >= 1.9`` if unavailable) over the dimension schedule
       :math:`d = 1, 2, 4, \\dots, d_{\\max}`.
+    - If the solver hits the time limit with a feasible incumbent, the
+      incumbent is post-checked and returned if it passes; otherwise the
+      schedule continues with the next :math:`d`.
     - Raises :class:`~mowl.geometric.errors.BoxModelNotFound` (inconclusive) if
       the MILP is infeasible for all :math:`d` in the schedule or the solver
-      time limit is exceeded; the exception message states ``d_max``,
+      time limit is exceeded without a passing incumbent; the exception message states ``d_max``,
       ``time_limit``, and that no theorem guarantees existence of a box model
       when the Helly check passes.
     - Every returned :class:`BoxModel` has passed
@@ -351,14 +376,13 @@ class BoxModelBuilder:
             )
 
         report = helly_check(self.cm, **self.helly_kwargs)
-        if self.faithful == "weak" and report.certificates_nondegenerate:
+        # Both modes require non-degeneracy, so only non-degenerate certificates
+        # are proofs here; strong certificates exclude only conjunction-faithful
+        # box models, not models that are strongly faithful on names.
+        if report.certificates_nondegenerate:
             raise NotBoxRepresentable(
-                "Ontology is not box-representable (non-degenerate Helly certificate found).",
-                report,
-            )
-        if self.faithful == "strong" and report.certificates_strong:
-            raise NotBoxRepresentable(
-                "Ontology is not strongly box-representable (strong Helly certificate found).",
+                "Ontology has no non-degenerate box model in any dimension "
+                "(non-degenerate Helly certificate found).",
                 report,
             )
 
@@ -386,6 +410,22 @@ class BoxModelBuilder:
                 )
                 self._verify_model(model)
                 return model
+            if status == "incumbent":
+                assert boxes_d is not None
+                model = BoxModel(
+                    cm=self.cm,
+                    dimension=d,
+                    boxes=boxes_d,
+                    M=self.M,
+                )
+                if self._passes_post_check(model):
+                    return model
+                logger.info(
+                    "BoxModelBuilder: time-limited MILP incumbent at d=%d failed "
+                    "the model post-check; continuing with the next dimension.",
+                    d,
+                )
+                continue
             if status == "timeout":
                 raise BoxModelNotFound(
                     f"BoxModelBuilder inconclusive: MILP solver reached "
@@ -400,6 +440,19 @@ class BoxModelBuilder:
             f"time_limit={self.time_limit}s; no theorem guarantees existence "
             f"of a box model when the Helly check passes."
         )
+
+    def _passes_post_check(self, model: BoxModel) -> bool:
+        """Return ``True`` iff ``model`` passes the same checks as :meth:`_verify_model`."""
+        checker = model.check()
+        if not checker.is_model(self.cm.axioms):
+            return False
+        if not checker.is_nondegenerate(self.cm):
+            return False
+        if self.faithful == "strong" and not checker.is_strongly_faithful_on_names(
+            self.cm
+        ):
+            return False
+        return True
 
     def _verify_model(self, model: BoxModel) -> None:
         """Run ModelChecker post-checks on ``model``; raise :class:`InternalConsistencyError` on failure."""
@@ -702,8 +755,16 @@ class BoxModelBuilder:
 
         status_code = getattr(res, "status", None)
         status_msg = str(getattr(res, "message", "")).lower()
+        has_x = getattr(res, "x", None) is not None
+        # HiGHS status codes in scipy.optimize.milp:
+        # 0 = optimal; 1 = iteration or time limit reached (res.x holds the
+        # incumbent if one was found); 2 = infeasible; 3 = unbounded; 4 = other.
+        is_limit = (
+            status_code == 1 or "time limit" in status_msg or "timed out" in status_msg
+        )
+        success = bool(getattr(res, "success", False))
 
-        if getattr(res, "success", False) and getattr(res, "x", None) is not None:
+        if (success or is_limit) and has_x:
             sol = np.asarray(res.x, dtype=float)
             boxes_out: Dict[str, Box] = {
                 TOP: Box(
@@ -721,10 +782,15 @@ class BoxModelBuilder:
                 hi_vec = np.clip(hi_vec, 0.0, M)
                 hi_vec = np.maximum(lo_vec, hi_vec)
                 boxes_out[name] = Box(lo_vec, hi_vec)
-            return "optimal", boxes_out
+            return ("optimal" if success else "incumbent"), boxes_out
 
-        # HiGHS status codes in scipy.optimize.milp:
-        # 1 = Iteration or time limit reached; 2 = Infeasible
-        if status_code == 1 or "time limit" in status_msg or "timed out" in status_msg:
+        if is_limit:
             return "timeout", None
+        if status_code == 4:
+            logger.info(
+                "BoxModelBuilder: MILP solver returned status 4 at d=%d (%s); "
+                "treating as no model found at this dimension.",
+                d,
+                getattr(res, "message", ""),
+            )
         return "infeasible", None

@@ -153,10 +153,16 @@ class TestBoxes(TestCase):
             dropped_axioms=0,
         )
         cm_oneway = CanonicalModel.from_normalised(no_oneway)
-        with self.assertRaises(NotBoxRepresentable) as ctx_ow:
-            BoxModelBuilder(cm_oneway, faithful="strong").build()
-        self.assertEqual(len(ctx_ow.exception.report.certificates_nondegenerate), 0)
-        self.assertGreaterEqual(len(ctx_ow.exception.report.certificates_strong), 1)
+        report_ow = helly_check(cm_oneway)
+        self.assertEqual(len(report_ow.certificates_nondegenerate), 0)
+        self.assertGreaterEqual(len(report_ow.certificates_strong), 1)
+        # Strong certificates exclude only conjunction-faithful box models, so
+        # faithful="strong" is not rejected: the builder searches and the model it
+        # returns is strongly faithful on names.
+        strong_model = BoxModelBuilder(cm_oneway, faithful="strong").build()
+        self.assertTrue(strong_model.is_model())
+        self.assertTrue(strong_model.is_nondegenerate())
+        self.assertTrue(strong_model.is_strongly_faithful_on_names())
 
         # Under faithful="weak", one-way T3 is box-representable (X1, X2, X3 pairwise disjoint)
         weak_model = BoxModelBuilder(cm_oneway, faithful="weak").build()
@@ -209,6 +215,108 @@ class TestBoxes(TestCase):
             self.assertTrue(checker.is_model(cm.axioms))
             self.assertTrue(checker.is_nondegenerate(cm))
             self.assertTrue(checker.is_strongly_faithful_on_names(cm))
+
+    def test_strong_certificate_does_not_block_strongly_faithful_model(self) -> None:
+        # Reviewer counterexample (final review C1): O = {X1 n X2 <= Y, Y n X3 <= bot}
+        # has the strong certificate (X1, X2, X3) with no pairwise names, yet the
+        # 1-D boxes X1=[0,1], X2=[2,3], X3=[4,5], Y=[6,7] are a non-degenerate
+        # model that is strongly faithful on names.
+        X1, X2, X3, Y = NS + "X1", NS + "X2", NS + "X3", NS + "Y"
+        no = NormalisedOntology(
+            axioms=[NF2(X1, X2, Y), NF2(Y, X3, BOTTOM)],
+            concept_names={X1, X2, X3, Y, TOP, BOTTOM},
+            role_names=set(),
+            dropped_axioms=0,
+        )
+        cm = CanonicalModel.from_normalised(no)
+        report = helly_check(cm)
+        self.assertTrue(report.complete)
+        self.assertEqual(len(report.certificates_nondegenerate), 0)
+        self.assertEqual(len(report.certificates_strong), 1)
+        cert = report.certificates_strong[0]
+        self.assertEqual(set(cert.c1 + cert.c2 + cert.c3), {X1, X2, X3})
+        self.assertEqual(cert.pairwise_names, (None, None, None))
+        self.assertIs(report.box_representable_strong, False)
+
+        hand = BoxModel(
+            cm,
+            1,
+            {
+                X1: Box([0.0], [1.0]),
+                X2: Box([2.0], [3.0]),
+                X3: Box([4.0], [5.0]),
+                Y: Box([6.0], [7.0]),
+            },
+        )
+        self.assertTrue(hand.is_model())
+        self.assertTrue(hand.is_nondegenerate())
+        self.assertTrue(hand.is_strongly_faithful_on_names())
+
+        model = BoxModelBuilder(cm, faithful="strong").build()
+        self.assertEqual(model.dimension, 1)
+        self.assertTrue(model.is_model())
+        self.assertTrue(model.is_nondegenerate())
+        self.assertTrue(model.is_strongly_faithful_on_names())
+        self.assertTrue(ModelChecker(model).is_strongly_faithful_on_names(cm))
+
+    def test_time_limited_incumbent_is_post_checked(self) -> None:
+        from scipy.optimize import milp as real_milp
+
+        A, B, C = NS + "A", NS + "B", NS + "C"
+        no = NormalisedOntology(
+            axioms=[NF1(A, B), NF2(B, C, BOTTOM)],
+            concept_names={A, B, C, TOP, BOTTOM},
+            role_names=set(),
+            dropped_axioms=0,
+        )
+        cm = CanonicalModel.from_normalised(no)
+
+        def incumbent_milp(*args, **kwargs):
+            # A real feasible solution, reported as "time limit reached" (status 1).
+            res = real_milp(*args, **kwargs)
+            self.assertEqual(res.status, 0)
+            out = MagicMock()
+            out.success = False
+            out.status = 1
+            out.x = res.x
+            out.message = "Time limit reached. (HiGHS Status 13)"
+            return out
+
+        with patch("mowl.geometric.boxes._scipy_milp", side_effect=incumbent_milp):
+            model = BoxModelBuilder(cm, d_max=2, time_limit=10.0).build()
+        self.assertEqual(model.dimension, 1)
+        self.assertTrue(model.is_model())
+        self.assertTrue(model.is_nondegenerate())
+
+        # An incumbent that fails the post-check (all boxes the point 0, so B and C
+        # intersect) is not returned; the schedule continues and ends inconclusive.
+        def bad_incumbent_milp(*args, **kwargs):
+            n_vars = len(kwargs["c"])
+            out = MagicMock()
+            out.success = False
+            out.status = 1
+            out.x = np.zeros(n_vars)
+            out.message = "Time limit reached. (HiGHS Status 13)"
+            return out
+
+        with patch(
+            "mowl.geometric.boxes._scipy_milp", side_effect=bad_incumbent_milp
+        ) as mocked:
+            with self.assertRaises(BoxModelNotFound):
+                BoxModelBuilder(cm, d_max=2, time_limit=10.0).build()
+        self.assertEqual(mocked.call_count, 2)
+
+        # Solver status 4 is logged at INFO, then treated as no model at that d.
+        other_res = MagicMock()
+        other_res.success = False
+        other_res.status = 4
+        other_res.x = None
+        other_res.message = "Solver error"
+        with patch("mowl.geometric.boxes._scipy_milp", return_value=other_res):
+            with self.assertLogs("mowl.geometric.boxes", level="INFO") as logs:
+                with self.assertRaises(BoxModelNotFound):
+                    BoxModelBuilder(cm, d_max=1, time_limit=10.0).build()
+        self.assertTrue(any("status 4" in line for line in logs.output))
 
     def test_random_propositional(self) -> None:
         names = [f"{NS}N{i}" for i in range(6)]

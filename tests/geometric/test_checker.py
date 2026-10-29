@@ -376,3 +376,38 @@ def test_checker_imports_without_jvm() -> None:
     assert "ok" in res.stdout
 
 
+
+
+def test_polyhedral_role_axioms_reject_non_simplex_vertex_pair_hulls() -> None:
+    # Reviewer counterexample: r = conv{(v0, (v1+v2)/2)}, s = conv{(v1,v0), (v2,v0)},
+    # t = conv{(v1,v1)}. (v0, v0) lies in r o s but not in t, so NF7(r, s, t) is
+    # false; generator-pair composition cannot see this because the intermediate
+    # point (v1+v2)/2 is not a simplex vertex. The checker must refuse rather
+    # than answer True.
+    pts = simplex_points(3)
+    v0, v1, v2 = pts[0], pts[1], pts[2]
+    mid = 0.5 * (v1 + v2)
+    r = PairHull(np.vstack([np.concatenate([v0, mid])]))
+    s = PairHull(np.vstack([np.concatenate([v1, v0]), np.concatenate([v2, v0])]))
+    t = PairHull(np.vstack([np.concatenate([v1, v1])]))
+    universe = Face.from_simplex(pts, {0, 1, 2})
+    eta = DictInterpretation(
+        family="polyhedral",
+        universe=universe,
+        classes={"F0": Face.from_simplex(pts, {0}), "F1": Face.from_simplex(pts, {1})},
+        roles={"r": r, "s": s, "t": t},
+    )
+    checker = ModelChecker(eta)
+    with pytest.raises(UnsupportedRegion, match="simplex-vertex"):
+        checker.satisfies(NF7("r", "s", "t"))
+    with pytest.raises(UnsupportedRegion, match="simplex-vertex"):
+        checker.satisfies(NF6("r", "t"))
+    with pytest.raises(UnsupportedRegion, match="simplex-vertex"):
+        checker.satisfies(NF3("F0", "r", "F1"))
+    with pytest.raises(UnsupportedRegion, match="simplex-vertex"):
+        checker.satisfies(NF4("r", "F1", "F0"))
+    # Simplex-vertex hulls are still decided: s o s = {(v1,v0),(v2,v0)} o ... has no
+    # composable pairs except via v0, which s never starts from.
+    assert checker.satisfies(NF7("s", "s", "t")) is True
+    assert checker.satisfies(NF7("s", "t", "t")) is True
+    assert checker.satisfies(NF6("t", "s")) is False

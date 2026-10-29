@@ -3,8 +3,11 @@ from __future__ import annotations
 
 import logging
 import os
+import random
 from typing import Dict, Set, Tuple
 from unittest import TestCase
+
+import pytest
 
 import mowl
 mowl.init_jvm("2g")
@@ -19,6 +22,7 @@ from mowl.geometric.normal_forms import BOTTOM, TOP, normalise, to_owl
 from mowl.owlapi import OWLAPIAdapter
 from mowl.reasoning import MOWLReasoner
 from tests.datasetFactory import FamilyDataset
+from tests.geometric.helpers import random_el_tbox
 
 logger = logging.getLogger(__name__)
 
@@ -275,3 +279,65 @@ class TestCompletion(TestCase):
             comp_entailed.issubset(elk_entailed),
             f"Unsound derivations wrt original FamilyDataset: {comp_entailed - elk_entailed}",
         )
+
+    @pytest.mark.slow
+    def test_random_tboxes_match_elk(self) -> None:
+        """Differential test: completion vs ELK on 100 seeded random EL++ TBoxes with roles."""
+        from mowl.geometric.intervals import IntervalUnionModel
+        from mowl.geometric.polyhedral import ConvexPolyhedralModel
+
+        n_consistent = 0
+        n_inconsistent = 0
+        for seed in range(100):
+            rng = random.Random(seed)
+            no = random_el_tbox(rng, allow_roles=True)
+            comp = Completion(no.axioms, no.concept_names, no.role_names).saturate()
+            ont = to_owl(no)
+
+            reasoner = ElkReasonerFactory().createReasoner(ont)
+            try:
+                reasoner.precomputeInferences()
+                elk_consistent = bool(reasoner.isConsistent())
+            finally:
+                reasoner.dispose()
+
+            with self.subTest(seed=seed):
+                self.assertEqual(
+                    comp.is_inconsistent(),
+                    not elk_consistent,
+                    f"Consistency mismatch on seed {seed}",
+                )
+            if not elk_consistent:
+                n_inconsistent += 1
+                continue
+            n_consistent += 1
+
+            elk_entailed, elk_unsat = _elk_subsumptions_and_unsat(
+                ont, no.concept_names
+            )
+            names = sorted(no.concept_names - {BOTTOM})
+            with self.subTest(seed=seed):
+                comp_unsat = {n for n in names if comp.is_unsatisfiable(n)}
+                self.assertEqual(comp_unsat, elk_unsat)
+                for a in names:
+                    if a in elk_unsat:
+                        continue
+                    for b in names:
+                        self.assertEqual(
+                            comp.entails(a, b),
+                            (a, b) in elk_entailed,
+                            f"Subsumption mismatch on seed {seed} for ({a}, {b})",
+                        )
+
+                # Both exact constructions post-check themselves and raise
+                # InternalConsistencyError on failure.
+                cm = CanonicalModel.from_normalised(no)
+                IntervalUnionModel(cm)
+                ConvexPolyhedralModel(cm)
+
+        logger.info(
+            "test_random_tboxes_match_elk: %d consistent, %d inconsistent",
+            n_consistent,
+            n_inconsistent,
+        )
+        self.assertGreater(n_consistent, 0)
