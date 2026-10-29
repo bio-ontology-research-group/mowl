@@ -47,7 +47,7 @@ Semantics and guarantees:
 """
 from __future__ import annotations
 
-from typing import FrozenSet, Iterable, List, Sequence, Tuple
+from typing import FrozenSet, Iterable, List, Optional, Sequence, Tuple
 import numpy as np
 
 _INTERVAL_EQ_TOL: float = 1e-12
@@ -587,6 +587,80 @@ class Face:
 
     def __repr__(self) -> str:
         return f"Face(dim={self.dim}, vertex_ids={sorted(self.vertex_ids)!r})"
+
+
+class ThickFace(Face):
+    """Thickened simplex face with interior in :math:`\\mathbb{R}^{\\text{dim}}` (:math:`n = \\text{dim} + 1`).
+
+    Represents the intersection of the standard :math:`(n - 1)`-simplex
+    :math:`\\{\\lambda_j(x) \\ge 0\\; (0 \\le j < n)\\}` with the half-spaces
+    :math:`\\lambda_j(x) \\le \\varepsilon` for every :math:`j \\notin S`, where
+    :math:`S = \\text{vertex\\_ids}` and :math:`\\varepsilon = \\tfrac{1}{2n}` by
+    default. Intended for propositional ontologies only (Spec §5.3).
+    """
+
+    def __init__(
+        self,
+        dim: int,
+        vertices: np.ndarray,
+        vertex_ids: Iterable[int],
+        eps: Optional[float] = None,
+    ) -> None:
+        super().__init__(dim, vertices, vertex_ids)
+        n = self.dim + 1
+        self.eps: float = float(1.0 / (2 * n) if eps is None else eps)
+
+    @classmethod
+    def from_simplex(
+        cls,
+        points: np.ndarray,
+        vertex_ids: Iterable[int],
+        eps: Optional[float] = None,
+    ) -> ThickFace:
+        """Construct a :class:`ThickFace` from ``simplex_points(n)`` and ``vertex_ids``."""
+        base = Face.from_simplex(points, vertex_ids)
+        return cls(base.dim, base.vertices, base.vertex_ids, eps=eps)
+
+    def h_rep(self) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+        """Return ``(A_ub, b_ub, A_eq, b_eq)`` with simplex bounds and :math:`\\lambda_j(x) \\le \\varepsilon` for :math:`j \\notin S`."""
+        k = self.dim
+        n = k + 1
+        ub_rows: List[np.ndarray] = []
+        ub_rhs: List[float] = []
+
+        for j in range(n):
+            if j < k:
+                a_j = np.zeros(k, dtype=float)
+                a_j[j] = 1.0
+                c_j = 0.0
+            else:
+                a_j = np.full(k, -1.0, dtype=float)
+                c_j = 1.0
+
+            # Simplex constraint: -lambda_j(x) <= 0  <=>  -a_j . x <= c_j
+            ub_rows.append(-a_j)
+            ub_rhs.append(c_j)
+
+            if j not in self.vertex_ids:
+                # Thickened constraint: lambda_j(x) <= eps  <=>  a_j . x <= eps - c_j
+                ub_rows.append(a_j)
+                ub_rhs.append(self.eps - c_j)
+
+        A_ub = (
+            np.vstack(ub_rows)
+            if ub_rows
+            else np.zeros((0, k), dtype=float)
+        )
+        b_ub = np.asarray(ub_rhs, dtype=float)
+        A_eq = np.zeros((0, k), dtype=float)
+        b_eq = np.zeros((0,), dtype=float)
+        return A_ub, b_ub, A_eq, b_eq
+
+    def __repr__(self) -> str:
+        return (
+            f"ThickFace(dim={self.dim}, vertex_ids={sorted(self.vertex_ids)!r}, "
+            f"eps={self.eps!r})"
+        )
 
 
 class PairHull:
