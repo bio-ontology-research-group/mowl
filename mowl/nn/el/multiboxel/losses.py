@@ -483,7 +483,10 @@ def gci2_score_neg(
     - Matches :func:`mowl.nn.el.boxsquaredel.losses.gci2_score_neg` at ``k = 1``.
 
     Non-guarantees:
-    - Penalises the closest component to the role box rather than all components.
+    - Penalises, on each side, only the component whose distance
+      :math:`\\text{md}` to the role box is closest to :math:`\\delta` (the
+      minimiser of :math:`(\\delta - \\text{md})^2`), which need not be the
+      component closest to the role box; the other components are not penalised.
     """
     bumped_c = cen_c + bump_d.unsqueeze(1)  # (B, k, d)
     bumped_d = cen_d + bump_c.unsqueeze(1)  # (B, k, d)
