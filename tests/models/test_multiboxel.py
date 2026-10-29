@@ -112,21 +112,17 @@ def test_multiboxel_trains_on_t3(t3_dataset: PathDataset, tmp_path: Path) -> Non
 @pytest.mark.xfail(
     strict=True,
     reason=(
-        "With margin=0.0 and width-floor regulariser w_min=0.05 (weight 1.0), "
-        "BoxSquaredEL satisfies axiom_loss + floor > 1e-3 on all runs (seed=0: "
-        "7.68e-03 + 0.00e+00 = 7.68e-03 at 3000 epochs, 8.10e-03 + 1.11e-03 = "
-        "9.21e-03 at 6000; seed=1: 6.05e-03 at 3000, 6.82e-03 at 6000; seed=2: "
-        "3.89e-03 at 3000, 3.78e-03 at 6000), and MultiBoxEL(k=2) at seed=0 "
-        "satisfies min_d |offset| = 0.0662 >= 0.045 (floor=0.00e+00, deg={'A': "
-        "False, 'B': False, 'C': False}) and triple_nonempty=False, but because "
-        "gci1_score gates pairwise intersections by 2-D non-emptiness while "
-        "gci1_bot_score penalises 1-D overlap in every coordinate independently, "
-        "Adam (lr=0.01) plateaus in a local minimum / non-smooth hinge oscillation "
-        "above 1e-4 across seeds 0..2 and epochs in {3000, 6000} (seed=0: "
-        "axiom=1.31e-03 [gci0=3.62e-04, gci1=1.51e-04, gci1_bot=7.95e-04], "
-        "floor=0.00e+00, min_off=0.0662 at 3000 epochs, axiom=1.65e-03 at 6000; "
-        "seed=1: axiom=3.30e-03 at 3000, 4.38e-03 at 6000, triple_nonempty=True; "
-        "seed=2: axiom=5.70e-03 at 3000, 5.43e-03 at 6000, triple_nonempty=True)."
+        "embed_dim=1, margin=0.0, width floor w_min=0.05: the exact multibox "
+        "configuration (X1=[0,1]u[2,3], X2=[0,1]u[4,5], X3=[2,3]u[4,5], A=[0,1], "
+        "C=[2,3], B=[4,5]) has gci0/gci1/gci1_bot loss exactly 0 and floor 0, but "
+        "Adam does not reach it: MultiBoxEL(k=2) axiom loss stays above 1e-4 for "
+        "every lr in {0.005, 0.01, 0.02}, seed in {0, 1, 2}, epochs in {3000, 6000} "
+        "(best 7.99e-04 at lr=0.005/seed=0/3000 with floor 1.03e-03; lr=0.01: "
+        "seed0 1.50e-03/1.77e-03, seed1 1.56e-03/1.79e-03, seed2 6.00e-03/5.92e-03 "
+        "at 3000/6000), and triple_nonempty=True on all runs except "
+        "lr=0.005/seed=1/3000 (axiom 1.12e-03). BoxSquaredEL (lr=0.01, 3000) "
+        "stays above 1e-3 as required (seed0 4.13e-03, seed1 2.02e-03, seed2 "
+        "2.02e-03, floor 0)."
     ),
 )
 def test_t3_solvability_multibox_vs_box2el(
@@ -138,22 +134,32 @@ def test_t3_solvability_multibox_vs_box2el(
     simultaneously satisfiable by exact box equality, while adding the width-floor
     regulariser ``sum(relu(0.05 - |offset|))`` prevents single-box models from
     escaping Helly's theorem by collapsing ``A, B, C`` to zero-width points.
-    Consequently, any single-box embedding with widths ``>= 0.05`` must overlap on
-    ``X1 cap X2 cap X3 != empty`` and incur strictly positive ``gci1_bot`` or
-    width-floor loss, whereas a 2-component multibox model admits an exact zero-loss
-    configuration with all half-widths ``>= 0.05`` and ``X1 cap X2 cap X3 == empty``.
 
-    Measured final losses (seed=0, embed_dim=2, lr=0.01, epochs=3000, margin=0.0,
-    w_min=0.05, neg_sampling_gcis=[]):
-    - MultiBoxEL(k=2): axiom ``1.31e-03``, floor ``0.00e+00``, ``min_d |offset| = 0.0662``
-      (``1.65e-03`` at 6000 epochs; ``triple_nonempty=False``, non-degenerate)
-    - BoxSquaredEL: axiom ``7.68e-03``, floor ``0.00e+00``, total ``7.68e-03``
-      (axiom ``8.10e-03``, floor ``1.11e-03``, total ``9.21e-03`` at 6000 epochs)
+    The test runs with ``embed_dim=1`` for both models. The disjointness loss
+    ``gci1_bot`` (``||relu(-dist - gamma)||``, inherited from Box²EL) is zero only
+    if the two boxes are separated or touching in *every* coordinate, not merely
+    disjoint (a documented limitation, see the ``gci1_bot`` docstrings in
+    ``mowl/nn/el/multiboxel/losses.py``). In ``d = 2`` this conflicts with the
+    component layouts the optimiser finds (at ``d = 2`` MultiBoxEL plateaued at
+    axiom loss ``1.31e-03``). In ``d = 1`` disjointness and
+    every-coordinate separation coincide, and an exact solution exists:
+    ``X1 = [0,1] u [2,3]``, ``X2 = [0,1] u [4,5]``, ``X3 = [2,3] u [4,5]``,
+    ``A = [0,1]``, ``C = [2,3]``, ``B = [4,5]`` (all axiom losses 0, floor 0,
+    ``X1 cap X2 cap X3`` empty). Box²EL cannot reach zero: pairwise intersecting
+    intervals share a point (Helly in ``d = 1``), so ``A`` and ``B``, each of width
+    ``>= w_min``, overlap.
+
+    Measured final losses (embed_dim=1, margin=0.0, w_min=0.05, neg_sampling_gcis=[]):
+    - MultiBoxEL(k=2), lr=0.01, seed=0: axiom ``1.50e-03``, floor ``0``,
+      ``min_d |offset| = 0.0676``, ``triple_nonempty=True`` at 3000 epochs
+      (axiom ``1.77e-03`` at 6000). No lr in {0.005, 0.01, 0.02} x seed in {0, 1, 2}
+      x epochs in {3000, 6000} gets below 1e-4 (best ``7.99e-04``), hence xfail.
+    - BoxSquaredEL, lr=0.01, seed=0: axiom ``4.13e-03``, floor ``0`` at 3000 epochs.
     """
     torch.manual_seed(0)
     mb = _FlooredMultiBoxEL(
         t3_dataset,
-        embed_dim=2,
+        embed_dim=1,
         n_components=2,
         margin=0.0,
         learning_rate=0.01,
@@ -167,7 +173,7 @@ def test_t3_solvability_multibox_vs_box2el(
     torch.manual_seed(0)
     b2 = _FlooredBoxSquaredEL(
         t3_dataset,
-        embed_dim=2,
+        embed_dim=1,
         margin=0.0,
         learning_rate=0.01,
         neg_sampling_gcis=[],
