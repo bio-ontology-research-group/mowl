@@ -215,3 +215,61 @@ non-existing attributes"""
                 self.assertIsInstance(key, str)
                 self.assertIsInstance(value, np.ndarray)
                 self.assertEqual(value.shape, (embed_dim,))
+
+
+class TestEmbeddingElModelAuxiliaryEntities(TestCase):
+    """Auxiliary classes introduced by the normalizer are indexed by EL models."""
+
+    @classmethod
+    def setUpClass(cls):
+        from mowl.owlapi import OWLAPIAdapter
+        ad = OWLAPIAdapter()
+        ns = "http://test.org/elmodel_aux#"
+        cls.ont = ad.create_ontology("http://test.org/elmodel_aux")
+        A, B, C, D = [ad.create_class(ns + x) for x in "ABCD"]
+        r = ad.create_object_property(ns + "r")
+        ad.owl_manager.addAxiom(cls.ont, ad.create_subclass_of(
+            ad.create_object_intersection_of(B, ad.create_object_some_values_from(r, C)), A))
+        ad.owl_manager.addAxiom(cls.ont, ad.create_subclass_of(
+            D, ad.create_object_some_values_from(r, ad.create_object_intersection_of(B, C))))
+        cls.dataset = Dataset(cls.ont)
+
+    def test_auxiliary_classes_are_appended_to_index(self):
+        from mowl.ontology.normalize import is_auxiliary_iri
+        model = EmbeddingELModel(self.dataset, 4, 4)
+        dataset_classes = list(self.dataset.classes.as_str)
+        index = model.class_index_dict
+        # dataset classes keep their indices, auxiliaries come after them
+        for i, name in enumerate(dataset_classes):
+            self.assertEqual(index[name], i)
+        aux = [name for name in index if is_auxiliary_iri(name)]
+        self.assertGreater(len(aux), 0)
+        self.assertEqual(sorted(index[a] for a in aux),
+                         list(range(len(dataset_classes), len(index))))
+        # the dataset itself is untouched
+        self.assertFalse(any(is_auxiliary_iri(c) for c in self.dataset.classes.as_str))
+
+    def test_training_axioms_are_all_indexed(self):
+        for dataset in (self.dataset, FamilyDataset()):
+            with self.subTest(dataset=type(dataset).__name__):
+                model = EmbeddingELModel(dataset, 4, 4)
+                el_dataset = ELDataset(dataset.ontology, model.class_index_dict,
+                                       model.object_property_index_dict,
+                                       normalized_gcis=model._training_normalized_gcis)
+                el_dataset.get_gci_datasets()
+                self.assertEqual(el_dataset.num_skipped_axioms, 0)
+
+    def test_training_ontology_normalized_once(self):
+        from unittest import mock
+        from mowl.ontology.normalize import ELNormalizer
+        original = ELNormalizer.normalize
+        with mock.patch.object(ELNormalizer, "normalize", autospec=True,
+                               side_effect=original) as patched:
+            model = EmbeddingELModel(self.dataset, 4, 4)
+            model.training_datasets
+        self.assertEqual(patched.call_count, 1)
+
+    def test_module_covers_auxiliary_classes(self):
+        model = ELEmbeddings(self.dataset, embed_dim=4, batch_size=4)
+        self.assertEqual(model.module.class_embed.weight.shape[0], len(model.class_index_dict))
+        model.train(epochs=1)
