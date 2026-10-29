@@ -1,7 +1,6 @@
 """Tests for the MultiBoxEL model and the T3 solvability comparison with BoxSquaredEL."""
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Tuple
 
@@ -14,31 +13,8 @@ mowl.init_jvm("2g")
 
 from mowl.datasets import PathDataset
 from mowl.models import BoxSquaredEL, MultiBoxEL
-from tests.geometric.helpers import NS, t3_dataset
+from tests.geometric.helpers import NS
 
-__all__ = ["t3_dataset"]
-
-SCRATCH_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-    "geometric",
-    "_scratch",
-)
-
-
-@pytest.fixture
-def tmp_path(request: pytest.FixtureRequest, t3_dataset: PathDataset) -> Path:
-    """Return a per-test scratch directory inside the repo's gitignored scratch folder.
-
-    Overrides pytest's built-in ``tmp_path`` (which would live under /tmp) and also
-    points ``t3_dataset.ontology_path`` at a path in the scratch folder: the models
-    write the EL normaliser cache (``<ontology>_mowl_el_normalized_v2.owl``) next to
-    ``dataset.ontology_path``, and that cache must not be written into
-    ``tests/geometric/fixtures``, which holds only tracked source fixtures.
-    """
-    path = Path(SCRATCH_DIR) / request.node.name
-    path.mkdir(parents=True, exist_ok=True)
-    t3_dataset.ontology_path = str(Path(SCRATCH_DIR) / "t3.owl")
-    return path
 
 
 def _triple_nonempty(
@@ -101,12 +77,12 @@ def _total_positive_loss(model: MultiBoxEL | BoxSquaredEL) -> float:
     return total
 
 
-def test_multiboxel_trains_on_t3(t3_dataset: PathDataset, tmp_path: Path) -> None:
+def test_multiboxel_trains_on_t3(t3_dataset: PathDataset, scratch_dir: Path) -> None:
     m = MultiBoxEL(
         t3_dataset,
         embed_dim=2,
         n_components=2,
-        model_filepath=str(tmp_path / "m.pt"),
+        model_filepath=str(scratch_dir / "m.pt"),
     )
     m.train(epochs=3, validate_every=10)
     for param in m.module.parameters():
@@ -175,7 +151,7 @@ def _assert_t3_multibox_separates(model: MultiBoxEL) -> None:
 
 @pytest.mark.slow
 def test_t3_expressivity_multibox_zero_loss(
-    t3_dataset: PathDataset, tmp_path: Path
+    t3_dataset: PathDataset, scratch_dir: Path
 ) -> None:
     """MultiBoxEL(k=2) in one dimension represents the Helly-violating T3 TBox with zero loss.
 
@@ -190,7 +166,7 @@ def test_t3_expressivity_multibox_zero_loss(
 
     Measured: total axiom loss ``0.0``, floor ``0.0``.
     """
-    mb = _make_t3_multibox(t3_dataset, tmp_path / "mb_exact.pt")
+    mb = _make_t3_multibox(t3_dataset, scratch_dir / "mb_exact.pt")
     _write_t3_exact(mb)
 
     bad = []
@@ -211,7 +187,7 @@ def test_t3_expressivity_multibox_zero_loss(
 @pytest.mark.slow
 @pytest.mark.parametrize("seed", [0, 1, 2])
 def test_t3_box2el_cannot_reach_zero(
-    t3_dataset: PathDataset, tmp_path: Path, seed: int
+    t3_dataset: PathDataset, scratch_dir: Path, seed: int
 ) -> None:
     """Floored BoxSquaredEL in one dimension cannot reach zero loss on T3.
 
@@ -233,7 +209,7 @@ def test_t3_box2el_cannot_reach_zero(
         margin=0.0,
         learning_rate=0.01,
         neg_sampling_gcis=[],
-        model_filepath=str(tmp_path / f"b2_t3_{seed}.pt"),
+        model_filepath=str(scratch_dir / f"b2_t3_{seed}.pt"),
     )
     b2.train(epochs=3000, validate_every=4000)
     b2_loss = _total_positive_loss(b2) + float(_width_floor(b2.module).item())
@@ -242,7 +218,7 @@ def test_t3_box2el_cannot_reach_zero(
 
 @pytest.mark.slow
 def test_t3_local_learnability_multibox(
-    t3_dataset: PathDataset, tmp_path: Path
+    t3_dataset: PathDataset, scratch_dir: Path
 ) -> None:
     """Adam recovers a zero-loss MultiBoxEL(k=2) solution from a perturbed exact configuration.
 
@@ -254,7 +230,7 @@ def test_t3_local_learnability_multibox(
     (noise seeds 1 and 2 also reach ``< 2e-15``; ``sigma = 0.05`` reaches ``0``).
     """
     torch.manual_seed(0)
-    mb = _make_t3_multibox(t3_dataset, tmp_path / "mb_local.pt", learning_rate=0.005)
+    mb = _make_t3_multibox(t3_dataset, scratch_dir / "mb_local.pt", learning_rate=0.005)
     _write_t3_exact(mb)
     gen = torch.Generator().manual_seed(0)
     with torch.no_grad():
@@ -278,7 +254,7 @@ def test_t3_local_learnability_multibox(
     ),
 )
 def test_t3_random_init_multibox_optimisation_gap(
-    t3_dataset: PathDataset, tmp_path: Path
+    t3_dataset: PathDataset, scratch_dir: Path
 ) -> None:
     """Adam from random init plateaus near 1e-3 although a zero-loss configuration exists.
 
@@ -296,7 +272,7 @@ def test_t3_random_init_multibox_optimisation_gap(
     The test (seed 0, lr 0.01, 3000 epochs) fails first on the empty-triple check.
     """
     torch.manual_seed(0)
-    mb = _make_t3_multibox(t3_dataset, tmp_path / "mb_t3.pt")
+    mb = _make_t3_multibox(t3_dataset, scratch_dir / "mb_t3.pt")
     mb.train(epochs=3000, validate_every=4000)
     mb_loss = _total_positive_loss(mb)
     mb_min_offset = float(torch.abs(mb.module.class_offset.weight).min().item())
