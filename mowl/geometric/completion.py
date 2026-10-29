@@ -6,7 +6,7 @@ Krötzsch & Simančík (*The Incredible ELK*, JAR 2014, §4, Table 2) for normal
 EL++ TBoxes and RBoxes (:class:`~mowl.geometric.normal_forms.NF1`–:class:`~mowl.geometric.normal_forms.NF4`,
 :class:`~mowl.geometric.normal_forms.NF6`, :class:`~mowl.geometric.normal_forms.NF7`).
 
-Guarantees (Spec §5.1):
+Guarantees:
 - The canonical interpretation :math:`\\mathcal{I}` satisfies the normalised
   ontology :math:`\\mathcal{O}` (:math:`\\mathcal{I} \\models \\mathcal{O}`).
 - For all concept names :math:`A, B`:
@@ -303,7 +303,7 @@ class Completion:
 class CanonicalModel:
     """Canonical model :math:`\\mathcal{I}` of a consistent normalised EL++ ontology.
 
-    Domain and interpretation (Spec §5.1):
+    Domain and interpretation:
     - :math:`\\Delta^{\\mathcal{I}} = \\{d_A : A \\in N_C \\cup \\{\\top\\}, \\bot \\notin S(A)\\}`,
       ordered by sorted satisfiable concept names ``names``.
     - :math:`A^{\\mathcal{I}} = \\{d_B \\in \\Delta^{\\mathcal{I}} : A \\in S(B)\\}`

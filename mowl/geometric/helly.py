@@ -1,9 +1,9 @@
 """Helly-satisfiability check and non-box-representability certificates.
 
 Implements the Helly-satisfiability diagnostic and minimal jointly-unsatisfiable
-concept-name set enumeration of Spec §5.3 (G4).
+concept-name set enumeration.
 
-What a certificate proves (Spec §5.3):
+What a certificate proves:
 - By Helly's theorem for axis-parallel boxes in :math:`\\mathbb{R}^d` (Helly
   number 2; Eckhoff 1988; Leemhuis & Kutz, NeSy 2025, Def. 3, Prop. 4), any
   finite family of axis-parallel boxes whose members pairwise intersect has a
@@ -54,7 +54,7 @@ What a certificate proves (Spec §5.3):
   model exists; no sufficiency theorem is known. Use
   :class:`~mowl.geometric.boxes.BoxModelBuilder` to search for a model.
 
-Propositional exactness lemma, relevance pruning, and completeness (Spec §5.3):
+Propositional exactness lemma, relevance pruning, and completeness:
 - **Lemma (strong reading only).** In the propositional fragment (no
   :class:`~mowl.geometric.normal_forms.NF3`,
   :class:`~mowl.geometric.normal_forms.NF4`,
@@ -68,7 +68,7 @@ Propositional exactness lemma, relevance pruning, and completeness (Spec §5.3):
   :math:`(\\{u_1\\}, \\{u_2\\}, U \\setminus \\{u_1, u_2\\})` has satisfiable
   pairwise conjunctions (proper subsets of :math:`U`) and unsatisfiable triple
   conjunction :math:`\\sqcap U`.
-- **Soundness vs. completeness for non-degenerate certificates (Spec §5.3 v3).**
+- **Soundness vs. completeness for non-degenerate certificates.**
   The Lemma is complete for *strong* certificates only. Non-degenerate
   certificates are a sound sufficient condition for non-box-representability,
   not a complete one: whether a certificate is non-degenerate depends on how a
@@ -79,7 +79,7 @@ Propositional exactness lemma, relevance pruning, and completeness (Spec §5.3):
   ``certificates_nondegenerate`` is non-empty, ``True`` only when ``complete``
   is ``True`` and ``certificates_strong`` is empty (since every non-degenerate
   certificate is also a strong certificate), and ``None`` otherwise.
-- **Relevance pruning (Spec §5.3 v3).** Only :math:`\\bot`-relevant concept names
+- **Relevance pruning.** Only :math:`\\bot`-relevant concept names
   are enumerated as candidates, where relevance is the backward closure from the
   :math:`\\bot`-axioms through :class:`~mowl.geometric.normal_forms.NF1` and
   :class:`~mowl.geometric.normal_forms.NF2` (a name is relevant if it is a
@@ -209,7 +209,7 @@ class HellyReport:
     check is exact for the **strong reading** only
     (:attr:`box_representable_strong` / ``certificates_strong``); non-degenerate
     certificates are a sound sufficient condition for non-box-representability,
-    not a complete one (Spec §5.3 v3). With roles, ``complete`` is always
+    not a complete one. With roles, ``complete`` is always
     ``False`` (Leemhuis & Kutz, NAI 2026, Prop. 38), though any returned
     certificate remains a sound proof of non-box-representability (Eckhoff 1988;
     Leemhuis & Kutz, NeSy 2025, Defs. 3, 6; Props. 4, 5) of its kind:
@@ -378,7 +378,7 @@ def helly_check(
     derivation of :math:`Z \\sqsubseteq \\bot` uses only :math:`\\bot`-relevant
     names (backward closure from :math:`\\bot`-axioms through ``NF1`` and ``NF2``),
     so restricting candidates to :math:`\\bot`-relevant names preserves soundness
-    and completeness of minimal unsatisfiable set enumeration (Spec §5.3 v3).
+    and completeness of minimal unsatisfiable set enumeration.
     If the ontology contains no :math:`\\bot`-axiom (no ``NF1``, ``NF2``, or
     ``NF4`` with ``sup == BOTTOM``), returns immediately with no certificates
     and ``complete = (not has_roles)``.
@@ -400,7 +400,7 @@ def helly_check(
       *non-degenerate* box model of :math:`\\mathcal{O}` exists in any dimension,
       though not a complete one (whether a certificate is non-degenerate depends
       on the split of :math:`U` into :math:`(C_1, C_2, C_3)` and the union of a
-      non-degenerate certificate need not be minimal; Spec §5.3 v3).
+      non-degenerate certificate need not be minimal).
     - A certificate in ``certificates_strong`` proves that no
       *conjunction-faithful* box model of :math:`\\mathcal{O}` (one in which
       every satisfiable conjunction of concept names is non-empty) exists in

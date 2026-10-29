@@ -1,6 +1,6 @@
 """Exact geometric model checker for :mod:`mowl.geometric` region families.
 
-Semantics and guarantees (Spec §5.2):
+Semantics and guarantees:
 - :class:`GeometricInterpretation`: abstract base class for region assignments
   :math:`\\eta` over a universe :math:`U = \\eta(\\top)` in one of the three
   families ``{"interval", "box", "polyhedral"}``. Maps ``TOP`` to
