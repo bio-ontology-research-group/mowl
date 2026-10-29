@@ -192,6 +192,7 @@ class Completion:
 
         # ----- Worklist for concept-side conclusions -------------------
         worklist: deque = deque()
+        edges_in: Dict[str, Set[Tuple[str, str]]] = defaultdict(set)
 
         def add_sub(c: str, d: str) -> None:
             if d not in result.sub_super[c]:
@@ -201,6 +202,7 @@ class Completion:
         def add_edge(c: str, r: str, d: str) -> None:
             if (r, d) not in result.edges[c]:
                 result.edges[c].add((r, d))
+                edges_in[d].add((c, r))
                 worklist.append(("edge", c, r, d))
 
         # ----- Init rule R_0 -------------------------------------------
@@ -244,22 +246,17 @@ class Completion:
                 # Rule R_bot-edge:
                 # C <= BOTTOM and edge (X, S, C)  ==>  X <= BOTTOM
                 if d == BOTTOM:
-                    for parent, role_set in list(result.edges.items()):
-                        for (_role, target) in list(role_set):
-                            if target == c:
-                                add_sub(parent, BOTTOM)
+                    for parent, _role in list(edges_in.get(c, ())):
+                        add_sub(parent, BOTTOM)
 
                 # Rule R_exists- (NF4):
                 # C <= D and edge (X, S, C) with S <=* R and exists R.D <= E  ==>  X <= E
-                for parent, role_set in list(result.edges.items()):
-                    for (role, target) in list(role_set):
-                        if target != c:
-                            continue
-                        for super_role in result.role_sub.get(role, {role}):
-                            for nf4 in self._nf4_by_role_filler.get(
-                                (super_role, d), []
-                            ):
-                                add_sub(parent, nf4.sup)
+                for parent, role in list(edges_in.get(c, ())):
+                    for super_role in result.role_sub.get(role, {role}):
+                        for nf4 in self._nf4_by_role_filler.get(
+                            (super_role, d), []
+                        ):
+                            add_sub(parent, nf4.sup)
 
             else:  # item[0] == "edge"
                 _, c, r, d = item
@@ -288,15 +285,12 @@ class Completion:
                             add_edge(c, super_role, e)
 
                 # Symmetric R_chain (NF7): compose with incoming edges into c
-                for parent, role_set in list(result.edges.items()):
-                    for (r0, target) in list(role_set):
-                        if target != c:
-                            continue
-                        for nf7 in self._nf7_by_pair.get((r0, r), []):
-                            for super_role in result.role_sub.get(
-                                nf7.sup, {nf7.sup}
-                            ):
-                                add_edge(parent, super_role, d)
+                for parent, r0 in list(edges_in.get(c, ())):
+                    for nf7 in self._nf7_by_pair.get((r0, r), []):
+                        for super_role in result.role_sub.get(
+                            nf7.sup, {nf7.sup}
+                        ):
+                            add_edge(parent, super_role, d)
 
                 # Role-hierarchy lift (NF6): an R-edge is also an S-edge for every R <=* S
                 for super_role in result.role_sub.get(r, set()):

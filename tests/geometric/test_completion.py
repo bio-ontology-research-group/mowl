@@ -341,3 +341,75 @@ class TestCompletion(TestCase):
             n_inconsistent,
         )
         self.assertGreater(n_consistent, 0)
+
+    def test_saturate_edges_in_matches_bruteforce(self) -> None:
+        """Verify inverse-edge indexed saturation against ELK on ``roles.owl`` and 20 seeded random role-bearing TBoxes.
+
+        ELK's OWLAPI ``OWLReasoner`` interface exposes class satisfiability and
+        named-class subsumptions (``sub_super``) rather than internal completion
+        role-edge queues, so this test asserts exact ``sub_super`` and
+        unsatisfiability agreement with ELK across all concepts (and specifically
+        for every derived edge target ``d`` in ``comp.edges``).
+        """
+        tboxes = [("roles", normalise(PathDataset(_fixture_path("roles.owl"))))]
+        for seed in range(20):
+            rng = random.Random(seed)
+            tboxes.append((f"seed_{seed}", random_el_tbox(rng, allow_roles=True)))
+
+        for label, no in tboxes:
+            comp = Completion(no.axioms, no.concept_names, no.role_names).saturate()
+            ont = to_owl(no)
+
+            reasoner = ElkReasonerFactory().createReasoner(ont)
+            try:
+                reasoner.precomputeInferences()
+                elk_consistent = bool(reasoner.isConsistent())
+            finally:
+                reasoner.dispose()
+
+            with self.subTest(tbox=label):
+                self.assertEqual(
+                    comp.is_inconsistent(),
+                    not elk_consistent,
+                    f"Consistency mismatch on {label}",
+                )
+                if not elk_consistent:
+                    continue
+
+                elk_entailed, elk_unsat = _elk_subsumptions_and_unsat(
+                    ont, no.concept_names
+                )
+                names = sorted(no.concept_names - {BOTTOM})
+                comp_unsat = {n for n in names if comp.is_unsatisfiable(n)}
+                self.assertEqual(comp_unsat, elk_unsat)
+
+                for a in names:
+                    if a in elk_unsat:
+                        continue
+                    for b in names:
+                        self.assertEqual(
+                            comp.entails(a, b),
+                            (a, b) in elk_entailed,
+                            f"Subsumption mismatch on {label} for ({a}, {b})",
+                        )
+
+                edge_targets = {
+                    target
+                    for role_set in comp.edges.values()
+                    for (_role, target) in role_set
+                }
+                for target in edge_targets:
+                    if target == BOTTOM or target in elk_unsat:
+                        self.assertTrue(comp.is_unsatisfiable(target))
+                    else:
+                        target_sups = {
+                            b for b in names if comp.entails(target, b)
+                        }
+                        elk_target_sups = {
+                            b for b in names if (target, b) in elk_entailed
+                        }
+                        self.assertEqual(
+                            target_sups,
+                            elk_target_sups,
+                            f"Edge target subsumers mismatch on {label} for {target}",
+                        )
