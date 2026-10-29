@@ -16,6 +16,11 @@ References:
 """
 from __future__ import annotations
 
+from mowl.geometric.completion import (
+    CanonicalModel,
+    Completion,
+    CompletionResult,
+)
 from mowl.geometric.errors import (
     BoxModelNotFound,
     GeometricError,
@@ -45,6 +50,9 @@ __all__ = [
     "Axiom",
     "BOTTOM",
     "BoxModelNotFound",
+    "CanonicalModel",
+    "Completion",
+    "CompletionResult",
     "GeometricError",
     "InconsistentOntology",
     "InternalConsistencyError",
