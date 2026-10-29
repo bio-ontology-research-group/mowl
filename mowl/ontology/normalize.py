@@ -14,16 +14,47 @@ from java.util import HashSet
 from jpype import java
 
 import os
+import hashlib
 import logging
 logger = logging.getLogger(__name__)
 handler = logging.StreamHandler()
 logger.addHandler(handler)
 logger.setLevel(logging.INFO)
 
-AUXILIARY_IRI_PREFIX = "http://mowl.borg/aux#"
-"""Namespace of the fresh classes (and object properties) that the normaliser introduces \
-to flatten nested class expressions. The local name is jcel's name for the auxiliary entity, \
-e.g. ``http://mowl.borg/aux#AuxiliaryEntity42``."""
+AUXILIARY_IRI_BASE = "http://mowl.borg/aux/"
+"""Base of the IRIs of the fresh classes (and object properties) that the normaliser \
+introduces to flatten nested class expressions. An auxiliary entity has the IRI \
+``http://mowl.borg/aux/<tag>#<jcel name>``, e.g. \
+``http://mowl.borg/aux/3f2a9c01be#AuxiliaryEntity42``, where ``<tag>`` is the first 10 hex \
+characters of the SHA-1 of the sorted string forms of the TBox axioms that were normalised. \
+The same ontology therefore always yields the same names, and auxiliary entities of different \
+ontologies (e.g. training and testing sets) never coincide."""
+
+
+def is_auxiliary_iri(iri):
+    """Returns ``True`` if ``iri`` names an auxiliary entity introduced by \
+:class:`ELNormalizer`.
+
+    :param iri: Entity IRI
+    :type iri: str
+    :rtype: bool
+    """
+    return str(iri).startswith(AUXILIARY_IRI_BASE)
+
+
+def auxiliary_iri_prefix(axioms):
+    """Returns the auxiliary IRI prefix ``http://mowl.borg/aux/<tag>#`` for a collection of \
+OWL axioms.
+
+    :param axioms: Axioms that are normalised
+    :type axioms: iterable of :class:`org.semanticweb.owlapi.model.OWLAxiom`
+    :rtype: str
+    """
+    digest = hashlib.sha1()
+    for axiom_str in sorted(str(ax.toString()) for ax in axioms):
+        digest.update(axiom_str.encode("utf-8"))
+        digest.update(b"\n")
+    return f"{AUXILIARY_IRI_BASE}{digest.hexdigest()[:10]}#"
 
 from mowl.owlapi import OWLAPIAdapter
 from deprecated.sphinx import versionchanged
@@ -46,9 +77,9 @@ logic EL language.
         :rtype: str
         """
         if ontology_path.endswith(".owl"):
-            return ontology_path[:-4] + "_mowl_el_normalized.owl"
+            return ontology_path[:-4] + "_mowl_el_normalized_v2.owl"
         else:
-            return ontology_path + "_mowl_el_normalized.owl"
+            return ontology_path + "_mowl_el_normalized_v2.owl"
 
     def _save_normalized_ontology(self, axioms_dict, cache_path):
         """Save normalized axioms to an OWL file.
@@ -89,7 +120,7 @@ logic EL language.
         :type load: bool, optional
         :param ontology_path: Path to the original ontology file. If provided and use_cache is \
             True, the normalized ontology will be cached to avoid re-normalization on subsequent \
-            calls. The cache file will be named ``<ontology_path>_mowl_el_normalized.owl``.
+            calls. The cache file will be named ``<ontology_path>_mowl_el_normalized_v2.owl``.
         :type ontology_path: str, optional
         :param use_cache: Whether to use caching. Default is True. If False, the ontology will \
             be re-normalized even if a cache file exists.
@@ -196,7 +227,7 @@ type org.semanticweb.owlapi.model.OWLOntology. Found: {type(ontology)}")
         """Map every auxiliary class and object property created by jcel during normalisation
         to a fresh OWL entity in the translation repository, so that the reverse translation
         can resolve them. The fresh entities have IRIs
-        ``AUXILIARY_IRI_PREFIX + <jcel entity name>``.
+        ``auxiliary_iri_prefix(<TBox axioms>) + <jcel entity name>``.
 
         :class:`TranslationRepository` offers no public method to bind an existing integer
         identifier to an OWL entity (``addClass`` always creates a new identifier), so the
@@ -205,10 +236,11 @@ type org.semanticweb.owlapi.model.OWLOntology. Found: {type(ontology)}")
         repository = translator.getTranslationRepository()
         entity_manager = translator.getOntologyObjectFactory().getEntityManager()
         existing_iris = {str(e.toStringID()) for e in ontology.getSignature(Imports.INCLUDED)}
+        prefix = auxiliary_iri_prefix(ontology.getTBoxAxioms(Imports.INCLUDED))
 
         def fresh_iri(identifier):
             name = str(entity_manager.getName(identifier))
-            iri = AUXILIARY_IRI_PREFIX + name
+            iri = prefix + name
             if iri in existing_iris:
                 raise ValueError(f"Auxiliary entity IRI {iri} clashes with an entity of the "
                                  "input ontology")

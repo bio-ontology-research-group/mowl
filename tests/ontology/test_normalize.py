@@ -357,7 +357,7 @@ class TestElNormalizerCaching(TestCase):
 
         # Create a test ontology file path
         ontology_path = os.path.join(self.temp_dir, "test_ontology.owl")
-        expected_cache_path = os.path.join(self.temp_dir, "test_ontology_mowl_el_normalized.owl")
+        expected_cache_path = os.path.join(self.temp_dir, "test_ontology_mowl_el_normalized_v2.owl")
 
         normalizer = ELNormalizer()
         normalized_axioms = normalizer.normalize(
@@ -378,7 +378,7 @@ class TestElNormalizerCaching(TestCase):
         import os
 
         ontology_path = os.path.join(self.temp_dir, "test_ontology.owl")
-        expected_cache_path = os.path.join(self.temp_dir, "test_ontology_mowl_el_normalized.owl")
+        expected_cache_path = os.path.join(self.temp_dir, "test_ontology_mowl_el_normalized_v2.owl")
 
         normalizer = ELNormalizer()
 
@@ -419,7 +419,7 @@ class TestElNormalizerCaching(TestCase):
         normalized_axioms = normalizer.normalize(self.family_dataset.ontology)
 
         # No cache files should be created in temp_dir
-        cache_files = [f for f in os.listdir(self.temp_dir) if f.endswith("_mowl_el_normalized.owl")]
+        cache_files = [f for f in os.listdir(self.temp_dir) if f.endswith("_mowl_el_normalized_v2.owl")]
         self.assertEqual(len(cache_files), 0, "No cache files should be created without ontology_path")
 
         # Normalization should still work
@@ -430,7 +430,7 @@ class TestElNormalizerCaching(TestCase):
         import os
 
         ontology_path = os.path.join(self.temp_dir, "test_ontology.owl")
-        expected_cache_path = os.path.join(self.temp_dir, "test_ontology_mowl_el_normalized.owl")
+        expected_cache_path = os.path.join(self.temp_dir, "test_ontology_mowl_el_normalized_v2.owl")
 
         normalizer = ELNormalizer()
 
@@ -456,10 +456,10 @@ class TestElNormalizerCaching(TestCase):
         import os
 
         test_cases = [
-            ("ontology.owl", "ontology_mowl_el_normalized.owl"),
-            ("/path/to/ontology.owl", "/path/to/ontology_mowl_el_normalized.owl"),
-            ("my_ontology.owl", "my_ontology_mowl_el_normalized.owl"),
-            ("/data/test.owl", "/data/test_mowl_el_normalized.owl"),
+            ("ontology.owl", "ontology_mowl_el_normalized_v2.owl"),
+            ("/path/to/ontology.owl", "/path/to/ontology_mowl_el_normalized_v2.owl"),
+            ("my_ontology.owl", "my_ontology_mowl_el_normalized_v2.owl"),
+            ("/data/test.owl", "/data/test_mowl_el_normalized_v2.owl"),
         ]
 
         normalizer = ELNormalizer()
@@ -674,3 +674,46 @@ class TestElNormalizerAuxiliaryClasses(TestCase):
                 sat_n, subs_n = self._entailments(norm_ont, classes)
                 self.assertEqual(sat_o, sat_n)
                 self.assertEqual(subs_o, subs_n)
+
+
+class TestAuxiliaryIriPrefix(TestCase):
+    """Auxiliary IRIs are http://mowl.borg/aux/<tag>#..., with <tag> derived from the TBox."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.adapter = OWLAPIAdapter()
+
+    def _nested_ontology(self, iri, extra=None):
+        ad = self.adapter
+        ont = ad.create_ontology(iri)
+        A, B, C = [ad.create_class(f"http://test.org/prefix#{x}") for x in "ABC"]
+        r = ad.create_object_property("http://test.org/prefix#r")
+        ad.owl_manager.addAxiom(ont, ad.create_subclass_of(
+            ad.create_object_intersection_of(B, ad.create_object_some_values_from(r, C)), A))
+        if extra is not None:
+            ad.owl_manager.addAxiom(ont, ad.create_subclass_of(
+                ad.create_class(f"http://test.org/prefix#{extra}"), A))
+        return ont
+
+    def _aux_iris(self, normalized):
+        from mowl.ontology.normalize import is_auxiliary_iri
+        iris = set()
+        for key, axs in normalized.items():
+            classes, props, _ = GCI.get_entities(axs)
+            iris |= {e for e in classes | props if is_auxiliary_iri(e)}
+        return iris
+
+    def test_prefix_is_stable_and_ontology_specific(self):
+        import re
+        aux1 = self._aux_iris(ELNormalizer().normalize(self._nested_ontology("http://o/1")))
+        aux2 = self._aux_iris(ELNormalizer().normalize(self._nested_ontology("http://o/2")))
+        aux3 = self._aux_iris(ELNormalizer().normalize(
+            self._nested_ontology("http://o/3", extra="D")))
+        self.assertEqual(len(aux1), 1)
+        self.assertRegex(next(iter(aux1)),
+                         r"^http://mowl\.borg/aux/[0-9a-f]{10}#AuxiliaryEntity\d+$")
+        # same TBox -> same names (needed for the on-disk cache)
+        self.assertEqual(aux1, aux2)
+        # different TBox -> different namespace
+        prefix = lambda iri: iri.split("#")[0]
+        self.assertNotEqual({prefix(i) for i in aux1}, {prefix(i) for i in aux3})
