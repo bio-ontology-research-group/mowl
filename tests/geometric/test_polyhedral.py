@@ -24,7 +24,6 @@ from mowl.geometric.errors import (
 from mowl.geometric.normal_forms import (
     BOTTOM,
     NF1,
-    NF2,
     NF3,
     NF4,
     NF6,
@@ -36,7 +35,10 @@ from mowl.geometric.polyhedral import ConvexPolyhedralModel
 from mowl.geometric.regions import Face, PairHull, ThickFace, simplex_points
 from mowl.owlapi import OWLAPIAdapter
 from tests.datasetFactory import FamilyDataset
-from tests.geometric.helpers import assert_canonical_model_satisfies_axioms
+from tests.geometric.helpers import (
+    assert_canonical_model_satisfies_axioms,
+    random_el_tbox,
+)
 
 NS = "http://mowl.borg/geo#"
 FIXTURES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
@@ -183,53 +185,44 @@ class TestConvexPolyhedralModel(TestCase):
         self.assertTrue(poly.check().satisfies(NF3(TOP, r, B)))
 
     def test_random_role_tboxes(self) -> None:
-        names = [f"{NS}N{i}" for i in range(6)]
-        roles = [f"{NS}r0", f"{NS}r1"]
-        axiom_kinds = ("NF1", "NF2", "NF3", "NF4", "NF6")
-
         consistent_count = 0
-        for seed in range(30):
-            rng = random.Random(seed)
-            n_axioms = rng.randint(5, 10)
-            axioms = []
-            for _ in range(n_axioms):
-                kind = rng.choice(axiom_kinds)
-                if kind == "NF1":
-                    sub = rng.choice(names)
-                    sup_pool = [c for c in names if c != sub] + [BOTTOM]
-                    sup = rng.choice(sup_pool)
-                    axioms.append(NF1(sub, sup))
-                elif kind == "NF2":
-                    sub1, sub2 = rng.sample(names, 2)
-                    sup_pool = [c for c in names if c not in (sub1, sub2)] + [BOTTOM]
-                    sup = rng.choice(sup_pool)
-                    axioms.append(NF2(sub1, sub2, sup))
-                elif kind == "NF3":
-                    sub, filler = rng.sample(names, 2)
-                    role = rng.choice(roles)
-                    axioms.append(NF3(sub, role, filler))
-                elif kind == "NF4":
-                    filler = rng.choice(names)
-                    sup_pool = [c for c in names if c != filler] + [BOTTOM]
-                    sup = rng.choice(sup_pool)
-                    role = rng.choice(roles)
-                    axioms.append(NF4(role, filler, sup))
-                else:  # NF6
-                    r_sub, r_sup = rng.sample(roles, 2)
-                    axioms.append(NF6(r_sub, r_sup))
+        inconsistent_count = 0
+        top_lhs_consistent = 0
+        roleful_tboxes = 0
+        nf4_live_preimage = 0
+        nf4_bot_nonempty_role = 0
 
-            no = NormalisedOntology(
-                axioms=axioms,
-                concept_names=set(names) | {TOP, BOTTOM},
-                role_names=set(roles),
-                dropped_axioms=0,
+        for seed in range(30):
+            no = random_el_tbox(random.Random(seed), allow_roles=True)
+            self.assertLessEqual(len(no.axioms), 10)
+            self.assertEqual(len(no.concept_names - {TOP, BOTTOM}), 6)
+            self.assertEqual(len(no.role_names), 2)
+
+            has_top_lhs = any(
+                (isinstance(ax, (NF1, NF3)) and ax.sub == TOP)
+                for ax in no.axioms
             )
             try:
                 cm = CanonicalModel.from_normalised(no)
             except InconsistentOntology:
+                inconsistent_count += 1
                 continue
 
             consistent_count += 1
+            if has_top_lhs:
+                top_lhs_consistent += 1
+            if any(cm.role(r) for r in no.role_names):
+                roleful_tboxes += 1
+
+            for ax in no.axioms:
+                if isinstance(ax, NF4):
+                    ext_fill = cm.extension(ax.filler)
+                    r_pairs = cm.role(ax.role)
+                    if any(j in ext_fill for (_, j) in r_pairs):
+                        nf4_live_preimage += 1
+                    if ax.sup == BOTTOM and r_pairs:
+                        nf4_bot_nonempty_role += 1
+
             with self.subTest(seed=seed):
                 assert_canonical_model_satisfies_axioms(cm)
                 poly = ConvexPolyhedralModel.from_canonical_model(cm)
@@ -237,6 +230,12 @@ class TestConvexPolyhedralModel(TestCase):
                 self.assertTrue(poly.is_nondegenerate())
                 self.assertTrue(poly.is_strongly_faithful_on_names())
 
+        self.assertGreaterEqual(nf4_live_preimage, 15)
+        self.assertGreaterEqual(nf4_bot_nonempty_role, 2)
+        self.assertGreaterEqual(roleful_tboxes, 20)
+        self.assertTrue(inconsistent_count >= 1 or top_lhs_consistent >= 1)
+        self.assertGreaterEqual(inconsistent_count, 1)
+        self.assertGreaterEqual(top_lhs_consistent, 1)
         self.assertGreater(consistent_count, 0)
 
     def test_thicken_propositional(self) -> None:

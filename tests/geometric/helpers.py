@@ -1,10 +1,114 @@
 """Shared test helpers for mowl.geometric test suite."""
 from __future__ import annotations
 
-from typing import Set, Tuple
+import random
+from typing import List, Set, Tuple
 
 from mowl.geometric.completion import CanonicalModel
-from mowl.geometric.normal_forms import NF1, NF2, NF3, NF4, NF6, NF7
+from mowl.geometric.normal_forms import (
+    BOTTOM,
+    NF1,
+    NF2,
+    NF3,
+    NF4,
+    NF6,
+    NF7,
+    TOP,
+    NormalisedOntology,
+)
+
+NS = "http://mowl.borg/geo#"
+
+
+def random_el_tbox(
+    rng: random.Random, allow_roles: bool = True
+) -> NormalisedOntology:
+    """Generate a random normalised EL TBox with <= 10 axioms, 6 concept names, and <= 2 roles.
+
+    - Concept names: ``N0..N5`` in ``http://mowl.borg/geo#``.
+    - Role names: ``r0, r1`` when ``allow_roles=True``, else empty.
+    - With probability 0.15 per TBox, adds an axiom with ``TOP`` on the left
+      (:class:`NF1` or, when ``allow_roles=True``, :class:`NF3`).
+    - When ``allow_roles=True``, each :class:`NF4` axiom draws its ``(role, filler)``
+      from pairs already used by an :class:`NF3` axiom in the same TBox (or a
+      super-role of one via a generated :class:`NF6`), with right-hand side
+      ``BOTTOM`` with probability 0.2 and a concept name otherwise.
+    """
+    names = [f"{NS}N{i}" for i in range(6)]
+    roles = [f"{NS}r0", f"{NS}r1"] if allow_roles else []
+    n_axioms = rng.randint(8, 10)
+    axioms = []
+    nf3_pairs: List[Tuple[str, str]] = []
+    nf6_edges: List[Tuple[str, str]] = []
+
+    if rng.random() < 0.15:
+        if allow_roles and rng.random() < 0.5:
+            role = rng.choice(roles)
+            filler = rng.choice(names)
+            axioms.append(NF3(TOP, role, filler))
+            nf3_pairs.append((role, filler))
+        else:
+            axioms.append(NF1(TOP, rng.choice(names)))
+
+    while len(axioms) < n_axioms:
+        if not allow_roles:
+            kind = rng.choice(("NF1", "NF2"))
+        elif len(nf3_pairs) < 2:
+            kind = rng.choices(
+                ("NF1", "NF2", "NF3", "NF6"), weights=(1, 1, 7, 1)
+            )[0]
+        else:
+            kind = rng.choices(
+                ("NF1", "NF2", "NF3", "NF4", "NF6"), weights=(1, 1, 3, 6, 1)
+            )[0]
+
+        if kind == "NF1":
+            sub = rng.choice(names)
+            sup = (
+                BOTTOM
+                if rng.random() < 0.05
+                else rng.choice([c for c in names if c != sub])
+            )
+            axioms.append(NF1(sub, sup))
+        elif kind == "NF2":
+            sub1, sub2 = rng.sample(names, 2)
+            sup = (
+                BOTTOM
+                if rng.random() < 0.05
+                else rng.choice([c for c in names if c not in (sub1, sub2)])
+            )
+            axioms.append(NF2(sub1, sub2, sup))
+        elif kind == "NF3":
+            sub, filler = rng.sample(names, 2)
+            role = rng.choice(roles)
+            axioms.append(NF3(sub, role, filler))
+            if (role, filler) not in nf3_pairs:
+                nf3_pairs.append((role, filler))
+        elif kind == "NF4":
+            pool = list(nf3_pairs)
+            for r_sub, r_sup in nf6_edges:
+                for r, f in nf3_pairs:
+                    if r == r_sub and (r_sup, f) not in pool:
+                        pool.append((r_sup, f))
+            role, filler = rng.choice(pool)
+            sup = (
+                BOTTOM
+                if rng.random() < 0.2
+                else rng.choice([c for c in names if c != filler])
+            )
+            axioms.append(NF4(role, filler, sup))
+        else:  # NF6
+            r_sub, r_sup = rng.sample(roles, 2)
+            axioms.append(NF6(r_sub, r_sup))
+            if (r_sub, r_sup) not in nf6_edges:
+                nf6_edges.append((r_sub, r_sup))
+
+    return NormalisedOntology(
+        axioms=axioms,
+        concept_names=set(names) | {TOP, BOTTOM},
+        role_names=set(roles),
+        dropped_axioms=0,
+    )
 
 
 def assert_canonical_model_satisfies_axioms(cm: CanonicalModel) -> None:
