@@ -16,11 +16,6 @@ References:
 """
 from __future__ import annotations
 
-from mowl.geometric.completion import (
-    CanonicalModel,
-    Completion,
-    CompletionResult,
-)
 from mowl.geometric.errors import (
     BoxModelNotFound,
     GeometricError,
@@ -31,31 +26,79 @@ from mowl.geometric.errors import (
     UnsupportedAxiom,
     UnsupportedRegion,
 )
-from mowl.geometric.normal_forms import (
-    BOTTOM,
-    NF1,
-    NF2,
-    NF3,
-    NF4,
-    NF6,
-    NF7,
-    TOP,
-    Axiom,
-    NormalisedOntology,
-    normalise,
-    to_owl,
+from mowl.geometric.regions import (
+    EMPTY_1D,
+    Box,
+    Face,
+    IntervalUnion,
+    PairHull,
+    RectUnion,
+    simplex_points,
 )
+
+try:
+    from mowl.geometric.completion import (
+        CanonicalModel,
+        Completion,
+        CompletionResult,
+    )
+    from mowl.geometric.normal_forms import (
+        BOTTOM,
+        NF1,
+        NF2,
+        NF3,
+        NF4,
+        NF6,
+        NF7,
+        TOP,
+        Axiom,
+        NormalisedOntology,
+        normalise,
+        to_owl,
+    )
+except ImportError:  # pragma: no cover - allows importing regions without starting JVM
+    pass
+
+
+def __getattr__(name: str) -> object:
+    if name in {"CanonicalModel", "Completion", "CompletionResult"}:
+        from mowl.geometric import completion
+
+        return getattr(completion, name)
+    if name in {
+        "Axiom",
+        "BOTTOM",
+        "NF1",
+        "NF2",
+        "NF3",
+        "NF4",
+        "NF6",
+        "NF7",
+        "NormalisedOntology",
+        "TOP",
+        "normalise",
+        "to_owl",
+    }:
+        from mowl.geometric import normal_forms
+
+        return getattr(normal_forms, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
 
 __all__ = [
     "Axiom",
     "BOTTOM",
+    "Box",
     "BoxModelNotFound",
     "CanonicalModel",
     "Completion",
     "CompletionResult",
+    "EMPTY_1D",
+    "Face",
     "GeometricError",
     "InconsistentOntology",
     "InternalConsistencyError",
+    "IntervalUnion",
     "MissingDependency",
     "NF1",
     "NF2",
@@ -65,9 +108,12 @@ __all__ = [
     "NF7",
     "NormalisedOntology",
     "NotBoxRepresentable",
+    "PairHull",
+    "RectUnion",
     "TOP",
     "UnsupportedAxiom",
     "UnsupportedRegion",
     "normalise",
+    "simplex_points",
     "to_owl",
 ]
