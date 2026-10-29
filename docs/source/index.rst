@@ -109,6 +109,7 @@ If you used mOWL in your work, please consider citing `this article <https://doi
    corpus/index
    graphs/index
    embedding_el/index
+   geometric/index
    evaluation/index
    visualization/index
    examples/index

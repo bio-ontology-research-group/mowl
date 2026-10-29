@@ -16,7 +16,15 @@ References:
 """
 from __future__ import annotations
 
-from mowl.geometric import boxes, checker, helly, intervals, normal_forms, polyhedral
+from mowl.geometric import (
+    boxes,
+    checker,
+    export,
+    helly,
+    intervals,
+    normal_forms,
+    polyhedral,
+)
 from mowl.geometric.boxes import BoxModel, BoxModelBuilder
 from mowl.geometric.checker import (
     DictInterpretation,
@@ -32,6 +40,11 @@ from mowl.geometric.errors import (
     NotBoxRepresentable,
     UnsupportedAxiom,
     UnsupportedRegion,
+)
+from mowl.geometric.export import (
+    boxes_as_tensors,
+    class_points,
+    to_bounding_boxes,
 )
 from mowl.geometric.helly import HellyCertificate, HellyReport, helly_check
 from mowl.geometric.intervals import IntervalUnionModel
@@ -115,8 +128,11 @@ __all__ = [
     "UnsupportedAxiom",
     "UnsupportedRegion",
     "boxes",
+    "boxes_as_tensors",
     "checker",
+    "class_points",
     "completion",
+    "export",
     "helly",
     "helly_check",
     "intervals",
@@ -124,5 +140,6 @@ __all__ = [
     "normalise",
     "polyhedral",
     "simplex_points",
+    "to_bounding_boxes",
     "to_owl",
 ]
