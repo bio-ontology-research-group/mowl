@@ -14,7 +14,7 @@ region models exist:
   `T₃ = {A ≡ X₁⊓X₂, B ≡ X₂⊓X₃, C ≡ X₁⊓X₃, A⊓B ⊑ ⊥, B⊓C ⊑ ⊥, A⊓C ⊑ ⊥}` in any dimension
   (Leemhuis & Kutz, NeSy 2025; our Lean-checked proof in
   `bio-ontology-research-group/faithful-dl-embedding`).
-* **Balls** cannot either.
+* **Balls** of positive radius cannot either (three mutually tangent balls with point intersections are a degenerate exception).
 * **Convex polyhedra** can model every EL++ ontology with a finite canonical model,
   exactly, using one dimension per canonical-model element (Gutiérrez-Basulto &
   Schockaert, KR 2018, Prop. 3; Lacerda, Ozaki & Guimarães, TGDK 2024, Sec. 5), and
@@ -71,7 +71,7 @@ Non-goals (this iteration)
 
 * Axis-aligned cone models of ALC (Özçep et al.) — explicitly deferred.
 * Box models with roles (Box²EL-style head/tail/bump semantics) — the box builder is
-  propositional in v1; role axioms raise `NotImplementedError` with a clear message.
+  propositional in v1; role axioms raise `UnsupportedAxiom` with a clear message.
 * Learning. Nothing here trains anything; outputs may seed trainers.
 * GPU / torch tensors inside `mowl.geometric` (numpy + scipy only).
 
@@ -96,8 +96,9 @@ Anti-goals
   OWLAPI ontology: `SubObjectPropertyOf`, `SubPropertyChainOf`).
 * Must run on a laptop for small/medium ontologies (hundreds to a few thousand
   classes). Document that the polyhedral model has dimension ≈ |classes| and that LP
-  checks scale accordingly; the interval model and the Helly check scale to large
-  ontologies.
+  checks scale accordingly; the interval model scales to large ontologies. **[v4]** The
+  Helly check as implemented re-saturates per candidate set and is intended for small to
+  medium ontologies; incremental joint satisfiability is a follow-up.
 * Development environment: there is no working mOWL environment on the laptop yet.
   The implementer creates `~/.venvs/mowl-dev` (pyenv 3.10.4), `pip install -e .`,
   builds the Java gateway jars with `./build_jars.sh` (gradle and Java 21 are
@@ -241,8 +242,17 @@ non-empty*. Two readings are reported:
 * `certificates_nondegenerate`: certificates whose three pairwise conjunctions are each
   `O`-equivalent to a satisfiable *concept name* (so any non-degenerate box model is
   excluded; this is the `T₃` situation, `X₁⊓X₂ ≡ A` etc.);
-* `certificates_strong`: all certificates (they exclude strongly faithful box models,
-  where every satisfiable conjunction must be non-empty).
+* `certificates_strong`: all certificates. **[v4, after final review]** They exclude
+  *conjunction-faithful* box models — those in which every satisfiable conjunction of
+  names is non-empty — which is stronger than strong faithfulness on names; a box model
+  that is strongly faithful on names need not realise every satisfiable conjunction
+  (example: `X1⊓X2 ⊑ Y, Y⊓X3 ⊑ ⊥` has the 1-D box model X1=[0,1], X2=[2,3], X3=[4,5],
+  Y=[6,7], strongly faithful on names, although (X1,X2,X3) is a strong certificate).
+  Consequently `BoxModelBuilder(faithful="strong")` is gated on
+  `certificates_nondegenerate` only (sound, since its non-degeneracy witnesses make
+  any returned model non-degenerate), and the per-LHS-conjunction witnesses mentioned
+  for the MILP are dropped. `box_representable_* = True` means "no Helly obstruction of
+  this kind was found" (obstruction-free), not that a box model exists.
 This is the TBox-only counterpart of Leemhuis & Kutz's Helly antipattern (their
 Example 2 forces the witnesses with an ABox; here names or strong faithfulness do).
 Note that `T₃` without the names `A, B, C` is Helly-satisfiable in the sense of Leemhuis
@@ -321,7 +331,8 @@ returned `BoxModel` is passed through `ModelChecker` before return. Outcomes:
   that no theorem guarantees existence). In the §7 property test this outcome is
   logged, never asserted as failure.
 Document: feasibility is checked by MILP with `scipy.optimize.milp` (HiGHS); exact but
-exponential in the worst case; intended for small ontologies (≤ ~200 names).
+exponential in the worst case; intended for small ontologies. **[v4]** If the time limit
+is hit with a feasible incumbent, the incumbent is post-checked and returned if it passes.
 
 ### 5.4 Exports (G7)
 
