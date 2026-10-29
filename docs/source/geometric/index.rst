@@ -11,7 +11,7 @@ Constructive geometric models of EL++ ontologies
 
 Learned geometric ontology embeddings in mOWL—such as
 :class:`ELEmbeddings <mowl.models.elembeddings.model.ELEmbeddings>`,
-:class:`ELBoxEmbeddings <mowl.models.elboxembeddings.model.ELBoxEmbeddings>`, and
+:class:`ELBE <mowl.models.elbe.model.ELBE>`, and
 :class:`BoxSquaredELModule <mowl.nn.el.boxsquaredel.module.BoxSquaredELModule>`—optimise
 differentiable loss functions and satisfy an ontology only approximately.
 Recent theoretical results characterise when *exact* geometric region models of

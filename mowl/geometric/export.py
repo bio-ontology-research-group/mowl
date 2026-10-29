@@ -2,8 +2,8 @@
 
 Provides helpers to export class regions from :class:`~mowl.geometric.polyhedral.ConvexPolyhedralModel`
 and :class:`~mowl.geometric.boxes.BoxModel` as NumPy arrays suitable for seeding
-or inspecting mOWL embedding modules (such as :class:`~mowl.nn.el.elbox.module.ELBoxModule`
-/ :class:`~mowl.models.elboxembeddings.model.ELBoxEmbeddings` and
+or inspecting mOWL embedding modules (such as :class:`~mowl.nn.el.elbe.module.ELBEModule`
+/ :class:`~mowl.models.elbe.model.ELBE` and
 :class:`~mowl.nn.el.boxsquaredel.module.BoxSquaredELModule`).
 
 Guarantees and limitations (Spec §2 Anti-goals, §5.4):
@@ -25,7 +25,7 @@ Guarantees and limitations (Spec §2 Anti-goals, §5.4):
   unsatisfiable classes) with ``NaN``. Supports both ``(lo, hi)`` corner pairs
   (``as_center_offset=False``, default) and ``(center, offset)`` pairs
   (``as_center_offset=True``, where ``center = (lo + hi) / 2`` and
-  ``offset = (hi - lo) / 2 >= 0``) to initialise ``ELBoxEmbeddings`` or
+  ``offset = (hi - lo) / 2 >= 0``) to initialise ``ELBE`` or
   ``BoxSquaredEL`` class embeddings. Note that :class:`~mowl.geometric.boxes.BoxModelBuilder`
   minimises total box width :math:`\\sum (U_{A,i} - L_{A,i})`, so returned boxes
   are frequently degenerate (:math:`\\text{lo} = \\text{hi}`, zero offset/volume);
@@ -117,8 +117,8 @@ def boxes_as_tensors(
     The returned arrays are aligned with ``class_to_id`` (such as
     :attr:`mowl.datasets.Dataset.class_to_id`) and can be converted to PyTorch
     tensors (e.g. ``torch.from_numpy(...)``) to initialise class embeddings in
-    :class:`~mowl.models.elboxembeddings.model.ELBoxEmbeddings` /
-    :class:`~mowl.nn.el.elbox.module.ELBoxModule` or
+    :class:`~mowl.models.elbe.model.ELBE` /
+    :class:`~mowl.nn.el.elbe.module.ELBEModule` or
     :class:`~mowl.nn.el.boxsquaredel.module.BoxSquaredELModule`:
 
     - With ``as_center_offset=False`` (default), returns ``(lo, hi)`` where row
@@ -126,7 +126,7 @@ def boxes_as_tensors(
       :math:`(L_A, U_A) \\in \\mathbb{R}^d \\times \\mathbb{R}^d`.
     - With ``as_center_offset=True``, returns ``(center, offset)`` where
       ``center = 0.5 * (lo + hi)`` and ``offset = 0.5 * (hi - lo) >= 0`` match
-      the centre/offset parameterisation used by ``ELBoxEmbeddings`` and
+      the centre/offset parameterisation used by ``ELBE`` and
       ``BoxSquaredEL``.
     - Concept names in ``class_to_id`` that have no non-empty box in
       ``box_model`` (such as ``owl:Nothing``, unsatisfiable classes, or classes

@@ -222,7 +222,7 @@ def normalise(source: Union[Dataset, OWLOntology]) -> NormalisedOntology:
             filtered_tbox.add(ax)
 
     clean_tbox_ont = OWLAPIAdapter().owl_manager.createOntology(filtered_tbox)
-    gci_dict = normalizer.normalize(clean_tbox_ont)
+    gci_dict = normalizer.normalize(clean_tbox_ont, use_cache=False)
 
     axioms: List[Axiom] = []
     concept_names: Set[str] = {TOP, BOTTOM}

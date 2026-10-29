@@ -124,7 +124,7 @@ by :attr:`mowl.datasets.Dataset.class_to_id` using
    box_model = BoxModelBuilder(cm_ok, d_max=4, time_limit=30.0).build()
    assert box_model.is_model() and box_model.is_nondegenerate()
 
-   # Export as (lo, hi) corners or as (center, offset) for ELBoxEmbeddings / BoxSquaredEL
+   # Export as (lo, hi) corners or as (center, offset) for ELBE / BoxSquaredEL
    lo, hi = boxes_as_tensors(box_model, ds_ok.class_to_id)
    centers, offsets = boxes_as_tensors(
        box_model, ds_ok.class_to_id, as_center_offset=True
