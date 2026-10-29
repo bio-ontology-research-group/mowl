@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import random
 import subprocess
+import sys
 from unittest import TestCase
 
 import mowl
@@ -392,7 +393,7 @@ class TestHellyCheck(TestCase):
 
     def test_import_without_jvm(self) -> None:
         cmd = [
-            "/home/leechuck/.venvs/mowl-dev/bin/python",
+            sys.executable,
             "-c",
             (
                 "import mowl.geometric; "

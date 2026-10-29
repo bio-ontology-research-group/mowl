@@ -2,9 +2,9 @@
 
 Provides helpers to export class regions from :class:`~mowl.geometric.polyhedral.ConvexPolyhedralModel`
 and :class:`~mowl.geometric.boxes.BoxModel` as NumPy arrays suitable for seeding
-or inspecting mOWL embedding modules (such as :class:`~mowl.nn.el.elboxembeddings.ELBoxModule`
+or inspecting mOWL embedding modules (such as :class:`~mowl.nn.el.elbox.module.ELBoxModule`
 / :class:`~mowl.models.elboxembeddings.model.ELBoxEmbeddings` and
-:class:`~mowl.nn.el.boxsquaredel.BoxSquaredELModule`).
+:class:`~mowl.nn.el.boxsquaredel.module.BoxSquaredELModule`).
 
 Guarantees and limitations (Spec §2 Anti-goals, §5.4):
 - :func:`class_points` returns the exact generating simplex-vertex rows for each
@@ -118,8 +118,8 @@ def boxes_as_tensors(
     :attr:`mowl.datasets.Dataset.class_to_id`) and can be converted to PyTorch
     tensors (e.g. ``torch.from_numpy(...)``) to initialise class embeddings in
     :class:`~mowl.models.elboxembeddings.model.ELBoxEmbeddings` /
-    :class:`~mowl.nn.el.elboxembeddings.ELBoxModule` or
-    :class:`~mowl.nn.el.boxsquaredel.BoxSquaredELModule`:
+    :class:`~mowl.nn.el.elbox.module.ELBoxModule` or
+    :class:`~mowl.nn.el.boxsquaredel.module.BoxSquaredELModule`:
 
     - With ``as_center_offset=False`` (default), returns ``(lo, hi)`` where row
       ``idx = class_to_id[name]`` holds the lower and upper box corners

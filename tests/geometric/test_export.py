@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import sys
 from unittest import TestCase
 
 import numpy as np
@@ -65,7 +66,8 @@ class TestExport(TestCase):
 
         # Also demonstrate on t3 that bounding boxes are lossy and do NOT form a model:
         # for X1, X2, X3 their simplex faces are disjoint on the triple intersection,
-        # whereas axis-parallel bounding boxes of the faces of X1, X2, X3 share the origin.
+        # whereas axis-parallel bounding boxes of the faces of X1, X2, X3 share a
+        # common point (which follows from Helly number 2 of boxes).
         ds_t3 = PathDataset(_fixture_path("t3.owl"))
         cm_t3 = CanonicalModel.from_dataset(ds_t3)
         poly_t3 = ConvexPolyhedralModel.from_canonical_model(cm_t3)
@@ -198,7 +200,7 @@ class TestExport(TestCase):
 
     def test_import_without_jvm(self) -> None:
         cmd = [
-            "/home/leechuck/.venvs/mowl-dev/bin/python",
+            sys.executable,
             "-c",
             (
                 "import sys; "

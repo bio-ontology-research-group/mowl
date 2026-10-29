@@ -12,7 +12,7 @@ Constructive geometric models of EL++ ontologies
 Learned geometric ontology embeddings in mOWL—such as
 :class:`ELEmbeddings <mowl.models.elembeddings.model.ELEmbeddings>`,
 :class:`ELBoxEmbeddings <mowl.models.elboxembeddings.model.ELBoxEmbeddings>`, and
-:class:`BoxSquaredELModule <mowl.nn.el.boxsquaredel.BoxSquaredELModule>`—optimise
+:class:`BoxSquaredELModule <mowl.nn.el.boxsquaredel.module.BoxSquaredELModule>`—optimise
 differentiable loss functions and satisfy an ontology only approximately.
 Recent theoretical results characterise when *exact* geometric region models of
 :math:`\mathcal{EL}^{++}` ontologies exist and give explicit constructions:
@@ -134,9 +134,9 @@ Limitations and caveats
      is a proof of impossibility; when no certificate is found and the MILP fails
      for all :math:`d \le d_{\max}` or reaches ``time_limit``,
      :meth:`~mowl.geometric.boxes.BoxModelBuilder.build` raises
-     :class:`~mowl.geometric.errors.BoxModelNotFound` (inconclusive). Moreover,
-     MILP feasibility is exponential in the worst case and is intended for small
-     ontologies (:math:`\le \sim 200` concept names).
+     :class:`~mowl.geometric.errors.BoxModelNotFound` (inconclusive). The
+     builder is intended for small ontologies; the MILP is exponential in the
+     worst case.
    * *Zero-width (degenerate) boxes:* Because the MILP objective minimises total
      box width :math:`\sum_{A,i} (U_{A,i} - L_{A,i})`, returned boxes frequently
      satisfy :math:`\text{lo} = \text{hi}` (single points, which are non-empty

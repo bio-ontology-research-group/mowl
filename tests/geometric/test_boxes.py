@@ -5,6 +5,7 @@ import logging
 import os
 import random
 import subprocess
+import sys
 from typing import Dict, List, Optional
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
@@ -407,7 +408,7 @@ class TestBoxes(TestCase):
 
     def test_import_without_jvm(self) -> None:
         cmd = [
-            "/home/leechuck/.venvs/mowl-dev/bin/python",
+            sys.executable,
             "-c",
             (
                 "import mowl.geometric; "
