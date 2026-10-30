@@ -75,3 +75,19 @@ def go_subsumption_dataset():
 def foodon_subsumption_dataset():
     """Session-scoped FoodOnSubsumptionDataset fixture - loaded lazily once per test session."""
     return FoodOnSubsumptionDataset()
+
+
+@pytest.fixture
+def abox_kb():
+    """Build a small EL KB with TBox + ABox covering class and role assertions."""
+    from tests.geometric.helpers import build_abox_kb
+
+    return build_abox_kb()
+
+
+@pytest.fixture
+def abox_kb_random():
+    """Return 20 seeded random small KBs (seeds 0..19) with 3-6 individuals each."""
+    from tests.geometric.helpers import _build_random_abox_kb
+
+    return [(seed, *_build_random_abox_kb(seed)) for seed in range(20)]

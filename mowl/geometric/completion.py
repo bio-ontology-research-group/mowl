@@ -47,7 +47,6 @@ from mowl.geometric.normal_forms import (
     NF4,
     NF6,
     NF7,
-    NOMINAL_PREFIX,
     TOP,
     Axiom,
     NormalisedOntology,

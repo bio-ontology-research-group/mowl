@@ -1,4 +1,4 @@
-"""Backbone-agnostic point-based membership and loss functions for Objective O3.
+"""Backbone-agnostic point-based membership and loss functions.
 
 Implements soft coordinatewise box membership, noisy-OR union membership across
 multi-box components, binary cross-entropy membership loss, and log-side-length
@@ -406,7 +406,7 @@ def compute_point_membership_loss(
     neg: bool = False,
     weight: Optional[float] = None,
 ) -> th.Tensor:
-    """Compute Objective O3 membership BCE loss for a sampled dict or a ``(B, 2)`` pair tensor.
+    """Compute point-based membership BCE loss for a sampled dict or a ``(B, 2)`` pair tensor.
 
     Guarantees:
     - When ``batch`` is a mapping, sums the BCE losses for ``"pos"`` (target ``1``,

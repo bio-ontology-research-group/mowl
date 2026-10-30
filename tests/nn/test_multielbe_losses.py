@@ -7,6 +7,7 @@ import torch
 from mowl.nn import ELBEModule, MultiELBEModule
 import mowl.nn.el.elbe.losses as EL
 import mowl.nn.el.multielbe.losses as MEL
+from tests.geometric.helpers import _random_batch
 
 
 def make_pair(
@@ -42,43 +43,6 @@ def make_pair(
         me.ind_embed.weight.copy_(elbe.ind_embed.weight)
         me.ind_offset.weight.copy_(elbe.ind_offset.weight)
     return elbe, me
-
-
-def _random_batch(
-    gci: str,
-    cols: int,
-    batch_size: int,
-    n_classes: int,
-    n_rels: int,
-    n_inds: int,
-    gen: torch.Generator,
-) -> torch.Tensor:
-    """Create a random integer batch with valid entity indices for ``gci``."""
-    if gci == "gci2":
-        c0 = torch.randint(0, n_classes, (batch_size, 1), generator=gen)
-        r = torch.randint(0, n_rels, (batch_size, 1), generator=gen)
-        c1 = torch.randint(0, n_classes, (batch_size, 1), generator=gen)
-        return torch.cat([c0, r, c1], dim=1)
-    if gci == "gci3":
-        r = torch.randint(0, n_rels, (batch_size, 1), generator=gen)
-        c0 = torch.randint(0, n_classes, (batch_size, 1), generator=gen)
-        c1 = torch.randint(0, n_classes, (batch_size, 1), generator=gen)
-        return torch.cat([r, c0, c1], dim=1)
-    if gci == "gci3_bot":
-        r = torch.randint(0, n_rels, (batch_size, 1), generator=gen)
-        c0 = torch.randint(0, n_classes, (batch_size, 1), generator=gen)
-        bot = torch.zeros((batch_size, 1), dtype=torch.long)
-        return torch.cat([r, c0, bot], dim=1)
-    if gci == "class_assertion":
-        ind = torch.randint(0, n_inds, (batch_size, 1), generator=gen)
-        cls = torch.randint(0, n_classes, (batch_size, 1), generator=gen)
-        return torch.cat([ind, cls], dim=1)
-    if gci == "object_property_assertion":
-        i0 = torch.randint(0, n_inds, (batch_size, 1), generator=gen)
-        r = torch.randint(0, n_rels, (batch_size, 1), generator=gen)
-        i1 = torch.randint(0, n_inds, (batch_size, 1), generator=gen)
-        return torch.cat([i0, r, i1], dim=1)
-    return torch.randint(0, n_classes, (batch_size, cols), generator=gen)
 
 
 @pytest.mark.parametrize(

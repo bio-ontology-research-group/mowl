@@ -20,8 +20,7 @@ from mowl.nn.el.pointloss import (
     union_membership,
     volume_penalty,
 )
-from tests.geometric.helpers import NS, fixture_path
-from tests.models.test_multiboxel import _T3_EXACT_1D, _write_t3_exact
+from tests.geometric.helpers import _T3_EXACT_1D, _write_t3_exact, fixture_path
 
 
 def test_union_membership_noisy_or() -> None:

@@ -14,7 +14,6 @@ from mowl.datasets.el.points import (
 from mowl.geometric.normal_forms import BOTTOM, TOP
 from mowl.nn import MultiELBEModule
 from mowl.nn.el.pointloss import (
-    _VALID_OBJECTIVES,
     _validate_objective,
     volume_penalty,
 )
@@ -102,8 +101,11 @@ class MultiELBE(EmbeddingELModel):
         Non-negative weight multiplying ``init_boxes.anchor_loss(self.module)``
         in :meth:`get_regularization_loss` when ``init_boxes`` is provided.
     objective : {"axiom", "point", "mixed", "hybrid"}, default "axiom"
-        Training objective mode (O1 ``"axiom"``, O3 ``"point"``, O2
-        ``"mixed"``, or ``"hybrid"``).
+        Training objective mode (``"axiom"``, ``"point"``, ``"mixed"``, or
+        ``"hybrid"``). Under ``objective="point"`` and ``"mixed"``, ABox
+        ``class_assertion`` is still trained in the main loop via
+        :math:`-\\log m_C(a)` while ``object_property_assertion`` is zeroed
+        (handled via ``point_role_loss``).
     beta : float, default 0.1
         Temperature :math:`\\beta > 0` for the sigmoid boundary of soft box
         membership under ``objective="point"``, ``"mixed"``, or ``"hybrid"``.
@@ -122,6 +124,11 @@ class MultiELBE(EmbeddingELModel):
         Base random seed for :class:`~mowl.datasets.el.points.PointSupervision`
         construction and per-epoch sampling under ``objective="point"``,
         ``"mixed"``, or ``"hybrid"``.
+
+    References
+    ----------
+    .. [federico2026] Federico, P., Leemhuis, M., & Kutz, O. (2026). Multi-box
+       concept embeddings for description logics (JOWO 2026).
     """
 
     def __init__(

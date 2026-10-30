@@ -47,6 +47,11 @@ Non-guarantees:
   component receives a gradient proportional to its softmax weight pulling it
   toward the source component, which promotes component collapse unless paired
   with :func:`~mowl.nn.el.softagg.diversity_penalty` (``diversity_reg > 0``).
+
+References
+----------
+.. [federico2026] Federico, P., Leemhuis, M., & Kutz, O. (2026). Multi-box
+   concept embeddings for description logics (JOWO 2026).
 """
 from __future__ import annotations
 

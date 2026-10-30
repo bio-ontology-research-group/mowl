@@ -75,13 +75,13 @@ five-part progression:
    embeddings :class:`~mowl.models.PrismEL`, and the faithful-by-construction
    canonical-element mixture model :class:`~mowl.models.CanonicalMixture`
    (backed by :class:`~mowl.geometric.membership.MembershipStructure`).
-5. **Training objectives for multi-box models:** Objective O1 (soft component
+5. **Training objectives for multi-box models:** soft component
    aggregation and log-space volume-overlap diversity regularisation in
-   :mod:`mowl.nn.el.softagg`) and Objective O3 (canonical-element point
+   :mod:`mowl.nn.el.softagg`, and canonical-element point
    supervision in :mod:`mowl.datasets.el.points` and
    :mod:`mowl.nn.el.pointloss`, available via
    ``objective="point" | "mixed" | "hybrid"`` on :class:`~mowl.models.MultiBoxEL` and
-   :class:`~mowl.models.MultiELBE`).
+   :class:`~mowl.models.MultiELBE`.
 
 
 Guarantees by model and procedure
@@ -136,11 +136,11 @@ constructed model ever fails verification, construction raises
      - Target :math:`(k, d)` matching :class:`~mowl.models.BoxSquaredEL`, :class:`~mowl.models.ELBE`, :class:`~mowl.models.PrismEL` (:math:`k = 1, d \ge 3`), :class:`~mowl.models.MultiBoxEL`, or :class:`~mowl.models.MultiELBE` (:math:`k \ge 1`)
    * - :class:`~mowl.models.MultiBoxEL` / :class:`~mowl.nn.MultiBoxELModule`
      - :math:`\mathcal{EL}^{++}` concept normal forms (``gci0``, ``gci1``, ``gci2``, ``gci3``, ``gci0_bot``, ``gci1_bot``, ``gci3_bot``) and ABox assertions (``role_axiom_capable = False``)
-     - Every class is a union of :math:`k = \text{n\_components}` axis-parallel boxes with shared class bump and Box²EL role semantics. At :math:`k = 1` with ``component_aggregation="hard"``, ``component_reg=0.0``, and ``diversity_reg=0.0``, every GCI loss (positive and negative, including ``gci1`` batches with empty intersections) and regularisation loss equal :class:`~mowl.models.BoxSquaredEL` to within ``1e-6``. Supports Objective O1 (``component_aggregation="soft"``, ``tau_anneal``, ``diversity_reg``) and Objective O3 (``objective="point" | "mixed" | "hybrid"``).
+     - Every class is a union of :math:`k = \text{n\_components}` axis-parallel boxes with shared class bump and Box²EL role semantics (`Federico, Leemhuis & Kutz, JOWO 2026`). At :math:`k = 1` with ``component_aggregation="hard"``, ``component_reg=0.0``, and ``diversity_reg=0.0``, every GCI loss (positive and negative, including ``gci1`` batches with empty intersections) and regularisation loss equal :class:`~mowl.models.BoxSquaredEL` to within ``1e-6``. Supports soft component aggregation (``component_aggregation="soft"``, ``tau_anneal``, ``diversity_reg``) and canonical-element point supervision (``objective="point" | "mixed" | "hybrid"``).
      - :math:`k` boxes in :math:`\mathbb{R}^d` per class (:math:`k \ge 2` escapes the Helly number 2 obstruction on :math:`T_3`)
    * - :class:`~mowl.models.MultiELBE` / :class:`~mowl.nn.MultiELBEModule`
      - :math:`\mathcal{EL}^{++}` concept normal forms (``gci0``, ``gci1``, ``gci2``, ``gci3``, ``gci0_bot``, ``gci1_bot``, ``gci3_bot``) and ABox assertions (``role_axiom_capable = False``)
-     - Every class is a union of :math:`k = \text{n\_components}` axis-parallel boxes with ELBE inclusion, gated pairwise intersection, translation roles, and box individuals. At :math:`k = 1` with ``component_aggregation="hard"``, ``component_reg=0.0``, and ``diversity_reg=0.0``, every GCI loss and MSE training loss equal :class:`~mowl.models.ELBE` / :class:`~mowl.nn.ELBEModule` at equal ``margin`` to within ``1e-6`` (preserving ELBE's overlap formula for ``gci3``). Supports ``init_boxes``/``anchor_weight``, Objective O1, and Objective O3.
+     - Every class is a union of :math:`k = \text{n\_components}` axis-parallel boxes with ELBE inclusion, gated pairwise intersection, translation roles, and box individuals (`Federico, Leemhuis & Kutz, JOWO 2026`). At :math:`k = 1` with ``component_aggregation="hard"``, ``component_reg=0.0``, and ``diversity_reg=0.0``, every GCI loss and MSE training loss equal :class:`~mowl.models.ELBE` / :class:`~mowl.nn.ELBEModule` at equal ``margin`` to within ``1e-6`` (preserving ELBE's overlap formula for ``gci3``). Supports ``init_boxes``/``anchor_weight``, soft component aggregation, and canonical-element point supervision.
      - :math:`k` boxes in :math:`\mathbb{R}^d` per class
    * - :class:`~mowl.models.PrismEL` / :class:`~mowl.nn.PrismModule`
      - :math:`\mathcal{EL}^{++}` concept normal forms and ABox assertions (``role_axiom_capable = False``)
@@ -150,13 +150,13 @@ constructed model ever fails verification, construction raises
      - Normalised :math:`\mathcal{EL}^{++}` knowledge bases with individuals (ABox completion)
      - Represents each individual :math:`a` as a masked softmax distribution :math:`p_a` over its admissible canonical support :math:`S_a \subseteq S` from :class:`~mowl.geometric.membership.MembershipStructure`. Guarantees hierarchy violation rate ``0``, exact score ``0.0`` on all training-entailed class assertions, and ``+inf`` score on all contradicted class assertions for all parameter values.
      - Low-rank factorisation :math:`r = \text{rank}` over :math:`|S|` canonical elements
-   * - Objective O1 (:mod:`mowl.nn.el.softagg`)
+   * - Soft component aggregation (:mod:`mowl.nn.el.softagg`)
      - :class:`~mowl.models.MultiBoxEL` and :class:`~mowl.models.MultiELBE` (``component_aggregation="soft"``)
      - Replaces hard :math:`\min` over target components by :math:`\text{softmin}_\tau(v) = -\tau(\log\sum_j e^{-v_j/\tau} - \log K)` (converging to :math:`\min` as :math:`\tau \to 0^+` and equal to the single slice at :math:`K = 1`), soft-argmin emptiness weights :math:`w_{ij} = \text{softmax}(-\text{empt}_{ij}/\tau)` with detached gate :math:`g_{ij} = \max(\text{non\_empty}_{ij}^{\text{det}}, w_{ij}^{\text{det}})` in ``gci1``, and dimension-independent log-space :func:`~mowl.nn.el.softagg.diversity_penalty` (``1.0`` on identical boxes at any :math:`d`).
      - Temperature :math:`\tau` annealed geometrically from ``tau_start`` (``1.0``) to ``tau_end`` (``0.05``)
-   * - Objective O3 (:class:`~mowl.datasets.el.points.PointSupervision`, :mod:`mowl.nn.el.pointloss`)
+   * - Canonical-element point supervision (:class:`~mowl.datasets.el.points.PointSupervision`, :mod:`mowl.nn.el.pointloss`)
      - :class:`~mowl.models.MultiBoxEL` and :class:`~mowl.models.MultiELBE` (``objective="point" | "mixed" | "hybrid"``)
-     - Supervises class regions via soft coordinate-minimum box membership :math:`m(x) = \min_{\text{coord}} \sigma((|o| - |x - c|)/\beta)` and noisy-OR union membership :math:`m_C(x) = 1 - \prod_i (1 - m_{C_i}(x))` over canonical elements of satisfiable named classes and individuals (aliasing individual elements to ``ind_embed``, with a virtual box of half-width ``ind_halfwidth`` defaulting to :math:`5\beta` around ``ind_embed`` for individual targets in role edges), plus ``volume_reg`` log-side-length regularisation. ``"mixed"`` retains the backbone's :math:`\bot`-axiom losses (``gci0_bot``, ``gci1_bot``, ``gci3_bot``), and ``"hybrid"`` retains all GCI losses alongside the point losses. Class assertions are scored by :math:`-\log m_C(a)`.
+     - Supervises class regions via soft coordinate-minimum box membership :math:`m(x) = \min_{\text{coord}} \sigma((|o| - |x - c|)/\beta)` and noisy-OR union membership :math:`m_C(x) = 1 - \prod_i (1 - m_{C_i}(x))` over canonical elements of satisfiable named classes and individuals (aliasing individual elements to ``ind_embed``, with a virtual box of half-width ``ind_halfwidth`` defaulting to :math:`5\beta` around ``ind_embed`` for individual targets in role edges), plus ``volume_reg`` log-side-length regularisation. Under ``"point"`` and ``"mixed"``, ABox ``class_assertion`` is still trained in the main loop via :math:`-\log m_C(a)` while ``object_property_assertion`` is zeroed; ``"mixed"`` retains the backbone's :math:`\bot`-axiom losses (``gci0_bot``, ``gci1_bot``, ``gci3_bot``), and ``"hybrid"`` retains all GCI and ABox losses alongside the point losses. Class assertions are scored by :math:`-\log m_C(a)`.
      - :math:`|\text{elements}| \times d` point table ``elem_embed``
 
 
@@ -360,9 +360,9 @@ Limitations and caveats
      gradient-based training is not guaranteed to converge to a global optimum
      from arbitrary random initialisations.
 
-9. **Objectives O1 (soft aggregation, :mod:`mowl.nn.el.softagg`) and O3 (point supervision, :mod:`mowl.nn.el.pointloss`)**
+9. **Soft component aggregation (:mod:`mowl.nn.el.softagg`) and canonical-element point supervision (:mod:`mowl.nn.el.pointloss`)**
 
-   * *Finite-temperature collapse pressure under O1 and ``tau_end=0.05`` floor:*
+   * *Finite-temperature collapse pressure under soft aggregation and ``tau_end=0.05`` floor:*
      At finite :math:`\tau > 0`, :func:`~mowl.nn.el.softagg.softmin` satisfies
      :math:`\min_j v_j \le \text{softmin}_\tau(v) \le \text{mean}_j v_j` and is
      strictly positive at a hard model whenever non-nearest target components have
@@ -375,7 +375,7 @@ Limitations and caveats
      Although ``module.tau`` is persisted as a registered buffer in
      ``state_dict()``, the geometric annealing schedule in ``on_epoch_start``
      restarts from ``tau_start`` at each :meth:`~mowl.models.MultiBoxEL.train` call.
-   * *Strict positivity of BCE and region vs. point model-ness under O3:*
+   * *Strict positivity of BCE and region vs. point model-ness under point supervision:*
      Because :func:`~mowl.nn.el.pointloss.soft_box_membership` takes the minimum
      over :math:`d` coordinate sigmoids
      :math:`m(x) = \min_{\text{coord}} \sigma((|o| - |x - c|)/\beta)` (which is
@@ -388,14 +388,16 @@ Limitations and caveats
      :math:`[\varepsilon, 1 - \varepsilon]` in
      :func:`~mowl.nn.el.pointloss.membership_bce`) and
      :func:`~mowl.nn.el.pointloss.membership_bce` never reaches exact zero.
-     Under ``objective="point"``, all GCI losses are zeroed because finite point
+     Under ``objective="point"``, all TBox GCI losses and ABox
+     ``object_property_assertion`` are zeroed (while ABox ``class_assertion`` is
+     still trained in the main loop via :math:`-\log m_C(a)`) because finite point
      sets do not forbid boxes from overlapping in empty space;
-     ``objective="mixed"`` keeps the backbone's :math:`\bot`-axiom losses
-     (``gci0_bot``, ``gci1_bot``, ``gci3_bot``) alongside the point losses, and
-     ``objective="hybrid"`` keeps all GCI losses alongside the point losses.
-     Under ``"point"``, ``"mixed"``, and ``"hybrid"``, ABox class assertions are
-     scored by :math:`-\log m_C(a)` and point satisfaction is measured via
-     :meth:`~mowl.nn.MultiBoxELModule.point_modelness`.
+     ``objective="mixed"`` additionally keeps the backbone's :math:`\bot`-axiom
+     losses (``gci0_bot``, ``gci1_bot``, ``gci3_bot``) alongside the point losses,
+     and ``objective="hybrid"`` keeps all GCI and ABox losses alongside the point
+     losses. Under ``"point"``, ``"mixed"``, and ``"hybrid"``, ABox class
+     assertions are scored by :math:`-\log m_C(a)` and point satisfaction is
+     measured via :meth:`~mowl.nn.MultiBoxELModule.point_modelness`.
 
 
 References

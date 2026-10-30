@@ -173,16 +173,16 @@ CanonicalMixture model
    :show-inheritance:
 
 
-Objective O1: Soft component aggregation and diversity regularisation
----------------------------------------------------------------------
+Soft component aggregation and diversity regularisation
+-------------------------------------------------------
 
 .. automodule:: mowl.nn.el.softagg
    :members:
    :show-inheritance:
 
 
-Objective O3: Canonical-element point supervision and losses
-------------------------------------------------------------
+Canonical-element point supervision and losses
+----------------------------------------------
 
 .. automodule:: mowl.datasets.el.points
    :members:

@@ -3,9 +3,10 @@ from __future__ import annotations
 
 import os
 import random
-from typing import List, Set, Tuple
+from typing import Dict, List, Set, Tuple
 
 import pytest
+import torch
 
 from mowl.datasets import PathDataset
 from mowl.geometric.completion import CanonicalModel
@@ -20,8 +21,11 @@ from mowl.geometric.normal_forms import (
     TOP,
     NormalisedOntology,
 )
+from mowl.owlapi import OWLAPIAdapter
 
 NS = "http://mowl.borg/geo#"
+IND = "http://mowl.borg/geo/ind#"
+_OWL_THING = "http://www.w3.org/2002/07/owl#Thing"
 FIXTURES_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fixtures")
 
 
@@ -237,3 +241,243 @@ def assert_canonical_model_satisfies_axioms(cm: CanonicalModel) -> None:
             )
         else:  # pragma: no cover
             raise AssertionError(f"Unexpected axiom type: {ax!r}")
+
+
+def build_abox_kb():
+    """Build a small EL KB with TBox + ABox covering class and role assertions."""
+    adapter = OWLAPIAdapter()
+    mgr = adapter.owl_manager
+    df = adapter.data_factory
+    ont = adapter.create_ontology("http://mowl.borg/geo/abox_test")
+
+    top = adapter.create_class(TOP)
+    bot = adapter.create_class(BOTTOM)
+    father = adapter.create_class(NS + "Father")
+    mother = adapter.create_class(NS + "Mother")
+    parent = adapter.create_class(NS + "Parent")
+    male = adapter.create_class(NS + "Male")
+    female = adapter.create_class(NS + "Female")
+    has_child = adapter.create_object_property(NS + "hasChild")
+
+    bob = adapter.create_individual(IND + "bob")
+    ann = adapter.create_individual(IND + "ann")
+    carl = adapter.create_individual(IND + "carl")
+
+    # TBox:
+    # Father <= Parent, Mother <= Parent
+    mgr.addAxiom(ont, adapter.create_subclass_of(father, parent))
+    mgr.addAxiom(ont, adapter.create_subclass_of(mother, parent))
+    # exists hasChild.TOP <= Parent
+    mgr.addAxiom(
+        ont,
+        adapter.create_subclass_of(
+            adapter.create_object_some_values_from(has_child, top), parent
+        ),
+    )
+    # Male and Female <= BOTTOM
+    mgr.addAxiom(
+        ont,
+        adapter.create_subclass_of(
+            adapter.create_object_intersection_of(male, female), bot
+        ),
+    )
+
+    # ABox:
+    # Father(bob), Male(bob), hasChild(bob, ann), hasChild(carl, ann)
+    mgr.addAxiom(ont, df.getOWLClassAssertionAxiom(father, bob))
+    mgr.addAxiom(ont, df.getOWLClassAssertionAxiom(male, bob))
+    mgr.addAxiom(ont, df.getOWLObjectPropertyAssertionAxiom(has_child, bob, ann))
+    mgr.addAxiom(ont, df.getOWLObjectPropertyAssertionAxiom(has_child, carl, ann))
+
+    return ont
+
+
+@pytest.fixture
+def abox_kb():
+    """Build a small EL KB with TBox + ABox covering class and role assertions."""
+    return build_abox_kb()
+
+
+def _build_random_abox_kb(seed: int):
+    """Build a seeded random small EL KB with 3-6 individuals."""
+    rng = random.Random(seed)
+    adapter = OWLAPIAdapter()
+    mgr = adapter.owl_manager
+    df = adapter.data_factory
+    ont = adapter.create_ontology(f"http://mowl.borg/geo/random_abox_{seed}")
+
+    top = adapter.create_class(TOP)
+    bot = adapter.create_class(BOTTOM)
+    class_iris = [f"{NS}C{i}" for i in range(6)]
+    role_iris = [f"{NS}r0", f"{NS}r1"]
+    n_inds = rng.randint(3, 6)
+    ind_iris = [f"{IND}a{i}" for i in range(n_inds)]
+
+    classes = {iri: adapter.create_class(iri) for iri in class_iris}
+    roles = {iri: adapter.create_object_property(iri) for iri in role_iris}
+    inds = {iri: adapter.create_individual(iri) for iri in ind_iris}
+
+    for c_obj in classes.values():
+        mgr.addAxiom(ont, df.getOWLDeclarationAxiom(c_obj))
+    for r_obj in roles.values():
+        mgr.addAxiom(ont, df.getOWLDeclarationAxiom(r_obj))
+    for i_obj in inds.values():
+        mgr.addAxiom(ont, df.getOWLDeclarationAxiom(i_obj))
+
+    # Disjoint pair C4 and C5 <= BOTTOM (assertions draw from C0..C4 so KB stays consistent)
+    mgr.addAxiom(
+        ont,
+        adapter.create_subclass_of(
+            adapter.create_object_intersection_of(
+                classes[class_iris[4]], classes[class_iris[5]]
+            ),
+            bot,
+        ),
+    )
+
+    safe_classes = class_iris[:5]
+    # Random TBox axioms over safe_classes
+    for _ in range(rng.randint(5, 8)):
+        kind = rng.choice(["nf1", "nf2", "nf3", "nf4", "nf6"])
+        if kind == "nf1":
+            c1, c2 = rng.sample(safe_classes, 2)
+            mgr.addAxiom(ont, adapter.create_subclass_of(classes[c1], classes[c2]))
+        elif kind == "nf2":
+            c1, c2, c3 = rng.sample(safe_classes, 3)
+            mgr.addAxiom(
+                ont,
+                adapter.create_subclass_of(
+                    adapter.create_object_intersection_of(classes[c1], classes[c2]),
+                    classes[c3],
+                ),
+            )
+        elif kind == "nf3":
+            c1, c2 = rng.sample(safe_classes, 2)
+            r = rng.choice(role_iris)
+            mgr.addAxiom(
+                ont,
+                adapter.create_subclass_of(
+                    classes[c1],
+                    adapter.create_object_some_values_from(roles[r], classes[c2]),
+                ),
+            )
+        elif kind == "nf4":
+            c1, c2 = rng.sample(safe_classes, 2)
+            r = rng.choice(role_iris)
+            filler = top if rng.random() < 0.3 else classes[c1]
+            mgr.addAxiom(
+                ont,
+                adapter.create_subclass_of(
+                    adapter.create_object_some_values_from(roles[r], filler),
+                    classes[c2],
+                ),
+            )
+        else:
+            r1, r2 = rng.sample(role_iris, 2)
+            mgr.addAxiom(ont, df.getOWLSubObjectPropertyOfAxiom(roles[r1], roles[r2]))
+
+    # Random ABox class assertions and role assertions
+    for _ in range(rng.randint(3, 6)):
+        a = rng.choice(ind_iris)
+        c = rng.choice(safe_classes)
+        mgr.addAxiom(ont, df.getOWLClassAssertionAxiom(classes[c], inds[a]))
+
+    for _ in range(rng.randint(2, 5)):
+        a = rng.choice(ind_iris)
+        b = rng.choice(ind_iris)
+        r = rng.choice(role_iris)
+        mgr.addAxiom(
+            ont, df.getOWLObjectPropertyAssertionAxiom(roles[r], inds[a], inds[b])
+        )
+
+    return ont, ind_iris, class_iris
+
+
+@pytest.fixture
+def abox_kb_random():
+    """Return 20 seeded random small KBs (seeds 0..19) with 3-6 individuals each."""
+    return [(seed, *_build_random_abox_kb(seed)) for seed in range(20)]
+
+
+def _dicts_for_abox_kb() -> Tuple[Dict[str, int], Dict[str, int], Dict[str, int]]:
+    class_iris = [
+        NS + "Father",
+        NS + "Mother",
+        NS + "Parent",
+        NS + "Male",
+        NS + "Female",
+    ]
+    ind_iris = [
+        IND + "bob",
+        IND + "ann",
+        IND + "carl",
+    ]
+    role_iris = [NS + "hasChild"]
+    class_index_dict = {iri: idx for idx, iri in enumerate(class_iris)}
+    individual_index_dict = {iri: idx for idx, iri in enumerate(ind_iris)}
+    relation_index_dict = {iri: idx for idx, iri in enumerate(role_iris)}
+    return class_index_dict, individual_index_dict, relation_index_dict
+
+
+# Exact zero-loss 1-D configuration for MultiBoxEL(k=2) on T3, as intervals per component.
+_T3_EXACT_1D = {
+    "X1": [(0.0, 1.0), (2.0, 3.0)],
+    "X2": [(0.0, 1.0), (4.0, 5.0)],
+    "X3": [(2.0, 3.0), (4.0, 5.0)],
+    "A": [(0.0, 1.0), (0.0, 1.0)],
+    "C": [(2.0, 3.0), (2.0, 3.0)],
+    "B": [(4.0, 5.0), (4.0, 5.0)],
+    "Z": [(0.0, 1.0), (0.0, 1.0)],
+}
+
+
+def _write_t3_exact(model) -> None:
+    """Write the exact 1-D configuration into the class boxes (owl:Thing = [-1, 6] in both components)."""
+    intervals = dict(_T3_EXACT_1D)
+    with torch.no_grad():
+        for name, comps in list(intervals.items()) + [(None, [(-1.0, 6.0), (-1.0, 6.0)])]:
+            iri = _OWL_THING if name is None else NS + name
+            idx = model.class_index_dict[iri]
+            model.module.class_center.weight[idx] = torch.tensor(
+                [(lo + hi) / 2 for lo, hi in comps]
+            )
+            model.module.class_offset.weight[idx] = torch.tensor(
+                [(hi - lo) / 2 for lo, hi in comps]
+            )
+
+
+def _random_batch(
+    gci: str,
+    cols: int,
+    batch_size: int,
+    n_classes: int,
+    n_rels: int,
+    n_inds: int,
+    gen: torch.Generator,
+) -> torch.Tensor:
+    """Create a random integer batch with valid entity indices for ``gci``."""
+    if gci == "gci2":
+        c0 = torch.randint(0, n_classes, (batch_size, 1), generator=gen)
+        r = torch.randint(0, n_rels, (batch_size, 1), generator=gen)
+        c1 = torch.randint(0, n_classes, (batch_size, 1), generator=gen)
+        return torch.cat([c0, r, c1], dim=1)
+    if gci == "gci3":
+        r = torch.randint(0, n_rels, (batch_size, 1), generator=gen)
+        c0 = torch.randint(0, n_classes, (batch_size, 1), generator=gen)
+        c1 = torch.randint(0, n_classes, (batch_size, 1), generator=gen)
+        return torch.cat([r, c0, c1], dim=1)
+    if gci == "gci3_bot":
+        r = torch.randint(0, n_rels, (batch_size, 1), generator=gen)
+        c0 = torch.randint(0, n_classes, (batch_size, 1), generator=gen)
+        bot = torch.zeros((batch_size, 1), dtype=torch.long)
+        return torch.cat([r, c0, bot], dim=1)
+    if gci == "class_assertion":
+        ind = torch.randint(0, n_inds, (batch_size, 1), generator=gen)
+        cls = torch.randint(0, n_classes, (batch_size, 1), generator=gen)
+        return torch.cat([ind, cls], dim=1)
+    if gci == "object_property_assertion":
+        i0 = torch.randint(0, n_inds, (batch_size, 1), generator=gen)
+        r = torch.randint(0, n_rels, (batch_size, 1), generator=gen)
+        i1 = torch.randint(0, n_inds, (batch_size, 1), generator=gen)
+        return torch.cat([i0, r, i1], dim=1)
+    return torch.randint(0, n_classes, (batch_size, cols), generator=gen)

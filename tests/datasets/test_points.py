@@ -21,6 +21,7 @@ from org.semanticweb.owlapi.model import OWLOntology
 
 from mowl.datasets import PathDataset
 from mowl.datasets.el.points import (
+    MAX_EXACT_CHECKS_FACTOR,
     POINTS_CODE_TAG,
     PointSupervision,
     build_or_load_point_supervision,
@@ -30,8 +31,7 @@ from mowl.geometric.completion import CanonicalModel
 from mowl.geometric.normal_forms import BOTTOM, TOP
 from mowl.nn import MultiBoxELModule, MultiELBEModule
 from mowl.owlapi import OWLAPIAdapter
-from tests.geometric.helpers import NS, fixture_path
-from tests.geometric.test_abox import IND, _build_random_abox_kb, abox_kb  # noqa: F401
+from tests.geometric.helpers import IND, NS, _build_random_abox_kb, fixture_path
 
 
 @pytest.fixture
@@ -488,6 +488,91 @@ def test_sample_permutes_all_elements_coverage() -> None:
     assert len(seen_roles) == n_elem
 
 
+def test_nf2_exact_check_bound_and_seeded_cache(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """NF2 exact checks are bounded by 4 * hard_neg_cap (setting hard_neg_capped) and cache keys include seed and cap."""
+    import mowl.datasets.el.points as points_mod
+
+    adapter = OWLAPIAdapter()
+    mgr = adapter.owl_manager
+    ont = adapter.create_ontology("http://mowl.borg/geo/nf2_bound_test")
+
+    c_a = adapter.create_class(NS + "A")
+    c_b = adapter.create_class(NS + "B")
+    c_e = adapter.create_class(NS + "E")
+    mgr.addAxiom(
+        ont,
+        adapter.create_subclass_of(
+            adapter.create_object_intersection_of(c_a, c_b), c_e
+        ),
+    )
+    sub_a = [adapter.create_class(f"{NS}A_{i}") for i in range(6)]
+    sub_b = [adapter.create_class(f"{NS}B_{i}") for i in range(6)]
+    for sa in sub_a:
+        mgr.addAxiom(ont, adapter.create_subclass_of(sa, c_a))
+    for sb in sub_b:
+        mgr.addAxiom(ont, adapter.create_subclass_of(sb, c_b))
+
+    cm = CanonicalModel.from_ontology(ont)
+    names = sorted(cm.concept_names - {TOP, BOTTOM})
+    cls_dict = {iri: idx for idx, iri in enumerate(names)}
+
+    orig_check = points_mod._pair_joint_satisfiable
+    calls = {"count": 0}
+
+    def _counting_check(*args, **kwargs):
+        calls["count"] += 1
+        return orig_check(*args, **kwargs)
+
+    monkeypatch.setattr(points_mod, "_pair_joint_satisfiable", _counting_check)
+
+    tiny_cap = 2
+    max_checks = MAX_EXACT_CHECKS_FACTOR * tiny_cap
+    ps = PointSupervision.from_canonical_model(
+        cm, cls_dict, rng_seed=3, hard_neg_cap=tiny_cap
+    )
+    assert calls["count"] == max_checks
+    assert ps.hard_neg_capped is True
+
+    # Verify build_or_load_point_supervision keys by rng_seed, hard_neg_cap, and POINTS_CODE_TAG
+    class _DummyDataset:
+        def __init__(self, ontology, data_root: Path) -> None:
+            self.ontology = ontology
+            self.data_root = str(data_root)
+
+    ds = _DummyDataset(ont, tmp_path)
+    ps_s1 = build_or_load_point_supervision(
+        ds, cls_dict, rng_seed=1, hard_neg_cap=2, cache_dir=tmp_path
+    )
+    ps_s2 = build_or_load_point_supervision(
+        ds, cls_dict, rng_seed=2, hard_neg_cap=2, cache_dir=tmp_path
+    )
+    ps_cap5 = build_or_load_point_supervision(
+        ds, cls_dict, rng_seed=1, hard_neg_cap=5, cache_dir=tmp_path
+    )
+    assert ps_s1.rng_seed == 1
+    assert ps_s2.rng_seed == 2
+    assert ps_cap5.rng_seed == 1
+    assert ps_s1.ontology_sha256 != ps_s2.ontology_sha256
+    assert ps_s1.ontology_sha256 != ps_cap5.ontology_sha256
+
+    cache_files = sorted(p.name for p in tmp_path.glob(f"points_{POINTS_CODE_TAG}_*.pt"))
+    assert len(cache_files) == 3
+    assert any("seed1_cap2" in name for name in cache_files)
+    assert any("seed2_cap2" in name for name in cache_files)
+    assert any("seed1_cap5" in name for name in cache_files)
+
+    # Reload from cache and verify stored rng_seed is preserved
+    calls_before = calls["count"]
+    ps_s2_reload = build_or_load_point_supervision(
+        ds, cls_dict, rng_seed=2, hard_neg_cap=2, cache_dir=tmp_path
+    )
+    assert calls["count"] == calls_before
+    assert ps_s2_reload.rng_seed == 2
+    assert ps_s2_reload.hard_neg_capped is True
+
+
 def _run_synthetic_scale_benchmark() -> Tuple[float, float, int, int, int]:
     """Run the 50k x 50k synthetic scale benchmark and return (elapsed_s, max_rss_gb, n_pos, n_hard, n_sampled)."""
     n_elements = 50_000
@@ -544,10 +629,9 @@ def _run_synthetic_scale_benchmark() -> Tuple[float, float, int, int, int]:
 @pytest.mark.slow
 def test_point_supervision_synthetic_scale() -> None:
     """Synthetic scale test: 50,000 elements x 50,000 classes (~15 ancestors, 300 bot axioms) finishes in <60s and <2GB."""
-    # Note: tests/conftest.py preloads 9 builtin datasets into a 10 GB JVM at
-    # session start (~5.8 GB baseline ru_maxrss), so we measure ru_maxrss
-    # before and after construction (and also check total ru_maxrss when the
-    # baseline is < 1.5 GB).
+    # Earlier tests in the session may have already increased the process/JVM
+    # high-water mark (ru_maxrss), so we check the RSS increase across the
+    # benchmark and also check total ru_maxrss when the baseline is < 1.5 GB.
     rss_before_gb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / (1024.0 * 1024.0)
     elapsed, rss_after_gb, n_pos, n_hard, n_sampled = _run_synthetic_scale_benchmark()
     rss_delta_gb = max(0.0, rss_after_gb - rss_before_gb)

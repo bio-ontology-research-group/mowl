@@ -1,4 +1,4 @@
-"""Unit tests for soft component aggregation and diversity regularisation (Objective O1)."""
+"""Unit tests for soft component aggregation and diversity regularisation."""
 from __future__ import annotations
 
 import pytest

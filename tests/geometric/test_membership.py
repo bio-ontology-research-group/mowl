@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import random
-from typing import Dict, List, Set, Tuple
+from typing import Dict, Set
 
 import pytest
 import torch
@@ -15,31 +15,16 @@ from org.semanticweb.owlapi.model import OWLOntology
 from mowl.geometric.completion import CanonicalModel
 from mowl.geometric.membership import MEMBERSHIP_CODE_TAG, MembershipStructure
 from mowl.geometric.normal_forms import BOTTOM, TOP
-from tests.geometric.test_abox import IND, NS, _build_random_abox_kb, abox_kb  # noqa: F401
-
-
-def _dicts_for_abox_kb() -> Tuple[Dict[str, int], Dict[str, int], Dict[str, int]]:
-    class_iris = [
-        NS + "Father",
-        NS + "Mother",
-        NS + "Parent",
-        NS + "Male",
-        NS + "Female",
-    ]
-    ind_iris = [
-        IND + "bob",
-        IND + "ann",
-        IND + "carl",
-    ]
-    role_iris = [NS + "hasChild"]
-    class_index_dict = {iri: idx for idx, iri in enumerate(class_iris)}
-    individual_index_dict = {iri: idx for idx, iri in enumerate(ind_iris)}
-    relation_index_dict = {iri: idx for idx, iri in enumerate(role_iris)}
-    return class_index_dict, individual_index_dict, relation_index_dict
+from tests.geometric.helpers import (
+    IND,
+    NS,
+    _build_random_abox_kb,
+    _dicts_for_abox_kb,
+)
 
 
 def test_toy_family_kb_expected_matrix(abox_kb: OWLOntology) -> None:
-    """Toy family KB (from WP-A Task 1's fixture) gives the expected matrix and role edges."""
+    """Toy family KB fixture gives the expected matrix and role edges."""
     cm = CanonicalModel.from_ontology(abox_kb)
     class_index_dict, individual_index_dict, _ = _dicts_for_abox_kb()
 
@@ -256,7 +241,6 @@ def test_unsatisfiable_class_top_column_and_dropped_role_edges() -> None:
     df = adapter.data_factory
     ont = adapter.create_ontology("http://mowl.borg/geo/membership_edge_cases")
 
-    top = adapter.create_class(TOP)
     bot = adapter.create_class(BOTTOM)
     c_a = adapter.create_class(NS + "A")
     c_b = adapter.create_class(NS + "B")

@@ -1,4 +1,4 @@
-"""Tests for Objective O3 (point and mixed modes) on MultiBoxEL and MultiELBE."""
+"""Tests for the point-based objective (point and mixed modes) on MultiBoxEL and MultiELBE."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -14,9 +14,7 @@ from mowl.geometric.normal_forms import TOP
 from mowl.models import MultiBoxEL, MultiELBE
 from mowl.nn import MultiBoxELModule, MultiELBEModule
 from mowl.nn.el.pointloss import soft_box_membership, union_membership
-from tests.geometric.helpers import fixture_path
-from tests.geometric.test_abox import abox_kb  # noqa: F401
-from tests.nn.test_multielbe_losses import _random_batch
+from tests.geometric.helpers import _random_batch, fixture_path
 
 
 def test_point_objective_tbox_only(tmp_path: Path, abox_kb) -> None:

@@ -1,4 +1,4 @@
-"""CanonicalMixtureModule neural module for the canonical-element mixture model (R4)."""
+"""CanonicalMixtureModule neural module for the canonical-element mixture model."""
 from __future__ import annotations
 
 import math
@@ -15,7 +15,7 @@ MAX_SUPPORT_ENTRIES: int = 524_288
 
 
 class CanonicalMixtureModule(ELModule):
-    """Canonical-element mixture neural module (R4).
+    """Canonical-element mixture neural module.
 
     Represents each individual :math:`a` as a probability distribution
     :math:`p_a = \\operatorname{softmax}_{S_a}(\\ell_a)` over its admissible

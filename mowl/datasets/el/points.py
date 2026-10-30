@@ -1,4 +1,4 @@
-"""Canonical-element point supervision for Objective O3 (:class:`PointSupervision`).
+"""Canonical-element point supervision (:class:`PointSupervision`).
 
 Constructs positive membership pairs ``(x_D, C)`` from sparse ancestor sets,
 hard negative pairs ``(x_D, C)`` from (a) the one-step disjointness closure
@@ -12,11 +12,13 @@ above the cap, without ever materialising a full Cartesian product) plus
 conjunction axiom (:math:`D \\sqsubseteq A` and :math:`C \\sqsubseteq B` in either
 order for some :math:`A \\sqcap B \\sqsubseteq E` with :math:`E \\neq \\bot`,
 represented with the same non-materialised descendant-index product blocks and
-checked exactly; capped at
-:data:`HARD_NEG_CAP` with :attr:`PointSupervision.hard_neg_capped` recording
-whether the cap was hit), random negative candidates by rejection sampling
-against each element's positive set at :meth:`PointSupervision.sample` time, and
-canonical role edges ``(x_C, r, x_D)`` restricted to the element table from a
+checked exactly; bounded by at most
+``max_exact_checks = 4 * hard_neg_cap`` (:data:`MAX_EXACT_CHECKS` at default cap)
+candidate checks in total and capped at :data:`HARD_NEG_CAP`, with
+:attr:`PointSupervision.hard_neg_capped` recording whether either bound was hit),
+random negative candidates by rejection sampling against each element's positive
+set at :meth:`PointSupervision.sample` time, and canonical role edges
+``(x_C, r, x_D)`` restricted to the element table from a
 :class:`~mowl.geometric.completion.CanonicalModel`.
 
 Why one exact check per candidate pair in (b) suffices without outer iteration:
@@ -95,8 +97,10 @@ from mowl.ontology.normalize import is_auxiliary_iri
 
 logger = logging.getLogger(__name__)
 
-POINTS_CODE_TAG: str = "points-v4"
+POINTS_CODE_TAG: str = "points-v5"
 HARD_NEG_CAP: int = 2_000_000
+MAX_EXACT_CHECKS_FACTOR: int = 4
+MAX_EXACT_CHECKS: int = MAX_EXACT_CHECKS_FACTOR * HARD_NEG_CAP
 
 
 def _is_named_target_class(iri: str, cm: CanonicalModel) -> bool:
@@ -453,12 +457,16 @@ def ontology_sha256(
     class_index_dict: Optional[Mapping[str, int]] = None,
     individual_index_dict: Optional[Mapping[str, int]] = None,
     object_property_index_dict: Optional[Mapping[str, int]] = None,
+    *,
+    rng_seed: int = 0,
+    hard_neg_cap: int = HARD_NEG_CAP,
 ) -> str:
-    """Compute a deterministic SHA-256 hex digest for an ontology/dataset and its index dicts.
+    """Compute a deterministic SHA-256 hex digest for an ontology/dataset, its index dicts, ``rng_seed``, and ``hard_neg_cap``.
 
     Guarantees:
     - Produces an identical 64-character hex string for identical ontology files
-      (or axioms when no file path exists) and entity-to-index mappings.
+      (or axioms when no file path exists), entity-to-index mappings,
+      ``rng_seed``, and ``hard_neg_cap``.
     - Works for both file-backed :class:`~mowl.datasets.PathDataset` instances
       and in-memory ``OWLOntology`` / :class:`~mowl.datasets.Dataset` objects.
 
@@ -471,6 +479,8 @@ def ontology_sha256(
     """
     hasher = hashlib.sha256()
     hasher.update(f"tag:{POINTS_CODE_TAG}\n".encode("utf-8"))
+    hasher.update(f"seed:{int(rng_seed)}\n".encode("utf-8"))
+    hasher.update(f"hard_neg_cap:{int(hard_neg_cap)}\n".encode("utf-8"))
 
     ont = getattr(ontology_or_dataset, "ontology", ontology_or_dataset)
     ont_path = getattr(ontology_or_dataset, "ontology_path", None)
@@ -502,7 +512,7 @@ def ontology_sha256(
 
 @dataclass
 class PointSupervision:
-    """Precomputed canonical-element supervision pairs for Objective O3.
+    """Precomputed canonical-element supervision pairs for point-based training.
 
     Guarantees:
     - Stores only flat index tensors (:attr:`pos_pairs`, :attr:`hard_neg_pairs`,
@@ -549,8 +559,9 @@ class PointSupervision:
     ontology_sha256 : Optional[str]
         Optional SHA-256 digest of the source ontology and index maps.
     hard_neg_capped : bool
-        ``True`` iff the hard-negative candidate pool or final ``hard_neg_pairs``
-        hit ``hard_neg_cap`` during construction.
+        ``True`` iff the hard-negative candidate pool, the ``NF2`` exact-check
+        bound (``max_exact_checks = 4 * hard_neg_cap``), or final
+        ``hard_neg_pairs`` hit ``hard_neg_cap`` during construction.
     """
 
     n_elements: int
@@ -635,15 +646,18 @@ class PointSupervision:
         joint-satisfiability check over candidate pairs from
         :math:`M \\cdot \\text{Conj} \\cdot M_{\\text{cls}}^\\top` for binary
         conjunction axioms :math:`A \\sqcap B \\sqsubseteq E` (:math:`E \\neq \\bot`),
-        capped at ``hard_neg_cap`` pairs sampled with ``rng_seed`` and recording
-        whether the cap was hit in :attr:`hard_neg_capped`.
+        bounded by at most ``max_exact_checks = 4 * hard_neg_cap`` candidate
+        checks in total and capped at ``hard_neg_cap`` pairs sampled with
+        ``rng_seed``, recording whether either bound was hit in
+        :attr:`hard_neg_capped`.
 
         Guarantees:
         - Scales in time and memory with ``nnz(M)`` and the number of disjointness /
           conjunction pairs rather than :math:`|\\text{elements}| \\times |\\text{classes}|`.
-        - Caps candidate pairs and ``hard_neg_pairs`` at ``hard_neg_cap`` (default
-          ``2,000,000``) using the dataset random generator seeded with ``rng_seed``,
-          setting :attr:`hard_neg_capped` to ``True`` iff the cap was hit.
+        - Bounds step (b) exact checks at ``max_exact_checks = 4 * hard_neg_cap``
+          and caps ``hard_neg_pairs`` at ``hard_neg_cap`` (default ``2,000,000``)
+          using the dataset random generator seeded with ``rng_seed``, setting
+          :attr:`hard_neg_capped` to ``True`` iff either bound was hit.
 
         Non-guarantees:
         - When ``cm`` is ``None``, only one-step pairs arising from ``disjoint_pairs``
@@ -1004,38 +1018,44 @@ class PointSupervision:
                                     nf2_index.setdefault(ax.sub2, []).append(ax)
                         pair_cache: Dict[FrozenSet[str], bool] = {}
 
-                        if (
-                            hard_neg_cap > 0
-                            and blocks_b.total > hard_neg_cap
-                            and blocks_b.total <= max(int(hard_neg_cap) * 8, 4096)
-                        ):
-                            p_arr = _sample_indices(
-                                blocks_b.total, blocks_b.total, int(rng_seed)
+                        max_exact_checks = (
+                            MAX_EXACT_CHECKS_FACTOR * int(hard_neg_cap)
+                            if hard_neg_cap > 0
+                            else 0
+                        )
+                        cand_b_codes, capped_b_cand = _sample_or_enumerate_blocks(
+                            blocks_b,
+                            stride=stride,
+                            exclude_codes=[pos_codes, hard_a_codes],
+                            cap=max_exact_checks,
+                            rng_seed=int(rng_seed),
+                        )
+                        if hard_neg_cap > 0 and cand_b_codes.size > 1:
+                            perm = _sample_indices(
+                                int(cand_b_codes.size),
+                                int(cand_b_codes.size),
+                                int(rng_seed),
                             ).numpy()
-                            codes = blocks_b.decode_codes(p_arr, stride)
-                            codes = _filter_excluded_codes(
-                                codes, [pos_codes, hard_a_codes]
-                            )
-                            u_codes, first_idx = np.unique(codes, return_index=True)
-                            cand_b_codes = u_codes[np.argsort(first_idx)]
-                            capped_b_cand = False
-                        else:
-                            cand_b_codes, capped_b_cand = _sample_or_enumerate_blocks(
-                                blocks_b,
-                                stride=stride,
-                                exclude_codes=[pos_codes, hard_a_codes],
-                                cap=int(hard_neg_cap),
-                                rng_seed=int(rng_seed),
-                            )
+                            cand_b_codes = cand_b_codes[perm]
 
                         capped_b = bool(capped_b_cand)
                         unsat_b_list: List[int] = []
+                        n_exact_checks = 0
                         for code in cand_b_codes.tolist():
                             e_idx = int(code // stride)
                             c_idx = int(code % stride)
                             d_name = elem_names_list[e_idx]
                             c_iri = id_to_iri.get(c_idx)
-                            if c_iri is not None and not _pair_joint_satisfiable(
+                            if c_iri is None:
+                                continue
+                            if (
+                                max_exact_checks > 0
+                                and n_exact_checks >= max_exact_checks
+                            ):
+                                capped_b = True
+                                break
+                            n_exact_checks += 1
+                            if not _pair_joint_satisfiable(
                                 cm, d_name, c_iri, nf2_index, pair_cache
                             ):
                                 if (
@@ -1045,6 +1065,11 @@ class PointSupervision:
                                     capped_b = True
                                     break
                                 unsat_b_list.append(int(code))
+                        if (
+                            max_exact_checks > 0
+                            and n_exact_checks >= max_exact_checks
+                        ):
+                            capped_b = True
                         if unsat_b_list:
                             hard_b_codes = np.sort(
                                 np.asarray(unsat_b_list, dtype=np.int64)
@@ -1123,7 +1148,9 @@ class PointSupervision:
         sparse disjointness closure :math:`M \\cdot \\text{Dis} \\cdot M^\\top`
         plus (b) an exact joint-satisfiability pass over candidate pairs from
         :math:`M \\cdot \\text{Conj} \\cdot M^\\top` for every ``NF2`` axiom
-        :math:`A \\sqcap B \\sqsubseteq E` with :math:`E \\neq \\bot`.
+        :math:`A \\sqcap B \\sqsubseteq E` with :math:`E \\neq \\bot` (bounded by
+        at most ``max_exact_checks = 4 * hard_neg_cap`` candidate checks in
+        total, setting :attr:`hard_neg_capped` when the bound is hit).
 
         Why a single exact check per candidate pair in (b) suffices without
         iterating to a fixpoint:
@@ -1631,12 +1658,14 @@ def build_or_load_point_supervision(
     object_property_index_dict: Optional[Mapping[str, int]] = None,
     *,
     rng_seed: int = 0,
+    hard_neg_cap: int = HARD_NEG_CAP,
     cache_dir: Optional[Union[str, Path]] = None,
     use_cache: bool = True,
 ) -> PointSupervision:
     """Build or load a cached :class:`PointSupervision` for ``dataset``.
 
-    Keyed by ``ontology_sha256(dataset, ...)`` and :data:`POINTS_CODE_TAG` under
+    Keyed by ``ontology_sha256(dataset, ..., rng_seed=rng_seed, hard_neg_cap=hard_neg_cap)``,
+    ``rng_seed``, ``hard_neg_cap``, and :data:`POINTS_CODE_TAG` under
     ``dataset.data_root`` (when present) or ``~/.cache/mowl/points/``.
     """
     sha = ontology_sha256(
@@ -1644,16 +1673,18 @@ def build_or_load_point_supervision(
         class_index_dict=class_index_dict,
         individual_index_dict=individual_index_dict,
         object_property_index_dict=object_property_index_dict,
+        rng_seed=rng_seed,
+        hard_neg_cap=hard_neg_cap,
     )
     resolved_dir = resolve_points_cache_dir(dataset, cache_dir=cache_dir)
-    cache_path = resolved_dir / f"points_{POINTS_CODE_TAG}_{sha[:16]}.pt"
+    cache_path = (
+        resolved_dir
+        / f"points_{POINTS_CODE_TAG}_seed{int(rng_seed)}_cap{int(hard_neg_cap)}_{sha[:16]}.pt"
+    )
 
     if use_cache and cache_path.exists():
         try:
-            loaded = PointSupervision.load(cache_path, expected_sha256=sha)
-            loaded.rng_seed = int(rng_seed)
-            loaded._default_gen.manual_seed(int(rng_seed))
-            return loaded
+            return PointSupervision.load(cache_path, expected_sha256=sha)
         except Exception as exc:
             logger.warning(
                 "Failed to load cached PointSupervision from %s (%s); rebuilding.",
@@ -1671,6 +1702,7 @@ def build_or_load_point_supervision(
         rng_seed=rng_seed,
         allow_absent_individuals=True,
         ontology_sha256=sha,
+        hard_neg_cap=hard_neg_cap,
     )
     if use_cache:
         try:

@@ -660,13 +660,13 @@ on :math:`S_a` and scores ``+inf``:
    tmpdir.cleanup()
 
 
-Objective O1: Soft component aggregation and diversity regularisation
----------------------------------------------------------------------
+Soft component aggregation and diversity regularisation
+-------------------------------------------------------
 
 Under hard aggregation (``component_aggregation="hard"``), taking ``amin`` over
 target components and ``argmin`` over pairwise emptiness routes gradient only to
 the single nearest component, leaving non-nearest components dead from random
-initialisation. Objective O1 (implemented in :mod:`mowl.nn.el.softagg` and
+initialisation. Soft component aggregation (implemented in :mod:`mowl.nn.el.softagg` and
 available on both :class:`~mowl.models.MultiBoxEL` and
 :class:`~mowl.models.MultiELBE`) sets ``component_aggregation="soft"`` to
 replace every target minimum by the normalised log-mean-exp soft-minimum
@@ -741,18 +741,21 @@ and to :math:`\le 10^{-3}` when components are disjoint:
    assert float(ident_c.grad.norm().item()) > 0.0
 
 
-Objective O3: Canonical-element point supervision
--------------------------------------------------
+Canonical-element point supervision
+-----------------------------------
 
-Objective O3 supervises class regions by points—the canonical elements of
+The point-based objective supervises class regions by points—the canonical elements of
 satisfiable named classes and ABox individuals in the training ontology's
 :class:`~mowl.geometric.completion.CanonicalModel`—rather than by box-to-box
 inclusion. :class:`~mowl.datasets.el.points.PointSupervision` (in
 :mod:`mowl.datasets.el.points`) precomputes positive membership pairs
 :math:`(x_D, C)` where :math:`\mathcal{O} \models D \sqsubseteq C`, hard
-negative pairs where :math:`\mathcal{O} \models D \sqcap C \sqsubseteq \bot`,
-per-element pools of non-entailed classes for random negatives (weighted by
-``neg_weight``, default ``0.1``), and canonical role edges :math:`(x_C, r, x_D)`,
+negative pairs where :math:`\mathcal{O} \models D \sqcap C \sqsubseteq \bot`
+(capped at ``HARD_NEG_CAP = 2_000_000`` with the ``NF2`` exact check bounded by
+at most ``max_exact_checks = 4 * hard_neg_cap`` candidate checks in total),
+and canonical role edges :math:`(x_C, r, x_D)`, while rejection-sampling
+non-entailed random negative pairs on the fly against ``pos_pairs`` (weighted by
+``neg_weight``, default ``0.1``, with nothing per-element stored),
 sampling up to ``points_per_epoch`` (default ``100_000``) pairs per epoch. In
 :mod:`mowl.nn.el.pointloss`, soft coordinate-minimum box membership
 :math:`m(x; c, o) = \min_{\text{coord}} \sigma((|o| - |x - c|)/\beta)` (with
@@ -762,11 +765,13 @@ targets in role edges against a virtual box of half-width ``ind_halfwidth``,
 defaulting to :math:`5\beta`, around ``ind_embed``) and trained with binary
 cross-entropy plus the mean log-side-length regulariser ``volume_reg`` (default
 ``1e-3``) so boxes shrink tightly onto their points. Setting
-``objective="point"`` uses only the point and volume losses (zeroing all GCI
-losses), ``objective="mixed"`` keeps the backbone's :math:`\bot`-axiom
-region losses (``gci0_bot``, ``gci1_bot``, ``gci3_bot``) so empty-space
-disjointness is still enforced, and ``objective="hybrid"`` keeps all GCI
-losses alongside the point losses. Under ``"point"``, ``"mixed"``, and
+``objective="point"`` zeroes all TBox GCI losses and ABox
+``object_property_assertion`` while still training ABox ``class_assertion`` in
+the main loop via :math:`-\log m_C(a)`, ``objective="mixed"`` additionally keeps
+the backbone's :math:`\bot`-axiom region losses (``gci0_bot``, ``gci1_bot``,
+``gci3_bot``) so empty-space disjointness is still enforced, and
+``objective="hybrid"`` keeps all GCI and ABox losses alongside the point
+losses. Under ``"point"``, ``"mixed"``, and
 ``"hybrid"``, ABox class assertions are scored by :math:`-\log m_C(a)`
 (:meth:`~mowl.nn.MultiBoxELModule.class_assertion_score_point`, aliasing
 individual elements directly to ``ind_embed`` without using ``ind_offset``) and

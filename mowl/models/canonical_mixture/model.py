@@ -1,4 +1,4 @@
-"""CanonicalMixture model class (R4)."""
+"""CanonicalMixture model class."""
 from __future__ import annotations
 
 import hashlib
@@ -13,7 +13,6 @@ from tqdm import trange
 import mowl.geometric.completion as completion_mod
 import mowl.geometric.membership as membership_mod
 from mowl.base_models.elmodel import EmbeddingELModel
-from mowl.datasets.el import ELDataset
 from mowl.geometric.completion import CanonicalModel
 from mowl.geometric.membership import MEMBERSHIP_CODE_TAG, MembershipStructure
 from mowl.nn.el.canonical_mixture import (
@@ -25,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 
 class CanonicalMixture(EmbeddingELModel):
-    """Canonical-element mixture model (R4) for ABox completion under an :math:`\\mathcal{EL}` TBox.
+    """Canonical-element mixture model for ABox completion under an :math:`\\mathcal{EL}` TBox.
 
     Builds the :class:`~mowl.geometric.completion.CanonicalModel` and
     :class:`~mowl.geometric.membership.MembershipStructure` of the training
@@ -122,59 +121,6 @@ class CanonicalMixture(EmbeddingELModel):
                 f"eval_gci_name must be one of {valid_names}, got {value!r}"
             )
         self._eval_gci_name = value
-
-    def _load_datasets(self) -> None:
-        """Load GCI and ABox assertion datasets, passing ``individual_index_dict``."""
-        if self._datasets_loaded:
-            return
-
-        ontology_path = getattr(self.dataset, "ontology_path", None)
-        validation_path = getattr(self.dataset, "validation_path", None)
-        testing_path = getattr(self.dataset, "testing_path", None)
-
-        training_el_dataset = ELDataset(
-            self.dataset.ontology,
-            self.class_index_dict,
-            self.object_property_index_dict,
-            individual_index_dict=self.individual_index_dict,
-            extended=self._extended,
-            load_normalized=self.load_normalized,
-            device=self.device,
-            ontology_path=ontology_path,
-            load_role_axioms=self.load_role_axioms,
-            normalized_gcis=self._training_normalized_gcis,
-        )
-        self._training_datasets = training_el_dataset.get_gci_datasets()
-
-        self._validation_datasets = None
-        if self.dataset.validation is not None:
-            validation_el_dataset = ELDataset(
-                self.dataset.validation,
-                self.class_index_dict,
-                self.object_property_index_dict,
-                individual_index_dict=self.individual_index_dict,
-                extended=self._extended,
-                device=self.device,
-                ontology_path=validation_path,
-                load_role_axioms=self.load_role_axioms,
-            )
-            self._validation_datasets = validation_el_dataset.get_gci_datasets()
-
-        self._testing_datasets = None
-        if self.dataset.testing is not None:
-            testing_el_dataset = ELDataset(
-                self.dataset.testing,
-                self.class_index_dict,
-                self.object_property_index_dict,
-                individual_index_dict=self.individual_index_dict,
-                extended=self._extended,
-                device=self.device,
-                ontology_path=testing_path,
-                load_role_axioms=self.load_role_axioms,
-            )
-            self._testing_datasets = testing_el_dataset.get_gci_datasets()
-
-        self._datasets_loaded = True
 
     def _cache_path(self) -> Optional[Path]:
         """Return cache file path next to ``dataset.ontology_path`` if available."""

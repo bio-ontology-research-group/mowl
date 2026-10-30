@@ -12,7 +12,6 @@ from mowl.nn.el.boxsquaredel.module import BoxSquaredELModule
 from mowl.nn.el.multibox_utils import effective_components as _effective_components
 import mowl.nn.el.multiboxel.losses as L
 from mowl.nn.el.pointloss import (
-    _VALID_OBJECTIVES,
     _validate_beta,
     _validate_ind_halfwidth,
     _validate_objective,
@@ -100,7 +99,11 @@ class MultiBoxELModule(ELModule):
         Weight for the pairwise component volume overlap regulariser
         :func:`~mowl.nn.el.softagg.diversity_penalty`.
     objective : str, default "axiom"
-        Training objective mode: ``"axiom"``, ``"point"``, ``"mixed"``, or ``"hybrid"``.
+        Training objective mode: ``"axiom"``, ``"point"``, ``"mixed"``, or
+        ``"hybrid"``. Under ``objective="point"`` and ``"mixed"``, ABox
+        ``class_assertion`` is still trained in the main loop via
+        :math:`-\\log m_C(a)` while ``object_property_assertion`` is zeroed
+        (handled via :meth:`point_role_loss`).
     beta : float, default 0.1
         Sigmoid temperature :math:`\\beta > 0` for soft box membership under
         ``objective="point"``, ``"mixed"``, or ``"hybrid"``.
@@ -114,6 +117,11 @@ class MultiBoxELModule(ELModule):
         Virtual box half-width around individual targets in role pairs under
         ``objective="point"``, ``"mixed"``, or ``"hybrid"``; defaults to
         ``5.0 * beta``.
+
+    References
+    ----------
+    .. [federico2026] Federico, P., Leemhuis, M., & Kutz, O. (2026). Multi-box
+       concept embeddings for description logics (JOWO 2026).
     """
 
     neg_capable_gcis = frozenset({"gci2", "object_property_assertion"})
@@ -411,7 +419,7 @@ class MultiBoxELModule(ELModule):
         neg: bool = False,
         weight: Optional[float] = None,
     ) -> th.Tensor:
-        """Compute Objective O3 point-membership BCE loss.
+        """Compute point-membership BCE loss.
 
         Guarantees:
         - Accepts either a ``(B, 2)`` integer tensor ``[elem_idx, class_idx]`` or
@@ -454,7 +462,7 @@ class MultiBoxELModule(ELModule):
         neg: bool = False,
         weight: Optional[float] = None,
     ) -> th.Tensor:
-        """Compute Objective O3 role BCE loss via Box²EL head/tail boxes and element bumps.
+        """Compute canonical-element role BCE loss via Box²EL head/tail boxes and element bumps.
 
         For each role triple ``(x_C, r, y_D)``:
         - Head term: :math:`m_{H_r}(x + b_D)`.

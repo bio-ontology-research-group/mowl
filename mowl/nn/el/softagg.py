@@ -1,4 +1,4 @@
-"""Soft component aggregation and diversity regularisation helpers (Objective O1).
+"""Soft component aggregation and diversity regularisation helpers.
 
 Provides temperature-controlled soft minimum and softmax weights over component
 axes so that every component of a multi-box class receives gradient during

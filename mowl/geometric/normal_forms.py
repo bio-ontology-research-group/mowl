@@ -33,7 +33,7 @@ import itertools
 from typing import TYPE_CHECKING, List, Set, Union
 import urllib.parse
 
-from mowl.geometric.errors import UnsupportedAxiom, UnsupportedAxiomError
+from mowl.geometric.errors import UnsupportedAxiomError
 
 if TYPE_CHECKING:  # pragma: no cover
     from org.semanticweb.owlapi.model import OWLOntology

@@ -1,7 +1,7 @@
 """Precomputed sparse element × class membership and canonical role edges.
 
 Constructs :class:`MembershipStructure` from a :class:`~mowl.geometric.completion.CanonicalModel`
-for the canonical-element mixture model (R4).
+for the canonical-element mixture model.
 
 Guarantees:
 - Support :math:`S` consists of the canonical elements of satisfiable named

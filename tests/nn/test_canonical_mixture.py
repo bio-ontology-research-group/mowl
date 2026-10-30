@@ -22,11 +22,10 @@ from org.semanticweb.owlapi.model import OWLOntology
 
 from mowl.geometric.completion import CanonicalModel
 from mowl.geometric.membership import MembershipStructure
-from mowl.geometric.normal_forms import BOTTOM, TOP
+from mowl.geometric.normal_forms import BOTTOM
 from mowl.nn.el.canonical_mixture import CanonicalMixtureModule
 from mowl.owlapi import OWLAPIAdapter
-from tests.geometric.test_abox import IND, NS, abox_kb  # noqa: F401
-from tests.geometric.test_membership import _dicts_for_abox_kb
+from tests.geometric.helpers import IND, NS, _dicts_for_abox_kb
 
 
 def _build_module_for_abox_kb(
