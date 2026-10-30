@@ -80,7 +80,7 @@ five-part progression:
    :mod:`mowl.nn.el.softagg`) and Objective O3 (canonical-element point
    supervision in :mod:`mowl.datasets.el.points` and
    :mod:`mowl.nn.el.pointloss`, available via
-   ``objective="point" | "mixed"`` on :class:`~mowl.models.MultiBoxEL` and
+   ``objective="point" | "mixed" | "hybrid"`` on :class:`~mowl.models.MultiBoxEL` and
    :class:`~mowl.models.MultiELBE`).
 
 
@@ -132,11 +132,11 @@ constructed model ever fails verification, construction raises
      - Matches interpretation ambient dimension
    * - :class:`~mowl.geometric.init.ExactBoxInit`
      - Normalised :math:`\mathcal{EL}^{++}` (``method="projected"``) or propositional :math:`\mathcal{EL}_\bot` with fallback to ``"projected"`` (``method="milp"``)
-     - In ``"projected"`` mode with :math:`k = 1`, guarantees :math:`\text{box}(C) \subseteq \text{box}(D)` (up to ``float32`` tolerance ``1e-6``) and zero ``gci0`` loss at margin :math:`0` for every entailed atomic subsumption :math:`C \sqsubseteq D` with **satisfiable** :math:`C` (unsatisfiable subclasses are points at the origin and are not covered; disjointness is not guaranteed). In ``"milp"`` mode, preserves both containment and disjointness when a box model is found (its boxes are mapped coordinate-wise by an increasing affine map from the solver's universe :math:`[0, M]` onto :math:`[-\text{scale}, \text{scale}]`), and falls back to ``"projected"`` on :class:`~mowl.geometric.errors.NotBoxRepresentable` or :class:`~mowl.geometric.errors.BoxModelNotFound`. For :class:`~mowl.nn.PrismModule`, circumscribes coordinates ``0..1`` with an equilateral triangle of inradius :math:`\max(o_0, o_1)\sqrt{3}` so the prism contains the initialisation box. Skips classes absent from the canonical model (``NaN`` rows left untouched by :meth:`~mowl.geometric.init.ExactBoxInit.apply_to_module` and ignored by :meth:`~mowl.geometric.init.ExactBoxInit.anchor_loss`).
+     - In ``"projected"`` mode with :math:`k = 1`, guarantees :math:`\text{box}(C) \subseteq \text{box}(D)` (up to ``float32`` tolerance ``1e-6``) and zero ``gci0`` loss at margin :math:`0` for every entailed atomic subsumption :math:`C \sqsubseteq D` with **satisfiable** :math:`C` (unsatisfiable subclasses are points at the origin and are not covered; disjointness is not guaranteed). In ``"milp"`` mode, preserves both containment and disjointness when a box model is found (its boxes are mapped coordinate-wise by an increasing affine map from the solver's universe :math:`[0, M]` onto :math:`[-\text{scale}, \text{scale}]`), and falls back to ``"projected"`` on :class:`~mowl.geometric.errors.NotBoxRepresentable` or :class:`~mowl.geometric.errors.BoxModelNotFound`. For :class:`~mowl.nn.PrismModule`, sets the equilateral triangle in coordinates ``0..1`` to inradius :math:`\max(o_0, o_1)\sqrt{3}`, which suffices to contain the rectangle (not minimal), so the prism contains the initialisation box. Skips classes absent from the canonical model (``NaN`` rows left untouched by :meth:`~mowl.geometric.init.ExactBoxInit.apply_to_module` and ignored by :meth:`~mowl.geometric.init.ExactBoxInit.anchor_loss`).
      - Target :math:`(k, d)` matching :class:`~mowl.models.BoxSquaredEL`, :class:`~mowl.models.ELBE`, :class:`~mowl.models.PrismEL` (:math:`k = 1, d \ge 3`), :class:`~mowl.models.MultiBoxEL`, or :class:`~mowl.models.MultiELBE` (:math:`k \ge 1`)
    * - :class:`~mowl.models.MultiBoxEL` / :class:`~mowl.nn.MultiBoxELModule`
      - :math:`\mathcal{EL}^{++}` concept normal forms (``gci0``, ``gci1``, ``gci2``, ``gci3``, ``gci0_bot``, ``gci1_bot``, ``gci3_bot``) and ABox assertions (``role_axiom_capable = False``)
-     - Every class is a union of :math:`k = \text{n\_components}` axis-parallel boxes with shared class bump and Box²EL role semantics. At :math:`k = 1` with ``component_reg=0.0`` and ``diversity_reg=0.0``, every GCI loss (positive and negative, including ``gci1`` batches with empty intersections) and regularisation loss equal :class:`~mowl.models.BoxSquaredEL` to within ``1e-6``. Supports Objective O1 (``component_aggregation="soft"``, ``tau_anneal``, ``diversity_reg``) and Objective O3 (``objective="point" | "mixed"``).
+     - Every class is a union of :math:`k = \text{n\_components}` axis-parallel boxes with shared class bump and Box²EL role semantics. At :math:`k = 1` with ``component_aggregation="hard"``, ``component_reg=0.0``, and ``diversity_reg=0.0``, every GCI loss (positive and negative, including ``gci1`` batches with empty intersections) and regularisation loss equal :class:`~mowl.models.BoxSquaredEL` to within ``1e-6``. Supports Objective O1 (``component_aggregation="soft"``, ``tau_anneal``, ``diversity_reg``) and Objective O3 (``objective="point" | "mixed" | "hybrid"``).
      - :math:`k` boxes in :math:`\mathbb{R}^d` per class (:math:`k \ge 2` escapes the Helly number 2 obstruction on :math:`T_3`)
    * - :class:`~mowl.models.MultiELBE` / :class:`~mowl.nn.MultiELBEModule`
      - :math:`\mathcal{EL}^{++}` concept normal forms (``gci0``, ``gci1``, ``gci2``, ``gci3``, ``gci0_bot``, ``gci1_bot``, ``gci3_bot``) and ABox assertions (``role_axiom_capable = False``)
@@ -155,8 +155,8 @@ constructed model ever fails verification, construction raises
      - Replaces hard :math:`\min` over target components by :math:`\text{softmin}_\tau(v) = -\tau(\log\sum_j e^{-v_j/\tau} - \log K)` (converging to :math:`\min` as :math:`\tau \to 0^+` and equal to the single slice at :math:`K = 1`), soft-argmin emptiness weights :math:`w_{ij} = \text{softmax}(-\text{empt}_{ij}/\tau)` with detached gate :math:`g_{ij} = \max(\text{non\_empty}_{ij}^{\text{det}}, w_{ij}^{\text{det}})` in ``gci1``, and dimension-independent log-space :func:`~mowl.nn.el.softagg.diversity_penalty` (``1.0`` on identical boxes at any :math:`d`).
      - Temperature :math:`\tau` annealed geometrically from ``tau_start`` (``1.0``) to ``tau_end`` (``0.05``)
    * - Objective O3 (:class:`~mowl.datasets.el.points.PointSupervision`, :mod:`mowl.nn.el.pointloss`)
-     - :class:`~mowl.models.MultiBoxEL` and :class:`~mowl.models.MultiELBE` (``objective="point" | "mixed"``)
-     - Supervises class regions via soft coordinatewise box membership :math:`m(x) = \prod_{\text{coord}} \sigma((|o| - |x - c|)/\beta)` and noisy-OR union membership :math:`m_C(x) = 1 - \prod_i (1 - m_{C_i}(x))` over canonical elements of satisfiable named classes and individuals (aliasing individual elements to ``ind_embed``), plus ``volume_reg`` log-side-length regularisation. ``"mixed"`` retains the backbone's :math:`\bot`-axiom losses (``gci0_bot``, ``gci1_bot``, ``gci3_bot``). Class assertions are scored by :math:`-\log m_C(a)`.
+     - :class:`~mowl.models.MultiBoxEL` and :class:`~mowl.models.MultiELBE` (``objective="point" | "mixed" | "hybrid"``)
+     - Supervises class regions via soft coordinate-minimum box membership :math:`m(x) = \min_{\text{coord}} \sigma((|o| - |x - c|)/\beta)` and noisy-OR union membership :math:`m_C(x) = 1 - \prod_i (1 - m_{C_i}(x))` over canonical elements of satisfiable named classes and individuals (aliasing individual elements to ``ind_embed``, with a virtual box of half-width ``ind_halfwidth`` defaulting to :math:`5\beta` around ``ind_embed`` for individual targets in role edges), plus ``volume_reg`` log-side-length regularisation. ``"mixed"`` retains the backbone's :math:`\bot`-axiom losses (``gci0_bot``, ``gci1_bot``, ``gci3_bot``), and ``"hybrid"`` retains all GCI losses alongside the point losses. Class assertions are scored by :math:`-\log m_C(a)`.
      - :math:`|\text{elements}| \times d` point table ``elem_embed``
 
 
@@ -376,14 +376,24 @@ Limitations and caveats
      ``state_dict()``, the geometric annealing schedule in ``on_epoch_start``
      restarts from ``tau_start`` at each :meth:`~mowl.models.MultiBoxEL.train` call.
    * *Strict positivity of BCE and region vs. point model-ness under O3:*
-     Because :func:`~mowl.nn.el.pointloss.soft_box_membership` is a product of
-     :math:`d` coordinate sigmoids at finite :math:`\beta > 0`,
-     :math:`m(x) < 1` strictly and :func:`~mowl.nn.el.pointloss.membership_bce`
-     never reaches exact zero. Under ``objective="point"``, all GCI losses are
-     zeroed because finite point sets do not forbid boxes from overlapping in
-     empty space; ``objective="mixed"`` keeps the backbone's :math:`\bot`-axiom
-     losses (``gci0_bot``, ``gci1_bot``, ``gci3_bot``) alongside the point
-     losses. Under both ``"point"`` and ``"mixed"``, ABox class assertions are
+     Because :func:`~mowl.nn.el.pointloss.soft_box_membership` takes the minimum
+     over :math:`d` coordinate sigmoids
+     :math:`m(x) = \min_{\text{coord}} \sigma((|o| - |x - c|)/\beta)` (which is
+     dimension-free, avoiding the :math:`\sigma(|o|/\beta)^d` decay of a
+     coordinatewise product; individual targets in role edges use a virtual box
+     of half-width ``ind_halfwidth`` defaulting to :math:`5\beta` around
+     ``ind_embed``), at finite :math:`\beta > 0` and finite box half-widths
+     every coordinate sigmoid is strictly in :math:`(0, 1)`, so
+     :math:`0 < m(x) < 1` strictly (and is clamped to
+     :math:`[\varepsilon, 1 - \varepsilon]` in
+     :func:`~mowl.nn.el.pointloss.membership_bce`) and
+     :func:`~mowl.nn.el.pointloss.membership_bce` never reaches exact zero.
+     Under ``objective="point"``, all GCI losses are zeroed because finite point
+     sets do not forbid boxes from overlapping in empty space;
+     ``objective="mixed"`` keeps the backbone's :math:`\bot`-axiom losses
+     (``gci0_bot``, ``gci1_bot``, ``gci3_bot``) alongside the point losses, and
+     ``objective="hybrid"`` keeps all GCI losses alongside the point losses.
+     Under ``"point"``, ``"mixed"``, and ``"hybrid"``, ABox class assertions are
      scored by :math:`-\log m_C(a)` and point satisfaction is measured via
      :meth:`~mowl.nn.MultiBoxELModule.point_modelness`.
 

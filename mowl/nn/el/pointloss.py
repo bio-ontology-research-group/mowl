@@ -15,6 +15,12 @@ Guarantees:
   coordinate lies inside the box.
 - :func:`union_membership` computes the noisy-OR :math:`1 - \\prod_{i=1}^k (1 - m_i)`
   of shape ``(B,)``, reducing identically to ``m[:, 0]`` when ``k == 1``.
+- :func:`compute_target_membership` evaluates noisy-OR union membership over
+  ``module.class_boxes`` for class targets and soft box membership in a virtual
+  box of half-width ``module.ind_halfwidth`` (defaulting to :math:`5\\beta`, so a
+  point landing at the individual's centre has membership
+  :math:`\\sigma(5) \\approx 0.9933`) around ``module.ind_embed`` for individual
+  targets.
 - :func:`membership_bce` clamps probabilities to ``[eps, 1 - eps]`` (``eps = 1e-6``)
   so the loss and its gradients are always finite even when ``m`` underflows to ``0``
   or saturates to ``1``.
@@ -22,8 +28,9 @@ Guarantees:
   :math:`\\text{mean}_{\\text{coord}} \\log(2|o| + 10^{-6})`.
 
 Non-guarantees:
-- At finite :math:`\\beta > 0`, :func:`soft_box_membership` satisfies
-  :math:`0 < m(x) < 1` strictly for finite box offsets.
+- At finite :math:`\\beta > 0`, :func:`soft_box_membership` takes the minimum of
+  :math:`d` coordinate sigmoids and therefore satisfies :math:`0 < m(x) < 1`
+  strictly for finite box offsets.
 - Consequently, :func:`membership_bce` is strictly positive and never reaches
   exact zero.
 """
@@ -38,7 +45,7 @@ if TYPE_CHECKING:
     from mowl.datasets.el.points import PointSupervision
 
 
-_VALID_OBJECTIVES = ("axiom", "point", "mixed")
+_VALID_OBJECTIVES = ("axiom", "point", "mixed", "hybrid")
 
 
 def _validate_beta(beta: float) -> float:
@@ -62,10 +69,10 @@ def _validate_ind_halfwidth(ind_halfwidth: float) -> float:
 
 
 def _validate_objective(objective: str) -> str:
-    """Validate that ``objective`` is one of ``'axiom'``, ``'point'``, or ``'mixed'``."""
+    """Validate that ``objective`` is one of ``'axiom'``, ``'point'``, ``'mixed'``, or ``'hybrid'``."""
     if objective not in _VALID_OBJECTIVES:
         raise ValueError(
-            f"objective must be 'axiom', 'point', or 'mixed', got {objective!r}"
+            f"objective must be one of {_VALID_OBJECTIVES}, got {objective!r}"
         )
     return objective
 
@@ -331,12 +338,14 @@ def compute_target_membership(
     evaluates noisy-OR union membership over ``module.class_boxes``. For
     individual target elements (``ps.element_is_individual[elem_y] == True``),
     evaluates soft box membership in a virtual box of half-width
-    ``module.ind_halfwidth`` centred at ``module.ind_embed(ind_idx)``.
+    ``module.ind_halfwidth`` (defaulting to :math:`5\\beta` on the modules)
+    centred at ``module.ind_embed(ind_idx)``.
 
     Guarantees:
     - Returns a 1-D tensor of shape ``(B,)`` in ``(0, 1)``.
-    - Uses ``module.ind_halfwidth`` and ``module.ind_embed`` for individual
-      targets without accessing ``ind_offset``.
+    - Uses ``module.ind_halfwidth`` (default :math:`5\\beta`) and
+      ``module.ind_embed`` for individual targets without accessing
+      ``ind_offset``.
 
     Non-guarantees:
     - Raises :class:`RuntimeError` if ``module.point_supervision`` is ``None``

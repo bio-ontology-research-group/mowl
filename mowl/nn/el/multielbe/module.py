@@ -12,8 +12,10 @@ from mowl.nn.el.multibox_utils import effective_components as _effective_compone
 from mowl.nn.el.multiboxel.module import MultiBoxELModule
 import mowl.nn.el.multielbe.losses as L
 from mowl.nn.el.pointloss import (
+    _VALID_OBJECTIVES,
     _validate_beta,
     _validate_ind_halfwidth,
+    _validate_objective,
     compute_class_assertion_score_point,
     compute_point_membership_loss,
     compute_point_modelness,
@@ -25,8 +27,6 @@ from mowl.nn.el.softagg import _validate_tau, diversity_penalty
 
 if TYPE_CHECKING:
     from mowl.datasets.el.points import PointSupervision
-
-_VALID_OBJECTIVES = ("axiom", "point", "mixed", "hybrid")
 
 
 class MultiELBEModule(ELModule):
@@ -103,14 +103,17 @@ class MultiELBEModule(ELModule):
         Training objective mode: ``"axiom"``, ``"point"``, ``"mixed"``, or ``"hybrid"``.
     beta : float, default 0.1
         Sigmoid temperature :math:`\\beta > 0` for soft box membership under
-        Objective O3.
+        ``objective="point"``, ``"mixed"``, or ``"hybrid"``.
     neg_weight : float, default 0.1
-        Weight multiplying random-negative BCE terms under Objective O3.
+        Weight multiplying random-negative BCE terms under ``objective="point"``,
+        ``"mixed"``, or ``"hybrid"``.
     volume_reg : float, default 0.0
-        Volume regularisation weight stored on the module.
+        Volume regularisation weight stored on the module for ``objective="point"``,
+        ``"mixed"``, or ``"hybrid"``.
     ind_halfwidth : float, optional
-        Virtual box half-width around individual targets in role pairs;
-        defaults to ``5.0 * beta``.
+        Virtual box half-width around individual targets in role pairs under
+        ``objective="point"``, ``"mixed"``, or ``"hybrid"``; defaults to
+        ``5.0 * beta``.
     """
 
     neg_capable_gcis = frozenset({"gci2", "object_property_assertion"})
@@ -150,10 +153,7 @@ class MultiELBEModule(ELModule):
             or float(diversity_reg) < 0.0
         ):
             raise ValueError(f"diversity_reg must be >= 0, got {diversity_reg!r}")
-        if objective not in _VALID_OBJECTIVES:
-            raise ValueError(
-                f"objective must be one of {_VALID_OBJECTIVES}, got {objective!r}"
-            )
+        _validate_objective(objective)
         beta_f = _validate_beta(beta)
         ind_hw_f = (
             5.0 * beta_f
@@ -215,10 +215,7 @@ class MultiELBEModule(ELModule):
             self._buffers["tau"].fill_(tau_f)
             return
         if name == "objective":
-            if value not in _VALID_OBJECTIVES:
-                raise ValueError(
-                    f"objective must be one of {_VALID_OBJECTIVES}, got {value!r}"
-                )
+            _validate_objective(value)  # type: ignore[arg-type]
         elif name == "beta":
             beta_f = _validate_beta(value)  # type: ignore[arg-type]
             super().__setattr__(name, beta_f)
@@ -616,8 +613,11 @@ class MultiELBEModule(ELModule):
         Guarantees:
         - Returns shape ``(B, 1)``, identical to ``ELBEModule.gci1_bot_loss`` at ``k = 1``
           and equal ``margin``.
-        - Zero if and only if **all** :math:`k^2` component pairs have zero ELBE
-          disjointness score (mean of non-negatives).
+        - Differs from single-box ELBE only by averaging the per-pair :math:`L_2`
+          norm scores across the :math:`k^2` component pairs, so the loss is zero
+          if and only if **all** :math:`k^2` component pairs score ``0`` (under
+          ELBE's :math:`L_2`-norm coordinate score, each pair is separated by at
+          least ``margin`` in *every* coordinate).
 
         Non-guarantees:
         - ``neg=True`` is not distinct from ``neg=False``.

@@ -531,8 +531,8 @@ Federico, Leemhuis & Kutz (DL 2026). When initialised with
 :class:`~mowl.geometric.init.ExactBoxInit`, coordinates ``2..d`` of each
 initialisation box populate ``(box_center, box_offset)`` and coordinates
 ``0..1`` populate the equilateral triangle with ``tri_center = center[:2]`` and
-:math:`\text{tri\_inradius} = \max(o_0, o_1) \sqrt{3}` (the incircle of the
-equilateral triangle circumscribing the rectangle's bounding square), so that
+:math:`\text{tri\_inradius} = \max(o_0, o_1) \sqrt{3}` (which suffices to
+contain the rectangle in coordinates ``0..1``, not minimal), so that
 every corner of the initialisation box lies inside the initialised prism:
 
 .. testcode::
@@ -754,17 +754,20 @@ negative pairs where :math:`\mathcal{O} \models D \sqcap C \sqsubseteq \bot`,
 per-element pools of non-entailed classes for random negatives (weighted by
 ``neg_weight``, default ``0.1``), and canonical role edges :math:`(x_C, r, x_D)`,
 sampling up to ``points_per_epoch`` (default ``100_000``) pairs per epoch. In
-:mod:`mowl.nn.el.pointloss`, soft coordinatewise box membership
-:math:`m(x; c, o) = \prod_{\text{coord}} \sigma((|o| - |x - c|)/\beta)` (with
+:mod:`mowl.nn.el.pointloss`, soft coordinate-minimum box membership
+:math:`m(x; c, o) = \min_{\text{coord}} \sigma((|o| - |x - c|)/\beta)` (with
 temperature ``beta``, default ``0.1``) is combined across components via
-noisy-OR :math:`m_C(x) = 1 - \prod_i (1 - m_{C_i}(x))` and trained with binary
+noisy-OR :math:`m_C(x) = 1 - \prod_i (1 - m_{C_i}(x))` (evaluating individual
+targets in role edges against a virtual box of half-width ``ind_halfwidth``,
+defaulting to :math:`5\beta`, around ``ind_embed``) and trained with binary
 cross-entropy plus the mean log-side-length regulariser ``volume_reg`` (default
 ``1e-3``) so boxes shrink tightly onto their points. Setting
 ``objective="point"`` uses only the point and volume losses (zeroing all GCI
-losses), whereas ``objective="mixed"`` keeps the backbone's :math:`\bot`-axiom
+losses), ``objective="mixed"`` keeps the backbone's :math:`\bot`-axiom
 region losses (``gci0_bot``, ``gci1_bot``, ``gci3_bot``) so empty-space
-disjointness is still enforced. Under both ``"point"`` and ``"mixed"``, ABox
-class assertions are scored by :math:`-\log m_C(a)`
+disjointness is still enforced, and ``objective="hybrid"`` keeps all GCI
+losses alongside the point losses. Under ``"point"``, ``"mixed"``, and
+``"hybrid"``, ABox class assertions are scored by :math:`-\log m_C(a)`
 (:meth:`~mowl.nn.MultiBoxELModule.class_assertion_score_point`, aliasing
 individual elements directly to ``ind_embed`` without using ``ind_offset``) and
 point satisfaction is reported by

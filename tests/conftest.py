@@ -1,65 +1,77 @@
-import os
-import shutil
 import logging
 import pytest
-import mowl
 
-from mowl.datasets.builtin import (
-    FamilyDataset as BuiltinFamilyDataset,
+from tests.datasetFactory import (
+    FamilyDataset,
+    FoodOnSubsumptionDataset,
+    GDADatasetV2,
     GDAHumanELDataset,
     GDAMouseELDataset,
-    PPIYeastSlimDataset as BuiltinPPIYeastSlimDataset,
-    PPIHumanDataset,
+    GOSubsumptionDataset,
     HPIDataset,
-    GOSubsumptionDataset as BuiltinGOSubsumptionDataset,
-    FoodOnSubsumptionDataset as BuiltinFoodOnSubsumptionDataset,
-    GDADatasetV2 as BuiltinGDADatasetV2,
+    PPIHumanDataset,
+    PPIYeastSlimDataset,
 )
-from tests.datasetFactory import FamilyDataset, PPIYeastSlimDataset, GDADatasetV2
 
 logger = logging.getLogger("Downloader")
-print("Initializing datasets")
 
 
-def pytest_configure(config):
-    print("Downloading datasets")
-    print("Downloading family dataset")
-    BuiltinFamilyDataset()
-    print("Downloading gda_human_el dataset")
-    GDAHumanELDataset()
-    print("Downloading gda_mouse_el dataset")
-    GDAMouseELDataset()
-    print("Downloading ppi_yeast_slim dataset")
-    BuiltinPPIYeastSlimDataset()
-    print("Downloading ppi_human dataset")
-    PPIHumanDataset()
-    print("Downloading hpi dataset")
-    HPIDataset()
-    print("Downloading go_subsumption dataset")
-    BuiltinGOSubsumptionDataset()
-    print("Downloading foodon_subsumption dataset")
-    BuiltinFoodOnSubsumptionDataset()
-    print("Downloading gda_v2 dataset")
-    BuiltinGDADatasetV2()
-
-
-# Session-scoped fixtures for commonly used datasets
-# These are loaded once per test session and reused across all tests
+# Session-scoped fixtures for commonly used datasets.
+# Datasets are downloaded and instantiated lazily on first request rather than
+# eagerly in pytest_configure, so test suites that do not use builtin datasets
+# (e.g. `pytest tests/nn`) incur zero dataset download or JVM ontology-loading
+# overhead at collection/session start.
 
 
 @pytest.fixture(scope="session")
 def family_dataset():
-    """Session-scoped FamilyDataset fixture - loaded once per test session."""
+    """Session-scoped FamilyDataset fixture - loaded lazily once per test session."""
     return FamilyDataset()
 
 
 @pytest.fixture(scope="session")
 def ppi_yeast_slim_dataset():
-    """Session-scoped PPIYeastSlimDataset fixture - loaded once per test session."""
+    """Session-scoped PPIYeastSlimDataset fixture - loaded lazily once per test session."""
     return PPIYeastSlimDataset()
 
 
 @pytest.fixture(scope="session")
 def gda_dataset_v2():
-    """Session-scoped GDADatasetV2 fixture - loaded once per test session."""
+    """Session-scoped GDADatasetV2 fixture - loaded lazily once per test session."""
     return GDADatasetV2()
+
+
+@pytest.fixture(scope="session")
+def gda_human_el_dataset():
+    """Session-scoped GDAHumanELDataset fixture - loaded lazily once per test session."""
+    return GDAHumanELDataset()
+
+
+@pytest.fixture(scope="session")
+def gda_mouse_el_dataset():
+    """Session-scoped GDAMouseELDataset fixture - loaded lazily once per test session."""
+    return GDAMouseELDataset()
+
+
+@pytest.fixture(scope="session")
+def ppi_human_dataset():
+    """Session-scoped PPIHumanDataset fixture - loaded lazily once per test session."""
+    return PPIHumanDataset()
+
+
+@pytest.fixture(scope="session")
+def hpi_dataset():
+    """Session-scoped HPIDataset fixture - loaded lazily once per test session."""
+    return HPIDataset()
+
+
+@pytest.fixture(scope="session")
+def go_subsumption_dataset():
+    """Session-scoped GOSubsumptionDataset fixture - loaded lazily once per test session."""
+    return GOSubsumptionDataset()
+
+
+@pytest.fixture(scope="session")
+def foodon_subsumption_dataset():
+    """Session-scoped FoodOnSubsumptionDataset fixture - loaded lazily once per test session."""
+    return FoodOnSubsumptionDataset()

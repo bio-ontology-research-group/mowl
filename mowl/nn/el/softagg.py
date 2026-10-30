@@ -21,8 +21,9 @@ Guarantees:
   in log space using raw side lengths :math:`2|o_{C,i,m}|` on both numerator and
   denominator, :func:`diversity_penalty` evaluates to ``1.0`` per identical
   component pair at any dimension :math:`d` (with non-zero gradient with respect
-  to a centre shift), to ``<= 1e-3`` per pair disjoint in at least one
-  coordinate (for unit-scale boxes at ``eps = 1e-6``), and to ``0.0`` when
+  to a centre shift), to :math:`\\approx 10^{-6}` per disjoint coordinate (not
+  exact ``0.0``, and ``<= 1e-3`` per pair disjoint in at least one coordinate
+  for side lengths :math:`\\ge 10^{-3}` at ``eps = 1e-6``), and to ``0.0`` when
   ``n_components == 1``.
 
 Non-guarantees:
@@ -302,18 +303,19 @@ def diversity_penalty(
       :math:`C_j`, :math:`\\text{ratio}_{ij}` equals the coordinatewise product
       :math:`\\prod_m (\\text{inter}_{ij,m} + \\varepsilon) / (\\min(\\text{side}_{i,m}, \\text{side}_{j,m}) + \\varepsilon)`.
     - When two boxes are disjoint in at least one coordinate (so
-      :math:`\\text{inter}_{ij,m} = 0` in that coordinate), that coordinate
-      contributes :math:`\\varepsilon / (\\min(\\text{side}_{i,m}, \\text{side}_{j,m}) + \\varepsilon)`,
-      giving :math:`\\text{ratio}_{ij} \\le 10^{-3}` for non-degenerate boxes at
-      ``eps = 1e-6``.
+      :math:`\\text{inter}_{ij,m} = 0` in that coordinate), each disjoint
+      coordinate contributes a factor of
+      :math:`\\varepsilon / (\\min(\\text{side}_{i,m}, \\text{side}_{j,m}) + \\varepsilon) \\approx 10^{-6} / \\text{side}_{ij,m}`
+      at ``eps = 1e-6`` (giving :math:`\\approx 10^{-6}` per disjoint coordinate
+      for unit-scale boxes and :math:`\\text{ratio}_{ij} \\le 10^{-3}` for side
+      lengths :math:`\\ge 10^{-3}`).
 
     Non-guarantees:
     - Because ``eps > 0`` is added inside :math:`\\log(\\text{inter}_{ij,m} + \\varepsilon)`
-      to keep log-space evaluation finite, disjoint pairs evaluate to
-      :math:`O(\\varepsilon / \\text{side})` (at most :math:`\\le 10^{-3}` in a single
-      disjoint coordinate, and underflowing to ``0.0`` when disjoint in multiple
-      coordinates) rather than exact IEEE ``0.0`` when disjoint in only one
-      coordinate.
+      to keep log-space evaluation finite, disjoint pairs contribute
+      :math:`\\approx 10^{-6} / \\text{side}` per disjoint coordinate (:math:`O(\\varepsilon)`
+      per disjoint coordinate, not exact IEEE ``0.0``, until the product across
+      many disjoint coordinates underflows ``float32``).
 
     Parameters
     ----------

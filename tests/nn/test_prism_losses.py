@@ -415,12 +415,13 @@ def test_elbe_t3_bound_best_of_restarts() -> None:
     across 5 random restarts (seeds 0..4) of 3000 steps with Adam(lr=0.005) and
     ExponentialLR(0.985).
 
-    The lower bound follows from Helly's theorem for axis-aligned boxes: any
-    family of pairwise-intersecting boxes in ℝ^d has a common intersection point,
-    so A ⊓ B ⊑ ⊥, B ⊓ C ⊑ ⊥, A ⊓ C ⊑ ⊥, A ⊓ X3 ⊑ ⊥, B ⊓ X1 ⊑ ⊥, C ⊓ X2 ⊑ ⊥
-    with A = X1 ⊓ X2, B = X2 ⊓ X3, C = X1 ⊓ X3 cannot all hold with non-degenerate
-    boxes. Note that test_prism_t3_locally_stable is a local stability check from
-    a perturbed exact configuration, not a random-init learnability claim.
+    The lower bound follows from Helly's theorem for axis-aligned boxes: since
+    A ⊆ X1 ⊓ X2, B ⊆ X2 ⊓ X3, and C ⊆ X1 ⊓ X3 are non-empty, X1, X2, X3 are
+    pairwise-intersecting axis-aligned boxes in ℝ^d and therefore share a common
+    point x ∈ X1 ∩ X2 ∩ X3. With A = X1 ⊓ X2, that point satisfies x ∈ A ∩ X3,
+    contradicting A ⊓ X3 ⊑ ⊥. Note that test_prism_t3_locally_stable is a local
+    stability check from a perturbed exact configuration, not a random-init
+    learnability claim.
     """
     gci0, gci1, gci1_bot = _t3_axioms()
     w_min = 0.05
@@ -516,8 +517,6 @@ def test_prism_t3_from_random_init_gap() -> None:
         f"Best random-init PrismModule T3 final loss across 5 seeds (3000 steps): "
         f"{best_prism_loss:.6f} > 1e-4"
     )
-    if best_prism_loss > 1e-4:
-        pytest.xfail(msg)
     assert best_prism_loss <= 1e-4, msg
 
 

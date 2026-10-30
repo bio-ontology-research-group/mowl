@@ -13,9 +13,11 @@ from mowl.datasets.el.points import (
 )
 from mowl.geometric.normal_forms import BOTTOM, TOP
 from mowl.nn import MultiELBEModule
-from mowl.nn.el.pointloss import volume_penalty
-
-_VALID_OBJECTIVES = ("axiom", "point", "mixed", "hybrid")
+from mowl.nn.el.pointloss import (
+    _VALID_OBJECTIVES,
+    _validate_objective,
+    volume_penalty,
+)
 
 
 class MultiELBE(EmbeddingELModel):
@@ -104,19 +106,22 @@ class MultiELBE(EmbeddingELModel):
         ``"mixed"``, or ``"hybrid"``).
     beta : float, default 0.1
         Temperature :math:`\\beta > 0` for the sigmoid boundary of soft box
-        membership under ``objective="point"`` or ``"mixed"``.
+        membership under ``objective="point"``, ``"mixed"``, or ``"hybrid"``.
     neg_weight : float, default 0.1
         Non-negative weight :math:`\\lambda_{\\text{neg}}` on the negative point
-        membership term.
+        membership term under ``objective="point"``, ``"mixed"``, or ``"hybrid"``.
     volume_reg : float, default 1e-3
         Non-negative weight :math:`\\lambda_{\\text{vol}}` on the named-class
-        volume penalty (excluding ``TOP`` and ``BOTTOM``).
+        volume penalty (excluding ``TOP`` and ``BOTTOM``) under
+        ``objective="point"``, ``"mixed"``, or ``"hybrid"``.
     points_per_epoch : int, default 100000
         Total pair budget sampled per epoch from
-        :class:`~mowl.datasets.el.points.PointSupervision`.
+        :class:`~mowl.datasets.el.points.PointSupervision` under
+        ``objective="point"``, ``"mixed"``, or ``"hybrid"``.
     points_seed : int, default 0
         Base random seed for :class:`~mowl.datasets.el.points.PointSupervision`
-        construction and per-epoch sampling.
+        construction and per-epoch sampling under ``objective="point"``,
+        ``"mixed"``, or ``"hybrid"``.
     """
 
     def __init__(
@@ -161,10 +166,7 @@ class MultiELBE(EmbeddingELModel):
             )
         if float(diversity_reg) < 0.0:
             raise ValueError(f"diversity_reg must be >= 0, got {diversity_reg!r}")
-        if objective not in _VALID_OBJECTIVES:
-            raise ValueError(
-                f"objective must be one of {_VALID_OBJECTIVES}, got {objective!r}"
-            )
+        _validate_objective(objective)
         if isinstance(beta, bool) or not isinstance(beta, (int, float)) or float(beta) <= 0.0:
             raise ValueError(f"beta must be > 0, got {beta!r}")
         if (
@@ -300,7 +302,7 @@ class MultiELBE(EmbeddingELModel):
         """Ensure ``elem_embed`` is registered before constructing the Adam optimiser.
 
         Guarantees:
-        - Under ``objective="point"`` or ``"mixed"``, calls
+        - Under ``objective="point"``, ``"mixed"``, or ``"hybrid"``, calls
           :meth:`_ensure_point_supervision` before ``super().get_optimizer()``
           so ``self.module.elem_embed`` parameters are included in the
           optimiser parameter group.

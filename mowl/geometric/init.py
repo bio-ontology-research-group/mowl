@@ -29,8 +29,8 @@ Guarantees:
   coordinates :math:`2 .. d - 1` of the initialisation box are written to
   ``box_center`` and ``box_offset``, and coordinates :math:`0 .. 1` define the
   equilateral triangle with ``tri_center = center[:2]`` and
-  ``tri_inradius = max(offset[0], offset[1]) * sqrt(3)`` (the incircle radius of
-  the equilateral triangle circumscribing the rectangle's bounding square).
+  ``tri_inradius = max(offset[0], offset[1]) * sqrt(3)`` (which suffices to
+  contain the rectangle in coordinates :math:`0 .. 1`, not minimal).
   Every corner of the initialisation box therefore lies inside the initialised
   prism (up to ``float32`` rounding, ``<= 1e-6``), and :meth:`ExactBoxInit.anchor_loss`
   compares ``(tri_center, |tri_inradius|, box_center, |box_offset|)`` against
@@ -784,10 +784,10 @@ class ExactBoxInit:
         of the initialisation box, and the triangle part is written from
         coordinates ``0..1``: ``tri_center`` is set to the box centre of those
         two coordinates, and ``tri_inradius`` is set to
-        :math:`\\max(\\text{half-widths of coords } 0, 1) \\cdot \\sqrt{3}` (the
-        incircle of the equilateral triangle circumscribing that rectangle's
-        bounding square, so the initialised prism contains the initialisation
-        box); :meth:`anchor_loss` compares the same quantities.
+        :math:`\\max(\\text{half-widths of coords } 0, 1) \\cdot \\sqrt{3}` (which
+        suffices to contain the rectangle in coordinates ``0..1`` (not minimal),
+        so the initialised prism contains the initialisation box);
+        :meth:`anchor_loss` compares the same quantities.
 
         Rows are matched by IRI: initialisation row ``class_to_id[C]`` is
         written to module row ``class_index_dict[C]``. Module rows without an
@@ -849,8 +849,9 @@ class ExactBoxInit:
 
         For prism modules (:class:`~mowl.nn.el.prism.module.PrismModule`),
         compares ``(tri_center, box_center)`` against the initial centres and
-        ``(|tri_inradius|, |box_offset|)`` against the initial circumscribing
-        inradius :math:`\\max(o_0, o_1) \\sqrt{3}` and box half-widths.
+        ``(|tri_inradius|, |box_offset|)`` against the initial inradius
+        :math:`\\max(o_0, o_1) \\sqrt{3}` (which suffices to contain the
+        rectangle in coordinates ``0..1``, not minimal) and box half-widths.
 
         Uses the row map cached by :meth:`apply_to_module` for ``module``
         (identity when ``module`` has not been seen and has exactly

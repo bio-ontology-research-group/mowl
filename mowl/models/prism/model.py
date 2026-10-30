@@ -24,9 +24,9 @@ class PrismEL(EmbeddingELModel):
       :meth:`init_module` applies :meth:`~mowl.geometric.init.ExactBoxInit.apply_to_module`
       after module construction; the initialised prism of each class contains its
       initialisation box (the equilateral triangle in coordinates ``0..1`` with
-      centre ``c[:2]`` and inradius :math:`\\max(o_0, o_1) \\sqrt{3}` circumscribes
-      the bounding square of ``[c_0 - o_0, c_0 + o_0] x [c_1 - o_1, c_1 + o_1]``,
-      and coordinates ``2..d`` copy the box part). When ``anchor_weight > 0``,
+      centre ``c[:2]`` and inradius :math:`\\max(o_0, o_1) \\sqrt{3}`, which
+      suffices to contain the rectangle ``[c_0 - o_0, c_0 + o_0] x [c_1 - o_1, c_1 + o_1]``
+      (not minimal), and coordinates ``2..d`` copy the box part). When ``anchor_weight > 0``,
       :meth:`get_regularization_loss` adds
       ``anchor_weight * init_boxes.anchor_loss(self.module)``.
 

@@ -425,13 +425,17 @@ def gci1_bot_loss(
     """ELBE GCI1-bot loss :math:`\\text{mean}_{i,j} \\|\\text{relu}(-|c_{C,i} - c_{D,j}| + o_{C,i} + o_{D,j} + \\text{margin})\\|_2` for :math:`C \\sqcap D \\sqsubseteq \\bot`.
 
     Computes the arithmetic mean of non-negative ELBE pairwise disjointness
-    scores over all :math:`k^2` component pairs :math:`(C_i, D_j)`.
+    scores over all :math:`k^2` component pairs :math:`(C_i, D_j)` (differing
+    from single-box :func:`mowl.nn.el.elbe.losses.gci1_bot_loss` only in this
+    mean aggregation over the :math:`k^2` pairs, while retaining ELBE's
+    Euclidean norm over coordinates inside each pair).
 
     Guarantees:
     - Returns shape ``(B, 1)``, matching :func:`mowl.nn.el.elbe.losses.gci1_bot_loss` at ``k = 1``.
     - Because the loss is the mean of non-negative pairwise terms, it equals
       ``0`` if and only if **all** :math:`k^2` component pairs :math:`(C_i, D_j)`
-      have zero ELBE disjointness score (i.e.
+      score ``0``—which under ELBE's :math:`L_2`-norm coordinate score means each
+      pair is separated by at least ``margin`` in *every* coordinate (i.e.
       :math:`|c_{C,i} - c_{D,j}| \\ge o_{C,i} + o_{D,j} + \\text{margin}` in every
       coordinate for every :math:`(i, j)`).
 
