@@ -4,6 +4,7 @@ from .el.elbe.module import ELBEModule
 from .el.boxel.module import BoxELModule
 from .el.boxsquaredel.module import BoxSquaredELModule
 from .el.multiboxel.module import MultiBoxELModule
+from .el.prism.module import PrismModule
 from .el.transbox.module import TransBoxModule
 from .alc.module import ALCModule
 from .alc.falcon.module import FALCONModule
