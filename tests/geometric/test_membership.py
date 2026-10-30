@@ -245,3 +245,65 @@ def test_save_and_load_roundtrip(abox_kb: OWLOntology, tmp_path) -> None:
     torch.save(raw, stale_file)
     with pytest.raises(ValueError, match="code_tag"):
         MembershipStructure.load(stale_file)
+
+
+def test_unsatisfiable_class_top_column_and_dropped_role_edges() -> None:
+    """Unsatisfiable named class is excluded from S with zero M column; TOP column is all-True; role edges outside S are dropped."""
+    from mowl.owlapi import OWLAPIAdapter
+
+    adapter = OWLAPIAdapter()
+    mgr = adapter.owl_manager
+    df = adapter.data_factory
+    ont = adapter.create_ontology("http://mowl.borg/geo/membership_edge_cases")
+
+    top = adapter.create_class(TOP)
+    bot = adapter.create_class(BOTTOM)
+    c_a = adapter.create_class(NS + "A")
+    c_b = adapter.create_class(NS + "B")
+    c_unsat = adapter.create_class(NS + "Unsat")
+    r = adapter.create_object_property(NS + "r")
+    ind_a = adapter.create_individual(IND + "a")
+
+    # Unsat <= BOTTOM; A <= exists r.B; A(a)
+    mgr.addAxiom(ont, adapter.create_subclass_of(c_unsat, bot))
+    mgr.addAxiom(
+        ont,
+        adapter.create_subclass_of(c_a, adapter.create_object_some_values_from(r, c_b)),
+    )
+    mgr.addAxiom(ont, df.getOWLClassAssertionAxiom(c_a, ind_a))
+
+    cm = CanonicalModel.from_ontology(ont)
+    assert not cm.is_satisfiable(NS + "Unsat")
+
+    # Include Unsat and TOP in class_index_dict, but omit B so B is outside S
+    class_index_dict = {
+        NS + "A": 0,
+        NS + "Unsat": 1,
+        TOP: 2,
+        BOTTOM: 3,
+    }
+    individual_index_dict = {IND + "a": 0}
+
+    ms = MembershipStructure.from_canonical_model(
+        cm, class_index_dict, individual_index_dict
+    )
+
+    # Unsat, TOP, BOTTOM are not in support S; B was omitted from class_index_dict so B is not in S
+    assert NS + "Unsat" not in ms.element_index
+    assert TOP not in ms.element_index
+    assert BOTTOM not in ms.element_index
+    assert NS + "B" not in ms.element_index
+    assert ms.element_names == [NS + "A", cm.individuals[IND + "a"]]
+
+    dense_m = ms.M.to_dense()
+    # Unsat column (1) and BOTTOM column (3) are all False
+    assert not bool(dense_m[:, 1].any().item())
+    assert not bool(dense_m[:, 3].any().item())
+    # TOP column (2) is all True for every element in S
+    assert bool(dense_m[:, 2].all().item())
+
+    # Canonical model has r-edges (A -> B) and (N_a -> B), but since B is outside S,
+    # those boundary edges are dropped from ms.roles[0]
+    assert len(cm.role(NS + "r")) == 2
+    assert ms.roles[0]._nnz() == 0
+

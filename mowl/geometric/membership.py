@@ -19,6 +19,13 @@ Guarantees:
   :attr:`MembershipStructure.M` for a 1-D ``LongTensor`` of class indices using
   sparse index operations only, returning all-``True`` over :math:`S` when the
   input tensor is empty.
+
+Non-guarantees:
+- Satisfiable individuals present in ``cm.individuals`` but missing from
+  ``individual_index_dict`` are still appended to support :math:`S` (they have
+  no entry in ``individual_element``).
+- Any individual in ``individual_index_dict`` that is absent from ``cm`` or
+  unsatisfiable in ``cm`` raises :class:`ValueError`.
 """
 from __future__ import annotations
 
@@ -72,13 +79,22 @@ class MembershipStructure:
         of shape ``(|S|, |S|)`` and dtype ``torch.bool`` with canonical role edges.
     individual_element : torch.LongTensor
         1-D ``LongTensor`` of shape ``(n_ind,)`` mapping each individual index
-        (following ``individual_index_dict``) to its element index in :math:`S`.
+        (following ``individual_index_dict``) to its element index in :math:`S`
+        (entries not in ``individual_index_dict`` default to ``-1``).
     class_index_dict : Dict[str, int]
         Class IRI to column index mapping.
     individual_index_dict : Dict[str, int]
         Individual IRI to individual index mapping.
     role_index_dict : Dict[str, int]
         Role IRI to role key mapping.
+
+    Non-guarantees
+    --------------
+    - Satisfiable individuals present in ``cm.individuals`` but missing from
+      ``individual_index_dict`` are still added to support :math:`S` (they have
+      no entry in :attr:`individual_element`).
+    - Any individual in ``individual_index_dict`` that is absent from ``cm`` or
+      unsatisfiable in ``cm`` raises :class:`ValueError`.
     """
 
     element_names: List[str]
@@ -178,7 +194,7 @@ class MembershipStructure:
         n_elements = len(element_names)
 
         # Build individual_element: LongTensor (n_ind,)
-        ind_elem_tensor = torch.empty((n_ind,), dtype=torch.long)
+        ind_elem_tensor = torch.full((n_ind,), -1, dtype=torch.long)
         for ind_idx, nom_name in ind_nominals_in_order:
             ind_elem_tensor[ind_idx] = element_index[nom_name]
 
