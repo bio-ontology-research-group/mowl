@@ -255,6 +255,25 @@ class CanonicalMixture(EmbeddingELModel):
             total += float(self.module(chunk, gci_name).detach().sum().item())
         return total / float(n)
 
+    def _backward_chunked_loss(
+        self, data: th.Tensor, gci_name: str, neg: bool = False
+    ) -> float:
+        """Compute mean loss over ``data`` in support-bounded micro-chunks, accumulating gradients per chunk."""
+        n = int(data.shape[0])
+        if n == 0:
+            return 0.0
+        ranges = self.module._pair_chunk_Ranges(data, max_sup_entries=524_288)
+        total_loss = 0.0
+        for s_idx, e_idx in ranges:
+            chunk = data[s_idx:e_idx]
+            weight = float(e_idx - s_idx) / float(n)
+            c_loss = self.module(chunk, gci_name, neg=neg).mean() * weight
+            if c_loss.requires_grad:
+                c_loss.backward()
+            total_loss += float(c_loss.detach().item())
+            del c_loss
+        return total_loss
+
     def _compute_validation_loss(self) -> float:
         """Compute validation loss on ``validation_datasets``."""
         with th.no_grad():
@@ -321,7 +340,8 @@ class CanonicalMixture(EmbeddingELModel):
 
             for start in range(0, n_ind, self.batch_size):
                 batch_inds = perm[start : start + self.batch_size]
-                loss = th.tensor(0.0, device=self.device)
+                optimizer.zero_grad()
+                step_loss = 0.0
                 has_supervision = False
 
                 if ca_data.shape[0] > 0:
@@ -334,11 +354,12 @@ class CanonicalMixture(EmbeddingELModel):
                             )[: self.batch_size]
                             pos_ca = pos_ca.index_select(0, perm_ca)
                         neg_ca = self.module.sample_class_negatives(pos_ca)
-                        loss_ca = (
-                            self.module.class_assertion_loss(pos_ca, neg=False).mean()
-                            + self.module.class_assertion_loss(neg_ca, neg=True).mean()
+                        step_loss += self._backward_chunked_loss(
+                            pos_ca, "class_assertion", neg=False
                         )
-                        loss = loss + loss_ca
+                        step_loss += self._backward_chunked_loss(
+                            neg_ca, "class_assertion", neg=True
+                        )
                         has_supervision = True
 
                 if opa_data.shape[0] > 0:
@@ -351,24 +372,32 @@ class CanonicalMixture(EmbeddingELModel):
                             )[: self.batch_size]
                             pos_opa = pos_opa.index_select(0, perm_opa)
                         neg_opa = self.module.sample_role_negatives(pos_opa)
-                        loss_opa = (
-                            self.module.object_property_assertion_loss(
-                                pos_opa, neg=False
-                            ).mean()
-                            + self.module.object_property_assertion_loss(
-                                neg_opa, neg=True
-                            ).mean()
+                        step_loss += self._backward_chunked_loss(
+                            pos_opa, "object_property_assertion", neg=False
                         )
-                        loss = loss + loss_opa
+                        step_loss += self._backward_chunked_loss(
+                            neg_opa, "object_property_assertion", neg=True
+                        )
                         has_supervision = True
 
-                reg = self.module.regularization_loss(batch_inds)
+                if self.entropy_reg > 0.0:
+                    n_b = int(batch_inds.shape[0])
+                    for s_i, e_i in self.module._ind_chunk_Ranges(
+                        batch_inds, max_sup_entries=524_288
+                    ):
+                        w_i = float(e_i - s_i) / float(max(n_b, 1))
+                        reg_c = (
+                            self.module.regularization_loss(batch_inds[s_i:e_i])
+                            * w_i
+                        )
+                        if reg_c.requires_grad:
+                            reg_c.backward()
+                        step_loss += float(reg_c.detach().item())
+                        del reg_c
+
                 if has_supervision or self.entropy_reg > 0.0:
-                    loss = loss + reg
-                    optimizer.zero_grad()
-                    loss.backward()
                     optimizer.step()
-                    epoch_loss += float(loss.detach().item())
+                    epoch_loss += step_loss
                     n_batches += 1
 
             train_loss = epoch_loss / max(n_batches, 1)

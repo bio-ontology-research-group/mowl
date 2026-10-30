@@ -228,3 +228,33 @@ def test_validation_only_individual_gets_full_support_and_cache_hashes_source(
     monkeypatch.setattr(membership_mod, "__file__", str(fake_src))
     new_cache_path = model._cache_path()
     assert orig_cache_path != new_cache_path
+
+
+@pytest.mark.slow
+def test_real_helis_one_epoch_cuda_peak_memory(tmp_path: Path) -> None:
+    """One epoch on real helis (/home/leechuck/tmp/gfe-data/helis/ontology.owl) at batch_size=1024 uses < 3 GB CUDA memory."""
+    helis_owl = Path("/home/leechuck/tmp/gfe-data/helis/ontology.owl")
+    if not helis_owl.exists():
+        pytest.skip(f"Missing real helis ontology at {helis_owl}")
+    if not torch.cuda.is_available():
+        pytest.skip("CUDA is required for real helis CUDA peak memory test")
+
+    torch.cuda.empty_cache()
+    torch.cuda.reset_peak_memory_stats()
+
+    ds = PathDataset(str(helis_owl))
+    ckpt = tmp_path / "helis_cm.pt"
+    model = CanonicalMixture(
+        ds,
+        rank=50,
+        lr=0.001,
+        batch_size=1024,
+        model_filepath=str(ckpt),
+        device="cuda",
+    )
+    model.train(epochs=1, validate_every=0)
+    peak_bytes = int(torch.cuda.max_memory_allocated())
+    assert peak_bytes < int(3.0 * 1e9), (
+        f"helis 1-epoch CUDA max_memory_allocated {peak_bytes / 1e9:.3f} GB >= 3.0 GB"
+    )
+

@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import math
 import random
-import resource
+import subprocess
+import sys
 import time
+from pathlib import Path
 from typing import List, Tuple
 
 import numpy as np
@@ -844,24 +846,87 @@ def test_yeast_scale_training_step_peak_memory() -> None:
 
     max_bytes = int(1.5 * 1e9)  # 1.5 GB
 
-    # 1. CPU training step peak RSS delta < 1.5 GB
-    rss_before_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-    opt_cpu = torch.optim.Adam(module_cpu.parameters(), lr=0.01)
-    opt_cpu.zero_grad()
-    neg_ca_cpu = module_cpu.sample_class_negatives(pos_ca)
-    neg_opa_cpu = module_cpu.sample_role_negatives(pos_opa)
-    loss_cpu = (
-        module_cpu.class_assertion_loss(pos_ca, neg=False).mean()
-        + module_cpu.class_assertion_loss(neg_ca_cpu, neg=True).mean()
-        + module_cpu.object_property_assertion_loss(pos_opa, neg=False).mean()
-        + module_cpu.object_property_assertion_loss(neg_opa_cpu, neg=True).mean()
-        + module_cpu.regularization_loss(batch_inds)
+    # 1. CPU training step peak RSS delta < 1.5 GB measured in a fresh subprocess
+    # so prior tests' high-water mark does not mask the delta of ru_maxrss.
+    repo_root = str(Path(__file__).resolve().parents[2])
+    cpu_script = """
+import sys, resource, numpy as np, torch
+sys.path.insert(0, ".")
+import mowl
+mowl.init_jvm("1g")
+import mowl.datasets
+from mowl.geometric.membership import MembershipStructure
+from mowl.nn.el.canonical_mixture import CanonicalMixtureModule
+
+n_elements, n_classes, n_ind, nnz_er, batch_size = 56_000, 50_000, 6_000, 216_000, 1024
+rng = np.random.default_rng(42)
+diag_c = np.arange(n_classes, dtype=np.int64)
+ind_ids = np.arange(n_ind, dtype=np.int64)
+own_els = n_classes + ind_ids
+extra_rows = np.empty((n_ind, 18), dtype=np.int64)
+block_size = (n_classes - n_ind) // 18
+for k in range(18):
+    low = n_ind + k * block_size
+    high = n_ind + (k + 1) * block_size
+    extra_rows[:, k] = rng.integers(low, high, size=(n_ind,), dtype=np.int64)
+m_rows = np.concatenate([diag_c, own_els, extra_rows.reshape(-1)])
+m_cols = np.concatenate([diag_c, ind_ids, np.repeat(ind_ids, 18)])
+m_sparse = torch.sparse_coo_tensor(
+    torch.stack([torch.from_numpy(m_rows), torch.from_numpy(m_cols)], dim=0),
+    torch.ones((m_rows.size,), dtype=torch.bool),
+    size=(n_elements, n_classes),
+    dtype=torch.bool,
+).coalesce()
+flat_edges = np.unique(rng.integers(0, n_elements * n_elements, size=nnz_er + 5_000, dtype=np.int64))[:nnz_er]
+er_sparse = torch.sparse_coo_tensor(
+    torch.stack([torch.from_numpy(flat_edges // n_elements), torch.from_numpy(flat_edges % n_elements)], dim=0),
+    torch.ones((nnz_er,), dtype=torch.bool),
+    size=(n_elements, n_elements),
+    dtype=torch.bool,
+).coalesce()
+element_names = [f"C{c}" for c in range(n_classes)] + [f"ind{i}" for i in range(n_ind)]
+ms = MembershipStructure(
+    element_names=element_names,
+    element_index={name: idx for idx, name in enumerate(element_names)},
+    M=m_sparse,
+    roles={0: er_sparse},
+    individual_element=torch.arange(n_classes, n_elements, dtype=torch.long),
+    class_index_dict={f"C{c}": c for c in range(n_classes)},
+    individual_index_dict={f"ind{i}": i for i in range(n_ind)},
+    role_index_dict={"r": 0},
+)
+torch.manual_seed(0)
+module_cpu = CanonicalMixtureModule(ms, rank=32, entropy_reg=0.01)
+batch_inds = torch.arange(batch_size, dtype=torch.long)
+pos_ca = torch.stack([batch_inds, batch_inds], dim=1)
+tail_inds = torch.randint(0, n_ind, (batch_size,), dtype=torch.long)
+pos_opa = torch.stack([batch_inds, torch.zeros_like(batch_inds), tail_inds], dim=1)
+rss_before_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+opt_cpu = torch.optim.Adam(module_cpu.parameters(), lr=0.01)
+opt_cpu.zero_grad()
+neg_ca_cpu = module_cpu.sample_class_negatives(pos_ca)
+neg_opa_cpu = module_cpu.sample_role_negatives(pos_opa)
+loss_cpu = (
+    module_cpu.class_assertion_loss(pos_ca, neg=False).mean()
+    + module_cpu.class_assertion_loss(neg_ca_cpu, neg=True).mean()
+    + module_cpu.object_property_assertion_loss(pos_opa, neg=False).mean()
+    + module_cpu.object_property_assertion_loss(neg_opa_cpu, neg=True).mean()
+    + module_cpu.regularization_loss(batch_inds)
+)
+loss_cpu.backward()
+opt_cpu.step()
+rss_after_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+assert torch.isfinite(loss_cpu)
+print((rss_after_kb - rss_before_kb) * 1024)
+"""
+    proc = subprocess.run(
+        [sys.executable, "-c", cpu_script],
+        cwd=repo_root,
+        check=True,
+        capture_output=True,
+        text=True,
     )
-    loss_cpu.backward()
-    opt_cpu.step()
-    rss_after_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-    rss_delta_bytes = (rss_after_kb - rss_before_kb) * 1024
-    assert torch.isfinite(loss_cpu)
+    rss_delta_bytes = int(proc.stdout.strip().splitlines()[-1])
     assert rss_delta_bytes < max_bytes, (
         f"CPU peak RSS delta {rss_delta_bytes / 1e9:.3f} GB >= 1.5 GB"
     )
