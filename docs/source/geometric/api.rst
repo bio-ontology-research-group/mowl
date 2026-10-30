@@ -121,6 +121,30 @@ PrismEL model
    :show-inheritance:
 
 
+Canonical membership structure
+------------------------------
+
+.. automodule:: mowl.geometric.membership
+   :members:
+   :show-inheritance:
+
+
+CanonicalMixture neural module
+------------------------------
+
+.. automodule:: mowl.nn.el.canonical_mixture.module
+   :members:
+   :show-inheritance:
+
+
+CanonicalMixture model
+----------------------
+
+.. automodule:: mowl.models.canonical_mixture.model
+   :members:
+   :show-inheritance:
+
+
 Exceptions
 ----------
 

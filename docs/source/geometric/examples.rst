@@ -377,3 +377,104 @@ every corner of the initialisation box lies inside the initialised prism:
    assert model.count_class_parameters() == 2 * 6 - 1 == 11
    model.train(epochs=3, validate_every=10)
    assert all(torch.isfinite(p).all() for p in model.module.parameters())
+
+
+CanonicalMixture on a tiny ABox knowledge base
+----------------------------------------------
+
+:class:`~mowl.models.CanonicalMixture` (:class:`~mowl.nn.CanonicalMixtureModule`)
+represents each individual :math:`a` as a probability distribution
+:math:`p_a = \operatorname{softmax}_{S_a}(\ell_a)` over its admissible canonical
+support
+:math:`S_a = \{x \in S : x \in C^{\mathcal{I}} \text{ for every training-entailed class } C \text{ of } a\}`,
+where :math:`S` and the sparse membership matrix
+:attr:`~mowl.geometric.membership.MembershipStructure.M` come from the
+:class:`~mowl.geometric.completion.CanonicalModel` of the training ontology. By
+construction, every training-entailed class assertion (including assertions
+entailed through role assertions) has empty complement in :math:`S_a` and scores
+``0.0`` exactly, while every contradicted class assertion has zero probability
+on :math:`S_a` and scores ``+inf``:
+
+.. testcode::
+
+   import math
+   import pathlib
+   import tempfile
+
+   import mowl
+   mowl.init_jvm("2g")  # no-op if the JVM is already running
+
+   import torch
+   from org.semanticweb.owlapi.model import IRI
+   from mowl.datasets import PathDataset
+   from mowl.geometric.normal_forms import BOTTOM, TOP
+   from mowl.models import CanonicalMixture
+   from mowl.owlapi import OWLAPIAdapter
+
+   NS = "http://mowl.borg/geo/ex#"
+   IND = "http://mowl.borg/geo/ex/ind#"
+
+   adapter = OWLAPIAdapter()
+   mgr = adapter.owl_manager
+   df = adapter.data_factory
+   ont = adapter.create_ontology("http://mowl.borg/geo/ex/ont")
+
+   top = adapter.create_class(TOP)
+   bot = adapter.create_class(BOTTOM)
+   father = adapter.create_class(NS + "Father")
+   parent = adapter.create_class(NS + "Parent")
+   male = adapter.create_class(NS + "Male")
+   female = adapter.create_class(NS + "Female")
+   has_child = adapter.create_object_property(NS + "hasChild")
+   bob = adapter.create_individual(IND + "bob")
+   ann = adapter.create_individual(IND + "ann")
+
+   # TBox: Father <= Parent, Father <= Male, exists hasChild.TOP <= Parent, Male & Female <= BOTTOM
+   mgr.addAxiom(ont, adapter.create_subclass_of(father, parent))
+   mgr.addAxiom(ont, adapter.create_subclass_of(father, male))
+   mgr.addAxiom(
+       ont,
+       adapter.create_subclass_of(
+           adapter.create_object_some_values_from(has_child, top), parent
+       ),
+   )
+   mgr.addAxiom(
+       ont,
+       adapter.create_subclass_of(
+           adapter.create_object_intersection_of(male, female), bot
+       ),
+   )
+
+   # ABox: Father(bob), Female(ann), hasChild(bob, ann)
+   mgr.addAxiom(ont, df.getOWLClassAssertionAxiom(father, bob))
+   mgr.addAxiom(ont, df.getOWLClassAssertionAxiom(female, ann))
+   mgr.addAxiom(ont, df.getOWLObjectPropertyAssertionAxiom(has_child, bob, ann))
+
+   tmpdir = tempfile.TemporaryDirectory()
+   owl_path = pathlib.Path(tmpdir.name) / "tiny_abox.owl"
+   mgr.saveOntology(ont, IRI.create(owl_path.as_uri()))
+
+   ds = PathDataset(str(owl_path))
+   model = CanonicalMixture(
+       ds,
+       rank=8,
+       lr=0.01,
+       batch_size=2,
+       model_filepath=str(pathlib.Path(tmpdir.name) / "cm.pt"),
+   )
+   model.train(epochs=3, validate_every=1)
+
+   bob_idx = model.individual_index_dict[IND + "bob"]
+   parent_idx = model.class_index_dict[NS + "Parent"]
+   female_idx = model.class_index_dict[NS + "Female"]
+
+   entailed_score = model.module.class_assertion_score(
+       torch.tensor([[bob_idx, parent_idx]], dtype=torch.long)
+   )
+   contradicted_score = model.module.class_assertion_score(
+       torch.tensor([[bob_idx, female_idx]], dtype=torch.long)
+   )
+   assert float(entailed_score.item()) == 0.0
+   assert math.isinf(float(contradicted_score.item())) and float(contradicted_score.item()) > 0.0
+
+   tmpdir.cleanup()

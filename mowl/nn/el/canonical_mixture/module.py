@@ -4,6 +4,7 @@ from __future__ import annotations
 import math
 from typing import List, Optional, Tuple
 
+import numpy as np
 import torch
 import torch.nn as nn
 
@@ -18,8 +19,9 @@ class CanonicalMixtureModule(ELModule):
     :math:`p_a = \\operatorname{softmax}_{S_a}(\\ell_a)` over its admissible
     canonical support
     :math:`S_a = \\{x \\in S : x \\in C^{\\mathcal{I}} \\text{ for every entailed class } C \\text{ of } a\\}`
-    (computed via :meth:`~mowl.geometric.membership.MembershipStructure.type_mask`
-    over the full membership row :math:`M[x_a, :]`), where logits are factored
+    (computed by intersecting the sorted CSC columns of :math:`M` over the
+    minimal training-entailed types of :math:`a` derived from :math:`M`'s rows),
+    where logits are factored
     as :math:`\\ell_a = U_a V^\\top + b + \\delta_a` with
     :math:`U \\in \\mathbb{R}^{n_{\\text{ind}} \\times r}`,
     :math:`V \\in \\mathbb{R}^{|S| \\times r}`, :math:`b \\in \\mathbb{R}^{|S|}`, and a
@@ -114,7 +116,8 @@ class CanonicalMixtureModule(ELModule):
         )
 
         # Coalesce M once at construction and build CSR of M (elements -> classes),
-        # sorted flat keys (row * n_classes + col), and float sparse M^T for spmm.
+        # CSC of M (classes -> sorted element indices), sorted flat keys
+        # (row * n_classes + col), and float sparse M^T for spmm.
         m_coal = structure.M.coalesce()
         m_indices = m_coal.indices().cpu()
         m_values = m_coal.values().bool().cpu()
@@ -129,20 +132,33 @@ class CanonicalMixtureModule(ELModule):
             row_counts = torch.bincount(sorted_rows, minlength=self.n_elements)
             m_crow_offsets = torch.zeros((self.n_elements + 1,), dtype=torch.long)
             m_crow_offsets[1:] = torch.cumsum(row_counts, dim=0)
+
+            col_flat_keys = raw_cols * self.n_elements + raw_rows
+            col_order = torch.argsort(col_flat_keys, stable=True)
+            csc_cols = raw_cols[col_order]
+            csc_rows = raw_rows[col_order]
+            col_counts = torch.bincount(csc_cols, minlength=self.n_classes)
+            m_ccol_offsets = torch.zeros((self.n_classes + 1,), dtype=torch.long)
+            m_ccol_offsets[1:] = torch.cumsum(col_counts, dim=0)
         else:
             sorted_rows = torch.empty((0,), dtype=torch.long)
             sorted_cols = torch.empty((0,), dtype=torch.long)
             sorted_flat_keys = torch.empty((0,), dtype=torch.long)
             m_crow_offsets = torch.zeros((self.n_elements + 1,), dtype=torch.long)
+            csc_cols = torch.empty((0,), dtype=torch.long)
+            csc_rows = torch.empty((0,), dtype=torch.long)
+            m_ccol_offsets = torch.zeros((self.n_classes + 1,), dtype=torch.long)
 
         self.register_buffer("_m_crow_offsets", m_crow_offsets)
         self.register_buffer("_m_col_indices", sorted_cols)
         self.register_buffer("_m_flat_keys", sorted_flat_keys)
+        self.register_buffer("_m_ccol_offsets", m_ccol_offsets)
+        self.register_buffer("_m_csc_row_indices", csc_rows)
 
         # Store M^T as a coalesced float sparse tensor (n_classes x |S|) for rank_classes spmm
         mt_indices = (
-            torch.stack([sorted_cols, sorted_rows], dim=0)
-            if sorted_cols.numel() > 0
+            torch.stack([csc_cols, csc_rows], dim=0)
+            if csc_cols.numel() > 0
             else torch.empty((2, 0), dtype=torch.long)
         )
         mt_vals = torch.ones((mt_indices.shape[1],), dtype=torch.float32)
@@ -210,10 +226,10 @@ class CanonicalMixtureModule(ELModule):
         found = self._m_flat_keys.index_select(0, pos.clamp(max=max_pos)) == keys
         return valid & (pos <= max_pos) & found
 
-    def _build_admissible_supports(
+    def _validate_training_class_assertions(
         self, training_class_assertions: Optional[torch.Tensor]
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """Precompute CSR admissible element offsets, concatenated indices, and own-element logit offsets."""
+    ) -> None:
+        """Validate shape, bounds, and M-entailment of ``training_class_assertions``."""
         if (
             training_class_assertions is not None
             and training_class_assertions.numel() > 0
@@ -239,6 +255,135 @@ class CanonicalMixtureModule(ELModule):
                     f"Training class assertion (individual={bad_ind}, class={bad_cls}) is not entailed by M."
                 )
 
+    def _build_admissible_supports(
+        self, training_class_assertions: Optional[torch.Tensor]
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Precompute CSR admissible element offsets, concatenated indices, and own-element logit offsets.
+
+        Computes :math:`S_a` as the intersection of the sorted CSC column sets of
+        :math:`M` over the *minimal* (most specific) training-entailed types of
+        individual :math:`a` (types none of whose strict subclasses is also a type
+        of :math:`a`, derived from :math:`M`'s rows).
+        """
+        self._validate_training_class_assertions(training_class_assertions)
+
+        support_lists: List[torch.Tensor] = []
+        lengths = torch.empty((self.n_ind,), dtype=torch.long)
+        own_offsets = torch.empty((self.n_ind,), dtype=torch.float32)
+        odds = self.init_self_mass / (1.0 - self.init_self_mass)
+
+        m_crow_np = self._m_crow_offsets.cpu().numpy()
+        m_cols_np = self._m_col_indices.cpu().numpy()
+        m_ccol_np = self._m_ccol_offsets.cpu().numpy()
+        m_csc_rows_np = self._m_csc_row_indices.cpu().numpy()
+        ind_elems_np = self.individual_element.cpu().numpy()
+
+        # Map each class index c to its canonical element row in S (or -1 if absent, e.g. TOP)
+        class_to_elem = np.full((self.n_classes,), -1, dtype=np.int64)
+        if self.structure.class_index_dict and self.structure.element_index:
+            for c_iri, c_idx in self.structure.class_index_dict.items():
+                if 0 <= c_idx < self.n_classes:
+                    el_idx = self.structure.element_index.get(c_iri, -1)
+                    if el_idx >= 0:
+                        class_to_elem[c_idx] = el_idx
+
+        for ind_i in range(self.n_ind):
+            own_el = int(ind_elems_np[ind_i])
+            if own_el < 0:
+                # Individual occurs only in validation/test (no training assertions): support = all of S
+                elems = torch.arange(self.n_elements, dtype=torch.long)
+                s_len = int(elems.numel())
+                lengths[ind_i] = s_len
+                own_offsets[ind_i] = 0.0
+                support_lists.append(elems)
+                continue
+
+            row_start = int(m_crow_np[own_el])
+            row_end = int(m_crow_np[own_el + 1])
+            t_arr = m_cols_np[row_start:row_end]
+
+            if t_arr.size == 0:
+                if not (0 <= own_el < self.n_elements):
+                    raise ValueError(
+                        f"Own element {own_el} of individual {ind_i} is not in its admissible support."
+                    )
+                elems = torch.arange(self.n_elements, dtype=torch.long)
+            else:
+                if t_arr.size == 1:
+                    c0 = int(t_arr[0])
+                    elems_np = m_csc_rows_np[m_ccol_np[c0] : m_ccol_np[c0 + 1]]
+                else:
+                    # Find minimal types of a: types in t_arr none of whose strict subclasses is in t_arr.
+                    # Class c is a strict subclass of d iff d is in M[r_c, :] and c is not in M[r_d, :].
+                    non_minimal = set()
+                    for c in t_arr:
+                        c_int = int(c)
+                        if c_int in non_minimal:
+                            continue
+                        r_c = int(class_to_elem[c_int])
+                        if r_c >= 0:
+                            sups_c = m_cols_np[m_crow_np[r_c] : m_crow_np[r_c + 1]]
+                            for d in sups_c:
+                                d_int = int(d)
+                                if d_int == c_int or d_int in non_minimal:
+                                    continue
+                                r_d = int(class_to_elem[d_int])
+                                if r_d < 0:
+                                    non_minimal.add(d_int)
+                                else:
+                                    sups_d = m_cols_np[
+                                        m_crow_np[r_d] : m_crow_np[r_d + 1]
+                                    ]
+                                    if not np.any(sups_d == c_int):
+                                        non_minimal.add(d_int)
+                    min_types = [int(c) for c in t_arr if int(c) not in non_minimal]
+                    if not min_types:
+                        min_types = [int(c) for c in t_arr]
+                    # Intersect sorted CSC columns starting from the smallest column
+                    min_types.sort(
+                        key=lambda c: int(m_ccol_np[c + 1] - m_ccol_np[c])
+                    )
+                    c0 = min_types[0]
+                    elems_np = m_csc_rows_np[m_ccol_np[c0] : m_ccol_np[c0 + 1]]
+                    for c in min_types[1:]:
+                        col_c = m_csc_rows_np[m_ccol_np[c] : m_ccol_np[c + 1]]
+                        elems_np = np.intersect1d(
+                            elems_np, col_c, assume_unique=True
+                        )
+                        if elems_np.size <= 1:
+                            break
+
+                pos = int(np.searchsorted(elems_np, own_el))
+                if pos >= elems_np.size or int(elems_np[pos]) != own_el:
+                    raise ValueError(
+                        f"Own element {own_el} of individual {ind_i} is not in its admissible support."
+                    )
+                elems = torch.from_numpy(elems_np.copy()).to(dtype=torch.long)
+
+            support_lists.append(elems)
+            s_len = int(elems.numel())
+            lengths[ind_i] = s_len
+            # Own-element logit offset: log(9 * (|S_a| - 1)) when |S_a| > 1, 0 when |S_a| == 1
+            if s_len > 1:
+                own_offsets[ind_i] = math.log(odds * float(s_len - 1))
+            else:
+                own_offsets[ind_i] = 0.0
+
+        support_offsets = torch.zeros((self.n_ind + 1,), dtype=torch.long)
+        support_offsets[1:] = torch.cumsum(lengths, dim=0)
+        support_indices = (
+            torch.cat(support_lists, dim=0)
+            if support_lists
+            else torch.empty((0,), dtype=torch.long)
+        )
+        return support_offsets, support_indices, own_offsets
+
+    def _build_admissible_supports_reference(
+        self, training_class_assertions: Optional[torch.Tensor] = None
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Private reference implementation of support construction via :meth:`MembershipStructure.type_mask`."""
+        self._validate_training_class_assertions(training_class_assertions)
+
         support_lists: List[torch.Tensor] = []
         lengths = torch.empty((self.n_ind,), dtype=torch.long)
         own_offsets = torch.empty((self.n_ind,), dtype=torch.float32)
@@ -251,7 +396,6 @@ class CanonicalMixtureModule(ELModule):
         for ind_i in range(self.n_ind):
             own_el = int(ind_elems_cpu[ind_i].item())
             if own_el < 0:
-                # Individual occurs only in validation/test (no training assertions): support = all of S
                 elems = torch.arange(self.n_elements, dtype=torch.long)
                 s_len = int(elems.numel())
                 lengths[ind_i] = s_len
@@ -271,7 +415,6 @@ class CanonicalMixtureModule(ELModule):
             support_lists.append(elems)
             s_len = int(elems.numel())
             lengths[ind_i] = s_len
-            # Own-element logit offset: log(9 * (|S_a| - 1)) when |S_a| > 1, 0 when |S_a| == 1
             if s_len > 1:
                 own_offsets[ind_i] = math.log(odds * float(s_len - 1))
             else:
@@ -575,14 +718,12 @@ class CanonicalMixtureModule(ELModule):
         )
         return torch.stack([pos_data[:, 0], pos_data[:, 1], corrupt_tail], dim=1)
 
-    def regularization_loss(
-        self, ind_idx: Optional[torch.Tensor] = None
-    ) -> torch.Tensor:
-        """Return the entropy regularisation term :math:`\\lambda \\cdot \\operatorname{mean}_a H(p_a)`."""
+    def regularization_loss(self, ind_idx: torch.Tensor) -> torch.Tensor:
+        """Return the entropy regularisation term :math:`\\lambda \\cdot \\operatorname{mean}_a H(p_a)` for ``ind_idx``."""
+        if ind_idx is None:
+            raise TypeError("regularization_loss requires an ind_idx batch tensor.")
         if self.entropy_reg == 0.0:
             return self.U.sum() * 0.0
-        if ind_idx is None:
-            ind_idx = torch.arange(self.n_ind, device=self.U.device, dtype=torch.long)
         ind_idx = torch.as_tensor(
             ind_idx, dtype=torch.long, device=self.U.device
         ).reshape(-1)
@@ -599,9 +740,15 @@ class CanonicalMixtureModule(ELModule):
     def rank_classes(self, ind_idx: torch.Tensor) -> torch.Tensor:
         """Return ``(B, n_classes)`` negative-log class-membership scores for ``ind_idx``.
 
-        Computes :math:`1 - \\sum_{x \\in S_a, x \\notin C} p_a(x)` via
-        :func:`torch.sparse.mm` so entailed classes score ``0.0`` exactly and
-        classes with zero probability mass under :math:`p_a` get ``+inf``.
+        Only the endpoints ``0`` and ``1`` of the membership probability are
+        exact: entailed classes (all :math:`x \\in S_a` belong to :math:`C`) are
+        forced to probability ``1.0`` (score ``0.0``) and classes with zero
+        support overlap (no :math:`x \\in S_a` belongs to :math:`C`) are forced
+        to probability ``0.0`` (score ``+inf``) via exact support counts from
+        :func:`torch.sparse.mm`. For intermediate values, the complement mass is
+        computed as ``row_sum - in_c`` rather than a direct complement sum, so
+        intermediate scores are approximate; :meth:`class_assertion_score` is
+        the exact path.
         """
         ind_idx = torch.as_tensor(
             ind_idx, dtype=torch.long, device=self.U.device

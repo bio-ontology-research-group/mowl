@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import math
 import random
+import time
 from typing import List, Tuple
 
+import numpy as np
 import pytest
 import torch
 
@@ -597,8 +599,122 @@ def test_sparse_memory_and_role_score(abox_kb: OWLOntology) -> None:
 
     pos_loss = module.object_property_assertion_loss(role_data[:2], neg=False)
     neg_loss = module.object_property_assertion_loss(role_data[2:], neg=True)
-    reg_loss = module.regularization_loss()
+    reg_loss = module.regularization_loss(
+        torch.tensor([bob, ann, carl], dtype=torch.long)
+    )
     assert pos_loss.shape == (2,)
     assert neg_loss.shape == (1,)
     assert reg_loss.ndim == 0
     assert torch.isfinite(reg_loss)
+
+
+def test_regularization_loss_requires_batch(abox_kb: OWLOntology) -> None:
+    """Calling regularization_loss without a batch argument raises TypeError."""
+    module, _, _ = _build_module_for_abox_kb(abox_kb, entropy_reg=0.1)
+    with pytest.raises(TypeError):
+        module.regularization_loss()  # type: ignore[call-arg]
+    with pytest.raises(TypeError):
+        module.regularization_loss(None)  # type: ignore[arg-type]
+
+
+def test_support_construction_matches_reference_on_fixture_kb(
+    abox_kb: OWLOntology,
+) -> None:
+    """CSC minimal-type intersection produces results identical to the old type_mask reference on abox_kb."""
+    module, _, ms = _build_module_for_abox_kb(abox_kb)
+    bob_idx = ms.individual_index_dict[IND + "bob"]
+    training_ca = torch.tensor(
+        [
+            [bob_idx, ms.class_index_dict[NS + "Father"]],
+            [bob_idx, ms.class_index_dict[NS + "Male"]],
+        ],
+        dtype=torch.long,
+    )
+    ref_offsets, ref_indices, ref_own_offsets = (
+        module._build_admissible_supports_reference(training_ca)
+    )
+    assert torch.equal(module.support_offsets, ref_offsets)
+    assert torch.equal(module.support_indices, ref_indices)
+    assert torch.equal(module.own_logit_offset, ref_own_offsets)
+
+
+@pytest.mark.slow
+def test_synthetic_large_support_construction_timing() -> None:
+    """Synthetic KB with n_ind = 6,000, |S| = 50,000, ~15 types per element builds supports in < 60 s on CPU."""
+    n_ind = 6_000
+    n_elements = 50_000
+    n_classes = n_elements - n_ind  # 44,000
+    rng = np.random.default_rng(0)
+
+    # Build a transitively closed 15-level DAG hierarchy on n_classes so each element has ~15 types
+    ancestors: List[np.ndarray] = [None] * n_classes  # type: ignore[list-item]
+    layer_size = 250
+    for c in range(layer_size):
+        ancestors[c] = np.array([c], dtype=np.int64)
+    for layer in range(1, 14):
+        start = layer * layer_size
+        prev_start = (layer - 1) * layer_size
+        for c in range(start, start + layer_size):
+            p = int(rng.integers(prev_start, start))
+            ancestors[c] = np.append(ancestors[p], c)
+    start_14 = 14 * layer_size
+    prev_start = 13 * layer_size
+    for c in range(start_14, n_classes):
+        p = int(rng.integers(prev_start, start_14))
+        ancestors[c] = np.append(ancestors[p], c)
+
+    rows_list: List[np.ndarray] = []
+    cols_list: List[np.ndarray] = []
+    for c in range(n_classes):
+        a = ancestors[c]
+        rows_list.append(np.full(a.size, c, dtype=np.int64))
+        cols_list.append(a)
+
+    for i in range(n_ind):
+        el = n_classes + i
+        c1 = int(rng.integers(start_14, n_classes))
+        c2 = int(rng.integers(prev_start, start_14))
+        a = np.union1d(ancestors[c1], ancestors[c2])
+        rows_list.append(np.full(a.size, el, dtype=np.int64))
+        cols_list.append(a)
+
+    rows_np = np.concatenate(rows_list)
+    cols_np = np.concatenate(cols_list)
+    avg_types = rows_np.size / n_elements
+    assert 13.0 <= avg_types <= 17.0
+
+    indices = torch.stack(
+        [torch.from_numpy(rows_np), torch.from_numpy(cols_np)], dim=0
+    )
+    values = torch.ones((rows_np.size,), dtype=torch.bool)
+    m_sparse = torch.sparse_coo_tensor(
+        indices, values, size=(n_elements, n_classes), dtype=torch.bool
+    ).coalesce()
+
+    element_names = [f"{NS}C{c}" for c in range(n_classes)] + [
+        f"{IND}ind{i}" for i in range(n_ind)
+    ]
+    element_index = {name: idx for idx, name in enumerate(element_names)}
+    class_index_dict = {f"{NS}C{c}": c for c in range(n_classes)}
+    individual_index_dict = {f"{IND}ind{i}": i for i in range(n_ind)}
+    ind_elem = torch.arange(n_classes, n_elements, dtype=torch.long)
+
+    ms = MembershipStructure(
+        element_names=element_names,
+        element_index=element_index,
+        M=m_sparse,
+        roles={},
+        individual_element=ind_elem,
+        class_index_dict=class_index_dict,
+        individual_index_dict=individual_index_dict,
+        role_index_dict={},
+    )
+
+    t0 = time.perf_counter()
+    module = CanonicalMixtureModule(ms, rank=16)
+    elapsed = time.perf_counter() - t0
+
+    assert elapsed < 60.0, f"Construction took {elapsed:.2f}s (>= 60s)"
+    assert module.support_offsets.shape == (n_ind + 1,)
+    assert int(module.support_lengths.min().item()) >= 1
+
