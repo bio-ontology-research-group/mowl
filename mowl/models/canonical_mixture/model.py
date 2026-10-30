@@ -10,6 +10,8 @@ from typing import Optional
 import torch as th
 from tqdm import trange
 
+import mowl.geometric.completion as completion_mod
+import mowl.geometric.membership as membership_mod
 from mowl.base_models.elmodel import EmbeddingELModel
 from mowl.datasets.el import ELDataset
 from mowl.geometric.completion import CanonicalModel
@@ -25,21 +27,27 @@ class CanonicalMixture(EmbeddingELModel):
     Builds the :class:`~mowl.geometric.completion.CanonicalModel` and
     :class:`~mowl.geometric.membership.MembershipStructure` of the training
     ontology (caching the :class:`MembershipStructure` next to
-    ``dataset.ontology_path`` when available) and trains a
+    ``dataset.ontology_path`` when available, keyed by the ontology SHA-256,
+    index maps, and the source hashes of ``mowl/geometric/completion.py`` and
+    ``mowl/geometric/membership.py``) and trains a
     :class:`~mowl.nn.el.canonical_mixture.CanonicalMixtureModule` with mini-batches
     of individuals.
 
     Guarantees:
     - Raises ``ValueError("CanonicalMixture needs individuals")`` when the
       dataset contains no individuals.
-    - Every training-entailed class assertion scores ``0.0`` (probability ``1``)
-      and every contradicted class assertion scores ``+inf`` (probability ``0``)
-      at initialisation and after any number of training epochs.
+    - Every training-entailed class assertion (including assertions entailed
+      through roles) scores ``0.0`` exactly (probability ``1``) and every
+      contradicted class assertion scores ``+inf`` (probability ``0``) at
+      initialisation and after any number of training epochs.
+    - Individuals that occur only in validation or testing splits (no training
+      assertions) receive admissible support equal to all of :math:`S`.
     - Hierarchy violation rate is identically ``0`` for all parameters.
     - :meth:`train` iterates over mini-batches of ``batch_size`` individuals per
-      epoch, invokes ``epoch_callback(epoch, self)`` when provided, and
-      evaluates validation loss every ``validate_every`` epochs saving the best
-      ``state_dict`` checkpoint to :attr:`model_filepath`.
+      epoch, invokes ``epoch_callback(epoch, self)`` when provided, evaluates
+      validation loss every ``validate_every`` epochs saving the best
+      ``state_dict`` checkpoint to :attr:`model_filepath`, and reloads the best
+      checkpoint at the end of :meth:`train`.
 
     Non-guarantees:
     - Only defined for datasets with individuals; raises :class:`ValueError` on
@@ -174,7 +182,13 @@ class CanonicalMixture(EmbeddingELModel):
         with open(ontology_path, "rb") as f:
             while chunk := f.read(65536):
                 hasher.update(chunk)
-        # Also mix in class/individual/role index ordering so changes invalidate cache
+        # Hash the source of mowl/geometric/completion.py and mowl/geometric/membership.py
+        for mod in (completion_mod, membership_mod):
+            mod_file = getattr(mod, "__file__", None)
+            if mod_file and os.path.exists(mod_file):
+                with open(mod_file, "rb") as mf:
+                    hasher.update(mf.read())
+        # Mix in class/individual/role index ordering so changes invalidate cache
         for k, v in sorted(self.named_class_index_dict.items()):
             hasher.update(f"C:{k}={v}\n".encode("utf-8"))
         for k, v in sorted(self.individual_index_dict.items()):
@@ -204,6 +218,7 @@ class CanonicalMixture(EmbeddingELModel):
             class_index_dict=self.named_class_index_dict,
             individual_index_dict=self.individual_index_dict,
             relation_index_dict=self.object_property_index_dict,
+            allow_absent_individuals=True,
         )
         if cache_file is not None:
             try:
@@ -284,6 +299,7 @@ class CanonicalMixture(EmbeddingELModel):
 
         optimizer = self.get_optimizer()
         best_loss = float("inf")
+        best_saved = False
 
         for epoch in trange(epochs):
             self.module.train()
@@ -344,7 +360,20 @@ class CanonicalMixture(EmbeddingELModel):
                     if valid_loss < best_loss:
                         best_loss = valid_loss
                         th.save(self.module.state_dict(), self.model_filepath)
+                        best_saved = True
                 else:
                     if train_loss < best_loss:
                         best_loss = train_loss
                         th.save(self.module.state_dict(), self.model_filepath)
+                        best_saved = True
+
+        if (
+            best_saved
+            and self.model_filepath is not None
+            and os.path.exists(self.model_filepath)
+        ):
+            self.module.load_state_dict(
+                th.load(
+                    self.model_filepath, map_location=self.device, weights_only=True
+                )
+            )

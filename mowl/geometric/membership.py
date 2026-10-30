@@ -122,6 +122,7 @@ class MembershipStructure:
         class_index_dict: Mapping[str, int],
         individual_index_dict: Mapping[str, int],
         relation_index_dict: Optional[Mapping[str, int]] = None,
+        allow_absent_individuals: bool = False,
     ) -> MembershipStructure:
         """Build a :class:`MembershipStructure` from a :class:`~mowl.geometric.completion.CanonicalModel`.
 
@@ -136,6 +137,11 @@ class MembershipStructure:
         relation_index_dict : Optional[Mapping[str, int]], optional
             Dataset mapping from role IRI to role index. When ``None``, roles in
             ``sorted(cm.role_names)`` are indexed ``0 .. len(cm.role_names) - 1``.
+        allow_absent_individuals : bool, default False
+            When ``False``, raises :class:`ValueError` if any individual in
+            ``individual_index_dict`` is absent from ``cm.individuals``. When
+            ``True``, absent individuals (e.g. individuals occurring only in
+            validation/testing splits) receive ``individual_element = -1``.
         """
         cls_dict: Dict[str, int] = {str(k): int(v) for k, v in class_index_dict.items()}
         ind_dict: Dict[str, int] = {
@@ -151,16 +157,19 @@ class MembershipStructure:
         n_classes = (max(cls_dict.values()) + 1) if cls_dict else 0
         n_ind = (max(ind_dict.values()) + 1) if ind_dict else 0
 
-        # Validate all individuals in individual_index_dict exist and are satisfiable in cm
+        # Validate individuals in individual_index_dict exist (unless allow_absent_individuals)
+        # and are satisfiable in cm
         sorted_ind_items = sorted(ind_dict.items(), key=lambda kv: kv[1])
         ind_nominals_in_order: List[Tuple[int, str]] = []
         seen_nominals = set()
         for ind_iri, ind_idx in sorted_ind_items:
             nom_name = cm.individuals.get(ind_iri)
             if nom_name is None:
-                raise ValueError(
-                    f"Individual {ind_iri!r} is absent from the canonical model."
-                )
+                if not allow_absent_individuals:
+                    raise ValueError(
+                        f"Individual {ind_iri!r} is absent from the canonical model."
+                    )
+                continue
             if not cm.is_satisfiable(nom_name):
                 raise ValueError(
                     f"Individual {ind_iri!r} is unsatisfiable in the canonical model."
@@ -272,7 +281,7 @@ class MembershipStructure:
                 f"Class index out of bounds for M with {n_classes} classes."
             )
 
-        m_coal = self.M.coalesce()
+        m_coal = self.M if self.M.is_coalesced() else self.M.coalesce()
         indices = m_coal.indices()
         values = m_coal.values().bool()
         if values.numel() == 0:
