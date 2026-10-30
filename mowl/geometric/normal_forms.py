@@ -31,6 +31,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 import itertools
 from typing import TYPE_CHECKING, List, Set, Union
+import urllib.parse
+
+from mowl.geometric.errors import UnsupportedAxiom, UnsupportedAxiomError
 
 if TYPE_CHECKING:  # pragma: no cover
     from org.semanticweb.owlapi.model import OWLOntology
@@ -39,6 +42,26 @@ if TYPE_CHECKING:  # pragma: no cover
 BOTTOM = "http://www.w3.org/2002/07/owl#Nothing"
 TOP = "http://www.w3.org/2002/07/owl#Thing"
 AUX_NS = "http://mowl.borg/geo/aux#"
+NOMINAL_PREFIX = "http://mowl.borg/nominal/"
+
+
+def nominal_name(individual_iri: str) -> str:
+    """Return the fresh nominal concept name ``NOMINAL_PREFIX + quote(individual_iri, safe='')``."""
+    return NOMINAL_PREFIX + urllib.parse.quote(str(individual_iri), safe="")
+
+
+def is_nominal_name(name: str) -> bool:
+    """Return ``True`` iff ``name`` is a nominal concept name produced by :func:`nominal_name`."""
+    return str(name).startswith(NOMINAL_PREFIX)
+
+
+def individual_of_name(name: str) -> str:
+    """Return the individual IRI encoded by nominal concept name ``name``."""
+    if not is_nominal_name(name):
+        raise ValueError(
+            f"Expected a nominal name starting with {NOMINAL_PREFIX!r}, got {name!r}"
+        )
+    return urllib.parse.unquote(str(name)[len(NOMINAL_PREFIX):])
 
 
 @dataclass(frozen=True)
@@ -234,6 +257,9 @@ def normalise(source: Union[Dataset, OWLOntology]) -> NormalisedOntology:
     for prop in ontology.getObjectPropertiesInSignature(Imports.fromBoolean(True)):
         role_names.add(_clean_iri(prop))
 
+    for ind in ontology.getIndividualsInSignature(Imports.fromBoolean(True)):
+        concept_names.add(nominal_name(_clean_iri(ind)))
+
     for gci in gci_dict["gci0"] + gci_dict["gci0_bot"]:
         sub = str(gci.subclass)
         sup = str(gci.superclass)
@@ -340,6 +366,39 @@ def normalise(source: Union[Dataset, OWLOntology]) -> NormalisedOntology:
                     axioms.append(NF7(prev, chain_iris[idx], fresh_role))
                     prev = fresh_role
                 axioms.append(NF7(prev, chain_iris[-1], sup_r))
+        else:
+            dropped_axioms += 1
+
+    # Extract ABox axioms across the imports closure (individuals as fresh nominal names)
+    abox_axioms = ontology.getABoxAxioms(Imports.fromBoolean(True))
+    for ax in abox_axioms:
+        ax_type = ax.getAxiomType()
+        if ax_type == AxiomType.CLASS_ASSERTION:
+            ce = ax.getClassExpression()
+            ind = ax.getIndividual()
+            if ce.isAnonymous() or ind.isAnonymous():
+                raise UnsupportedAxiomError(
+                    f"Unsupported complex ClassAssertion: {ax}"
+                )
+            nom_a = nominal_name(_clean_iri(ind))
+            cls_iri = _clean_iri(ce)
+            axioms.append(NF1(nom_a, cls_iri))
+            concept_names.add(nom_a)
+            concept_names.add(cls_iri)
+        elif ax_type == AxiomType.OBJECT_PROPERTY_ASSERTION:
+            prop = ax.getProperty()
+            subj = ax.getSubject()
+            obj = ax.getObject()
+            if prop.isAnonymous() or subj.isAnonymous() or obj.isAnonymous():
+                dropped_axioms += 1
+                continue
+            r_iri = _clean_iri(prop)
+            nom_a = nominal_name(_clean_iri(subj))
+            nom_b = nominal_name(_clean_iri(obj))
+            axioms.append(NF3(nom_a, r_iri, nom_b))
+            concept_names.add(nom_a)
+            concept_names.add(nom_b)
+            role_names.add(r_iri)
         else:
             dropped_axioms += 1
 

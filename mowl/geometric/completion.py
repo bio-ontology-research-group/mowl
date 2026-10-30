@@ -45,9 +45,13 @@ from mowl.geometric.normal_forms import (
     NF4,
     NF6,
     NF7,
+    NOMINAL_PREFIX,
     TOP,
     Axiom,
     NormalisedOntology,
+    individual_of_name,
+    is_nominal_name,
+    nominal_name,
     normalise,
 )
 
@@ -343,7 +347,14 @@ class CanonicalModel:
             all_concepts.update(concept_names)
         all_concepts.discard(BOTTOM)
 
-        self.concept_names: Set[str] = set(all_concepts) | {BOTTOM}
+        self.individuals: Dict[str, str] = {
+            individual_of_name(c): c
+            for c in sorted(all_concepts)
+            if is_nominal_name(c)
+        }
+        self._concept_names: Set[str] = {
+            c for c in all_concepts if not is_nominal_name(c)
+        } | {BOTTOM}
         self.role_names: Set[str] = set(completion.role_names)
         if role_names is not None:
             self.role_names.update(role_names)
@@ -473,6 +484,46 @@ class CanonicalModel:
             return self._joint_sat_cache[names_fset]
         self._saturate_conjunction(names_fset)
         return self._joint_sat_cache[names_fset]
+
+    @property
+    def concept_names(self) -> Set[str]:
+        """Concept names in the signature, excluding nominal names."""
+        return set(self._concept_names)
+
+    def element_of(self, name: str) -> int:
+        """Return the canonical domain element index for ``name`` (or individual IRI ``name``)."""
+        if name in self._name_to_pos:
+            return self._name_to_pos[name]
+        nom = self.individuals.get(name)
+        if nom is not None and nom in self._name_to_pos:
+            return self._name_to_pos[nom]
+        raise KeyError(name)
+
+    def _nominal_for(self, a: str) -> str:
+        """Resolve an individual IRI (or nominal name) ``a`` to its nominal concept name ``N_a``."""
+        if is_nominal_name(a):
+            return a
+        return self.individuals.get(a, nominal_name(a))
+
+    def instance_of(self, a: str, C: str) -> bool:
+        """Return ``True`` iff :math:`\\mathcal{O} \\models C(a)` (via :math:`N_a \\sqsubseteq C`)."""
+        return self.entails(self._nominal_for(a), C)
+
+    entails_assertion = instance_of
+
+    def assertion_contradicted(self, a: str, C: str) -> bool:
+        """Return ``True`` iff :math:`\\mathcal{O} \\models N_a \\sqcap C \\sqsubseteq \\bot`."""
+        return not self.joint_satisfiable({self._nominal_for(a), C})
+
+    def role_instances(self, r: str) -> Set[Tuple[str, str]]:
+        """Return pairs of individual IRIs ``(a, b)`` connected by role ``r`` in the canonical model."""
+        out: Set[Tuple[str, str]] = set()
+        for pos_i, pos_j in self.role(r):
+            src_name = self.names[pos_i]
+            dst_name = self.names[pos_j]
+            if is_nominal_name(src_name) and is_nominal_name(dst_name):
+                out.add((individual_of_name(src_name), individual_of_name(dst_name)))
+        return out
 
     def entails_conjunction(self, names: Iterable[str], sup: str) -> bool:
         """Return ``True`` iff :math:`\\mathcal{O} \\models (\\sqcap_{A \\in \\text{names}} A) \\sqsubseteq \\text{sup}`."""
