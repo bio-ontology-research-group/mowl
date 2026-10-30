@@ -1,7 +1,7 @@
 """MultiBoxEL neural module."""
 from __future__ import annotations
 
-from typing import Optional, Tuple
+from typing import TYPE_CHECKING, Dict, Mapping, Optional, Tuple, Union
 
 import torch as th
 import torch.nn as nn
@@ -11,7 +11,20 @@ import mowl.nn.el.boxsquaredel.losses as B2L
 from mowl.nn.el.boxsquaredel.module import BoxSquaredELModule
 from mowl.nn.el.multibox_utils import effective_components as _effective_components
 import mowl.nn.el.multiboxel.losses as L
+from mowl.nn.el.pointloss import (
+    _validate_beta,
+    _validate_objective,
+    compute_class_assertion_score_point,
+    compute_point_membership_loss,
+    compute_point_modelness,
+    gather_element_embeddings,
+    membership_bce,
+    soft_box_membership,
+)
 from mowl.nn.el.softagg import _validate_tau, diversity_penalty
+
+if TYPE_CHECKING:
+    from mowl.datasets.el.points import PointSupervision
 
 
 class MultiBoxELModule(ELModule):
@@ -102,6 +115,10 @@ class MultiBoxELModule(ELModule):
         component_aggregation: str = "hard",
         tau: float = 1.0,
         diversity_reg: float = 0.0,
+        objective: str = "axiom",
+        beta: float = 0.1,
+        neg_weight: float = 0.1,
+        volume_reg: float = 0.0,
     ) -> None:
         super().__init__()
         if isinstance(n_components, bool) or not isinstance(n_components, int) or n_components < 1:
@@ -119,6 +136,20 @@ class MultiBoxELModule(ELModule):
             or float(diversity_reg) < 0.0
         ):
             raise ValueError(f"diversity_reg must be >= 0, got {diversity_reg!r}")
+        _validate_objective(objective)
+        beta_f = _validate_beta(beta)
+        if (
+            isinstance(neg_weight, bool)
+            or not isinstance(neg_weight, (int, float))
+            or float(neg_weight) < 0.0
+        ):
+            raise ValueError(f"neg_weight must be >= 0, got {neg_weight!r}")
+        if (
+            isinstance(volume_reg, bool)
+            or not isinstance(volume_reg, (int, float))
+            or float(volume_reg) < 0.0
+        ):
+            raise ValueError(f"volume_reg must be >= 0, got {volume_reg!r}")
 
         self.nb_ont_classes = nb_ont_classes
         self.nb_rels = nb_rels
@@ -157,13 +188,30 @@ class MultiBoxELModule(ELModule):
         self.component_aggregation = component_aggregation
         self.register_buffer("tau", th.tensor(tau_f, dtype=th.float32))
         self.diversity_reg = float(diversity_reg)
+        self.objective = objective
+        self.beta = beta_f
+        self.neg_weight = float(neg_weight)
+        self.volume_reg = float(volume_reg)
+        self.point_supervision: Optional[PointSupervision] = None
+        self.elem_embed: Optional[nn.Embedding] = None
 
     def __setattr__(self, name: str, value: object) -> None:
         if name == "tau" and "_buffers" in self.__dict__ and "tau" in self._buffers:
             tau_f = _validate_tau(value)  # type: ignore[arg-type]
             self._buffers["tau"].fill_(tau_f)
             return
+        if name == "objective":
+            _validate_objective(value)  # type: ignore[arg-type]
         super().__setattr__(name, value)
+
+    @property
+    def ind_embed(self) -> Optional[nn.Embedding]:
+        """Alias for ``ind_center`` so individual point lookups use a uniform attribute name."""
+        return self.__dict__.get("_modules", {}).get("ind_center", None)
+
+    @ind_embed.setter
+    def ind_embed(self, value: Optional[nn.Embedding]) -> None:
+        self.ind_center = value
 
     # Single-component tables (roles, bumps, individuals) use the Box²EL initialiser.
     init_embeddings = BoxSquaredELModule.init_embeddings
@@ -202,7 +250,127 @@ class MultiBoxELModule(ELModule):
         )
         return cen, off
 
+    def set_point_supervision(self, ps: PointSupervision) -> None:
+        """Attach :class:`~mowl.datasets.el.points.PointSupervision` and lazily create ``elem_embed``."""
+        self.point_supervision = ps
+        device = self.class_center.weight.device
+        dtype = self.class_center.weight.dtype
+        if self.elem_embed is None or self.elem_embed.num_embeddings != ps.n_elements:
+            self.elem_embed = self.init_embeddings(
+                ps.n_elements, self.embed_dim
+            ).to(device=device, dtype=dtype)
+
+    def element_embeddings(self, elem_idx: th.Tensor) -> th.Tensor:
+        """Return point coordinates ``(B, d)`` for ``elem_idx``, aliasing individual elements to ``ind_embed``."""
+        if self.point_supervision is None or self.elem_embed is None:
+            raise RuntimeError(
+                "PointSupervision has not been set on this module; call set_point_supervision(ps) first."
+            )
+        return gather_element_embeddings(
+            elem_idx, self.point_supervision, self.elem_embed, self.ind_embed
+        )
+
+    def element_bumps(self, elem_idx: th.Tensor) -> th.Tensor:
+        """Return Box²EL bump vectors ``(B, d)`` of each element's own class or individual."""
+        if self.point_supervision is None:
+            raise RuntimeError(
+                "PointSupervision has not been set on this module; call set_point_supervision(ps) first."
+            )
+        ps = self.point_supervision
+        device = self.bump_classes.weight.device
+        dtype = self.bump_classes.weight.dtype
+        idx = elem_idx.to(device=device, dtype=th.long)
+        if idx.numel() == 0:
+            return th.empty((0, self.embed_dim), device=device, dtype=dtype)
+
+        is_ind = ps.element_is_individual.to(device=device)[idx]
+        cls_or_ind = ps.element_class_index.to(device=device)[idx]
+        if not bool(is_ind.any().item()):
+            return self.bump_classes(cls_or_ind)
+        if self.bump_individuals is None:
+            raise ValueError(
+                "PointSupervision contains individual elements, but bump_individuals is None."
+            )
+        if bool(is_ind.all().item()):
+            return self.bump_individuals(cls_or_ind)
+
+        out = th.empty((idx.shape[0], self.embed_dim), device=device, dtype=dtype)
+        out[~is_ind] = self.bump_classes(cls_or_ind[~is_ind])
+        out[is_ind] = self.bump_individuals(cls_or_ind[is_ind])
+        return out
+
+    def point_membership_loss(
+        self,
+        batch: Union[Mapping[str, th.Tensor], th.Tensor],
+        neg: bool = False,
+        weight: Optional[float] = None,
+    ) -> th.Tensor:
+        """Compute Objective O3 point-membership BCE loss."""
+        return compute_point_membership_loss(self, batch, neg=neg, weight=weight)
+
+    def point_role_loss(
+        self,
+        batch: Union[Mapping[str, th.Tensor], th.Tensor],
+        neg: bool = False,
+        weight: Optional[float] = None,
+    ) -> th.Tensor:
+        """Compute Objective O3 role BCE loss via Box²EL head/tail boxes and element bumps.
+
+        For each role triple ``(x_C, r, y_D)``, evaluates
+        :math:`m_{H_r}(x + b_D) \\cdot m_{T_r}(y + b_C)` where :math:`b_C, b_D` are
+        the bumps of the elements' own classes or individuals.
+        """
+        device = self.class_center.weight.device
+        dtype = self.class_center.weight.dtype
+        roles = batch.get("roles") if isinstance(batch, Mapping) else batch
+        if roles is None or roles.numel() == 0:
+            return th.zeros((), device=device, dtype=dtype)
+
+        r_tensor = roles.to(device=device, dtype=th.long)
+        elem_x = r_tensor[:, 0]
+        rel_idx = r_tensor[:, 1]
+        elem_y = r_tensor[:, 2]
+
+        x = self.element_embeddings(elem_x)
+        y = self.element_embeddings(elem_y)
+        b_c = self.element_bumps(elem_x)
+        b_d = self.element_bumps(elem_y)
+
+        cen_h = self.head_center(rel_idx).unsqueeze(1)
+        off_h = th.abs(self.head_offset(rel_idx)).unsqueeze(1)
+        cen_t = self.tail_center(rel_idx).unsqueeze(1)
+        off_t = th.abs(self.tail_offset(rel_idx)).unsqueeze(1)
+
+        m_head = soft_box_membership(x + b_d, cen_h, off_h, beta=self.beta).squeeze(1)
+        m_tail = soft_box_membership(y + b_c, cen_t, off_t, beta=self.beta).squeeze(1)
+        m_role = m_head * m_tail
+
+        target = 0.0 if neg else 1.0
+        eff_w = (self.neg_weight if neg else 1.0) if weight is None else float(weight)
+        return membership_bce(m_role, target, weight=eff_w)
+
+    def class_assertion_score_point(self, data: th.Tensor) -> th.Tensor:
+        """Compute point-mode class assertion score :math:`-\\log m_C(a)` for ``data`` ``(B, 2)``."""
+        return compute_class_assertion_score_point(self, data)
+
+    def point_modelness(
+        self,
+        ps: Optional[PointSupervision] = None,
+        chunk_size: int = 8192,
+    ) -> Dict[str, float]:
+        """Return ``dict(pos_frac=..., hardneg_frac=...)`` evaluated in chunks on the current device."""
+        return compute_point_modelness(self, ps=ps, chunk_size=chunk_size)
+
+    def _zero_loss(self, data: th.Tensor) -> th.Tensor:
+        return th.zeros(
+            (data.shape[0],),
+            device=self.class_center.weight.device,
+            dtype=self.class_center.weight.dtype,
+        )
+
     def gci0_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
+        if self.objective in ("point", "mixed"):
+            return self._zero_loss(data)
         return L.gci0_loss(
             data,
             self.class_center,
@@ -215,6 +383,8 @@ class MultiBoxELModule(ELModule):
         )
 
     def gci0_bot_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
+        if self.objective == "point":
+            return self._zero_loss(data)
         return L.gci0_bot_loss(
             data,
             self.class_offset,
@@ -225,6 +395,8 @@ class MultiBoxELModule(ELModule):
         )
 
     def gci1_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
+        if self.objective in ("point", "mixed"):
+            return self._zero_loss(data)
         return L.gci1_loss(
             data,
             self.class_center,
@@ -237,6 +409,8 @@ class MultiBoxELModule(ELModule):
         )
 
     def gci1_bot_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
+        if self.objective == "point":
+            return self._zero_loss(data)
         return L.gci1_bot_loss(
             data,
             self.class_center,
@@ -249,6 +423,8 @@ class MultiBoxELModule(ELModule):
         )
 
     def gci2_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
+        if self.objective in ("point", "mixed"):
+            return self._zero_loss(data)
         return L.gci2_loss(
             data,
             self.class_center,
@@ -267,6 +443,8 @@ class MultiBoxELModule(ELModule):
         )
 
     def gci3_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
+        if self.objective in ("point", "mixed"):
+            return self._zero_loss(data)
         return L.gci3_loss(
             data,
             self.class_center,
@@ -284,6 +462,8 @@ class MultiBoxELModule(ELModule):
         )
 
     def gci3_bot_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
+        if self.objective == "point":
+            return self._zero_loss(data)
         return L.gci3_bot_loss(
             data,
             self.head_offset,
@@ -293,6 +473,8 @@ class MultiBoxELModule(ELModule):
         )
 
     def class_assertion_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
+        if self.objective in ("point", "mixed"):
+            return self.class_assertion_score_point(data)
         if self.ind_center is None or self.ind_offset is None:
             raise ValueError(
                 "The number of individuals must be specified to use this loss function."
@@ -313,6 +495,8 @@ class MultiBoxELModule(ELModule):
     def object_property_assertion_loss(
         self, data: th.Tensor, neg: bool = False
     ) -> th.Tensor:
+        if self.objective in ("point", "mixed"):
+            return self._zero_loss(data)
         if (
             self.ind_center is None
             or self.ind_offset is None

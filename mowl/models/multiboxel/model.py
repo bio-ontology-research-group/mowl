@@ -1,8 +1,18 @@
 """MultiBoxEL model class."""
 from __future__ import annotations
 
+from typing import Optional
+
+import numpy as np
+import torch as th
+
 from mowl.base_models.elmodel import EmbeddingELModel
+from mowl.datasets.el.points import (
+    PointSupervision,
+    build_or_load_point_supervision,
+)
 from mowl.nn import MultiBoxELModule
+from mowl.nn.el.pointloss import _VALID_OBJECTIVES, volume_penalty
 
 
 class MultiBoxEL(EmbeddingELModel):
@@ -122,6 +132,12 @@ class MultiBoxEL(EmbeddingELModel):
                  tau_anneal=False,
                  diversity_reg=0.0,
                  tau=None,
+                 objective="axiom",
+                 beta=0.1,
+                 neg_weight=0.1,
+                 volume_reg=1e-3,
+                 points_per_epoch=100_000,
+                 points_seed=0,
                  ):
         if float(anchor_weight) < 0:
             raise ValueError(f"anchor_weight must be >= 0, got {anchor_weight!r}")
@@ -137,6 +153,34 @@ class MultiBoxEL(EmbeddingELModel):
             )
         if float(diversity_reg) < 0.0:
             raise ValueError(f"diversity_reg must be >= 0, got {diversity_reg!r}")
+        if objective not in _VALID_OBJECTIVES:
+            raise ValueError(
+                f"objective must be one of {_VALID_OBJECTIVES}, got {objective!r}"
+            )
+        if isinstance(beta, bool) or not isinstance(beta, (int, float)) or float(beta) <= 0.0:
+            raise ValueError(f"beta must be > 0, got {beta!r}")
+        if (
+            isinstance(neg_weight, bool)
+            or not isinstance(neg_weight, (int, float))
+            or float(neg_weight) < 0.0
+        ):
+            raise ValueError(f"neg_weight must be >= 0, got {neg_weight!r}")
+        if (
+            isinstance(volume_reg, bool)
+            or not isinstance(volume_reg, (int, float))
+            or float(volume_reg) < 0.0
+        ):
+            raise ValueError(f"volume_reg must be >= 0, got {volume_reg!r}")
+        if (
+            isinstance(points_per_epoch, bool)
+            or not isinstance(points_per_epoch, int)
+            or points_per_epoch < 1
+        ):
+            raise ValueError(
+                f"points_per_epoch must be an int >= 1, got {points_per_epoch!r}"
+            )
+        if isinstance(points_seed, bool) or not isinstance(points_seed, int):
+            raise ValueError(f"points_seed must be an int, got {points_seed!r}")
         super().__init__(dataset, embed_dim, batch_size, extended=True,
                          model_filepath=model_filepath, device=device,
                          learning_rate=learning_rate,
@@ -157,6 +201,13 @@ class MultiBoxEL(EmbeddingELModel):
         self.tau_anneal = bool(tau_anneal)
         self.tau = eff_tau_start
         self.diversity_reg = float(diversity_reg)
+        self.objective = objective
+        self.beta = float(beta)
+        self.neg_weight = float(neg_weight)
+        self.volume_reg = float(volume_reg)
+        self.points_per_epoch = int(points_per_epoch)
+        self.points_seed = int(points_seed)
+        self._point_supervision: Optional[PointSupervision] = None
         self._loaded = False
         self.extended = False
         self.init_module()
@@ -176,10 +227,47 @@ class MultiBoxEL(EmbeddingELModel):
             component_aggregation=self.component_aggregation,
             tau=self.tau,
             diversity_reg=self.diversity_reg,
+            objective=self.objective,
+            beta=self.beta,
+            neg_weight=self.neg_weight,
+            volume_reg=self.volume_reg,
         ).to(self.device)
         if self.init_boxes is not None:
             self.init_boxes.apply_to_module(
                 self.module, class_index_dict=self.class_index_dict)
+        if self._point_supervision is not None:
+            self.module.set_point_supervision(self._point_supervision)
+
+    @property
+    def point_supervision(self) -> Optional[PointSupervision]:
+        """Return the cached :class:`~mowl.datasets.el.points.PointSupervision` if built."""
+        return self._point_supervision
+
+    def _ensure_point_supervision(self) -> PointSupervision:
+        """Lazily build or load :class:`~mowl.datasets.el.points.PointSupervision` and attach to ``module``."""
+        if self._point_supervision is None:
+            self._point_supervision = build_or_load_point_supervision(
+                self.dataset,
+                self.named_class_index_dict,
+                self.individual_index_dict,
+                self.object_property_index_dict,
+                rng_seed=self.points_seed,
+            )
+        if self.module.point_supervision is not self._point_supervision:
+            self.module.set_point_supervision(self._point_supervision)
+        return self._point_supervision
+
+    def get_optimizer(self):
+        """Ensure ``elem_embed`` is registered before constructing the Adam optimiser."""
+        if self.objective != "axiom":
+            self._ensure_point_supervision()
+        return super().get_optimizer()
+
+    def get_negative_sampling_config(self):
+        """Disable GCI negative sampling by default when GCI losses are zeroed in point/mixed mode."""
+        if self.objective != "axiom" and self.neg_sampling_gcis is None:
+            return {}
+        return super().get_negative_sampling_config()
 
     def on_epoch_start(self, epoch: int, epochs: int) -> None:
         """Update ``self.module.tau`` according to the geometric annealing schedule when ``tau_anneal=True``.
@@ -205,6 +293,23 @@ class MultiBoxEL(EmbeddingELModel):
                 tau = self.tau_start
             self.tau = float(tau)
             self.module.tau = float(tau)
+
+    def additional_training_loss(self, epoch: int) -> Optional[th.Tensor]:
+        """Compute sampled canonical-element point and role losses plus volume regulariser."""
+        if self.objective == "axiom":
+            return None
+        ps = self._ensure_point_supervision()
+        epoch_rng = np.random.default_rng(self.points_seed + int(epoch))
+        batch = ps.sample(self.points_per_epoch, rng=epoch_rng)
+        loss = self.module.point_membership_loss(batch)
+        loss = loss + self.module.point_role_loss(batch)
+        if self.volume_reg > 0.0 and len(self.named_class_index_dict) > 0:
+            cls_idx = th.arange(
+                len(self.named_class_index_dict), device=self.device, dtype=th.long
+            )
+            _, offsets = self.module.class_boxes(cls_idx)
+            loss = loss + self.volume_reg * volume_penalty(offsets)
+        return loss
 
     def get_regularization_loss(self):
         """Return module regularisation loss plus weighted anchor loss when active."""

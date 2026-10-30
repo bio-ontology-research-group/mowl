@@ -1,7 +1,7 @@
 """MultiELBE neural module."""
 from __future__ import annotations
 
-from typing import Optional, Tuple
+from typing import TYPE_CHECKING, Dict, Optional, Tuple, Union
 
 import torch as th
 import torch.nn as nn
@@ -11,7 +11,20 @@ from mowl.nn.el.boxsquaredel.module import BoxSquaredELModule
 from mowl.nn.el.multibox_utils import effective_components as _effective_components
 from mowl.nn.el.multiboxel.module import MultiBoxELModule
 import mowl.nn.el.multielbe.losses as L
+from mowl.nn.el.pointloss import (
+    _VALID_OBJECTIVES,
+    compute_class_assertion_score_point,
+    compute_point_membership_loss,
+    compute_point_modelness,
+    gather_element_embeddings,
+    membership_bce,
+    soft_box_membership,
+    union_membership,
+)
 from mowl.nn.el.softagg import _validate_tau, diversity_penalty
+
+if TYPE_CHECKING:
+    from mowl.datasets.el.points import PointSupervision
 
 
 class MultiELBEModule(ELModule):
@@ -101,6 +114,10 @@ class MultiELBEModule(ELModule):
         component_aggregation: str = "hard",
         tau: float = 1.0,
         diversity_reg: float = 0.0,
+        objective: str = "axiom",
+        beta: float = 0.1,
+        neg_weight: float = 0.1,
+        volume_reg: float = 0.0,
     ) -> None:
         super().__init__()
         if isinstance(n_components, bool) or not isinstance(n_components, int) or n_components < 1:
@@ -118,6 +135,24 @@ class MultiELBEModule(ELModule):
             or float(diversity_reg) < 0.0
         ):
             raise ValueError(f"diversity_reg must be >= 0, got {diversity_reg!r}")
+        if objective not in _VALID_OBJECTIVES:
+            raise ValueError(
+                f"objective must be one of {_VALID_OBJECTIVES}, got {objective!r}"
+            )
+        if isinstance(beta, bool) or not isinstance(beta, (int, float)) or float(beta) <= 0.0:
+            raise ValueError(f"beta must be > 0, got {beta!r}")
+        if (
+            isinstance(neg_weight, bool)
+            or not isinstance(neg_weight, (int, float))
+            or float(neg_weight) < 0.0
+        ):
+            raise ValueError(f"neg_weight must be >= 0, got {neg_weight!r}")
+        if (
+            isinstance(volume_reg, bool)
+            or not isinstance(volume_reg, (int, float))
+            or float(volume_reg) < 0.0
+        ):
+            raise ValueError(f"volume_reg must be >= 0, got {volume_reg!r}")
 
         self.nb_ont_classes = nb_ont_classes
         self.nb_rels = nb_rels
@@ -130,6 +165,12 @@ class MultiELBEModule(ELModule):
         self.component_aggregation = component_aggregation
         self.register_buffer("tau", th.tensor(tau_f, dtype=th.float32))
         self.diversity_reg = float(diversity_reg)
+        self.objective = objective
+        self.beta = float(beta)
+        self.neg_weight = float(neg_weight)
+        self.volume_reg = float(volume_reg)
+        self.point_supervision: Optional["PointSupervision"] = None
+        self.elem_embed: Optional[nn.Embedding] = None
 
         self.class_embed = self.init_class_embeddings(
             nb_ont_classes, n_components, embed_dim
@@ -152,10 +193,261 @@ class MultiELBEModule(ELModule):
             tau_f = _validate_tau(value)  # type: ignore[arg-type]
             self._buffers["tau"].fill_(tau_f)
             return
+        if name == "objective":
+            if value not in _VALID_OBJECTIVES:
+                raise ValueError(
+                    f"objective must be one of {_VALID_OBJECTIVES}, got {value!r}"
+                )
+        elif name == "beta":
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or float(value) <= 0.0:
+                raise ValueError(f"beta must be > 0, got {value!r}")
+            value = float(value)
+        elif name == "neg_weight":
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or float(value) < 0.0:
+                raise ValueError(f"neg_weight must be >= 0, got {value!r}")
+            value = float(value)
+        elif name == "volume_reg":
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or float(value) < 0.0:
+                raise ValueError(f"volume_reg must be >= 0, got {value!r}")
+            value = float(value)
         super().__setattr__(name, value)
 
     init_embeddings = BoxSquaredELModule.init_embeddings
     init_class_embeddings = MultiBoxELModule.init_class_embeddings
+
+    def set_point_supervision(self, ps: "PointSupervision") -> None:
+        """Attach :class:`~mowl.datasets.el.points.PointSupervision` and create ``elem_embed``.
+
+        Guarantees:
+        - Sets ``self.point_supervision = ps``.
+        - Allocates ``self.elem_embed`` of shape ``(ps.n_elements, embed_dim)`` on
+          the same device and dtype as ``class_embed.weight``, with rows for
+          individual-backed elements never indexed from ``elem_embed``.
+
+        Non-guarantees:
+        - Re-calling with a different ``n_elements`` replaces ``self.elem_embed``.
+
+        Parameters
+        ----------
+        ps : PointSupervision
+            Canonical-element supervision table.
+        """
+        self.point_supervision = ps
+        device = self.class_embed.weight.device
+        dtype = self.class_embed.weight.dtype
+        if self.elem_embed is None or self.elem_embed.num_embeddings != ps.n_elements:
+            self.elem_embed = self.init_embeddings(
+                ps.n_elements, self.embed_dim
+            ).to(device=device, dtype=dtype)
+
+    def element_embeddings(self, elem_idx: th.Tensor) -> th.Tensor:
+        """Look up element point embeddings of shape ``(B, d)`` with individual aliasing.
+
+        Guarantees:
+        - Class-element rows are gathered from ``self.elem_embed`` and individual-element
+          rows are gathered from ``self.ind_embed``, preserving separate gradient flows.
+
+        Non-guarantees:
+        - Raises ``RuntimeError`` if :meth:`set_point_supervision` has not been called.
+
+        Parameters
+        ----------
+        elem_idx : torch.Tensor
+            1-D integer tensor of element indices of length ``B``.
+
+        Returns
+        -------
+        torch.Tensor
+            Element coordinates of shape ``(B, embed_dim)``.
+        """
+        if self.point_supervision is None or self.elem_embed is None:
+            raise RuntimeError(
+                "PointSupervision has not been set on this module; call set_point_supervision(ps) first."
+            )
+        return gather_element_embeddings(
+            elem_idx, self.point_supervision, self.elem_embed, self.ind_embed
+        )
+
+    def point_membership_loss(
+        self,
+        batch: Union[th.Tensor, Dict[str, th.Tensor]],
+        neg: bool = False,
+        weight: Optional[float] = None,
+    ) -> th.Tensor:
+        """Compute point-in-box BCE membership loss for a pair tensor or sampled dict.
+
+        Guarantees:
+        - Accepts either a ``(B, 2)`` integer tensor ``(elem_idx, class_idx)`` (with
+          target ``1 - float(neg)``) or a dict from :meth:`PointSupervision.sample`
+          containing ``"pos"``, ``"hard"``, and ``"rand"`` keys.
+        - Differentiable with respect to ``elem_embed``, ``ind_embed``, ``class_embed``,
+          and ``class_offset``.
+
+        Non-guarantees:
+        - Raises ``RuntimeError`` if :meth:`set_point_supervision` has not been called.
+
+        Parameters
+        ----------
+        batch : torch.Tensor or dict of str to torch.Tensor
+            Pair tensor of shape ``(B, 2)`` or sample dictionary.
+        neg : bool, default False
+            If ``batch`` is a tensor, whether targets are ``0.0`` (``True``) or ``1.0`` (``False``).
+        weight : float, optional
+            Optional sample weight when ``batch`` is a tensor.
+
+        Returns
+        -------
+        torch.Tensor
+            Scalar BCE membership loss.
+        """
+        return compute_point_membership_loss(self, batch, neg=neg, weight=weight)
+
+    def point_role_loss(
+        self,
+        batch: Union[th.Tensor, Dict[str, th.Tensor]],
+        neg: bool = False,
+        weight: Optional[float] = None,
+    ) -> th.Tensor:
+        """Compute MultiELBE translation role loss for canonical role edges :math:`(x_C, r, x_D)`.
+
+        Uses soft membership of the translated source element :math:`x_C + r` in
+        the target concept :math:`D`'s union of boxes:
+        :math:`m(x_C, r, x_D) = m_D(x_C + r)`.
+
+        Guarantees:
+        - Accepts either a ``(B, 3)`` integer tensor ``(elem_x, r_idx, elem_y)`` or a
+          sample dict with key ``"roles"``.
+        - Differentiable with respect to ``elem_embed``/``ind_embed``, ``rel_embed``,
+          ``class_embed``, and ``class_offset``.
+
+        Non-guarantees:
+        - Does not use ``ind_offset`` when target elements are individuals.
+
+        Parameters
+        ----------
+        batch : torch.Tensor or dict of str to torch.Tensor
+            Role triple tensor of shape ``(B, 3)`` or sample dictionary.
+        neg : bool, default False
+            Whether targets are ``0.0`` (``True``) or ``1.0`` (``False``).
+        weight : float, optional
+            Optional sample weight.
+
+        Returns
+        -------
+        torch.Tensor
+            Scalar BCE role loss.
+        """
+        if self.point_supervision is None or self.elem_embed is None:
+            raise RuntimeError(
+                "point_supervision is not set; call set_point_supervision(ps) first."
+            )
+        device = self.class_embed.weight.device
+        dtype = self.class_embed.weight.dtype
+        if isinstance(batch, dict):
+            triples = batch.get("roles")
+            if triples is None or triples.numel() == 0:
+                return th.zeros((), dtype=dtype, device=device)
+        else:
+            triples = batch
+            if triples.numel() == 0:
+                return th.zeros((), dtype=dtype, device=device)
+
+        triples_dev = triples.to(device=device, dtype=th.long)
+        elem_x = triples_dev[:, 0]
+        r_idx = triples_dev[:, 1]
+        elem_y = triples_dev[:, 2]
+
+        x = self.element_embeddings(elem_x)
+        r = self.rel_embed(r_idx)
+        x_shifted = x + r
+
+        ps = self.point_supervision
+        is_ind_y = ps.element_is_individual.to(device=device)[elem_y]
+        cls_or_ind_y = ps.element_class_index.to(device=device)[elem_y]
+        if not bool(is_ind_y.any().item()):
+            cen_d, off_d = self.class_boxes(cls_or_ind_y)
+        else:
+            b_size = elem_y.shape[0]
+            cen_d = th.empty(
+                (b_size, self.n_components, self.embed_dim),
+                dtype=x_shifted.dtype,
+                device=device,
+            )
+            off_d = th.zeros(
+                (b_size, self.n_components, self.embed_dim),
+                dtype=x_shifted.dtype,
+                device=device,
+            )
+            cls_mask = ~is_ind_y
+            if bool(cls_mask.any().item()):
+                c_cls, o_cls = self.class_boxes(cls_or_ind_y[cls_mask])
+                cen_d[cls_mask] = c_cls
+                off_d[cls_mask] = o_cls
+            if bool(is_ind_y.any().item()):
+                if self.ind_embed is None:
+                    raise ValueError(
+                        "Individual elements present in PointSupervision but module has no ind_embed."
+                    )
+                c_ind = (
+                    self.ind_embed(cls_or_ind_y[is_ind_y])
+                    .unsqueeze(1)
+                    .expand(-1, self.n_components, -1)
+                )
+                cen_d[is_ind_y] = c_ind
+
+        comp_m = soft_box_membership(x_shifted, cen_d, off_d, beta=self.beta)
+        m = union_membership(comp_m)
+        target_val = 0.0 if neg else 1.0
+        eff_w = (self.neg_weight if neg else 1.0) if weight is None else float(weight)
+        return membership_bce(m, target_val, weight=eff_w)
+
+    def class_assertion_score_point(self, data: th.Tensor) -> th.Tensor:
+        """Compute point-based ABox class assertion score :math:`-\\log(m_C(x_a) + \\varepsilon)`.
+
+        Guarantees:
+        - Returns shape ``(B, 1)`` using ``self.ind_embed`` without touching ``self.ind_offset``.
+
+        Non-guarantees:
+        - Raises ``ValueError`` if ``nb_inds`` was ``None`` or ``0``.
+
+        Parameters
+        ----------
+        data : torch.Tensor
+            Integer batch of shape ``(B, 2)`` with columns ``(a, C)``.
+
+        Returns
+        -------
+        torch.Tensor
+            Score tensor of shape ``(B, 1)`` where lower means higher membership.
+        """
+        return compute_class_assertion_score_point(self, data)
+
+    def point_modelness(
+        self,
+        ps: Optional["PointSupervision"] = None,
+        chunk_size: int = 8192,
+    ) -> Dict[str, float]:
+        """Compute ``pos_frac`` (:math:`m \\ge 0.5`) and ``hardneg_frac`` (:math:`m < 0.5`).
+
+        Guarantees:
+        - Evaluates in chunks on the module's current device under ``torch.no_grad()``.
+
+        Non-guarantees:
+        - Does not evaluate role pairs.
+
+        Parameters
+        ----------
+        ps : PointSupervision, optional
+            Supervision object (defaults to ``self.point_supervision``).
+        chunk_size : int, default 8192
+            Number of pairs per evaluation chunk.
+
+        Returns
+        -------
+        dict of str to float
+            Dictionary with keys ``"pos_frac"`` and ``"hardneg_frac"``.
+        """
+        return compute_point_modelness(self, ps=ps, chunk_size=chunk_size)
 
     @property
     def class_center(self) -> nn.Embedding:
@@ -220,6 +512,12 @@ class MultiELBEModule(ELModule):
         torch.Tensor
             Per-row loss tensor of shape ``(B, 1)``.
         """
+        if self.objective in ("point", "mixed"):
+            return th.zeros(
+                (len(data), 1),
+                dtype=self.class_embed.weight.dtype,
+                device=data.device,
+            )
         return L.gci0_loss(
             data,
             self.class_embed,
@@ -252,6 +550,12 @@ class MultiELBEModule(ELModule):
         torch.Tensor
             Per-row loss tensor of shape ``(B,)``.
         """
+        if self.objective == "point":
+            return th.zeros(
+                (len(data),),
+                dtype=self.class_embed.weight.dtype,
+                device=data.device,
+            )
         return L.gci0_bot_loss(
             data,
             self.class_offset,
@@ -283,6 +587,12 @@ class MultiELBEModule(ELModule):
         torch.Tensor
             Per-row loss tensor of shape ``(B, 1)``.
         """
+        if self.objective in ("point", "mixed"):
+            return th.zeros(
+                (len(data), 1),
+                dtype=self.class_embed.weight.dtype,
+                device=data.device,
+            )
         return L.gci1_loss(
             data,
             self.class_embed,
@@ -318,6 +628,12 @@ class MultiELBEModule(ELModule):
         torch.Tensor
             Per-row loss tensor of shape ``(B, 1)``.
         """
+        if self.objective == "point":
+            return th.zeros(
+                (len(data), 1),
+                dtype=self.class_embed.weight.dtype,
+                device=data.device,
+            )
         return L.gci1_bot_loss(
             data,
             self.class_embed,
@@ -388,6 +704,12 @@ class MultiELBEModule(ELModule):
         torch.Tensor
             Per-row score tensor of shape ``(B, 1)``.
         """
+        if self.objective in ("point", "mixed"):
+            return th.zeros(
+                (len(data), 1),
+                dtype=self.class_embed.weight.dtype,
+                device=data.device,
+            )
         return L.gci2_loss(
             data,
             self.class_embed,
@@ -423,6 +745,12 @@ class MultiELBEModule(ELModule):
         torch.Tensor
             Per-row loss tensor of shape ``(B, 1)``.
         """
+        if self.objective in ("point", "mixed"):
+            return th.zeros(
+                (len(data), 1),
+                dtype=self.class_embed.weight.dtype,
+                device=data.device,
+            )
         return L.gci3_loss(
             data,
             self.class_embed,
@@ -457,6 +785,12 @@ class MultiELBEModule(ELModule):
         torch.Tensor
             Per-row loss tensor of shape ``(B,)``.
         """
+        if self.objective == "point":
+            return th.zeros(
+                (len(data),),
+                dtype=self.class_embed.weight.dtype,
+                device=data.device,
+            )
         return L.gci3_bot_loss(
             data,
             self.class_offset,
@@ -497,6 +831,8 @@ class MultiELBEModule(ELModule):
             raise ValueError(
                 "The number of individuals must be specified to use this loss function."
             )
+        if self.objective in ("point", "mixed"):
+            return self.class_assertion_score_point(data)
         return L.class_assertion_loss(
             data,
             self.ind_embed,
@@ -542,6 +878,12 @@ class MultiELBEModule(ELModule):
         if self.ind_embed is None or self.ind_offset is None or self.nb_inds == 0:
             raise ValueError(
                 "The number of individuals must be specified to use this loss function."
+            )
+        if self.objective in ("point", "mixed"):
+            return th.zeros(
+                (len(data), 1),
+                dtype=self.class_embed.weight.dtype,
+                device=data.device,
             )
         return L.object_property_assertion_loss(
             data,
