@@ -38,14 +38,41 @@ Non-guarantees:
   :math:`\\min_j \\text{incl}(C_i, D_j)` and gating over pairwise intersections makes
   the objective piecewise smooth rather than convex; gradient descent is not
   guaranteed to reach a global minimum from arbitrary random initialisations.
+- **Non-zero soft loss at hard models and component collapse pressure:** Under
+  ``aggregation="soft"`` at finite :math:`\\tau > 0`, :func:`~mowl.nn.el.softagg.softmin`
+  satisfies :math:`\\min_j v_j \\le \\text{softmin}_\\tau(v) \\le \\text{mean}_j v_j`
+  and is strictly positive whenever the target components do not all have zero
+  inclusion score (e.g. :math:`\\text{softmin}_{\\tau=1}([0, 5]) \\approx 0.69`).
+  Thus a hard zero-loss model is not a zero of the soft loss: every target
+  component receives a gradient proportional to its softmax weight pulling it
+  toward the source component, which promotes component collapse unless paired
+  with :func:`~mowl.nn.el.softagg.diversity_penalty` (``diversity_reg > 0``).
+
+References
+----------
+G. Federico, M. Leemhuis and O. Kutz, "Introducing Multiboxes: Increasing the
+Trustworthiness of Ontology Embeddings", JOWO 2026.
 """
 from __future__ import annotations
 
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 import torch as th
 
 import mowl.nn.el.boxsquaredel.losses as B2L
+from mowl.nn.el.softagg import _validate_tau, soft_gci1_terms, softmin
+
+
+def _validate_aggregation(
+    aggregation: str, tau: Union[float, int, th.Tensor] = 1.0
+) -> None:
+    """Validate ``aggregation`` mode and ``tau`` when ``aggregation == 'soft'``."""
+    if aggregation not in ("hard", "soft"):
+        raise ValueError(
+            f"aggregation must be 'hard' or 'soft', got {aggregation!r}"
+        )
+    if aggregation == "soft":
+        _validate_tau(tau)
 
 
 def _resolve_n_components(
@@ -194,15 +221,22 @@ def gci0_score(
     class_offset: th.nn.Embedding,
     gamma: float,
     n_components: Optional[int] = None,
+    aggregation: str = "hard",
+    tau: float = 1.0,
 ) -> th.Tensor:
-    """Unsquared GCI0 score :math:`\\text{mean}_i \\min_j \\text{incl}(C_i, D_j)` for :math:`C \\sqsubseteq D`.
+    """Unsquared GCI0 score :math:`\\text{mean}_i \\text{agg}_j \\text{incl}(C_i, D_j)` for :math:`C \\sqsubseteq D`.
 
     Guarantees:
     - Reduces to :func:`mowl.nn.el.boxsquaredel.losses.gci0_score` when ``k = 1``.
+    - Converges from ``aggregation="soft"`` to ``aggregation="hard"`` as ``tau -> 0+``.
 
     Non-guarantees:
     - Does not require different components :math:`C_i` to map into distinct
       components :math:`D_j`.
+    - Under ``aggregation="soft"`` at finite ``tau > 0``, the score is not zero
+      at a hard model (:func:`~mowl.nn.el.softagg.softmin` :math:`\\le \\text{mean}`
+      pulls all target components :math:`D_j` toward each :math:`C_i`, which is
+      why ``diversity_reg`` / :func:`~mowl.nn.el.softagg.diversity_penalty` is needed).
 
     Parameters
     ----------
@@ -216,16 +250,23 @@ def gci0_score(
         Inclusion margin.
     n_components : Optional[int], default None
         Number of components :math:`k`.
+    aggregation : str, default "hard"
+        Target-component aggregation mode: ``"hard"`` or ``"soft"``.
+    tau : float, default 1.0
+        Soft-minimum temperature used when ``aggregation="soft"``.
 
     Returns
     -------
     torch.Tensor
         Per-row score tensor of shape ``(B,)``.
     """
+    _validate_aggregation(aggregation, tau)
     cen_c, off_c = _unpack_boxes(data[:, 0], class_center, class_offset, n_components)
     cen_d, off_d = _unpack_boxes(data[:, 1], class_center, class_offset, n_components)
     incl = multi_inclusion(cen_c, off_c, cen_d, off_d, gamma)
-    return th.amin(incl, dim=2).mean(dim=1)
+    if aggregation == "hard":
+        return th.amin(incl, dim=2).mean(dim=1)
+    return softmin(incl, tau=tau, dim=2).mean(dim=1)
 
 
 def gci0_loss(
@@ -235,24 +276,36 @@ def gci0_loss(
     gamma: float,
     n_components: Optional[int] = None,
     neg: bool = False,
+    aggregation: str = "hard",
+    tau: float = 1.0,
 ) -> th.Tensor:
     """Squared GCI0 loss for :math:`C \\sqsubseteq D`.
 
     Guarantees:
     - Matches :func:`mowl.nn.el.boxsquaredel.losses.gci0_loss` at ``k = 1``.
-    - At ``gamma = 0``, equals ``0`` iff every component :math:`C_i` is contained
-      in some component :math:`D_j`.
+    - At ``gamma = 0`` and ``aggregation="hard"``, equals ``0`` iff every
+      component :math:`C_i` is contained in some component :math:`D_j`.
 
     Non-guarantees:
     - ``neg=True`` is not distinct from ``neg=False`` (GCI0 is not in ``neg_capable_gcis``).
     """
-    return gci0_score(data, class_center, class_offset, gamma, n_components=n_components).square()
+    return gci0_score(
+        data,
+        class_center,
+        class_offset,
+        gamma,
+        n_components=n_components,
+        aggregation=aggregation,
+        tau=tau,
+    ).square()
 
 
 def gci0_bot_score(
     data: th.Tensor,
     class_offset: th.nn.Embedding,
     n_components: Optional[int] = None,
+    aggregation: str = "hard",
+    tau: float = 1.0,
 ) -> th.Tensor:
     """Unsquared GCI0-bot score :math:`\\text{mean}_i \\|o_{C_i}\\|_2` for :math:`C \\sqsubseteq \\bot`.
 
@@ -262,6 +315,7 @@ def gci0_bot_score(
     Non-guarantees:
     - Constrains half-widths to zero but does not constrain component centres.
     """
+    _validate_aggregation(aggregation, tau)
     b_size = data.shape[0]
     k = _resolve_n_components(class_offset, n_components)
     raw_o = th.abs(class_offset(data[:, 0]))
@@ -275,6 +329,8 @@ def gci0_bot_loss(
     class_offset: th.nn.Embedding,
     n_components: Optional[int] = None,
     neg: bool = False,
+    aggregation: str = "hard",
+    tau: float = 1.0,
 ) -> th.Tensor:
     """Squared GCI0-bot loss for :math:`C \\sqsubseteq \\bot`.
 
@@ -284,7 +340,13 @@ def gci0_bot_loss(
     Non-guarantees:
     - ``neg=True`` is not distinct from ``neg=False``.
     """
-    return gci0_bot_score(data, class_offset, n_components=n_components).square()
+    return gci0_bot_score(
+        data,
+        class_offset,
+        n_components=n_components,
+        aggregation=aggregation,
+        tau=tau,
+    ).square()
 
 
 def gci1_score(
@@ -293,30 +355,45 @@ def gci1_score(
     class_offset: th.nn.Embedding,
     gamma: float,
     n_components: Optional[int] = None,
+    aggregation: str = "hard",
+    tau: float = 1.0,
 ) -> th.Tensor:
     """Unsquared gated GCI1 score for :math:`C \\sqcap D \\sqsubseteq E`.
 
-    For each batch row:
+    For each batch row under ``aggregation="hard"``:
     - :math:`(i^*, j^*) = \\arg\\min_{i,j} \\text{empt}(C_i, D_j)` (chosen on detached
       emptiness penalties so no gradient flows through the discrete argmin).
     - Gate :math:`g_{ij} = 1` if :math:`\\text{lo}_{ij} \\le \\text{up}_{ij}` in every
       coordinate or :math:`(i, j) = (i^*, j^*)`, else :math:`0` (detached).
     - Score :math:`= \\text{empt}(C_{i^*}, D_{j^*}) + \\frac{\\sum_{i,j} g_{ij} \\min_m \\text{incl}(I(C_i, D_j), E_m)}{\\sum_{i,j} g_{ij}}`.
 
+    Under ``aggregation="soft"`` (delegating to :func:`~mowl.nn.el.softagg.soft_gci1_terms`):
+    - :math:`w_{ij} = \\text{softmax}(-\\text{empt}_{ij} / \\tau)` (with gradient),
+      emptiness term :math:`\\sum_{i,j} w_{ij} \\text{empt}_{ij}`, detached gate
+      :math:`g_{ij} = \\max(\\text{non\\_empty}_{ij}^\\text{det}, w_{ij}^\\text{det})`
+      (detached because the gate selects active pairs rather than acting as a
+      target), and inner target aggregation :math:`\\text{softmin}_\\tau` over :math:`E_m`.
+
     Guarantees:
     - At ``k = 1``, the single pair ``(0, 0)`` is always the designated pair
       (:math:`g_{00} = 1`), so this score matches
       :func:`mowl.nn.el.boxsquaredel.losses.gci1_score` on both empty and
-      non-empty intersections.
+      non-empty intersections under both ``"hard"`` and ``"soft"``.
     - When at least one pair :math:`(C_i, D_j)` intersects non-emptily, any
       other pair that is strictly disjoint (:math:`\\text{lo}_{ij} > \\text{up}_{ij}`
-      in some coordinate) receives :math:`g_{ij} = 0` and imposes no penalty.
+      in some coordinate) receives :math:`g_{ij} = 0` under ``"hard"`` and
+      imposes no penalty.
 
     Non-guarantees:
     - If a non-empty intersection :math:`C_i \\cap D_j` cannot be covered by a
       single component :math:`E_m` (even though it could be covered by a union
       of several :math:`E_m`), :math:`\\min_m \\text{incl}(I(C_i, D_j), E_m)` remains positive.
+    - Under ``aggregation="soft"`` at finite ``tau > 0``, the score is not zero
+      at a hard model (:func:`~mowl.nn.el.softagg.softmin` :math:`\\le \\text{mean}`
+      pulls all target components :math:`E_m` toward each active intersection,
+      which is why ``diversity_reg`` exists).
     """
+    _validate_aggregation(aggregation, tau)
     b_size = data.shape[0]
     cen_c, off_c = _unpack_boxes(data[:, 0], class_center, class_offset, n_components)
     cen_d, off_d = _unpack_boxes(data[:, 1], class_center, class_offset, n_components)
@@ -329,15 +406,6 @@ def gci1_score(
 
     empt = th.linalg.norm(th.relu(lower - upper), dim=-1)  # (B, k, k)
     empt_flat = empt.view(b_size, k * k)
-    designated_idx = th.argmin(empt_flat.detach(), dim=1)  # (B,)
-    batch_arange = th.arange(b_size, device=empt.device)
-    empt_designated = empt_flat[batch_arange, designated_idx]  # (B,)
-
-    non_empty = (lower.detach() <= upper.detach()).all(dim=-1)  # (B, k, k)
-    desig_mask = th.zeros((b_size, k * k), dtype=th.bool, device=empt.device)
-    desig_mask[batch_arange, designated_idx] = True
-    desig_mask = desig_mask.view(b_size, k, k)
-    gate = (non_empty | desig_mask).to(dtype=empt.dtype).detach()  # (B, k, k)
 
     # Compute inclusion for all (i, j, m) as (B, k, k, k)
     ic = inter_cen.unsqueeze(3)  # (B, k, k, 1, d)
@@ -347,9 +415,24 @@ def gci1_score(
     dist_ie = th.abs(ic - ce) - io - oe
     incl_ijm = th.linalg.norm(th.relu(dist_ie + 2 * io - gamma), dim=-1)  # (B, k, k, k)
 
-    min_incl_ij = th.amin(incl_ijm, dim=3)  # (B, k, k)
-    gated_incl = (gate * min_incl_ij).sum(dim=(1, 2)) / gate.sum(dim=(1, 2))
-    return gated_incl + empt_designated
+    if aggregation == "hard":
+        designated_idx = th.argmin(empt_flat.detach(), dim=1)  # (B,)
+        batch_arange = th.arange(b_size, device=empt.device)
+        empt_designated = empt_flat[batch_arange, designated_idx]  # (B,)
+
+        non_empty = (lower.detach() <= upper.detach()).all(dim=-1)  # (B, k, k)
+        desig_mask = th.zeros((b_size, k * k), dtype=th.bool, device=empt.device)
+        desig_mask[batch_arange, designated_idx] = True
+        desig_mask = desig_mask.view(b_size, k, k)
+        gate = (non_empty | desig_mask).to(dtype=empt.dtype).detach()  # (B, k, k)
+
+        min_incl_ij = th.amin(incl_ijm, dim=3)  # (B, k, k)
+        gated_incl = (gate * min_incl_ij).sum(dim=(1, 2)) / gate.sum(dim=(1, 2))
+        return gated_incl + empt_designated
+
+    non_empty = (lower.detach() <= upper.detach()).all(dim=-1)  # (B, k, k)
+    empt_soft, gated_incl = soft_gci1_terms(empt, non_empty, incl_ijm, tau=tau)
+    return gated_incl + empt_soft
 
 
 def gci1_loss(
@@ -359,6 +442,8 @@ def gci1_loss(
     gamma: float,
     n_components: Optional[int] = None,
     neg: bool = False,
+    aggregation: str = "hard",
+    tau: float = 1.0,
 ) -> th.Tensor:
     """Squared GCI1 loss for :math:`C \\sqcap D \\sqsubseteq E`.
 
@@ -369,7 +454,15 @@ def gci1_loss(
     Non-guarantees:
     - ``neg=True`` is not distinct from ``neg=False``.
     """
-    return gci1_score(data, class_center, class_offset, gamma, n_components=n_components).square()
+    return gci1_score(
+        data,
+        class_center,
+        class_offset,
+        gamma,
+        n_components=n_components,
+        aggregation=aggregation,
+        tau=tau,
+    ).square()
 
 
 def gci1_bot_score(
@@ -378,6 +471,8 @@ def gci1_bot_score(
     class_offset: th.nn.Embedding,
     gamma: float,
     n_components: Optional[int] = None,
+    aggregation: str = "hard",
+    tau: float = 1.0,
 ) -> th.Tensor:
     """Unsquared GCI1-bot score :math:`\\text{mean}_{i,j} \\|\\text{relu}(-\\text{dist}(C_i, D_j) - \\gamma)\\|_2` for :math:`C \\sqcap D \\sqsubseteq \\bot`.
 
@@ -397,6 +492,7 @@ def gci1_bot_score(
     - When two boxes touch on their boundary (:math:`\\text{dist} = 0` in one
       coordinate and :math:`\\ge 0` in all others), the score at ``gamma = 0`` is zero.
     """
+    _validate_aggregation(aggregation, tau)
     cen_c, off_c = _unpack_boxes(data[:, 0], class_center, class_offset, n_components)
     cen_d, off_d = _unpack_boxes(data[:, 1], class_center, class_offset, n_components)
     dist = (
@@ -415,6 +511,8 @@ def gci1_bot_loss(
     gamma: float,
     n_components: Optional[int] = None,
     neg: bool = False,
+    aggregation: str = "hard",
+    tau: float = 1.0,
 ) -> th.Tensor:
     """Squared GCI1-bot loss for :math:`C \\sqcap D \\sqsubseteq \\bot`.
 
@@ -424,7 +522,15 @@ def gci1_bot_loss(
     Non-guarantees:
     - ``neg=True`` is not distinct from ``neg=False``.
     """
-    return gci1_bot_score(data, class_center, class_offset, gamma, n_components=n_components).square()
+    return gci1_bot_score(
+        data,
+        class_center,
+        class_offset,
+        gamma,
+        n_components=n_components,
+        aggregation=aggregation,
+        tau=tau,
+    ).square()
 
 
 def gci2_score(
@@ -440,8 +546,10 @@ def gci2_score(
     off_tail: th.Tensor,
     gamma: float,
     delta: float,
+    aggregation: str = "hard",
+    tau: float = 1.0,
 ) -> th.Tensor:
-    """Positive GCI2 loss :math:`(\\text{mean}_i \\text{incl}(C_i + b_D, H_r) + \\min_j \\text{incl}(D_j + b_C, T_r)) / 2` for :math:`C \\sqsubseteq \\exists r.D`.
+    """Positive GCI2 loss :math:`(\\text{mean}_i \\text{incl}(C_i + b_D, H_r) + \\text{agg}_j \\text{incl}(D_j + b_C, T_r)) / 2` for :math:`C \\sqsubseteq \\exists r.D`.
 
     Guarantees:
     - Matches :func:`mowl.nn.el.boxsquaredel.losses.gci2_score` at ``k = 1``.
@@ -449,7 +557,12 @@ def gci2_score(
     Non-guarantees:
     - Shares a single class bump vector :math:`b_C, b_D` across all components of
       :math:`C` and :math:`D`.
+    - Under ``aggregation="soft"`` at finite ``tau > 0``, the score is not zero
+      at a hard model (:func:`~mowl.nn.el.softagg.softmin` :math:`\\le \\text{mean}`
+      pulls all target components :math:`D_j + b_C` toward :math:`T_r`, which is
+      why ``diversity_reg`` exists).
     """
+    _validate_aggregation(aggregation, tau)
     bumped_c = cen_c + bump_d.unsqueeze(1)  # (B, k, d)
     bumped_d = cen_d + bump_c.unsqueeze(1)  # (B, k, d)
 
@@ -460,7 +573,9 @@ def gci2_score(
         bumped_d, off_d, cen_tail.unsqueeze(1), off_tail.unsqueeze(1), gamma
     ).squeeze(2)  # (B, k)
 
-    return (incl_1.mean(dim=1) + th.amin(incl_2, dim=1)) / 2
+    if aggregation == "hard":
+        return (incl_1.mean(dim=1) + th.amin(incl_2, dim=1)) / 2
+    return (incl_1.mean(dim=1) + softmin(incl_2, tau=tau, dim=1)) / 2
 
 
 def gci2_score_neg(
@@ -476,18 +591,28 @@ def gci2_score_neg(
     off_tail: th.Tensor,
     gamma: float,
     delta: float,
+    aggregation: str = "hard",
+    tau: float = 1.0,
 ) -> th.Tensor:
-    """Negative GCI2 loss :math:`\\min_i (\\delta - \\text{md}(C_i + b_D, H_r))^2 + \\min_j (\\delta - \\text{md}(D_j + b_C, T_r))^2`.
+    """Negative GCI2 loss :math:`\\frac{1}{k^2} \\sum_{i,j} \\left[(\\delta - \\text{md}(C_i + b_D, H_r))^2 + (\\delta - \\text{md}(D_j + b_C, T_r))^2\\right]`.
+
+    Computes the mean over all :math:`k^2` component pairs :math:`(C_i, D_j)` of
+    Box\\ :math:`^2`\\ EL's negative GCI2 score, identical for ``aggregation="hard"``
+    and ``aggregation="soft"`` (no ``softmin``).
 
     Guarantees:
     - Matches :func:`mowl.nn.el.boxsquaredel.losses.gci2_score_neg` at ``k = 1``.
+    - At :math:`k \\ge 2`, equals ``0`` if and only if every component pair
+      :math:`(C_i, D_j)` is separated at target distance :math:`\\delta` from the
+      respective role boxes (:math:`\\text{md}(C_i + b_D, H_r) = \\delta` for all
+      :math:`i` and :math:`\\text{md}(D_j + b_C, T_r) = \\delta` for all :math:`j`).
+    - Identical under ``aggregation="hard"`` and ``aggregation="soft"``.
 
     Non-guarantees:
-    - Penalises, on each side, only the component whose distance
-      :math:`\\text{md}` to the role box is closest to :math:`\\delta` (the
-      minimiser of :math:`(\\delta - \\text{md})^2`), which need not be the
-      component closest to the role box; the other components are not penalised.
+    - ``aggregation`` and ``tau`` are validated for API uniformity but do not
+      alter the negative score.
     """
+    _validate_aggregation(aggregation, tau)
     bumped_c = cen_c + bump_d.unsqueeze(1)  # (B, k, d)
     bumped_d = cen_d + bump_c.unsqueeze(1)  # (B, k, d)
 
@@ -505,8 +630,8 @@ def gci2_score_neg(
     )
     md_2 = th.linalg.norm(th.relu(dist_2 + gamma), dim=-1)  # (B, k)
 
-    first_part = th.amin((delta - md_1).square(), dim=1)
-    second_part = th.amin((delta - md_2).square(), dim=1)
+    first_part = (delta - md_1).square().mean(dim=1)
+    second_part = (delta - md_2).square().mean(dim=1)
     return first_part + second_part
 
 
@@ -523,6 +648,8 @@ def gci2_loss(
     delta: float,
     n_components: Optional[int] = None,
     neg: bool = False,
+    aggregation: str = "hard",
+    tau: float = 1.0,
 ) -> th.Tensor:
     """GCI2 loss for :math:`C \\sqsubseteq \\exists r.D` (positive and negative).
 
@@ -533,6 +660,7 @@ def gci2_loss(
     Non-guarantees:
     - Roles remain single head/tail boxes rather than multi-box relations.
     """
+    _validate_aggregation(aggregation, tau)
     d_single = int(bump.embedding_dim)
     cen_c, off_c = _unpack_boxes(
         data[:, 0], class_center, class_offset, n_components, embed_dim=d_single
@@ -562,6 +690,8 @@ def gci2_loss(
         off_tail,
         gamma,
         delta,
+        aggregation=aggregation,
+        tau=tau,
     )
 
 
@@ -576,8 +706,10 @@ def gci3_score(
     bump: th.nn.Embedding,
     gamma: float,
     n_components: Optional[int] = None,
+    aggregation: str = "hard",
+    tau: float = 1.0,
 ) -> th.Tensor:
-    """Unsquared GCI3 score :math:`\\min_m \\text{incl}(H_r - b_C, D_m)` for :math:`\\exists r.C \\sqsubseteq D`.
+    """Unsquared GCI3 score :math:`\\text{agg}_m \\text{incl}(H_r - b_C, D_m)` for :math:`\\exists r.C \\sqsubseteq D`.
 
     Guarantees:
     - Matches :func:`mowl.nn.el.boxsquaredel.losses.gci3_score` at ``k = 1``.
@@ -585,7 +717,12 @@ def gci3_score(
     Non-guarantees:
     - ``tail_center`` and ``tail_offset`` are accepted for signature compatibility
       with Box²EL and are not used in the score.
+    - Under ``aggregation="soft"`` at finite ``tau > 0``, the score is not zero
+      at a hard model (:func:`~mowl.nn.el.softagg.softmin` :math:`\\le \\text{mean}`
+      pulls all target components :math:`D_m` toward :math:`H_r - b_C`, which is
+      why ``diversity_reg`` exists).
     """
+    _validate_aggregation(aggregation, tau)
     d_single = int(head_center.embedding_dim)
     cen_d, off_d = _unpack_boxes(
         data[:, 2], class_center, class_offset, n_components, embed_dim=d_single
@@ -597,7 +734,9 @@ def gci3_score(
     bumped_head_cen = (cen_head - bump_c).unsqueeze(1)  # (B, 1, d)
     bumped_head_off = off_head.unsqueeze(1)  # (B, 1, d)
     incl = multi_inclusion(bumped_head_cen, bumped_head_off, cen_d, off_d, gamma).squeeze(1)
-    return th.amin(incl, dim=1)
+    if aggregation == "hard":
+        return th.amin(incl, dim=1)
+    return softmin(incl, tau=tau, dim=1)
 
 
 def gci3_loss(
@@ -612,6 +751,8 @@ def gci3_loss(
     gamma: float,
     n_components: Optional[int] = None,
     neg: bool = False,
+    aggregation: str = "hard",
+    tau: float = 1.0,
 ) -> th.Tensor:
     """Squared GCI3 loss for :math:`\\exists r.C \\sqsubseteq D`.
 
@@ -632,12 +773,16 @@ def gci3_loss(
         bump,
         gamma,
         n_components=n_components,
+        aggregation=aggregation,
+        tau=tau,
     ).square()
 
 
 def gci3_bot_score(
     data: th.Tensor,
     head_offset: th.nn.Embedding,
+    aggregation: str = "hard",
+    tau: float = 1.0,
 ) -> th.Tensor:
     """Unsquared GCI3-bot score :math:`\\|o_{H_r}\\|_2` for :math:`\\exists r.C \\sqsubseteq \\bot`.
 
@@ -647,6 +792,7 @@ def gci3_bot_score(
     Non-guarantees:
     - Independent of :math:`C`.
     """
+    _validate_aggregation(aggregation, tau)
     return B2L.gci3_bot_score(data, head_offset)
 
 
@@ -654,6 +800,8 @@ def gci3_bot_loss(
     data: th.Tensor,
     head_offset: th.nn.Embedding,
     neg: bool = False,
+    aggregation: str = "hard",
+    tau: float = 1.0,
 ) -> th.Tensor:
     """Squared GCI3-bot loss for :math:`\\exists r.C \\sqsubseteq \\bot`.
 
@@ -663,6 +811,7 @@ def gci3_bot_loss(
     Non-guarantees:
     - ``neg=True`` is not distinct from ``neg=False``.
     """
+    _validate_aggregation(aggregation, tau)
     return B2L.gci3_bot_loss(data, head_offset)
 
 
@@ -675,15 +824,22 @@ def class_assertion_loss(
     gamma: float,
     n_components: Optional[int] = None,
     neg: bool = False,
+    aggregation: str = "hard",
+    tau: float = 1.0,
 ) -> th.Tensor:
-    """Class assertion loss :math:`\\min_m \\text{incl}(a, C_m)` for :math:`C(a)`.
+    """Class assertion loss :math:`\\text{agg}_m \\text{incl}(a, C_m)` for :math:`C(a)`.
 
     Guarantees:
     - Matches :func:`mowl.nn.el.boxsquaredel.losses.class_assertion_loss` at ``k = 1``.
 
     Non-guarantees:
     - Individuals remain single boxes rather than multi-boxes.
+    - Under ``aggregation="soft"`` at finite ``tau > 0``, the score is not zero
+      at a hard model (:func:`~mowl.nn.el.softagg.softmin` :math:`\\le \\text{mean}`
+      pulls all target components :math:`C_m` toward :math:`a`, which is why
+      ``diversity_reg`` exists).
     """
+    _validate_aggregation(aggregation, tau)
     cen_i = ind_center(data[:, 0]).unsqueeze(1)  # (B, 1, d)
     off_i = th.abs(ind_offset(data[:, 0])).unsqueeze(1)  # (B, 1, d)
     d_single = int(ind_center.embedding_dim)
@@ -691,7 +847,9 @@ def class_assertion_loss(
         data[:, 1], class_center, class_offset, n_components, embed_dim=d_single
     )
     incl = multi_inclusion(cen_i, off_i, cen_c, off_c, gamma).squeeze(1)  # (B, k)
-    return th.amin(incl, dim=1)
+    if aggregation == "hard":
+        return th.amin(incl, dim=1)
+    return softmin(incl, tau=tau, dim=1)
 
 
 def object_property_assertion_loss(
@@ -706,15 +864,20 @@ def object_property_assertion_loss(
     gamma: float,
     delta: float,
     neg: bool = False,
+    aggregation: str = "hard",
+    tau: float = 1.0,
 ) -> th.Tensor:
     """Object property assertion loss :math:`r(a, b)`, delegating to Box²EL unchanged.
 
     Guarantees:
-    - Identical to :func:`mowl.nn.el.boxsquaredel.losses.object_property_assertion_loss`.
+    - Identical to :func:`mowl.nn.el.boxsquaredel.losses.object_property_assertion_loss`
+      for both ``neg=False`` and ``neg=True`` and under both ``aggregation="hard"``
+      and ``aggregation="soft"`` (individuals and roles have a single component).
 
     Non-guarantees:
     - Individuals and roles are single boxes.
     """
+    _validate_aggregation(aggregation, tau)
     return B2L.object_property_assertion_loss(
         data,
         ind_center,

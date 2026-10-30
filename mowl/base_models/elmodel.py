@@ -225,6 +225,7 @@ training ontology.
         training_el_dataset = ELDataset(self.dataset.ontology,
                                         self.class_index_dict,
                                         self.object_property_index_dict,
+                                        individual_index_dict=self.individual_index_dict,
                                         extended=self._extended,
                                         load_normalized=self.load_normalized,
                                         device=self.device,
@@ -238,6 +239,7 @@ training ontology.
         if self.dataset.validation:
             validation_el_dataset = ELDataset(self.dataset.validation, self.class_index_dict,
                                               self.object_property_index_dict,
+                                              individual_index_dict=self.individual_index_dict,
                                               extended=self._extended, device=self.device,
                                               ontology_path=validation_path,
                                               load_role_axioms=self.load_role_axioms)
@@ -248,6 +250,7 @@ training ontology.
         if self.dataset.testing:
             testing_el_dataset = ELDataset(self.dataset.testing, self.class_index_dict,
                                            self.object_property_index_dict,
+                                           individual_index_dict=self.individual_index_dict,
                                            extended=self._extended, device=self.device,
                                            ontology_path=testing_path,
                                            load_role_axioms=self.load_role_axioms)
@@ -572,6 +575,34 @@ of :class:`torch.utils.data.DataLoader`
         """
         return th.optim.Adam(self.module.parameters(), lr=self.learning_rate)
 
+    def on_epoch_start(self, epoch, epochs):
+        """Hook called at the beginning of each training epoch.
+
+        Override this method in subclasses to update schedules (e.g.,
+        temperature annealing) before each epoch's forward pass. The default
+        implementation is a no-op.
+
+        :param epoch: 0-based index of the current epoch
+        :type epoch: int
+        :param epochs: Total number of epochs in the current :meth:`train` run
+        :type epochs: int
+        """
+        return None
+
+    def additional_training_loss(self, epoch):
+        """Return an optional extra loss term added to the GCI loss each epoch.
+
+        Override this method in subclasses to inject auxiliary objectives
+        (e.g., canonical-element point supervision) before regularization and
+        backpropagation. Return ``None`` when no extra term is active.
+
+        :param epoch: 0-based index of the current epoch
+        :type epoch: int
+        :return: Scalar loss tensor to add to the epoch loss, or ``None``
+        :rtype: torch.Tensor or None
+        """
+        return None
+
     def train(self, epochs, validate_every=1, epoch_callback=None):
         """Train the model.
 
@@ -580,6 +611,8 @@ of :class:`torch.utils.data.DataLoader`
         - :meth:`get_negative_sampling_config`: Configure which GCIs need negatives
         - :meth:`generate_negatives`: Custom negative sampling strategy
         - :meth:`compute_loss`: Custom loss computation (e.g., MSE loss)
+        - :meth:`on_epoch_start`: Per-epoch setup hook (e.g., temperature annealing)
+        - :meth:`additional_training_loss`: Extra per-epoch loss term
         - :meth:`get_regularization_loss`: Add regularization
         - :meth:`get_optimizer`: Use different optimizer
 
@@ -651,6 +684,7 @@ of :class:`torch.utils.data.DataLoader`
 
         for epoch in trange(epochs):
             self.module.train()
+            self.on_epoch_start(epoch, epochs)
 
             train_loss = 0
             loss = th.tensor(0.0, device=self.device)
@@ -669,6 +703,10 @@ of :class:`torch.utils.data.DataLoader`
                     neg_scores = self.module(neg_data, gci_name, neg=True)
 
                 loss = loss + self.compute_loss(pos_scores, neg_scores)
+
+            extra_loss = self.additional_training_loss(epoch)
+            if extra_loss is not None:
+                loss = loss + extra_loss
 
             # Add regularization loss
             loss = loss + self.get_regularization_loss()

@@ -1,16 +1,16 @@
 mowl.geometric API reference
 ============================
 
-Normal forms and normalisation
-------------------------------
+Normal forms and normalisation (TBox, RBox, and ABox)
+-----------------------------------------------------
 
 .. automodule:: mowl.geometric.normal_forms
    :members:
    :show-inheritance:
 
 
-Completion and canonical model
-------------------------------
+Completion and canonical model (TBox, RBox, and ABox)
+-----------------------------------------------------
 
 .. automodule:: mowl.geometric.completion
    :members:
@@ -81,6 +81,14 @@ Exact-model box initialisation and anchor
    :show-inheritance:
 
 
+Shared multi-box utilities
+--------------------------
+
+.. automodule:: mowl.nn.el.multibox_utils
+   :members:
+   :show-inheritance:
+
+
 MultiBoxEL neural module and losses
 -----------------------------------
 
@@ -97,6 +105,90 @@ MultiBoxEL model
 ----------------
 
 .. automodule:: mowl.models.multiboxel.model
+   :members:
+   :show-inheritance:
+
+
+MultiELBE neural module and losses
+----------------------------------
+
+.. automodule:: mowl.nn.el.multielbe.module
+   :members:
+   :show-inheritance:
+
+.. automodule:: mowl.nn.el.multielbe.losses
+   :members:
+   :show-inheritance:
+
+
+MultiELBE model
+---------------
+
+.. automodule:: mowl.models.multielbe.model
+   :members:
+   :show-inheritance:
+
+
+Prism neural module and losses
+------------------------------
+
+.. automodule:: mowl.nn.el.prism.module
+   :members:
+   :show-inheritance:
+
+.. automodule:: mowl.nn.el.prism.losses
+   :members:
+   :show-inheritance:
+
+
+PrismEL model
+-------------
+
+.. automodule:: mowl.models.prism.model
+   :members:
+   :show-inheritance:
+
+
+Canonical membership structure
+------------------------------
+
+.. automodule:: mowl.geometric.membership
+   :members:
+   :show-inheritance:
+
+
+CanonicalMixture neural module
+------------------------------
+
+.. automodule:: mowl.nn.el.canonical_mixture.module
+   :members:
+   :show-inheritance:
+
+
+CanonicalMixture model
+----------------------
+
+.. automodule:: mowl.models.canonical_mixture.model
+   :members:
+   :show-inheritance:
+
+
+Soft component aggregation and diversity regularisation
+-------------------------------------------------------
+
+.. automodule:: mowl.nn.el.softagg
+   :members:
+   :show-inheritance:
+
+
+Canonical-element point supervision and losses
+----------------------------------------------
+
+.. automodule:: mowl.datasets.el.points
+   :members:
+   :show-inheritance:
+
+.. automodule:: mowl.nn.el.pointloss
    :members:
    :show-inheritance:
 
