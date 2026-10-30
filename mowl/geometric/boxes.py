@@ -196,10 +196,11 @@ class BoxModel(GeometricInterpretation):
 
     @property
     def class_regions(self) -> Dict[str, Box]:
-        """Return a copy of the mapping from known concept names to :class:`~mowl.geometric.regions.Box` regions."""
+        """Return a copy of the mapping from known concept and nominal names to :class:`~mowl.geometric.regions.Box` regions."""
         out: Dict[str, Box] = {
             cname: self.class_region(cname)
-            for cname in self.canonical_model.concept_names
+            for cname in set(self.canonical_model.concept_names)
+            | set(self.canonical_model.names)
         }
         out[TOP] = self._universe
         out[BOTTOM] = self._empty_box

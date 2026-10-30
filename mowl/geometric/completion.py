@@ -15,7 +15,9 @@ Guarantees:
   :math:`A^{\\mathcal{I}} = \\emptyset \\iff \\mathcal{O} \\models A \\sqsubseteq \\bot`.
 - Constructing :class:`CanonicalModel` raises
   :class:`~mowl.geometric.errors.InconsistentOntology` if and only if
-  :math:`\\bot \\in S(\\top)` (:math:`\\mathcal{O} \\models \\top \\sqsubseteq \\bot`).
+  :math:`\\bot \\in S(\\top)` (:math:`\\mathcal{O} \\models \\top \\sqsubseteq \\bot`)
+  or :math:`\\bot \\in S(N_a)` (:math:`\\mathcal{O} \\models N_a \\sqsubseteq \\bot`)
+  for some individual ``a`` (with the individual IRI in the exception message).
 
 References:
 - Kazakov, Krötzsch & Simančík, *The Incredible ELK: From Polynomial Procedures
@@ -309,20 +311,41 @@ class CanonicalModel:
 
     Domain and interpretation:
     - :math:`\\Delta^{\\mathcal{I}} = \\{d_A : A \\in N_C \\cup \\{\\top\\}, \\bot \\notin S(A)\\}`,
-      ordered by sorted satisfiable concept names ``names``.
+      ordered by sorted satisfiable concept and nominal names ``names``.
     - :math:`A^{\\mathcal{I}} = \\{d_B \\in \\Delta^{\\mathcal{I}} : A \\in S(B)\\}`
       (returned as a :class:`frozenset` of integer element positions by :meth:`extension`).
     - :math:`r^{\\mathcal{I}} = \\{(d_B, d_C) \\in \\Delta^{\\mathcal{I}} \\times \\Delta^{\\mathcal{I}} : (B, C) \\in R(r)\\}`
       (returned as a :class:`frozenset` of integer position pairs by :meth:`role`).
 
-    Guarantees:
+    Guarantees
+    ----------
     - :math:`\\mathcal{I} \\models \\mathcal{O}`.
-    - For concept names :math:`A, B`:
+    - For concept/nominal names :math:`A, B`:
       :math:`A^{\\mathcal{I}} \\subseteq B^{\\mathcal{I}} \\iff \\mathcal{O} \\models A \\sqsubseteq B`.
     - For concept name :math:`A`:
       :math:`A^{\\mathcal{I}} = \\emptyset \\iff \\mathcal{O} \\models A \\sqsubseteq \\bot`.
-    - Raises :class:`~mowl.geometric.errors.InconsistentOntology` iff
-      :math:`\\bot \\in S(\\top)`.
+    - Raises :class:`~mowl.geometric.errors.InconsistentOntology` if and only if
+      :math:`\\bot \\in S(\\top)` or :math:`\\bot \\in S(N_a)` for some nominal
+      concept :math:`N_a` (with the offending individual IRI in the message).
+      Consequently, every individual in ``individuals`` is satisfiable on any
+      constructed :class:`CanonicalModel`, and :meth:`element_of` cannot
+      encounter an unsatisfiable nominal on a built model.
+    - Instance checking (:meth:`instance_of`) is sound and complete for
+      :math:`\\mathcal{ELH}` (with :math:`\\bot`) without nominals
+      (``ObjectOneOf``), functionality (``FunctionalObjectProperty``), and range
+      (``ObjectPropertyRange``) axioms.
+
+    Non-guarantees
+    --------------
+    - Sound and complete for instance checking only for :math:`\\mathcal{ELH}`
+      without nominals, functionality, and range axioms.
+    - Passing unknown individual or class IRIs to :meth:`instance_of` or
+      :meth:`assertion_contradicted` returns ``False``.
+    - During :func:`~mowl.geometric.normal_forms.normalise`, complex
+      ``ClassAssertion``, ``SameIndividual``, ``DifferentIndividuals``,
+      ``ObjectPropertyAssertion`` with an inverse property, assertions on
+      anonymous individuals, and negative or data assertions raise
+      :class:`~mowl.geometric.errors.UnsupportedAxiomError` with the axiom text.
     """
 
     def __init__(
@@ -352,6 +375,12 @@ class CanonicalModel:
             for c in sorted(all_concepts)
             if is_nominal_name(c)
         }
+        for ind_iri, nom_name in self.individuals.items():
+            if completion.is_unsatisfiable(nom_name):
+                raise InconsistentOntology(
+                    f"Ontology is inconsistent: individual '{ind_iri}' is unsatisfiable "
+                    f"({nom_name} <= owl:Nothing derived in completion)."
+                )
         self._concept_names: Set[str] = {
             c for c in all_concepts if not is_nominal_name(c)
         } | {BOTTOM}
@@ -487,11 +516,99 @@ class CanonicalModel:
 
     @property
     def concept_names(self) -> Set[str]:
-        """Concept names in the signature, excluding nominal names."""
+        """Return concept names in the ontology signature, excluding nominal names.
+
+        Separates genuine concept names (including auxiliary normalisation
+        names, ``TOP``, and ``BOTTOM``) from nominal concept names
+        (:func:`~mowl.geometric.normal_forms.is_nominal_name`) introduced for
+        individuals, while ``self.names`` retains all satisfiable names
+        (including nominals) so region builders treat nominals like any other
+        satisfiable name.
+
+        Guarantees
+        ----------
+        - Contains no nominal names (``not any(is_nominal_name(c) for c in cm.concept_names)``).
+        - Includes ``TOP``, ``BOTTOM``, and all non-nominal concept names
+          (satisfiable and unsatisfiable) in the normalised ontology signature.
+        - Instance checking on the nominal encoding is sound and complete for
+          :math:`\\mathcal{ELH}` without nominals, functionality, and range
+          axioms.
+
+        Non-guarantees
+        --------------
+        - Does not include nominal concept names (use ``self.names`` or
+          ``self.individuals`` for nominals).
+        - Sound and complete for instance checking only for :math:`\\mathcal{ELH}`
+          without nominals, functionality, and range axioms; unknown IRIs return
+          ``False`` in :meth:`instance_of` and :meth:`assertion_contradicted`;
+          complex ``ClassAssertion``, ``SameIndividual``,
+          ``DifferentIndividuals``, ``ObjectPropertyAssertion`` with an inverse
+          property, assertions on anonymous individuals, and negative/data
+          assertions raise :class:`~mowl.geometric.errors.UnsupportedAxiomError`
+          during normalisation.
+
+        Returns
+        -------
+        Set[str]
+            Copy of the non-nominal concept name set.
+        """
         return set(self._concept_names)
 
     def element_of(self, name: str) -> int:
-        """Return the canonical domain element index for ``name`` (or individual IRI ``name``)."""
+        """Return the canonical domain element index for a concept/nominal name or individual IRI.
+
+        Looks up ``name`` directly in ``self._name_to_pos`` (satisfiable concept
+        or nominal names in ``self.names``) or via ``self.individuals[name]``
+        when ``name`` is a known individual IRI.
+
+        Guarantees
+        ----------
+        - For every satisfiable concept or nominal name ``c`` in ``self.names``,
+          returns ``i`` such that ``self.names[i] == c`` and
+          ``self.domain[i] == f"d_{c}"``.
+        - For every individual IRI ``a`` in ``self.individuals``, returns
+          ``element_of(self.individuals[a])``. Because an unsatisfiable nominal
+          (:math:`N_a \\sqsubseteq \\bot` derived) raises
+          :class:`~mowl.geometric.errors.InconsistentOntology` during
+          :class:`CanonicalModel` construction, every individual ``a`` in
+          ``self.individuals`` has a satisfiable nominal in ``self.names``, so
+          ``element_of(a)`` cannot hit an unsatisfiable nominal on a built
+          model.
+        - Sound and complete for instance checking in :math:`\\mathcal{ELH}`
+          without nominals, functionality, and range axioms.
+
+        Non-guarantees
+        --------------
+        - Raises :class:`KeyError` for unknown IRIs and for unsatisfiable
+          non-nominal concept names (including ``BOTTOM``). Unknown IRIs passed
+          to :meth:`instance_of` or :meth:`assertion_contradicted` return
+          ``False`` instead.
+        - Sound and complete for instance checking only for :math:`\\mathcal{ELH}`
+          without nominals, functionality, and range axioms; complex
+          ``ClassAssertion``, ``SameIndividual``, ``DifferentIndividuals``,
+          ``ObjectPropertyAssertion`` with an inverse property, assertions on
+          anonymous individuals, and negative/data assertions raise
+          :class:`~mowl.geometric.errors.UnsupportedAxiomError` during
+          normalisation.
+
+        Parameters
+        ----------
+        name : str
+            Satisfiable concept name, nominal name, or individual IRI in the
+            canonical model.
+
+        Returns
+        -------
+        int
+            Integer index :math:`0 \\le i < |\\text{self.domain}|` of the
+            canonical domain element.
+
+        Raises
+        ------
+        KeyError
+            If ``name`` is not a satisfiable name in ``self.names`` or a known
+            individual IRI in ``self.individuals``.
+        """
         if name in self._name_to_pos:
             return self._name_to_pos[name]
         nom = self.individuals.get(name)
@@ -506,17 +623,149 @@ class CanonicalModel:
         return self.individuals.get(a, nominal_name(a))
 
     def instance_of(self, a: str, C: str) -> bool:
-        """Return ``True`` iff :math:`\\mathcal{O} \\models C(a)` (via :math:`N_a \\sqsubseteq C`)."""
+        """Decide whether individual ``a`` is entailed to be an instance of concept ``C``.
+
+        Evaluates :math:`\\mathcal{O} \\models N_a \\sqsubseteq C` in the
+        saturated completion via :meth:`entails`.
+
+        Guarantees
+        ----------
+        - Sound and complete for atomic instance checking (:math:`\\mathcal{O} \\models C(a)`)
+          in :math:`\\mathcal{ELH}` (with :math:`\\bot`) without nominals
+          (``ObjectOneOf``), functionality (``FunctionalObjectProperty``), and
+          range (``ObjectPropertyRange``) axioms.
+        - Accepts either an individual IRI ``a`` or its encoded nominal name
+          ``N_a``.
+        - For every known individual ``a`` in ``self.individuals``,
+          ``instance_of(a, TOP)`` is ``True`` and ``instance_of(a, BOTTOM)`` is
+          ``False`` (since any unsatisfiable nominal raises
+          :class:`~mowl.geometric.errors.InconsistentOntology` at model
+          construction).
+
+        Non-guarantees
+        --------------
+        - Sound and complete for instance checking only for :math:`\\mathcal{ELH}`
+          without nominals, functionality, and range axioms.
+        - Returns ``False`` whenever ``a`` or ``C`` is an unknown IRI not
+          present in the canonical model (in particular,
+          ``instance_of(unknown, TOP)`` is ``False``).
+        - Unsupported ABox assertions (complex ``ClassAssertion``,
+          ``SameIndividual``, ``DifferentIndividuals``,
+          ``ObjectPropertyAssertion`` with an inverse property, assertions on
+          anonymous individuals, and negative/data assertions) raise
+          :class:`~mowl.geometric.errors.UnsupportedAxiomError` during
+          normalisation.
+
+        Parameters
+        ----------
+        a : str
+            Individual IRI (or nominal concept name ``N_a``).
+        C : str
+            Named concept IRI (or ``TOP`` / ``BOTTOM``).
+
+        Returns
+        -------
+        bool
+            ``True`` iff :math:`\\mathcal{O} \\models N_a \\sqsubseteq C` for
+            known ``a`` and ``C``, else ``False``.
+        """
         return self.entails(self._nominal_for(a), C)
 
     entails_assertion = instance_of
 
     def assertion_contradicted(self, a: str, C: str) -> bool:
-        """Return ``True`` iff :math:`\\mathcal{O} \\models N_a \\sqcap C \\sqsubseteq \\bot`."""
-        return not self.joint_satisfiable({self._nominal_for(a), C})
+        """Decide whether asserting ``C(a)`` is contradicted by the ontology.
+
+        Evaluates :math:`\\mathcal{O} \\models N_a \\sqcap C \\sqsubseteq \\bot`
+        via ``not self.joint_satisfiable({N_a, C})`` for known ``a`` and ``C``.
+
+        Guarantees
+        ----------
+        - Sound and complete for deciding whether :math:`\\mathcal{O} \\cup \\{C(a)\\}`
+          is inconsistent (:math:`\\mathcal{O} \\models N_a \\sqcap C \\sqsubseteq \\bot`)
+          in :math:`\\mathcal{ELH}` (with :math:`\\bot`) without nominals
+          (``ObjectOneOf``), functionality (``FunctionalObjectProperty``), and
+          range (``ObjectPropertyRange``) axioms.
+        - Accepts either an individual IRI ``a`` or its encoded nominal name
+          ``N_a``.
+
+        Non-guarantees
+        --------------
+        - Sound and complete for instance checking and assertion contradiction
+          only for :math:`\\mathcal{ELH}` without nominals, functionality, and
+          range axioms.
+        - Returns ``False`` whenever ``a`` or ``C`` is an unknown IRI not
+          present in the canonical model.
+        - Unsupported ABox assertions (complex ``ClassAssertion``,
+          ``SameIndividual``, ``DifferentIndividuals``,
+          ``ObjectPropertyAssertion`` with an inverse property, assertions on
+          anonymous individuals, and negative/data assertions) raise
+          :class:`~mowl.geometric.errors.UnsupportedAxiomError` during
+          normalisation.
+
+        Parameters
+        ----------
+        a : str
+            Individual IRI (or nominal concept name ``N_a``).
+        C : str
+            Named concept IRI (or ``TOP`` / ``BOTTOM``).
+
+        Returns
+        -------
+        bool
+            ``True`` iff both ``a`` and ``C`` are known to the canonical model
+            and :math:`\\mathcal{O} \\models N_a \\sqcap C \\sqsubseteq \\bot`,
+            else ``False``.
+        """
+        nom = self._nominal_for(a)
+        if nom not in self._name_to_pos or (
+            C not in self._concept_names and C not in self._name_to_pos
+        ):
+            return False
+        return not self.joint_satisfiable({nom, C})
 
     def role_instances(self, r: str) -> Set[Tuple[str, str]]:
-        """Return pairs of individual IRIs ``(a, b)`` connected by role ``r`` in the canonical model."""
+        """Return pairs of individual IRIs ``(a, b)`` connected by role ``r`` in the canonical model.
+
+        Filters :meth:`role` for ``r`` to pairs ``(pos_i, pos_j)`` whose canonical
+        domain elements both correspond to nominal names (:func:`is_nominal_name`),
+        decoding each nominal back to its individual IRI via
+        :func:`individual_of_name`.
+
+        Guarantees
+        ----------
+        - Returns the exact set of individual IRI pairs ``(a, b)`` such that
+          :math:`(d_{N_a}, d_{N_b}) \\in r^{\\mathcal{I}}` under the RBox closure
+          (:class:`~mowl.geometric.normal_forms.NF6` role hierarchy and
+          :class:`~mowl.geometric.normal_forms.NF7` role chains).
+        - Non-nominal canonical domain elements :math:`d_C` are excluded from
+          the returned pairs.
+        - Sound and complete for instance checking in :math:`\\mathcal{ELH}`
+          without nominals, functionality, and range axioms.
+
+        Non-guarantees
+        --------------
+        - Returns ``set()`` if ``r`` is an unknown role IRI or has no
+          nominal-to-nominal edges.
+        - Sound and complete for instance checking only for :math:`\\mathcal{ELH}`
+          without nominals, functionality, and range axioms; unknown IRIs return
+          ``False`` in :meth:`instance_of` and :meth:`assertion_contradicted`;
+          complex ``ClassAssertion``, ``SameIndividual``,
+          ``DifferentIndividuals``, ``ObjectPropertyAssertion`` with an inverse
+          property, assertions on anonymous individuals, and negative/data
+          assertions raise :class:`~mowl.geometric.errors.UnsupportedAxiomError`
+          during normalisation.
+
+        Parameters
+        ----------
+        r : str
+            Role (object property) IRI string.
+
+        Returns
+        -------
+        Set[Tuple[str, str]]
+            Set of ``(subject_individual_iri, object_individual_iri)`` pairs.
+        """
         out: Set[Tuple[str, str]] = set()
         for pos_i, pos_j in self.role(r):
             src_name = self.names[pos_i]

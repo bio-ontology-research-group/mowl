@@ -46,17 +46,136 @@ NOMINAL_PREFIX = "http://mowl.borg/nominal/"
 
 
 def nominal_name(individual_iri: str) -> str:
-    """Return the fresh nominal concept name ``NOMINAL_PREFIX + quote(individual_iri, safe='')``."""
+    """Encode a named individual IRI as a fresh nominal concept name.
+
+    Constructs ``NOMINAL_PREFIX + urllib.parse.quote(str(individual_iri), safe="")``
+    so that arbitrary characters in ``individual_iri`` (such as ``#``, ``/``,
+    ``?``, ``%``, spaces, or non-ASCII characters) yield a valid, collision-free
+    IRI string suitable for use as an atomic concept name in :class:`NF1` and
+    :class:`NF3` axioms.
+
+    Guarantees
+    ----------
+    - Bijective on string representations of individual IRIs:
+      ``individual_of_name(nominal_name(iri)) == str(iri)`` and
+      ``is_nominal_name(nominal_name(iri)) is True`` for every ``iri``.
+    - Used by :func:`normalise` and :class:`~mowl.geometric.completion.CanonicalModel`
+      to encode atomic ABox assertions ``C(a)`` as ``NF1(N_a, C)`` and
+      ``r(a, b)`` as ``NF3(N_a, r, N_b)``, which is sound and complete for
+      instance checking in :math:`\\mathcal{ELH}` (with :math:`\\bot`) without
+      nominals (``ObjectOneOf``), functionality (``FunctionalObjectProperty``),
+      and range (``ObjectPropertyRange``) axioms.
+
+    Non-guarantees
+    --------------
+    - Does not validate that ``individual_iri`` is declared in any ontology;
+      querying :meth:`~mowl.geometric.completion.CanonicalModel.instance_of` or
+      :meth:`~mowl.geometric.completion.CanonicalModel.assertion_contradicted`
+      with an unknown individual or class IRI returns ``False``.
+    - The nominal encoding is sound and complete for instance checking only for
+      :math:`\\mathcal{ELH}` without nominals, functionality, and range axioms.
+      Unsupported ABox assertions (complex ``ClassAssertion``,
+      ``SameIndividual``, ``DifferentIndividuals``, ``ObjectPropertyAssertion``
+      with an inverse property, assertions on anonymous individuals, and
+      negative or data assertions) raise
+      :class:`~mowl.geometric.errors.UnsupportedAxiomError` during
+      :func:`normalise`.
+
+    Parameters
+    ----------
+    individual_iri : str
+        Unbracketed IRI string of a named individual.
+
+    Returns
+    -------
+    str
+        Fresh nominal concept IRI ``NOMINAL_PREFIX + <percent-encoded IRI>``.
+    """
     return NOMINAL_PREFIX + urllib.parse.quote(str(individual_iri), safe="")
 
 
 def is_nominal_name(name: str) -> bool:
-    """Return ``True`` iff ``name`` is a nominal concept name produced by :func:`nominal_name`."""
+    """Test whether a concept name IRI is a nominal name produced by :func:`nominal_name`.
+
+    Guarantees
+    ----------
+    - Returns ``True`` if and only if ``str(name).startswith(NOMINAL_PREFIX)``.
+    - Partitions canonical-model concept identifiers into nominal names
+      (individuals encoded via :func:`nominal_name`, included in
+      :attr:`~mowl.geometric.completion.CanonicalModel.names` so region
+      builders treat them as names) and non-nominal concept names
+      (:attr:`~mowl.geometric.completion.CanonicalModel.concept_names`).
+    - Sound and complete instance checking via nominal names holds for
+      :math:`\\mathcal{ELH}` without nominals, functionality, and range axioms.
+
+    Non-guarantees
+    --------------
+    - Checks only the ``NOMINAL_PREFIX`` prefix; does not verify whether the
+      decoded individual IRI occurs in a specific
+      :class:`~mowl.geometric.completion.CanonicalModel` (unknown IRIs return
+      ``False`` in ``instance_of`` and ``assertion_contradicted``).
+    - Unsupported ABox assertions (complex ``ClassAssertion``,
+      ``SameIndividual``, ``DifferentIndividuals``, ``ObjectPropertyAssertion``
+      with an inverse property, assertions on anonymous individuals, and
+      negative or data assertions) are rejected by :func:`normalise` with
+      :class:`~mowl.geometric.errors.UnsupportedAxiomError`.
+
+    Parameters
+    ----------
+    name : str
+        Candidate concept or nominal IRI string.
+
+    Returns
+    -------
+    bool
+        ``True`` iff ``name`` starts with :data:`NOMINAL_PREFIX`.
+    """
     return str(name).startswith(NOMINAL_PREFIX)
 
 
 def individual_of_name(name: str) -> str:
-    """Return the individual IRI encoded by nominal concept name ``name``."""
+    """Decode the original individual IRI from a nominal concept name.
+
+    Inverts :func:`nominal_name` by stripping :data:`NOMINAL_PREFIX` and
+    percent-decoding the remainder via :func:`urllib.parse.unquote`.
+
+    Guarantees
+    ----------
+    - Exact left-inverse of :func:`nominal_name`:
+      ``individual_of_name(nominal_name(a)) == str(a)`` for any string ``a``.
+    - Raises :class:`ValueError` whenever ``not is_nominal_name(name)``.
+    - Supports the nominal ABox encoding of :func:`normalise`, which is sound
+      and complete for instance checking in :math:`\\mathcal{ELH}` without
+      nominals, functionality, and range axioms.
+
+    Non-guarantees
+    --------------
+    - Does not check whether the decoded individual IRI belongs to a given
+      ontology (unknown IRIs evaluate to ``False`` in
+      :meth:`~mowl.geometric.completion.CanonicalModel.instance_of` and
+      :meth:`~mowl.geometric.completion.CanonicalModel.assertion_contradicted`).
+    - Sound and complete instance checking via nominal names holds only for
+      :math:`\\mathcal{ELH}` without nominals, functionality, and range axioms;
+      complex ``ClassAssertion``, ``SameIndividual``, ``DifferentIndividuals``,
+      ``ObjectPropertyAssertion`` with an inverse property, assertions on
+      anonymous individuals, and negative/data assertions raise
+      :class:`~mowl.geometric.errors.UnsupportedAxiomError` in :func:`normalise`.
+
+    Parameters
+    ----------
+    name : str
+        Nominal concept name starting with :data:`NOMINAL_PREFIX`.
+
+    Returns
+    -------
+    str
+        Decoded individual IRI string.
+
+    Raises
+    ------
+    ValueError
+        If ``name`` does not start with :data:`NOMINAL_PREFIX`.
+    """
     if not is_nominal_name(name):
         raise ValueError(
             f"Expected a nominal name starting with {NOMINAL_PREFIX!r}, got {name!r}"
@@ -152,16 +271,16 @@ def _local_name(iri: str) -> str:
 def normalise(source: Union[Dataset, OWLOntology]) -> NormalisedOntology:
     """Normalise a mOWL :class:`~mowl.datasets.Dataset` or OWLAPI ``OWLOntology``.
 
-    **Converted axioms:**
-
+    Guarantees
+    ----------
     - *TBox (via* :class:`~mowl.ontology.normalize.ELNormalizer` *):*
       ``SubClassOf``, ``EquivalentClasses``, ``DisjointClasses``, and
-      ``ObjectPropertyDomain(r, C)`` (which ``ELNormalizer`` translates into the
-      GCI ``exists r.owl:Thing <= C``, producing :class:`NF4` ``(r, TOP, A)``
-      when ``C`` is a concept name ``A``) constructed over ``EL_bot`` concepts
-      (named classes, ``owl:Thing``, ``owl:Nothing``, ``ObjectIntersectionOf``,
-      and ``ObjectSomeValuesFrom`` over named object properties) are normalised
-      into :class:`NF1`, :class:`NF2`, :class:`NF3`, and :class:`NF4`.
+      ``ObjectPropertyDomain(r, C)`` (translated into ``exists r.owl:Thing <= C``,
+      producing :class:`NF4` ``(r, TOP, A)`` when ``C`` is a concept name ``A``)
+      constructed over ``EL_bot`` concepts (named classes, ``owl:Thing``,
+      ``owl:Nothing``, ``ObjectIntersectionOf``, and ``ObjectSomeValuesFrom``
+      over named object properties) are normalised into :class:`NF1`,
+      :class:`NF2`, :class:`NF3`, and :class:`NF4`.
     - *RBox (extracted across the imports closure):*
       - ``SubObjectPropertyOf(r, s)`` with named ``r, s`` -> :class:`NF6` ``(r, s)``.
       - ``EquivalentObjectProperties(r_1, ..., r_k)`` with named ``r_i`` ->
@@ -174,37 +293,81 @@ def normalise(source: Union[Dataset, OWLOntology]) -> NormalisedOntology:
       - ``SubPropertyChainOf([r_1, ..., r_k], s)`` (``k > 2``) with named roles ->
         split into ``k - 1`` :class:`NF7` axioms using fresh auxiliary roles
         ``http://mowl.borg/geo/aux#<s_local>_chain_<i>``.
+    - *ABox (extracted across the imports closure, individuals as fresh nominal names):*
+      - Each named individual ``a`` is mapped to ``N_a = nominal_name(a)`` and
+        included in ``concept_names``.
+      - Atomic ``ClassAssertion(C, a)`` with a named class ``C`` and named
+        individual ``a`` -> :class:`NF1` ``(N_a, C)``.
+      - ``ObjectPropertyAssertion(r, a, b)`` with a named object property ``r``
+        and named individuals ``a, b`` -> :class:`NF3` ``(N_a, r, N_b)``.
+      - This nominal encoding is sound and complete for instance checking in
+        :math:`\\mathcal{ELH}` (with :math:`\\bot`) without nominals
+        (``ObjectOneOf``), functionality (``FunctionalObjectProperty``), and
+        range (``ObjectPropertyRange``) axioms.
 
-    **Dropped axioms (each increments ``dropped_axioms`` by 1):**
-
-    - *TBox:*
+    Non-guarantees
+    --------------
+    - Sound and complete for instance checking only for :math:`\\mathcal{ELH}`
+      without nominals, functionality, and range axioms.
+    - Querying :meth:`~mowl.geometric.completion.CanonicalModel.instance_of` or
+      :meth:`~mowl.geometric.completion.CanonicalModel.assertion_contradicted`
+      with unknown individual or class IRIs returns ``False``.
+    - *ABox assertions that raise*
+      :class:`~mowl.geometric.errors.UnsupportedAxiomError` *(with the axiom text;
+      no silent ABox drops):*
+      - ``ClassAssertion`` with a complex (anonymous) class expression.
+      - ``ClassAssertion`` on an anonymous individual.
+      - ``ObjectPropertyAssertion`` with an inverse property
+        (``ObjectInverseOf``).
+      - ``ObjectPropertyAssertion`` on an anonymous subject or object individual.
+      - ``SameIndividual`` and ``DifferentIndividuals``.
+      - Negative and data property assertions
+        (``NegativeObjectPropertyAssertion``, ``DataPropertyAssertion``,
+        ``NegativeDataPropertyAssertion``).
+    - *Dropped TBox and RBox axioms (each increments ``dropped_axioms`` by 1):*
       - Any TBox axiom filtered out by :meth:`ELNormalizer.preprocess_ontology`
         (axioms containing ``ObjectUnionOf``, ``ObjectComplementOf``,
         ``ObjectAllValuesFrom``, ``ObjectMinCardinality``, ``ObjectMaxCardinality``,
         ``ObjectExactCardinality``, ``ObjectHasSelf``, ``ObjectOneOf``, SWRL rules,
-        etc.).
-      - Any TBox axiom containing an inverse/anonymous object property expression
-        (``ObjectInverseOf``).
-      - ``ObjectPropertyRange`` axioms and any other OWLAPI TBox axiom type not
+        etc.) or containing ``ObjectInverseOf``.
+      - ``ObjectPropertyRange`` and any other OWLAPI TBox axiom type not
         converted by ``ELNormalizer`` (``FunctionalObjectProperty``,
         ``InverseFunctionalObjectProperty``, ``DisjointUnion``, ``HasKey``,
         ``DatatypeDefinition``, ``DataPropertyDomain``, ``DataPropertyRange``,
         ``FunctionalDataProperty``).
-    - *RBox:*
       - ``SubObjectPropertyOf``, ``EquivalentObjectProperties``,
         ``TransitiveObjectProperty``, or ``SubPropertyChainOf`` axioms that
         contain any inverse/anonymous object property expression, or
-        ``EquivalentObjectProperties`` with fewer than 2 properties, or
-        ``SubPropertyChainOf`` with an empty property chain.
-      - Any other OWLAPI RBox axiom type (``InverseObjectProperties``,
+        ``EquivalentObjectProperties`` with fewer than 2 distinct properties, or
+        ``SubPropertyChainOf`` with an empty property chain, and any other
+        OWLAPI RBox axiom type (``InverseObjectProperties``,
         ``SymmetricObjectProperty``, ``AsymmetricObjectProperty``,
         ``ReflexiveObjectProperty``, ``IrreflexiveObjectProperty``,
         ``DisjointObjectProperties``, ``SubDataPropertyOf``,
         ``EquivalentDataProperties``, ``DisjointDataProperties``).
 
-    :param source: Input dataset or OWLAPI ontology.
-    :return: :class:`NormalisedOntology` with NF1–NF4, NF6, NF7 axioms, concept
-        and role signatures, and total dropped TBox + RBox axiom count.
+    Parameters
+    ----------
+    source : Union[Dataset, OWLOntology]
+        Input mOWL dataset or OWLAPI ontology.
+
+    Returns
+    -------
+    NormalisedOntology
+        Normalised ontology with ``NF1``–``NF4``, ``NF6``, ``NF7`` axioms,
+        concept and role signatures (including nominal concept names), and total
+        dropped TBox + RBox axiom count.
+
+    Raises
+    ------
+    TypeError
+        If ``source`` is neither a :class:`~mowl.datasets.Dataset` nor an
+        ``OWLOntology``.
+    UnsupportedAxiomError
+        If the ontology contains an unsupported ABox axiom (complex
+        ``ClassAssertion``, ``SameIndividual``, ``DifferentIndividuals``,
+        ``ObjectPropertyAssertion`` with an inverse property, an assertion on an
+        anonymous individual, or a negative/data assertion).
     """
     from java.util import HashSet
     from org.semanticweb.owlapi.model import AxiomType, OWLOntology
@@ -376,7 +539,11 @@ def normalise(source: Union[Dataset, OWLOntology]) -> NormalisedOntology:
         if ax_type == AxiomType.CLASS_ASSERTION:
             ce = ax.getClassExpression()
             ind = ax.getIndividual()
-            if ce.isAnonymous() or ind.isAnonymous():
+            if ind.isAnonymous():
+                raise UnsupportedAxiomError(
+                    f"Unsupported ClassAssertion on anonymous individual: {ax}"
+                )
+            if ce.isAnonymous():
                 raise UnsupportedAxiomError(
                     f"Unsupported complex ClassAssertion: {ax}"
                 )
@@ -389,9 +556,14 @@ def normalise(source: Union[Dataset, OWLOntology]) -> NormalisedOntology:
             prop = ax.getProperty()
             subj = ax.getSubject()
             obj = ax.getObject()
-            if prop.isAnonymous() or subj.isAnonymous() or obj.isAnonymous():
-                dropped_axioms += 1
-                continue
+            if prop.isAnonymous():
+                raise UnsupportedAxiomError(
+                    f"Unsupported ObjectPropertyAssertion with inverse property: {ax}"
+                )
+            if subj.isAnonymous() or obj.isAnonymous():
+                raise UnsupportedAxiomError(
+                    f"Unsupported ObjectPropertyAssertion on anonymous individual: {ax}"
+                )
             r_iri = _clean_iri(prop)
             nom_a = nominal_name(_clean_iri(subj))
             nom_b = nominal_name(_clean_iri(obj))
@@ -400,7 +572,9 @@ def normalise(source: Union[Dataset, OWLOntology]) -> NormalisedOntology:
             concept_names.add(nom_b)
             role_names.add(r_iri)
         else:
-            dropped_axioms += 1
+            raise UnsupportedAxiomError(
+                f"Unsupported ABox axiom ({ax_type}): {ax}"
+            )
 
     return NormalisedOntology(
         axioms=axioms,

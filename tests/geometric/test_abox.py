@@ -183,14 +183,22 @@ def test_role_assertion_propagates_existential(abox_kb):        # hasChild(bob, 
     assert cm.instance_of(IND+"bob", NS+"Parent")
     assert cm.instance_of(IND+"carl", NS+"Parent")
     assert not cm.instance_of(IND+"ann", NS+"Parent")
-    assert (IND+"bob", IND+"ann") in cm.role_instances(NS+"hasChild")
-    assert (IND+"carl", IND+"ann") in cm.role_instances(NS+"hasChild")
+    assert cm.role_instances(NS+"hasChild") == {
+        (IND+"bob", IND+"ann"),
+        (IND+"carl", IND+"ann"),
+    }
+    assert cm.role_instances(NS+"unknownRole") == set()
 
 
 def test_assertion_contradicted(abox_kb):                        # Male ⊓ Female ⊑ ⊥, Male(bob)
     cm = CanonicalModel.from_ontology(abox_kb)
     assert cm.assertion_contradicted(IND+"bob", NS+"Female")
     assert not cm.assertion_contradicted(IND+"bob", NS+"Parent")
+    assert not cm.assertion_contradicted(IND+"unknown", TOP)
+    assert not cm.assertion_contradicted(IND+"unknown", BOTTOM)
+    assert not cm.assertion_contradicted(IND+"bob", NS+"UnknownClass")
+    assert not cm.instance_of(IND+"unknown", TOP)
+    assert not cm.instance_of(IND+"bob", NS+"UnknownClass")
 
 
 def test_individual_with_only_role_assertions(abox_kb):          # hasChild(carl, ann) only
@@ -198,8 +206,133 @@ def test_individual_with_only_role_assertions(abox_kb):          # hasChild(carl
     assert IND+"carl" in cm.individuals and cm.instance_of(IND+"carl", TOP)
 
 
+def test_element_of(abox_kb):
+    cm = CanonicalModel.from_ontology(abox_kb)
+    for cname in cm.names:
+        pos = cm.element_of(cname)
+        assert cm.names[pos] == cname
+        assert cm.domain[pos] == f"d_{cname}"
+    for ind_iri, nom_name in cm.individuals.items():
+        pos_ind = cm.element_of(ind_iri)
+        pos_nom = cm.element_of(nom_name)
+        assert pos_ind == pos_nom
+        assert cm.names[pos_ind] == nom_name
+    with pytest.raises(KeyError):
+        cm.element_of(IND + "unknown_individual")
+    with pytest.raises(KeyError):
+        cm.element_of(BOTTOM)
+
+
+def test_interval_model_on_abox_kb(abox_kb):
+    from mowl.geometric.intervals import IntervalUnionModel
+
+    cm = CanonicalModel.from_ontology(abox_kb)
+    ivl = IntervalUnionModel.from_canonical_model(cm)
+    assert ivl.is_model()
+    assert ivl.is_nondegenerate()
+    assert ivl.is_strongly_faithful_on_names()
+    for ind_iri, nom_name in cm.individuals.items():
+        assert nom_name in ivl.class_regions, f"Missing {nom_name} for {ind_iri}"
+        assert not ivl.class_region(nom_name).is_empty
+        assert not ivl.class_regions[nom_name].is_empty
+
+
+def test_polyhedral_model_on_abox_kb(abox_kb):
+    from mowl.geometric.polyhedral import ConvexPolyhedralModel
+
+    cm = CanonicalModel.from_ontology(abox_kb)
+    poly = ConvexPolyhedralModel.from_canonical_model(cm)
+    assert poly.is_model()
+    assert poly.is_nondegenerate()
+    assert poly.is_strongly_faithful_on_names()
+    for ind_iri, nom_name in cm.individuals.items():
+        assert nom_name in poly.class_regions, f"Missing {nom_name} for {ind_iri}"
+        assert not poly.class_region(nom_name).is_empty
+        assert not poly.class_regions[nom_name].is_empty
+
+
+def test_box_model_on_abox_kb(abox_kb):
+    from mowl.geometric.boxes import BoxModelBuilder
+    from mowl.geometric.normal_forms import NF1, NF2, NormalisedOntology
+
+    no = normalise(abox_kb)
+    prop_axioms = [ax for ax in no.axioms if isinstance(ax, (NF1, NF2))]
+    prop_no = NormalisedOntology(
+        axioms=prop_axioms,
+        concept_names=no.concept_names,
+        role_names=set(),
+        dropped_axioms=0,
+    )
+    cm = CanonicalModel.from_normalised(prop_no)
+    box_model = BoxModelBuilder(cm, faithful="strong").build()
+    assert box_model.is_model()
+    assert box_model.is_nondegenerate()
+    assert box_model.is_strongly_faithful_on_names()
+    for ind_iri, nom_name in cm.individuals.items():
+        assert nom_name in box_model.class_regions, f"Missing {nom_name} for {ind_iri}"
+        assert not box_model.class_region(nom_name).is_empty
+        assert not box_model.class_regions[nom_name].is_empty
+
+
+def test_unsatisfiable_nominal_raises_inconsistent_ontology():
+    from mowl.geometric.errors import InconsistentOntology
+
+    adapter = OWLAPIAdapter()
+    mgr = adapter.owl_manager
+    df = adapter.data_factory
+
+    # 1. Direct clash on bob: Male ⊓ Female ⊑ ⊥, Male(bob), Female(bob)
+    ont1 = adapter.create_ontology("http://mowl.borg/geo/inconsistent_abox_direct")
+    male = adapter.create_class(NS + "Male")
+    female = adapter.create_class(NS + "Female")
+    bot = adapter.create_class(BOTTOM)
+    bob = adapter.create_individual(IND + "bob")
+    mgr.addAxiom(
+        ont1,
+        adapter.create_subclass_of(
+            adapter.create_object_intersection_of(male, female), bot
+        ),
+    )
+    mgr.addAxiom(ont1, df.getOWLClassAssertionAxiom(male, bob))
+    mgr.addAxiom(ont1, df.getOWLClassAssertionAxiom(female, bob))
+    with pytest.raises(InconsistentOntology) as exc1:
+        CanonicalModel.from_ontology(ont1)
+    assert (IND + "bob") in str(exc1.value)
+
+    # 2. Propagated clash via role assertion: A ⊓ B ⊑ ⊥, B(a), r(a,b), B(b), ∃r.B ⊑ A
+    ont2 = adapter.create_ontology("http://mowl.borg/geo/inconsistent_abox_role")
+    cls_a = adapter.create_class(NS + "A")
+    cls_b = adapter.create_class(NS + "B")
+    role_r = adapter.create_object_property(NS + "r")
+    ind_a = adapter.create_individual(IND + "a")
+    ind_b = adapter.create_individual(IND + "b")
+    mgr.addAxiom(
+        ont2,
+        adapter.create_subclass_of(
+            adapter.create_object_intersection_of(cls_a, cls_b), bot
+        ),
+    )
+    mgr.addAxiom(
+        ont2,
+        adapter.create_subclass_of(
+            adapter.create_object_some_values_from(role_r, cls_b), cls_a
+        ),
+    )
+    mgr.addAxiom(ont2, df.getOWLClassAssertionAxiom(cls_b, ind_a))
+    mgr.addAxiom(ont2, df.getOWLClassAssertionAxiom(cls_b, ind_b))
+    mgr.addAxiom(ont2, df.getOWLObjectPropertyAssertionAxiom(role_r, ind_a, ind_b))
+    with pytest.raises(InconsistentOntology) as exc2:
+        CanonicalModel.from_ontology(ont2)
+    assert (IND + "a") in str(exc2.value)
+
+
 def test_concept_names_exclude_nominals(abox_kb):
-    from mowl.geometric.normal_forms import individual_of_name, is_nominal_name
+    from mowl.geometric.normal_forms import (
+        individual_of_name,
+        is_nominal_name,
+        nominal_name,
+        to_owl,
+    )
 
     cm = CanonicalModel.from_ontology(abox_kb)
     assert set(cm.individuals.keys()) == {IND + "bob", IND + "ann", IND + "carl"}
@@ -221,8 +354,24 @@ def test_concept_names_exclude_nominals(abox_kb):
         BOTTOM,
     }.issubset(cm.concept_names)
 
+    # Special characters round-trip and to_owl round-trip
+    special_iris = [
+        "http://example.org/ind#bob smith%20?x=1&y=2",
+        "http://example.org/ind/ümlaut_λ",
+        "urn:uuid:12345678-1234-5678-1234-567812345678",
+    ]
+    for s_iri in special_iris:
+        enc = nominal_name(s_iri)
+        assert is_nominal_name(enc)
+        assert individual_of_name(enc) == s_iri
+
+    rt_cm = CanonicalModel.from_ontology(to_owl(normalise(abox_kb)))
+    assert rt_cm.individuals == cm.individuals
+    assert rt_cm.instance_of(IND + "bob", NS + "Parent")
+
 
 def test_complex_class_assertion_raises():                       # ClassAssertion(∃r.C, a) → UnsupportedAxiomError
+    from java.util import HashSet
     from mowl.geometric.errors import UnsupportedAxiomError
 
     adapter = OWLAPIAdapter()
@@ -233,6 +382,8 @@ def test_complex_class_assertion_raises():                       # ClassAssertio
     r = adapter.create_object_property(NS + "r")
     c = adapter.create_class(NS + "C")
     a = adapter.create_individual(IND + "a")
+    b = adapter.create_individual(IND + "b")
+    anon = df.getOWLAnonymousIndividual()
     complex_ce = adapter.create_object_some_values_from(r, c)
     ax = df.getOWLClassAssertionAxiom(complex_ce, a)
     mgr.addAxiom(ont, ax)
@@ -241,11 +392,33 @@ def test_complex_class_assertion_raises():                       # ClassAssertio
         normalise(ont)
     assert str(ax) in str(exc_info.value)
 
+    # Also verify SameIndividual, DifferentIndividuals, inverse ObjectPropertyAssertion,
+    # and assertions on anonymous individuals raise UnsupportedAxiomError with axiom text
+    inds_set = HashSet()
+    inds_set.add(a)
+    inds_set.add(b)
+    unsupported_axioms = [
+        df.getOWLSameIndividualAxiom(inds_set),
+        df.getOWLDifferentIndividualsAxiom(inds_set),
+        df.getOWLObjectPropertyAssertionAxiom(df.getOWLObjectInverseOf(r), a, b),
+        df.getOWLClassAssertionAxiom(c, anon),
+        df.getOWLObjectPropertyAssertionAxiom(r, a, anon),
+    ]
+    for idx, bad_ax in enumerate(unsupported_axioms):
+        ont_bad = adapter.create_ontology(f"http://mowl.borg/geo/unsupported_abox_{idx}")
+        mgr.addAxiom(ont_bad, bad_ax)
+        with pytest.raises(UnsupportedAxiomError) as bad_exc:
+            normalise(ont_bad)
+        assert str(bad_ax) in str(bad_exc.value)
+
 
 def test_matches_elk_instance_checking(abox_kb_random):           # 20 random small KBs: cm.instance_of == ELK getTypes (helpers' ELK access as in test_completion.py)
     adapter = OWLAPIAdapter()
+    mgr = adapter.owl_manager
+    df = adapter.data_factory
     assert len(abox_kb_random) == 20
 
+    total_contradicted = 0
     for seed, ont, ind_iris, class_iris in abox_kb_random:
         assert 3 <= len(ind_iris) <= 6
         cm = CanonicalModel.from_ontology(ont)
@@ -270,3 +443,29 @@ def test_matches_elk_instance_checking(abox_kb_random):           # 20 random sm
                 assert not cm.instance_of(ind_iri, BOTTOM)
         finally:
             reasoner.dispose()
+
+        # Compare cm.assertion_contradicted(ind, cls) with ELK (KB + cls(ind) inconsistent)
+        for ind_iri in ind_iris:
+            ind_obj = adapter.create_individual(ind_iri)
+            for cls_iri in class_iris:
+                cls_obj = adapter.create_class(cls_iri)
+                probe_ax = df.getOWLClassAssertionAxiom(cls_obj, ind_obj)
+                already_present = bool(ont.containsAxiom(probe_ax))
+                if not already_present:
+                    mgr.addAxiom(ont, probe_ax)
+                probe_reasoner = ElkReasonerFactory().createReasoner(ont)
+                try:
+                    elk_contradicted = not bool(probe_reasoner.isConsistent())
+                finally:
+                    probe_reasoner.dispose()
+                    if not already_present:
+                        mgr.removeAxiom(ont, probe_ax)
+                actual_contradicted = cm.assertion_contradicted(ind_iri, cls_iri)
+                assert actual_contradicted == elk_contradicted, (
+                    f"Contradiction mismatch on seed {seed} for ({ind_iri}, {cls_iri}): "
+                    f"cm={actual_contradicted}, ELK={elk_contradicted}"
+                )
+                if actual_contradicted:
+                    total_contradicted += 1
+
+    assert total_contradicted > 0
