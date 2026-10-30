@@ -429,6 +429,46 @@ class CanonicalMixtureModule(ELModule):
         )
         return support_offsets, support_indices, own_offsets
 
+    def _batch_chunk_size(self, bsz: int) -> int:
+        """Return row chunk size: at most 256 when ``|S| * bsz * 4`` bytes exceeds 256 MB."""
+        if bsz <= 0:
+            return 1
+        max_bytes = 256 * 1024 * 1024
+        if self.n_elements * bsz * 4 > max_bytes:
+            return min(256, max(1, max_bytes // max(self.n_elements * 4, 1)))
+        return bsz
+
+    def _expand_batch_supports(
+        self,
+        inv_idx: torch.Tensor,
+        u_offsets: torch.Tensor,
+        u_elem_ids: torch.Tensor,
+        u_sup_probs: torch.Tensor,
+    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, int]:
+        """Expand segmented support entries ``(col_ids, elem_ids, probs, total)`` for ``inv_idx``."""
+        c_bsz = inv_idx.shape[0]
+        device = inv_idx.device
+        starts = u_offsets.index_select(0, inv_idx)
+        ends = u_offsets.index_select(0, inv_idx + 1)
+        lengths = ends - starts
+        total = int(lengths.sum().item())
+        if total == 0:
+            empty_l = torch.empty((0,), dtype=torch.long, device=device)
+            empty_f = torch.empty((0,), dtype=u_sup_probs.dtype, device=device)
+            return empty_l, empty_l, empty_f, 0
+        col_ids = torch.repeat_interleave(
+            torch.arange(c_bsz, device=device, dtype=torch.long), lengths
+        )
+        cum_len = torch.cumsum(lengths, dim=0) - lengths
+        flat_pos = (
+            torch.arange(total, device=device, dtype=torch.long)
+            - torch.repeat_interleave(cum_len, lengths)
+            + torch.repeat_interleave(starts, lengths)
+        )
+        elems = u_elem_ids.index_select(0, flat_pos)
+        probs = u_sup_probs.index_select(0, flat_pos)
+        return col_ids, elems, probs, total
+
     def _sup_log_p_and_probs(
         self, ind_idx: torch.Tensor
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -448,6 +488,10 @@ class CanonicalMixtureModule(ELModule):
         ends = self.support_offsets.index_select(0, ind_idx + 1)
         lengths = ends - starts
         total_sup = int(lengths.sum().item())
+        if total_sup == 0:
+            empty_l = torch.empty((0,), dtype=torch.long, device=device)
+            empty_f = torch.empty((0,), dtype=dtype, device=device)
+            return empty_l, empty_l, empty_f, empty_f, lengths
 
         row_ids = torch.repeat_interleave(
             torch.arange(bsz, device=device, dtype=torch.long), lengths
@@ -460,10 +504,25 @@ class CanonicalMixtureModule(ELModule):
         )
         elem_ids = self.support_indices.index_select(0, flat_pos)
 
-        # Compute logits for the batch and gather support entries only
+        # Compute logits exclusively on the gathered support entries (in chunks if large)
         u_batch = self.U.index_select(0, ind_idx)  # (B, r)
-        raw_logits = u_batch @ self.V.t() + self.b.unsqueeze(0)  # (B, |S|)
-        sup_logits = raw_logits[row_ids, elem_ids]  # (total_sup,)
+        sup_chunk = 65_536
+        if total_sup <= sup_chunk:
+            sup_logits = (
+                u_batch.index_select(0, row_ids) * self.V.index_select(0, elem_ids)
+            ).sum(dim=1) + self.b.index_select(0, elem_ids)
+        else:
+            logit_parts = []
+            for s in range(0, total_sup, sup_chunk):
+                r_c = row_ids[s : s + sup_chunk]
+                e_c = elem_ids[s : s + sup_chunk]
+                logit_parts.append(
+                    (u_batch.index_select(0, r_c) * self.V.index_select(0, e_c)).sum(
+                        dim=1
+                    )
+                    + self.b.index_select(0, e_c)
+                )
+            sup_logits = torch.cat(logit_parts, dim=0)
 
         own_elems = self.individual_element.index_select(0, ind_idx)
         own_offs = self.own_logit_offset.index_select(0, ind_idx).to(dtype=dtype)
@@ -523,12 +582,8 @@ class CanonicalMixtureModule(ELModule):
         out[row_ids, elem_ids] = sup_log_probs
         return out
 
-    def _class_assertion_prob(self, data: torch.Tensor) -> torch.Tensor:
-        """Return class-membership probability :math:`1 - \\sum_{x \\in S_a, x \\notin C} p_a(x) \\in [0, 1]`."""
-        data = torch.as_tensor(data, dtype=torch.long, device=self.U.device)
-        if data.numel() == 0:
-            return torch.empty((0,), dtype=self.U.dtype, device=self.U.device)
-
+    def _class_assertion_prob_chunk(self, data: torch.Tensor) -> torch.Tensor:
+        """Compute class-membership probability for a single row chunk of ``data``."""
         ind_idx = data[:, 0]
         cls_idx = data[:, 1]
         bsz = data.shape[0]
@@ -543,27 +598,13 @@ class CanonicalMixtureModule(ELModule):
         )
         u_offsets[1:] = torch.cumsum(u_lengths, dim=0)
 
-        b_starts = u_offsets.index_select(0, inv_ind)
-        b_ends = u_offsets.index_select(0, inv_ind + 1)
-        b_lengths = b_ends - b_starts
-        total_pairs = int(b_lengths.sum().item())
-
+        batch_ids, x_elems, p_vals, total_pairs = self._expand_batch_supports(
+            inv_ind, u_offsets, u_elem_ids, u_sup_probs
+        )
         if total_pairs == 0:
             return torch.zeros((bsz,), dtype=self.U.dtype, device=device)
 
-        batch_ids = torch.repeat_interleave(
-            torch.arange(bsz, device=device, dtype=torch.long), b_lengths
-        )
-        cum_b = torch.cumsum(b_lengths, dim=0) - b_lengths
-        flat_u_pos = (
-            torch.arange(total_pairs, device=device, dtype=torch.long)
-            - torch.repeat_interleave(cum_b, b_lengths)
-            + torch.repeat_interleave(b_starts, b_lengths)
-        )
-        x_elems = u_elem_ids.index_select(0, flat_u_pos)
-        p_vals = u_sup_probs.index_select(0, flat_u_pos)
         c_vals = cls_idx.index_select(0, batch_ids)
-
         in_c = self._is_entailed_for_elem(x_elems, c_vals)
         not_in_c = ~in_c
 
@@ -579,6 +620,24 @@ class CanonicalMixtureModule(ELModule):
             has_in_c,
             (1.0 - sum_not_c).clamp(min=0.0, max=1.0),
             torch.zeros_like(sum_not_c),
+        )
+
+    def _class_assertion_prob(self, data: torch.Tensor) -> torch.Tensor:
+        """Return class-membership probability :math:`1 - \\sum_{x \\in S_a, x \\notin C} p_a(x) \\in [0, 1]`."""
+        data = torch.as_tensor(data, dtype=torch.long, device=self.U.device)
+        if data.numel() == 0:
+            return torch.empty((0,), dtype=self.U.dtype, device=self.U.device)
+
+        bsz = data.shape[0]
+        chunk_size = self._batch_chunk_size(bsz)
+        if bsz <= chunk_size:
+            return self._class_assertion_prob_chunk(data)
+        return torch.cat(
+            [
+                self._class_assertion_prob_chunk(data[s : s + chunk_size])
+                for s in range(0, bsz, chunk_size)
+            ],
+            dim=0,
         )
 
     def class_assertion_score(self, data: torch.Tensor) -> torch.Tensor:
@@ -600,15 +659,23 @@ class CanonicalMixtureModule(ELModule):
         head_idx = data[:, 0]
         rel_idx = data[:, 1]
         tail_idx = data[:, 2]
+        bsz = data.shape[0]
+        device = self.U.device
+        dtype = self.U.dtype
 
         all_inds = torch.cat([head_idx, tail_idx], dim=0)
         unique_inds, inv = torch.unique(all_inds, return_inverse=True)
-        p_unique = self._probs(unique_inds)
-        bsz = data.shape[0]
+        _, u_elem_ids, _, u_sup_probs, u_lengths = self._sup_log_p_and_probs(
+            unique_inds
+        )
+        u_offsets = torch.zeros(
+            (unique_inds.numel() + 1,), dtype=torch.long, device=device
+        )
+        u_offsets[1:] = torch.cumsum(u_lengths, dim=0)
         inv_head = inv[:bsz]
         inv_tail = inv[bsz:]
 
-        probs = torch.zeros((bsz,), dtype=p_unique.dtype, device=p_unique.device)
+        probs = torch.zeros((bsz,), dtype=dtype, device=device)
         for r_key in torch.unique(rel_idx).tolist():
             r_int = int(r_key)
             buf_name = f"_role_mat_{r_int}"
@@ -619,12 +686,41 @@ class CanonicalMixtureModule(ELModule):
                 continue
             mask = rel_idx == r_int
             rows_b = torch.nonzero(mask, as_tuple=False).reshape(-1)
-            u_h = inv_head.index_select(0, rows_b)
-            u_t = inv_tail.index_select(0, rows_b)
-            p_a = p_unique.index_select(0, u_h)  # (B_r, |S|)
-            p_b = p_unique.index_select(0, u_t)  # (B_r, |S|)
-            er_pb = torch.sparse.mm(e_r, p_b.t()).t()  # (B_r, |S|)
-            probs = probs.scatter_add(0, rows_b, (p_a * er_pb).sum(dim=1))
+            b_r = int(rows_b.numel())
+            chunk_size = self._batch_chunk_size(b_r)
+
+            for start in range(0, b_r, chunk_size):
+                c_rows = rows_b[start : start + chunk_size]
+                c_bsz = int(c_rows.numel())
+                u_h = inv_head.index_select(0, c_rows)
+                u_t = inv_tail.index_select(0, c_rows)
+
+                h_cols, h_elems, h_probs, total_h = self._expand_batch_supports(
+                    u_h, u_offsets, u_elem_ids, u_sup_probs
+                )
+                t_cols, t_elems, t_probs, total_t = self._expand_batch_supports(
+                    u_t, u_offsets, u_elem_ids, u_sup_probs
+                )
+                if total_h == 0 or total_t == 0:
+                    continue
+
+                # Build dense (|S| x c_bsz) matrix of p_b columns from masked support
+                c_alloc = c_bsz
+                while c_alloc in (self.n_ind, self.n_elements, self.n_classes):
+                    c_alloc += 1
+                p_b_buf = torch.zeros(
+                    (self.n_elements, c_alloc), dtype=dtype, device=device
+                )
+                p_b_col = p_b_buf[:, :c_bsz]
+                p_b_col[t_elems, t_cols] = t_probs
+
+                # q = E_r @ p_b of shape (|S|, c_bsz), then dot with p_a on its support
+                q = torch.sparse.mm(e_r, p_b_col)
+                q_at_h = q[h_elems, h_cols]
+                c_probs = torch.zeros((c_bsz,), dtype=dtype, device=device)
+                c_probs.scatter_add_(0, h_cols, h_probs * q_at_h)
+                probs = probs.scatter_add(0, c_rows, c_probs)
+                del p_b_buf, p_b_col, q
 
         return probs.clamp(min=0.0, max=1.0)
 
@@ -664,11 +760,11 @@ class CanonicalMixtureModule(ELModule):
     def sample_class_negatives(self, pos_data: torch.Tensor) -> torch.Tensor:
         """Sample one non-entailed class per positive ``(ind_idx, class_idx)`` row via rejection sampling."""
         pos_data = torch.as_tensor(pos_data, dtype=torch.long, device=self.U.device)
+        if pos_data.numel() == 0:
+            return torch.empty((0, 2), dtype=torch.long, device=self.U.device)
         ind_col = pos_data[:, 0]
         bsz = ind_col.shape[0]
         device = self.U.device
-        if bsz == 0:
-            return torch.empty((0, 2), dtype=torch.long, device=device)
 
         own_elems = self.individual_element.index_select(0, ind_col)
         neg_classes = torch.randint(
@@ -713,10 +809,24 @@ class CanonicalMixtureModule(ELModule):
     def sample_role_negatives(self, pos_data: torch.Tensor) -> torch.Tensor:
         """Sample one corrupted tail individual per positive ``(head_ind, role_idx, tail_ind)`` row."""
         pos_data = torch.as_tensor(pos_data, dtype=torch.long, device=self.U.device)
-        corrupt_tail = torch.randint(
-            0, self.n_ind, (pos_data.shape[0],), device=self.U.device, dtype=torch.long
-        )
-        return torch.stack([pos_data[:, 0], pos_data[:, 1], corrupt_tail], dim=1)
+        if pos_data.numel() == 0:
+            return torch.empty((0, 3), dtype=torch.long, device=self.U.device)
+        bsz = pos_data.shape[0]
+        chunk_size = self._batch_chunk_size(bsz)
+        if bsz <= chunk_size:
+            corrupt_tail = torch.randint(
+                0, self.n_ind, (bsz,), device=self.U.device, dtype=torch.long
+            )
+            return torch.stack([pos_data[:, 0], pos_data[:, 1], corrupt_tail], dim=1)
+        out = torch.empty((bsz, 3), dtype=torch.long, device=self.U.device)
+        for start in range(0, bsz, chunk_size):
+            end = min(bsz, start + chunk_size)
+            out[start:end, 0] = pos_data[start:end, 0]
+            out[start:end, 1] = pos_data[start:end, 1]
+            out[start:end, 2] = torch.randint(
+                0, self.n_ind, (end - start,), device=self.U.device, dtype=torch.long
+            )
+        return out
 
     def regularization_loss(self, ind_idx: torch.Tensor) -> torch.Tensor:
         """Return the entropy regularisation term :math:`\\lambda \\cdot \\operatorname{mean}_a H(p_a)` for ``ind_idx``."""
@@ -758,6 +868,16 @@ class CanonicalMixtureModule(ELModule):
         dtype = self.U.dtype
         if bsz == 0:
             return torch.empty((0, self.n_classes), dtype=dtype, device=device)
+
+        chunk_size = self._batch_chunk_size(bsz)
+        if bsz > chunk_size:
+            return torch.cat(
+                [
+                    self.rank_classes(ind_idx[s : s + chunk_size])
+                    for s in range(0, bsz, chunk_size)
+                ],
+                dim=0,
+            )
 
         row_ids, elem_ids, _, sup_probs, lengths = self._sup_log_p_and_probs(ind_idx)
         probs_elem = torch.zeros((bsz, self.n_elements), dtype=dtype, device=device)

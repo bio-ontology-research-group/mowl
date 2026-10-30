@@ -243,6 +243,18 @@ class CanonicalMixture(EmbeddingELModel):
             training_class_assertions=training_ca,
         ).to(self.device)
 
+    def _eval_gci_mean(self, v_data: th.Tensor, gci_name: str) -> float:
+        """Compute mean module output on ``v_data`` in ``batch_size`` chunks."""
+        n = int(v_data.shape[0])
+        if n == 0:
+            return 0.0
+        step = max(int(self.batch_size), 1)
+        total = 0.0
+        for start in range(0, n, step):
+            chunk = v_data[start : start + step]
+            total += float(self.module(chunk, gci_name).detach().sum().item())
+        return total / float(n)
+
     def _compute_validation_loss(self) -> float:
         """Compute validation loss on ``validation_datasets``."""
         with th.no_grad():
@@ -254,12 +266,12 @@ class CanonicalMixture(EmbeddingELModel):
             gci_name = self._eval_gci_name
             if gci_name in val_datasets and len(val_datasets[gci_name]) > 0:
                 v_data = val_datasets[gci_name][:]
-                return float(th.mean(self.module(v_data, gci_name)).detach().item())
+                return self._eval_gci_mean(v_data, gci_name)
 
             for fallback in ("class_assertion", "object_property_assertion"):
                 if fallback in val_datasets and len(val_datasets[fallback]) > 0:
                     v_data = val_datasets[fallback][:]
-                    return float(th.mean(self.module(v_data, fallback)).detach().item())
+                    return self._eval_gci_mean(v_data, fallback)
             return 0.0
 
     def train(
@@ -316,6 +328,11 @@ class CanonicalMixture(EmbeddingELModel):
                     mask_ca = th.isin(ca_data[:, 0], batch_inds)
                     if bool(mask_ca.any().item()):
                         pos_ca = ca_data[mask_ca]
+                        if pos_ca.shape[0] > self.batch_size:
+                            perm_ca = th.randperm(
+                                pos_ca.shape[0], device=self.device
+                            )[: self.batch_size]
+                            pos_ca = pos_ca.index_select(0, perm_ca)
                         neg_ca = self.module.sample_class_negatives(pos_ca)
                         loss_ca = (
                             self.module.class_assertion_loss(pos_ca, neg=False).mean()
@@ -328,6 +345,11 @@ class CanonicalMixture(EmbeddingELModel):
                     mask_opa = th.isin(opa_data[:, 0], batch_inds)
                     if bool(mask_opa.any().item()):
                         pos_opa = opa_data[mask_opa]
+                        if pos_opa.shape[0] > self.batch_size:
+                            perm_opa = th.randperm(
+                                pos_opa.shape[0], device=self.device
+                            )[: self.batch_size]
+                            pos_opa = pos_opa.index_select(0, perm_opa)
                         neg_opa = self.module.sample_role_negatives(pos_opa)
                         loss_opa = (
                             self.module.object_property_assertion_loss(

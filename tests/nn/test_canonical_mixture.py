@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import math
 import random
+import resource
 import time
 from typing import List, Tuple
 
@@ -717,4 +718,180 @@ def test_synthetic_large_support_construction_timing() -> None:
     assert elapsed < 60.0, f"Construction took {elapsed:.2f}s (>= 60s)"
     assert module.support_offsets.shape == (n_ind + 1,)
     assert int(module.support_lengths.min().item()) >= 1
+
+
+def test_role_score_matches_dense_formula_on_fixture_kb(
+    abox_kb: OWLOntology, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """New chunked sparse.mm role score equals the previous dense p_a^T E_r p_b formula within 1e-6 on abox_kb."""
+    torch.manual_seed(17)
+    module, _, ms = _build_module_for_abox_kb(abox_kb, rank=16)
+    with torch.no_grad():
+        module.U.normal_(0.0, 1.5)
+        module.V.normal_(0.0, 1.5)
+        module.b.normal_(0.0, 0.5)
+
+    # All 9 pairs of (head, role=0, tail) on the 3 individuals of abox_kb, repeated to exercise multi-chunk path
+    base_pairs = torch.tensor(
+        [[h, 0, t] for h in range(module.n_ind) for t in range(module.n_ind)],
+        dtype=torch.long,
+    )
+    role_data = base_pairs.repeat(35, 1)  # 315 rows
+
+    # Previous dense formula: p_unique = exp(log_p), er_pb = (E_r @ p_b^T)^T, score = -log((p_a * er_pb).sum(1))
+    all_inds = torch.arange(module.n_ind, dtype=torch.long)
+    p_dense = torch.exp(module.log_p(all_inds))
+    e_r_dense = ms.roles[0].to_dense().to(dtype=p_dense.dtype)
+    p_a = p_dense.index_select(0, role_data[:, 0])
+    p_b = p_dense.index_select(0, role_data[:, 2])
+    er_pb = (e_r_dense @ p_b.t()).t()
+    expected_probs = (p_a * er_pb).sum(dim=1).clamp(min=0.0, max=1.0)
+    expected_scores = -torch.log(expected_probs) + 0.0
+
+    actual_probs = module._object_property_assertion_prob(role_data)
+    actual_scores = module.object_property_assertion_score(role_data)
+    assert torch.allclose(actual_probs, expected_probs, rtol=1e-6, atol=1e-6)
+    assert torch.allclose(actual_scores, expected_scores, rtol=1e-6, atol=1e-6)
+
+    # Also verify forced small chunking (chunk_size = 4) produces identical results within 1e-6
+    monkeypatch.setattr(module, "_batch_chunk_size", lambda bsz: 4)
+    chunked_probs = module._object_property_assertion_prob(role_data)
+    chunked_scores = module.object_property_assertion_score(role_data)
+    assert torch.allclose(chunked_probs, expected_probs, rtol=1e-6, atol=1e-6)
+    assert torch.allclose(chunked_scores, expected_scores, rtol=1e-6, atol=1e-6)
+
+
+@pytest.mark.slow
+def test_yeast_scale_training_step_peak_memory() -> None:
+    """Synthetic yeast-scale structure (|S|=56k, n_classes=50k, n_ind=6k, nnz(E_r)=216k, |S_a|~20): 1 step < 1.5 GB."""
+    n_elements = 56_000
+    n_classes = 50_000
+    n_ind = 6_000
+    nnz_er = 216_000
+    batch_size = 1024
+    rng = np.random.default_rng(42)
+
+    # Build M (56,000 x 50,000) so each individual a has 1 minimal class c = a whose column has 20 elements
+    # (c, own_el = n_classes + a, plus 18 additional canonical elements), giving |S_a| == 20.
+    diag_c = np.arange(n_classes, dtype=np.int64)
+    ind_ids = np.arange(n_ind, dtype=np.int64)
+    own_els = n_classes + ind_ids
+
+    extra_rows = rng.integers(n_ind, n_classes, size=(n_ind, 18), dtype=np.int64)
+    # Ensure the 18 extra elements per column are distinct by offsetting within disjoint blocks
+    block_size = (n_classes - n_ind) // 18
+    for k in range(18):
+        low = n_ind + k * block_size
+        high = n_ind + (k + 1) * block_size
+        extra_rows[:, k] = rng.integers(low, high, size=(n_ind,), dtype=np.int64)
+
+    m_rows = np.concatenate([diag_c, own_els, extra_rows.reshape(-1)])
+    m_cols = np.concatenate([diag_c, ind_ids, np.repeat(ind_ids, 18)])
+    m_indices = torch.stack(
+        [torch.from_numpy(m_rows), torch.from_numpy(m_cols)], dim=0
+    )
+    m_values = torch.ones((m_rows.size,), dtype=torch.bool)
+    m_sparse = torch.sparse_coo_tensor(
+        m_indices, m_values, size=(n_elements, n_classes), dtype=torch.bool
+    ).coalesce()
+
+    # Build E_r (56,000 x 56,000) with 216,000 distinct random edges
+    flat_edges = np.unique(
+        rng.integers(0, n_elements * n_elements, size=nnz_er + 5_000, dtype=np.int64)
+    )[:nnz_er]
+    assert flat_edges.size == nnz_er
+    er_rows = torch.from_numpy(flat_edges // n_elements)
+    er_cols = torch.from_numpy(flat_edges % n_elements)
+    er_sparse = torch.sparse_coo_tensor(
+        torch.stack([er_rows, er_cols], dim=0),
+        torch.ones((nnz_er,), dtype=torch.bool),
+        size=(n_elements, n_elements),
+        dtype=torch.bool,
+    ).coalesce()
+    assert er_sparse._nnz() == nnz_er
+
+    element_names = [f"{NS}C{c}" for c in range(n_classes)] + [
+        f"{IND}ind{i}" for i in range(n_ind)
+    ]
+    element_index = {name: idx for idx, name in enumerate(element_names)}
+    class_index_dict = {f"{NS}C{c}": c for c in range(n_classes)}
+    individual_index_dict = {f"{IND}ind{i}": i for i in range(n_ind)}
+    ind_elem = torch.arange(n_classes, n_elements, dtype=torch.long)
+
+    ms = MembershipStructure(
+        element_names=element_names,
+        element_index=element_index,
+        M=m_sparse,
+        roles={0: er_sparse},
+        individual_element=ind_elem,
+        class_index_dict=class_index_dict,
+        individual_index_dict=individual_index_dict,
+        role_index_dict={f"{NS}r": 0},
+    )
+
+    torch.manual_seed(0)
+    module_cpu = CanonicalMixtureModule(ms, rank=32, entropy_reg=0.01)
+    assert float(module_cpu.support_lengths.float().mean().item()) == pytest.approx(
+        20.0, abs=1.0
+    )
+
+    batch_inds = torch.arange(batch_size, dtype=torch.long)
+    pos_ca = torch.stack([batch_inds, batch_inds], dim=1)
+    tail_inds = torch.randint(0, n_ind, (batch_size,), dtype=torch.long)
+    pos_opa = torch.stack(
+        [batch_inds, torch.zeros_like(batch_inds), tail_inds], dim=1
+    )
+
+    max_bytes = int(1.5 * 1e9)  # 1.5 GB
+
+    # 1. CPU training step peak RSS delta < 1.5 GB
+    rss_before_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    opt_cpu = torch.optim.Adam(module_cpu.parameters(), lr=0.01)
+    opt_cpu.zero_grad()
+    neg_ca_cpu = module_cpu.sample_class_negatives(pos_ca)
+    neg_opa_cpu = module_cpu.sample_role_negatives(pos_opa)
+    loss_cpu = (
+        module_cpu.class_assertion_loss(pos_ca, neg=False).mean()
+        + module_cpu.class_assertion_loss(neg_ca_cpu, neg=True).mean()
+        + module_cpu.object_property_assertion_loss(pos_opa, neg=False).mean()
+        + module_cpu.object_property_assertion_loss(neg_opa_cpu, neg=True).mean()
+        + module_cpu.regularization_loss(batch_inds)
+    )
+    loss_cpu.backward()
+    opt_cpu.step()
+    rss_after_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    rss_delta_bytes = (rss_after_kb - rss_before_kb) * 1024
+    assert torch.isfinite(loss_cpu)
+    assert rss_delta_bytes < max_bytes, (
+        f"CPU peak RSS delta {rss_delta_bytes / 1e9:.3f} GB >= 1.5 GB"
+    )
+
+    # 2. CUDA training step max_memory_allocated < 1.5 GB (if available)
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+        torch.cuda.reset_peak_memory_stats()
+        module_cuda = CanonicalMixtureModule(ms, rank=32, entropy_reg=0.01).to("cuda")
+        opt_cuda = torch.optim.Adam(module_cuda.parameters(), lr=0.01)
+        pos_ca_cuda = pos_ca.to("cuda")
+        pos_opa_cuda = pos_opa.to("cuda")
+        batch_inds_cuda = batch_inds.to("cuda")
+
+        opt_cuda.zero_grad()
+        neg_ca_cuda = module_cuda.sample_class_negatives(pos_ca_cuda)
+        neg_opa_cuda = module_cuda.sample_role_negatives(pos_opa_cuda)
+        loss_cuda = (
+            module_cuda.class_assertion_loss(pos_ca_cuda, neg=False).mean()
+            + module_cuda.class_assertion_loss(neg_ca_cuda, neg=True).mean()
+            + module_cuda.object_property_assertion_loss(pos_opa_cuda, neg=False).mean()
+            + module_cuda.object_property_assertion_loss(neg_opa_cuda, neg=True).mean()
+            + module_cuda.regularization_loss(batch_inds_cuda)
+        )
+        loss_cuda.backward()
+        opt_cuda.step()
+        cuda_peak_bytes = torch.cuda.max_memory_allocated()
+        assert torch.isfinite(loss_cuda)
+        assert cuda_peak_bytes < max_bytes, (
+            f"CUDA max_memory_allocated {cuda_peak_bytes / 1e9:.3f} GB >= 1.5 GB"
+        )
+
 
