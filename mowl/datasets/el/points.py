@@ -1,9 +1,13 @@
 """Canonical-element point supervision for Objective O3 (:class:`PointSupervision`).
 
-Constructs positive membership pairs ``(x_D, C)``, hard negative pairs ``(x_D, C)``
-where :math:`D \\sqcap C \\sqsubseteq \\bot` is provable in the completion, random
-negative candidates (classes not entailed for :math:`D`), and canonical role edges
-``(x_C, r, x_D)`` restricted to the element table from a
+Constructs positive membership pairs ``(x_D, C)`` from sparse ancestor sets,
+hard negative pairs ``(x_D, C)`` from the disjointness closure
+(:math:`D \\sqsubseteq A` and :math:`C \\sqsubseteq B` for some axiom
+:math:`A \\sqcap B \\sqsubseteq \\bot` or :math:`A \\sqsubseteq \\bot`, computed via
+sparse boolean matrix products :math:`M \\cdot \\text{Dis} \\cdot M^\\top` and
+capped at :data:`HARD_NEG_CAP`), random negative candidates by rejection sampling
+against each element's positive set at :meth:`PointSupervision.sample` time, and
+canonical role edges ``(x_C, r, x_D)`` restricted to the element table from a
 :class:`~mowl.geometric.completion.CanonicalModel`.
 
 Guarantees:
@@ -11,6 +15,10 @@ Guarantees:
   ``class_index_dict`` (excluding ``TOP``, ``BOTTOM``, and normaliser auxiliary
   classes) followed by one row per satisfiable individual in
   ``individual_index_dict`` present in ``cm.individuals``.
+- Any individual in ``individual_index_dict`` whose nominal concept is
+  unsatisfiable in ``cm`` raises :class:`ValueError` (if an individual is
+  unsatisfiable in the source ontology, :class:`~mowl.geometric.completion.CanonicalModel`
+  itself raises :class:`~mowl.geometric.errors.InconsistentOntology`).
 - Unsatisfiable concept names, ``TOP``, ``BOTTOM``, and auxiliary concept names
   are absent from :attr:`PointSupervision.element_names`,
   :attr:`PointSupervision.pos_pairs`, :attr:`PointSupervision.hard_neg_pairs`,
@@ -18,12 +26,22 @@ Guarantees:
 - Every pair ``(x_D, C)`` in :attr:`PointSupervision.pos_pairs` is entailed by
   ``cm`` (:meth:`~mowl.geometric.completion.CanonicalModel.entails`), and no pair
   in :attr:`PointSupervision.hard_neg_pairs` or sampled ``"rand"`` is entailed.
-- Every pair ``(x_D, C)`` in :attr:`PointSupervision.hard_neg_pairs` satisfies
-  ``not cm.joint_satisfiable({D, C})``.
+- Every pair ``(x_D, C)`` in :attr:`PointSupervision.hard_neg_pairs` belongs to
+  the disjointness closure and satisfies ``not cm.joint_satisfiable({D, C})``.
+- Nothing per-element is stored on :class:`PointSupervision` or in the cache file;
+  :meth:`PointSupervision.sample` returns at most ``n`` pairs in total across
+  ``"pos"``, ``"hard"``, ``"rand"``, and ``"roles"``, drawing one hard negative
+  per sampled positive when the positive's element has any and one random
+  negative per sampled positive by rejection against ``pos_pairs``.
 - :meth:`PointSupervision.save` and :meth:`PointSupervision.load` validate
   :data:`POINTS_CODE_TAG` and (when supplied) the ontology SHA-256 digest.
 
 Non-guarantees:
+- For file-backed datasets with an existing ``ontology_path``,
+  :func:`ontology_sha256` hashes the ontology file on disk rather than iterating
+  over in-memory ``OWLOntology`` axioms; in-memory edits to ``dataset.ontology``
+  (e.g. ``add_axioms``) are therefore not detected by the cache key unless
+  ``ontology_path`` is absent or ``use_cache=False``.
 - Individuals present in ``individual_index_dict`` that do not occur in the
   training ontology (e.g. validation/test-only individuals absent from
   ``cm.individuals``) have no canonical element in ``cm`` and are omitted from
@@ -45,15 +63,18 @@ import random
 from typing import BinaryIO, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 
 import numpy as np
+import scipy.sparse as sp
 import torch
 
 from mowl.geometric.completion import CanonicalModel
-from mowl.geometric.normal_forms import AUX_NS, BOTTOM, TOP, is_nominal_name
+from mowl.geometric.membership import _sparse_bool_coo
+from mowl.geometric.normal_forms import AUX_NS, BOTTOM, NF1, NF2, TOP, is_nominal_name
 from mowl.ontology.normalize import is_auxiliary_iri
 
 logger = logging.getLogger(__name__)
 
-POINTS_CODE_TAG: str = "points-v1"
+POINTS_CODE_TAG: str = "points-v2"
+HARD_NEG_CAP: int = 2_000_000
 
 
 def _is_named_target_class(iri: str, cm: CanonicalModel) -> bool:
@@ -92,7 +113,11 @@ def _randint_with_rng(
     if isinstance(rng, torch.Generator):
         return torch.randint(0, high, (size,), generator=rng, dtype=torch.long)
     if isinstance(rng, (np.random.Generator, np.random.RandomState)):
-        arr = rng.integers(0, high, size=size) if isinstance(rng, np.random.Generator) else rng.randint(0, high, size=size)
+        arr = (
+            rng.integers(0, high, size=size)
+            if isinstance(rng, np.random.Generator)
+            else rng.randint(0, high, size=size)
+        )
         return torch.as_tensor(arr, dtype=torch.long)
     if isinstance(rng, random.Random):
         return torch.tensor([rng.randrange(high) for _ in range(size)], dtype=torch.long)
@@ -137,6 +162,20 @@ def _sample_indices(
     raise TypeError(f"Unsupported rng type: {type(rng).__name__}")
 
 
+def _sort_pairs_lexicographically(pairs: torch.Tensor) -> torch.Tensor:
+    """Return a ``(N, 2)`` ``LongTensor`` sorted lexicographically by ``(col 0, col 1)``."""
+    p = torch.as_tensor(pairs, dtype=torch.long).reshape(-1, 2)
+    if p.shape[0] <= 1:
+        return p.contiguous()
+    max_col1 = int(p[:, 1].max().item())
+    stride = max(max_col1 + 1, 1)
+    keys = p[:, 0] * stride + p[:, 1]
+    if bool((keys[1:] < keys[:-1]).any().item()):
+        order = torch.argsort(keys)
+        p = p[order]
+    return p.contiguous()
+
+
 def ontology_sha256(
     ontology_or_dataset: object,
     class_index_dict: Optional[Mapping[str, int]] = None,
@@ -146,12 +185,16 @@ def ontology_sha256(
     """Compute a deterministic SHA-256 hex digest for an ontology/dataset and its index dicts.
 
     Guarantees:
-    - Produces an identical 64-character hex string for identical ontology axioms
-      and entity-to-index mappings.
+    - Produces an identical 64-character hex string for identical ontology files
+      (or axioms when no file path exists) and entity-to-index mappings.
     - Works for both file-backed :class:`~mowl.datasets.PathDataset` instances
       and in-memory ``OWLOntology`` / :class:`~mowl.datasets.Dataset` objects.
 
     Non-guarantees:
+    - When ``ontology_or_dataset`` has an existing ``ontology_path`` file on disk,
+      hashes the raw file bytes directly for speed; in-memory modifications to
+      ``dataset.ontology`` (such as ``add_axioms``) are not detected unless
+      ``ontology_path`` is removed or the ontology object itself is passed.
     - Does not hash validation or testing split ontologies.
     """
     hasher = hashlib.sha256()
@@ -189,6 +232,19 @@ def ontology_sha256(
 class PointSupervision:
     """Precomputed canonical-element supervision pairs for Objective O3.
 
+    Guarantees:
+    - Stores only flat index tensors (:attr:`pos_pairs`, :attr:`hard_neg_pairs`,
+      :attr:`role_pairs`, :attr:`element_class_index`, :attr:`element_is_individual`,
+      :attr:`candidate_class_indices`) with no per-element Python sets or dense
+      per-element negative pools in memory or on disk.
+    - :attr:`pos_pairs` and :attr:`hard_neg_pairs` are maintained in lexicographical
+      ``(elem_idx, class_idx)`` order so per-element positive and hard-negative
+      slices can be queried in :math:`O(\\log P)` via :func:`torch.searchsorted`.
+
+    Non-guarantees:
+    - Does not store negative pools; random negatives are drawn on the fly in
+      :meth:`sample` by rejection against :attr:`pos_pairs`.
+
     Attributes
     ----------
     n_elements : int
@@ -207,7 +263,8 @@ class PointSupervision:
         for every entailed pair ``(x_D, C)`` with ``C != TOP``.
     hard_neg_pairs : torch.LongTensor
         2-D ``LongTensor`` of shape ``(H, 2)`` with columns ``[elem_idx, class_idx]``
-        for every pair ``(x_D, C)`` with ``not cm.joint_satisfiable({D, C})``.
+        from the disjointness closure :math:`M \\cdot \\text{Dis} \\cdot M^\\top`
+        (capped at :data:`HARD_NEG_CAP`).
     role_pairs : torch.LongTensor
         2-D ``LongTensor`` of shape ``(R, 3)`` with columns
         ``[src_elem_idx, rel_idx, dst_elem_idx]`` for canonical role edges
@@ -244,10 +301,8 @@ class PointSupervision:
         self.element_is_individual = torch.as_tensor(
             self.element_is_individual, dtype=torch.bool
         ).reshape(self.n_elements)
-        self.pos_pairs = torch.as_tensor(self.pos_pairs, dtype=torch.long).reshape(-1, 2)
-        self.hard_neg_pairs = torch.as_tensor(
-            self.hard_neg_pairs, dtype=torch.long
-        ).reshape(-1, 2)
+        self.pos_pairs = _sort_pairs_lexicographically(self.pos_pairs)
+        self.hard_neg_pairs = _sort_pairs_lexicographically(self.hard_neg_pairs)
         self.role_pairs = torch.as_tensor(self.role_pairs, dtype=torch.long).reshape(
             -1, 3
         )
@@ -260,20 +315,327 @@ class PointSupervision:
                 self.candidate_class_indices = torch.unique(
                     self.element_class_index[cls_mask], sorted=True
                 )
+        elif self.candidate_class_indices.numel() > 1:
+            if bool(
+                (
+                    self.candidate_class_indices[1:]
+                    < self.candidate_class_indices[:-1]
+                ).any().item()
+            ):
+                self.candidate_class_indices = torch.sort(
+                    self.candidate_class_indices
+                ).values
 
-        # Precompute per-element non-entailed candidate class indices for fast O(1) random neg sampling
-        pos_by_elem: Dict[int, set] = {i: set() for i in range(self.n_elements)}
-        for e_idx, c_idx in self.pos_pairs.tolist():
-            pos_by_elem[int(e_idx)].add(int(c_idx))
-        cand_list = self.candidate_class_indices.tolist()
-        self._non_entailed_by_elem: List[torch.Tensor] = [
-            torch.tensor(
-                [c for c in cand_list if c not in pos_by_elem[i]], dtype=torch.long
-            )
-            for i in range(self.n_elements)
-        ]
         self._default_gen = torch.Generator()
         self._default_gen.manual_seed(int(self.rng_seed))
+
+    @classmethod
+    def from_sparse_membership(
+        cls,
+        M: torch.Tensor,
+        element_names: Sequence[str],
+        element_class_index: torch.Tensor,
+        element_is_individual: torch.Tensor,
+        disjoint_pairs: Union[torch.Tensor, Sequence[Tuple[int, int]]] = (),
+        *,
+        bot_classes: Union[torch.Tensor, Sequence[int]] = (),
+        candidate_class_indices: Optional[torch.Tensor] = None,
+        class_element_rows: Optional[torch.Tensor] = None,
+        role_pairs: Optional[torch.Tensor] = None,
+        hard_neg_cap: int = HARD_NEG_CAP,
+        rng_seed: int = 0,
+        ontology_sha256: Optional[str] = None,
+    ) -> PointSupervision:
+        """Build :class:`PointSupervision` from a sparse element × concept membership matrix ``M``.
+
+        Computes positive pairs directly from the nonzero entries of ``M`` over
+        ``candidate_class_indices``, and hard negatives from the disjointness
+        closure :math:`M \\cdot \\text{Dis} \\cdot M_{\\text{cls}}^\\top` restricted to
+        the active disjointness columns and target class rows, capped at
+        ``hard_neg_cap`` pairs sampled with ``rng_seed``.
+
+        Guarantees:
+        - Scales in time and memory with ``nnz(M)`` and the number of disjointness
+          pairs rather than :math:`|\\text{elements}| \\times |\\text{classes}|`.
+        - Caps ``hard_neg_pairs`` at ``hard_neg_cap`` (default ``2,000,000``)
+          using the dataset random generator seeded with ``rng_seed``.
+
+        Non-guarantees:
+        - Only pairs arising from ``disjoint_pairs`` (:math:`A \\sqcap B \\sqsubseteq \\bot`)
+          and ``bot_classes`` (:math:`A \\sqsubseteq \\bot`) are included in
+          ``hard_neg_pairs``.
+
+        Parameters
+        ----------
+        M : torch.Tensor
+            Sparse COO boolean (or numeric) tensor of shape ``(n_elements, n_cols)``
+            where ``M[e, c]`` is nonzero iff element ``e`` is subsumed by concept ``c``.
+        element_names : Sequence[str]
+            Element names of length ``n_elements``.
+        element_class_index : torch.Tensor
+            1-D ``LongTensor`` of shape ``(n_elements,)`` with each element's own
+            class or individual index.
+        element_is_individual : torch.Tensor
+            1-D ``BoolTensor`` of shape ``(n_elements,)`` flagging individual elements.
+        disjoint_pairs : torch.Tensor or Sequence[Tuple[int, int]], optional
+            Pairs ``(A, B)`` of column indices in ``M`` such that
+            :math:`A \\sqcap B \\sqsubseteq \\bot`.
+        bot_classes : torch.Tensor or Sequence[int], optional
+            Column indices ``A`` in ``M`` such that :math:`A \\sqsubseteq \\bot`.
+        candidate_class_indices : torch.Tensor, optional
+            Sorted 1-D ``LongTensor`` of target named class indices. Defaults to
+            the unique class indices of non-individual elements.
+        class_element_rows : torch.Tensor, optional
+            1-D ``LongTensor`` of row indices in ``M`` corresponding to
+            ``candidate_class_indices``.
+        role_pairs : torch.Tensor, optional
+            2-D ``LongTensor`` of shape ``(R, 3)`` with canonical role triples.
+        hard_neg_cap : int, default 2_000_000
+            Maximum number of hard negative pairs retained.
+        rng_seed : int, default 0
+            Random seed for capping ``hard_neg_pairs`` and default :meth:`sample` calls.
+        ontology_sha256 : str, optional
+            Optional SHA-256 digest stored for cache validation.
+
+        Returns
+        -------
+        PointSupervision
+            Constructed supervision structure.
+        """
+        elem_names_list = list(element_names)
+        n_elements = len(elem_names_list)
+        elem_cls_idx = torch.as_tensor(element_class_index, dtype=torch.long).reshape(
+            n_elements
+        )
+        elem_is_ind = torch.as_tensor(element_is_individual, dtype=torch.bool).reshape(
+            n_elements
+        )
+
+        if candidate_class_indices is None:
+            cls_mask = ~elem_is_ind
+            if bool(cls_mask.any().item()):
+                cand_cls = torch.unique(elem_cls_idx[cls_mask], sorted=True)
+            else:
+                cand_cls = torch.empty((0,), dtype=torch.long)
+        else:
+            cand_cls = torch.unique(
+                torch.as_tensor(candidate_class_indices, dtype=torch.long).reshape(-1),
+                sorted=True,
+            )
+
+        if isinstance(M, torch.Tensor):
+            n_cols = int(M.shape[1]) if M.dim() == 2 else 0
+            m_coal = M.coalesce()
+            m_indices = m_coal.indices()
+            if m_indices.numel() > 0 and m_coal.values().dtype == torch.bool:
+                vals = m_coal.values()
+                if not bool(vals.all().item()):
+                    m_indices = m_indices[:, vals]
+        else:
+            m_coo = sp.coo_matrix(M)
+            n_cols = int(m_coo.shape[1])
+            if m_coo.nnz > 0:
+                mask = np.asarray(m_coo.data, dtype=bool)
+                rows_np = np.asarray(m_coo.row[mask], dtype=np.int64)
+                cols_np = np.asarray(m_coo.col[mask], dtype=np.int64)
+                m_indices = torch.stack(
+                    [torch.from_numpy(rows_np), torch.from_numpy(cols_np)], dim=0
+                )
+            else:
+                m_indices = torch.empty((2, 0), dtype=torch.long)
+
+        # 1. Positive pairs from sparse M restricted to candidate_class_indices
+        if m_indices.shape[1] == 0 or cand_cls.numel() == 0 or n_cols == 0:
+            pos_pairs = torch.empty((0, 2), dtype=torch.long)
+        else:
+            all_cols_are_cand = (
+                cand_cls.numel() == n_cols
+                and int(cand_cls[0].item()) == 0
+                and int(cand_cls[-1].item()) == n_cols - 1
+            )
+            if all_cols_are_cand:
+                pos_pairs = m_indices.t().contiguous().to(dtype=torch.long)
+            else:
+                is_cand_col = torch.zeros((n_cols,), dtype=torch.bool)
+                valid_cand = cand_cls[(cand_cls >= 0) & (cand_cls < n_cols)]
+                is_cand_col[valid_cand] = True
+                keep_pos = is_cand_col[m_indices[1]]
+                pos_pairs = (
+                    m_indices[:, keep_pos].t().contiguous().to(dtype=torch.long)
+                )
+
+        # 2. Hard negative pairs from sparse boolean product M * Dis * M_cls^T
+        dis_t = (
+            torch.as_tensor(disjoint_pairs, dtype=torch.long).reshape(-1, 2)
+            if isinstance(disjoint_pairs, torch.Tensor) or len(disjoint_pairs) > 0
+            else torch.empty((0, 2), dtype=torch.long)
+        )
+        bot_t = (
+            torch.as_tensor(bot_classes, dtype=torch.long).reshape(-1)
+            if isinstance(bot_classes, torch.Tensor) or len(bot_classes) > 0
+            else torch.empty((0,), dtype=torch.long)
+        )
+
+        if (
+            n_elements == 0
+            or cand_cls.numel() == 0
+            or n_cols == 0
+            or m_indices.shape[1] == 0
+            or (dis_t.shape[0] == 0 and bot_t.numel() == 0)
+        ):
+            hard_neg_pairs = torch.empty((0, 2), dtype=torch.long)
+        else:
+            m_rows_np = m_indices[0].cpu().numpy()
+            m_cols_np = m_indices[1].cpu().numpy()
+            m_csr = sp.csr_matrix(
+                (np.ones(m_rows_np.shape[0], dtype=bool), (m_rows_np, m_cols_np)),
+                shape=(n_elements, n_cols),
+                dtype=bool,
+            )
+
+            if class_element_rows is not None:
+                cls_rows_np = (
+                    torch.as_tensor(class_element_rows, dtype=torch.long)
+                    .reshape(-1)
+                    .cpu()
+                    .numpy()
+                )
+                cls_target_ids_np = cand_cls.cpu().numpy()
+            else:
+                is_cand_col_np = np.zeros(n_cols, dtype=bool)
+                cand_np = cand_cls.cpu().numpy()
+                valid_cand_np = cand_np[(cand_np >= 0) & (cand_np < n_cols)]
+                is_cand_col_np[valid_cand_np] = True
+                cls_elem_mask_np = (~elem_is_ind.cpu().numpy()) & is_cand_col_np[
+                    elem_cls_idx.cpu().numpy()
+                ]
+                cls_rows_np = np.flatnonzero(cls_elem_mask_np)
+                cls_target_ids_np = elem_cls_idx.cpu().numpy()[cls_rows_np]
+
+            m_cls_csr = m_csr[cls_rows_np]
+
+            # Build symmetric Dis over active columns
+            dis_parts_r: List[np.ndarray] = []
+            dis_parts_c: List[np.ndarray] = []
+            if dis_t.shape[0] > 0:
+                d_np = dis_t.cpu().numpy()
+                valid_d = (
+                    (d_np[:, 0] >= 0)
+                    & (d_np[:, 0] < n_cols)
+                    & (d_np[:, 1] >= 0)
+                    & (d_np[:, 1] < n_cols)
+                )
+                d_np = d_np[valid_d]
+                if d_np.shape[0] > 0:
+                    dis_parts_r.extend([d_np[:, 0], d_np[:, 1]])
+                    dis_parts_c.extend([d_np[:, 1], d_np[:, 0]])
+
+            if bot_t.numel() > 0:
+                b_np = bot_t.cpu().numpy()
+                b_np = b_np[(b_np >= 0) & (b_np < n_cols)]
+                if b_np.size > 0 and cls_target_ids_np.size > 0:
+                    # A <= bot is equivalent to A disjoint with all target classes
+                    rep_a = np.repeat(b_np, cls_target_ids_np.size)
+                    tile_c = np.tile(cls_target_ids_np, b_np.size)
+                    dis_parts_r.extend([rep_a, tile_c])
+                    dis_parts_c.extend([tile_c, rep_a])
+
+            if not dis_parts_r or cls_rows_np.size == 0:
+                hard_neg_pairs = torch.empty((0, 2), dtype=torch.long)
+            else:
+                dis_r_all = np.concatenate(dis_parts_r)
+                dis_c_all = np.concatenate(dis_parts_c)
+                active_cols, inv_cols = np.unique(
+                    np.concatenate([dis_r_all, dis_c_all]), return_inverse=True
+                )
+                n_active = active_cols.size
+                half = dis_r_all.size
+                dis_r_sub = inv_cols[:half]
+                dis_c_sub = inv_cols[half:]
+                dis_sub = sp.csr_matrix(
+                    (
+                        np.ones(half, dtype=bool),
+                        (dis_r_sub, dis_c_sub),
+                    ),
+                    shape=(n_active, n_active),
+                    dtype=bool,
+                )
+
+                m_sub = m_csr[:, active_cols]
+                m_cls_sub = m_cls_csr[:, active_cols]
+                md_sub = (m_sub @ dis_sub).astype(bool)
+                active_elem_rows = np.flatnonzero(np.diff(md_sub.indptr) > 0)
+
+                if active_elem_rows.size == 0:
+                    hard_neg_pairs = torch.empty((0, 2), dtype=torch.long)
+                else:
+                    h_sub = (md_sub[active_elem_rows] @ m_cls_sub.T).astype(bool)
+                    if h_sub.nnz == 0:
+                        hard_neg_pairs = torch.empty((0, 2), dtype=torch.long)
+                    else:
+                        h_coo = h_sub.tocoo()
+                        h_elem = torch.from_numpy(
+                            active_elem_rows[h_coo.row].astype(np.int64, copy=False)
+                        )
+                        h_cls = torch.from_numpy(
+                            cls_target_ids_np[h_coo.col].astype(np.int64, copy=False)
+                        )
+                        if pos_pairs.shape[0] > 0:
+                            pos_sorted = _sort_pairs_lexicographically(pos_pairs)
+                            stride = max(
+                                int(pos_sorted[:, 1].max().item()),
+                                int(h_cls.max().item()),
+                            ) + 1
+                            pos_codes = (
+                                pos_sorted[:, 0] * stride + pos_sorted[:, 1]
+                            ).contiguous()
+                            h_codes = (h_elem * stride + h_cls).contiguous()
+                            idx = torch.searchsorted(pos_codes, h_codes)
+                            n_pos = int(pos_codes.numel())
+                            idx_clamped = idx.clamp(max=n_pos - 1)
+                            is_pos = (idx < n_pos) & (pos_codes[idx_clamped] == h_codes)
+                            if bool(is_pos.any().item()):
+                                keep_h = ~is_pos
+                                h_elem = h_elem[keep_h]
+                                h_cls = h_cls[keep_h]
+
+                        if h_elem.numel() == 0:
+                            hard_neg_pairs = torch.empty((0, 2), dtype=torch.long)
+                        else:
+                            hard_neg_pairs = _sort_pairs_lexicographically(
+                                torch.stack([h_elem, h_cls], dim=1)
+                            )
+                            if (
+                                hard_neg_cap > 0
+                                and hard_neg_pairs.shape[0] > hard_neg_cap
+                            ):
+                                keep_idx = torch.sort(
+                                    _sample_indices(
+                                        hard_neg_pairs.shape[0],
+                                        int(hard_neg_cap),
+                                        int(rng_seed),
+                                    )
+                                ).values
+                                hard_neg_pairs = hard_neg_pairs[keep_idx].contiguous()
+
+        eff_roles = (
+            torch.as_tensor(role_pairs, dtype=torch.long).reshape(-1, 3)
+            if role_pairs is not None
+            else torch.empty((0, 3), dtype=torch.long)
+        )
+
+        return cls(
+            n_elements=n_elements,
+            element_names=elem_names_list,
+            element_class_index=elem_cls_idx,
+            element_is_individual=elem_is_ind,
+            pos_pairs=pos_pairs,
+            hard_neg_pairs=hard_neg_pairs,
+            role_pairs=eff_roles,
+            candidate_class_indices=cand_cls,
+            rng_seed=int(rng_seed),
+            ontology_sha256=ontology_sha256,
+        )
 
     @classmethod
     def from_canonical_model(
@@ -287,8 +649,25 @@ class PointSupervision:
         rng_seed: int = 0,
         allow_absent_individuals: bool = True,
         ontology_sha256: Optional[str] = None,
+        hard_neg_cap: int = HARD_NEG_CAP,
     ) -> PointSupervision:
         """Build :class:`PointSupervision` from a :class:`~mowl.geometric.completion.CanonicalModel`.
+
+        Enumerates positive pairs from the sparse ancestor sets
+        ``cm.completion.sub_super`` and hard negatives from the disjointness
+        closure :math:`M \\cdot \\text{Dis} \\cdot M^\\top` via
+        :meth:`from_sparse_membership`.
+
+        Guarantees:
+        - Never calls ``cm.entails`` or ``cm.joint_satisfiable`` in an
+          :math:`|\\text{elements}| \\times |\\text{classes}|` loop.
+        - Raises :class:`ValueError` if any individual in ``individual_index_dict``
+          is unsatisfiable in ``cm`` (or absent from ``cm`` when
+          ``allow_absent_individuals=False``).
+
+        Non-guarantees:
+        - Individuals absent from ``cm.individuals`` are skipped when
+          ``allow_absent_individuals=True``.
 
         Parameters
         ----------
@@ -303,12 +682,14 @@ class PointSupervision:
         relation_index_dict : Optional[Mapping[str, int]], optional
             Keyword alias for ``object_property_index_dict``.
         rng_seed : int, default 0
-            Default seed for :meth:`sample`.
+            Default seed for :meth:`sample` and hard-negative capping.
         allow_absent_individuals : bool, default True
             If ``False``, raises :class:`ValueError` when an individual in
             ``individual_index_dict`` is absent from ``cm.individuals``.
         ontology_sha256 : Optional[str], optional
             Optional SHA-256 digest stored with the supervision object for cache validation.
+        hard_neg_cap : int, default 2_000_000
+            Maximum number of hard negative pairs retained.
         """
         cls_dict: Dict[str, int] = {str(k): int(v) for k, v in class_index_dict.items()}
         ind_dict: Dict[str, int] = (
@@ -367,31 +748,48 @@ class PointSupervision:
             dtype=torch.bool,
         )
 
-        # 3. Positive pairs (x_D, C) and hard negative pairs (x_D, C)
-        pos_list: List[Tuple[int, int]] = []
-        hard_neg_list: List[Tuple[int, int]] = []
+        # 3. Build sparse membership matrix M from ancestor sets cm.completion.sub_super
+        # and extract disjointness axioms A \sqcap B \sqsubseteq \bot / A \sqsubseteq \bot
+        col_map: Dict[str, int] = {c_iri: c_idx for c_iri, c_idx in named_classes}
+        next_col = (max(cls_dict.values()) + 1) if cls_dict else 0
 
-        has_bottom_axiom = any(
-            getattr(ax, "sup", None) == BOTTOM for ax in cm.axioms
-        )
+        disjoint_pairs: List[Tuple[int, int]] = []
+        bot_classes: List[int] = []
+        for ax in cm.axioms:
+            if isinstance(ax, NF2) and cm.completion.is_unsatisfiable(ax.sup):
+                for cname in (ax.sub1, ax.sub2):
+                    if (
+                        cname not in (TOP, BOTTOM)
+                        and cname not in col_map
+                        and not cm.completion.is_unsatisfiable(cname)
+                    ):
+                        col_map[cname] = next_col
+                        next_col += 1
+                c1 = col_map.get(ax.sub1)
+                c2 = col_map.get(ax.sub2)
+                if c1 is not None and c2 is not None:
+                    disjoint_pairs.append((c1, c2))
+            elif isinstance(ax, NF1) and cm.completion.is_unsatisfiable(ax.sup):
+                cname = ax.sub
+                if cname not in (TOP, BOTTOM):
+                    if cname not in col_map:
+                        col_map[cname] = next_col
+                        next_col += 1
+                    bot_classes.append(col_map[cname])
 
+        n_elements = len(element_names)
+        m_rows: List[int] = []
+        m_cols: List[int] = []
+        sub_super = cm.completion.sub_super
         for elem_i, d_name in enumerate(element_names):
-            for c_iri, c_idx in named_classes:
-                if cm.entails(d_name, c_iri):
-                    pos_list.append((elem_i, c_idx))
-                elif has_bottom_axiom and not cm.joint_satisfiable({d_name, c_iri}):
-                    hard_neg_list.append((elem_i, c_idx))
+            for sup_iri in sub_super.get(d_name, ()):
+                c_idx = col_map.get(sup_iri)
+                if c_idx is not None:
+                    m_rows.append(elem_i)
+                    m_cols.append(c_idx)
 
-        pos_pairs = (
-            torch.tensor(pos_list, dtype=torch.long)
-            if pos_list
-            else torch.empty((0, 2), dtype=torch.long)
-        )
-        hard_neg_pairs = (
-            torch.tensor(hard_neg_list, dtype=torch.long)
-            if hard_neg_list
-            else torch.empty((0, 2), dtype=torch.long)
-        )
+        M = _sparse_bool_coo(m_rows, m_cols, size=(n_elements, max(next_col, 1)))
+        class_element_rows = torch.arange(len(named_classes), dtype=torch.long)
 
         # 4. Canonical role edges (x_C, r, x_D) restricted to elements in the table
         cm_pos_to_elem: Dict[int, int] = {
@@ -413,18 +811,119 @@ class PointSupervision:
             else torch.empty((0, 3), dtype=torch.long)
         )
 
-        return cls(
-            n_elements=len(element_names),
+        return cls.from_sparse_membership(
+            M=M,
             element_names=element_names,
             element_class_index=element_class_index,
             element_is_individual=element_is_individual,
-            pos_pairs=pos_pairs,
-            hard_neg_pairs=hard_neg_pairs,
-            role_pairs=role_pairs,
+            disjoint_pairs=disjoint_pairs,
+            bot_classes=bot_classes,
             candidate_class_indices=candidate_class_indices,
+            class_element_rows=class_element_rows,
+            role_pairs=role_pairs,
+            hard_neg_cap=hard_neg_cap,
             rng_seed=int(rng_seed),
             ontology_sha256=ontology_sha256,
         )
+
+    def _sample_hard_for_elements(
+        self,
+        elem_col: torch.Tensor,
+        eff_rng: object,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Sample one hard negative per element in ``elem_col`` that has any in ``hard_neg_pairs``."""
+        b_size = int(elem_col.numel())
+        if b_size == 0 or self.hard_neg_pairs.shape[0] == 0:
+            return (
+                torch.zeros((b_size,), dtype=torch.bool),
+                torch.empty((0, 2), dtype=torch.long),
+            )
+        elem_col = elem_col.contiguous()
+        hard_elems = self.hard_neg_pairs[:, 0].contiguous()
+        lo = torch.searchsorted(hard_elems, elem_col, side="left")
+        hi = torch.searchsorted(hard_elems, elem_col, side="right")
+        counts = hi - lo
+        has_hard = counts > 0
+        n_with_hard = int(has_hard.sum().item())
+        if n_with_hard == 0:
+            return has_hard, torch.empty((0, 2), dtype=torch.long)
+        draws = _randint_with_rng(2**31 - 1, n_with_hard, eff_rng)  # type: ignore[arg-type]
+        chosen_idx = lo[has_hard] + (draws % counts[has_hard])
+        return has_hard, self.hard_neg_pairs[chosen_idx]
+
+    def _sample_rand_for_elements(
+        self,
+        elem_col: torch.Tensor,
+        eff_rng: object,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """Rejection-sample one non-entailed class per element in ``elem_col`` against ``pos_pairs``."""
+        b_size = int(elem_col.numel())
+        n_cand = int(self.candidate_class_indices.numel())
+        if b_size == 0 or n_cand == 0:
+            return (
+                torch.zeros((b_size,), dtype=torch.bool),
+                torch.empty((0, 2), dtype=torch.long),
+            )
+
+        elem_col = elem_col.contiguous()
+        if self.pos_pairs.shape[0] == 0:
+            draws = _randint_with_rng(n_cand, b_size, eff_rng)  # type: ignore[arg-type]
+            chosen_c = self.candidate_class_indices[draws]
+            return (
+                torch.ones((b_size,), dtype=torch.bool),
+                torch.stack([elem_col, chosen_c], dim=1),
+            )
+
+        max_cls = max(
+            int(self.candidate_class_indices.max().item()),
+            int(self.pos_pairs[:, 1].max().item()),
+        )
+        stride = max_cls + 1
+        pos_codes = (
+            self.pos_pairs[:, 0] * stride + self.pos_pairs[:, 1]
+        ).contiguous()
+        n_pos_total = int(pos_codes.numel())
+
+        chosen_c = torch.empty((b_size,), dtype=torch.long)
+        pending = torch.arange(b_size, dtype=torch.long)
+
+        for _ in range(16):
+            if pending.numel() == 0:
+                break
+            draws = _randint_with_rng(n_cand, int(pending.numel()), eff_rng)  # type: ignore[arg-type]
+            cand_c = self.candidate_class_indices[draws]
+            cand_codes = elem_col[pending] * stride + cand_c
+            idx = torch.searchsorted(pos_codes, cand_codes)
+            idx_clamped = idx.clamp(max=n_pos_total - 1)
+            is_entailed = (idx < n_pos_total) & (pos_codes[idx_clamped] == cand_codes)
+            accepted = ~is_entailed
+            if bool(accepted.any().item()):
+                chosen_c[pending[accepted]] = cand_c[accepted]
+            pending = pending[is_entailed]
+
+        has_rand = torch.ones((b_size,), dtype=torch.bool)
+        if pending.numel() > 0:
+            pos_elems = self.pos_pairs[:, 0].contiguous()
+            lo = torch.searchsorted(pos_elems, elem_col[pending], side="left")
+            hi = torch.searchsorted(pos_elems, elem_col[pending], side="right")
+            cand_list = self.candidate_class_indices.tolist()
+            fallback_draws = _randint_with_rng(
+                2**31 - 1, int(pending.numel()), eff_rng  # type: ignore[arg-type]
+            ).tolist()
+            for k, p_idx in enumerate(pending.tolist()):
+                l_i = int(lo[k].item())
+                h_i = int(hi[k].item())
+                entailed_set = set(self.pos_pairs[l_i:h_i, 1].tolist())
+                valid_c = [c for c in cand_list if c not in entailed_set]
+                if not valid_c:
+                    has_rand[p_idx] = False
+                else:
+                    chosen_c[p_idx] = valid_c[fallback_draws[k] % len(valid_c)]
+
+        if not bool(has_rand.any().item()):
+            return has_rand, torch.empty((0, 2), dtype=torch.long)
+        valid_rows = torch.stack([elem_col[has_rand], chosen_c[has_rand]], dim=1)
+        return has_rand, valid_rows
 
     def sample(
         self,
@@ -439,12 +938,26 @@ class PointSupervision:
             ]
         ] = None,
     ) -> Dict[str, torch.Tensor]:
-        """Sample up to ``n`` positive, hard-negative, random-negative, and role pairs.
+        """Sample at most ``n`` pairs in total across positive, hard-negative, random-negative, and role pairs.
+
+        Guarantees:
+        - Total returned pairs satisfy
+          ``pos.shape[0] + hard.shape[0] + rand.shape[0] + roles.shape[0] <= max(n, 0)``.
+        - For each sampled positive ``(x_D, C)`` (when ``n >= 3``), draws one hard
+          negative ``(x_D, C_hard)`` if element ``x_D`` has any hard negatives in
+          :attr:`hard_neg_pairs`, and one random negative ``(x_D, C_rand)`` by
+          rejection sampling against ``x_D``'s positive set in :attr:`pos_pairs`.
+
+        Non-guarantees:
+        - When ``n`` is smaller than the total available pairs, positives and
+          roles are subsampled without replacement to stay within the total
+          budget ``n``.
 
         Parameters
         ----------
         n : int
-            Maximum number of pairs per category (e.g. ``points_per_epoch``).
+            Maximum total number of pairs across all four returned tensors
+            (e.g. ``points_per_epoch``).
         rng : int, torch.Generator, np.random.Generator, random.Random, optional
             Random generator or integer seed. When ``None``, uses the internal
             generator seeded by :attr:`rng_seed`.
@@ -456,42 +969,76 @@ class PointSupervision:
             ``"rand"`` ``(n_rand, 2)``, and ``"roles"`` ``(n_r, 3)``.
         """
         cap = max(int(n), 0)
-        eff_rng = self._default_gen if rng is None else rng
+        if cap == 0:
+            return {
+                "pos": torch.empty((0, 2), dtype=torch.long),
+                "hard": torch.empty((0, 2), dtype=torch.long),
+                "rand": torch.empty((0, 2), dtype=torch.long),
+                "roles": torch.empty((0, 3), dtype=torch.long),
+            }
 
+        eff_rng = self._default_gen if rng is None else rng
         if isinstance(eff_rng, int):
             gen = torch.Generator()
             gen.manual_seed(int(eff_rng))
             eff_rng = gen
 
-        pos_idx = _sample_indices(self.pos_pairs.shape[0], cap, eff_rng)
-        pos = self.pos_pairs[pos_idx]
+        n_pos_avail = int(self.pos_pairs.shape[0])
+        n_role_avail = int(self.role_pairs.shape[0])
 
-        hard_cap = min(cap, pos.shape[0]) if pos.shape[0] > 0 else cap
-        if self.hard_neg_pairs.shape[0] <= cap:
-            hard_cap = self.hard_neg_pairs.shape[0]
-        hard_idx = _sample_indices(self.hard_neg_pairs.shape[0], hard_cap, eff_rng)
-        hard = self.hard_neg_pairs[hard_idx]
+        if n_pos_avail == 0:
+            role_idx = _sample_indices(n_role_avail, cap, eff_rng)
+            return {
+                "pos": torch.empty((0, 2), dtype=torch.long),
+                "hard": torch.empty((0, 2), dtype=torch.long),
+                "rand": torch.empty((0, 2), dtype=torch.long),
+                "roles": self.role_pairs[role_idx],
+            }
 
-        role_idx = _sample_indices(self.role_pairs.shape[0], cap, eff_rng)
-        roles = self.role_pairs[role_idx]
-
-        # Sample one random negative (x_D, C_rand) per sampled positive (x_D, C_pos)
-        rand_rows: List[Tuple[int, int]] = []
-        if pos.shape[0] > 0:
-            elem_col = pos[:, 0].tolist()
-            # Draw uniform floats/ints in one batch via eff_rng
-            raw_draws = _randint_with_rng(2**31 - 1, len(elem_col), eff_rng).tolist()
-            for e_idx, draw in zip(elem_col, raw_draws):
-                pool = self._non_entailed_by_elem[int(e_idx)]
-                if pool.numel() > 0:
-                    chosen_c = int(pool[draw % pool.numel()].item())
-                    rand_rows.append((int(e_idx), chosen_c))
-
-        rand = (
-            torch.tensor(rand_rows, dtype=torch.long)
-            if rand_rows
-            else torch.empty((0, 2), dtype=torch.long)
+        role_reserve = min(n_role_avail, cap // 4)
+        pos_budget = cap - role_reserve
+        n_cand = int(self.candidate_class_indices.numel())
+        max_pos_cand = (
+            min(n_pos_avail, pos_budget)
+            if n_cand <= 1
+            else min(n_pos_avail, max(1, pos_budget // 2))
         )
+
+        pos_idx = _sample_indices(n_pos_avail, max_pos_cand, eff_rng)
+        pos_cand = self.pos_pairs[pos_idx]
+        elem_col = pos_cand[:, 0]
+        has_hard, hard_cand = self._sample_hard_for_elements(elem_col, eff_rng)
+        has_rand, rand_cand = self._sample_rand_for_elements(elem_col, eff_rng)
+
+        pair_weights = 1 + has_hard.to(dtype=torch.long) + has_rand.to(dtype=torch.long)
+        cum_w = torch.cumsum(pair_weights, dim=0)
+
+        if int(cum_w[-1].item()) + n_role_avail <= cap:
+            pos = pos_cand
+            hard = hard_cand
+            rand = rand_cand
+            role_idx = _sample_indices(n_role_avail, n_role_avail, eff_rng)
+            roles = self.role_pairs[role_idx]
+        else:
+            k_keep = int((cum_w <= pos_budget).sum().item())
+            if k_keep == 0:
+                pos = pos_cand[:1]
+                hard = torch.empty((0, 2), dtype=torch.long)
+                if pos_budget >= 2 and rand_cand.shape[0] > 0 and bool(has_rand[0].item()):
+                    rand = rand_cand[:1]
+                else:
+                    rand = torch.empty((0, 2), dtype=torch.long)
+            else:
+                pos = pos_cand[:k_keep]
+                n_hard_keep = int(has_hard[:k_keep].sum().item())
+                n_rand_keep = int(has_rand[:k_keep].sum().item())
+                hard = hard_cand[:n_hard_keep]
+                rand = rand_cand[:n_rand_keep]
+
+            used = int(pos.shape[0] + hard.shape[0] + rand.shape[0])
+            role_cap = min(n_role_avail, max(0, cap - used))
+            role_idx = _sample_indices(n_role_avail, role_cap, eff_rng)
+            roles = self.role_pairs[role_idx]
 
         return {
             "pos": pos,

@@ -6,9 +6,15 @@ volume regularisation.
 
 Guarantees:
 - :func:`soft_box_membership` returns a tensor in ``(0, 1)`` of shape ``(B, k)``
-  computed as :math:`\\prod_{\\text{coord}} \\sigma((|o| - |x - c|) / \\beta)`.
+  computed as :math:`\\min_{\\text{coord}} \\sigma((|o| - |x - c|) / \\beta)`.
+  The minimum over coordinates is used instead of the coordinatewise product
+  because the product decays as :math:`\\sigma(|o|/\\beta)^d` even for a point at
+  the box centre (e.g. :math:`\\approx 10^{-7}` at :math:`d=50, |o|=\\beta`),
+  making membership unreachable in high ambient dimensions, whereas the minimum
+  has no :math:`d`-dependence and still approaches ``1`` only when every
+  coordinate lies inside the box.
 - :func:`union_membership` computes the noisy-OR :math:`1 - \\prod_{i=1}^k (1 - m_i)`
-  of shape ``(B,)``, reducing exactly to ``m[:, 0]`` when ``k == 1``.
+  of shape ``(B,)``, reducing0-for-0 to ``m[:, 0]`` when ``k == 1``.
 - :func:`membership_bce` clamps probabilities to ``[eps, 1 - eps]`` (``eps = 1e-6``)
   so the loss and its gradients are always finite even when ``m`` underflows to ``0``
   or saturates to ``1``.
@@ -16,9 +22,8 @@ Guarantees:
   :math:`\\text{mean}_{\\text{coord}} \\log(2|o| + 10^{-6})`.
 
 Non-guarantees:
-- Because :func:`soft_box_membership` is a product of sigmoids over ``d``
-  coordinates, ``m(x) < 1`` strictly at finite ``beta > 0`` and decreases with
-  ambient dimension ``d`` unless ``|o| - |x - c|`` is large relative to ``beta``.
+- At finite :math:`\\beta > 0`, :func:`soft_box_membership` satisfies
+  :math:`0 < m(x) < 1` strictly for finite box offsets.
 - Consequently, :func:`membership_bce` is strictly positive and never reaches
   exact zero.
 """
@@ -43,6 +48,19 @@ def _validate_beta(beta: float) -> float:
     return float(beta)
 
 
+def _validate_ind_halfwidth(ind_halfwidth: float) -> float:
+    """Validate that ``ind_halfwidth`` is a positive real number."""
+    if (
+        isinstance(ind_halfwidth, bool)
+        or not isinstance(ind_halfwidth, (int, float))
+        or float(ind_halfwidth) <= 0.0
+    ):
+        raise ValueError(
+            f"ind_halfwidth must be a positive float, got {ind_halfwidth!r}"
+        )
+    return float(ind_halfwidth)
+
+
 def _validate_objective(objective: str) -> str:
     """Validate that ``objective`` is one of ``'axiom'``, ``'point'``, or ``'mixed'``."""
     if objective not in _VALID_OBJECTIVES:
@@ -58,7 +76,21 @@ def soft_box_membership(
     offsets: th.Tensor,
     beta: float = 0.1,
 ) -> th.Tensor:
-    """Compute soft box membership :math:`m(x; c, o) = \\prod_{\\text{coord}} \\sigma((|o| - |x - c|) / \\beta)`.
+    """Compute soft box membership :math:`m(x; c, o) = \\min_{\\text{coord}} \\sigma((|o| - |x - c|) / \\beta)`.
+
+    Uses the minimum over coordinates rather than the coordinatewise product because
+    the product decays exponentially with dimension as :math:`\\sigma(|o|/\\beta)^d`
+    even at :math:`x = c`, whereas the minimum is dimension-free and equals :math:`1`
+    in the :math:`\\beta \\to 0` limit if and only if every coordinate of :math:`x`
+    lies inside :math:`[c - |o|, c + |o|]`.
+
+    Guarantees:
+    - Returns a tensor of shape ``(B, k)`` with entries strictly in ``(0, 1)``.
+    - Dimension-invariant for isotropic boxes when :math:`x = c`.
+
+    Non-guarantees:
+    - Subgradients pass only through the bottleneck coordinate(s) achieving the
+      minimum in each component box.
 
     Parameters
     ----------
@@ -89,11 +121,18 @@ def soft_box_membership(
         raise ValueError(f"Expected x to have 2 or 3 dimensions, got shape {tuple(x.shape)}")
 
     logits = (th.abs(offsets) - th.abs(x_exp - centers)) / beta_f
-    return th.prod(th.sigmoid(logits), dim=-1)
+    return th.amin(th.sigmoid(logits), dim=-1)
 
 
 def union_membership(m: th.Tensor) -> th.Tensor:
     """Aggregate component memberships ``(B, k)`` via noisy-OR :math:`1 - \\prod_i (1 - m_i)`.
+
+    Guarantees:
+    - Returns a 1-D tensor of shape ``(B,)`` in ``[0, 1]``.
+    - Reduces identically to ``m[:, 0]`` when ``k == 1``.
+
+    Non-guarantees:
+    - Assumes independent component memberships when combining overlapping boxes.
 
     Parameters
     ----------
@@ -117,6 +156,15 @@ def membership_bce(
     eps: float = 1e-6,
 ) -> th.Tensor:
     """Compute weighted binary cross-entropy on membership probabilities ``m``.
+
+    Guarantees:
+    - Clamps ``m`` to ``[eps, 1 - eps]`` so log-probabilities and gradients are
+      always finite.
+    - Returns a scalar ``0.0`` tensor when ``m`` is empty.
+
+    Non-guarantees:
+    - Never reaches exact ``0.0`` for non-empty batches because ``m`` is clamped
+      away from ``0`` and ``1``.
 
     Parameters
     ----------
@@ -146,6 +194,13 @@ def membership_bce(
 
 def volume_penalty(offsets: th.Tensor, eps: float = 1e-6) -> th.Tensor:
     """Compute mean log side length :math:`\\text{mean}_{C, i} \\text{mean}_{\\text{coord}} \\log(2|o| + 10^{-6})`.
+
+    Guarantees:
+    - Returns a finite scalar tensor for any non-negative or signed ``offsets``.
+    - Returns ``0.0`` when ``offsets`` is empty.
+
+    Non-guarantees:
+    - Can take negative values when box side lengths :math:`2|o|` are smaller than ``1``.
 
     Parameters
     ----------
@@ -180,6 +235,26 @@ def gather_element_embeddings(
     - Gradients for individual elements route exclusively to ``ind_embed.weight``
       (``elem_embed.weight`` is not indexed at individual element rows).
     - Gradients for class elements route exclusively to ``elem_embed.weight``.
+
+    Non-guarantees:
+    - Raises :class:`ValueError` if ``elem_idx`` references an individual element
+      when ``ind_embed is None``.
+
+    Parameters
+    ----------
+    elem_idx : torch.Tensor
+        1-D integer tensor of canonical element indices of shape ``(B,)``.
+    ps : PointSupervision
+        Canonical-element supervision structure defining element-to-entity mappings.
+    elem_embed : torch.nn.Embedding
+        Element embedding table of shape ``(n_elements, d)``.
+    ind_embed : torch.nn.Embedding, optional
+        Individual embedding table of shape ``(n_individuals, d)``, or ``None``.
+
+    Returns
+    -------
+    torch.Tensor
+        Element point coordinates of shape ``(B, d)``.
     """
     device = elem_embed.weight.device
     dtype = elem_embed.weight.dtype
@@ -211,7 +286,28 @@ def pair_union_membership(
     module: nn.Module,
     pairs: th.Tensor,
 ) -> th.Tensor:
-    """Compute union membership :math:`m_C(x_D)` for a ``(B, 2)`` tensor of ``[elem_idx, class_idx]``."""
+    """Compute union membership :math:`m_C(x_D)` for a ``(B, 2)`` tensor of ``[elem_idx, class_idx]``.
+
+    Guarantees:
+    - Evaluates :func:`soft_box_membership` at temperature ``module.beta`` and
+      aggregates across the ``k`` components of ``class_idx`` via :func:`union_membership`.
+    - Returns an empty 1-D tensor on ``module``'s device when ``pairs`` is empty.
+
+    Non-guarantees:
+    - Requires ``module.set_point_supervision(ps)`` to have been called prior to invocation.
+
+    Parameters
+    ----------
+    module : torch.nn.Module
+        Multi-box module exposing ``element_embeddings``, ``class_boxes``, and ``beta``.
+    pairs : torch.Tensor
+        2-D integer tensor of shape ``(B, 2)`` with columns ``[elem_idx, class_idx]``.
+
+    Returns
+    -------
+    torch.Tensor
+        1-D tensor of union membership probabilities of shape ``(B,)``.
+    """
     device = module.class_center.weight.device  # type: ignore[union-attr]
     dtype = module.class_center.weight.dtype  # type: ignore[union-attr]
     if pairs.numel() == 0:
@@ -230,7 +326,35 @@ def compute_point_membership_loss(
     neg: bool = False,
     weight: Optional[float] = None,
 ) -> th.Tensor:
-    """Compute Objective O3 membership BCE loss for a sampled dict or a ``(B, 2)`` pair tensor."""
+    """Compute Objective O3 membership BCE loss for a sampled dict or a ``(B, 2)`` pair tensor.
+
+    Guarantees:
+    - When ``batch`` is a mapping, sums the BCE losses for ``"pos"`` (target ``1``,
+      weight ``1``), ``"hard"`` (target ``0``, weight ``1``), and ``"rand"``
+      (target ``0``, weight ``weight`` or ``module.neg_weight``).
+    - When ``batch`` is a ``(B, 2)`` tensor, computes BCE with target ``0`` if
+      ``neg=True`` else ``1``.
+
+    Non-guarantees:
+    - Ignores role triples ``"roles"`` (handled separately by ``point_role_loss``).
+
+    Parameters
+    ----------
+    module : torch.nn.Module
+        Multi-box module with attached :class:`~mowl.datasets.el.points.PointSupervision`.
+    batch : Mapping[str, torch.Tensor] or torch.Tensor
+        Dictionary returned by :meth:`~mowl.datasets.el.points.PointSupervision.sample`
+        or a 2-D pair tensor of shape ``(B, 2)``.
+    neg : bool, default False
+        Whether a tensor ``batch`` represents negative pairs.
+    weight : float, optional
+        Optional override for the negative-sample weight.
+
+    Returns
+    -------
+    torch.Tensor
+        Scalar BCE loss tensor.
+    """
     device = module.class_center.weight.device  # type: ignore[union-attr]
     dtype = module.class_center.weight.dtype  # type: ignore[union-attr]
 
@@ -262,7 +386,32 @@ def compute_class_assertion_score_point(
     data: th.Tensor,
     eps: float = 1e-12,
 ) -> th.Tensor:
-    """Compute point-mode class-assertion ranking score :math:`-\\log m_C(a)` for ``data`` ``(B, 2)`` ``[ind, class]``."""
+    """Compute point-mode class-assertion ranking score :math:`-\\log m_C(a)` for ``data`` ``(B, 2)`` ``[ind, class]``.
+
+    Guarantees:
+    - Returns a 1-D tensor of shape ``(B,)`` where smaller values indicate higher
+      membership probability :math:`m_C(a)`.
+    - Reads individual coordinates exclusively from ``module.ind_embed`` without
+      accessing ``ind_offset``.
+
+    Non-guarantees:
+    - Raises :class:`ValueError` when the module has no individuals (``nb_inds`` is
+      ``None`` or ``0``).
+
+    Parameters
+    ----------
+    module : torch.nn.Module
+        Multi-box module exposing ``ind_embed``, ``class_boxes``, and ``beta``.
+    data : torch.Tensor
+        2-D integer tensor of shape ``(B, 2)`` with columns ``[ind_idx, class_idx]``.
+    eps : float, default 1e-12
+        Lower clamp on :math:`m_C(a)` inside ``-log``.
+
+    Returns
+    -------
+    torch.Tensor
+        1-D score tensor of shape ``(B,)``.
+    """
     ind_embed = getattr(module, "ind_embed", None)
     nb_inds = getattr(module, "nb_inds", None)
     if ind_embed is None or nb_inds is None or int(nb_inds) == 0:
@@ -284,7 +433,32 @@ def compute_point_modelness(
     ps: Optional[PointSupervision] = None,
     chunk_size: int = 8192,
 ) -> Dict[str, float]:
-    """Compute fraction of positives with ``m >= 0.5`` and hard negatives with ``m < 0.5`` in chunks."""
+    """Compute fraction of positives with ``m >= 0.5`` and hard negatives with ``m < 0.5`` in chunks.
+
+    Guarantees:
+    - Evaluates all pairs in ``ps.pos_pairs`` and ``ps.hard_neg_pairs`` on
+      ``module``'s current device under ``torch.no_grad()`` using batches of size
+      at most ``chunk_size``.
+    - Returns ``1.0`` for ``pos_frac`` (or ``hardneg_frac``) when the corresponding
+      pair tensor is empty.
+
+    Non-guarantees:
+    - Does not evaluate role pairs or random negatives.
+
+    Parameters
+    ----------
+    module : torch.nn.Module
+        Multi-box module to evaluate.
+    ps : PointSupervision, optional
+        Supervision object; defaults to ``module.point_supervision``.
+    chunk_size : int, default 8192
+        Maximum number of pairs evaluated per forward chunk.
+
+    Returns
+    -------
+    Dict[str, float]
+        Dictionary ``{"pos_frac": float, "hardneg_frac": float}``.
+    """
     eff_ps = ps if ps is not None else getattr(module, "point_supervision", None)
     if eff_ps is None:
         raise ValueError(

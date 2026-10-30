@@ -11,6 +11,7 @@ from mowl.datasets.el.points import (
     PointSupervision,
     build_or_load_point_supervision,
 )
+from mowl.geometric.normal_forms import BOTTOM, TOP
 from mowl.nn import MultiBoxELModule
 from mowl.nn.el.pointloss import _VALID_OBJECTIVES, volume_penalty
 
@@ -107,6 +108,24 @@ class MultiBoxEL(EmbeddingELModel):
         Weight for the pairwise component volume overlap regulariser.
     tau : float, optional
         Optional alias for ``tau_start`` when setting a fixed temperature.
+    objective : {"axiom", "point", "mixed"}, default "axiom"
+        Training objective mode (O1 ``"axiom"``, O3 ``"point"``, or O2
+        ``"mixed"``).
+    beta : float, default 0.1
+        Temperature :math:`\\beta > 0` for the sigmoid boundary of soft box
+        membership under ``objective="point"`` or ``"mixed"``.
+    neg_weight : float, default 0.1
+        Non-negative weight :math:`\\lambda_{\\text{neg}}` on the negative point
+        membership term.
+    volume_reg : float, default 1e-3
+        Non-negative weight :math:`\\lambda_{\\text{vol}}` on the named-class
+        volume penalty (excluding ``TOP`` and ``BOTTOM``).
+    points_per_epoch : int, default 100000
+        Total pair budget sampled per epoch from
+        :class:`~mowl.datasets.el.points.PointSupervision`.
+    points_seed : int, default 0
+        Base random seed for :class:`~mowl.datasets.el.points.PointSupervision`
+        construction and per-epoch sampling.
     """
 
     def __init__(self,
@@ -240,11 +259,39 @@ class MultiBoxEL(EmbeddingELModel):
 
     @property
     def point_supervision(self) -> Optional[PointSupervision]:
-        """Return the cached :class:`~mowl.datasets.el.points.PointSupervision` if built."""
+        """Return the cached :class:`~mowl.datasets.el.points.PointSupervision` if built.
+
+        Guarantees:
+        - Returns the :class:`~mowl.datasets.el.points.PointSupervision`
+          instance attached to this model once :meth:`_ensure_point_supervision`
+          has been called, or ``None`` beforehand.
+
+        Non-guarantees:
+        - Does not trigger lazy construction of point supervision.
+
+        Returns
+        -------
+        PointSupervision or None
+            Cached point supervision bundle or ``None``.
+        """
         return self._point_supervision
 
     def _ensure_point_supervision(self) -> PointSupervision:
-        """Lazily build or load :class:`~mowl.datasets.el.points.PointSupervision` and attach to ``module``."""
+        """Lazily build or load :class:`~mowl.datasets.el.points.PointSupervision` and attach to ``module``.
+
+        Guarantees:
+        - Builds or loads the :class:`~mowl.datasets.el.points.PointSupervision`
+          once and registers ``elem_embed`` on ``self.module``.
+
+        Non-guarantees:
+        - Does not re-run canonical model completion on subsequent calls unless
+          ``self._point_supervision`` is reset.
+
+        Returns
+        -------
+        PointSupervision
+            The active point supervision bundle.
+        """
         if self._point_supervision is None:
             self._point_supervision = build_or_load_point_supervision(
                 self.dataset,
@@ -258,13 +305,43 @@ class MultiBoxEL(EmbeddingELModel):
         return self._point_supervision
 
     def get_optimizer(self):
-        """Ensure ``elem_embed`` is registered before constructing the Adam optimiser."""
+        """Ensure ``elem_embed`` is registered before constructing the Adam optimiser.
+
+        Guarantees:
+        - Under ``objective="point"`` or ``"mixed"``, calls
+          :meth:`_ensure_point_supervision` before ``super().get_optimizer()``
+          so ``self.module.elem_embed`` parameters are included in the
+          optimiser parameter group.
+
+        Non-guarantees:
+        - Does not construct ``elem_embed`` when ``objective="axiom"``.
+
+        Returns
+        -------
+        torch.optim.Optimizer
+            Configured optimiser over ``self.module.parameters()``.
+        """
         if self.objective != "axiom":
             self._ensure_point_supervision()
         return super().get_optimizer()
 
     def get_negative_sampling_config(self):
-        """Disable GCI negative sampling by default when GCI losses are zeroed in point/mixed mode."""
+        """Disable GCI negative sampling by default when GCI losses are zeroed in point/mixed mode.
+
+        Guarantees:
+        - Returns an empty dict ``{}`` when ``objective != "axiom"`` and
+          ``neg_sampling_gcis is None``.
+        - Delegates to ``super().get_negative_sampling_config()`` otherwise.
+
+        Non-guarantees:
+        - Does not disable GCI negative sampling if the caller explicitly passed
+          a non-``None`` ``neg_sampling_gcis`` list.
+
+        Returns
+        -------
+        dict
+            Mapping from GCI name to negative-sampling configuration.
+        """
         if self.objective != "axiom" and self.neg_sampling_gcis is None:
             return {}
         return super().get_negative_sampling_config()
@@ -295,7 +372,31 @@ class MultiBoxEL(EmbeddingELModel):
             self.module.tau = float(tau)
 
     def additional_training_loss(self, epoch: int) -> Optional[th.Tensor]:
-        """Compute sampled canonical-element point and role losses plus volume regulariser."""
+        """Compute sampled canonical-element point and role losses plus volume regulariser.
+
+        Guarantees:
+        - Returns ``None`` when ``objective == "axiom"``.
+        - Under ``objective in ("point", "mixed")``, samples at most
+          ``points_per_epoch`` pairs using seed ``points_seed + epoch`` and
+          returns ``point_membership_loss + point_role_loss + volume_reg * volume_penalty(offsets)``
+          where ``TOP`` (``owl:Thing``) and ``BOTTOM`` (``owl:Nothing``) are
+          excluded from the volume penalty.
+
+        Non-guarantees:
+        - Does not include region-level GCI losses (handled by the main epoch
+          loop).
+
+        Parameters
+        -------
+        epoch : int
+            Zero-based training epoch index used to seed per-epoch sampling.
+
+        Returns
+        -------
+        torch.Tensor or None
+            Scalar additional training loss tensor, or ``None`` under
+            ``objective="axiom"``.
+        """
         if self.objective == "axiom":
             return None
         ps = self._ensure_point_supervision()
@@ -304,11 +405,17 @@ class MultiBoxEL(EmbeddingELModel):
         loss = self.module.point_membership_loss(batch)
         loss = loss + self.module.point_role_loss(batch)
         if self.volume_reg > 0.0 and len(self.named_class_index_dict) > 0:
-            cls_idx = th.arange(
-                len(self.named_class_index_dict), device=self.device, dtype=th.long
-            )
-            _, offsets = self.module.class_boxes(cls_idx)
-            loss = loss + self.volume_reg * volume_penalty(offsets)
+            non_top_indices = [
+                int(idx)
+                for iri, idx in self.named_class_index_dict.items()
+                if iri not in (TOP, BOTTOM)
+            ]
+            if non_top_indices:
+                cls_idx = th.tensor(
+                    non_top_indices, device=self.device, dtype=th.long
+                )
+                _, offsets = self.module.class_boxes(cls_idx)
+                loss = loss + self.volume_reg * volume_penalty(offsets)
         return loss
 
     def get_regularization_loss(self):

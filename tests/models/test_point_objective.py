@@ -10,6 +10,7 @@ import mowl
 mowl.init_jvm("2g")
 
 from mowl.datasets import Dataset, PathDataset
+from mowl.geometric.normal_forms import TOP
 from mowl.models import MultiBoxEL, MultiELBE
 from mowl.nn import MultiBoxELModule, MultiELBEModule
 from mowl.nn.el.pointloss import soft_box_membership, union_membership
@@ -62,6 +63,16 @@ def test_point_objective_tbox_only(tmp_path: Path, abox_kb) -> None:
         assert model.module.ind_embed is not None
         assert model.module.ind_embed.weight.grad is not None
         assert bool((model.module.ind_embed.weight.grad.abs() > 0).any().item())
+
+        # Verify TOP is excluded from the volume penalty in additional_training_loss
+        if TOP in model.named_class_index_dict:
+            top_idx = model.named_class_index_dict[TOP]
+            model.module.zero_grad()
+            add_loss = model.additional_training_loss(0)
+            assert add_loss is not None
+            add_loss.backward()
+            assert model.module.class_offset.weight.grad is not None
+            assert torch.all(model.module.class_offset.weight.grad[top_idx] == 0.0)
 
 
 def test_mixed_keeps_only_bottom_losses() -> None:
@@ -120,6 +131,10 @@ def test_mixed_keeps_only_bottom_losses() -> None:
         )
         bot_names = ("gci0_bot", "gci1_bot", "gci3_bot")
 
+        # In training mode (module.training is True):
+        mod_axiom.train()
+        mod_mixed.train()
+        mod_point.train()
         for gci in non_bot_names:
             out_ax = mod_axiom(batches[gci], gci)
             out_mx = mod_mixed(batches[gci], gci)
@@ -138,6 +153,17 @@ def test_mixed_keeps_only_bottom_losses() -> None:
             assert torch.allclose(out_mx, out_ax, atol=1e-6)
             assert bool((out_mx > 0.0).any().item())
             assert torch.all(out_pt == 0.0)
+
+        # In eval mode (module.training is False): every GCI forward returns ordinary region scores
+        mod_axiom.eval()
+        mod_mixed.eval()
+        mod_point.eval()
+        for gci in non_bot_names + bot_names:
+            out_ax_eval = mod_axiom(batches[gci], gci)
+            out_mx_eval = mod_mixed(batches[gci], gci)
+            out_pt_eval = mod_point(batches[gci], gci)
+            assert torch.allclose(out_pt_eval, out_ax_eval, atol=1e-6)
+            assert torch.allclose(out_mx_eval, out_ax_eval, atol=1e-6)
 
 
 def test_point_mode_class_assertion_score_is_neg_log_m() -> None:
