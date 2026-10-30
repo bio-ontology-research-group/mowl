@@ -3,13 +3,13 @@ from __future__ import annotations
 
 from typing import Optional, Tuple
 
-import numpy as np
 import torch as th
 import torch.nn as nn
 
 from mowl.nn import ELModule
 import mowl.nn.el.boxsquaredel.losses as B2L
 from mowl.nn.el.boxsquaredel.module import BoxSquaredELModule
+from mowl.nn.el.multibox_utils import effective_components as _effective_components
 import mowl.nn.el.multiboxel.losses as L
 from mowl.nn.el.softagg import diversity_penalty
 
@@ -393,48 +393,10 @@ class MultiBoxELModule(ELModule):
         torch.Tensor
             1-D integer tensor of length ``nb_ont_classes`` on CPU.
         """
-        k = self.n_components
-        d = self.embed_dim
-        n = self.nb_ont_classes
-        cen_np = (
-            self.class_center.weight.detach()
-            .cpu()
-            .view(n, k, d)
-            .numpy()
+        centers = self.class_center.weight.view(
+            self.nb_ont_classes, self.n_components, self.embed_dim
         )
-        off_np = (
-            th.abs(self.class_offset.weight.detach())
-            .cpu()
-            .view(n, k, d)
-            .numpy()
+        offsets = self.class_offset.weight.view(
+            self.nb_ont_classes, self.n_components, self.embed_dim
         )
-        lo_np = cen_np - off_np  # (n, k, d)
-        hi_np = cen_np + off_np  # (n, k, d)
-        valid_np = np.all(off_np > eps, axis=-1)  # (n, k)
-
-        counts = np.zeros(n, dtype=np.int64)
-        for c in range(n):
-            v = valid_np[c]
-            if not np.any(v):
-                continue
-            lo_c = lo_np[c]
-            hi_c = hi_np[c]
-            eff = 0
-            for i in range(k):
-                if not v[i]:
-                    continue
-                contained = False
-                for j in range(k):
-                    if i == j or not v[j]:
-                        continue
-                    if np.all(lo_c[j] <= lo_c[i]) and np.all(hi_c[i] <= hi_c[j]):
-                        equal_boxes = np.all(lo_c[i] <= lo_c[j]) and np.all(
-                            hi_c[j] <= hi_c[i]
-                        )
-                        if not equal_boxes or j < i:
-                            contained = True
-                            break
-                if not contained:
-                    eff += 1
-            counts[c] = eff
-        return th.from_numpy(counts)
+        return _effective_components(centers, offsets, eps=eps)

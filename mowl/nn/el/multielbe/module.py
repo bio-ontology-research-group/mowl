@@ -3,16 +3,15 @@ from __future__ import annotations
 
 from typing import Optional, Tuple
 
-import numpy as np
 import torch as th
 import torch.nn as nn
 
 from mowl.nn import ELModule
 from mowl.nn.el.boxsquaredel.module import BoxSquaredELModule
+from mowl.nn.el.multibox_utils import effective_components as _effective_components
 from mowl.nn.el.multiboxel.module import MultiBoxELModule
 import mowl.nn.el.multielbe.losses as L
 from mowl.nn.el.softagg import diversity_penalty
-
 
 
 class MultiELBEModule(ELModule):
@@ -28,12 +27,17 @@ class MultiELBEModule(ELModule):
     :class:`~mowl.nn.el.elbe.module.ELBEModule`.
 
     Guarantees:
-    - **Exact k = 1 reduction:** When ``n_components == 1``,
-      ``component_aggregation == "hard"``, and ``component_reg == 0.0`` with
-      weights copied from an :class:`~mowl.nn.el.elbe.module.ELBEModule`, every
-      GCI loss (positive and negative) agrees with
-      :class:`~mowl.nn.el.elbe.module.ELBEModule` to within floating-point
-      tolerance ``1e-6``.
+    - **Exact k = 1 reduction (identical to ELBEModule at equal margin):** When
+      ``n_components == 1``, ``component_aggregation == "hard"``,
+      ``component_reg == 0.0``, and ``diversity_reg == 0.0`` with weights copied
+      from an :class:`~mowl.nn.el.elbe.module.ELBEModule`, every GCI loss
+      (positive and negative) is identical to
+      :class:`~mowl.nn.el.elbe.module.ELBEModule` at equal ``margin`` to within
+      floating-point tolerance ``1e-6``. Both ``MultiELBEModule`` and
+      ``ELBEModule`` keep the default ``margin=0.1`` as specified in the brief
+      (note that the high-level :class:`~mowl.models.ELBE` model wrapper defaults
+      to ``margin=0``, so comparing ``MultiELBE`` and ``ELBE`` models requires
+      passing an equal ``margin`` explicitly).
     - **Effective component count:** :meth:`effective_components` counts, for
       each class on CPU via corner arithmetic, the components whose half-widths
       exceed ``eps`` in every coordinate and whose box is not contained in
@@ -57,7 +61,8 @@ class MultiELBEModule(ELModule):
     embed_dim : int, default 50
         Ambient Euclidean dimension :math:`d`.
     margin : float, default 0.1
-        ELBE inclusion margin (positive margin tightens).
+        ELBE inclusion margin (positive margin tightens; kept at ``0.1`` as
+        specified in the brief, matching :class:`~mowl.nn.el.elbe.module.ELBEModule`).
     n_components : int, default 1
         Number of box components :math:`k \\ge 1` per class.
     component_reg : float, default 0.0
@@ -119,7 +124,6 @@ class MultiELBEModule(ELModule):
         self.diversity_reg = float(diversity_reg)
 
         self.class_embed = self.init_class_embeddings(
-
             nb_ont_classes, n_components, embed_dim
         )
         self.class_offset = self.init_class_embeddings(
@@ -140,11 +144,38 @@ class MultiELBEModule(ELModule):
 
     @property
     def class_center(self) -> nn.Embedding:
-        """Alias for ``class_embed`` used by :class:`~mowl.geometric.init.ExactBoxInit`."""
+        """Alias for ``class_embed`` used by :class:`~mowl.geometric.init.ExactBoxInit`.
+
+        Guarantees:
+        - Returns the exact same ``nn.Embedding`` instance as ``self.class_embed``
+          without registering a duplicate parameter in ``state_dict()``.
+
+        Non-guarantees:
+        - Read-only property; reassigning ``class_center`` is not supported.
+        """
         return self.class_embed
 
     def class_boxes(self, idx: th.Tensor) -> Tuple[th.Tensor, th.Tensor]:
-        """Return ``(centers, offsets)`` of shape ``(B, k, d)`` for class indices ``idx``."""
+        """Return ``(centers, offsets)`` of shape ``(B, k, d)`` for class indices ``idx``.
+
+        Guarantees:
+        - ``offsets`` is non-negative (computed via ``torch.abs``).
+
+        Non-guarantees:
+        - Does not sort or deduplicate components.
+
+        Parameters
+        ----------
+        idx : torch.Tensor
+            1-D integer tensor of class indices of length ``B``.
+
+        Returns
+        -------
+        centers : torch.Tensor
+            Component centres of shape ``(B, n_components, embed_dim)``.
+        offsets : torch.Tensor
+            Non-negative component half-widths of shape ``(B, n_components, embed_dim)``.
+        """
         b_size = idx.shape[0]
         cen = self.class_embed(idx).view(b_size, self.n_components, self.embed_dim)
         off = th.abs(self.class_offset(idx)).view(
@@ -153,6 +184,27 @@ class MultiELBEModule(ELModule):
         return cen, off
 
     def gci0_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
+        """Compute GCI0 loss for :math:`C \\sqsubseteq D` via :func:`~mowl.nn.el.multielbe.losses.gci0_loss`.
+
+        Guarantees:
+        - Returns shape ``(B, 1)``, identical to ``ELBEModule.gci0_loss`` at ``k = 1``
+          and equal ``margin``.
+
+        Non-guarantees:
+        - ``neg=True`` is not distinct from ``neg=False``.
+
+        Parameters
+        ----------
+        data : torch.Tensor
+            Integer batch of shape ``(B, 2)`` with columns ``(C, D)``.
+        neg : bool, default False
+            Unused negative-sampling flag.
+
+        Returns
+        -------
+        torch.Tensor
+            Per-row loss tensor of shape ``(B, 1)``.
+        """
         return L.gci0_loss(
             data,
             self.class_embed,
@@ -165,6 +217,26 @@ class MultiELBEModule(ELModule):
         )
 
     def gci0_bot_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
+        """Compute GCI0-bot loss for :math:`C \\sqsubseteq \\bot` via :func:`~mowl.nn.el.multielbe.losses.gci0_bot_loss`.
+
+        Guarantees:
+        - Returns shape ``(B,)``, identical to ``ELBEModule.gci0_bot_loss`` at ``k = 1``.
+
+        Non-guarantees:
+        - ``neg=True`` is not distinct from ``neg=False``.
+
+        Parameters
+        ----------
+        data : torch.Tensor
+            Integer batch of shape ``(B, >=1)`` with column ``0`` holding ``C``.
+        neg : bool, default False
+            Unused negative-sampling flag.
+
+        Returns
+        -------
+        torch.Tensor
+            Per-row loss tensor of shape ``(B,)``.
+        """
         return L.gci0_bot_loss(
             data,
             self.class_offset,
@@ -175,6 +247,27 @@ class MultiELBEModule(ELModule):
         )
 
     def gci1_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
+        """Compute gated GCI1 loss for :math:`C \\sqcap D \\sqsubseteq E` via :func:`~mowl.nn.el.multielbe.losses.gci1_loss`.
+
+        Guarantees:
+        - Returns shape ``(B, 1)``, identical to ``ELBEModule.gci1_loss`` at ``k = 1``
+          and equal ``margin`` (both empty and non-empty intersections).
+
+        Non-guarantees:
+        - ``neg=True`` is not distinct from ``neg=False``.
+
+        Parameters
+        ----------
+        data : torch.Tensor
+            Integer batch of shape ``(B, 3)`` with columns ``(C, D, E)``.
+        neg : bool, default False
+            Unused negative-sampling flag.
+
+        Returns
+        -------
+        torch.Tensor
+            Per-row loss tensor of shape ``(B, 1)``.
+        """
         return L.gci1_loss(
             data,
             self.class_embed,
@@ -187,6 +280,29 @@ class MultiELBEModule(ELModule):
         )
 
     def gci1_bot_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
+        """Compute GCI1-bot loss for :math:`C \\sqcap D \\sqsubseteq \\bot` via :func:`~mowl.nn.el.multielbe.losses.gci1_bot_loss`.
+
+        Guarantees:
+        - Returns shape ``(B, 1)``, identical to ``ELBEModule.gci1_bot_loss`` at ``k = 1``
+          and equal ``margin``.
+        - Zero if and only if **all** :math:`k^2` component pairs have zero ELBE
+          disjointness score (mean of non-negatives).
+
+        Non-guarantees:
+        - ``neg=True`` is not distinct from ``neg=False``.
+
+        Parameters
+        ----------
+        data : torch.Tensor
+            Integer batch of shape ``(B, >=2)`` with columns ``(C, D, ...)``.
+        neg : bool, default False
+            Unused negative-sampling flag.
+
+        Returns
+        -------
+        torch.Tensor
+            Per-row loss tensor of shape ``(B, 1)``.
+        """
         return L.gci1_bot_loss(
             data,
             self.class_embed,
@@ -199,6 +315,25 @@ class MultiELBEModule(ELModule):
         )
 
     def gci2_score(self, data: th.Tensor) -> th.Tensor:
+        """Compute positive GCI2 score for :math:`C \\sqsubseteq \\exists r.D` via :func:`~mowl.nn.el.multielbe.losses.gci2_score`.
+
+        Guarantees:
+        - Returns shape ``(B, 1)``, identical to ``ELBEModule.gci2_score`` at ``k = 1``
+          and equal ``margin``.
+
+        Non-guarantees:
+        - Evaluates only the positive inclusion direction (``neg=False``).
+
+        Parameters
+        ----------
+        data : torch.Tensor
+            Integer batch of shape ``(B, 3)`` with columns ``(C, r, D)``.
+
+        Returns
+        -------
+        torch.Tensor
+            Per-row score tensor of shape ``(B, 1)``.
+        """
         return L.gci2_score(
             data,
             self.class_embed,
@@ -211,6 +346,32 @@ class MultiELBEModule(ELModule):
         )
 
     def gci2_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
+        """Compute GCI2 loss for :math:`C \\sqsubseteq \\exists r.D` (positive or negative) via :func:`~mowl.nn.el.multielbe.losses.gci2_loss`.
+
+        Guarantees:
+        - Returns shape ``(B, 1)``, identical to ``ELBEModule.gci2_loss`` at ``k = 1``
+          and equal ``margin`` for both ``neg=False`` and ``neg=True``.
+        - For :math:`k \\ge 2`, aggregates both ``neg=False`` and ``neg=True`` as
+          :math:`\\text{mean}_i \\text{agg}_j s(C_i, D_j, r)` (where :math:`\\text{agg}_j = \\min_j`
+          under ``"hard"`` and :math:`\\text{softmin}_{\\tau, j}` under ``"soft"``), so
+          ``neg=True`` measures the mean over :math:`C_i` of the ELBE separation
+          to the nearest :math:`D_j`.
+
+        Non-guarantees:
+        - Roles are single translation vectors rather than multi-box relations.
+
+        Parameters
+        ----------
+        data : torch.Tensor
+            Integer batch of shape ``(B, 3)`` with columns ``(C, r, D)``.
+        neg : bool, default False
+            If ``True``, evaluate the negative separation score.
+
+        Returns
+        -------
+        torch.Tensor
+            Per-row score tensor of shape ``(B, 1)``.
+        """
         return L.gci2_loss(
             data,
             self.class_embed,
@@ -224,6 +385,28 @@ class MultiELBEModule(ELModule):
         )
 
     def gci3_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
+        """Compute GCI3 overlap loss for :math:`\\exists r.C \\sqsubseteq D` via :func:`~mowl.nn.el.multielbe.losses.gci3_loss`.
+
+        Guarantees:
+        - Returns shape ``(B, 1)``, identical to ``ELBEModule.gci3_loss`` at ``k = 1``
+          and equal ``margin``.
+
+        Non-guarantees:
+        - Uses ELBE's overlap formula rather than full box inclusion.
+        - ``neg=True`` is not distinct from ``neg=False``.
+
+        Parameters
+        ----------
+        data : torch.Tensor
+            Integer batch of shape ``(B, 3)`` with columns ``(r, C, D)``.
+        neg : bool, default False
+            Unused negative-sampling flag.
+
+        Returns
+        -------
+        torch.Tensor
+            Per-row loss tensor of shape ``(B, 1)``.
+        """
         return L.gci3_loss(
             data,
             self.class_embed,
@@ -237,6 +420,27 @@ class MultiELBEModule(ELModule):
         )
 
     def gci3_bot_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
+        """Compute GCI3-bot loss for :math:`\\exists r.C \\sqsubseteq \\bot` via :func:`~mowl.nn.el.multielbe.losses.gci3_bot_loss`.
+
+        Guarantees:
+        - Indexes ``data[:, 1]`` for :math:`C` (rows are ``(r, C, bot)``) and
+          returns shape ``(B,)``, identical to ``ELBEModule.gci3_bot_loss`` at ``k = 1``.
+
+        Non-guarantees:
+        - ``neg=True`` is not distinct from ``neg=False``.
+
+        Parameters
+        ----------
+        data : torch.Tensor
+            Integer batch of shape ``(B, >=2)`` with columns ``(r, C, ...)``.
+        neg : bool, default False
+            Unused negative-sampling flag.
+
+        Returns
+        -------
+        torch.Tensor
+            Per-row loss tensor of shape ``(B,)``.
+        """
         return L.gci3_bot_loss(
             data,
             self.class_offset,
@@ -247,6 +451,32 @@ class MultiELBEModule(ELModule):
         )
 
     def class_assertion_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
+        """Compute ABox class assertion loss for :math:`C(a)` via :func:`~mowl.nn.el.multielbe.losses.class_assertion_loss`.
+
+        Guarantees:
+        - Returns shape ``(B, 1)``, identical to ``ELBEModule.class_assertion_loss``
+          at ``k = 1`` and equal ``margin``.
+
+        Non-guarantees:
+        - ``neg=True`` is not distinct from ``neg=False``.
+
+        Parameters
+        ----------
+        data : torch.Tensor
+            Integer batch of shape ``(B, 2)`` with columns ``(a, C)``.
+        neg : bool, default False
+            Unused negative-sampling flag.
+
+        Returns
+        -------
+        torch.Tensor
+            Per-row loss tensor of shape ``(B, 1)``.
+
+        Raises
+        ------
+        ValueError
+            If ``nb_inds`` was ``None`` or ``0`` at module construction.
+        """
         if self.ind_embed is None or self.ind_offset is None or self.nb_inds == 0:
             raise ValueError(
                 "The number of individuals must be specified to use this loss function."
@@ -267,6 +497,32 @@ class MultiELBEModule(ELModule):
     def object_property_assertion_loss(
         self, data: th.Tensor, neg: bool = False
     ) -> th.Tensor:
+        """Compute ABox object property assertion loss for :math:`r(a, b)` via :func:`~mowl.nn.el.multielbe.losses.object_property_assertion_loss`.
+
+        Guarantees:
+        - Returns shape ``(B, 1)``, identical to ``ELBEModule.object_property_assertion_loss``
+          at equal ``margin`` for both ``neg=False`` and ``neg=True``.
+
+        Non-guarantees:
+        - Individuals and roles are single-component embeddings.
+
+        Parameters
+        ----------
+        data : torch.Tensor
+            Integer batch of shape ``(B, 3)`` with columns ``(a, r, b)``.
+        neg : bool, default False
+            If ``True``, evaluate the negative separation score.
+
+        Returns
+        -------
+        torch.Tensor
+            Per-row score tensor of shape ``(B, 1)``.
+
+        Raises
+        ------
+        ValueError
+            If ``nb_inds`` was ``None`` or ``0`` at module construction.
+        """
         if self.ind_embed is None or self.ind_offset is None or self.nb_inds == 0:
             raise ValueError(
                 "The number of individuals must be specified to use this loss function."
@@ -283,7 +539,21 @@ class MultiELBEModule(ELModule):
         )
 
     def regularization_loss(self) -> th.Tensor:
-        """Compute optional component and diversity penalties (zero when weights are ``0.0`` or ``k == 1``)."""
+        """Compute optional component centre and volume-overlap diversity penalties.
+
+        Guarantees:
+        - Returns a scalar ``0.0`` tensor on ``class_embed.weight.device`` when
+          ``n_components == 1`` or ``component_reg == 0.0 and diversity_reg == 0.0``.
+
+        Non-guarantees:
+        - When both ``component_reg == 0.0`` and ``diversity_reg == 0.0``, unused
+          components are permitted to collapse or nest inside other components.
+
+        Returns
+        -------
+        torch.Tensor
+            Scalar regularisation loss tensor.
+        """
         loss = th.zeros(
             (),
             device=self.class_embed.weight.device,
@@ -315,49 +585,33 @@ class MultiELBEModule(ELModule):
         return loss
 
     def effective_components(self, eps: float = 1e-3) -> th.Tensor:
-        """Count non-degenerate, non-nested components per class on CPU using corner arithmetic."""
-        k = self.n_components
-        d = self.embed_dim
-        n = self.nb_ont_classes
-        cen_np = (
-            self.class_embed.weight.detach()
-            .cpu()
-            .view(n, k, d)
-            .numpy()
-        )
-        off_np = (
-            th.abs(self.class_offset.weight.detach())
-            .cpu()
-            .view(n, k, d)
-            .numpy()
-        )
-        lo_np = cen_np - off_np
-        hi_np = cen_np + off_np
-        valid_np = np.all(off_np > eps, axis=-1)
+        """Count non-degenerate, non-nested components per class on CPU using corner arithmetic.
 
-        counts = np.zeros(n, dtype=np.int64)
-        for c in range(n):
-            v = valid_np[c]
-            if not np.any(v):
-                continue
-            lo_c = lo_np[c]
-            hi_c = hi_np[c]
-            eff = 0
-            for i in range(k):
-                if not v[i]:
-                    continue
-                contained = False
-                for j in range(k):
-                    if i == j or not v[j]:
-                        continue
-                    if np.all(lo_c[j] <= lo_c[i]) and np.all(hi_c[i] <= hi_c[j]):
-                        equal_boxes = np.all(lo_c[i] <= lo_c[j]) and np.all(
-                            hi_c[j] <= hi_c[i]
-                        )
-                        if not equal_boxes or j < i:
-                            contained = True
-                            break
-                if not contained:
-                    eff += 1
-            counts[c] = eff
-        return th.from_numpy(counts)
+        Delegates to :func:`mowl.nn.el.multibox_utils.effective_components`.
+
+        Guarantees:
+        - Returns a CPU ``torch.Tensor`` of shape ``(nb_ont_classes,)`` with
+          integer counts in ``0 .. n_components``.
+
+        Non-guarantees:
+        - Does not check whether a component is covered by the *union* of two or
+          more other components when it is not contained in any single one.
+
+        Parameters
+        ----------
+        eps : float, default 1e-3
+            Minimum half-width threshold for a component to be considered
+            non-degenerate.
+
+        Returns
+        -------
+        torch.Tensor
+            1-D integer tensor of length ``nb_ont_classes`` on CPU.
+        """
+        centers = self.class_embed.weight.view(
+            self.nb_ont_classes, self.n_components, self.embed_dim
+        )
+        offsets = self.class_offset.weight.view(
+            self.nb_ont_classes, self.n_components, self.embed_dim
+        )
+        return _effective_components(centers, offsets, eps=eps)

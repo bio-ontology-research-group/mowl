@@ -66,8 +66,9 @@ def _random_batch(
         return torch.cat([r, c0, c1], dim=1)
     if gci == "gci3_bot":
         r = torch.randint(0, n_rels, (batch_size, 1), generator=gen)
-        c0 = torch.randint(0, n_classes, (batch_size, max(1, cols)), generator=gen)
-        return torch.cat([r, c0], dim=1)
+        c0 = torch.randint(0, n_classes, (batch_size, 1), generator=gen)
+        bot = torch.zeros((batch_size, 1), dtype=torch.long)
+        return torch.cat([r, c0, bot], dim=1)
     if gci == "class_assertion":
         ind = torch.randint(0, n_inds, (batch_size, 1), generator=gen)
         cls = torch.randint(0, n_classes, (batch_size, 1), generator=gen)
@@ -89,7 +90,7 @@ def _random_batch(
         ("gci1_bot", 2),
         ("gci2", 3),
         ("gci3", 3),
-        ("gci3_bot", 1),
+        ("gci3_bot", 3),
         ("class_assertion", 2),
         ("object_property_assertion", 3),
     ],
@@ -175,7 +176,7 @@ def test_shapes_k3() -> None:
         ("gci1_bot", 2),
         ("gci2", 3),
         ("gci3", 3),
-        ("gci3_bot", 1),
+        ("gci3_bot", 3),
         ("class_assertion", 2),
         ("object_property_assertion", 3),
     ]:
@@ -214,6 +215,139 @@ def test_gci0_zero_iff_each_component_inside_some_component() -> None:
     loss_bad = me(torch.tensor([[0, 2]]), "gci0")
     assert float(loss_good.item()) <= 1e-12
     assert float(loss_bad.item()) > 1.0
+
+
+def test_gci1_k2_hard_gating_at_margin_zero() -> None:
+    """Hand-built k=2 test for the gci1 hard-aggregation gating path at margin 0.
+
+    Covers:
+    (a) loss == 0 when every non-empty component pair's intersection lies inside
+        some E_m (even when disjoint pairs have phantom boxes far from E);
+    (b) loss > 0 when one non-empty pair's intersection lies outside every E_m;
+    (c) when all k^2 = 4 pairs are disjoint and the least-empty pair's phantom
+        box is contained in some E_m, loss equals the least-empty pair's
+        emptiness penalty within 1e-6.
+    """
+    me = MultiELBEModule(
+        nb_ont_classes=6,
+        nb_rels=1,
+        embed_dim=2,
+        n_components=2,
+        margin=0.0,
+        component_aggregation="hard",
+    )
+    with torch.no_grad():
+        # Row 0 (C): C_0 = [0, 2]^2 (c=(1,1), o=(1,1)), C_1 = [10, 12]^2 (c=(11,11), o=(1,1))
+        me.class_embed.weight[0] = torch.tensor([1.0, 1.0, 11.0, 11.0])
+        me.class_offset.weight[0] = torch.tensor([1.0, 1.0, 1.0, 1.0])
+
+        # Row 1 (D_intersect):
+        #   D_0 = [1, 3]^2 (c=(2,2), o=(1,1)) -> intersects C_0 on [1, 2]^2 (c=(1.5,1.5), o=(0.5,0.5)), disjoint from C_1
+        #   D_1 = [11, 13]^2 (c=(12,12), o=(1,1)) -> intersects C_1 on [11, 12]^2 (c=(11.5,11.5), o=(0.5,0.5)), disjoint from C_0
+        me.class_embed.weight[1] = torch.tensor([2.0, 2.0, 12.0, 12.0])
+        me.class_offset.weight[1] = torch.tensor([1.0, 1.0, 1.0, 1.0])
+
+        # Row 2 (E_good):
+        #   E_0 = [0, 3]^2 (c=(1.5,1.5), o=(1.5,1.5)) -> contains C_0 cap D_0 = [1, 2]^2
+        #   E_1 = [10, 13]^2 (c=(11.5,11.5), o=(1.5,1.5)) -> contains C_1 cap D_1 = [11, 12]^2
+        me.class_embed.weight[2] = torch.tensor([1.5, 1.5, 11.5, 11.5])
+        me.class_offset.weight[2] = torch.tensor([1.5, 1.5, 1.5, 1.5])
+
+        # Row 3 (E_bad):
+        #   E_0 = [0, 3]^2 (contains C_0 cap D_0), E_1 = [30, 32]^2 (misses C_1 cap D_1 = [11, 12]^2)
+        me.class_embed.weight[3] = torch.tensor([1.5, 1.5, 31.0, 31.0])
+        me.class_offset.weight[3] = torch.tensor([1.5, 1.5, 1.0, 1.0])
+
+        # Row 4 (D_all_disjoint): all 4 pairs with C are strictly disjoint;
+        #   D_0 = [50, 52]^2 (c=(51,51), o=(1,1)) -> far from C_0 and C_1
+        #   D_1 = [3, 5]^2 (c=(4,4), o=(1,1)) -> off-diagonal pair (0, 1) with C_0 = [0, 2]^2
+        #     has lo = (3, 3), up = (2, 2), lo - up = (1, 1), empt = sqrt(2),
+        #     phantom box center = (2.5, 2.5), offset = (0.5, 0.5).
+        me.class_embed.weight[4] = torch.tensor([51.0, 51.0, 4.0, 4.0])
+        me.class_offset.weight[4] = torch.tensor([1.0, 1.0, 1.0, 1.0])
+
+        # Row 5 (E_phantom):
+        #   E_0 = [80, 82]^2 (far from everything),
+        #   E_1 = [2, 3]^2 (c=(2.5,2.5), o=(0.5,0.5)) -> contains the phantom box of pair (0, 1) exactly.
+        me.class_embed.weight[5] = torch.tensor([81.0, 81.0, 2.5, 2.5])
+        me.class_offset.weight[5] = torch.tensor([1.0, 1.0, 0.5, 0.5])
+
+    # (a) Every non-empty pair is inside some E_m; disjoint pairs (0, 1) and (1, 0) are gated out -> loss == 0
+    loss_a = me(torch.tensor([[0, 1, 2]]), "gci1")
+    assert torch.allclose(loss_a, torch.zeros_like(loss_a), atol=1e-6)
+
+    # (b) Non-empty pair (1, 1) lies outside every E_m -> loss > 0
+    loss_b = me(torch.tensor([[0, 1, 3]]), "gci1")
+    assert float(loss_b.item()) > 1.0
+
+    # (c) All 4 pairs disjoint: loss equals the least-empty pair (0, 1)'s emptiness term sqrt(2)
+    loss_c = me(torch.tensor([[0, 4, 5]]), "gci1")
+    expected_empt = torch.tensor([[2.0**0.5]], dtype=loss_c.dtype)
+    assert torch.allclose(loss_c, expected_empt, atol=1e-6)
+
+
+def test_gci2_and_gci3_k2_with_nonzero_relation() -> None:
+    """Behavioural k=2 tests for gci2 and gci3 with a non-zero relation translation vector."""
+    me = MultiELBEModule(
+        nb_ont_classes=6,
+        nb_rels=1,
+        embed_dim=2,
+        n_components=2,
+        margin=0.0,
+        component_aggregation="hard",
+    )
+    with torch.no_grad():
+        # Non-zero role translation r_0 = (3, -2)
+        me.rel_embed.weight[0] = torch.tensor([3.0, -2.0])
+
+        # --- gci2: C \sqsubseteq \exists r.D (each C_i + r inside some D_j) ---
+        # Row 0 (C_gci2):
+        #   C_0: c=(1, 4), o=(1, 1) -> C_0 + r_0 has c=(4, 2), o=(1, 1)
+        #   C_1: c=(10, 10), o=(1, 1) -> C_1 + r_0 has c=(13, 8), o=(1, 1)
+        me.class_embed.weight[0] = torch.tensor([1.0, 4.0, 10.0, 10.0])
+        me.class_offset.weight[0] = torch.tensor([1.0, 1.0, 1.0, 1.0])
+
+        # Row 1 (D_gci2_good): D_0 contains C_1 + r_0, D_1 contains C_0 + r_0 (swapped component indices)
+        me.class_embed.weight[1] = torch.tensor([13.0, 8.0, 4.0, 2.0])
+        me.class_offset.weight[1] = torch.tensor([1.5, 1.5, 1.5, 1.5])
+
+        # Row 2 (D_gci2_bad): D_0 contains C_0 + r_0, but D_1 sits at untranslated C_1 (10, 10)
+        me.class_embed.weight[2] = torch.tensor([4.0, 2.0, 10.0, 10.0])
+        me.class_offset.weight[2] = torch.tensor([1.5, 1.5, 1.0, 1.0])
+
+        # --- gci3: \exists r.C \sqsubseteq D (each C_i - r overlaps some D_j) ---
+        # Row 3 (C_gci3):
+        #   C_0: c=(5, 0), o=(1, 1) -> C_0 - r_0 has c=(2, 2), o=(1, 1) (box [1, 3]^2)
+        #   C_1: c=(15, 10), o=(1, 1) -> C_1 - r_0 has c=(12, 12), o=(1, 1) (box [11, 13]^2)
+        me.class_embed.weight[3] = torch.tensor([5.0, 0.0, 15.0, 10.0])
+        me.class_offset.weight[3] = torch.tensor([1.0, 1.0, 1.0, 1.0])
+
+        # Row 4 (D_gci3_good):
+        #   D_0 = [12.5, 14.5]^2 (c=(13.5, 13.5), o=(1, 1)) -> overlaps C_1 - r_0 = [11, 13]^2
+        #   D_1 = [2.5, 4.5]^2 (c=(3.5, 3.5), o=(1, 1)) -> overlaps C_0 - r_0 = [1, 3]^2
+        me.class_embed.weight[4] = torch.tensor([13.5, 13.5, 3.5, 3.5])
+        me.class_offset.weight[4] = torch.tensor([1.0, 1.0, 1.0, 1.0])
+
+        # Row 5 (D_gci3_bad):
+        #   D_0 overlaps C_0 - r_0, but D_1 sits at untranslated C_1 (15, 10) with o=(0.5, 0.5) (disjoint from C_1 - r_0)
+        me.class_embed.weight[5] = torch.tensor([3.5, 3.5, 15.0, 10.0])
+        me.class_offset.weight[5] = torch.tensor([1.0, 1.0, 0.5, 0.5])
+
+    gci2_zero = me(torch.tensor([[0, 0, 1]]), "gci2")
+    gci2_pos = me(torch.tensor([[0, 0, 2]]), "gci2")
+    assert torch.allclose(gci2_zero, torch.zeros_like(gci2_zero), atol=1e-6)
+    assert float(gci2_pos.item()) > 0.0
+    assert torch.allclose(
+        gci2_pos, torch.tensor([[(13.0**0.5) / 2.0]], dtype=gci2_pos.dtype), atol=1e-6
+    )
+
+    gci3_zero = me(torch.tensor([[0, 3, 4]]), "gci3")
+    gci3_pos = me(torch.tensor([[0, 3, 5]]), "gci3")
+    assert torch.allclose(gci3_zero, torch.zeros_like(gci3_zero), atol=1e-6)
+    assert float(gci3_pos.item()) > 0.0
+    assert torch.allclose(
+        gci3_pos, torch.tensor([[(2.5**0.5) / 2.0]], dtype=gci3_pos.dtype), atol=1e-6
+    )
 
 
 def test_gci3_keeps_elbe_overlap_semantics() -> None:

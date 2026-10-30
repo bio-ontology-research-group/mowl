@@ -6,22 +6,32 @@ Roles :math:`r` are represented by single translation vectors :math:`r \\in \\ma
 as in ELBE, and individuals :math:`a` are represented by single boxes as in ELBE.
 
 Guarantees:
-- **Exact k = 1 identity with ELBE:** When ``n_components == 1``, every loss
-  function in this module (``gci0_loss``, ``gci0_bot_loss``, ``gci1_loss``,
-  ``gci1_bot_loss``, ``gci2_loss`` positive and negative, ``gci3_loss``,
-  ``gci3_bot_loss``, ``class_assertion_loss``, ``object_property_assertion_loss``)
-  reduces algebraically and numerically (to floating-point tolerance ``1e-6``)
-  to the corresponding function in :mod:`mowl.nn.el.elbe.losses`, including on
-  ``gci1`` batches whose pairwise intersections are empty and preserving ELBE's
-  margin sign convention (positive ``margin`` tightens).
-- **Zero-loss characterisation at margin 0:** At ``margin = 0``:
-  - ``gci0_loss`` is zero if and only if each component :math:`C_i` is contained
-    in at least one component :math:`D_j`.
-  - ``gci1_loss`` is zero when at least one pair :math:`(C_i, D_j)` has a
-    non-empty intersection (:math:`\\text{lo}_{ij} \\le \\text{up}_{ij}`) and every
-    pair with non-empty intersection is contained in some component :math:`E_m`;
-    disjoint component pairs :math:`(C_i, D_j)` are gated out and impose no
-    inclusion penalty.
+- **Exact k = 1 identity with ELBE (identical to ELBEModule at equal margin):**
+  When ``n_components == 1``, every loss function in this module (``gci0_loss``,
+  ``gci0_bot_loss``, ``gci1_loss``, ``gci1_bot_loss``, ``gci2_loss`` positive and
+  negative, ``gci3_loss``, ``gci3_bot_loss``, ``class_assertion_loss``,
+  ``object_property_assertion_loss``) reduces algebraically and numerically (to
+  floating-point tolerance ``1e-6``) to the corresponding function in
+  :mod:`mowl.nn.el.elbe.losses` at equal ``margin``, including on ``gci1`` batches
+  whose pairwise intersections are empty and preserving ELBE's margin sign
+  convention (positive ``margin`` tightens).
+- **Zero-loss characterisation:**
+  - At ``margin = 0`` under ``aggregation="hard"``, ``gci0_loss`` is zero if and
+    only if each component :math:`C_i` is contained in at least one component
+    :math:`D_j`.
+  - At ``margin = 0`` under ``aggregation="hard"``, ``gci1_loss`` is zero when at
+    least one pair :math:`(C_i, D_j)` has a non-empty intersection
+    (:math:`\\text{lo}_{ij} \\le \\text{up}_{ij}`) and every pair with non-empty
+    intersection is contained in some component :math:`E_m`; disjoint component
+    pairs :math:`(C_i, D_j)` are gated out and impose no inclusion penalty. When
+    all :math:`k^2` pairs are disjoint, only the least-empty pair
+    :math:`(i^*, j^*) = \\arg\\min_{i,j} \\text{empt}(C_i, D_j)` is gated in and the
+    loss equals :math:`\\min_m \\text{incl}(I(C_{i^*}, D_{j^*}), E_m) + \\text{empt}(C_{i^*}, D_{j^*})`.
+  - ``gci1_bot_loss`` is the mean of non-negative ELBE pairwise disjointness
+    scores over all :math:`k^2` pairs :math:`(C_i, D_j)`, and is zero if and only
+    if **all** :math:`k^2` pairs have zero ELBE disjointness score (i.e.
+    :math:`|c_{C,i} - c_{D,j}| \\ge o_{C,i} + o_{D,j} + \\text{margin}` in every
+    coordinate for every pair :math:`(i, j)`).
   - ``gci3_loss`` preserves ELBE's overlap formula
     :math:`\\|\\text{relu}(|c - r - d| - o_c - o_d + \\text{margin})\\|_2` rather
     than full box inclusion.
@@ -88,6 +98,15 @@ def multi_pair_score(
     shape ``(B, d)``, such as role translations ``rel``) to ``(B * ka * kb, d)``,
     calls ``fn``, and reshapes the output to ``(B, ka, kb)``.
 
+    Guarantees:
+    - Applies ``torch.abs`` to ``off_a`` and ``off_b`` before invoking ``fn``.
+    - For ``ka = kb = 1``, ``multi_pair_score(fn, cen_a, off_a, cen_b, off_b, ...)[:, 0, 0]``
+      equals ``fn(cen_a[:, 0], |off_a[:, 0]|, cen_b[:, 0], |off_b[:, 0]|, ...).reshape(-1)``.
+
+    Non-guarantees:
+    - Extra tensor arguments whose shape is not ``(B, d)`` are passed through
+      without component-grid broadcasting.
+
     Parameters
     ----------
     fn : callable
@@ -148,6 +167,10 @@ def multi_inclusion(
     - At ``margin = 0``, entry ``(b, i, j)`` is ``0`` if and only if box ``A_{b,i}``
       is contained in box ``B_{b,j}``.
 
+    Non-guarantees:
+    - When ``margin < 0``, the score can be zero even when ``A_{b,i}`` slightly
+      exceeds ``B_{b,j}``.
+
     Parameters
     ----------
     cen_a : torch.Tensor
@@ -184,10 +207,38 @@ def gci0_loss(
     Guarantees:
     - Returns shape ``(B, 1)``, matching :func:`mowl.nn.el.elbe.losses.gci0_loss` at ``k = 1``
       under both ``"hard"`` and ``"soft"``.
+    - At ``margin = 0`` and ``aggregation="hard"``, equals ``0`` if and only if
+      every component :math:`C_i` is contained in at least one component :math:`D_j`.
     - Converges from ``aggregation="soft"`` to ``aggregation="hard"`` as ``tau -> 0+``.
 
     Non-guarantees:
     - ``neg=True`` is not distinct from ``neg=False``.
+    - Different source components :math:`C_i` may map into the same target
+      component :math:`D_j`.
+
+    Parameters
+    ----------
+    data : torch.Tensor
+        Integer tensor of shape ``(B, 2)`` with columns ``(C, D)``.
+    class_embed : torch.nn.Embedding
+        Class centre embedding table of width ``k * d``.
+    class_offset : torch.nn.Embedding
+        Class offset embedding table of width ``k * d``.
+    margin : float
+        ELBE inclusion margin (positive margin tightens).
+    n_components : Optional[int], default None
+        Number of components :math:`k` per class.
+    neg : bool, default False
+        Unused flag kept for GCI dispatch signature uniformity.
+    aggregation : str, default "hard"
+        Target-component aggregation mode: ``"hard"`` or ``"soft"``.
+    tau : float, default 1.0
+        Soft-minimum temperature used when ``aggregation="soft"``.
+
+    Returns
+    -------
+    torch.Tensor
+        Per-row loss tensor of shape ``(B, 1)``.
     """
     _validate_aggregation(aggregation, tau)
     cen_c, off_c = _unpack_boxes(data[:, 0], class_embed, class_offset, n_components)
@@ -208,7 +259,33 @@ def gci0_bot_loss(
 ) -> th.Tensor:
     """ELBE GCI0-bot loss :math:`\\text{mean}_i \\|o_{C_i}\\|_2` for :math:`C \\sqsubseteq \\bot`.
 
-    Returns shape ``(B,)``, matching :func:`mowl.nn.el.elbe.losses.gci0_bot_loss` at ``k = 1``.
+    Guarantees:
+    - Returns shape ``(B,)``, matching :func:`mowl.nn.el.elbe.losses.gci0_bot_loss` at ``k = 1``.
+    - Equals ``0`` if and only if all :math:`k` component offsets of :math:`C` are zero.
+
+    Non-guarantees:
+    - Constrains half-widths to zero but does not constrain component centres.
+    - ``neg=True`` is not distinct from ``neg=False``.
+
+    Parameters
+    ----------
+    data : torch.Tensor
+        Integer tensor of shape ``(B, >=1)`` whose column ``0`` holds class indices ``C``.
+    class_offset : torch.nn.Embedding
+        Class offset embedding table of width ``k * d``.
+    n_components : Optional[int], default None
+        Number of components :math:`k` per class.
+    neg : bool, default False
+        Unused flag kept for GCI dispatch signature uniformity.
+    aggregation : str, default "hard"
+        Aggregation mode validated for API consistency (``"hard"`` or ``"soft"``).
+    tau : float, default 1.0
+        Temperature validated when ``aggregation="soft"``.
+
+    Returns
+    -------
+    torch.Tensor
+        Per-row loss tensor of shape ``(B,)``.
     """
     _validate_aggregation(aggregation, tau)
     b_size = data.shape[0]
@@ -246,9 +323,45 @@ def gci1_loss(
     Guarantees:
     - Returns shape ``(B, 1)``, matching :func:`mowl.nn.el.elbe.losses.gci1_loss` at ``k = 1``
       on both empty and non-empty intersections under both ``"hard"`` and ``"soft"``.
+    - At ``margin = 0`` under ``aggregation="hard"``:
+      - Equals ``0`` when at least one pair :math:`(C_i, D_j)` has a non-empty
+        intersection and every non-empty pair's intersection is contained in
+        some component :math:`E_m` (disjoint pairs receive :math:`g_{ij} = 0`).
+      - Is strictly positive when any non-empty pair's intersection lies outside
+        every :math:`E_m`.
+      - When all :math:`k^2` pairs are disjoint, only the least-empty pair
+        :math:`(i^*, j^*)` is gated in and the loss equals
+        :math:`\\min_m \\text{incl}(I(C_{i^*}, D_{j^*}), E_m) + \\text{empt}(C_{i^*}, D_{j^*})`.
 
     Non-guarantees:
     - ``neg=True`` is not distinct from ``neg=False``.
+    - If a non-empty intersection :math:`C_i \\cap D_j` is covered only by a
+      union of multiple :math:`E_m` rather than a single :math:`E_m`, the loss
+      remains positive.
+
+    Parameters
+    ----------
+    data : torch.Tensor
+        Integer tensor of shape ``(B, 3)`` with columns ``(C, D, E)``.
+    class_embed : torch.nn.Embedding
+        Class centre embedding table of width ``k * d``.
+    class_offset : torch.nn.Embedding
+        Class offset embedding table of width ``k * d``.
+    margin : float
+        ELBE inclusion margin (positive margin tightens).
+    n_components : Optional[int], default None
+        Number of components :math:`k` per class.
+    neg : bool, default False
+        Unused flag kept for GCI dispatch signature uniformity.
+    aggregation : str, default "hard"
+        Component aggregation mode: ``"hard"`` or ``"soft"``.
+    tau : float, default 1.0
+        Soft-assignment temperature used when ``aggregation="soft"``.
+
+    Returns
+    -------
+    torch.Tensor
+        Per-row loss tensor of shape ``(B, 1)``.
     """
     _validate_aggregation(aggregation, tau)
     b_size = data.shape[0]
@@ -329,7 +442,46 @@ def gci1_bot_loss(
 ) -> th.Tensor:
     """ELBE GCI1-bot loss :math:`\\text{mean}_{i,j} \\|\\text{relu}(-|c_{C,i} - c_{D,j}| + o_{C,i} + o_{D,j} + \\text{margin})\\|_2` for :math:`C \\sqcap D \\sqsubseteq \\bot`.
 
-    Returns shape ``(B, 1)``, matching :func:`mowl.nn.el.elbe.losses.gci1_bot_loss` at ``k = 1``.
+    Computes the arithmetic mean of non-negative ELBE pairwise disjointness
+    scores over all :math:`k^2` component pairs :math:`(C_i, D_j)`.
+
+    Guarantees:
+    - Returns shape ``(B, 1)``, matching :func:`mowl.nn.el.elbe.losses.gci1_bot_loss` at ``k = 1``.
+    - Because the loss is the mean of non-negative pairwise terms, it equals
+      ``0`` if and only if **all** :math:`k^2` component pairs :math:`(C_i, D_j)`
+      have zero ELBE disjointness score (i.e.
+      :math:`|c_{C,i} - c_{D,j}| \\ge o_{C,i} + o_{D,j} + \\text{margin}` in every
+      coordinate for every :math:`(i, j)`).
+
+    Non-guarantees:
+    - Disjoint component pairs separated along one coordinate whose projections
+      still satisfy :math:`|c_{C,i,m} - c_{D,j,m}| < o_{C,i,m} + o_{D,j,m} + \\text{margin}`
+      along another coordinate :math:`m` still incur a positive score.
+    - ``neg=True`` is not distinct from ``neg=False``.
+
+    Parameters
+    ----------
+    data : torch.Tensor
+        Integer tensor of shape ``(B, >=2)`` with columns ``(C, D, ...)``.
+    class_embed : torch.nn.Embedding
+        Class centre embedding table of width ``k * d``.
+    class_offset : torch.nn.Embedding
+        Class offset embedding table of width ``k * d``.
+    margin : float
+        ELBE disjointness margin (positive margin requires larger separation).
+    n_components : Optional[int], default None
+        Number of components :math:`k` per class.
+    neg : bool, default False
+        Unused flag kept for GCI dispatch signature uniformity.
+    aggregation : str, default "hard"
+        Aggregation mode validated for API consistency (``"hard"`` or ``"soft"``).
+    tau : float, default 1.0
+        Temperature validated when ``aggregation="soft"``.
+
+    Returns
+    -------
+    torch.Tensor
+        Per-row loss tensor of shape ``(B, 1)``.
     """
     _validate_aggregation(aggregation, tau)
     cen_c, off_c = _unpack_boxes(data[:, 0], class_embed, class_offset, n_components)
@@ -348,7 +500,44 @@ def gci2_score(
     aggregation: str = "hard",
     tau: float = 1.0,
 ) -> th.Tensor:
-    """Positive ELBE GCI2 score for :math:`C \\sqsubseteq \\exists r.D`."""
+    """Positive ELBE GCI2 score :math:`\\text{mean}_i \\text{agg}_j \\text{gci2\\_score}(C_i, D_j, r)` for :math:`C \\sqsubseteq \\exists r.D`.
+
+    Delegates to :func:`gci2_loss` with ``neg=False``.
+
+    Guarantees:
+    - Returns shape ``(B, 1)``, matching :func:`mowl.nn.el.elbe.losses.gci2_score` at ``k = 1``.
+    - At ``margin = 0`` and ``aggregation="hard"``, equals ``0`` if and only if
+      every translated component :math:`C_i + r` is contained in at least one
+      target component :math:`D_j`.
+
+    Non-guarantees:
+    - Roles are single translation vectors :math:`r \\in \\mathbb{R}^d` shared
+      across all components.
+
+    Parameters
+    ----------
+    data : torch.Tensor
+        Integer tensor of shape ``(B, 3)`` with columns ``(C, r, D)``.
+    class_embed : torch.nn.Embedding
+        Class centre embedding table of width ``k * d``.
+    class_offset : torch.nn.Embedding
+        Class offset embedding table of width ``k * d``.
+    rel_embed : torch.nn.Embedding
+        Relation translation embedding table of width ``d``.
+    margin : float
+        ELBE inclusion margin (positive margin tightens).
+    n_components : Optional[int], default None
+        Number of components :math:`k` per class.
+    aggregation : str, default "hard"
+        Target-component aggregation mode: ``"hard"`` or ``"soft"``.
+    tau : float, default 1.0
+        Soft-minimum temperature used when ``aggregation="soft"``.
+
+    Returns
+    -------
+    torch.Tensor
+        Per-row score tensor of shape ``(B, 1)``.
+    """
     return gci2_loss(
         data,
         class_embed,
@@ -375,9 +564,59 @@ def gci2_loss(
 ) -> th.Tensor:
     """ELBE GCI2 loss :math:`\\text{mean}_i \\text{agg}_j s(C_i, D_j, r)` for :math:`C \\sqsubseteq \\exists r.D` (positive and negative).
 
-    Uses :func:`mowl.nn.el.elbe.losses.gci2_score` when ``neg=False`` and
-    :func:`mowl.nn.el.elbe.losses.gci2_score_neg` when ``neg=True``.
-    Returns shape ``(B, 1)``, matching :func:`mowl.nn.el.elbe.losses.gci2_loss` at ``k = 1``.
+    Aggregation for :math:`k \\ge 2`:
+    - When ``neg=False``, :math:`s` is :func:`mowl.nn.el.elbe.losses.gci2_score`
+      (:math:`\\|\\text{relu}(|c_{C,i} + r - c_{D,j}| + o_{C,i} - o_{D,j} + \\text{margin})\\|_2`),
+      aggregated as :math:`\\text{mean}_i \\min_j s(C_i, D_j, r)` under ``"hard"``
+      (or :math:`\\text{mean}_i \\text{softmin}_{\\tau, j} s(C_i, D_j, r)` under
+      ``"soft"``), so every translated component :math:`C_i + r` must be
+      contained in some :math:`D_j`.
+    - When ``neg=True``, :math:`s` is :func:`mowl.nn.el.elbe.losses.gci2_score_neg`
+      (:math:`\\|\\text{relu}(|c_{C,i} + r - c_{D,j}| - o_{C,i} - o_{D,j} - \\text{margin})\\|_2`),
+      also aggregated as :math:`\\text{mean}_i \\min_j s(C_i, D_j, r)` under
+      ``"hard"`` (or :math:`\\text{mean}_i \\text{softmin}_{\\tau, j} s(C_i, D_j, r)`
+      under ``"soft"``). For each source component :math:`C_i`, this takes the
+      ELBE separation to its *nearest* target component :math:`D_j` and averages
+      over :math:`i`: under ELBE's MSE negative loss (target ``1``), every
+      translated component :math:`C_i + r` must be separated from its nearest
+      :math:`D_j`.
+
+    Guarantees:
+    - Returns shape ``(B, 1)``, matching :func:`mowl.nn.el.elbe.losses.gci2_loss`
+      at ``k = 1`` for both ``neg=False`` and ``neg=True``.
+    - Converges from ``aggregation="soft"`` to ``aggregation="hard"`` as ``tau -> 0+``.
+
+    Non-guarantees:
+    - Under ``neg=True``, returns the raw negative score :math:`\\text{mean}_i \\text{agg}_j \\text{gci2\\_score\\_neg}(C_i, D_j, r)`
+      (as ELBE does); pushing this score toward ``1`` is performed by the
+      model's MSE criterion rather than inside ``gci2_loss``.
+
+    Parameters
+    ----------
+    data : torch.Tensor
+        Integer tensor of shape ``(B, 3)`` with columns ``(C, r, D)``.
+    class_embed : torch.nn.Embedding
+        Class centre embedding table of width ``k * d``.
+    class_offset : torch.nn.Embedding
+        Class offset embedding table of width ``k * d``.
+    rel_embed : torch.nn.Embedding
+        Relation translation embedding table of width ``d``.
+    margin : float
+        ELBE margin (positive margin tightens inclusion and negative separation).
+    n_components : Optional[int], default None
+        Number of components :math:`k` per class.
+    neg : bool, default False
+        If ``False``, compute the positive inclusion score; if ``True``, compute
+        the negative separation score.
+    aggregation : str, default "hard"
+        Target-component aggregation mode: ``"hard"`` or ``"soft"``.
+    tau : float, default 1.0
+        Soft-minimum temperature used when ``aggregation="soft"``.
+
+    Returns
+    -------
+    torch.Tensor
+        Per-row score tensor of shape ``(B, 1)``.
     """
     _validate_aggregation(aggregation, tau)
     d_single = int(rel_embed.embedding_dim)
@@ -406,7 +645,37 @@ def gci3_pair_score(
     """Pairwise ELBE GCI3 overlap score :math:`\\|\\text{relu}(|c - r - d| - o_c - o_d + \\text{margin})\\|_2`.
 
     Preserves ELBE's actual overlap formula (:mod:`mowl.nn.el.elbe.losses` ``gci3_loss``)
-    verbatim so that ``k = 1`` reproduces :class:`~mowl.nn.el.elbe.module.ELBEModule` exactly.
+    verbatim so that ``k = 1`` reproduces :class:`~mowl.nn.el.elbe.module.ELBEModule`
+    at equal ``margin``.
+
+    Guarantees:
+    - Returns shape ``(N, 1)`` matching the body of :func:`mowl.nn.el.elbe.losses.gci3_loss`.
+    - At ``margin = 0``, equals ``0`` if and only if the shifted box
+      :math:`(c - r, o_c)` overlaps :math:`(d, o_d)` in every coordinate.
+
+    Non-guarantees:
+    - Enforces box overlap (:math:`-o_c - o_d`) rather than full box inclusion
+      (:math:`+o_c - o_d`), matching ELBE's implementation.
+
+    Parameters
+    ----------
+    c : torch.Tensor
+        Source box centres of shape ``(N, d)``.
+    off_c : torch.Tensor
+        Non-negative source box half-widths of shape ``(N, d)``.
+    d : torch.Tensor
+        Target box centres of shape ``(N, d)``.
+    off_d : torch.Tensor
+        Non-negative target box half-widths of shape ``(N, d)``.
+    rel : torch.Tensor
+        Relation translation vectors of shape ``(N, d)``.
+    margin : float
+        ELBE overlap margin (positive margin requires deeper overlap).
+
+    Returns
+    -------
+    torch.Tensor
+        Pairwise scores of shape ``(N, 1)``.
     """
     euc = th.abs(c - rel - d)
     return th.reshape(
@@ -427,7 +696,41 @@ def gci3_loss(
 ) -> th.Tensor:
     """ELBE GCI3 loss :math:`\\text{mean}_i \\text{agg}_j \\text{gci3\\_pair\\_score}(C_i, D_j, r)` for :math:`\\exists r.C \\sqsubseteq D`.
 
-    Returns shape ``(B, 1)``, matching :func:`mowl.nn.el.elbe.losses.gci3_loss` at ``k = 1``.
+    Guarantees:
+    - Returns shape ``(B, 1)``, matching :func:`mowl.nn.el.elbe.losses.gci3_loss` at ``k = 1``.
+    - At ``margin = 0`` and ``aggregation="hard"``, equals ``0`` if and only if
+      each shifted component :math:`C_i - r` overlaps at least one target
+      component :math:`D_j`.
+
+    Non-guarantees:
+    - Preserves ELBE's overlap formula rather than full box inclusion.
+    - ``neg=True`` is not distinct from ``neg=False``.
+
+    Parameters
+    ----------
+    data : torch.Tensor
+        Integer tensor of shape ``(B, 3)`` with columns ``(r, C, D)``.
+    class_embed : torch.nn.Embedding
+        Class centre embedding table of width ``k * d``.
+    class_offset : torch.nn.Embedding
+        Class offset embedding table of width ``k * d``.
+    rel_embed : torch.nn.Embedding
+        Relation translation embedding table of width ``d``.
+    margin : float
+        ELBE overlap margin (positive margin tightens).
+    n_components : Optional[int], default None
+        Number of components :math:`k` per class.
+    neg : bool, default False
+        Unused flag kept for GCI dispatch signature uniformity.
+    aggregation : str, default "hard"
+        Target-component aggregation mode: ``"hard"`` or ``"soft"``.
+    tau : float, default 1.0
+        Soft-minimum temperature used when ``aggregation="soft"``.
+
+    Returns
+    -------
+    torch.Tensor
+        Per-row loss tensor of shape ``(B, 1)``.
     """
     _validate_aggregation(aggregation, tau)
     d_single = int(rel_embed.embedding_dim)
@@ -454,13 +757,41 @@ def gci3_bot_loss(
 ) -> th.Tensor:
     """ELBE GCI3-bot loss :math:`\\text{mean}_i \\|o_{C_i}\\|_2` for :math:`\\exists r.C \\sqsubseteq \\bot`.
 
-    Returns shape ``(B,)``, matching :func:`mowl.nn.el.elbe.losses.gci3_bot_loss` at ``k = 1``.
+    Indexes ``data[:, 1]`` for :math:`C` (rows are ``(r, C, bot)``) exactly as
+    :func:`mowl.nn.el.elbe.losses.gci3_bot_loss` does.
+
+    Guarantees:
+    - Returns shape ``(B,)``, matching :func:`mowl.nn.el.elbe.losses.gci3_bot_loss` at ``k = 1``.
+    - Equals ``0`` if and only if all :math:`k` component offsets of :math:`C` are zero.
+
+    Non-guarantees:
+    - Independent of the role :math:`r` in ``data[:, 0]`` (inherited from ELBE).
+    - ``neg=True`` is not distinct from ``neg=False``.
+
+    Parameters
+    ----------
+    data : torch.Tensor
+        Integer tensor of shape ``(B, >=2)`` with columns ``(r, C, ...)``.
+    class_offset : torch.nn.Embedding
+        Class offset embedding table of width ``k * d``.
+    n_components : Optional[int], default None
+        Number of components :math:`k` per class.
+    neg : bool, default False
+        Unused flag kept for GCI dispatch signature uniformity.
+    aggregation : str, default "hard"
+        Aggregation mode validated for API consistency (``"hard"`` or ``"soft"``).
+    tau : float, default 1.0
+        Temperature validated when ``aggregation="soft"``.
+
+    Returns
+    -------
+    torch.Tensor
+        Per-row loss tensor of shape ``(B,)``.
     """
     _validate_aggregation(aggregation, tau)
     b_size = data.shape[0]
     k = _resolve_n_components(class_offset, n_components)
-    col = 1 if data.shape[1] > 1 else 0
-    raw_o = th.abs(class_offset(data[:, col]))
+    raw_o = th.abs(class_offset(data[:, 1]))
     d = raw_o.shape[-1] // k
     off_c = raw_o.view(b_size, k, d)
     return th.linalg.norm(off_c, dim=-1).mean(dim=1)
@@ -480,7 +811,42 @@ def class_assertion_loss(
 ) -> th.Tensor:
     """ELBE class assertion loss :math:`\\text{agg}_m \\text{incl}(a, C_m)` for :math:`C(a)`.
 
-    Returns shape ``(B, 1)``, matching :func:`mowl.nn.el.elbe.losses.class_assertion_loss` at ``k = 1``.
+    Guarantees:
+    - Returns shape ``(B, 1)``, matching :func:`mowl.nn.el.elbe.losses.class_assertion_loss` at ``k = 1``.
+    - At ``margin = 0`` and ``aggregation="hard"``, equals ``0`` if and only if
+      the individual box :math:`a` is contained in at least one component :math:`C_m`.
+
+    Non-guarantees:
+    - Individuals are single boxes rather than multi-component unions.
+    - ``neg=True`` is not distinct from ``neg=False``.
+
+    Parameters
+    ----------
+    data : torch.Tensor
+        Integer tensor of shape ``(B, 2)`` with columns ``(a, C)``.
+    ind_embed : torch.nn.Embedding
+        Individual centre embedding table of width ``d``.
+    ind_offset : torch.nn.Embedding
+        Individual offset embedding table of width ``d``.
+    class_embed : torch.nn.Embedding
+        Class centre embedding table of width ``k * d``.
+    class_offset : torch.nn.Embedding
+        Class offset embedding table of width ``k * d``.
+    margin : float
+        ELBE inclusion margin (positive margin tightens).
+    n_components : Optional[int], default None
+        Number of components :math:`k` per class.
+    neg : bool, default False
+        Unused flag kept for GCI dispatch signature uniformity.
+    aggregation : str, default "hard"
+        Target-component aggregation mode: ``"hard"`` or ``"soft"``.
+    tau : float, default 1.0
+        Soft-minimum temperature used when ``aggregation="soft"``.
+
+    Returns
+    -------
+    torch.Tensor
+        Per-row loss tensor of shape ``(B, 1)``.
     """
     _validate_aggregation(aggregation, tau)
     cen_i = ind_embed(data[:, 0]).unsqueeze(1)  # (B, 1, d)
@@ -505,7 +871,41 @@ def object_property_assertion_loss(
     aggregation: str = "hard",
     tau: float = 1.0,
 ) -> th.Tensor:
-    """ELBE object property assertion loss :math:`r(a, b)`, delegating to :mod:`mowl.nn.el.elbe.losses`."""
+    """ELBE object property assertion loss for :math:`r(a, b)`, delegating to :mod:`mowl.nn.el.elbe.losses`.
+
+    Guarantees:
+    - Returns shape ``(B, 1)``, identical to :func:`mowl.nn.el.elbe.losses.object_property_assertion_loss`
+      for both ``neg=False`` and ``neg=True``.
+
+    Non-guarantees:
+    - Individuals and roles are single-component embeddings, so ``aggregation``
+      and ``tau`` are validated for signature uniformity but do not alter the score.
+
+    Parameters
+    ----------
+    data : torch.Tensor
+        Integer tensor of shape ``(B, 3)`` with columns ``(a, r, b)``.
+    ind_embed : torch.nn.Embedding
+        Individual centre embedding table of width ``d``.
+    ind_offset : torch.nn.Embedding
+        Individual offset embedding table of width ``d``.
+    rel_embed : torch.nn.Embedding
+        Relation translation embedding table of width ``d``.
+    margin : float
+        ELBE margin.
+    neg : bool, default False
+        If ``False``, compute positive inclusion score; if ``True``, compute
+        negative separation score.
+    aggregation : str, default "hard"
+        Aggregation mode validated for API consistency (``"hard"`` or ``"soft"``).
+    tau : float, default 1.0
+        Temperature validated when ``aggregation="soft"``.
+
+    Returns
+    -------
+    torch.Tensor
+        Per-row score tensor of shape ``(B, 1)``.
+    """
     _validate_aggregation(aggregation, tau)
     return EL.object_property_assertion_loss(
         data,
