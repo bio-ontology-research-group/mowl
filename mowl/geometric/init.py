@@ -2,10 +2,12 @@
 
 Provides :class:`ExactBoxInit`, which initialises the class boxes
 of axis-parallel box-embedding modules (:class:`~mowl.nn.el.boxsquaredel.module.BoxSquaredELModule`,
-:class:`~mowl.nn.el.elbe.module.ELBEModule`, and ``MultiBoxELModule``) from the
+:class:`~mowl.nn.el.elbe.module.ELBEModule`, and ``MultiBoxELModule``) and the
+class prisms of :class:`~mowl.nn.el.prism.module.PrismModule` from the
 canonical model of a normalised :math:`\\mathcal{EL}^{++}` ontology, and computes
 an unweighted :math:`L_2^2` anchor loss pulling class centres and half-widths
-back towards the initial configuration during training.
+(or triangle centres, inradii, and box centres/half-widths) back towards the
+initial configuration during training.
 
 Guarantees:
 - **Containment guarantee (projected mode, k = 1):** When ``method="projected"``
@@ -22,6 +24,17 @@ Guarantees:
   zero :class:`BoxSquaredELModule` and :class:`ELBEModule` loss (up to
   ``float32`` rounding, ``<= 1e-6``) at margin :math:`0` immediately after
   :meth:`ExactBoxInit.apply_to_module`.
+- **Prism box-containment guarantee (k = 1, d >= 3):** When applied to a module
+  with ``tri_center`` (:class:`~mowl.nn.el.prism.module.PrismModule`),
+  coordinates :math:`2 .. d - 1` of the initialisation box are written to
+  ``box_center`` and ``box_offset``, and coordinates :math:`0 .. 1` define the
+  equilateral triangle with ``tri_center = center[:2]`` and
+  ``tri_inradius = max(offset[0], offset[1]) * sqrt(3)`` (the incircle radius of
+  the equilateral triangle circumscribing the rectangle's bounding square).
+  Every corner of the initialisation box therefore lies inside the initialised
+  prism (up to ``float32`` rounding, ``<= 1e-6``), and :meth:`ExactBoxInit.anchor_loss`
+  compares ``(tri_center, |tri_inradius|, box_center, |box_offset|)`` against
+  these same initial quantities.
 - **Degenerate point boxes for unsatisfiable concepts:** ``BOTTOM``
   (``owl:Nothing``) and any concept name in the canonical model's signature that
   is unsatisfiable (:math:`E_C = \\emptyset`) are initialised to the point box
@@ -558,6 +571,57 @@ class ExactBoxInit:
         k = int(self.n_components)
         d = int(self.embed_dim)
 
+        if hasattr(module, "tri_center"):
+            if not (
+                hasattr(module, "tri_inradius")
+                and hasattr(module, "box_center")
+                and hasattr(module, "box_offset")
+            ):
+                raise UnsupportedRegion(
+                    f"Module {type(module).__name__!r} has tri_center but lacks "
+                    f"tri_inradius/box_center/box_offset embeddings."
+                )
+            if k != 1:
+                raise UnsupportedRegion(
+                    f"Prism module {type(module).__name__!r} requires "
+                    f"ExactBoxInit.n_components == 1, got n_components={k}."
+                )
+            if d < 3:
+                raise UnsupportedRegion(
+                    f"Prism module {type(module).__name__!r} requires "
+                    f"ExactBoxInit.embed_dim >= 3, got d={d}."
+                )
+            mod_d = int(
+                getattr(
+                    module,
+                    "embed_dim",
+                    int(module.tri_center.weight.shape[1])
+                    + int(module.box_center.weight.shape[1]),
+                )
+            )
+            if mod_d != d:
+                raise UnsupportedRegion(
+                    f"Dimension mismatch for {type(module).__name__!r}: ExactBoxInit has "
+                    f"d={d}, module has embed_dim={mod_d}."
+                )
+            tc_shape = tuple(module.tri_center.weight.shape)
+            tr_shape = tuple(module.tri_inradius.weight.shape)
+            bc_shape = tuple(module.box_center.weight.shape)
+            bo_shape = tuple(module.box_offset.weight.shape)
+            n_rows = tc_shape[0] if len(tc_shape) == 2 else -1
+            if (
+                tc_shape != (n_rows, 2)
+                or tr_shape != (n_rows, 1)
+                or bc_shape != (n_rows, d - 2)
+                or bo_shape != (n_rows, d - 2)
+            ):
+                raise UnsupportedRegion(
+                    f"Embedding shape mismatch for {type(module).__name__!r} (prism layout): "
+                    f"expected (n_rows, 2), (n_rows, 1), (n_rows, {d - 2}), (n_rows, {d - 2}), "
+                    f"got {tc_shape}, {tr_shape}, {bc_shape}, {bo_shape}."
+                )
+            return module.tri_center, module.tri_inradius, "prism"
+
         if hasattr(module, "n_components"):
             if not (hasattr(module, "class_center") and hasattr(module, "class_offset")):
                 raise UnsupportedRegion(
@@ -683,6 +747,14 @@ class ExactBoxInit:
             if layout == "multiboxel":
                 c_np = c_np.reshape(len(init_rows), k * d)
                 o_np = o_np.reshape(len(init_rows), k * d)
+            elif layout == "prism":
+                c_np = c_np[:, 0, :]
+                o_first = o_np[:, 0, :]
+                tri_r = (
+                    np.max(o_first[:, :2], axis=-1, keepdims=True)
+                    * np.sqrt(3.0)
+                ).astype(np.float32)
+                o_np = np.concatenate([tri_r, o_first[:, 2:]], axis=-1)
             else:
                 c_np = c_np[:, 0, :]
                 o_np = o_np[:, 0, :]
@@ -696,15 +768,26 @@ class ExactBoxInit:
     def apply_to_module(
         self, module: Any, class_index_dict: Optional[Mapping[Any, int]] = None
     ) -> int:
-        """Write initialised class boxes into ``module`` under ``torch.no_grad()``.
+        """Write initialised class boxes or prisms into ``module`` under ``torch.no_grad()``.
 
         Supports :class:`~mowl.nn.el.boxsquaredel.module.BoxSquaredELModule`
         (``class_center``, ``class_offset``),
         :class:`~mowl.nn.el.elbe.module.ELBEModule` (``class_embed``,
-        ``class_offset``), and :class:`~mowl.nn.el.multiboxel.module.MultiBoxELModule`
+        ``class_offset``), :class:`~mowl.nn.el.multiboxel.module.MultiBoxELModule`
         (detected by ``hasattr(module, "n_components")``; ``class_center`` and
         ``class_offset`` of width ``n_components * embed_dim`` storing flattened
-        ``(k, d)`` rows).
+        ``(k, d)`` rows), and :class:`~mowl.nn.el.prism.module.PrismModule`
+        (detected by ``hasattr(module, "tri_center")``).
+
+        When ``module`` has ``tri_center`` (prism layout), the box part
+        (``box_center``, ``box_offset``) is written from coordinates ``2..d``
+        of the initialisation box, and the triangle part is written from
+        coordinates ``0..1``: ``tri_center`` is set to the box centre of those
+        two coordinates, and ``tri_inradius`` is set to
+        :math:`\\max(\\text{half-widths of coords } 0, 1) \\cdot \\sqrt{3}` (the
+        incircle of the equilateral triangle circumscribing that rectangle's
+        bounding square, so the initialised prism contains the initialisation
+        box); :meth:`anchor_loss` compares the same quantities.
 
         Rows are matched by IRI: initialisation row ``class_to_id[C]`` is
         written to module row ``class_index_dict[C]``. Module rows without an
@@ -722,7 +805,7 @@ class ExactBoxInit:
         Parameters
         ----------
         module : torch.nn.Module
-            Target box-embedding module.
+            Target box-embedding or prism-embedding module.
         class_index_dict : Optional[Mapping[Any, int]], default None
             Mapping from class IRIs (or ``OWLClass`` objects) to module rows,
             typically ``model.class_index_dict``. If ``None``, the module must
@@ -737,7 +820,7 @@ class ExactBoxInit:
         Raises
         ------
         UnsupportedRegion
-            If ``module`` does not expose supported box embeddings, its
+            If ``module`` does not expose supported box or prism embeddings, its
             dimensions / component count do not match ``self``, an initialised
             class is missing from ``class_index_dict``, or
             ``class_index_dict`` is ``None`` and the row counts differ.
@@ -750,13 +833,24 @@ class ExactBoxInit:
         c_ref, o_ref = self._reference(layout, c_emb.weight.device, c_emb.weight.dtype)
         rows = torch.from_numpy(rows_np).to(device=c_emb.weight.device)
         with torch.no_grad():
-            c_emb.weight[rows] = c_ref
-            o_emb.weight[rows] = o_ref
+            if layout == "prism":
+                module.tri_center.weight[rows] = c_ref[:, :2]
+                module.box_center.weight[rows] = c_ref[:, 2:]
+                module.tri_inradius.weight[rows] = o_ref[:, :1]
+                module.box_offset.weight[rows] = o_ref[:, 1:]
+            else:
+                c_emb.weight[rows] = c_ref
+                o_emb.weight[rows] = o_ref
 
         return int(len(rows_np))
 
     def anchor_loss(self, module: Any) -> torch.Tensor:
         """Return unweighted mean :math:`\\|c - c_0\\|_2^2 + \\||o| - o_0\\|_2^2` over initialised rows.
+
+        For prism modules (:class:`~mowl.nn.el.prism.module.PrismModule`),
+        compares ``(tri_center, box_center)`` against the initial centres and
+        ``(|tri_inradius|, |box_offset|)`` against the initial circumscribing
+        inradius :math:`\\max(o_0, o_1) \\sqrt{3}` and box half-widths.
 
         Uses the row map cached by :meth:`apply_to_module` for ``module``
         (identity when ``module`` has not been seen and has exactly
@@ -768,7 +862,7 @@ class ExactBoxInit:
         Parameters
         ----------
         module : torch.nn.Module
-            Target box-embedding module.
+            Target box-embedding or prism-embedding module.
 
         Returns
         -------
@@ -791,8 +885,21 @@ class ExactBoxInit:
         c_ref, o_ref = self._reference(layout, device, c_emb.weight.dtype)
         rows = torch.from_numpy(rows_np).to(device=device)
 
-        c_cur = c_emb.weight[rows]
-        o_cur = torch.abs(o_emb.weight[rows])
+        if layout == "prism":
+            c_cur = torch.cat(
+                [module.tri_center.weight[rows], module.box_center.weight[rows]],
+                dim=-1,
+            )
+            o_cur = torch.cat(
+                [
+                    torch.abs(module.tri_inradius.weight[rows]),
+                    torch.abs(module.box_offset.weight[rows]),
+                ],
+                dim=-1,
+            )
+        else:
+            c_cur = c_emb.weight[rows]
+            o_cur = torch.abs(o_emb.weight[rows])
 
         row_loss = (c_cur - c_ref).square().sum(dim=-1) + (
             o_cur - o_ref

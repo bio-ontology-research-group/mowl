@@ -30,7 +30,8 @@ from mowl.geometric.errors import (
 )
 from mowl.geometric.normal_forms import BOTTOM, NF1, NF2, TOP, NormalisedOntology, to_owl
 from mowl.models import BoxSquaredEL
-from mowl.nn import BoxSquaredELModule, ELBEModule
+from mowl.nn import BoxSquaredELModule, ELBEModule, PrismModule
+import mowl.nn.el.prism.losses as PL
 from mowl.owlapi import OWLAPIAdapter
 from tests.geometric.helpers import (
     NS,
@@ -505,6 +506,69 @@ def test_apply_rejects_dimension_mismatch(t3_dataset: PathDataset) -> None:
     # Unsupported module without class_center or class_embed
     with pytest.raises(UnsupportedRegion):
         init.apply_to_module(nn.Linear(5, 5))
+
+    # PrismModule dimension / component mismatch
+    wrong_prism = PrismModule(nb_ont_classes=n_classes, nb_rels=1, embed_dim=4)
+    with pytest.raises(UnsupportedRegion):
+        init.apply_to_module(wrong_prism)
+    with pytest.raises(UnsupportedRegion):
+        init.anchor_loss(wrong_prism)
+
+    prism_ok = PrismModule(nb_ont_classes=n_classes, nb_rels=1, embed_dim=5)
+    with pytest.raises(UnsupportedRegion):
+        init_k2.apply_to_module(prism_ok)
+
+
+def test_apply_to_prism_contains_init_box_and_anchor_loss(
+    t3_dataset: PathDataset,
+) -> None:
+    import itertools
+    import math
+
+    d = 5
+    init = ExactBoxInit.from_dataset(t3_dataset, embed_dim=d, seed=0)
+    n_classes = len(init.class_to_id)
+    prism = PrismModule(nb_ont_classes=n_classes, nb_rels=1, embed_dim=d)
+
+    written = init.apply_to_module(prism)
+    assert written == n_classes
+
+    c, o, mask = init.as_tensors()
+    c_init = c[mask, 0]
+    o_init = o[mask, 0]
+
+    tc = prism.tri_center.weight[mask]
+    tr = torch.abs(prism.tri_inradius.weight[mask])
+    bc = prism.box_center.weight[mask]
+    bo = torch.abs(prism.box_offset.weight[mask])
+
+    expected_tr = torch.amax(o_init[:, :2], dim=-1, keepdim=True) * math.sqrt(3.0)
+    assert torch.allclose(tc, c_init[:, :2], atol=1e-6)
+    assert torch.allclose(tr, expected_tr, atol=1e-6)
+    assert torch.allclose(bc, c_init[:, 2:], atol=1e-6)
+    assert torch.allclose(bo, o_init[:, 2:], atol=1e-6)
+
+    # Every corner of the init box lies inside the initialised prism (tol 1e-6)
+    h = PL.supports(tc, tr)
+    normals = PL.NORMALS.to(dtype=tc.dtype)
+    for s0, s1 in itertools.product((-1.0, 1.0), repeat=2):
+        corner_2d = c_init[:, :2] + torch.stack(
+            [s0 * o_init[:, 0], s1 * o_init[:, 1]], dim=-1
+        )
+        assert torch.all(corner_2d @ normals.T <= h + 1e-6)
+
+    assert torch.all(bc - bo - 1e-6 <= c_init[:, 2:] - o_init[:, 2:])
+    assert torch.all(c_init[:, 2:] + o_init[:, 2:] <= bc + bo + 1e-6)
+
+    assert float(init.anchor_loss(prism).item()) <= 1e-12
+    with torch.no_grad():
+        prism.tri_inradius.weight.mul_(-1.0)
+        prism.box_offset.weight.mul_(-1.0)
+    assert float(init.anchor_loss(prism).item()) <= 1e-12
+
+    with torch.no_grad():
+        prism.tri_inradius.weight.add_(0.25)
+    assert float(init.anchor_loss(prism).item()) > 0.0
 
 
 def test_extensions_match_naive(roles_cm: CanonicalModel) -> None:

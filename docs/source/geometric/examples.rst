@@ -336,3 +336,44 @@ following properties:
    assert all(torch.isfinite(p).all() for p in model.module.parameters())
 
    tmpdir.cleanup()
+
+
+PrismEL on the Family ontology
+------------------------------
+
+:class:`~mowl.models.PrismEL` (:class:`~mowl.nn.PrismModule`) represents every
+ontology class :math:`C` as a prism
+:math:`P_C = T_C \times B_C \subset \mathbb{R}^2 \times \mathbb{R}^{d-2}` with
+:math:`2d - 1` scalar parameters per class (triangle centre ``(2)``, triangle
+inradius ``(1)``, box centre ``(d - 2)``, and box half-width ``(d - 2)``,
+reported by :meth:`~mowl.models.PrismEL.count_class_parameters`) following
+Federico, Leemhuis & Kutz (DL 2026). When initialised with
+:class:`~mowl.geometric.init.ExactBoxInit`, coordinates ``2..d`` of each
+initialisation box populate ``(box_center, box_offset)`` and coordinates
+``0..1`` populate the equilateral triangle with ``tri_center = center[:2]`` and
+:math:`\text{tri\_inradius} = \max(o_0, o_1) \sqrt{3}` (the incircle of the
+equilateral triangle circumscribing the rectangle's bounding square), so that
+every corner of the initialisation box lies inside the initialised prism:
+
+.. testcode::
+
+   import mowl
+   mowl.init_jvm("2g")  # no-op if the JVM is already running
+
+   import torch
+   from mowl.datasets.builtin import FamilyDataset
+   from mowl.geometric import ExactBoxInit
+   from mowl.models import PrismEL
+
+   ds = FamilyDataset()
+   init = ExactBoxInit.from_dataset(ds, embed_dim=6, seed=0)
+   model = PrismEL(
+       ds,
+       embed_dim=6,
+       margin=0.1,
+       init_boxes=init,
+       anchor_weight=0.1,
+   )
+   assert model.count_class_parameters() == 2 * 6 - 1 == 11
+   model.train(epochs=3, validate_every=10)
+   assert all(torch.isfinite(p).all() for p in model.module.parameters())

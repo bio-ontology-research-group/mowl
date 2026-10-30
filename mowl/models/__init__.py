@@ -13,6 +13,7 @@ from mowl.models.boxel.examples.model_gda import BoxELGDA
 
 from mowl.models.boxsquaredel.model import BoxSquaredEL
 from mowl.models.multiboxel.model import MultiBoxEL
+from mowl.models.prism.model import PrismEL
 from mowl.models.canonical_mixture.model import CanonicalMixture
 
 from mowl.models.transbox.model import TransBox

@@ -101,6 +101,26 @@ MultiBoxEL model
    :show-inheritance:
 
 
+Prism neural module and losses
+------------------------------
+
+.. automodule:: mowl.nn.el.prism.module
+   :members:
+   :show-inheritance:
+
+.. automodule:: mowl.nn.el.prism.losses
+   :members:
+   :show-inheritance:
+
+
+PrismEL model
+-------------
+
+.. automodule:: mowl.models.prism.model
+   :members:
+   :show-inheritance:
+
+
 Exceptions
 ----------
 
