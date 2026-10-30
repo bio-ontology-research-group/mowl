@@ -11,6 +11,8 @@ from mowl.nn import ELModule
 import mowl.nn.el.boxsquaredel.losses as B2L
 from mowl.nn.el.boxsquaredel.module import BoxSquaredELModule
 import mowl.nn.el.multiboxel.losses as L
+from mowl.nn.el.softagg import diversity_penalty
+
 
 
 class MultiBoxELModule(ELModule):
@@ -66,6 +68,13 @@ class MultiBoxELModule(ELModule):
         Weight for the anti-collapse pairwise component centre regulariser
         :math:`\\text{mean}_C \\text{mean}_{i<j} \\text{relu}(\\tau - \\|c_{C,i} - c_{C,j}\\|_2)`
         with :math:`\\tau = 0.1`.
+    component_aggregation : str, default "hard"
+        Component aggregation mode: ``"hard"`` or ``"soft"``.
+    tau : float, default 1.0
+        Soft-assignment temperature stored on the module.
+    diversity_reg : float, default 0.0
+        Weight for the pairwise component volume overlap regulariser
+        :func:`~mowl.nn.el.softagg.diversity_penalty`.
     """
 
     neg_capable_gcis = frozenset({"gci2", "object_property_assertion"})
@@ -82,12 +91,27 @@ class MultiBoxELModule(ELModule):
         delta: float = 2.0,
         reg_factor: float = 0.05,
         component_reg: float = 0.0,
+        component_aggregation: str = "hard",
+        tau: float = 1.0,
+        diversity_reg: float = 0.0,
     ) -> None:
         super().__init__()
         if isinstance(n_components, bool) or not isinstance(n_components, int) or n_components < 1:
             raise ValueError(f"n_components must be an int >= 1, got {n_components!r}")
         if isinstance(embed_dim, bool) or not isinstance(embed_dim, int) or embed_dim < 1:
             raise ValueError(f"embed_dim must be an int >= 1, got {embed_dim!r}")
+        if component_aggregation not in ("hard", "soft"):
+            raise ValueError(
+                f"component_aggregation must be 'hard' or 'soft', got {component_aggregation!r}"
+            )
+        if isinstance(tau, bool) or not isinstance(tau, (int, float)) or float(tau) <= 0.0:
+            raise ValueError(f"tau must be > 0, got {tau!r}")
+        if (
+            isinstance(diversity_reg, bool)
+            or not isinstance(diversity_reg, (int, float))
+            or float(diversity_reg) < 0.0
+        ):
+            raise ValueError(f"diversity_reg must be >= 0, got {diversity_reg!r}")
 
         self.nb_ont_classes = nb_ont_classes
         self.nb_rels = nb_rels
@@ -123,6 +147,10 @@ class MultiBoxELModule(ELModule):
         self.delta = delta
         self.reg_factor = reg_factor
         self.component_reg = component_reg
+        self.component_aggregation = component_aggregation
+        self.tau = float(tau)
+        self.diversity_reg = float(diversity_reg)
+
 
     # Single-component tables (roles, bumps, individuals) use the Box²EL initialiser.
     init_embeddings = BoxSquaredELModule.init_embeddings
@@ -169,6 +197,8 @@ class MultiBoxELModule(ELModule):
             self.gamma,
             n_components=self.n_components,
             neg=neg,
+            aggregation=self.component_aggregation,
+            tau=self.tau,
         )
 
     def gci0_bot_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
@@ -177,6 +207,8 @@ class MultiBoxELModule(ELModule):
             self.class_offset,
             n_components=self.n_components,
             neg=neg,
+            aggregation=self.component_aggregation,
+            tau=self.tau,
         )
 
     def gci1_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
@@ -187,6 +219,8 @@ class MultiBoxELModule(ELModule):
             self.gamma,
             n_components=self.n_components,
             neg=neg,
+            aggregation=self.component_aggregation,
+            tau=self.tau,
         )
 
     def gci1_bot_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
@@ -197,6 +231,8 @@ class MultiBoxELModule(ELModule):
             self.gamma,
             n_components=self.n_components,
             neg=neg,
+            aggregation=self.component_aggregation,
+            tau=self.tau,
         )
 
     def gci2_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
@@ -213,6 +249,8 @@ class MultiBoxELModule(ELModule):
             self.delta,
             n_components=self.n_components,
             neg=neg,
+            aggregation=self.component_aggregation,
+            tau=self.tau,
         )
 
     def gci3_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
@@ -228,10 +266,18 @@ class MultiBoxELModule(ELModule):
             self.gamma,
             n_components=self.n_components,
             neg=neg,
+            aggregation=self.component_aggregation,
+            tau=self.tau,
         )
 
     def gci3_bot_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
-        return L.gci3_bot_loss(data, self.head_offset, neg=neg)
+        return L.gci3_bot_loss(
+            data,
+            self.head_offset,
+            neg=neg,
+            aggregation=self.component_aggregation,
+            tau=self.tau,
+        )
 
     def class_assertion_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
         if self.ind_center is None or self.ind_offset is None:
@@ -247,6 +293,8 @@ class MultiBoxELModule(ELModule):
             self.gamma,
             n_components=self.n_components,
             neg=neg,
+            aggregation=self.component_aggregation,
+            tau=self.tau,
         )
 
     def object_property_assertion_loss(
@@ -272,18 +320,21 @@ class MultiBoxELModule(ELModule):
             self.gamma,
             self.delta,
             neg=neg,
+            aggregation=self.component_aggregation,
+            tau=self.tau,
         )
 
     def regularization_loss(self) -> th.Tensor:
-        """Compute Box²EL bump regularisation plus optional anti-collapse component penalty.
+        """Compute Box²EL bump regularisation plus optional component and diversity penalties.
 
         Guarantees:
-        - When ``component_reg == 0.0`` (or ``n_components == 1``), returns the
-          exact same tensor value as :meth:`BoxSquaredELModule.regularization_loss`.
+        - When ``component_reg == 0.0`` and ``diversity_reg == 0.0`` (or
+          ``n_components == 1``), returns the exact same tensor value as
+          :meth:`BoxSquaredELModule.regularization_loss`.
 
         Non-guarantees:
-        - When ``component_reg == 0.0``, unused components are permitted to
-          collapse or nest inside other components.
+        - When ``component_reg == 0.0`` and ``diversity_reg == 0.0``, unused
+          components are permitted to collapse or nest inside other components.
         """
         loss = B2L.reg_loss(self.bump_classes, self.reg_factor)
         if self.bump_individuals is not None:
@@ -303,6 +354,14 @@ class MultiBoxELModule(ELModule):
             dists = th.linalg.norm(diffs, dim=-1)
             comp_penalty = th.relu(tau - dists).mean(dim=1).mean(dim=0)
             loss = loss + self.component_reg * comp_penalty
+        if self.diversity_reg > 0.0 and self.n_components > 1 and self.nb_ont_classes > 0:
+            centers = self.class_center.weight.view(
+                self.nb_ont_classes, self.n_components, self.embed_dim
+            )
+            offsets = th.abs(self.class_offset.weight).view(
+                self.nb_ont_classes, self.n_components, self.embed_dim
+            )
+            loss = loss + self.diversity_reg * diversity_penalty(centers, offsets)
         return loss
 
     def effective_components(self, eps: float = 1e-3) -> th.Tensor:

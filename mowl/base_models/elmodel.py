@@ -651,6 +651,8 @@ of :class:`torch.utils.data.DataLoader`
 
         for epoch in trange(epochs):
             self.module.train()
+            if hasattr(self, "on_epoch_start") and callable(self.on_epoch_start):
+                self.on_epoch_start(epoch, epochs)
 
             train_loss = 0
             loss = th.tensor(0.0, device=self.device)
@@ -670,8 +672,16 @@ of :class:`torch.utils.data.DataLoader`
 
                 loss = loss + self.compute_loss(pos_scores, neg_scores)
 
+            if hasattr(self, "additional_training_loss") and callable(
+                self.additional_training_loss
+            ):
+                extra_loss = self.additional_training_loss(epoch)
+                if extra_loss is not None:
+                    loss = loss + extra_loss
+
             # Add regularization loss
             loss = loss + self.get_regularization_loss()
+
 
             optimizer.zero_grad()
             loss.backward()

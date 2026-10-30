@@ -46,8 +46,16 @@ class MultiELBE(EmbeddingELModel):
         Weight for the anti-collapse pairwise component centre regulariser.
     component_aggregation : str, default "hard"
         Component aggregation mode: ``"hard"`` or ``"soft"``.
-    tau : float, default 1.0
-        Soft-assignment temperature stored on the module.
+    tau : float, optional
+        Optional alias for ``tau_start`` when setting a fixed temperature.
+    tau_start : float, default 1.0
+        Initial soft-assignment temperature :math:`\\tau_{\\text{start}} > 0`.
+    tau_end : float, default 0.01
+        Final soft-assignment temperature :math:`\\tau_{\\text{end}} > 0` when
+        ``tau_anneal=True``.
+    tau_anneal : bool, default False
+        Whether to anneal ``module.tau`` geometrically from ``tau_start`` to
+        ``tau_end`` over the training epochs in :meth:`on_epoch_start`.
     diversity_reg : float, default 0.0
         Diversity regularisation weight stored on the module.
     reg_norm : int, default 1
@@ -79,7 +87,10 @@ class MultiELBE(EmbeddingELModel):
         n_components=1,
         component_reg=0.0,
         component_aggregation="hard",
-        tau=1.0,
+        tau=None,
+        tau_start=1.0,
+        tau_end=0.01,
+        tau_anneal=False,
         diversity_reg=0.0,
         init_boxes=None,
         anchor_weight=0.0,
@@ -96,6 +107,14 @@ class MultiELBE(EmbeddingELModel):
             raise ValueError(
                 f"component_aggregation must be 'hard' or 'soft', got {component_aggregation!r}"
             )
+        eff_tau_start = float(tau) if tau is not None else float(tau_start)
+        eff_tau_end = float(tau_end)
+        if eff_tau_start <= 0.0 or eff_tau_end <= 0.0:
+            raise ValueError(
+                f"tau_start and tau_end must be > 0, got tau_start={eff_tau_start!r}, tau_end={eff_tau_end!r}"
+            )
+        if float(diversity_reg) < 0.0:
+            raise ValueError(f"diversity_reg must be >= 0, got {diversity_reg!r}")
         super().__init__(
             dataset,
             embed_dim,
@@ -111,7 +130,10 @@ class MultiELBE(EmbeddingELModel):
         self.n_components = n_components
         self.component_reg = component_reg
         self.component_aggregation = component_aggregation
-        self.tau = float(tau)
+        self.tau_start = eff_tau_start
+        self.tau_end = eff_tau_end
+        self.tau_anneal = bool(tau_anneal)
+        self.tau = eff_tau_start
         self.diversity_reg = float(diversity_reg)
         self.reg_norm = reg_norm
         self.init_boxes = init_boxes
@@ -139,6 +161,28 @@ class MultiELBE(EmbeddingELModel):
             self.init_boxes.apply_to_module(
                 self.module, class_index_dict=self.class_index_dict
             )
+
+    def on_epoch_start(self, epoch: int, epochs: int) -> None:
+        """Update ``self.module.tau`` according to the geometric annealing schedule when ``tau_anneal=True``.
+
+        Guarantees:
+        - When ``tau_anneal=True`` and ``epochs > 1``, sets
+          ``module.tau = tau_start * (tau_end / tau_start) ** (epoch / (epochs - 1))``
+          so epoch ``0`` uses ``tau_start`` and epoch ``epochs - 1`` uses ``tau_end``.
+        - When ``tau_anneal=False``, leaves ``module.tau`` unchanged.
+
+        Non-guarantees:
+        - When ``epochs <= 1`` and ``tau_anneal=True``, ``module.tau`` remains ``tau_start``.
+        """
+        if self.tau_anneal:
+            if epochs > 1:
+                tau = self.tau_start * (
+                    (self.tau_end / self.tau_start) ** (epoch / (epochs - 1))
+                )
+            else:
+                tau = self.tau_start
+            self.tau = float(tau)
+            self.module.tau = float(tau)
 
     def get_regularization_loss(self):
         """Return module regularisation loss plus weighted anchor loss when active."""

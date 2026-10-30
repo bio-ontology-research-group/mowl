@@ -285,7 +285,7 @@ def test_effective_components() -> None:
     assert eff.tolist() == [3, 2, 1, 1, 0]
 
 
-def test_component_aggregation_validation_and_soft_not_implemented() -> None:
+def test_component_aggregation_validation_and_soft_diversity_reg() -> None:
     me = MultiELBEModule(
         nb_ont_classes=4,
         nb_rels=2,
@@ -307,10 +307,25 @@ def test_component_aggregation_validation_and_soft_not_implemented() -> None:
             component_aggregation="invalid",
         )
 
-    with pytest.raises(NotImplementedError, match="implemented in a later task"):
-        MultiELBEModule(
-            nb_ont_classes=4,
-            nb_rels=2,
-            embed_dim=3,
-            component_aggregation="soft",
-        )
+    me_soft = MultiELBEModule(
+        nb_ont_classes=4,
+        nb_rels=2,
+        embed_dim=3,
+        n_components=2,
+        component_aggregation="soft",
+        tau=1e-4,
+        diversity_reg=0.5,
+    )
+    with torch.no_grad():
+        me_soft.class_embed.weight.copy_(me.class_embed.weight)
+        me_soft.class_offset.weight.copy_(me.class_offset.weight)
+        me_soft.rel_embed.weight.copy_(me.rel_embed.weight)
+
+    batch = torch.tensor([[0, 1, 2], [1, 2, 3]], dtype=torch.long)
+    assert torch.allclose(me_soft(batch, "gci1"), me(batch, "gci1"), atol=1e-3, rtol=1e-3)
+
+    with torch.no_grad():
+        me_soft.class_embed.weight.zero_()
+        me_soft.class_offset.weight.fill_(1.0)
+    assert float(me_soft.regularization_loss().item()) > 0.0
+

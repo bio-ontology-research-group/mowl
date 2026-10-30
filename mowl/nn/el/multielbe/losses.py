@@ -46,8 +46,11 @@ import mowl.nn.el.elbe.losses as EL
 from mowl.nn.el.multiboxel.losses import (
     _resolve_n_components,
     _unpack_boxes,
+    _validate_aggregation,
     multi_intersection,
 )
+from mowl.nn.el.softagg import soft_weights, softmin
+
 
 __all__ = [
     "_resolve_n_components",
@@ -173,15 +176,26 @@ def gci0_loss(
     margin: float,
     n_components: Optional[int] = None,
     neg: bool = False,
+    aggregation: str = "hard",
+    tau: float = 1.0,
 ) -> th.Tensor:
-    """ELBE GCI0 loss :math:`\\text{mean}_i \\min_j \\text{incl}(C_i, D_j)` for :math:`C \\sqsubseteq D`.
+    """ELBE GCI0 loss :math:`\\text{mean}_i \\text{agg}_j \\text{incl}(C_i, D_j)` for :math:`C \\sqsubseteq D`.
 
-    Returns shape ``(B, 1)``, matching :func:`mowl.nn.el.elbe.losses.gci0_loss` at ``k = 1``.
+    Guarantees:
+    - Returns shape ``(B, 1)``, matching :func:`mowl.nn.el.elbe.losses.gci0_loss` at ``k = 1``
+      under both ``"hard"`` and ``"soft"``.
+    - Converges from ``aggregation="soft"`` to ``aggregation="hard"`` as ``tau -> 0+``.
+
+    Non-guarantees:
+    - ``neg=True`` is not distinct from ``neg=False``.
     """
+    _validate_aggregation(aggregation, tau)
     cen_c, off_c = _unpack_boxes(data[:, 0], class_embed, class_offset, n_components)
     cen_d, off_d = _unpack_boxes(data[:, 1], class_embed, class_offset, n_components)
     incl = multi_inclusion(cen_c, off_c, cen_d, off_d, margin)
-    return th.amin(incl, dim=2).mean(dim=1, keepdim=True)
+    if aggregation == "hard":
+        return th.amin(incl, dim=2).mean(dim=1, keepdim=True)
+    return softmin(incl, tau=tau, dim=2).mean(dim=1, keepdim=True)
 
 
 def gci0_bot_loss(
@@ -189,11 +203,14 @@ def gci0_bot_loss(
     class_offset: th.nn.Embedding,
     n_components: Optional[int] = None,
     neg: bool = False,
+    aggregation: str = "hard",
+    tau: float = 1.0,
 ) -> th.Tensor:
     """ELBE GCI0-bot loss :math:`\\text{mean}_i \\|o_{C_i}\\|_2` for :math:`C \\sqsubseteq \\bot`.
 
     Returns shape ``(B,)``, matching :func:`mowl.nn.el.elbe.losses.gci0_bot_loss` at ``k = 1``.
     """
+    _validate_aggregation(aggregation, tau)
     b_size = data.shape[0]
     k = _resolve_n_components(class_offset, n_components)
     raw_o = th.abs(class_offset(data[:, 0]))
@@ -209,19 +226,31 @@ def gci1_loss(
     margin: float,
     n_components: Optional[int] = None,
     neg: bool = False,
+    aggregation: str = "hard",
+    tau: float = 1.0,
 ) -> th.Tensor:
     """Gated ELBE GCI1 loss for :math:`C \\sqcap D \\sqsubseteq E`.
 
     Uses the same pairwise intersection gating rule as :mod:`mowl.nn.el.multiboxel.losses`:
-    - :math:`(i^*, j^*) = \\arg\\min_{i,j} \\text{empt}(C_i, D_j)` (chosen on detached
-      emptiness penalties).
-    - Gate :math:`g_{ij} = 1` if :math:`\\text{lo}_{ij} \\le \\text{up}_{ij}` in every
-      coordinate or :math:`(i, j) = (i^*, j^*)`, else :math:`0` (detached).
-    - Score :math:`= \\frac{\\sum_{i,j} g_{ij} \\min_m \\text{incl}(I(C_i, D_j), E_m)}{\\sum_{i,j} g_{ij}} + \\text{empt}(C_{i^*}, D_{j^*})`.
+    - Under ``aggregation="hard"``:
+      :math:`(i^*, j^*) = \\arg\\min_{i,j} \\text{empt}(C_i, D_j)` (chosen on detached
+      emptiness penalties), gate :math:`g_{ij} = 1` if :math:`\\text{lo}_{ij} \\le \\text{up}_{ij}`
+      in every coordinate or :math:`(i, j) = (i^*, j^*)` else :math:`0` (detached), and
+      score :math:`= \\frac{\\sum_{i,j} g_{ij} \\min_m \\text{incl}(I(C_i, D_j), E_m)}{\\sum_{i,j} g_{ij}} + \\text{empt}(C_{i^*}, D_{j^*})`.
+    - Under ``aggregation="soft"``:
+      :math:`w_{ij} = \\text{softmax}(-\\text{empt}_{ij} / \\tau)` (with gradient),
+      emptiness term :math:`\\sum_{i,j} w_{ij} \\text{empt}_{ij}`, gate
+      :math:`g_{ij} = \\max(\\text{non\\_empty}_{ij}^\\text{det}, w_{ij})`, and inner
+      target aggregation :math:`\\text{softmin}_\\tau` over :math:`E_m`.
 
-    Returns shape ``(B, 1)``, matching :func:`mowl.nn.el.elbe.losses.gci1_loss` at ``k = 1``
-    on both empty and non-empty intersections.
+    Guarantees:
+    - Returns shape ``(B, 1)``, matching :func:`mowl.nn.el.elbe.losses.gci1_loss` at ``k = 1``
+      on both empty and non-empty intersections under both ``"hard"`` and ``"soft"``.
+
+    Non-guarantees:
+    - ``neg=True`` is not distinct from ``neg=False``.
     """
+    _validate_aggregation(aggregation, tau)
     b_size = data.shape[0]
     cen_c, off_c = _unpack_boxes(data[:, 0], class_embed, class_offset, n_components)
     cen_d, off_d = _unpack_boxes(data[:, 1], class_embed, class_offset, n_components)
@@ -234,15 +263,6 @@ def gci1_loss(
 
     empt = th.linalg.norm(th.relu(lower - upper), dim=-1)  # (B, k, k)
     empt_flat = empt.view(b_size, k * k)
-    designated_idx = th.argmin(empt_flat.detach(), dim=1)  # (B,)
-    batch_arange = th.arange(b_size, device=empt.device)
-    empt_designated = empt_flat[batch_arange, designated_idx]  # (B,)
-
-    non_empty = (lower.detach() <= upper.detach()).all(dim=-1)  # (B, k, k)
-    desig_mask = th.zeros((b_size, k * k), dtype=th.bool, device=empt.device)
-    desig_mask[batch_arange, designated_idx] = True
-    desig_mask = desig_mask.view(b_size, k, k)
-    gate = (non_empty | desig_mask).to(dtype=empt.dtype).detach()  # (B, k, k)
 
     ic = inter_cen.unsqueeze(3)  # (B, k, k, 1, d)
     io = inter_off.unsqueeze(3)  # (B, k, k, 1, d)
@@ -251,9 +271,36 @@ def gci1_loss(
     euc_ie = th.abs(ic - ce)
     incl_ijm = th.linalg.norm(th.relu(euc_ie + io - oe + margin), dim=-1)  # (B, k, k, k)
 
-    min_incl_ij = th.amin(incl_ijm, dim=3)  # (B, k, k)
+    if aggregation == "hard":
+        designated_idx = th.argmin(empt_flat.detach(), dim=1)  # (B,)
+        batch_arange = th.arange(b_size, device=empt.device)
+        empt_designated = empt_flat[batch_arange, designated_idx]  # (B,)
+
+        non_empty = (lower.detach() <= upper.detach()).all(dim=-1)  # (B, k, k)
+        desig_mask = th.zeros((b_size, k * k), dtype=th.bool, device=empt.device)
+        desig_mask[batch_arange, designated_idx] = True
+        desig_mask = desig_mask.view(b_size, k, k)
+        gate = (non_empty | desig_mask).to(dtype=empt.dtype).detach()  # (B, k, k)
+
+        min_incl_ij = th.amin(incl_ijm, dim=3)  # (B, k, k)
+        gated_incl = (gate * min_incl_ij).sum(dim=(1, 2)) / gate.sum(dim=(1, 2))
+        return (gated_incl + empt_designated).unsqueeze(1)
+
+    w_flat = soft_weights(empt_flat, tau=tau, dim=1)  # (B, k * k)
+    empt_soft = (w_flat * empt_flat).sum(dim=1)  # (B,)
+    w = w_flat.view(b_size, k, k)  # (B, k, k)
+
+    non_empty_f = (
+        (lower.detach() <= upper.detach())
+        .all(dim=-1)
+        .to(dtype=empt.dtype)
+        .detach()
+    )  # (B, k, k)
+    gate = th.maximum(non_empty_f, w)  # (B, k, k)
+
+    min_incl_ij = softmin(incl_ijm, tau=tau, dim=3)  # (B, k, k)
     gated_incl = (gate * min_incl_ij).sum(dim=(1, 2)) / gate.sum(dim=(1, 2))
-    return (gated_incl + empt_designated).unsqueeze(1)
+    return (gated_incl + empt_soft).unsqueeze(1)
 
 
 def _gci1_bot_pair_score(
@@ -277,11 +324,14 @@ def gci1_bot_loss(
     margin: float,
     n_components: Optional[int] = None,
     neg: bool = False,
+    aggregation: str = "hard",
+    tau: float = 1.0,
 ) -> th.Tensor:
     """ELBE GCI1-bot loss :math:`\\text{mean}_{i,j} \\|\\text{relu}(-|c_{C,i} - c_{D,j}| + o_{C,i} + o_{D,j} + \\text{margin})\\|_2` for :math:`C \\sqcap D \\sqsubseteq \\bot`.
 
     Returns shape ``(B, 1)``, matching :func:`mowl.nn.el.elbe.losses.gci1_bot_loss` at ``k = 1``.
     """
+    _validate_aggregation(aggregation, tau)
     cen_c, off_c = _unpack_boxes(data[:, 0], class_embed, class_offset, n_components)
     cen_d, off_d = _unpack_boxes(data[:, 1], class_embed, class_offset, n_components)
     pair_scores = multi_pair_score(_gci1_bot_pair_score, cen_c, off_c, cen_d, off_d, margin)
@@ -295,6 +345,8 @@ def gci2_score(
     rel_embed: th.nn.Embedding,
     margin: float,
     n_components: Optional[int] = None,
+    aggregation: str = "hard",
+    tau: float = 1.0,
 ) -> th.Tensor:
     """Positive ELBE GCI2 score for :math:`C \\sqsubseteq \\exists r.D`."""
     return gci2_loss(
@@ -305,6 +357,8 @@ def gci2_score(
         margin,
         n_components=n_components,
         neg=False,
+        aggregation=aggregation,
+        tau=tau,
     )
 
 
@@ -316,13 +370,16 @@ def gci2_loss(
     margin: float,
     n_components: Optional[int] = None,
     neg: bool = False,
+    aggregation: str = "hard",
+    tau: float = 1.0,
 ) -> th.Tensor:
-    """ELBE GCI2 loss :math:`\\text{mean}_i \\min_j s(C_i, D_j, r)` for :math:`C \\sqsubseteq \\exists r.D` (positive and negative).
+    """ELBE GCI2 loss :math:`\\text{mean}_i \\text{agg}_j s(C_i, D_j, r)` for :math:`C \\sqsubseteq \\exists r.D` (positive and negative).
 
     Uses :func:`mowl.nn.el.elbe.losses.gci2_score` when ``neg=False`` and
     :func:`mowl.nn.el.elbe.losses.gci2_score_neg` when ``neg=True``.
     Returns shape ``(B, 1)``, matching :func:`mowl.nn.el.elbe.losses.gci2_loss` at ``k = 1``.
     """
+    _validate_aggregation(aggregation, tau)
     d_single = int(rel_embed.embedding_dim)
     cen_c, off_c = _unpack_boxes(
         data[:, 0], class_embed, class_offset, n_components, embed_dim=d_single
@@ -333,7 +390,9 @@ def gci2_loss(
     )
     fn = EL.gci2_score_neg if neg else EL.gci2_score
     pair_scores = multi_pair_score(fn, cen_c, off_c, cen_d, off_d, r, margin)
-    return th.amin(pair_scores, dim=2).mean(dim=1, keepdim=True)
+    if aggregation == "hard":
+        return th.amin(pair_scores, dim=2).mean(dim=1, keepdim=True)
+    return softmin(pair_scores, tau=tau, dim=2).mean(dim=1, keepdim=True)
 
 
 def gci3_pair_score(
@@ -363,11 +422,14 @@ def gci3_loss(
     margin: float,
     n_components: Optional[int] = None,
     neg: bool = False,
+    aggregation: str = "hard",
+    tau: float = 1.0,
 ) -> th.Tensor:
-    """ELBE GCI3 loss :math:`\\text{mean}_i \\min_j \\text{gci3\\_pair\\_score}(C_i, D_j, r)` for :math:`\\exists r.C \\sqsubseteq D`.
+    """ELBE GCI3 loss :math:`\\text{mean}_i \\text{agg}_j \\text{gci3\\_pair\\_score}(C_i, D_j, r)` for :math:`\\exists r.C \\sqsubseteq D`.
 
     Returns shape ``(B, 1)``, matching :func:`mowl.nn.el.elbe.losses.gci3_loss` at ``k = 1``.
     """
+    _validate_aggregation(aggregation, tau)
     d_single = int(rel_embed.embedding_dim)
     r = rel_embed(data[:, 0])
     cen_c, off_c = _unpack_boxes(
@@ -377,7 +439,9 @@ def gci3_loss(
         data[:, 2], class_embed, class_offset, n_components, embed_dim=d_single
     )
     pair_scores = multi_pair_score(gci3_pair_score, cen_c, off_c, cen_d, off_d, r, margin)
-    return th.amin(pair_scores, dim=2).mean(dim=1, keepdim=True)
+    if aggregation == "hard":
+        return th.amin(pair_scores, dim=2).mean(dim=1, keepdim=True)
+    return softmin(pair_scores, tau=tau, dim=2).mean(dim=1, keepdim=True)
 
 
 def gci3_bot_loss(
@@ -385,11 +449,14 @@ def gci3_bot_loss(
     class_offset: th.nn.Embedding,
     n_components: Optional[int] = None,
     neg: bool = False,
+    aggregation: str = "hard",
+    tau: float = 1.0,
 ) -> th.Tensor:
     """ELBE GCI3-bot loss :math:`\\text{mean}_i \\|o_{C_i}\\|_2` for :math:`\\exists r.C \\sqsubseteq \\bot`.
 
     Returns shape ``(B,)``, matching :func:`mowl.nn.el.elbe.losses.gci3_bot_loss` at ``k = 1``.
     """
+    _validate_aggregation(aggregation, tau)
     b_size = data.shape[0]
     k = _resolve_n_components(class_offset, n_components)
     col = 1 if data.shape[1] > 1 else 0
@@ -408,11 +475,14 @@ def class_assertion_loss(
     margin: float,
     n_components: Optional[int] = None,
     neg: bool = False,
+    aggregation: str = "hard",
+    tau: float = 1.0,
 ) -> th.Tensor:
-    """ELBE class assertion loss :math:`\\min_m \\text{incl}(a, C_m)` for :math:`C(a)`.
+    """ELBE class assertion loss :math:`\\text{agg}_m \\text{incl}(a, C_m)` for :math:`C(a)`.
 
     Returns shape ``(B, 1)``, matching :func:`mowl.nn.el.elbe.losses.class_assertion_loss` at ``k = 1``.
     """
+    _validate_aggregation(aggregation, tau)
     cen_i = ind_embed(data[:, 0]).unsqueeze(1)  # (B, 1, d)
     off_i = th.abs(ind_offset(data[:, 0])).unsqueeze(1)  # (B, 1, d)
     d_single = int(ind_embed.embedding_dim)
@@ -420,7 +490,9 @@ def class_assertion_loss(
         data[:, 1], class_embed, class_offset, n_components, embed_dim=d_single
     )
     incl = multi_inclusion(cen_i, off_i, cen_c, off_c, margin).squeeze(1)  # (B, k)
-    return th.amin(incl, dim=1, keepdim=True)
+    if aggregation == "hard":
+        return th.amin(incl, dim=1, keepdim=True)
+    return softmin(incl, tau=tau, dim=1, keepdim=True)
 
 
 def object_property_assertion_loss(
@@ -430,8 +502,11 @@ def object_property_assertion_loss(
     rel_embed: th.nn.Embedding,
     margin: float,
     neg: bool = False,
+    aggregation: str = "hard",
+    tau: float = 1.0,
 ) -> th.Tensor:
     """ELBE object property assertion loss :math:`r(a, b)`, delegating to :mod:`mowl.nn.el.elbe.losses`."""
+    _validate_aggregation(aggregation, tau)
     return EL.object_property_assertion_loss(
         data,
         ind_embed,

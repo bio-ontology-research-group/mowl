@@ -11,6 +11,8 @@ from mowl.nn import ELModule
 from mowl.nn.el.boxsquaredel.module import BoxSquaredELModule
 from mowl.nn.el.multiboxel.module import MultiBoxELModule
 import mowl.nn.el.multielbe.losses as L
+from mowl.nn.el.softagg import diversity_penalty
+
 
 
 class MultiELBEModule(ELModule):
@@ -95,6 +97,14 @@ class MultiELBEModule(ELModule):
             raise ValueError(
                 f"component_aggregation must be 'hard' or 'soft', got {component_aggregation!r}"
             )
+        if isinstance(tau, bool) or not isinstance(tau, (int, float)) or float(tau) <= 0.0:
+            raise ValueError(f"tau must be > 0, got {tau!r}")
+        if (
+            isinstance(diversity_reg, bool)
+            or not isinstance(diversity_reg, (int, float))
+            or float(diversity_reg) < 0.0
+        ):
+            raise ValueError(f"diversity_reg must be >= 0, got {diversity_reg!r}")
 
         self.nb_ont_classes = nb_ont_classes
         self.nb_rels = nb_rels
@@ -108,10 +118,8 @@ class MultiELBEModule(ELModule):
         self.tau = float(tau)
         self.diversity_reg = float(diversity_reg)
 
-        if component_aggregation == "soft":
-            raise NotImplementedError("implemented in a later task")
-
         self.class_embed = self.init_class_embeddings(
+
             nb_ont_classes, n_components, embed_dim
         )
         self.class_offset = self.init_class_embeddings(
@@ -144,12 +152,7 @@ class MultiELBEModule(ELModule):
         )
         return cen, off
 
-    def _check_aggregation(self) -> None:
-        if self.component_aggregation == "soft":
-            raise NotImplementedError("implemented in a later task")
-
     def gci0_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
-        self._check_aggregation()
         return L.gci0_loss(
             data,
             self.class_embed,
@@ -157,19 +160,21 @@ class MultiELBEModule(ELModule):
             self.margin,
             n_components=self.n_components,
             neg=neg,
+            aggregation=self.component_aggregation,
+            tau=self.tau,
         )
 
     def gci0_bot_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
-        self._check_aggregation()
         return L.gci0_bot_loss(
             data,
             self.class_offset,
             n_components=self.n_components,
             neg=neg,
+            aggregation=self.component_aggregation,
+            tau=self.tau,
         )
 
     def gci1_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
-        self._check_aggregation()
         return L.gci1_loss(
             data,
             self.class_embed,
@@ -177,10 +182,11 @@ class MultiELBEModule(ELModule):
             self.margin,
             n_components=self.n_components,
             neg=neg,
+            aggregation=self.component_aggregation,
+            tau=self.tau,
         )
 
     def gci1_bot_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
-        self._check_aggregation()
         return L.gci1_bot_loss(
             data,
             self.class_embed,
@@ -188,10 +194,11 @@ class MultiELBEModule(ELModule):
             self.margin,
             n_components=self.n_components,
             neg=neg,
+            aggregation=self.component_aggregation,
+            tau=self.tau,
         )
 
     def gci2_score(self, data: th.Tensor) -> th.Tensor:
-        self._check_aggregation()
         return L.gci2_score(
             data,
             self.class_embed,
@@ -199,10 +206,11 @@ class MultiELBEModule(ELModule):
             self.rel_embed,
             self.margin,
             n_components=self.n_components,
+            aggregation=self.component_aggregation,
+            tau=self.tau,
         )
 
     def gci2_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
-        self._check_aggregation()
         return L.gci2_loss(
             data,
             self.class_embed,
@@ -211,10 +219,11 @@ class MultiELBEModule(ELModule):
             self.margin,
             n_components=self.n_components,
             neg=neg,
+            aggregation=self.component_aggregation,
+            tau=self.tau,
         )
 
     def gci3_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
-        self._check_aggregation()
         return L.gci3_loss(
             data,
             self.class_embed,
@@ -223,19 +232,21 @@ class MultiELBEModule(ELModule):
             self.margin,
             n_components=self.n_components,
             neg=neg,
+            aggregation=self.component_aggregation,
+            tau=self.tau,
         )
 
     def gci3_bot_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
-        self._check_aggregation()
         return L.gci3_bot_loss(
             data,
             self.class_offset,
             n_components=self.n_components,
             neg=neg,
+            aggregation=self.component_aggregation,
+            tau=self.tau,
         )
 
     def class_assertion_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
-        self._check_aggregation()
         if self.ind_embed is None or self.ind_offset is None or self.nb_inds == 0:
             raise ValueError(
                 "The number of individuals must be specified to use this loss function."
@@ -249,12 +260,13 @@ class MultiELBEModule(ELModule):
             self.margin,
             n_components=self.n_components,
             neg=neg,
+            aggregation=self.component_aggregation,
+            tau=self.tau,
         )
 
     def object_property_assertion_loss(
         self, data: th.Tensor, neg: bool = False
     ) -> th.Tensor:
-        self._check_aggregation()
         if self.ind_embed is None or self.ind_offset is None or self.nb_inds == 0:
             raise ValueError(
                 "The number of individuals must be specified to use this loss function."
@@ -266,10 +278,12 @@ class MultiELBEModule(ELModule):
             self.rel_embed,
             self.margin,
             neg=neg,
+            aggregation=self.component_aggregation,
+            tau=self.tau,
         )
 
     def regularization_loss(self) -> th.Tensor:
-        """Compute optional anti-collapse component penalty (zero when ``component_reg == 0.0`` or ``k == 1``)."""
+        """Compute optional component and diversity penalties (zero when weights are ``0.0`` or ``k == 1``)."""
         loss = th.zeros(
             (),
             device=self.class_embed.weight.device,
@@ -290,6 +304,14 @@ class MultiELBEModule(ELModule):
             dists = th.linalg.norm(diffs, dim=-1)
             comp_penalty = th.relu(tau_c - dists).mean(dim=1).mean(dim=0)
             loss = loss + self.component_reg * comp_penalty
+        if self.diversity_reg > 0.0 and self.n_components > 1 and self.nb_ont_classes > 0:
+            centers = self.class_embed.weight.view(
+                self.nb_ont_classes, self.n_components, self.embed_dim
+            )
+            offsets = th.abs(self.class_offset.weight).view(
+                self.nb_ont_classes, self.n_components, self.embed_dim
+            )
+            loss = loss + self.diversity_reg * diversity_penalty(centers, offsets)
         return loss
 
     def effective_components(self, eps: float = 1e-3) -> th.Tensor:
