@@ -33,9 +33,16 @@ class PrismModule(ELModule):
     - Raises :class:`ValueError` if ``embed_dim < 3``.
     - :meth:`prism_params` returns ``(h, box_center, |box_offset|)`` of shapes
       ``(B, 3)``, ``(B, d - 2)``, ``(B, d - 2)`` with non-negative ``box_offset``.
-    - Every GCI loss returns a 1-D tensor of shape ``(B,)``.
+    - Every GCI loss returns a 1-D tensor of shape ``(B,)`` like MultiBoxEL
+      (whereas ELBE returns ``(B, 1)``).
+    - :meth:`gci1_bot_loss` aggregates box coordinates with ``min`` (semantically
+      disjointness-if-any-separates; ELBE uses the Euclidean norm).
 
     Non-guarantees:
+    - :meth:`gci0_bot_loss` and :meth:`gci3_bot_loss` have a floor of ``margin``
+      at ``margin > 0`` since :math:`\\sum_k h_k = 3 |\\rho| \\ge 0`.
+    - Touching triangles (:math:`\\sum_k \\min(h_{C,k}, h_{D,k}) = 0`) count as
+      disjoint at ``margin = 0``.
     - Role axiom losses (``role_inclusion``, ``role_chain``) are not implemented
       (``role_axiom_capable = False``).
     - Negative sampling is only supported for ``gci2`` and
