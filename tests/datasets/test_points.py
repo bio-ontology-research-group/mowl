@@ -28,7 +28,7 @@ from mowl.geometric.normal_forms import BOTTOM, TOP
 from mowl.nn import MultiBoxELModule, MultiELBEModule
 from mowl.owlapi import OWLAPIAdapter
 from tests.geometric.helpers import NS, fixture_path
-from tests.geometric.test_abox import IND, abox_kb  # noqa: F401
+from tests.geometric.test_abox import IND, _build_random_abox_kb, abox_kb  # noqa: F401
 
 
 @pytest.fixture
@@ -98,10 +98,33 @@ def test_point_pairs_consistent_with_cm(t3_kb: OWLOntology) -> None:
             if cm.entails(d_name, c_iri):
                 assert (elem_i, cls_j) in pos_set
 
-    # Every hard negative (x_D, C) is jointly unsatisfiable and not entailed
-    # On t3.owl there are 3 disjointness axioms (A & B <= bot, A & C <= bot, B & C <= bot),
-    # yielding 6 directed disjoint pairs independent of has_bottom_axiom.
-    assert ps.hard_neg_pairs.shape == (6, 2)
+    # Every hard negative (x_D, C) is jointly unsatisfiable and not entailed,
+    # and the set equals the exact brute-force {!cm.joint_satisfiable({D, C})} set:
+    # on t3.owl there are 12 directed hard negative pairs (6 from the 3 direct
+    # disjointness axioms plus 6 two-step pairs (A,X3),(B,X1),(C,X2) and reverses).
+    assert ps.hard_neg_capped is False
+    assert ps.hard_neg_pairs.shape == (12, 2)
+    hard_named = {
+        (ps.element_names[e].split("#")[-1], inv_cls[c].split("#")[-1])
+        for e, c in ps.hard_neg_pairs.tolist()
+    }
+    expected_t3_hard = {
+        ("A", "B"), ("B", "A"),
+        ("A", "C"), ("C", "A"),
+        ("B", "C"), ("C", "B"),
+        ("A", "X3"), ("X3", "A"),
+        ("B", "X1"), ("X1", "B"),
+        ("C", "X2"), ("X2", "C"),
+    }
+    assert hard_named == expected_t3_hard
+    brute_hard = {
+        (elem_i, cls_j)
+        for elem_i, d_name in enumerate(ps.element_names)
+        for c_iri, cls_j in cls_dict.items()
+        if c_iri not in (unsat_iri, TOP, BOTTOM)
+        and not cm.joint_satisfiable({d_name, c_iri})
+    }
+    assert {tuple(row) for row in ps.hard_neg_pairs.tolist()} == brute_hard
     for elem_i, cls_j in ps.hard_neg_pairs.tolist():
         d_name = ps.element_names[elem_i]
         c_iri = inv_cls[cls_j]
@@ -220,6 +243,7 @@ def test_cache_roundtrip(t3_kb: OWLOntology, abox_kb: OWLOntology, tmp_path: Pat
     assert torch.equal(loaded.pos_pairs, ps.pos_pairs)
     assert torch.equal(loaded.hard_neg_pairs, ps.hard_neg_pairs)
     assert torch.equal(loaded.role_pairs, ps.role_pairs)
+    assert loaded.hard_neg_capped == ps.hard_neg_capped
 
     # Wrong expected_sha256 raises ValueError
     with pytest.raises(ValueError, match="sha256"):
@@ -246,6 +270,194 @@ def test_cache_roundtrip(t3_kb: OWLOntology, abox_kb: OWLOntology, tmp_path: Pat
         ds, cls_dict, {}, cache_dir=cache_dir, rng_seed=0
     )
     assert torch.equal(ps1.pos_pairs, ps2.pos_pairs)
+
+
+def _build_3step_chain_kb() -> OWLOntology:
+    """Build a 3-step conjunction chain KB where E3 & G3 <= bot requires 3 NF2 steps."""
+    adapter = OWLAPIAdapter()
+    mgr = adapter.owl_manager
+    ont = adapter.create_ontology("http://mowl.borg/geo/chain3")
+    c = {
+        name: adapter.create_class(NS + name)
+        for name in ("A", "B", "Cc", "D", "E1", "E2", "E3", "G1", "G2", "G3")
+    }
+    bot = adapter.create_class(BOTTOM)
+    # D <= A, D <= G1, D <= G2, D <= G3; Cc <= B
+    mgr.addAxiom(ont, adapter.create_subclass_of(c["D"], c["A"]))
+    mgr.addAxiom(ont, adapter.create_subclass_of(c["D"], c["G1"]))
+    mgr.addAxiom(ont, adapter.create_subclass_of(c["D"], c["G2"]))
+    mgr.addAxiom(ont, adapter.create_subclass_of(c["D"], c["G3"]))
+    mgr.addAxiom(ont, adapter.create_subclass_of(c["Cc"], c["B"]))
+    # A & B <= E1; E1 & G1 <= E2; E2 & G2 <= E3; E3 & G3 <= bot
+    mgr.addAxiom(
+        ont,
+        adapter.create_subclass_of(
+            adapter.create_object_intersection_of(c["A"], c["B"]), c["E1"]
+        ),
+    )
+    mgr.addAxiom(
+        ont,
+        adapter.create_subclass_of(
+            adapter.create_object_intersection_of(c["E1"], c["G1"]), c["E2"]
+        ),
+    )
+    mgr.addAxiom(
+        ont,
+        adapter.create_subclass_of(
+            adapter.create_object_intersection_of(c["E2"], c["G2"]), c["E3"]
+        ),
+    )
+    mgr.addAxiom(
+        ont,
+        adapter.create_subclass_of(
+            adapter.create_object_intersection_of(c["E3"], c["G3"]), bot
+        ),
+    )
+    return ont
+
+
+def _assert_supervision_exact_against_cm(ont: OWLOntology) -> PointSupervision:
+    """Assert pos_pairs and hard_neg_pairs match brute-force cm.entails / !cm.joint_satisfiable."""
+    cm = CanonicalModel.from_ontology(ont)
+    cls_dict = _class_dict_from_ontology(ont)
+    inds = sorted(str(i.toStringID()) for i in ont.getIndividualsInSignature())
+    ind_dict = {iri: idx for idx, iri in enumerate(inds)}
+    rels = sorted(str(r.toStringID()) for r in ont.getObjectPropertiesInSignature())
+    rel_dict = {iri: idx for idx, iri in enumerate(rels)}
+    inv_cls = {idx: iri for iri, idx in cls_dict.items()}
+
+    ps = PointSupervision.from_canonical_model(cm, cls_dict, ind_dict, rel_dict)
+    assert ps.hard_neg_capped is False
+
+    cand_cls = ps.candidate_class_indices.tolist()
+    brute_pos = {
+        (e, c)
+        for e, d in enumerate(ps.element_names)
+        for c in cand_cls
+        if cm.entails(d, inv_cls[c])
+    }
+    brute_hard = {
+        (e, c)
+        for e, d in enumerate(ps.element_names)
+        for c in cand_cls
+        if not cm.joint_satisfiable({d, inv_cls[c]})
+    }
+    pos_set = {tuple(row) for row in ps.pos_pairs.tolist()}
+    hard_set = {tuple(row) for row in ps.hard_neg_pairs.tolist()}
+    assert pos_set == brute_pos
+    assert hard_set == brute_hard
+    return ps
+
+
+def test_hard_neg_pairs_exact_against_brute_force(
+    t3_kb: OWLOntology, abox_kb: OWLOntology
+) -> None:
+    """hard_neg_pairs equals brute-force {(x_D, C) : not cm.joint_satisfiable({D, C})} on every fixture."""
+    # 1. t3.owl: 12 pairs including two-step (A,X3),(B,X1),(C,X2) and reverses
+    ps_t3 = _assert_supervision_exact_against_cm(t3_kb)
+    assert ps_t3.hard_neg_pairs.shape == (12, 2)
+
+    # 2. helly_ok.owl: 14 pairs including two-step (D,F) and (F,D)
+    helly_ont = PathDataset(fixture_path("helly_ok.owl")).ontology
+    ps_helly = _assert_supervision_exact_against_cm(helly_ont)
+    assert ps_helly.hard_neg_pairs.shape == (14, 2)
+    helly_cls = _class_dict_from_ontology(helly_ont)
+    helly_inv = {v: k.split("#")[-1] for k, v in helly_cls.items()}
+    helly_named = {
+        (ps_helly.element_names[e].split("#")[-1], helly_inv[c])
+        for e, c in ps_helly.hard_neg_pairs.tolist()
+    }
+    assert ("D", "F") in helly_named and ("F", "D") in helly_named
+
+    # 3. roles.owl and top_lhs.owl: 0 pairs
+    for fname in ("roles.owl", "top_lhs.owl"):
+        ps_f = _assert_supervision_exact_against_cm(
+            PathDataset(fixture_path(fname)).ontology
+        )
+        assert ps_f.hard_neg_pairs.shape == (0, 2)
+
+    # 4. abox_kb: 3 pairs (including individual element bob vs Female)
+    ps_abox = _assert_supervision_exact_against_cm(abox_kb)
+    assert ps_abox.hard_neg_pairs.shape == (3, 2)
+
+    # 5. All 20 random ABox KBs from tests/geometric/test_abox.py
+    for seed in range(20):
+        ont_seed, _, _ = _build_random_abox_kb(seed)
+        _assert_supervision_exact_against_cm(ont_seed)
+
+    # 6. 3-step conjunction chain KB: 12 exact pairs (vs 4 under one-step closure)
+    chain_ont = _build_3step_chain_kb()
+    ps_chain = _assert_supervision_exact_against_cm(chain_ont)
+    assert ps_chain.hard_neg_pairs.shape == (12, 2)
+    chain_cls = _class_dict_from_ontology(chain_ont)
+    chain_inv = {v: k.split("#")[-1] for k, v in chain_cls.items()}
+    chain_named = {
+        (ps_chain.element_names[e].split("#")[-1], chain_inv[c])
+        for e, c in ps_chain.hard_neg_pairs.tolist()
+    }
+    for multi_step_pair in (
+        ("D", "Cc"), ("Cc", "D"),
+        ("D", "B"), ("B", "D"),
+        ("D", "E1"), ("E1", "D"),
+        ("D", "E2"), ("E2", "D"),
+    ):
+        assert multi_step_pair in chain_named
+
+    # 7. When hard_neg_cap is hit, hard_neg_capped is True and output is capped
+    cm_t3 = CanonicalModel.from_ontology(t3_kb)
+    ps_capped = PointSupervision.from_canonical_model(
+        cm_t3, _class_dict_from_ontology(t3_kb), {}, rng_seed=0, hard_neg_cap=5
+    )
+    assert ps_capped.hard_neg_capped is True
+    assert ps_capped.hard_neg_pairs.shape == (5, 2)
+
+
+def test_sample_permutes_all_elements_coverage() -> None:
+    """sample() permutes positive and role index arrays so every element is sampled when n_pos_take < n_pos."""
+    n_elem = 700
+    n_cls = 10
+    pos = torch.stack(
+        [
+            torch.arange(n_elem, dtype=torch.long),
+            torch.zeros(n_elem, dtype=torch.long),
+        ],
+        dim=1,
+    )
+    hard = torch.stack(
+        [
+            torch.arange(n_elem, dtype=torch.long),
+            torch.ones(n_elem, dtype=torch.long),
+        ],
+        dim=1,
+    )
+    roles = torch.stack(
+        [
+            torch.zeros(n_elem, dtype=torch.long),
+            torch.arange(n_elem, dtype=torch.long),
+            torch.arange(n_elem, dtype=torch.long),
+        ],
+        dim=1,
+    )
+    ps = PointSupervision(
+        n_elements=n_elem,
+        element_names=[f"e{i}" for i in range(n_elem)],
+        element_class_index=torch.arange(n_elem, dtype=torch.long) % n_cls,
+        element_is_individual=torch.zeros(n_elem, dtype=torch.bool),
+        pos_pairs=pos,
+        hard_neg_pairs=hard,
+        role_pairs=roles,
+        candidate_class_indices=torch.arange(n_cls, dtype=torch.long),
+    )
+
+    seen_pos = set()
+    seen_roles = set()
+    for seed in range(20):
+        b = ps.sample(1500, rng=seed)
+        seen_pos.update(b["pos"][:, 0].tolist())
+        seen_roles.update(b["roles"][:, 1].tolist())
+    assert len(seen_pos) == n_elem
+    assert max(seen_pos) == n_elem - 1
+    assert len(seen_roles) == n_elem
 
 
 def _run_synthetic_scale_benchmark() -> Tuple[float, float, int, int, int]:
@@ -283,6 +495,7 @@ def _run_synthetic_scale_benchmark() -> Tuple[float, float, int, int, int]:
         disjoint_pairs=disjoint_pairs,
         rng_seed=0,
     )
+    assert isinstance(ps.hard_neg_capped, bool)
     batch = ps.sample(100_000, rng=0)
     elapsed = time.perf_counter() - t0
     max_rss_gb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / (1024.0 * 1024.0)

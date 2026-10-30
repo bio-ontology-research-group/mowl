@@ -18,6 +18,7 @@ from mowl.nn.el.pointloss import (
     compute_class_assertion_score_point,
     compute_point_membership_loss,
     compute_point_modelness,
+    compute_target_membership,
     gather_element_embeddings,
     membership_bce,
     soft_box_membership,
@@ -434,6 +435,15 @@ class MultiBoxELModule(ELModule):
         """
         return compute_point_membership_loss(self, batch, neg=neg, weight=weight)
 
+    def target_membership(self, points: th.Tensor, elem_y: th.Tensor) -> th.Tensor:
+        """Compute soft membership of ``points`` ``(B, d)`` in target element ``elem_y`` ``(B,)``.
+
+        Uses ``self.class_boxes`` for class targets and a virtual box of
+        half-width ``self.ind_halfwidth`` around ``self.ind_embed`` for
+        individual targets.
+        """
+        return compute_target_membership(self, points, elem_y)
+
     def point_role_loss(
         self,
         batch: Union[Mapping[str, th.Tensor], th.Tensor],
@@ -442,15 +452,21 @@ class MultiBoxELModule(ELModule):
     ) -> th.Tensor:
         """Compute Objective O3 role BCE loss via Box²EL head/tail boxes and element bumps.
 
-        For each role triple ``(x_C, r, y_D)``, evaluates
-        :math:`m_{H_r}(x + b_D) \\cdot m_{T_r}(y + b_C)` where :math:`b_C, b_D` are
-        the bumps of the elements' own classes or individuals.
+        For each role triple ``(x_C, r, y_D)``:
+        - Head term: :math:`m_{H_r}(x + b_D)`.
+        - Tail term: :math:`m_{T_r}(y + b_C)` when ``y_D`` is a class element, or
+          soft membership of the translated tail centre :math:`c_{T_r} - b_C` in
+          the virtual box of half-width ``self.ind_halfwidth`` around
+          ``self.ind_embed[b]`` when ``y_D`` is an individual target.
+        - Combined role membership: :math:`m_{\\text{head}} \\cdot m_{\\text{tail}}`.
 
         Guarantees:
         - Accepts either a ``(B, 3)`` integer tensor ``[elem_x, r_idx, elem_y]``
           or a sample dictionary with key ``"roles"``.
         - Differentiable with respect to element points, element bumps, and
           role head/tail box parameters, without accessing ``ind_offset``.
+        - Uses ``self.ind_halfwidth`` for individual targets exactly as
+          :class:`~mowl.nn.el.multielbe.module.MultiELBEModule` does.
 
         Non-guarantees:
         - Raises :class:`RuntimeError` if :meth:`set_point_supervision` has not
@@ -470,6 +486,10 @@ class MultiBoxELModule(ELModule):
         torch.Tensor
             Scalar BCE role loss.
         """
+        if self.point_supervision is None or self.elem_embed is None:
+            raise RuntimeError(
+                "PointSupervision has not been set on this module; call set_point_supervision(ps) first."
+            )
         device = self.class_center.weight.device
         dtype = self.class_center.weight.dtype
         roles = batch.get("roles") if isinstance(batch, Mapping) else batch
@@ -482,17 +502,40 @@ class MultiBoxELModule(ELModule):
         elem_y = r_tensor[:, 2]
 
         x = self.element_embeddings(elem_x)
-        y = self.element_embeddings(elem_y)
         b_c = self.element_bumps(elem_x)
         b_d = self.element_bumps(elem_y)
 
         cen_h = self.head_center(rel_idx).unsqueeze(1)
         off_h = th.abs(self.head_offset(rel_idx)).unsqueeze(1)
-        cen_t = self.tail_center(rel_idx).unsqueeze(1)
+        cen_t = self.tail_center(rel_idx)
         off_t = th.abs(self.tail_offset(rel_idx)).unsqueeze(1)
 
         m_head = soft_box_membership(x + b_d, cen_h, off_h, beta=self.beta).squeeze(1)
-        m_tail = soft_box_membership(y + b_c, cen_t, off_t, beta=self.beta).squeeze(1)
+
+        ps = self.point_supervision
+        is_ind_y = ps.element_is_individual.to(device=device)[elem_y]
+        if not bool(is_ind_y.any().item()):
+            y = self.element_embeddings(elem_y)
+            m_tail = soft_box_membership(
+                y + b_c, cen_t.unsqueeze(1), off_t, beta=self.beta
+            ).squeeze(1)
+        elif bool(is_ind_y.all().item()):
+            m_tail = self.target_membership(cen_t - b_c, elem_y)
+        else:
+            b_size = int(elem_y.shape[0])
+            m_tail = th.empty((b_size,), device=device, dtype=dtype)
+            cls_mask = ~is_ind_y
+            y_cls = self.element_embeddings(elem_y[cls_mask])
+            m_tail[cls_mask] = soft_box_membership(
+                y_cls + b_c[cls_mask],
+                cen_t[cls_mask].unsqueeze(1),
+                off_t[cls_mask],
+                beta=self.beta,
+            ).squeeze(1)
+            m_tail[is_ind_y] = self.target_membership(
+                cen_t[is_ind_y] - b_c[is_ind_y], elem_y[is_ind_y]
+            )
+
         m_role = m_head * m_tail
 
         target = 0.0 if neg else 1.0

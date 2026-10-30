@@ -243,26 +243,39 @@ def test_point_role_loss_numeric_multielbe_and_multiboxel() -> None:
     # Hand computation for MultiBoxEL Triple 1 (elem_x=0 class 0, elem_y=2 individual 0):
     # x + b_ind0 = [1.0, 2.0] + [0.4, -0.1] = [1.4, 1.9]
     # |o_H| - |x + b_ind0 - c_H| = [0.5 - 0.5, 0.5 - 0.2] = [0.0, 0.3] -> min = 0.0 -> m_H = sig(0.0) = 0.5
-    # y_ind0 + b_x = [2.0, 1.0] + [0.1, 0.2] = [2.1, 1.2]
-    # |o_T| - |y_ind0 + b_x - c_T| = [0.6 - 1.3, 0.4 - 1.3] = [-0.7, -0.9] -> min = -0.9 -> m_T = sig(-9.0)
-    m_boxel_ind = torch.sigmoid(torch.tensor(0.0)) * torch.sigmoid(torch.tensor(-9.0))
+    # Individual target uses virtual box (y_ind0, ind_halfwidth=0.5) on translated tail centre c_T - b_x:
+    # c_T - b_x = [0.8, -0.1] - [0.1, 0.2] = [0.7, -0.3]
+    # ind_halfwidth - |(c_T - b_x) - y_ind0| = [0.5 - 1.3, 0.5 - 1.3] = [-0.8, -0.8] -> min = -0.8 -> m_T = sig(-8.0)
+    m_boxel_ind = torch.sigmoid(torch.tensor(0.0)) * torch.sigmoid(torch.tensor(-8.0))
     loss_boxel_ind = boxel.point_role_loss({"roles": torch.tensor([[0, 0, 2]], dtype=torch.long)})
     assert torch.allclose(loss_boxel_ind, -torch.log(m_boxel_ind), atol=1e-6)
 
-    # Virtual box around an individual target on MultiBoxEL (half-width ind_halfwidth = 5*beta)
-    # reaches m >= 0.99 when a translated point lands on the individual target:
-    y_ind_pt = boxel.ind_center.weight[0].unsqueeze(0)
-    ind_vbox_c = y_ind_pt.unsqueeze(1)
-    ind_vbox_o = torch.full_like(ind_vbox_c, boxel.ind_halfwidth)
-    m_vbox = union_membership(soft_box_membership(y_ind_pt, ind_vbox_c, ind_vbox_o, beta=boxel.beta))
-    assert m_vbox.item() >= 0.99
-    assert m_vbox.item() == pytest.approx(torch.sigmoid(torch.tensor(5.0)).item(), rel=1e-5)
-
-    # And when x + b_ind == c_H and y_ind + b_x == c_T with offsets >= 6*beta, MultiBoxEL role m >= 0.99:
+    # Zero out tail_offset so only ind_halfwidth = 5*beta can give m_T = sig(5.0) >= 0.99
+    # when c_T - b_x == y_ind0 and x + b_ind0 == c_H:
     with torch.no_grad():
         boxel.head_center.weight[0] = torch.tensor([1.4, 1.9])
         boxel.head_offset.weight[0] = torch.tensor([0.6, 0.6])
         boxel.tail_center.weight[0] = torch.tensor([2.1, 1.2])
-        boxel.tail_offset.weight[0] = torch.tensor([0.6, 0.6])
-    loss_boxel_exact_ind = boxel.point_role_loss({"roles": torch.tensor([[0, 0, 2]], dtype=torch.long)})
-    assert torch.exp(-loss_boxel_exact_ind).item() >= 0.99
+        boxel.tail_offset.weight[0] = torch.tensor([0.0, 0.0])
+
+    m_target_elbe = elbe.target_membership(
+        torch.tensor([[1.5, 1.7]]), torch.tensor([2], dtype=torch.long)
+    )
+    m_target_boxel = boxel.target_membership(
+        torch.tensor([[2.0, 1.0]]), torch.tensor([2], dtype=torch.long)
+    )
+    assert m_target_elbe.item() >= 0.99
+    assert m_target_boxel.item() >= 0.99
+    assert m_target_boxel.item() == pytest.approx(
+        torch.sigmoid(torch.tensor(5.0)).item(), rel=1e-5
+    )
+
+    loss_boxel_exact_ind = boxel.point_role_loss(
+        {"roles": torch.tensor([[0, 0, 2]], dtype=torch.long)}
+    )
+    m_exact_boxel = torch.exp(-loss_boxel_exact_ind).item()
+    assert m_exact_boxel >= 0.99
+    assert m_exact_boxel == pytest.approx(
+        (torch.sigmoid(torch.tensor(6.0)) * torch.sigmoid(torch.tensor(5.0))).item(),
+        rel=1e-5,
+    )

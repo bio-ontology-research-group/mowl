@@ -1,14 +1,32 @@
 """Canonical-element point supervision for Objective O3 (:class:`PointSupervision`).
 
 Constructs positive membership pairs ``(x_D, C)`` from sparse ancestor sets,
-hard negative pairs ``(x_D, C)`` from the disjointness closure
+hard negative pairs ``(x_D, C)`` from (a) the one-step disjointness closure
 (:math:`D \\sqsubseteq A` and :math:`C \\sqsubseteq B` for some axiom
 :math:`A \\sqcap B \\sqsubseteq \\bot` or :math:`A \\sqsubseteq \\bot`, computed via
-sparse boolean matrix products :math:`M \\cdot \\text{Dis} \\cdot M^\\top` and
-capped at :data:`HARD_NEG_CAP`), random negative candidates by rejection sampling
+sparse boolean matrix products :math:`M \\cdot \\text{Dis} \\cdot M^\\top`) plus
+(b) an exact joint-satisfiability pass over candidate pairs that can trigger a
+conjunction axiom (:math:`D \\sqsubseteq A` and :math:`C \\sqsubseteq B` in either
+order for some :math:`A \\sqcap B \\sqsubseteq E` with :math:`E \\neq \\bot`,
+computed with the same sparse products and checked exactly; capped at
+:data:`HARD_NEG_CAP` with :attr:`PointSupervision.hard_neg_capped` recording
+whether the cap was hit), random negative candidates by rejection sampling
 against each element's positive set at :meth:`PointSupervision.sample` time, and
 canonical role edges ``(x_C, r, x_D)`` restricted to the element table from a
 :class:`~mowl.geometric.completion.CanonicalModel`.
+
+Why one exact check per candidate pair in (b) suffices without outer iteration:
+In :class:`~mowl.geometric.completion.CanonicalModel`, every single-concept rule
+(``NF1``, ``NF3``, ``NF4``, ``NF6``, ``NF7``, and backward ``BOTTOM`` propagation)
+is already saturated to fixpoint on :math:`S(D)` and :math:`S(C)` individually,
+and a fresh conjunction concept :math:`Z \\sqsubseteq D \\sqcap C` has no incoming
+role edges. Therefore, :math:`S(D) \\cup S(C)` can derive concepts outside
+:math:`S(D) \\cup S(C)` only if at least one binary conjunction axiom
+(:math:`A \\sqcap B \\sqsubseteq E`) has one conjunct in :math:`S(D)` and the other
+in :math:`S(C)`. Because joint-satisfiability checking saturates each candidate
+pair :math:`\\{D, C\\}` completely to fixpoint across all chained axioms, a single
+exact check per candidate pair is both sound and complete and requires no outer
+fixpoint loop.
 
 Guarantees:
 - Element table contains one row per satisfiable named concept in
@@ -60,7 +78,7 @@ import logging
 import os
 from pathlib import Path
 import random
-from typing import BinaryIO, Dict, List, Mapping, Optional, Sequence, Tuple, Union
+from typing import BinaryIO, Dict, FrozenSet, List, Mapping, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import scipy.sparse as sp
@@ -73,7 +91,7 @@ from mowl.ontology.normalize import is_auxiliary_iri
 
 logger = logging.getLogger(__name__)
 
-POINTS_CODE_TAG: str = "points-v2"
+POINTS_CODE_TAG: str = "points-v3"
 HARD_NEG_CAP: int = 2_000_000
 
 
@@ -137,29 +155,171 @@ def _sample_indices(
         ]
     ],
 ) -> torch.Tensor:
-    """Return all ``0 .. total - 1`` when ``total <= cap``, else sample ``cap`` without replacement."""
+    """Permute ``0 .. total - 1`` with ``rng`` and return the first ``min(total, cap)`` indices."""
     if total <= 0 or cap <= 0:
         return torch.empty((0,), dtype=torch.long)
-    if total <= cap:
-        return torch.arange(total, dtype=torch.long)
+    k = min(int(total), int(cap))
     if rng is None:
-        return torch.randperm(total, dtype=torch.long)[:cap]
+        return torch.randperm(total, dtype=torch.long)[:k]
     if isinstance(rng, int):
         gen = torch.Generator()
         gen.manual_seed(int(rng))
-        return torch.randperm(total, generator=gen, dtype=torch.long)[:cap]
+        return torch.randperm(total, generator=gen, dtype=torch.long)[:k]
     if isinstance(rng, torch.Generator):
-        return torch.randperm(total, generator=rng, dtype=torch.long)[:cap]
+        return torch.randperm(total, generator=rng, dtype=torch.long)[:k]
     if isinstance(rng, np.random.Generator):
-        chosen = rng.choice(total, size=cap, replace=False)
+        chosen = rng.choice(total, size=k, replace=False)
         return torch.as_tensor(chosen, dtype=torch.long)
     if isinstance(rng, np.random.RandomState):
-        chosen = rng.choice(total, size=cap, replace=False)
+        chosen = rng.choice(total, size=k, replace=False)
         return torch.as_tensor(chosen, dtype=torch.long)
     if isinstance(rng, random.Random):
-        chosen = rng.sample(range(total), cap)
+        chosen = rng.sample(range(total), k)
         return torch.tensor(chosen, dtype=torch.long)
     raise TypeError(f"Unsupported rng type: {type(rng).__name__}")
+
+
+def _pair_joint_satisfiable(
+    cm: CanonicalModel,
+    d_name: str,
+    c_iri: str,
+    nf2_by_sub: Optional[Mapping[str, Sequence[NF2]]] = None,
+    cache: Optional[Dict[FrozenSet[str], bool]] = None,
+) -> bool:
+    """Return ``True`` iff ``{d_name, c_iri}`` is jointly satisfiable in ``cm``.
+
+    Starts from the pre-saturated ancestor sets ``S(d_name) | S(c_iri)`` in
+    ``cm.completion.sub_super`` and closes under binary conjunction axioms
+    (:class:`~mowl.geometric.normal_forms.NF2`). Because every single-concept
+    rule (``NF1``, ``NF3``, ``NF4``, ``NF6``, ``NF7``, and backward ``BOTTOM``
+    propagation) is already saturated on each concept name in ``cm.completion``
+    and a fresh conjunction concept ``Z <= d_name & c_iri`` has no incoming role
+    edges, ``S(Z)`` is identical to closing ``S(d_name) | S(c_iri)`` under
+    ``NF2`` triggers ``(B1, B2) -> S(E)``.
+    """
+    key = frozenset((d_name, c_iri))
+    if cache is not None and key in cache:
+        return cache[key]
+    if key in cm._joint_sat_cache:
+        res = cm._joint_sat_cache[key]
+        if cache is not None:
+            cache[key] = res
+        return res
+
+    sub_super = cm.completion.sub_super
+    s_d = sub_super.get(d_name, set())
+    s_c = sub_super.get(c_iri, set())
+    if d_name == BOTTOM or c_iri == BOTTOM or BOTTOM in s_d or BOTTOM in s_c:
+        if cache is not None:
+            cache[key] = False
+        return False
+
+    if nf2_by_sub is None:
+        nf2_index: Dict[str, List[NF2]] = {}
+        for ax in cm.axioms:
+            if isinstance(ax, NF2):
+                nf2_index.setdefault(ax.sub1, []).append(ax)
+                if ax.sub2 != ax.sub1:
+                    nf2_index.setdefault(ax.sub2, []).append(ax)
+        nf2_by_sub = nf2_index
+
+    closure: set[str] = set(s_d) | set(s_c)
+    queue = list(s_c - s_d)
+    head = 0
+    while head < len(queue):
+        x = queue[head]
+        head += 1
+        for ax in nf2_by_sub.get(x, ()):
+            other = ax.sub2 if ax.sub1 == x else ax.sub1
+            if other in closure:
+                sup = ax.sup
+                if cm.completion.is_unsatisfiable(sup):
+                    if cache is not None:
+                        cache[key] = False
+                    return False
+                if sup not in closure:
+                    for u in sub_super.get(sup, (sup,)):
+                        if u == BOTTOM:
+                            if cache is not None:
+                                cache[key] = False
+                            return False
+                        if u not in closure:
+                            closure.add(u)
+                            queue.append(u)
+
+    if cache is not None:
+        cache[key] = True
+    return True
+
+
+def _sparse_pair_product(
+    m_csr: sp.csr_matrix,
+    m_cls_csr: sp.csr_matrix,
+    cls_target_ids_np: np.ndarray,
+    rel_parts_r: Sequence[np.ndarray],
+    rel_parts_c: Sequence[np.ndarray],
+    exclude_pairs: Optional[torch.Tensor] = None,
+) -> torch.Tensor:
+    """Compute sorted ``(elem_idx, class_idx)`` pairs from ``M @ Rel @ M_cls^T`` excluding ``exclude_pairs``."""
+    if not rel_parts_r or cls_target_ids_np.size == 0:
+        return torch.empty((0, 2), dtype=torch.long)
+
+    rel_r_all = np.concatenate(rel_parts_r)
+    rel_c_all = np.concatenate(rel_parts_c)
+    if rel_r_all.size == 0:
+        return torch.empty((0, 2), dtype=torch.long)
+
+    active_cols, inv_cols = np.unique(
+        np.concatenate([rel_r_all, rel_c_all]), return_inverse=True
+    )
+    n_active = active_cols.size
+    half = rel_r_all.size
+    rel_r_sub = inv_cols[:half]
+    rel_c_sub = inv_cols[half:]
+    rel_sub = sp.csr_matrix(
+        (np.ones(half, dtype=bool), (rel_r_sub, rel_c_sub)),
+        shape=(n_active, n_active),
+        dtype=bool,
+    )
+
+    m_sub = m_csr[:, active_cols]
+    m_cls_sub = m_cls_csr[:, active_cols]
+    md_sub = (m_sub @ rel_sub).astype(bool)
+    active_elem_rows = np.flatnonzero(np.diff(md_sub.indptr) > 0)
+    if active_elem_rows.size == 0:
+        return torch.empty((0, 2), dtype=torch.long)
+
+    h_sub = (md_sub[active_elem_rows] @ m_cls_sub.T).astype(bool)
+    if h_sub.nnz == 0:
+        return torch.empty((0, 2), dtype=torch.long)
+
+    h_coo = h_sub.tocoo()
+    h_elem = torch.from_numpy(active_elem_rows[h_coo.row].astype(np.int64, copy=False))
+    h_cls = torch.from_numpy(cls_target_ids_np[h_coo.col].astype(np.int64, copy=False))
+
+    if exclude_pairs is not None and exclude_pairs.shape[0] > 0:
+        ex_sorted = _sort_pairs_lexicographically(exclude_pairs)
+        stride = (
+            max(
+                int(ex_sorted[:, 1].max().item()),
+                int(h_cls.max().item()),
+            )
+            + 1
+        )
+        ex_codes = (ex_sorted[:, 0] * stride + ex_sorted[:, 1]).contiguous()
+        h_codes = (h_elem * stride + h_cls).contiguous()
+        idx = torch.searchsorted(ex_codes, h_codes)
+        n_ex = int(ex_codes.numel())
+        idx_clamped = idx.clamp(max=n_ex - 1)
+        is_ex = (idx < n_ex) & (ex_codes[idx_clamped] == h_codes)
+        if bool(is_ex.any().item()):
+            keep = ~is_ex
+            h_elem = h_elem[keep]
+            h_cls = h_cls[keep]
+
+    if h_elem.numel() == 0:
+        return torch.empty((0, 2), dtype=torch.long)
+    return _sort_pairs_lexicographically(torch.stack([h_elem, h_cls], dim=1))
 
 
 def _sort_pairs_lexicographically(pairs: torch.Tensor) -> torch.Tensor:
@@ -276,6 +436,9 @@ class PointSupervision:
         Default random seed used when ``sample(n, rng=None)`` is called.
     ontology_sha256 : Optional[str]
         Optional SHA-256 digest of the source ontology and index maps.
+    hard_neg_capped : bool
+        ``True`` iff the hard-negative candidate pool or final ``hard_neg_pairs``
+        hit ``hard_neg_cap`` during construction.
     """
 
     n_elements: int
@@ -290,6 +453,7 @@ class PointSupervision:
     )
     rng_seed: int = 0
     ontology_sha256: Optional[str] = None
+    hard_neg_capped: bool = False
 
     CODE_TAG: str = POINTS_CODE_TAG
 
@@ -326,6 +490,7 @@ class PointSupervision:
                     self.candidate_class_indices
                 ).values
 
+        self.hard_neg_capped = bool(self.hard_neg_capped)
         self._default_gen = torch.Generator()
         self._default_gen.manual_seed(int(self.rng_seed))
 
@@ -339,6 +504,9 @@ class PointSupervision:
         disjoint_pairs: Union[torch.Tensor, Sequence[Tuple[int, int]]] = (),
         *,
         bot_classes: Union[torch.Tensor, Sequence[int]] = (),
+        conjunction_pairs: Union[torch.Tensor, Sequence[Tuple[int, int]]] = (),
+        cm: Optional[CanonicalModel] = None,
+        class_id_to_iri: Optional[Mapping[int, str]] = None,
         candidate_class_indices: Optional[torch.Tensor] = None,
         class_element_rows: Optional[torch.Tensor] = None,
         role_pairs: Optional[torch.Tensor] = None,
@@ -349,21 +517,26 @@ class PointSupervision:
         """Build :class:`PointSupervision` from a sparse element × concept membership matrix ``M``.
 
         Computes positive pairs directly from the nonzero entries of ``M`` over
-        ``candidate_class_indices``, and hard negatives from the disjointness
-        closure :math:`M \\cdot \\text{Dis} \\cdot M_{\\text{cls}}^\\top` restricted to
-        the active disjointness columns and target class rows, capped at
-        ``hard_neg_cap`` pairs sampled with ``rng_seed``.
+        ``candidate_class_indices``, and hard negatives from (a) the one-step
+        disjointness closure :math:`M \\cdot \\text{Dis} \\cdot M_{\\text{cls}}^\\top`
+        plus, when ``conjunction_pairs`` and ``cm`` are supplied, (b) an exact
+        joint-satisfiability check over candidate pairs from
+        :math:`M \\cdot \\text{Conj} \\cdot M_{\\text{cls}}^\\top` for binary
+        conjunction axioms :math:`A \\sqcap B \\sqsubseteq E` (:math:`E \\neq \\bot`),
+        capped at ``hard_neg_cap`` pairs sampled with ``rng_seed`` and recording
+        whether the cap was hit in :attr:`hard_neg_capped`.
 
         Guarantees:
-        - Scales in time and memory with ``nnz(M)`` and the number of disjointness
-          pairs rather than :math:`|\\text{elements}| \\times |\\text{classes}|`.
-        - Caps ``hard_neg_pairs`` at ``hard_neg_cap`` (default ``2,000,000``)
-          using the dataset random generator seeded with ``rng_seed``.
+        - Scales in time and memory with ``nnz(M)`` and the number of disjointness /
+          conjunction pairs rather than :math:`|\\text{elements}| \\times |\\text{classes}|`.
+        - Caps candidate pairs and ``hard_neg_pairs`` at ``hard_neg_cap`` (default
+          ``2,000,000``) using the dataset random generator seeded with ``rng_seed``,
+          setting :attr:`hard_neg_capped` to ``True`` iff the cap was hit.
 
         Non-guarantees:
-        - Only pairs arising from ``disjoint_pairs`` (:math:`A \\sqcap B \\sqsubseteq \\bot`)
-          and ``bot_classes`` (:math:`A \\sqsubseteq \\bot`) are included in
-          ``hard_neg_pairs``.
+        - When ``cm`` is ``None``, only one-step pairs arising from ``disjoint_pairs``
+          (:math:`A \\sqcap B \\sqsubseteq \\bot`) and ``bot_classes``
+          (:math:`A \\sqsubseteq \\bot`) are included in ``hard_neg_pairs``.
 
         Parameters
         ----------
@@ -382,6 +555,13 @@ class PointSupervision:
             :math:`A \\sqcap B \\sqsubseteq \\bot`.
         bot_classes : torch.Tensor or Sequence[int], optional
             Column indices ``A`` in ``M`` such that :math:`A \\sqsubseteq \\bot`.
+        conjunction_pairs : torch.Tensor or Sequence[Tuple[int, int]], optional
+            Pairs ``(A, B)`` of column indices in ``M`` for binary conjunction axioms
+            :math:`A \\sqcap B \\sqsubseteq E` with :math:`E \\neq \\bot`.
+        cm : CanonicalModel, optional
+            Canonical model used to check candidate pairs from ``conjunction_pairs``.
+        class_id_to_iri : Mapping[int, str], optional
+            Mapping from integer class index to class IRI for candidate pair checking.
         candidate_class_indices : torch.Tensor, optional
             Sorted 1-D ``LongTensor`` of target named class indices. Defaults to
             the unique class indices of non-individual elements.
@@ -464,7 +644,9 @@ class PointSupervision:
                     m_indices[:, keep_pos].t().contiguous().to(dtype=torch.long)
                 )
 
-        # 2. Hard negative pairs from sparse boolean product M * Dis * M_cls^T
+        # 2. Hard negative pairs:
+        #    (a) one-step sparse product M * Dis * M_cls^T
+        #    (b) exact check on conjunction-triggering candidate pairs M * Conj * M_cls^T
         dis_t = (
             torch.as_tensor(disjoint_pairs, dtype=torch.long).reshape(-1, 2)
             if isinstance(disjoint_pairs, torch.Tensor) or len(disjoint_pairs) > 0
@@ -475,13 +657,19 @@ class PointSupervision:
             if isinstance(bot_classes, torch.Tensor) or len(bot_classes) > 0
             else torch.empty((0,), dtype=torch.long)
         )
+        conj_t = (
+            torch.as_tensor(conjunction_pairs, dtype=torch.long).reshape(-1, 2)
+            if isinstance(conjunction_pairs, torch.Tensor) or len(conjunction_pairs) > 0
+            else torch.empty((0, 2), dtype=torch.long)
+        )
 
+        hard_neg_capped = False
         if (
             n_elements == 0
             or cand_cls.numel() == 0
             or n_cols == 0
             or m_indices.shape[1] == 0
-            or (dis_t.shape[0] == 0 and bot_t.numel() == 0)
+            or (dis_t.shape[0] == 0 and bot_t.numel() == 0 and conj_t.shape[0] == 0)
         ):
             hard_neg_pairs = torch.empty((0, 2), dtype=torch.long)
         else:
@@ -513,8 +701,13 @@ class PointSupervision:
                 cls_target_ids_np = elem_cls_idx.cpu().numpy()[cls_rows_np]
 
             m_cls_csr = m_csr[cls_rows_np]
+            pos_sorted = (
+                _sort_pairs_lexicographically(pos_pairs)
+                if pos_pairs.shape[0] > 0
+                else torch.empty((0, 2), dtype=torch.long)
+            )
 
-            # Build symmetric Dis over active columns
+            # Step (a): Build symmetric Dis over active columns
             dis_parts_r: List[np.ndarray] = []
             dis_parts_c: List[np.ndarray] = []
             if dis_t.shape[0] > 0:
@@ -540,83 +733,104 @@ class PointSupervision:
                     dis_parts_r.extend([rep_a, tile_c])
                     dis_parts_c.extend([tile_c, rep_a])
 
-            if not dis_parts_r or cls_rows_np.size == 0:
+            hard_a = _sparse_pair_product(
+                m_csr,
+                m_cls_csr,
+                cls_target_ids_np,
+                dis_parts_r,
+                dis_parts_c,
+                exclude_pairs=pos_sorted,
+            )
+
+            # Step (b): Candidate pairs from NF2 conjunction axioms A & B <= E (E != bot)
+            hard_b = torch.empty((0, 2), dtype=torch.long)
+            if conj_t.shape[0] > 0 and cm is not None and cls_rows_np.size > 0:
+                c_np = conj_t.cpu().numpy()
+                valid_c = (
+                    (c_np[:, 0] >= 0)
+                    & (c_np[:, 0] < n_cols)
+                    & (c_np[:, 1] >= 0)
+                    & (c_np[:, 1] < n_cols)
+                )
+                c_np = c_np[valid_c]
+                if c_np.shape[0] > 0:
+                    conj_parts_r = [c_np[:, 0], c_np[:, 1]]
+                    conj_parts_c = [c_np[:, 1], c_np[:, 0]]
+                    exclude_ab = (
+                        torch.cat([pos_sorted, hard_a], dim=0)
+                        if hard_a.shape[0] > 0
+                        else pos_sorted
+                    )
+                    cand_b = _sparse_pair_product(
+                        m_csr,
+                        m_cls_csr,
+                        cls_target_ids_np,
+                        conj_parts_r,
+                        conj_parts_c,
+                        exclude_pairs=exclude_ab,
+                    )
+                    if cand_b.shape[0] > 0:
+                        if hard_neg_cap > 0 and cand_b.shape[0] > hard_neg_cap:
+                            hard_neg_capped = True
+                            keep_cand = torch.sort(
+                                _sample_indices(
+                                    cand_b.shape[0],
+                                    int(hard_neg_cap),
+                                    int(rng_seed),
+                                )
+                            ).values
+                            cand_b = cand_b[keep_cand].contiguous()
+
+                        if class_id_to_iri is not None:
+                            id_to_iri: Dict[int, str] = dict(class_id_to_iri)
+                        else:
+                            id_to_iri = {
+                                int(cls_target_ids_np[i]): elem_names_list[int(cls_rows_np[i])]
+                                for i in range(cls_rows_np.size)
+                            }
+
+                        nf2_index: Dict[str, List[NF2]] = {}
+                        for ax in cm.axioms:
+                            if isinstance(ax, NF2):
+                                nf2_index.setdefault(ax.sub1, []).append(ax)
+                                if ax.sub2 != ax.sub1:
+                                    nf2_index.setdefault(ax.sub2, []).append(ax)
+                        pair_cache: Dict[FrozenSet[str], bool] = {}
+
+                        unsat_rows: List[Tuple[int, int]] = []
+                        for e_idx, c_idx in cand_b.tolist():
+                            d_name = elem_names_list[e_idx]
+                            c_iri = id_to_iri.get(c_idx)
+                            if c_iri is not None and not _pair_joint_satisfiable(
+                                cm, d_name, c_iri, nf2_index, pair_cache
+                            ):
+                                unsat_rows.append((e_idx, c_idx))
+                        if unsat_rows:
+                            hard_b = torch.tensor(unsat_rows, dtype=torch.long)
+
+            if hard_a.shape[0] == 0 and hard_b.shape[0] == 0:
                 hard_neg_pairs = torch.empty((0, 2), dtype=torch.long)
             else:
-                dis_r_all = np.concatenate(dis_parts_r)
-                dis_c_all = np.concatenate(dis_parts_c)
-                active_cols, inv_cols = np.unique(
-                    np.concatenate([dis_r_all, dis_c_all]), return_inverse=True
+                combined = (
+                    hard_a
+                    if hard_b.shape[0] == 0
+                    else (
+                        hard_b
+                        if hard_a.shape[0] == 0
+                        else torch.cat([hard_a, hard_b], dim=0)
+                    )
                 )
-                n_active = active_cols.size
-                half = dis_r_all.size
-                dis_r_sub = inv_cols[:half]
-                dis_c_sub = inv_cols[half:]
-                dis_sub = sp.csr_matrix(
-                    (
-                        np.ones(half, dtype=bool),
-                        (dis_r_sub, dis_c_sub),
-                    ),
-                    shape=(n_active, n_active),
-                    dtype=bool,
-                )
-
-                m_sub = m_csr[:, active_cols]
-                m_cls_sub = m_cls_csr[:, active_cols]
-                md_sub = (m_sub @ dis_sub).astype(bool)
-                active_elem_rows = np.flatnonzero(np.diff(md_sub.indptr) > 0)
-
-                if active_elem_rows.size == 0:
-                    hard_neg_pairs = torch.empty((0, 2), dtype=torch.long)
-                else:
-                    h_sub = (md_sub[active_elem_rows] @ m_cls_sub.T).astype(bool)
-                    if h_sub.nnz == 0:
-                        hard_neg_pairs = torch.empty((0, 2), dtype=torch.long)
-                    else:
-                        h_coo = h_sub.tocoo()
-                        h_elem = torch.from_numpy(
-                            active_elem_rows[h_coo.row].astype(np.int64, copy=False)
+                hard_neg_pairs = _sort_pairs_lexicographically(combined)
+                if hard_neg_cap > 0 and hard_neg_pairs.shape[0] > hard_neg_cap:
+                    hard_neg_capped = True
+                    keep_idx = torch.sort(
+                        _sample_indices(
+                            hard_neg_pairs.shape[0],
+                            int(hard_neg_cap),
+                            int(rng_seed),
                         )
-                        h_cls = torch.from_numpy(
-                            cls_target_ids_np[h_coo.col].astype(np.int64, copy=False)
-                        )
-                        if pos_pairs.shape[0] > 0:
-                            pos_sorted = _sort_pairs_lexicographically(pos_pairs)
-                            stride = max(
-                                int(pos_sorted[:, 1].max().item()),
-                                int(h_cls.max().item()),
-                            ) + 1
-                            pos_codes = (
-                                pos_sorted[:, 0] * stride + pos_sorted[:, 1]
-                            ).contiguous()
-                            h_codes = (h_elem * stride + h_cls).contiguous()
-                            idx = torch.searchsorted(pos_codes, h_codes)
-                            n_pos = int(pos_codes.numel())
-                            idx_clamped = idx.clamp(max=n_pos - 1)
-                            is_pos = (idx < n_pos) & (pos_codes[idx_clamped] == h_codes)
-                            if bool(is_pos.any().item()):
-                                keep_h = ~is_pos
-                                h_elem = h_elem[keep_h]
-                                h_cls = h_cls[keep_h]
-
-                        if h_elem.numel() == 0:
-                            hard_neg_pairs = torch.empty((0, 2), dtype=torch.long)
-                        else:
-                            hard_neg_pairs = _sort_pairs_lexicographically(
-                                torch.stack([h_elem, h_cls], dim=1)
-                            )
-                            if (
-                                hard_neg_cap > 0
-                                and hard_neg_pairs.shape[0] > hard_neg_cap
-                            ):
-                                keep_idx = torch.sort(
-                                    _sample_indices(
-                                        hard_neg_pairs.shape[0],
-                                        int(hard_neg_cap),
-                                        int(rng_seed),
-                                    )
-                                ).values
-                                hard_neg_pairs = hard_neg_pairs[keep_idx].contiguous()
+                    ).values
+                    hard_neg_pairs = hard_neg_pairs[keep_idx].contiguous()
 
         eff_roles = (
             torch.as_tensor(role_pairs, dtype=torch.long).reshape(-1, 3)
@@ -635,6 +849,7 @@ class PointSupervision:
             candidate_class_indices=cand_cls,
             rng_seed=int(rng_seed),
             ontology_sha256=ontology_sha256,
+            hard_neg_capped=hard_neg_capped,
         )
 
     @classmethod
@@ -654,11 +869,30 @@ class PointSupervision:
         """Build :class:`PointSupervision` from a :class:`~mowl.geometric.completion.CanonicalModel`.
 
         Enumerates positive pairs from the sparse ancestor sets
-        ``cm.completion.sub_super`` and hard negatives from the disjointness
-        closure :math:`M \\cdot \\text{Dis} \\cdot M^\\top` via
-        :meth:`from_sparse_membership`.
+        ``cm.completion.sub_super`` and hard negatives via (a) the one-step
+        sparse disjointness closure :math:`M \\cdot \\text{Dis} \\cdot M^\\top`
+        plus (b) an exact joint-satisfiability pass over candidate pairs from
+        :math:`M \\cdot \\text{Conj} \\cdot M^\\top` for every ``NF2`` axiom
+        :math:`A \\sqcap B \\sqsubseteq E` with :math:`E \\neq \\bot`.
+
+        Why a single exact check per candidate pair in (b) suffices without
+        iterating to a fixpoint:
+        In ``cm.completion``, all single-concept rules (``NF1``, ``NF3``,
+        ``NF4``, ``NF6``, ``NF7``, and backward ``BOTTOM`` propagation) are
+        already saturated on :math:`S(D)` and :math:`S(C)` individually, and a
+        fresh conjunction concept :math:`Z \\sqsubseteq D \\sqcap C` has no
+        incoming role edges. Consequently, :math:`S(D) \\cup S(C)` can derive new
+        concepts only if at least one binary conjunction axiom
+        :math:`A \\sqcap B \\sqsubseteq E` has :math:`D \\sqsubseteq A` and
+        :math:`C \\sqsubseteq B` (or reverse). Because each candidate pair
+        :math:`(D, C)` in (b) is saturated completely to fixpoint across all
+        chained axioms when checked for joint satisfiability, one exact check
+        per candidate pair finds every multi-step unsatisfiable pair without
+        outer iteration.
 
         Guarantees:
+        - When ``hard_neg_capped`` is ``False``, :attr:`hard_neg_pairs` equals
+          the exact set :math:`\\{(x_D, C) : \\neg \\text{cm.joint\\_satisfiable}(\\{D, C\\})\\}`.
         - Never calls ``cm.entails`` or ``cm.joint_satisfiable`` in an
           :math:`|\\text{elements}| \\times |\\text{classes}|` loop.
         - Raises :class:`ValueError` if any individual in ``individual_index_dict``
@@ -718,6 +952,7 @@ class PointSupervision:
         candidate_class_indices = torch.tensor(
             [c_idx for _, c_idx in named_classes], dtype=torch.long
         )
+        class_id_to_iri: Dict[int, str] = {c_idx: c_iri for c_iri, c_idx in named_classes}
 
         # 2. Satisfiable individuals in individual_index_dict
         ind_elements: List[Tuple[str, int]] = []
@@ -749,14 +984,16 @@ class PointSupervision:
         )
 
         # 3. Build sparse membership matrix M from ancestor sets cm.completion.sub_super
-        # and extract disjointness axioms A \sqcap B \sqsubseteq \bot / A \sqsubseteq \bot
+        # and extract (a) disjointness axioms A \sqcap B \sqsubseteq \bot / A \sqsubseteq \bot
+        # plus (b) conjunction axioms A \sqcap B \sqsubseteq E with E != \bot
         col_map: Dict[str, int] = {c_iri: c_idx for c_iri, c_idx in named_classes}
         next_col = (max(cls_dict.values()) + 1) if cls_dict else 0
 
         disjoint_pairs: List[Tuple[int, int]] = []
         bot_classes: List[int] = []
+        conjunction_pairs: List[Tuple[int, int]] = []
         for ax in cm.axioms:
-            if isinstance(ax, NF2) and cm.completion.is_unsatisfiable(ax.sup):
+            if isinstance(ax, NF2):
                 for cname in (ax.sub1, ax.sub2):
                     if (
                         cname not in (TOP, BOTTOM)
@@ -768,7 +1005,10 @@ class PointSupervision:
                 c1 = col_map.get(ax.sub1)
                 c2 = col_map.get(ax.sub2)
                 if c1 is not None and c2 is not None:
-                    disjoint_pairs.append((c1, c2))
+                    if cm.completion.is_unsatisfiable(ax.sup):
+                        disjoint_pairs.append((c1, c2))
+                    elif c1 != c2:
+                        conjunction_pairs.append((c1, c2))
             elif isinstance(ax, NF1) and cm.completion.is_unsatisfiable(ax.sup):
                 cname = ax.sub
                 if cname not in (TOP, BOTTOM):
@@ -818,6 +1058,9 @@ class PointSupervision:
             element_is_individual=element_is_individual,
             disjoint_pairs=disjoint_pairs,
             bot_classes=bot_classes,
+            conjunction_pairs=conjunction_pairs,
+            cm=cm,
+            class_id_to_iri=class_id_to_iri,
             candidate_class_indices=candidate_class_indices,
             class_element_rows=class_element_rows,
             role_pairs=role_pairs,
@@ -1061,6 +1304,7 @@ class PointSupervision:
             "role_pairs": self.role_pairs.cpu(),
             "candidate_class_indices": self.candidate_class_indices.cpu(),
             "rng_seed": int(self.rng_seed),
+            "hard_neg_capped": bool(self.hard_neg_capped),
         }
 
     @classmethod
@@ -1094,6 +1338,7 @@ class PointSupervision:
             ),
             rng_seed=int(data.get("rng_seed", 0)),  # type: ignore[arg-type]
             ontology_sha256=str(saved_sha) if saved_sha is not None else None,
+            hard_neg_capped=bool(data.get("hard_neg_capped", False)),
         )
 
     def save(self, path: Union[str, Path, BinaryIO]) -> None:

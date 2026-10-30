@@ -14,7 +14,7 @@ Guarantees:
   has no :math:`d`-dependence and still approaches ``1`` only when every
   coordinate lies inside the box.
 - :func:`union_membership` computes the noisy-OR :math:`1 - \\prod_{i=1}^k (1 - m_i)`
-  of shape ``(B,)``, reducing0-for-0 to ``m[:, 0]`` when ``k == 1``.
+  of shape ``(B,)``, reducing identically to ``m[:, 0]`` when ``k == 1``.
 - :func:`membership_bce` clamps probabilities to ``[eps, 1 - eps]`` (``eps = 1e-6``)
   so the loss and its gradients are always finite even when ``m`` underflows to ``0``
   or saturates to ``1``.
@@ -318,6 +318,77 @@ def pair_union_membership(
     return union_membership(
         soft_box_membership(x, cen, off, beta=float(module.beta))  # type: ignore[arg-type]
     )
+
+
+def compute_target_membership(
+    module: nn.Module,
+    points: th.Tensor,
+    elem_y: th.Tensor,
+) -> th.Tensor:
+    """Compute soft membership of ``points`` ``(B, d)`` in target element ``elem_y`` ``(B,)``.
+
+    For class target elements (``ps.element_is_individual[elem_y] == False``),
+    evaluates noisy-OR union membership over ``module.class_boxes``. For
+    individual target elements (``ps.element_is_individual[elem_y] == True``),
+    evaluates soft box membership in a virtual box of half-width
+    ``module.ind_halfwidth`` centred at ``module.ind_embed(ind_idx)``.
+
+    Guarantees:
+    - Returns a 1-D tensor of shape ``(B,)`` in ``(0, 1)``.
+    - Uses ``module.ind_halfwidth`` and ``module.ind_embed`` for individual
+      targets without accessing ``ind_offset``.
+
+    Non-guarantees:
+    - Raises :class:`RuntimeError` if ``module.point_supervision`` is ``None``
+      or :class:`ValueError` if an individual target is encountered when
+      ``module.ind_embed`` is ``None``.
+    """
+    ps = getattr(module, "point_supervision", None)
+    if ps is None:
+        raise RuntimeError(
+            "PointSupervision has not been set on this module; call set_point_supervision(ps) first."
+        )
+    device = points.device
+    dtype = points.dtype
+    y_idx = elem_y.to(device=device, dtype=th.long)
+    b_size = int(y_idx.numel())
+    if b_size == 0:
+        return th.empty((0,), device=device, dtype=dtype)
+
+    beta_f = float(module.beta)  # type: ignore[arg-type]
+    is_ind_y = ps.element_is_individual.to(device=device)[y_idx]
+    cls_or_ind_y = ps.element_class_index.to(device=device)[y_idx]
+
+    if not bool(is_ind_y.any().item()):
+        cen_d, off_d = module.class_boxes(cls_or_ind_y)  # type: ignore[operator]
+        return union_membership(
+            soft_box_membership(points, cen_d, off_d, beta=beta_f)
+        )
+
+    ind_embed = getattr(module, "ind_embed", None)
+    if ind_embed is None:
+        raise ValueError(
+            "Individual elements present in PointSupervision but module has no ind_embed."
+        )
+    ind_hw = float(module.ind_halfwidth)  # type: ignore[arg-type]
+
+    if bool(is_ind_y.all().item()):
+        c_ind = ind_embed(cls_or_ind_y).unsqueeze(1)
+        o_ind = th.full_like(c_ind, ind_hw)
+        return soft_box_membership(points, c_ind, o_ind, beta=beta_f).squeeze(1)
+
+    m = th.empty((b_size,), dtype=dtype, device=device)
+    cls_mask = ~is_ind_y
+    c_cls, o_cls = module.class_boxes(cls_or_ind_y[cls_mask])  # type: ignore[operator]
+    m[cls_mask] = union_membership(
+        soft_box_membership(points[cls_mask], c_cls, o_cls, beta=beta_f)
+    )
+    c_ind = ind_embed(cls_or_ind_y[is_ind_y]).unsqueeze(1)
+    o_ind = th.full_like(c_ind, ind_hw)
+    m[is_ind_y] = soft_box_membership(
+        points[is_ind_y], c_ind, o_ind, beta=beta_f
+    ).squeeze(1)
+    return m
 
 
 def compute_point_membership_loss(

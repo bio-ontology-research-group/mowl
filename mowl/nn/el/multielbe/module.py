@@ -18,10 +18,9 @@ from mowl.nn.el.pointloss import (
     compute_class_assertion_score_point,
     compute_point_membership_loss,
     compute_point_modelness,
+    compute_target_membership,
     gather_element_embeddings,
     membership_bce,
-    soft_box_membership,
-    union_membership,
 )
 from mowl.nn.el.softagg import _validate_tau, diversity_penalty
 
@@ -331,6 +330,15 @@ class MultiELBEModule(ELModule):
         """
         return compute_point_membership_loss(self, batch, neg=neg, weight=weight)
 
+    def target_membership(self, points: th.Tensor, elem_y: th.Tensor) -> th.Tensor:
+        """Compute soft membership of ``points`` ``(B, d)`` in target element ``elem_y`` ``(B,)``.
+
+        Uses ``self.class_boxes`` for class targets and a virtual box of
+        half-width ``self.ind_halfwidth`` around ``self.ind_embed`` for
+        individual targets.
+        """
+        return compute_target_membership(self, points, elem_y)
+
     def point_role_loss(
         self,
         batch: Union[th.Tensor, Dict[str, th.Tensor]],
@@ -392,37 +400,7 @@ class MultiELBEModule(ELModule):
 
         x = self.element_embeddings(elem_x)
         r = self.rel_embed(r_idx)
-        x_shifted = x + r
-
-        ps = self.point_supervision
-        is_ind_y = ps.element_is_individual.to(device=device)[elem_y]
-        cls_or_ind_y = ps.element_class_index.to(device=device)[elem_y]
-        if not bool(is_ind_y.any().item()):
-            cen_d, off_d = self.class_boxes(cls_or_ind_y)
-            m = union_membership(
-                soft_box_membership(x_shifted, cen_d, off_d, beta=self.beta)
-            )
-        else:
-            b_size = elem_y.shape[0]
-            m = th.empty((b_size,), dtype=x_shifted.dtype, device=device)
-            cls_mask = ~is_ind_y
-            if bool(cls_mask.any().item()):
-                c_cls, o_cls = self.class_boxes(cls_or_ind_y[cls_mask])
-                m[cls_mask] = union_membership(
-                    soft_box_membership(
-                        x_shifted[cls_mask], c_cls, o_cls, beta=self.beta
-                    )
-                )
-            if bool(is_ind_y.any().item()):
-                if self.ind_embed is None:
-                    raise ValueError(
-                        "Individual elements present in PointSupervision but module has no ind_embed."
-                    )
-                c_ind = self.ind_embed(cls_or_ind_y[is_ind_y]).unsqueeze(1)
-                o_ind = th.full_like(c_ind, float(self.ind_halfwidth))
-                m[is_ind_y] = soft_box_membership(
-                    x_shifted[is_ind_y], c_ind, o_ind, beta=self.beta
-                ).squeeze(1)
+        m = self.target_membership(x + r, elem_y)
 
         target_val = 0.0 if neg else 1.0
         eff_w = (self.neg_weight if neg else 1.0) if weight is None else float(weight)
