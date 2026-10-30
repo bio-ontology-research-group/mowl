@@ -1,6 +1,7 @@
 """Tests for CanonicalMixture model in mowl.models.canonical_mixture."""
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -232,8 +233,19 @@ def test_validation_only_individual_gets_full_support_and_cache_hashes_source(
 
 @pytest.mark.slow
 def test_real_helis_one_epoch_cuda_peak_memory(tmp_path: Path) -> None:
-    """One epoch on real helis (/home/leechuck/tmp/gfe-data/helis/ontology.owl) at batch_size=1024 uses < 3 GB CUDA memory."""
-    helis_owl = Path("/home/leechuck/tmp/gfe-data/helis/ontology.owl")
+    """One epoch on real helis at batch_size=1024 uses < 3 GB CUDA memory.
+
+    Note: ``/home/leechuck/tmp/gfe-data/helis/ontology.owl`` is the processed
+    training ontology written by ``experiments/data/make_helis.py`` (and loaded
+    directly via ``PathDataset`` in ``experiments.datasets.load_dataset("helis")``).
+    It already includes all 83,210 object property assertions and the 16,458
+    range-materialised class assertions (30,680 total training class assertions).
+    """
+    helis_owl = Path(
+        os.environ.get(
+            "MOWL_HELIS_OWL", "/home/leechuck/tmp/gfe-data/helis/ontology.owl"
+        )
+    )
     if not helis_owl.exists():
         pytest.skip(f"Missing real helis ontology at {helis_owl}")
     if not torch.cuda.is_available():
@@ -252,6 +264,10 @@ def test_real_helis_one_epoch_cuda_peak_memory(tmp_path: Path) -> None:
         model_filepath=str(ckpt),
         device="cuda",
     )
+    # Verify the loaded ontology includes the materialised range assertions and role assertions
+    assert len(model.training_datasets["class_assertion"]) >= 30_000
+    assert len(model.training_datasets["object_property_assertion"]) >= 80_000
+
     model.train(epochs=1, validate_every=0)
     peak_bytes = int(torch.cuda.max_memory_allocated())
     assert peak_bytes < int(3.0 * 1e9), (

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import math
 import random
+import resource
 import subprocess
 import sys
 import time
@@ -15,6 +16,7 @@ import torch
 
 import mowl
 mowl.init_jvm("2g")
+import mowl.datasets  # noqa: E402,F401
 
 from org.semanticweb.owlapi.model import OWLOntology
 
@@ -224,6 +226,8 @@ def test_csr_supports_and_no_dense_ind_tensors(monkeypatch: pytest.MonkeyPatch) 
     ind_iris = [f"{IND}ind{i}" for i in range(n_ind)]
     classes = {iri: adapter.create_class(iri) for iri in c_iris}
     inds = {iri: adapter.create_individual(iri) for iri in ind_iris}
+    role_r = adapter.create_object_property(f"{NS}r")
+    mgr.addAxiom(ont, df.getOWLDeclarationAxiom(role_r))
     for c_obj in classes.values():
         mgr.addAxiom(ont, df.getOWLDeclarationAxiom(c_obj))
     for i, ind_iri in enumerate(ind_iris):
@@ -231,11 +235,19 @@ def test_csr_supports_and_no_dense_ind_tensors(monkeypatch: pytest.MonkeyPatch) 
         mgr.addAxiom(
             ont, df.getOWLClassAssertionAxiom(classes[cls_iri], inds[ind_iri])
         )
+        next_ind_iri = ind_iris[(i + 1) % n_ind]
+        mgr.addAxiom(
+            ont,
+            df.getOWLObjectPropertyAssertionAxiom(
+                role_r, inds[ind_iri], inds[next_ind_iri]
+            ),
+        )
 
     cm = CanonicalModel.from_ontology(ont)
     cls_dict = {iri: i for i, iri in enumerate(c_iris)}
     ind_dict = {iri: i for i, iri in enumerate(ind_iris)}
-    ms = MembershipStructure.from_canonical_model(cm, cls_dict, ind_dict)
+    rel_dict = {f"{NS}r": 0}
+    ms = MembershipStructure.from_canonical_model(cm, cls_dict, ind_dict, rel_dict)
     n_elements = ms.M.shape[0]
     assert n_elements == n_cls + n_ind  # 26 elements
 
@@ -282,7 +294,7 @@ def test_csr_supports_and_no_dense_ind_tensors(monkeypatch: pytest.MonkeyPatch) 
                 f"Buffer {name} has forbidden shape {tuple(buf.shape)}"
             )
 
-    # Run mini-batch operations (B = 4 < n_ind) under the allocation guard
+    # Run mini-batch operations (B = 4, distinct from n_ind=11, n_cls=15, n_elements=26) under the allocation guard
     batch_ca = train_ca[:4]
     negs = module.sample_class_negatives(batch_ca)
     assert negs.shape == (4, 2)
@@ -294,9 +306,17 @@ def test_csr_supports_and_no_dense_ind_tensors(monkeypatch: pytest.MonkeyPatch) 
         own_el = int(ms.individual_element[ind_i].item())
         assert not bool(dense_m[own_el, neg_c].item())
 
+    batch_opa = torch.tensor(
+        [[i, 0, (i + 1) % n_ind] for i in range(4)], dtype=torch.long
+    )
+    neg_opa = module.sample_role_negatives(batch_opa)
+    assert neg_opa.shape == (4, 3)
+
     loss = (
         module.class_assertion_loss(batch_ca, neg=False).mean()
         + module.class_assertion_loss(negs, neg=True).mean()
+        + module.object_property_assertion_loss(batch_opa, neg=False).mean()
+        + module.object_property_assertion_loss(neg_opa, neg=True).mean()
         + module.regularization_loss(batch_ca[:, 0])
     )
     loss.backward()
@@ -763,9 +783,239 @@ def test_role_score_matches_dense_formula_on_fixture_kb(
     assert torch.allclose(chunked_scores, expected_scores, rtol=1e-6, atol=1e-6)
 
 
-@pytest.mark.slow
-def test_yeast_scale_training_step_peak_memory() -> None:
-    """Synthetic yeast-scale structure (|S|=56k, n_classes=50k, n_ind=6k, nnz(E_r)=216k, |S_a|~20): 1 step < 1.5 GB."""
+def _assert_fast_vs_gathered_scores_and_grads(
+    module: CanonicalMixtureModule,
+    ca_data: torch.Tensor,
+    opa_data: torch.Tensor,
+    ind_batch: torch.Tensor,
+) -> None:
+    """Assert scores and parameter gradients of the full-support dense fast path match the gathered path within 1e-5."""
+    assert bool(module.is_full_support.any().item())
+
+    # 1. Forward scores and probabilities
+    module._use_full_support_fast_path = True
+    lp_fast = module.log_p(ind_batch).detach()
+    p_fast = module._probs(ind_batch).detach()
+    rank_fast = module.rank_classes(ind_batch).detach()
+    ca_score_fast = module.class_assertion_score(ca_data).detach()
+    ca_prob_fast = module._class_assertion_prob(ca_data).detach()
+    opa_score_fast = module.object_property_assertion_score(opa_data).detach()
+    opa_prob_fast = module._object_property_assertion_prob(opa_data).detach()
+    reg_fast = module.regularization_loss(ind_batch).detach()
+
+    module._use_full_support_fast_path = False
+    lp_gath = module.log_p(ind_batch).detach()
+    p_gath = module._probs(ind_batch).detach()
+    rank_gath = module.rank_classes(ind_batch).detach()
+    ca_score_gath = module.class_assertion_score(ca_data).detach()
+    ca_prob_gath = module._class_assertion_prob(ca_data).detach()
+    opa_score_gath = module.object_property_assertion_score(opa_data).detach()
+    opa_prob_gath = module._object_property_assertion_prob(opa_data).detach()
+    reg_gath = module.regularization_loss(ind_batch).detach()
+
+    assert torch.allclose(lp_fast, lp_gath, rtol=1e-5, atol=1e-5)
+    assert torch.allclose(p_fast, p_gath, rtol=1e-5, atol=1e-5)
+    assert torch.equal(torch.isinf(rank_fast), torch.isinf(rank_gath))
+    finite_rank = torch.isfinite(rank_gath)
+    assert torch.allclose(
+        rank_fast[finite_rank], rank_gath[finite_rank], rtol=1e-5, atol=1e-5
+    )
+    assert torch.allclose(ca_prob_fast, ca_prob_gath, rtol=1e-5, atol=1e-5)
+    assert torch.equal(torch.isinf(ca_score_fast), torch.isinf(ca_score_gath))
+    finite_ca = torch.isfinite(ca_score_gath)
+    assert torch.allclose(
+        ca_score_fast[finite_ca], ca_score_gath[finite_ca], rtol=1e-5, atol=1e-5
+    )
+    assert torch.allclose(opa_prob_fast, opa_prob_gath, rtol=1e-5, atol=1e-5)
+    assert torch.equal(torch.isinf(opa_score_fast), torch.isinf(opa_score_gath))
+    finite_opa = torch.isfinite(opa_score_gath)
+    assert torch.allclose(
+        opa_score_fast[finite_opa], opa_score_gath[finite_opa], rtol=1e-5, atol=1e-5
+    )
+    assert torch.allclose(reg_fast, reg_gath, rtol=1e-5, atol=1e-5)
+
+    # 2. Backward gradients (pos + neg class assertions, pos + neg role assertions, entropy reg)
+    def _run_grad(use_fast: bool) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
+        module._use_full_support_fast_path = use_fast
+        module.zero_grad()
+        loss = (
+            module.class_assertion_loss(ca_data, neg=False).mean()
+            + module.class_assertion_loss(ca_data, neg=True).mean()
+            + module.object_property_assertion_loss(opa_data, neg=False).mean()
+            + module.object_property_assertion_loss(opa_data, neg=True).mean()
+            + module.regularization_loss(ind_batch)
+        )
+        loss.backward()
+        assert module.U.grad is not None
+        assert module.V.grad is not None
+        assert module.b.grad is not None
+        return (
+            loss.detach().clone(),
+            module.U.grad.detach().clone(),
+            module.V.grad.detach().clone(),
+            module.b.grad.detach().clone(),
+        )
+
+    loss_fast, u_grad_fast, v_grad_fast, b_grad_fast = _run_grad(True)
+    loss_gath, u_grad_gath, v_grad_gath, b_grad_gath = _run_grad(False)
+    module._use_full_support_fast_path = True
+
+    assert torch.allclose(loss_fast, loss_gath, rtol=1e-5, atol=1e-5)
+    assert torch.allclose(u_grad_fast, u_grad_gath, rtol=1e-5, atol=1e-5)
+    assert torch.allclose(v_grad_fast, v_grad_gath, rtol=1e-5, atol=1e-5)
+    assert torch.allclose(b_grad_fast, b_grad_gath, rtol=1e-5, atol=1e-5)
+
+
+def test_full_support_dense_fast_path_matches_gathered_scores_and_gradients(
+    abox_kb: OWLOntology,
+) -> None:
+    """On the fixture KB and on a synthetic structure, scores and gradients of the dense fast path equal the gathered path within 1e-5."""
+    # Part 1: Fixture KB (abox_kb: ann has full support S_ann = S; bob and carl have proper subset supports)
+    torch.manual_seed(23)
+    module_kb, _, ms_kb = _build_module_for_abox_kb(abox_kb, rank=16, entropy_reg=0.05)
+    with torch.no_grad():
+        module_kb.U.normal_(0.0, 0.4)
+        module_kb.V.normal_(0.0, 0.4)
+        module_kb.b.normal_(0.0, 0.2)
+
+    ann_idx = ms_kb.individual_index_dict[IND + "ann"]
+    assert bool(module_kb.is_full_support[ann_idx].item())
+    assert int(module_kb.is_full_support.sum().item()) == 1
+
+    all_inds_kb = torch.arange(module_kb.n_ind, dtype=torch.long)
+    ca_kb = torch.tensor(
+        [[i, c] for i in range(module_kb.n_ind) for c in range(module_kb.n_classes)],
+        dtype=torch.long,
+    )
+    opa_kb = torch.tensor(
+        [[h, 0, t] for h in range(module_kb.n_ind) for t in range(module_kb.n_ind)],
+        dtype=torch.long,
+    )
+    _assert_fast_vs_gathered_scores_and_grads(module_kb, ca_kb, opa_kb, all_inds_kb)
+
+    # Also test purely full-support batch on fixture KB
+    ca_ann = torch.tensor(
+        [[ann_idx, c] for c in range(module_kb.n_classes)], dtype=torch.long
+    )
+    opa_ann = torch.tensor([[ann_idx, 0, ann_idx]], dtype=torch.long)
+    _assert_fast_vs_gathered_scores_and_grads(
+        module_kb,
+        ca_ann,
+        opa_ann,
+        torch.tensor([ann_idx], dtype=torch.long),
+    )
+
+    # Part 2: Synthetic structure with n_elements=80, n_classes=50, n_ind=30
+    # - inds 0..9: role-only training individuals (own_el >= 0, empty M row -> S_a = S)
+    # - inds 10..14: unseen validation individuals (own_el == -1 -> S_a = S)
+    # - inds 15..29: partial-support individuals (15 elements per support)
+    # - class 0: empty column (contradicted), class 1: full column (entailed for all S), classes 2..49: partial columns
+    rng = np.random.default_rng(99)
+    n_elements = 80
+    n_classes = 50
+    n_ind = 30
+    m_dense = np.zeros((n_elements, n_classes), dtype=bool)
+    m_dense[:, 1] = True  # class 1 contains all of S (TOP-like)
+    for c in range(2, n_classes - 1):
+        m_dense[c, c] = True
+        chosen = rng.choice(n_classes, size=12, replace=False)
+        m_dense[chosen, c] = True
+
+    m_dense[:, 1] = False
+    # Role-only individuals 0..9 (elements 50..59) have no specific classes
+    m_dense[n_classes : n_classes + 10, :] = False
+    for i in range(15, n_ind):
+        own_el = n_classes + i
+        c_i = 2 + (i - 15)
+        m_dense[own_el, :] = False
+        m_dense[own_el, c_i] = True
+    # Class 49 contains all elements in S (TOP-like), so S_a for inds 0..9 is still all of S
+    m_dense[49, :] = False
+    m_dense[:, 49] = True
+
+    nz_rows, nz_cols = np.nonzero(m_dense)
+    m_sparse = torch.sparse_coo_tensor(
+        torch.stack([torch.from_numpy(nz_rows), torch.from_numpy(nz_cols)], dim=0),
+        torch.ones((nz_rows.size,), dtype=torch.bool),
+        size=(n_elements, n_classes),
+        dtype=torch.bool,
+    ).coalesce()
+
+    er_edges = rng.choice(n_elements * n_elements, size=400, replace=False)
+    er_sparse = torch.sparse_coo_tensor(
+        torch.stack(
+            [
+                torch.from_numpy(er_edges // n_elements),
+                torch.from_numpy(er_edges % n_elements),
+            ],
+            dim=0,
+        ),
+        torch.ones((er_edges.size,), dtype=torch.bool),
+        size=(n_elements, n_elements),
+        dtype=torch.bool,
+    ).coalesce()
+
+    ind_elem = torch.arange(n_classes, n_elements, dtype=torch.long)
+    ind_elem[10:15] = -1  # unseen validation individuals
+
+    element_names = [f"{NS}C{c}" for c in range(n_classes)] + [
+        f"{IND}ind{i}" for i in range(n_ind)
+    ]
+    ms_syn = MembershipStructure(
+        element_names=element_names,
+        element_index={name: idx for idx, name in enumerate(element_names)},
+        M=m_sparse,
+        roles={0: er_sparse},
+        individual_element=ind_elem,
+        class_index_dict={f"{NS}C{c}": c for c in range(n_classes)},
+        individual_index_dict={f"{IND}ind{i}": i for i in range(n_ind)},
+        role_index_dict={f"{NS}r": 0},
+    )
+
+    torch.manual_seed(31)
+    module_syn = CanonicalMixtureModule(ms_syn, rank=12, entropy_reg=0.05)
+    with torch.no_grad():
+        module_syn.U.normal_(0.0, 0.4)
+        module_syn.V.normal_(0.0, 0.4)
+        module_syn.b.normal_(0.0, 0.2)
+
+    # Inds 0..14 have full support S_a = S; inds 15..29 have partial support
+    assert bool(module_syn.is_full_support[:15].all().item())
+    assert not bool(module_syn.is_full_support[15:].any().item())
+
+    full_only_inds = torch.arange(15, dtype=torch.long)
+    ca_syn_full = torch.tensor(
+        [[i, c] for i in range(15) for c in [0, 2, 5, 10, 49]], dtype=torch.long
+    )
+    opa_syn_full = torch.tensor(
+        [[i, 0, (i * 3 + 1) % 15] for i in range(15)], dtype=torch.long
+    )
+    _assert_fast_vs_gathered_scores_and_grads(
+        module_syn, ca_syn_full, opa_syn_full, full_only_inds
+    )
+
+    # Mixed batch (full-support + partial-support individuals)
+    all_syn_inds = torch.arange(n_ind, dtype=torch.long)
+    ca_syn_mixed = torch.tensor(
+        [[i, (i * 7) % n_classes] for i in range(n_ind)]
+        + [[i, 0] for i in range(5)]
+        + [[i, 49] for i in range(5)],
+        dtype=torch.long,
+    )
+    opa_syn_mixed = torch.tensor(
+        [[i, 0, (i + 10) % n_ind] for i in range(n_ind)]
+        + [[(i + 15) % n_ind, 0, i % 15] for i in range(n_ind)],
+        dtype=torch.long,
+    )
+    _assert_fast_vs_gathered_scores_and_grads(
+        module_syn, ca_syn_mixed, opa_syn_mixed, all_syn_inds
+    )
+
+
+def _build_yeast_scale_structure_and_batch() -> Tuple[
+    MembershipStructure, torch.Tensor, torch.Tensor, torch.Tensor
+]:
+    """Build the synthetic yeast-scale MembershipStructure and 1024-row training batch."""
     n_elements = 56_000
     n_classes = 50_000
     n_ind = 6_000
@@ -779,8 +1029,7 @@ def test_yeast_scale_training_step_peak_memory() -> None:
     ind_ids = np.arange(n_ind, dtype=np.int64)
     own_els = n_classes + ind_ids
 
-    extra_rows = rng.integers(n_ind, n_classes, size=(n_ind, 18), dtype=np.int64)
-    # Ensure the 18 extra elements per column are distinct by offsetting within disjoint blocks
+    extra_rows = np.empty((n_ind, 18), dtype=np.int64)
     block_size = (n_classes - n_ind) // 18
     for k in range(18):
         low = n_ind + k * block_size
@@ -832,95 +1081,56 @@ def test_yeast_scale_training_step_peak_memory() -> None:
     )
 
     torch.manual_seed(0)
-    module_cpu = CanonicalMixtureModule(ms, rank=32, entropy_reg=0.01)
-    assert float(module_cpu.support_lengths.float().mean().item()) == pytest.approx(
-        20.0, abs=1.0
-    )
-
     batch_inds = torch.arange(batch_size, dtype=torch.long)
     pos_ca = torch.stack([batch_inds, batch_inds], dim=1)
     tail_inds = torch.randint(0, n_ind, (batch_size,), dtype=torch.long)
     pos_opa = torch.stack(
         [batch_inds, torch.zeros_like(batch_inds), tail_inds], dim=1
     )
+    return ms, batch_inds, pos_ca, pos_opa
 
+
+def _run_yeast_scale_cpu_step_rss_delta() -> int:
+    """Run one CPU training step on the synthetic yeast-scale structure and return the RSS delta in bytes."""
+    ms, batch_inds, pos_ca, pos_opa = _build_yeast_scale_structure_and_batch()
+    torch.manual_seed(0)
+    module_cpu = CanonicalMixtureModule(ms, rank=32, entropy_reg=0.01)
+    assert float(module_cpu.support_lengths.float().mean().item()) == pytest.approx(
+        20.0, abs=1.0
+    )
+    rss_before_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    opt_cpu = torch.optim.Adam(module_cpu.parameters(), lr=0.01)
+    opt_cpu.zero_grad()
+    neg_ca_cpu = module_cpu.sample_class_negatives(pos_ca)
+    neg_opa_cpu = module_cpu.sample_role_negatives(pos_opa)
+    loss_cpu = (
+        module_cpu.class_assertion_loss(pos_ca, neg=False).mean()
+        + module_cpu.class_assertion_loss(neg_ca_cpu, neg=True).mean()
+        + module_cpu.object_property_assertion_loss(pos_opa, neg=False).mean()
+        + module_cpu.object_property_assertion_loss(neg_opa_cpu, neg=True).mean()
+        + module_cpu.regularization_loss(batch_inds)
+    )
+    loss_cpu.backward()
+    opt_cpu.step()
+    rss_after_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    assert torch.isfinite(loss_cpu)
+    return int((rss_after_kb - rss_before_kb) * 1024)
+
+
+@pytest.mark.slow
+def test_yeast_scale_training_step_peak_memory() -> None:
+    """Synthetic yeast-scale structure (|S|=56k, n_classes=50k, n_ind=6k, nnz(E_r)=216k, |S_a|~20): 1 step < 1.5 GB."""
     max_bytes = int(1.5 * 1e9)  # 1.5 GB
 
     # 1. CPU training step peak RSS delta < 1.5 GB measured in a fresh subprocess
     # so prior tests' high-water mark does not mask the delta of ru_maxrss.
     repo_root = str(Path(__file__).resolve().parents[2])
-    cpu_script = """
-import sys, resource, numpy as np, torch
-sys.path.insert(0, ".")
-import mowl
-mowl.init_jvm("1g")
-import mowl.datasets
-from mowl.geometric.membership import MembershipStructure
-from mowl.nn.el.canonical_mixture import CanonicalMixtureModule
-
-n_elements, n_classes, n_ind, nnz_er, batch_size = 56_000, 50_000, 6_000, 216_000, 1024
-rng = np.random.default_rng(42)
-diag_c = np.arange(n_classes, dtype=np.int64)
-ind_ids = np.arange(n_ind, dtype=np.int64)
-own_els = n_classes + ind_ids
-extra_rows = np.empty((n_ind, 18), dtype=np.int64)
-block_size = (n_classes - n_ind) // 18
-for k in range(18):
-    low = n_ind + k * block_size
-    high = n_ind + (k + 1) * block_size
-    extra_rows[:, k] = rng.integers(low, high, size=(n_ind,), dtype=np.int64)
-m_rows = np.concatenate([diag_c, own_els, extra_rows.reshape(-1)])
-m_cols = np.concatenate([diag_c, ind_ids, np.repeat(ind_ids, 18)])
-m_sparse = torch.sparse_coo_tensor(
-    torch.stack([torch.from_numpy(m_rows), torch.from_numpy(m_cols)], dim=0),
-    torch.ones((m_rows.size,), dtype=torch.bool),
-    size=(n_elements, n_classes),
-    dtype=torch.bool,
-).coalesce()
-flat_edges = np.unique(rng.integers(0, n_elements * n_elements, size=nnz_er + 5_000, dtype=np.int64))[:nnz_er]
-er_sparse = torch.sparse_coo_tensor(
-    torch.stack([torch.from_numpy(flat_edges // n_elements), torch.from_numpy(flat_edges % n_elements)], dim=0),
-    torch.ones((nnz_er,), dtype=torch.bool),
-    size=(n_elements, n_elements),
-    dtype=torch.bool,
-).coalesce()
-element_names = [f"C{c}" for c in range(n_classes)] + [f"ind{i}" for i in range(n_ind)]
-ms = MembershipStructure(
-    element_names=element_names,
-    element_index={name: idx for idx, name in enumerate(element_names)},
-    M=m_sparse,
-    roles={0: er_sparse},
-    individual_element=torch.arange(n_classes, n_elements, dtype=torch.long),
-    class_index_dict={f"C{c}": c for c in range(n_classes)},
-    individual_index_dict={f"ind{i}": i for i in range(n_ind)},
-    role_index_dict={"r": 0},
-)
-torch.manual_seed(0)
-module_cpu = CanonicalMixtureModule(ms, rank=32, entropy_reg=0.01)
-batch_inds = torch.arange(batch_size, dtype=torch.long)
-pos_ca = torch.stack([batch_inds, batch_inds], dim=1)
-tail_inds = torch.randint(0, n_ind, (batch_size,), dtype=torch.long)
-pos_opa = torch.stack([batch_inds, torch.zeros_like(batch_inds), tail_inds], dim=1)
-rss_before_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-opt_cpu = torch.optim.Adam(module_cpu.parameters(), lr=0.01)
-opt_cpu.zero_grad()
-neg_ca_cpu = module_cpu.sample_class_negatives(pos_ca)
-neg_opa_cpu = module_cpu.sample_role_negatives(pos_opa)
-loss_cpu = (
-    module_cpu.class_assertion_loss(pos_ca, neg=False).mean()
-    + module_cpu.class_assertion_loss(neg_ca_cpu, neg=True).mean()
-    + module_cpu.object_property_assertion_loss(pos_opa, neg=False).mean()
-    + module_cpu.object_property_assertion_loss(neg_opa_cpu, neg=True).mean()
-    + module_cpu.regularization_loss(batch_inds)
-)
-loss_cpu.backward()
-opt_cpu.step()
-rss_after_kb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-assert torch.isfinite(loss_cpu)
-print((rss_after_kb - rss_before_kb) * 1024)
-"""
+    cpu_cmd = (
+        "from tests.nn.test_canonical_mixture import _run_yeast_scale_cpu_step_rss_delta; "
+        "print(_run_yeast_scale_cpu_step_rss_delta())"
+    )
     proc = subprocess.run(
-        [sys.executable, "-c", cpu_script],
+        [sys.executable, "-c", cpu_cmd],
         cwd=repo_root,
         check=True,
         capture_output=True,
@@ -933,6 +1143,7 @@ print((rss_after_kb - rss_before_kb) * 1024)
 
     # 2. CUDA training step max_memory_allocated < 1.5 GB (if available)
     if torch.cuda.is_available():
+        ms, batch_inds, pos_ca, pos_opa = _build_yeast_scale_structure_and_batch()
         torch.cuda.empty_cache()
         torch.cuda.reset_peak_memory_stats()
         module_cuda = CanonicalMixtureModule(ms, rank=32, entropy_reg=0.01).to("cuda")

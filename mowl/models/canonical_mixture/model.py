@@ -16,7 +16,10 @@ from mowl.base_models.elmodel import EmbeddingELModel
 from mowl.datasets.el import ELDataset
 from mowl.geometric.completion import CanonicalModel
 from mowl.geometric.membership import MEMBERSHIP_CODE_TAG, MembershipStructure
-from mowl.nn.el.canonical_mixture import CanonicalMixtureModule
+from mowl.nn.el.canonical_mixture import (
+    MAX_SUPPORT_ENTRIES,
+    CanonicalMixtureModule,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -262,7 +265,9 @@ class CanonicalMixture(EmbeddingELModel):
         n = int(data.shape[0])
         if n == 0:
             return 0.0
-        ranges = self.module._pair_chunk_Ranges(data, max_sup_entries=524_288)
+        ranges = self.module._pair_chunk_ranges(
+            data, max_sup_entries=MAX_SUPPORT_ENTRIES
+        )
         total_loss = 0.0
         for s_idx, e_idx in ranges:
             chunk = data[s_idx:e_idx]
@@ -382,8 +387,8 @@ class CanonicalMixture(EmbeddingELModel):
 
                 if self.entropy_reg > 0.0:
                     n_b = int(batch_inds.shape[0])
-                    for s_i, e_i in self.module._ind_chunk_Ranges(
-                        batch_inds, max_sup_entries=524_288
+                    for s_i, e_i in self.module._ind_chunk_ranges(
+                        batch_inds, max_sup_entries=MAX_SUPPORT_ENTRIES
                     ):
                         w_i = float(e_i - s_i) / float(max(n_b, 1))
                         reg_c = (

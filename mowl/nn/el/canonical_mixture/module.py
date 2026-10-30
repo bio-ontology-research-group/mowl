@@ -11,6 +11,8 @@ import torch.nn as nn
 from mowl.geometric.membership import MembershipStructure
 from mowl.nn import ELModule
 
+MAX_SUPPORT_ENTRIES: int = 524_288
+
 
 class CanonicalMixtureModule(ELModule):
     """Canonical-element mixture neural module (R4).
@@ -64,6 +66,7 @@ class CanonicalMixtureModule(ELModule):
 
     neg_capable_gcis = frozenset({"class_assertion", "object_property_assertion"})
     role_axiom_capable = False
+    MAX_SUPPORT_ENTRIES = MAX_SUPPORT_ENTRIES
 
     def __init__(
         self,
@@ -199,6 +202,11 @@ class CanonicalMixtureModule(ELModule):
         self.register_buffer("support_offsets", support_offsets)
         self.register_buffer("support_indices", support_indices)
         self.register_buffer("own_logit_offset", own_offsets)
+        self.register_buffer(
+            "is_full_support",
+            (support_offsets[1:] - support_offsets[:-1]) == self.n_elements,
+        )
+        self._use_full_support_fast_path: bool = True
 
     @property
     def support_lengths(self) -> torch.Tensor:
@@ -438,24 +446,33 @@ class CanonicalMixtureModule(ELModule):
             return min(128, max(1, max_bytes // max(self.n_elements * 4, 1)))
         return bsz
 
-    def _ind_chunk_Ranges(
-        self, ind_idx: torch.Tensor, max_sup_entries: int = 524_288
+    def _effective_support_costs(self, ind_idx: torch.Tensor) -> torch.Tensor:
+        """Return per-individual support-entry cost (dense full-support rows cost 4 B/entry vs ~40 B gathered)."""
+        starts = self.support_offsets.index_select(0, ind_idx)
+        ends = self.support_offsets.index_select(0, ind_idx + 1)
+        lengths = ends - starts
+        if not self._use_full_support_fast_path:
+            return lengths
+        is_full = self.is_full_support.index_select(0, ind_idx)
+        full_cost = max(1, self.n_elements // 10)
+        return torch.where(is_full, torch.full_like(lengths, full_cost), lengths)
+
+    def _ind_chunk_ranges(
+        self, ind_idx: torch.Tensor, max_sup_entries: int = MAX_SUPPORT_ENTRIES
     ) -> List[Tuple[int, int]]:
         """Partition ``ind_idx`` into ``(start, end)`` slices each holding ``<= max_sup_entries`` support items."""
         bsz = int(ind_idx.shape[0])
         if bsz == 0:
             return []
-        starts = self.support_offsets.index_select(0, ind_idx)
-        ends = self.support_offsets.index_select(0, ind_idx + 1)
-        lengths = ends - starts
-        total = int(lengths.sum().item())
+        costs = self._effective_support_costs(ind_idx)
+        total = int(costs.sum().item())
         if total <= max_sup_entries:
             return [(0, bsz)]
-        len_list = lengths.tolist()
+        cost_list = costs.tolist()
         ranges: List[Tuple[int, int]] = []
         s = 0
         acc = 0
-        for i, L in enumerate(len_list):
+        for i, L in enumerate(cost_list):
             if acc + L > max_sup_entries and i > s:
                 ranges.append((s, i))
                 s = i
@@ -466,8 +483,8 @@ class CanonicalMixtureModule(ELModule):
             ranges.append((s, bsz))
         return ranges
 
-    def _pair_chunk_Ranges(
-        self, data: torch.Tensor, max_sup_entries: int = 524_288
+    def _pair_chunk_ranges(
+        self, data: torch.Tensor, max_sup_entries: int = MAX_SUPPORT_ENTRIES
     ) -> List[Tuple[int, int]]:
         """Partition 2-D ``data`` rows so each slice's endpoints have ``<= max_sup_entries`` total support items and ``<= _batch_chunk_size`` rows."""
         bsz = int(data.shape[0])
@@ -475,17 +492,13 @@ class CanonicalMixtureModule(ELModule):
             return []
         max_rows = self._batch_chunk_size(bsz)
         h_idx = data[:, 0]
-        h_lens = self.support_offsets.index_select(
-            0, h_idx + 1
-        ) - self.support_offsets.index_select(0, h_idx)
+        h_costs = self._effective_support_costs(h_idx)
         if data.shape[1] >= 3:
             t_idx = data[:, 2]
-            t_lens = self.support_offsets.index_select(
-                0, t_idx + 1
-            ) - self.support_offsets.index_select(0, t_idx)
-            row_costs = h_lens + t_lens
+            t_costs = self._effective_support_costs(t_idx)
+            row_costs = h_costs + t_costs
         else:
-            row_costs = h_lens
+            row_costs = h_costs
 
         total_cost = int(row_costs.sum().item())
         if bsz <= max_rows and total_cost <= max_sup_entries:
@@ -505,6 +518,28 @@ class CanonicalMixtureModule(ELModule):
         if s < bsz:
             ranges.append((s, bsz))
         return ranges
+
+    def _full_support_log_p(self, full_inds: torch.Tensor) -> torch.Tensor:
+        """Compute dense ``(k, |S|)`` log-probabilities ``log_softmax(U[a] @ V^T + b + delta_a)`` for full-support individuals."""
+        device = self.U.device
+        dtype = self.U.dtype
+        k = int(full_inds.shape[0])
+        if k == 0:
+            return torch.empty((0, self.n_elements), dtype=dtype, device=device)
+        u_batch = self.U.index_select(0, full_inds)  # (k, r)
+        logits = torch.addmm(self.b, u_batch, self.V.t())  # (k, |S|)
+        own_elems = self.individual_element.index_select(0, full_inds)
+        has_own = own_elems >= 0
+        if bool(has_own.any().item()):
+            own_rows = torch.nonzero(has_own, as_tuple=False).reshape(-1)
+            own_cols = own_elems.index_select(0, own_rows)
+            own_offs = (
+                self.own_logit_offset.index_select(0, full_inds)
+                .index_select(0, own_rows)
+                .to(dtype=dtype)
+            )
+            logits[own_rows, own_cols] = logits[own_rows, own_cols] + own_offs
+        return torch.log_softmax(logits, dim=1)
 
     def _expand_batch_supports(
         self,
@@ -625,7 +660,7 @@ class CanonicalMixtureModule(ELModule):
             empty_f = torch.empty((0,), dtype=dtype, device=device)
             return empty_l, empty_l, empty_f, empty_f, empty_l
 
-        ranges = self._ind_chunk_Ranges(ind_idx, max_sup_entries=524_288)
+        ranges = self._ind_chunk_ranges(ind_idx)
         if len(ranges) == 1:
             return self._sup_log_p_and_probs_single(ind_idx)
 
@@ -657,41 +692,75 @@ class CanonicalMixtureModule(ELModule):
             ind_idx, dtype=torch.long, device=self.U.device
         ).reshape(-1)
         bsz = ind_idx.shape[0]
+        device = self.U.device
         probs = torch.zeros(
-            (bsz, self.n_elements), dtype=self.U.dtype, device=self.U.device
+            (bsz, self.n_elements), dtype=self.U.dtype, device=device
         )
         if bsz == 0:
             return probs
-        for s, e in self._ind_chunk_Ranges(ind_idx, max_sup_entries=524_288):
-            row_ids, elem_ids, _, sup_probs, _ = self._sup_log_p_and_probs_single(
-                ind_idx[s:e]
-            )
-            probs[row_ids + s, elem_ids] = sup_probs
+        for s, e in self._ind_chunk_ranges(ind_idx):
+            sub_inds = ind_idx[s:e]
+            if self._use_full_support_fast_path:
+                sub_is_full = self.is_full_support.index_select(0, sub_inds)
+            else:
+                sub_is_full = torch.zeros(
+                    (sub_inds.shape[0],), dtype=torch.bool, device=device
+                )
+            if bool(sub_is_full.any().item()):
+                full_pos = torch.nonzero(sub_is_full, as_tuple=False).reshape(-1)
+                probs[full_pos + s] = torch.exp(
+                    self._full_support_log_p(sub_inds.index_select(0, full_pos))
+                )
+            if bool((~sub_is_full).any().item()):
+                part_pos = torch.nonzero(~sub_is_full, as_tuple=False).reshape(-1)
+                row_ids, elem_ids, _, sup_probs, _ = (
+                    self._sup_log_p_and_probs_single(
+                        sub_inds.index_select(0, part_pos)
+                    )
+                )
+                probs[part_pos.index_select(0, row_ids) + s, elem_ids] = sup_probs
         return probs
 
     def log_p(self, ind_idx: torch.Tensor) -> torch.Tensor:
         """Compute masked log-probabilities ``log p_a`` of shape ``(B, |S|)`` for ``ind_idx``.
 
-        Log-softmax is computed exclusively over the gathered admissible support
+        Log-softmax is computed exclusively over the admissible support
         :math:`S_a`, and entries outside :math:`S_a` are ``-inf``.
         """
         ind_idx = torch.as_tensor(
             ind_idx, dtype=torch.long, device=self.U.device
         ).reshape(-1)
         bsz = ind_idx.shape[0]
+        device = self.U.device
         out = torch.full(
             (bsz, self.n_elements),
             float("-inf"),
             dtype=self.U.dtype,
-            device=self.U.device,
+            device=device,
         )
         if bsz == 0:
             return out
-        for s, e in self._ind_chunk_Ranges(ind_idx, max_sup_entries=524_288):
-            row_ids, elem_ids, sup_log_probs, _, _ = self._sup_log_p_and_probs_single(
-                ind_idx[s:e]
-            )
-            out[row_ids + s, elem_ids] = sup_log_probs
+        for s, e in self._ind_chunk_ranges(ind_idx):
+            sub_inds = ind_idx[s:e]
+            if self._use_full_support_fast_path:
+                sub_is_full = self.is_full_support.index_select(0, sub_inds)
+            else:
+                sub_is_full = torch.zeros(
+                    (sub_inds.shape[0],), dtype=torch.bool, device=device
+                )
+            if bool(sub_is_full.any().item()):
+                full_pos = torch.nonzero(sub_is_full, as_tuple=False).reshape(-1)
+                out[full_pos + s] = self._full_support_log_p(
+                    sub_inds.index_select(0, full_pos)
+                )
+            if bool((~sub_is_full).any().item()):
+                part_pos = torch.nonzero(~sub_is_full, as_tuple=False).reshape(-1)
+                row_ids, elem_ids, sup_log_probs, _, _ = (
+                    self._sup_log_p_and_probs_single(
+                        sub_inds.index_select(0, part_pos)
+                    )
+                )
+                out[part_pos.index_select(0, row_ids) + s, elem_ids] = sup_log_probs
         return out
 
     def _class_assertion_prob_chunk(self, data: torch.Tensor) -> torch.Tensor:
@@ -705,46 +774,148 @@ class CanonicalMixtureModule(ELModule):
         unique_inds, inv_ind = torch.unique(ind_idx, return_inverse=True)
         out = torch.zeros((bsz,), dtype=dtype, device=device)
 
-        for s, e in self._ind_chunk_Ranges(unique_inds, max_sup_entries=524_288):
+        for s, e in self._ind_chunk_ranges(unique_inds):
             sub_u = unique_inds[s:e]
             mask_b = (inv_ind >= s) & (inv_ind < e)
             rows_b = torch.nonzero(mask_b, as_tuple=False).reshape(-1)
             if rows_b.numel() == 0:
                 continue
-            c_bsz = int(rows_b.numel())
             local_inv = inv_ind.index_select(0, rows_b) - s
-            _, u_elem_ids, _, u_sup_probs, u_lengths = (
-                self._sup_log_p_and_probs_single(sub_u)
-            )
-            u_offsets = torch.zeros(
-                (sub_u.numel() + 1,), dtype=torch.long, device=device
-            )
-            u_offsets[1:] = torch.cumsum(u_lengths, dim=0)
 
-            batch_ids, x_elems, p_vals, total_pairs = self._expand_batch_supports(
-                local_inv, u_offsets, u_elem_ids, u_sup_probs
-            )
-            if total_pairs == 0:
-                continue
+            if self._use_full_support_fast_path:
+                u_is_full = self.is_full_support.index_select(0, sub_u)
+            else:
+                u_is_full = torch.zeros(
+                    (sub_u.numel(),), dtype=torch.bool, device=device
+                )
 
-            c_vals = cls_idx.index_select(0, rows_b).index_select(0, batch_ids)
-            in_c = self._is_entailed_for_elem(x_elems, c_vals)
-            not_in_c = ~in_c
+            # 1. Dense fast path for full-support individuals (S_a = S):
+            # log_softmax(U[a] @ V^T + b) multiplied with M[:, C] (sparse) for class score and complement sum.
+            if bool(u_is_full.any().item()):
+                full_u_pos = torch.nonzero(u_is_full, as_tuple=False).reshape(-1)
+                full_u = sub_u.index_select(0, full_u_pos)
+                row_is_full = u_is_full.index_select(0, local_inv)
+                full_rows_b = rows_b.index_select(
+                    0, torch.nonzero(row_is_full, as_tuple=False).reshape(-1)
+                )
+                if full_rows_b.numel() > 0:
+                    u_to_full = torch.full(
+                        (sub_u.numel(),), -1, dtype=torch.long, device=device
+                    )
+                    u_to_full[full_u_pos] = torch.arange(
+                        full_u.numel(), dtype=torch.long, device=device
+                    )
+                    full_local_inv = u_to_full.index_select(
+                        0, inv_ind.index_select(0, full_rows_b) - s
+                    )
+                    full_probs = torch.exp(self._full_support_log_p(full_u))  # (k, |S|)
+                    c_queries = cls_idx.index_select(0, full_rows_b)
+                    c_uniq, c_inv = torch.unique(c_queries, return_inverse=True)
+                    c_starts = self._m_ccol_offsets.index_select(0, c_uniq)
+                    c_ends = self._m_ccol_offsets.index_select(0, c_uniq + 1)
+                    c_lens = c_ends - c_starts
+                    total_nnz = int(c_lens.sum().item())
 
-            sum_not_c = torch.zeros((c_bsz,), dtype=p_vals.dtype, device=device)
-            if bool(not_in_c.any().item()):
-                sum_not_c.scatter_add_(0, batch_ids[not_in_c], p_vals[not_in_c])
+                    if total_nnz > 0:
+                        n_c = int(c_uniq.numel())
+                        col_ids = torch.repeat_interleave(
+                            torch.arange(n_c, device=device, dtype=torch.long),
+                            c_lens,
+                        )
+                        cum_c = torch.cumsum(c_lens, dim=0) - c_lens
+                        flat_c_pos = (
+                            torch.arange(total_nnz, device=device, dtype=torch.long)
+                            - torch.repeat_interleave(cum_c, c_lens)
+                            + torch.repeat_interleave(c_starts, c_lens)
+                        )
+                        row_elem_ids = self._m_csc_row_indices.index_select(
+                            0, flat_c_pos
+                        )
+                        m_sub_t = torch.sparse_coo_tensor(
+                            torch.stack([col_ids, row_elem_ids], dim=0),
+                            torch.ones((total_nnz,), dtype=dtype, device=device),
+                            size=(n_c, self.n_elements),
+                            dtype=dtype,
+                            device=device,
+                        ).coalesce()
+                        # M[:, c_uniq]^T @ full_probs^T -> (n_c, k)
+                        in_c_mat = torch.sparse.mm(m_sub_t, full_probs.t())
+                        in_c_mass = in_c_mat[c_inv, full_local_inv]
+                        row_c_len = c_lens.index_select(0, c_inv)
+                        row_prob_sum = full_probs.sum(dim=1).index_select(
+                            0, full_local_inv
+                        )
+                        sum_not_c = torch.where(
+                            row_c_len >= self.n_elements,
+                            torch.zeros_like(in_c_mass),
+                            (row_prob_sum - in_c_mass).clamp(min=0.0),
+                        )
+                        c_probs_full = torch.where(
+                            row_c_len > 0,
+                            (1.0 - sum_not_c).clamp(min=0.0, max=1.0),
+                            torch.zeros_like(in_c_mass),
+                        )
+                        out = out.scatter(0, full_rows_b, c_probs_full)
 
-            has_in_c = torch.zeros((c_bsz,), dtype=torch.bool, device=device)
-            if bool(in_c.any().item()):
-                has_in_c[batch_ids[in_c]] = True
+            # 2. Gathered path for proper-subset support individuals (S_a != S):
+            if bool((~u_is_full).any().item()):
+                part_u_pos = torch.nonzero(~u_is_full, as_tuple=False).reshape(-1)
+                part_u = sub_u.index_select(0, part_u_pos)
+                row_is_part = ~u_is_full.index_select(0, local_inv)
+                part_rows_b = rows_b.index_select(
+                    0, torch.nonzero(row_is_part, as_tuple=False).reshape(-1)
+                )
+                if part_rows_b.numel() > 0:
+                    c_bsz = int(part_rows_b.numel())
+                    u_to_part = torch.full(
+                        (sub_u.numel(),), -1, dtype=torch.long, device=device
+                    )
+                    u_to_part[part_u_pos] = torch.arange(
+                        part_u.numel(), dtype=torch.long, device=device
+                    )
+                    part_local_inv = u_to_part.index_select(
+                        0, inv_ind.index_select(0, part_rows_b) - s
+                    )
+                    _, u_elem_ids, _, u_sup_probs, u_lengths = (
+                        self._sup_log_p_and_probs_single(part_u)
+                    )
+                    u_offsets = torch.zeros(
+                        (part_u.numel() + 1,), dtype=torch.long, device=device
+                    )
+                    u_offsets[1:] = torch.cumsum(u_lengths, dim=0)
 
-            c_probs = torch.where(
-                has_in_c,
-                (1.0 - sum_not_c).clamp(min=0.0, max=1.0),
-                torch.zeros_like(sum_not_c),
-            )
-            out = out.scatter(0, rows_b, c_probs)
+                    batch_ids, x_elems, p_vals, total_pairs = (
+                        self._expand_batch_supports(
+                            part_local_inv, u_offsets, u_elem_ids, u_sup_probs
+                        )
+                    )
+                    if total_pairs > 0:
+                        c_vals = cls_idx.index_select(0, part_rows_b).index_select(
+                            0, batch_ids
+                        )
+                        in_c = self._is_entailed_for_elem(x_elems, c_vals)
+                        not_in_c = ~in_c
+
+                        sum_not_c = torch.zeros(
+                            (c_bsz,), dtype=p_vals.dtype, device=device
+                        )
+                        if bool(not_in_c.any().item()):
+                            sum_not_c.scatter_add_(
+                                0, batch_ids[not_in_c], p_vals[not_in_c]
+                            )
+
+                        has_in_c = torch.zeros(
+                            (c_bsz,), dtype=torch.bool, device=device
+                        )
+                        if bool(in_c.any().item()):
+                            has_in_c[batch_ids[in_c]] = True
+
+                        c_probs_part = torch.where(
+                            has_in_c,
+                            (1.0 - sum_not_c).clamp(min=0.0, max=1.0),
+                            torch.zeros_like(sum_not_c),
+                        )
+                        out = out.scatter(0, part_rows_b, c_probs_part)
 
         return out
 
@@ -802,9 +973,7 @@ class CanonicalMixtureModule(ELModule):
             rows_b = torch.nonzero(mask, as_tuple=False).reshape(-1)
             sub_data = data.index_select(0, rows_b)
 
-            for s_idx, e_idx in self._pair_chunk_Ranges(
-                sub_data, max_sup_entries=524_288
-            ):
+            for s_idx, e_idx in self._pair_chunk_ranges(sub_data):
                 c_rows = rows_b[s_idx:e_idx]
                 c_bsz = int(c_rows.numel())
                 c_heads = head_idx.index_select(0, c_rows)
@@ -812,45 +981,127 @@ class CanonicalMixtureModule(ELModule):
 
                 c_all = torch.cat([c_heads, c_tails], dim=0)
                 c_uniq, c_inv = torch.unique(c_all, return_inverse=True)
-                _, u_elem_ids, _, u_sup_probs, u_lengths = (
-                    self._sup_log_p_and_probs_single(c_uniq)
-                )
-                u_offsets = torch.zeros(
-                    (c_uniq.numel() + 1,), dtype=torch.long, device=device
-                )
-                u_offsets[1:] = torch.cumsum(u_lengths, dim=0)
                 u_h = c_inv[:c_bsz]
                 u_t = c_inv[c_bsz:]
 
-                h_cols, h_elems, h_probs, total_h = self._expand_batch_supports(
-                    u_h, u_offsets, u_elem_ids, u_sup_probs
-                )
-                t_cols, t_elems, t_probs, total_t = self._expand_batch_supports(
-                    u_t, u_offsets, u_elem_ids, u_sup_probs
-                )
-                if total_h == 0 or total_t == 0:
-                    continue
+                if self._use_full_support_fast_path:
+                    u_is_full = self.is_full_support.index_select(0, c_uniq)
+                else:
+                    u_is_full = torch.zeros(
+                        (c_uniq.numel(),), dtype=torch.bool, device=device
+                    )
 
-                # Pad column count by 1 if c_bsz coincides with n_ind, n_elements, or
-                # n_classes so the temporary (|S|, c_alloc) spmm buffer never matches a
-                # full-dataset (|S|, n_ind) / (|S|, |S|) / (|S|, n_classes) shape on
-                # small toy KBs where batch size happens to equal n_ind or n_classes.
-                c_alloc = c_bsz
-                while c_alloc in (self.n_ind, self.n_elements, self.n_classes):
-                    c_alloc += 1
-                p_b_buf = torch.zeros(
-                    (self.n_elements, c_alloc), dtype=dtype, device=device
-                )
-                p_b_col = p_b_buf[:, :c_bsz]
-                p_b_col[t_elems, t_cols] = t_probs
+                n_uniq = int(c_uniq.numel())
+                has_full = bool(u_is_full.any().item())
+                has_part = bool((~u_is_full).any().item())
 
-                # q = E_r @ p_b of shape (|S|, c_bsz), then dot with p_a on its support
+                full_probs: Optional[torch.Tensor] = None
+                u_to_full: Optional[torch.Tensor] = None
+                if has_full:
+                    full_u_pos = torch.nonzero(u_is_full, as_tuple=False).reshape(-1)
+                    full_inds = c_uniq.index_select(0, full_u_pos)
+                    full_probs = torch.exp(
+                        self._full_support_log_p(full_inds)
+                    )  # (n_full, |S|)
+                    u_to_full = torch.full(
+                        (n_uniq,), -1, dtype=torch.long, device=device
+                    )
+                    u_to_full[full_u_pos] = torch.arange(
+                        full_inds.numel(), dtype=torch.long, device=device
+                    )
+
+                part_elem_ids: Optional[torch.Tensor] = None
+                part_sup_probs: Optional[torch.Tensor] = None
+                part_offsets: Optional[torch.Tensor] = None
+                u_to_part: Optional[torch.Tensor] = None
+                if has_part:
+                    part_u_pos = torch.nonzero(~u_is_full, as_tuple=False).reshape(-1)
+                    part_inds = c_uniq.index_select(0, part_u_pos)
+                    _, part_elem_ids, _, part_sup_probs, part_lengths = (
+                        self._sup_log_p_and_probs_single(part_inds)
+                    )
+                    part_offsets = torch.zeros(
+                        (part_inds.numel() + 1,), dtype=torch.long, device=device
+                    )
+                    part_offsets[1:] = torch.cumsum(part_lengths, dim=0)
+                    u_to_part = torch.full(
+                        (n_uniq,), -1, dtype=torch.long, device=device
+                    )
+                    u_to_part[part_u_pos] = torch.arange(
+                        part_inds.numel(), dtype=torch.long, device=device
+                    )
+
+                p_b_col = torch.zeros(
+                    (self.n_elements, c_bsz), dtype=dtype, device=device
+                )
+                t_is_full = u_is_full.index_select(0, u_t)
+                if has_full and bool(t_is_full.any().item()):
+                    assert full_probs is not None and u_to_full is not None
+                    t_full_cols = torch.nonzero(t_is_full, as_tuple=False).reshape(-1)
+                    t_full_idx = u_to_full.index_select(
+                        0, u_t.index_select(0, t_full_cols)
+                    )
+                    p_b_col[:, t_full_cols] = full_probs.index_select(0, t_full_idx).t()
+
+                if has_part and bool((~t_is_full).any().item()):
+                    assert (
+                        part_offsets is not None
+                        and part_elem_ids is not None
+                        and part_sup_probs is not None
+                        and u_to_part is not None
+                    )
+                    t_part_cols = torch.nonzero(~t_is_full, as_tuple=False).reshape(-1)
+                    t_part_inv = u_to_part.index_select(
+                        0, u_t.index_select(0, t_part_cols)
+                    )
+                    t_sub_cols, t_elems, t_probs, total_t = (
+                        self._expand_batch_supports(
+                            t_part_inv, part_offsets, part_elem_ids, part_sup_probs
+                        )
+                    )
+                    if total_t > 0:
+                        p_b_col[
+                            t_elems, t_part_cols.index_select(0, t_sub_cols)
+                        ] = t_probs
+
+                # q = E_r @ p_b of shape (|S|, c_bsz), then dot with p_a
                 q = torch.sparse.mm(e_r, p_b_col)
-                q_at_h = q[h_elems, h_cols]
                 c_probs = torch.zeros((c_bsz,), dtype=dtype, device=device)
-                c_probs.scatter_add_(0, h_cols, h_probs * q_at_h)
+
+                h_is_full = u_is_full.index_select(0, u_h)
+                if has_full and bool(h_is_full.any().item()):
+                    assert full_probs is not None and u_to_full is not None
+                    h_full_cols = torch.nonzero(h_is_full, as_tuple=False).reshape(-1)
+                    h_full_idx = u_to_full.index_select(
+                        0, u_h.index_select(0, h_full_cols)
+                    )
+                    p_a_full = full_probs.index_select(0, h_full_idx)
+                    q_full = q.index_select(1, h_full_cols).t()
+                    c_probs[h_full_cols] = (p_a_full * q_full).sum(dim=1)
+
+                if has_part and bool((~h_is_full).any().item()):
+                    assert (
+                        part_offsets is not None
+                        and part_elem_ids is not None
+                        and part_sup_probs is not None
+                        and u_to_part is not None
+                    )
+                    h_part_cols = torch.nonzero(~h_is_full, as_tuple=False).reshape(-1)
+                    h_part_inv = u_to_part.index_select(
+                        0, u_h.index_select(0, h_part_cols)
+                    )
+                    h_sub_cols, h_elems, h_probs, total_h = (
+                        self._expand_batch_supports(
+                            h_part_inv, part_offsets, part_elem_ids, part_sup_probs
+                        )
+                    )
+                    if total_h > 0:
+                        orig_h_cols = h_part_cols.index_select(0, h_sub_cols)
+                        q_at_h = q[h_elems, orig_h_cols]
+                        c_probs.scatter_add_(0, orig_h_cols, h_probs * q_at_h)
+
                 probs = probs.scatter_add(0, c_rows, c_probs)
-                del p_b_buf, p_b_col, q
+                del p_b_col, q
 
         return probs.clamp(min=0.0, max=1.0)
 
@@ -970,17 +1221,35 @@ class CanonicalMixtureModule(ELModule):
         bsz = ind_idx.shape[0]
         if bsz == 0:
             return self.U.sum() * 0.0
+        device = self.U.device
+        dtype = self.U.dtype
         ent_parts: List[torch.Tensor] = []
-        for s, e in self._ind_chunk_Ranges(ind_idx, max_sup_entries=524_288):
+        for s, e in self._ind_chunk_ranges(ind_idx):
             sub_inds = ind_idx[s:e]
-            c_bsz = sub_inds.shape[0]
-            row_ids, _, sup_log_probs, sup_probs, _ = self._sup_log_p_and_probs_single(
-                sub_inds
-            )
-            ent_c = torch.zeros(
-                (c_bsz,), dtype=sup_probs.dtype, device=sup_probs.device
-            )
-            ent_c.scatter_add_(0, row_ids, -sup_probs * sup_log_probs)
+            c_bsz = int(sub_inds.shape[0])
+            ent_c = torch.zeros((c_bsz,), dtype=dtype, device=device)
+            if self._use_full_support_fast_path:
+                sub_is_full = self.is_full_support.index_select(0, sub_inds)
+            else:
+                sub_is_full = torch.zeros((c_bsz,), dtype=torch.bool, device=device)
+
+            if bool(sub_is_full.any().item()):
+                full_pos = torch.nonzero(sub_is_full, as_tuple=False).reshape(-1)
+                lp_full = self._full_support_log_p(sub_inds.index_select(0, full_pos))
+                p_full = torch.exp(lp_full)
+                ent_c[full_pos] = -(p_full * lp_full).sum(dim=1)
+
+            if bool((~sub_is_full).any().item()):
+                part_pos = torch.nonzero(~sub_is_full, as_tuple=False).reshape(-1)
+                row_ids, _, sup_log_probs, sup_probs, _ = (
+                    self._sup_log_p_and_probs_single(sub_inds.index_select(0, part_pos))
+                )
+                ent_part = torch.zeros(
+                    (part_pos.numel(),), dtype=dtype, device=device
+                )
+                ent_part.scatter_add_(0, row_ids, -sup_probs * sup_log_probs)
+                ent_c[part_pos] = ent_part
+
             ent_parts.append(ent_c)
         ent_per_ind = torch.cat(ent_parts, dim=0)
         return self.entropy_reg * ent_per_ind.mean()
@@ -1017,11 +1286,33 @@ class CanonicalMixtureModule(ELModule):
                 dim=0,
             )
 
-        row_ids, elem_ids, _, sup_probs, lengths = self._sup_log_p_and_probs(ind_idx)
         probs_elem = torch.zeros((bsz, self.n_elements), dtype=dtype, device=device)
-        probs_elem[row_ids, elem_ids] = sup_probs
         sup_mask_float = torch.zeros((bsz, self.n_elements), dtype=dtype, device=device)
-        sup_mask_float[row_ids, elem_ids] = 1.0
+        lengths = (
+            self.support_offsets.index_select(0, ind_idx + 1)
+            - self.support_offsets.index_select(0, ind_idx)
+        )
+
+        if self._use_full_support_fast_path:
+            sub_is_full = self.is_full_support.index_select(0, ind_idx)
+        else:
+            sub_is_full = torch.zeros((bsz,), dtype=torch.bool, device=device)
+
+        if bool(sub_is_full.any().item()):
+            full_pos = torch.nonzero(sub_is_full, as_tuple=False).reshape(-1)
+            probs_elem[full_pos] = torch.exp(
+                self._full_support_log_p(ind_idx.index_select(0, full_pos))
+            )
+            sup_mask_float[full_pos] = 1.0
+
+        if bool((~sub_is_full).any().item()):
+            part_pos = torch.nonzero(~sub_is_full, as_tuple=False).reshape(-1)
+            row_ids, elem_ids, _, sup_probs, _ = self._sup_log_p_and_probs(
+                ind_idx.index_select(0, part_pos)
+            )
+            orig_rows = part_pos.index_select(0, row_ids)
+            probs_elem[orig_rows, elem_ids] = sup_probs
+            sup_mask_float[orig_rows, elem_ids] = 1.0
 
         # M is (|S|, n_classes), _m_float_t is (n_classes, |S|)
         in_c_probs = torch.sparse.mm(self._m_float_t, probs_elem.t()).t()  # (B, n_classes)
