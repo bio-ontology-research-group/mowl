@@ -1,8 +1,11 @@
 """Tests for PointSupervision in mowl.datasets.el.points."""
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import resource
+import subprocess
+import sys
 import time
 from typing import Dict, Tuple
 
@@ -412,6 +415,31 @@ def test_hard_neg_pairs_exact_against_brute_force(
     assert ps_capped.hard_neg_pairs.shape == (5, 2)
 
 
+def test_t3_tiny_hard_neg_cap(t3_kb: OWLOntology) -> None:
+    """With a tiny cap (10) on t3, returns 10 distinct valid hard negatives and hard_neg_capped=True."""
+    cm = CanonicalModel.from_ontology(t3_kb)
+    cls_dict = _class_dict_from_ontology(t3_kb)
+    inv_cls = {idx: iri for iri, idx in cls_dict.items()}
+    ps_full = PointSupervision.from_canonical_model(cm, cls_dict, {})
+    exact_hard_set = {tuple(row) for row in ps_full.hard_neg_pairs.tolist()}
+    assert len(exact_hard_set) == 12
+
+    for seed in range(5):
+        ps_cap10 = PointSupervision.from_canonical_model(
+            cm, cls_dict, {}, rng_seed=seed, hard_neg_cap=10
+        )
+        assert ps_cap10.hard_neg_capped is True
+        assert ps_cap10.hard_neg_pairs.shape == (10, 2)
+        rows = [tuple(r) for r in ps_cap10.hard_neg_pairs.tolist()]
+        assert len(set(rows)) == 10
+        for elem_i, cls_j in rows:
+            assert (elem_i, cls_j) in exact_hard_set
+            d_name = ps_cap10.element_names[elem_i]
+            c_iri = inv_cls[cls_j]
+            assert not cm.entails(d_name, c_iri)
+            assert not cm.joint_satisfiable({d_name, c_iri})
+
+
 def test_sample_permutes_all_elements_coverage() -> None:
     """sample() permutes positive and role index arrays so every element is sampled when n_pos_take < n_pos."""
     n_elem = 700
@@ -534,4 +562,120 @@ def test_point_supervision_synthetic_scale() -> None:
         assert rss_after_gb < 2.0, f"Peak RSS (ru_maxrss) was {rss_after_gb:.3f} GB (>= 2.0 GB limit)"
     assert n_pos >= 50_000
     assert 0 < n_hard <= 2_000_000
+    assert n_sampled <= 100_000
+
+
+_GO_LIKE_SUBPROCESS_SCRIPT = """
+import json
+import resource
+import time
+import numpy as np
+import scipy.sparse as sp
+import torch
+import mowl
+mowl.init_jvm("1g")
+from mowl.datasets.el.points import PointSupervision
+
+n_classes = 50_000
+n_inds = 23_000
+n_elements = n_classes + n_inds  # 73,000 elements
+rng = np.random.default_rng(42)
+
+# Three root classes 0, 1, 2 with 30k, 12k, 8k class descendants
+root_for_cls = np.empty(n_classes, dtype=np.int64)
+root_for_cls[:30_000] = 0
+root_for_cls[30_000:42_000] = 1
+root_for_cls[42_000:] = 2
+
+elem_cls = np.concatenate([
+    np.arange(n_classes, dtype=np.int64),
+    rng.integers(0, n_classes, size=n_inds, dtype=np.int64),
+])
+elem_root = root_for_cls[elem_cls]
+
+rows_list = [np.arange(n_elements, dtype=np.int64), np.arange(n_elements, dtype=np.int64)]
+cols_list = [elem_cls, elem_root]
+extra_rows = np.repeat(np.arange(n_elements, dtype=np.int64), 13)
+extra_cols = rng.integers(3, n_classes, size=extra_rows.shape[0], dtype=np.int64)
+rows = np.concatenate(rows_list + [extra_rows])
+cols = np.concatenate(cols_list + [extra_cols])
+membership = sp.csr_matrix(
+    (np.ones(rows.shape[0], dtype=bool), (rows, cols)),
+    shape=(n_elements, n_classes),
+    dtype=bool,
+)
+
+dis_a = rng.integers(3, n_classes, size=300, dtype=np.int64)
+dis_b = (dis_a + rng.integers(1, n_classes - 3, size=300, dtype=np.int64)) % n_classes
+disjoint_pairs = [(0, 1), (0, 2), (1, 2)] + list(zip(dis_a.tolist(), dis_b.tolist()))
+
+element_names = [f"http://example.org/E_{i}" for i in range(n_elements)]
+element_class_index = torch.cat([
+    torch.arange(n_classes, dtype=torch.long),
+    torch.arange(n_inds, dtype=torch.long),
+])
+element_is_individual = torch.cat([
+    torch.zeros(n_classes, dtype=torch.bool),
+    torch.ones(n_inds, dtype=torch.bool),
+])
+
+t0 = time.perf_counter()
+ps = PointSupervision.from_sparse_membership(
+    M=membership,
+    element_names=element_names,
+    element_class_index=element_class_index,
+    element_is_individual=element_is_individual,
+    candidate_class_indices=torch.arange(n_classes, dtype=torch.long),
+    class_element_rows=torch.arange(n_classes, dtype=torch.long),
+    disjoint_pairs=disjoint_pairs,
+    rng_seed=0,
+)
+batch = ps.sample(100_000, rng=0)
+elapsed = time.perf_counter() - t0
+peak_rss_gb = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / (1024.0 * 1024.0)
+
+for elem_i, cls_j in ps.hard_neg_pairs[:200].tolist():
+    assert not bool(membership[elem_i, cls_j])
+for elem_i, cls_j in batch["rand"][:200].tolist():
+    assert not bool(membership[elem_i, cls_j])
+
+print("GO_SCALE_RESULT:" + json.dumps({
+    "elapsed": elapsed,
+    "peak_rss_gb": peak_rss_gb,
+    "n_pos": int(ps.pos_pairs.shape[0]),
+    "n_hard": int(ps.hard_neg_pairs.shape[0]),
+    "hard_neg_capped": bool(ps.hard_neg_capped),
+    "n_sampled": int(sum(t.shape[0] for t in batch.values())),
+}))
+"""
+
+
+@pytest.mark.slow
+def test_point_supervision_go_like_scale() -> None:
+    """GO-like scale test (73k elements, 50k classes, 3 pairwise-disjoint 30k/12k/8k roots + 300 bot axioms) finishes in <60s and <2GB child peak RSS."""
+    proc = subprocess.run(
+        [sys.executable, "-c", _GO_LIKE_SUBPROCESS_SCRIPT],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    result_line = next(
+        line for line in proc.stdout.splitlines() if line.startswith("GO_SCALE_RESULT:")
+    )
+    metrics = json.loads(result_line[len("GO_SCALE_RESULT:") :])
+    elapsed = float(metrics["elapsed"])
+    peak_rss_gb = float(metrics["peak_rss_gb"])
+    n_pos = int(metrics["n_pos"])
+    n_hard = int(metrics["n_hard"])
+    capped = bool(metrics["hard_neg_capped"])
+    n_sampled = int(metrics["n_sampled"])
+    print(
+        f"[go_scale_test] elapsed={elapsed:.3f}s, peak_rss={peak_rss_gb:.3f}GB, "
+        f"pos={n_pos}, hard={n_hard}, capped={capped}, sampled={n_sampled}"
+    )
+    assert elapsed < 60.0, f"GO-like scale test took {elapsed:.2f}s (>= 60s limit)"
+    assert peak_rss_gb < 2.0, f"Child peak RSS was {peak_rss_gb:.3f} GB (>= 2.0 GB limit)"
+    assert capped is True
+    assert n_hard == 2_000_000
+    assert n_pos >= 73_000
     assert n_sampled <= 100_000

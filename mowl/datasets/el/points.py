@@ -3,12 +3,16 @@
 Constructs positive membership pairs ``(x_D, C)`` from sparse ancestor sets,
 hard negative pairs ``(x_D, C)`` from (a) the one-step disjointness closure
 (:math:`D \\sqsubseteq A` and :math:`C \\sqsubseteq B` for some axiom
-:math:`A \\sqcap B \\sqsubseteq \\bot` or :math:`A \\sqsubseteq \\bot`, computed via
-sparse boolean matrix products :math:`M \\cdot \\text{Dis} \\cdot M^\\top`) plus
+:math:`A \\sqcap B \\sqsubseteq \\bot` or :math:`A \\sqsubseteq \\bot`, represented as
+sparse descendant-index product blocks :math:`\\text{desc}(A) \\times \\text{desc}(B)`
+that are enumerated exhaustively below :data:`HARD_NEG_CAP` and sampled without
+replacement proportional to :math:`|\\text{desc}(A)| \\cdot |\\text{desc}(B)|` when
+above the cap, without ever materialising a full Cartesian product) plus
 (b) an exact joint-satisfiability pass over candidate pairs that can trigger a
 conjunction axiom (:math:`D \\sqsubseteq A` and :math:`C \\sqsubseteq B` in either
 order for some :math:`A \\sqcap B \\sqsubseteq E` with :math:`E \\neq \\bot`,
-computed with the same sparse products and checked exactly; capped at
+represented with the same non-materialised descendant-index product blocks and
+checked exactly; capped at
 :data:`HARD_NEG_CAP` with :attr:`PointSupervision.hard_neg_capped` recording
 whether the cap was hit), random negative candidates by rejection sampling
 against each element's positive set at :meth:`PointSupervision.sample` time, and
@@ -91,7 +95,7 @@ from mowl.ontology.normalize import is_auxiliary_iri
 
 logger = logging.getLogger(__name__)
 
-POINTS_CODE_TAG: str = "points-v3"
+POINTS_CODE_TAG: str = "points-v4"
 HARD_NEG_CAP: int = 2_000_000
 
 
@@ -252,74 +256,182 @@ def _pair_joint_satisfiable(
     return True
 
 
-def _sparse_pair_product(
-    m_csr: sp.csr_matrix,
-    m_cls_csr: sp.csr_matrix,
-    cls_target_ids_np: np.ndarray,
-    rel_parts_r: Sequence[np.ndarray],
-    rel_parts_c: Sequence[np.ndarray],
-    exclude_pairs: Optional[torch.Tensor] = None,
-) -> torch.Tensor:
-    """Compute sorted ``(elem_idx, class_idx)`` pairs from ``M @ Rel @ M_cls^T`` excluding ``exclude_pairs``."""
-    if not rel_parts_r or cls_target_ids_np.size == 0:
-        return torch.empty((0, 2), dtype=torch.long)
+@dataclass
+class _ProductBlocks:
+    """Compact representation of rectangular product blocks ``desc_elem(A_k) x desc_cls(B_k)``.
 
-    rel_r_all = np.concatenate(rel_parts_r)
-    rel_c_all = np.concatenate(rel_parts_c)
-    if rel_r_all.size == 0:
-        return torch.empty((0, 2), dtype=torch.long)
+    Never materialises any block product ``desc_elem(A_k) x desc_cls(B_k)``; stores
+    only flat 1-D pools of element and target-class indices (`O(nnz(M))`) plus
+    per-block ``(offset, length)`` descriptors and cumulative product sizes
+    :math:`\\Sigma_k |\\text{desc}(A_k)| \\cdot |\\text{desc}(B_k)|`.
+    """
 
-    active_cols, inv_cols = np.unique(
-        np.concatenate([rel_r_all, rel_c_all]), return_inverse=True
-    )
-    n_active = active_cols.size
-    half = rel_r_all.size
-    rel_r_sub = inv_cols[:half]
-    rel_c_sub = inv_cols[half:]
-    rel_sub = sp.csr_matrix(
-        (np.ones(half, dtype=bool), (rel_r_sub, rel_c_sub)),
-        shape=(n_active, n_active),
-        dtype=bool,
-    )
+    l_pool: np.ndarray
+    r_pool: np.ndarray
+    l_offsets: np.ndarray
+    n_l: np.ndarray
+    r_offsets: np.ndarray
+    n_r: np.ndarray
+    sizes: np.ndarray
+    cum_sizes: np.ndarray
+    total: int
 
-    m_sub = m_csr[:, active_cols]
-    m_cls_sub = m_cls_csr[:, active_cols]
-    md_sub = (m_sub @ rel_sub).astype(bool)
-    active_elem_rows = np.flatnonzero(np.diff(md_sub.indptr) > 0)
-    if active_elem_rows.size == 0:
-        return torch.empty((0, 2), dtype=torch.long)
-
-    h_sub = (md_sub[active_elem_rows] @ m_cls_sub.T).astype(bool)
-    if h_sub.nnz == 0:
-        return torch.empty((0, 2), dtype=torch.long)
-
-    h_coo = h_sub.tocoo()
-    h_elem = torch.from_numpy(active_elem_rows[h_coo.row].astype(np.int64, copy=False))
-    h_cls = torch.from_numpy(cls_target_ids_np[h_coo.col].astype(np.int64, copy=False))
-
-    if exclude_pairs is not None and exclude_pairs.shape[0] > 0:
-        ex_sorted = _sort_pairs_lexicographically(exclude_pairs)
-        stride = (
-            max(
-                int(ex_sorted[:, 1].max().item()),
-                int(h_cls.max().item()),
-            )
-            + 1
+    def decode_codes(self, p_arr: np.ndarray, stride: int) -> np.ndarray:
+        """Decode flat product indices ``0 <= p < total`` into ``elem_idx * stride + class_idx``."""
+        if p_arr.size == 0 or self.total == 0:
+            return np.empty(0, dtype=np.int64)
+        block_idx = np.searchsorted(self.cum_sizes, p_arr, side="right")
+        prev_cum = np.where(
+            block_idx > 0, self.cum_sizes[np.maximum(block_idx - 1, 0)], 0
         )
-        ex_codes = (ex_sorted[:, 0] * stride + ex_sorted[:, 1]).contiguous()
-        h_codes = (h_elem * stride + h_cls).contiguous()
-        idx = torch.searchsorted(ex_codes, h_codes)
-        n_ex = int(ex_codes.numel())
-        idx_clamped = idx.clamp(max=n_ex - 1)
-        is_ex = (idx < n_ex) & (ex_codes[idx_clamped] == h_codes)
-        if bool(is_ex.any().item()):
-            keep = ~is_ex
-            h_elem = h_elem[keep]
-            h_cls = h_cls[keep]
+        rem = p_arr - prev_cum
+        r_len = self.n_r[block_idx]
+        i_idx = rem // r_len
+        j_idx = rem % r_len
+        e_arr = self.l_pool[self.l_offsets[block_idx] + i_idx]
+        c_arr = self.r_pool[self.r_offsets[block_idx] + j_idx]
+        return e_arr * stride + c_arr
 
-    if h_elem.numel() == 0:
-        return torch.empty((0, 2), dtype=torch.long)
-    return _sort_pairs_lexicographically(torch.stack([h_elem, h_cls], dim=1))
+
+def _filter_excluded_codes(
+    codes: np.ndarray, exclude_sorted_list: Sequence[np.ndarray]
+) -> np.ndarray:
+    """Remove any code present in any sorted 1-D array in ``exclude_sorted_list``, preserving order."""
+    if codes.size == 0:
+        return codes
+    for ex in exclude_sorted_list:
+        if ex.size == 0:
+            continue
+        idx = np.searchsorted(ex, codes)
+        idx_clamped = np.minimum(idx, ex.size - 1)
+        keep = (idx >= ex.size) | (ex[idx_clamped] != codes)
+        if not bool(np.all(keep)):
+            codes = codes[keep]
+            if codes.size == 0:
+                return codes
+    return codes
+
+
+def _sample_or_enumerate_blocks(
+    blocks: _ProductBlocks,
+    stride: int,
+    exclude_codes: Sequence[np.ndarray],
+    cap: int,
+    rng_seed: int,
+) -> Tuple[np.ndarray, bool]:
+    """Enumerate all valid pair codes when ``blocks.total <= cap``, else sample up to ``cap`` without replacement.
+
+    Drawing a uniform index ``p`` in ``0 .. blocks.total - 1`` and decoding via
+    ``blocks.cum_sizes`` is mathematically identical to sampling an axiom block
+    proportional to its product size ``|desc(A_k)| * |desc(B_k)|`` and then a
+    uniform ``(i, j)`` index pair in ``desc(A_k) x desc(B_k)``.
+    """
+    if blocks.total == 0:
+        return np.empty(0, dtype=np.int64), False
+
+    if cap <= 0 or blocks.total <= cap:
+        p_arr = np.arange(blocks.total, dtype=np.int64)
+        codes = blocks.decode_codes(p_arr, stride)
+        codes = _filter_excluded_codes(codes, exclude_codes)
+        if codes.size == 0:
+            return np.empty(0, dtype=np.int64), False
+        return np.unique(codes), False
+
+    if blocks.total <= max(cap * 4, 4096):
+        p_arr = _sample_indices(blocks.total, blocks.total, int(rng_seed)).numpy()
+        codes = blocks.decode_codes(p_arr, stride)
+        codes = _filter_excluded_codes(codes, exclude_codes)
+        if codes.size == 0:
+            return np.empty(0, dtype=np.int64), False
+        u_codes, first_idx = np.unique(codes, return_index=True)
+        if u_codes.size > cap:
+            keep_order = np.argpartition(first_idx, cap)[:cap]
+            return np.sort(u_codes[keep_order]), True
+        return u_codes, False
+
+    gen = torch.Generator()
+    gen.manual_seed(int(rng_seed))
+    collected = np.empty(0, dtype=np.int64)
+    capped = False
+
+    for _ in range(6):
+        need = cap - int(collected.size)
+        batch_draw = min(
+            max(int((need + 1) * 1.15) + 64, 256),
+            max(cap * 2, 1024),
+        )
+        p_arr = _randint_with_rng(blocks.total, batch_draw, gen).numpy()
+        codes = blocks.decode_codes(p_arr, stride)
+        ex_list = (
+            list(exclude_codes) + [collected]
+            if collected.size > 0
+            else list(exclude_codes)
+        )
+        codes = _filter_excluded_codes(codes, ex_list)
+        if codes.size == 0:
+            continue
+        u_codes, first_idx = np.unique(codes, return_index=True)
+        if u_codes.size > need:
+            capped = True
+            if need > 0:
+                keep_order = np.argpartition(first_idx, need)[:need]
+                u_codes = np.sort(u_codes[keep_order])
+                collected = (
+                    np.union1d(collected, u_codes) if collected.size > 0 else u_codes
+                )
+            break
+        collected = np.union1d(collected, u_codes) if collected.size > 0 else u_codes
+
+    if collected.size >= cap:
+        capped = True
+    return collected, capped
+
+
+def _build_product_blocks(
+    l_base_pool: np.ndarray,
+    r_base_pool: np.ndarray,
+    block_specs: Sequence[Tuple[int, int, int, int]],
+    extra_l: Sequence[np.ndarray] = (),
+    extra_r: Sequence[np.ndarray] = (),
+) -> _ProductBlocks:
+    """Assemble a :class:`_ProductBlocks` instance from base pools, extra slices, and ``(l_off, n_l, r_off, n_r)`` tuples."""
+    if not block_specs:
+        empty = np.empty(0, dtype=np.int64)
+        return _ProductBlocks(
+            l_pool=l_base_pool,
+            r_pool=r_base_pool,
+            l_offsets=empty,
+            n_l=empty,
+            r_offsets=empty,
+            n_r=empty,
+            sizes=empty,
+            cum_sizes=empty,
+            total=0,
+        )
+    l_pool = (
+        np.concatenate([l_base_pool] + list(extra_l)) if extra_l else l_base_pool
+    )
+    r_pool = (
+        np.concatenate([r_base_pool] + list(extra_r)) if extra_r else r_base_pool
+    )
+    arr = np.asarray(block_specs, dtype=np.int64).reshape(-1, 4)
+    l_offsets = arr[:, 0]
+    n_l = arr[:, 1]
+    r_offsets = arr[:, 2]
+    n_r = arr[:, 3]
+    sizes = n_l * n_r
+    cum_sizes = np.cumsum(sizes)
+    return _ProductBlocks(
+        l_pool=l_pool,
+        r_pool=r_pool,
+        l_offsets=l_offsets,
+        n_l=n_l,
+        r_offsets=r_offsets,
+        n_r=n_r,
+        sizes=sizes,
+        cum_sizes=cum_sizes,
+        total=int(cum_sizes[-1]),
+    )
 
 
 def _sort_pairs_lexicographically(pairs: torch.Tensor) -> torch.Tensor:
@@ -701,15 +813,42 @@ class PointSupervision:
                 cls_target_ids_np = elem_cls_idx.cpu().numpy()[cls_rows_np]
 
             m_cls_csr = m_csr[cls_rows_np]
+            m_csc = m_csr.tocsc()
+            m_csc.sort_indices()
+            m_cls_csc = m_cls_csr.tocsc()
+            m_cls_csc.sort_indices()
+
+            l_base_pool = m_csc.indices.astype(np.int64, copy=False)
+            l_indptr = m_csc.indptr.astype(np.int64, copy=False)
+            r_base_pool = cls_target_ids_np[m_cls_csc.indices].astype(
+                np.int64, copy=False
+            )
+            r_indptr = m_cls_csc.indptr.astype(np.int64, copy=False)
+
             pos_sorted = (
                 _sort_pairs_lexicographically(pos_pairs)
                 if pos_pairs.shape[0] > 0
                 else torch.empty((0, 2), dtype=torch.long)
             )
+            max_cls_id = max(
+                int(cand_cls.max().item()) if cand_cls.numel() > 0 else 0,
+                int(pos_sorted[:, 1].max().item()) if pos_sorted.shape[0] > 0 else 0,
+            )
+            stride = max(max_cls_id + 1, 1)
+            pos_codes = (
+                (
+                    pos_sorted[:, 0].cpu().numpy().astype(np.int64) * stride
+                    + pos_sorted[:, 1].cpu().numpy().astype(np.int64)
+                )
+                if pos_sorted.shape[0] > 0
+                else np.empty(0, dtype=np.int64)
+            )
 
-            # Step (a): Build symmetric Dis over active columns
-            dis_parts_r: List[np.ndarray] = []
-            dis_parts_c: List[np.ndarray] = []
+            # Step (a): Product blocks for ⊥-sources (A & B <= bot and A <= bot)
+            specs_a: List[Tuple[int, int, int, int]] = []
+            extra_l_a: List[np.ndarray] = []
+            extra_r_a: List[np.ndarray] = []
+
             if dis_t.shape[0] > 0:
                 d_np = dis_t.cpu().numpy()
                 valid_d = (
@@ -720,30 +859,64 @@ class PointSupervision:
                 )
                 d_np = d_np[valid_d]
                 if d_np.shape[0] > 0:
-                    dis_parts_r.extend([d_np[:, 0], d_np[:, 1]])
-                    dis_parts_c.extend([d_np[:, 1], d_np[:, 0]])
+                    seen_dir_a: set[Tuple[int, int]] = set()
+                    for a_col, b_col in d_np.tolist():
+                        for u_col, v_col in ((int(a_col), int(b_col)), (int(b_col), int(a_col))):
+                            if (u_col, v_col) in seen_dir_a:
+                                continue
+                            seen_dir_a.add((u_col, v_col))
+                            l_off = int(l_indptr[u_col])
+                            n_l_u = int(l_indptr[u_col + 1] - l_off)
+                            r_off = int(r_indptr[v_col])
+                            n_r_v = int(r_indptr[v_col + 1] - r_off)
+                            if n_l_u > 0 and n_r_v > 0:
+                                specs_a.append((l_off, n_l_u, r_off, n_r_v))
 
-            if bot_t.numel() > 0:
-                b_np = bot_t.cpu().numpy()
+            if bot_t.numel() > 0 and cls_target_ids_np.size > 0:
+                b_np = np.unique(bot_t.cpu().numpy())
                 b_np = b_np[(b_np >= 0) & (b_np < n_cols)]
-                if b_np.size > 0 and cls_target_ids_np.size > 0:
-                    # A <= bot is equivalent to A disjoint with all target classes
-                    rep_a = np.repeat(b_np, cls_target_ids_np.size)
-                    tile_c = np.tile(cls_target_ids_np, b_np.size)
-                    dis_parts_r.extend([rep_a, tile_c])
-                    dis_parts_c.extend([tile_c, rep_a])
+                if b_np.size > 0:
+                    all_elem_off: Optional[int] = None
+                    all_cls_off: Optional[int] = None
+                    l_cur = int(l_base_pool.size)
+                    r_cur = int(r_base_pool.size)
+                    for b_col in b_np.tolist():
+                        u_col = int(b_col)
+                        l_off = int(l_indptr[u_col])
+                        n_l_u = int(l_indptr[u_col + 1] - l_off)
+                        if n_l_u > 0:
+                            if all_cls_off is None:
+                                all_cls_off = r_cur
+                                extra_r_a.append(
+                                    cls_target_ids_np.astype(np.int64, copy=False)
+                                )
+                                r_cur += int(cls_target_ids_np.size)
+                            specs_a.append(
+                                (l_off, n_l_u, all_cls_off, int(cls_target_ids_np.size))
+                            )
+                        r_off = int(r_indptr[u_col])
+                        n_r_u = int(r_indptr[u_col + 1] - r_off)
+                        if n_r_u > 0:
+                            if all_elem_off is None:
+                                all_elem_off = l_cur
+                                extra_l_a.append(np.arange(n_elements, dtype=np.int64))
+                                l_cur += n_elements
+                            specs_a.append((all_elem_off, n_elements, r_off, n_r_u))
 
-            hard_a = _sparse_pair_product(
-                m_csr,
-                m_cls_csr,
-                cls_target_ids_np,
-                dis_parts_r,
-                dis_parts_c,
-                exclude_pairs=pos_sorted,
+            blocks_a = _build_product_blocks(
+                l_base_pool, r_base_pool, specs_a, extra_l_a, extra_r_a
+            )
+            hard_a_codes, capped_a = _sample_or_enumerate_blocks(
+                blocks_a,
+                stride=stride,
+                exclude_codes=[pos_codes],
+                cap=int(hard_neg_cap),
+                rng_seed=int(rng_seed),
             )
 
-            # Step (b): Candidate pairs from NF2 conjunction axioms A & B <= E (E != bot)
-            hard_b = torch.empty((0, 2), dtype=torch.long)
+            # Step (b): Product blocks for NF2 conjunction axioms A & B <= E (E != bot)
+            hard_b_codes = np.empty(0, dtype=np.int64)
+            capped_b = False
             if conj_t.shape[0] > 0 and cm is not None and cls_rows_np.size > 0:
                 c_np = conj_t.cpu().numpy()
                 valid_c = (
@@ -751,36 +924,70 @@ class PointSupervision:
                     & (c_np[:, 0] < n_cols)
                     & (c_np[:, 1] >= 0)
                     & (c_np[:, 1] < n_cols)
+                    & (c_np[:, 0] != c_np[:, 1])
                 )
                 c_np = c_np[valid_c]
                 if c_np.shape[0] > 0:
-                    conj_parts_r = [c_np[:, 0], c_np[:, 1]]
-                    conj_parts_c = [c_np[:, 1], c_np[:, 0]]
-                    exclude_ab = (
-                        torch.cat([pos_sorted, hard_a], dim=0)
-                        if hard_a.shape[0] > 0
-                        else pos_sorted
-                    )
-                    cand_b = _sparse_pair_product(
-                        m_csr,
-                        m_cls_csr,
-                        cls_target_ids_np,
-                        conj_parts_r,
-                        conj_parts_c,
-                        exclude_pairs=exclude_ab,
-                    )
-                    if cand_b.shape[0] > 0:
-                        if hard_neg_cap > 0 and cand_b.shape[0] > hard_neg_cap:
-                            hard_neg_capped = True
-                            keep_cand = torch.sort(
-                                _sample_indices(
-                                    cand_b.shape[0],
-                                    int(hard_neg_cap),
-                                    int(rng_seed),
-                                )
-                            ).values
-                            cand_b = cand_b[keep_cand].contiguous()
+                    specs_b: List[Tuple[int, int, int, int]] = []
+                    extra_l_b: List[np.ndarray] = []
+                    extra_r_b: List[np.ndarray] = []
+                    l_cur_b = int(l_base_pool.size)
+                    r_cur_b = int(r_base_pool.size)
+                    seen_undir_b: set[Tuple[int, int]] = set()
 
+                    for a_col, b_col in c_np.tolist():
+                        u_col, v_col = int(a_col), int(b_col)
+                        pair_key = (min(u_col, v_col), max(u_col, v_col))
+                        if pair_key in seen_undir_b:
+                            continue
+                        seen_undir_b.add(pair_key)
+
+                        l_off_u = int(l_indptr[u_col])
+                        n_l_u = int(l_indptr[u_col + 1] - l_off_u)
+                        l_off_v = int(l_indptr[v_col])
+                        n_l_v = int(l_indptr[v_col + 1] - l_off_v)
+                        r_off_u = int(r_indptr[u_col])
+                        n_r_u = int(r_indptr[u_col + 1] - r_off_u)
+                        r_off_v = int(r_indptr[v_col])
+                        n_r_v = int(r_indptr[v_col + 1] - r_off_v)
+
+                        if max(n_l_u, n_l_v, n_r_u, n_r_v) <= 1024:
+                            elem_u = l_base_pool[l_off_u : l_off_u + n_l_u]
+                            elem_v = l_base_pool[l_off_v : l_off_v + n_l_v]
+                            cls_u = r_base_pool[r_off_u : r_off_u + n_r_u]
+                            cls_v = r_base_pool[r_off_v : r_off_v + n_r_v]
+
+                            l_uv = np.setdiff1d(elem_u, elem_v, assume_unique=True)
+                            r_uv = np.setdiff1d(cls_v, cls_u)
+                            if l_uv.size > 0 and r_uv.size > 0:
+                                extra_l_b.append(l_uv)
+                                extra_r_b.append(r_uv)
+                                specs_b.append(
+                                    (l_cur_b, int(l_uv.size), r_cur_b, int(r_uv.size))
+                                )
+                                l_cur_b += int(l_uv.size)
+                                r_cur_b += int(r_uv.size)
+
+                            l_vu = np.setdiff1d(elem_v, elem_u, assume_unique=True)
+                            r_vu = np.setdiff1d(cls_u, cls_v)
+                            if l_vu.size > 0 and r_vu.size > 0:
+                                extra_l_b.append(l_vu)
+                                extra_r_b.append(r_vu)
+                                specs_b.append(
+                                    (l_cur_b, int(l_vu.size), r_cur_b, int(r_vu.size))
+                                )
+                                l_cur_b += int(l_vu.size)
+                                r_cur_b += int(r_vu.size)
+                        else:
+                            if n_l_u > 0 and n_r_v > 0:
+                                specs_b.append((l_off_u, n_l_u, r_off_v, n_r_v))
+                            if n_l_v > 0 and n_r_u > 0:
+                                specs_b.append((l_off_v, n_l_v, r_off_u, n_r_u))
+
+                    blocks_b = _build_product_blocks(
+                        l_base_pool, r_base_pool, specs_b, extra_l_b, extra_r_b
+                    )
+                    if blocks_b.total > 0:
                         if class_id_to_iri is not None:
                             id_to_iri: Dict[int, str] = dict(class_id_to_iri)
                         else:
@@ -797,40 +1004,83 @@ class PointSupervision:
                                     nf2_index.setdefault(ax.sub2, []).append(ax)
                         pair_cache: Dict[FrozenSet[str], bool] = {}
 
-                        unsat_rows: List[Tuple[int, int]] = []
-                        for e_idx, c_idx in cand_b.tolist():
+                        if (
+                            hard_neg_cap > 0
+                            and blocks_b.total > hard_neg_cap
+                            and blocks_b.total <= max(int(hard_neg_cap) * 8, 4096)
+                        ):
+                            p_arr = _sample_indices(
+                                blocks_b.total, blocks_b.total, int(rng_seed)
+                            ).numpy()
+                            codes = blocks_b.decode_codes(p_arr, stride)
+                            codes = _filter_excluded_codes(
+                                codes, [pos_codes, hard_a_codes]
+                            )
+                            u_codes, first_idx = np.unique(codes, return_index=True)
+                            cand_b_codes = u_codes[np.argsort(first_idx)]
+                            capped_b_cand = False
+                        else:
+                            cand_b_codes, capped_b_cand = _sample_or_enumerate_blocks(
+                                blocks_b,
+                                stride=stride,
+                                exclude_codes=[pos_codes, hard_a_codes],
+                                cap=int(hard_neg_cap),
+                                rng_seed=int(rng_seed),
+                            )
+
+                        capped_b = bool(capped_b_cand)
+                        unsat_b_list: List[int] = []
+                        for code in cand_b_codes.tolist():
+                            e_idx = int(code // stride)
+                            c_idx = int(code % stride)
                             d_name = elem_names_list[e_idx]
                             c_iri = id_to_iri.get(c_idx)
                             if c_iri is not None and not _pair_joint_satisfiable(
                                 cm, d_name, c_iri, nf2_index, pair_cache
                             ):
-                                unsat_rows.append((e_idx, c_idx))
-                        if unsat_rows:
-                            hard_b = torch.tensor(unsat_rows, dtype=torch.long)
+                                if (
+                                    hard_neg_cap > 0
+                                    and len(unsat_b_list) >= hard_neg_cap
+                                ):
+                                    capped_b = True
+                                    break
+                                unsat_b_list.append(int(code))
+                        if unsat_b_list:
+                            hard_b_codes = np.sort(
+                                np.asarray(unsat_b_list, dtype=np.int64)
+                            )
 
-            if hard_a.shape[0] == 0 and hard_b.shape[0] == 0:
+            hard_neg_capped = bool(capped_a or capped_b)
+            if hard_a_codes.size == 0 and hard_b_codes.size == 0:
                 hard_neg_pairs = torch.empty((0, 2), dtype=torch.long)
             else:
-                combined = (
-                    hard_a
-                    if hard_b.shape[0] == 0
+                combined_codes = (
+                    hard_a_codes
+                    if hard_b_codes.size == 0
                     else (
-                        hard_b
-                        if hard_a.shape[0] == 0
-                        else torch.cat([hard_a, hard_b], dim=0)
+                        hard_b_codes
+                        if hard_a_codes.size == 0
+                        else np.union1d(hard_a_codes, hard_b_codes)
                     )
                 )
-                hard_neg_pairs = _sort_pairs_lexicographically(combined)
-                if hard_neg_cap > 0 and hard_neg_pairs.shape[0] > hard_neg_cap:
+                if hard_neg_cap > 0 and combined_codes.size > hard_neg_cap:
                     hard_neg_capped = True
-                    keep_idx = torch.sort(
+                    keep_idx = np.sort(
                         _sample_indices(
-                            hard_neg_pairs.shape[0],
+                            int(combined_codes.size),
                             int(hard_neg_cap),
                             int(rng_seed),
-                        )
-                    ).values
-                    hard_neg_pairs = hard_neg_pairs[keep_idx].contiguous()
+                        ).numpy()
+                    )
+                    combined_codes = combined_codes[keep_idx]
+
+                h_elem = torch.from_numpy(
+                    (combined_codes // stride).astype(np.int64, copy=False)
+                )
+                h_cls = torch.from_numpy(
+                    (combined_codes % stride).astype(np.int64, copy=False)
+                )
+                hard_neg_pairs = torch.stack([h_elem, h_cls], dim=1).contiguous()
 
         eff_roles = (
             torch.as_tensor(role_pairs, dtype=torch.long).reshape(-1, 3)
