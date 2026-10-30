@@ -2,8 +2,8 @@
 
 References
 ----------
-.. [federico2026] Federico, P., Leemhuis, M., & Kutz, O. (2026). Multi-box
-   concept embeddings for description logics (JOWO 2026).
+G. Federico, M. Leemhuis and O. Kutz, "Introducing Multiboxes: Increasing the
+Trustworthiness of Ontology Embeddings", JOWO 2026.
 """
 from __future__ import annotations
 

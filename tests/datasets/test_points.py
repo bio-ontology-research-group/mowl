@@ -535,6 +535,28 @@ def test_nf2_exact_check_bound_and_seeded_cache(
     assert calls["count"] == max_checks
     assert ps.hard_neg_capped is True
 
+    # Boundary case: when candidates equal 4 * cap and all are checked, hard_neg_capped is False
+    ont_exact = adapter.create_ontology("http://mowl.borg/geo/nf2_exact_boundary")
+    mgr.addAxiom(
+        ont_exact,
+        adapter.create_subclass_of(
+            adapter.create_object_intersection_of(c_a, c_b), c_e
+        ),
+    )
+    for sa in sub_a[:1]:
+        mgr.addAxiom(ont_exact, adapter.create_subclass_of(sa, c_a))
+    for sb in sub_b[:1]:
+        mgr.addAxiom(ont_exact, adapter.create_subclass_of(sb, c_b))
+    cm_exact = CanonicalModel.from_ontology(ont_exact)
+    names_exact = sorted(cm_exact.concept_names - {TOP, BOTTOM})
+    cls_dict_exact = {iri: idx for idx, iri in enumerate(names_exact)}
+    calls["count"] = 0
+    ps_exact_bound = PointSupervision.from_canonical_model(
+        cm_exact, cls_dict_exact, rng_seed=3, hard_neg_cap=tiny_cap
+    )
+    assert calls["count"] == max_checks
+    assert ps_exact_bound.hard_neg_capped is False
+
     # Verify build_or_load_point_supervision keys by rng_seed, hard_neg_cap, and POINTS_CODE_TAG
     class _DummyDataset:
         def __init__(self, ontology, data_root: Path) -> None:

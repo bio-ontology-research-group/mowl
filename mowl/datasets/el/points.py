@@ -386,7 +386,7 @@ def _sample_or_enumerate_blocks(
             break
         collected = np.union1d(collected, u_codes) if collected.size > 0 else u_codes
 
-    if collected.size >= cap:
+    if collected.size > cap:
         capped = True
     return collected, capped
 
@@ -1065,11 +1065,6 @@ class PointSupervision:
                                     capped_b = True
                                     break
                                 unsat_b_list.append(int(code))
-                        if (
-                            max_exact_checks > 0
-                            and n_exact_checks >= max_exact_checks
-                        ):
-                            capped_b = True
                         if unsat_b_list:
                             hard_b_codes = np.sort(
                                 np.asarray(unsat_b_list, dtype=np.int64)
