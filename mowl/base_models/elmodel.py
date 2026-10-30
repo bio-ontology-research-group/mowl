@@ -225,6 +225,7 @@ training ontology.
         training_el_dataset = ELDataset(self.dataset.ontology,
                                         self.class_index_dict,
                                         self.object_property_index_dict,
+                                        individual_index_dict=self.individual_index_dict,
                                         extended=self._extended,
                                         load_normalized=self.load_normalized,
                                         device=self.device,
@@ -238,6 +239,7 @@ training ontology.
         if self.dataset.validation:
             validation_el_dataset = ELDataset(self.dataset.validation, self.class_index_dict,
                                               self.object_property_index_dict,
+                                              individual_index_dict=self.individual_index_dict,
                                               extended=self._extended, device=self.device,
                                               ontology_path=validation_path,
                                               load_role_axioms=self.load_role_axioms)
@@ -248,6 +250,7 @@ training ontology.
         if self.dataset.testing:
             testing_el_dataset = ELDataset(self.dataset.testing, self.class_index_dict,
                                            self.object_property_index_dict,
+                                           individual_index_dict=self.individual_index_dict,
                                            extended=self._extended, device=self.device,
                                            ontology_path=testing_path,
                                            load_role_axioms=self.load_role_axioms)
