@@ -12,7 +12,6 @@ from mowl.nn.el.multibox_utils import effective_components as _effective_compone
 from mowl.nn.el.multiboxel.module import MultiBoxELModule
 import mowl.nn.el.multielbe.losses as L
 from mowl.nn.el.pointloss import (
-    _VALID_OBJECTIVES,
     _validate_beta,
     _validate_ind_halfwidth,
     compute_class_assertion_score_point,
@@ -26,6 +25,8 @@ from mowl.nn.el.softagg import _validate_tau, diversity_penalty
 
 if TYPE_CHECKING:
     from mowl.datasets.el.points import PointSupervision
+
+_VALID_OBJECTIVES = ("axiom", "point", "mixed", "hybrid")
 
 
 class MultiELBEModule(ELModule):
@@ -99,7 +100,7 @@ class MultiELBEModule(ELModule):
     diversity_reg : float, default 0.0
         Diversity regularisation weight stored on the module.
     objective : str, default "axiom"
-        Training objective mode: ``"axiom"``, ``"point"``, or ``"mixed"``.
+        Training objective mode: ``"axiom"``, ``"point"``, ``"mixed"``, or ``"hybrid"``.
     beta : float, default 0.1
         Sigmoid temperature :math:`\\beta > 0` for soft box membership under
         Objective O3.
@@ -836,7 +837,7 @@ class MultiELBEModule(ELModule):
             raise ValueError(
                 "The number of individuals must be specified to use this loss function."
             )
-        if self.objective in ("point", "mixed"):
+        if self.objective in ("point", "mixed", "hybrid"):
             return self.class_assertion_score_point(data)
         return L.class_assertion_loss(
             data,

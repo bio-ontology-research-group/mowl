@@ -14,7 +14,6 @@ import mowl.nn.el.multiboxel.losses as L
 from mowl.nn.el.pointloss import (
     _validate_beta,
     _validate_ind_halfwidth,
-    _validate_objective,
     compute_class_assertion_score_point,
     compute_point_membership_loss,
     compute_point_modelness,
@@ -27,6 +26,17 @@ from mowl.nn.el.softagg import _validate_tau, diversity_penalty
 
 if TYPE_CHECKING:
     from mowl.datasets.el.points import PointSupervision
+
+_VALID_OBJECTIVES = ("axiom", "point", "mixed", "hybrid")
+
+
+def _validate_objective(objective: str) -> str:
+    """Validate that ``objective`` is one of ``'axiom'``, ``'point'``, ``'mixed'``, or ``'hybrid'``."""
+    if objective not in _VALID_OBJECTIVES:
+        raise ValueError(
+            f"objective must be one of {_VALID_OBJECTIVES}, got {objective!r}"
+        )
+    return objective
 
 
 class MultiBoxELModule(ELModule):
@@ -99,7 +109,7 @@ class MultiBoxELModule(ELModule):
         Weight for the pairwise component volume overlap regulariser
         :func:`~mowl.nn.el.softagg.diversity_penalty`.
     objective : str, default "axiom"
-        Training objective mode: ``"axiom"``, ``"point"``, or ``"mixed"``.
+        Training objective mode: ``"axiom"``, ``"point"``, ``"mixed"``, or ``"hybrid"``.
     beta : float, default 0.1
         Sigmoid temperature :math:`\\beta > 0` for soft box membership under
         Objective O3.
@@ -704,7 +714,7 @@ class MultiBoxELModule(ELModule):
         )
 
     def class_assertion_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
-        if self.objective in ("point", "mixed"):
+        if self.objective in ("point", "mixed", "hybrid"):
             return self.class_assertion_score_point(data)
         if self.ind_center is None or self.ind_offset is None:
             raise ValueError(

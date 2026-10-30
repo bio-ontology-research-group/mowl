@@ -13,7 +13,9 @@ from mowl.datasets.el.points import (
 )
 from mowl.geometric.normal_forms import BOTTOM, TOP
 from mowl.nn import MultiBoxELModule
-from mowl.nn.el.pointloss import _VALID_OBJECTIVES, volume_penalty
+from mowl.nn.el.pointloss import volume_penalty
+
+_VALID_OBJECTIVES = ("axiom", "point", "mixed", "hybrid")
 
 
 class MultiBoxEL(EmbeddingELModel):
@@ -108,9 +110,9 @@ class MultiBoxEL(EmbeddingELModel):
         Weight for the pairwise component volume overlap regulariser.
     tau : float, optional
         Optional alias for ``tau_start`` when setting a fixed temperature.
-    objective : {"axiom", "point", "mixed"}, default "axiom"
-        Training objective mode (O1 ``"axiom"``, O3 ``"point"``, or O2
-        ``"mixed"``).
+    objective : {"axiom", "point", "mixed", "hybrid"}, default "axiom"
+        Training objective mode (O1 ``"axiom"``, O3 ``"point"``, O2
+        ``"mixed"``, or ``"hybrid"``).
     beta : float, default 0.1
         Temperature :math:`\\beta > 0` for the sigmoid boundary of soft box
         membership under ``objective="point"`` or ``"mixed"``.
@@ -329,9 +331,10 @@ class MultiBoxEL(EmbeddingELModel):
         """Disable GCI negative sampling by default when GCI losses are zeroed in point/mixed mode.
 
         Guarantees:
-        - Returns an empty dict ``{}`` when ``objective != "axiom"`` and
+        - Returns an empty dict ``{}`` when ``objective in ("point", "mixed")`` and
           ``neg_sampling_gcis is None``.
-        - Delegates to ``super().get_negative_sampling_config()`` otherwise.
+        - Delegates to ``super().get_negative_sampling_config()`` otherwise (including
+          ``"axiom"`` and ``"hybrid"``).
 
         Non-guarantees:
         - Does not disable GCI negative sampling if the caller explicitly passed
@@ -342,7 +345,7 @@ class MultiBoxEL(EmbeddingELModel):
         dict
             Mapping from GCI name to negative-sampling configuration.
         """
-        if self.objective != "axiom" and self.neg_sampling_gcis is None:
+        if self.objective in ("point", "mixed") and self.neg_sampling_gcis is None:
             return {}
         return super().get_negative_sampling_config()
 
@@ -376,7 +379,7 @@ class MultiBoxEL(EmbeddingELModel):
 
         Guarantees:
         - Returns ``None`` when ``objective == "axiom"``.
-        - Under ``objective in ("point", "mixed")``, samples at most
+        - Under ``objective in ("point", "mixed", "hybrid")``, samples at most
           ``points_per_epoch`` pairs using seed ``points_seed + epoch`` and
           returns ``point_membership_loss + point_role_loss + volume_reg * volume_penalty(offsets)``
           where ``TOP`` (``owl:Thing``) and ``BOTTOM`` (``owl:Nothing``) are
