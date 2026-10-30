@@ -1,6 +1,127 @@
 Worked examples
 ===============
 
+Canonical model (TBox and ABox: nominal encoding and instance checking)
+-----------------------------------------------------------------------
+
+:func:`~mowl.geometric.normal_forms.normalise` and
+:class:`~mowl.geometric.completion.CanonicalModel` support knowledge bases with
+ABox assertions by encoding each named individual :math:`a` as a fresh nominal
+concept name :math:`N_a = \text{nominal\_name}(a)` (with prefix
+:data:`~mowl.geometric.normal_forms.NOMINAL_PREFIX` ``"http://mowl.borg/nominal/"``
+followed by the percent-encoded IRI), translating atomic class assertions
+:math:`C(a)` into :class:`~mowl.geometric.normal_forms.NF1` :math:`(N_a, C)` and
+object-property assertions :math:`r(a, b)` into
+:class:`~mowl.geometric.normal_forms.NF3` :math:`(N_a, r, N_b)`. For
+:math:`\mathcal{ELH}` (with :math:`\bot`) without nominals, functionality, or
+range axioms, saturation on this encoding is sound and complete for atomic
+instance checking (:meth:`~mowl.geometric.completion.CanonicalModel.instance_of`,
+aliased as :meth:`~mowl.geometric.completion.CanonicalModel.entails_assertion`)
+and assertion contradiction
+(:meth:`~mowl.geometric.completion.CanonicalModel.assertion_contradicted`,
+testing :math:`\mathcal{O} \models N_a \sqcap C \sqsubseteq \bot`).
+:attr:`~mowl.geometric.completion.CanonicalModel.individuals` maps each
+individual IRI to its nominal name :math:`N_a`,
+:meth:`~mowl.geometric.completion.CanonicalModel.role_instances` returns the
+pairs of individual IRIs connected by a role in the canonical model, and
+:attr:`~mowl.geometric.completion.CanonicalModel.concept_names` returns only the
+non-nominal concept names while :attr:`~mowl.geometric.completion.CanonicalModel.names`
+keeps all satisfiable concept and nominal names (so constructive region builders
+assign every satisfiable individual a non-empty region). If any individual is
+unsatisfiable (:math:`\mathcal{O} \models N_a \sqsubseteq \bot`), constructing
+:class:`~mowl.geometric.completion.CanonicalModel` raises
+:class:`~mowl.geometric.errors.InconsistentOntology` with the offending
+individual IRI in the message:
+
+.. testcode::
+
+   import mowl
+   mowl.init_jvm("2g")  # no-op if the JVM is already running
+
+   import mowl.datasets  # ensure dataset classes are loaded before completion
+   from mowl.geometric import (
+       BOTTOM,
+       TOP,
+       CanonicalModel,
+       InconsistentOntology,
+       individual_of_name,
+       is_nominal_name,
+       nominal_name,
+   )
+   from mowl.owlapi import OWLAPIAdapter
+
+   NS = "http://mowl.borg/geo#"
+   IND = "http://mowl.borg/geo/ind#"
+
+   adapter = OWLAPIAdapter()
+   mgr = adapter.owl_manager
+   df = adapter.data_factory
+   ont = adapter.create_ontology("http://mowl.borg/geo/abox_example")
+
+   top = adapter.create_class(TOP)
+   bot = adapter.create_class(BOTTOM)
+   father = adapter.create_class(NS + "Father")
+   mother = adapter.create_class(NS + "Mother")
+   parent = adapter.create_class(NS + "Parent")
+   male = adapter.create_class(NS + "Male")
+   female = adapter.create_class(NS + "Female")
+   has_child = adapter.create_object_property(NS + "hasChild")
+
+   bob = adapter.create_individual(IND + "bob")
+   ann = adapter.create_individual(IND + "ann")
+   carl = adapter.create_individual(IND + "carl")
+
+   # TBox: Father <= Parent, Mother <= Parent, exists hasChild.TOP <= Parent, Male & Female <= BOTTOM
+   mgr.addAxiom(ont, adapter.create_subclass_of(father, parent))
+   mgr.addAxiom(ont, adapter.create_subclass_of(mother, parent))
+   mgr.addAxiom(
+       ont,
+       adapter.create_subclass_of(
+           adapter.create_object_some_values_from(has_child, top), parent
+       ),
+   )
+   mgr.addAxiom(
+       ont,
+       adapter.create_subclass_of(
+           adapter.create_object_intersection_of(male, female), bot
+       ),
+   )
+
+   # ABox: Father(bob), Male(bob), hasChild(bob, ann), hasChild(carl, ann)
+   mgr.addAxiom(ont, df.getOWLClassAssertionAxiom(father, bob))
+   mgr.addAxiom(ont, df.getOWLClassAssertionAxiom(male, bob))
+   mgr.addAxiom(ont, df.getOWLObjectPropertyAssertionAxiom(has_child, bob, ann))
+   mgr.addAxiom(ont, df.getOWLObjectPropertyAssertionAxiom(has_child, carl, ann))
+
+   cm = CanonicalModel.from_ontology(ont)
+
+   # Nominal encoding and separation of concept_names from nominals
+   assert set(cm.individuals.keys()) == {IND + "bob", IND + "ann", IND + "carl"}
+   bob_nom = cm.individuals[IND + "bob"]
+   assert bob_nom == nominal_name(IND + "bob") and is_nominal_name(bob_nom)
+   assert individual_of_name(bob_nom) == IND + "bob"
+   assert bob_nom in cm.names and bob_nom not in cm.concept_names
+   assert cm.element_of(IND + "bob") == cm.element_of(bob_nom)
+
+   # Instance checking (via hierarchy and via role domain) and contradiction
+   assert cm.instance_of(IND + "bob", NS + "Parent")
+   assert cm.instance_of(IND + "carl", NS + "Parent")
+   assert not cm.instance_of(IND + "ann", NS + "Parent")
+   assert cm.assertion_contradicted(IND + "bob", NS + "Female")
+   assert not cm.assertion_contradicted(IND + "bob", NS + "Parent")
+   assert cm.role_instances(NS + "hasChild") == {
+       (IND + "bob", IND + "ann"),
+       (IND + "carl", IND + "ann"),
+   }
+
+   # Asserting Female(bob) makes bob's nominal unsatisfiable and raises InconsistentOntology
+   mgr.addAxiom(ont, df.getOWLClassAssertionAxiom(female, bob))
+   try:
+       CanonicalModel.from_ontology(ont)
+   except InconsistentOntology as exc:
+       assert (IND + "bob") in str(exc)
+
+
 The :math:`T_3` Helly-obstruction ontology
 ------------------------------------------
 
@@ -151,11 +272,12 @@ Initialising box embeddings from the exact model
 ------------------------------------------------
 
 :class:`~mowl.geometric.init.ExactBoxInit` initialises the class boxes of
-:class:`~mowl.models.BoxSquaredEL`, :class:`~mowl.models.ELBE`, and
-:class:`~mowl.models.MultiBoxEL` directly from the canonical model of the
-training ontology (and optionally adds an :math:`L_2^2` anchor regulariser via
-``anchor_weight > 0``; defaults ``init_boxes=None, anchor_weight=0.0`` leave
-behaviour unchanged):
+:class:`~mowl.models.BoxSquaredEL`, :class:`~mowl.models.ELBE`,
+:class:`~mowl.models.MultiBoxEL`, and :class:`~mowl.models.MultiELBE` (as well
+as the class prisms of :class:`~mowl.models.PrismEL`) directly from the
+canonical model of the training ontology (and optionally adds an :math:`L_2^2`
+anchor regulariser via ``anchor_weight > 0``; defaults
+``init_boxes=None, anchor_weight=0.0`` leave behaviour unchanged):
 
 * **Containment guarantee (projected mode,** :math:`k = 1` **):** When
   ``method="projected"`` and ``n_components=1``, every entailed atomic
@@ -338,6 +460,64 @@ following properties:
    tmpdir.cleanup()
 
 
+MultiELBE on the Family ontology
+--------------------------------
+
+:class:`~mowl.models.MultiELBE` (:class:`~mowl.nn.MultiELBEModule`) represents
+every ontology class as a union of :math:`k = \text{n\_components}` axis-parallel
+boxes in :math:`\mathbb{R}^d` under ELBE inclusion, gated pairwise intersection
+(``gci1``), coordinatewise separation over all :math:`k^2` pairs (``gci1_bot``),
+ELBE overlap semantics for ``gci3``, translation vectors for roles, and single
+boxes for individuals. At ``n_components=1`` with
+``component_aggregation="hard"``, ``component_reg=0.0``, and
+``diversity_reg=0.0``, :class:`~mowl.nn.MultiELBEModule` reproduces
+:class:`~mowl.nn.ELBEModule` on every GCI loss to within ``1e-6`` at equal
+``margin`` (note that :class:`~mowl.models.MultiELBE` defaults to ``margin=0.1``
+like :class:`~mowl.nn.ELBEModule`, whereas :class:`~mowl.models.ELBE` defaults
+to ``margin=0``), and accepts ``init_boxes`` and ``anchor_weight`` from
+:class:`~mowl.geometric.init.ExactBoxInit` via the ``class_center`` alias for
+``class_embed``:
+
+.. testcode::
+
+   import mowl
+   mowl.init_jvm("2g")  # no-op if the JVM is already running
+
+   import torch
+   from mowl.datasets.builtin import FamilyDataset
+   from mowl.geometric import ExactBoxInit
+   from mowl.models import ELBE, MultiELBE
+
+   ds = FamilyDataset()
+
+   # 1. Exact k = 1 identity with ELBE at equal margin
+   elbe = ELBE(ds, embed_dim=6, margin=0.1)
+   melbe_k1 = MultiELBE(ds, embed_dim=6, margin=0.1, n_components=1)
+   melbe_k1.module.load_state_dict(elbe.module.state_dict(), strict=False)
+   gci0_batch = elbe.training_datasets["gci0"].data
+   with torch.no_grad():
+       diff = (
+           elbe.module(gci0_batch, "gci0")
+           - melbe_k1.module(gci0_batch, "gci0")
+       ).abs().max()
+       assert float(diff.item()) <= 1e-6
+
+   # 2. Multi-component (k = 2) training with ExactBoxInit and anchor_weight
+   init_k2 = ExactBoxInit.from_dataset(ds, embed_dim=6, n_components=2, seed=0)
+   model = MultiELBE(
+       ds,
+       embed_dim=6,
+       margin=0.1,
+       n_components=2,
+       init_boxes=init_k2,
+       anchor_weight=0.1,
+   )
+   model.train(epochs=3, validate_every=10)
+   eff = model.module.effective_components(eps=1e-3)
+   assert eff.shape == (len(model.class_index_dict),)
+   assert all(torch.isfinite(p).all() for p in model.module.parameters())
+
+
 PrismEL on the Family ontology
 ------------------------------
 
@@ -478,3 +658,173 @@ on :math:`S_a` and scores ``+inf``:
    assert math.isinf(float(contradicted_score.item())) and float(contradicted_score.item()) > 0.0
 
    tmpdir.cleanup()
+
+
+Objective O1: Soft component aggregation and diversity regularisation
+---------------------------------------------------------------------
+
+Under hard aggregation (``component_aggregation="hard"``), taking ``amin`` over
+target components and ``argmin`` over pairwise emptiness routes gradient only to
+the single nearest component, leaving non-nearest components dead from random
+initialisation. Objective O1 (implemented in :mod:`mowl.nn.el.softagg` and
+available on both :class:`~mowl.models.MultiBoxEL` and
+:class:`~mowl.models.MultiELBE`) sets ``component_aggregation="soft"`` to
+replace every target minimum by the normalised log-mean-exp soft-minimum
+:func:`~mowl.nn.el.softagg.softmin`
+(:math:`\text{softmin}_\tau(v) = -\tau(\log\sum_{j=1}^K \exp(-v_j/\tau) - \log K)`)
+and ``gci1``'s designated pair by :func:`~mowl.nn.el.softagg.soft_gci1_terms`
+(softmax emptiness weights :math:`w_{ij} = \text{softmax}(-\text{empt}_{ij}/\tau)`
+with a detached selection gate
+:math:`g_{ij} = \max(\text{non\_empty}_{ij}^{\text{det}}, w_{ij}^{\text{det}})`).
+When ``tau_anneal=True``, ``module.tau`` (stored as a registered buffer in
+``state_dict()``) is annealed geometrically from ``tau_start`` (default ``1.0``)
+to ``tau_end`` (default ``0.05``) across the epochs of each ``train()`` call;
+``tau_end`` defaults to ``0.05`` rather than ``0.01`` because ``float32``
+softmax weights :math:`\exp(-\Delta/\tau)` underflow to exact ``0.0`` once the
+score gap :math:`\Delta` exceeds :math:`\approx 100\tau`. Because
+:math:`\text{softmin}_\tau(v) \le \text{mean}(v)` pulls all target components
+together at finite :math:`\tau > 0`, ``diversity_reg`` adds the log-space
+pairwise soft containment ratio :func:`~mowl.nn.el.softagg.diversity_penalty`,
+which evaluates to ``1.0`` on identical boxes at any ambient dimension :math:`d`
+and to :math:`\le 10^{-3}` when components are disjoint:
+
+.. testcode::
+
+   import mowl
+   mowl.init_jvm("2g")  # no-op if the JVM is already running
+
+   import torch
+   from mowl.datasets.builtin import FamilyDataset
+   from mowl.models import MultiBoxEL, MultiELBE
+   from mowl.nn.el.softagg import diversity_penalty, softmin
+
+   ds = FamilyDataset()
+
+   # 1. Soft aggregation with geometric temperature annealing and diversity_reg
+   mb = MultiBoxEL(
+       ds,
+       embed_dim=8,
+       n_components=2,
+       component_aggregation="soft",
+       tau_start=1.0,
+       tau_end=0.05,
+       tau_anneal=True,
+       diversity_reg=0.1,
+       neg_sampling_gcis=[],
+   )
+   mb.train(epochs=3, validate_every=10)
+   assert abs(float(mb.module.tau.item()) - 0.05) < 1e-6
+   assert "tau" in mb.module.state_dict()
+
+   me = MultiELBE(
+       ds,
+       embed_dim=8,
+       n_components=2,
+       component_aggregation="soft",
+       tau_start=1.0,
+       tau_end=0.05,
+       tau_anneal=True,
+       diversity_reg=0.1,
+       neg_sampling_gcis=[],
+   )
+   me.train(epochs=3, validate_every=10)
+   assert abs(float(me.module.tau.item()) - 0.05) < 1e-6
+
+   # 2. Shared helpers in mowl.nn.el.softagg: softmin and log-space diversity_penalty
+   v = torch.tensor([[0.0, 2.0]])
+   assert float(softmin(v, tau=1e-4, dim=-1).item()) < 1e-3
+   ident_c = torch.zeros((1, 2, 50), requires_grad=True)
+   ident_o = torch.full((1, 2, 50), 0.2)
+   pen = diversity_penalty(ident_c, ident_o)
+   pen.backward()
+   assert abs(float(pen.item()) - 1.0) < 1e-5
+   assert float(ident_c.grad.norm().item()) > 0.0
+
+
+Objective O3: Canonical-element point supervision
+-------------------------------------------------
+
+Objective O3 supervises class regions by points—the canonical elements of
+satisfiable named classes and ABox individuals in the training ontology's
+:class:`~mowl.geometric.completion.CanonicalModel`—rather than by box-to-box
+inclusion. :class:`~mowl.datasets.el.points.PointSupervision` (in
+:mod:`mowl.datasets.el.points`) precomputes positive membership pairs
+:math:`(x_D, C)` where :math:`\mathcal{O} \models D \sqsubseteq C`, hard
+negative pairs where :math:`\mathcal{O} \models D \sqcap C \sqsubseteq \bot`,
+per-element pools of non-entailed classes for random negatives (weighted by
+``neg_weight``, default ``0.1``), and canonical role edges :math:`(x_C, r, x_D)`,
+sampling up to ``points_per_epoch`` (default ``100_000``) pairs per epoch. In
+:mod:`mowl.nn.el.pointloss`, soft coordinatewise box membership
+:math:`m(x; c, o) = \prod_{\text{coord}} \sigma((|o| - |x - c|)/\beta)` (with
+temperature ``beta``, default ``0.1``) is combined across components via
+noisy-OR :math:`m_C(x) = 1 - \prod_i (1 - m_{C_i}(x))` and trained with binary
+cross-entropy plus the mean log-side-length regulariser ``volume_reg`` (default
+``1e-3``) so boxes shrink tightly onto their points. Setting
+``objective="point"`` uses only the point and volume losses (zeroing all GCI
+losses), whereas ``objective="mixed"`` keeps the backbone's :math:`\bot`-axiom
+region losses (``gci0_bot``, ``gci1_bot``, ``gci3_bot``) so empty-space
+disjointness is still enforced. Under both ``"point"`` and ``"mixed"``, ABox
+class assertions are scored by :math:`-\log m_C(a)`
+(:meth:`~mowl.nn.MultiBoxELModule.class_assertion_score_point`, aliasing
+individual elements directly to ``ind_embed`` without using ``ind_offset``) and
+point satisfaction is reported by
+:meth:`~mowl.nn.MultiBoxELModule.point_modelness` (fractions of positive pairs
+with :math:`m \ge 0.5` and hard negatives with :math:`m < 0.5`):
+
+.. testcode::
+
+   import mowl
+   mowl.init_jvm("2g")  # no-op if the JVM is already running
+
+   import torch
+   from mowl.datasets.builtin import FamilyDataset
+   from mowl.datasets.el.points import PointSupervision
+   from mowl.geometric import CanonicalModel
+   from mowl.models import MultiBoxEL, MultiELBE
+
+   ds = FamilyDataset()
+
+   # Train MultiELBE with objective="mixed" (point supervision + bottom-axiom region losses)
+   melbe = MultiELBE(
+       ds,
+       embed_dim=8,
+       n_components=2,
+       objective="mixed",
+       beta=0.1,
+       neg_weight=0.1,
+       volume_reg=1e-3,
+       points_per_epoch=500,
+   )
+   cm = CanonicalModel.from_dataset(ds)
+   ps = PointSupervision.from_canonical_model(
+       cm,
+       melbe.named_class_index_dict,
+       melbe.individual_index_dict,
+       melbe.object_property_index_dict,
+   )
+   assert ps.n_elements > 0 and ps.pos_pairs.shape[0] > 0 and ps.hard_neg_pairs.shape[0] > 0
+
+   melbe.train(epochs=3, validate_every=10)
+   stats = melbe.module.point_modelness()
+   assert 0.0 <= stats["pos_frac"] <= 1.0 and 0.0 <= stats["hardneg_frac"] <= 1.0
+
+   # Under "mixed", gci0_loss is zeroed while gci1_bot_loss remains active
+   gci0_data = melbe.training_datasets["gci0"].data
+   gci1_bot_data = melbe.training_datasets["gci1_bot"].data
+   with torch.no_grad():
+       assert float(melbe.module(gci0_data, "gci0").abs().max().item()) == 0.0
+       assert float(melbe.module(gci1_bot_data, "gci1_bot").abs().max().item()) > 0.0
+
+   # Train MultiBoxEL with objective="point"
+   mbox = MultiBoxEL(
+       ds,
+       embed_dim=8,
+       n_components=2,
+       objective="point",
+       beta=0.1,
+       neg_weight=0.1,
+       volume_reg=1e-3,
+       points_per_epoch=500,
+   )
+   mbox.train(epochs=3, validate_every=10)
+   assert set(mbox.module.point_modelness().keys()) == {"pos_frac", "hardneg_frac"}
