@@ -28,6 +28,14 @@ class MultiBoxEL(EmbeddingELModel):
       zero-loss global optimum from arbitrary random initialisations.
     - Role axiom training (``load_role_axioms=True``) is not supported by
       :class:`~mowl.nn.MultiBoxELModule`.
+    - Under ``component_aggregation="soft"`` at finite ``tau > 0``, the soft
+      loss is not zero at a hard model (:func:`~mowl.nn.el.softagg.softmin`
+      :math:`\\le \\text{mean}` pulls all target components toward source
+      components), which is why ``diversity_reg`` exists.
+    - Although ``module.tau`` is stored as a registered buffer in
+      ``module.state_dict()``, the annealing schedule in :meth:`on_epoch_start`
+      is indexed by the local ``epoch`` counter of each :meth:`train` call and
+      therefore restarts from ``tau_start`` at every :meth:`train` call.
 
     Parameters
     ----------
@@ -74,12 +82,17 @@ class MultiBoxEL(EmbeddingELModel):
         Component aggregation mode: ``"hard"`` or ``"soft"``.
     tau_start : float, default 1.0
         Initial soft-assignment temperature :math:`\\tau_{\\text{start}} > 0`.
-    tau_end : float, default 0.01
+    tau_end : float, default 0.05
         Final soft-assignment temperature :math:`\\tau_{\\text{end}} > 0` when
-        ``tau_anneal=True``.
+        ``tau_anneal=True``. Defaults to ``0.05`` because ``float32`` softmax
+        weights :math:`\\exp(-\\Delta / \\tau)` underflow to ``0.0`` once the
+        score gap :math:`\\Delta` exceeds :math:`\\approx 100 \\tau`; smaller
+        ``tau_end`` values therefore reintroduce dead components with exact
+        zero gradient late in training.
     tau_anneal : bool, default False
         Whether to anneal ``module.tau`` geometrically from ``tau_start`` to
-        ``tau_end`` over the training epochs in :meth:`on_epoch_start`.
+        ``tau_end`` over the training epochs in :meth:`on_epoch_start`. The
+        schedule restarts from ``tau_start`` on every call to :meth:`train`.
     diversity_reg : float, default 0.0
         Weight for the pairwise component volume overlap regulariser.
     tau : float, optional
@@ -105,7 +118,7 @@ class MultiBoxEL(EmbeddingELModel):
                  anchor_weight=0.0,
                  component_aggregation="hard",
                  tau_start=1.0,
-                 tau_end=0.01,
+                 tau_end=0.05,
                  tau_anneal=False,
                  diversity_reg=0.0,
                  tau=None,
@@ -179,6 +192,9 @@ class MultiBoxEL(EmbeddingELModel):
 
         Non-guarantees:
         - When ``epochs <= 1`` and ``tau_anneal=True``, ``module.tau`` remains ``tau_start``.
+        - The schedule is stateless across :meth:`train` calls: every call to
+          :meth:`train` starts at ``epoch = 0`` and therefore restarts
+          ``module.tau`` from ``tau_start``.
         """
         if self.tau_anneal:
             if epochs > 1:
@@ -191,7 +207,6 @@ class MultiBoxEL(EmbeddingELModel):
             self.module.tau = float(tau)
 
     def get_regularization_loss(self):
-
         """Return module regularisation loss plus weighted anchor loss when active."""
         loss = super().get_regularization_loss()
         if self.init_boxes is not None and self.anchor_weight > 0:

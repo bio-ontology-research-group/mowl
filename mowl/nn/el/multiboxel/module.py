@@ -11,8 +11,7 @@ import mowl.nn.el.boxsquaredel.losses as B2L
 from mowl.nn.el.boxsquaredel.module import BoxSquaredELModule
 from mowl.nn.el.multibox_utils import effective_components as _effective_components
 import mowl.nn.el.multiboxel.losses as L
-from mowl.nn.el.softagg import diversity_penalty
-
+from mowl.nn.el.softagg import _validate_tau, diversity_penalty
 
 
 class MultiBoxELModule(ELModule):
@@ -38,12 +37,21 @@ class MultiBoxELModule(ELModule):
       exceed ``eps`` in every coordinate and whose box is not contained in
       another component of the same class (with exact ties broken by keeping
       the lowest-index component).
+    - **Checkpointed temperature buffer:** ``tau`` is stored as a registered
+      ``float32`` buffer so it is saved and restored in ``state_dict()`` while
+      still accepting ``module.tau = float_value`` assignments.
 
     Non-guarantees:
     - Role axiom losses (``role_inclusion``, ``role_chain``) are not implemented
       (``role_axiom_capable = False``).
     - Negative sampling is only supported for ``gci2`` and
       ``object_property_assertion`` (``neg_capable_gcis``).
+    - Under ``component_aggregation="soft"`` at finite ``tau > 0``, the soft
+      loss is not zero at a hard model because :func:`~mowl.nn.el.softagg.softmin`
+      (:math:`\\le \\text{mean}`) pulls all target components toward each source
+      component in proportion to their softmax weights; ``diversity_reg``
+      (:func:`~mowl.nn.el.softagg.diversity_penalty`) exists to counteract this
+      collapse pressure.
 
     Parameters
     ----------
@@ -71,7 +79,7 @@ class MultiBoxELModule(ELModule):
     component_aggregation : str, default "hard"
         Component aggregation mode: ``"hard"`` or ``"soft"``.
     tau : float, default 1.0
-        Soft-assignment temperature stored on the module.
+        Soft-assignment temperature stored as a registered buffer on the module.
     diversity_reg : float, default 0.0
         Weight for the pairwise component volume overlap regulariser
         :func:`~mowl.nn.el.softagg.diversity_penalty`.
@@ -104,8 +112,7 @@ class MultiBoxELModule(ELModule):
             raise ValueError(
                 f"component_aggregation must be 'hard' or 'soft', got {component_aggregation!r}"
             )
-        if isinstance(tau, bool) or not isinstance(tau, (int, float)) or float(tau) <= 0.0:
-            raise ValueError(f"tau must be > 0, got {tau!r}")
+        tau_f = _validate_tau(tau)
         if (
             isinstance(diversity_reg, bool)
             or not isinstance(diversity_reg, (int, float))
@@ -148,9 +155,15 @@ class MultiBoxELModule(ELModule):
         self.reg_factor = reg_factor
         self.component_reg = component_reg
         self.component_aggregation = component_aggregation
-        self.tau = float(tau)
+        self.register_buffer("tau", th.tensor(tau_f, dtype=th.float32))
         self.diversity_reg = float(diversity_reg)
 
+    def __setattr__(self, name: str, value: object) -> None:
+        if name == "tau" and "_buffers" in self.__dict__ and "tau" in self._buffers:
+            tau_f = _validate_tau(value)  # type: ignore[arg-type]
+            self._buffers["tau"].fill_(tau_f)
+            return
+        super().__setattr__(name, value)
 
     # Single-component tables (roles, bumps, individuals) use the Box²EL initialiser.
     init_embeddings = BoxSquaredELModule.init_embeddings

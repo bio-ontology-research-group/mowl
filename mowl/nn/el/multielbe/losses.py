@@ -45,6 +45,15 @@ Non-guarantees:
   gating over pairwise intersections makes the objective piecewise smooth rather
   than convex; gradient descent is not guaranteed to reach a global minimum from
   arbitrary random initialisations.
+- **Non-zero soft loss at hard models and component collapse pressure:** Under
+  ``aggregation="soft"`` at finite :math:`\\tau > 0`, :func:`~mowl.nn.el.softagg.softmin`
+  satisfies :math:`\\min_j v_j \\le \\text{softmin}_\\tau(v) \\le \\text{mean}_j v_j`
+  and is strictly positive whenever the target components do not all have zero
+  inclusion score (e.g. :math:`\\text{softmin}_{\\tau=1}([0, 5]) \\approx 0.69`).
+  Thus a hard zero-loss model is not a zero of the soft loss: every target
+  component receives a gradient proportional to its softmax weight pulling it
+  toward the source component, which promotes component collapse unless paired
+  with :func:`~mowl.nn.el.softagg.diversity_penalty` (``diversity_reg > 0``).
 """
 from __future__ import annotations
 
@@ -59,7 +68,7 @@ from mowl.nn.el.multiboxel.losses import (
     _validate_aggregation,
     multi_intersection,
 )
-from mowl.nn.el.softagg import soft_weights, softmin
+from mowl.nn.el.softagg import soft_gci1_terms, softmin
 
 
 __all__ = [
@@ -215,6 +224,10 @@ def gci0_loss(
     - ``neg=True`` is not distinct from ``neg=False``.
     - Different source components :math:`C_i` may map into the same target
       component :math:`D_j`.
+    - Under ``aggregation="soft"`` at finite ``tau > 0``, the loss is not zero
+      at a hard model (:func:`~mowl.nn.el.softagg.softmin` :math:`\\le \\text{mean}`
+      pulls all target components :math:`D_j` toward each :math:`C_i`, which is
+      why ``diversity_reg`` exists).
 
     Parameters
     ----------
@@ -314,11 +327,12 @@ def gci1_loss(
       emptiness penalties), gate :math:`g_{ij} = 1` if :math:`\\text{lo}_{ij} \\le \\text{up}_{ij}`
       in every coordinate or :math:`(i, j) = (i^*, j^*)` else :math:`0` (detached), and
       score :math:`= \\frac{\\sum_{i,j} g_{ij} \\min_m \\text{incl}(I(C_i, D_j), E_m)}{\\sum_{i,j} g_{ij}} + \\text{empt}(C_{i^*}, D_{j^*})`.
-    - Under ``aggregation="soft"``:
+    - Under ``aggregation="soft"`` (delegating to :func:`~mowl.nn.el.softagg.soft_gci1_terms`):
       :math:`w_{ij} = \\text{softmax}(-\\text{empt}_{ij} / \\tau)` (with gradient),
-      emptiness term :math:`\\sum_{i,j} w_{ij} \\text{empt}_{ij}`, gate
-      :math:`g_{ij} = \\max(\\text{non\\_empty}_{ij}^\\text{det}, w_{ij})`, and inner
-      target aggregation :math:`\\text{softmin}_\\tau` over :math:`E_m`.
+      emptiness term :math:`\\sum_{i,j} w_{ij} \\text{empt}_{ij}`, detached gate
+      :math:`g_{ij} = \\max(\\text{non\\_empty}_{ij}^\\text{det}, w_{ij}^\\text{det})`
+      (detached because the gate selects active pairs rather than acting as a
+      target), and inner target aggregation :math:`\\text{softmin}_\\tau` over :math:`E_m`.
 
     Guarantees:
     - Returns shape ``(B, 1)``, matching :func:`mowl.nn.el.elbe.losses.gci1_loss` at ``k = 1``
@@ -338,30 +352,10 @@ def gci1_loss(
     - If a non-empty intersection :math:`C_i \\cap D_j` is covered only by a
       union of multiple :math:`E_m` rather than a single :math:`E_m`, the loss
       remains positive.
-
-    Parameters
-    ----------
-    data : torch.Tensor
-        Integer tensor of shape ``(B, 3)`` with columns ``(C, D, E)``.
-    class_embed : torch.nn.Embedding
-        Class centre embedding table of width ``k * d``.
-    class_offset : torch.nn.Embedding
-        Class offset embedding table of width ``k * d``.
-    margin : float
-        ELBE inclusion margin (positive margin tightens).
-    n_components : Optional[int], default None
-        Number of components :math:`k` per class.
-    neg : bool, default False
-        Unused flag kept for GCI dispatch signature uniformity.
-    aggregation : str, default "hard"
-        Component aggregation mode: ``"hard"`` or ``"soft"``.
-    tau : float, default 1.0
-        Soft-assignment temperature used when ``aggregation="soft"``.
-
-    Returns
-    -------
-    torch.Tensor
-        Per-row loss tensor of shape ``(B, 1)``.
+    - Under ``aggregation="soft"`` at finite ``tau > 0``, the loss is not zero
+      at a hard model (:func:`~mowl.nn.el.softagg.softmin` :math:`\\le \\text{mean}`
+      pulls all target components :math:`E_m` toward each active intersection,
+      which is why ``diversity_reg`` exists).
     """
     _validate_aggregation(aggregation, tau)
     b_size = data.shape[0]
@@ -399,20 +393,8 @@ def gci1_loss(
         gated_incl = (gate * min_incl_ij).sum(dim=(1, 2)) / gate.sum(dim=(1, 2))
         return (gated_incl + empt_designated).unsqueeze(1)
 
-    w_flat = soft_weights(empt_flat, tau=tau, dim=1)  # (B, k * k)
-    empt_soft = (w_flat * empt_flat).sum(dim=1)  # (B,)
-    w = w_flat.view(b_size, k, k)  # (B, k, k)
-
-    non_empty_f = (
-        (lower.detach() <= upper.detach())
-        .all(dim=-1)
-        .to(dtype=empt.dtype)
-        .detach()
-    )  # (B, k, k)
-    gate = th.maximum(non_empty_f, w)  # (B, k, k)
-
-    min_incl_ij = softmin(incl_ijm, tau=tau, dim=3)  # (B, k, k)
-    gated_incl = (gate * min_incl_ij).sum(dim=(1, 2)) / gate.sum(dim=(1, 2))
+    non_empty = (lower.detach() <= upper.detach()).all(dim=-1)  # (B, k, k)
+    empt_soft, gated_incl = soft_gci1_terms(empt, non_empty, incl_ijm, tau=tau)
     return (gated_incl + empt_soft).unsqueeze(1)
 
 
@@ -513,6 +495,10 @@ def gci2_score(
     Non-guarantees:
     - Roles are single translation vectors :math:`r \\in \\mathbb{R}^d` shared
       across all components.
+    - Under ``aggregation="soft"`` at finite ``tau > 0``, the score is not zero
+      at a hard model (:func:`~mowl.nn.el.softagg.softmin` :math:`\\le \\text{mean}`
+      pulls all target components :math:`D_j` toward each :math:`C_i + r`, which
+      is why ``diversity_reg`` exists).
 
     Parameters
     ----------
@@ -562,7 +548,7 @@ def gci2_loss(
     aggregation: str = "hard",
     tau: float = 1.0,
 ) -> th.Tensor:
-    """ELBE GCI2 loss :math:`\\text{mean}_i \\text{agg}_j s(C_i, D_j, r)` for :math:`C \\sqsubseteq \\exists r.D` (positive and negative).
+    """ELBE GCI2 loss for :math:`C \\sqsubseteq \\exists r.D` (positive and negative).
 
     Aggregation for :math:`k \\ge 2`:
     - When ``neg=False``, :math:`s` is :func:`mowl.nn.el.elbe.losses.gci2_score`
@@ -573,23 +559,24 @@ def gci2_loss(
       contained in some :math:`D_j`.
     - When ``neg=True``, :math:`s` is :func:`mowl.nn.el.elbe.losses.gci2_score_neg`
       (:math:`\\|\\text{relu}(|c_{C,i} + r - c_{D,j}| - o_{C,i} - o_{D,j} - \\text{margin})\\|_2`),
-      also aggregated as :math:`\\text{mean}_i \\min_j s(C_i, D_j, r)` under
-      ``"hard"`` (or :math:`\\text{mean}_i \\text{softmin}_{\\tau, j} s(C_i, D_j, r)`
-      under ``"soft"``). For each source component :math:`C_i`, this takes the
-      ELBE separation to its *nearest* target component :math:`D_j` and averages
-      over :math:`i`: under ELBE's MSE negative loss (target ``1``), every
-      translated component :math:`C_i + r` must be separated from its nearest
-      :math:`D_j`.
+      aggregated as the mean over all :math:`k^2` component pairs
+      :math:`\\text{mean}_{i,j} s(C_i, D_j, r)` identically under both ``"hard"``
+      and ``"soft"`` (no ``softmin``).
 
     Guarantees:
     - Returns shape ``(B, 1)``, matching :func:`mowl.nn.el.elbe.losses.gci2_loss`
       at ``k = 1`` for both ``neg=False`` and ``neg=True``.
-    - Converges from ``aggregation="soft"`` to ``aggregation="hard"`` as ``tau -> 0+``.
+    - Converges from ``aggregation="soft"`` to ``aggregation="hard"`` as ``tau -> 0+``
+      (and is identical for ``neg=True`` at all ``tau``).
 
     Non-guarantees:
-    - Under ``neg=True``, returns the raw negative score :math:`\\text{mean}_i \\text{agg}_j \\text{gci2\\_score\\_neg}(C_i, D_j, r)`
+    - Under ``neg=True``, returns the raw negative score :math:`\\text{mean}_{i,j} \\text{gci2\\_score\\_neg}(C_i, D_j, r)`
       (as ELBE does); pushing this score toward ``1`` is performed by the
       model's MSE criterion rather than inside ``gci2_loss``.
+    - Under ``neg=False`` and ``aggregation="soft"`` at finite ``tau > 0``, the
+      loss is not zero at a hard model (:func:`~mowl.nn.el.softagg.softmin`
+      :math:`\\le \\text{mean}` pulls all target components :math:`D_j` toward each
+      :math:`C_i + r`, which is why ``diversity_reg`` exists).
 
     Parameters
     ----------
@@ -627,8 +614,14 @@ def gci2_loss(
     cen_d, off_d = _unpack_boxes(
         data[:, 2], class_embed, class_offset, n_components, embed_dim=d_single
     )
-    fn = EL.gci2_score_neg if neg else EL.gci2_score
-    pair_scores = multi_pair_score(fn, cen_c, off_c, cen_d, off_d, r, margin)
+    if neg:
+        pair_scores = multi_pair_score(
+            EL.gci2_score_neg, cen_c, off_c, cen_d, off_d, r, margin
+        )
+        return pair_scores.mean(dim=(1, 2)).unsqueeze(1)
+    pair_scores = multi_pair_score(
+        EL.gci2_score, cen_c, off_c, cen_d, off_d, r, margin
+    )
     if aggregation == "hard":
         return th.amin(pair_scores, dim=2).mean(dim=1, keepdim=True)
     return softmin(pair_scores, tau=tau, dim=2).mean(dim=1, keepdim=True)
@@ -705,6 +698,10 @@ def gci3_loss(
     Non-guarantees:
     - Preserves ELBE's overlap formula rather than full box inclusion.
     - ``neg=True`` is not distinct from ``neg=False``.
+    - Under ``aggregation="soft"`` at finite ``tau > 0``, the loss is not zero
+      at a hard model (:func:`~mowl.nn.el.softagg.softmin` :math:`\\le \\text{mean}`
+      pulls all target components :math:`D_j` toward each :math:`C_i - r`, which
+      is why ``diversity_reg`` exists).
 
     Parameters
     ----------
@@ -819,6 +816,10 @@ def class_assertion_loss(
     Non-guarantees:
     - Individuals are single boxes rather than multi-component unions.
     - ``neg=True`` is not distinct from ``neg=False``.
+    - Under ``aggregation="soft"`` at finite ``tau > 0``, the loss is not zero
+      at a hard model (:func:`~mowl.nn.el.softagg.softmin` :math:`\\le \\text{mean}`
+      pulls all target components :math:`C_m` toward :math:`a`, which is why
+      ``diversity_reg`` exists).
 
     Parameters
     ----------

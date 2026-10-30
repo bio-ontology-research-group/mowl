@@ -29,6 +29,11 @@ class MultiELBE(EmbeddingELModel):
     Non-guarantees:
     - Gradient-based training is non-convex and is not guaranteed to reach a
       zero-loss global optimum from arbitrary random initialisations.
+    - At finite :math:`\\tau > 0`, the soft-aggregated loss is not zero at a
+      hard geometric model because :func:`~mowl.nn.el.softagg.softmin` over
+      target components is strictly below the unweighted mean unless all target
+      components coincide (pulling target components toward one another);
+      ``diversity_reg`` exists to counteract this target-collapse pressure.
     - Role axiom training (``load_role_axioms=True``) is not supported by
       :class:`~mowl.nn.MultiELBEModule`.
 
@@ -50,12 +55,18 @@ class MultiELBE(EmbeddingELModel):
         Optional alias for ``tau_start`` when setting a fixed temperature.
     tau_start : float, default 1.0
         Initial soft-assignment temperature :math:`\\tau_{\\text{start}} > 0`.
-    tau_end : float, default 0.01
+    tau_end : float, default 0.05
         Final soft-assignment temperature :math:`\\tau_{\\text{end}} > 0` when
-        ``tau_anneal=True``.
+        ``tau_anneal=True``. Defaults to ``0.05`` because ``float32`` softmax
+        weights underflow to exact ``0.0`` once the score gap exceeds
+        :math:`\\sim 100\\tau`, so smaller ``tau_end`` reintroduces dead
+        components late in training.
     tau_anneal : bool, default False
         Whether to anneal ``module.tau`` geometrically from ``tau_start`` to
         ``tau_end`` over the training epochs in :meth:`on_epoch_start`.
+        ``module.tau`` is stored as a registered buffer in ``state_dict()``,
+        and the annealing schedule restarts from ``tau_start`` at every
+        :meth:`train` call.
     diversity_reg : float, default 0.0
         Diversity regularisation weight stored on the module.
     reg_norm : int, default 1
@@ -89,7 +100,7 @@ class MultiELBE(EmbeddingELModel):
         component_aggregation="hard",
         tau=None,
         tau_start=1.0,
-        tau_end=0.01,
+        tau_end=0.05,
         tau_anneal=False,
         diversity_reg=0.0,
         init_boxes=None,
@@ -169,10 +180,15 @@ class MultiELBE(EmbeddingELModel):
         - When ``tau_anneal=True`` and ``epochs > 1``, sets
           ``module.tau = tau_start * (tau_end / tau_start) ** (epoch / (epochs - 1))``
           so epoch ``0`` uses ``tau_start`` and epoch ``epochs - 1`` uses ``tau_end``.
+        - ``module.tau`` is updated in-place as a registered buffer and saved in
+          ``module.state_dict()``.
         - When ``tau_anneal=False``, leaves ``module.tau`` unchanged.
 
         Non-guarantees:
         - When ``epochs <= 1`` and ``tau_anneal=True``, ``module.tau`` remains ``tau_start``.
+        - The annealing schedule is indexed by the local ``epoch`` counter of each
+          :meth:`train` call and therefore restarts from ``tau_start`` at every
+          :meth:`train` invocation.
         """
         if self.tau_anneal:
             if epochs > 1:

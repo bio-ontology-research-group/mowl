@@ -437,5 +437,3 @@ def test_multiboxel_soft_aggregation_and_diversity_reg() -> None:
     with pytest.raises(ValueError, match="component_aggregation"):
         MultiBoxELModule(nb_ont_classes=4, nb_rels=2, component_aggregation="invalid")
 
-
-

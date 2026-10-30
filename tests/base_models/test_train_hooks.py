@@ -82,7 +82,6 @@ def test_train_hooks_absent_identical() -> None:
         assert torch.allclose(state_absent[k], state_noop[k], atol=1e-6, rtol=1e-5)
 
 
-
 def test_tau_anneal_schedule() -> None:
     ds = FamilyDataset()
     tau_start = 1.2
@@ -90,6 +89,10 @@ def test_tau_anneal_schedule() -> None:
     epochs = 5
 
     for model_cls in (MultiBoxEL, MultiELBE):
+        m_default = model_cls(ds, embed_dim=8, n_components=2)
+        assert m_default.tau_end == pytest.approx(0.05, rel=1e-6)
+        assert "tau" in m_default.module.state_dict()
+
         m = model_cls(
             ds,
             embed_dim=8,
@@ -111,6 +114,22 @@ def test_tau_anneal_schedule() -> None:
         for ep, val in enumerate(taus):
             expected = tau_start * ((tau_end / tau_start) ** (ep / (epochs - 1)))
             assert val == pytest.approx(expected, rel=1e-6)
+
+        # Registered buffer tau is saved in state_dict and restored by load_state_dict
+        saved_state = {k: v.clone() for k, v in m.module.state_dict().items()}
+        assert float(saved_state["tau"].item()) == pytest.approx(tau_end, rel=1e-6)
+        m_default.module.load_state_dict(saved_state)
+        assert float(m_default.module.tau.item()) == pytest.approx(tau_end, rel=1e-6)
+
+        # A subsequent train() call restarts the schedule from tau_start at epoch 0
+        taus_restart: list[float] = []
+        m.train(
+            epochs=epochs,
+            validate_every=10,
+            epoch_callback=lambda ep, mod: taus_restart.append(float(mod.module.tau)),
+        )
+        assert taus_restart[0] == pytest.approx(tau_start, rel=1e-6)
+        assert taus_restart[-1] == pytest.approx(tau_end, rel=1e-6)
 
         m_fixed = model_cls(
             ds,
