@@ -226,6 +226,10 @@ def prism_intersection(
 ) -> Tuple[th.Tensor, th.Tensor, th.Tensor]:
     """Compute the closed-form intersection of two prisms (Proposition 5, Federico et al., DL 2026).
 
+    Box offsets in ``b1`` and ``b2`` are treated as **signed** half-widths and are
+    not passed through :func:`torch.abs`; callers reading raw embedding parameters
+    for primitive prisms must pass ``|box_offset|``.
+
     Guarantees:
     - Returns ``(h, lower, upper)`` with ``h = torch.minimum(h1, h2)`` of shape
       ``(B, 3)`` and box corners ``lower, upper`` of shape ``(B, d - 2)``.
@@ -233,6 +237,9 @@ def prism_intersection(
       ``(lower <= upper).all(dim=-1)``.
 
     Non-guarantees:
+    - Does not apply :func:`torch.abs` to the box half-widths in ``b1`` or ``b2``
+      (offsets are treated as signed half-widths; callers must pass ``|box_offset|``
+      for primitive prisms).
     - When the intersection is empty in the triangle or box part, ``h.sum(dim=-1) < 0``
       or ``lower > upper`` in some coordinate; callers must check non-emptiness
       if required.
@@ -242,15 +249,15 @@ def prism_intersection(
     h1 : torch.Tensor
         First triangle support tensor of shape ``(B, 3)``.
     b1 : Tuple[torch.Tensor, torch.Tensor]
-        First box ``(center, offset)`` of shapes ``(B, d - 2)``.
+        First box ``(center, signed_offset)`` of shapes ``(B, d - 2)``.
     h2 : torch.Tensor
         Second triangle support tensor of shape ``(B, 3)``.
     b2 : Tuple[torch.Tensor, torch.Tensor]
-        Second box ``(center, offset)`` of shapes ``(B, d - 2)``.
+        Second box ``(center, signed_offset)`` of shapes ``(B, d - 2)``.
 
     Returns
     -------
-    Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
+    Tuple[torch.Tensor, torch.Tensor, th.Tensor]
         Tuple ``(h, lower, upper)`` of intersection support values and box bounds.
     """
     c1, o1 = b1
@@ -259,6 +266,42 @@ def prism_intersection(
     lower = th.maximum(c1 - o1, c2 - o2)
     upper = th.minimum(c1 + o1, c2 + o2)
     return h, lower, upper
+
+
+def prism_regions_intersection(c: PrismRegions, d: PrismRegions) -> PrismRegions:
+    """Intersect two :class:`PrismRegions` with signed box half-widths.
+
+    Wraps :func:`prism_intersection` and converts the box bounds ``(lower, upper)``
+    into centre ``(lower + upper) / 2`` and signed half-width ``(upper - lower) / 2``.
+
+    Guarantees:
+    - Returns a :class:`PrismRegions` with ``h = torch.minimum(c.h, d.h)`` of shape
+      ``(B, 3)`` and ``cen, w`` of shape ``(B, d - 2)``.
+    - Preserves negative signed half-widths ``w_m < 0`` when the box intervals do
+      not overlap in coordinate ``m``.
+
+    Non-guarantees:
+    - Does not apply :func:`torch.abs` to ``c.w``, ``d.w``, or the output ``w``;
+      empty intersections produce :math:`\\sum_k h_k < 0` or :math:`w_m < 0`.
+
+    Parameters
+    ----------
+    c : PrismRegions
+        First prism regions of shape ``(B, 3)`` and ``(B, d - 2)``.
+    d : PrismRegions
+        Second prism regions of shape ``(B, 3)`` and ``(B, d - 2)``.
+
+    Returns
+    -------
+    PrismRegions
+        Intersection prism regions with signed half-widths.
+    """
+    h_inter, lower, upper = prism_intersection(c.h, (c.cen, c.w), d.h, (d.cen, d.w))
+    return PrismRegions(
+        h=h_inter,
+        cen=(lower + upper) / 2.0,
+        w=(upper - lower) / 2.0,
+    )
 
 
 def triangle_empty_score(h: th.Tensor, margin: float = 0.0) -> th.Tensor:
@@ -535,7 +578,34 @@ def gci2_score_prisms(
     rel: th.Tensor,
     margin: float,
 ) -> th.Tensor:
-    """Positive GCI2 score on :class:`PrismRegions`: inclusion of :math:`C + r` inside :math:`D`."""
+    """Positive GCI2 score on :class:`PrismRegions`: inclusion of :math:`C + r` inside :math:`D`.
+
+    Guarantees:
+    - Returns a 1-D tensor of shape ``(B,)`` matching :func:`gci2_score` with
+      ``|c.w|`` and ``|d.w|``.
+    - At ``margin = 0``, equals ``0`` iff the translated prism :math:`P_C + r`
+      is contained in :math:`P_D`.
+
+    Non-guarantees:
+    - Passes ``torch.abs(c.w)`` and ``torch.abs(d.w)`` to :func:`gci2_score` and
+      does not gate out empty source prisms :math:`C`.
+
+    Parameters
+    ----------
+    c : PrismRegions
+        Source prism regions of shape ``(B, 3)`` and ``(B, d - 2)``.
+    d : PrismRegions
+        Target prism regions of shape ``(B, 3)`` and ``(B, d - 2)``.
+    rel : torch.Tensor
+        Role translation vectors of shape ``(B, d)``.
+    margin : float
+        Inclusion margin.
+
+    Returns
+    -------
+    torch.Tensor
+        Per-row score tensor of shape ``(B,)``.
+    """
     return gci2_score(c.h, c.cen, th.abs(c.w), d.h, d.cen, th.abs(d.w), rel, margin)
 
 
@@ -598,7 +668,35 @@ def gci2_score_neg_prisms(
     margin: float,
     rc: Optional[th.Tensor] = None,
 ) -> th.Tensor:
-    """Negative GCI2 score on :class:`PrismRegions`."""
+    """Negative GCI2 score on :class:`PrismRegions`.
+
+    Guarantees:
+    - Returns a 1-D tensor of shape ``(B,)`` matching :func:`gci2_score_neg`.
+    - When ``rc is None``, recovers the effective non-negative inradius
+      :math:`\\text{relu}(\\sum_k h_{C,k} / 3)` from ``c.h``.
+
+    Non-guarantees:
+    - Measures separation violation (zero when close, positive when separated)
+      for downstream negative-sampling losses.
+
+    Parameters
+    ----------
+    c : PrismRegions
+        Source prism regions of shape ``(B, 3)`` and ``(B, d - 2)``.
+    d : PrismRegions
+        Target prism regions of shape ``(B, 3)`` and ``(B, d - 2)``.
+    rel : torch.Tensor
+        Role translation vectors of shape ``(B, d)``.
+    margin : float
+        Margin subtracted inside ``relu``.
+    rc : Optional[torch.Tensor], default None
+        Optional explicit inradii of :math:`C`, shape ``(B, 1)``.
+
+    Returns
+    -------
+    torch.Tensor
+        Per-row negative score tensor of shape ``(B,)``.
+    """
     if rc is None:
         rc = th.relu(c.h.sum(dim=-1, keepdim=True) / 3.0)
     return gci2_score_neg(
@@ -729,7 +827,34 @@ def gci3_score_prisms(
     rel: th.Tensor,
     margin: float,
 ) -> th.Tensor:
-    """Positive GCI3 score on :class:`PrismRegions` for :math:`\\exists r.C \\sqsubseteq D`."""
+    """Positive GCI3 score on :class:`PrismRegions` for :math:`\\exists r.C \\sqsubseteq D`.
+
+    Guarantees:
+    - Returns a 1-D tensor of shape ``(B,)``.
+    - At ``margin = 0``, equals ``0`` iff the shifted prism :math:`P_C - r` has a
+      non-empty intersection with :math:`P_D` (using ``|c.w|`` and ``|d.w|``).
+
+    Non-guarantees:
+    - Following ELBE's ``gci3_loss``, requires :math:`P_C - r` to overlap :math:`P_D`
+      rather than full existential inclusion when roles are not functional.
+    - Passes ``torch.abs(c.w)`` and ``torch.abs(d.w)`` to the box overlap term.
+
+    Parameters
+    ----------
+    c : PrismRegions
+        Filler prism regions of shape ``(B, 3)`` and ``(B, d - 2)``.
+    d : PrismRegions
+        Target prism regions of shape ``(B, 3)`` and ``(B, d - 2)``.
+    rel : torch.Tensor
+        Role translation vectors of shape ``(B, d)``.
+    margin : float
+        Overlap margin.
+
+    Returns
+    -------
+    torch.Tensor
+        Per-row score tensor of shape ``(B,)``.
+    """
     r_tri = rel[:, :2]
     r_box = rel[:, 2:]
     hc_shifted = _translate_supports(c.h, -r_tri)
@@ -805,7 +930,30 @@ def gci3_loss(
 
 
 def gci3_bot_score_prisms(c: PrismRegions, margin: float = 0.0) -> th.Tensor:
-    """GCI3-bot score on :class:`PrismRegions` for :math:`\\exists r.C \\sqsubseteq \\bot`."""
+    """GCI3-bot score on :class:`PrismRegions` for :math:`\\exists r.C \\sqsubseteq \\bot`.
+
+    Guarantees:
+    - Returns a 1-D tensor of shape ``(B,)`` equal to :func:`triangle_empty_score`
+      on ``c.h``.
+    - At ``margin = 0``, equals ``0`` whenever :math:`\\sum_{k=1}^3 h_{C,k} \\le 0`.
+
+    Non-guarantees:
+    - At ``margin > 0``, if :math:`\\sum_{k=1}^3 h_{C,k} \\ge 0`, this score has a
+      floor of ``margin`` and cannot reach ``0``.
+    - Does not inspect the box part ``c.cen, c.w`` or role embeddings.
+
+    Parameters
+    ----------
+    c : PrismRegions
+        Filler prism regions with ``h`` of shape ``(B, 3)``.
+    margin : float, default 0.0
+        Margin added inside ``relu``.
+
+    Returns
+    -------
+    torch.Tensor
+        Per-row score tensor of shape ``(B,)``.
+    """
     return triangle_empty_score(c.h, margin)
 
 
@@ -862,7 +1010,33 @@ def class_assertion_score_prisms(
     c: PrismRegions,
     margin: float,
 ) -> th.Tensor:
-    """Class assertion score on :class:`PrismRegions` for :math:`C(a)`."""
+    """Class assertion score on :class:`PrismRegions` for :math:`C(a)`.
+
+    Guarantees:
+    - Returns a 1-D tensor of shape ``(B,)``.
+    - At ``margin = 0``, equals ``0`` iff the individual point
+      :math:`x_a = (x_{\\text{tri}}, x_{\\text{box}})` lies inside :math:`T_C` and
+      inside the box with centre ``c.cen`` and half-width ``|c.w|``.
+
+    Non-guarantees:
+    - Passes ``torch.abs(c.w)`` to :func:`prism_inclusion_score`, so negative
+      signed box half-widths are treated by their magnitude unless ``c.w`` is
+      non-negative.
+
+    Parameters
+    ----------
+    ind_pts : torch.Tensor
+        Individual point embeddings of shape ``(B, d)``.
+    c : PrismRegions
+        Class prism regions of shape ``(B, 3)`` and ``(B, d - 2)``.
+    margin : float
+        Inclusion margin.
+
+    Returns
+    -------
+    torch.Tensor
+        Per-assertion score tensor of shape ``(B,)``.
+    """
     x_tri = ind_pts[:, :2]
     x_box = ind_pts[:, 2:]
     zero_r = th.zeros((ind_pts.shape[0], 1), device=ind_pts.device, dtype=ind_pts.dtype)
@@ -934,6 +1108,24 @@ def gci0_structural(c: PrismRegions, d: PrismRegions, margin: float) -> th.Tenso
     - Non-emptiness gate :math:`\\text{ne}(C) > 0` is detached.
     - At ``margin = 0``, equals ``0`` iff :math:`C` is empty (:math:`\\text{ne}(C) \\le 0`)
       or :math:`P_C \\subseteq P_D`.
+
+    Non-guarantees:
+    - Vacuously ``0`` when :math:`\\text{ne}(C) \\le 0`; non-emptiness of
+      satisfiable classes is enforced separately by ``existence_loss``.
+
+    Parameters
+    ----------
+    c : PrismRegions
+        Sub-concept prism regions of shape ``(B, 3)`` and ``(B, d - 2)``.
+    d : PrismRegions
+        Super-concept prism regions of shape ``(B, 3)`` and ``(B, d - 2)``.
+    margin : float
+        Tightening inclusion margin.
+
+    Returns
+    -------
+    torch.Tensor
+        Per-row squared GCI0 structural loss of shape ``(B,)``.
     """
     ne_c_det = prism_nonempty_measure(
         PrismRegions(h=c.h.detach(), cen=c.cen.detach(), w=c.w.detach())
@@ -946,7 +1138,30 @@ def gci0_structural(c: PrismRegions, d: PrismRegions, margin: float) -> th.Tenso
 
 
 def gci0_bot_structural(c: PrismRegions) -> th.Tensor:
-    """Compute the structural GCI0-bot loss :math:`\\text{relu}(\\text{ne}(C))^2` for :math:`C \\sqsubseteq \\bot`."""
+    """Compute the structural GCI0-bot loss :math:`\\text{relu}(\\text{ne}(C))^2` for :math:`C \\sqsubseteq \\bot`.
+
+    Uses no margin because primitive prisms satisfy :math:`\\text{ne}(C) \\ge 0`,
+    so a positive margin would impose a non-zero floor on primitive classes.
+
+    Guarantees:
+    - Returns a 1-D tensor of shape ``(B,)``.
+    - Equals ``0`` iff :math:`\\text{ne}(C) \\le 0` (either :math:`\\sum_{k=1}^3 h_{C,k} \\le 0`
+      or :math:`\\min_m w_{C,m} \\le 0`).
+
+    Non-guarantees:
+    - Gradients flow only through the branch (triangle support sum or minimum box
+      side length) attaining :math:`\\text{ne}(C)`.
+
+    Parameters
+    ----------
+    c : PrismRegions
+        Concept prism regions of shape ``(B, 3)`` and ``(B, d - 2)``.
+
+    Returns
+    -------
+    torch.Tensor
+        Per-row squared GCI0-bot structural loss of shape ``(B,)``.
+    """
     return th.relu(prism_nonempty_measure(c)).square()
 
 
@@ -964,11 +1179,30 @@ def gci1_structural(
     - Masked rows and rows with :math:`\\text{ne}(C \\cap D) \\le 0` evaluate to
       exact ``0.0`` with zero gradient.
     - Imposes no emptiness penalties on :math:`C \\cap D`.
+
+    Non-guarantees:
+    - Vacuously ``0`` when :math:`\\text{ne}(C \\cap D) \\le 0`; non-emptiness of
+      satisfiable conjunction pairs is enforced separately by ``existence_loss``.
+
+    Parameters
+    ----------
+    c : PrismRegions
+        First conjunct prism regions of shape ``(B, 3)`` and ``(B, d - 2)``.
+    d : PrismRegions
+        Second conjunct prism regions of shape ``(B, 3)`` and ``(B, d - 2)``.
+    e : PrismRegions
+        Super-concept prism regions of shape ``(B, 3)`` and ``(B, d - 2)``.
+    margin : float
+        Tightening inclusion margin.
+    masked : Optional[torch.Tensor], default None
+        Boolean tensor of shape ``(B,)`` marking definition rows whose loss is ``0``.
+
+    Returns
+    -------
+    torch.Tensor
+        Per-row squared GCI1 structural loss of shape ``(B,)``.
     """
-    h_inter, lower, upper = prism_intersection(c.h, (c.cen, c.w), d.h, (d.cen, d.w))
-    inter_cen = (lower + upper) / 2.0
-    inter_w = (upper - lower) / 2.0
-    inter = PrismRegions(h=h_inter, cen=inter_cen, w=inter_w)
+    inter = prism_regions_intersection(c, d)
 
     ne_det = prism_nonempty_measure(
         PrismRegions(h=inter.h.detach(), cen=inter.cen.detach(), w=inter.w.detach())
@@ -987,11 +1221,34 @@ def gci1_structural(
 
 
 def gci1_bot_structural(c: PrismRegions, d: PrismRegions, margin: float) -> th.Tensor:
-    """Compute the structural GCI1-bot loss :math:`\\text{relu}(\\text{ne}(C \\cap D) + m)^2` for :math:`C \\sqcap D \\sqsubseteq \\bot`."""
-    h_inter, lower, upper = prism_intersection(c.h, (c.cen, c.w), d.h, (d.cen, d.w))
-    inter_cen = (lower + upper) / 2.0
-    inter_w = (upper - lower) / 2.0
-    inter = PrismRegions(h=h_inter, cen=inter_cen, w=inter_w)
+    """Compute the structural GCI1-bot loss :math:`\\text{relu}(\\text{ne}(C \\cap D) + m)^2` for :math:`C \\sqcap D \\sqsubseteq \\bot`.
+
+    Guarantees:
+    - Returns a 1-D tensor of shape ``(B,)``.
+    - Equals ``0`` iff :math:`\\text{ne}(C \\cap D) \\le -m`, i.e. either the
+      triangle intersection has :math:`\\sum_{k=1}^3 \\min(h_{C,k}, h_{D,k}) \\le -m`
+      or at least one box coordinate is separated by at least ``m``
+      (:math:`2 w_{C \\cap D, m} \\le -m`).
+
+    Non-guarantees:
+    - Gradients flow only through the branch (triangle support sum or single box
+      coordinate) attaining :math:`\\text{ne}(C \\cap D)`.
+
+    Parameters
+    ----------
+    c : PrismRegions
+        First conjunct prism regions of shape ``(B, 3)`` and ``(B, d - 2)``.
+    d : PrismRegions
+        Second conjunct prism regions of shape ``(B, 3)`` and ``(B, d - 2)``.
+    margin : float
+        Separation margin :math:`m`.
+
+    Returns
+    -------
+    torch.Tensor
+        Per-row squared GCI1-bot structural loss of shape ``(B,)``.
+    """
+    inter = prism_regions_intersection(c, d)
     return th.relu(prism_nonempty_measure(inter) + margin).square()
 
 

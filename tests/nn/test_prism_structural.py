@@ -58,9 +58,11 @@ def test_prism_nonempty_measure() -> None:
 
 def test_prism_structural_zero_at_exact_t3() -> None:
     """Exact T3 prism configuration: all structural losses and the existence term are 0 at margin 0."""
-    # Classes: 0=X1, 1=X2, 2=X3, 3=A (X1 cap X2), 4=B (X2 cap X3), 5=C (X1 cap X3), 6=TOP
+    # Classes: 0=X1, 1=X2, 2=X3, 3=A (X1 cap X2), 4=B (X2 cap X3), 5=C (X1 cap X3), 6=TOP, 7=Z (primitive inside X1)
+    # Include unmasked GCI0 rows (3, 6) [A <= TOP] and (7, 0) [Z <= X1] alongside the 6 definition rows
     gci0 = th.tensor(
-        [[3, 0], [3, 1], [4, 1], [4, 2], [5, 0], [5, 2]], dtype=th.long
+        [[3, 0], [3, 1], [4, 1], [4, 2], [5, 0], [5, 2], [3, 6], [7, 0]],
+        dtype=th.long,
     )
     gci1 = th.tensor([[0, 1, 3], [1, 2, 4], [0, 2, 5]], dtype=th.long)
     gci1_bot = th.tensor(
@@ -69,7 +71,7 @@ def test_prism_structural_zero_at_exact_t3() -> None:
     gci0_bot = th.zeros((0, 2), dtype=th.long)
 
     mod = PrismModule(
-        nb_ont_classes=7,
+        nb_ont_classes=8,
         nb_rels=1,
         embed_dim=4,
         margin=0.0,
@@ -85,18 +87,20 @@ def test_prism_structural_zero_at_exact_t3() -> None:
     hb = th.minimum(h2, h3)
     hc = th.minimum(h1, h3)
     htop = th.tensor([5.0, 5.0, 5.0])
-    all_h = th.stack([h1, h2, h3, ha, hb, hc, htop], dim=0)
+    hz = ha.clone()  # non-empty (sum = 1.0) and strictly inside X1 (ha <= h1)
+    all_h = th.stack([h1, h2, h3, ha, hb, hc, htop, hz], dim=0)
     centers, inradii = _supports_to_center_inradius(all_h)
     with th.no_grad():
         mod.tri_center.weight.copy_(centers)
         mod.tri_inradius.weight.copy_(inradii)
         mod.box_center.weight.zero_()
         mod.box_offset.weight.fill_(1.0)
+        mod.box_offset.weight[7].fill_(0.5)
 
     table = DefinitionTable.from_normal_forms(
         gci0=gci0,
         gci1=gci1,
-        n_classes=7,
+        n_classes=8,
         k=1,
         max_components=2**30,
         top_idx=6,
@@ -108,14 +112,24 @@ def test_prism_structural_zero_at_exact_t3() -> None:
         gci0_bot=gci0_bot,
         gci1=gci1,
         gci1_bot=gci1_bot,
-        n_classes=7,
+        n_classes=8,
         top_idx=6,
         bottom_idx=None,
     )
     mod.set_structural_tables(table, targets, top_idx=6)
 
     assert table.n_defined == 3
-    assert table.def_mask[:6].tolist() == [False, False, False, True, True, True]
+    assert table.def_mask.tolist() == [False, False, False, True, True, True, False, False]
+    assert table.masked_gci0(gci0).tolist() == [
+        True,
+        True,
+        True,
+        True,
+        True,
+        True,
+        False,
+        False,
+    ]
 
     loss_0 = mod(gci0, "gci0")
     loss_1 = mod(gci1, "gci1")
@@ -127,11 +141,19 @@ def test_prism_structural_zero_at_exact_t3() -> None:
     assert th.all(loss_1_bot <= 1e-12)
     assert float(extra.item()) <= 1e-12
 
-    # Also verify size_reg excludes top_idx (6) and averages |r| and 2|o| over primitive classes 0, 1, 2
+    # Displace Z (idx 7) outside X1 (idx 0) and verify the unmasked gci0 row (7, 0) scores > 0
+    saved_box_c7 = mod.box_center.weight[7].clone()
+    with th.no_grad():
+        mod.box_center.weight[7].fill_(5.0)
+    loss_0_displaced = mod(gci0, "gci0")
+    assert float(loss_0_displaced[7].item()) > 0.0
+    assert float(loss_0_displaced[6].item()) <= 1e-12
+    with th.no_grad():
+        mod.box_center.weight[7].copy_(saved_box_c7)
+
+    # Also verify size_reg excludes top_idx (6) and averages |r| and 2|o| over primitive classes 0, 1, 2, 7
     mod.size_reg = 1.0
     extra_with_size = mod.structural_extra_loss()
-    # For X1, X2, X3: sum(h) = 5 -> r = 5/3; box_offset = (1, 1) -> 2|o| = (2, 2).
-    # Mean of |r| is 5/3, mean of 2|o| is 2.0, or combined mean over primitive classes
     assert float(extra_with_size.item()) > 0.0
     # Mutating top_idx (6) parameters must not change structural_extra_loss
     with th.no_grad():
@@ -140,6 +162,119 @@ def test_prism_structural_zero_at_exact_t3() -> None:
     assert float(mod.structural_extra_loss().item()) == pytest.approx(
         float(extra_with_size.item()), abs=1e-6
     )
+
+
+def test_gci0_and_gci1_structural_hand_built_regions() -> None:
+    """Direct unit tests on hand-built PrismRegions for gci0_structural and gci1_structural."""
+    # 1. Included -> 0 at margin 0
+    c_in = PL.PrismRegions(
+        h=th.tensor([[1.0, 1.0, 1.0]], dtype=th.float64),
+        cen=th.tensor([[0.0, 0.0]], dtype=th.float64),
+        w=th.tensor([[0.5, 0.5]], dtype=th.float64),
+    )
+    d_big = PL.PrismRegions(
+        h=th.tensor([[2.0, 2.0, 2.0]], dtype=th.float64),
+        cen=th.tensor([[0.0, 0.0]], dtype=th.float64),
+        w=th.tensor([[1.0, 1.0]], dtype=th.float64),
+    )
+    assert PL.gci0_structural(c_in, d_big, margin=0.0).item() == 0.0
+    assert PL.gci1_structural(c_in, d_big, d_big, margin=0.0).item() == 0.0
+
+    # 2. Not included -> > 0
+    assert PL.gci0_structural(d_big, c_in, margin=0.0).item() > 0.0
+    assert PL.gci1_structural(d_big, d_big, c_in, margin=0.0).item() > 0.0
+
+    # 3. Empty C (gci0) or empty C cap D (gci1) -> 0 (vacuous) even when coordinates exceed target
+    c_empty_tri = PL.PrismRegions(
+        h=th.tensor([[10.0, -6.0, -6.0]], dtype=th.float64),  # sum = -2 < 0
+        cen=th.tensor([[5.0, 5.0]], dtype=th.float64),
+        w=th.tensor([[2.0, 2.0]], dtype=th.float64),
+    )
+    c_empty_box = PL.PrismRegions(
+        h=th.tensor([[5.0, 5.0, 5.0]], dtype=th.float64),
+        cen=th.tensor([[5.0, 5.0]], dtype=th.float64),
+        w=th.tensor([[-0.1, 2.0]], dtype=th.float64),  # negative w_0 -> empty
+    )
+    assert PL.gci0_structural(c_empty_tri, c_in, margin=0.1).item() == 0.0
+    assert PL.gci0_structural(c_empty_box, c_in, margin=0.1).item() == 0.0
+
+    # Disjoint non-empty C and D -> empty C cap D -> vacuous 0 in gci1_structural
+    d_disjoint_box = PL.PrismRegions(
+        h=th.tensor([[1.0, 1.0, 1.0]], dtype=th.float64),
+        cen=th.tensor([[10.0, 10.0]], dtype=th.float64),
+        w=th.tensor([[0.5, 0.5]], dtype=th.float64),
+    )
+    e_tiny = PL.PrismRegions(
+        h=th.tensor([[0.1, 0.1, 0.1]], dtype=th.float64),
+        cen=th.tensor([[-5.0, -5.0]], dtype=th.float64),
+        w=th.tensor([[0.1, 0.1]], dtype=th.float64),
+    )
+    assert PL.gci1_structural(c_in, d_disjoint_box, e_tiny, margin=0.1).item() == 0.0
+
+    # 4. Inclusion into an EMPTY computed target -> > 0
+    # Empty target in box (negative w) and empty target in triangle (sum(h) < 0)
+    target_empty_box = PL.PrismRegions(
+        h=th.tensor([[2.0, 2.0, 2.0]], dtype=th.float64),
+        cen=th.tensor([[0.0, 0.0]], dtype=th.float64),
+        w=th.tensor([[-1.0, 2.0]], dtype=th.float64),
+    )
+    target_empty_tri = PL.PrismRegions(
+        h=th.tensor([[-1.0, -1.0, -1.0]], dtype=th.float64),
+        cen=th.tensor([[0.0, 0.0]], dtype=th.float64),
+        w=th.tensor([[2.0, 2.0]], dtype=th.float64),
+    )
+    assert PL.gci0_structural(c_in, target_empty_box, margin=0.0).item() > 0.0
+    assert PL.gci0_structural(c_in, target_empty_tri, margin=0.0).item() > 0.0
+    assert PL.gci1_structural(c_in, d_big, target_empty_box, margin=0.0).item() > 0.0
+    assert PL.gci1_structural(c_in, d_big, target_empty_tri, margin=0.0).item() > 0.0
+
+    # 5. Masked gci1 row -> exactly 0 with zero gradient to all inputs
+    ch = th.tensor([[2.0, 2.0, 2.0]], dtype=th.float64, requires_grad=True)
+    ccen = th.tensor([[1.0, 1.0]], dtype=th.float64, requires_grad=True)
+    cw = th.tensor([[1.0, 1.0]], dtype=th.float64, requires_grad=True)
+    dh = th.tensor([[2.0, 2.0, 2.0]], dtype=th.float64, requires_grad=True)
+    dcen = th.tensor([[1.0, 1.0]], dtype=th.float64, requires_grad=True)
+    dw = th.tensor([[1.0, 1.0]], dtype=th.float64, requires_grad=True)
+    eh = th.tensor([[0.5, 0.5, 0.5]], dtype=th.float64, requires_grad=True)
+    ecen = th.tensor([[0.0, 0.0]], dtype=th.float64, requires_grad=True)
+    ew = th.tensor([[0.2, 0.2]], dtype=th.float64, requires_grad=True)
+
+    c_grad = PL.PrismRegions(h=ch, cen=ccen, w=cw)
+    d_grad = PL.PrismRegions(h=dh, cen=dcen, w=dw)
+    e_grad = PL.PrismRegions(h=eh, cen=ecen, w=ew)
+    # Without mask this violates inclusion (> 0)
+    assert PL.gci1_structural(c_grad, d_grad, e_grad, margin=0.1).item() > 0.0
+    masked_loss = PL.gci1_structural(
+        c_grad, d_grad, e_grad, margin=0.1, masked=th.tensor([True])
+    )
+    assert masked_loss.item() == 0.0
+    masked_loss.sum().backward()
+    for tensor in (ch, ccen, cw, dh, dcen, dw, eh, ecen, ew):
+        assert tensor.grad is not None
+        assert th.all(tensor.grad == 0.0)
+
+    # 6. At margin m > 0, an inclusion that holds with slack < m -> > 0
+    # Here slack is 0.05 in both triangle supports and box half-widths; at m = 0.0 it is 0, at m = 0.1 > 0.05 it is > 0
+    c_slack = PL.PrismRegions(
+        h=th.tensor([[0.95, 0.95, 0.95]], dtype=th.float64),
+        cen=th.tensor([[0.0, 0.0]], dtype=th.float64),
+        w=th.tensor([[0.95, 0.95]], dtype=th.float64),
+    )
+    d_slack = PL.PrismRegions(
+        h=th.tensor([[1.0, 1.0, 1.0]], dtype=th.float64),
+        cen=th.tensor([[0.0, 0.0]], dtype=th.float64),
+        w=th.tensor([[1.0, 1.0]], dtype=th.float64),
+    )
+    assert PL.gci0_structural(c_slack, d_slack, margin=0.0).item() == 0.0
+    assert PL.gci0_structural(c_slack, d_slack, margin=0.1).item() > 0.0
+    assert PL.gci1_structural(c_slack, d_slack, d_slack, margin=0.0).item() == 0.0
+    assert PL.gci1_structural(c_slack, d_slack, d_slack, margin=0.1).item() > 0.0
+
+    # Also check prism_regions_intersection helper directly
+    inter = PL.prism_regions_intersection(c_in, d_big)
+    assert th.allclose(inter.h, c_in.h)
+    assert th.allclose(inter.cen, c_in.cen)
+    assert th.allclose(inter.w, c_in.w)
 
 
 def test_prism_gci1_bot_triangle_separation() -> None:
@@ -246,6 +381,17 @@ def test_prism_definition_depth_cap() -> None:
         max_level=1,
     )
     assert t_depth1.def_mask.tolist() == [False, True, False, False, False]
+
+    # Install t_depth1 and assert class_regions returns the primitive prism for the rejected level-2 class A (idx 0)
+    mod.set_structural_tables(t_depth1, targets)
+    reg_d1 = mod.class_regions(th.tensor([0, 1], dtype=th.long))
+    prim_h0, prim_bc0, prim_bo0 = mod.prism_params(th.tensor([0], dtype=th.long))
+    assert th.allclose(reg_d1.h[0:1], prim_h0, atol=1e-6)
+    assert th.allclose(reg_d1.cen[0:1], prim_bc0, atol=1e-6)
+    assert th.allclose(reg_d1.w[0:1], prim_bo0, atol=1e-6)
+    # While Aux (idx 1, level 1) is still computed as X1 cap X2
+    assert th.allclose(reg_d1.cen[1], th.tensor([2.5, 2.5]), atol=1e-6)
+    assert th.allclose(reg_d1.w[1], th.tensor([1.5, -0.5]), atol=1e-6)
 
 
 def test_role_and_assertion_prisms_delegation() -> None:

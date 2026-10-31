@@ -143,7 +143,32 @@ class PrismModule(ELModule):
         targets: ExistenceTargets,
         top_idx: Optional[int] = None,
     ) -> None:
-        """Install the compiled :class:`DefinitionTable` and :class:`ExistenceTargets`."""
+        """Install the compiled :class:`DefinitionTable` and :class:`ExistenceTargets`.
+
+        Guarantees:
+        - Stores ``table`` on :attr:`definition_table`, ``targets`` on
+          :attr:`existence_targets`, and ``top_idx`` on :attr:`_top_idx`.
+        - Subsequent calls to :meth:`class_regions`, :meth:`structural_extra_loss`,
+          and the GCI loss methods use these tables when ``objective="structural"``.
+
+        Non-guarantees:
+        - Does not mutate ``table`` or ``targets`` in place; table tensors are
+          moved to the module device on demand when indexed in
+          :meth:`class_regions` and :meth:`structural_extra_loss`.
+
+        Parameters
+        ----------
+        table : DefinitionTable
+            Compiled acyclic conjunction definition table.
+        targets : ExistenceTargets
+            Satisfiable classes and conjunction pairs for existence regularisation.
+        top_idx : Optional[int], default None
+            Class index of ``owl:Thing`` to exclude from primitive size regularisation.
+
+        Returns
+        -------
+        None
+        """
         self.definition_table = table
         self.existence_targets = targets
         self._top_idx = top_idx
@@ -152,10 +177,32 @@ class PrismModule(ELModule):
         """Return materialised :class:`~mowl.nn.el.prism.losses.PrismRegions` for class indices ``idx``.
 
         Primitive classes are read from :meth:`prism_params` (``w = |box_offset|``).
-        Defined classes in :attr:`definition_table` are evaluated recursively with
-        signed box half-widths ``w = (upper - lower) / 2`` and triangle supports
+        Defined classes in :attr:`definition_table` are evaluated recursively via
+        :func:`~mowl.nn.el.prism.losses.prism_regions_intersection` with signed box
+        half-widths ``w = (upper - lower) / 2`` and triangle supports
         ``h = min(h_X, h_Y)``. When no :attr:`definition_table` is set, every class
-        is treated as primitive.
+        is treated as primitive. Definition table tensors (``def_mask``, ``def_x``,
+        ``def_y``) are moved to the module device when indexing ``idx``.
+
+        Guarantees:
+        - Returns a :class:`~mowl.nn.el.prism.losses.PrismRegions` on the module
+          device with ``h`` of shape ``(B, 3)`` and ``cen, w`` of shape ``(B, d - 2)``.
+        - Preserves signed negative half-widths ``w_m < 0`` on defined classes
+          whose box intersection is empty along coordinate ``m``.
+
+        Non-guarantees:
+        - Assumes :attr:`definition_table` is acyclic (as guaranteed by
+          :meth:`DefinitionTable.from_normal_forms`).
+
+        Parameters
+        ----------
+        idx : torch.Tensor
+            1-D integer tensor of class indices of shape ``(B,)``.
+
+        Returns
+        -------
+        mowl.nn.el.prism.losses.PrismRegions
+            Materialised prism regions for ``idx`` on the module device.
         """
         device = self.tri_center.weight.device
         idx_t = idx.to(device=device, dtype=th.long)
@@ -176,23 +223,36 @@ class PrismModule(ELModule):
 
         rx = self.class_regions(dx)
         ry = self.class_regions(dy)
-
-        h_def, lower, upper = L.prism_intersection(
-            rx.h, (rx.cen, rx.w), ry.h, (ry.cen, ry.w)
-        )
-        cen_def = (lower + upper) / 2.0
-        w_def = (upper - lower) / 2.0
+        inter_def = L.prism_regions_intersection(rx, ry)
 
         h_out = h.clone()
         cen_out = bc.clone()
         w_out = bo.clone()
-        h_out[def_pos] = h_def
-        cen_out[def_pos] = cen_def
-        w_out[def_pos] = w_def
+        h_out[def_pos] = inter_def.h
+        cen_out[def_pos] = inter_def.cen
+        w_out[def_pos] = inter_def.w
         return L.PrismRegions(h=h_out, cen=cen_out, w=w_out)
 
     def all_class_regions(self) -> L.PrismRegions:
-        """Return :class:`~mowl.nn.el.prism.losses.PrismRegions` for all classes on CPU without grad."""
+        """Return :class:`~mowl.nn.el.prism.losses.PrismRegions` for all classes on CPU without grad.
+
+        Guarantees:
+        - Returns a :class:`~mowl.nn.el.prism.losses.PrismRegions` of shape
+          ``(nb_ont_classes, ...)`` on the ``cpu`` device with ``requires_grad == False``.
+
+        Non-guarantees:
+        - Detached from the autograd graph and unsuitable for backpropagating loss
+          gradients.
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        mowl.nn.el.prism.losses.PrismRegions
+            Detached CPU prism regions for all ``0 .. nb_ont_classes - 1``.
+        """
         device = self.tri_center.weight.device
         with th.no_grad():
             idx = th.arange(self.nb_ont_classes, dtype=th.long, device=device)
@@ -204,7 +264,27 @@ class PrismModule(ELModule):
             )
 
     def structural_extra_loss(self) -> th.Tensor:
-        """Compute existence loss plus primitive size regularisation for ``objective="structural"``."""
+        """Compute existence loss plus primitive size regularisation for ``objective="structural"``.
+
+        Guarantees:
+        - Returns a scalar tensor of shape ``()`` on the module device.
+        - Excludes defined classes (``definition_table.def_mask``) and ``_top_idx``
+          (``owl:Thing``) from the primitive size regularisation term
+          ``size_reg * mean([|r|, 2|o|])``.
+
+        Non-guarantees:
+        - Returns ``0.0`` for the existence term when :attr:`existence_targets` is
+          ``None`` or ``existence_weight == 0``.
+
+        Parameters
+        ----------
+        None
+
+        Returns
+        -------
+        torch.Tensor
+            Scalar extra training loss combining existence and primitive size terms.
+        """
         device = self.tri_center.weight.device
         dtype = self.tri_center.weight.dtype
         total = th.zeros((), device=device, dtype=dtype)
@@ -221,14 +301,7 @@ class PrismModule(ELModule):
             if pairs_idx.shape[0] > 0:
                 rc = self.class_regions(pairs_idx[:, 0])
                 rd = self.class_regions(pairs_idx[:, 1])
-                h_inter, lower, upper = L.prism_intersection(
-                    rc.h, (rc.cen, rc.w), rd.h, (rd.cen, rd.w)
-                )
-                inter = L.PrismRegions(
-                    h=h_inter,
-                    cen=(lower + upper) / 2.0,
-                    w=(upper - lower) / 2.0,
-                )
+                inter = L.prism_regions_intersection(rc, rd)
                 pair_sizes = L.prism_nonempty_measure(inter)
             else:
                 pair_sizes = th.empty(0, device=device, dtype=dtype)

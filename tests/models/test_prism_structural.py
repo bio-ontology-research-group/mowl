@@ -54,6 +54,23 @@ def test_prism_structural_train_tables(t3_dataset: PathDataset, scratch_dir: Pat
     assert targets.pairs.shape == (3, 2)
     assert model.additional_training_loss(0) is not None
 
+    # Under structural objective, compute_loss(pos) equals pos.mean() (no double squaring),
+    # while the axiom objective retains MSE(pos.mean(), 0) = pos.mean()**2.
+    pos = th.tensor([0.2, 0.4, 0.9], dtype=th.float64)
+    neg = th.tensor([0.3, 0.7], dtype=th.float64)
+    assert th.allclose(model.compute_loss(pos), pos.mean(), atol=1e-12)
+    expected_with_neg = pos.mean() + (neg.mean() - 1.0) ** 2
+    assert th.allclose(model.compute_loss(pos, neg), expected_with_neg, atol=1e-12)
+
+    axiom_model = PrismEL(
+        t3_dataset,
+        embed_dim=4,
+        margin=0.02,
+        objective="axiom",
+        model_filepath=str(scratch_dir / "prism_axiom_t3.pt"),
+    )
+    assert th.allclose(axiom_model.compute_loss(pos), pos.mean() ** 2, atol=1e-12)
+
 
 @pytest.mark.slow
 def test_t3_prism_structural_random_init(t3_dataset: PathDataset, scratch_dir: Path) -> None:
@@ -105,27 +122,18 @@ def test_t3_prism_structural_random_init(t3_dataset: PathDataset, scratch_dir: P
                 regs = mod.class_regions(
                     th.tensor([x1_idx, x2_idx, x3_idx], dtype=th.long, device=model.device)
                 )
-                h12, l12, u12 = PL.prism_intersection(
-                    regs.h[0:1],
-                    (regs.cen[0:1], regs.w[0:1]),
-                    regs.h[1:2],
-                    (regs.cen[1:2], regs.w[1:2]),
+                r12 = PL.prism_regions_intersection(
+                    PL.PrismRegions(h=regs.h[0:1], cen=regs.cen[0:1], w=regs.w[0:1]),
+                    PL.PrismRegions(h=regs.h[1:2], cen=regs.cen[1:2], w=regs.w[1:2]),
                 )
-                c12 = (l12 + u12) / 2.0
-                w12 = (u12 - l12) / 2.0
-                h123, l123, u123 = PL.prism_intersection(
-                    h12,
-                    (c12, w12),
-                    regs.h[2:3],
-                    (regs.cen[2:3], regs.w[2:3]),
+                r123 = PL.prism_regions_intersection(
+                    r12,
+                    PL.PrismRegions(h=regs.h[2:3], cen=regs.cen[2:3], w=regs.w[2:3]),
                 )
-                c123 = (l123 + u123) / 2.0
-                w123 = (u123 - l123) / 2.0
-                r123 = PL.PrismRegions(h=h123, cen=c123, w=w123)
                 triple_ne = float(PL.prism_nonempty_measure(r123).item())
                 triple_empty = bool(
-                    float(h123.sum().item()) < 0.0
-                    or bool((l123 > u123).any().item())
+                    float(r123.h.sum().item()) < 0.0
+                    or bool((r123.w < 0.0).any().item())
                 )
         finally:
             mod.margin = saved_margin

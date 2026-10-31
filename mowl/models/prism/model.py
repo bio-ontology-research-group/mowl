@@ -139,17 +139,44 @@ class PrismEL(EmbeddingELModel):
             )
 
     def _dataset_rows(self, key: str, cols: int) -> th.Tensor:
-        """Return ``self.training_datasets[key][:]`` sliced to ``cols`` columns, or an empty ``(0, cols)`` LongTensor."""
+        """Return ``self.training_datasets[key][:]`` on CPU sliced to ``cols`` columns, or an empty ``(0, cols)`` LongTensor."""
         ds = self.training_datasets.get(key)
         if ds is None or len(ds) == 0:
             return th.zeros((0, cols), dtype=th.long)
-        rows = ds[:]
+        rows = ds[:].detach().cpu()
         if rows.ndim == 2 and rows.shape[1] > cols:
             rows = rows[:, :cols]
-        return rows
+        return rows.to(dtype=th.long)
 
     def train(self, epochs, validate_every=1, epoch_callback=None):
-        """Train the model, building structural tables first when ``objective='structural'``."""
+        """Train the model, building structural tables first when ``objective='structural'``.
+
+        Guarantees:
+        - When ``objective="structural"``, compiles a :class:`~mowl.nn.el.structural.DefinitionTable`
+          (with ``k=1``, ``max_components=2**30``, ``max_level=self.max_depth``) and
+          :class:`~mowl.nn.el.structural.ExistenceTargets` from CPU dataset tensors
+          and installs them on :attr:`module` via :meth:`~mowl.nn.PrismModule.set_structural_tables`
+          before delegating to ``super().train(...)``.
+        - When ``objective="axiom"``, delegates directly to ``super().train(...)``.
+
+        Non-guarantees:
+        - Gradient-based training is non-convex and is not guaranteed to reach a
+          global minimum from arbitrary random initialisations.
+
+        Parameters
+        ----------
+        epochs : int
+            Number of training epochs.
+        validate_every : int, default 1
+            Validation frequency in epochs.
+        epoch_callback : callable, optional
+            Optional callback ``(epoch, train_loss, val_loss) -> Optional[bool]``.
+
+        Returns
+        -------
+        int
+            Result returned by :meth:`~mowl.base_models.elmodel.EmbeddingELModel.train`.
+        """
         if self.objective == "structural":
             n_classes = len(self.class_index_dict)
             top_idx = self.class_index_dict.get(TOP)
@@ -191,7 +218,25 @@ class PrismEL(EmbeddingELModel):
         )
 
     def additional_training_loss(self, epoch):
-        """Return ``module.structural_extra_loss()`` when ``objective='structural'``, else ``None``."""
+        """Return ``module.structural_extra_loss()`` when ``objective='structural'``, else ``None``.
+
+        Guarantees:
+        - Returns a scalar ``torch.Tensor`` when ``objective="structural"`` and
+          ``None`` when ``objective="axiom"``.
+
+        Non-guarantees:
+        - Does not depend on ``epoch``.
+
+        Parameters
+        ----------
+        epoch : int
+            Current 1-based training epoch index.
+
+        Returns
+        -------
+        Optional[torch.Tensor]
+            Extra structural training loss or ``None``.
+        """
         if self.objective == "structural":
             return self.module.structural_extra_loss()
         return None
@@ -217,19 +262,24 @@ class PrismEL(EmbeddingELModel):
         return loss
 
     def compute_loss(self, pos_scores, neg_scores=None):
-        """Compute MSE loss for PrismEL (matching ELBE).
+        """Compute per-GCI batch loss for PrismEL.
 
-        Positive samples should have scores close to 0.
-        Negative samples should have scores close to 1.
+        Under ``objective="structural"``, ``pos_scores`` are already squared hinge
+        losses, so returns ``pos_scores.mean()`` directly (avoiding double squaring).
+        Under ``objective="axiom"``, returns ``MSE(pos_scores.mean(), 0)`` matching ELBE.
+        In both modes, if ``neg_scores`` is given, adds ``MSE(neg_scores.mean(), 1)``.
         """
         pos_mean = th.mean(pos_scores)
-        loss = self._mse_criterion(
-            pos_mean, th.zeros_like(pos_mean, requires_grad=False)
-        )
+        if self.objective == "structural":
+            loss = pos_mean
+        else:
+            loss = self._mse_criterion(
+                pos_mean, th.zeros_like(pos_mean, requires_grad=False)
+            )
 
         if neg_scores is not None:
             neg_mean = th.mean(neg_scores)
-            loss += self._mse_criterion(
+            loss = loss + self._mse_criterion(
                 neg_mean, th.ones_like(neg_mean, requires_grad=False)
             )
 
