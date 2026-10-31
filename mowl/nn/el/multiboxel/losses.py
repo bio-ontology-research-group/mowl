@@ -548,11 +548,16 @@ def gci2_score(
     delta: float,
     aggregation: str = "hard",
     tau: float = 1.0,
+    active_c: Optional[th.Tensor] = None,
+    active_d: Optional[th.Tensor] = None,
 ) -> th.Tensor:
     """Positive GCI2 loss :math:`(\\text{mean}_i \\text{incl}(C_i + b_D, H_r) + \\text{agg}_j \\text{incl}(D_j + b_C, T_r)) / 2` for :math:`C \\sqsubseteq \\exists r.D`.
 
     Guarantees:
     - Matches :func:`mowl.nn.el.boxsquaredel.losses.gci2_score` at ``k = 1``.
+    - When ``active_c`` or ``active_d`` is provided, inactive source slots are
+      excluded from the mean (with denominator clamped to ``>= 1``) and inactive
+      target slots are excluded from the minimum.
 
     Non-guarantees:
     - Shares a single class bump vector :math:`b_C, b_D` across all components of
@@ -563,19 +568,44 @@ def gci2_score(
       why ``diversity_reg`` exists).
     """
     _validate_aggregation(aggregation, tau)
-    bumped_c = cen_c + bump_d.unsqueeze(1)  # (B, k, d)
-    bumped_d = cen_d + bump_c.unsqueeze(1)  # (B, k, d)
+    bumped_c = cen_c + bump_d.unsqueeze(1)  # (B, kc, d)
+    bumped_d = cen_d + bump_c.unsqueeze(1)  # (B, kd, d)
 
     incl_1 = multi_inclusion(
         bumped_c, off_c, cen_head.unsqueeze(1), off_head.unsqueeze(1), gamma
-    ).squeeze(2)  # (B, k)
+    ).squeeze(2)  # (B, kc)
     incl_2 = multi_inclusion(
         bumped_d, off_d, cen_tail.unsqueeze(1), off_tail.unsqueeze(1), gamma
-    ).squeeze(2)  # (B, k)
+    ).squeeze(2)  # (B, kd)
 
-    if aggregation == "hard":
-        return (incl_1.mean(dim=1) + th.amin(incl_2, dim=1)) / 2
-    return (incl_1.mean(dim=1) + softmin(incl_2, tau=tau, dim=1)) / 2
+    if active_c is None and active_d is None:
+        if aggregation == "hard":
+            return (incl_1.mean(dim=1) + th.amin(incl_2, dim=1)) / 2
+        return (incl_1.mean(dim=1) + softmin(incl_2, tau=tau, dim=1)) / 2
+
+    if active_c is None:
+        term_1 = incl_1.mean(dim=1)
+    else:
+        act_c = active_c.to(dtype=th.bool)
+        mask_c = act_c.to(dtype=incl_1.dtype)
+        term_1 = th.where(act_c, incl_1, th.zeros_like(incl_1)).sum(dim=1) / (
+            mask_c.sum(dim=1).clamp_min(1.0)
+        )
+
+    if active_d is None:
+        term_2 = (
+            th.amin(incl_2, dim=1)
+            if aggregation == "hard"
+            else softmin(incl_2, tau=tau, dim=1)
+        )
+    else:
+        act_d = active_d.to(dtype=th.bool)
+        has_d = act_d.any(dim=1)
+        incl_2_masked = incl_2.masked_fill(~act_d, float("inf"))
+        min_2 = th.amin(incl_2_masked, dim=1)
+        term_2 = th.where(has_d, min_2, th.zeros_like(min_2))
+
+    return (term_1 + term_2) / 2
 
 
 def gci2_score_neg(
@@ -593,6 +623,8 @@ def gci2_score_neg(
     delta: float,
     aggregation: str = "hard",
     tau: float = 1.0,
+    active_c: Optional[th.Tensor] = None,
+    active_d: Optional[th.Tensor] = None,
 ) -> th.Tensor:
     """Negative GCI2 loss :math:`\\frac{1}{k^2} \\sum_{i,j} \\left[(\\delta - \\text{md}(C_i + b_D, H_r))^2 + (\\delta - \\text{md}(D_j + b_C, T_r))^2\\right]`.
 
@@ -613,25 +645,44 @@ def gci2_score_neg(
       alter the negative score.
     """
     _validate_aggregation(aggregation, tau)
-    bumped_c = cen_c + bump_d.unsqueeze(1)  # (B, k, d)
-    bumped_d = cen_d + bump_c.unsqueeze(1)  # (B, k, d)
+    bumped_c = cen_c + bump_d.unsqueeze(1)  # (B, kc, d)
+    bumped_d = cen_d + bump_c.unsqueeze(1)  # (B, kd, d)
 
     dist_1 = (
         th.abs(bumped_c - cen_head.unsqueeze(1))
         - th.abs(off_c)
         - th.abs(off_head).unsqueeze(1)
     )
-    md_1 = th.linalg.norm(th.relu(dist_1 + gamma), dim=-1)  # (B, k)
+    md_1 = th.linalg.norm(th.relu(dist_1 + gamma), dim=-1)  # (B, kc)
 
     dist_2 = (
         th.abs(bumped_d - cen_tail.unsqueeze(1))
         - th.abs(off_d)
         - th.abs(off_tail).unsqueeze(1)
     )
-    md_2 = th.linalg.norm(th.relu(dist_2 + gamma), dim=-1)  # (B, k)
+    md_2 = th.linalg.norm(th.relu(dist_2 + gamma), dim=-1)  # (B, kd)
 
-    first_part = (delta - md_1).square().mean(dim=1)
-    second_part = (delta - md_2).square().mean(dim=1)
+    sq_1 = (delta - md_1).square()
+    sq_2 = (delta - md_2).square()
+
+    if active_c is None:
+        first_part = sq_1.mean(dim=1)
+    else:
+        act_c = active_c.to(dtype=th.bool)
+        mask_c = act_c.to(dtype=sq_1.dtype)
+        first_part = th.where(act_c, sq_1, th.zeros_like(sq_1)).sum(dim=1) / (
+            mask_c.sum(dim=1).clamp_min(1.0)
+        )
+
+    if active_d is None:
+        second_part = sq_2.mean(dim=1)
+    else:
+        act_d = active_d.to(dtype=th.bool)
+        mask_d = act_d.to(dtype=sq_2.dtype)
+        second_part = th.where(act_d, sq_2, th.zeros_like(sq_2)).sum(dim=1) / (
+            mask_d.sum(dim=1).clamp_min(1.0)
+        )
+
     return first_part + second_part
 
 
@@ -695,6 +746,45 @@ def gci2_loss(
     )
 
 
+def gci3_score_boxes(
+    cen_d: th.Tensor,
+    off_d: th.Tensor,
+    active: Optional[th.Tensor],
+    cen_head: th.Tensor,
+    off_head: th.Tensor,
+    bump_c: th.Tensor,
+    gamma: float = 0.0,
+    aggregation: str = "hard",
+    tau: float = 1.0,
+) -> th.Tensor:
+    """Unsquared GCI3 score :math:`\\text{agg}_m \\text{incl}(H_r - b_C, D_m)` on pre-unpacked boxes.
+
+    Guarantees:
+    - When ``active is None``, returns the exact same tensor as :func:`gci3_score`.
+    - When ``active`` is provided under ``aggregation="hard"``, inactive target
+      slots are excluded from the minimum.
+
+    Non-guarantees:
+    - Under ``aggregation="soft"`` at finite ``tau > 0``, the score is not zero
+      at a hard model.
+    """
+    _validate_aggregation(aggregation, tau)
+    bumped_head_cen = (cen_head - bump_c).unsqueeze(1)  # (B, 1, d)
+    bumped_head_off = off_head.unsqueeze(1)  # (B, 1, d)
+    incl = multi_inclusion(
+        bumped_head_cen, bumped_head_off, cen_d, off_d, gamma
+    ).squeeze(1)
+    if aggregation == "hard":
+        if active is None:
+            return th.amin(incl, dim=1)
+        act = active.to(dtype=th.bool)
+        has_act = act.any(dim=1)
+        incl_masked = incl.masked_fill(~act, float("inf"))
+        min_val = th.amin(incl_masked, dim=1)
+        return th.where(has_act, min_val, th.zeros_like(min_val))
+    return softmin(incl, tau=tau, dim=1)
+
+
 def gci3_score(
     data: th.Tensor,
     class_center: th.nn.Embedding,
@@ -730,13 +820,17 @@ def gci3_score(
     cen_head = head_center(data[:, 0])
     off_head = th.abs(head_offset(data[:, 0]))
     bump_c = bump(data[:, 1])
-
-    bumped_head_cen = (cen_head - bump_c).unsqueeze(1)  # (B, 1, d)
-    bumped_head_off = off_head.unsqueeze(1)  # (B, 1, d)
-    incl = multi_inclusion(bumped_head_cen, bumped_head_off, cen_d, off_d, gamma).squeeze(1)
-    if aggregation == "hard":
-        return th.amin(incl, dim=1)
-    return softmin(incl, tau=tau, dim=1)
+    return gci3_score_boxes(
+        cen_d,
+        off_d,
+        None,
+        cen_head,
+        off_head,
+        bump_c,
+        gamma=gamma,
+        aggregation=aggregation,
+        tau=tau,
+    )
 
 
 def gci3_loss(
@@ -778,6 +872,31 @@ def gci3_loss(
     ).square()
 
 
+def gci3_bot_score_boxes(
+    cen_c: Optional[th.Tensor] = None,
+    off_c: Optional[th.Tensor] = None,
+    active: Optional[th.Tensor] = None,
+    off_head: Optional[th.Tensor] = None,
+    aggregation: str = "hard",
+    tau: float = 1.0,
+) -> th.Tensor:
+    """Unsquared GCI3-bot score :math:`\\|o_{H_r}\\|_2` for :math:`\\exists r.C \\sqsubseteq \\bot` on box tensors.
+
+    Guarantees:
+    - Returns :math:`\\|\\text{abs}(\\text{off\\_head})\\|_2` of shape ``(B,)``,
+      identical to :func:`gci3_bot_score` whether ``active`` is ``None`` or a
+      boolean mask.
+
+    Non-guarantees:
+    - Independent of :math:`C` (follows Box²EL).
+    """
+    _validate_aggregation(aggregation, tau)
+    target_off = off_head if off_head is not None else cen_c
+    if target_off is None:
+        raise ValueError("off_head must be provided to gci3_bot_score_boxes.")
+    return th.linalg.norm(th.abs(target_off), dim=-1)
+
+
 def gci3_bot_score(
     data: th.Tensor,
     head_offset: th.nn.Embedding,
@@ -793,7 +912,10 @@ def gci3_bot_score(
     - Independent of :math:`C`.
     """
     _validate_aggregation(aggregation, tau)
-    return B2L.gci3_bot_score(data, head_offset)
+    off_head = th.abs(head_offset(data[:, 0]))
+    return gci3_bot_score_boxes(
+        None, None, None, off_head, aggregation=aggregation, tau=tau
+    )
 
 
 def gci3_bot_loss(
@@ -811,8 +933,45 @@ def gci3_bot_loss(
     Non-guarantees:
     - ``neg=True`` is not distinct from ``neg=False``.
     """
+    return gci3_bot_score(
+        data, head_offset, aggregation=aggregation, tau=tau
+    ).square()
+
+
+def class_assertion_score_boxes(
+    cen_c: th.Tensor,
+    off_c: th.Tensor,
+    active: Optional[th.Tensor],
+    cen_ind: th.Tensor,
+    off_ind: th.Tensor,
+    gamma: float = 0.0,
+    aggregation: str = "hard",
+    tau: float = 1.0,
+) -> th.Tensor:
+    """Class assertion score :math:`\\text{agg}_m \\text{incl}(a, C_m)` for :math:`C(a)` on box tensors.
+
+    Guarantees:
+    - When ``active is None``, returns the exact same tensor as
+      :func:`class_assertion_loss`.
+    - When ``active`` is provided under ``aggregation="hard"``, inactive target
+      slots are excluded from the minimum.
+
+    Non-guarantees:
+    - Individuals remain single boxes rather than multi-boxes.
+    """
     _validate_aggregation(aggregation, tau)
-    return B2L.gci3_bot_loss(data, head_offset)
+    cen_i = cen_ind.unsqueeze(1) if cen_ind.ndim == 2 else cen_ind
+    off_i = th.abs(off_ind).unsqueeze(1) if off_ind.ndim == 2 else th.abs(off_ind)
+    incl = multi_inclusion(cen_i, off_i, cen_c, off_c, gamma).squeeze(1)  # (B, K)
+    if aggregation == "hard":
+        if active is None:
+            return th.amin(incl, dim=1)
+        act = active.to(dtype=th.bool)
+        has_act = act.any(dim=1)
+        incl_masked = incl.masked_fill(~act, float("inf"))
+        min_val = th.amin(incl_masked, dim=1)
+        return th.where(has_act, min_val, th.zeros_like(min_val))
+    return softmin(incl, tau=tau, dim=1)
 
 
 def class_assertion_loss(
@@ -840,16 +999,22 @@ def class_assertion_loss(
       ``diversity_reg`` exists).
     """
     _validate_aggregation(aggregation, tau)
-    cen_i = ind_center(data[:, 0]).unsqueeze(1)  # (B, 1, d)
-    off_i = th.abs(ind_offset(data[:, 0])).unsqueeze(1)  # (B, 1, d)
+    cen_i = ind_center(data[:, 0])
+    off_i = th.abs(ind_offset(data[:, 0]))
     d_single = int(ind_center.embedding_dim)
     cen_c, off_c = _unpack_boxes(
         data[:, 1], class_center, class_offset, n_components, embed_dim=d_single
     )
-    incl = multi_inclusion(cen_i, off_i, cen_c, off_c, gamma).squeeze(1)  # (B, k)
-    if aggregation == "hard":
-        return th.amin(incl, dim=1)
-    return softmin(incl, tau=tau, dim=1)
+    return class_assertion_score_boxes(
+        cen_c,
+        off_c,
+        None,
+        cen_i,
+        off_i,
+        gamma=gamma,
+        aggregation=aggregation,
+        tau=tau,
+    )
 
 
 def object_property_assertion_loss(

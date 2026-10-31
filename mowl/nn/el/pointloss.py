@@ -45,7 +45,7 @@ if TYPE_CHECKING:
     from mowl.datasets.el.points import PointSupervision
 
 
-_VALID_OBJECTIVES = ("axiom", "point", "mixed", "hybrid")
+_VALID_OBJECTIVES = ("axiom", "point", "mixed", "hybrid", "structural")
 
 
 def _validate_beta(beta: float) -> float:

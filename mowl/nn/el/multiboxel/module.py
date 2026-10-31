@@ -1,8 +1,9 @@
 """MultiBoxEL neural module."""
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Dict, Mapping, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Dict, List, Mapping, Optional, Tuple, Union
 
+import numpy as np
 import torch as th
 import torch.nn as nn
 
@@ -24,6 +25,20 @@ from mowl.nn.el.pointloss import (
     soft_box_membership,
 )
 from mowl.nn.el.softagg import _validate_tau, diversity_penalty
+from mowl.nn.el.structural import (
+    DefinitionTable,
+    ExistenceTargets,
+    Regions,
+    existence_loss,
+    gci0_bot_structural,
+    gci0_structural,
+    gci1_bot_structural,
+    gci1_structural,
+    nonempty_measure,
+    pair_size,
+    pair_slots,
+    region_size,
+)
 
 if TYPE_CHECKING:
     from mowl.datasets.el.points import PointSupervision
@@ -146,6 +161,12 @@ class MultiBoxELModule(ELModule):
         neg_weight: float = 0.1,
         volume_reg: float = 0.0,
         ind_halfwidth: Optional[float] = None,
+        margin: float = 0.02,
+        max_components: Optional[int] = None,
+        structural_definitions: bool = True,
+        existence_weight: float = 1.0,
+        size_reg: float = 1e-3,
+        reseed_every: int = 0,
     ) -> None:
         super().__init__()
         if isinstance(n_components, bool) or not isinstance(n_components, int) or n_components < 1:
@@ -164,6 +185,41 @@ class MultiBoxELModule(ELModule):
         ):
             raise ValueError(f"diversity_reg must be >= 0, got {diversity_reg!r}")
         _validate_objective(objective)
+        if objective == "structural" and component_aggregation != "hard":
+            raise ValueError(
+                "component_aggregation must be 'hard' when objective='structural', "
+                f"got {component_aggregation!r}"
+            )
+        if max_components is None:
+            eff_max_components = n_components * n_components
+        else:
+            if (
+                isinstance(max_components, bool)
+                or not isinstance(max_components, int)
+                or max_components < n_components
+            ):
+                raise ValueError(
+                    f"max_components must be an int >= n_components ({n_components}), got {max_components!r}"
+                )
+            eff_max_components = int(max_components)
+        if (
+            isinstance(existence_weight, bool)
+            or not isinstance(existence_weight, (int, float))
+            or float(existence_weight) < 0.0
+        ):
+            raise ValueError(f"existence_weight must be >= 0, got {existence_weight!r}")
+        if (
+            isinstance(size_reg, bool)
+            or not isinstance(size_reg, (int, float))
+            or float(size_reg) < 0.0
+        ):
+            raise ValueError(f"size_reg must be >= 0, got {size_reg!r}")
+        if (
+            isinstance(reseed_every, bool)
+            or not isinstance(reseed_every, int)
+            or reseed_every < 0
+        ):
+            raise ValueError(f"reseed_every must be an int >= 0, got {reseed_every!r}")
         beta_f = _validate_beta(beta)
         ind_hw_f = (
             5.0 * beta_f
@@ -214,6 +270,16 @@ class MultiBoxELModule(ELModule):
             self.ind_offset = None
 
         self.gamma = gamma
+        self.margin = float(margin)
+        self.max_components = eff_max_components
+        self.structural_definitions = bool(structural_definitions)
+        self.existence_weight = float(existence_weight)
+        self.size_reg = float(size_reg)
+        self.reseed_every = int(reseed_every)
+        self.definition_table: Optional[DefinitionTable] = None
+        self.existence_targets: Optional[ExistenceTargets] = None
+        self.top_idx: Optional[int] = None
+        self.last_reseed_count: int = 0
         self.delta = delta
         self.reg_factor = reg_factor
         self.component_reg = component_reg
@@ -243,6 +309,22 @@ class MultiBoxELModule(ELModule):
             return
         if name == "objective":
             _validate_objective(value)  # type: ignore[arg-type]
+            if (
+                value == "structural"
+                and self.__dict__.get("component_aggregation", "hard") != "hard"
+            ):
+                raise ValueError(
+                    "component_aggregation must be 'hard' when objective='structural'."
+                )
+        elif name == "component_aggregation":
+            if value not in ("hard", "soft"):
+                raise ValueError(
+                    f"component_aggregation must be 'hard' or 'soft', got {value!r}"
+                )
+            if value != "hard" and self.__dict__.get("objective") == "structural":
+                raise ValueError(
+                    "component_aggregation must be 'hard' when objective='structural'."
+                )
         elif name == "beta":
             beta_f = _validate_beta(value)  # type: ignore[arg-type]
             super().__setattr__(name, beta_f)
@@ -307,6 +389,342 @@ class MultiBoxELModule(ELModule):
             b_size, self.n_components, self.embed_dim
         )
         return cen, off
+
+    def set_structural_tables(
+        self,
+        table: DefinitionTable,
+        targets: ExistenceTargets,
+        top_idx: Optional[int] = None,
+    ) -> None:
+        """Attach :class:`~mowl.nn.el.structural.DefinitionTable` and :class:`~mowl.nn.el.structural.ExistenceTargets`.
+
+        Guarantees:
+        - Sets ``self.definition_table``, ``self.existence_targets``, and
+          ``self.top_idx``.
+
+        Non-guarantees:
+        - Does not re-validate table dimensions against ``nb_ont_classes``.
+
+        Parameters
+        ----------
+        table : DefinitionTable
+            Compiled conjunction definition table.
+        targets : ExistenceTargets
+            Satisfiable classes and conjunction pairs for existence supervision.
+        top_idx : Optional[int], default None
+            Class index of ``owl:Thing`` to exclude from size regularisation.
+        """
+        self.definition_table = table
+        self.existence_targets = targets
+        self.top_idx = top_idx
+
+    def class_regions(self, idx: th.Tensor) -> Regions:
+        """Materialise :class:`~mowl.nn.el.structural.Regions` with ``K = max_components`` slots for class indices ``idx``.
+
+        Primitive classes occupy slots ``0 .. k - 1`` with ``w = |offset| >= 0``
+        (active) and pad slots ``k .. K - 1`` with ``cen = 0, w = -1``
+        (inactive). Defined classes in ``self.definition_table`` are computed
+        recursively via :func:`~mowl.nn.el.structural.pair_slots` from their
+        definers ``(def_x, def_y)``.
+
+        Guarantees:
+        - Returns :class:`~mowl.nn.el.structural.Regions` of shapes
+          ``(B, K, d)`` for ``cen`` and ``w`` and ``(B, K)`` for ``active``.
+        - Inactive slots always have ``cen = 0`` and ``w = -1``.
+
+        Non-guarantees:
+        - Active computed slots may be geometrically empty (``w[..., m] < 0``).
+
+        Parameters
+        ----------
+        idx : torch.Tensor
+            1-D integer tensor of class indices of length ``B``.
+
+        Returns
+        -------
+        Regions
+            Materialised class regions.
+        """
+        device = self.class_center.weight.device
+        dtype = self.class_center.weight.dtype
+        idx_dev = idx.to(device=device, dtype=th.long)
+        b_size = int(idx_dev.shape[0])
+        k = self.n_components
+        max_k = self.max_components
+        dim = self.embed_dim
+
+        if b_size == 0:
+            return Regions(
+                cen=th.zeros((0, max_k, dim), dtype=dtype, device=device),
+                w=-th.ones((0, max_k, dim), dtype=dtype, device=device),
+                active=th.zeros((0, max_k), dtype=th.bool, device=device),
+            )
+
+        raw_cen, raw_off = self.class_boxes(idx_dev)
+        if max_k > k:
+            pad_n = max_k - k
+            pad_cen = th.zeros((b_size, pad_n, dim), dtype=dtype, device=device)
+            pad_w = -th.ones((b_size, pad_n, dim), dtype=dtype, device=device)
+            cen = th.cat([raw_cen, pad_cen], dim=1)
+            w = th.cat([raw_off, pad_w], dim=1)
+            active = th.cat(
+                [
+                    th.ones((b_size, k), dtype=th.bool, device=device),
+                    th.zeros((b_size, pad_n), dtype=th.bool, device=device),
+                ],
+                dim=1,
+            )
+        else:
+            cen = raw_cen
+            w = raw_off
+            active = th.ones((b_size, k), dtype=th.bool, device=device)
+
+        table = self.definition_table
+        if table is not None and table.n_defined > 0:
+            def_mask_all = table.def_mask.to(device=device)
+            is_def = def_mask_all[idx_dev]
+            if bool(is_def.any().item()):
+                def_idx = idx_dev[is_def]
+                dx = table.def_x.to(device=device)[def_idx]
+                dy = table.def_y.to(device=device)[def_idx]
+                rx = self.class_regions(dx)
+                ry = self.class_regions(dy)
+                r_def = pair_slots(rx, ry, max_k)
+                cen = cen.clone()
+                w = w.clone()
+                active = active.clone()
+                cen[is_def] = r_def.cen
+                w[is_def] = r_def.w
+                active[is_def] = r_def.active
+
+        return Regions(cen=cen, w=w, active=active)
+
+    def all_class_regions(self) -> Regions:
+        """Return materialised :class:`~mowl.nn.el.structural.Regions` for all classes on CPU without gradients.
+
+        Guarantees:
+        - Returns :class:`~mowl.nn.el.structural.Regions` of shape
+          ``(nb_ont_classes, max_components, embed_dim)`` on CPU with
+          ``requires_grad == False``.
+
+        Non-guarantees:
+        - Evaluates all ``nb_ont_classes`` in a single batch.
+        """
+        with th.no_grad():
+            idx = th.arange(
+                self.nb_ont_classes,
+                device=self.class_center.weight.device,
+                dtype=th.long,
+            )
+            r = self.class_regions(idx)
+            return Regions(
+                cen=r.cen.detach().cpu(),
+                w=r.w.detach().cpu(),
+                active=r.active.detach().cpu(),
+            )
+
+    def structural_extra_loss(self) -> th.Tensor:
+        """Compute structural existence loss plus primitive width regularisation.
+
+        Evaluates ``existence_weight * existence_loss(cls_sizes, pair_sizes, margin)``
+        plus ``size_reg * mean(2 * |offset|)`` over primitive (raw) slots of all
+        classes except ``owl:Thing`` (``self.top_idx``).
+
+        Guarantees:
+        - Returns a scalar ``torch.Tensor`` on the module's current device.
+        - Excludes ``self.top_idx`` and accepted defined classes from the size
+          regularisation term.
+
+        Non-guarantees:
+        - When ``self.existence_targets is None``, the existence term is ``0.0``.
+        """
+        device = self.class_center.weight.device
+        dtype = self.class_center.weight.dtype
+
+        targets = self.existence_targets
+        if targets is not None and self.existence_weight > 0.0:
+            if targets.classes.numel() > 0:
+                cls_idx = targets.classes.to(device=device, dtype=th.long)
+                r_cls = self.class_regions(cls_idx)
+                cls_sizes = region_size(r_cls)
+            else:
+                cls_sizes = th.empty(0, dtype=dtype, device=device)
+
+            if targets.pairs.numel() > 0:
+                pairs = targets.pairs.to(device=device, dtype=th.long)
+                r_a = self.class_regions(pairs[:, 0])
+                r_b = self.class_regions(pairs[:, 1])
+                p_sizes = pair_size(r_a, r_b)
+            else:
+                p_sizes = th.empty(0, dtype=dtype, device=device)
+
+            ex_term = self.existence_weight * existence_loss(
+                cls_sizes, p_sizes, self.margin
+            )
+        else:
+            ex_term = th.zeros((), dtype=dtype, device=device)
+
+        if self.size_reg > 0.0 and self.nb_ont_classes > 0:
+            prim_mask = th.ones(self.nb_ont_classes, dtype=th.bool, device=device)
+            if self.top_idx is not None and 0 <= self.top_idx < self.nb_ont_classes:
+                prim_mask[self.top_idx] = False
+            if self.definition_table is not None:
+                prim_mask = prim_mask & (
+                    ~self.definition_table.def_mask.to(device=device)
+                )
+            if bool(prim_mask.any().item()):
+                raw_off = th.abs(self.class_offset.weight[prim_mask])
+                size_term = self.size_reg * (2.0 * raw_off).mean()
+            else:
+                size_term = th.zeros((), dtype=dtype, device=device)
+        else:
+            size_term = th.zeros((), dtype=dtype, device=device)
+
+        return ex_term + size_term
+
+    def reseed(self, rng: np.random.Generator) -> int:
+        """Relocate dead primitive components to violated existence targets under ``no_grad``.
+
+        Follows design §5:
+        1. Identifies dead primitive components (nested inside another active
+           component of the same class, with exact ties broken by lower index,
+           or ``min_m |offset| < 1e-3``).
+        2. Processes violated pair targets ``(C, D)`` (``NE(C cap D) < margin``)
+           in ``rng.permutation`` order, using each dead component at most once
+           and placing it at the partner's largest active non-empty slot with
+           half its width.
+        3. Clamps the largest component of any primitive class target still
+           satisfying ``NE(C) < margin`` to ``max(|offset|, margin)``.
+
+        Guarantees:
+        - Returns the total number of re-seeding moves and stores it in
+          ``self.last_reseed_count``.
+        - Never modifies defined classes' raw rows or uses a dead slot more
+          than once per call.
+
+        Non-guarantees:
+        - Does not reset optimiser moments for moved rows.
+
+        Parameters
+        ----------
+        rng : numpy.random.Generator
+            Seeded NumPy random generator for permuting violated pairs.
+
+        Returns
+        -------
+        int
+            Number of re-seeded components.
+        """
+        targets = self.existence_targets
+        if targets is None or self.nb_ont_classes == 0:
+            self.last_reseed_count = 0
+            return 0
+
+        eps = 1e-3
+        device = self.class_center.weight.device
+        n = self.nb_ont_classes
+        k = self.n_components
+        dim = self.embed_dim
+
+        with th.no_grad():
+            cen_view = self.class_center.weight.data.view(n, k, dim)
+            off_view = self.class_offset.weight.data.view(n, k, dim)
+
+            cen_np = cen_view.detach().cpu().numpy()
+            off_np = th.abs(off_view.detach()).cpu().numpy()
+            lo_np = cen_np - off_np
+            hi_np = cen_np + off_np
+            valid_np = np.all(off_np >= eps, axis=-1)
+
+            if self.definition_table is not None:
+                def_mask_np = self.definition_table.def_mask.detach().cpu().numpy()
+            else:
+                def_mask_np = np.zeros(n, dtype=bool)
+
+            dead_queues: Dict[int, List[int]] = {}
+            for c in range(n):
+                if def_mask_np[c]:
+                    dead_queues[c] = []
+                    continue
+                v = valid_np[c]
+                lo_c = lo_np[c]
+                hi_c = hi_np[c]
+                dead_c: List[int] = []
+                for i in range(k):
+                    if not v[i]:
+                        dead_c.append(i)
+                        continue
+                    contained = False
+                    for j in range(k):
+                        if i == j or not v[j]:
+                            continue
+                        if np.all(lo_c[j] <= lo_c[i]) and np.all(hi_c[i] <= hi_c[j]):
+                            equal_boxes = np.all(lo_c[i] <= lo_c[j]) and np.all(
+                                hi_c[j] <= hi_c[i]
+                            )
+                            if not equal_boxes or j < i:
+                                contained = True
+                                break
+                    if contained:
+                        dead_c.append(i)
+                dead_queues[c] = dead_c
+
+            moves = 0
+            if targets.pairs.numel() > 0:
+                pairs_dev = targets.pairs.to(device=device, dtype=th.long)
+                r_a = self.class_regions(pairs_dev[:, 0])
+                r_b = self.class_regions(pairs_dev[:, 1])
+                ps = pair_size(r_a, r_b)
+                violated_mask = (ps < self.margin).detach().cpu().numpy()
+                violated_indices = np.flatnonzero(violated_mask)
+
+                if violated_indices.size > 0:
+                    perm = rng.permutation(violated_indices.size)
+                    pairs_list = targets.pairs.detach().cpu().tolist()
+                    for p_idx in violated_indices[perm]:
+                        c_idx, d_idx = int(pairs_list[p_idx][0]), int(pairs_list[p_idx][1])
+                        if dead_queues.get(c_idx):
+                            mover_cls = c_idx
+                            partner_cls = d_idx
+                        elif dead_queues.get(d_idx):
+                            mover_cls = d_idx
+                            partner_cls = c_idx
+                        else:
+                            continue
+
+                        r_p = self.class_regions(
+                            th.tensor([partner_cls], device=device, dtype=th.long)
+                        )
+                        ne_p = nonempty_measure(r_p.w[0])
+                        ne_p_masked = ne_p.masked_fill(~r_p.active[0], float("-inf"))
+                        best_j = int(th.argmax(ne_p_masked).item())
+                        best_ne = float(ne_p_masked[best_j].item())
+                        if best_ne <= 0.0:
+                            continue
+
+                        dead_slot = dead_queues[mover_cls].pop(0)
+                        cen_view[mover_cls, dead_slot].copy_(r_p.cen[0, best_j])
+                        off_view[mover_cls, dead_slot].copy_(
+                            0.5 * th.abs(r_p.w[0, best_j])
+                        )
+                        moves += 1
+
+            if targets.classes.numel() > 0:
+                for c_raw in targets.classes.detach().cpu().tolist():
+                    c_idx = int(c_raw)
+                    if def_mask_np[c_idx]:
+                        continue
+                    w_c = th.abs(off_view[c_idx])
+                    ne_c = nonempty_measure(w_c)
+                    if float(ne_c.max().item()) < self.margin:
+                        best_j = int(th.argmax(ne_c).item())
+                        off_view[c_idx, best_j].copy_(
+                            th.clamp(w_c[best_j], min=float(self.margin))
+                        )
+                        moves += 1
+
+            self.last_reseed_count = moves
+            return moves
 
     def set_point_supervision(self, ps: PointSupervision) -> None:
         """Attach :class:`~mowl.datasets.el.points.PointSupervision` and lazily create ``elem_embed``.
@@ -612,6 +1030,14 @@ class MultiBoxELModule(ELModule):
         )
 
     def gci0_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
+        if self.objective == "structural":
+            r_c = self.class_regions(data[:, 0])
+            r_d = self.class_regions(data[:, 1])
+            out = gci0_structural(r_c, r_d, self.margin)
+            if self.definition_table is not None:
+                masked = self.definition_table.masked_gci0(data)
+                out = th.where(masked, th.zeros_like(out), out)
+            return out
         if self.training and self.objective in ("point", "mixed"):
             return self._zero_loss(data)
         return L.gci0_loss(
@@ -626,6 +1052,9 @@ class MultiBoxELModule(ELModule):
         )
 
     def gci0_bot_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
+        if self.objective == "structural":
+            r_c = self.class_regions(data[:, 0])
+            return gci0_bot_structural(r_c)
         if self.training and self.objective == "point":
             return self._zero_loss(data)
         return L.gci0_bot_loss(
@@ -638,6 +1067,16 @@ class MultiBoxELModule(ELModule):
         )
 
     def gci1_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
+        if self.objective == "structural":
+            r_c = self.class_regions(data[:, 0])
+            r_d = self.class_regions(data[:, 1])
+            r_e = self.class_regions(data[:, 2])
+            masked = (
+                self.definition_table.masked_gci1(data)
+                if self.definition_table is not None
+                else None
+            )
+            return gci1_structural(r_c, r_d, r_e, self.margin, masked=masked)
         if self.training and self.objective in ("point", "mixed"):
             return self._zero_loss(data)
         return L.gci1_loss(
@@ -652,6 +1091,16 @@ class MultiBoxELModule(ELModule):
         )
 
     def gci1_bot_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
+        if self.objective == "structural":
+            r_c = self.class_regions(data[:, 0])
+            r_d = self.class_regions(data[:, 1])
+            act_c = r_c.active & (nonempty_measure(r_c.w.detach()) > 0.0)
+            act_d = r_d.active & (nonempty_measure(r_d.w.detach()) > 0.0)
+            return gci1_bot_structural(
+                Regions(cen=r_c.cen, w=r_c.w, active=act_c),
+                Regions(cen=r_d.cen, w=r_d.w, active=act_d),
+                self.margin,
+            )
         if self.training and self.objective == "point":
             return self._zero_loss(data)
         return L.gci1_bot_loss(
@@ -666,6 +1115,36 @@ class MultiBoxELModule(ELModule):
         )
 
     def gci2_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
+        if self.objective == "structural":
+            r_c = self.class_regions(data[:, 0])
+            r_d = self.class_regions(data[:, 2])
+            act_c = r_c.active & (nonempty_measure(r_c.w) > 0.0)
+            act_d = r_d.active & (nonempty_measure(r_d.w) > 0.0)
+            bump_c = self.bump_classes(data[:, 0])
+            bump_d = self.bump_classes(data[:, 2])
+            cen_head = self.head_center(data[:, 1])
+            off_head = th.abs(self.head_offset(data[:, 1]))
+            cen_tail = self.tail_center(data[:, 1])
+            off_tail = th.abs(self.tail_offset(data[:, 1]))
+            fn = L.gci2_score_neg if neg else L.gci2_score
+            return fn(
+                r_c.cen,
+                th.abs(r_c.w),
+                bump_c,
+                r_d.cen,
+                th.abs(r_d.w),
+                bump_d,
+                cen_head,
+                off_head,
+                cen_tail,
+                off_tail,
+                self.margin,
+                self.delta,
+                aggregation="hard",
+                tau=self.tau,
+                active_c=act_c,
+                active_d=act_d,
+            )
         if self.training and self.objective in ("point", "mixed"):
             return self._zero_loss(data)
         return L.gci2_loss(
@@ -686,6 +1165,23 @@ class MultiBoxELModule(ELModule):
         )
 
     def gci3_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
+        if self.objective == "structural":
+            r_d = self.class_regions(data[:, 2])
+            act_d = r_d.active & (nonempty_measure(r_d.w) > 0.0)
+            cen_head = self.head_center(data[:, 0])
+            off_head = th.abs(self.head_offset(data[:, 0]))
+            bump_c = self.bump_classes(data[:, 1])
+            return L.gci3_score_boxes(
+                r_d.cen,
+                th.abs(r_d.w),
+                act_d,
+                cen_head,
+                off_head,
+                bump_c,
+                gamma=self.margin,
+                aggregation="hard",
+                tau=self.tau,
+            ).square()
         if self.training and self.objective in ("point", "mixed"):
             return self._zero_loss(data)
         return L.gci3_loss(
@@ -705,6 +1201,22 @@ class MultiBoxELModule(ELModule):
         )
 
     def gci3_bot_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
+        if self.objective == "structural":
+            if data.ndim == 2 and data.shape[1] >= 2:
+                r_c = self.class_regions(data[:, 1])
+                act_c = r_c.active & (nonempty_measure(r_c.w) > 0.0)
+                cen_c, off_c = r_c.cen, th.abs(r_c.w)
+            else:
+                cen_c, off_c, act_c = None, None, None
+            off_head = th.abs(self.head_offset(data[:, 0]))
+            return L.gci3_bot_score_boxes(
+                cen_c,
+                off_c,
+                act_c,
+                off_head,
+                aggregation="hard",
+                tau=self.tau,
+            ).square()
         if self.training and self.objective == "point":
             return self._zero_loss(data)
         return L.gci3_bot_loss(
@@ -716,6 +1228,25 @@ class MultiBoxELModule(ELModule):
         )
 
     def class_assertion_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
+        if self.objective == "structural":
+            if self.ind_center is None or self.ind_offset is None:
+                raise ValueError(
+                    "The number of individuals must be specified to use this loss function."
+                )
+            r_c = self.class_regions(data[:, 1])
+            act_c = r_c.active & (nonempty_measure(r_c.w) > 0.0)
+            cen_i = self.ind_center(data[:, 0])
+            off_i = th.abs(self.ind_offset(data[:, 0]))
+            return L.class_assertion_score_boxes(
+                r_c.cen,
+                th.abs(r_c.w),
+                act_c,
+                cen_i,
+                off_i,
+                gamma=self.margin,
+                aggregation="hard",
+                tau=self.tau,
+            )
         if self.objective in ("point", "mixed", "hybrid"):
             return self.class_assertion_score_point(data)
         if self.ind_center is None or self.ind_offset is None:
@@ -738,6 +1269,30 @@ class MultiBoxELModule(ELModule):
     def object_property_assertion_loss(
         self, data: th.Tensor, neg: bool = False
     ) -> th.Tensor:
+        if self.objective == "structural":
+            if (
+                self.ind_center is None
+                or self.ind_offset is None
+                or self.bump_individuals is None
+            ):
+                raise ValueError(
+                    "The number of individuals must be specified to use this loss function."
+                )
+            return L.object_property_assertion_loss(
+                data,
+                self.ind_center,
+                self.ind_offset,
+                self.head_center,
+                self.head_offset,
+                self.tail_center,
+                self.tail_offset,
+                self.bump_individuals,
+                self.margin,
+                self.delta,
+                neg=neg,
+                aggregation="hard",
+                tau=self.tau,
+            )
         if self.training and self.objective in ("point", "mixed"):
             return self._zero_loss(data)
         if (
