@@ -787,9 +787,8 @@ def test_structural_role_and_assertion_dispatch_defined_masks_and_margin() -> No
     gci2_d_a = th.tensor([[3, 0, 0]], dtype=th.long)
     assert float(mod.gci2_loss(gci2_d_a).item()) == pytest.approx(0.1, abs=1e-6)
 
-    # 3. Empty-slot mask: EmptyDef (4) has all slots empty (X1 cap D = empty because D's only non-empty slot
-    # is at 0, wait: X1 slot 0 is [-1, 1] and D slot 0 is [-1.1, 1.1] — let's move D slot 0 to [50, 52]
-    # so EmptyDef = X1 cap D is disjoint in all slot pairs!).
+    # 3. Empty-slot mask: set D (3) to [50, 52] (slot 0) and [30, 30] (slot 1, ne=0)
+    # so EmptyDef (4) = X1 cap D is disjoint in all slot pairs and has only empty slots.
     with th.no_grad():
         mod.class_center.weight[3] = th.tensor([50.0, 30.0])
         mod.class_offset.weight[3] = th.tensor([1.0, 0.0])
@@ -836,4 +835,37 @@ def test_structural_role_and_assertion_dispatch_defined_masks_and_margin() -> No
     opa_scores = mod.object_property_assertion_loss(opa_rows, neg=False)
     assert float(opa_scores[0].item()) == pytest.approx(0.15, abs=1e-6)
     assert float(opa_scores[1].item()) == pytest.approx(0.0, abs=1e-7)
+
+    # 7. At margin = 0, an unsatisfied gci2, gci3, and class_assertion each score > 0:
+    # A (0) is [-1, 1] (cen=0, w=1). Set head = [-0.5, 0.5] (smaller than A -> gci2 source A not in head),
+    # set head = [-1.5, 1.5] (larger than A -> gci3 head not in A), and ind 0 off = 1.5 (not in A).
+    mod.margin = 0.0
+    with th.no_grad():
+        mod.head_offset.weight[0] = th.tensor([0.5])
+    assert float(mod.gci2_loss(gci2_a_d).item()) > 0.0
+    with th.no_grad():
+        mod.head_offset.weight[0] = th.tensor([1.5])
+        mod.ind_offset.weight[0] = th.tensor([1.5])
+    assert float(mod.gci3_loss(gci3_row).item()) > 0.0
+    assert float(mod.class_assertion_loss(ca_rows[:1]).item()) > 0.0
+
+
+def test_structural_definitions_rejects_non_bool() -> None:
+    """structural_definitions=1 raises ValueError on both MultiBoxEL and PrismEL (and their modules)."""
+    from mowl.models import PrismEL
+    from mowl.nn import PrismModule
+
+    with pytest.raises(ValueError, match="structural_definitions"):
+        MultiBoxELModule(
+            nb_ont_classes=4, nb_rels=1, embed_dim=2, structural_definitions=1  # type: ignore[arg-type]
+        )
+    with pytest.raises(ValueError, match="structural_definitions"):
+        PrismModule(
+            nb_ont_classes=4, nb_rels=1, embed_dim=4, structural_definitions=1  # type: ignore[arg-type]
+        )
+    ds = PathDataset(fixture_path("t3.owl"))
+    with pytest.raises(ValueError, match="structural_definitions"):
+        MultiBoxEL(ds, embed_dim=2, structural_definitions=1)  # type: ignore[arg-type]
+    with pytest.raises(ValueError, match="structural_definitions"):
+        PrismEL(ds, embed_dim=4, structural_definitions=1)  # type: ignore[arg-type]
 

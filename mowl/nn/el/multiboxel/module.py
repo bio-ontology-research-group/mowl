@@ -151,8 +151,10 @@ class MultiBoxELModule(ELModule):
         inclusions via :math:`\\text{relu}(\\text{dist} + 2 o - \\gamma)`), positive
         scores pass ``gamma = -margin`` so :math:`m > 0` tightens inclusion, while
         negative scores (:func:`~mowl.nn.el.multiboxel.losses.gci2_score_neg` and
-        negative ``object_property_assertion``) pass ``gamma = +margin`` so
-        negatives require separation by the margin.
+        negative ``object_property_assertion``) keep Box\\ :math:`^2`\\ EL's
+        convention (``gamma = +margin``, which relaxes them by the margin), so
+        the negative-sampling term is unchanged between the axiom and structural
+        objectives.
     max_components : int, optional, default None
         Maximum component slots :math:`K \\ge k` per class under
         ``objective="structural"``; defaults to ``n_components ** 2`` when ``None``.
@@ -238,6 +240,10 @@ class MultiBoxELModule(ELModule):
                     f"max_components must be an int >= n_components ({n_components}), got {max_components!r}"
                 )
             eff_max_components = int(max_components)
+        if not isinstance(structural_definitions, bool):
+            raise ValueError(
+                f"structural_definitions must be a bool, got {structural_definitions!r}"
+            )
         if (
             isinstance(existence_weight, bool)
             or not isinstance(existence_weight, (int, float))

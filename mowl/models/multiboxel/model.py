@@ -42,10 +42,12 @@ class MultiBoxEL(EmbeddingELModel):
       stays enabled by default under ``objective="structural"`` for ``gci2`` and
       ``object_property_assertion`` (``neg_capable_gcis``) exactly as under
       ``objective="axiom"``; positive role and assertion scores pass
-      ``gamma = -self.margin`` (tightening inclusion), whereas negative ``gci2``
-      and ``object_property_assertion`` scores pass ``gamma = +self.margin``
-      (requiring separation by the margin, with masked active non-empty slots in
-      ``gci2``).
+      ``gamma = -self.margin`` (tightening inclusion), whereas negative scores
+      (``gci2`` with masked active non-empty slots and
+      ``object_property_assertion``) keep Box\\ :math:`^2`\\ EL's convention
+      (``gamma = +margin``, which relaxes them by the margin), so the
+      negative-sampling term is unchanged between the axiom and structural
+      objectives.
 
     Non-guarantees:
     - Gradient-based training is non-convex and is not guaranteed to reach a
@@ -259,7 +261,7 @@ class MultiBoxEL(EmbeddingELModel):
         self.points_per_epoch = int(points_per_epoch)
         self.points_seed = int(points_seed)
         self.max_components = max_components
-        self.structural_definitions = bool(structural_definitions)
+        self.structural_definitions = structural_definitions
         self.existence_weight = existence_weight
         self.size_reg = size_reg
         self.reseed_every = reseed_every
@@ -299,6 +301,7 @@ class MultiBoxEL(EmbeddingELModel):
             reseed_every=self.reseed_every,
         ).to(self.device)
         self.max_components = self.module.max_components
+        self.structural_definitions = self.module.structural_definitions
         self.diversity_reg = self.module.diversity_reg
         self.beta = self.module.beta
         self.neg_weight = self.module.neg_weight

@@ -978,7 +978,7 @@ class ExistenceTargets:
     Non-guarantees:
     - Without a :class:`~mowl.geometric.completion.CanonicalModel`, satisfiability
       is approximated syntactically from ``gci0_bot`` and ``gci1_bot`` rows only.
-    - Auxiliary classes minted by :class:`~mowl.reasoning.normalize.ELNormalizer`
+    - Auxiliary classes minted by :class:`~mowl.ontology.normalize.ELNormalizer`
       (``http://mowl.borg/aux/...``) are unknown to a
       :class:`~mowl.geometric.completion.CanonicalModel` built with
       ``mowl.geometric``'s own normaliser, so their entailed unsatisfiability
@@ -1029,7 +1029,7 @@ class ExistenceTargets:
         Non-guarantees:
         - Does not test pairs that do not occur as the left-hand side of any
           ``gci1`` row.
-        - Auxiliary classes minted by :class:`~mowl.reasoning.normalize.ELNormalizer`
+        - Auxiliary classes minted by :class:`~mowl.ontology.normalize.ELNormalizer`
           (``http://mowl.borg/aux/...``) are unknown to a
           :class:`~mowl.geometric.completion.CanonicalModel` built with
           ``mowl.geometric``'s own normaliser, so their entailed unsatisfiability
@@ -1201,7 +1201,7 @@ def build_structural_tables(
     - Returns ``(definition_table, existence_targets, top_idx)``.
 
     Non-guarantees:
-    - Auxiliary classes minted by :class:`~mowl.reasoning.normalize.ELNormalizer`
+    - Auxiliary classes minted by :class:`~mowl.ontology.normalize.ELNormalizer`
       are unknown to a :class:`~mowl.geometric.completion.CanonicalModel` built
       with ``mowl.geometric``'s normaliser, so their satisfiability uses the
       asserted ``gci0_bot``/``gci1_bot`` rules only.
