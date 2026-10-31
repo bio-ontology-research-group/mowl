@@ -670,17 +670,26 @@ class DefinitionTable:
       for every defined class ``a``, and ``level[p] == 0`` for every primitive class ``p``.
     - For every defined class ``a``, ``comps[a] == comps[def_x[a]] * comps[def_y[a]] <= max_components``
       and ``level[a] <= max_level`` (when a bound was passed to :meth:`from_normal_forms`).
-    - :meth:`masked_gci0` marks exactly the rows ``(A, X)`` and ``(A, Y)`` of
-      accepted definitions :math:`A \\to (X, Y)`, and :meth:`masked_gci1` marks
-      ``(X, Y, A)`` and ``(Y, X, A)``; ``gci2`` and ``gci3`` rows are never
-      masked (they continue to train the role auxiliary's region).
+    - :meth:`masked_gci0` marks the ``gci0`` rows ``(A, X)`` and ``(A, Y)`` of
+      accepted definitions :math:`A \\to (X, Y)` (when :math:`(A, \\text{Aux})` is
+      only entailed through a role auxiliary, no ``gci0`` row exists for it and
+      therefore only ``(A, X)`` and the ``gci1`` rows are masked; the
+      ``gci2``/``gci3`` rows keep training :math:`\\text{Aux}`), and
+      :meth:`masked_gci1` marks ``(X, Y, A)`` and ``(Y, X, A)``; ``gci2`` and
+      ``gci3`` rows are never masked (they continue to train the role
+      auxiliary's region).
 
     Non-guarantees:
     - Only compiles binary conjunction definitions :math:`A \\equiv X \\sqcap Y`
       where each inclusion :math:`A \\sqsubseteq D` (:math:`D \\in \\{X, Y\\}`) is
       witnessed either directly in ``gci0`` or via a single role-auxiliary step
-      :math:`A \\sqsubseteq \\exists r.C \\sqsubseteq D` in ``gci2`` + ``gci3``;
-      pure role equivalences (:math:`A \\equiv \\exists r.B`) remain primitive.
+      :math:`A \\sqsubseteq \\exists r.C \\sqsubseteq \\text{Aux}` in ``gci2`` + ``gci3``;
+      definitions whose normalisation introduces nested auxiliaries on both
+      sides (e.g. :math:`A \\equiv \\text{Pizza} \\sqcap \\exists\\text{hasTopping}.(\\text{PizzaTopping} \\sqcap \\exists\\text{hasSpiciness}.\\text{Hot})`
+      yields :math:`A \\sqsubseteq \\exists r.\\text{Aux}_1` and
+      :math:`\\exists r.\\text{Aux}_2 \\sqsubseteq \\text{Aux}_3` with
+      :math:`\\text{Aux}_1 \\neq \\text{Aux}_2`) are not detected, and pure role
+      equivalences (:math:`A \\equiv \\exists r.B`) remain primitive.
 
     Attributes
     ----------
@@ -748,6 +757,14 @@ class DefinitionTable:
           dependency cycles deterministically in increasing class index.
 
         Non-guarantees:
+        - Definitions whose normalisation introduces nested auxiliaries on both
+          sides (e.g.
+          :math:`A \\equiv \\text{Pizza} \\sqcap \\exists\\text{hasTopping}.(\\text{PizzaTopping} \\sqcap \\exists\\text{hasSpiciness}.\\text{Hot})`
+          yields :math:`A \\sqsubseteq \\exists r.\\text{Aux}_1` and
+          :math:`\\exists r.\\text{Aux}_2 \\sqsubseteq \\text{Aux}_3` with
+          :math:`\\text{Aux}_1 \\neq \\text{Aux}_2`) are not detected; only a
+          single role-auxiliary step
+          :math:`A \\sqsubseteq \\exists r.C \\sqsubseteq \\text{Aux}` is.
         - When the ready queue empties while undecided candidates remain, the
           cycle break rejects the lowest-index ``UNDECIDED`` candidate; that
           candidate may sit downstream of a cycle rather than on the cycle
@@ -821,10 +838,10 @@ class DefinitionTable:
             and gci3 is not None
             and gci3.numel() > 0
         ):
-            rc_to_a: Dict[Tuple[int, int], List[int]] = {}
+            rc_to_a: Dict[Tuple[int, int], Set[int]] = {}
             for row in gci2.detach().cpu().reshape(-1, 3).tolist():
                 a_i, r_i, c_i = int(row[0]), int(row[1]), int(row[2])
-                rc_to_a.setdefault((r_i, c_i), []).append(a_i)
+                rc_to_a.setdefault((r_i, c_i), set()).add(a_i)
             for row in gci3.detach().cpu().reshape(-1, 3).tolist():
                 r_i, c_i, y_i = int(row[0]), int(row[1]), int(row[2])
                 for a_i in rc_to_a.get((r_i, c_i), ()):
@@ -936,7 +953,11 @@ class DefinitionTable:
         - Returns a 1-D ``torch.bool`` tensor of length ``rows.shape[0]`` on
           ``rows.device``.
         - Marks entry ``b`` as ``True`` iff ``rows[b]`` is ``(A, X)`` or
-          ``(A, Y)`` for an accepted definition :math:`A \\to (X, Y)`.
+          ``(A, Y)`` for an accepted definition :math:`A \\to (X, Y)`. When
+          :math:`(A, \\text{Aux})` is only entailed through a role auxiliary, no
+          ``gci0`` row exists for it and therefore only ``(A, X)`` and the
+          ``gci1`` rows are masked; the ``gci2``/``gci3`` rows keep training
+          :math:`\\text{Aux}`.
 
         Non-guarantees:
         - Assumes row entries are valid class indices in ``0 .. n_classes - 1``.

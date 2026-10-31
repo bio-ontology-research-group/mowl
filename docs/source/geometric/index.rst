@@ -516,7 +516,14 @@ measured seeds (``strict_loss == 0``, minimum target class and pair
      :class:`~mowl.ontology.normalize.ELNormalizer` normalises definitions of
      the form :math:`A \equiv X \sqcap \exists r.C` into :math:`A \sqsubseteq X`,
      :math:`A \sqsubseteq \exists r.C`, :math:`\exists r.C \sqsubseteq \text{Aux}`,
-     and :math:`X \sqcap \text{Aux} \sqsubseteq A`). If several :math:`(X, Y)`
+     and :math:`X \sqcap \text{Aux} \sqsubseteq A`; definitions whose
+     normalisation introduces nested auxiliaries on both sides—e.g.
+     :math:`A \equiv \text{Pizza} \sqcap \exists\text{hasTopping}.(\text{PizzaTopping} \sqcap \exists\text{hasSpiciness}.\text{Hot})`,
+     which yields :math:`A \sqsubseteq \exists r.\text{Aux}_1` and
+     :math:`\exists r.\text{Aux}_2 \sqsubseteq \text{Aux}_3` with
+     :math:`\text{Aux}_1 \neq \text{Aux}_2`—are not detected, only a single
+     role-auxiliary step :math:`A \sqsubseteq \exists r.C \sqsubseteq \text{Aux}`
+     is). If several :math:`(X, Y)`
      qualify for the same :math:`A`, the lexicographically smallest
      :math:`(\min(X, Y), \max(X, Y))` is selected.
    * *Bottom-up acceptance and cap:* Candidates are processed in topological
@@ -547,9 +554,11 @@ measured seeds (``strict_loss == 0``, minimum target class and pair
      (:meth:`~mowl.nn.el.structural.DefinitionTable.masked_gci0`) and
      :math:`(X, Y, A)` and :math:`(Y, X, A)` in ``gci1``
      (:meth:`~mowl.nn.el.structural.DefinitionTable.masked_gci1`) hold by
-     construction and evaluate to exact ``0.0`` loss in training and evaluation,
-     whereas ``gci2`` and ``gci3`` rows are **not** masked so they continue to
-     train the role auxiliary's region.
+     construction and evaluate to exact ``0.0`` loss in training and evaluation;
+     when :math:`(A, \text{Aux})` is only entailed through the role auxiliary,
+     no ``gci0`` row exists for it and therefore only :math:`(A, X)` and the
+     ``gci1`` rows are masked, while the ``gci2`` and ``gci3`` rows are **not**
+     masked and keep training :math:`\text{Aux}`'s region.
      Setting ``structural_definitions=False`` disables the table (every class
      stays primitive and nothing is masked).
 

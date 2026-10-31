@@ -1,6 +1,7 @@
 """Model-level tests for MultiBoxEL structural objective."""
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Tuple
 
@@ -315,14 +316,25 @@ def test_multiboxel_structural_survives_reload_and_narrow_tensor_raises(
         build_structural_tables(_DummyModel())
 
 
+_PIZZA_EL_DIR = Path(
+    os.environ.get(
+        "MOWL_PIZZA_EL_DIR",
+        "/home/leechuck/Public/software/faithful-dl-embedding/experiments/data/pizza-el",
+    )
+)
+_PIZZA_EL_ONT = (
+    _PIZZA_EL_DIR if _PIZZA_EL_DIR.suffix == ".owl" else _PIZZA_EL_DIR / "ontology.owl"
+)
+
+
 def test_pizza_role_auxiliary_definitions_detected(tmp_path: Path) -> None:
-    """Model-level test: Pizza-style role-auxiliary definitions (and Pizza-EL training ontology) produce n_defined > 0, with gci2/gci3 losses still active."""
+    """Model-level test: Pizza-style role-auxiliary definitions produce n_defined > 0, with gci2/gci3 losses still active."""
     from mowl.owlapi import OWLAPIAdapter
     from org.semanticweb.owlapi.formats import FunctionalSyntaxDocumentFormat
     from org.semanticweb.owlapi.model import IRI
     import java.io
 
-    # 1. Self-contained 6-class Pizza-style ontology:
+    # Self-contained 6-class Pizza-style ontology:
     # CheeseyPizza == Pizza cap exists hasTopping.CheeseTopping
     # MeatyPizza   == Pizza cap exists hasTopping.MeatTopping
     # SpicyPizza   == Pizza cap exists hasTopping.SpicyTopping
@@ -375,27 +387,29 @@ def test_pizza_role_auxiliary_definitions_detected(tmp_path: Path) -> None:
     assert len(gci2_rows) == 3
     assert len(gci3_rows) == 3
 
-    # 2. Full Pizza-EL training ontology from experiments (loads in < 1s from cache)
-    pizza_ont_path = Path(
-        "/home/leechuck/Public/software/faithful-dl-embedding/experiments/data/pizza-el/ontology.owl"
+
+@pytest.mark.skipif(
+    not _PIZZA_EL_ONT.exists(),
+    reason=f"Pizza-EL ontology not found at {_PIZZA_EL_ONT} (set MOWL_PIZZA_EL_DIR)",
+)
+def test_pizza_el_full_ontology_definitions_detected(tmp_path: Path) -> None:
+    """Full Pizza-EL training ontology from MOWL_PIZZA_EL_DIR produces n_defined == 4 at k=4, K=16."""
+    ds_pizza = PathDataset(str(_PIZZA_EL_ONT))
+    model_pizza = MultiBoxEL(
+        ds_pizza,
+        embed_dim=4,
+        n_components=4,
+        max_components=16,
+        objective="structural",
+        neg_sampling_gcis=[],
+        model_filepath=str(tmp_path / "pizza.pt"),
     )
-    if pizza_ont_path.exists():
-        ds_pizza = PathDataset(str(pizza_ont_path))
-        model_pizza = MultiBoxEL(
-            ds_pizza,
-            embed_dim=4,
-            n_components=4,
-            max_components=16,
-            objective="structural",
-            neg_sampling_gcis=[],
-            model_filepath=str(tmp_path / "pizza.pt"),
-        )
-        table_pizza, _, _ = build_structural_tables(
-            model_pizza, k=4, max_components=16, enabled=True
-        )
-        assert table_pizza.n_defined > 0
-        assert table_pizza.n_defined == 4
-        assert table_pizza.max_level == 1
+    table_pizza, _, _ = build_structural_tables(
+        model_pizza, k=4, max_components=16, enabled=True
+    )
+    assert table_pizza.n_defined > 0
+    assert table_pizza.n_defined == 4
+    assert table_pizza.max_level == 1
 
 
 @pytest.mark.slow
