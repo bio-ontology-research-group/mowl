@@ -51,6 +51,7 @@ Non-guarantees:
 from __future__ import annotations
 
 from dataclasses import dataclass
+import heapq
 from typing import TYPE_CHECKING, Dict, List, NamedTuple, Optional, Set, Tuple
 
 import torch as th
@@ -93,6 +94,24 @@ class Regions(NamedTuple):
     cen: th.Tensor
     w: th.Tensor
     active: th.Tensor
+
+
+def _pair_bounds(
+    cen_a: th.Tensor,
+    w_a: th.Tensor,
+    cen_b: th.Tensor,
+    w_b: th.Tensor,
+) -> Tuple[th.Tensor, th.Tensor, th.Tensor, th.Tensor]:
+    """Compute pairwise ``(lower, upper, cen_ij, w_ij)`` of shape ``(B, ka, kb, d)``."""
+    ca = cen_a.unsqueeze(2)
+    wa = w_a.unsqueeze(2)
+    cb = cen_b.unsqueeze(1)
+    wb = w_b.unsqueeze(1)
+    lower = th.maximum(ca - wa, cb - wb)
+    upper = th.minimum(ca + wa, cb + wb)
+    cen_ij = (lower + upper) / 2.0
+    w_ij = (upper - lower) / 2.0
+    return lower, upper, cen_ij, w_ij
 
 
 def signed_overlap(
@@ -138,12 +157,7 @@ def signed_overlap(
     torch.Tensor
         Pairwise coordinatewise signed overlaps of shape ``(B, ka, kb, d)``.
     """
-    ca = cen_a.unsqueeze(2)
-    wa = w_a.unsqueeze(2)
-    cb = cen_b.unsqueeze(1)
-    wb = w_b.unsqueeze(1)
-    lower = th.maximum(ca - wa, cb - wb)
-    upper = th.minimum(ca + wa, cb + wb)
+    lower, upper, _, _ = _pair_bounds(cen_a, w_a, cen_b, w_b)
     return upper - lower
 
 
@@ -193,16 +207,9 @@ def pair_slots(a: Regions, b: Regions, max_slots: int) -> Regions:
     kb = b.cen.shape[1]
     total_pairs = ka * kb
 
-    ca = a.cen.unsqueeze(2)
-    wa = a.w.unsqueeze(2)
-    cb = b.cen.unsqueeze(1)
-    wb = b.w.unsqueeze(1)
-
-    lower = th.maximum(ca - wa, cb - wb)
-    upper = th.minimum(ca + wa, cb + wb)
-
-    cen_ij = ((lower + upper) / 2.0).reshape(bsz, total_pairs, dim)
-    w_ij = ((upper - lower) / 2.0).reshape(bsz, total_pairs, dim)
+    _, _, cen_grid, w_grid = _pair_bounds(a.cen, a.w, b.cen, b.w)
+    cen_ij = cen_grid.reshape(bsz, total_pairs, dim)
+    w_ij = w_grid.reshape(bsz, total_pairs, dim)
     act_ij = (a.active.unsqueeze(2) & b.active.unsqueeze(1)).reshape(bsz, total_pairs)
 
     active_counts = act_ij.sum(dim=1)
@@ -331,6 +338,21 @@ def pair_size(a: Regions, b: Regions) -> th.Tensor:
     return th.amax(masked_ne, dim=1)
 
 
+def _inclusion_tight_violation(
+    cen_a: th.Tensor,
+    w_a: th.Tensor,
+    cen_b: th.Tensor,
+    w_b: th.Tensor,
+    margin: float,
+) -> th.Tensor:
+    """Compute coordinatewise tight inclusion violations ``relu(|c_a - c_b| + w_a - w_b + m)`` of shape ``(B, ka, kb, d)``."""
+    ca = cen_a.unsqueeze(2)
+    wa = w_a.unsqueeze(2)
+    cb = cen_b.unsqueeze(1)
+    wb = w_b.unsqueeze(1)
+    return th.relu(th.abs(ca - cb) + wa - wb + margin)
+
+
 def inclusion_tight(
     cen_a: th.Tensor,
     w_a: th.Tensor,
@@ -371,11 +393,7 @@ def inclusion_tight(
     torch.Tensor
         Pairwise inclusion distances of shape ``(B, ka, kb)``.
     """
-    ca = cen_a.unsqueeze(2)
-    wa = w_a.unsqueeze(2)
-    cb = cen_b.unsqueeze(1)
-    wb = w_b.unsqueeze(1)
-    violation = th.relu(th.abs(ca - cb) + wa - wb + margin)
+    violation = _inclusion_tight_violation(cen_a, w_a, cen_b, w_b, margin)
     return th.linalg.norm(violation, dim=-1)
 
 
@@ -397,6 +415,7 @@ def gci0_structural(c: Regions, d: Regions, margin: float) -> th.Tensor:
       violations never push :math:`C_i` to shrink to empty.
     - At ``margin = 0``, equals ``0`` iff every active non-empty slot of :math:`C`
       is contained in some active slot of :math:`D`.
+    - Raises :class:`ValueError` if any batch row of ``d`` has zero active slots.
 
     Non-guarantees:
     - Vacuously ``0`` when :math:`C` has no active non-empty slots; non-emptiness
@@ -416,7 +435,9 @@ def gci0_structural(c: Regions, d: Regions, margin: float) -> th.Tensor:
     torch.Tensor
         Per-row squared GCI0 structural loss of shape ``(B,)``.
     """
-    incl_sq = inclusion_tight(c.cen, c.w, d.cen, d.w, margin).square()
+    if d.active.shape[0] > 0 and not bool(d.active.any(dim=1).all().item()):
+        raise ValueError("gci0_structural requires at least one active target slot in d per batch row.")
+    incl_sq = _inclusion_tight_violation(c.cen, c.w, d.cen, d.w, margin).square().sum(dim=-1)
     incl_masked = incl_sq.masked_fill(~d.active.unsqueeze(1), float("inf"))
     min_j = th.amin(incl_masked, dim=2)  # (B, kc)
 
@@ -487,6 +508,7 @@ def gci1_structural(
       gradient.
     - Imposes no emptiness penalty on :math:`C \\cap D` (conjunction non-emptiness
       belongs exclusively to :func:`existence_loss`).
+    - Raises :class:`ValueError` if any batch row of ``e`` has zero active slots.
 
     Non-guarantees:
     - Requires each non-empty pair box :math:`C_i \\cap D_j` to be covered by a
@@ -510,20 +532,16 @@ def gci1_structural(
     torch.Tensor
         Per-row squared GCI1 structural loss of shape ``(B,)``.
     """
+    if e.active.shape[0] > 0 and not bool(e.active.any(dim=1).all().item()):
+        raise ValueError("gci1_structural requires at least one active target slot in e per batch row.")
+
     bsz, kc, dim = c.cen.shape
     kd = d.cen.shape[1]
     total_pairs = kc * kd
 
-    ca = c.cen.unsqueeze(2)
-    wa = c.w.unsqueeze(2)
-    cb = d.cen.unsqueeze(1)
-    wb = d.w.unsqueeze(1)
-
-    lower = th.maximum(ca - wa, cb - wb)
-    upper = th.minimum(ca + wa, cb + wb)
-
-    inter_cen = ((lower + upper) / 2.0).reshape(bsz, total_pairs, dim)
-    inter_w = ((upper - lower) / 2.0).reshape(bsz, total_pairs, dim)
+    _, _, cen_grid, w_grid = _pair_bounds(c.cen, c.w, d.cen, d.w)
+    inter_cen = cen_grid.reshape(bsz, total_pairs, dim)
+    inter_w = w_grid.reshape(bsz, total_pairs, dim)
     pair_active = (c.active.unsqueeze(2) & d.active.unsqueeze(1)).reshape(bsz, total_pairs)
 
     ne_ij_det = nonempty_measure(inter_w.detach())
@@ -532,7 +550,7 @@ def gci1_structural(
         mask_bool = masked.to(dtype=th.bool)
         gate_bool = gate_bool & (~mask_bool.unsqueeze(1))
 
-    incl_sq = inclusion_tight(inter_cen, inter_w, e.cen, e.w, margin).square()
+    incl_sq = _inclusion_tight_violation(inter_cen, inter_w, e.cen, e.w, margin).square().sum(dim=-1)
     incl_masked = incl_sq.masked_fill(~e.active.unsqueeze(1), float("inf"))
     min_l = th.amin(incl_masked, dim=2)  # (B, kc * kd)
 
@@ -794,112 +812,66 @@ class DefinitionTable:
                         candidates[a_raw] = pair
 
         accepted: Dict[int, Tuple[int, int]] = {}
+        lvl_arr: List[int] = [0] * n_classes
+        cmp_arr: List[int] = [k] * n_classes
 
-        def _depends_on(src: int, target: int) -> bool:
-            """Return True iff src == target or src depends on target in accepted."""
-            stack = [src]
-            visited: Set[int] = set()
-            while stack:
-                curr = stack.pop()
-                if curr == target:
-                    return True
-                if curr in visited:
-                    continue
-                visited.add(curr)
-                if curr in accepted:
-                    dx, dy = accepted[curr]
-                    stack.append(dx)
-                    stack.append(dy)
-            return False
-
-        def _recompute_levels_and_comps(
-            acc: Dict[int, Tuple[int, int]],
-        ) -> Tuple[Dict[int, int], Dict[int, int]]:
-            """Compute (level_map, comps_map) on the DAG `acc`."""
-            lvl_map: Dict[int, int] = {}
-            cmp_map: Dict[int, int] = {}
-
-            def _eval(node: int) -> Tuple[int, int]:
-                if node in lvl_map:
-                    return lvl_map[node], cmp_map[node]
-                if node not in acc:
-                    lvl_map[node] = 0
-                    cmp_map[node] = k
-                    return 0, k
-                dx, dy = acc[node]
-                lx, cx = _eval(dx)
-                ly, cy = _eval(dy)
-                lv = 1 + max(lx, ly)
-                cp = cx * cy
-                lvl_map[node] = lv
-                cmp_map[node] = cp
-                return lv, cp
-
-            for u in acc:
-                _eval(u)
-            return lvl_map, cmp_map
+        dependants: Dict[int, List[int]] = {u: [] for u in candidates}
+        in_deg: Dict[int, int] = {}
+        ready_heap: List[int] = []
+        for u, (x, y) in candidates.items():
+            deg = 0
+            if x in candidates:
+                dependants[x].append(u)
+                deg += 1
+            if y in candidates:
+                dependants[y].append(u)
+                deg += 1
+            in_deg[u] = deg
+            if deg == 0:
+                heapq.heappush(ready_heap, u)
 
         undecided: Set[int] = set(candidates.keys())
+        sorted_cands = sorted(candidates.keys())
+        cand_ptr = 0
 
-        def _on_cycle_in_undecided(start: int) -> bool:
-            """Return True iff start can reach itself via >= 1 step in undecided."""
-            dx, dy = candidates[start]
-            stack = [d for d in (dx, dy) if d in undecided]
-            visited: Set[int] = set()
-            while stack:
-                curr = stack.pop()
-                if curr == start:
-                    return True
-                if curr in visited:
-                    continue
-                visited.add(curr)
-                if curr in undecided:
-                    cx, cy = candidates[curr]
-                    if cx in undecided:
-                        stack.append(cx)
-                    if cy in undecided:
-                        stack.append(cy)
-            return False
+        def _release_dependants(node: int) -> None:
+            for dep in dependants[node]:
+                if dep in undecided:
+                    in_deg[dep] -= 1
+                    if in_deg[dep] == 0:
+                        heapq.heappush(ready_heap, dep)
 
         while undecided:
-            ready = sorted(
-                u
-                for u in undecided
-                if candidates[u][0] not in undecided
-                and candidates[u][1] not in undecided
-            )
-            if ready:
-                u = ready[0]
-            else:
-                cycle_nodes = sorted(
-                    u for u in undecided if _on_cycle_in_undecided(u)
-                )
-                u = cycle_nodes[0] if cycle_nodes else min(undecided)
+            while ready_heap:
+                u = heapq.heappop(ready_heap)
+                if u not in undecided:
+                    continue
+                undecided.remove(u)
+                x, y = candidates[u]
+                lv = 1 + max(lvl_arr[x], lvl_arr[y])
+                cp = cmp_arr[x] * cmp_arr[y]
+                if cp <= max_components and (max_level is None or lv <= max_level):
+                    accepted[u] = (x, y)
+                    lvl_arr[u] = lv
+                    cmp_arr[u] = cp
+                _release_dependants(u)
 
-            undecided.remove(u)
-            x, y = candidates[u]
-            if _depends_on(x, u) or _depends_on(y, u):
-                continue
+            if undecided:
+                while sorted_cands[cand_ptr] not in undecided:
+                    cand_ptr += 1
+                victim = sorted_cands[cand_ptr]
+                cand_ptr += 1
+                undecided.remove(victim)
+                _release_dependants(victim)
 
-            accepted[u] = (x, y)
-            lvl_map, cmp_map = _recompute_levels_and_comps(accepted)
-            valid = all(
-                cmp_map[node] <= max_components
-                and (max_level is None or lvl_map[node] <= max_level)
-                for node in accepted
-            )
-            if not valid:
-                del accepted[u]
-
-        lvl_map, cmp_map = _recompute_levels_and_comps(accepted)
         gci0_keys: List[int] = []
         gci1_keys: List[int] = []
         for a, (x, y) in sorted(accepted.items()):
             def_mask[a] = True
             def_x[a] = x
             def_y[a] = y
-            level[a] = lvl_map[a]
-            comps[a] = cmp_map[a]
+            level[a] = lvl_arr[a]
+            comps[a] = cmp_arr[a]
             gci0_keys.append(a * n_classes + x)
             gci0_keys.append(a * n_classes + y)
             gci1_keys.append((x * n_classes + y) * n_classes + a)
@@ -1025,10 +997,12 @@ class ExistenceTargets:
           IRI is in ``cm.concept_names`` (treating unknown IRIs as satisfiable)
           and ``cm.joint_satisfiable([iri_c, iri_d])`` for ``gci1`` pairs whose
           IRIs are both in ``cm.concept_names`` (falling back to the asserted
-          ``gci1_bot`` rule when an IRI is unknown to ``cm``).
+          ``gci0_bot``/``gci1_bot`` rule when an IRI is unknown to ``cm``).
+          Raises :class:`ValueError` if ``cm`` is provided with ``index_to_iri=None``.
         - Without ``cm``, includes every class not appearing in ``gci0_bot`` and
           every distinct unordered pair ``(min(C, D), max(C, D))`` from ``gci1``
-          not appearing in either order in ``gci1_bot``.
+          where neither ``C`` nor ``D`` appears in ``gci0_bot`` and ``(C, D)``
+          does not appear in either order in ``gci1_bot``.
         - Excludes ``top_idx`` and ``bottom_idx`` everywhere.
 
         Non-guarantees:
@@ -1050,7 +1024,7 @@ class ExistenceTargets:
         bottom_idx : Optional[int]
             Class index of ``owl:Nothing`` if present, else ``None``.
         index_to_iri : Optional[Dict[int, str]], default None
-            Mapping from class index to IRI string (used when ``cm`` is given).
+            Mapping from class index to IRI string (required when ``cm`` is given).
         cm : Optional[CanonicalModel], default None
             Saturated canonical model for semantic satisfiability queries.
 
@@ -1059,6 +1033,9 @@ class ExistenceTargets:
         ExistenceTargets
             Target class and pair index tensors.
         """
+        if cm is not None and index_to_iri is None:
+            raise ValueError("index_to_iri must be provided when cm is not None.")
+
         excluded: Set[int] = {
             int(idx) for idx in (top_idx, bottom_idx) if idx is not None
         }
@@ -1084,7 +1061,8 @@ class ExistenceTargets:
             if c in excluded:
                 continue
             if cm is not None:
-                iri = index_to_iri.get(c) if index_to_iri is not None else None
+                assert index_to_iri is not None
+                iri = index_to_iri.get(c)
                 if iri is not None and iri in cm_concepts:
                     if cm.is_satisfiable(iri):
                         target_classes.append(c)
@@ -1107,8 +1085,9 @@ class ExistenceTargets:
         target_pairs: List[Tuple[int, int]] = []
         for c, d in sorted(candidate_pairs):
             if cm is not None:
-                iri_c = index_to_iri.get(c) if index_to_iri is not None else None
-                iri_d = index_to_iri.get(d) if index_to_iri is not None else None
+                assert index_to_iri is not None
+                iri_c = index_to_iri.get(c)
+                iri_d = index_to_iri.get(d)
                 if (
                     iri_c is not None
                     and iri_d is not None
@@ -1118,10 +1097,18 @@ class ExistenceTargets:
                     if cm.joint_satisfiable([iri_c, iri_d]):
                         target_pairs.append((c, d))
                 else:
-                    if (c, d) not in unsat_pairs_asserted:
+                    if (
+                        c not in unsat_classes_asserted
+                        and d not in unsat_classes_asserted
+                        and (c, d) not in unsat_pairs_asserted
+                    ):
                         target_pairs.append((c, d))
             else:
-                if (c, d) not in unsat_pairs_asserted:
+                if (
+                    c not in unsat_classes_asserted
+                    and d not in unsat_classes_asserted
+                    and (c, d) not in unsat_pairs_asserted
+                ):
                     target_pairs.append((c, d))
 
         classes_tensor = th.tensor(target_classes, dtype=th.long)

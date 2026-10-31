@@ -1,6 +1,7 @@
 """Unit tests for mowl.nn.el.structural (region algebra, structural losses, tables)."""
 from __future__ import annotations
 
+import time
 import pytest
 import torch as th
 
@@ -372,7 +373,7 @@ def test_definition_table_two_levels_and_cap() -> None:
 
 
 def test_definition_table_rejects_cycle() -> None:
-    """A == B cap C, B == A cap D -> exactly one accepted (the lower index)."""
+    """A == B cap C, B == A cap D -> lowest-index cycle node (A) rejected, B accepted."""
     # 0:A, 1:B, 2:C, 3:D
     gci0 = th.tensor(
         [
@@ -401,11 +402,11 @@ def test_definition_table_rejects_cycle() -> None:
         enabled=True,
     )
     assert table.n_defined == 1
-    assert table.def_mask.tolist() == [True, False, False, False]
-    assert table.def_x[0].item() == 1
-    assert table.def_y[0].item() == 2
-    assert table.level.tolist() == [1, 0, 0, 0]
-    assert table.comps.tolist() == [4, 2, 2, 2]
+    assert table.def_mask.tolist() == [False, True, False, False]
+    assert table.def_x[1].item() == 0
+    assert table.def_y[1].item() == 3
+    assert table.level.tolist() == [0, 1, 0, 0]
+    assert table.comps.tolist() == [2, 4, 2, 2]
 
 
 def test_definition_table_disabled() -> None:
@@ -543,4 +544,188 @@ def test_region_size_and_gci0_structural_and_float32() -> None:
     )
     with pytest.raises(ValueError):
         region_size(r_bad)
+
+
+def test_definition_table_scale_linear() -> None:
+    """20 000 independent candidates build in well under 5 s and produce n_defined == 20000."""
+    n_defs = 20_000
+    x_idx = n_defs
+    y_idx = n_defs + 1
+    n_classes = n_defs + 2
+
+    a_indices = th.arange(n_defs, dtype=th.long)
+    x_col = th.full((n_defs,), x_idx, dtype=th.long)
+    y_col = th.full((n_defs,), y_idx, dtype=th.long)
+
+    gci0 = th.cat(
+        [
+            th.stack([a_indices, x_col], dim=1),
+            th.stack([a_indices, y_col], dim=1),
+        ],
+        dim=0,
+    )
+    gci1 = th.stack([x_col, y_col, a_indices], dim=1)
+
+    t0 = time.perf_counter()
+    table = DefinitionTable.from_normal_forms(
+        gci0=gci0,
+        gci1=gci1,
+        n_classes=n_classes,
+        k=2,
+        max_components=16,
+        top_idx=None,
+        bottom_idx=None,
+        enabled=True,
+    )
+    elapsed = time.perf_counter() - t0
+    assert elapsed < 5.0, f"DefinitionTable took {elapsed:.2f}s (>= 5.0s)"
+    assert table.n_defined == n_defs
+    assert table.max_level == 1
+    assert bool(table.def_mask[:n_defs].all())
+    assert not bool(table.def_mask[n_defs:].any())
+
+
+def test_definition_table_cycle_with_smaller_acyclic_candidate() -> None:
+    """Cycle where the lowest-index cycle node is not the smallest candidate overall: 0 acyclic, 3 == 5 cap 7, 5 == 3 cap 8 -> 0 and 5 accepted, 3 rejected."""
+    # Candidates: 0 == 1 cap 2 (acyclic), 3 == 5 cap 7, 5 == 3 cap 8 (7, 8 primitive)
+    gci0 = th.tensor(
+        [
+            [0, 1],
+            [0, 2],
+            [3, 5],
+            [3, 7],
+            [5, 3],
+            [5, 8],
+        ],
+        dtype=th.long,
+    )
+    gci1 = th.tensor(
+        [
+            [1, 2, 0],
+            [5, 7, 3],
+            [3, 8, 5],
+        ],
+        dtype=th.long,
+    )
+    table = DefinitionTable.from_normal_forms(
+        gci0=gci0,
+        gci1=gci1,
+        n_classes=9,
+        k=2,
+        max_components=16,
+        top_idx=None,
+        bottom_idx=None,
+        enabled=True,
+    )
+    assert table.n_defined == 2
+    assert table.def_mask.tolist() == [
+        True,   # 0 accepted
+        False,
+        False,
+        False,  # 3 rejected (breaks cycle)
+        False,
+        True,   # 5 accepted (with 3 primitive)
+        False,
+        False,
+        False,
+    ]
+    assert table.def_x[0].item() == 1 and table.def_y[0].item() == 2
+    assert table.def_x[5].item() == 3 and table.def_y[5].item() == 8
+    assert table.level[0].item() == 1
+    assert table.level[3].item() == 0
+    assert table.level[5].item() == 1
+    assert table.comps[5].item() == 4
+
+
+def test_existence_targets_cm_requires_index_to_iri() -> None:
+    """Passing cm without index_to_iri raises ValueError."""
+    ds = PathDataset(fixture_path("t3.owl"))
+    cm = CanonicalModel.from_dataset(ds)
+    gci0_bot = th.zeros((0, 2), dtype=th.long)
+    gci1 = th.zeros((0, 3), dtype=th.long)
+    gci1_bot = th.zeros((0, 2), dtype=th.long)
+
+    with pytest.raises(ValueError, match="index_to_iri"):
+        ExistenceTargets.from_normal_forms(
+            gci0_bot=gci0_bot,
+            gci1=gci1,
+            gci1_bot=gci1_bot,
+            n_classes=5,
+            top_idx=None,
+            bottom_idx=None,
+            index_to_iri=None,
+            cm=cm,
+        )
+
+
+def test_existence_targets_asserted_drops_pairs_with_gci0_bot_class() -> None:
+    """Under the asserted rule (no cm), a pair (C, D) where C or D has a gci0_bot row is dropped."""
+    # Classes: 0:A, 1:B (in gci0_bot), 2:C, 3:BOT
+    gci0_bot = th.tensor([[1, 3]], dtype=th.long)
+    gci1 = th.tensor(
+        [
+            [0, 1, 2],  # involves 1 (unsat via gci0_bot) -> must be dropped
+            [1, 2, 0],  # involves 1 (unsat via gci0_bot) -> must be dropped
+            [0, 2, 1],  # both 0 and 2 satisfiable -> kept
+        ],
+        dtype=th.long,
+    )
+    gci1_bot = th.zeros((0, 2), dtype=th.long)
+
+    targets = ExistenceTargets.from_normal_forms(
+        gci0_bot=gci0_bot,
+        gci1=gci1,
+        gci1_bot=gci1_bot,
+        n_classes=4,
+        top_idx=None,
+        bottom_idx=3,
+    )
+    assert targets.classes.tolist() == [0, 2]
+    assert targets.pairs.tolist() == [[0, 2]]
+
+
+def test_gci0_and_gci1_raise_when_target_has_no_active_slots() -> None:
+    """gci0_structural and gci1_structural raise ValueError when the target has no active slot in a row."""
+    c = Regions(
+        cen=th.tensor([[[0.0, 0.0]]], dtype=th.float64),
+        w=th.tensor([[[1.0, 1.0]]], dtype=th.float64),
+        active=th.tensor([[True]]),
+    )
+    d_active = Regions(
+        cen=th.tensor([[[0.0, 0.0]]], dtype=th.float64),
+        w=th.tensor([[[1.0, 1.0]]], dtype=th.float64),
+        active=th.tensor([[True]]),
+    )
+    target_inactive = Regions(
+        cen=th.tensor([[[0.0, 0.0], [1.0, 1.0]]], dtype=th.float64),
+        w=th.tensor([[[1.0, 1.0], [1.0, 1.0]]], dtype=th.float64),
+        active=th.tensor([[False, False]]),
+    )
+
+    with pytest.raises(ValueError, match="active"):
+        gci0_structural(c, target_inactive, margin=0.0)
+
+    with pytest.raises(ValueError, match="active"):
+        gci1_structural(c, d_active, target_inactive, margin=0.0)
+
+
+def test_gci_structural_finite_grad_at_zero_violation() -> None:
+    """Squared inclusion inside gci0_structural and gci1_structural has finite (zero) gradient at exact boundary violation == 0."""
+    cen_c = th.tensor([[[1.0, 1.0]]], dtype=th.float64, requires_grad=True)
+    w_c = th.tensor([[[0.5, 0.5]]], dtype=th.float64, requires_grad=True)
+    cen_d = th.tensor([[[1.0, 1.0]]], dtype=th.float64, requires_grad=True)
+    w_d = th.tensor([[[0.5, 0.5]]], dtype=th.float64, requires_grad=True)
+
+    rc = Regions(cen=cen_c, w=w_c, active=th.tensor([[True]]))
+    rd = Regions(cen=cen_d, w=w_d, active=th.tensor([[True]]))
+
+    loss0 = gci0_structural(rc, rd, margin=0.0)
+    loss1 = gci1_structural(rc, rd, rd, margin=0.0)
+    (loss0 + loss1).backward()
+
+    for t in (cen_c, w_c, cen_d, w_d):
+        assert t.grad is not None
+        assert bool(th.isfinite(t.grad).all())
+        assert bool((t.grad == 0.0).all())
+
 
