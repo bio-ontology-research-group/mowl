@@ -555,11 +555,18 @@ def gci2_score(
 
     Guarantees:
     - Matches :func:`mowl.nn.el.boxsquaredel.losses.gci2_score` at ``k = 1``.
-    - When ``active_c`` or ``active_d`` is provided, inactive source slots are
-      excluded from the mean (with denominator clamped to ``>= 1``) and inactive
-      target slots are excluded from the minimum.
+    - When ``active_c`` or ``active_d`` is provided under ``aggregation="hard"``,
+      inactive source slots are excluded from the mean (with denominator clamped
+      to ``>= 1``) and inactive target slots are excluded from the minimum.
+    - Raises :class:`ValueError` if ``active_c`` or ``active_d`` is provided with
+      ``aggregation="soft"`` (structural mode forces ``"hard"`` aggregation).
 
     Non-guarantees:
+    - When every target slot in ``active_d`` is masked out for a row (an
+      all-empty, i.e. unsatisfiable, target :math:`D`), the target minimum term
+      ``term_2`` returns ``0.0`` (making the target half of
+      :math:`C \\sqsubseteq \\exists r.D` vacuously ``0``; when every source slot
+      in ``active_c`` is masked out as well, the entire score is ``0.0``).
     - Shares a single class bump vector :math:`b_C, b_D` across all components of
       :math:`C` and :math:`D`.
     - Under ``aggregation="soft"`` at finite ``tau > 0``, the score is not zero
@@ -568,6 +575,11 @@ def gci2_score(
       why ``diversity_reg`` exists).
     """
     _validate_aggregation(aggregation, tau)
+    if (active_c is not None or active_d is not None) and aggregation != "hard":
+        raise ValueError(
+            "gci2_score requires aggregation='hard' when active_c or active_d is provided "
+            f"(structural forces hard), got aggregation={aggregation!r}."
+        )
     bumped_c = cen_c + bump_d.unsqueeze(1)  # (B, kc, d)
     bumped_d = cen_d + bump_c.unsqueeze(1)  # (B, kd, d)
 
@@ -765,6 +777,10 @@ def gci3_score_boxes(
       slots are excluded from the minimum.
 
     Non-guarantees:
+    - When ``active`` is provided and every target slot in a row is masked out
+      (an all-empty, i.e. unsatisfiable, target :math:`D`), returns ``0.0`` for
+      that row, making :math:`\\exists r.C \\sqsubseteq D` vacuously ``0`` unless
+      :math:`D` is forced non-empty by ``existence_loss``.
     - Under ``aggregation="soft"`` at finite ``tau > 0``, the score is not zero
       at a hard model.
     """
@@ -873,10 +889,7 @@ def gci3_loss(
 
 
 def gci3_bot_score_boxes(
-    cen_c: Optional[th.Tensor] = None,
-    off_c: Optional[th.Tensor] = None,
-    active: Optional[th.Tensor] = None,
-    off_head: Optional[th.Tensor] = None,
+    off_head: th.Tensor,
     aggregation: str = "hard",
     tau: float = 1.0,
 ) -> th.Tensor:
@@ -884,17 +897,13 @@ def gci3_bot_score_boxes(
 
     Guarantees:
     - Returns :math:`\\|\\text{abs}(\\text{off\\_head})\\|_2` of shape ``(B,)``,
-      identical to :func:`gci3_bot_score` whether ``active`` is ``None`` or a
-      boolean mask.
+      identical to :func:`gci3_bot_score`.
 
     Non-guarantees:
     - Independent of :math:`C` (follows Box²EL).
     """
     _validate_aggregation(aggregation, tau)
-    target_off = off_head if off_head is not None else cen_c
-    if target_off is None:
-        raise ValueError("off_head must be provided to gci3_bot_score_boxes.")
-    return th.linalg.norm(th.abs(target_off), dim=-1)
+    return th.linalg.norm(th.abs(off_head), dim=-1)
 
 
 def gci3_bot_score(
@@ -914,7 +923,7 @@ def gci3_bot_score(
     _validate_aggregation(aggregation, tau)
     off_head = th.abs(head_offset(data[:, 0]))
     return gci3_bot_score_boxes(
-        None, None, None, off_head, aggregation=aggregation, tau=tau
+        off_head, aggregation=aggregation, tau=tau
     )
 
 
@@ -957,6 +966,10 @@ def class_assertion_score_boxes(
       slots are excluded from the minimum.
 
     Non-guarantees:
+    - When ``active`` is provided and every target slot in a row is masked out
+      (an all-empty, i.e. unsatisfiable, class :math:`C`), returns ``0.0`` for
+      that row, making :math:`C(a)` vacuously ``0`` unless :math:`C` is forced
+      non-empty by ``existence_loss``.
     - Individuals remain single boxes rather than multi-boxes.
     """
     _validate_aggregation(aggregation, tau)

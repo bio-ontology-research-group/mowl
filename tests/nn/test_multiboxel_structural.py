@@ -225,7 +225,7 @@ def test_structural_losses_zero_at_exact_t3(tmp_path: Path) -> None:
 
 
 def test_soft_aggregation_rejected() -> None:
-    """component_aggregation='soft' with objective='structural' raises ValueError."""
+    """component_aggregation='soft' with objective='structural' or masked gci2_score raises ValueError."""
     with pytest.raises(ValueError, match="component_aggregation"):
         MultiBoxELModule(
             nb_ont_classes=4,
@@ -234,6 +234,22 @@ def test_soft_aggregation_rejected() -> None:
             n_components=2,
             objective="structural",
             component_aggregation="soft",
+        )
+    cen = th.zeros((2, 2, 3))
+    off = th.ones((2, 2, 3)) * 0.2
+    bump = th.zeros((2, 3))
+    cen_r = th.zeros((2, 3))
+    off_r = th.ones((2, 3)) * 0.2
+    mask = th.ones((2, 2), dtype=th.bool)
+    with pytest.raises(ValueError, match="aggregation='hard'"):
+        L.gci2_score(
+            cen, off, bump, cen, off, bump, cen_r, off_r, cen_r, off_r,
+            0.02, 2.0, aggregation="soft", active_c=mask,
+        )
+    with pytest.raises(ValueError, match="aggregation='hard'"):
+        L.gci2_score(
+            cen, off, bump, cen, off, bump, cen_r, off_r, cen_r, off_r,
+            0.02, 2.0, aggregation="soft", active_d=mask,
         )
 
 
@@ -281,9 +297,8 @@ def test_role_scores_mask_identity() -> None:
     s3_true = L.gci3_score_boxes(cen_d, off_d, all_true, cen_h, off_h, bump_c, 0.02)
     assert th.allclose(s3_none, s3_true, atol=1e-7)
 
-    s3b_none = L.gci3_bot_score_boxes(cen_c, off_c, None, off_h)
-    s3b_true = L.gci3_bot_score_boxes(cen_c, off_c, all_true, off_h)
-    assert th.allclose(s3b_none, s3b_true, atol=1e-7)
+    s3b = L.gci3_bot_score_boxes(off_h)
+    assert th.allclose(s3b, th.linalg.norm(off_h, dim=-1), atol=1e-7)
 
     ca_none = L.class_assertion_score_boxes(cen_c, off_c, None, cen_ind, off_ind, 0.02)
     ca_true = L.class_assertion_score_boxes(
@@ -387,3 +402,245 @@ def test_reseed_moves_nested_component() -> None:
     # Component 1 of C moved to D's largest slot (slot 0) with half its width
     assert cen_c[0, 1].tolist() == pytest.approx([10.0, 12.0], abs=1e-6)
     assert off_c[0, 1].tolist() == pytest.approx([1.0, 1.5], abs=1e-6)
+
+
+def test_reseed_thin_slot_counts_as_dead() -> None:
+    """A non-nested slot with min_m |offset| < 1e-3 is classified as dead and relocated."""
+    mod = MultiBoxELModule(
+        nb_ont_classes=2,
+        nb_rels=1,
+        embed_dim=2,
+        n_components=2,
+        objective="structural",
+        margin=0.05,
+        max_components=4,
+    )
+    table = DefinitionTable.from_normal_forms(
+        gci0=th.zeros((0, 2), dtype=th.long),
+        gci1=th.zeros((0, 3), dtype=th.long),
+        n_classes=2,
+        k=2,
+        max_components=4,
+        top_idx=None,
+        bottom_idx=None,
+        enabled=True,
+    )
+    targets = ExistenceTargets(
+        classes=th.zeros(0, dtype=th.long),
+        pairs=th.tensor([[0, 1]], dtype=th.long),
+    )
+    mod.set_structural_tables(table, targets)
+
+    with th.no_grad():
+        # Class 0 (C): comp 0 at [0, 0] with off=[1.0, 1.0];
+        # comp 1 at [-5, -5] (disjoint from comp 0, not nested) with off=[0.5, 5e-4] -> thin (< 1e-3)
+        mod.class_center.weight[0] = th.tensor([0.0, 0.0, -5.0, -5.0])
+        mod.class_offset.weight[0] = th.tensor([1.0, 1.0, 0.5, 5e-4])
+
+        # Class 1 (D): both components valid and non-nested, far from C
+        mod.class_center.weight[1] = th.tensor([10.0, 14.0, 20.0, 20.0])
+        mod.class_offset.weight[1] = th.tensor([2.0, 4.0, 1.0, 1.0])
+
+    count = mod.reseed(np.random.default_rng(0))
+    assert count == 1
+    cen_c, off_c = mod.class_boxes(th.tensor([0], dtype=th.long))
+    assert cen_c[0, 0].tolist() == pytest.approx([0.0, 0.0], abs=1e-6)
+    assert cen_c[0, 1].tolist() == pytest.approx([10.0, 14.0], abs=1e-6)
+    assert off_c[0, 1].tolist() == pytest.approx([1.0, 2.0], abs=1e-6)
+
+
+def test_reseed_skips_partner_with_nonpositive_ne() -> None:
+    """Violated pair (C, D) is skipped when partner D's largest active slot has ne <= 0."""
+    # Classes: 0:C (primitive), 1:D := X1 cap X2 (defined, disjoint parents -> ne < 0), 2:X1, 3:X2
+    gci0 = th.tensor([[1, 2], [1, 3]], dtype=th.long)
+    gci1 = th.tensor([[2, 3, 1]], dtype=th.long)
+    table = DefinitionTable.from_normal_forms(
+        gci0=gci0,
+        gci1=gci1,
+        n_classes=4,
+        k=2,
+        max_components=4,
+        top_idx=None,
+        bottom_idx=None,
+        enabled=True,
+    )
+    targets = ExistenceTargets(
+        classes=th.zeros(0, dtype=th.long),
+        pairs=th.tensor([[0, 1]], dtype=th.long),
+    )
+    mod = MultiBoxELModule(
+        nb_ont_classes=4,
+        nb_rels=1,
+        embed_dim=2,
+        n_components=2,
+        objective="structural",
+        margin=0.05,
+        max_components=4,
+    )
+    mod.set_structural_tables(table, targets)
+
+    with th.no_grad():
+        # C (0) has comp 1 nested inside comp 0 (dead)
+        mod.class_center.weight[0] = th.tensor([0.0, 0.0, 0.0, 0.0])
+        mod.class_offset.weight[0] = th.tensor([1.0, 1.0, 0.2, 0.2])
+        # X1 (2) and X2 (3) are far apart so D = X1 cap X2 has all pair slots with ne < 0
+        mod.class_center.weight[2] = th.tensor([10.0, 10.0, 12.0, 12.0])
+        mod.class_offset.weight[2] = th.tensor([0.5, 0.5, 0.5, 0.5])
+        mod.class_center.weight[3] = th.tensor([30.0, 30.0, 32.0, 32.0])
+        mod.class_offset.weight[3] = th.tensor([0.5, 0.5, 0.5, 0.5])
+
+    count = mod.reseed(np.random.default_rng(0))
+    assert count == 0
+    _, off_c = mod.class_boxes(th.tensor([0], dtype=th.long))
+    assert off_c[0, 1].tolist() == pytest.approx([0.2, 0.2], abs=1e-6)
+
+
+def test_reseed_uses_defined_partner_materialised_slot() -> None:
+    """When partner in a violated pair is a defined class, reseed copies its largest materialised slot, not its raw row."""
+    # Classes: 0:C (primitive), 1:A := X1 cap X2 (defined), 2:X1, 3:X2
+    gci0 = th.tensor([[1, 2], [1, 3]], dtype=th.long)
+    gci1 = th.tensor([[2, 3, 1]], dtype=th.long)
+    table = DefinitionTable.from_normal_forms(
+        gci0=gci0,
+        gci1=gci1,
+        n_classes=4,
+        k=2,
+        max_components=4,
+        top_idx=None,
+        bottom_idx=None,
+        enabled=True,
+    )
+    targets = ExistenceTargets(
+        classes=th.zeros(0, dtype=th.long),
+        pairs=th.tensor([[0, 1]], dtype=th.long),
+    )
+    mod = MultiBoxELModule(
+        nb_ont_classes=4,
+        nb_rels=1,
+        embed_dim=2,
+        n_components=2,
+        objective="structural",
+        margin=0.05,
+        max_components=4,
+    )
+    mod.set_structural_tables(table, targets)
+
+    with th.no_grad():
+        # C (0): comp 1 nested in comp 0 around origin
+        mod.class_center.weight[0] = th.tensor([0.0, 0.0, 0.0, 0.0])
+        mod.class_offset.weight[0] = th.tensor([1.0, 1.0, 0.2, 0.2])
+        # Defined class A (1): sentinel garbage in raw embedding rows
+        mod.class_center.weight[1] = th.tensor([-99.0, -99.0, -99.0, -99.0])
+        mod.class_offset.weight[1] = th.tensor([99.0, 99.0, 99.0, 99.0])
+        # X1 (2): comp 0 is [8, 14] x [8, 14] (cen=[11, 11], off=[3, 3]); comp 1 at [50, 50]
+        mod.class_center.weight[2] = th.tensor([11.0, 11.0, 50.0, 50.0])
+        mod.class_offset.weight[2] = th.tensor([3.0, 3.0, 0.5, 0.5])
+        # X2 (3): comp 0 is [10, 16] x [10, 16] (cen=[13, 13], off=[3, 3]); comp 1 at [60, 60]
+        # Intersection X1_0 cap X2_0 = [10, 14]^2 -> cen=[12, 12], w=[2, 2] (ne=4.0)
+        mod.class_center.weight[3] = th.tensor([13.0, 13.0, 60.0, 60.0])
+        mod.class_offset.weight[3] = th.tensor([3.0, 3.0, 0.5, 0.5])
+
+    count = mod.reseed(np.random.default_rng(0))
+    assert count == 1
+    cen_c, off_c = mod.class_boxes(th.tensor([0], dtype=th.long))
+    assert cen_c[0, 1].tolist() == pytest.approx([12.0, 12.0], abs=1e-6)
+    assert off_c[0, 1].tolist() == pytest.approx([1.0, 1.0], abs=1e-6)
+    # Raw row of defined class A is untouched
+    assert mod.class_center.weight[1].tolist() == pytest.approx(
+        [-99.0, -99.0, -99.0, -99.0], abs=1e-6
+    )
+
+
+def test_reseed_class_level_inflation_to_margin() -> None:
+    """Primitive class target with NE(C) < margin has its largest component clamped to >= margin."""
+    mod = MultiBoxELModule(
+        nb_ont_classes=2,
+        nb_rels=1,
+        embed_dim=2,
+        n_components=2,
+        objective="structural",
+        margin=0.05,
+        max_components=4,
+    )
+    table = DefinitionTable.from_normal_forms(
+        gci0=th.zeros((0, 2), dtype=th.long),
+        gci1=th.zeros((0, 3), dtype=th.long),
+        n_classes=2,
+        k=2,
+        max_components=4,
+        top_idx=None,
+        bottom_idx=None,
+        enabled=True,
+    )
+    targets = ExistenceTargets(
+        classes=th.tensor([0, 1], dtype=th.long),
+        pairs=th.zeros((0, 2), dtype=th.long),
+    )
+    mod.set_structural_tables(table, targets)
+
+    with th.no_grad():
+        # Class 0: comp 0 has off=[0.005, 0.08] -> ne=0.01 (< 0.05, largest);
+        # comp 1 has off=[0.002, 0.002] -> ne=0.004
+        mod.class_center.weight[0] = th.tensor([0.0, 0.0, 5.0, 5.0])
+        mod.class_offset.weight[0] = th.tensor([0.005, 0.08, 0.002, 0.002])
+        # Class 1: already satisfies NE >= 0.05 (off=[0.1, 0.1] -> ne=0.2)
+        mod.class_center.weight[1] = th.tensor([0.0, 0.0, 5.0, 5.0])
+        mod.class_offset.weight[1] = th.tensor([0.1, 0.1, 0.1, 0.1])
+
+    count = mod.reseed(np.random.default_rng(0))
+    assert count == 1
+    _, off_c = mod.class_boxes(th.tensor([0], dtype=th.long))
+    # Comp 0 clamped to max(|o|, 0.05) = [0.05, 0.08]; comp 1 untouched
+    assert off_c[0, 0].tolist() == pytest.approx([0.05, 0.08], abs=1e-6)
+    assert off_c[0, 1].tolist() == pytest.approx([0.002, 0.002], abs=1e-6)
+
+
+def test_reseed_uses_dead_slot_at_most_once_per_call() -> None:
+    """A single dead slot on C is used at most once across two violated pairs (C, D1) and (C, D2) in one call."""
+    mod = MultiBoxELModule(
+        nb_ont_classes=3,
+        nb_rels=1,
+        embed_dim=2,
+        n_components=2,
+        objective="structural",
+        margin=0.05,
+        max_components=4,
+    )
+    table = DefinitionTable.from_normal_forms(
+        gci0=th.zeros((0, 2), dtype=th.long),
+        gci1=th.zeros((0, 3), dtype=th.long),
+        n_classes=3,
+        k=2,
+        max_components=4,
+        top_idx=None,
+        bottom_idx=None,
+        enabled=True,
+    )
+    targets = ExistenceTargets(
+        classes=th.zeros(0, dtype=th.long),
+        pairs=th.tensor([[0, 1], [0, 2]], dtype=th.long),
+    )
+    mod.set_structural_tables(table, targets)
+
+    with th.no_grad():
+        # Class 0 (C): 1 live slot + 1 dead slot (comp 1 nested in comp 0)
+        mod.class_center.weight[0] = th.tensor([0.0, 0.0, 0.0, 0.0])
+        mod.class_offset.weight[0] = th.tensor([1.0, 1.0, 0.3, 0.3])
+        # Class 1 (D1): 2 live non-nested slots, no dead slots
+        mod.class_center.weight[1] = th.tensor([10.0, 10.0, 15.0, 15.0])
+        mod.class_offset.weight[1] = th.tensor([1.0, 1.0, 1.0, 1.0])
+        # Class 2 (D2): 2 live non-nested slots, no dead slots
+        mod.class_center.weight[2] = th.tensor([-10.0, -10.0, -15.0, -15.0])
+        mod.class_offset.weight[2] = th.tensor([2.0, 2.0, 1.0, 1.0])
+
+    count = mod.reseed(np.random.default_rng(7))
+    assert count == 1
+    assert mod.last_reseed_count == 1
+    cen_c, _ = mod.class_boxes(th.tensor([0], dtype=th.long))
+    # Comp 0 of C was live and must remain at [0, 0]
+    assert cen_c[0, 0].tolist() == pytest.approx([0.0, 0.0], abs=1e-6)
+    # Comp 1 of C moved to either D1's or D2's largest slot
+    assert cen_c[0, 1].tolist() in (
+        pytest.approx([10.0, 10.0], abs=1e-6),
+        pytest.approx([-10.0, -10.0], abs=1e-6),
+    )

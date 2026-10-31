@@ -37,6 +37,12 @@ class MultiBoxEL(EmbeddingELModel):
       after module construction; when ``anchor_weight > 0``,
       :meth:`get_regularization_loss` adds
       ``anchor_weight * init_boxes.anchor_loss(self.module)``.
+    - **Negative sampling under ``objective="structural"``:** Negative sampling
+      stays enabled by default under ``objective="structural"`` for ``gci2`` and
+      ``object_property_assertion`` (``neg_capable_gcis``) exactly as under
+      ``objective="axiom"``, with ``gci2`` and ``object_property_assertion``
+      negative scores evaluated using ``self.margin`` as ``gamma`` (and masked
+      active non-empty slots in ``gci2``).
 
     Non-guarantees:
     - Gradient-based training is non-convex and is not guaranteed to reach a
@@ -112,12 +118,15 @@ class MultiBoxEL(EmbeddingELModel):
         Weight for the pairwise component volume overlap regulariser.
     tau : float, optional
         Optional alias for ``tau_start`` when setting a fixed temperature.
-    objective : {"axiom", "point", "mixed", "hybrid"}, default "axiom"
-        Training objective mode (``"axiom"``, ``"point"``, ``"mixed"``, or
-        ``"hybrid"``). Under ``objective="point"`` and ``"mixed"``, ABox
-        ``class_assertion`` is still trained in the main loop via
-        :math:`-\\log m_C(a)` while ``object_property_assertion`` is zeroed
-        (handled via ``point_role_loss``).
+    objective : {"axiom", "point", "mixed", "hybrid", "structural"}, default "axiom"
+        Training objective mode (``"axiom"``, ``"point"``, ``"mixed"``,
+        ``"hybrid"``, or ``"structural"``). Under ``objective="point"`` and
+        ``"mixed"``, ABox ``class_assertion`` is still trained in the main loop
+        via :math:`-\\log m_C(a)` while ``object_property_assertion`` is zeroed
+        (handled via ``point_role_loss``). Under ``objective="structural"``,
+        negative sampling stays enabled exactly as under ``"axiom"`` (scoring
+        ``gci2`` and ``object_property_assertion`` negatives with ``margin`` as
+        ``gamma``).
     beta : float, default 0.1
         Temperature :math:`\\beta > 0` for the sigmoid boundary of soft box
         membership under ``objective="point"``, ``"mixed"``, or ``"hybrid"``.
@@ -135,7 +144,30 @@ class MultiBoxEL(EmbeddingELModel):
     points_seed : int, default 0
         Base random seed for :class:`~mowl.datasets.el.points.PointSupervision`
         construction and per-epoch sampling under ``objective="point"``,
-        ``"mixed"``, or ``"hybrid"``.
+        ``"mixed"``, or ``"hybrid"``, and for per-epoch re-seeding under
+        ``objective="structural"``.
+    max_components : int, optional, default None
+        Maximum component slots :math:`K \\ge k` per class under
+        ``objective="structural"``; defaults to ``n_components ** 2`` when ``None``.
+    structural_definitions : bool, default True
+        Whether ``objective="structural"`` compiles acyclic binary conjunction
+        definitions :math:`A \\equiv X \\sqcap Y` via
+        :class:`~mowl.nn.el.structural.DefinitionTable`.
+    existence_weight : float, default 1.0
+        Non-negative weight multiplying :func:`~mowl.nn.el.structural.existence_loss`
+        under ``objective="structural"``.
+    size_reg : float, default 1e-3
+        Non-negative weight multiplying the primitive box width regulariser
+        ``mean(2 * |offset|)`` under ``objective="structural"``.
+    reseed_every : int, default 0
+        Epoch interval for heuristic discrete re-seeding
+        (:meth:`~mowl.nn.MultiBoxELModule.reseed`) under
+        ``objective="structural"`` (``0`` disables re-seeding).
+    canonical_model : mowl.geometric.completion.CanonicalModel, optional, default None
+        Optional pre-computed :class:`~mowl.geometric.completion.CanonicalModel`
+        used to determine semantic satisfiability in
+        :meth:`~mowl.nn.el.structural.ExistenceTargets.from_normal_forms` under
+        ``objective="structural"``.
 
     References
     ----------
@@ -397,7 +429,7 @@ class MultiBoxEL(EmbeddingELModel):
         - Returns an empty dict ``{}`` when ``objective in ("point", "mixed")`` and
           ``neg_sampling_gcis is None``.
         - Delegates to ``super().get_negative_sampling_config()`` otherwise (including
-          ``"axiom"`` and ``"hybrid"``).
+          ``"axiom"``, ``"hybrid"``, and ``"structural"``).
 
         Non-guarantees:
         - Does not disable GCI negative sampling if the caller explicitly passed
@@ -419,6 +451,8 @@ class MultiBoxEL(EmbeddingELModel):
         - When ``tau_anneal=True`` and ``epochs > 1``, sets
           ``module.tau = tau_start * (tau_end / tau_start) ** (epoch / (epochs - 1))``
           so epoch ``0`` uses ``tau_start`` and epoch ``epochs - 1`` uses ``tau_end``.
+        - When ``tau_anneal=False``, leaves ``self.tau`` and ``self.module.tau``
+          unchanged.
         - Under ``objective="structural"``, calls
           ``module.reseed(np.random.default_rng(points_seed + epoch))`` when
           ``reseed_every > 0 and epoch > 0 and epoch % reseed_every == 0``.
@@ -498,7 +532,40 @@ class MultiBoxEL(EmbeddingELModel):
         return loss
 
     def train(self, epochs, validate_every=1, epoch_callback=None):
-        """Build structural tables when ``objective='structural'``, then run the training loop."""
+        """Build structural tables when ``objective='structural'``, then run the training loop.
+
+        Guarantees:
+
+        - When ``objective="structural"``, compiles a
+          :class:`~mowl.nn.el.structural.DefinitionTable` and
+          :class:`~mowl.nn.el.structural.ExistenceTargets` from CPU training
+          normal-form tensors and attaches them via
+          :meth:`~mowl.nn.MultiBoxELModule.set_structural_tables` before
+          delegating to ``super().train(...)``.
+        - Raises :class:`ValueError` if any required training GCI tensor has
+          fewer columns than expected by its normal form.
+        - When ``objective != "structural"``, delegates directly to
+          ``super().train(...)``.
+
+        Non-guarantees:
+
+        - Gradient-based training is non-convex and is not guaranteed to reach a
+          global minimum from arbitrary random initialisations.
+
+        Parameters
+        ----------
+        epochs : int
+            Number of training epochs.
+        validate_every : int, default 1
+            Validation frequency in epochs.
+        epoch_callback : callable, optional
+            Optional callback ``(epoch, train_loss, val_loss) -> Optional[bool]``.
+
+        Returns
+        -------
+        int
+            Result returned by :meth:`~mowl.base_models.elmodel.EmbeddingELModel.train`.
+        """
         if self.objective == "structural":
             ds_dict = self.training_datasets
 
@@ -509,9 +576,11 @@ class MultiBoxEL(EmbeddingELModel):
                 rows = ds[:].detach().cpu().to(th.long)
                 if rows.ndim == 1:
                     rows = rows.unsqueeze(0)
-                if rows.shape[1] >= cols:
-                    return rows[:, :cols].contiguous()
-                return rows.reshape(-1, cols)
+                if rows.shape[1] < cols:
+                    raise ValueError(
+                        f"Training dataset {name!r} has {rows.shape[1]} columns, expected at least {cols}."
+                    )
+                return rows[:, :cols].contiguous()
 
             gci0 = _extract_rows("gci0", 2)
             gci0_bot = _extract_rows("gci0_bot", 2)

@@ -257,7 +257,7 @@ def prism_intersection(
 
     Returns
     -------
-    Tuple[torch.Tensor, torch.Tensor, th.Tensor]
+    Tuple[torch.Tensor, torch.Tensor, torch.Tensor]
         Tuple ``(h, lower, upper)`` of intersection support values and box bounds.
     """
     c1, o1 = b1
@@ -676,8 +676,12 @@ def gci2_score_neg_prisms(
       :math:`\\text{relu}(\\sum_k h_{C,k} / 3)` from ``c.h``.
 
     Non-guarantees:
-    - Measures separation violation (zero when close, positive when separated)
-      for downstream negative-sampling losses.
+    - Passes ``torch.abs(c.w)`` and ``torch.abs(d.w)`` to :func:`gci2_score_neg`
+      and, when ``rc is None``, clamps the recovered inradius via
+      :math:`\\text{relu}(\\sum_k h_{C,k} / 3)`, so empty defined prisms with
+      negative signed box widths or negative support sum are not gated out.
+    - Returns an unsquared proximity score (not a standalone loss; callers pair
+      it with a target of ``1`` in ``MSE(neg_scores.mean(), 1)``).
 
     Parameters
     ----------
@@ -1019,9 +1023,16 @@ def class_assertion_score_prisms(
       inside the box with centre ``c.cen`` and half-width ``|c.w|``.
 
     Non-guarantees:
-    - Passes ``torch.abs(c.w)`` to :func:`prism_inclusion_score`, so negative
-      signed box half-widths are treated by their magnitude unless ``c.w`` is
-      non-negative.
+    - Does not gate out empty class prisms (:math:`\\sum_k h_{C,k} < 0` or
+      :math:`w_{C,m} < 0`): passes ``torch.abs(c.w)`` to
+      :func:`prism_inclusion_score`, so a defined class with a negative signed
+      box half-width :math:`w_{C,m} < 0` is treated as having positive half-width
+      :math:`|w_{C,m}|` unless ``c`` is non-empty (enforced separately by
+      ``existence_loss``).
+    - At ``margin > 0``, because :math:`\\sum_k n_k = 0`, at least one triangle
+      support coordinate of :math:`x_a - c_C` is non-negative, so a point
+      individual can only achieve ``0`` when the triangle inradius of :math:`C`
+      is at least ``margin``.
 
     Parameters
     ----------
@@ -1097,7 +1108,7 @@ def class_assertion_loss(
 
 
 def gci0_structural(c: PrismRegions, d: PrismRegions, margin: float) -> th.Tensor:
-    """Compute the structural GCI0 loss :math:`[\\text{ne}(C) > 0]^{\\text{det}} \\cdot \\text{prism\\_inclusion\\_score}(C, D, m)^2`.
+    """Compute the structural GCI0 loss as the gated squared-hinge sum on signed widths (equivalent to ``prism_inclusion_score(C, D, m)**2`` for non-negative widths).
 
     Uses signed half-widths :math:`w_C, w_D` directly inside the inclusion violation
     :math:`\\text{relu}(|b_C - b_D| + w_C - w_D + m)` (matching ``w_C >= 0`` whenever
@@ -1172,7 +1183,7 @@ def gci1_structural(
     margin: float,
     masked: Optional[th.Tensor] = None,
 ) -> th.Tensor:
-    """Compute the structural GCI1 loss :math:`[\\text{ne}(C \\cap D) > 0]^{\\text{det}} \\cdot \\text{prism\\_inclusion\\_score}(C \\cap D, E, m)^2`.
+    """Compute the structural GCI1 loss on :math:`I = C \\cap D` as the gated squared-hinge sum on signed widths (equivalent to ``prism_inclusion_score(C cap D, E, m)**2`` for non-negative widths).
 
     Guarantees:
     - Returns a 1-D tensor of shape ``(B,)``.

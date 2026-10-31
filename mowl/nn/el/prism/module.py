@@ -50,6 +50,30 @@ class PrismModule(ELModule):
       (``role_axiom_capable = False``).
     - Negative sampling is only supported for ``gci2`` and
       ``object_property_assertion`` (``neg_capable_gcis``).
+
+    Parameters
+    ----------
+    nb_ont_classes : int
+        Number of ontology classes.
+    nb_rels : int
+        Number of object properties (roles).
+    nb_inds : Optional[int], default None
+        Number of individuals (ABox).
+    embed_dim : int, default 50
+        Ambient Euclidean dimension :math:`d \\ge 3`.
+    margin : float, default 0.1
+        Inclusion and separation margin.
+    objective : {"axiom", "structural"}, default "axiom"
+        Training objective mode: ``"axiom"`` or ``"structural"``.
+    max_depth : int, default 8
+        Maximum conjunction definition depth :math:`\\text{max\\_level}` under
+        ``objective="structural"``.
+    existence_weight : float, default 1.0
+        Non-negative weight multiplying :func:`~mowl.nn.el.structural.existence_loss`
+        in :meth:`structural_extra_loss`.
+    size_reg : float, default 1e-3
+        Non-negative weight multiplying the primitive prism size regulariser
+        ``mean([|r|, 2|o|])`` in :meth:`structural_extra_loss`.
     """
 
     neg_capable_gcis = frozenset({"gci2", "object_property_assertion"})

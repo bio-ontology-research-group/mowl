@@ -114,10 +114,10 @@ class MultiBoxELModule(ELModule):
         Weight for the pairwise component volume overlap regulariser
         :func:`~mowl.nn.el.softagg.diversity_penalty`.
     objective : str, default "axiom"
-        Training objective mode: ``"axiom"``, ``"point"``, ``"mixed"``, or
-        ``"hybrid"``. Under ``objective="point"`` and ``"mixed"``, ABox
-        ``class_assertion`` is still trained in the main loop via
-        :math:`-\\log m_C(a)` while ``object_property_assertion`` is zeroed
+        Training objective mode: ``"axiom"``, ``"point"``, ``"mixed"``,
+        ``"hybrid"``, or ``"structural"``. Under ``objective="point"`` and
+        ``"mixed"``, ABox ``class_assertion`` is still trained in the main loop
+        via :math:`-\\log m_C(a)` while ``object_property_assertion`` is zeroed
         (handled via :meth:`point_role_loss`).
     beta : float, default 0.1
         Sigmoid temperature :math:`\\beta > 0` for soft box membership under
@@ -132,6 +132,25 @@ class MultiBoxELModule(ELModule):
         Virtual box half-width around individual targets in role pairs under
         ``objective="point"``, ``"mixed"``, or ``"hybrid"``; defaults to
         ``5.0 * beta``.
+    margin : float, default 0.02
+        Tightening margin :math:`m` used by ``objective="structural"`` for GCI
+        inclusions, ``gci1_bot`` separation, and :func:`~mowl.nn.el.structural.existence_loss`.
+    max_components : int, optional, default None
+        Maximum component slots :math:`K \\ge k` per class under
+        ``objective="structural"``; defaults to ``n_components ** 2`` when ``None``.
+    structural_definitions : bool, default True
+        Whether ``objective="structural"`` compiles acyclic conjunction
+        definitions :math:`A \\equiv X \\sqcap Y` via
+        :class:`~mowl.nn.el.structural.DefinitionTable`.
+    existence_weight : float, default 1.0
+        Non-negative weight on :func:`~mowl.nn.el.structural.existence_loss` in
+        :meth:`structural_extra_loss`.
+    size_reg : float, default 1e-3
+        Non-negative weight on the primitive side-length regulariser
+        ``mean(2 * |offset|)`` in :meth:`structural_extra_loss`.
+    reseed_every : int, default 0
+        Epoch interval for heuristic discrete re-seeding (:meth:`reseed`) under
+        ``objective="structural"`` (``0`` disables re-seeding).
 
     References
     ----------
@@ -1030,6 +1049,16 @@ class MultiBoxELModule(ELModule):
         )
 
     def gci0_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
+        """Compute GCI0 loss (:math:`C \\sqsubseteq D`), dispatching to :func:`~mowl.nn.el.structural.gci0_structural` under ``objective="structural"``.
+
+        Guarantees:
+        - Under ``objective="structural"``, masks out defining rows from
+          ``self.definition_table`` to exact ``0.0``.
+
+        Non-guarantees:
+        - Under ``objective="structural"``, vacuously ``0.0`` when :math:`C` has
+          no active non-empty slots.
+        """
         if self.objective == "structural":
             r_c = self.class_regions(data[:, 0])
             r_d = self.class_regions(data[:, 1])
@@ -1052,6 +1081,7 @@ class MultiBoxELModule(ELModule):
         )
 
     def gci0_bot_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
+        """Compute GCI0-bot loss (:math:`C \\sqsubseteq \\bot`), dispatching to :func:`~mowl.nn.el.structural.gci0_bot_structural` under ``objective="structural"``."""
         if self.objective == "structural":
             r_c = self.class_regions(data[:, 0])
             return gci0_bot_structural(r_c)
@@ -1067,6 +1097,7 @@ class MultiBoxELModule(ELModule):
         )
 
     def gci1_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
+        """Compute GCI1 loss (:math:`C \\sqcap D \\sqsubseteq E`), dispatching to :func:`~mowl.nn.el.structural.gci1_structural` under ``objective="structural"``."""
         if self.objective == "structural":
             r_c = self.class_regions(data[:, 0])
             r_d = self.class_regions(data[:, 1])
@@ -1091,6 +1122,24 @@ class MultiBoxELModule(ELModule):
         )
 
     def gci1_bot_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
+        """Compute GCI1-bot loss (:math:`C \\sqcap D \\sqsubseteq \\bot`).
+
+        Under ``objective="structural"``, gates active slots of :math:`C` and
+        :math:`D` by detached non-emptiness
+        (``r.active & (nonempty_measure(r.w.detach()) > 0.0)``) before calling
+        :func:`~mowl.nn.el.structural.gci1_bot_structural`.
+
+        Guarantees:
+        - At ``margin = 0``, the ``ne > 0`` slot gate has the identical zero set
+          to gating on ``active`` alone (every pair of non-empty active slots is
+          disjoint up to boundary contact).
+
+        Non-guarantees:
+        - Deviates from design §4 (which gates on ``active`` alone) at
+          ``margin > 0``: empty computed slots (e.g. from defined classes) with
+          :math:`-\\text{margin} < \\text{ne} \\le 0` are gated out rather than
+          pushed below :math:`-\\text{margin}`.
+        """
         if self.objective == "structural":
             r_c = self.class_regions(data[:, 0])
             r_d = self.class_regions(data[:, 1])
@@ -1115,6 +1164,21 @@ class MultiBoxELModule(ELModule):
         )
 
     def gci2_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
+        """Compute GCI2 loss (:math:`C \\sqsubseteq \\exists r.D`), masking inactive or empty slots under ``objective="structural"``.
+
+        Guarantees:
+        - Under ``objective="structural"``, evaluates :func:`~mowl.nn.el.multiboxel.losses.gci2_score`
+          (or :func:`~mowl.nn.el.multiboxel.losses.gci2_score_neg` when ``neg=True``)
+          with ``gamma = self.margin``, ``aggregation="hard"``, and slot masks
+          ``active & (ne(w) > 0)``.
+
+        Non-guarantees:
+        - Under ``objective="structural"``, when every target slot of :math:`D`
+          is masked out (an all-empty, i.e. unsatisfiable, target :math:`D`),
+          the target minimum term in :func:`~mowl.nn.el.multiboxel.losses.gci2_score`
+          returns ``0.0`` (and when every source slot of :math:`C` is also
+          masked out, the positive score is vacuously ``0.0``).
+        """
         if self.objective == "structural":
             r_c = self.class_regions(data[:, 0])
             r_d = self.class_regions(data[:, 2])
@@ -1165,6 +1229,20 @@ class MultiBoxELModule(ELModule):
         )
 
     def gci3_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
+        """Compute GCI3 loss (:math:`\\exists r.C \\sqsubseteq D`), masking inactive or empty target slots under ``objective="structural"``.
+
+        Guarantees:
+        - Under ``objective="structural"``, evaluates the squared
+          :func:`~mowl.nn.el.multiboxel.losses.gci3_score_boxes` with
+          ``gamma = self.margin``, ``aggregation="hard"``, and target mask
+          ``r_d.active & (ne(r_d.w) > 0)``.
+
+        Non-guarantees:
+        - Under ``objective="structural"``, returns ``0.0`` when every target
+          slot of :math:`D` is masked out (an all-empty, i.e. unsatisfiable,
+          target makes :math:`\\exists r.C \\sqsubseteq D` vacuously ``0`` unless
+          :math:`D` is forced non-empty by ``existence_loss``).
+        """
         if self.objective == "structural":
             r_d = self.class_regions(data[:, 2])
             act_d = r_d.active & (nonempty_measure(r_d.w) > 0.0)
@@ -1201,18 +1279,10 @@ class MultiBoxELModule(ELModule):
         )
 
     def gci3_bot_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
+        """Compute GCI3-bot loss (:math:`\\exists r.C \\sqsubseteq \\bot`) via :func:`~mowl.nn.el.multiboxel.losses.gci3_bot_score_boxes`."""
         if self.objective == "structural":
-            if data.ndim == 2 and data.shape[1] >= 2:
-                r_c = self.class_regions(data[:, 1])
-                act_c = r_c.active & (nonempty_measure(r_c.w) > 0.0)
-                cen_c, off_c = r_c.cen, th.abs(r_c.w)
-            else:
-                cen_c, off_c, act_c = None, None, None
             off_head = th.abs(self.head_offset(data[:, 0]))
             return L.gci3_bot_score_boxes(
-                cen_c,
-                off_c,
-                act_c,
                 off_head,
                 aggregation="hard",
                 tau=self.tau,
@@ -1228,6 +1298,20 @@ class MultiBoxELModule(ELModule):
         )
 
     def class_assertion_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
+        """Compute class assertion loss (:math:`C(a)`), masking inactive or empty class slots under ``objective="structural"``.
+
+        Guarantees:
+        - Under ``objective="structural"``, evaluates
+          :func:`~mowl.nn.el.multiboxel.losses.class_assertion_score_boxes` with
+          ``gamma = self.margin``, ``aggregation="hard"``, and class mask
+          ``r_c.active & (ne(r_c.w) > 0)``.
+
+        Non-guarantees:
+        - Under ``objective="structural"``, returns ``0.0`` when every slot of
+          class :math:`C` is masked out (an all-empty, i.e. unsatisfiable, class
+          makes :math:`C(a)` vacuously ``0`` unless :math:`C` is forced
+          non-empty by ``existence_loss``).
+        """
         if self.objective == "structural":
             if self.ind_center is None or self.ind_offset is None:
                 raise ValueError(
@@ -1269,6 +1353,7 @@ class MultiBoxELModule(ELModule):
     def object_property_assertion_loss(
         self, data: th.Tensor, neg: bool = False
     ) -> th.Tensor:
+        """Compute object property assertion loss (:math:`r(a, b)`), using ``gamma = self.margin`` under ``objective="structural"``."""
         if self.objective == "structural":
             if (
                 self.ind_center is None

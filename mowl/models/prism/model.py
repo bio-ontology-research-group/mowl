@@ -68,6 +68,28 @@ class PrismEL(EmbeddingELModel):
     neg_sampling_gcis : list of str, optional
         Explicit list of GCI names for negative sampling, or ``None`` to use
         the module's ``neg_capable_gcis``.
+    objective : {"axiom", "structural"}, default "axiom"
+        Training objective mode (``"axiom"`` or ``"structural"``). Under
+        ``objective="structural"``, :meth:`compute_loss` averages the already-squared
+        structural GCI losses directly (without an outer squaring) while keeping
+        negative sampling enabled for ``gci2`` and ``object_property_assertion``.
+    max_depth : int, default 8
+        Maximum definition level :math:`\\text{max\\_level}` passed to
+        :meth:`~mowl.nn.el.structural.DefinitionTable.from_normal_forms` under
+        ``objective="structural"``.
+    existence_weight : float, default 1.0
+        Non-negative weight multiplying :func:`~mowl.nn.el.structural.existence_loss`
+        in :meth:`~mowl.nn.PrismModule.structural_extra_loss` under
+        ``objective="structural"``.
+    size_reg : float, default 1e-3
+        Non-negative weight multiplying the primitive prism size regulariser
+        ``mean([|r|, 2|o|])`` in :meth:`~mowl.nn.PrismModule.structural_extra_loss`
+        under ``objective="structural"``.
+    canonical_model : mowl.geometric.completion.CanonicalModel, optional, default None
+        Optional pre-computed :class:`~mowl.geometric.completion.CanonicalModel`
+        used to determine semantic satisfiability in
+        :meth:`~mowl.nn.el.structural.ExistenceTargets.from_normal_forms` under
+        ``objective="structural"``.
     """
 
     def __init__(

@@ -841,8 +841,9 @@ with :math:`m \ge 0.5` and hard negatives with :math:`m < 0.5`):
 Structural objective on :math:`T_3`
 -----------------------------------
 
-Setting ``objective="structural"`` on :class:`~mowl.models.MultiBoxEL` (or
-:class:`~mowl.models.PrismEL`) compiles acyclic binary conjunction definitions
+Setting ``objective="structural"`` on :class:`~mowl.models.MultiBoxEL` (default
+``margin=0.02``, ``reseed_every=0``) or :class:`~mowl.models.PrismEL` (default
+``margin=0.1``) compiles acyclic binary conjunction definitions
 :math:`A \equiv X \sqcap Y` from the normalised ``gci0`` and ``gci1`` axioms into
 :attr:`~mowl.nn.MultiBoxELModule.definition_table`
 (:class:`~mowl.nn.el.structural.DefinitionTable`), materialises every class as

@@ -23,12 +23,15 @@ Provides the building blocks for the ``objective="structural"`` formulation of
 
 Guarantees:
 - **Zero-loss faithfulness at margin 0:** With ``enabled=True`` on
-  :class:`DefinitionTable`, at ``margin = 0``, the sum of
+  :class:`DefinitionTable`, at ``margin = 0``, zero sum of
   :func:`gci0_structural`, :func:`gci0_bot_structural`, :func:`gci1_structural`,
-  :func:`gci1_bot_structural`, and :func:`existence_loss` is ``0`` if and only if
-  the materialised regions satisfy all box normal forms set-theoretically and
+  :func:`gci1_bot_structural`, and :func:`existence_loss` implies that the
+  materialised regions form a geometric model of the box normal forms in which
   every target class and target conjunction pair has a non-empty intersection
-  (up to boundary contact :math:`w_m = 0`).
+  (up to boundary contact :math:`w_m = 0`); the converse holds when every
+  active non-empty source slot (in :func:`gci0_structural`) or pair slot (in
+  :func:`gci1_structural`) is covered by a single active target slot (see the
+  Non-guarantees below).
 - **Single-coordinate disjointness in :func:`gci1_bot_structural`:** Two active
   component boxes separated by at least ``margin`` in *at least one* coordinate
   incur zero loss, even when their projections overlap in all remaining
@@ -735,6 +738,10 @@ class DefinitionTable:
           dependency cycles deterministically in increasing class index.
 
         Non-guarantees:
+        - When the ready queue empties while undecided candidates remain, the
+          cycle break rejects the lowest-index ``UNDECIDED`` candidate; that
+          candidate may sit downstream of a cycle rather than on the cycle
+          itself (deterministic, possibly lossy).
         - Rejected candidates remain primitive and their ``gci0``/``gci1`` rows
           are not masked.
 
