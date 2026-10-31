@@ -431,6 +431,81 @@ def test_definition_table_disabled() -> None:
     assert not bool(table.masked_gci1(gci1).any())
 
 
+def test_definition_table_role_auxiliary_pizza_style() -> None:
+    """Pizza-style normal forms (A <= X, A <= exists r.C, exists r.C <= Aux, X cap Aux <= A)
+    -> A defined with definers (X, Aux), masked rows = {(A,X) gci0, (X,Aux,A)/(Aux,X,A) gci1}
+    and gci2/gci3 rows are NOT masked.
+    """
+    # Indices: 0:A, 1:X, 2:C, 3:Aux, 4:Other
+    # Normal forms of A == X cap exists r.C:
+    # gci0: A <= X (0, 1), plus an unrelated row Other <= X (4, 1)
+    # gci2: A <= exists r0.C (0, 0, 2)
+    # gci3: exists r0.C <= Aux (0, 2, 3)
+    # gci1: X cap Aux <= A (1, 3, 0), plus an unrelated row C cap Other <= X (2, 4, 1)
+    gci0 = th.tensor([[0, 1], [4, 1]], dtype=th.long)
+    gci1 = th.tensor([[1, 3, 0], [2, 4, 1]], dtype=th.long)
+    gci2 = th.tensor([[0, 0, 2]], dtype=th.long)
+    gci3 = th.tensor([[0, 2, 3]], dtype=th.long)
+
+    # Without gci2/gci3, A is not detected because (A, Aux) is not in gci0
+    table_no_roles = DefinitionTable.from_normal_forms(
+        gci0=gci0,
+        gci1=gci1,
+        n_classes=5,
+        k=2,
+        max_components=16,
+        top_idx=None,
+        bottom_idx=None,
+        enabled=True,
+    )
+    assert table_no_roles.n_defined == 0
+
+    # Mismatched role or filler in gci3 does not trigger definition
+    table_mismatch = DefinitionTable.from_normal_forms(
+        gci0=gci0,
+        gci1=gci1,
+        n_classes=5,
+        k=2,
+        max_components=16,
+        top_idx=None,
+        bottom_idx=None,
+        enabled=True,
+        gci2=gci2,
+        gci3=th.tensor([[1, 2, 3]], dtype=th.long),
+    )
+    assert table_mismatch.n_defined == 0
+
+    # With matching gci2 (A, r, C) and gci3 (r, C, Aux), A is defined with definers (X, Aux)
+    table = DefinitionTable.from_normal_forms(
+        gci0=gci0,
+        gci1=gci1,
+        n_classes=5,
+        k=2,
+        max_components=16,
+        top_idx=None,
+        bottom_idx=None,
+        enabled=True,
+        gci2=gci2,
+        gci3=gci3,
+    )
+    assert table.n_defined == 1
+    assert table.max_level == 1
+    assert table.def_mask.tolist() == [True, False, False, False, False]
+    assert table.def_x[0].item() == 1
+    assert table.def_y[0].item() == 3
+    assert table.level.tolist() == [1, 0, 0, 0, 0]
+    assert table.comps.tolist() == [4, 2, 2, 2, 2]
+
+    # Masked gci0 rows: (A, X) is masked, (Other, X) is not
+    assert table.masked_gci0(gci0).tolist() == [True, False]
+    # Masked gci1 rows: both (X, Aux, A) and (Aux, X, A) are masked, (C, Other, X) is not
+    assert table.masked_gci1(gci1).tolist() == [True, False]
+    assert table.masked_gci1(th.tensor([[3, 1, 0]], dtype=th.long)).tolist() == [True]
+    # gci2 and gci3 rows are never masked by DefinitionTable
+    assert not hasattr(table, "masked_gci2")
+    assert not hasattr(table, "masked_gci3")
+
+
 def test_existence_targets_asserted_rule() -> None:
     """Without cm: classes without gci0_bot and gci1 pairs without gci1_bot (excluding top/bot)."""
     # Classes: 0:A, 1:B, 2:C, 3:Unsat, 4:TOP, 5:BOT

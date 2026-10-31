@@ -93,8 +93,9 @@ class PrismEL(EmbeddingELModel):
         ``objective="structural"``.
     structural_definitions : bool, default True
         Whether ``objective="structural"`` compiles acyclic binary conjunction
-        definitions :math:`A \\equiv X \\sqcap Y` via
-        :class:`~mowl.nn.el.structural.DefinitionTable`.
+        definitions :math:`A \\equiv X \\sqcap Y` (including through role
+        auxiliaries :math:`A \\sqsubseteq \\exists r.C \\sqsubseteq \\text{Aux}`)
+        via :class:`~mowl.nn.el.structural.DefinitionTable`.
     existence_weight : float, default 1.0
         Non-negative weight multiplying :func:`~mowl.nn.el.structural.existence_loss`
         in :meth:`~mowl.nn.PrismModule.structural_extra_loss` under

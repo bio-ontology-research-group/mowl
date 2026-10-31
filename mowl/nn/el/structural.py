@@ -672,12 +672,15 @@ class DefinitionTable:
       and ``level[a] <= max_level`` (when a bound was passed to :meth:`from_normal_forms`).
     - :meth:`masked_gci0` marks exactly the rows ``(A, X)`` and ``(A, Y)`` of
       accepted definitions :math:`A \\to (X, Y)`, and :meth:`masked_gci1` marks
-      ``(X, Y, A)`` and ``(Y, X, A)``.
+      ``(X, Y, A)`` and ``(Y, X, A)``; ``gci2`` and ``gci3`` rows are never
+      masked (they continue to train the role auxiliary's region).
 
     Non-guarantees:
-    - Only compiles binary conjunction definitions witnessed simultaneously by
-      ``(A, X)``, ``(A, Y)`` in ``gci0`` and ``(X, Y, A)`` in ``gci1``; role
-      definitions (:math:`A \\equiv \\exists r.B`) remain primitive.
+    - Only compiles binary conjunction definitions :math:`A \\equiv X \\sqcap Y`
+      where each inclusion :math:`A \\sqsubseteq D` (:math:`D \\in \\{X, Y\\}`) is
+      witnessed either directly in ``gci0`` or via a single role-auxiliary step
+      :math:`A \\sqsubseteq \\exists r.C \\sqsubseteq D` in ``gci2`` + ``gci3``;
+      pure role equivalences (:math:`A \\equiv \\exists r.B`) remain primitive.
 
     Attributes
     ----------
@@ -724,16 +727,22 @@ class DefinitionTable:
         bottom_idx: Optional[int],
         enabled: bool = True,
         max_level: Optional[int] = None,
+        gci2: Optional[th.Tensor] = None,
+        gci3: Optional[th.Tensor] = None,
     ) -> DefinitionTable:
-        """Build a :class:`DefinitionTable` from ``gci0`` and ``gci1`` normal-form index tensors.
+        """Build a :class:`DefinitionTable` from ``gci0`` and ``gci1`` (and optional ``gci2``/``gci3``) normal-form index tensors.
 
         Guarantees:
         - When ``enabled=False``, every class is primitive (``n_defined == 0``,
           ``max_level == 0``, ``comps == k``) and no rows are masked.
         - Candidate definers for ``A`` are the lexicographically smallest
           ``(min(X, Y), max(X, Y))`` with ``X != Y``, ``A not in {X, Y}``,
-          none of ``A, X, Y`` in ``{top_idx, bottom_idx}``, ``(A, X)`` and
-          ``(A, Y)`` in ``gci0``, and ``(X, Y, A)`` in ``gci1``.
+          none of ``A, X, Y`` in ``{top_idx, bottom_idx}``, ``(X, Y, A)`` in
+          ``gci1``, and each required inclusion ``(A, D)`` for ``D in {X, Y}``
+          present either directly in ``gci0`` or through a role auxiliary via a
+          ``gci2`` row ``(A, r, C)`` and a ``gci3`` row ``(r, C, D)`` (same ``r``
+          and ``C``, i.e. :math:`A \\sqsubseteq \\exists r.C \\sqsubseteq D` is
+          entailed).
         - Candidates are accepted iff acyclic, ``comps(X) * comps(Y) <= max_components``,
           and ``level(A) <= max_level`` (when ``max_level is not None``), breaking
           dependency cycles deterministically in increasing class index.
@@ -744,7 +753,7 @@ class DefinitionTable:
           candidate may sit downstream of a cycle rather than on the cycle
           itself (deterministic, possibly lossy).
         - Rejected candidates remain primitive and their ``gci0``/``gci1`` rows
-          are not masked.
+          are not masked; ``gci2`` and ``gci3`` rows are never masked.
 
         Parameters
         ----------
@@ -766,6 +775,12 @@ class DefinitionTable:
             If ``False``, disables structural definitions (all classes primitive).
         max_level : Optional[int], default None
             Optional maximum definition level cap (``None`` for unbounded).
+        gci2 : Optional[torch.Tensor], default None
+            Optional long tensor of shape ``(N2, 3)`` with rows ``(C, r, D)`` for
+            :math:`C \\sqsubseteq \\exists r.D` (matching :class:`~mowl.datasets.el.GCI2Dataset`).
+        gci3 : Optional[torch.Tensor], default None
+            Optional long tensor of shape ``(N3, 3)`` with rows ``(r, C, D)`` for
+            :math:`\\exists r.C \\sqsubseteq D` (matching :class:`~mowl.datasets.el.GCI3Dataset`).
 
         Returns
         -------
@@ -799,6 +814,21 @@ class DefinitionTable:
         if gci0 is not None and gci0.numel() > 0:
             for row in gci0.detach().cpu().reshape(-1, 2).tolist():
                 gci0_set.add((int(row[0]), int(row[1])))
+
+        if (
+            gci2 is not None
+            and gci2.numel() > 0
+            and gci3 is not None
+            and gci3.numel() > 0
+        ):
+            rc_to_a: Dict[Tuple[int, int], List[int]] = {}
+            for row in gci2.detach().cpu().reshape(-1, 3).tolist():
+                a_i, r_i, c_i = int(row[0]), int(row[1]), int(row[2])
+                rc_to_a.setdefault((r_i, c_i), []).append(a_i)
+            for row in gci3.detach().cpu().reshape(-1, 3).tolist():
+                r_i, c_i, y_i = int(row[0]), int(row[1]), int(row[2])
+                for a_i in rc_to_a.get((r_i, c_i), ()):
+                    gci0_set.add((a_i, y_i))
 
         candidates: Dict[int, Tuple[int, int]] = {}
         if gci1 is not None and gci1.numel() > 0:
@@ -1195,9 +1225,12 @@ def build_structural_tables(
     """Build :class:`DefinitionTable`, :class:`ExistenceTargets`, and ``top_idx`` from a model.
 
     Guarantees:
-    - Extracts ``gci0`` (2 cols), ``gci0_bot`` (2 cols), ``gci1`` (3 cols), and
-      ``gci1_bot`` (2 cols) from ``model_like.training_datasets``, raising
-      :class:`ValueError` if any tensor has fewer columns than required.
+    - Extracts ``gci0`` (2 cols ``(C, D)``), ``gci0_bot`` (2 cols ``(C, bot)``),
+      ``gci1`` (3 cols ``(C, D, E)``), ``gci1_bot`` (2 cols ``(C, D)``),
+      ``gci2`` (3 cols ``(C, r, D)`` as stored by :class:`~mowl.datasets.el.GCI2Dataset`),
+      and ``gci3`` (3 cols ``(r, C, D)`` as stored by :class:`~mowl.datasets.el.GCI3Dataset`)
+      from ``model_like.training_datasets``, raising :class:`ValueError` if any
+      tensor has fewer columns than required.
     - Returns ``(definition_table, existence_targets, top_idx)``.
 
     Non-guarantees:
@@ -1238,6 +1271,8 @@ def build_structural_tables(
     gci0_bot_rows = _extract_normal_form_rows(td, "gci0_bot", 2)
     gci1_rows = _extract_normal_form_rows(td, "gci1", 3)
     gci1_bot_rows = _extract_normal_form_rows(td, "gci1_bot", 2)
+    gci2_rows = _extract_normal_form_rows(td, "gci2", 3)
+    gci3_rows = _extract_normal_form_rows(td, "gci3", 3)
 
     class_to_id = dict(model_like.class_index_dict)
     n_classes = len(class_to_id)
@@ -1267,6 +1302,8 @@ def build_structural_tables(
         bottom_idx=bottom_idx,
         enabled=enabled_val,
         max_level=max_level_val,
+        gci2=gci2_rows,
+        gci3=gci3_rows,
     )
 
     targets = ExistenceTargets.from_normal_forms(

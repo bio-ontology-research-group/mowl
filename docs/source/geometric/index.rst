@@ -500,16 +500,25 @@ measured seeds (``strict_loss == 0``, minimum target class and pair
    Built once per :meth:`~mowl.models.MultiBoxEL.train` /
    :meth:`~mowl.models.PrismEL.train` call via
    :meth:`~mowl.nn.el.structural.DefinitionTable.from_normal_forms` from the
-   training normal forms (``gci0`` rows :math:`(C, D)` and ``gci1`` rows
-   :math:`(C, D, E)`):
+   training normal forms (``gci0`` rows :math:`(C, D)`, ``gci1`` rows
+   :math:`(C, D, E)`, and optional ``gci2`` rows :math:`(C, r, D)` and
+   ``gci3`` rows :math:`(r, C, D)`):
 
-   * *Candidate:* :math:`A` is a candidate defined class with definers
-     :math:`(X, Y)` iff there is a ``gci1`` row :math:`(X, Y, A)` with
-     :math:`X \neq Y`, :math:`A \notin \{X, Y\}`, none of :math:`A, X, Y` equal
-     to ``owl:Thing`` or ``owl:Nothing``, and both ``gci0`` rows :math:`(A, X)`
-     and :math:`(A, Y)` exist. If several :math:`(X, Y)` qualify for the same
-     :math:`A`, the lexicographically smallest :math:`(\min(X, Y), \max(X, Y))`
-     is selected.
+   * *Candidate (including role auxiliaries):* :math:`A` is a candidate defined
+     class with definers :math:`(X, Y)` iff there is a ``gci1`` row
+     :math:`(X, Y, A)` with :math:`X \neq Y`, :math:`A \notin \{X, Y\}`, none
+     of :math:`A, X, Y` equal to ``owl:Thing`` or ``owl:Nothing``, and each
+     required inclusion :math:`(A, D)` for :math:`D \in \{X, Y\}` is satisfied
+     either directly by a ``gci0`` row :math:`(A, D)` or through a role
+     auxiliary by a ``gci2`` row :math:`(A, r, C)` together with a ``gci3`` row
+     :math:`(r, C, D)` sharing the same :math:`r` and :math:`C` (i.e.
+     :math:`A \sqsubseteq \exists r.C \sqsubseteq D` is entailed, which is how
+     :class:`~mowl.ontology.normalize.ELNormalizer` normalises definitions of
+     the form :math:`A \equiv X \sqcap \exists r.C` into :math:`A \sqsubseteq X`,
+     :math:`A \sqsubseteq \exists r.C`, :math:`\exists r.C \sqsubseteq \text{Aux}`,
+     and :math:`X \sqcap \text{Aux} \sqsubseteq A`). If several :math:`(X, Y)`
+     qualify for the same :math:`A`, the lexicographically smallest
+     :math:`(\min(X, Y), \max(X, Y))` is selected.
    * *Bottom-up acceptance and cap:* Candidates are processed in topological
      order of the candidate dependency graph (a candidate is ready once its
      definers are decided), with ties broken by increasing class index (Kahn's
@@ -538,7 +547,9 @@ measured seeds (``strict_loss == 0``, minimum target class and pair
      (:meth:`~mowl.nn.el.structural.DefinitionTable.masked_gci0`) and
      :math:`(X, Y, A)` and :math:`(Y, X, A)` in ``gci1``
      (:meth:`~mowl.nn.el.structural.DefinitionTable.masked_gci1`) hold by
-     construction and evaluate to exact ``0.0`` loss in training and evaluation.
+     construction and evaluate to exact ``0.0`` loss in training and evaluation,
+     whereas ``gci2`` and ``gci3`` rows are **not** masked so they continue to
+     train the role auxiliary's region.
      Setting ``structural_definitions=False`` disables the table (every class
      stays primitive and nothing is masked).
 

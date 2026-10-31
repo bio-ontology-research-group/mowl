@@ -315,6 +315,89 @@ def test_multiboxel_structural_survives_reload_and_narrow_tensor_raises(
         build_structural_tables(_DummyModel())
 
 
+def test_pizza_role_auxiliary_definitions_detected(tmp_path: Path) -> None:
+    """Model-level test: Pizza-style role-auxiliary definitions (and Pizza-EL training ontology) produce n_defined > 0, with gci2/gci3 losses still active."""
+    from mowl.owlapi import OWLAPIAdapter
+    from org.semanticweb.owlapi.formats import FunctionalSyntaxDocumentFormat
+    from org.semanticweb.owlapi.model import IRI
+    import java.io
+
+    # 1. Self-contained 6-class Pizza-style ontology:
+    # CheeseyPizza == Pizza cap exists hasTopping.CheeseTopping
+    # MeatyPizza   == Pizza cap exists hasTopping.MeatTopping
+    # SpicyPizza   == Pizza cap exists hasTopping.SpicyTopping
+    ad = OWLAPIAdapter()
+    ns = "http://mowl.borg/pizza_mini#"
+    ont = ad.create_ontology("http://mowl.borg/pizza_mini")
+    pizza = ad.create_class(ns + "Pizza")
+    cheesey = ad.create_class(ns + "CheeseyPizza")
+    meaty = ad.create_class(ns + "MeatyPizza")
+    spicy = ad.create_class(ns + "SpicyPizza")
+    cheese_top = ad.create_class(ns + "CheeseTopping")
+    meat_top = ad.create_class(ns + "MeatTopping")
+    spicy_top = ad.create_class(ns + "SpicyTopping")
+    has_topping = ad.create_object_property(ns + "hasTopping")
+
+    for defined_cls, filler_cls in (
+        (cheesey, cheese_top),
+        (meaty, meat_top),
+        (spicy, spicy_top),
+    ):
+        rhs = ad.create_object_intersection_of(
+            pizza, ad.create_object_some_values_from(has_topping, filler_cls)
+        )
+        ad.owl_manager.addAxiom(ont, ad.create_equivalent_classes(defined_cls, rhs))
+
+    mini_owl = tmp_path / "pizza_mini.owl"
+    ad.owl_manager.saveOntology(
+        ont,
+        FunctionalSyntaxDocumentFormat(),
+        IRI.create(java.io.File(str(mini_owl)).toURI()),
+    )
+
+    ds_mini = PathDataset(str(mini_owl))
+    model_mini = MultiBoxEL(
+        ds_mini,
+        embed_dim=4,
+        n_components=4,
+        max_components=16,
+        objective="structural",
+        neg_sampling_gcis=[],
+        model_filepath=str(tmp_path / "mini.pt"),
+    )
+    model_mini.train(epochs=1, validate_every=10)
+    assert model_mini.module.definition_table is not None
+    assert model_mini.module.definition_table.n_defined == 3
+    assert model_mini.module.definition_table.max_level == 1
+    # gci2 and gci3 rows are NOT masked (they still train Aux's region)
+    gci2_rows = model_mini.training_datasets["gci2"][:]
+    gci3_rows = model_mini.training_datasets["gci3"][:]
+    assert len(gci2_rows) == 3
+    assert len(gci3_rows) == 3
+
+    # 2. Full Pizza-EL training ontology from experiments (loads in < 1s from cache)
+    pizza_ont_path = Path(
+        "/home/leechuck/Public/software/faithful-dl-embedding/experiments/data/pizza-el/ontology.owl"
+    )
+    if pizza_ont_path.exists():
+        ds_pizza = PathDataset(str(pizza_ont_path))
+        model_pizza = MultiBoxEL(
+            ds_pizza,
+            embed_dim=4,
+            n_components=4,
+            max_components=16,
+            objective="structural",
+            neg_sampling_gcis=[],
+            model_filepath=str(tmp_path / "pizza.pt"),
+        )
+        table_pizza, _, _ = build_structural_tables(
+            model_pizza, k=4, max_components=16, enabled=True
+        )
+        assert table_pizza.n_defined > 0
+        assert table_pizza.n_defined == 4
+        assert table_pizza.max_level == 1
+
+
 @pytest.mark.slow
 def test_t3_structural_random_init_finds_model(tmp_path: Path) -> None:
     """At least 1 of 5 seeds (0..4) reaches strict structural loss <= 1e-6 at margin 0,
