@@ -4,7 +4,9 @@ from __future__ import annotations
 import torch as th
 
 from mowl.base_models.elmodel import EmbeddingELModel
+from mowl.geometric.normal_forms import BOTTOM, TOP
 from mowl.nn import PrismModule
+from mowl.nn.el.structural import DefinitionTable, ExistenceTargets
 
 
 class PrismEL(EmbeddingELModel):
@@ -81,9 +83,18 @@ class PrismEL(EmbeddingELModel):
         model_filepath=None,
         device="cpu",
         neg_sampling_gcis=None,
+        objective="axiom",
+        max_depth=8,
+        existence_weight=1.0,
+        size_reg=1e-3,
+        canonical_model=None,
     ):
         if float(anchor_weight) < 0:
             raise ValueError(f"anchor_weight must be >= 0, got {anchor_weight!r}")
+        if objective not in ("axiom", "structural"):
+            raise ValueError(
+                f"objective must be 'axiom' or 'structural', got {objective!r}"
+            )
         super().__init__(
             dataset,
             embed_dim,
@@ -99,6 +110,11 @@ class PrismEL(EmbeddingELModel):
         self.reg_norm = reg_norm
         self.init_boxes = init_boxes
         self.anchor_weight = float(anchor_weight)
+        self.objective = objective
+        self.max_depth = max_depth
+        self.existence_weight = float(existence_weight)
+        self.size_reg = float(size_reg)
+        self.canonical_model = canonical_model
         self._loaded = False
         self.extended = False
         self._mse_criterion = th.nn.MSELoss()
@@ -112,11 +128,73 @@ class PrismEL(EmbeddingELModel):
             len(self.individual_index_dict),
             embed_dim=self.embed_dim,
             margin=self.margin,
+            objective=self.objective,
+            max_depth=self.max_depth,
+            existence_weight=self.existence_weight,
+            size_reg=self.size_reg,
         ).to(self.device)
         if self.init_boxes is not None:
             self.init_boxes.apply_to_module(
                 self.module, class_index_dict=self.class_index_dict
             )
+
+    def _dataset_rows(self, key: str, cols: int) -> th.Tensor:
+        """Return ``self.training_datasets[key][:]`` sliced to ``cols`` columns, or an empty ``(0, cols)`` LongTensor."""
+        ds = self.training_datasets.get(key)
+        if ds is None or len(ds) == 0:
+            return th.zeros((0, cols), dtype=th.long)
+        rows = ds[:]
+        if rows.ndim == 2 and rows.shape[1] > cols:
+            rows = rows[:, :cols]
+        return rows
+
+    def train(self, epochs, validate_every=1, epoch_callback=None):
+        """Train the model, building structural tables first when ``objective='structural'``."""
+        if self.objective == "structural":
+            n_classes = len(self.class_index_dict)
+            top_idx = self.class_index_dict.get(TOP)
+            bottom_idx = self.class_index_dict.get(BOTTOM)
+            index_to_iri = {idx: iri for iri, idx in self.class_index_dict.items()}
+
+            gci0 = self._dataset_rows("gci0", 2)
+            gci0_bot = self._dataset_rows("gci0_bot", 2)
+            gci1 = self._dataset_rows("gci1", 3)
+            gci1_bot = self._dataset_rows("gci1_bot", 2)
+
+            table = DefinitionTable.from_normal_forms(
+                gci0=gci0,
+                gci1=gci1,
+                n_classes=n_classes,
+                k=1,
+                max_components=2**30,
+                top_idx=top_idx,
+                bottom_idx=bottom_idx,
+                enabled=True,
+                max_level=self.max_depth,
+            )
+            targets = ExistenceTargets.from_normal_forms(
+                gci0_bot=gci0_bot,
+                gci1=gci1,
+                gci1_bot=gci1_bot,
+                n_classes=n_classes,
+                top_idx=top_idx,
+                bottom_idx=bottom_idx,
+                index_to_iri=index_to_iri,
+                cm=self.canonical_model,
+            )
+            self.module.set_structural_tables(table, targets, top_idx=top_idx)
+
+        return super().train(
+            epochs=epochs,
+            validate_every=validate_every,
+            epoch_callback=epoch_callback,
+        )
+
+    def additional_training_loss(self, epoch):
+        """Return ``module.structural_extra_loss()`` when ``objective='structural'``, else ``None``."""
+        if self.objective == "structural":
+            return self.module.structural_extra_loss()
+        return None
 
     def count_class_parameters(self) -> int:
         """Return the number of scalar parameters per ontology class (:math:`2d - 1`).

@@ -62,7 +62,7 @@ Non-guarantees:
 from __future__ import annotations
 
 import math
-from typing import Tuple
+from typing import NamedTuple, Optional, Tuple
 
 import torch as th
 
@@ -74,6 +74,54 @@ NORMALS: th.Tensor = th.tensor(
     ],
     dtype=th.float32,
 )
+
+
+class PrismRegions(NamedTuple):
+    """Materialised prism regions with triangle supports, box centres, and signed half-widths.
+
+    Attributes
+    ----------
+    h : torch.Tensor
+        Triangle support values of shape ``(B, 3)``.
+    cen : torch.Tensor
+        Box centres of shape ``(B, d - 2)``.
+    w : torch.Tensor
+        Signed box half-widths of shape ``(B, d - 2)``; negative in coordinate ``m``
+        iff the box part is empty along coordinate ``m``.
+    """
+
+    h: th.Tensor
+    cen: th.Tensor
+    w: th.Tensor
+
+
+def prism_nonempty_measure(r: PrismRegions) -> th.Tensor:
+    """Compute the signed non-emptiness measure :math:`\\text{ne}(P) = \\min(\\sum_k h_k,\\; \\min_m 2 w_m)`.
+
+    Guarantees:
+    - Returns a 1-D tensor of shape ``(B,)``.
+    - Strictly positive if and only if :math:`\\sum_{k=1}^3 h_k > 0` and every
+      box coordinate has :math:`w_m > 0`.
+
+    Non-guarantees:
+    - Gradients flow only through the branch (triangle support sum or minimum box
+      side length) attaining the minimum.
+
+    Parameters
+    ----------
+    r : PrismRegions
+        Batch of prism regions with ``h`` of shape ``(B, 3)`` and ``cen, w`` of
+        shape ``(B, d - 2)``.
+
+    Returns
+    -------
+    torch.Tensor
+        Per-row non-emptiness measure of shape ``(B,)``.
+    """
+    tri_ne = r.h.sum(dim=-1)
+    box_ne = 2.0 * th.amin(r.w, dim=-1)
+    return th.minimum(tri_ne, box_ne)
+
 
 
 def supports(center: th.Tensor, inradius: th.Tensor) -> th.Tensor:
@@ -207,8 +255,6 @@ def prism_intersection(
     """
     c1, o1 = b1
     c2, o2 = b2
-    o1 = th.abs(o1)
-    o2 = th.abs(o2)
     h = th.minimum(h1, h2)
     lower = th.maximum(c1 - o1, c2 - o2)
     upper = th.minimum(c1 + o1, c2 + o2)
@@ -483,6 +529,16 @@ def gci1_bot_loss(
     return th.minimum(tri_term, min_box_term)
 
 
+def gci2_score_prisms(
+    c: PrismRegions,
+    d: PrismRegions,
+    rel: th.Tensor,
+    margin: float,
+) -> th.Tensor:
+    """Positive GCI2 score on :class:`PrismRegions`: inclusion of :math:`C + r` inside :math:`D`."""
+    return gci2_score(c.h, c.cen, th.abs(c.w), d.h, d.cen, th.abs(d.w), rel, margin)
+
+
 def gci2_score(
     hc: th.Tensor,
     bc: th.Tensor,
@@ -533,6 +589,21 @@ def gci2_score(
     hc_trans = _translate_supports(hc, r_tri)
     bc_trans = bc + r_box
     return prism_inclusion_score(hc_trans, bc_trans, oc, hd, bd, od, margin)
+
+
+def gci2_score_neg_prisms(
+    c: PrismRegions,
+    d: PrismRegions,
+    rel: th.Tensor,
+    margin: float,
+    rc: Optional[th.Tensor] = None,
+) -> th.Tensor:
+    """Negative GCI2 score on :class:`PrismRegions`."""
+    if rc is None:
+        rc = th.relu(c.h.sum(dim=-1, keepdim=True) / 3.0)
+    return gci2_score_neg(
+        c.h, rc, c.cen, th.abs(c.w), d.h, d.cen, th.abs(d.w), rel, margin
+    )
 
 
 def gci2_score_neg(
@@ -644,10 +715,27 @@ def gci2_loss(
     hc, bc, oc = _unpack_prism(data[:, 0], tri_center, tri_inradius, box_center, box_offset)
     hd, bd, od = _unpack_prism(data[:, 2], tri_center, tri_inradius, box_center, box_offset)
     rel = rel_embed(data[:, 1])
+    c_reg = PrismRegions(h=hc, cen=bc, w=oc)
+    d_reg = PrismRegions(h=hd, cen=bd, w=od)
     if neg:
         rc = th.abs(tri_inradius(data[:, 0]))
-        return gci2_score_neg(hc, rc, bc, oc, hd, bd, od, rel, margin)
-    return gci2_score(hc, bc, oc, hd, bd, od, rel, margin)
+        return gci2_score_neg_prisms(c_reg, d_reg, rel, margin, rc=rc)
+    return gci2_score_prisms(c_reg, d_reg, rel, margin)
+
+
+def gci3_score_prisms(
+    c: PrismRegions,
+    d: PrismRegions,
+    rel: th.Tensor,
+    margin: float,
+) -> th.Tensor:
+    """Positive GCI3 score on :class:`PrismRegions` for :math:`\\exists r.C \\sqsubseteq D`."""
+    r_tri = rel[:, :2]
+    r_box = rel[:, 2:]
+    hc_shifted = _translate_supports(c.h, -r_tri)
+    tri_term = th.relu(-th.minimum(hc_shifted, d.h).sum(dim=-1) + margin).unsqueeze(-1)
+    box_term = th.relu(th.abs(c.cen - r_box - d.cen) - th.abs(c.w) - th.abs(d.w) + margin)
+    return th.linalg.norm(th.cat([tri_term, box_term], dim=-1), dim=-1)
 
 
 def gci3_loss(
@@ -708,13 +796,17 @@ def gci3_loss(
     rel = rel_embed(data[:, 0])
     hc, bc, oc = _unpack_prism(data[:, 1], tri_center, tri_inradius, box_center, box_offset)
     hd, bd, od = _unpack_prism(data[:, 2], tri_center, tri_inradius, box_center, box_offset)
+    return gci3_score_prisms(
+        PrismRegions(h=hc, cen=bc, w=oc),
+        PrismRegions(h=hd, cen=bd, w=od),
+        rel,
+        margin,
+    )
 
-    r_tri = rel[:, :2]
-    r_box = rel[:, 2:]
-    hc_shifted = _translate_supports(hc, -r_tri)
-    tri_term = th.relu(-th.minimum(hc_shifted, hd).sum(dim=-1) + margin).unsqueeze(-1)
-    box_term = th.relu(th.abs(bc - r_box - bd) - oc - od + margin)
-    return th.linalg.norm(th.cat([tri_term, box_term], dim=-1), dim=-1)
+
+def gci3_bot_score_prisms(c: PrismRegions, margin: float = 0.0) -> th.Tensor:
+    """GCI3-bot score on :class:`PrismRegions` for :math:`\\exists r.C \\sqsubseteq \\bot`."""
+    return triangle_empty_score(c.h, margin)
 
 
 def gci3_bot_loss(
@@ -761,7 +853,22 @@ def gci3_bot_loss(
     tc = tri_center(data[:, col])
     tr = th.abs(tri_inradius(data[:, col]))
     hc = supports(tc, tr)
-    return triangle_empty_score(hc, margin)
+    empty_box = th.zeros((hc.shape[0], 0), device=hc.device, dtype=hc.dtype)
+    return gci3_bot_score_prisms(PrismRegions(h=hc, cen=empty_box, w=empty_box), margin)
+
+
+def class_assertion_score_prisms(
+    ind_pts: th.Tensor,
+    c: PrismRegions,
+    margin: float,
+) -> th.Tensor:
+    """Class assertion score on :class:`PrismRegions` for :math:`C(a)`."""
+    x_tri = ind_pts[:, :2]
+    x_box = ind_pts[:, 2:]
+    zero_r = th.zeros((ind_pts.shape[0], 1), device=ind_pts.device, dtype=ind_pts.dtype)
+    hi = supports(x_tri, zero_r)
+    oi = th.zeros_like(x_box)
+    return prism_inclusion_score(hi, x_box, oi, c.h, c.cen, th.abs(c.w), margin)
 
 
 def class_assertion_loss(
@@ -811,14 +918,81 @@ def class_assertion_loss(
         Per-assertion loss tensor of shape ``(B,)``.
     """
     x = ind_embed(data[:, 0])
-    x_tri = x[:, :2]
-    x_box = x[:, 2:]
-    zero_r = th.zeros((x.shape[0], 1), device=x.device, dtype=x.dtype)
-    hi = supports(x_tri, zero_r)
-    oi = th.zeros_like(x_box)
-
     hc, bc, oc = _unpack_prism(data[:, 1], tri_center, tri_inradius, box_center, box_offset)
-    return prism_inclusion_score(hi, x_box, oi, hc, bc, oc, margin)
+    return class_assertion_score_prisms(x, PrismRegions(h=hc, cen=bc, w=oc), margin)
+
+
+def gci0_structural(c: PrismRegions, d: PrismRegions, margin: float) -> th.Tensor:
+    """Compute the structural GCI0 loss :math:`[\\text{ne}(C) > 0]^{\\text{det}} \\cdot \\text{prism\\_inclusion\\_score}(C, D, m)^2`.
+
+    Uses signed half-widths :math:`w_C, w_D` directly inside the inclusion violation
+    :math:`\\text{relu}(|b_C - b_D| + w_C - w_D + m)` (matching ``w_C >= 0`` whenever
+    :math:`\\text{ne}(C) > 0`).
+
+    Guarantees:
+    - Returns a 1-D tensor of shape ``(B,)``.
+    - Non-emptiness gate :math:`\\text{ne}(C) > 0` is detached.
+    - At ``margin = 0``, equals ``0`` iff :math:`C` is empty (:math:`\\text{ne}(C) \\le 0`)
+      or :math:`P_C \\subseteq P_D`.
+    """
+    ne_c_det = prism_nonempty_measure(
+        PrismRegions(h=c.h.detach(), cen=c.cen.detach(), w=c.w.detach())
+    )
+    gate_bool = ne_c_det > 0.0
+    tri_vec = th.relu(c.h - d.h + margin)
+    box_vec = th.relu(th.abs(c.cen - d.cen) + c.w - d.w + margin)
+    incl_sq = th.cat([tri_vec, box_vec], dim=-1).square().sum(dim=-1)
+    return th.where(gate_bool, incl_sq, th.zeros_like(incl_sq))
+
+
+def gci0_bot_structural(c: PrismRegions) -> th.Tensor:
+    """Compute the structural GCI0-bot loss :math:`\\text{relu}(\\text{ne}(C))^2` for :math:`C \\sqsubseteq \\bot`."""
+    return th.relu(prism_nonempty_measure(c)).square()
+
+
+def gci1_structural(
+    c: PrismRegions,
+    d: PrismRegions,
+    e: PrismRegions,
+    margin: float,
+    masked: Optional[th.Tensor] = None,
+) -> th.Tensor:
+    """Compute the structural GCI1 loss :math:`[\\text{ne}(C \\cap D) > 0]^{\\text{det}} \\cdot \\text{prism\\_inclusion\\_score}(C \\cap D, E, m)^2`.
+
+    Guarantees:
+    - Returns a 1-D tensor of shape ``(B,)``.
+    - Masked rows and rows with :math:`\\text{ne}(C \\cap D) \\le 0` evaluate to
+      exact ``0.0`` with zero gradient.
+    - Imposes no emptiness penalties on :math:`C \\cap D`.
+    """
+    h_inter, lower, upper = prism_intersection(c.h, (c.cen, c.w), d.h, (d.cen, d.w))
+    inter_cen = (lower + upper) / 2.0
+    inter_w = (upper - lower) / 2.0
+    inter = PrismRegions(h=h_inter, cen=inter_cen, w=inter_w)
+
+    ne_det = prism_nonempty_measure(
+        PrismRegions(h=inter.h.detach(), cen=inter.cen.detach(), w=inter.w.detach())
+    )
+    gate_bool = ne_det > 0.0
+    if masked is not None:
+        gate_bool = gate_bool & (~masked.to(dtype=th.bool))
+
+    tri_vec = th.relu(inter.h - e.h + margin)
+    box_vec = th.relu(th.abs(inter.cen - e.cen) + inter.w - e.w + margin)
+    incl_sq = th.cat([tri_vec, box_vec], dim=-1).square().sum(dim=-1)
+    out = th.where(gate_bool, incl_sq, th.zeros_like(incl_sq))
+    if masked is not None:
+        out = th.where(masked.to(dtype=th.bool), th.zeros_like(out), out)
+    return out
+
+
+def gci1_bot_structural(c: PrismRegions, d: PrismRegions, margin: float) -> th.Tensor:
+    """Compute the structural GCI1-bot loss :math:`\\text{relu}(\\text{ne}(C \\cap D) + m)^2` for :math:`C \\sqcap D \\sqsubseteq \\bot`."""
+    h_inter, lower, upper = prism_intersection(c.h, (c.cen, c.w), d.h, (d.cen, d.w))
+    inter_cen = (lower + upper) / 2.0
+    inter_w = (upper - lower) / 2.0
+    inter = PrismRegions(h=h_inter, cen=inter_cen, w=inter_w)
+    return th.relu(prism_nonempty_measure(inter) + margin).square()
 
 
 def object_property_assertion_loss(
