@@ -193,6 +193,14 @@ Canonical-element point supervision and losses
    :show-inheritance:
 
 
+Structural region algebra, definition tables, and losses
+--------------------------------------------------------
+
+.. automodule:: mowl.nn.el.structural
+   :members:
+   :show-inheritance:
+
+
 Exceptions
 ----------
 

@@ -836,3 +836,70 @@ with :math:`m \ge 0.5` and hard negatives with :math:`m < 0.5`):
    )
    mbox.train(epochs=3, validate_every=10)
    assert set(mbox.module.point_modelness().keys()) == {"pos_frac", "hardneg_frac"}
+
+
+Structural objective on :math:`T_3`
+-----------------------------------
+
+Setting ``objective="structural"`` on :class:`~mowl.models.MultiBoxEL` (or
+:class:`~mowl.models.PrismEL`) compiles acyclic binary conjunction definitions
+:math:`A \equiv X \sqcap Y` from the normalised ``gci0`` and ``gci1`` axioms into
+:attr:`~mowl.nn.MultiBoxELModule.definition_table`
+(:class:`~mowl.nn.el.structural.DefinitionTable`), materialises every class as
+:math:`K = \text{max\_components}` component slots with signed half-widths in
+:class:`~mowl.nn.el.structural.Regions` via
+:meth:`~mowl.nn.MultiBoxELModule.class_regions` /
+:meth:`~mowl.nn.MultiBoxELModule.all_class_regions` (with inactive slots padded
+as ``cen = 0, w = -1``), masks the defining ``gci0``/``gci1`` rows to exact
+``0.0`` loss, and supervises satisfiable classes and conjunction pairs with
+:func:`~mowl.nn.el.structural.existence_loss` and single-coordinate separation
+in :func:`~mowl.nn.el.structural.gci1_bot_structural`. On the :math:`T_3`
+fixture, the three pairwise definitions :math:`A \equiv X_1 \sqcap X_2`,
+:math:`B \equiv X_2 \sqcap X_3`, and :math:`C \equiv X_1 \sqcap X_3` are
+compiled into ``n_defined == 3`` defined classes:
+
+.. testcode::
+
+   import pathlib
+   import shutil
+   import tempfile
+
+   import mowl
+   mowl.init_jvm("2g")  # no-op if the JVM is already running
+
+   FIXTURES = pathlib.Path(mowl.__file__).resolve().parents[1] / "tests" / "geometric" / "fixtures"
+
+   import torch
+   from mowl.datasets import PathDataset
+   from mowl.models import MultiBoxEL
+
+   tmpdir = tempfile.TemporaryDirectory()
+   workdir = pathlib.Path(tmpdir.name)
+   shutil.copy(FIXTURES / "t3.owl", workdir / "t3.owl")
+   t3_dataset = PathDataset(str(workdir / "t3.owl"))
+
+   model = MultiBoxEL(
+       t3_dataset,
+       objective="structural",
+       n_components=2,
+       max_components=16,
+       embed_dim=2,
+       margin=0.02,
+       learning_rate=0.01,
+   )
+   model.train(epochs=5, validate_every=10)
+
+   n_def = model.module.definition_table.n_defined
+   regions = model.module.all_class_regions()
+   print(n_def)
+   print(tuple(regions.cen.shape))
+   assert n_def == 3
+   assert regions.cen.shape == (len(model.class_index_dict), 16, 2)
+   assert torch.all(regions.w[~regions.active] == -1.0)
+
+   tmpdir.cleanup()
+
+.. testoutput::
+
+   3
+   (9, 16, 2)
