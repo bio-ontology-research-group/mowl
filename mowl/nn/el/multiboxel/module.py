@@ -13,9 +13,9 @@ from mowl.nn.el.boxsquaredel.module import BoxSquaredELModule
 from mowl.nn.el.multibox_utils import effective_components as _effective_components
 import mowl.nn.el.multiboxel.losses as L
 from mowl.nn.el.pointloss import (
+    _VALID_OBJECTIVES,
     _validate_beta,
     _validate_ind_halfwidth,
-    _validate_objective,
     compute_class_assertion_score_point,
     compute_point_membership_loss,
     compute_point_modelness,
@@ -42,6 +42,18 @@ from mowl.nn.el.structural import (
 
 if TYPE_CHECKING:
     from mowl.datasets.el.points import PointSupervision
+
+
+_MULTIBOXEL_OBJECTIVES = _VALID_OBJECTIVES + ("structural",)
+
+
+def _validate_multiboxel_objective(objective: str) -> str:
+    """Validate that ``objective`` is a supported MultiBoxEL objective."""
+    if not isinstance(objective, str) or objective not in _MULTIBOXEL_OBJECTIVES:
+        raise ValueError(
+            f"objective must be one of {_MULTIBOXEL_OBJECTIVES}, got {objective!r}"
+        )
+    return objective
 
 
 class MultiBoxELModule(ELModule):
@@ -135,6 +147,12 @@ class MultiBoxELModule(ELModule):
     margin : float, default 0.02
         Tightening margin :math:`m` used by ``objective="structural"`` for GCI
         inclusions, ``gci1_bot`` separation, and :func:`~mowl.nn.el.structural.existence_loss`.
+        For Box\\ :math:`^2`\\ EL role and assertion scores (where ``gamma`` loosens
+        inclusions via :math:`\\text{relu}(\\text{dist} + 2 o - \\gamma)`), positive
+        scores pass ``gamma = -margin`` so :math:`m > 0` tightens inclusion, while
+        negative scores (:func:`~mowl.nn.el.multiboxel.losses.gci2_score_neg` and
+        negative ``object_property_assertion``) pass ``gamma = +margin`` so
+        negatives require separation by the margin.
     max_components : int, optional, default None
         Maximum component slots :math:`K \\ge k` per class under
         ``objective="structural"``; defaults to ``n_components ** 2`` when ``None``.
@@ -187,7 +205,6 @@ class MultiBoxELModule(ELModule):
         size_reg: float = 1e-3,
         reseed_every: int = 0,
     ) -> None:
-        super().__init__()
         if isinstance(n_components, bool) or not isinstance(n_components, int) or n_components < 1:
             raise ValueError(f"n_components must be an int >= 1, got {n_components!r}")
         if isinstance(embed_dim, bool) or not isinstance(embed_dim, int) or embed_dim < 1:
@@ -203,7 +220,7 @@ class MultiBoxELModule(ELModule):
             or float(diversity_reg) < 0.0
         ):
             raise ValueError(f"diversity_reg must be >= 0, got {diversity_reg!r}")
-        _validate_objective(objective)
+        _validate_multiboxel_objective(objective)
         if objective == "structural" and component_aggregation != "hard":
             raise ValueError(
                 "component_aggregation must be 'hard' when objective='structural', "
@@ -257,6 +274,7 @@ class MultiBoxELModule(ELModule):
             or float(volume_reg) < 0.0
         ):
             raise ValueError(f"volume_reg must be >= 0, got {volume_reg!r}")
+        super().__init__()
 
         self.nb_ont_classes = nb_ont_classes
         self.nb_rels = nb_rels
@@ -298,6 +316,14 @@ class MultiBoxELModule(ELModule):
         self.definition_table: Optional[DefinitionTable] = None
         self.existence_targets: Optional[ExistenceTargets] = None
         self.top_idx: Optional[int] = None
+        self._structural_device: Optional[th.device] = None
+        self._def_mask_dev: Optional[th.Tensor] = None
+        self._def_x_dev: Optional[th.Tensor] = None
+        self._def_y_dev: Optional[th.Tensor] = None
+        self._target_classes_dev: Optional[th.Tensor] = None
+        self._target_pairs_dev: Optional[th.Tensor] = None
+        self._prim_mask_dev: Optional[th.Tensor] = None
+        self._has_prim: bool = False
         self.last_reseed_count: int = 0
         self.delta = delta
         self.reg_factor = reg_factor
@@ -327,7 +353,7 @@ class MultiBoxELModule(ELModule):
             self._buffers["tau"].fill_(tau_f)
             return
         if name == "objective":
-            _validate_objective(value)  # type: ignore[arg-type]
+            _validate_multiboxel_objective(value)  # type: ignore[arg-type]
             if (
                 value == "structural"
                 and self.__dict__.get("component_aggregation", "hard") != "hard"
@@ -409,6 +435,45 @@ class MultiBoxELModule(ELModule):
         )
         return cen, off
 
+    def _sync_structural_device(self, device: th.device) -> None:
+        """Stage structural table tensors onto ``device`` once when attached or moved."""
+        if self._structural_device == device:
+            return
+        self._structural_device = device
+        table = self.definition_table
+        if table is not None:
+            self._def_mask_dev = table.def_mask.to(device=device)
+            self._def_x_dev = table.def_x.to(device=device)
+            self._def_y_dev = table.def_y.to(device=device)
+            if table._masked_gci0_keys.device != device:
+                table._masked_gci0_keys = table._masked_gci0_keys.to(device=device)
+            if table._masked_gci1_keys.device != device:
+                table._masked_gci1_keys = table._masked_gci1_keys.to(device=device)
+        else:
+            self._def_mask_dev = None
+            self._def_x_dev = None
+            self._def_y_dev = None
+
+        targets = self.existence_targets
+        if targets is not None:
+            self._target_classes_dev = targets.classes.to(device=device, dtype=th.long)
+            self._target_pairs_dev = targets.pairs.to(device=device, dtype=th.long)
+        else:
+            self._target_classes_dev = None
+            self._target_pairs_dev = None
+
+        if self.nb_ont_classes > 0:
+            prim_mask = th.ones(self.nb_ont_classes, dtype=th.bool, device=device)
+            if self.top_idx is not None and 0 <= self.top_idx < self.nb_ont_classes:
+                prim_mask[self.top_idx] = False
+            if self._def_mask_dev is not None:
+                prim_mask = prim_mask & (~self._def_mask_dev)
+            self._prim_mask_dev = prim_mask
+            self._has_prim = bool(prim_mask.any().item())
+        else:
+            self._prim_mask_dev = None
+            self._has_prim = False
+
     def set_structural_tables(
         self,
         table: DefinitionTable,
@@ -419,7 +484,8 @@ class MultiBoxELModule(ELModule):
 
         Guarantees:
         - Sets ``self.definition_table``, ``self.existence_targets``, and
-          ``self.top_idx``.
+          ``self.top_idx``, and stages device copies of the table and target
+          index tensors on ``class_center.weight.device``.
 
         Non-guarantees:
         - Does not re-validate table dimensions against ``nb_ont_classes``.
@@ -436,6 +502,8 @@ class MultiBoxELModule(ELModule):
         self.definition_table = table
         self.existence_targets = targets
         self.top_idx = top_idx
+        self._structural_device = None
+        self._sync_structural_device(self.class_center.weight.device)
 
     def class_regions(self, idx: th.Tensor) -> Regions:
         """Materialise :class:`~mowl.nn.el.structural.Regions` with ``K = max_components`` slots for class indices ``idx``.
@@ -466,7 +534,11 @@ class MultiBoxELModule(ELModule):
         """
         device = self.class_center.weight.device
         dtype = self.class_center.weight.dtype
-        idx_dev = idx.to(device=device, dtype=th.long)
+        idx_dev = (
+            idx
+            if (idx.device == device and idx.dtype == th.long)
+            else idx.to(device=device, dtype=th.long)
+        )
         b_size = int(idx_dev.shape[0])
         k = self.n_components
         max_k = self.max_components
@@ -500,12 +572,15 @@ class MultiBoxELModule(ELModule):
 
         table = self.definition_table
         if table is not None and table.n_defined > 0:
-            def_mask_all = table.def_mask.to(device=device)
-            is_def = def_mask_all[idx_dev]
+            self._sync_structural_device(device)
+            assert self._def_mask_dev is not None
+            assert self._def_x_dev is not None
+            assert self._def_y_dev is not None
+            is_def = self._def_mask_dev[idx_dev]
             if bool(is_def.any().item()):
                 def_idx = idx_dev[is_def]
-                dx = table.def_x.to(device=device)[def_idx]
-                dy = table.def_y.to(device=device)[def_idx]
+                dx = self._def_x_dev[def_idx]
+                dy = self._def_y_dev[def_idx]
                 rx = self.class_regions(dx)
                 ry = self.class_regions(dy)
                 r_def = pair_slots(rx, ry, max_k)
@@ -559,20 +634,21 @@ class MultiBoxELModule(ELModule):
         """
         device = self.class_center.weight.device
         dtype = self.class_center.weight.dtype
+        self._sync_structural_device(device)
 
         targets = self.existence_targets
         if targets is not None and self.existence_weight > 0.0:
-            if targets.classes.numel() > 0:
-                cls_idx = targets.classes.to(device=device, dtype=th.long)
-                r_cls = self.class_regions(cls_idx)
+            assert self._target_classes_dev is not None
+            assert self._target_pairs_dev is not None
+            if self._target_classes_dev.numel() > 0:
+                r_cls = self.class_regions(self._target_classes_dev)
                 cls_sizes = region_size(r_cls)
             else:
                 cls_sizes = th.empty(0, dtype=dtype, device=device)
 
-            if targets.pairs.numel() > 0:
-                pairs = targets.pairs.to(device=device, dtype=th.long)
-                r_a = self.class_regions(pairs[:, 0])
-                r_b = self.class_regions(pairs[:, 1])
+            if self._target_pairs_dev.numel() > 0:
+                r_a = self.class_regions(self._target_pairs_dev[:, 0])
+                r_b = self.class_regions(self._target_pairs_dev[:, 1])
                 p_sizes = pair_size(r_a, r_b)
             else:
                 p_sizes = th.empty(0, dtype=dtype, device=device)
@@ -583,19 +659,10 @@ class MultiBoxELModule(ELModule):
         else:
             ex_term = th.zeros((), dtype=dtype, device=device)
 
-        if self.size_reg > 0.0 and self.nb_ont_classes > 0:
-            prim_mask = th.ones(self.nb_ont_classes, dtype=th.bool, device=device)
-            if self.top_idx is not None and 0 <= self.top_idx < self.nb_ont_classes:
-                prim_mask[self.top_idx] = False
-            if self.definition_table is not None:
-                prim_mask = prim_mask & (
-                    ~self.definition_table.def_mask.to(device=device)
-                )
-            if bool(prim_mask.any().item()):
-                raw_off = th.abs(self.class_offset.weight[prim_mask])
-                size_term = self.size_reg * (2.0 * raw_off).mean()
-            else:
-                size_term = th.zeros((), dtype=dtype, device=device)
+        if self.size_reg > 0.0 and self._has_prim:
+            assert self._prim_mask_dev is not None
+            raw_off = th.abs(self.class_offset.weight[self._prim_mask_dev])
+            size_term = self.size_reg * (2.0 * raw_off).mean()
         else:
             size_term = th.zeros((), dtype=dtype, device=device)
 
@@ -1168,9 +1235,10 @@ class MultiBoxELModule(ELModule):
 
         Guarantees:
         - Under ``objective="structural"``, evaluates :func:`~mowl.nn.el.multiboxel.losses.gci2_score`
-          (or :func:`~mowl.nn.el.multiboxel.losses.gci2_score_neg` when ``neg=True``)
-          with ``gamma = self.margin``, ``aggregation="hard"``, and slot masks
-          ``active & (ne(w) > 0)``.
+          with tightening ``gamma = -self.margin`` when ``neg=False``, or
+          :func:`~mowl.nn.el.multiboxel.losses.gci2_score_neg` with
+          ``gamma = +self.margin`` when ``neg=True``, using ``aggregation="hard"``
+          and slot masks ``active & (ne(w) > 0)``.
 
         Non-guarantees:
         - Under ``objective="structural"``, when every target slot of :math:`D`
@@ -1178,6 +1246,10 @@ class MultiBoxELModule(ELModule):
           the target minimum term in :func:`~mowl.nn.el.multiboxel.losses.gci2_score`
           returns ``0.0`` (and when every source slot of :math:`C` is also
           masked out, the positive score is vacuously ``0.0``).
+        - Under ``objective="structural"`` with ``neg=True``, when every source
+          slot of :math:`C` is masked out (an all-empty source), the source half
+          of :func:`~mowl.nn.el.multiboxel.losses.gci2_score_neg` returns ``0.0``
+          (and ``0.0`` overall when every target slot of :math:`D` is also masked out).
         """
         if self.objective == "structural":
             r_c = self.class_regions(data[:, 0])
@@ -1191,6 +1263,7 @@ class MultiBoxELModule(ELModule):
             cen_tail = self.tail_center(data[:, 1])
             off_tail = th.abs(self.tail_offset(data[:, 1]))
             fn = L.gci2_score_neg if neg else L.gci2_score
+            role_gamma = self.margin if neg else -self.margin
             return fn(
                 r_c.cen,
                 th.abs(r_c.w),
@@ -1202,7 +1275,7 @@ class MultiBoxELModule(ELModule):
                 off_head,
                 cen_tail,
                 off_tail,
-                self.margin,
+                role_gamma,
                 self.delta,
                 aggregation="hard",
                 tau=self.tau,
@@ -1233,8 +1306,8 @@ class MultiBoxELModule(ELModule):
 
         Guarantees:
         - Under ``objective="structural"``, evaluates the squared
-          :func:`~mowl.nn.el.multiboxel.losses.gci3_score_boxes` with
-          ``gamma = self.margin``, ``aggregation="hard"``, and target mask
+          :func:`~mowl.nn.el.multiboxel.losses.gci3_score_boxes` with tightening
+          ``gamma = -self.margin``, ``aggregation="hard"``, and target mask
           ``r_d.active & (ne(r_d.w) > 0)``.
 
         Non-guarantees:
@@ -1256,7 +1329,7 @@ class MultiBoxELModule(ELModule):
                 cen_head,
                 off_head,
                 bump_c,
-                gamma=self.margin,
+                gamma=-self.margin,
                 aggregation="hard",
                 tau=self.tau,
             ).square()
@@ -1303,8 +1376,8 @@ class MultiBoxELModule(ELModule):
         Guarantees:
         - Under ``objective="structural"``, evaluates
           :func:`~mowl.nn.el.multiboxel.losses.class_assertion_score_boxes` with
-          ``gamma = self.margin``, ``aggregation="hard"``, and class mask
-          ``r_c.active & (ne(r_c.w) > 0)``.
+          tightening ``gamma = -self.margin``, ``aggregation="hard"``, and class
+          mask ``r_c.active & (ne(r_c.w) > 0)``.
 
         Non-guarantees:
         - Under ``objective="structural"``, returns ``0.0`` when every slot of
@@ -1327,7 +1400,7 @@ class MultiBoxELModule(ELModule):
                 act_c,
                 cen_i,
                 off_i,
-                gamma=self.margin,
+                gamma=-self.margin,
                 aggregation="hard",
                 tau=self.tau,
             )
@@ -1353,7 +1426,7 @@ class MultiBoxELModule(ELModule):
     def object_property_assertion_loss(
         self, data: th.Tensor, neg: bool = False
     ) -> th.Tensor:
-        """Compute object property assertion loss (:math:`r(a, b)`), using ``gamma = self.margin`` under ``objective="structural"``."""
+        """Compute object property assertion loss (:math:`r(a, b)`), passing ``gamma = -self.margin`` when ``neg=False`` and ``gamma = +self.margin`` when ``neg=True`` under ``objective="structural"``."""
         if self.objective == "structural":
             if (
                 self.ind_center is None
@@ -1363,6 +1436,7 @@ class MultiBoxELModule(ELModule):
                 raise ValueError(
                     "The number of individuals must be specified to use this loss function."
                 )
+            role_gamma = self.margin if neg else -self.margin
             return L.object_property_assertion_loss(
                 data,
                 self.ind_center,
@@ -1372,7 +1446,7 @@ class MultiBoxELModule(ELModule):
                 self.tail_center,
                 self.tail_offset,
                 self.bump_individuals,
-                self.margin,
+                role_gamma,
                 self.delta,
                 neg=neg,
                 aggregation="hard",

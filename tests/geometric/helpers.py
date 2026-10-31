@@ -5,6 +5,7 @@ import os
 import random
 from typing import Dict, List, Set, Tuple
 
+import numpy as np
 import pytest
 import torch
 
@@ -481,3 +482,49 @@ def _random_batch(
         i1 = torch.randint(0, n_inds, (batch_size, 1), generator=gen)
         return torch.cat([i0, r, i1], dim=1)
     return torch.randint(0, n_classes, (batch_size, cols), generator=gen)
+
+
+def _triple_nonempty(
+    boxes_x1: Tuple[np.ndarray, np.ndarray],
+    boxes_x2: Tuple[np.ndarray, np.ndarray],
+    boxes_x3: Tuple[np.ndarray, np.ndarray],
+    tol: float = 1e-6,
+) -> bool:
+    """Return True iff some component triple ``(X1_i, X2_j, X3_l)`` has a non-empty intersection."""
+    c1, o1 = boxes_x1
+    c2, o2 = boxes_x2
+    c3, o3 = boxes_x3
+    lo1, hi1 = c1 - np.abs(o1), c1 + np.abs(o1)
+    lo2, hi2 = c2 - np.abs(o2), c2 + np.abs(o2)
+    lo3, hi3 = c3 - np.abs(o3), c3 + np.abs(o3)
+    for i in range(lo1.shape[0]):
+        for j in range(lo2.shape[0]):
+            for l in range(lo3.shape[0]):
+                lo = np.maximum(np.maximum(lo1[i], lo2[j]), lo3[l])
+                hi = np.minimum(np.minimum(hi1[i], hi2[j]), hi3[l])
+                if bool(np.all(lo <= hi + tol)):
+                    return True
+    return False
+
+
+def _strict_structural_loss(model) -> float:
+    """Evaluate total structural GCI loss + existence term at ``margin=0, size_reg=0``."""
+    mod = model.module
+    old_margin = mod.margin
+    old_size_reg = mod.size_reg
+    try:
+        mod.margin = 0.0
+        mod.size_reg = 0.0
+        mod.eval()
+        total = 0.0
+        with torch.no_grad():
+            for gci_name, gci_ds in model.training_datasets.items():
+                if len(gci_ds) == 0:
+                    continue
+                scores = mod(gci_ds[:], gci_name)
+                total += float(scores.mean().item())
+            total += float(mod.structural_extra_loss().item())
+        return total
+    finally:
+        mod.margin = old_margin
+        mod.size_reg = old_size_reg

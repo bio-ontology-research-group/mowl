@@ -1,7 +1,7 @@
 """MultiBoxEL model class."""
 from __future__ import annotations
 
-from typing import Optional
+from typing import Optional, Tuple
 
 import numpy as np
 import torch as th
@@ -13,11 +13,12 @@ from mowl.datasets.el.points import (
 )
 from mowl.geometric.normal_forms import BOTTOM, TOP
 from mowl.nn import MultiBoxELModule
-from mowl.nn.el.pointloss import (
-    _validate_objective,
-    volume_penalty,
+from mowl.nn.el.pointloss import volume_penalty
+from mowl.nn.el.structural import (
+    DefinitionTable,
+    ExistenceTargets,
+    build_structural_tables,
 )
-from mowl.nn.el.structural import DefinitionTable, ExistenceTargets
 
 
 class MultiBoxEL(EmbeddingELModel):
@@ -40,9 +41,11 @@ class MultiBoxEL(EmbeddingELModel):
     - **Negative sampling under ``objective="structural"``:** Negative sampling
       stays enabled by default under ``objective="structural"`` for ``gci2`` and
       ``object_property_assertion`` (``neg_capable_gcis``) exactly as under
-      ``objective="axiom"``, with ``gci2`` and ``object_property_assertion``
-      negative scores evaluated using ``self.margin`` as ``gamma`` (and masked
-      active non-empty slots in ``gci2``).
+      ``objective="axiom"``; positive role and assertion scores pass
+      ``gamma = -self.margin`` (tightening inclusion), whereas negative ``gci2``
+      and ``object_property_assertion`` scores pass ``gamma = +self.margin``
+      (requiring separation by the margin, with masked active non-empty slots in
+      ``gci2``).
 
     Non-guarantees:
     - Gradient-based training is non-convex and is not guaranteed to reach a
@@ -213,67 +216,12 @@ class MultiBoxEL(EmbeddingELModel):
                  ):
         if float(anchor_weight) < 0:
             raise ValueError(f"anchor_weight must be >= 0, got {anchor_weight!r}")
-        if component_aggregation not in ("hard", "soft"):
-            raise ValueError(
-                f"component_aggregation must be 'hard' or 'soft', got {component_aggregation!r}"
-            )
         eff_tau_start = float(tau) if tau is not None else float(tau_start)
         eff_tau_end = float(tau_end)
         if eff_tau_start <= 0.0 or eff_tau_end <= 0.0:
             raise ValueError(
                 f"tau_start and tau_end must be > 0, got tau_start={eff_tau_start!r}, tau_end={eff_tau_end!r}"
             )
-        if float(diversity_reg) < 0.0:
-            raise ValueError(f"diversity_reg must be >= 0, got {diversity_reg!r}")
-        _validate_objective(objective)
-        if objective == "structural" and component_aggregation != "hard":
-            raise ValueError(
-                f"component_aggregation must be 'hard' when objective='structural', got {component_aggregation!r}"
-            )
-        if max_components is None:
-            eff_max_components = int(n_components) * int(n_components)
-        else:
-            if (
-                isinstance(max_components, bool)
-                or not isinstance(max_components, int)
-                or max_components < int(n_components)
-            ):
-                raise ValueError(
-                    f"max_components must be an int >= n_components ({n_components}), got {max_components!r}"
-                )
-            eff_max_components = int(max_components)
-        if (
-            isinstance(existence_weight, bool)
-            or not isinstance(existence_weight, (int, float))
-            or float(existence_weight) < 0.0
-        ):
-            raise ValueError(f"existence_weight must be >= 0, got {existence_weight!r}")
-        if (
-            isinstance(size_reg, bool)
-            or not isinstance(size_reg, (int, float))
-            or float(size_reg) < 0.0
-        ):
-            raise ValueError(f"size_reg must be >= 0, got {size_reg!r}")
-        if (
-            isinstance(reseed_every, bool)
-            or not isinstance(reseed_every, int)
-            or reseed_every < 0
-        ):
-            raise ValueError(f"reseed_every must be an int >= 0, got {reseed_every!r}")
-        if isinstance(beta, bool) or not isinstance(beta, (int, float)) or float(beta) <= 0.0:
-            raise ValueError(f"beta must be > 0, got {beta!r}")
-        if (
-            isinstance(neg_weight, bool)
-            or not isinstance(neg_weight, (int, float))
-            or float(neg_weight) < 0.0
-        ):
-            raise ValueError(f"neg_weight must be >= 0, got {neg_weight!r}")
-        if (
-            isinstance(volume_reg, bool)
-            or not isinstance(volume_reg, (int, float))
-            or float(volume_reg) < 0.0
-        ):
-            raise ValueError(f"volume_reg must be >= 0, got {volume_reg!r}")
         if (
             isinstance(points_per_epoch, bool)
             or not isinstance(points_per_epoch, int)
@@ -303,26 +251,29 @@ class MultiBoxEL(EmbeddingELModel):
         self.tau_end = eff_tau_end
         self.tau_anneal = bool(tau_anneal)
         self.tau = eff_tau_start
-        self.diversity_reg = float(diversity_reg)
+        self.diversity_reg = diversity_reg
         self.objective = objective
-        self.beta = float(beta)
-        self.neg_weight = float(neg_weight)
-        self.volume_reg = float(volume_reg)
+        self.beta = beta
+        self.neg_weight = neg_weight
+        self.volume_reg = volume_reg
         self.points_per_epoch = int(points_per_epoch)
         self.points_seed = int(points_seed)
-        self.max_components = eff_max_components
+        self.max_components = max_components
         self.structural_definitions = bool(structural_definitions)
-        self.existence_weight = float(existence_weight)
-        self.size_reg = float(size_reg)
-        self.reseed_every = int(reseed_every)
+        self.existence_weight = existence_weight
+        self.size_reg = size_reg
+        self.reseed_every = reseed_every
         self.canonical_model = canonical_model
         self._point_supervision: Optional[PointSupervision] = None
+        self._structural_tables: Optional[
+            Tuple[DefinitionTable, ExistenceTargets, Optional[int]]
+        ] = None
         self._loaded = False
         self.extended = False
         self.init_module()
 
     def init_module(self):
-        """Initialise :class:`~mowl.nn.MultiBoxELModule` and apply ``init_boxes`` if present."""
+        """Initialise :class:`~mowl.nn.MultiBoxELModule`, apply ``init_boxes`` if present, and re-attach cached supervision/tables."""
         self.module = MultiBoxELModule(
             len(self.class_index_dict),
             len(self.object_property_index_dict),
@@ -347,11 +298,22 @@ class MultiBoxEL(EmbeddingELModel):
             size_reg=self.size_reg,
             reseed_every=self.reseed_every,
         ).to(self.device)
+        self.max_components = self.module.max_components
+        self.diversity_reg = self.module.diversity_reg
+        self.beta = self.module.beta
+        self.neg_weight = self.module.neg_weight
+        self.volume_reg = self.module.volume_reg
+        self.existence_weight = self.module.existence_weight
+        self.size_reg = self.module.size_reg
+        self.reseed_every = self.module.reseed_every
         if self.init_boxes is not None:
             self.init_boxes.apply_to_module(
                 self.module, class_index_dict=self.class_index_dict)
         if self._point_supervision is not None:
             self.module.set_point_supervision(self._point_supervision)
+        if self._structural_tables is not None:
+            table, targets, top_idx = self._structural_tables
+            self.module.set_structural_tables(table, targets, top_idx=top_idx)
 
     @property
     def point_supervision(self) -> Optional[PointSupervision]:
@@ -538,8 +500,10 @@ class MultiBoxEL(EmbeddingELModel):
 
         - When ``objective="structural"``, compiles a
           :class:`~mowl.nn.el.structural.DefinitionTable` and
-          :class:`~mowl.nn.el.structural.ExistenceTargets` from CPU training
-          normal-form tensors and attaches them via
+          :class:`~mowl.nn.el.structural.ExistenceTargets` via
+          :func:`~mowl.nn.el.structural.build_structural_tables`, caches them on
+          the model so :meth:`init_module`, :meth:`load_best_model`, and
+          :meth:`from_pretrained` preserve them, and attaches them via
           :meth:`~mowl.nn.MultiBoxELModule.set_structural_tables` before
           delegating to ``super().train(...)``.
         - Raises :class:`ValueError` if any required training GCI tensor has
@@ -559,66 +523,55 @@ class MultiBoxEL(EmbeddingELModel):
         validate_every : int, default 1
             Validation frequency in epochs.
         epoch_callback : callable, optional
-            Optional callback ``(epoch, train_loss, val_loss) -> Optional[bool]``.
+            Optional callback ``epoch_callback(epoch, model)`` invoked at the end
+            of each 0-based epoch.
 
         Returns
         -------
-        int
-            Result returned by :meth:`~mowl.base_models.elmodel.EmbeddingELModel.train`.
+        None
+            Trains the model in place and returns ``None``.
         """
         if self.objective == "structural":
-            ds_dict = self.training_datasets
-
-            def _extract_rows(name: str, cols: int) -> th.Tensor:
-                ds = ds_dict.get(name)
-                if ds is None or len(ds) == 0:
-                    return th.zeros((0, cols), dtype=th.long)
-                rows = ds[:].detach().cpu().to(th.long)
-                if rows.ndim == 1:
-                    rows = rows.unsqueeze(0)
-                if rows.shape[1] < cols:
-                    raise ValueError(
-                        f"Training dataset {name!r} has {rows.shape[1]} columns, expected at least {cols}."
-                    )
-                return rows[:, :cols].contiguous()
-
-            gci0 = _extract_rows("gci0", 2)
-            gci0_bot = _extract_rows("gci0_bot", 2)
-            gci1 = _extract_rows("gci1", 3)
-            gci1_bot = _extract_rows("gci1_bot", 2)
-
-            top_idx = self.class_index_dict.get(TOP, None)
-            bottom_idx = self.class_index_dict.get(BOTTOM, None)
-            index_to_iri = {
-                int(idx): iri for iri, idx in self.class_index_dict.items()
-            }
-            n_classes = int(self.module.nb_ont_classes)
-
-            table = DefinitionTable.from_normal_forms(
-                gci0=gci0,
-                gci1=gci1,
-                n_classes=n_classes,
+            self._structural_tables = build_structural_tables(
+                self,
                 k=self.n_components,
                 max_components=self.max_components,
-                top_idx=top_idx,
-                bottom_idx=bottom_idx,
                 enabled=self.structural_definitions,
-            )
-            targets = ExistenceTargets.from_normal_forms(
-                gci0_bot=gci0_bot,
-                gci1=gci1,
-                gci1_bot=gci1_bot,
-                n_classes=n_classes,
-                top_idx=top_idx,
-                bottom_idx=bottom_idx,
-                index_to_iri=index_to_iri,
                 cm=self.canonical_model,
             )
+            table, targets, top_idx = self._structural_tables
             self.module.set_structural_tables(table, targets, top_idx=top_idx)
 
         return super().train(
             epochs, validate_every=validate_every, epoch_callback=epoch_callback
         )
+
+    def load_best_model(self):
+        """Reload the best checkpoint and re-attach structural tables when ``objective='structural'``."""
+        if self.objective == "structural" and self._structural_tables is None:
+            self._structural_tables = build_structural_tables(
+                self,
+                k=self.n_components,
+                max_components=self.max_components,
+                enabled=self.structural_definitions,
+                cm=self.canonical_model,
+            )
+        super().load_best_model()
+
+    def from_pretrained(self, model):
+        """Load pretrained weights and ensure structural tables are attached when ``objective='structural'``."""
+        super().from_pretrained(model)
+        if self.objective == "structural":
+            if self._structural_tables is None:
+                self._structural_tables = build_structural_tables(
+                    self,
+                    k=self.n_components,
+                    max_components=self.max_components,
+                    enabled=self.structural_definitions,
+                    cm=self.canonical_model,
+                )
+            table, targets, top_idx = self._structural_tables
+            self.module.set_structural_tables(table, targets, top_idx=top_idx)
 
     def get_regularization_loss(self):
         """Return module regularisation loss plus weighted anchor loss when active."""

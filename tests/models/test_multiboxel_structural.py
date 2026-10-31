@@ -16,9 +16,19 @@ from mowl.geometric.completion import CanonicalModel
 from mowl.models import MultiBoxEL
 from mowl.nn import MultiBoxELModule
 import mowl.nn.el.multiboxel.losses as L
-from mowl.nn.el.structural import nonempty_measure
-from tests.geometric.helpers import NS, _random_batch, fixture_path
-from tests.models.test_multiboxel import _triple_nonempty
+from mowl.nn.el.structural import (
+    build_structural_tables,
+    nonempty_measure,
+    pair_size,
+    region_size,
+)
+from tests.geometric.helpers import (
+    NS,
+    _random_batch,
+    _strict_structural_loss,
+    _triple_nonempty,
+    fixture_path,
+)
 
 
 def test_structural_train_builds_tables_and_masks(tmp_path: Path) -> None:
@@ -225,32 +235,92 @@ def _active_nonempty_boxes(
     return cen, w
 
 
-def _strict_structural_loss(model: MultiBoxEL) -> float:
-    """Evaluate total structural GCI loss + existence term at margin=0, size_reg=0."""
-    mod = model.module
-    old_margin = mod.margin
-    old_size_reg = mod.size_reg
-    try:
-        mod.margin = 0.0
-        mod.size_reg = 0.0
-        mod.eval()
-        total = 0.0
-        with th.no_grad():
-            for gci_name, gci_ds in model.training_datasets.items():
-                if len(gci_ds) == 0:
-                    continue
-                scores = mod(gci_ds[:], gci_name)
-                total += float(scores.mean().item())
-            total += float(mod.structural_extra_loss().item())
-        return total
-    finally:
-        mod.margin = old_margin
-        mod.size_reg = old_size_reg
+def test_multiboxel_structural_survives_reload_and_narrow_tensor_raises(
+    tmp_path: Path,
+) -> None:
+    """Train 3 epochs, save, load_best_model() / from_pretrained(): every GCI loss tensor and n_defined match pre-reload."""
+    ds = PathDataset(fixture_path("t3.owl"))
+    cm = CanonicalModel.from_dataset(ds)
+    ckpt = str(tmp_path / "m_reload.pt")
+
+    th.manual_seed(0)
+    np.random.seed(0)
+    model = MultiBoxEL(
+        ds,
+        embed_dim=2,
+        n_components=2,
+        objective="structural",
+        max_components=16,
+        canonical_model=cm,
+        neg_sampling_gcis=[],
+        model_filepath=ckpt,
+    )
+    model.train(epochs=3, validate_every=10)
+    th.save(model.module.state_dict(), ckpt)
+
+    model.module.eval()
+    assert model.module.definition_table is not None
+    pre_n_defined = model.module.definition_table.n_defined
+    assert pre_n_defined == 3
+    with th.no_grad():
+        pre_gci = {
+            name: model.module(gci_ds[:], name).detach().clone()
+            for name, gci_ds in model.training_datasets.items()
+            if len(gci_ds) > 0
+        }
+        pre_extra = model.module.structural_extra_loss().detach().clone()
+
+    model.load_best_model()
+    assert model.module.definition_table is not None
+    assert model.module.existence_targets is not None
+    assert model.module.definition_table.n_defined == pre_n_defined
+    with th.no_grad():
+        for name, expected in pre_gci.items():
+            actual = model.module(model.training_datasets[name][:], name)
+            assert th.equal(actual, expected), f"Mismatch on {name} after load_best_model"
+        assert th.equal(model.module.structural_extra_loss(), pre_extra)
+
+    fresh = MultiBoxEL(
+        ds,
+        embed_dim=2,
+        n_components=2,
+        objective="structural",
+        max_components=16,
+        canonical_model=cm,
+        neg_sampling_gcis=[],
+        model_filepath=ckpt,
+    )
+    fresh.from_pretrained(ckpt)
+    fresh.module.eval()
+    assert fresh.module.definition_table is not None
+    assert fresh.module.definition_table.n_defined == pre_n_defined
+    with th.no_grad():
+        for name, expected in pre_gci.items():
+            actual = fresh.module(model.training_datasets[name][:], name)
+            assert th.equal(actual, expected), f"Mismatch on {name} after from_pretrained"
+            actual_fresh_rows = fresh.module(fresh.training_datasets[name][:], name)
+            assert th.equal(actual_fresh_rows.sort().values, expected.sort().values)
+        assert th.equal(fresh.module.structural_extra_loss(), pre_extra)
+
+    # Too-narrow normal-form tensors must raise ValueError in build_structural_tables
+    class _DummyModel:
+        class_index_dict = {"http://mowl.borg/geo#A": 0, "http://mowl.borg/geo#B": 1}
+        n_components = 2
+        max_components = 4
+        structural_definitions = True
+        canonical_model = None
+        training_datasets = {"gci0": th.tensor([[0]], dtype=th.long)}
+
+    with pytest.raises(ValueError, match="columns"):
+        build_structural_tables(_DummyModel())
 
 
 @pytest.mark.slow
 def test_t3_structural_random_init_finds_model(tmp_path: Path) -> None:
-    """At least 1 of 5 seeds (0..4) reaches strict structural loss <= 1e-6 at margin 0 with empty X1 cap X2 cap X3."""
+    """At least 1 of 5 seeds (0..4) reaches strict structural loss <= 1e-6 at margin 0,
+    with min(region_size) > 0 on all target classes, min(pair_size) > 0 on all target pairs,
+    and empty X1 cap X2 cap X3.
+    """
     ds = PathDataset(fixture_path("t3.owl"))
     cm = CanonicalModel.from_dataset(ds)
 
@@ -277,6 +347,16 @@ def test_t3_structural_random_init_finds_model(tmp_path: Path) -> None:
         model.train(epochs=1500, validate_every=2000)
 
         strict_loss = _strict_structural_loss(model)
+        mod = model.module
+        targets = mod.existence_targets
+        assert targets is not None
+        with th.no_grad():
+            cls_regs = mod.class_regions(targets.classes)
+            min_cls_ne = float(region_size(cls_regs).min().item())
+            pa_regs = mod.class_regions(targets.pairs[:, 0])
+            pb_regs = mod.class_regions(targets.pairs[:, 1])
+            min_pair_ne = float(pair_size(pa_regs, pb_regs).min().item())
+
         b_x1 = _active_nonempty_boxes(model, "X1")
         b_x2 = _active_nonempty_boxes(model, "X2")
         b_x3 = _active_nonempty_boxes(model, "X3")
@@ -288,12 +368,24 @@ def test_t3_structural_random_init_finds_model(tmp_path: Path) -> None:
             if has_nonempty_slots
             else True
         )
-        ok = strict_loss <= 1e-6 and has_nonempty_slots and not triple_ne
-        outcomes.append((seed, strict_loss, triple_ne, ok))
+        ok = (
+            strict_loss <= 1e-6
+            and min_cls_ne > 0.0
+            and min_pair_ne > 0.0
+            and has_nonempty_slots
+            and not triple_ne
+        )
+        outcomes.append((seed, strict_loss, min_cls_ne, min_pair_ne, triple_ne, ok))
         if ok:
             successes += 1
 
+    for seed, strict_loss, min_cls_ne, min_pair_ne, triple_ne, ok in outcomes:
+        print(
+            f"seed={seed}: strict_loss={strict_loss:.3e}, min_cls_ne={min_cls_ne:.4f}, "
+            f"min_pair_ne={min_pair_ne:.4f}, triple_ne={triple_ne}, ok={ok}"
+        )
+
     assert successes >= 1, (
-        f"Expected at least 1 of 5 seeds to reach strict_loss <= 1e-6 with empty X1 cap X2 cap X3; "
-        f"got outcomes={outcomes}"
+        f"Expected at least 1 of 5 seeds to reach strict_loss <= 1e-6 with positive target existence "
+        f"and empty X1 cap X2 cap X3; got outcomes={outcomes}"
     )

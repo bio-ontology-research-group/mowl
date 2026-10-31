@@ -645,16 +645,22 @@ def gci2_score_neg(
     and ``aggregation="soft"`` (no ``softmin``).
 
     Guarantees:
-    - Matches :func:`mowl.nn.el.boxsquaredel.losses.gci2_score_neg` at ``k = 1``.
-    - At :math:`k \\ge 2`, equals ``0`` if and only if every component pair
-      :math:`(C_i, D_j)` is separated at target distance :math:`\\delta` from the
-      respective role boxes (:math:`\\text{md}(C_i + b_D, H_r) = \\delta` for all
-      :math:`i` and :math:`\\text{md}(D_j + b_C, T_r) = \\delta` for all :math:`j`).
+    - Matches :func:`mowl.nn.el.boxsquaredel.losses.gci2_score_neg` at ``k = 1``
+      when ``active_c`` and ``active_d`` are ``None`` (or all ``True``).
+    - At :math:`k \\ge 2`, equals ``0`` on unmasked components if and only if every
+      active component pair :math:`(C_i, D_j)` is separated at target distance
+      :math:`\\delta` from the respective role boxes (:math:`\\text{md}(C_i + b_D, H_r) = \\delta`
+      for all active :math:`i` and :math:`\\text{md}(D_j + b_C, T_r) = \\delta` for
+      all active :math:`j`).
     - Identical under ``aggregation="hard"`` and ``aggregation="soft"``.
 
     Non-guarantees:
     - ``aggregation`` and ``tau`` are validated for API uniformity but do not
       alter the negative score.
+    - When ``active_c`` is all-``False`` (an all-masked, i.e. empty, source), the
+      source half ``first_part`` returns ``0.0`` rather than ``delta ** 2``
+      (similarly ``second_part`` returns ``0.0`` when ``active_d`` is all-``False``,
+      so ``gci2_score_neg`` returns ``0.0`` when both masks are empty).
     """
     _validate_aggregation(aggregation, tau)
     bumped_c = cen_c + bump_d.unsqueeze(1)  # (B, kc, d)

@@ -4,6 +4,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import pytest
 import torch
 
 import mowl
@@ -12,6 +13,7 @@ mowl.init_jvm("2g")
 from mowl.datasets import PathDataset
 from mowl.geometric import ExactBoxInit
 from mowl.models import ELBE, MultiELBE
+from mowl.nn import MultiELBEModule
 from tests.datasetFactory import FamilyDataset
 
 
@@ -127,3 +129,15 @@ def test_init_boxes_apply_to_multielbe(t3_dataset: PathDataset, scratch_dir: Pat
     assert float(anchor_val.item()) > 0.0
     expected_reg = m.module.regularization_loss() + 0.5 * anchor_val
     assert torch.allclose(m.get_regularization_loss(), expected_reg, atol=1e-6)
+
+
+def test_multielbe_rejects_structural_objective(t3_dataset: PathDataset) -> None:
+    """MultiELBE and MultiELBEModule raise ValueError when given objective='structural'."""
+    with pytest.raises(ValueError, match="objective"):
+        MultiELBEModule(nb_ont_classes=4, nb_rels=1, embed_dim=4, objective="structural")
+    with pytest.raises(ValueError, match="objective"):
+        MultiELBE(t3_dataset, embed_dim=4, objective="structural")
+    mod = MultiELBEModule(nb_ont_classes=4, nb_rels=1, embed_dim=4, objective="axiom")
+    with pytest.raises(ValueError, match="objective"):
+        mod.objective = "structural"
+

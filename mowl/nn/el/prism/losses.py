@@ -588,7 +588,10 @@ def gci2_score_prisms(
 
     Non-guarantees:
     - Passes ``torch.abs(c.w)`` and ``torch.abs(d.w)`` to :func:`gci2_score` and
-      does not gate out empty source prisms :math:`C`.
+      does not gate out empty source prisms :math:`C`; a defined class that is
+      empty only in its box part (:math:`w_m < 0` in some coordinate while
+      :math:`\\sum_k h_k > 0`) therefore becomes a phantom non-empty box of
+      half-width :math:`|w_m| > 0` in role scores.
 
     Parameters
     ----------
@@ -841,7 +844,9 @@ def gci3_score_prisms(
     Non-guarantees:
     - Following ELBE's ``gci3_loss``, requires :math:`P_C - r` to overlap :math:`P_D`
       rather than full existential inclusion when roles are not functional.
-    - Passes ``torch.abs(c.w)`` and ``torch.abs(d.w)`` to the box overlap term.
+    - Passes ``torch.abs(c.w)`` and ``torch.abs(d.w)`` to the box overlap term,
+      so a defined class that is empty only in its box part (:math:`w_m < 0`)
+      becomes a phantom non-empty box of half-width :math:`|w_m| > 0`.
 
     Parameters
     ----------
@@ -944,6 +949,9 @@ def gci3_bot_score_prisms(c: PrismRegions, margin: float = 0.0) -> th.Tensor:
     Non-guarantees:
     - At ``margin > 0``, if :math:`\\sum_{k=1}^3 h_{C,k} \\ge 0`, this score has a
       floor of ``margin`` and cannot reach ``0``.
+    - Shrinks :math:`C` itself (:math:`\\text{relu}(\\sum_k h_{C,k} + \\text{margin})`),
+      which directly conflicts with :func:`~mowl.nn.el.structural.existence_loss`
+      whenever :math:`C` is satisfiable.
     - Does not inspect the box part ``c.cen, c.w`` or role embeddings.
 
     Parameters

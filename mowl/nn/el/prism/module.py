@@ -10,7 +10,7 @@ from mowl.nn import ELModule
 import mowl.nn.el.prism.losses as L
 from mowl.nn.el.structural import DefinitionTable, ExistenceTargets, existence_loss
 
-_VALID_OBJECTIVES = ("axiom", "structural")
+_PRISM_OBJECTIVES = ("axiom", "structural")
 
 
 class PrismModule(ELModule):
@@ -42,8 +42,21 @@ class PrismModule(ELModule):
       disjointness-if-any-separates; ELBE uses the Euclidean norm).
 
     Non-guarantees:
-    - :meth:`gci0_bot_loss` and :meth:`gci3_bot_loss` have a floor of ``margin``
-      at ``margin > 0`` since :math:`\\sum_k h_k = 3 |\\rho| \\ge 0`.
+    - :meth:`gci0_bot_loss` (under ``objective="axiom"``) and
+      :meth:`gci3_bot_loss` have a floor of ``margin`` at ``margin > 0`` since
+      :math:`\\sum_k h_k = 3 |\\rho| \\ge 0`; moreover, :meth:`gci3_bot_loss`
+      shrinks :math:`C` itself (:math:`\\text{relu}(\\sum_k h_{C,k} + \\text{margin})`),
+      which conflicts with :func:`~mowl.nn.el.structural.existence_loss` whenever
+      :math:`C` is satisfiable.
+    - Under ``objective="structural"``, only the box GCI losses (:meth:`gci0_loss`,
+      :meth:`gci0_bot_loss`, :meth:`gci1_loss`, :meth:`gci1_bot_loss`) are squared
+      hinges; the role and assertion scores (:meth:`gci2_loss`, :meth:`gci3_loss`,
+      :meth:`gci3_bot_loss`, :meth:`class_assertion_loss`,
+      :meth:`object_property_assertion_loss`) are unsquared norms/hinges and pass
+      ``torch.abs(w)`` on materialised defined classes, so a defined class that
+      is empty only in its box part (:math:`w_m < 0` while :math:`\\sum_k h_k > 0`)
+      becomes a phantom non-empty box of half-width :math:`|w_m| > 0` in role and
+      assertion scores.
     - Touching triangles (:math:`\\sum_k \\min(h_{C,k}, h_{D,k}) = 0`) count as
       disjoint at ``margin = 0``.
     - Role axiom losses (``role_inclusion``, ``role_chain``) are not implemented
@@ -68,6 +81,10 @@ class PrismModule(ELModule):
     max_depth : int, default 8
         Maximum conjunction definition depth :math:`\\text{max\\_level}` under
         ``objective="structural"``.
+    structural_definitions : bool, default True
+        Whether ``objective="structural"`` compiles acyclic conjunction
+        definitions :math:`A \\equiv X \\sqcap Y` via
+        :class:`~mowl.nn.el.structural.DefinitionTable`.
     existence_weight : float, default 1.0
         Non-negative weight multiplying :func:`~mowl.nn.el.structural.existence_loss`
         in :meth:`structural_extra_loss`.
@@ -88,24 +105,37 @@ class PrismModule(ELModule):
         margin: float = 0.1,
         objective: str = "axiom",
         max_depth: int = 8,
+        structural_definitions: bool = True,
         existence_weight: float = 1.0,
         size_reg: float = 1e-3,
     ) -> None:
-        super().__init__()
         if isinstance(embed_dim, bool) or not isinstance(embed_dim, int) or embed_dim < 3:
             raise ValueError(f"embed_dim must be an int >= 3, got {embed_dim!r}")
-        if objective not in _VALID_OBJECTIVES:
+        if not isinstance(objective, str) or objective not in _PRISM_OBJECTIVES:
             raise ValueError(
-                f"objective must be one of {_VALID_OBJECTIVES}, got {objective!r}"
+                f"objective must be one of {_PRISM_OBJECTIVES}, got {objective!r}"
             )
         if isinstance(max_depth, bool) or not isinstance(max_depth, int) or max_depth < 0:
             raise ValueError(f"max_depth must be an int >= 0, got {max_depth!r}")
-        if float(existence_weight) < 0.0:
+        if not isinstance(structural_definitions, bool):
+            raise ValueError(
+                f"structural_definitions must be a bool, got {structural_definitions!r}"
+            )
+        if (
+            isinstance(existence_weight, bool)
+            or not isinstance(existence_weight, (int, float))
+            or float(existence_weight) < 0.0
+        ):
             raise ValueError(
                 f"existence_weight must be >= 0, got {existence_weight!r}"
             )
-        if float(size_reg) < 0.0:
+        if (
+            isinstance(size_reg, bool)
+            or not isinstance(size_reg, (int, float))
+            or float(size_reg) < 0.0
+        ):
             raise ValueError(f"size_reg must be >= 0, got {size_reg!r}")
+        super().__init__()
 
         self.nb_ont_classes = nb_ont_classes
         self.nb_rels = nb_rels
@@ -114,11 +144,20 @@ class PrismModule(ELModule):
         self.margin = margin
         self.objective = objective
         self.max_depth = max_depth
+        self.structural_definitions = bool(structural_definitions)
         self.existence_weight = float(existence_weight)
         self.size_reg = float(size_reg)
         self.definition_table: Optional[DefinitionTable] = None
         self.existence_targets: Optional[ExistenceTargets] = None
-        self._top_idx: Optional[int] = None
+        self.top_idx: Optional[int] = None
+        self._structural_device: Optional[th.device] = None
+        self._def_mask_dev: Optional[th.Tensor] = None
+        self._def_x_dev: Optional[th.Tensor] = None
+        self._def_y_dev: Optional[th.Tensor] = None
+        self._target_classes_dev: Optional[th.Tensor] = None
+        self._target_pairs_dev: Optional[th.Tensor] = None
+        self._prim_mask_dev: Optional[th.Tensor] = None
+        self._has_prim: bool = False
 
         box_dim = embed_dim - 2
         self.tri_center = self._init_normalized_embedding(nb_ont_classes, 2)
@@ -161,6 +200,45 @@ class PrismModule(ELModule):
         bo = th.abs(self.box_offset(idx))
         return h, bc, bo
 
+    def _sync_structural_device(self, device: th.device) -> None:
+        """Stage structural table tensors onto ``device`` once when attached or moved."""
+        if self._structural_device == device:
+            return
+        self._structural_device = device
+        table = self.definition_table
+        if table is not None:
+            self._def_mask_dev = table.def_mask.to(device=device)
+            self._def_x_dev = table.def_x.to(device=device)
+            self._def_y_dev = table.def_y.to(device=device)
+            if table._masked_gci0_keys.device != device:
+                table._masked_gci0_keys = table._masked_gci0_keys.to(device=device)
+            if table._masked_gci1_keys.device != device:
+                table._masked_gci1_keys = table._masked_gci1_keys.to(device=device)
+        else:
+            self._def_mask_dev = None
+            self._def_x_dev = None
+            self._def_y_dev = None
+
+        targets = self.existence_targets
+        if targets is not None:
+            self._target_classes_dev = targets.classes.to(device=device, dtype=th.long)
+            self._target_pairs_dev = targets.pairs.to(device=device, dtype=th.long)
+        else:
+            self._target_classes_dev = None
+            self._target_pairs_dev = None
+
+        if self.nb_ont_classes > 0:
+            prim_mask = th.ones(self.nb_ont_classes, dtype=th.bool, device=device)
+            if self._def_mask_dev is not None:
+                prim_mask = prim_mask & (~self._def_mask_dev)
+            if self.top_idx is not None and 0 <= self.top_idx < self.nb_ont_classes:
+                prim_mask[self.top_idx] = False
+            self._prim_mask_dev = prim_mask
+            self._has_prim = bool(prim_mask.any().item())
+        else:
+            self._prim_mask_dev = None
+            self._has_prim = False
+
     def set_structural_tables(
         self,
         table: DefinitionTable,
@@ -171,14 +249,14 @@ class PrismModule(ELModule):
 
         Guarantees:
         - Stores ``table`` on :attr:`definition_table`, ``targets`` on
-          :attr:`existence_targets`, and ``top_idx`` on :attr:`_top_idx`.
+          :attr:`existence_targets`, and ``top_idx`` on :attr:`top_idx`, and
+          stages device copies of the table and target index tensors on
+          ``tri_center.weight.device``.
         - Subsequent calls to :meth:`class_regions`, :meth:`structural_extra_loss`,
           and the GCI loss methods use these tables when ``objective="structural"``.
 
         Non-guarantees:
-        - Does not mutate ``table`` or ``targets`` in place; table tensors are
-          moved to the module device on demand when indexed in
-          :meth:`class_regions` and :meth:`structural_extra_loss`.
+        - Does not re-validate table dimensions against ``nb_ont_classes``.
 
         Parameters
         ----------
@@ -195,7 +273,9 @@ class PrismModule(ELModule):
         """
         self.definition_table = table
         self.existence_targets = targets
-        self._top_idx = top_idx
+        self.top_idx = top_idx
+        self._structural_device = None
+        self._sync_structural_device(self.tri_center.weight.device)
 
     def class_regions(self, idx: th.Tensor) -> L.PrismRegions:
         """Return materialised :class:`~mowl.nn.el.prism.losses.PrismRegions` for class indices ``idx``.
@@ -205,8 +285,7 @@ class PrismModule(ELModule):
         :func:`~mowl.nn.el.prism.losses.prism_regions_intersection` with signed box
         half-widths ``w = (upper - lower) / 2`` and triangle supports
         ``h = min(h_X, h_Y)``. When no :attr:`definition_table` is set, every class
-        is treated as primitive. Definition table tensors (``def_mask``, ``def_x``,
-        ``def_y``) are moved to the module device when indexing ``idx``.
+        is treated as primitive.
 
         Guarantees:
         - Returns a :class:`~mowl.nn.el.prism.losses.PrismRegions` on the module
@@ -229,21 +308,29 @@ class PrismModule(ELModule):
             Materialised prism regions for ``idx`` on the module device.
         """
         device = self.tri_center.weight.device
-        idx_t = idx.to(device=device, dtype=th.long)
+        idx_t = (
+            idx
+            if (idx.device == device and idx.dtype == th.long)
+            else idx.to(device=device, dtype=th.long)
+        )
         h, bc, bo = self.prism_params(idx_t)
 
         table = self.definition_table
         if table is None or table.n_defined == 0 or idx_t.numel() == 0:
             return L.PrismRegions(h=h, cen=bc, w=bo)
 
-        def_mask = table.def_mask.to(device=device)[idx_t]
+        self._sync_structural_device(device)
+        assert self._def_mask_dev is not None
+        assert self._def_x_dev is not None
+        assert self._def_y_dev is not None
+        def_mask = self._def_mask_dev[idx_t]
         if not bool(def_mask.any().item()):
             return L.PrismRegions(h=h, cen=bc, w=bo)
 
         def_pos = th.nonzero(def_mask, as_tuple=False).squeeze(1)
         def_ids = idx_t[def_pos]
-        dx = table.def_x.to(device=device)[def_ids]
-        dy = table.def_y.to(device=device)[def_ids]
+        dx = self._def_x_dev[def_ids]
+        dy = self._def_y_dev[def_ids]
 
         rx = self.class_regions(dx)
         ry = self.class_regions(dy)
@@ -292,7 +379,7 @@ class PrismModule(ELModule):
 
         Guarantees:
         - Returns a scalar tensor of shape ``()`` on the module device.
-        - Excludes defined classes (``definition_table.def_mask``) and ``_top_idx``
+        - Excludes defined classes (``definition_table.def_mask``) and ``top_idx``
           (``owl:Thing``) from the primitive size regularisation term
           ``size_reg * mean([|r|, 2|o|])``.
 
@@ -311,20 +398,21 @@ class PrismModule(ELModule):
         """
         device = self.tri_center.weight.device
         dtype = self.tri_center.weight.dtype
+        self._sync_structural_device(device)
         total = th.zeros((), device=device, dtype=dtype)
 
         if self.existence_targets is not None and self.existence_weight > 0.0:
-            cls_idx = self.existence_targets.classes.to(device=device, dtype=th.long)
-            if cls_idx.numel() > 0:
-                reg_c = self.class_regions(cls_idx)
+            assert self._target_classes_dev is not None
+            assert self._target_pairs_dev is not None
+            if self._target_classes_dev.numel() > 0:
+                reg_c = self.class_regions(self._target_classes_dev)
                 class_sizes = L.prism_nonempty_measure(reg_c)
             else:
                 class_sizes = th.empty(0, device=device, dtype=dtype)
 
-            pairs_idx = self.existence_targets.pairs.to(device=device, dtype=th.long)
-            if pairs_idx.shape[0] > 0:
-                rc = self.class_regions(pairs_idx[:, 0])
-                rd = self.class_regions(pairs_idx[:, 1])
+            if self._target_pairs_dev.shape[0] > 0:
+                rc = self.class_regions(self._target_pairs_dev[:, 0])
+                rd = self.class_regions(self._target_pairs_dev[:, 1])
                 inter = L.prism_regions_intersection(rc, rd)
                 pair_sizes = L.prism_nonempty_measure(inter)
             else:
@@ -334,17 +422,12 @@ class PrismModule(ELModule):
                 class_sizes, pair_sizes, self.margin
             )
 
-        if self.size_reg > 0.0 and self.nb_ont_classes > 0:
-            prim_mask = th.ones(self.nb_ont_classes, dtype=th.bool, device=device)
-            if self.definition_table is not None:
-                prim_mask = prim_mask & (~self.definition_table.def_mask.to(device=device))
-            if self._top_idx is not None and 0 <= self._top_idx < self.nb_ont_classes:
-                prim_mask[self._top_idx] = False
-            if bool(prim_mask.any().item()):
-                r_abs = th.abs(self.tri_inradius.weight[prim_mask])
-                w_abs = 2.0 * th.abs(self.box_offset.weight[prim_mask])
-                size_term = th.cat([r_abs, w_abs], dim=-1).mean()
-                total = total + self.size_reg * size_term
+        if self.size_reg > 0.0 and self._has_prim:
+            assert self._prim_mask_dev is not None
+            r_abs = th.abs(self.tri_inradius.weight[self._prim_mask_dev])
+            w_abs = 2.0 * th.abs(self.box_offset.weight[self._prim_mask_dev])
+            size_term = th.cat([r_abs, w_abs], dim=-1).mean()
+            total = total + self.size_reg * size_term
 
         return total
 

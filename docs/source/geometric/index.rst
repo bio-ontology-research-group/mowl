@@ -435,9 +435,14 @@ guarantee concerns the zero set of the loss, not convergence of the optimiser;
 as measured on the :math:`T_3` fixture in the slow tests (empirical measurements,
 not a convergence guarantee; the synthetic sweep results live in the
 experiments repository), :class:`~mowl.models.MultiBoxEL` (:math:`k = 4`,
-:math:`K = 16`, :math:`d = 2`, re-seeding every 50 epochs) reached an exact
-model in 4 of 5 seeds and :class:`~mowl.models.PrismEL` (:math:`d = 3`) in 5 of
-5 seeds:
+:math:`K = 16`, :math:`d = 2`, re-seeding every 50 epochs) reached an exact,
+strictly non-empty Helly-breaking model (``strict_loss == 0``, minimum target
+class size :math:`\ge 0.0173 > 0`, minimum target pair size
+:math:`\ge 0.0179 > 0`, and :math:`X_1 \cap X_2 \cap X_3 = \emptyset`) in 4 of
+5 measured seeds and :class:`~mowl.models.PrismEL` (:math:`d = 3`) in 5 of 5
+measured seeds (``strict_loss == 0``, minimum target class and pair
+``prism_nonempty_measure`` :math:`\ge 0.0100 > 0`, and
+:math:`X_1 \cap X_2 \cap X_3 = \emptyset`):
 
 1. **Regions with signed half-widths and absent slots (:class:`~mowl.nn.el.structural.Regions`):**
    Every class :math:`C` is materialised as :math:`K = \text{max\_components}`
@@ -559,7 +564,7 @@ model in 4 of 5 seeds and :class:`~mowl.models.PrismEL` (:math:`d = 3`) in 5 of
       * - :math:`C \sqcap D \sqsubseteq \bot` (``gci1_bot``, :func:`~mowl.nn.el.structural.gci1_bot_structural`)
         - :math:`\operatorname{mean}_{(i,j) \text{ active}} \operatorname{relu}(\text{ne}(C_i \cap D_j) + m)^2` (with module slots gated to active non-empty components :math:`\text{ne} > 0`: identical zero set at :math:`m = 0`, deviating from gating on ``active`` alone only at :math:`m > 0`) — separation by :math:`m` in **at least one** coordinate
       * - :math:`C \sqsubseteq \exists r.D`, :math:`\exists r.C \sqsubseteq D`, :math:`\exists r.C \sqsubseteq \bot`, and ABox assertions (``gci2``, ``gci3``, ``gci3_bot``, ``class_assertion``, ``object_property_assertion``)
-        - Existing Box²EL multibox scores (hard aggregation, margin :math:`m`, with ``gci3`` and ``gci3_bot`` squared) evaluated on the materialised slots :math:`(c, |w|)` with inactive or empty slots (:math:`\neg\text{active} \vee \text{ne}(w) \le 0`) masked out (source slots excluded from means, target slots excluded from minima); class bumps remain per-class embedding rows
+        - Existing Box²EL multibox scores (hard aggregation, with ``gci3`` and ``gci3_bot`` squared) evaluated on the materialised slots :math:`(c, |w|)` with inactive or empty slots (:math:`\neg\text{active} \vee \text{ne}(w) \le 0`) masked out (source slots excluded from means, target slots excluded from minima); because Box²EL ``gamma`` loosens inclusions (:math:`\operatorname{relu}(\text{dist} + 2o - \gamma)`), positive role and assertion scores pass ``gamma = -m`` (tightening inclusion by :math:`m`), whereas negative scores (:func:`~mowl.nn.el.multiboxel.losses.gci2_score_neg` and negative ``object_property_assertion``) pass ``gamma = +m`` (requiring separation by :math:`m`); class bumps remain per-class embedding rows
 
    Additional per-epoch terms returned by
    :meth:`~mowl.models.MultiBoxEL.additional_training_loss` via
@@ -581,12 +586,16 @@ model in 4 of 5 seeds and :class:`~mowl.models.PrismEL` (:math:`d = 3`) in 5 of
      satisfiability for IRIs in ``canonical_model.concept_names`` comes from
      :meth:`~mowl.geometric.completion.CanonicalModel.is_satisfiable` and
      :meth:`~mowl.geometric.completion.CanonicalModel.joint_satisfiable`, while
-     IRIs unknown to the canonical model fall back to the asserted rule
-     (treated as satisfiable for single classes and checked against the
-     asserted ``gci0_bot``/``gci1_bot`` rows for pairs); otherwise a class is
-     assumed satisfiable unless a ``gci0_bot`` row :math:`(C, \bot)` exists and
-     a ``gci1`` pair unless either class appears in ``gci0_bot`` or
-     :math:`(C, D)` appears in ``gci1_bot``.
+     IRIs unknown to ``canonical_model.concept_names`` fall back to the asserted
+     ``gci0_bot``/``gci1_bot`` rules for both single classes and pairs (note
+     that auxiliary classes minted by :class:`~mowl.ontology.normalize.ELNormalizer`,
+     ``http://mowl.borg/aux/...``, are unknown to a
+     :class:`~mowl.geometric.completion.CanonicalModel` built with
+     ``mowl.geometric``'s own normaliser, so their entailed unsatisfiability
+     cannot be detected via ``canonical_model`` and uses the asserted rules
+     only); otherwise a class is assumed satisfiable unless a ``gci0_bot`` row
+     :math:`(C, \bot)` exists and a ``gci1`` pair unless either class appears in
+     ``gci0_bot`` or :math:`(C, D)` appears in ``gci1_bot``.
    * *Size* (weight ``size_reg``, default ``1e-3``): mean of :math:`2|o|` over
      raw primitive slots and coordinates (excluding :math:`\top` and accepted
      defined classes), keeping spare components small so they can be relocated
@@ -606,7 +615,14 @@ model in 4 of 5 seeds and :class:`~mowl.models.PrismEL` (:math:`d = 3`) in 5 of
      :math:`D` with no active non-empty slot) makes the target minimum fall back
      to ``0.0`` and renders the role or assertion score (or the target half of
      ``gci2``) vacuously ``0`` unless the existence term forces :math:`D` to be
-     non-empty. Furthermore, :func:`~mowl.nn.el.structural.region_size` and
+     non-empty; similarly, in the negative score
+     :func:`~mowl.nn.el.multiboxel.losses.gci2_score_neg`, an all-masked (empty)
+     source :math:`C` makes the source half return ``0.0`` rather than
+     :math:`\delta^2` (and ``0.0`` overall when both source and target are
+     all-masked). Because :math:`\top` (``owl:Thing``) is excluded from
+     :class:`~mowl.nn.el.structural.ExistenceTargets`, axioms with :math:`\top`
+     on the left-hand side are vacuous if :math:`\top` collapses to an empty
+     region. Furthermore, :func:`~mowl.nn.el.structural.region_size` and
      :func:`~mowl.nn.el.structural.pair_size` route gradient only through the
      argmax active slot or pair, and each non-empty source slot :math:`C_i` in
      ``gci0`` or pair slot :math:`C_i \cap D_j` in ``gci1`` must be covered by a
@@ -638,7 +654,7 @@ model in 4 of 5 seeds and :class:`~mowl.models.PrismEL` (:math:`d = 3`) in 5 of
      moments of moved rows are not reset.
 
 5. **Prisms (:class:`~mowl.models.PrismEL`, :class:`~mowl.nn.PrismModule`):**
-   Under ``PrismEL(..., margin=0.1, objective="structural", max_depth=8, existence_weight=1.0, size_reg=1e-3, canonical_model=None)``,
+   Under ``PrismEL(..., margin=0.1, objective="structural", max_depth=8, structural_definitions=True, existence_weight=1.0, size_reg=1e-3, canonical_model=None)``,
    each class is materialised as a single prism
    :class:`~mowl.nn.el.prism.losses.PrismRegions` ``(h, cen, w)`` with support
    vector :math:`h \in \mathbb{R}^3`, box centre :math:`\text{cen} \in \mathbb{R}^{d-2}`,
@@ -668,24 +684,35 @@ model in 4 of 5 seeds and :class:`~mowl.models.PrismEL` (:math:`d = 3`) in 5 of
       * - :math:`C \sqcap D \sqsubseteq \bot` (``gci1_bot``, :func:`~mowl.nn.el.prism.losses.gci1_bot_structural`)
         - :math:`\operatorname{relu}(\text{ne}(C \cap D) + m)^2`
       * - ``gci2``, ``gci3``, ``gci3_bot``, and assertions
-        - Existing prism losses (:func:`~mowl.nn.el.prism.losses.gci2_score_prisms`, :func:`~mowl.nn.el.prism.losses.gci2_score_neg_prisms`, :func:`~mowl.nn.el.prism.losses.gci3_score_prisms`, :func:`~mowl.nn.el.prism.losses.gci3_bot_score_prisms`, :func:`~mowl.nn.el.prism.losses.class_assertion_score_prisms`) on materialised prisms with ``|w|``
+        - Existing prism scores (:func:`~mowl.nn.el.prism.losses.gci2_score_prisms`, :func:`~mowl.nn.el.prism.losses.gci2_score_neg_prisms`, :func:`~mowl.nn.el.prism.losses.gci3_score_prisms`, :func:`~mowl.nn.el.prism.losses.gci3_bot_score_prisms`, :func:`~mowl.nn.el.prism.losses.class_assertion_score_prisms`, :func:`~mowl.nn.el.prism.losses.object_property_assertion_loss`) on materialised prisms with ``|w|`` (unsquared norms/hinges)
 
    The existence term uses :math:`\text{NE}(C) = \text{ne}(C)` and
    :math:`\text{NE}(C \sqcap D) = \text{ne}(C \cap D)`, and the size term
    averages :math:`|\rho|` and :math:`2|o|` over primitive classes (excluding
-   :math:`\top`). There is no re-seeding (single component). Because the
-   structural prism losses are already squared hinges,
-   :meth:`PrismEL.compute_loss <mowl.models.PrismEL.compute_loss>` is **not**
-   squared under ``objective="structural"`` (it returns ``pos_scores.mean()``
-   directly rather than ``MSE(pos_scores.mean(), 0)``, while still adding
+   :math:`\top`). There is no re-seeding (single component). Under
+   ``objective="structural"``, :meth:`PrismEL.compute_loss <mowl.models.PrismEL.compute_loss>`
+   returns ``pos_scores.mean()`` directly (without an outer squaring): only the
+   box structural GCI losses (``gci0``, ``gci0_bot``, ``gci1``, ``gci1_bot``)
+   are squared hinges, whereas the prism role and assertion scores (``gci2``,
+   ``gci3``, ``gci3_bot``, ``class_assertion``, ``object_property_assertion``)
+   are unsquared norms/hinges that enter linearly (while still adding
    ``MSE(neg_scores.mean(), 1)`` when ``neg_scores`` is present).
+
+   * **Prism non-guarantees:** Because the prism role and assertion scores take
+     :math:`|w|` on materialised defined classes, a defined class that is empty
+     only in its box part (:math:`w_m < 0` in some coordinate while
+     :math:`\sum_k h_k > 0`) becomes a phantom non-empty box of half-width
+     :math:`|w_m| > 0` in ``gci2``, ``gci3``, and ``class_assertion``. In
+     addition, :func:`~mowl.nn.el.prism.losses.gci3_bot_score_prisms`
+     (:math:`\operatorname{relu}(\sum_k h_{C,k} + m)`) shrinks :math:`C` itself,
+     which conflicts with the existence term whenever :math:`C` is satisfiable.
 
 6. **Public interface:**
 
    * ``MultiBoxEL(dataset, ..., margin=0.02, objective="structural", max_components=None, structural_definitions=True, existence_weight=1.0, size_reg=1e-3, reseed_every=0, canonical_model=None)``
      (where ``max_components=None`` defaults to :math:`k^2` and
      ``component_aggregation`` must be ``"hard"``).
-   * ``PrismEL(dataset, ..., margin=0.1, objective="structural", max_depth=8, existence_weight=1.0, size_reg=1e-3, canonical_model=None)``.
+   * ``PrismEL(dataset, ..., margin=0.1, objective="structural", max_depth=8, structural_definitions=True, existence_weight=1.0, size_reg=1e-3, canonical_model=None)``.
    * Default ``objective="axiom"`` leaves every existing code path unchanged.
      Negative sampling stays enabled under ``objective="structural"`` just as in
      the ``objective="axiom"`` path.
@@ -700,12 +727,16 @@ model in 4 of 5 seeds and :class:`~mowl.models.PrismEL` (:math:`d = 3`) in 5 of
      (detached on CPU); ``module.definition_table``
      (:class:`~mowl.nn.el.structural.DefinitionTable`),
      ``module.existence_targets``
-     (:class:`~mowl.nn.el.structural.ExistenceTargets`), and ``module.margin``
-     (tightening margin under both models when ``objective="structural"``:
-     default ``0.02`` on :class:`~mowl.models.MultiBoxEL` and ``0.1`` on
-     :class:`~mowl.models.PrismEL`). Both
-     models build ``definition_table`` and ``existence_targets`` idempotently at
-     the start of every ``train()`` call.
+     (:class:`~mowl.nn.el.structural.ExistenceTargets`), ``module.top_idx``, and
+     ``module.margin`` (tightening margin under both models when
+     ``objective="structural"``, passed as ``gamma = -margin`` to positive
+     Box²EL role/assertion scores and ``gamma = +margin`` to negative Box²EL
+     role/assertion scores: default ``0.02`` on :class:`~mowl.models.MultiBoxEL`
+     and ``0.1`` on :class:`~mowl.models.PrismEL`). Both models build
+     ``definition_table`` and ``existence_targets`` via
+     :func:`~mowl.nn.el.structural.build_structural_tables` at the start of
+     ``train()``, cache them on the model, and preserve them across
+     ``init_module()``, ``load_best_model()``, and ``from_pretrained()``.
 
 
 References

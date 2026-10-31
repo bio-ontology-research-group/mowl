@@ -55,7 +55,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import heapq
-from typing import TYPE_CHECKING, Dict, List, NamedTuple, Optional, Set, Tuple
+from typing import TYPE_CHECKING, Any, Dict, List, Mapping, NamedTuple, Optional, Set, Tuple
 
 import torch as th
 
@@ -77,6 +77,7 @@ __all__ = [
     "existence_loss",
     "DefinitionTable",
     "ExistenceTargets",
+    "build_structural_tables",
 ]
 
 
@@ -925,7 +926,9 @@ class DefinitionTable:
             return th.zeros(bsz, dtype=th.bool, device=rows.device)
         n = self.n_classes
         keys = rows[:, 0].to(th.long) * n + rows[:, 1].to(th.long)
-        return th.isin(keys, self._masked_gci0_keys.to(device=rows.device))
+        if self._masked_gci0_keys.device != rows.device:
+            self._masked_gci0_keys = self._masked_gci0_keys.to(device=rows.device)
+        return th.isin(keys, self._masked_gci0_keys)
 
     def masked_gci1(self, rows: th.Tensor) -> th.Tensor:
         """Return a boolean mask over ``gci1`` rows ``(C, D, E)`` covered by accepted definitions.
@@ -957,7 +960,9 @@ class DefinitionTable:
         r1 = rows[:, 1].to(th.long)
         r2 = rows[:, 2].to(th.long)
         keys = (r0 * n + r1) * n + r2
-        return th.isin(keys, self._masked_gci1_keys.to(device=rows.device))
+        if self._masked_gci1_keys.device != rows.device:
+            self._masked_gci1_keys = self._masked_gci1_keys.to(device=rows.device)
+        return th.isin(keys, self._masked_gci1_keys)
 
 
 @dataclass
@@ -973,6 +978,15 @@ class ExistenceTargets:
     Non-guarantees:
     - Without a :class:`~mowl.geometric.completion.CanonicalModel`, satisfiability
       is approximated syntactically from ``gci0_bot`` and ``gci1_bot`` rows only.
+    - Auxiliary classes minted by :class:`~mowl.reasoning.normalize.ELNormalizer`
+      (``http://mowl.borg/aux/...``) are unknown to a
+      :class:`~mowl.geometric.completion.CanonicalModel` built with
+      ``mowl.geometric``'s own normaliser, so their entailed unsatisfiability
+      cannot be detected via ``cm`` and falls back to the asserted ``gci0_bot``
+      and ``gci1_bot`` rules only.
+    - ``owl:Thing`` (``top_idx``) is excluded from ``classes`` and ``pairs``, so
+      axioms with :math:`\\top` on the left-hand side can be satisfied vacuously
+      if :math:`\\top` collapses to an empty region.
 
     Attributes
     ----------
@@ -1001,10 +1015,10 @@ class ExistenceTargets:
 
         Guarantees:
         - With ``cm`` provided, uses ``cm.is_satisfiable(iri)`` for classes whose
-          IRI is in ``cm.concept_names`` (treating unknown IRIs as satisfiable)
-          and ``cm.joint_satisfiable([iri_c, iri_d])`` for ``gci1`` pairs whose
-          IRIs are both in ``cm.concept_names`` (falling back to the asserted
-          ``gci0_bot``/``gci1_bot`` rule when an IRI is unknown to ``cm``).
+          IRI is in ``cm.concept_names`` and ``cm.joint_satisfiable([iri_c, iri_d])``
+          for ``gci1`` pairs whose IRIs are both in ``cm.concept_names``, falling
+          back to the asserted ``gci0_bot``/``gci1_bot`` rule whenever an IRI is
+          unknown to ``cm`` (both for single classes and for pairs).
           Raises :class:`ValueError` if ``cm`` is provided with ``index_to_iri=None``.
         - Without ``cm``, includes every class not appearing in ``gci0_bot`` and
           every distinct unordered pair ``(min(C, D), max(C, D))`` from ``gci1``
@@ -1015,6 +1029,11 @@ class ExistenceTargets:
         Non-guarantees:
         - Does not test pairs that do not occur as the left-hand side of any
           ``gci1`` row.
+        - Auxiliary classes minted by :class:`~mowl.reasoning.normalize.ELNormalizer`
+          (``http://mowl.borg/aux/...``) are unknown to a
+          :class:`~mowl.geometric.completion.CanonicalModel` built with
+          ``mowl.geometric``'s own normaliser, so their entailed unsatisfiability
+          cannot be detected via ``cm`` (asserted ``gci0_bot``/``gci1_bot`` rules only).
 
         Parameters
         ----------
@@ -1074,7 +1093,8 @@ class ExistenceTargets:
                     if cm.is_satisfiable(iri):
                         target_classes.append(c)
                 else:
-                    target_classes.append(c)
+                    if c not in unsat_classes_asserted:
+                        target_classes.append(c)
             else:
                 if c not in unsat_classes_asserted:
                     target_classes.append(c)
@@ -1125,3 +1145,138 @@ class ExistenceTargets:
             pairs_tensor = th.zeros((0, 2), dtype=th.long)
 
         return cls(classes=classes_tensor, pairs=pairs_tensor)
+
+
+def _extract_normal_form_rows(training_datasets: Mapping[str, Any], name: str, cols: int) -> th.Tensor:
+    """Extract a 2-D ``(N, cols)`` ``torch.long`` CPU tensor for normal-form ``name``."""
+    ds = training_datasets.get(name)
+    if ds is None:
+        return th.zeros((0, cols), dtype=th.long)
+    try:
+        if len(ds) == 0:
+            return th.zeros((0, cols), dtype=th.long)
+    except TypeError:
+        pass
+    rows = ds[:]
+    if isinstance(rows, (tuple, list)):
+        rows = rows[0]
+    rows = th.as_tensor(rows, dtype=th.long).detach().cpu()
+    if rows.ndim == 1:
+        if rows.numel() == 0:
+            return th.zeros((0, cols), dtype=th.long)
+        if rows.shape[0] < cols:
+            raise ValueError(
+                f"Expected at least {cols} columns for {name!r}, got shape {tuple(rows.shape)}."
+            )
+        rows = rows.unsqueeze(0)
+    elif rows.ndim == 2:
+        if rows.shape[1] < cols:
+            raise ValueError(
+                f"Expected at least {cols} columns for {name!r}, got shape {tuple(rows.shape)}."
+            )
+        if rows.shape[0] == 0:
+            return th.zeros((0, cols), dtype=th.long)
+    else:
+        raise ValueError(
+            f"Expected 1-D or 2-D tensor for {name!r}, got shape {tuple(rows.shape)}."
+        )
+    return rows[:, :cols]
+
+
+def build_structural_tables(
+    model_like: Any,
+    *,
+    k: Optional[int] = None,
+    max_components: Optional[int] = None,
+    enabled: Optional[bool] = None,
+    max_level: Optional[int] = None,
+    cm: Optional[CanonicalModel] = None,
+) -> Tuple[DefinitionTable, ExistenceTargets, Optional[int]]:
+    """Build :class:`DefinitionTable`, :class:`ExistenceTargets`, and ``top_idx`` from a model.
+
+    Guarantees:
+    - Extracts ``gci0`` (2 cols), ``gci0_bot`` (2 cols), ``gci1`` (3 cols), and
+      ``gci1_bot`` (2 cols) from ``model_like.training_datasets``, raising
+      :class:`ValueError` if any tensor has fewer columns than required.
+    - Returns ``(definition_table, existence_targets, top_idx)``.
+
+    Non-guarantees:
+    - Auxiliary classes minted by :class:`~mowl.reasoning.normalize.ELNormalizer`
+      are unknown to a :class:`~mowl.geometric.completion.CanonicalModel` built
+      with ``mowl.geometric``'s normaliser, so their satisfiability uses the
+      asserted ``gci0_bot``/``gci1_bot`` rules only.
+
+    Parameters
+    ----------
+    model_like : Any
+        Model exposing ``training_datasets`` and ``class_index_dict``, plus
+        optional attributes ``n_components`` (or ``k``), ``max_components``,
+        ``structural_definitions``, ``max_depth``, and ``canonical_model``.
+    k : Optional[int], default None
+        Number of primitive components per class (defaults to
+        ``getattr(model_like, "n_components", getattr(model_like, "k", 1))``).
+    max_components : Optional[int], default None
+        Maximum component slots for defined classes (defaults to
+        ``getattr(model_like, "max_components", 2**30)``).
+    enabled : Optional[bool], default None
+        Whether structural definitions are enabled (defaults to
+        ``getattr(model_like, "structural_definitions", True)``).
+    max_level : Optional[int], default None
+        Optional maximum definition depth cap (defaults to
+        ``getattr(model_like, "max_depth", None)``).
+    cm : Optional[CanonicalModel], default None
+        Optional pre-built canonical model (defaults to
+        ``getattr(model_like, "canonical_model", None)``).
+
+    Returns
+    -------
+    Tuple[DefinitionTable, ExistenceTargets, Optional[int]]
+        Compiled ``(definition_table, existence_targets, top_idx)``.
+    """
+    td = model_like.training_datasets
+    gci0_rows = _extract_normal_form_rows(td, "gci0", 2)
+    gci0_bot_rows = _extract_normal_form_rows(td, "gci0_bot", 2)
+    gci1_rows = _extract_normal_form_rows(td, "gci1", 3)
+    gci1_bot_rows = _extract_normal_form_rows(td, "gci1_bot", 2)
+
+    class_to_id = dict(model_like.class_index_dict)
+    n_classes = len(class_to_id)
+    top_idx = class_to_id.get("http://www.w3.org/2002/07/owl#Thing")
+    bottom_idx = class_to_id.get("http://www.w3.org/2002/07/owl#Nothing")
+    index_to_iri = {int(idx): str(iri) for iri, idx in class_to_id.items()}
+
+    default_k = getattr(model_like, "n_components", getattr(model_like, "k", 1))
+    k_val = int(default_k if k is None else k)
+    default_max_comp = getattr(model_like, "max_components", 2**30)
+    max_comp_val = int(default_max_comp if max_components is None else max_components)
+    enabled_val = bool(
+        getattr(model_like, "structural_definitions", True)
+        if enabled is None
+        else enabled
+    )
+    max_level_val = getattr(model_like, "max_depth", None) if max_level is None else max_level
+    cm_val = getattr(model_like, "canonical_model", None) if cm is None else cm
+
+    table = DefinitionTable.from_normal_forms(
+        gci0=gci0_rows,
+        gci1=gci1_rows,
+        n_classes=n_classes,
+        k=k_val,
+        max_components=max_comp_val,
+        top_idx=top_idx,
+        bottom_idx=bottom_idx,
+        enabled=enabled_val,
+        max_level=max_level_val,
+    )
+
+    targets = ExistenceTargets.from_normal_forms(
+        gci0_bot=gci0_bot_rows,
+        gci1=gci1_rows,
+        gci1_bot=gci1_bot_rows,
+        n_classes=n_classes,
+        top_idx=top_idx,
+        bottom_idx=bottom_idx,
+        index_to_iri=index_to_iri,
+        cm=cm_val,
+    )
+    return table, targets, top_idx

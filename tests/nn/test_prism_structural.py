@@ -465,3 +465,44 @@ def test_role_and_assertion_prisms_delegation() -> None:
         mod.class_assertion_loss(ca_batch, neg=False),
         atol=1e-6,
     )
+
+
+def test_prism_module_api_symmetry_and_validation() -> None:
+    """PrismModule exposes structural_definitions and public top_idx, and rejects bools for existence_weight/size_reg."""
+    mod = PrismModule(
+        nb_ont_classes=4,
+        nb_rels=1,
+        embed_dim=4,
+        objective="structural",
+        structural_definitions=False,
+    )
+    assert mod.structural_definitions is False
+    assert mod.top_idx is None
+
+    table = DefinitionTable.from_normal_forms(
+        gci0=th.zeros((0, 2), dtype=th.long),
+        gci1=th.zeros((0, 3), dtype=th.long),
+        n_classes=4,
+        k=1,
+        max_components=2**30,
+        top_idx=3,
+        bottom_idx=None,
+        enabled=False,
+    )
+    targets = ExistenceTargets(
+        classes=th.tensor([0, 1, 2], dtype=th.long),
+        pairs=th.zeros((0, 2), dtype=th.long),
+    )
+    mod.set_structural_tables(table, targets, top_idx=3)
+    assert mod.top_idx == 3
+
+    for bad_kw in (
+        {"existence_weight": True},
+        {"existence_weight": False},
+        {"size_reg": True},
+        {"size_reg": False},
+        {"structural_definitions": 1},  # type: ignore[dict-item]
+    ):
+        with pytest.raises(ValueError):
+            PrismModule(nb_ont_classes=4, nb_rels=1, embed_dim=4, **bad_kw)  # type: ignore[arg-type]
+

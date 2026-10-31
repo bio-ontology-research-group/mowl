@@ -20,6 +20,7 @@ from mowl.nn.el.structural import (
     DefinitionTable,
     ExistenceTargets,
     Regions,
+    nonempty_measure,
 )
 from tests.geometric.helpers import _write_t3_exact, fixture_path
 
@@ -644,3 +645,195 @@ def test_reseed_uses_dead_slot_at_most_once_per_call() -> None:
         pytest.approx([10.0, 10.0], abs=1e-6),
         pytest.approx([-10.0, -10.0], abs=1e-6),
     )
+
+
+def test_existence_targets_with_cm_unknown_iri_uses_asserted_gci0_bot() -> None:
+    """When cm is given, unknown IRIs (e.g. ELNormalizer aux classes) fall back to asserted gci0_bot."""
+    class _FakeCM:
+        concept_names = {"http://mowl.borg/geo#A", "http://mowl.borg/geo#UnsatNamed"}
+
+        def is_satisfiable(self, iri: str) -> bool:
+            return iri == "http://mowl.borg/geo#A"
+
+        def joint_satisfiable(self, iris) -> bool:
+            return all(i == "http://mowl.borg/geo#A" for i in iris)
+
+    index_to_iri = {
+        0: "http://mowl.borg/geo#A",
+        1: "http://mowl.borg/geo#UnsatNamed",
+        2: "http://mowl.borg/aux/sat_aux",
+        3: "http://mowl.borg/aux/unsat_aux",
+        4: "http://www.w3.org/2002/07/owl#Nothing",
+    }
+    gci0_bot = th.tensor([[3, 4]], dtype=th.long)
+    gci1 = th.tensor([[0, 2, 0], [0, 3, 0]], dtype=th.long)
+    gci1_bot = th.zeros((0, 2), dtype=th.long)
+
+    targets = ExistenceTargets.from_normal_forms(
+        gci0_bot=gci0_bot,
+        gci1=gci1,
+        gci1_bot=gci1_bot,
+        n_classes=5,
+        top_idx=None,
+        bottom_idx=4,
+        index_to_iri=index_to_iri,
+        cm=_FakeCM(),  # type: ignore[arg-type]
+    )
+    # 0 (A, sat in cm) and 2 (unknown IRI, not in gci0_bot) included;
+    # 1 (UnsatNamed, unsat in cm) and 3 (unknown IRI, in gci0_bot) excluded.
+    assert targets.classes.tolist() == [0, 2]
+    assert targets.pairs.tolist() == [[0, 2]]
+
+
+def test_structural_role_and_assertion_dispatch_defined_masks_and_margin() -> None:
+    """Module-level structural dispatch for gci2, gci3, class_assertion, object_property_assertion:
+    defined classes as source/target, empty-slot masks (including all-empty source in gci2_score_neg),
+    and tightening margin (slack < m scores > 0, slack >= m scores 0, margin=0 iff satisfied).
+    """
+    # Classes: 0:A := X1 cap X2 (defined), 1:X1 (prim), 2:X2 (prim), 3:D (prim), 4:EmptyDef := X1 cap D (defined, empty)
+    gci0 = th.tensor([[0, 1], [0, 2], [4, 1], [4, 3]], dtype=th.long)
+    gci1 = th.tensor([[1, 2, 0], [1, 3, 4]], dtype=th.long)
+    table = DefinitionTable.from_normal_forms(
+        gci0=gci0,
+        gci1=gci1,
+        n_classes=5,
+        k=2,
+        max_components=4,
+        top_idx=None,
+        bottom_idx=None,
+        enabled=True,
+    )
+    assert table.def_mask.tolist() == [True, False, False, False, True]
+    targets = ExistenceTargets(
+        classes=th.tensor([0, 1, 2, 3], dtype=th.long),
+        pairs=th.zeros((0, 2), dtype=th.long),
+    )
+
+    m = 0.2
+    mod = MultiBoxELModule(
+        nb_ont_classes=5,
+        nb_rels=1,
+        nb_inds=2,
+        embed_dim=1,
+        n_components=2,
+        margin=m,
+        delta=2.0,
+        objective="structural",
+        max_components=4,
+    )
+    mod.set_structural_tables(table, targets)
+
+    with th.no_grad():
+        # Sentinel raw rows for defined classes 0 and 4 so using raw rows would blow up
+        mod.class_center.weight[0] = th.tensor([500.0, 500.0])
+        mod.class_offset.weight[0] = th.tensor([50.0, 50.0])
+        mod.class_center.weight[4] = th.tensor([-500.0, -500.0])
+        mod.class_offset.weight[4] = th.tensor([50.0, 50.0])
+
+        # X1 (1): slot 0 = [-1, 1] (cen=0, off=1), slot 1 = [10, 12] (cen=11, off=1)
+        mod.class_center.weight[1] = th.tensor([0.0, 11.0])
+        mod.class_offset.weight[1] = th.tensor([1.0, 1.0])
+        # X2 (2): slot 0 = [-1, 1] (cen=0, off=1), slot 1 = [20, 22] (cen=21, off=1)
+        # => A = X1 cap X2 has 1 non-empty slot [-1, 1] (cen=0, w=1) and 3 empty slots (w < 0)
+        mod.class_center.weight[2] = th.tensor([0.0, 21.0])
+        mod.class_offset.weight[2] = th.tensor([1.0, 1.0])
+        # D (3): slot 0 = [-1.1, 1.1] (cen=0, off=1.1 -> slack 0.1 < m=0.2 over [-1, 1]),
+        #        slot 1 = [30, 30] (cen=30, off=0 -> empty, ne=0)
+        mod.class_center.weight[3] = th.tensor([0.0, 30.0])
+        mod.class_offset.weight[3] = th.tensor([1.1, 0.0])
+
+        # Zero all bumps
+        mod.bump_classes.weight.zero_()
+        mod.bump_individuals.weight.zero_()
+
+        # Role 0: head = [-1.1, 1.1] (cen=0, off=1.1 -> slack 0.1 < m=0.2 over A=[-1, 1]),
+        #         tail = [-1.3, 1.3] (cen=0, off=1.3 -> slack 0.2 >= m=0.2 over D=[-1.1, 1.1])
+        mod.head_center.weight[0] = th.tensor([0.0])
+        mod.head_offset.weight[0] = th.tensor([1.1])
+        mod.tail_center.weight[0] = th.tensor([0.0])
+        mod.tail_offset.weight[0] = th.tensor([1.3])
+
+        # Individuals: ind 0 at cen=0, off=0.95 (inside A=[-1, 1] with slack 0.05 < m=0.2)
+        #              ind 1 at cen=0, off=0.70 (inside A=[-1, 1] with slack 0.30 >= m=0.2)
+        mod.ind_center.weight[0] = th.tensor([0.0])
+        mod.ind_offset.weight[0] = th.tensor([0.95])
+        mod.ind_center.weight[1] = th.tensor([0.0])
+        mod.ind_offset.weight[1] = th.tensor([0.70])
+
+    # 1. Defined class A (0) as gci2 source, primitive D (3) as target:
+    # A=[-1, 1] in head=[-1.1, 1.1] has slack 0.1 < m=0.2 -> term_1 = (0.2 - 0.1) = 0.1 > 0;
+    # D=[-1.1, 1.1] in tail=[-1.3, 1.3] has slack 0.2 >= m=0.2 -> term_2 = 0.0;
+    # gci2_score = (0.1 + 0.0) / 2 = 0.05 > 0.
+    gci2_a_d = th.tensor([[0, 0, 3]], dtype=th.long)
+    score_slack_lt_m = float(mod.gci2_loss(gci2_a_d).item())
+    assert score_slack_lt_m == pytest.approx(0.05, abs=1e-6)
+
+    # At margin = 0, the exact same geometry is satisfied with slack >= 0, so score == 0.0
+    mod.margin = 0.0
+    assert float(mod.gci2_loss(gci2_a_d).item()) == pytest.approx(0.0, abs=1e-7)
+    mod.margin = m
+
+    # When head_offset is widened to 1.25 (slack 0.25 >= m=0.2), gci2_loss becomes 0.0
+    with th.no_grad():
+        mod.head_offset.weight[0] = th.tensor([1.25])
+    assert float(mod.gci2_loss(gci2_a_d).item()) == pytest.approx(0.0, abs=1e-7)
+
+    # 2. Defined class A (0) as gci2 target (D -> r.A):
+    # Put tail = [-1.0, 1.0] so A=[-1, 1] in tail has slack 0.0 < m=0.2 (term_2 = 0.2),
+    # while D=[-1.1, 1.1] in head=[-1.35, 1.35] has slack 0.25 >= m=0.2 (term_1 = 0.0).
+    with th.no_grad():
+        mod.head_offset.weight[0] = th.tensor([1.35])
+        mod.tail_offset.weight[0] = th.tensor([1.0])
+    gci2_d_a = th.tensor([[3, 0, 0]], dtype=th.long)
+    assert float(mod.gci2_loss(gci2_d_a).item()) == pytest.approx(0.1, abs=1e-6)
+
+    # 3. Empty-slot mask: EmptyDef (4) has all slots empty (X1 cap D = empty because D's only non-empty slot
+    # is at 0, wait: X1 slot 0 is [-1, 1] and D slot 0 is [-1.1, 1.1] — let's move D slot 0 to [50, 52]
+    # so EmptyDef = X1 cap D is disjoint in all slot pairs!).
+    with th.no_grad():
+        mod.class_center.weight[3] = th.tensor([50.0, 30.0])
+        mod.class_offset.weight[3] = th.tensor([1.0, 0.0])
+    r_empty = mod.class_regions(th.tensor([4], dtype=th.long))
+    assert bool((nonempty_measure(r_empty.w) <= 0.0).all().item())
+
+    # Positive gci2 with all-empty source and target is 0.0;
+    # Negative gci2 with all-empty source and target returns 0.0 (and with all-empty source returns only target half)
+    gci2_empty_empty = th.tensor([[4, 0, 4]], dtype=th.long)
+    assert float(mod.gci2_loss(gci2_empty_empty, neg=False).item()) == 0.0
+    assert float(mod.gci2_loss(gci2_empty_empty, neg=True).item()) == 0.0
+
+    # Negative gci2 with all-empty source (4) and non-empty target (0): source half is 0.0
+    gci2_empty_a = th.tensor([[4, 0, 0]], dtype=th.long)
+    neg_empty_src = float(mod.gci2_loss(gci2_empty_a, neg=True).item())
+    # Target A (cen=0, w=1) vs tail (cen=0, w=1) has dist = -2, relu(-2 + 0.2) = 0 -> (delta - 0)^2 = 4.0
+    assert neg_empty_src == pytest.approx(4.0, abs=1e-6)
+
+    # 4. gci3 (exists r.C <= A) with defined target A (0):
+    # head = [-0.9, 0.9] inside A = [-1, 1] with slack 0.1 < m=0.2 -> score = (0.2 - 0.1)^2 = 0.01 > 0;
+    # head = [-0.75, 0.75] inside A = [-1, 1] with slack 0.25 >= m=0.2 -> score = 0.0.
+    gci3_row = th.tensor([[0, 1, 0]], dtype=th.long)
+    with th.no_grad():
+        mod.head_offset.weight[0] = th.tensor([0.9])
+    assert float(mod.gci3_loss(gci3_row).item()) == pytest.approx(0.01, abs=1e-6)
+    with th.no_grad():
+        mod.head_offset.weight[0] = th.tensor([0.75])
+    assert float(mod.gci3_loss(gci3_row).item()) == pytest.approx(0.0, abs=1e-7)
+
+    # 5. class_assertion C(a) with defined class A (0):
+    # ind 0 (off=0.95) in A (w=1.0) has slack 0.05 < m=0.2 -> score = 0.15 > 0;
+    # ind 1 (off=0.70) in A (w=1.0) has slack 0.30 >= m=0.2 -> score = 0.0.
+    ca_rows = th.tensor([[0, 0], [1, 0]], dtype=th.long)
+    ca_scores = mod.class_assertion_loss(ca_rows)
+    assert float(ca_scores[0].item()) == pytest.approx(0.15, abs=1e-6)
+    assert float(ca_scores[1].item()) == pytest.approx(0.0, abs=1e-7)
+
+    # 6. object_property_assertion r(a, b):
+    # Set head = tail = [-1, 1]; ind 0 (off=0.95, slack 0.05 < m=0.2) vs ind 1 (off=0.70, slack 0.30 >= m=0.2)
+    with th.no_grad():
+        mod.head_offset.weight[0] = th.tensor([1.0])
+        mod.tail_offset.weight[0] = th.tensor([1.0])
+    opa_rows = th.tensor([[0, 0, 0], [1, 0, 1]], dtype=th.long)
+    opa_scores = mod.object_property_assertion_loss(opa_rows, neg=False)
+    assert float(opa_scores[0].item()) == pytest.approx(0.15, abs=1e-6)
+    assert float(opa_scores[1].item()) == pytest.approx(0.0, abs=1e-7)
+
