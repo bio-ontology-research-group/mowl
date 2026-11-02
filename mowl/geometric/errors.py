@@ -34,6 +34,9 @@ class UnsupportedAxiom(GeometricError):
     """Raised when an operation encounters an axiom outside its supported fragment."""
 
 
+UnsupportedAxiomError = UnsupportedAxiom
+
+
 class UnsupportedRegion(GeometricError):
     """Raised when a model checker or builder encounters an unsupported region representation."""
 

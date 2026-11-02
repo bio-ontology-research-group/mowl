@@ -13,7 +13,7 @@ mowl.init_jvm("2g")
 
 from mowl.datasets import PathDataset
 from mowl.models import BoxSquaredEL, MultiBoxEL
-from tests.geometric.helpers import NS
+from tests.geometric.helpers import NS, _write_t3_exact
 
 
 
@@ -91,20 +91,6 @@ def test_multiboxel_trains_on_t3(t3_dataset: PathDataset, scratch_dir: Path) -> 
     assert np.isfinite(loss_val)
 
 
-_OWL_THING = "http://www.w3.org/2002/07/owl#Thing"
-
-# Exact zero-loss 1-D configuration for MultiBoxEL(k=2) on T3, as intervals per component.
-_T3_EXACT_1D = {
-    "X1": [(0.0, 1.0), (2.0, 3.0)],
-    "X2": [(0.0, 1.0), (4.0, 5.0)],
-    "X3": [(2.0, 3.0), (4.0, 5.0)],
-    "A": [(0.0, 1.0), (0.0, 1.0)],
-    "C": [(2.0, 3.0), (2.0, 3.0)],
-    "B": [(4.0, 5.0), (4.0, 5.0)],
-    "Z": [(0.0, 1.0), (0.0, 1.0)],
-}
-
-
 def _make_t3_multibox(
     dataset: PathDataset, path: Path, learning_rate: float = 0.01
 ) -> _FlooredMultiBoxEL:
@@ -118,21 +104,6 @@ def _make_t3_multibox(
         neg_sampling_gcis=[],
         model_filepath=str(path),
     )
-
-
-def _write_t3_exact(model: MultiBoxEL) -> None:
-    """Write the exact 1-D configuration into the class boxes (owl:Thing = [-1, 6] in both components)."""
-    intervals = dict(_T3_EXACT_1D)
-    with torch.no_grad():
-        for name, comps in list(intervals.items()) + [(None, [(-1.0, 6.0), (-1.0, 6.0)])]:
-            iri = _OWL_THING if name is None else NS + name
-            idx = model.class_index_dict[iri]
-            model.module.class_center.weight[idx] = torch.tensor(
-                [(lo + hi) / 2 for lo, hi in comps]
-            )
-            model.module.class_offset.weight[idx] = torch.tensor(
-                [(hi - lo) / 2 for lo, hi in comps]
-            )
 
 
 def _mb_boxes(model: MultiBoxEL, name: str) -> Tuple[np.ndarray, np.ndarray]:

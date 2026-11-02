@@ -90,7 +90,7 @@ class IntervalUnionModel(GeometricInterpretation):
         self._universe: IntervalUnion = IntervalUnion(self._element_intervals)
 
         self._class_regions: Dict[str, IntervalUnion] = {}
-        for cname in cm.concept_names:
+        for cname in set(cm.concept_names) | set(cm.names):
             if cname == BOTTOM:
                 self._class_regions[cname] = EMPTY_1D
             elif cname == TOP:

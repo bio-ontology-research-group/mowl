@@ -149,7 +149,7 @@ class ConvexPolyhedralModel(GeometricInterpretation):
         self._empty_role: PairHull = PairHull(np.zeros((0, 2 * k), dtype=float))
 
         self._class_regions: Dict[str, Face] = {}
-        for cname in cm.concept_names:
+        for cname in set(cm.concept_names) | set(cm.names):
             if cname == BOTTOM:
                 self._class_regions[cname] = self._empty_face
             elif cname == TOP:

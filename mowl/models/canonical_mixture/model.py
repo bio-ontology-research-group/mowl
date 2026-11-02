@@ -1,0 +1,381 @@
+"""CanonicalMixture model class."""
+from __future__ import annotations
+
+import hashlib
+import logging
+import os
+from pathlib import Path
+from typing import Optional
+
+import torch as th
+from tqdm import trange
+
+import mowl.geometric.completion as completion_mod
+import mowl.geometric.membership as membership_mod
+from mowl.base_models.elmodel import EmbeddingELModel
+from mowl.geometric.completion import CanonicalModel
+from mowl.geometric.membership import MEMBERSHIP_CODE_TAG, MembershipStructure
+from mowl.nn.el.canonical_mixture import (
+    MAX_SUPPORT_ENTRIES,
+    CanonicalMixtureModule,
+)
+
+logger = logging.getLogger(__name__)
+
+
+class CanonicalMixture(EmbeddingELModel):
+    """Canonical-element mixture model for ABox completion under an :math:`\\mathcal{EL}` TBox.
+
+    Builds the :class:`~mowl.geometric.completion.CanonicalModel` and
+    :class:`~mowl.geometric.membership.MembershipStructure` of the training
+    ontology (caching the :class:`MembershipStructure` next to
+    ``dataset.ontology_path`` when available, keyed by the ontology SHA-256,
+    index maps, and the source hashes of ``mowl/geometric/completion.py`` and
+    ``mowl/geometric/membership.py``) and trains a
+    :class:`~mowl.nn.el.canonical_mixture.CanonicalMixtureModule` with mini-batches
+    of individuals.
+
+    Guarantees:
+    - Raises ``ValueError("CanonicalMixture needs individuals")`` when the
+      dataset contains no individuals.
+    - Every training-entailed class assertion (including assertions entailed
+      through roles) scores ``0.0`` exactly (probability ``1``) and every
+      contradicted class assertion scores ``+inf`` (probability ``0``) at
+      initialisation and after any number of training epochs.
+    - Individuals that occur only in validation or testing splits (no training
+      assertions) receive admissible support equal to all of :math:`S`.
+    - Hierarchy violation rate is identically ``0`` for all parameters.
+    - :meth:`train` iterates over mini-batches of ``batch_size`` individuals per
+      epoch, invokes ``epoch_callback(epoch, self)`` when provided, evaluates
+      validation loss every ``validate_every`` epochs saving the best
+      ``state_dict`` checkpoint to :attr:`model_filepath`, and reloads the best
+      checkpoint at the end of :meth:`train`.
+
+    Non-guarantees:
+    - Only defined for datasets with individuals; raises :class:`ValueError` on
+      TBox-only datasets.
+    - Named classes have no dense vector embeddings (a class is its column in
+      :attr:`MembershipStructure.M`).
+    """
+
+    def __init__(
+        self,
+        dataset,
+        rank: int = 50,
+        lr: float = 0.01,
+        batch_size: int = 1024,
+        entropy_reg: float = 0.0,
+        init_self_mass: float = 0.9,
+        model_filepath: Optional[str] = None,
+        device: str = "cpu",
+        load_normalized: bool = False,
+        use_cache: bool = True,
+    ) -> None:
+        if len(dataset.individuals) == 0:
+            raise ValueError("CanonicalMixture needs individuals")
+
+        super().__init__(
+            dataset,
+            embed_dim=rank,
+            batch_size=batch_size,
+            extended=True,
+            model_filepath=model_filepath,
+            load_normalized=load_normalized,
+            device=device,
+            learning_rate=lr,
+        )
+
+        if len(self.individual_index_dict) == 0:
+            raise ValueError("CanonicalMixture needs individuals")
+
+        self.rank = int(rank)
+        self.lr = float(lr)
+        self.entropy_reg = float(entropy_reg)
+        self.init_self_mass = float(init_self_mass)
+        self.use_cache = bool(use_cache)
+        self._eval_gci_name = "class_assertion"
+
+        self.structure: MembershipStructure = self._build_or_load_structure()
+        self.init_module()
+
+    @property
+    def eval_gci_name(self) -> str:
+        """The GCI/assertion type used for validation and evaluation."""
+        return self._eval_gci_name
+
+    @eval_gci_name.setter
+    def eval_gci_name(self, value: str) -> None:
+        valid_names = [
+            "gci0",
+            "gci1",
+            "gci2",
+            "gci3",
+            "gci0_bot",
+            "gci1_bot",
+            "gci3_bot",
+            "class_assertion",
+            "object_property_assertion",
+        ]
+        if value not in valid_names:
+            raise ValueError(
+                f"eval_gci_name must be one of {valid_names}, got {value!r}"
+            )
+        self._eval_gci_name = value
+
+    def _cache_path(self) -> Optional[Path]:
+        """Return cache file path next to ``dataset.ontology_path`` if available."""
+        ontology_path = getattr(self.dataset, "ontology_path", None)
+        if not ontology_path or not os.path.exists(ontology_path):
+            return None
+        hasher = hashlib.sha256()
+        with open(ontology_path, "rb") as f:
+            while chunk := f.read(65536):
+                hasher.update(chunk)
+        # Hash the source of mowl/geometric/completion.py and mowl/geometric/membership.py
+        for mod in (completion_mod, membership_mod):
+            mod_file = getattr(mod, "__file__", None)
+            if mod_file and os.path.exists(mod_file):
+                with open(mod_file, "rb") as mf:
+                    hasher.update(mf.read())
+        # Mix in class/individual/role index ordering so changes invalidate cache
+        for k, v in sorted(self.named_class_index_dict.items()):
+            hasher.update(f"C:{k}={v}\n".encode("utf-8"))
+        for k, v in sorted(self.individual_index_dict.items()):
+            hasher.update(f"I:{k}={v}\n".encode("utf-8"))
+        for k, v in sorted(self.object_property_index_dict.items()):
+            hasher.update(f"R:{k}={v}\n".encode("utf-8"))
+        digest = hasher.hexdigest()[:12]
+        base = ontology_path[:-4] if ontology_path.endswith(".owl") else ontology_path
+        return Path(f"{base}_mowl_{MEMBERSHIP_CODE_TAG}_{digest}.pt")
+
+    def _build_or_load_structure(self) -> MembershipStructure:
+        """Build :class:`MembershipStructure` from ``dataset.ontology`` or load from cache."""
+        cache_file = self._cache_path() if self.use_cache else None
+        if cache_file is not None and cache_file.exists():
+            try:
+                return MembershipStructure.load(cache_file)
+            except Exception as exc:
+                logger.warning(
+                    "Failed to load cached MembershipStructure from %s (%s); rebuilding.",
+                    cache_file,
+                    exc,
+                )
+
+        cm = CanonicalModel.from_ontology(self.dataset.ontology)
+        structure = MembershipStructure.from_canonical_model(
+            cm,
+            class_index_dict=self.named_class_index_dict,
+            individual_index_dict=self.individual_index_dict,
+            relation_index_dict=self.object_property_index_dict,
+            allow_absent_individuals=True,
+        )
+        if cache_file is not None:
+            try:
+                structure.save(cache_file)
+            except OSError as exc:
+                logger.warning(
+                    "Could not write MembershipStructure cache to %s: %s",
+                    cache_file,
+                    exc,
+                )
+        return structure
+
+    def init_module(self) -> None:
+        """Initialise :class:`~mowl.nn.el.canonical_mixture.CanonicalMixtureModule`."""
+        ca_ds = self.training_datasets.get("class_assertion")
+        training_ca = ca_ds[:] if (ca_ds is not None and len(ca_ds) > 0) else None
+        self.module = CanonicalMixtureModule(
+            self.structure,
+            rank=self.rank,
+            entropy_reg=self.entropy_reg,
+            init_self_mass=self.init_self_mass,
+            training_class_assertions=training_ca,
+        ).to(self.device)
+
+    def _eval_gci_mean(self, v_data: th.Tensor, gci_name: str) -> float:
+        """Compute mean module output on ``v_data`` in ``batch_size`` chunks."""
+        n = int(v_data.shape[0])
+        if n == 0:
+            return 0.0
+        step = max(int(self.batch_size), 1)
+        total = 0.0
+        for start in range(0, n, step):
+            chunk = v_data[start : start + step]
+            total += float(self.module(chunk, gci_name).detach().sum().item())
+        return total / float(n)
+
+    def _backward_chunked_loss(
+        self, data: th.Tensor, gci_name: str, neg: bool = False
+    ) -> float:
+        """Compute mean loss over ``data`` in support-bounded micro-chunks, accumulating gradients per chunk."""
+        n = int(data.shape[0])
+        if n == 0:
+            return 0.0
+        ranges = self.module._pair_chunk_ranges(
+            data, max_sup_entries=MAX_SUPPORT_ENTRIES
+        )
+        total_loss = 0.0
+        for s_idx, e_idx in ranges:
+            chunk = data[s_idx:e_idx]
+            weight = float(e_idx - s_idx) / float(n)
+            c_loss = self.module(chunk, gci_name, neg=neg).mean() * weight
+            if c_loss.requires_grad:
+                c_loss.backward()
+            total_loss += float(c_loss.detach().item())
+            del c_loss
+        return total_loss
+
+    def _compute_validation_loss(self) -> float:
+        """Compute validation loss on ``validation_datasets``."""
+        with th.no_grad():
+            self.module.eval()
+            val_datasets = self.validation_datasets
+            if not val_datasets:
+                return 0.0
+
+            gci_name = self._eval_gci_name
+            if gci_name in val_datasets and len(val_datasets[gci_name]) > 0:
+                v_data = val_datasets[gci_name][:]
+                return self._eval_gci_mean(v_data, gci_name)
+
+            for fallback in ("class_assertion", "object_property_assertion"):
+                if fallback in val_datasets and len(val_datasets[fallback]) > 0:
+                    v_data = val_datasets[fallback][:]
+                    return self._eval_gci_mean(v_data, fallback)
+            return 0.0
+
+    def train(
+        self,
+        epochs: int,
+        validate_every: int = 1,
+        epoch_callback=None,
+    ) -> None:
+        """Train the model using mini-batches of individuals.
+
+        Parameters
+        ----------
+        epochs : int
+            Number of training epochs.
+        validate_every : int, default 1
+            Validate and checkpoint every ``validate_every`` epochs.
+        epoch_callback : callable, optional
+            Optional callback ``epoch_callback(epoch, self)`` called after each
+            epoch.
+        """
+        n_ind = len(self.individual_index_dict)
+        if n_ind == 0:
+            raise ValueError("CanonicalMixture needs individuals")
+
+        ca_ds = self.training_datasets.get("class_assertion")
+        ca_data = (
+            ca_ds[:].to(self.device)
+            if (ca_ds is not None and len(ca_ds) > 0)
+            else th.empty((0, 2), dtype=th.long, device=self.device)
+        )
+        opa_ds = self.training_datasets.get("object_property_assertion")
+        opa_data = (
+            opa_ds[:].to(self.device)
+            if (opa_ds is not None and len(opa_ds) > 0)
+            else th.empty((0, 3), dtype=th.long, device=self.device)
+        )
+
+        optimizer = self.get_optimizer()
+        best_loss = float("inf")
+        best_saved = False
+
+        for epoch in trange(epochs):
+            self.module.train()
+            perm = th.randperm(n_ind, device=self.device)
+            epoch_loss = 0.0
+            n_batches = 0
+
+            for start in range(0, n_ind, self.batch_size):
+                batch_inds = perm[start : start + self.batch_size]
+                optimizer.zero_grad()
+                step_loss = 0.0
+                has_supervision = False
+
+                if ca_data.shape[0] > 0:
+                    mask_ca = th.isin(ca_data[:, 0], batch_inds)
+                    if bool(mask_ca.any().item()):
+                        pos_ca = ca_data[mask_ca]
+                        if pos_ca.shape[0] > self.batch_size:
+                            perm_ca = th.randperm(
+                                pos_ca.shape[0], device=self.device
+                            )[: self.batch_size]
+                            pos_ca = pos_ca.index_select(0, perm_ca)
+                        neg_ca = self.module.sample_class_negatives(pos_ca)
+                        step_loss += self._backward_chunked_loss(
+                            pos_ca, "class_assertion", neg=False
+                        )
+                        step_loss += self._backward_chunked_loss(
+                            neg_ca, "class_assertion", neg=True
+                        )
+                        has_supervision = True
+
+                if opa_data.shape[0] > 0:
+                    mask_opa = th.isin(opa_data[:, 0], batch_inds)
+                    if bool(mask_opa.any().item()):
+                        pos_opa = opa_data[mask_opa]
+                        if pos_opa.shape[0] > self.batch_size:
+                            perm_opa = th.randperm(
+                                pos_opa.shape[0], device=self.device
+                            )[: self.batch_size]
+                            pos_opa = pos_opa.index_select(0, perm_opa)
+                        neg_opa = self.module.sample_role_negatives(pos_opa)
+                        step_loss += self._backward_chunked_loss(
+                            pos_opa, "object_property_assertion", neg=False
+                        )
+                        step_loss += self._backward_chunked_loss(
+                            neg_opa, "object_property_assertion", neg=True
+                        )
+                        has_supervision = True
+
+                if self.entropy_reg > 0.0:
+                    n_b = int(batch_inds.shape[0])
+                    for s_i, e_i in self.module._ind_chunk_ranges(
+                        batch_inds, max_sup_entries=MAX_SUPPORT_ENTRIES
+                    ):
+                        w_i = float(e_i - s_i) / float(max(n_b, 1))
+                        reg_c = (
+                            self.module.regularization_loss(batch_inds[s_i:e_i])
+                            * w_i
+                        )
+                        if reg_c.requires_grad:
+                            reg_c.backward()
+                        step_loss += float(reg_c.detach().item())
+                        del reg_c
+
+                if has_supervision or self.entropy_reg > 0.0:
+                    optimizer.step()
+                    epoch_loss += step_loss
+                    n_batches += 1
+
+            train_loss = epoch_loss / max(n_batches, 1)
+
+            if epoch_callback is not None:
+                epoch_callback(epoch, self)
+
+            if validate_every and (epoch + 1) % validate_every == 0:
+                if self.dataset.validation is not None:
+                    valid_loss = self._compute_validation_loss()
+                    if valid_loss < best_loss:
+                        best_loss = valid_loss
+                        th.save(self.module.state_dict(), self.model_filepath)
+                        best_saved = True
+                else:
+                    if train_loss < best_loss:
+                        best_loss = train_loss
+                        th.save(self.module.state_dict(), self.model_filepath)
+                        best_saved = True
+
+        if (
+            best_saved
+            and self.model_filepath is not None
+            and os.path.exists(self.model_filepath)
+        ):
+            self.module.load_state_dict(
+                th.load(
+                    self.model_filepath, map_location=self.device, weights_only=True
+                )
+            )

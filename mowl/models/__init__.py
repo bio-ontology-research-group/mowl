@@ -3,6 +3,7 @@ from mowl.models.elembeddings.examples.model_ppi import ELEmPPI
 from mowl.models.elembeddings.examples.model_gda import ELEmGDA
 
 from mowl.models.elbe.model import ELBE
+from mowl.models.multielbe.model import MultiELBE
 from mowl.models.elbe.examples.model_ppi import ELBEPPI
 from mowl.models.elbe.examples.model_gda import ELBEGDA
 
@@ -12,6 +13,8 @@ from mowl.models.boxel.examples.model_gda import BoxELGDA
 
 from mowl.models.boxsquaredel.model import BoxSquaredEL
 from mowl.models.multiboxel.model import MultiBoxEL
+from mowl.models.prism.model import PrismEL
+from mowl.models.canonical_mixture.model import CanonicalMixture
 
 from mowl.models.transbox.model import TransBox
 

@@ -398,3 +398,42 @@ def test_resolve_n_components_rejects_ambiguous_embedding() -> None:
     assert MBL._resolve_n_components(bare_emb) == 1
 
 
+def test_multiboxel_soft_aggregation_and_diversity_reg() -> None:
+    n_classes, n_rels, d, n_inds, k = 6, 2, 4, 3, 3
+    torch.manual_seed(33)
+    mb_hard = MultiBoxELModule(
+        nb_ont_classes=n_classes,
+        nb_rels=n_rels,
+        nb_inds=n_inds,
+        embed_dim=d,
+        n_components=k,
+        gamma=0.05,
+        component_aggregation="hard",
+        diversity_reg=0.0,
+    )
+    torch.manual_seed(33)
+    mb_soft = MultiBoxELModule(
+        nb_ont_classes=n_classes,
+        nb_rels=n_rels,
+        nb_inds=n_inds,
+        embed_dim=d,
+        n_components=k,
+        gamma=0.05,
+        component_aggregation="soft",
+        tau=1e-4,
+        diversity_reg=0.2,
+    )
+    gen = torch.Generator().manual_seed(77)
+    batch = _random_batch("gci1", 3, 16, n_classes, n_rels, n_inds, gen)
+    assert torch.allclose(mb_soft(batch, "gci1"), mb_hard(batch, "gci1"), atol=1e-3, rtol=1e-3)
+
+    with torch.no_grad():
+        mb_soft.class_center.weight.zero_()
+        mb_soft.class_offset.weight.fill_(1.0)
+        mb_hard.class_center.weight.zero_()
+        mb_hard.class_offset.weight.fill_(1.0)
+    assert float(mb_soft.regularization_loss().item()) > float(mb_hard.regularization_loss().item())
+
+    with pytest.raises(ValueError, match="component_aggregation"):
+        MultiBoxELModule(nb_ont_classes=4, nb_rels=2, component_aggregation="invalid")
+
