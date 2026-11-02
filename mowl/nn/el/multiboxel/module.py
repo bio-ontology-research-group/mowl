@@ -171,6 +171,10 @@ class MultiBoxELModule(ELModule):
     reseed_every : int, default 0
         Epoch interval for heuristic discrete re-seeding (:meth:`reseed`) under
         ``objective="structural"`` (``0`` disables re-seeding).
+    bot_agg : {"mean", "sum"}, default "mean"
+        Aggregation over active component pairs in :meth:`gci1_bot_loss` under
+        ``objective="structural"`` (passed as ``agg`` to
+        :func:`~mowl.nn.el.structural.gci1_bot_structural`).
 
     References
     ----------
@@ -206,6 +210,7 @@ class MultiBoxELModule(ELModule):
         existence_weight: float = 1.0,
         size_reg: float = 1e-3,
         reseed_every: int = 0,
+        bot_agg: str = "mean",
     ) -> None:
         if isinstance(n_components, bool) or not isinstance(n_components, int) or n_components < 1:
             raise ValueError(f"n_components must be an int >= 1, got {n_components!r}")
@@ -262,6 +267,10 @@ class MultiBoxELModule(ELModule):
             or reseed_every < 0
         ):
             raise ValueError(f"reseed_every must be an int >= 0, got {reseed_every!r}")
+        if not isinstance(bot_agg, str) or bot_agg not in ("mean", "sum"):
+            raise ValueError(
+                f"bot_agg must be 'mean' or 'sum', got {bot_agg!r}"
+            )
         beta_f = _validate_beta(beta)
         ind_hw_f = (
             5.0 * beta_f
@@ -319,6 +328,7 @@ class MultiBoxELModule(ELModule):
         self.existence_weight = float(existence_weight)
         self.size_reg = float(size_reg)
         self.reseed_every = int(reseed_every)
+        self.bot_agg = bot_agg
         self.definition_table: Optional[DefinitionTable] = None
         self.existence_targets: Optional[ExistenceTargets] = None
         self.top_idx: Optional[int] = None
@@ -375,6 +385,11 @@ class MultiBoxELModule(ELModule):
             if value != "hard" and self.__dict__.get("objective") == "structural":
                 raise ValueError(
                     "component_aggregation must be 'hard' when objective='structural'."
+                )
+        elif name == "bot_agg":
+            if not isinstance(value, str) or value not in ("mean", "sum"):
+                raise ValueError(
+                    f"bot_agg must be 'mean' or 'sum', got {value!r}"
                 )
         elif name == "beta":
             beta_f = _validate_beta(value)  # type: ignore[arg-type]
@@ -1200,7 +1215,7 @@ class MultiBoxELModule(ELModule):
         Under ``objective="structural"``, gates active slots of :math:`C` and
         :math:`D` by detached non-emptiness
         (``r.active & (nonempty_measure(r.w.detach()) > 0.0)``) before calling
-        :func:`~mowl.nn.el.structural.gci1_bot_structural`.
+        :func:`~mowl.nn.el.structural.gci1_bot_structural` with ``agg=self.bot_agg``.
 
         Guarantees:
         - At ``margin = 0``, the ``ne > 0`` slot gate has the identical zero set
@@ -1222,6 +1237,7 @@ class MultiBoxELModule(ELModule):
                 Regions(cen=r_c.cen, w=r_c.w, active=act_c),
                 Regions(cen=r_d.cen, w=r_d.w, active=act_d),
                 self.margin,
+                agg=self.bot_agg,
             )
         if self.training and self.objective == "point":
             return self._zero_loss(data)

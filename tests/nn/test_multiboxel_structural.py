@@ -869,3 +869,99 @@ def test_structural_definitions_rejects_non_bool() -> None:
     with pytest.raises(ValueError, match="structural_definitions"):
         PrismEL(ds, embed_dim=4, structural_definitions=1)  # type: ignore[arg-type]
 
+
+def test_bot_agg_module_and_model_sum_vs_mean_and_validation() -> None:
+    """bot_agg defaults to 'mean'; 'sum' equals 'mean' * n_active_pairs on a random batch with padding slots; invalid values raise at module and model level."""
+    # Default is "mean" on module and model
+    mod_default = MultiBoxELModule(
+        nb_ont_classes=6,
+        nb_rels=1,
+        embed_dim=3,
+        n_components=2,
+        objective="structural",
+        max_components=8,
+    )
+    assert mod_default.bot_agg == "mean"
+
+    ds = PathDataset(fixture_path("t3.owl"))
+    model_default = MultiBoxEL(ds, embed_dim=2, objective="structural")
+    assert model_default.bot_agg == "mean"
+    assert model_default.module.bot_agg == "mean"
+
+    model_sum = MultiBoxEL(ds, embed_dim=2, objective="structural", bot_agg="sum")
+    assert model_sum.bot_agg == "sum"
+    assert model_sum.module.bot_agg == "sum"
+
+    # Invalid values raise at module construction, attribute assignment, and model construction
+    for bad in ("max", "avg", "", 1, None):
+        with pytest.raises(ValueError, match="bot_agg"):
+            MultiBoxELModule(
+                nb_ont_classes=4,
+                nb_rels=1,
+                embed_dim=2,
+                objective="structural",
+                bot_agg=bad,  # type: ignore[arg-type]
+            )
+        with pytest.raises(ValueError, match="bot_agg"):
+            mod_default.bot_agg = bad  # type: ignore[assignment]
+        with pytest.raises(ValueError, match="bot_agg"):
+            MultiBoxEL(ds, embed_dim=2, objective="structural", bot_agg=bad)  # type: ignore[arg-type]
+
+    # Sum equals mean * n_active_pairs on a random batch with padding slots (k=2, K=8, plus a defined class with 4 active slots)
+    # Classes: 0:A := X1 cap X2 (defined, 4 active slots), 1:X1 (prim, 2 active), 2:X2 (prim, 2 active), 3:D (prim, 2 active)
+    gci0 = th.tensor([[0, 1], [0, 2]], dtype=th.long)
+    gci1 = th.tensor([[1, 2, 0]], dtype=th.long)
+    table = DefinitionTable.from_normal_forms(
+        gci0=gci0,
+        gci1=gci1,
+        n_classes=4,
+        k=2,
+        max_components=8,
+        top_idx=None,
+        bottom_idx=None,
+        enabled=True,
+    )
+    targets = ExistenceTargets(
+        classes=th.tensor([0, 1, 2, 3], dtype=th.long),
+        pairs=th.zeros((0, 2), dtype=th.long),
+    )
+
+    th.manual_seed(99)
+    mod_mean = MultiBoxELModule(
+        nb_ont_classes=4,
+        nb_rels=1,
+        embed_dim=3,
+        n_components=2,
+        margin=0.05,
+        objective="structural",
+        max_components=8,
+        bot_agg="mean",
+    )
+    mod_mean.set_structural_tables(table, targets)
+    with th.no_grad():
+        # Place all primitive components near the origin with large positive widths so all active slots (including A = X1 cap X2) are non-empty and overlap
+        mod_mean.class_center.weight.uniform_(-0.1, 0.1)
+        mod_mean.class_offset.weight.uniform_(0.5, 1.0)
+
+    mod_s = MultiBoxELModule(
+        nb_ont_classes=4,
+        nb_rels=1,
+        embed_dim=3,
+        n_components=2,
+        margin=0.05,
+        objective="structural",
+        max_components=8,
+        bot_agg="sum",
+    )
+    mod_s.load_state_dict(mod_mean.state_dict())
+    mod_s.set_structural_tables(table, targets)
+
+    # Batch of gci1_bot rows: (A, D) -> 4 * 2 = 8 active pairs; (X1, D) -> 2 * 2 = 4 active pairs; (A, A) -> 4 * 4 = 16 active pairs
+    rows = th.tensor([[0, 3], [1, 3], [0, 0]], dtype=th.long)
+    out_mean = mod_mean.gci1_bot_loss(rows)
+    out_sum = mod_s.gci1_bot_loss(rows)
+    expected_n_pairs = th.tensor([8.0, 4.0, 16.0], dtype=out_mean.dtype)
+    assert bool((out_mean > 0.0).all())
+    assert th.allclose(out_sum, out_mean * expected_n_pairs, atol=1e-6, rtol=1e-6)
+
+

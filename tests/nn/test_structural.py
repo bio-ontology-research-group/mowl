@@ -804,3 +804,53 @@ def test_gci_structural_finite_grad_at_zero_violation() -> None:
         assert bool((t.grad == 0.0).all())
 
 
+def test_gci1_bot_structural_agg_sum_and_invalid() -> None:
+    """gci1_bot_structural(agg='sum') equals mean * n_active_pairs on a random batch with padding slots; invalid agg raises ValueError."""
+    gen = th.Generator().manual_seed(20261102)
+    b, kc, kd, dim = 4, 4, 5, 3
+    cen_c = th.randn((b, kc, dim), generator=gen, dtype=th.float64) * 0.2
+    w_c = th.abs(th.randn((b, kc, dim), generator=gen, dtype=th.float64)) + 0.5
+    cen_d = th.randn((b, kd, dim), generator=gen, dtype=th.float64) * 0.2
+    w_d = th.abs(th.randn((b, kd, dim), generator=gen, dtype=th.float64)) + 0.5
+
+    # Varying active counts per row with padding slots (and put giant overlaps in inactive slots)
+    act_c = th.tensor(
+        [
+            [True, True, False, False],
+            [True, False, True, True],
+            [False, True, False, False],
+            [True, True, True, True],
+        ],
+        dtype=th.bool,
+    )
+    act_d = th.tensor(
+        [
+            [True, True, True, False, False],
+            [True, True, False, False, False],
+            [True, False, True, True, False],
+            [False, True, False, True, False],
+        ],
+        dtype=th.bool,
+    )
+    w_c = th.where(act_c.unsqueeze(-1), w_c, th.full_like(w_c, 100.0))
+    w_d = th.where(act_d.unsqueeze(-1), w_d, th.full_like(w_d, 100.0))
+
+    rc = Regions(cen=cen_c, w=w_c, active=act_c)
+    rd = Regions(cen=cen_d, w=w_d, active=act_d)
+
+    loss_default = gci1_bot_structural(rc, rd, margin=0.05)
+    loss_mean = gci1_bot_structural(rc, rd, margin=0.05, agg="mean")
+    loss_sum = gci1_bot_structural(rc, rd, margin=0.05, agg="sum")
+
+    assert th.equal(loss_default, loss_mean)
+    n_active_pairs = (act_c.sum(dim=1) * act_d.sum(dim=1)).to(dtype=th.float64)
+    assert n_active_pairs.tolist() == [6.0, 6.0, 3.0, 8.0]
+    assert bool((loss_mean > 0.0).all())
+    assert th.allclose(loss_sum, loss_mean * n_active_pairs, atol=1e-12, rtol=1e-12)
+
+    for bad_agg in ("max", "min", "", 123, None):
+        with pytest.raises(ValueError, match="agg"):
+            gci1_bot_structural(rc, rd, margin=0.05, agg=bad_agg)  # type: ignore[arg-type]
+
+
+

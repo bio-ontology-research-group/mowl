@@ -582,7 +582,7 @@ measured seeds (``strict_loss == 0``, minimum target class and pair
       * - :math:`C \sqcap D \sqsubseteq E` (``gci1``, :func:`~mowl.nn.el.structural.gci1_structural`)
         - :math:`\operatorname{mean}_{(i,j):\,\text{active},\,\text{ne}(C_i \cap D_j)>0}^{\text{det}} \min_{l \text{ active}} \text{incl}_m(I_{ij}, E_l)^2` with :math:`I_{ij}` the pair slot; ``0`` if no pair is non-empty (vacuous; no emptiness penalty) or the row is masked
       * - :math:`C \sqcap D \sqsubseteq \bot` (``gci1_bot``, :func:`~mowl.nn.el.structural.gci1_bot_structural`)
-        - :math:`\operatorname{mean}_{(i,j) \text{ active}} \operatorname{relu}(\text{ne}(C_i \cap D_j) + m)^2` (with module slots gated to active non-empty components :math:`\text{ne} > 0`: identical zero set at :math:`m = 0`, deviating from gating on ``active`` alone only at :math:`m > 0`) — separation by :math:`m` in **at least one** coordinate
+        - :math:`\operatorname{agg}_{(i,j) \text{ active}} \operatorname{relu}(\text{ne}(C_i \cap D_j) + m)^2` with ``agg`` = ``bot_agg`` :math:`\in \{\text{"mean"}, \text{"sum"}\}` (default ``"mean"``; ``"sum"`` sums over active pairs instead of dividing by the active-pair count, with module slots gated to active non-empty components :math:`\text{ne} > 0`: identical zero set at :math:`m = 0`, deviating from gating on ``active`` alone only at :math:`m > 0`) — separation by :math:`m` in **at least one** coordinate
       * - :math:`C \sqsubseteq \exists r.D`, :math:`\exists r.C \sqsubseteq D`, :math:`\exists r.C \sqsubseteq \bot`, and ABox assertions (``gci2``, ``gci3``, ``gci3_bot``, ``class_assertion``, ``object_property_assertion``)
         - Existing Box²EL multibox scores (hard aggregation, with ``gci3`` and ``gci3_bot`` squared) evaluated on the materialised slots :math:`(c, |w|)` with inactive or empty slots (:math:`\neg\text{active} \vee \text{ne}(w) \le 0`) masked out (source slots excluded from means, target slots excluded from minima); because Box²EL ``gamma`` loosens inclusions (:math:`\operatorname{relu}(\text{dist} + 2o - \gamma)`), positive role and assertion scores pass ``gamma = -m`` (tightening inclusion by :math:`m`), whereas negative scores (:func:`~mowl.nn.el.multiboxel.losses.gci2_score_neg` and negative ``object_property_assertion``) keep Box²EL's convention (``gamma = +margin``, which relaxes them by the margin), so the negative-sampling term is unchanged between the axiom and structural objectives; class bumps remain per-class embedding rows
 
@@ -729,9 +729,9 @@ measured seeds (``strict_loss == 0``, minimum target class and pair
 
 6. **Public interface:**
 
-   * ``MultiBoxEL(dataset, ..., margin=0.02, objective="structural", max_components=None, structural_definitions=True, existence_weight=1.0, size_reg=1e-3, reseed_every=0, canonical_model=None)``
-     (where ``max_components=None`` defaults to :math:`k^2` and
-     ``component_aggregation`` must be ``"hard"``).
+   * ``MultiBoxEL(dataset, ..., margin=0.02, objective="structural", max_components=None, structural_definitions=True, existence_weight=1.0, size_reg=1e-3, reseed_every=0, canonical_model=None, bot_agg="mean")``
+     (where ``max_components=None`` defaults to :math:`k^2`, ``bot_agg`` is
+     ``"mean"`` or ``"sum"``, and ``component_aggregation`` must be ``"hard"``).
    * ``PrismEL(dataset, ..., margin=0.1, objective="structural", max_depth=8, structural_definitions=True, existence_weight=1.0, size_reg=1e-3, canonical_model=None)``.
    * Default ``objective="axiom"`` leaves every existing code path unchanged.
      Negative sampling stays enabled under ``objective="structural"`` just as in

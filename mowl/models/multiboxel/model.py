@@ -174,6 +174,10 @@ class MultiBoxEL(EmbeddingELModel):
         used to determine semantic satisfiability in
         :meth:`~mowl.nn.el.structural.ExistenceTargets.from_normal_forms` under
         ``objective="structural"``.
+    bot_agg : {"mean", "sum"}, default "mean"
+        Aggregation over active component pairs in ``gci1_bot`` under
+        ``objective="structural"`` (passed as ``agg`` to
+        :func:`~mowl.nn.el.structural.gci1_bot_structural`).
 
     References
     ----------
@@ -216,9 +220,12 @@ class MultiBoxEL(EmbeddingELModel):
                  size_reg=1e-3,
                  reseed_every=0,
                  canonical_model=None,
+                 bot_agg="mean",
                  ):
         if float(anchor_weight) < 0:
             raise ValueError(f"anchor_weight must be >= 0, got {anchor_weight!r}")
+        if not isinstance(bot_agg, str) or bot_agg not in ("mean", "sum"):
+            raise ValueError(f"bot_agg must be 'mean' or 'sum', got {bot_agg!r}")
         eff_tau_start = float(tau) if tau is not None else float(tau_start)
         eff_tau_end = float(tau_end)
         if eff_tau_start <= 0.0 or eff_tau_end <= 0.0:
@@ -267,6 +274,7 @@ class MultiBoxEL(EmbeddingELModel):
         self.size_reg = size_reg
         self.reseed_every = reseed_every
         self.canonical_model = canonical_model
+        self.bot_agg = bot_agg
         self._point_supervision: Optional[PointSupervision] = None
         self._structural_tables: Optional[
             Tuple[DefinitionTable, ExistenceTargets, Optional[int]]
@@ -300,6 +308,7 @@ class MultiBoxEL(EmbeddingELModel):
             existence_weight=self.existence_weight,
             size_reg=self.size_reg,
             reseed_every=self.reseed_every,
+            bot_agg=self.bot_agg,
         ).to(self.device)
         self.max_components = self.module.max_components
         self.structural_definitions = self.module.structural_definitions
@@ -310,6 +319,7 @@ class MultiBoxEL(EmbeddingELModel):
         self.existence_weight = self.module.existence_weight
         self.size_reg = self.module.size_reg
         self.reseed_every = self.module.reseed_every
+        self.bot_agg = self.module.bot_agg
         if self.init_boxes is not None:
             self.init_boxes.apply_to_module(
                 self.module, class_index_dict=self.class_index_dict)

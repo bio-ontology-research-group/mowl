@@ -567,14 +567,33 @@ def gci1_structural(
     return out
 
 
-def gci1_bot_structural(c: Regions, d: Regions, margin: float) -> th.Tensor:
-    """Compute the structural GCI1-bot loss :math:`\\text{mean}_{(i,j) \\text{ active}} \\text{relu}(\\text{ne}(C_i \\cap D_j) + m)^2` for :math:`C \\sqcap D \\sqsubseteq \\bot`.
+def gci1_bot_structural(
+    c: Regions,
+    d: Regions,
+    margin: float,
+    agg: str = "mean",
+) -> th.Tensor:
+    """Compute the structural GCI1-bot loss for :math:`C \\sqcap D \\sqsubseteq \\bot`.
+
+    Evaluates
+
+    .. math::
+
+        \\operatorname{agg}_{(i,j) \\text{ active}} \\operatorname{relu}(\\text{ne}(C_i \\cap D_j) + m)^2,
+
+    where ``agg`` is ``"mean"`` (per-row average over active pairs, ``0`` when no
+    pair is active) or ``"sum"`` (per-row sum over active pairs).
 
     Guarantees:
     - Returns a 1-D tensor of shape ``(B,)``.
-    - Equals ``0`` if and only if every active component pair :math:`(C_i, D_j)`
-      is separated by at least ``margin`` in *at least one* coordinate
+    - Under both ``agg="mean"`` and ``agg="sum"``, equals ``0`` if and only if
+      every active component pair :math:`(C_i, D_j)` is separated by at least
+      ``margin`` in *at least one* coordinate
       (:math:`\\min_m \\text{sov}_m(C_i, D_j) \\le -m`).
+    - For every row with :math:`N_{\\text{act}} \\ge 1` active pairs,
+      ``gci1_bot_structural(c, d, margin, agg="sum")`` equals
+      :math:`N_{\\text{act}}` times ``gci1_bot_structural(c, d, margin, agg="mean")``.
+    - Raises :class:`ValueError` if ``agg`` is not ``"mean"`` or ``"sum"``.
 
     Non-guarantees:
     - Gradients for each violating pair flow only through the coordinate with the
@@ -588,20 +607,28 @@ def gci1_bot_structural(c: Regions, d: Regions, margin: float) -> th.Tensor:
         Second conjunct regions of shape ``(B, kd, d)``.
     margin : float
         Separation margin :math:`m`.
+    agg : {"mean", "sum"}, default "mean"
+        Aggregation over active component pairs: ``"mean"`` averages over
+        active pairs; ``"sum"`` sums over active pairs.
 
     Returns
     -------
     torch.Tensor
         Per-row squared GCI1-bot structural loss of shape ``(B,)``.
     """
+    if not isinstance(agg, str) or agg not in ("mean", "sum"):
+        raise ValueError(f"agg must be 'mean' or 'sum', got {agg!r}")
+
     bsz = c.cen.shape[0]
     sov = signed_overlap(c.cen, c.w, d.cen, d.w)
     ne_ij = th.amin(sov, dim=-1).reshape(bsz, -1)
     pair_active = (c.active.unsqueeze(2) & d.active.unsqueeze(1)).reshape(bsz, -1)
 
     term = th.relu(ne_ij + margin).square()
-    mask = pair_active.to(dtype=c.cen.dtype)
     num = th.where(pair_active, term, th.zeros_like(term)).sum(dim=1)
+    if agg == "sum":
+        return num
+    mask = pair_active.to(dtype=c.cen.dtype)
     den = mask.sum(dim=1).clamp_min(1.0)
     return num / den
 
