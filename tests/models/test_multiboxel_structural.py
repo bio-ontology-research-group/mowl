@@ -22,6 +22,7 @@ from mowl.nn.el.structural import (
     nonempty_measure,
     pair_size,
     region_size,
+    signed_overlap,
 )
 from tests.geometric.helpers import (
     NS,
@@ -588,4 +589,71 @@ def test_multiboxel_witness_embed_survives_save_and_reload(tmp_path: Path) -> No
     fresh_zero_wit = fresh_zero.module.witness_points()
     assert fresh_zero_wit is not None
     assert th.equal(fresh_zero_wit, pre_wit)
+
+
+@pytest.mark.slow
+def test_t3_structural_idle_reseed_witness_finds_strict_exact_model(
+    tmp_path: Path,
+) -> None:
+    """T3 fixture, d=2, seed 0, objective='structural', bot_agg='sum', witness_weight=1.0,
+    size_reg=0.0, reseed_every=50, reseed_mode='idle', lr=0.01, 1500 epochs -> strict exact
+    model (every satisfiable class has a non-empty slot and every gci1_bot pair has all slot
+    pairs separated), verified via all_class_regions, nonempty_measure, and signed_overlap.
+    """
+    ds = PathDataset(fixture_path("t3.owl"))
+    cm = CanonicalModel.from_dataset(ds)
+
+    th.manual_seed(0)
+    np.random.seed(0)
+    model = MultiBoxEL(
+        ds,
+        embed_dim=2,
+        n_components=2,
+        learning_rate=0.01,
+        objective="structural",
+        bot_agg="sum",
+        witness_weight=1.0,
+        size_reg=0.0,
+        reseed_every=50,
+        reseed_mode="idle",
+        points_seed=0,
+        canonical_model=cm,
+        neg_sampling_gcis=[],
+        model_filepath=str(tmp_path / "t3_idle_s0.pt"),
+    )
+    model.train(epochs=1500, validate_every=2000)
+
+    regions = model.module.all_class_regions()
+    targets = model.module.existence_targets
+    assert targets is not None
+
+    # 1. Every satisfiable class has at least one active non-empty slot (ne > 0)
+    for cls_idx in targets.classes.tolist():
+        c = int(cls_idx)
+        ne_c = nonempty_measure(regions.w[c])
+        ne_c_active = ne_c[regions.active[c]]
+        assert ne_c_active.numel() > 0
+        assert float(ne_c_active.max().item()) > 0.0, (
+            f"Satisfiable class {c} has no non-empty slot: max ne = {float(ne_c_active.max().item())}"
+        )
+
+    # 2. Every gci1_bot pair has all slot pairs separated (min_m sov_m <= 0)
+    gci1_bot_rows = model.training_datasets["gci1_bot"][:][:, :2].detach().cpu()
+    assert gci1_bot_rows.shape[0] > 0
+    for row in gci1_bot_rows.tolist():
+        c_idx, d_idx = int(row[0]), int(row[1])
+        sov = signed_overlap(
+            regions.cen[c_idx : c_idx + 1],
+            regions.w[c_idx : c_idx + 1],
+            regions.cen[d_idx : d_idx + 1],
+            regions.w[d_idx : d_idx + 1],
+        )
+        pair_ne = th.amin(sov, dim=-1)[0]
+        act_pairs = regions.active[c_idx].unsqueeze(1) & regions.active[d_idx].unsqueeze(0)
+        assert float(pair_ne[act_pairs].max().item()) <= 0.0, (
+            f"gci1_bot pair ({c_idx}, {d_idx}) has overlapping active slot pair: "
+            f"max pair ne = {float(pair_ne[act_pairs].max().item())}"
+        )
+        assert float(pair_ne.max().item()) <= 0.0
+
 

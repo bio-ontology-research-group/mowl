@@ -18,10 +18,11 @@ Provides the building blocks for the ``objective="structural"`` formulation of
    Squared hinge losses with detached non-emptiness gates, single-coordinate
    separation for :math:`C \\sqcap D \\sqsubseteq \\bot`, and per-class witness
    supervision.
-4. **Definition table (:class:`DefinitionTable`), existence targets
+4. **Definition table (:class:`DefinitionTable`, :func:`slot_components`), existence targets
    (:class:`ExistenceTargets`), and witness targets (:class:`WitnessTargets`):**
    Compile acyclic conjunction definitions :math:`A \\equiv X \\sqcap Y` within
-   the slot/depth budget, identify satisfiable classes and conjunction pairs
+   the slot/depth budget, map materialised definition slots back to primitive
+   component indices, identify satisfiable classes and conjunction pairs
    requiring positive measure, and build positive/negative class-membership
    targets for per-class witness points.
 
@@ -104,6 +105,7 @@ __all__ = [
     "existence_loss",
     "witness_loss",
     "DefinitionTable",
+    "slot_components",
     "WitnessTargets",
     "ExistenceTargets",
     "build_structural_tables",
@@ -1194,6 +1196,133 @@ class DefinitionTable:
         if self._masked_gci1_keys.device != rows.device:
             self._masked_gci1_keys = self._masked_gci1_keys.to(device=rows.device)
         return th.isin(keys, self._masked_gci1_keys)
+
+
+def slot_components(
+    table: DefinitionTable,
+    cls: int,
+    slot: int,
+    k: Optional[int] = None,
+) -> Dict[int, int]:
+    """Map primitive class index to component index for a materialised slot of ``cls``.
+
+    Follows the exact recursive slot ordering produced by :func:`pair_slots` in
+    :meth:`~mowl.nn.MultiBoxELModule.class_regions`:
+
+    * If ``cls`` is primitive (``not table.def_mask[cls]``), active slot ``s``
+      (``0 <= s < k``) maps to ``{cls: s}``.
+    * If ``cls`` is an accepted defined class :math:`A \\to (X, Y)` with
+      :math:`c_Y` active slots on :math:`Y`, active slot ``s`` corresponds to
+      the lexicographic pair ``(s // c_Y, s % c_Y)`` of active slots of :math:`X`
+      and :math:`Y`, and recurses to the primitive leaves reachable through
+      ``def_x`` and ``def_y``.
+
+    Guarantees:
+    - Returns a ``Dict[int, int]`` mapping each primitive leaf class index in
+      the definition tree of ``cls`` to its component index in ``0 .. k - 1``.
+    - For any tree-structured definition (distinct primitive leaves), the box of
+      slot ``slot`` in :meth:`~mowl.nn.MultiBoxELModule.class_regions` equals
+      the coordinatewise intersection of the mapped primitive component boxes
+      ``(cen[p, c], |offset[p, c]|)`` for ``(p, c)`` in the returned dictionary.
+    - Raises :class:`ValueError` if ``cls``, ``slot``, or ``k`` is out of range
+      or not an integer.
+
+    Non-guarantees:
+    - If a defined class has a diamond DAG where the same primitive leaf is
+      reachable along both ``def_x`` and ``def_y`` with different component
+      indices in ``slot``, the right branch (``def_y``) overwrites the left
+      branch (``def_x``) in the returned dictionary.
+
+    Parameters
+    ----------
+    table : DefinitionTable
+        Compiled conjunction definition table (or a module exposing
+        ``definition_table`` and ``n_components``).
+    cls : int
+        Class index in ``0 .. table.n_classes - 1``.
+    slot : int
+        Active materialised slot index of ``cls``.
+    k : int, optional
+        Number of primitive components per class :math:`k \\ge 1`. When ``None``,
+        inferred from ``table.comps`` on primitive classes (or ``table.n_components``
+        if a module is passed).
+
+    Returns
+    -------
+    Dict[int, int]
+        Mapping ``{primitive_class_idx: component_idx}``.
+    """
+    if not isinstance(table, DefinitionTable):
+        if hasattr(table, "definition_table") and hasattr(table, "n_components"):
+            mod = table
+            if k is None:
+                k = int(mod.n_components)
+            if mod.definition_table is None:
+                if isinstance(cls, bool) or not isinstance(cls, int):
+                    raise ValueError(f"cls must be an int, got {cls!r}")
+                if isinstance(slot, bool) or not isinstance(slot, int):
+                    raise ValueError(f"slot must be an int, got {slot!r}")
+                if isinstance(k, bool) or not isinstance(k, int) or k < 1:
+                    raise ValueError(f"k must be an int >= 1, got {k!r}")
+                n_cls = int(mod.nb_ont_classes)
+                if cls < 0 or cls >= n_cls:
+                    raise ValueError(f"cls must be in 0 .. {n_cls - 1}, got {cls}")
+                if slot < 0 or slot >= k:
+                    raise ValueError(
+                        f"slot must be in 0 .. {k - 1} for class {cls}, got {slot}"
+                    )
+                return {int(cls): int(slot)}
+            table = mod.definition_table
+        else:
+            raise TypeError(
+                f"table must be a DefinitionTable, got {type(table).__name__}"
+            )
+
+    if isinstance(cls, bool) or not isinstance(cls, int):
+        raise ValueError(f"cls must be an int, got {cls!r}")
+    if isinstance(slot, bool) or not isinstance(slot, int):
+        raise ValueError(f"slot must be an int, got {slot!r}")
+
+    if k is None:
+        prim_mask = ~table.def_mask
+        if not bool(prim_mask.any().item()):
+            raise ValueError("k must be provided when table has no primitive classes.")
+        k_val = int(table.comps[prim_mask][0].item())
+    else:
+        if isinstance(k, bool) or not isinstance(k, int) or k < 1:
+            raise ValueError(f"k must be an int >= 1, got {k!r}")
+        k_val = int(k)
+
+    n_classes = table.n_classes
+    if cls < 0 or cls >= n_classes:
+        raise ValueError(f"cls must be in 0 .. {n_classes - 1}, got {cls}")
+
+    def _num_slots(u: int) -> int:
+        if not bool(table.def_mask[u].item()):
+            return k_val
+        x_u = int(table.def_x[u].item())
+        y_u = int(table.def_y[u].item())
+        return _num_slots(x_u) * _num_slots(y_u)
+
+    total_slots = _num_slots(cls)
+    if slot < 0 or slot >= total_slots:
+        raise ValueError(
+            f"slot must be in 0 .. {total_slots - 1} for class {cls}, got {slot}"
+        )
+
+    def _resolve(u: int, s: int) -> Dict[int, int]:
+        if not bool(table.def_mask[u].item()):
+            return {int(u): int(s)}
+        x_u = int(table.def_x[u].item())
+        y_u = int(table.def_y[u].item())
+        cy = _num_slots(y_u)
+        sx = s // cy
+        sy = s % cy
+        out = _resolve(x_u, sx)
+        out.update(_resolve(y_u, sy))
+        return out
+
+    return _resolve(cls, slot)
 
 
 @dataclass

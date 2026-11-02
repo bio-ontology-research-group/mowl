@@ -27,6 +27,7 @@ from mowl.nn.el.structural import (
     pair_slots,
     region_size,
     signed_overlap,
+    slot_components,
     witness_loss,
 )
 from tests.geometric.helpers import NS, fixture_path, t3_cm, t3_dataset
@@ -1028,6 +1029,133 @@ def test_inside_measure_and_witness_loss_zero_iff_and_inactive() -> None:
     assert witness_loss(empty, empty, margin=0.1).item() == 0.0
     assert witness_loss(th.tensor([0.5], dtype=th.float64), empty, margin=0.1).item() == 0.0
     assert witness_loss(empty, th.tensor([-0.5], dtype=th.float64), margin=0.1).item() == 0.0
+
+
+def test_slot_components_matches_pair_slots_two_levels() -> None:
+    """On a two-level definition at k=2, every materialised slot box equals the intersection of the primitive component boxes mapped by slot_components."""
+    from mowl.nn import MultiBoxELModule
+
+    # Classes:
+    # 0: A := Aux cap X3 (level 2, 8 active slots, def_x=1 (level 1), def_y=4 (prim))
+    # 1: Aux := X1 cap X2 (level 1, 4 active slots, def_x=2, def_y=3)
+    # 2: X1 (primitive, 2 slots)
+    # 3: X2 (primitive, 2 slots)
+    # 4: X3 (primitive, 2 slots)
+    # 5: A_rev := X1 cap Aux2 (level 2, 8 active slots, def_x=2 (prim), def_y=6 (level 1))
+    # 6: Aux2 := X2 cap X3 (level 1, 4 active slots, def_x=3, def_y=4)
+    gci0 = th.tensor(
+        [
+            [1, 2],  # Aux <= X1
+            [1, 3],  # Aux <= X2
+            [0, 1],  # A <= Aux
+            [0, 4],  # A <= X3
+            [6, 3],  # Aux2 <= X2
+            [6, 4],  # Aux2 <= X3
+            [5, 2],  # A_rev <= X1
+            [5, 6],  # A_rev <= Aux2
+        ],
+        dtype=th.long,
+    )
+    gci1 = th.tensor(
+        [
+            [2, 3, 1],  # X1 cap X2 <= Aux
+            [1, 4, 0],  # Aux cap X3 <= A
+            [3, 4, 6],  # X2 cap X3 <= Aux2
+            [2, 6, 5],  # X1 cap Aux2 <= A_rev
+        ],
+        dtype=th.long,
+    )
+    table = DefinitionTable.from_normal_forms(
+        gci0=gci0,
+        gci1=gci1,
+        n_classes=7,
+        k=2,
+        max_components=16,
+        top_idx=None,
+        bottom_idx=None,
+        enabled=True,
+    )
+    targets = ExistenceTargets.from_normal_forms(
+        gci0_bot=th.zeros((0, 2), dtype=th.long),
+        gci1=gci1,
+        gci1_bot=th.zeros((0, 2), dtype=th.long),
+        n_classes=7,
+        top_idx=None,
+        bottom_idx=None,
+    )
+
+    th.manual_seed(20261102)
+    mod = MultiBoxELModule(
+        nb_ont_classes=7,
+        nb_rels=1,
+        embed_dim=3,
+        n_components=2,
+        objective="structural",
+        max_components=16,
+    )
+    mod.set_structural_tables(table, targets)
+
+    # Check primitive classes (2, 3, 4)
+    for prim_cls in (2, 3, 4):
+        for s in range(2):
+            assert slot_components(table, prim_cls, s, 2) == {prim_cls: s}
+            assert slot_components(table, prim_cls, s) == {prim_cls: s}
+            assert slot_components(mod, prim_cls, s) == {prim_cls: s}
+
+    raw_cen, raw_off = mod.class_boxes(th.arange(7, dtype=th.long))
+    all_reg = mod.class_regions(th.arange(7, dtype=th.long))
+
+    # Check level-1 (Aux=1, Aux2=6) and level-2 (A=0, A_rev=5) defined classes against pair_slots / class_regions
+    for def_cls, n_slots, expected_prims in (
+        (1, 4, {2, 3}),
+        (6, 4, {3, 4}),
+        (0, 8, {2, 3, 4}),
+        (5, 8, {2, 3, 4}),
+    ):
+        assert int(all_reg.active[def_cls].sum().item()) == n_slots
+        seen_maps = []
+        for s in range(n_slots):
+            comp_map = slot_components(table, def_cls, s, 2)
+            assert comp_map == slot_components(mod, def_cls, s)
+            assert set(comp_map.keys()) == expected_prims
+            seen_maps.append(tuple(sorted(comp_map.items())))
+
+            # Intersect the mapped primitive component boxes directly
+            lowers = [
+                raw_cen[p_idx, c_idx] - raw_off[p_idx, c_idx]
+                for p_idx, c_idx in comp_map.items()
+            ]
+            uppers = [
+                raw_cen[p_idx, c_idx] + raw_off[p_idx, c_idx]
+                for p_idx, c_idx in comp_map.items()
+            ]
+            lo = th.stack(lowers, dim=0).amax(dim=0)
+            hi = th.stack(uppers, dim=0).amin(dim=0)
+            expected_cen = (lo + hi) / 2.0
+            expected_w = (hi - lo) / 2.0
+
+            assert th.allclose(all_reg.cen[def_cls, s], expected_cen, atol=1e-6)
+            assert th.allclose(all_reg.w[def_cls, s], expected_w, atol=1e-6)
+
+        # All n_slots active slots correspond to distinct primitive component combinations
+        assert len(set(seen_maps)) == n_slots
+
+    # Out-of-bounds and invalid arguments raise ValueError
+    with pytest.raises(ValueError, match="slot"):
+        slot_components(table, 2, 2, 2)
+    with pytest.raises(ValueError, match="slot"):
+        slot_components(table, 0, 8, 2)
+    with pytest.raises(ValueError, match="slot"):
+        slot_components(table, 0, -1, 2)
+    with pytest.raises(ValueError, match="cls"):
+        slot_components(table, 7, 0, 2)
+    with pytest.raises(ValueError, match="cls"):
+        slot_components(table, -1, 0, 2)
+    with pytest.raises(ValueError, match="k"):
+        slot_components(table, 0, 0, 0)
+    with pytest.raises(ValueError, match="k"):
+        slot_components(table, 0, 0, True)  # type: ignore[arg-type]
+
 
 
 

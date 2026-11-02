@@ -183,6 +183,19 @@ class MultiBoxEL(EmbeddingELModel):
     witness_weight : float, default 0.0
         Non-negative weight multiplying :func:`~mowl.nn.el.structural.witness_loss`
         under ``objective="structural"``.
+    reseed_mode : {"dead", "idle"}, default "dead"
+        Discrete re-seeding mode for :meth:`~mowl.nn.MultiBoxELModule.reseed`
+        under ``objective="structural"``: ``"dead"`` relocates nested or thin
+        primitive components to violated conjunction pair partners; ``"idle"``
+        requires ``witness_weight > 0`` and relocates the least-used primitive
+        leaf components of dead defined classes to their witness points.
+    reseed_size : float, default 0.15
+        Positive box half-width :math:`> 0` assigned in every coordinate to
+        re-seeded components under ``reseed_mode="idle"``.
+    reseed_batch : int, default 1
+        Maximum number of dead defined classes :math:`\\ge 1` processed per
+        :meth:`~mowl.nn.MultiBoxELModule.reseed` call under
+        ``reseed_mode="idle"``.
 
     References
     ----------
@@ -227,6 +240,9 @@ class MultiBoxEL(EmbeddingELModel):
                  canonical_model=None,
                  bot_agg="mean",
                  witness_weight=0.0,
+                 reseed_mode="dead",
+                 reseed_size=0.15,
+                 reseed_batch=1,
                  ):
         if float(anchor_weight) < 0:
             raise ValueError(f"anchor_weight must be >= 0, got {anchor_weight!r}")
@@ -238,6 +254,29 @@ class MultiBoxEL(EmbeddingELModel):
             or float(witness_weight) < 0.0
         ):
             raise ValueError(f"witness_weight must be >= 0, got {witness_weight!r}")
+        if not isinstance(reseed_mode, str) or reseed_mode not in ("dead", "idle"):
+            raise ValueError(
+                f"reseed_mode must be 'dead' or 'idle', got {reseed_mode!r}"
+            )
+        if reseed_mode == "idle" and float(witness_weight) <= 0.0:
+            raise ValueError(
+                "reseed_mode='idle' requires witness_weight > 0, "
+                f"got witness_weight={witness_weight!r}"
+            )
+        if (
+            isinstance(reseed_size, bool)
+            or not isinstance(reseed_size, (int, float))
+            or float(reseed_size) <= 0.0
+        ):
+            raise ValueError(f"reseed_size must be > 0, got {reseed_size!r}")
+        if (
+            isinstance(reseed_batch, bool)
+            or not isinstance(reseed_batch, int)
+            or reseed_batch < 1
+        ):
+            raise ValueError(
+                f"reseed_batch must be an int >= 1, got {reseed_batch!r}"
+            )
         eff_tau_start = float(tau) if tau is not None else float(tau_start)
         eff_tau_end = float(tau_end)
         if eff_tau_start <= 0.0 or eff_tau_end <= 0.0:
@@ -288,6 +327,9 @@ class MultiBoxEL(EmbeddingELModel):
         self.canonical_model = canonical_model
         self.bot_agg = bot_agg
         self.witness_weight = float(witness_weight)
+        self.reseed_mode = reseed_mode
+        self.reseed_size = float(reseed_size)
+        self.reseed_batch = int(reseed_batch)
         self._point_supervision: Optional[PointSupervision] = None
         self._structural_tables: Optional[
             Tuple[DefinitionTable, ExistenceTargets, Optional[int]]
@@ -324,6 +366,9 @@ class MultiBoxEL(EmbeddingELModel):
             reseed_every=self.reseed_every,
             bot_agg=self.bot_agg,
             witness_weight=self.witness_weight,
+            reseed_mode=self.reseed_mode,
+            reseed_size=self.reseed_size,
+            reseed_batch=self.reseed_batch,
         ).to(self.device)
         self.max_components = self.module.max_components
         self.structural_definitions = self.module.structural_definitions
@@ -336,6 +381,9 @@ class MultiBoxEL(EmbeddingELModel):
         self.reseed_every = self.module.reseed_every
         self.bot_agg = self.module.bot_agg
         self.witness_weight = self.module.witness_weight
+        self.reseed_mode = self.module.reseed_mode
+        self.reseed_size = self.module.reseed_size
+        self.reseed_batch = self.module.reseed_batch
         if self.init_boxes is not None:
             self.init_boxes.apply_to_module(
                 self.module, class_index_dict=self.class_index_dict)

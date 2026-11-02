@@ -674,28 +674,63 @@ measured seeds (``strict_loss == 0``, minimum target class and pair
 
 4. **Re-seeding (:meth:`~mowl.nn.MultiBoxELModule.reseed`):**
    Controlled by ``reseed_every`` (``reseed_every=0`` is the default, which
-   disables re-seeding); re-seeding is a heuristic discrete move rather than
-   part of the continuous objective. When ``reseed_every > 0`` under
+   disables re-seeding), ``reseed_mode`` (``{"dead", "idle"}``, default
+   ``"dead"``), ``reseed_size`` (``float = 0.15``), and ``reseed_batch``
+   (``int = 1``); re-seeding is a heuristic discrete move rather than part of
+   the continuous objective. When ``reseed_every > 0`` under
    ``objective="structural"``, at the start of every ``reseed_every``-th epoch
    (``epoch > 0``), :meth:`~mowl.models.MultiBoxEL.on_epoch_start` invokes
    :meth:`~mowl.nn.MultiBoxELModule.reseed` under ``torch.no_grad()`` on the raw
    embedding rows of **primitive** classes:
 
-   * A primitive component :math:`i` of :math:`C` is classified as **dead** if
-     it is nested inside another active valid component :math:`j` of :math:`C`
-     (:math:`\text{lo}_j \le \text{lo}_i` and :math:`\text{hi}_i \le \text{hi}_j`
-     in every coordinate, exact ties resolved by lower index) or has
-     :math:`\min_m |o_{i,m}| < 10^{-3}`.
-   * Violated pair targets :math:`(C, D)` (:math:`\text{NE}(C \sqcap D) < m`)
-     are processed in a seeded random order (seed ``points_seed + epoch``),
-     using each dead component at most once per epoch: take a dead component of
-     :math:`C` if available, else of :math:`D`; let :math:`P` be the partner
-     class and :math:`P_j` its active slot with largest :math:`\text{ne}(P_j) > 0`,
-     and set :math:`c_i := c_{P_j}`, :math:`o_i := 0.5 \cdot |w_{P_j}|`.
-   * Violated primitive class targets (:math:`\text{NE}(C) < m`) have the
-     offset of their largest-measure component clamped to :math:`\max(|o|, m)`.
-   * The number of moves is stored in ``module.last_reseed_count``; optimiser
-     moments of moved rows are not reset.
+   * ``reseed_mode="dead"`` (default):
+
+     - A primitive component :math:`i` of :math:`C` is classified as **dead** if
+       it is nested inside another active valid component :math:`j` of :math:`C`
+       (:math:`\text{lo}_j \le \text{lo}_i` and :math:`\text{hi}_i \le \text{hi}_j`
+       in every coordinate, exact ties resolved by lower index) or has
+       :math:`\min_m |o_{i,m}| < 10^{-3}`.
+     - Violated pair targets :math:`(C, D)` (:math:`\text{NE}(C \sqcap D) < m`)
+       are processed in a seeded random order (seed ``points_seed + epoch``),
+       using each dead component at most once per epoch: take a dead component of
+       :math:`C` if available, else of :math:`D`; let :math:`P` be the partner
+       class and :math:`P_j` its active slot with largest :math:`\text{ne}(P_j) > 0`,
+       and set :math:`c_i := c_{P_j}`, :math:`o_i := 0.5 \cdot |w_{P_j}|`.
+     - Violated primitive class targets (:math:`\text{NE}(C) < m`) have the
+       offset of their largest-measure component clamped to :math:`\max(|o|, m)`.
+     - The number of moves is stored in ``module.last_reseed_count``; optimiser
+       moments of moved rows are not reset.
+
+   * ``reseed_mode="idle"`` (requires ``witness_weight > 0``, raising
+     :class:`ValueError` otherwise, and uses ``reseed_size: float = 0.15`` and
+     ``reseed_batch: int = 1``):
+
+     1. **Dead defined classes**: accepted defined :math:`A` with
+        :math:`\text{NE}(A) = \max_{s \text{ active}} \text{ne}(A_s) < m`.
+     2. **Usage counts** :math:`u[X, c]` over primitive :math:`X` and component
+        :math:`c`: number of accepted defined classes :math:`A'` with
+        :math:`\text{NE}(A') \ge m` whose best slot (:math:`\arg\max \text{ne}`)
+        uses component :math:`c` of :math:`X`, where the slot-to-component map
+        (:func:`~mowl.nn.el.structural.slot_components`) follows the recursion
+        of :meth:`~mowl.nn.MultiBoxELModule.class_regions` /
+        :func:`~mowl.nn.el.structural.pair_slots` (a slot of
+        :math:`A \to (X, Y)` is a pair of a slot of :math:`X` and a slot of
+        :math:`Y`, recursing to primitives).
+     3. Process dead defined classes in a seeded random order
+        (``rng.permutation``), at most ``reseed_batch`` per call. For :math:`A`
+        with witness :math:`p`: for each primitive leaf :math:`X` of :math:`A`'s
+        definition tree (deduplicated): if some active component :math:`c` of
+        :math:`X` has :math:`\text{inside}(p, X_c) \ge m`, skip :math:`X`; else
+        :math:`c^* = \arg\min_c u[X, c]` (lowest index on ties),
+        :math:`\text{center}[X, c^*] := p + 0.01 \cdot \mathcal{N}(0, I)`
+        (seeded through ``rng``),
+        :math:`\text{offset}[X, c^*] := \text{reseed\_size}` in every
+        coordinate, :math:`u[X, c^*] \mathrel{+}= 1`. Count one move per
+        re-seeded component.
+     4. Keep step 3 of the ``"dead"`` mode (clamp the largest component of a
+        primitive class target with :math:`\text{NE} < m` to
+        :math:`\max(|o|, m)`).
+     5. ``module.last_reseed_count`` as before; optimiser moments are not reset.
 
 5. **Prisms (:class:`~mowl.models.PrismEL`, :class:`~mowl.nn.PrismModule`):**
    Under ``PrismEL(..., margin=0.1, objective="structural", max_depth=8, structural_definitions=True, existence_weight=1.0, size_reg=1e-3, canonical_model=None)``,
@@ -753,9 +788,10 @@ measured seeds (``strict_loss == 0``, minimum target class and pair
 
 6. **Public interface:**
 
-   * ``MultiBoxEL(dataset, ..., margin=0.02, objective="structural", max_components=None, structural_definitions=True, existence_weight=1.0, size_reg=1e-3, reseed_every=0, canonical_model=None, bot_agg="mean")``
+   * ``MultiBoxEL(dataset, ..., margin=0.02, objective="structural", max_components=None, structural_definitions=True, existence_weight=1.0, size_reg=1e-3, reseed_every=0, canonical_model=None, bot_agg="mean", witness_weight=0.0, reseed_mode="dead", reseed_size=0.15, reseed_batch=1)``
      (where ``max_components=None`` defaults to :math:`k^2`, ``bot_agg`` is
-     ``"mean"`` or ``"sum"``, and ``component_aggregation`` must be ``"hard"``).
+     ``"mean"`` or ``"sum"``, ``reseed_mode`` is ``"dead"`` or ``"idle"``, and
+     ``component_aggregation`` must be ``"hard"``).
    * ``PrismEL(dataset, ..., margin=0.1, objective="structural", max_depth=8, structural_definitions=True, existence_weight=1.0, size_reg=1e-3, canonical_model=None)``.
    * Default ``objective="axiom"`` leaves every existing code path unchanged.
      Negative sampling stays enabled under ``objective="structural"`` just as in
@@ -781,6 +817,12 @@ measured seeds (``strict_loss == 0``, minimum target class and pair
      :func:`~mowl.nn.el.structural.build_structural_tables` at the start of
      ``train()``, cache them on the model, and preserve them across
      ``init_module()``, ``load_best_model()``, and ``from_pretrained()``.
+
+   **Recommended settings for learning from random initialisation:** For
+   learning Helly-breaking multi-component box models from random
+   initialisation (including deep-chain theories where all live definitions
+   otherwise share the same primitive components), use
+   ``objective="structural", bot_agg="sum", witness_weight=1.0, reseed_every=50..100, reseed_mode="idle", size_reg=0.0``.
 
 
 References

@@ -21,9 +21,11 @@ from mowl.nn.el.structural import (
     ExistenceTargets,
     Regions,
     WitnessTargets,
+    build_structural_tables,
     nonempty_measure,
+    region_size,
 )
-from tests.geometric.helpers import _write_t3_exact, fixture_path
+from tests.geometric.helpers import NS, _write_t3_exact, fixture_path
 
 
 def test_class_regions_primitive_padding() -> None:
@@ -1171,6 +1173,330 @@ def test_witness_defaults_leave_structural_extra_loss_unchanged() -> None:
             )
         with pytest.raises(ValueError, match="witness_weight"):
             mod_w.witness_weight = bad_w  # type: ignore[assignment]
+
+
+def test_reseed_idle_t3_moves_least_used_component_and_preserves_used() -> None:
+    """On T3 (k=2, witnesses placed by hand, A made empty while B and C are live),
+    one idle reseed call moves the least-used (usage 0) component of each primitive
+    leaf not containing A's witness to the witness with half-width reseed_size,
+    leaves used components untouched, and sets last_reseed_count to the number of moves.
+    """
+    ds = PathDataset(fixture_path("t3.owl"))
+    cm = CanonicalModel.from_dataset(ds)
+
+    model = MultiBoxEL(
+        ds,
+        embed_dim=2,
+        n_components=2,
+        margin=0.05,
+        objective="structural",
+        max_components=16,
+        canonical_model=cm,
+        witness_weight=1.0,
+        reseed_mode="idle",
+        reseed_size=0.18,
+        reseed_batch=1,
+        neg_sampling_gcis=[],
+    )
+    assert model.reseed_mode == "idle"
+    assert model.reseed_size == pytest.approx(0.18)
+    assert model.reseed_batch == 1
+    assert model.module.reseed_mode == "idle"
+    assert model.module.reseed_size == pytest.approx(0.18)
+    assert model.module.reseed_batch == 1
+
+    table, targets, top_idx = build_structural_tables(
+        model, k=2, max_components=16, enabled=True, cm=cm, witness=True
+    )
+    mod = model.module
+    mod.set_structural_tables(table, targets, top_idx=top_idx)
+    assert mod.witness_embed is not None
+    assert targets.witness is not None
+
+    cid = model.class_index_dict
+    a_idx = cid[NS + "A"]
+    b_idx = cid[NS + "B"]
+    c_idx = cid[NS + "C"]
+    x1_idx = cid[NS + "X1"]
+    x2_idx = cid[NS + "X2"]
+    x3_idx = cid[NS + "X3"]
+    z_idx = cid[NS + "Z"]
+
+    wit_classes = targets.witness.classes.tolist()
+    w_a_row = wit_classes.index(a_idx)
+
+    # Case 1: B = X2 cap X3 is live at [10, 10] using X2_0 and X3_0;
+    #         C = X1 cap X3 is live at [20, 20] using X1_0 and X3_1;
+    #         A = X1 cap X2 is empty (NE(A) < margin) because X1_0 is at [20, 20],
+    #         X2_0 is at [10, 10], X1_1 is at [-30, -30], X2_1 is at [-40, -40].
+    #         Witness p_A is at [3.0, -4.0], which is outside both X1 and X2.
+    #         Usage counts: u[X1] = [1, 0], u[X2] = [1, 0], u[X3] = [1, 1].
+    p_a = th.tensor([3.0, -4.0])
+    with th.no_grad():
+        mod.witness_embed.weight.zero_()
+        mod.witness_embed.weight[w_a_row] = p_a
+
+        # X1: comp 0 used by C at [20, 20] (off=[0.5, 0.5]); comp 1 idle at [-30, -30] (off=[0.4, 0.4])
+        mod.class_center.weight[x1_idx] = th.tensor([20.0, 20.0, -30.0, -30.0])
+        mod.class_offset.weight[x1_idx] = th.tensor([0.5, 0.5, 0.4, 0.4])
+        # X2: comp 0 used by B at [10, 10] (off=[0.5, 0.5]); comp 1 idle at [-40, -40] (off=[0.4, 0.4])
+        mod.class_center.weight[x2_idx] = th.tensor([10.0, 10.0, -40.0, -40.0])
+        mod.class_offset.weight[x2_idx] = th.tensor([0.5, 0.5, 0.4, 0.4])
+        # X3: comp 0 used by B at [10, 10] (off=[0.5, 0.5]); comp 1 used by C at [20, 20] (off=[0.5, 0.5])
+        mod.class_center.weight[x3_idx] = th.tensor([10.0, 10.0, 20.0, 20.0])
+        mod.class_offset.weight[x3_idx] = th.tensor([0.5, 0.5, 0.5, 0.5])
+        # Z (primitive): already non-empty (off=[0.5, 0.5]) so step 4 clamp does not touch it
+        mod.class_center.weight[z_idx] = th.tensor([0.0, 0.0, 5.0, 5.0])
+        mod.class_offset.weight[z_idx] = th.tensor([0.5, 0.5, 0.5, 0.5])
+        # Sentinel raw rows on defined classes A, B, C
+        for d_idx in (a_idx, b_idx, c_idx):
+            mod.class_center.weight[d_idx] = th.tensor([99.0, 99.0, 99.0, 99.0])
+            mod.class_offset.weight[d_idx] = th.tensor([99.0, 99.0, 99.0, 99.0])
+
+    # Verify initial NE: B and C are live (>= 0.05), A is dead (< 0.05)
+    r_abc = mod.class_regions(th.tensor([a_idx, b_idx, c_idx], dtype=th.long))
+    ne_abc = region_size(r_abc).tolist()
+    assert ne_abc[0] < mod.margin
+    assert ne_abc[1] >= mod.margin
+    assert ne_abc[2] >= mod.margin
+
+    # Reproduce expectedrng draw for seed 123: permutation of 1 element, then two N(0, I) draws of dim 2
+    ref_rng = np.random.default_rng(123)
+    _ = ref_rng.permutation(1)
+    # Leaves of A := (min(x1, x2), max(x1, x2)) in order:
+    leaves_a = sorted([x1_idx, x2_idx])
+    expected_noise_first = th.as_tensor(ref_rng.standard_normal(2), dtype=th.float32) * 0.01
+    expected_noise_second = th.as_tensor(ref_rng.standard_normal(2), dtype=th.float32) * 0.01
+    expected_noise_by_cls = {
+        leaves_a[0]: expected_noise_first,
+        leaves_a[1]: expected_noise_second,
+    }
+
+    moves = mod.reseed(np.random.default_rng(123))
+    assert moves == 2
+    assert mod.last_reseed_count == 2
+
+    cen_after, off_after = mod.class_boxes(
+        th.tensor([x1_idx, x2_idx, x3_idx], dtype=th.long)
+    )
+    # Used components (comp 0 of X1 and X2, and both comps of X3) are untouched
+    assert cen_after[0, 0].tolist() == pytest.approx([20.0, 20.0], abs=1e-6)
+    assert off_after[0, 0].tolist() == pytest.approx([0.5, 0.5], abs=1e-6)
+    assert cen_after[1, 0].tolist() == pytest.approx([10.0, 10.0], abs=1e-6)
+    assert off_after[1, 0].tolist() == pytest.approx([0.5, 0.5], abs=1e-6)
+    assert cen_after[2, 0].tolist() == pytest.approx([10.0, 10.0], abs=1e-6)
+    assert cen_after[2, 1].tolist() == pytest.approx([20.0, 20.0], abs=1e-6)
+
+    # Idle components (comp 1 of X1 and comp 1 of X2) moved to p_A + 0.01*N(0, I) with half-width reseed_size=0.18
+    assert th.allclose(
+        cen_after[0, 1], p_a + expected_noise_by_cls[x1_idx], atol=1e-6
+    )
+    assert off_after[0, 1].tolist() == pytest.approx([0.18, 0.18], abs=1e-6)
+    assert th.allclose(
+        cen_after[1, 1], p_a + expected_noise_by_cls[x2_idx], atol=1e-6
+    )
+    assert off_after[1, 1].tolist() == pytest.approx([0.18, 0.18], abs=1e-6)
+
+    # Raw rows of defined classes are untouched, and A is now non-empty (NE(A) > margin)
+    for d_idx in (a_idx, b_idx, c_idx):
+        assert mod.class_center.weight[d_idx].tolist() == pytest.approx(
+            [99.0, 99.0, 99.0, 99.0], abs=1e-6
+        )
+    r_a_after = mod.class_regions(th.tensor([a_idx], dtype=th.long))
+    assert float(region_size(r_a_after)[0].item()) > mod.margin
+
+    # Case 2: If X1_1 already contains p_A by >= margin while X2 is moved away again,
+    # only X2's idle component (comp 1) is moved -> moves == 1.
+    with th.no_grad():
+        mod.class_center.weight[x1_idx, 2:4] = p_a
+        mod.class_offset.weight[x1_idx, 2:4] = th.tensor([0.18, 0.18])
+        mod.class_center.weight[x2_idx, 2:4] = th.tensor([-40.0, -40.0])
+        mod.class_offset.weight[x2_idx, 2:4] = th.tensor([0.4, 0.4])
+
+    moves_one = mod.reseed(np.random.default_rng(456))
+    assert moves_one == 1
+    assert mod.last_reseed_count == 1
+    cen_after2, off_after2 = mod.class_boxes(
+        th.tensor([x1_idx, x2_idx], dtype=th.long)
+    )
+    assert cen_after2[0, 1].tolist() == pytest.approx(p_a.tolist(), abs=1e-6)
+    assert off_after2[1, 1].tolist() == pytest.approx([0.18, 0.18], abs=1e-6)
+    assert float(th.linalg.norm(cen_after2[1, 1] - p_a).item()) < 0.05
+
+
+def test_reseed_mode_validation_and_dead_mode_unchanged() -> None:
+    """reseed_mode='idle' without witnesses raises ValueError; invalid reseed options raise; reseed_mode='dead' is unchanged."""
+    ds = PathDataset(fixture_path("t3.owl"))
+
+    # 1. reseed_mode="idle" with witness_weight == 0 raises at construction (module and model)
+    with pytest.raises(ValueError, match="witness_weight"):
+        MultiBoxELModule(
+            nb_ont_classes=4,
+            nb_rels=1,
+            embed_dim=2,
+            objective="structural",
+            witness_weight=0.0,
+            reseed_mode="idle",
+        )
+    with pytest.raises(ValueError, match="witness_weight"):
+        MultiBoxEL(
+            ds,
+            embed_dim=2,
+            objective="structural",
+            witness_weight=0.0,
+            reseed_mode="idle",
+        )
+
+    # 2. Attribute mutation validation on module
+    mod = MultiBoxELModule(
+        nb_ont_classes=4,
+        nb_rels=1,
+        embed_dim=2,
+        objective="structural",
+        witness_weight=0.0,
+    )
+    with pytest.raises(ValueError, match="witness_weight"):
+        mod.reseed_mode = "idle"
+    mod.witness_weight = 1.0
+    mod.reseed_mode = "idle"
+    with pytest.raises(ValueError, match="witness_weight"):
+        mod.witness_weight = 0.0
+
+    # Calling reseed() in idle mode without attached witness targets/witness_embed raises ValueError
+    with pytest.raises(ValueError, match="witness"):
+        mod.reseed(np.random.default_rng(0))
+
+    table = DefinitionTable.from_normal_forms(
+        gci0=th.zeros((0, 2), dtype=th.long),
+        gci1=th.zeros((0, 3), dtype=th.long),
+        n_classes=4,
+        k=2,
+        max_components=4,
+        top_idx=None,
+        bottom_idx=None,
+    )
+    targets_no_wit = ExistenceTargets(
+        classes=th.tensor([0, 1], dtype=th.long),
+        pairs=th.zeros((0, 2), dtype=th.long),
+        witness=None,
+    )
+    mod.set_structural_tables(table, targets_no_wit)
+    with pytest.raises(ValueError, match="witness"):
+        mod.reseed(np.random.default_rng(0))
+
+    # 3. Invalid reseed_mode, reseed_size, and reseed_batch raise ValueError
+    for bad_mode in ("random", "none", "", 1, None):
+        with pytest.raises(ValueError, match="reseed_mode"):
+            MultiBoxELModule(
+                nb_ont_classes=4,
+                nb_rels=1,
+                embed_dim=2,
+                objective="structural",
+                witness_weight=1.0,
+                reseed_mode=bad_mode,  # type: ignore[arg-type]
+            )
+        with pytest.raises(ValueError, match="reseed_mode"):
+            mod.reseed_mode = bad_mode  # type: ignore[assignment]
+        with pytest.raises(ValueError, match="reseed_mode"):
+            MultiBoxEL(
+                ds,
+                embed_dim=2,
+                objective="structural",
+                witness_weight=1.0,
+                reseed_mode=bad_mode,  # type: ignore[arg-type]
+            )
+
+    for bad_size in (0.0, -0.1, True, False, "0.15", None):
+        with pytest.raises(ValueError, match="reseed_size"):
+            MultiBoxELModule(
+                nb_ont_classes=4,
+                nb_rels=1,
+                embed_dim=2,
+                objective="structural",
+                reseed_size=bad_size,  # type: ignore[arg-type]
+            )
+        with pytest.raises(ValueError, match="reseed_size"):
+            mod.reseed_size = bad_size  # type: ignore[assignment]
+        with pytest.raises(ValueError, match="reseed_size"):
+            MultiBoxEL(
+                ds,
+                embed_dim=2,
+                objective="structural",
+                reseed_size=bad_size,  # type: ignore[arg-type]
+            )
+
+    for bad_batch in (0, -1, 1.5, True, False, "1", None):
+        with pytest.raises(ValueError, match="reseed_batch"):
+            MultiBoxELModule(
+                nb_ont_classes=4,
+                nb_rels=1,
+                embed_dim=2,
+                objective="structural",
+                reseed_batch=bad_batch,  # type: ignore[arg-type]
+            )
+        with pytest.raises(ValueError, match="reseed_batch"):
+            mod.reseed_batch = bad_batch  # type: ignore[assignment]
+        with pytest.raises(ValueError, match="reseed_batch"):
+            MultiBoxEL(
+                ds,
+                embed_dim=2,
+                objective="structural",
+                reseed_batch=bad_batch,  # type: ignore[arg-type]
+            )
+
+    # 4. reseed_mode="dead" is the default and produces identical results to explicit reseed_mode="dead"
+    th.manual_seed(77)
+    mod_default = MultiBoxELModule(
+        nb_ont_classes=3,
+        nb_rels=1,
+        embed_dim=2,
+        n_components=2,
+        objective="structural",
+        margin=0.05,
+    )
+    th.manual_seed(77)
+    mod_dead = MultiBoxELModule(
+        nb_ont_classes=3,
+        nb_rels=1,
+        embed_dim=2,
+        n_components=2,
+        objective="structural",
+        margin=0.05,
+        reseed_mode="dead",
+    )
+    assert mod_default.reseed_mode == "dead"
+    assert mod_default.reseed_size == 0.15
+    assert mod_default.reseed_batch == 1
+
+    t_dead = DefinitionTable.from_normal_forms(
+        gci0=th.zeros((0, 2), dtype=th.long),
+        gci1=th.zeros((0, 3), dtype=th.long),
+        n_classes=3,
+        k=2,
+        max_components=4,
+        top_idx=None,
+        bottom_idx=None,
+    )
+    e_dead = ExistenceTargets(
+        classes=th.tensor([0, 1, 2], dtype=th.long),
+        pairs=th.tensor([[0, 1], [1, 2]], dtype=th.long),
+    )
+    for m_i in (mod_default, mod_dead):
+        m_i.set_structural_tables(t_dead, e_dead)
+        with th.no_grad():
+            m_i.class_center.weight[0] = th.tensor([0.0, 0.0, 0.0, 0.0])
+            m_i.class_offset.weight[0] = th.tensor([1.0, 1.0, 0.2, 0.2])
+            m_i.class_center.weight[1] = th.tensor([10.0, 10.0, 20.0, 20.0])
+            m_i.class_offset.weight[1] = th.tensor([2.0, 2.0, 1.0, 1.0])
+            m_i.class_center.weight[2] = th.tensor([-5.0, -5.0, -5.0, -5.0])
+            m_i.class_offset.weight[2] = th.tensor([0.005, 0.005, 0.001, 0.001])
+
+    c1 = mod_default.reseed(np.random.default_rng(99))
+    c2 = mod_dead.reseed(np.random.default_rng(99))
+    assert c1 == c2 == 2
+    assert th.equal(mod_default.class_center.weight, mod_dead.class_center.weight)
+    assert th.equal(mod_default.class_offset.weight, mod_dead.class_offset.weight)
+
 
 
 

@@ -40,6 +40,7 @@ from mowl.nn.el.structural import (
     pair_size,
     pair_slots,
     region_size,
+    slot_components,
     witness_loss,
 )
 
@@ -184,6 +185,18 @@ class MultiBoxELModule(ELModule):
         ``witness_weight > 0.0`` and ``targets.witness`` is attached via
         :meth:`set_structural_tables`, allocates ``self.witness_embed`` with
         one learnable point per satisfiable target class.
+    reseed_mode : {"dead", "idle"}, default "dead"
+        Discrete re-seeding mode for :meth:`reseed` under
+        ``objective="structural"``: ``"dead"`` relocates nested or thin
+        primitive components to violated conjunction pair partners; ``"idle"``
+        requires ``witness_weight > 0`` and relocates the least-used primitive
+        leaf components of dead defined classes to their witness points.
+    reseed_size : float, default 0.15
+        Positive box half-width :math:`> 0` assigned in every coordinate to
+        re-seeded components under ``reseed_mode="idle"``.
+    reseed_batch : int, default 1
+        Maximum number of dead defined classes :math:`\\ge 1` processed per
+        :meth:`reseed` call under ``reseed_mode="idle"``.
 
     References
     ----------
@@ -221,6 +234,9 @@ class MultiBoxELModule(ELModule):
         reseed_every: int = 0,
         bot_agg: str = "mean",
         witness_weight: float = 0.0,
+        reseed_mode: str = "dead",
+        reseed_size: float = 0.15,
+        reseed_batch: int = 1,
     ) -> None:
         if isinstance(n_components, bool) or not isinstance(n_components, int) or n_components < 1:
             raise ValueError(f"n_components must be an int >= 1, got {n_components!r}")
@@ -287,6 +303,29 @@ class MultiBoxELModule(ELModule):
             or float(witness_weight) < 0.0
         ):
             raise ValueError(f"witness_weight must be >= 0, got {witness_weight!r}")
+        if not isinstance(reseed_mode, str) or reseed_mode not in ("dead", "idle"):
+            raise ValueError(
+                f"reseed_mode must be 'dead' or 'idle', got {reseed_mode!r}"
+            )
+        if reseed_mode == "idle" and float(witness_weight) <= 0.0:
+            raise ValueError(
+                "reseed_mode='idle' requires witness_weight > 0, "
+                f"got witness_weight={witness_weight!r}"
+            )
+        if (
+            isinstance(reseed_size, bool)
+            or not isinstance(reseed_size, (int, float))
+            or float(reseed_size) <= 0.0
+        ):
+            raise ValueError(f"reseed_size must be > 0, got {reseed_size!r}")
+        if (
+            isinstance(reseed_batch, bool)
+            or not isinstance(reseed_batch, int)
+            or reseed_batch < 1
+        ):
+            raise ValueError(
+                f"reseed_batch must be an int >= 1, got {reseed_batch!r}"
+            )
         beta_f = _validate_beta(beta)
         ind_hw_f = (
             5.0 * beta_f
@@ -346,6 +385,9 @@ class MultiBoxELModule(ELModule):
         self.reseed_every = int(reseed_every)
         self.bot_agg = bot_agg
         self.witness_weight = float(witness_weight)
+        self.reseed_mode = reseed_mode
+        self.reseed_size = float(reseed_size)
+        self.reseed_batch = int(reseed_batch)
         self.witness_embed: Optional[nn.Embedding] = None
         self.definition_table: Optional[DefinitionTable] = None
         self.existence_targets: Optional[ExistenceTargets] = None
@@ -418,7 +460,44 @@ class MultiBoxELModule(ELModule):
                 or float(value) < 0.0
             ):
                 raise ValueError(f"witness_weight must be >= 0, got {value!r}")
+            if float(value) <= 0.0 and self.__dict__.get("reseed_mode") == "idle":
+                raise ValueError(
+                    "reseed_mode='idle' requires witness_weight > 0, "
+                    f"got witness_weight={value!r}"
+                )
             value = float(value)
+        elif name == "reseed_mode":
+            if not isinstance(value, str) or value not in ("dead", "idle"):
+                raise ValueError(
+                    f"reseed_mode must be 'dead' or 'idle', got {value!r}"
+                )
+            if (
+                value == "idle"
+                and "witness_weight" in self.__dict__
+                and float(self.__dict__["witness_weight"]) <= 0.0
+            ):
+                raise ValueError(
+                    "reseed_mode='idle' requires witness_weight > 0, "
+                    f"got witness_weight={self.__dict__['witness_weight']!r}"
+                )
+        elif name == "reseed_size":
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or float(value) <= 0.0
+            ):
+                raise ValueError(f"reseed_size must be > 0, got {value!r}")
+            value = float(value)
+        elif name == "reseed_batch":
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, int)
+                or value < 1
+            ):
+                raise ValueError(
+                    f"reseed_batch must be an int >= 1, got {value!r}"
+                )
+            value = int(value)
         elif name == "beta":
             beta_f = _validate_beta(value)  # type: ignore[arg-type]
             super().__setattr__(name, beta_f)
@@ -802,24 +881,48 @@ class MultiBoxELModule(ELModule):
         return total
 
     def reseed(self, rng: np.random.Generator) -> int:
-        """Relocate dead primitive components to violated existence targets under ``no_grad``.
+        """Relocate dead or idle primitive components under ``no_grad``.
 
-        Follows design §5:
-        1. Identifies dead primitive components (nested inside another active
-           component of the same class, with exact ties broken by lower index,
-           or ``min_m |offset| < 1e-3``).
-        2. Processes violated pair targets ``(C, D)`` (``NE(C cap D) < margin``)
-           in ``rng.permutation`` order, using each dead component at most once
-           and placing it at the partner's largest active non-empty slot with
-           half its width.
-        3. Clamps the largest component of any primitive class target still
-           satisfying ``NE(C) < margin`` to ``max(|offset|, margin)``.
+        Dispatches on ``self.reseed_mode``:
+
+        * ``"dead"`` (round-4 §5):
+          1. Identifies dead primitive components (nested inside another active
+             component of the same class, with exact ties broken by lower index,
+             or ``min_m |offset| < 1e-3``).
+          2. Processes violated pair targets ``(C, D)`` (``NE(C cap D) < margin``)
+             in ``rng.permutation`` order, using each dead component at most once
+             and placing it at the partner's largest active non-empty slot with
+             half its width.
+          3. Clamps the largest component of any primitive class target still
+             satisfying ``NE(C) < margin`` to ``max(|offset|, margin)``.
+        * ``"idle"`` (round-5 §4, requires ``witness_weight > 0``):
+          1. Finds dead accepted defined classes :math:`A` with
+             :math:`\\text{NE}(A) = \\max_{s \\text{ active}} \\text{ne}(A_s) < \\text{margin}`.
+          2. Counts component usage ``u[X, c]`` over primitive :math:`X` and
+             component :math:`c` across accepted defined classes :math:`A'` with
+             :math:`\\text{NE}(A') \\ge \\text{margin}` whose best slot
+             (:math:`\\arg\\max \\text{ne}`) uses component :math:`c` of :math:`X`
+             via :func:`~mowl.nn.el.structural.slot_components`.
+          3. Processes dead defined classes in ``rng.permutation`` order, at most
+             ``self.reseed_batch`` per call: for each primitive leaf :math:`X`
+             of :math:`A`'s definition tree (deduplicated), if some active
+             component of :math:`X` already contains :math:`A`'s witness point
+             :math:`p` by at least ``margin`` (:math:`\\text{inside}(p, X_c) \\ge \\text{margin}`),
+             skips :math:`X`; otherwise selects :math:`c^* = \\arg\\min_c u[X, c]`
+             (lowest index on ties), sets
+             ``center[X, c*] := p + 0.01 * N(0, I)`` (drawn from ``rng``) and
+             ``offset[X, c*] := reseed_size`` in every coordinate, and increments
+             ``u[X, c*] += 1`` and the move counter.
+          4. Runs the primitive class target clamp step (clamping the largest
+             component of any primitive target with ``NE(C) < margin`` to
+             ``max(|offset|, margin)``).
 
         Guarantees:
         - Returns the total number of re-seeding moves and stores it in
           ``self.last_reseed_count``.
-        - Never modifies defined classes' raw rows or uses a dead slot more
-          than once per call.
+        - Never modifies defined classes' raw rows.
+        - Under ``reseed_mode="idle"``, raises :class:`ValueError` if witness
+          targets or ``witness_embed`` are not attached.
 
         Non-guarantees:
         - Does not reset optimiser moments for moved rows.
@@ -827,7 +930,8 @@ class MultiBoxELModule(ELModule):
         Parameters
         ----------
         rng : numpy.random.Generator
-            Seeded NumPy random generator for permuting violated pairs.
+            Seeded NumPy random generator for permuting targets and sampling
+            idle re-seed noise.
 
         Returns
         -------
@@ -835,6 +939,113 @@ class MultiBoxELModule(ELModule):
             Number of re-seeded components.
         """
         targets = self.existence_targets
+        if self.reseed_mode == "idle":
+            if (
+                self.witness_weight <= 0.0
+                or self.witness_embed is None
+                or targets is None
+                or targets.witness is None
+            ):
+                raise ValueError(
+                    "reseed_mode='idle' requires witness_weight > 0 and attached witness targets."
+                )
+            if self.nb_ont_classes == 0:
+                self.last_reseed_count = 0
+                return 0
+
+            device = self.class_center.weight.device
+            dtype = self.class_center.weight.dtype
+            n = self.nb_ont_classes
+            k = self.n_components
+            dim = self.embed_dim
+
+            with th.no_grad():
+                cen_view = self.class_center.weight.data.view(n, k, dim)
+                off_view = self.class_offset.weight.data.view(n, k, dim)
+
+                table = self.definition_table
+                if table is not None:
+                    def_mask_np = table.def_mask.detach().cpu().numpy()
+                else:
+                    def_mask_np = np.zeros(n, dtype=bool)
+
+                moves = 0
+                if table is not None and table.n_defined > 0:
+                    wit_classes_list = targets.witness.classes.detach().cpu().tolist()
+                    cls_to_wit_row: Dict[int, int] = {
+                        int(c): idx for idx, c in enumerate(wit_classes_list)
+                    }
+
+                    def_indices = [int(a) for a in np.flatnonzero(def_mask_np)]
+                    def_idx_dev = th.tensor(def_indices, device=device, dtype=th.long)
+                    r_def = self.class_regions(def_idx_dev)
+                    ne_all = nonempty_measure(r_def.w)
+                    ne_masked = ne_all.masked_fill(~r_def.active, float("-inf"))
+                    best_slots = th.argmax(ne_masked, dim=1).detach().cpu().tolist()
+                    best_nes = th.amax(ne_masked, dim=1).detach().cpu().tolist()
+
+                    u = np.zeros((n, k), dtype=np.int64)
+                    dead_defined: List[int] = []
+                    for a_cls, best_s, best_ne in zip(
+                        def_indices, best_slots, best_nes
+                    ):
+                        if float(best_ne) >= self.margin:
+                            comp_map = slot_components(
+                                table, int(a_cls), int(best_s), k
+                            )
+                            for prim_x, comp_c in comp_map.items():
+                                if 0 <= prim_x < n and 0 <= comp_c < k:
+                                    u[prim_x, comp_c] += 1
+                        elif int(a_cls) in cls_to_wit_row:
+                            dead_defined.append(int(a_cls))
+
+                    if dead_defined:
+                        perm = rng.permutation(len(dead_defined))
+                        batch_count = min(len(dead_defined), self.reseed_batch)
+                        for p_idx in perm[:batch_count]:
+                            a_cls = dead_defined[int(p_idx)]
+                            w_row = cls_to_wit_row[a_cls]
+                            p = self.witness_embed.weight.data[w_row]
+                            leaves = list(slot_components(table, a_cls, 0, k).keys())
+                            for x_cls in leaves:
+                                w_x = th.abs(off_view[x_cls])
+                                ins_x = th.amin(
+                                    w_x - th.abs(p.unsqueeze(0) - cen_view[x_cls]),
+                                    dim=-1,
+                                )
+                                if bool((ins_x >= self.margin).any().item()):
+                                    continue
+                                c_star = int(np.argmin(u[x_cls]))
+                                noise = (
+                                    th.as_tensor(
+                                        rng.standard_normal(dim),
+                                        dtype=dtype,
+                                        device=device,
+                                    )
+                                    * 0.01
+                                )
+                                cen_view[x_cls, c_star].copy_(p + noise)
+                                off_view[x_cls, c_star].fill_(float(self.reseed_size))
+                                u[x_cls, c_star] += 1
+                                moves += 1
+
+                if targets.classes.numel() > 0:
+                    for c_raw in targets.classes.detach().cpu().tolist():
+                        c_idx = int(c_raw)
+                        if def_mask_np[c_idx]:
+                            continue
+                        w_c = th.abs(off_view[c_idx])
+                        ne_c = nonempty_measure(w_c)
+                        if float(ne_c.max().item()) < self.margin:
+                            best_j = int(th.argmax(ne_c).item())
+                            off_view[c_idx, best_j].copy_(
+                                th.clamp(w_c[best_j], min=float(self.margin))
+                            )
+                            moves += 1
+
+                self.last_reseed_count = moves
+                return moves
+
         if targets is None or self.nb_ont_classes == 0:
             self.last_reseed_count = 0
             return 0
