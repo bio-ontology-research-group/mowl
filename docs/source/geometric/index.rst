@@ -818,11 +818,25 @@ measured seeds (``strict_loss == 0``, minimum target class and pair
      ``train()``, cache them on the model, and preserve them across
      ``init_module()``, ``load_best_model()``, and ``from_pretrained()``.
 
-   **Recommended settings for learning from random initialisation:** For
-   learning Helly-breaking multi-component box models from random
-   initialisation (including deep-chain theories where all live definitions
-   otherwise share the same primitive components), use
-   ``objective="structural", bot_agg="sum", witness_weight=1.0, reseed_every=50..100, reseed_mode="idle", size_reg=0.0``.
+   **Recommended settings for learning from random initialisation (witness-point recipe):**
+   On deep conjunction chains such as the Helly-obstruction family :math:`T_k`
+   (:math:`A_i \equiv \sqcap_{j \neq i} X_j` with :math:`A_i \sqcap A_j \sqsubseteq \bot`),
+   the round-4 defaults (``bot_agg="mean", witness_weight=0.0, reseed_every=0, reseed_mode="dead", size_reg=1e-3``)
+   can fall into a *component-assignment Helly trap*: every live defined class
+   selects the same component of each shared primitive :math:`X_j` (reducing each
+   :math:`A_i` to a single box while spare components stay idle), and averaging
+   ``gci1_bot`` over :math:`4^{k-1}` slot pairs dilutes the single overlapping
+   pair against :math:`\text{existence\_loss}`. Combining ``bot_agg="sum"``
+   (un-diluted disjointness penalties), ``witness_weight=1.0`` (one learnable
+   witness point :math:`w_C` per satisfiable class pushed inside its entailed
+   superclasses and outside disjoint classes), and
+   ``reseed_every=50..100, reseed_mode="idle", size_reg=0.0`` (relocating the
+   least-used primitive leaf components of dead defined classes to their witness
+   points with half-width ``reseed_size=0.15``) breaks the component-sharing
+   symmetry and reliably finds exact multi-component box models from random
+   initialisation. See the gallery tutorial
+   :doc:`/examples/elmodels/plot_4_multibox_structural_tk` for a self-contained
+   demonstration and 2-D visualisations on :math:`T_3` and :math:`T_5`.
 
 
 References
