@@ -486,3 +486,106 @@ def test_t3_structural_random_init_finds_model(tmp_path: Path) -> None:
         f"Expected at least 1 of 5 seeds to reach strict_loss <= 1e-6 with positive target existence "
         f"and empty X1 cap X2 cap X3; got outcomes={outcomes}"
     )
+
+
+def test_multiboxel_witness_embed_survives_save_and_reload(tmp_path: Path) -> None:
+    """MultiBoxEL with witness_weight > 0 preserves witness_embed values and structural_extra_loss across load_best_model and from_pretrained."""
+    ds = PathDataset(fixture_path("t3.owl"))
+    cm = CanonicalModel.from_dataset(ds)
+    ckpt = str(tmp_path / "m_wit_reload.pt")
+
+    for bad_w in (-0.5, True, False, "1.0", None):
+        with pytest.raises(ValueError, match="witness_weight"):
+            MultiBoxEL(
+                ds,
+                embed_dim=2,
+                objective="structural",
+                witness_weight=bad_w,  # type: ignore[arg-type]
+            )
+
+    th.manual_seed(7)
+    np.random.seed(7)
+    model = MultiBoxEL(
+        ds,
+        embed_dim=3,
+        n_components=2,
+        objective="structural",
+        max_components=8,
+        canonical_model=cm,
+        witness_weight=0.5,
+        neg_sampling_gcis=[],
+        model_filepath=ckpt,
+    )
+    assert model.witness_weight == 0.5
+    assert model.module.witness_weight == 0.5
+
+    model.train(epochs=3, validate_every=10)
+    assert model.module.witness_embed is not None
+    with th.no_grad():
+        # Write distinctive values to witness_embed to prove reload doesn't just re-initialise
+        expected_wit = (
+            th.arange(
+                model.module.witness_embed.weight.numel(),
+                dtype=model.module.witness_embed.weight.dtype,
+            ).reshape_as(model.module.witness_embed.weight)
+            * 0.125
+            - 0.3
+        )
+        model.module.witness_embed.weight.copy_(expected_wit)
+    th.save(model.module.state_dict(), ckpt)
+
+    model.module.eval()
+    with th.no_grad():
+        pre_wit = model.module.witness_points()
+        assert pre_wit is not None
+        assert th.equal(pre_wit, expected_wit.cpu())
+        pre_extra = model.module.structural_extra_loss().detach().clone()
+
+    # 1. load_best_model() re-initialises module, attaches tables, and loads witness_embed.weight
+    model.load_best_model()
+    assert model.module.witness_embed is not None
+    after_best_wit = model.module.witness_points()
+    assert after_best_wit is not None
+    assert th.equal(after_best_wit, pre_wit)
+    with th.no_grad():
+        assert th.equal(model.module.structural_extra_loss(), pre_extra)
+
+    # 2. Fresh MultiBoxEL with witness_weight=0.5 calling from_pretrained(ckpt) BEFORE train()
+    fresh = MultiBoxEL(
+        ds,
+        embed_dim=3,
+        n_components=2,
+        objective="structural",
+        max_components=8,
+        canonical_model=cm,
+        witness_weight=0.5,
+        neg_sampling_gcis=[],
+        model_filepath=ckpt,
+    )
+    assert fresh.module.witness_embed is None
+    fresh.from_pretrained(ckpt)
+    fresh.module.eval()
+    assert fresh.module.witness_embed is not None
+    fresh_wit = fresh.module.witness_points()
+    assert fresh_wit is not None
+    assert th.equal(fresh_wit, pre_wit)
+    with th.no_grad():
+        assert th.equal(fresh.module.structural_extra_loss(), pre_extra)
+
+    # 3. Fresh MultiBoxEL with default witness_weight=0.0 calling from_pretrained(ckpt) still loads witness_embed.weight cleanly
+    fresh_zero = MultiBoxEL(
+        ds,
+        embed_dim=3,
+        n_components=2,
+        objective="structural",
+        max_components=8,
+        canonical_model=cm,
+        neg_sampling_gcis=[],
+        model_filepath=ckpt,
+    )
+    fresh_zero.from_pretrained(ckpt)
+    assert fresh_zero.module.witness_embed is not None
+    fresh_zero_wit = fresh_zero.module.witness_points()
+    assert fresh_zero_wit is not None
+    assert th.equal(fresh_zero_wit, pre_wit)
+

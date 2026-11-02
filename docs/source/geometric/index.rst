@@ -620,6 +620,30 @@ measured seeds (``strict_loss == 0``, minimum target class and pair
      raw primitive slots and coordinates (excluding :math:`\top` and accepted
      defined classes), keeping spare components small so they can be relocated
      and discouraging single spanning boxes.
+   * *Witness points* (weight ``witness_weight``, default ``0.0``,
+     :func:`~mowl.nn.el.structural.witness_loss`): when ``witness_weight > 0``,
+     allocates ``module.witness_embed`` with one learnable witness point
+     :math:`w_C \in \mathbb{R}^d` per satisfiable class
+     :math:`C \in \text{targets.witness.classes}` (:class:`~mowl.nn.el.structural.WitnessTargets`)
+     and adds
+
+     .. math::
+
+        \operatorname{mean}_{(C, D) \in \text{pos}} \operatorname{relu}(m - \text{inside}(w_C, D))^2
+        + \operatorname{mean}_{(C, D) \in \text{neg}} \operatorname{relu}(\text{inside}(w_C, D) + m)^2,
+
+     where :func:`~mowl.nn.el.structural.inside_measure` evaluates
+     :math:`\text{inside}(p, D) = \max_{s \text{ active}} \min_m (w_{D,s,m} - |p_m - c_{D,s,m}|)`
+     on the materialised :meth:`~mowl.nn.MultiBoxELModule.class_regions` of
+     :math:`D` (returning ``-1e6`` if no slot is active), ``pos`` collects
+     :math:`(w_C, D)` with :math:`C \sqsubseteq D` (via
+     :meth:`~mowl.geometric.completion.CanonicalModel.entails` when
+     ``canonical_model`` is given, or :math:`\{C\} \cup \{D : (C, D) \in \text{gci0}\}`
+     otherwise), and ``neg`` collects satisfiable :math:`D` disjoint from
+     :math:`C` (via ``not canonical_model.joint_satisfiable([C, D])`` when
+     ``canonical_model`` is given, or asserted ``gci1_bot`` partners otherwise),
+     excluding :math:`\top` and :math:`\bot` throughout. Witness coordinates can
+     be inspected via :meth:`~mowl.nn.MultiBoxELModule.witness_points`.
 
    * **Guarantee:** With ``structural_definitions=True``, at margin :math:`m = 0`,
      zero sum of the structural box losses (``gci0``, ``gci0_bot``, ``gci1``,

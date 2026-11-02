@@ -20,6 +20,7 @@ from mowl.nn.el.structural import (
     DefinitionTable,
     ExistenceTargets,
     Regions,
+    WitnessTargets,
     nonempty_measure,
 )
 from tests.geometric.helpers import _write_t3_exact, fixture_path
@@ -963,5 +964,213 @@ def test_bot_agg_module_and_model_sum_vs_mean_and_validation() -> None:
     expected_n_pairs = th.tensor([8.0, 4.0, 16.0], dtype=out_mean.dtype)
     assert bool((out_mean > 0.0).all())
     assert th.allclose(out_sum, out_mean * expected_n_pairs, atol=1e-6, rtol=1e-6)
+
+
+def test_witness_loss_gradients_to_witness_and_primitive_and_defined_classes() -> None:
+    """structural_extra_loss with witness_weight > 0 routes gradients to witness_embed, primitive class rows, and primitive definers of defined classes."""
+    # Classes: 0:A := X1 cap X2 (defined), 1:X1 (prim), 2:X2 (prim), 3:D (prim)
+    gci0 = th.tensor([[0, 1], [0, 2]], dtype=th.long)
+    gci1 = th.tensor([[1, 2, 0]], dtype=th.long)
+    gci1_bot = th.tensor([[0, 3]], dtype=th.long)
+    table = DefinitionTable.from_normal_forms(
+        gci0=gci0,
+        gci1=gci1,
+        n_classes=4,
+        k=2,
+        max_components=4,
+        top_idx=None,
+        bottom_idx=None,
+        enabled=True,
+    )
+    assert table.def_mask.tolist() == [True, False, False, False]
+
+    # Build witness targets where w_0 (for A=0) has pos=(0, 0) (defined class A) and neg=(0, 3) (primitive class D)
+    wit = WitnessTargets(
+        classes=th.tensor([0], dtype=th.long),
+        pos=th.tensor([[0, 0]], dtype=th.long),
+        neg=th.tensor([[0, 3]], dtype=th.long),
+    )
+    targets = ExistenceTargets(
+        classes=th.zeros(0, dtype=th.long),
+        pairs=th.zeros((0, 2), dtype=th.long),
+        witness=wit,
+    )
+
+    mod = MultiBoxELModule(
+        nb_ont_classes=4,
+        nb_rels=1,
+        embed_dim=2,
+        n_components=2,
+        margin=0.2,
+        objective="structural",
+        max_components=4,
+        existence_weight=0.0,
+        size_reg=0.0,
+        witness_weight=1.5,
+    )
+    assert mod.witness_embed is None
+    assert mod.witness_points() is None
+    mod.set_structural_tables(table, targets)
+    assert mod.witness_embed is not None
+    assert mod.witness_embed.weight.shape == (1, 2)
+
+    with th.no_grad():
+        # X1 (1): slot 0 = [-1, 1] x [-2, 2] (cen=[0,0], off=[1,2]); slot 1 far away at [20,20]
+        mod.class_center.weight[1] = th.tensor([0.0, 0.0, 20.0, 20.0])
+        mod.class_offset.weight[1] = th.tensor([1.0, 2.0, 0.5, 0.5])
+        # X2 (2): slot 0 = [-2, 2] x [-1, 1] (cen=[0,0], off=[2,1]); slot 1 far away at [30,30]
+        # => A = X1 cap X2 has slot 0 = [-1, 1]^2 (limited by X1 in coord 0 and X2 in coord 1)
+        mod.class_center.weight[2] = th.tensor([0.0, 0.0, 30.0, 30.0])
+        mod.class_offset.weight[2] = th.tensor([2.0, 1.0, 0.5, 0.5])
+        # D (3): slot 0 = [1.0, 3.0] x [-1.0, 1.0] (cen=[2.0, 0.0], off=[1.0, 1.0]); slot 1 at [40,40]
+        mod.class_center.weight[3] = th.tensor([2.0, 0.0, 40.0, 40.0])
+        mod.class_offset.weight[3] = th.tensor([1.0, 1.0, 0.5, 0.5])
+        # Put w_0 at [0.95, 0.0]:
+        # In A=[-1,1]^2: coord 0 slack is 1.0 - 0.95 = 0.05 < m=0.2 (determined by X1's coord 0)!
+        # In D=[1,3]x[-1,1]: coord 0 slack is 1.0 - |0.95 - 2.0| = -0.05 > -m=-0.2 (violates neg margin)!
+        mod.witness_embed.weight[0] = th.tensor([0.95, 0.0])
+
+    pts = mod.witness_points()
+    assert pts is not None
+    assert pts.shape == (1, 2)
+    assert not pts.requires_grad
+    assert pts[0].tolist() == pytest.approx([0.95, 0.0], abs=1e-6)
+
+    loss = mod.structural_extra_loss()
+    # Expected: 1.5 * ((0.2 - 0.05)^2 + (-0.05 + 0.2)^2) = 1.5 * (0.0225 + 0.0225) = 0.0675
+    assert loss.item() == pytest.approx(0.0675, abs=1e-6)
+    loss.backward()
+
+    assert mod.witness_embed.weight.grad is not None
+    assert mod.class_center.weight.grad is not None
+    assert mod.class_offset.weight.grad is not None
+
+    # Witness point receives gradient pulling it left (away from D and deeper into A)
+    assert mod.witness_embed.weight.grad[0, 0].item() != 0.0
+    # Defined class A (row 0) raw embedding row receives exact 0 gradient
+    assert bool((mod.class_center.weight.grad[0] == 0.0).all())
+    assert bool((mod.class_offset.weight.grad[0] == 0.0).all())
+    # Note: for symmetric box [-1, 1] at cen=0, off=1, w - |p - cen| = |off| - (p - cen) = off + cen - p
+    # so both class_center[1, 0] and class_offset[1, 0] (X1 slot 0 coord 0) and D's row 3 slot 0 coord 0 get non-zero gradient!
+    assert mod.class_center.weight.grad[1, 0].item() != 0.0
+    assert mod.class_offset.weight.grad[1, 0].item() != 0.0
+    assert mod.class_center.weight.grad[3, 0].item() != 0.0
+    assert mod.class_offset.weight.grad[3, 0].item() != 0.0
+
+
+def test_witness_defaults_leave_structural_extra_loss_unchanged() -> None:
+    """With default witness_weight=0.0, witness_embed is not allocated and structural_extra_loss is byte-for-byte unchanged."""
+    gci0 = th.tensor([[0, 1], [0, 2]], dtype=th.long)
+    gci1 = th.tensor([[1, 2, 0]], dtype=th.long)
+    gci1_bot = th.tensor([[0, 3]], dtype=th.long)
+    table = DefinitionTable.from_normal_forms(
+        gci0=gci0,
+        gci1=gci1,
+        n_classes=4,
+        k=2,
+        max_components=4,
+        top_idx=None,
+        bottom_idx=None,
+        enabled=True,
+    )
+    targets_no_wit = ExistenceTargets.from_normal_forms(
+        gci0_bot=th.zeros((0, 2), dtype=th.long),
+        gci1=gci1,
+        gci1_bot=gci1_bot,
+        n_classes=4,
+        top_idx=None,
+        bottom_idx=None,
+        witness=False,
+    )
+    targets_with_wit = ExistenceTargets.from_normal_forms(
+        gci0_bot=th.zeros((0, 2), dtype=th.long),
+        gci1=gci1,
+        gci1_bot=gci1_bot,
+        n_classes=4,
+        top_idx=None,
+        bottom_idx=None,
+        gci0=gci0,
+        witness=True,
+    )
+    assert targets_no_wit.witness is None
+    assert targets_with_wit.witness is not None
+
+    th.manual_seed(2026)
+    mod_a = MultiBoxELModule(
+        nb_ont_classes=4,
+        nb_rels=1,
+        embed_dim=3,
+        n_components=2,
+        objective="structural",
+        max_components=4,
+    )
+    mod_a.set_structural_tables(table, targets_no_wit)
+
+    th.manual_seed(2026)
+    mod_b = MultiBoxELModule(
+        nb_ont_classes=4,
+        nb_rels=1,
+        embed_dim=3,
+        n_components=2,
+        objective="structural",
+        max_components=4,
+    )
+    mod_b.set_structural_tables(table, targets_with_wit)
+
+    assert mod_a.witness_weight == 0.0
+    assert mod_b.witness_weight == 0.0
+    assert mod_a.witness_embed is None
+    assert mod_b.witness_embed is None
+    assert set(mod_a.state_dict().keys()) == set(mod_b.state_dict().keys())
+
+    extra_a = mod_a.structural_extra_loss()
+    extra_b = mod_b.structural_extra_loss()
+    assert th.equal(extra_a, extra_b)
+    assert th.equal(mod_a.gci1_bot_loss(gci1_bot), mod_b.gci1_bot_loss(gci1_bot))
+
+    # Re-calling set_structural_tables with witness_weight > 0 preserves witness_embed unless W changes
+    mod_w = MultiBoxELModule(
+        nb_ont_classes=4,
+        nb_rels=1,
+        embed_dim=3,
+        n_components=2,
+        objective="structural",
+        max_components=4,
+        witness_weight=0.5,
+    )
+    mod_w.set_structural_tables(table, targets_with_wit)
+    first_emb = mod_w.witness_embed
+    assert first_emb is not None
+    mod_w.set_structural_tables(table, targets_with_wit)
+    assert mod_w.witness_embed is first_emb
+
+    smaller_wit = WitnessTargets.from_normal_forms(
+        classes=th.tensor([0, 1], dtype=th.long),
+        gci0=gci0,
+        gci1_bot=gci1_bot,
+    )
+    targets_smaller = ExistenceTargets(
+        classes=th.tensor([0, 1], dtype=th.long),
+        pairs=targets_with_wit.pairs,
+        witness=smaller_wit,
+    )
+    mod_w.set_structural_tables(table, targets_smaller)
+    assert mod_w.witness_embed is not first_emb
+    assert mod_w.witness_embed is not None
+    assert mod_w.witness_embed.num_embeddings == 2
+
+    # Validation checks on witness_weight
+    for bad_w in (-0.1, -1, True, False, "0.5", None):
+        with pytest.raises(ValueError, match="witness_weight"):
+            MultiBoxELModule(
+                nb_ont_classes=4,
+                nb_rels=1,
+                embed_dim=2,
+                objective="structural",
+                witness_weight=bad_w,  # type: ignore[arg-type]
+            )
+        with pytest.raises(ValueError, match="witness_weight"):
+            mod_w.witness_weight = bad_w  # type: ignore[assignment]
+
 
 

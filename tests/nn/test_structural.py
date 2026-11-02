@@ -14,19 +14,22 @@ from mowl.nn.el.structural import (
     DefinitionTable,
     ExistenceTargets,
     Regions,
+    WitnessTargets,
     existence_loss,
     gci0_bot_structural,
     gci0_structural,
     gci1_bot_structural,
     gci1_structural,
     inclusion_tight,
+    inside_measure,
     nonempty_measure,
     pair_size,
     pair_slots,
     region_size,
     signed_overlap,
+    witness_loss,
 )
-from tests.geometric.helpers import NS, fixture_path
+from tests.geometric.helpers import NS, fixture_path, t3_cm, t3_dataset
 
 
 def test_signed_overlap_sign() -> None:
@@ -851,6 +854,181 @@ def test_gci1_bot_structural_agg_sum_and_invalid() -> None:
     for bad_agg in ("max", "min", "", 123, None):
         with pytest.raises(ValueError, match="agg"):
             gci1_bot_structural(rc, rd, margin=0.05, agg=bad_agg)  # type: ignore[arg-type]
+
+
+def test_witness_targets_t3_with_and_without_cm(
+    t3_dataset: PathDataset, t3_cm: CanonicalModel
+) -> None:
+    """On T3 without cm: pos(A)={(A,A),(A,X1),(A,X2)}, neg(A)={(A,B),(A,C)}; with cm: neg(A) also has (A,X3); never TOP/BOT."""
+    from mowl.models import MultiBoxEL
+    from mowl.nn.el.structural import build_structural_tables
+
+    model_no_cm = MultiBoxEL(
+        t3_dataset, embed_dim=2, objective="structural", canonical_model=None
+    )
+    _, targets_no_cm, top_idx = build_structural_tables(model_no_cm, cm=None)
+    assert targets_no_cm.witness is not None
+    wit_no_cm = targets_no_cm.witness
+
+    cid = model_no_cm.class_index_dict
+    a_idx = cid[NS + "A"]
+    b_idx = cid[NS + "B"]
+    c_idx = cid[NS + "C"]
+    x1_idx = cid[NS + "X1"]
+    x2_idx = cid[NS + "X2"]
+    x3_idx = cid[NS + "X3"]
+    bot_idx = cid.get("http://www.w3.org/2002/07/owl#Nothing")
+
+    # Never include TOP or BOTTOM in classes, pos, or neg
+    for wit in (wit_no_cm,):
+        cls_set = set(wit.classes.tolist())
+        pos_cls_set = set(wit.pos[:, 1].tolist())
+        neg_cls_set = set(wit.neg[:, 1].tolist())
+        for forbidden in (top_idx, bot_idx):
+            if forbidden is not None:
+                assert forbidden not in cls_set
+                assert forbidden not in pos_cls_set
+                assert forbidden not in neg_cls_set
+
+    w_a_row = wit_no_cm.classes.tolist().index(a_idx)
+    pos_a_no_cm = {
+        int(cls_i)
+        for r_i, cls_i in wit_no_cm.pos.tolist()
+        if int(r_i) == w_a_row
+    }
+    neg_a_no_cm = {
+        int(cls_i)
+        for r_i, cls_i in wit_no_cm.neg.tolist()
+        if int(r_i) == w_a_row
+    }
+    assert pos_a_no_cm == {a_idx, x1_idx, x2_idx}
+    assert neg_a_no_cm == {b_idx, c_idx}
+    assert x3_idx not in neg_a_no_cm
+
+    # With T3 canonical model: neg(A) also includes X3 (since A cap X3 <= bot is entailed)
+    _, targets_cm, _ = build_structural_tables(model_no_cm, cm=t3_cm)
+    assert targets_cm.witness is not None
+    wit_cm = targets_cm.witness
+
+    for forbidden in (top_idx, bot_idx):
+        if forbidden is not None:
+            assert forbidden not in set(wit_cm.classes.tolist())
+            assert forbidden not in set(wit_cm.pos[:, 1].tolist())
+            assert forbidden not in set(wit_cm.neg[:, 1].tolist())
+
+    w_a_row_cm = wit_cm.classes.tolist().index(a_idx)
+    pos_a_cm = {
+        int(cls_i)
+        for r_i, cls_i in wit_cm.pos.tolist()
+        if int(r_i) == w_a_row_cm
+    }
+    neg_a_cm = {
+        int(cls_i)
+        for r_i, cls_i in wit_cm.neg.tolist()
+        if int(r_i) == w_a_row_cm
+    }
+    assert pos_a_cm == {a_idx, x1_idx, x2_idx}
+    assert neg_a_cm == {b_idx, c_idx, x3_idx}
+
+    # Rows are deduplicated and pos/neg are disjoint
+    pos_tuples = [tuple(r) for r in wit_cm.pos.tolist()]
+    neg_tuples = [tuple(r) for r in wit_cm.neg.tolist()]
+    assert len(pos_tuples) == len(set(pos_tuples))
+    assert len(neg_tuples) == len(set(neg_tuples))
+    assert set(pos_tuples).isdisjoint(set(neg_tuples))
+
+    # Passing cm without index_to_iri raises ValueError
+    with pytest.raises(ValueError, match="index_to_iri"):
+        WitnessTargets.from_normal_forms(
+            classes=th.tensor([0], dtype=th.long),
+            gci0=th.zeros((0, 2), dtype=th.long),
+            gci1_bot=th.zeros((0, 2), dtype=th.long),
+            cm=t3_cm,
+        )
+
+
+def test_inside_measure_and_witness_loss_zero_iff_and_inactive() -> None:
+    """Hand-built regions: inside/outside/inactive behaviour of inside_measure and zero iff conditions of witness_loss."""
+    # 3 rows, K=2 slots, d=2:
+    # Row 0: slot 0 active box [-1, 1]^2 (cen=[0,0], w=[1,1]), slot 1 inactive giant box [-100,100]^2
+    #        point p0 = [0.2, -0.5] -> min(1 - 0.2, 1 - 0.5) = +0.5 (strictly inside by 0.5)
+    # Row 1: slot 0 active box [0, 2]^2 (cen=[1,1], w=[1,1]), slot 1 active box [10, 12]^2 (cen=[11,11], w=[1,1])
+    #        point p1 = [2.4, 1.0] -> slot 0: min(1 - 1.4, 1 - 0) = -0.4; slot 1: min(1 - 8.6, 1 - 10) = -9.0 -> max = -0.4 (outside by 0.4)
+    # Row 2: both slots inactive -> returns -1e6 with finite (zero) gradient
+    pts = th.tensor(
+        [[0.2, -0.5], [2.4, 1.0], [0.0, 0.0]],
+        dtype=th.float64,
+        requires_grad=True,
+    )
+    cen = th.tensor(
+        [
+            [[0.0, 0.0], [0.0, 0.0]],
+            [[1.0, 1.0], [11.0, 11.0]],
+            [[0.0, 0.0], [0.0, 0.0]],
+        ],
+        dtype=th.float64,
+        requires_grad=True,
+    )
+    w = th.tensor(
+        [
+            [[1.0, 1.0], [100.0, 100.0]],
+            [[1.0, 1.0], [1.0, 1.0]],
+            [[5.0, 5.0], [5.0, 5.0]],
+        ],
+        dtype=th.float64,
+        requires_grad=True,
+    )
+    active = th.tensor(
+        [[True, False], [True, True], [False, False]], dtype=th.bool
+    )
+    reg = Regions(cen=cen, w=w, active=active)
+    ins = inside_measure(pts, reg)
+    assert ins.shape == (3,)
+    assert ins[0].item() == pytest.approx(0.5, abs=1e-12)
+    assert ins[1].item() == pytest.approx(-0.4, abs=1e-12)
+    assert ins[2].item() == pytest.approx(-1e6, abs=1e-6)
+
+    # Gradients on all-inactive row 2 are finite and zero, while rows 0 and 1 have finite non-zero gradients
+    ins.sum().backward()
+    for t in (pts, cen, w):
+        assert t.grad is not None
+        assert bool(th.isfinite(t.grad).all())
+    assert bool((pts.grad[2] == 0.0).all())
+    assert bool((cen.grad[2] == 0.0).all())
+    assert bool((w.grad[2] == 0.0).all())
+    assert bool((w.grad[0, 1] == 0.0).all())  # inactive slot 1 of row 0 gets 0 grad
+
+    # witness_loss zero iff inside_pos >= m and inside_neg <= -m:
+    # At margin m = 0.3, ins[0] = +0.5 >= 0.3 and ins[1] = -0.4 <= -0.3 -> loss == 0.0
+    loss_zero = witness_loss(ins[:1].detach(), ins[1:2].detach(), margin=0.3)
+    assert loss_zero.item() == 0.0
+
+    # At boundary inside_pos == m and inside_neg == -m -> loss == 0.0
+    loss_boundary = witness_loss(
+        th.tensor([0.3], dtype=th.float64),
+        th.tensor([-0.3], dtype=th.float64),
+        margin=0.3,
+    )
+    assert loss_boundary.item() == 0.0
+
+    # Violating positive (0.5 < m=0.6 -> (0.6 - 0.5)^2 = 0.01)
+    loss_pos_viol = witness_loss(
+        ins[:1].detach(), th.tensor([-1.0], dtype=th.float64), margin=0.6
+    )
+    assert loss_pos_viol.item() == pytest.approx(0.01, abs=1e-12)
+
+    # Violating negative (-0.4 > -m=-0.6 -> (-0.4 + 0.6)^2 = 0.04)
+    loss_neg_viol = witness_loss(
+        th.tensor([1.0], dtype=th.float64), ins[1:2].detach(), margin=0.6
+    )
+    assert loss_neg_viol.item() == pytest.approx(0.04, abs=1e-12)
+
+    # Empty tensors contribute 0.0
+    empty = th.empty(0, dtype=th.float64)
+    assert witness_loss(empty, empty, margin=0.1).item() == 0.0
+    assert witness_loss(th.tensor([0.5], dtype=th.float64), empty, margin=0.1).item() == 0.0
+    assert witness_loss(empty, th.tensor([-0.5], dtype=th.float64), margin=0.1).item() == 0.0
+
 
 
 

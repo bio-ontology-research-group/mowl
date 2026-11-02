@@ -29,15 +29,18 @@ from mowl.nn.el.structural import (
     DefinitionTable,
     ExistenceTargets,
     Regions,
+    WitnessTargets,
     existence_loss,
     gci0_bot_structural,
     gci0_structural,
     gci1_bot_structural,
     gci1_structural,
+    inside_measure,
     nonempty_measure,
     pair_size,
     pair_slots,
     region_size,
+    witness_loss,
 )
 
 if TYPE_CHECKING:
@@ -175,6 +178,12 @@ class MultiBoxELModule(ELModule):
         Aggregation over active component pairs in :meth:`gci1_bot_loss` under
         ``objective="structural"`` (passed as ``agg`` to
         :func:`~mowl.nn.el.structural.gci1_bot_structural`).
+    witness_weight : float, default 0.0
+        Non-negative weight on :func:`~mowl.nn.el.structural.witness_loss` in
+        :meth:`structural_extra_loss` under ``objective="structural"``. When
+        ``witness_weight > 0.0`` and ``targets.witness`` is attached via
+        :meth:`set_structural_tables`, allocates ``self.witness_embed`` with
+        one learnable point per satisfiable target class.
 
     References
     ----------
@@ -211,6 +220,7 @@ class MultiBoxELModule(ELModule):
         size_reg: float = 1e-3,
         reseed_every: int = 0,
         bot_agg: str = "mean",
+        witness_weight: float = 0.0,
     ) -> None:
         if isinstance(n_components, bool) or not isinstance(n_components, int) or n_components < 1:
             raise ValueError(f"n_components must be an int >= 1, got {n_components!r}")
@@ -271,6 +281,12 @@ class MultiBoxELModule(ELModule):
             raise ValueError(
                 f"bot_agg must be 'mean' or 'sum', got {bot_agg!r}"
             )
+        if (
+            isinstance(witness_weight, bool)
+            or not isinstance(witness_weight, (int, float))
+            or float(witness_weight) < 0.0
+        ):
+            raise ValueError(f"witness_weight must be >= 0, got {witness_weight!r}")
         beta_f = _validate_beta(beta)
         ind_hw_f = (
             5.0 * beta_f
@@ -329,6 +345,8 @@ class MultiBoxELModule(ELModule):
         self.size_reg = float(size_reg)
         self.reseed_every = int(reseed_every)
         self.bot_agg = bot_agg
+        self.witness_weight = float(witness_weight)
+        self.witness_embed: Optional[nn.Embedding] = None
         self.definition_table: Optional[DefinitionTable] = None
         self.existence_targets: Optional[ExistenceTargets] = None
         self.top_idx: Optional[int] = None
@@ -338,6 +356,8 @@ class MultiBoxELModule(ELModule):
         self._def_y_dev: Optional[th.Tensor] = None
         self._target_classes_dev: Optional[th.Tensor] = None
         self._target_pairs_dev: Optional[th.Tensor] = None
+        self._witness_pos_dev: Optional[th.Tensor] = None
+        self._witness_neg_dev: Optional[th.Tensor] = None
         self._prim_mask_dev: Optional[th.Tensor] = None
         self._has_prim: bool = False
         self.last_reseed_count: int = 0
@@ -391,6 +411,14 @@ class MultiBoxELModule(ELModule):
                 raise ValueError(
                     f"bot_agg must be 'mean' or 'sum', got {value!r}"
                 )
+        elif name == "witness_weight":
+            if (
+                isinstance(value, bool)
+                or not isinstance(value, (int, float))
+                or float(value) < 0.0
+            ):
+                raise ValueError(f"witness_weight must be >= 0, got {value!r}")
+            value = float(value)
         elif name == "beta":
             beta_f = _validate_beta(value)  # type: ignore[arg-type]
             super().__setattr__(name, beta_f)
@@ -479,9 +507,24 @@ class MultiBoxELModule(ELModule):
         if targets is not None:
             self._target_classes_dev = targets.classes.to(device=device, dtype=th.long)
             self._target_pairs_dev = targets.pairs.to(device=device, dtype=th.long)
+            if targets.witness is not None:
+                self._witness_pos_dev = targets.witness.pos.to(
+                    device=device, dtype=th.long
+                )
+                self._witness_neg_dev = targets.witness.neg.to(
+                    device=device, dtype=th.long
+                )
+            else:
+                self._witness_pos_dev = None
+                self._witness_neg_dev = None
         else:
             self._target_classes_dev = None
             self._target_pairs_dev = None
+            self._witness_pos_dev = None
+            self._witness_neg_dev = None
+
+        if self.witness_embed is not None and self.witness_embed.weight.device != device:
+            self.witness_embed = self.witness_embed.to(device=device)
 
         if self.nb_ont_classes > 0:
             prim_mask = th.ones(self.nb_ont_classes, dtype=th.bool, device=device)
@@ -507,6 +550,11 @@ class MultiBoxELModule(ELModule):
         - Sets ``self.definition_table``, ``self.existence_targets``, and
           ``self.top_idx``, and stages device copies of the table and target
           index tensors on ``class_center.weight.device``.
+        - When ``targets.witness is not None`` and ``self.witness_weight > 0.0``,
+          allocates ``self.witness_embed`` of shape ``(W, embed_dim)`` with the
+          same dtype, device, and initialiser as ``class_center``, re-allocating
+          only if ``self.witness_embed is None`` or the number of witnesses
+          ``W`` changes.
 
         Non-guarantees:
         - Does not re-validate table dimensions against ``nb_ont_classes``.
@@ -516,15 +564,47 @@ class MultiBoxELModule(ELModule):
         table : DefinitionTable
             Compiled conjunction definition table.
         targets : ExistenceTargets
-            Satisfiable classes and conjunction pairs for existence supervision.
+            Satisfiable classes, conjunction pairs, and optional witness targets.
         top_idx : Optional[int], default None
             Class index of ``owl:Thing`` to exclude from size regularisation.
         """
         self.definition_table = table
         self.existence_targets = targets
         self.top_idx = top_idx
+        if (
+            targets is not None
+            and targets.witness is not None
+            and self.witness_weight > 0.0
+        ):
+            n_wit = int(targets.witness.classes.numel())
+            if (
+                self.witness_embed is None
+                or self.witness_embed.num_embeddings != n_wit
+            ):
+                emb = self.init_class_embeddings(n_wit, 1, self.embed_dim)
+                self.witness_embed = emb.to(
+                    device=self.class_center.weight.device,
+                    dtype=self.class_center.weight.dtype,
+                )
         self._structural_device = None
         self._sync_structural_device(self.class_center.weight.device)
+
+    def witness_points(self) -> Optional[th.Tensor]:
+        """Return detached CPU witness point coordinates of shape ``(W, embed_dim)``, or ``None`` when disabled.
+
+        Guarantees:
+        - Returns ``None`` when ``self.witness_embed is None``.
+        - Otherwise returns a detached CPU ``torch.Tensor`` of shape
+          ``(W, embed_dim)`` with ``requires_grad == False``.
+
+        Non-guarantees:
+        - Row order follows ``self.existence_targets.witness.classes``, not
+          ``0 .. nb_ont_classes - 1``.
+        """
+        if self.witness_embed is None:
+            return None
+        with th.no_grad():
+            return self.witness_embed.weight.detach().cpu().clone()
 
     def class_regions(self, idx: th.Tensor) -> Regions:
         """Materialise :class:`~mowl.nn.el.structural.Regions` with ``K = max_components`` slots for class indices ``idx``.
@@ -639,19 +719,24 @@ class MultiBoxELModule(ELModule):
             )
 
     def structural_extra_loss(self) -> th.Tensor:
-        """Compute structural existence loss plus primitive width regularisation.
+        """Compute structural existence loss, primitive width regularisation, and optional witness loss.
 
         Evaluates ``existence_weight * existence_loss(cls_sizes, pair_sizes, margin)``
         plus ``size_reg * mean(2 * |offset|)`` over primitive (raw) slots of all
-        classes except ``owl:Thing`` (``self.top_idx``).
+        classes except ``owl:Thing`` (``self.top_idx``), plus
+        ``witness_weight * witness_loss(inside_pos, inside_neg, margin)`` when
+        ``witness_weight > 0.0`` and witness targets/embeddings are present.
 
         Guarantees:
         - Returns a scalar ``torch.Tensor`` on the module's current device.
         - Excludes ``self.top_idx`` and accepted defined classes from the size
           regularisation term.
+        - Evaluates witness membership on materialised :meth:`class_regions`,
+          so defined classes propagate gradients to their primitive definers.
 
         Non-guarantees:
-        - When ``self.existence_targets is None``, the existence term is ``0.0``.
+        - When ``self.existence_targets is None``, the existence and witness
+          terms are ``0.0``.
         """
         device = self.class_center.weight.device
         dtype = self.class_center.weight.dtype
@@ -687,7 +772,34 @@ class MultiBoxELModule(ELModule):
         else:
             size_term = th.zeros((), dtype=dtype, device=device)
 
-        return ex_term + size_term
+        total = ex_term + size_term
+        if (
+            targets is not None
+            and targets.witness is not None
+            and self.witness_weight > 0.0
+            and self.witness_embed is not None
+        ):
+            assert self._witness_pos_dev is not None
+            assert self._witness_neg_dev is not None
+            if self._witness_pos_dev.numel() > 0:
+                w_pos = self.witness_embed(self._witness_pos_dev[:, 0])
+                r_pos = self.class_regions(self._witness_pos_dev[:, 1])
+                in_pos = inside_measure(w_pos, r_pos)
+            else:
+                in_pos = th.empty(0, dtype=dtype, device=device)
+
+            if self._witness_neg_dev.numel() > 0:
+                w_neg = self.witness_embed(self._witness_neg_dev[:, 0])
+                r_neg = self.class_regions(self._witness_neg_dev[:, 1])
+                in_neg = inside_measure(w_neg, r_neg)
+            else:
+                in_neg = th.empty(0, dtype=dtype, device=device)
+
+            total = total + self.witness_weight * witness_loss(
+                in_pos, in_neg, self.margin
+            )
+
+        return total
 
     def reseed(self, rng: np.random.Generator) -> int:
         """Relocate dead primitive components to violated existence targets under ``no_grad``.
