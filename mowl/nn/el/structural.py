@@ -1,4 +1,4 @@
-"""Region algebra with signed half-widths, structural GCI losses, definition tables, and existence targets.
+"""Region algebra with signed half-widths, structural GCI losses, definition tables, existence targets, and witness targets.
 
 Provides the building blocks for the ``objective="structural"`` formulation of
 :class:`~mowl.models.MultiBoxEL` and :class:`~mowl.models.PrismEL`:
@@ -7,19 +7,24 @@ Provides the building blocks for the ``objective="structural"`` formulation of
    materialised as :math:`K` component slots with centre :math:`c \\in \\mathbb{R}^d`,
    *signed* half-width :math:`w \\in \\mathbb{R}^d` (negative in a coordinate iff the
    slot is empty along that coordinate), and a boolean ``active`` mask.
-2. **Signed overlap and non-emptiness (:func:`signed_overlap`, :func:`nonempty_measure`,
-   :func:`region_size`, :func:`pair_size`):** Differentiable signed measures that
-   remain informative when component pairs are separated, routing gradient to the
-   nearest active component or pair.
-3. **Structural GCI and existence losses (:func:`inclusion_tight`,
+2. **Signed overlap, non-emptiness, and point-inside measures (:func:`signed_overlap`,
+   :func:`nonempty_measure`, :func:`region_size`, :func:`pair_size`,
+   :func:`inside_measure`):** Differentiable signed measures that remain
+   informative when component pairs are separated or a witness point lies
+   outside a region, routing gradient to the nearest active component or pair.
+3. **Structural GCI, existence, and witness losses (:func:`inclusion_tight`,
    :func:`gci0_structural`, :func:`gci0_bot_structural`, :func:`gci1_structural`,
-   :func:`gci1_bot_structural`, :func:`existence_loss`):** Squared hinge losses with
-   detached non-emptiness gates and single-coordinate separation for
-   :math:`C \\sqcap D \\sqsubseteq \\bot`.
-4. **Definition table (:class:`DefinitionTable`) and existence targets
-   (:class:`ExistenceTargets`):** Compile acyclic conjunction definitions
-   :math:`A \\equiv X \\sqcap Y` within the slot/depth budget and identify
-   satisfiable classes and conjunction pairs requiring positive measure.
+   :func:`gci1_bot_structural`, :func:`existence_loss`, :func:`witness_loss`):**
+   Squared hinge losses with detached non-emptiness gates, single-coordinate
+   separation for :math:`C \\sqcap D \\sqsubseteq \\bot`, and per-class witness
+   supervision.
+4. **Definition table (:class:`DefinitionTable`, :func:`slot_components`), existence targets
+   (:class:`ExistenceTargets`), and witness targets (:class:`WitnessTargets`):**
+   Compile acyclic conjunction definitions :math:`A \\equiv X \\sqcap Y` within
+   the slot/depth budget, map materialised definition slots back to primitive
+   component indices, identify satisfiable classes and conjunction pairs
+   requiring positive measure, and build positive/negative class-membership
+   targets for per-class witness points.
 
 Guarantees:
 - **Zero-loss faithfulness at margin 0:** With ``enabled=True`` on
@@ -40,12 +45,22 @@ Guarantees:
   pairs of :math:`C` and :math:`D` have :math:`\\text{ne}(C_i \\cap D_j) \\le 0`
   (or when the row is masked by :class:`DefinitionTable`), :func:`gci1_structural`
   returns exact ``0.0`` with zero gradient.
+- **Witness-loss zero set in :func:`witness_loss`:** At ``margin = m``,
+  :func:`witness_loss` equals ``0`` if and only if for every positive pair
+  :math:`(i, D) \\in \\text{pos}` the witness point :math:`p_i` lies at least
+  :math:`m` inside some active slot of :math:`D`
+  (:math:`\\text{inside}(p_i, D) \\ge m`) and for every negative pair
+  :math:`(i, D) \\in \\text{neg}` the point :math:`p_i` lies at least :math:`m`
+  outside every active slot of :math:`D`
+  (:math:`\\text{inside}(p_i, D) \\le -m`).
 
 Non-guarantees:
-- **Hard max routing in :func:`region_size` and :func:`pair_size`:** Gradients of
-  :func:`region_size` and :func:`pair_size` flow only to the argmax active slot
-  or pair (ties broken by PyTorch's ``amax``); spare dead components require
-  discrete re-seeding to move when trapped in local minima.
+- **Hard max routing in :func:`region_size`, :func:`pair_size`, and :func:`inside_measure`:**
+  Gradients of :func:`region_size`, :func:`pair_size`, and
+  :func:`inside_measure` flow only to the argmax active slot or pair (ties
+  broken by PyTorch's ``amax``); spare dead or idle components require discrete
+  re-seeding to move when trapped in local minima. Rows with zero active slots
+  in :func:`inside_measure` return the finite floor ``-1e6`` with zero gradient.
 - **Boundary contact at ``margin = 0``:** At ``margin = 0``, boxes with zero width
   (:math:`\\text{ne} = 0`) sit on the boundary between empty and non-empty; a
   strictly positive ``margin > 0`` during training is required to enforce
@@ -55,7 +70,19 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import heapq
-from typing import TYPE_CHECKING, Any, Dict, List, Mapping, NamedTuple, Optional, Set, Tuple
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    List,
+    Mapping,
+    NamedTuple,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+    Union,
+)
 
 import torch as th
 
@@ -69,13 +96,17 @@ __all__ = [
     "nonempty_measure",
     "region_size",
     "pair_size",
+    "inside_measure",
     "inclusion_tight",
     "gci0_structural",
     "gci0_bot_structural",
     "gci1_structural",
     "gci1_bot_structural",
     "existence_loss",
+    "witness_loss",
     "DefinitionTable",
+    "slot_components",
+    "WitnessTargets",
     "ExistenceTargets",
     "build_structural_tables",
 ]
@@ -342,6 +373,71 @@ def pair_size(a: Regions, b: Regions) -> th.Tensor:
     return th.amax(masked_ne, dim=1)
 
 
+def inside_measure(points: th.Tensor, regions: Regions) -> th.Tensor:
+    """Compute signed interior depth :math:`\\max_{s \\text{ active}} \\min_m (w_{s,m} - |p_m - \\text{cen}_{s,m}|)` of ``points`` in ``regions``.
+
+    Guarantees:
+    - Returns a 1-D tensor of shape ``(W,)`` matching the batch dimension of ``points``.
+    - Entry ``b`` is strictly positive (at least ``m``) if and only if ``points[b]``
+      lies at least ``m`` inside some active slot of ``regions[b]`` in every coordinate.
+    - Inactive slots are masked before the maximum; if a batch row has no active
+      slots, its output is the finite constant ``-1e6`` with zero gradient so
+      that downstream losses keep finite gradients.
+    - Raises :class:`ValueError` if ``points`` and ``regions`` have incompatible shapes.
+
+    Non-guarantees:
+    - Gradients flow only to the active slot attaining the maximum and the
+      coordinate attaining the minimum (zero gradient on rows with no active slots).
+
+    Parameters
+    ----------
+    points : torch.Tensor
+        Point coordinates of shape ``(W, d)``.
+    regions : Regions
+        Target regions of shape ``(W, K, d)`` for ``cen`` and ``w`` and
+        ``(W, K)`` for ``active``.
+
+    Returns
+    -------
+    torch.Tensor
+        Signed inside measure of shape ``(W,)``.
+    """
+    if points.ndim != 2:
+        raise ValueError(
+            f"points must be 2-D (W, d), got shape {tuple(points.shape)}"
+        )
+    if (
+        regions.cen.ndim != 3
+        or regions.w.ndim != 3
+        or regions.active.ndim != 2
+        or regions.cen.shape != regions.w.shape
+        or regions.cen.shape[:2] != regions.active.shape
+        or points.shape[0] != regions.cen.shape[0]
+        or points.shape[1] != regions.cen.shape[2]
+    ):
+        raise ValueError(
+            f"Incompatible shapes between points {tuple(points.shape)} and regions "
+            f"(cen={tuple(regions.cen.shape)}, w={tuple(regions.w.shape)}, "
+            f"active={tuple(regions.active.shape)})."
+        )
+
+    bsz = int(points.shape[0])
+    if bsz == 0:
+        return th.empty((0,), dtype=points.dtype, device=points.device)
+
+    coord_depth = regions.w - th.abs(points.unsqueeze(1) - regions.cen)
+    slot_depth = th.amin(coord_depth, dim=-1)  # (W, K)
+
+    has_active = regions.active.any(dim=1, keepdim=True)  # (W, 1)
+    inactive_fill = th.where(
+        has_active,
+        th.full_like(slot_depth, float("-inf")),
+        th.full_like(slot_depth, -1e6),
+    )
+    masked = th.where(regions.active, slot_depth, inactive_fill)
+    return th.amax(masked, dim=1)
+
+
 def _inclusion_tight_violation(
     cen_a: th.Tensor,
     w_a: th.Tensor,
@@ -567,14 +663,33 @@ def gci1_structural(
     return out
 
 
-def gci1_bot_structural(c: Regions, d: Regions, margin: float) -> th.Tensor:
-    """Compute the structural GCI1-bot loss :math:`\\text{mean}_{(i,j) \\text{ active}} \\text{relu}(\\text{ne}(C_i \\cap D_j) + m)^2` for :math:`C \\sqcap D \\sqsubseteq \\bot`.
+def gci1_bot_structural(
+    c: Regions,
+    d: Regions,
+    margin: float,
+    agg: str = "mean",
+) -> th.Tensor:
+    """Compute the structural GCI1-bot loss for :math:`C \\sqcap D \\sqsubseteq \\bot`.
+
+    Evaluates
+
+    .. math::
+
+        \\operatorname{agg}_{(i,j) \\text{ active}} \\operatorname{relu}(\\text{ne}(C_i \\cap D_j) + m)^2,
+
+    where ``agg`` is ``"mean"`` (per-row average over active pairs, ``0`` when no
+    pair is active) or ``"sum"`` (per-row sum over active pairs).
 
     Guarantees:
     - Returns a 1-D tensor of shape ``(B,)``.
-    - Equals ``0`` if and only if every active component pair :math:`(C_i, D_j)`
-      is separated by at least ``margin`` in *at least one* coordinate
+    - Under both ``agg="mean"`` and ``agg="sum"``, equals ``0`` if and only if
+      every active component pair :math:`(C_i, D_j)` is separated by at least
+      ``margin`` in *at least one* coordinate
       (:math:`\\min_m \\text{sov}_m(C_i, D_j) \\le -m`).
+    - For every row with :math:`N_{\\text{act}} \\ge 1` active pairs,
+      ``gci1_bot_structural(c, d, margin, agg="sum")`` equals
+      :math:`N_{\\text{act}}` times ``gci1_bot_structural(c, d, margin, agg="mean")``.
+    - Raises :class:`ValueError` if ``agg`` is not ``"mean"`` or ``"sum"``.
 
     Non-guarantees:
     - Gradients for each violating pair flow only through the coordinate with the
@@ -588,20 +703,28 @@ def gci1_bot_structural(c: Regions, d: Regions, margin: float) -> th.Tensor:
         Second conjunct regions of shape ``(B, kd, d)``.
     margin : float
         Separation margin :math:`m`.
+    agg : {"mean", "sum"}, default "mean"
+        Aggregation over active component pairs: ``"mean"`` averages over
+        active pairs; ``"sum"`` sums over active pairs.
 
     Returns
     -------
     torch.Tensor
         Per-row squared GCI1-bot structural loss of shape ``(B,)``.
     """
+    if not isinstance(agg, str) or agg not in ("mean", "sum"):
+        raise ValueError(f"agg must be 'mean' or 'sum', got {agg!r}")
+
     bsz = c.cen.shape[0]
     sov = signed_overlap(c.cen, c.w, d.cen, d.w)
     ne_ij = th.amin(sov, dim=-1).reshape(bsz, -1)
     pair_active = (c.active.unsqueeze(2) & d.active.unsqueeze(1)).reshape(bsz, -1)
 
     term = th.relu(ne_ij + margin).square()
-    mask = pair_active.to(dtype=c.cen.dtype)
     num = th.where(pair_active, term, th.zeros_like(term)).sum(dim=1)
+    if agg == "sum":
+        return num
+    mask = pair_active.to(dtype=c.cen.dtype)
     den = mask.sum(dim=1).clamp_min(1.0)
     return num / den
 
@@ -659,6 +782,65 @@ def existence_loss(
         pair_term = th.zeros((), dtype=dtype, device=device)
 
     return cls_term + pair_term
+
+
+def witness_loss(
+    inside_pos: th.Tensor,
+    inside_neg: th.Tensor,
+    margin: float,
+) -> th.Tensor:
+    """Compute the structural witness loss over positive and negative class memberships.
+
+    Evaluates
+
+    .. math::
+
+        \\text{mean}_{(i, D) \\in \\text{pos}} \\text{relu}(m - \\text{inside}(p_i, D))^2
+        + \\text{mean}_{(i, D) \\in \\text{neg}} \\text{relu}(\\text{inside}(p_i, D) + m)^2,
+
+    where an empty ``inside_pos`` or ``inside_neg`` tensor contributes ``0.0``.
+
+    Guarantees:
+    - Returns a scalar ``torch.Tensor`` of shape ``()``.
+    - Equals ``0`` if and only if every entry in ``inside_pos`` is at least
+      ``margin`` (:math:`\\text{inside}(p_i, D) \\ge m`, i.e. witness :math:`p_i`
+      lies at least :math:`m` inside some active slot of :math:`D`) and every
+      entry in ``inside_neg`` is at most ``-margin``
+      (:math:`\\text{inside}(p_i, D) \\le -m`, i.e. witness :math:`p_i` lies at
+      least :math:`m` outside every active slot of :math:`D`).
+
+    Non-guarantees:
+    - Does not deduplicate target rows; callers should pass deduplicated
+      targets from :class:`WitnessTargets`.
+
+    Parameters
+    ----------
+    inside_pos : torch.Tensor
+        1-D tensor of shape ``(P,)`` holding :math:`\\text{inside}(p_i, D)` for positive targets.
+    inside_neg : torch.Tensor
+        1-D tensor of shape ``(N,)`` holding :math:`\\text{inside}(p_i, D)` for negative targets.
+    margin : float
+        Interior / exterior margin :math:`m`.
+
+    Returns
+    -------
+    torch.Tensor
+        Scalar witness loss.
+    """
+    dtype = inside_pos.dtype if inside_pos.numel() > 0 else inside_neg.dtype
+    device = inside_pos.device if inside_pos.numel() > 0 else inside_neg.device
+
+    if inside_pos.numel() > 0:
+        pos_term = th.relu(margin - inside_pos).square().mean()
+    else:
+        pos_term = th.zeros((), dtype=dtype, device=device)
+
+    if inside_neg.numel() > 0:
+        neg_term = th.relu(inside_neg + margin).square().mean()
+    else:
+        neg_term = th.zeros((), dtype=dtype, device=device)
+
+    return pos_term + neg_term
 
 
 @dataclass
@@ -1016,15 +1198,390 @@ class DefinitionTable:
         return th.isin(keys, self._masked_gci1_keys)
 
 
+def slot_components(
+    table: DefinitionTable,
+    cls: int,
+    slot: int,
+    k: Optional[int] = None,
+) -> Dict[int, int]:
+    """Map primitive class index to component index for a materialised slot of ``cls``.
+
+    Follows the exact recursive slot ordering produced by :func:`pair_slots` in
+    :meth:`~mowl.nn.MultiBoxELModule.class_regions`:
+
+    * If ``cls`` is primitive (``not table.def_mask[cls]``), active slot ``s``
+      (``0 <= s < k``) maps to ``{cls: s}``.
+    * If ``cls`` is an accepted defined class :math:`A \\to (X, Y)` with
+      :math:`c_Y` active slots on :math:`Y`, active slot ``s`` corresponds to
+      the lexicographic pair ``(s // c_Y, s % c_Y)`` of active slots of :math:`X`
+      and :math:`Y`, and recurses to the primitive leaves reachable through
+      ``def_x`` and ``def_y``.
+
+    Guarantees:
+    - Returns a ``Dict[int, int]`` mapping each primitive leaf class index in
+      the definition tree of ``cls`` to its component index in ``0 .. k - 1``.
+    - For any tree-structured definition (distinct primitive leaves), the box of
+      slot ``slot`` in :meth:`~mowl.nn.MultiBoxELModule.class_regions` equals
+      the coordinatewise intersection of the mapped primitive component boxes
+      ``(cen[p, c], |offset[p, c]|)`` for ``(p, c)`` in the returned dictionary.
+    - Raises :class:`ValueError` if ``cls``, ``slot``, or ``k`` is out of range
+      or not an integer.
+
+    Non-guarantees:
+    - If a defined class has a diamond DAG where the same primitive leaf is
+      reachable along both ``def_x`` and ``def_y`` with different component
+      indices in ``slot``, the right branch (``def_y``) overwrites the left
+      branch (``def_x``) in the returned dictionary.
+
+    Parameters
+    ----------
+    table : DefinitionTable
+        Compiled conjunction definition table (or a module exposing
+        ``definition_table`` and ``n_components``).
+    cls : int
+        Class index in ``0 .. table.n_classes - 1``.
+    slot : int
+        Active materialised slot index of ``cls``.
+    k : int, optional
+        Number of primitive components per class :math:`k \\ge 1`. When ``None``,
+        inferred from ``table.comps`` on primitive classes (or ``table.n_components``
+        if a module is passed).
+
+    Returns
+    -------
+    Dict[int, int]
+        Mapping ``{primitive_class_idx: component_idx}``.
+    """
+    if not isinstance(table, DefinitionTable):
+        if hasattr(table, "definition_table") and hasattr(table, "n_components"):
+            mod = table
+            if k is None:
+                k = int(mod.n_components)
+            if mod.definition_table is None:
+                if isinstance(cls, bool) or not isinstance(cls, int):
+                    raise ValueError(f"cls must be an int, got {cls!r}")
+                if isinstance(slot, bool) or not isinstance(slot, int):
+                    raise ValueError(f"slot must be an int, got {slot!r}")
+                if isinstance(k, bool) or not isinstance(k, int) or k < 1:
+                    raise ValueError(f"k must be an int >= 1, got {k!r}")
+                n_cls = int(mod.nb_ont_classes)
+                if cls < 0 or cls >= n_cls:
+                    raise ValueError(f"cls must be in 0 .. {n_cls - 1}, got {cls}")
+                if slot < 0 or slot >= k:
+                    raise ValueError(
+                        f"slot must be in 0 .. {k - 1} for class {cls}, got {slot}"
+                    )
+                return {int(cls): int(slot)}
+            table = mod.definition_table
+        else:
+            raise TypeError(
+                f"table must be a DefinitionTable, got {type(table).__name__}"
+            )
+
+    if isinstance(cls, bool) or not isinstance(cls, int):
+        raise ValueError(f"cls must be an int, got {cls!r}")
+    if isinstance(slot, bool) or not isinstance(slot, int):
+        raise ValueError(f"slot must be an int, got {slot!r}")
+
+    if k is None:
+        prim_mask = ~table.def_mask
+        if not bool(prim_mask.any().item()):
+            raise ValueError("k must be provided when table has no primitive classes.")
+        k_val = int(table.comps[prim_mask][0].item())
+    else:
+        if isinstance(k, bool) or not isinstance(k, int) or k < 1:
+            raise ValueError(f"k must be an int >= 1, got {k!r}")
+        k_val = int(k)
+
+    n_classes = table.n_classes
+    if cls < 0 or cls >= n_classes:
+        raise ValueError(f"cls must be in 0 .. {n_classes - 1}, got {cls}")
+
+    def _num_slots(u: int) -> int:
+        if not bool(table.def_mask[u].item()):
+            return k_val
+        x_u = int(table.def_x[u].item())
+        y_u = int(table.def_y[u].item())
+        return _num_slots(x_u) * _num_slots(y_u)
+
+    total_slots = _num_slots(cls)
+    if slot < 0 or slot >= total_slots:
+        raise ValueError(
+            f"slot must be in 0 .. {total_slots - 1} for class {cls}, got {slot}"
+        )
+
+    def _resolve(u: int, s: int) -> Dict[int, int]:
+        if not bool(table.def_mask[u].item()):
+            return {int(u): int(s)}
+        x_u = int(table.def_x[u].item())
+        y_u = int(table.def_y[u].item())
+        cy = _num_slots(y_u)
+        sx = s // cy
+        sy = s % cy
+        out = _resolve(x_u, sx)
+        out.update(_resolve(y_u, sy))
+        return out
+
+    return _resolve(cls, slot)
+
+
+@dataclass
+class WitnessTargets:
+    """Satisfiable witness classes and positive/negative class-membership targets for :func:`witness_loss`.
+
+    Guarantees:
+    - ``classes`` is a 1-D ``torch.long`` tensor of shape ``(W,)``, ``pos`` is a
+      2-D ``torch.long`` tensor of shape ``(P, 2)``, and ``neg`` is a 2-D
+      ``torch.long`` tensor of shape ``(N, 2)`` with rows ``(witness_row, class_idx)``
+      where ``witness_row`` is in ``0 .. W - 1`` (aligned with ``classes``) and
+      ``class_idx`` is a full class index.
+    - ``top_idx`` and ``bottom_idx`` are excluded from ``classes`` and from the
+      ``class_idx`` column of both ``pos`` and ``neg``.
+    - Rows of ``pos`` and ``neg`` are deduplicated and disjoint (``pos ∩ neg = ∅``),
+      and ``(r, classes[r])`` is always included in ``pos`` for every witness row ``r``.
+
+    Non-guarantees:
+    - Without a :class:`~mowl.geometric.completion.CanonicalModel`, positive and
+      negative targets are approximated syntactically from ``gci0`` and ``gci1_bot``
+      rows only (entailed subsumptions and entailed disjointness are not inferred).
+    - Auxiliary classes minted by :class:`~mowl.ontology.normalize.ELNormalizer`
+      (``http://mowl.borg/aux/...``) are unknown to a
+      :class:`~mowl.geometric.completion.CanonicalModel` built with
+      ``mowl.geometric``'s own normaliser, so their relations fall back to the
+      asserted ``gci0`` and ``gci1_bot`` rows only.
+
+    Attributes
+    ----------
+    classes : torch.Tensor
+        1-D ``torch.long`` tensor of witness class indices, shape ``(W,)``.
+    pos : torch.Tensor
+        2-D ``torch.long`` tensor of positive pairs ``(witness_row, class_idx)``,
+        shape ``(P, 2)``.
+    neg : torch.Tensor
+        2-D ``torch.long`` tensor of negative pairs ``(witness_row, class_idx)``,
+        shape ``(N, 2)``.
+    """
+
+    classes: th.Tensor
+    pos: th.Tensor
+    neg: th.Tensor
+
+    @classmethod
+    def from_normal_forms(
+        cls,
+        classes: Union[th.Tensor, Sequence[int]],
+        gci0: Optional[th.Tensor] = None,
+        gci1_bot: Optional[th.Tensor] = None,
+        top_idx: Optional[int] = None,
+        bottom_idx: Optional[int] = None,
+        index_to_iri: Optional[Union[Mapping[int, str], Mapping[str, int], Sequence[str]]] = None,
+        cm: Optional[CanonicalModel] = None,
+        *,
+        n_classes: Optional[int] = None,
+        class_index_dict: Optional[Mapping[str, int]] = None,
+    ) -> WitnessTargets:
+        """Build :class:`WitnessTargets` from satisfiable classes, normal forms, and an optional :class:`CanonicalModel`.
+
+        Guarantees:
+        - With ``cm`` provided, for each witness row ``r`` with class ``C = classes[r]``
+          whose IRI is in ``cm.concept_names``:
+          - ``pos`` includes ``(r, D)`` for ``D == C`` and for every target class ``D``
+            whose IRI is in ``cm.concept_names`` with ``cm.entails(iri_c, iri_d)``;
+          - ``neg`` includes ``(r, D)`` for every satisfiable target class ``D``
+            whose IRI is in ``cm.concept_names`` with
+            ``not cm.joint_satisfiable([iri_c, iri_d])`` (excluding any ``D`` in ``pos``);
+          - whenever ``C`` or ``D`` has an IRI unknown to ``cm``, falls back to the
+            asserted ``gci0``/``gci1_bot`` rule for that pair.
+          Raises :class:`ValueError` if ``cm`` is provided without ``index_to_iri``
+          (or ``class_index_dict``).
+        - Without ``cm``, ``pos`` for witness ``C = classes[r]`` is
+          :math:`\\{(r, C)\\} \\cup \\{(r, D) : (C, D) \\in \\text{gci0}\\}` and ``neg`` is
+          :math:`\\{(r, D) : (C, D) \\text{ or } (D, C) \\in \\text{gci1\\_bot}\\} \\setminus \\text{pos}`.
+        - Excludes ``top_idx`` and ``bottom_idx`` everywhere and deduplicates rows.
+
+        Non-guarantees:
+        - Without ``cm``, indirect subsumptions (:math:`C \\sqsubseteq X_1 \\sqsubseteq X_2`)
+          and indirect disjointness (:math:`A \\sqsubseteq X_2,\\; X_2 \\sqcap X_3 \\sqsubseteq \\bot`)
+          are not added unless asserted directly in ``gci0`` or ``gci1_bot``.
+        - Auxiliary classes minted by :class:`~mowl.ontology.normalize.ELNormalizer`
+          are unknown to ``cm`` and use the asserted ``gci0``/``gci1_bot`` rules only.
+
+        Parameters
+        ----------
+        classes : Union[torch.Tensor, Sequence[int]]
+            1-D sequence or ``torch.long`` tensor of satisfiable class indices.
+        gci0 : Optional[torch.Tensor], default None
+            Long tensor of shape ``(N0, 2)`` with rows ``(C, D)``.
+        gci1_bot : Optional[torch.Tensor], default None
+            Long tensor of shape ``(N2, 2)`` with rows ``(C, D)``.
+        top_idx : Optional[int], default None
+            Class index of ``owl:Thing`` if present, else ``None``.
+        bottom_idx : Optional[int], default None
+            Class index of ``owl:Nothing`` if present, else ``None``.
+        index_to_iri : Optional[Union[Mapping[int, str], Mapping[str, int], Sequence[str]]], default None
+            Mapping from class index to IRI string (or ``class_index_dict`` mapping
+            IRI to index, or sequence of IRI strings indexed by class index).
+            Required when ``cm`` is given.
+        cm : Optional[CanonicalModel], default None
+            Saturated canonical model for semantic entailment and joint-satisfiability
+            queries.
+        n_classes : Optional[int], default None
+            Optional total number of classes used to bound class indices.
+        class_index_dict : Optional[Mapping[str, int]], default None
+            Optional mapping from IRI string to class index (alternative to
+            ``index_to_iri``).
+
+        Returns
+        -------
+        WitnessTargets
+            Compiled witness target tensors ``(classes, pos, neg)``.
+        """
+        idx_to_iri: Optional[Dict[int, str]] = None
+        if index_to_iri is not None:
+            if isinstance(index_to_iri, Mapping):
+                sample_key = next(iter(index_to_iri.keys()), None)
+                if isinstance(sample_key, str):
+                    idx_to_iri = {int(v): str(k) for k, v in index_to_iri.items()}
+                else:
+                    idx_to_iri = {int(k): str(v) for k, v in index_to_iri.items()}
+            else:
+                idx_to_iri = {i: str(v) for i, v in enumerate(index_to_iri)}
+        elif class_index_dict is not None:
+            idx_to_iri = {int(idx): str(iri) for iri, idx in class_index_dict.items()}
+
+        if cm is not None and idx_to_iri is None:
+            raise ValueError("index_to_iri must be provided when cm is not None.")
+
+        excluded: Set[int] = {
+            int(idx) for idx in (top_idx, bottom_idx) if idx is not None
+        }
+
+        def _valid_idx(idx: int) -> bool:
+            if idx < 0 or idx in excluded:
+                return False
+            if n_classes is not None and idx >= n_classes:
+                return False
+            return True
+
+        cm_concepts: Set[str] = set()
+        if cm is not None:
+            cn_attr = getattr(cm, "concept_names", set())
+            cm_concepts = set(cn_attr() if callable(cn_attr) else cn_attr)
+
+        classes_raw = (
+            th.as_tensor(classes, dtype=th.long).detach().cpu().reshape(-1).tolist()
+        )
+        witness_classes: List[int] = []
+        seen_w: Set[int] = set()
+        for c_raw in classes_raw:
+            c = int(c_raw)
+            if not _valid_idx(c) or c in seen_w:
+                continue
+            if cm is not None:
+                assert idx_to_iri is not None
+                iri_c = idx_to_iri.get(c)
+                if iri_c is not None and iri_c in cm_concepts and not cm.is_satisfiable(iri_c):
+                    continue
+            seen_w.add(c)
+            witness_classes.append(c)
+
+        gci0_supers: Dict[int, Set[int]] = {}
+        all_candidates: Set[int] = set(witness_classes)
+        if n_classes is not None:
+            for d in range(n_classes):
+                if _valid_idx(d):
+                    all_candidates.add(d)
+        if idx_to_iri is not None:
+            for d in idx_to_iri.keys():
+                if _valid_idx(d):
+                    all_candidates.add(d)
+
+        if gci0 is not None and gci0.numel() > 0:
+            for row in gci0.detach().cpu().reshape(-1, 2).tolist():
+                c, d = int(row[0]), int(row[1])
+                if not (_valid_idx(c) and _valid_idx(d)):
+                    continue
+                gci0_supers.setdefault(c, set()).add(d)
+                all_candidates.add(c)
+                all_candidates.add(d)
+
+        gci1_bot_partners: Dict[int, Set[int]] = {}
+        if gci1_bot is not None and gci1_bot.numel() > 0:
+            for row in gci1_bot.detach().cpu().reshape(-1, 2).tolist():
+                c, d = int(row[0]), int(row[1])
+                if not (_valid_idx(c) and _valid_idx(d)):
+                    continue
+                gci1_bot_partners.setdefault(c, set()).add(d)
+                gci1_bot_partners.setdefault(d, set()).add(c)
+                all_candidates.add(c)
+                all_candidates.add(d)
+
+        sorted_candidates = sorted(all_candidates)
+        cm_sat: Dict[int, bool] = {}
+        if cm is not None:
+            assert idx_to_iri is not None
+            for d in sorted_candidates:
+                iri_d = idx_to_iri.get(d)
+                if iri_d is not None and iri_d in cm_concepts:
+                    cm_sat[d] = bool(cm.is_satisfiable(iri_d))
+
+        pos_rows: List[Tuple[int, int]] = []
+        neg_rows: List[Tuple[int, int]] = []
+
+        for w_row, c in enumerate(witness_classes):
+            pos_c: Set[int] = {c}
+            neg_c: Set[int] = set()
+
+            iri_c = idx_to_iri.get(c) if idx_to_iri is not None else None
+            if cm is not None and iri_c is not None and iri_c in cm_concepts:
+                assert idx_to_iri is not None
+                for d in sorted_candidates:
+                    iri_d = idx_to_iri.get(d)
+                    if iri_d is not None and iri_d in cm_concepts:
+                        if cm.entails(iri_c, iri_d):
+                            pos_c.add(d)
+                        elif cm_sat.get(d, False) and not cm.joint_satisfiable([iri_c, iri_d]):
+                            neg_c.add(d)
+                    else:
+                        if d in gci0_supers.get(c, set()):
+                            pos_c.add(d)
+                        elif d in gci1_bot_partners.get(c, set()):
+                            neg_c.add(d)
+            else:
+                pos_c.update(gci0_supers.get(c, set()))
+                neg_c.update(gci1_bot_partners.get(c, set()))
+
+            neg_c.difference_update(pos_c)
+            for d in sorted(pos_c):
+                pos_rows.append((w_row, d))
+            for d in sorted(neg_c):
+                neg_rows.append((w_row, d))
+
+        classes_tensor = th.tensor(witness_classes, dtype=th.long)
+        pos_tensor = (
+            th.tensor(pos_rows, dtype=th.long)
+            if pos_rows
+            else th.zeros((0, 2), dtype=th.long)
+        )
+        neg_tensor = (
+            th.tensor(neg_rows, dtype=th.long)
+            if neg_rows
+            else th.zeros((0, 2), dtype=th.long)
+        )
+        return cls(classes=classes_tensor, pos=pos_tensor, neg=neg_tensor)
+
+
 @dataclass
 class ExistenceTargets:
-    """Satisfiable classes and conjunction pairs targeted by :func:`existence_loss`.
+    """Satisfiable classes, conjunction pairs, and optional witness targets.
 
     Guarantees:
     - ``classes`` is a 1-D ``torch.long`` tensor of shape ``(C,)`` and ``pairs``
       is a 2-D ``torch.long`` tensor of shape ``(P, 2)`` with ``pairs[:, 0] < pairs[:, 1]``.
     - ``top_idx`` and ``bottom_idx`` are excluded from both ``classes`` and ``pairs``.
     - Pairs are unordered, deduplicated, and strictly satisfy ``C != D``.
+    - When ``witness`` is present, ``witness.classes`` is aligned with ``classes``
+      and excludes ``top_idx`` and ``bottom_idx``.
 
     Non-guarantees:
     - Without a :class:`~mowl.geometric.completion.CanonicalModel`, satisfiability
@@ -1045,10 +1602,13 @@ class ExistenceTargets:
         1-D ``torch.long`` tensor of satisfiable class indices, shape ``(C,)``.
     pairs : torch.Tensor
         2-D ``torch.long`` tensor of satisfiable conjunction pairs, shape ``(P, 2)``.
+    witness : Optional[WitnessTargets], default None
+        Optional positive/negative membership targets for per-class witness points.
     """
 
     classes: th.Tensor
     pairs: th.Tensor
+    witness: Optional[WitnessTargets] = None
 
     @classmethod
     def from_normal_forms(
@@ -1061,6 +1621,8 @@ class ExistenceTargets:
         bottom_idx: Optional[int],
         index_to_iri: Optional[Dict[int, str]] = None,
         cm: Optional[CanonicalModel] = None,
+        gci0: Optional[th.Tensor] = None,
+        witness: bool = False,
     ) -> ExistenceTargets:
         """Build :class:`ExistenceTargets` from normal forms and an optional :class:`CanonicalModel`.
 
@@ -1076,6 +1638,8 @@ class ExistenceTargets:
           where neither ``C`` nor ``D`` appears in ``gci0_bot`` and ``(C, D)``
           does not appear in either order in ``gci1_bot``.
         - Excludes ``top_idx`` and ``bottom_idx`` everywhere.
+        - When ``witness=True``, attaches :class:`WitnessTargets` built via
+          :meth:`WitnessTargets.from_normal_forms`.
 
         Non-guarantees:
         - Does not test pairs that do not occur as the left-hand side of any
@@ -1104,11 +1668,16 @@ class ExistenceTargets:
             Mapping from class index to IRI string (required when ``cm`` is given).
         cm : Optional[CanonicalModel], default None
             Saturated canonical model for semantic satisfiability queries.
+        gci0 : Optional[torch.Tensor], default None
+            Optional ``gci0`` rows ``(C, D)`` used when ``witness=True``.
+        witness : bool, default False
+            Whether to also populate the ``witness`` attribute with
+            :class:`WitnessTargets`.
 
         Returns
         -------
         ExistenceTargets
-            Target class and pair index tensors.
+            Target class and pair index tensors (plus optional ``witness`` targets).
         """
         if cm is not None and index_to_iri is None:
             raise ValueError("index_to_iri must be provided when cm is not None.")
@@ -1195,7 +1764,20 @@ class ExistenceTargets:
         else:
             pairs_tensor = th.zeros((0, 2), dtype=th.long)
 
-        return cls(classes=classes_tensor, pairs=pairs_tensor)
+        witness_targets: Optional[WitnessTargets] = None
+        if witness:
+            witness_targets = WitnessTargets.from_normal_forms(
+                classes=classes_tensor,
+                gci0=gci0,
+                gci1_bot=gci1_bot,
+                top_idx=top_idx,
+                bottom_idx=bottom_idx,
+                index_to_iri=index_to_iri,
+                cm=cm,
+                n_classes=n_classes,
+            )
+
+        return cls(classes=classes_tensor, pairs=pairs_tensor, witness=witness_targets)
 
 
 def _extract_normal_form_rows(training_datasets: Mapping[str, Any], name: str, cols: int) -> th.Tensor:
@@ -1242,6 +1824,7 @@ def build_structural_tables(
     enabled: Optional[bool] = None,
     max_level: Optional[int] = None,
     cm: Optional[CanonicalModel] = None,
+    witness: bool = True,
 ) -> Tuple[DefinitionTable, ExistenceTargets, Optional[int]]:
     """Build :class:`DefinitionTable`, :class:`ExistenceTargets`, and ``top_idx`` from a model.
 
@@ -1252,7 +1835,9 @@ def build_structural_tables(
       and ``gci3`` (3 cols ``(r, C, D)`` as stored by :class:`~mowl.datasets.el.GCI3Dataset`)
       from ``model_like.training_datasets``, raising :class:`ValueError` if any
       tensor has fewer columns than required.
-    - Returns ``(definition_table, existence_targets, top_idx)``.
+    - Returns ``(definition_table, existence_targets, top_idx)``; when
+      ``witness=True`` (the default), ``existence_targets.witness`` is populated
+      with :class:`WitnessTargets`.
 
     Non-guarantees:
     - Auxiliary classes minted by :class:`~mowl.ontology.normalize.ELNormalizer`
@@ -1281,6 +1866,9 @@ def build_structural_tables(
     cm : Optional[CanonicalModel], default None
         Optional pre-built canonical model (defaults to
         ``getattr(model_like, "canonical_model", None)``).
+    witness : bool, default True
+        Whether to build and attach :class:`WitnessTargets` on
+        ``existence_targets.witness``.
 
     Returns
     -------
@@ -1336,5 +1924,7 @@ def build_structural_tables(
         bottom_idx=bottom_idx,
         index_to_iri=index_to_iri,
         cm=cm_val,
+        gci0=gci0_rows,
+        witness=bool(witness),
     )
     return table, targets, top_idx

@@ -84,6 +84,23 @@ Models embeddings the :math:`\mathcal{EL}` language
     </div>
 
 
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Axis-aligned boxes satisfy Helly&#x27;s theorem: in \mathbb{R}^d, if every pair among k boxes has a ...">
+
+.. only:: html
+
+  .. image:: /examples/elmodels/images/thumb/sphx_glr_plot_4_multibox_structural_tk_thumb.png
+    :alt:
+
+  :ref:`sphx_glr_examples_elmodels_plot_4_multibox_structural_tk.py`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Witness-Point Structural Training on the Helly Counterexample T_k</div>
+    </div>
+
+
 .. thumbnail-parent-div-close
 
 .. raw:: html

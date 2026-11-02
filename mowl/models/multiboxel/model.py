@@ -1,10 +1,12 @@
 """MultiBoxEL model class."""
 from __future__ import annotations
 
+import os
 from typing import Optional, Tuple
 
 import numpy as np
 import torch as th
+import torch.nn as nn
 
 from mowl.base_models.elmodel import EmbeddingELModel
 from mowl.datasets.el.points import (
@@ -174,6 +176,26 @@ class MultiBoxEL(EmbeddingELModel):
         used to determine semantic satisfiability in
         :meth:`~mowl.nn.el.structural.ExistenceTargets.from_normal_forms` under
         ``objective="structural"``.
+    bot_agg : {"mean", "sum"}, default "mean"
+        Aggregation over active component pairs in ``gci1_bot`` under
+        ``objective="structural"`` (passed as ``agg`` to
+        :func:`~mowl.nn.el.structural.gci1_bot_structural`).
+    witness_weight : float, default 0.0
+        Non-negative weight multiplying :func:`~mowl.nn.el.structural.witness_loss`
+        under ``objective="structural"``.
+    reseed_mode : {"dead", "idle"}, default "dead"
+        Discrete re-seeding mode for :meth:`~mowl.nn.MultiBoxELModule.reseed`
+        under ``objective="structural"``: ``"dead"`` relocates nested or thin
+        primitive components to violated conjunction pair partners; ``"idle"``
+        requires ``witness_weight > 0`` and relocates the least-used primitive
+        leaf components of dead defined classes to their witness points.
+    reseed_size : float, default 0.15
+        Positive box half-width :math:`> 0` assigned in every coordinate to
+        re-seeded components under ``reseed_mode="idle"``.
+    reseed_batch : int, default 1
+        Maximum number of dead defined classes :math:`\\ge 1` processed per
+        :meth:`~mowl.nn.MultiBoxELModule.reseed` call under
+        ``reseed_mode="idle"``.
 
     References
     ----------
@@ -216,9 +238,45 @@ class MultiBoxEL(EmbeddingELModel):
                  size_reg=1e-3,
                  reseed_every=0,
                  canonical_model=None,
+                 bot_agg="mean",
+                 witness_weight=0.0,
+                 reseed_mode="dead",
+                 reseed_size=0.15,
+                 reseed_batch=1,
                  ):
         if float(anchor_weight) < 0:
             raise ValueError(f"anchor_weight must be >= 0, got {anchor_weight!r}")
+        if not isinstance(bot_agg, str) or bot_agg not in ("mean", "sum"):
+            raise ValueError(f"bot_agg must be 'mean' or 'sum', got {bot_agg!r}")
+        if (
+            isinstance(witness_weight, bool)
+            or not isinstance(witness_weight, (int, float))
+            or float(witness_weight) < 0.0
+        ):
+            raise ValueError(f"witness_weight must be >= 0, got {witness_weight!r}")
+        if not isinstance(reseed_mode, str) or reseed_mode not in ("dead", "idle"):
+            raise ValueError(
+                f"reseed_mode must be 'dead' or 'idle', got {reseed_mode!r}"
+            )
+        if reseed_mode == "idle" and float(witness_weight) <= 0.0:
+            raise ValueError(
+                "reseed_mode='idle' requires witness_weight > 0, "
+                f"got witness_weight={witness_weight!r}"
+            )
+        if (
+            isinstance(reseed_size, bool)
+            or not isinstance(reseed_size, (int, float))
+            or float(reseed_size) <= 0.0
+        ):
+            raise ValueError(f"reseed_size must be > 0, got {reseed_size!r}")
+        if (
+            isinstance(reseed_batch, bool)
+            or not isinstance(reseed_batch, int)
+            or reseed_batch < 1
+        ):
+            raise ValueError(
+                f"reseed_batch must be an int >= 1, got {reseed_batch!r}"
+            )
         eff_tau_start = float(tau) if tau is not None else float(tau_start)
         eff_tau_end = float(tau_end)
         if eff_tau_start <= 0.0 or eff_tau_end <= 0.0:
@@ -267,10 +325,16 @@ class MultiBoxEL(EmbeddingELModel):
         self.size_reg = size_reg
         self.reseed_every = reseed_every
         self.canonical_model = canonical_model
+        self.bot_agg = bot_agg
+        self.witness_weight = float(witness_weight)
+        self.reseed_mode = reseed_mode
+        self.reseed_size = float(reseed_size)
+        self.reseed_batch = int(reseed_batch)
         self._point_supervision: Optional[PointSupervision] = None
         self._structural_tables: Optional[
             Tuple[DefinitionTable, ExistenceTargets, Optional[int]]
         ] = None
+        self._checkpoint_witness_rows: Optional[int] = None
         self._loaded = False
         self.extended = False
         self.init_module()
@@ -300,6 +364,11 @@ class MultiBoxEL(EmbeddingELModel):
             existence_weight=self.existence_weight,
             size_reg=self.size_reg,
             reseed_every=self.reseed_every,
+            bot_agg=self.bot_agg,
+            witness_weight=self.witness_weight,
+            reseed_mode=self.reseed_mode,
+            reseed_size=self.reseed_size,
+            reseed_batch=self.reseed_batch,
         ).to(self.device)
         self.max_components = self.module.max_components
         self.structural_definitions = self.module.structural_definitions
@@ -310,6 +379,11 @@ class MultiBoxEL(EmbeddingELModel):
         self.existence_weight = self.module.existence_weight
         self.size_reg = self.module.size_reg
         self.reseed_every = self.module.reseed_every
+        self.bot_agg = self.module.bot_agg
+        self.witness_weight = self.module.witness_weight
+        self.reseed_mode = self.module.reseed_mode
+        self.reseed_size = self.module.reseed_size
+        self.reseed_batch = self.module.reseed_batch
         if self.init_boxes is not None:
             self.init_boxes.apply_to_module(
                 self.module, class_index_dict=self.class_index_dict)
@@ -318,6 +392,16 @@ class MultiBoxEL(EmbeddingELModel):
         if self._structural_tables is not None:
             table, targets, top_idx = self._structural_tables
             self.module.set_structural_tables(table, targets, top_idx=top_idx)
+        if (
+            self._checkpoint_witness_rows is not None
+            and self.module.witness_embed is None
+        ):
+            self.module.witness_embed = nn.Embedding(
+                self._checkpoint_witness_rows, self.embed_dim
+            ).to(
+                device=self.module.class_center.weight.device,
+                dtype=self.module.class_center.weight.dtype,
+            )
 
     @property
     def point_supervision(self) -> Optional[PointSupervision]:
@@ -550,6 +634,20 @@ class MultiBoxEL(EmbeddingELModel):
             epochs, validate_every=validate_every, epoch_callback=epoch_callback
         )
 
+    def _peek_checkpoint_witness_rows(self, path: Optional[str]) -> Optional[int]:
+        """Return ``num_embeddings`` if ``witness_embed.weight`` is present in the checkpoint at ``path``."""
+        if not isinstance(path, str) or not os.path.exists(path):
+            return None
+        try:
+            state = th.load(path, weights_only=True, map_location="cpu")
+        except Exception:
+            return None
+        if isinstance(state, dict) and "witness_embed.weight" in state:
+            w = state["witness_embed.weight"]
+            if isinstance(w, th.Tensor) and w.ndim == 2:
+                return int(w.shape[0])
+        return None
+
     def load_best_model(self):
         """Reload the best checkpoint and re-attach structural tables when ``objective='structural'``."""
         if self.objective == "structural" and self._structural_tables is None:
@@ -560,11 +658,20 @@ class MultiBoxEL(EmbeddingELModel):
                 enabled=self.structural_definitions,
                 cm=self.canonical_model,
             )
+        self._checkpoint_witness_rows = self._peek_checkpoint_witness_rows(
+            self.model_filepath
+        )
         super().load_best_model()
 
     def from_pretrained(self, model):
-        """Load pretrained weights and ensure structural tables are attached when ``objective='structural'``."""
-        super().from_pretrained(model)
+        """Load pretrained weights and ensure structural tables are attached before ``load_state_dict``."""
+        if not isinstance(model, str):
+            raise TypeError(
+                "Parameter model must be a string pointing to the model file."
+            )
+        if not os.path.exists(model):
+            raise FileNotFoundError("Pretrained model path does not exist")
+
         if self.objective == "structural":
             if self._structural_tables is None:
                 self._structural_tables = build_structural_tables(
@@ -576,6 +683,21 @@ class MultiBoxEL(EmbeddingELModel):
                 )
             table, targets, top_idx = self._structural_tables
             self.module.set_structural_tables(table, targets, top_idx=top_idx)
+
+        wit_rows = self._peek_checkpoint_witness_rows(model)
+        if wit_rows is not None and (
+            self.module.witness_embed is None
+            or self.module.witness_embed.num_embeddings != wit_rows
+        ):
+            self._checkpoint_witness_rows = wit_rows
+            self.module.witness_embed = nn.Embedding(
+                wit_rows, self.embed_dim
+            ).to(
+                device=self.module.class_center.weight.device,
+                dtype=self.module.class_center.weight.dtype,
+            )
+
+        super().from_pretrained(model)
 
     def get_regularization_loss(self):
         """Return module regularisation loss plus weighted anchor loss when active."""

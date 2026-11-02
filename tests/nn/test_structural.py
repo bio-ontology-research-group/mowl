@@ -14,19 +14,23 @@ from mowl.nn.el.structural import (
     DefinitionTable,
     ExistenceTargets,
     Regions,
+    WitnessTargets,
     existence_loss,
     gci0_bot_structural,
     gci0_structural,
     gci1_bot_structural,
     gci1_structural,
     inclusion_tight,
+    inside_measure,
     nonempty_measure,
     pair_size,
     pair_slots,
     region_size,
     signed_overlap,
+    slot_components,
+    witness_loss,
 )
-from tests.geometric.helpers import NS, fixture_path
+from tests.geometric.helpers import NS, fixture_path, t3_cm, t3_dataset
 
 
 def test_signed_overlap_sign() -> None:
@@ -802,5 +806,357 @@ def test_gci_structural_finite_grad_at_zero_violation() -> None:
         assert t.grad is not None
         assert bool(th.isfinite(t.grad).all())
         assert bool((t.grad == 0.0).all())
+
+
+def test_gci1_bot_structural_agg_sum_and_invalid() -> None:
+    """gci1_bot_structural(agg='sum') equals mean * n_active_pairs on a random batch with padding slots; invalid agg raises ValueError."""
+    gen = th.Generator().manual_seed(20261102)
+    b, kc, kd, dim = 4, 4, 5, 3
+    cen_c = th.randn((b, kc, dim), generator=gen, dtype=th.float64) * 0.2
+    w_c = th.abs(th.randn((b, kc, dim), generator=gen, dtype=th.float64)) + 0.5
+    cen_d = th.randn((b, kd, dim), generator=gen, dtype=th.float64) * 0.2
+    w_d = th.abs(th.randn((b, kd, dim), generator=gen, dtype=th.float64)) + 0.5
+
+    # Varying active counts per row with padding slots (and put giant overlaps in inactive slots)
+    act_c = th.tensor(
+        [
+            [True, True, False, False],
+            [True, False, True, True],
+            [False, True, False, False],
+            [True, True, True, True],
+        ],
+        dtype=th.bool,
+    )
+    act_d = th.tensor(
+        [
+            [True, True, True, False, False],
+            [True, True, False, False, False],
+            [True, False, True, True, False],
+            [False, True, False, True, False],
+        ],
+        dtype=th.bool,
+    )
+    w_c = th.where(act_c.unsqueeze(-1), w_c, th.full_like(w_c, 100.0))
+    w_d = th.where(act_d.unsqueeze(-1), w_d, th.full_like(w_d, 100.0))
+
+    rc = Regions(cen=cen_c, w=w_c, active=act_c)
+    rd = Regions(cen=cen_d, w=w_d, active=act_d)
+
+    loss_default = gci1_bot_structural(rc, rd, margin=0.05)
+    loss_mean = gci1_bot_structural(rc, rd, margin=0.05, agg="mean")
+    loss_sum = gci1_bot_structural(rc, rd, margin=0.05, agg="sum")
+
+    assert th.equal(loss_default, loss_mean)
+    n_active_pairs = (act_c.sum(dim=1) * act_d.sum(dim=1)).to(dtype=th.float64)
+    assert n_active_pairs.tolist() == [6.0, 6.0, 3.0, 8.0]
+    assert bool((loss_mean > 0.0).all())
+    assert th.allclose(loss_sum, loss_mean * n_active_pairs, atol=1e-12, rtol=1e-12)
+
+    for bad_agg in ("max", "min", "", 123, None):
+        with pytest.raises(ValueError, match="agg"):
+            gci1_bot_structural(rc, rd, margin=0.05, agg=bad_agg)  # type: ignore[arg-type]
+
+
+def test_witness_targets_t3_with_and_without_cm(
+    t3_dataset: PathDataset, t3_cm: CanonicalModel
+) -> None:
+    """On T3 without cm: pos(A)={(A,A),(A,X1),(A,X2)}, neg(A)={(A,B),(A,C)}; with cm: neg(A) also has (A,X3); never TOP/BOT."""
+    from mowl.models import MultiBoxEL
+    from mowl.nn.el.structural import build_structural_tables
+
+    model_no_cm = MultiBoxEL(
+        t3_dataset, embed_dim=2, objective="structural", canonical_model=None
+    )
+    _, targets_no_cm, top_idx = build_structural_tables(model_no_cm, cm=None)
+    assert targets_no_cm.witness is not None
+    wit_no_cm = targets_no_cm.witness
+
+    cid = model_no_cm.class_index_dict
+    a_idx = cid[NS + "A"]
+    b_idx = cid[NS + "B"]
+    c_idx = cid[NS + "C"]
+    x1_idx = cid[NS + "X1"]
+    x2_idx = cid[NS + "X2"]
+    x3_idx = cid[NS + "X3"]
+    bot_idx = cid.get("http://www.w3.org/2002/07/owl#Nothing")
+
+    # Never include TOP or BOTTOM in classes, pos, or neg
+    for wit in (wit_no_cm,):
+        cls_set = set(wit.classes.tolist())
+        pos_cls_set = set(wit.pos[:, 1].tolist())
+        neg_cls_set = set(wit.neg[:, 1].tolist())
+        for forbidden in (top_idx, bot_idx):
+            if forbidden is not None:
+                assert forbidden not in cls_set
+                assert forbidden not in pos_cls_set
+                assert forbidden not in neg_cls_set
+
+    w_a_row = wit_no_cm.classes.tolist().index(a_idx)
+    pos_a_no_cm = {
+        int(cls_i)
+        for r_i, cls_i in wit_no_cm.pos.tolist()
+        if int(r_i) == w_a_row
+    }
+    neg_a_no_cm = {
+        int(cls_i)
+        for r_i, cls_i in wit_no_cm.neg.tolist()
+        if int(r_i) == w_a_row
+    }
+    assert pos_a_no_cm == {a_idx, x1_idx, x2_idx}
+    assert neg_a_no_cm == {b_idx, c_idx}
+    assert x3_idx not in neg_a_no_cm
+
+    # With T3 canonical model: neg(A) also includes X3 (since A cap X3 <= bot is entailed)
+    _, targets_cm, _ = build_structural_tables(model_no_cm, cm=t3_cm)
+    assert targets_cm.witness is not None
+    wit_cm = targets_cm.witness
+
+    for forbidden in (top_idx, bot_idx):
+        if forbidden is not None:
+            assert forbidden not in set(wit_cm.classes.tolist())
+            assert forbidden not in set(wit_cm.pos[:, 1].tolist())
+            assert forbidden not in set(wit_cm.neg[:, 1].tolist())
+
+    w_a_row_cm = wit_cm.classes.tolist().index(a_idx)
+    pos_a_cm = {
+        int(cls_i)
+        for r_i, cls_i in wit_cm.pos.tolist()
+        if int(r_i) == w_a_row_cm
+    }
+    neg_a_cm = {
+        int(cls_i)
+        for r_i, cls_i in wit_cm.neg.tolist()
+        if int(r_i) == w_a_row_cm
+    }
+    assert pos_a_cm == {a_idx, x1_idx, x2_idx}
+    assert neg_a_cm == {b_idx, c_idx, x3_idx}
+
+    # Rows are deduplicated and pos/neg are disjoint
+    pos_tuples = [tuple(r) for r in wit_cm.pos.tolist()]
+    neg_tuples = [tuple(r) for r in wit_cm.neg.tolist()]
+    assert len(pos_tuples) == len(set(pos_tuples))
+    assert len(neg_tuples) == len(set(neg_tuples))
+    assert set(pos_tuples).isdisjoint(set(neg_tuples))
+
+    # Passing cm without index_to_iri raises ValueError
+    with pytest.raises(ValueError, match="index_to_iri"):
+        WitnessTargets.from_normal_forms(
+            classes=th.tensor([0], dtype=th.long),
+            gci0=th.zeros((0, 2), dtype=th.long),
+            gci1_bot=th.zeros((0, 2), dtype=th.long),
+            cm=t3_cm,
+        )
+
+
+def test_inside_measure_and_witness_loss_zero_iff_and_inactive() -> None:
+    """Hand-built regions: inside/outside/inactive behaviour of inside_measure and zero iff conditions of witness_loss."""
+    # 3 rows, K=2 slots, d=2:
+    # Row 0: slot 0 active box [-1, 1]^2 (cen=[0,0], w=[1,1]), slot 1 inactive giant box [-100,100]^2
+    #        point p0 = [0.2, -0.5] -> min(1 - 0.2, 1 - 0.5) = +0.5 (strictly inside by 0.5)
+    # Row 1: slot 0 active box [0, 2]^2 (cen=[1,1], w=[1,1]), slot 1 active box [10, 12]^2 (cen=[11,11], w=[1,1])
+    #        point p1 = [2.4, 1.0] -> slot 0: min(1 - 1.4, 1 - 0) = -0.4; slot 1: min(1 - 8.6, 1 - 10) = -9.0 -> max = -0.4 (outside by 0.4)
+    # Row 2: both slots inactive -> returns -1e6 with finite (zero) gradient
+    pts = th.tensor(
+        [[0.2, -0.5], [2.4, 1.0], [0.0, 0.0]],
+        dtype=th.float64,
+        requires_grad=True,
+    )
+    cen = th.tensor(
+        [
+            [[0.0, 0.0], [0.0, 0.0]],
+            [[1.0, 1.0], [11.0, 11.0]],
+            [[0.0, 0.0], [0.0, 0.0]],
+        ],
+        dtype=th.float64,
+        requires_grad=True,
+    )
+    w = th.tensor(
+        [
+            [[1.0, 1.0], [100.0, 100.0]],
+            [[1.0, 1.0], [1.0, 1.0]],
+            [[5.0, 5.0], [5.0, 5.0]],
+        ],
+        dtype=th.float64,
+        requires_grad=True,
+    )
+    active = th.tensor(
+        [[True, False], [True, True], [False, False]], dtype=th.bool
+    )
+    reg = Regions(cen=cen, w=w, active=active)
+    ins = inside_measure(pts, reg)
+    assert ins.shape == (3,)
+    assert ins[0].item() == pytest.approx(0.5, abs=1e-12)
+    assert ins[1].item() == pytest.approx(-0.4, abs=1e-12)
+    assert ins[2].item() == pytest.approx(-1e6, abs=1e-6)
+
+    # Gradients on all-inactive row 2 are finite and zero, while rows 0 and 1 have finite non-zero gradients
+    ins.sum().backward()
+    for t in (pts, cen, w):
+        assert t.grad is not None
+        assert bool(th.isfinite(t.grad).all())
+    assert bool((pts.grad[2] == 0.0).all())
+    assert bool((cen.grad[2] == 0.0).all())
+    assert bool((w.grad[2] == 0.0).all())
+    assert bool((w.grad[0, 1] == 0.0).all())  # inactive slot 1 of row 0 gets 0 grad
+
+    # witness_loss zero iff inside_pos >= m and inside_neg <= -m:
+    # At margin m = 0.3, ins[0] = +0.5 >= 0.3 and ins[1] = -0.4 <= -0.3 -> loss == 0.0
+    loss_zero = witness_loss(ins[:1].detach(), ins[1:2].detach(), margin=0.3)
+    assert loss_zero.item() == 0.0
+
+    # At boundary inside_pos == m and inside_neg == -m -> loss == 0.0
+    loss_boundary = witness_loss(
+        th.tensor([0.3], dtype=th.float64),
+        th.tensor([-0.3], dtype=th.float64),
+        margin=0.3,
+    )
+    assert loss_boundary.item() == 0.0
+
+    # Violating positive (0.5 < m=0.6 -> (0.6 - 0.5)^2 = 0.01)
+    loss_pos_viol = witness_loss(
+        ins[:1].detach(), th.tensor([-1.0], dtype=th.float64), margin=0.6
+    )
+    assert loss_pos_viol.item() == pytest.approx(0.01, abs=1e-12)
+
+    # Violating negative (-0.4 > -m=-0.6 -> (-0.4 + 0.6)^2 = 0.04)
+    loss_neg_viol = witness_loss(
+        th.tensor([1.0], dtype=th.float64), ins[1:2].detach(), margin=0.6
+    )
+    assert loss_neg_viol.item() == pytest.approx(0.04, abs=1e-12)
+
+    # Empty tensors contribute 0.0
+    empty = th.empty(0, dtype=th.float64)
+    assert witness_loss(empty, empty, margin=0.1).item() == 0.0
+    assert witness_loss(th.tensor([0.5], dtype=th.float64), empty, margin=0.1).item() == 0.0
+    assert witness_loss(empty, th.tensor([-0.5], dtype=th.float64), margin=0.1).item() == 0.0
+
+
+def test_slot_components_matches_pair_slots_two_levels() -> None:
+    """On a two-level definition at k=2, every materialised slot box equals the intersection of the primitive component boxes mapped by slot_components."""
+    from mowl.nn import MultiBoxELModule
+
+    # Classes:
+    # 0: A := Aux cap X3 (level 2, 8 active slots, def_x=1 (level 1), def_y=4 (prim))
+    # 1: Aux := X1 cap X2 (level 1, 4 active slots, def_x=2, def_y=3)
+    # 2: X1 (primitive, 2 slots)
+    # 3: X2 (primitive, 2 slots)
+    # 4: X3 (primitive, 2 slots)
+    # 5: A_rev := X1 cap Aux2 (level 2, 8 active slots, def_x=2 (prim), def_y=6 (level 1))
+    # 6: Aux2 := X2 cap X3 (level 1, 4 active slots, def_x=3, def_y=4)
+    gci0 = th.tensor(
+        [
+            [1, 2],  # Aux <= X1
+            [1, 3],  # Aux <= X2
+            [0, 1],  # A <= Aux
+            [0, 4],  # A <= X3
+            [6, 3],  # Aux2 <= X2
+            [6, 4],  # Aux2 <= X3
+            [5, 2],  # A_rev <= X1
+            [5, 6],  # A_rev <= Aux2
+        ],
+        dtype=th.long,
+    )
+    gci1 = th.tensor(
+        [
+            [2, 3, 1],  # X1 cap X2 <= Aux
+            [1, 4, 0],  # Aux cap X3 <= A
+            [3, 4, 6],  # X2 cap X3 <= Aux2
+            [2, 6, 5],  # X1 cap Aux2 <= A_rev
+        ],
+        dtype=th.long,
+    )
+    table = DefinitionTable.from_normal_forms(
+        gci0=gci0,
+        gci1=gci1,
+        n_classes=7,
+        k=2,
+        max_components=16,
+        top_idx=None,
+        bottom_idx=None,
+        enabled=True,
+    )
+    targets = ExistenceTargets.from_normal_forms(
+        gci0_bot=th.zeros((0, 2), dtype=th.long),
+        gci1=gci1,
+        gci1_bot=th.zeros((0, 2), dtype=th.long),
+        n_classes=7,
+        top_idx=None,
+        bottom_idx=None,
+    )
+
+    th.manual_seed(20261102)
+    mod = MultiBoxELModule(
+        nb_ont_classes=7,
+        nb_rels=1,
+        embed_dim=3,
+        n_components=2,
+        objective="structural",
+        max_components=16,
+    )
+    mod.set_structural_tables(table, targets)
+
+    # Check primitive classes (2, 3, 4)
+    for prim_cls in (2, 3, 4):
+        for s in range(2):
+            assert slot_components(table, prim_cls, s, 2) == {prim_cls: s}
+            assert slot_components(table, prim_cls, s) == {prim_cls: s}
+            assert slot_components(mod, prim_cls, s) == {prim_cls: s}
+
+    raw_cen, raw_off = mod.class_boxes(th.arange(7, dtype=th.long))
+    all_reg = mod.class_regions(th.arange(7, dtype=th.long))
+
+    # Check level-1 (Aux=1, Aux2=6) and level-2 (A=0, A_rev=5) defined classes against pair_slots / class_regions
+    for def_cls, n_slots, expected_prims in (
+        (1, 4, {2, 3}),
+        (6, 4, {3, 4}),
+        (0, 8, {2, 3, 4}),
+        (5, 8, {2, 3, 4}),
+    ):
+        assert int(all_reg.active[def_cls].sum().item()) == n_slots
+        seen_maps = []
+        for s in range(n_slots):
+            comp_map = slot_components(table, def_cls, s, 2)
+            assert comp_map == slot_components(mod, def_cls, s)
+            assert set(comp_map.keys()) == expected_prims
+            seen_maps.append(tuple(sorted(comp_map.items())))
+
+            # Intersect the mapped primitive component boxes directly
+            lowers = [
+                raw_cen[p_idx, c_idx] - raw_off[p_idx, c_idx]
+                for p_idx, c_idx in comp_map.items()
+            ]
+            uppers = [
+                raw_cen[p_idx, c_idx] + raw_off[p_idx, c_idx]
+                for p_idx, c_idx in comp_map.items()
+            ]
+            lo = th.stack(lowers, dim=0).amax(dim=0)
+            hi = th.stack(uppers, dim=0).amin(dim=0)
+            expected_cen = (lo + hi) / 2.0
+            expected_w = (hi - lo) / 2.0
+
+            assert th.allclose(all_reg.cen[def_cls, s], expected_cen, atol=1e-6)
+            assert th.allclose(all_reg.w[def_cls, s], expected_w, atol=1e-6)
+
+        # All n_slots active slots correspond to distinct primitive component combinations
+        assert len(set(seen_maps)) == n_slots
+
+    # Out-of-bounds and invalid arguments raise ValueError
+    with pytest.raises(ValueError, match="slot"):
+        slot_components(table, 2, 2, 2)
+    with pytest.raises(ValueError, match="slot"):
+        slot_components(table, 0, 8, 2)
+    with pytest.raises(ValueError, match="slot"):
+        slot_components(table, 0, -1, 2)
+    with pytest.raises(ValueError, match="cls"):
+        slot_components(table, 7, 0, 2)
+    with pytest.raises(ValueError, match="cls"):
+        slot_components(table, -1, 0, 2)
+    with pytest.raises(ValueError, match="k"):
+        slot_components(table, 0, 0, 0)
+    with pytest.raises(ValueError, match="k"):
+        slot_components(table, 0, 0, True)  # type: ignore[arg-type]
+
+
+
 
 

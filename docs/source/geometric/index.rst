@@ -582,7 +582,7 @@ measured seeds (``strict_loss == 0``, minimum target class and pair
       * - :math:`C \sqcap D \sqsubseteq E` (``gci1``, :func:`~mowl.nn.el.structural.gci1_structural`)
         - :math:`\operatorname{mean}_{(i,j):\,\text{active},\,\text{ne}(C_i \cap D_j)>0}^{\text{det}} \min_{l \text{ active}} \text{incl}_m(I_{ij}, E_l)^2` with :math:`I_{ij}` the pair slot; ``0`` if no pair is non-empty (vacuous; no emptiness penalty) or the row is masked
       * - :math:`C \sqcap D \sqsubseteq \bot` (``gci1_bot``, :func:`~mowl.nn.el.structural.gci1_bot_structural`)
-        - :math:`\operatorname{mean}_{(i,j) \text{ active}} \operatorname{relu}(\text{ne}(C_i \cap D_j) + m)^2` (with module slots gated to active non-empty components :math:`\text{ne} > 0`: identical zero set at :math:`m = 0`, deviating from gating on ``active`` alone only at :math:`m > 0`) — separation by :math:`m` in **at least one** coordinate
+        - :math:`\operatorname{agg}_{(i,j) \text{ active}} \operatorname{relu}(\text{ne}(C_i \cap D_j) + m)^2` with ``agg`` = ``bot_agg`` :math:`\in \{\text{"mean"}, \text{"sum"}\}` (default ``"mean"``; ``"sum"`` sums over active pairs instead of dividing by the active-pair count, with module slots gated to active non-empty components :math:`\text{ne} > 0`: identical zero set at :math:`m = 0`, deviating from gating on ``active`` alone only at :math:`m > 0`) — separation by :math:`m` in **at least one** coordinate
       * - :math:`C \sqsubseteq \exists r.D`, :math:`\exists r.C \sqsubseteq D`, :math:`\exists r.C \sqsubseteq \bot`, and ABox assertions (``gci2``, ``gci3``, ``gci3_bot``, ``class_assertion``, ``object_property_assertion``)
         - Existing Box²EL multibox scores (hard aggregation, with ``gci3`` and ``gci3_bot`` squared) evaluated on the materialised slots :math:`(c, |w|)` with inactive or empty slots (:math:`\neg\text{active} \vee \text{ne}(w) \le 0`) masked out (source slots excluded from means, target slots excluded from minima); because Box²EL ``gamma`` loosens inclusions (:math:`\operatorname{relu}(\text{dist} + 2o - \gamma)`), positive role and assertion scores pass ``gamma = -m`` (tightening inclusion by :math:`m`), whereas negative scores (:func:`~mowl.nn.el.multiboxel.losses.gci2_score_neg` and negative ``object_property_assertion``) keep Box²EL's convention (``gamma = +margin``, which relaxes them by the margin), so the negative-sampling term is unchanged between the axiom and structural objectives; class bumps remain per-class embedding rows
 
@@ -620,6 +620,30 @@ measured seeds (``strict_loss == 0``, minimum target class and pair
      raw primitive slots and coordinates (excluding :math:`\top` and accepted
      defined classes), keeping spare components small so they can be relocated
      and discouraging single spanning boxes.
+   * *Witness points* (weight ``witness_weight``, default ``0.0``,
+     :func:`~mowl.nn.el.structural.witness_loss`): when ``witness_weight > 0``,
+     allocates ``module.witness_embed`` with one learnable witness point
+     :math:`w_C \in \mathbb{R}^d` per satisfiable class
+     :math:`C \in \text{targets.witness.classes}` (:class:`~mowl.nn.el.structural.WitnessTargets`)
+     and adds
+
+     .. math::
+
+        \operatorname{mean}_{(C, D) \in \text{pos}} \operatorname{relu}(m - \text{inside}(w_C, D))^2
+        + \operatorname{mean}_{(C, D) \in \text{neg}} \operatorname{relu}(\text{inside}(w_C, D) + m)^2,
+
+     where :func:`~mowl.nn.el.structural.inside_measure` evaluates
+     :math:`\text{inside}(p, D) = \max_{s \text{ active}} \min_m (w_{D,s,m} - |p_m - c_{D,s,m}|)`
+     on the materialised :meth:`~mowl.nn.MultiBoxELModule.class_regions` of
+     :math:`D` (returning ``-1e6`` if no slot is active), ``pos`` collects
+     :math:`(w_C, D)` with :math:`C \sqsubseteq D` (via
+     :meth:`~mowl.geometric.completion.CanonicalModel.entails` when
+     ``canonical_model`` is given, or :math:`\{C\} \cup \{D : (C, D) \in \text{gci0}\}`
+     otherwise), and ``neg`` collects satisfiable :math:`D` disjoint from
+     :math:`C` (via ``not canonical_model.joint_satisfiable([C, D])`` when
+     ``canonical_model`` is given, or asserted ``gci1_bot`` partners otherwise),
+     excluding :math:`\top` and :math:`\bot` throughout. Witness coordinates can
+     be inspected via :meth:`~mowl.nn.MultiBoxELModule.witness_points`.
 
    * **Guarantee:** With ``structural_definitions=True``, at margin :math:`m = 0`,
      zero sum of the structural box losses (``gci0``, ``gci0_bot``, ``gci1``,
@@ -650,28 +674,63 @@ measured seeds (``strict_loss == 0``, minimum target class and pair
 
 4. **Re-seeding (:meth:`~mowl.nn.MultiBoxELModule.reseed`):**
    Controlled by ``reseed_every`` (``reseed_every=0`` is the default, which
-   disables re-seeding); re-seeding is a heuristic discrete move rather than
-   part of the continuous objective. When ``reseed_every > 0`` under
+   disables re-seeding), ``reseed_mode`` (``{"dead", "idle"}``, default
+   ``"dead"``), ``reseed_size`` (``float = 0.15``), and ``reseed_batch``
+   (``int = 1``); re-seeding is a heuristic discrete move rather than part of
+   the continuous objective. When ``reseed_every > 0`` under
    ``objective="structural"``, at the start of every ``reseed_every``-th epoch
    (``epoch > 0``), :meth:`~mowl.models.MultiBoxEL.on_epoch_start` invokes
    :meth:`~mowl.nn.MultiBoxELModule.reseed` under ``torch.no_grad()`` on the raw
    embedding rows of **primitive** classes:
 
-   * A primitive component :math:`i` of :math:`C` is classified as **dead** if
-     it is nested inside another active valid component :math:`j` of :math:`C`
-     (:math:`\text{lo}_j \le \text{lo}_i` and :math:`\text{hi}_i \le \text{hi}_j`
-     in every coordinate, exact ties resolved by lower index) or has
-     :math:`\min_m |o_{i,m}| < 10^{-3}`.
-   * Violated pair targets :math:`(C, D)` (:math:`\text{NE}(C \sqcap D) < m`)
-     are processed in a seeded random order (seed ``points_seed + epoch``),
-     using each dead component at most once per epoch: take a dead component of
-     :math:`C` if available, else of :math:`D`; let :math:`P` be the partner
-     class and :math:`P_j` its active slot with largest :math:`\text{ne}(P_j) > 0`,
-     and set :math:`c_i := c_{P_j}`, :math:`o_i := 0.5 \cdot |w_{P_j}|`.
-   * Violated primitive class targets (:math:`\text{NE}(C) < m`) have the
-     offset of their largest-measure component clamped to :math:`\max(|o|, m)`.
-   * The number of moves is stored in ``module.last_reseed_count``; optimiser
-     moments of moved rows are not reset.
+   * ``reseed_mode="dead"`` (default):
+
+     - A primitive component :math:`i` of :math:`C` is classified as **dead** if
+       it is nested inside another active valid component :math:`j` of :math:`C`
+       (:math:`\text{lo}_j \le \text{lo}_i` and :math:`\text{hi}_i \le \text{hi}_j`
+       in every coordinate, exact ties resolved by lower index) or has
+       :math:`\min_m |o_{i,m}| < 10^{-3}`.
+     - Violated pair targets :math:`(C, D)` (:math:`\text{NE}(C \sqcap D) < m`)
+       are processed in a seeded random order (seed ``points_seed + epoch``),
+       using each dead component at most once per epoch: take a dead component of
+       :math:`C` if available, else of :math:`D`; let :math:`P` be the partner
+       class and :math:`P_j` its active slot with largest :math:`\text{ne}(P_j) > 0`,
+       and set :math:`c_i := c_{P_j}`, :math:`o_i := 0.5 \cdot |w_{P_j}|`.
+     - Violated primitive class targets (:math:`\text{NE}(C) < m`) have the
+       offset of their largest-measure component clamped to :math:`\max(|o|, m)`.
+     - The number of moves is stored in ``module.last_reseed_count``; optimiser
+       moments of moved rows are not reset.
+
+   * ``reseed_mode="idle"`` (requires ``witness_weight > 0``, raising
+     :class:`ValueError` otherwise, and uses ``reseed_size: float = 0.15`` and
+     ``reseed_batch: int = 1``):
+
+     1. **Dead defined classes**: accepted defined :math:`A` with
+        :math:`\text{NE}(A) = \max_{s \text{ active}} \text{ne}(A_s) < m`.
+     2. **Usage counts** :math:`u[X, c]` over primitive :math:`X` and component
+        :math:`c`: number of accepted defined classes :math:`A'` with
+        :math:`\text{NE}(A') \ge m` whose best slot (:math:`\arg\max \text{ne}`)
+        uses component :math:`c` of :math:`X`, where the slot-to-component map
+        (:func:`~mowl.nn.el.structural.slot_components`) follows the recursion
+        of :meth:`~mowl.nn.MultiBoxELModule.class_regions` /
+        :func:`~mowl.nn.el.structural.pair_slots` (a slot of
+        :math:`A \to (X, Y)` is a pair of a slot of :math:`X` and a slot of
+        :math:`Y`, recursing to primitives).
+     3. Process dead defined classes in a seeded random order
+        (``rng.permutation``), at most ``reseed_batch`` per call. For :math:`A`
+        with witness :math:`p`: for each primitive leaf :math:`X` of :math:`A`'s
+        definition tree (deduplicated): if some active component :math:`c` of
+        :math:`X` has :math:`\text{inside}(p, X_c) \ge m`, skip :math:`X`; else
+        :math:`c^* = \arg\min_c u[X, c]` (lowest index on ties),
+        :math:`\text{center}[X, c^*] := p + 0.01 \cdot \mathcal{N}(0, I)`
+        (seeded through ``rng``),
+        :math:`\text{offset}[X, c^*] := \text{reseed\_size}` in every
+        coordinate, :math:`u[X, c^*] \mathrel{+}= 1`. Count one move per
+        re-seeded component.
+     4. Keep step 3 of the ``"dead"`` mode (clamp the largest component of a
+        primitive class target with :math:`\text{NE} < m` to
+        :math:`\max(|o|, m)`).
+     5. ``module.last_reseed_count`` as before; optimiser moments are not reset.
 
 5. **Prisms (:class:`~mowl.models.PrismEL`, :class:`~mowl.nn.PrismModule`):**
    Under ``PrismEL(..., margin=0.1, objective="structural", max_depth=8, structural_definitions=True, existence_weight=1.0, size_reg=1e-3, canonical_model=None)``,
@@ -729,8 +788,9 @@ measured seeds (``strict_loss == 0``, minimum target class and pair
 
 6. **Public interface:**
 
-   * ``MultiBoxEL(dataset, ..., margin=0.02, objective="structural", max_components=None, structural_definitions=True, existence_weight=1.0, size_reg=1e-3, reseed_every=0, canonical_model=None)``
-     (where ``max_components=None`` defaults to :math:`k^2` and
+   * ``MultiBoxEL(dataset, ..., margin=0.02, objective="structural", max_components=None, structural_definitions=True, existence_weight=1.0, size_reg=1e-3, reseed_every=0, canonical_model=None, bot_agg="mean", witness_weight=0.0, reseed_mode="dead", reseed_size=0.15, reseed_batch=1)``
+     (where ``max_components=None`` defaults to :math:`k^2`, ``bot_agg`` is
+     ``"mean"`` or ``"sum"``, ``reseed_mode`` is ``"dead"`` or ``"idle"``, and
      ``component_aggregation`` must be ``"hard"``).
    * ``PrismEL(dataset, ..., margin=0.1, objective="structural", max_depth=8, structural_definitions=True, existence_weight=1.0, size_reg=1e-3, canonical_model=None)``.
    * Default ``objective="axiom"`` leaves every existing code path unchanged.
@@ -757,6 +817,26 @@ measured seeds (``strict_loss == 0``, minimum target class and pair
      :func:`~mowl.nn.el.structural.build_structural_tables` at the start of
      ``train()``, cache them on the model, and preserve them across
      ``init_module()``, ``load_best_model()``, and ``from_pretrained()``.
+
+   **Recommended settings for learning from random initialisation (witness-point recipe):**
+   On deep conjunction chains such as the Helly-obstruction family :math:`T_k`
+   (:math:`A_i \equiv \sqcap_{j \neq i} X_j` with :math:`A_i \sqcap A_j \sqsubseteq \bot`),
+   the round-4 defaults (``bot_agg="mean", witness_weight=0.0, reseed_every=0, reseed_mode="dead", size_reg=1e-3``)
+   can fall into a *component-assignment Helly trap*: every live defined class
+   selects the same component of each shared primitive :math:`X_j` (reducing each
+   :math:`A_i` to a single box while spare components stay idle), and averaging
+   ``gci1_bot`` over :math:`4^{k-1}` slot pairs dilutes the single overlapping
+   pair against :math:`\text{existence\_loss}`. Combining ``bot_agg="sum"``
+   (un-diluted disjointness penalties), ``witness_weight=1.0`` (one learnable
+   witness point :math:`w_C` per satisfiable class pushed inside its entailed
+   superclasses and outside disjoint classes), and
+   ``reseed_every=50..100, reseed_mode="idle", size_reg=0.0`` (relocating the
+   least-used primitive leaf components of dead defined classes to their witness
+   points with half-width ``reseed_size=0.15``) breaks the component-sharing
+   symmetry and reliably finds exact multi-component box models from random
+   initialisation. See the gallery tutorial
+   :doc:`/examples/elmodels/plot_4_multibox_structural_tk` for a self-contained
+   demonstration and 2-D visualisations on :math:`T_3` and :math:`T_5`.
 
 
 References
