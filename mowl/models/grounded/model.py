@@ -184,6 +184,9 @@ class GroundedEL(EmbeddingELModel):
         Whether the dataset ontology is already normalised.
     load_role_axioms : bool, default True
         Whether to load ``role_inclusion`` and ``role_chain`` datasets.
+    n_filler_samples : int, default 64
+        Maximum number of candidate filler elements per batch row in ``gci3``
+        and ``gci3_bot`` (always including the row's own filler :math:`x_B`).
     """
 
     def __init__(
@@ -220,6 +223,7 @@ class GroundedEL(EmbeddingELModel):
         model_filepath: Optional[str] = None,
         load_normalized: bool = False,
         load_role_axioms: bool = True,
+        n_filler_samples: int = 64,
     ) -> None:
         _validate_int_ge("embed_dim", embed_dim, 1)
         _validate_int_ge("n_components", n_components, 1)
@@ -236,6 +240,7 @@ class GroundedEL(EmbeddingELModel):
         _validate_int_ge("n_region_samples", n_region_samples, 0)
         _validate_int_ge("n_adv", n_adv, 0)
         _validate_int_ge("n_random_elements", n_random_elements, 0)
+        _validate_int_ge("n_filler_samples", n_filler_samples, 1)
         if not isinstance(agg, str) or agg not in ("max", "lse"):
             raise ValueError(f"agg must be 'max' or 'lse', got {agg!r}")
         _validate_int_ge("reseed_every", reseed_every, 0)
@@ -274,6 +279,7 @@ class GroundedEL(EmbeddingELModel):
         self.n_region_samples = int(n_region_samples)
         self.n_adv = int(n_adv)
         self.n_random_elements = int(n_random_elements)
+        self.n_filler_samples = int(n_filler_samples)
         self.agg = agg
         self.agg_tau = agg_tau_f
         self.reseed_every = int(reseed_every)
@@ -506,33 +512,29 @@ class GroundedEL(EmbeddingELModel):
         if self._filler_by_role is not None and self._lhs_by_role is not None:
             return
         td = self.training_datasets
-        fillers: Dict[int, List[int]] = {r: [] for r in range(self.nb_rels)}
-        lhs_map: Dict[int, List[int]] = {r: [] for r in range(self.nb_rels)}
+        fillers: Dict[int, Dict[int, None]] = {r: {} for r in range(self.nb_rels)}
+        lhs_map: Dict[int, Dict[int, None]] = {r: {} for r in range(self.nb_rels)}
 
         if "gci2" in td and len(td["gci2"]) > 0:
             for row in td["gci2"][:].detach().cpu().tolist():
                 a_id, r_id, b_id = int(row[0]), int(row[1]), int(row[2])
-                if b_id not in fillers[r_id]:
-                    fillers[r_id].append(b_id)
-                if a_id not in lhs_map[r_id]:
-                    lhs_map[r_id].append(a_id)
+                fillers[r_id][b_id] = None
+                lhs_map[r_id][a_id] = None
 
         if "object_property_assertion" in td and len(td["object_property_assertion"]) > 0:
             for row in td["object_property_assertion"][:].detach().cpu().tolist():
                 ind_a, r_id, ind_b = int(row[0]), int(row[1]), int(row[2])
                 el_a = self.nb_classes + ind_a
                 el_b = self.nb_classes + ind_b
-                if el_b not in fillers[r_id]:
-                    fillers[r_id].append(el_b)
-                if el_a not in lhs_map[r_id]:
-                    lhs_map[r_id].append(el_a)
+                fillers[r_id][el_b] = None
+                lhs_map[r_id][el_a] = None
 
         self._filler_by_role = {
-            r: th.tensor(vals, dtype=th.long, device=self.device)
+            r: th.tensor(list(vals.keys()), dtype=th.long, device=self.device)
             for r, vals in fillers.items()
         }
         self._lhs_by_role = {
-            r: th.tensor(vals, dtype=th.long, device=self.device)
+            r: th.tensor(list(vals.keys()), dtype=th.long, device=self.device)
             for r, vals in lhs_map.items()
         }
 
@@ -562,6 +564,86 @@ class GroundedEL(EmbeddingELModel):
             :max_b
         ].to(device=uniq.device)
         return uniq[perm]
+
+    def _sample_batch_y_fillers(
+        self,
+        rows: th.Tensor,
+        gen: th.Generator,
+    ) -> th.Tensor:
+        """Subsample ``all_fillers`` to at most ``self.n_filler_samples`` per batch, always including each row's own filler ``rows[:, 1]``."""
+        bsz = int(rows.shape[0])
+        assert self._filler_by_role is not None
+        role_filler_parts = [rows[:, 1]] + [
+            self._filler_by_role[int(r_i)]
+            for r_i in th.unique(rows[:, 0]).cpu().tolist()
+            if int(r_i) in self._filler_by_role
+        ]
+        all_fillers = th.unique(th.cat(role_filler_parts))
+        if all_fillers.numel() <= self.n_filler_samples:
+            return sample_filler_elements(
+                all_fillers,
+                self.nb_elements,
+                self.n_random_elements,
+                generator=gen,
+                batch_size=bsz,
+            )
+        n_shared = max(self.n_filler_samples - 1, 0)
+        if n_shared > 0:
+            perm = th.randperm(
+                all_fillers.numel(), device=gen.device, generator=gen
+            )[:n_shared].to(device=all_fillers.device)
+            sub_fillers = all_fillers[perm]
+        else:
+            sub_fillers = th.empty((0,), dtype=th.long, device=self.device)
+        y_rest = sample_filler_elements(
+            sub_fillers,
+            self.nb_elements,
+            self.n_random_elements,
+            generator=gen,
+            batch_size=bsz,
+        )
+        return th.cat([rows[:, 1].unsqueeze(1), y_rest], dim=1)
+
+    def _grid_role_membership(
+        self,
+        pos_all: th.Tensor,
+        x_mat: th.Tensor,
+        y_mat: th.Tensor,
+        r_ids: th.Tensor,
+        need_crisp: bool = False,
+    ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
+        """Compute ``role_membership`` (and optional crisp role depth) on a ``(B, sx, sy)`` grid by reducing over ``d`` on ``(B, sx)`` and ``(B, sy)`` first."""
+        mod = self.module
+        bsz, sx = x_mat.shape
+        sy = int(y_mat.shape[1])
+        h_reg, t_reg = mod.role_regions(r_ids)
+        px_2d = pos_all[x_mat]  # (B, sx, d)
+        py_2d = pos_all[y_mat]  # (B, sy, d)
+        h_cen = h_reg.cen.to(dtype=px_2d.dtype)
+        h_w = h_reg.w.to(dtype=px_2d.dtype)
+        t_cen = t_reg.cen.to(dtype=py_2d.dtype)
+        t_w = t_reg.w.to(dtype=py_2d.dtype)
+
+        h_dep = th.amin(
+            h_w.unsqueeze(1) - th.abs(px_2d.unsqueeze(2) - h_cen.unsqueeze(1)), dim=-1
+        )  # (B, sx, K_r)
+        t_dep = th.amin(
+            t_w.unsqueeze(1) - th.abs(py_2d.unsqueeze(2) - t_cen.unsqueeze(1)), dim=-1
+        )  # (B, sy, K_r)
+        slot_depth = th.minimum(h_dep.unsqueeze(2), t_dep.unsqueeze(1)).reshape(
+            bsz * sx * sy, -1
+        )  # (B * sx * sy, K_r)
+        act_flat = (
+            h_reg.active.view(bsz, 1, 1, -1)
+            .expand(bsz, sx, sy, -1)
+            .reshape(bsz * sx * sy, -1)
+        )
+        dep_soft = mod._aggregate_slot_depth(slot_depth, act_flat, crisp=False)
+        rho_xy = th.sigmoid(dep_soft / mod.tau.to(dtype=dep_soft.dtype))
+        if not need_crisp:
+            return rho_xy, None
+        dep_crisp = mod._aggregate_slot_depth(slot_depth, act_flat, crisp=True)
+        return rho_xy, dep_crisp
 
     def compute_batch_losses(
         self,
@@ -868,40 +950,35 @@ class GroundedEL(EmbeddingELModel):
             x_mat = sample_elements(
                 rows[:, 2], self.nb_elements, self.n_random_elements, generator, batch_elements=cand
             )
-            # Build y candidates from role fillers + row's B + random
-            assert self._filler_by_role is not None
-            all_fillers = th.unique(
-                th.cat(
-                    [rows[:, 1]]
-                    + [
-                        self._filler_by_role[int(r_i)]
-                        for r_i in th.unique(rows[:, 0]).cpu().tolist()
-                        if int(r_i) in self._filler_by_role
-                    ]
-                )
-            )
-            y_mat = sample_filler_elements(
-                all_fillers,
-                self.nb_elements,
-                self.n_random_elements,
-                generator=generator,
-                batch_size=bsz,
-            )
+            y_mat = self._sample_batch_y_fillers(rows, generator)
             sx = int(x_mat.shape[1])
             sy = int(y_mat.shape[1])
-            x_grid = x_mat.unsqueeze(2).expand(bsz, sx, sy).reshape(-1)
-            y_grid = y_mat.unsqueeze(1).expand(bsz, sx, sy).reshape(-1)
-            r_grid = rows[:, 0].view(bsz, 1, 1).expand(bsz, sx, sy).reshape(-1)
-            b_grid = rows[:, 1].view(bsz, 1, 1).expand(bsz, sx, sy).reshape(-1)
-            c_grid = rows[:, 2].view(bsz, 1, 1).expand(bsz, sx, sy).reshape(-1)
-            px = pos_all[x_grid]
-            py = pos_all[y_grid]
+            rho_xy, _ = self._grid_role_membership(
+                pos_all, x_mat, y_mat, rows[:, 0], need_crisp=False
+            )
+            b_2d = rows[:, 1].unsqueeze(1).expand(bsz, sy).reshape(-1)
+            c_2d = rows[:, 2].unsqueeze(1).expand(bsz, sx).reshape(-1)
+            mb_grid = (
+                mod.membership(pos_all[y_mat.reshape(-1)], b_2d)
+                .view(bsz, 1, sy)
+                .expand(bsz, sx, sy)
+                .reshape(-1)
+            )
+            mc_grid = (
+                mod.membership(pos_all[x_mat.reshape(-1)], c_2d)
+                .view(bsz, sx, 1)
+                .expand(bsz, sx, sy)
+                .reshape(-1)
+            )
+            dead_x_grid = (
+                dead_gate[x_mat].unsqueeze(2).expand(bsz, sx, sy).reshape(-1)
+            )
             axiom_terms.append(
                 gci3(
-                    mod.role_membership(px, py, r_grid),
-                    mod.membership(py, b_grid),
-                    mod.membership(px, c_grid),
-                    dead=dead_gate[x_grid],
+                    rho_xy,
+                    mb_grid,
+                    mc_grid,
+                    dead=dead_x_grid,
                 ).mean()
             )
             if do_region:
@@ -942,39 +1019,31 @@ class GroundedEL(EmbeddingELModel):
             x_mat = sample_elements(
                 rows[:, 1], self.nb_elements, self.n_random_elements, generator, batch_elements=cand
             )
-            assert self._filler_by_role is not None
-            all_fillers = th.unique(
-                th.cat(
-                    [rows[:, 1]]
-                    + [
-                        self._filler_by_role[int(r_i)]
-                        for r_i in th.unique(rows[:, 0]).cpu().tolist()
-                        if int(r_i) in self._filler_by_role
-                    ]
-                )
-            )
-            y_mat = sample_filler_elements(
-                all_fillers,
-                self.nb_elements,
-                self.n_random_elements,
-                generator=generator,
-                batch_size=bsz,
-            )
+            y_mat = self._sample_batch_y_fillers(rows, generator)
             sx = int(x_mat.shape[1])
             sy = int(y_mat.shape[1])
-            x_grid = x_mat.unsqueeze(2).expand(bsz, sx, sy).reshape(-1)
-            y_grid = y_mat.unsqueeze(1).expand(bsz, sx, sy).reshape(-1)
-            r_grid = rows[:, 0].view(bsz, 1, 1).expand(bsz, sx, sy).reshape(-1)
-            b_grid = rows[:, 1].view(bsz, 1, 1).expand(bsz, sx, sy).reshape(-1)
-            px = pos_all[x_grid]
-            py = pos_all[y_grid]
-            rho_xy = mod.role_membership(px, py, r_grid)
-            mb_y = mod.membership(py, b_grid)
-            both_crisp = (mod.role_depth(px, py, r_grid, crisp=True) > 0) & (
-                mod.depth(py, b_grid, crisp=True) > 0
+            rho_xy, r_dep_crisp = self._grid_role_membership(
+                pos_all, x_mat, y_mat, rows[:, 0], need_crisp=True
             )
+            assert r_dep_crisp is not None
+            b_2d = rows[:, 1].unsqueeze(1).expand(bsz, sy).reshape(-1)
+            py_flat = pos_all[y_mat.reshape(-1)]
+            mb_grid = (
+                mod.membership(py_flat, b_2d)
+                .view(bsz, 1, sy)
+                .expand(bsz, sx, sy)
+                .reshape(-1)
+            )
+            b_crisp_grid = (
+                (mod.depth(py_flat, b_2d, crisp=True) > 0)
+                .view(bsz, 1, sy)
+                .expand(bsz, sx, sy)
+                .reshape(-1)
+            )
+            both_crisp = (r_dep_crisp > 0) & b_crisp_grid
+            x_grid = x_mat.unsqueeze(2).expand(bsz, sx, sy).reshape(-1)
             dead_eff = th.where(both_crisp, dead_all[x_grid], dead_gate[x_grid])
-            axiom_terms.append(gci3_bot(rho_xy, mb_y, dead=dead_eff).mean())
+            axiom_terms.append(gci3_bot(rho_xy, mb_grid, dead=dead_eff).mean())
             if do_region:
                 r_reg = rows[:, 0].repeat(self.n_region_samples)
                 b_reg = rows[:, 1].repeat(self.n_region_samples)
@@ -1189,53 +1258,179 @@ class GroundedEL(EmbeddingELModel):
             "total": total,
         }
 
+    @staticmethod
+    def _class_slot_live_counts_chunked(
+        cen_c: th.Tensor,
+        w_c: th.Tensor,
+        act_c: th.Tensor,
+        live_pos: th.Tensor,
+        chunk_size: int = 8192,
+    ) -> th.Tensor:
+        """Compute number of live elements crisp-inside each of ``K`` components of a single class in chunks of 8192 elements."""
+        k_slots = int(cen_c.shape[0])
+        counts = th.zeros((k_slots,), dtype=th.long, device=cen_c.device)
+        n_live = int(live_pos.shape[0])
+        if n_live == 0 or not bool(act_c.any().item()):
+            return counts
+        for start in range(0, n_live, chunk_size):
+            end = min(start + chunk_size, n_live)
+            p_chunk = live_pos[start:end]  # (C_len, d), C_len <= 8192
+            c_dep = th.amin(
+                w_c.unsqueeze(0) - th.abs(p_chunk.unsqueeze(1) - cen_c.unsqueeze(0)),
+                dim=-1,
+            )  # (C_len, K)
+            inside = (c_dep > 0.0) & act_c.unsqueeze(0)
+            counts += inside.sum(dim=0)
+        return counts
+
+    def _compute_slot_live_counts(
+        self,
+        regions: Regions,
+        live_pos: th.Tensor,
+        query_slot_mask: th.Tensor,
+        chunk_size: int = 8192,
+    ) -> th.Tensor:
+        """Compute exact count of live elements crisp-inside each queried ``(c_id, k)`` slot using 8192-element chunks."""
+        device = regions.cen.device
+        k_slots = int(regions.cen.shape[1])
+        counts = th.zeros((self.nb_classes, k_slots), dtype=th.long, device=device)
+        n_live = int(live_pos.shape[0])
+        if n_live == 0 or not bool(query_slot_mask.any().item()):
+            return counts
+
+        if self.nb_classes <= 2048 or n_live <= 2048:
+            query_classes = (
+                th.nonzero(query_slot_mask.any(dim=1), as_tuple=False).view(-1).tolist()
+            )
+            for c_id in query_classes:
+                counts[c_id] = self._class_slot_live_counts_chunked(
+                    regions.cen[c_id],
+                    regions.w[c_id],
+                    regions.active[c_id] & query_slot_mask[c_id],
+                    live_pos,
+                    chunk_size=chunk_size,
+                )
+            return counts
+
+        # Lossless 4^D_BINS spatial-bin prefilter + exact per-box depth in <= 8192-element chunks
+        d_bins = min(self.embed_dim, 5)
+        n_bins = 4**d_bins
+        p_min = live_pos[:, :d_bins].amin(dim=0)
+        p_max = live_pos[:, :d_bins].amax(dim=0)
+        scale = 3.999 / (p_max - p_min + 1e-6)
+        elem_bins = th.clamp(
+            ((live_pos[:, :d_bins] - p_min) * scale).to(th.long), 0, 3
+        )
+        mult = (
+            4 ** th.arange(d_bins, dtype=th.long, device=device)
+        ).unsqueeze(0)
+        elem_hash = (elem_bins * mult).sum(dim=1)
+        order = th.argsort(elem_hash)
+        sorted_pos = live_pos[order]
+        counts_bin = th.bincount(elem_hash, minlength=n_bins)
+        offsets = th.zeros((n_bins + 1,), dtype=th.long, device=device)
+        offsets[1:] = th.cumsum(counts_bin, dim=0)
+
+        q_flat_ids = th.nonzero(query_slot_mask.reshape(-1), as_tuple=False).view(-1)
+        cen_q = regions.cen.reshape(-1, self.embed_dim)[q_flat_ids]
+        w_q = regions.w.reshape(-1, self.embed_dim)[q_flat_ids]
+        lo_b = th.clamp(
+            ((cen_q[:, :d_bins] - w_q[:, :d_bins] - 1e-6 - p_min) * scale).to(th.long),
+            0,
+            3,
+        )
+        hi_b = th.clamp(
+            ((cen_q[:, :d_bins] + w_q[:, :d_bins] + 1e-6 - p_min) * scale).to(th.long),
+            0,
+            3,
+        )
+        q_counts = th.zeros((q_flat_ids.numel(),), dtype=th.long, device=device)
+
+        for h in range(n_bins):
+            s_i = int(offsets[h].item())
+            e_i = int(offsets[h + 1].item())
+            if s_i == e_i:
+                continue
+            rem = h
+            mask = th.ones((q_flat_ids.numel(),), dtype=th.bool, device=device)
+            for m_i in range(d_bins):
+                b_m = rem & 3
+                rem >>= 2
+                mask &= (lo_b[:, m_i] <= b_m) & (hi_b[:, m_i] >= b_m)
+            b_ids = th.nonzero(mask, as_tuple=False).view(-1)
+            if b_ids.numel() == 0:
+                continue
+            for e_s in range(s_i, e_i, chunk_size):
+                e_e = min(e_s + chunk_size, e_i)
+                p_chunk = sorted_pos[e_s:e_e]  # (<= 8192, d)
+                for b_s in range(0, b_ids.numel(), 256):
+                    b_e = min(b_s + 256, b_ids.numel())
+                    b_sub = b_ids[b_s:b_e]
+                    c_sub = cen_q[b_sub]
+                    w_sub = w_q[b_sub]
+                    dep = th.amin(
+                        w_sub.unsqueeze(1)
+                        - th.abs(p_chunk.unsqueeze(0) - c_sub.unsqueeze(1)),
+                        dim=-1,
+                    )
+                    q_counts[b_sub] += (dep > 0.0).sum(dim=1)
+
+        counts.view(-1)[q_flat_ids] = q_counts
+        return counts
+
     def reseed_idle(
         self,
         generator: Optional[th.Generator] = None,
         reseed_size: float = 0.08,
         prune_unused: bool = True,
     ) -> int:
-        """Relocate idle class components to violating/shared elements and deactivate unused phantom slots (§5).
+        """Relocate idle/least-used class components to uncovered own elements and prune empty slots (§5).
 
-        Uses no reasoner:
-        1. Determines for each live element :math:`x` and class :math:`A` whether
-           :math:`x` currently needs to belong to :math:`A` (either :math:`x = x_A`
-           is :math:`A`'s own element, or :math:`x` is crisp-inside :math:`A`, or
-           :math:`x` is crisp-inside the LHS of a ``gci0`` / ``gci1`` / ``class_assertion``
-           axiom with RHS :math:`A`).
-        2. Assigns each required element :math:`x` of class :math:`A` to a dedicated
-           component slot (up to ``n_components``) centred at :math:`p_x` whenever
-           :math:`x` is not yet crisp-inside :math:`A` (:math:`m_A(x) < 0.5`) or
-           shares a component box with another element while an idle slot is free.
-        3. When ``prune_unused=True``, deactivates component slots that contain no
-           live element so phantom boxes do not produce spurious region violations.
+        Performs ONLY:
+        1. For each live class :math:`A` whose own element :math:`x_A` is not
+           crisp-inside :math:`A`: places one component box of half-width
+           ``reseed_size`` at :math:`p_{x_A}`, using an inactive slot if any,
+           else the active slot that crisp-contains the fewest live elements
+           (breaking ties by smallest volume); same for ABox class assertions
+           :math:`C(a)` (element of individual :math:`a`).
+        2. When ``prune_unused=True``: deactivates active components that
+           crisp-contain no live element (inspecting element positions only).
 
         Guarantees:
-        - Reasoner-free (R1): inspects only current module positions, memberships,
-          and training axiom tensors.
-        - Returns the total number of component slots re-seeded or pruned.
+        - Reasoner-free (R1): never reads ``gci0``, ``gci1``, ``gci2``, ``gci3``,
+          ``gci0_bot``, ``gci1_bot``, ``gci3_bot``, ``role_inclusion``,
+          ``role_chain``, or ``object_property_assertion`` tables.
+        - Never modifies ``elem_pos.weight`` or ``dead_logits``, and never
+          rebuilds whole classes.
+        - Computes per-class live element depths in chunks of at most 8192
+          elements (:math:`O(|\\Delta| \\cdot K \\cdot d)` memory per chunk; no
+          :math:`|\\Delta|^2` tensor anywhere).
+        - Returns the total number of modified component slots.
 
         Non-guarantees:
-        - Does not reset Adam optimiser moments for modified parameter rows.
+        - Does not reset Adam optimiser moments directly; :meth:`train` calls
+          ``optimizer.state.clear()`` after invoking :meth:`reseed_idle`.
 
         Parameters
         ----------
         generator : Optional[torch.Generator], default None
-            Optional PyTorch RNG.
+            Optional PyTorch RNG (retained for signature compatibility).
         reseed_size : float, default 0.08
-            Half-width assigned to newly re-seeded component boxes.
+            Positive half-width assigned to newly re-seeded component boxes.
         prune_unused : bool, default True
-            Whether to deactivate component slots that contain zero live elements.
+            Whether to deactivate active component slots that crisp-contain zero
+            live elements.
 
         Returns
         -------
         int
             Number of modified component slots.
         """
+        reseed_size_f = _validate_positive_float("reseed_size", reseed_size)
+        raw_w_target = _inv_softplus(reseed_size_f)
         mod = self.module
         device = self.device
-        dtype = mod.class_centers.dtype
-        td = self.training_datasets
+        k_slots = mod.n_components
         moves = 0
 
         with th.no_grad():
@@ -1244,237 +1439,155 @@ class GroundedEL(EmbeddingELModel):
             if self.bot_id is not None:
                 dead_c[self.bot_id] = True
             live_mask = ~dead_c
+            live_pos = pos_all[live_mask]  # (L, d)
 
-            # Ensure pairwise separation of distinct element positions if two elements collapsed
-            if self.nb_elements > 1:
-                diff = pos_all.unsqueeze(1) - pos_all.unsqueeze(0)
-                dist_inf = th.amax(th.abs(diff), dim=-1)
-                dist_inf.fill_diagonal_(float("inf"))
-                min_d = float(dist_inf.min().item())
-                if min_d < 4.0 * reseed_size and mod.encoder is None:
-                    side = int(math.ceil(self.nb_elements ** (1.0 / self.embed_dim)))
-                    coords = th.zeros(
-                        (self.nb_elements, self.embed_dim), dtype=dtype, device=device
-                    )
-                    idx_rem = th.arange(self.nb_elements, dtype=th.long, device=device)
-                    for d_i in range(self.embed_dim):
-                        coords[:, d_i] = (idx_rem % side).to(dtype=dtype)
-                        idx_rem = idx_rem // side
-                    mod.elem_pos.weight.copy_(coords)
-                    pos_all = mod.positions()
-                    eff_delta = reseed_size
-                else:
-                    eff_delta = (
-                        min(reseed_size, 0.25 * min_d) if min_d > 1e-4 else reseed_size
-                    )
-                    eff_delta = max(eff_delta, 0.02)
-            else:
-                eff_delta = reseed_size
-            raw_w_target = _inv_softplus(eff_delta)
-
-            # Syntactic forward target memberships starting from each live class's own element + ABox
-            target_m = th.zeros(
-                (self.nb_elements, self.nb_classes), dtype=th.bool, device=device
-            )
-            for c_id in range(self.nb_classes):
-                if (
-                    c_id != self.bot_id
-                    and c_id != self.top_id
-                    and bool(live_mask[c_id].item())
-                ):
-                    target_m[c_id, c_id] = True
-            if "class_assertion" in td and len(td["class_assertion"]) > 0:
-                for row in td["class_assertion"][:].detach().cpu().tolist():
-                    el_a = self.nb_classes + int(row[0])
-                    c_id = int(row[1])
-                    if bool(live_mask[el_a].item()) and c_id != self.bot_id:
-                        target_m[el_a, c_id] = True
-
-            g0 = (
-                [
-                    (int(r[0]), int(r[1]))
-                    for r in td["gci0"][:].detach().cpu().tolist()
-                ]
-                if "gci0" in td and len(td["gci0"]) > 0
-                else []
-            )
-            g1 = (
-                [
-                    (int(r[0]), int(r[1]), int(r[2]))
-                    for r in td["gci1"][:].detach().cpu().tolist()
-                ]
-                if "gci1" in td and len(td["gci1"]) > 0
-                else []
-            )
-            g2 = (
-                [
-                    (int(r[0]), int(r[1]), int(r[2]))
-                    for r in td["gci2"][:].detach().cpu().tolist()
-                ]
-                if "gci2" in td and len(td["gci2"]) > 0
-                else []
-            )
-            g3 = (
-                [
-                    (int(r[0]), int(r[1]), int(r[2]))
-                    for r in td["gci3"][:].detach().cpu().tolist()
-                ]
-                if "gci3" in td and len(td["gci3"]) > 0
-                else []
-            )
-            g0_bot = (
-                [int(r[0]) for r in td["gci0_bot"][:].detach().cpu().tolist()]
-                if "gci0_bot" in td and len(td["gci0_bot"]) > 0
-                else []
-            )
-            g1_bot = (
-                [
-                    (int(r[0]), int(r[1]))
-                    for r in td["gci1_bot"][:].detach().cpu().tolist()
-                ]
-                if "gci1_bot" in td and len(td["gci1_bot"]) > 0
-                else []
-            )
-            g3_bot = (
-                [
-                    (int(r[0]), int(r[1]))
-                    for r in td["gci3_bot"][:].detach().cpu().tolist()
-                ]
-                if "gci3_bot" in td and len(td["gci3_bot"]) > 0
-                else []
-            )
-
-            max_iters = max(2, min(self.nb_classes + 1, 16))
-            for _ in range(max_iters):
-                changed = False
-                for a_id, b_id in g0:
-                    if b_id == self.bot_id or b_id == self.top_id:
-                        continue
-                    new_m = target_m[:, a_id] & live_mask & (~target_m[:, b_id])
-                    if bool(new_m.any().item()):
-                        target_m[:, b_id] |= new_m
-                        changed = True
-                for a_id, b_id, c_id in g1:
-                    if c_id == self.bot_id or c_id == self.top_id:
-                        continue
-                    new_m = (
-                        target_m[:, a_id]
-                        & target_m[:, b_id]
-                        & live_mask
-                        & (~target_m[:, c_id])
-                    )
-                    if bool(new_m.any().item()):
-                        target_m[:, c_id] |= new_m
-                        changed = True
-                if g2 and g3:
-                    for a_id, r_id, b_id in g2:
-                        if not bool(live_mask[b_id].item()):
-                            continue
-                        for r3_id, b3_id, c3_id in g3:
-                            if (
-                                r3_id == r_id
-                                and c3_id != self.bot_id
-                                and c3_id != self.top_id
-                                and bool(target_m[b_id, b3_id].item())
-                            ):
-                                new_m = (
-                                    target_m[:, a_id]
-                                    & live_mask
-                                    & (~target_m[:, c3_id])
-                                )
-                                if bool(new_m.any().item()):
-                                    target_m[:, c3_id] |= new_m
-                                    changed = True
-                # Check bottom rules (gci0_bot, gci1_bot, gci3_bot, gci2 dead filler)
-                newly_dead = th.zeros_like(live_mask)
-                for a_id in g0_bot:
-                    newly_dead |= target_m[:, a_id] & live_mask
-                for a_id, b_id in g1_bot:
-                    newly_dead |= target_m[:, a_id] & target_m[:, b_id] & live_mask
-                for a_id, r_id, b_id in g2:
-                    if not bool(live_mask[b_id].item()):
-                        newly_dead |= target_m[:, a_id] & live_mask
-                    else:
-                        for r3_id, b3_id in g3_bot:
-                            if r3_id == r_id and bool(target_m[b_id, b3_id].item()):
-                                newly_dead |= target_m[:, a_id] & live_mask
-                if bool(newly_dead.any().item()):
-                    live_mask = live_mask & (~newly_dead)
-                    dead_c = ~live_mask
-                    target_m[newly_dead, :] = False
-                    mod.dead_logits[newly_dead] = th.clamp(
-                        mod.dead_logits[newly_dead], min=6.0
-                    )
-                    changed = True
-                if not changed:
-                    break
-
-            k_slots = mod.n_components
             regions = mod.class_regions()  # (nb_classes, K, d)
+            cen = regions.cen
+            w = regions.w
+            act = regions.active  # (nb_classes, K)
 
-            for c_id in range(self.nb_classes):
-                if c_id == self.top_id or c_id == self.bot_id:
-                    continue
-                req_elems = (
-                    th.nonzero(target_m[:, c_id], as_tuple=False).view(-1).cpu().tolist()
+            # Check whether each class's own element x_A is crisp-inside each slot of A
+            cls_pos = pos_all[: self.nb_classes]  # (nb_classes, d)
+            own_dep = th.amin(
+                w - th.abs(cls_pos.unsqueeze(1) - cen), dim=-1
+            )  # (nb_classes, K)
+            own_in_slot = (
+                (own_dep > 0.0) & act & live_mask[: self.nb_classes].unsqueeze(1)
+            )  # (nb_classes, K)
+            own_inside_cls = own_in_slot.any(dim=1)  # (nb_classes,)
+
+            live_cls_mask = live_mask[: self.nb_classes].clone()
+            if self.top_id is not None:
+                live_cls_mask[self.top_id] = False
+            if self.bot_id is not None:
+                live_cls_mask[self.bot_id] = False
+
+            need_own_mask = live_cls_mask & (~own_inside_cls)
+
+            # Determine which active slots need exact live-element counts:
+            # - classes in need_own_mask that have all K slots active (to choose fewest-element slot)
+            # - active slots not already containing x_A when prune_unused=True
+            need_tiebreak_cls = need_own_mask & act.all(dim=1) & (k_slots > 1)
+            query_slot_mask = need_tiebreak_cls.unsqueeze(1) & act
+            if prune_unused:
+                prune_candidates = act & (~own_in_slot)
+                if self.top_id is not None:
+                    prune_candidates[self.top_id, :] = False
+                if self.bot_id is not None:
+                    prune_candidates[self.bot_id, :] = False
+                query_slot_mask = query_slot_mask | prune_candidates
+
+            slot_counts = self._compute_slot_live_counts(
+                regions, live_pos, query_slot_mask, chunk_size=8192
+            )
+            # Ensure slots known to contain x_A have count >= 1
+            slot_counts = th.where(
+                own_in_slot & (slot_counts == 0),
+                th.ones_like(slot_counts),
+                slot_counts,
+            )
+
+            # Step (a.1): live classes A whose own element x_A is not crisp-inside A
+            need_cls_ids = th.nonzero(need_own_mask, as_tuple=False).view(-1)
+            if need_cls_ids.numel() > 0:
+                w_need = w[need_cls_ids]  # (M, K, d)
+                act_need = act[need_cls_ids]  # (M, K)
+                cnt_need = slot_counts[need_cls_ids]  # (M, K)
+                log_vol_need = th.where(
+                    act_need,
+                    th.log(th.clamp(w_need, min=1e-12)).sum(dim=-1),
+                    th.full(act_need.shape, float("-inf"), dtype=w.dtype, device=device),
                 )
-                if not req_elems:
-                    if prune_unused and bool(mod.class_active[c_id].any().item()):
-                        mod.class_active[c_id, :] = False
-                        mod.class_raw_widths[c_id, :].fill_(_INACTIVE_RAW_WIDTH)
-                        moves += 1
-                    continue
 
-                # Determine which active components currently cover which live elements
-                cen_c = regions.cen[c_id]  # (K, d)
-                w_c = regions.w[c_id]  # (K, d)
-                act_c = regions.active[c_id]  # (K,)
-                # Component depth for all live elements: (nb_elements, K)
-                c_dep = th.amin(
-                    w_c.unsqueeze(0) - th.abs(pos_all.unsqueeze(1) - cen_c.unsqueeze(0)),
-                    dim=-1,
+                best_k = th.zeros((need_cls_ids.numel(),), dtype=th.long, device=device)
+                best_act = act_need[:, 0]
+                best_cnt = cnt_need[:, 0]
+                best_lvol = log_vol_need[:, 0]
+                for k in range(1, k_slots):
+                    cur_act = act_need[:, k]
+                    cur_cnt = cnt_need[:, k]
+                    cur_lvol = log_vol_need[:, k]
+                    better = (~cur_act & best_act) | (
+                        (cur_act == best_act)
+                        & (
+                            (cur_cnt < best_cnt)
+                            | ((cur_cnt == best_cnt) & (cur_lvol < best_lvol))
+                        )
+                    )
+                    best_k = th.where(better, th.full_like(best_k, k), best_k)
+                    best_act = th.where(better, cur_act, best_act)
+                    best_cnt = th.where(better, cur_cnt, best_cnt)
+                    best_lvol = th.where(better, cur_lvol, best_lvol)
+
+                mod.class_centers[need_cls_ids, best_k] = pos_all[need_cls_ids]
+                mod.class_raw_widths[need_cls_ids, best_k] = raw_w_target
+                mod.class_active[need_cls_ids, best_k] = True
+                # Newly placed box at live x_A crisp-contains at least x_A
+                slot_counts[need_cls_ids, best_k] = th.clamp(
+                    slot_counts[need_cls_ids, best_k], min=1
                 )
-                c_dep = c_dep.masked_fill(~act_c.unsqueeze(0), float("-inf"))
-                inside_ck = (c_dep > 0.0) & live_mask.unsqueeze(1)  # (nb_elements, K)
+                moves += int(need_cls_ids.numel())
 
-                # Check if any required element is missing or if a component covers non-target elements
-                missing_elems = [
-                    x_el for x_el in req_elems if not bool(inside_ck[x_el].any().item())
-                ]
-                spurious_mask = (~target_m[:, c_id]) & live_mask
-                has_spurious = bool(inside_ck[spurious_mask].any().item())
-                multi_covered = bool((inside_ck[req_elems].sum(dim=0) > 1).any().item())
-
-                if len(req_elems) <= k_slots and (
-                    missing_elems or has_spurious or prune_unused
-                ):
-                    # Assign one dedicated δ-box per required element and deactivate unused slots
-                    mod.class_active[c_id, :] = False
-                    mod.class_raw_widths[c_id, :].fill_(_INACTIVE_RAW_WIDTH)
-                    mod.class_centers[c_id, :].zero_()
-                    for slot_idx, x_el in enumerate(req_elems):
-                        mod.class_centers[c_id, slot_idx].copy_(pos_all[x_el])
-                        mod.class_raw_widths[c_id, slot_idx].fill_(raw_w_target)
-                        mod.class_active[c_id, slot_idx] = True
-                        moves += 1
-                elif missing_elems:
-                    # K < len(req_elems): relocate least-used component to missing elements
-                    usage = inside_ck.sum(dim=0).cpu().numpy()
-                    for x_el in missing_elems:
-                        k_star = int(np.argmin(usage))
-                        mod.class_centers[c_id, k_star].copy_(pos_all[x_el])
+            # Step (a.2): ABox class assertions C(a) (element of individual a)
+            if self.nb_inds > 0:
+                td = self.training_datasets
+                if "class_assertion" in td and len(td["class_assertion"]) > 0:
+                    for row in td["class_assertion"][:].detach().cpu().tolist():
+                        el_a = self.nb_classes + int(row[0])
+                        c_id = int(row[1])
+                        if (
+                            c_id == self.top_id
+                            or c_id == self.bot_id
+                            or not bool(live_mask[el_a].item())
+                        ):
+                            continue
+                        reg_c = mod.class_regions(c_id)
+                        cen_c = reg_c.cen[0]  # (K, d)
+                        w_c = reg_c.w[0]  # (K, d)
+                        act_c = reg_c.active[0]  # (K,)
+                        dep_a = th.amin(
+                            w_c - th.abs(pos_all[el_a].unsqueeze(0) - cen_c), dim=-1
+                        )
+                        if bool(((dep_a > 0.0) & act_c).any().item()):
+                            continue
+                        cnt_c = self._class_slot_live_counts_chunked(
+                            cen_c, w_c, act_c, live_pos, chunk_size=8192
+                        )
+                        slot_counts[c_id] = cnt_c
+                        if bool((~act_c).any().item()):
+                            k_star = int(
+                                th.nonzero(~act_c, as_tuple=False)[0].item()
+                            )
+                        else:
+                            lvol_c = (
+                                th.log(th.clamp(w_c, min=1e-12)).sum(dim=-1).cpu().tolist()
+                            )
+                            cnt_list = cnt_c.cpu().tolist()
+                            k_star = min(
+                                range(k_slots),
+                                key=lambda k: (int(cnt_list[k]), float(lvol_c[k])),
+                            )
+                        mod.class_centers[c_id, k_star].copy_(pos_all[el_a])
                         mod.class_raw_widths[c_id, k_star].fill_(raw_w_target)
                         mod.class_active[c_id, k_star] = True
-                        usage[k_star] += 1
+                        slot_counts[c_id, k_star] = max(
+                            int(slot_counts[c_id, k_star].item()), 1
+                        )
                         moves += 1
-                elif prune_unused:
-                    # Deactivate any active slot that contains 0 live elements
-                    used_slots = inside_ck.any(dim=0)
-                    unused_active = act_c & (~used_slots)
-                    if bool(unused_active.any().item()):
-                        mod.class_active[c_id, unused_active] = False
-                        mod.class_raw_widths[c_id, unused_active] = _INACTIVE_RAW_WIDTH
-                        moves += int(unused_active.sum().item())
+
+            # Step (b): deactivate active components that crisp-contain no live element
+            if prune_unused:
+                cur_reg = mod.class_regions()
+                unused_active = cur_reg.active & (slot_counts == 0)
+                if self.top_id is not None:
+                    unused_active[self.top_id, :] = False
+                if self.bot_id is not None:
+                    unused_active[self.bot_id, :] = False
+                n_pruned = int(unused_active.sum().item())
+                if n_pruned > 0:
+                    mod.class_active[unused_active] = False
+                    mod.class_raw_widths[unused_active] = _INACTIVE_RAW_WIDTH
+                    moves += n_pruned
 
         return moves
 
@@ -1489,16 +1602,20 @@ class GroundedEL(EmbeddingELModel):
 
         Each epoch:
         1. Anneals :math:`\\tau` geometrically from ``tau0`` to ``tau1``.
-        2. Optionally calls :meth:`reseed_idle` when ``reseed_every > 0`` and
-           ``epoch > 0 and epoch % reseed_every == 0``.
-        3. Computes ``L = L_fact + L_axioms + lambda_reg * L_region + L_minimality``
+        2. Computes ``L = L_fact + L_axioms + lambda_reg * L_region + L_minimality``
            via :meth:`compute_batch_losses` and performs one Adam step.
+        3. Optionally calls :meth:`reseed_idle` when ``reseed_every > 0`` and
+           ``(epoch + 1) % reseed_every == 0`` (never at the last epoch unless
+           ``(epoch + 1) % reseed_every == 0``), followed by
+           ``optimizer.state.clear()`` to reset Adam moments.
         4. Logs per-term losses every ``log_every`` epochs.
 
         Guarantees:
         - Reasoner-free (R1): never imports or calls any reasoner or semantic
           completion algorithm.
         - Deterministic for a fixed ``self.seed``.
+        - Calls :meth:`reseed_idle` if and only if ``reseed_every > 0`` and
+          ``(epoch + 1) % reseed_every == 0``.
         - Records per-epoch loss dictionaries in :attr:`loss_history` and returns
           them.
 
@@ -1559,22 +1676,9 @@ class GroundedEL(EmbeddingELModel):
                 with th.no_grad():
                     self.module.dead_logits[self.bot_id] = _DEAD_LOGIT
 
-            do_reseed_now = (
-                self.reseed_every > 0
-                and (
-                    (epoch + 1) % self.reseed_every == 0
-                    or epoch + 1 == eff_epochs
-                )
-            ) or (
-                self.reseed_every == 0
-                and eff_epochs >= 50
-                and epoch + 1 == eff_epochs
-            )
-            if do_reseed_now:
+            if self.reseed_every > 0 and (epoch + 1) % self.reseed_every == 0:
                 self.reseed_idle(generator=gen, prune_unused=True)
                 optimizer.state.clear()
-                with th.no_grad():
-                    losses = self.compute_batch_losses(generator=gen)
 
             rec = {k: float(v.detach().item()) for k, v in losses.items()}
             rec["tau"] = float(tau)
@@ -1643,12 +1747,56 @@ class GroundedEL(EmbeddingELModel):
         pts = c_act.unsqueeze(1) + w_act.unsqueeze(1) * u_bits
         return pts.reshape(-1, dim)
 
+    def _eval_elem_memberships_chunked(
+        self,
+        eval_pos: th.Tensor,
+        mentioned_classes: th.Tensor,
+        chunk_size: int = 512,
+    ) -> th.Tensor:
+        """Compute crisp membership ``(L, M)`` only for ``eval_pos`` and ``mentioned_classes`` in chunks."""
+        mod = self.module
+        device = self.device
+        n_eval_el = int(eval_pos.shape[0])
+        n_ment = int(mentioned_classes.numel())
+        out = th.empty((n_eval_el, n_ment), dtype=th.float32, device=device)
+        if n_eval_el == 0 or n_ment == 0:
+            return out
+
+        for c_s in range(0, n_ment, chunk_size):
+            c_e = min(c_s + chunk_size, n_ment)
+            c_sub = mentioned_classes[c_s:c_e]  # (C_sub,)
+            reg_sub = mod.class_regions(c_sub)  # (C_sub, K, d)
+            c_dep = th.amin(
+                reg_sub.w.unsqueeze(0)
+                - th.abs(eval_pos.unsqueeze(1).unsqueeze(2) - reg_sub.cen.unsqueeze(0)),
+                dim=-1,
+            )  # (L, C_sub, K)
+            c_dep = c_dep.masked_fill(~reg_sub.active.unsqueeze(0), float("-inf"))
+            max_dep = th.amax(c_dep, dim=-1)  # (L, C_sub)
+            if self.top_id is not None:
+                max_dep = th.where(
+                    (c_sub == self.top_id).unsqueeze(0),
+                    th.full_like(max_dep, 1.0),
+                    max_dep,
+                )
+            if self.bot_id is not None:
+                max_dep = th.where(
+                    (c_sub == self.bot_id).unsqueeze(0),
+                    th.full_like(max_dep, -1.0),
+                    max_dep,
+                )
+            out[:, c_s:c_e] = crisp_membership(max_dep)
+        return out
+
     def crisp_report(self, n_eval: int = 10000) -> Dict[str, float]:
         """Compute reasoner-free crisp violation metrics ``elem_viol`` and ``region_viol`` (§7).
 
         Guarantees:
         - Reasoner-free (R1): never imports or calls any reasoner or
           :class:`~mowl.geometric.completion.CanonicalModel`.
+        - Never materialises a :math:`(|\\Delta| \\times |\\mathcal{C}|)` tensor;
+          computes memberships only for the sampled evaluation elements and the
+          classes mentioned by the evaluated axioms, in chunks.
         - Returns ``{"elem_viol": float, "region_viol": float}`` with values in
           ``[0.0, 1.0]``.
 
@@ -1692,15 +1840,38 @@ class GroundedEL(EmbeddingELModel):
             eval_pos = pos_all[eval_elem_ids]
             eval_dead_f = dead_f[eval_elem_ids]
 
-            # Precompute crisp membership for all elements when nb_elements * nb_classes <= 200_000
-            elem_m_all = th.stack(
-                [
-                    crisp_membership(mod.depth(pos_all, c_id, crisp=True))
-                    for c_id in range(self.nb_classes)
-                ],
-                dim=1,
-            )  # (nb_elements, nb_classes)
-            elem_m_live = elem_m_all[eval_elem_ids]  # (L, nb_classes)
+            # Collect unique classes mentioned by the evaluated axioms
+            cls_parts: List[th.Tensor] = []
+            for k_ax, cols in (
+                ("gci0", (0, 1)),
+                ("gci0_bot", (0,)),
+                ("gci1", (0, 1, 2)),
+                ("gci1_bot", (0, 1)),
+                ("gci2", (0, 2)),
+                ("gci3", (1, 2)),
+                ("gci3_bot", (1,)),
+            ):
+                if k_ax in td and len(td[k_ax]) > 0:
+                    t_ax = td[k_ax][:].to(device=device, dtype=th.long)
+                    for col_i in cols:
+                        cls_parts.append(t_ax[:, col_i])
+            if cls_parts:
+                mentioned_classes = th.unique(th.cat(cls_parts))
+            else:
+                mentioned_classes = th.empty((0,), dtype=th.long, device=device)
+
+            cls_to_col = th.full(
+                (self.nb_classes,), -1, dtype=th.long, device=device
+            )
+            if mentioned_classes.numel() > 0:
+                cls_to_col[mentioned_classes] = th.arange(
+                    mentioned_classes.numel(), dtype=th.long, device=device
+                )
+
+            # Compute crisp memberships ONLY for eval_elem_ids and mentioned_classes in chunks
+            elem_m_live = self._eval_elem_memberships_chunked(
+                eval_pos, mentioned_classes, chunk_size=512
+            )  # (L, M)
 
             elem_viol_count = 0
             elem_total_count = 0
@@ -1721,239 +1892,540 @@ class GroundedEL(EmbeddingELModel):
                 )
                 if k in td and len(td[k]) > 0
             )
-            n_per_ax = max(16, min(2000, n_eval // max(total_region_axioms, 1)))
             reg_viol_axioms = 0
             reg_total_axioms = 0
 
-            all_regs = mod.class_regions()
+            if total_region_axioms <= 512:
+                n_per_ax = max(16, min(2000, n_eval // max(total_region_axioms, 1)))
 
-            # 1. GCI0: A <= B
-            if "gci0" in td and len(td["gci0"]) > 0:
-                for row in td["gci0"][:].detach().cpu().tolist():
-                    a_id, b_id = int(row[0]), int(row[1])
-                    if eval_elem_ids.numel() > 0:
-                        h_e = gci0(
-                            elem_m_live[:, a_id], elem_m_live[:, b_id], dead=eval_dead_f
-                        )
-                        elem_viol_count += int((h_e > 0.0).sum().item())
-                        elem_total_count += int(h_e.numel())
-                    reg_total_axioms += 1
-                    s_reg = sample_class_region(
-                        mod, a_id, generator=gen, n_samples=n_per_ax
-                    )
-                    corners = self._box_corner_samples(
-                        all_regs.cen[a_id : a_id + 1],
-                        all_regs.w[a_id : a_id + 1],
-                        all_regs.active[a_id : a_id + 1],
-                        gen,
-                    )
-                    pts_list = [eval_pos]
-                    if bool(s_reg.valid.any().item()):
-                        pts_list.append(s_reg.points[s_reg.valid])
-                    if corners.numel() > 0:
-                        pts_list.append(corners)
-                    pts = th.cat(pts_list, dim=0)
-                    if pts.shape[0] > 0:
-                        ma = crisp_membership(mod.depth(pts, a_id, crisp=True))
-                        mb = crisp_membership(mod.depth(pts, b_id, crisp=True))
-                        if bool((gci0(ma, mb, dead=None) > 0.0).any().item()):
-                            reg_viol_axioms += 1
-
-            # 2. GCI0_bot: A <= bot
-            if "gci0_bot" in td and len(td["gci0_bot"]) > 0:
-                for row in td["gci0_bot"][:].detach().cpu().tolist():
-                    a_id = int(row[0])
-                    if eval_elem_ids.numel() > 0:
-                        h_e = gci0_bot(elem_m_live[:, a_id], dead=eval_dead_f)
-                        elem_viol_count += int((h_e > 0.0).sum().item())
-                        elem_total_count += int(h_e.numel())
-                    reg_total_axioms += 1
-                    s_reg = sample_class_region(
-                        mod, a_id, generator=gen, n_samples=n_per_ax
-                    )
-                    if bool(s_reg.valid.any().item()):
-                        reg_viol_axioms += 1
-                    elif eval_pos.shape[0] > 0:
-                        ma = crisp_membership(mod.depth(eval_pos, a_id, crisp=True))
-                        if bool((gci0_bot(ma, dead=None) > 0.0).any().item()):
-                            reg_viol_axioms += 1
-
-            # 3. GCI1: A cap B <= C
-            if "gci1" in td and len(td["gci1"]) > 0:
-                for row in td["gci1"][:].detach().cpu().tolist():
-                    a_id, b_id, c_id = int(row[0]), int(row[1]), int(row[2])
-                    if eval_elem_ids.numel() > 0:
-                        h_e = gci1(
-                            elem_m_live[:, a_id],
-                            elem_m_live[:, b_id],
-                            elem_m_live[:, c_id],
-                            dead=eval_dead_f,
-                        )
-                        elem_viol_count += int((h_e > 0.0).sum().item())
-                        elem_total_count += int(h_e.numel())
-                    reg_total_axioms += 1
-                    s_reg = sample_pair_region(
-                        mod, a_id, b_id, generator=gen, n_samples=n_per_ax
-                    )
-                    pts_list = [eval_pos]
-                    if bool(s_reg.valid.any().item()):
-                        pts_list.append(s_reg.points[s_reg.valid])
-                    pts = th.cat(pts_list, dim=0)
-                    if pts.shape[0] > 0:
-                        ma = crisp_membership(mod.depth(pts, a_id, crisp=True))
-                        mb = crisp_membership(mod.depth(pts, b_id, crisp=True))
-                        mc = crisp_membership(mod.depth(pts, c_id, crisp=True))
-                        if bool((gci1(ma, mb, mc, dead=None) > 0.0).any().item()):
-                            reg_viol_axioms += 1
-
-            # 4. GCI1_bot: A cap B <= bot
-            if "gci1_bot" in td and len(td["gci1_bot"]) > 0:
-                for row in td["gci1_bot"][:].detach().cpu().tolist():
-                    a_id, b_id = int(row[0]), int(row[1])
-                    if eval_elem_ids.numel() > 0:
-                        h_e = gci1_bot(
-                            elem_m_live[:, a_id], elem_m_live[:, b_id], dead=eval_dead_f
-                        )
-                        elem_viol_count += int((h_e > 0.0).sum().item())
-                        elem_total_count += int(h_e.numel())
-                    reg_total_axioms += 1
-                    s_inter = sample_pair_region(
-                        mod, a_id, b_id, generator=gen, n_samples=n_per_ax
-                    )
-                    if bool(s_inter.valid.any().item()):
-                        reg_viol_axioms += 1
-                    else:
-                        s_a = sample_class_region(
+                # 1. GCI0: A <= B
+                if "gci0" in td and len(td["gci0"]) > 0:
+                    for row in td["gci0"][:].detach().cpu().tolist():
+                        a_id, b_id = int(row[0]), int(row[1])
+                        col_a = int(cls_to_col[a_id].item())
+                        col_b = int(cls_to_col[b_id].item())
+                        if eval_elem_ids.numel() > 0:
+                            h_e = gci0(
+                                elem_m_live[:, col_a],
+                                elem_m_live[:, col_b],
+                                dead=eval_dead_f,
+                            )
+                            elem_viol_count += int((h_e > 0.0).sum().item())
+                            elem_total_count += int(h_e.numel())
+                        reg_total_axioms += 1
+                        s_reg = sample_class_region(
                             mod, a_id, generator=gen, n_samples=n_per_ax
                         )
+                        reg_a = mod.class_regions(a_id)
+                        corners = self._box_corner_samples(
+                            reg_a.cen, reg_a.w, reg_a.active, gen
+                        )
                         pts_list = [eval_pos]
-                        if bool(s_a.valid.any().item()):
-                            pts_list.append(s_a.points[s_a.valid])
+                        if bool(s_reg.valid.any().item()):
+                            pts_list.append(s_reg.points[s_reg.valid])
+                        if corners.numel() > 0:
+                            pts_list.append(corners)
                         pts = th.cat(pts_list, dim=0)
                         if pts.shape[0] > 0:
                             ma = crisp_membership(mod.depth(pts, a_id, crisp=True))
                             mb = crisp_membership(mod.depth(pts, b_id, crisp=True))
-                            if bool((gci1_bot(ma, mb, dead=None) > 0.0).any().item()):
+                            if bool((gci0(ma, mb, dead=None) > 0.0).any().item()):
                                 reg_viol_axioms += 1
 
-            # 5. GCI2: A <= exists r.B
-            if "gci2" in td and len(td["gci2"]) > 0:
-                for row in td["gci2"][:].detach().cpu().tolist():
-                    a_id, r_id, b_id = int(row[0]), int(row[1]), int(row[2])
-                    pb = pos_all[b_id]
-                    if eval_elem_ids.numel() > 0:
-                        rho_e = crisp_membership(
-                            mod.role_depth(eval_pos, pb, r_id, crisp=True)
+                # 2. GCI0_bot: A <= bot
+                if "gci0_bot" in td and len(td["gci0_bot"]) > 0:
+                    for row in td["gci0_bot"][:].detach().cpu().tolist():
+                        a_id = int(row[0])
+                        col_a = int(cls_to_col[a_id].item())
+                        if eval_elem_ids.numel() > 0:
+                            h_e = gci0_bot(elem_m_live[:, col_a], dead=eval_dead_f)
+                            elem_viol_count += int((h_e > 0.0).sum().item())
+                            elem_total_count += int(h_e.numel())
+                        reg_total_axioms += 1
+                        s_reg = sample_class_region(
+                            mod, a_id, generator=gen, n_samples=n_per_ax
                         )
-                        db_e = dead_f[b_id].expand_as(eval_dead_f)
-                        h_e = gci2(
-                            elem_m_live[:, a_id],
-                            rho_e,
-                            dead=eval_dead_f,
-                            dead_filler=db_e,
-                        )
-                        elem_viol_count += int((h_e > 0.0).sum().item())
-                        elem_total_count += int(h_e.numel())
-                    reg_total_axioms += 1
-                    s_reg = sample_class_region(
-                        mod, a_id, generator=gen, n_samples=n_per_ax
-                    )
-                    corners = self._box_corner_samples(
-                        all_regs.cen[a_id : a_id + 1],
-                        all_regs.w[a_id : a_id + 1],
-                        all_regs.active[a_id : a_id + 1],
-                        gen,
-                    )
-                    pts_list = [eval_pos]
-                    if bool(s_reg.valid.any().item()):
-                        pts_list.append(s_reg.points[s_reg.valid])
-                    if corners.numel() > 0:
-                        pts_list.append(corners)
-                    pts = th.cat(pts_list, dim=0)
-                    if pts.shape[0] > 0:
-                        ma = crisp_membership(mod.depth(pts, a_id, crisp=True))
-                        rho_z = crisp_membership(
-                            mod.role_depth(pts, pb, r_id, crisp=True)
-                        )
-                        db_z = dead_f[b_id].expand_as(ma)
-                        if bool(
-                            (gci2(ma, rho_z, dead=None, dead_filler=db_z) > 0.0)
-                            .any()
-                            .item()
-                        ):
+                        if bool(s_reg.valid.any().item()):
                             reg_viol_axioms += 1
+                        elif eval_pos.shape[0] > 0:
+                            ma = crisp_membership(mod.depth(eval_pos, a_id, crisp=True))
+                            if bool((gci0_bot(ma, dead=None) > 0.0).any().item()):
+                                reg_viol_axioms += 1
 
-            # 6. GCI3: exists r.B <= C
-            if "gci3" in td and len(td["gci3"]) > 0:
-                y_eval_ids = (
-                    eval_elem_ids[:32]
-                    if eval_elem_ids.numel() > 32
-                    else eval_elem_ids
-                )
-                for row in td["gci3"][:].detach().cpu().tolist():
-                    r_id, b_id, c_id = int(row[0]), int(row[1]), int(row[2])
-                    if eval_elem_ids.numel() > 0 and y_eval_ids.numel() > 0:
-                        for y_id in y_eval_ids.tolist():
-                            rho_xy = crisp_membership(
-                                mod.role_depth(eval_pos, pos_all[y_id], r_id, crisp=True)
-                            )
-                            mb_y = elem_m_all[y_id, b_id].expand_as(rho_xy)
-                            h_e = gci3(
-                                rho_xy, mb_y, elem_m_live[:, c_id], dead=eval_dead_f
+                # 3. GCI1: A cap B <= C
+                if "gci1" in td and len(td["gci1"]) > 0:
+                    for row in td["gci1"][:].detach().cpu().tolist():
+                        a_id, b_id, c_id = int(row[0]), int(row[1]), int(row[2])
+                        col_a = int(cls_to_col[a_id].item())
+                        col_b = int(cls_to_col[b_id].item())
+                        col_c = int(cls_to_col[c_id].item())
+                        if eval_elem_ids.numel() > 0:
+                            h_e = gci1(
+                                elem_m_live[:, col_a],
+                                elem_m_live[:, col_b],
+                                elem_m_live[:, col_c],
+                                dead=eval_dead_f,
                             )
                             elem_viol_count += int((h_e > 0.0).sum().item())
                             elem_total_count += int(h_e.numel())
-                    reg_total_axioms += 1
-                    h_s, t_s = sample_role_region(
-                        mod, r_id, generator=gen, n_samples=n_per_ax
-                    )
-                    violated = False
-                    if bool(h_s.valid.any().item()):
-                        zx = h_s.points[h_s.valid]
-                        zy = t_s.points[t_s.valid]
-                        rho_z = crisp_membership(
-                            mod.role_depth(zx, zy, r_id, crisp=True)
+                        reg_total_axioms += 1
+                        s_reg = sample_pair_region(
+                            mod, a_id, b_id, generator=gen, n_samples=n_per_ax
                         )
-                        mb_z = crisp_membership(mod.depth(zy, b_id, crisp=True))
-                        mc_z = crisp_membership(mod.depth(zx, c_id, crisp=True))
-                        if bool((gci3(rho_z, mb_z, mc_z, dead=None) > 0.0).any().item()):
-                            violated = True
-                    if violated:
-                        reg_viol_axioms += 1
+                        pts_list = [eval_pos]
+                        if bool(s_reg.valid.any().item()):
+                            pts_list.append(s_reg.points[s_reg.valid])
+                        pts = th.cat(pts_list, dim=0)
+                        if pts.shape[0] > 0:
+                            ma = crisp_membership(mod.depth(pts, a_id, crisp=True))
+                            mb = crisp_membership(mod.depth(pts, b_id, crisp=True))
+                            mc = crisp_membership(mod.depth(pts, c_id, crisp=True))
+                            if bool((gci1(ma, mb, mc, dead=None) > 0.0).any().item()):
+                                reg_viol_axioms += 1
 
-            # 7. GCI3_bot: exists r.B <= bot
-            if "gci3_bot" in td and len(td["gci3_bot"]) > 0:
-                y_eval_ids = (
-                    eval_elem_ids[:32]
-                    if eval_elem_ids.numel() > 32
-                    else eval_elem_ids
-                )
-                for row in td["gci3_bot"][:].detach().cpu().tolist():
-                    r_id, b_id = int(row[0]), int(row[1])
-                    if eval_elem_ids.numel() > 0 and y_eval_ids.numel() > 0:
-                        for y_id in y_eval_ids.tolist():
-                            rho_xy = crisp_membership(
-                                mod.role_depth(eval_pos, pos_all[y_id], r_id, crisp=True)
+                # 4. GCI1_bot: A cap B <= bot
+                if "gci1_bot" in td and len(td["gci1_bot"]) > 0:
+                    for row in td["gci1_bot"][:].detach().cpu().tolist():
+                        a_id, b_id = int(row[0]), int(row[1])
+                        col_a = int(cls_to_col[a_id].item())
+                        col_b = int(cls_to_col[b_id].item())
+                        if eval_elem_ids.numel() > 0:
+                            h_e = gci1_bot(
+                                elem_m_live[:, col_a],
+                                elem_m_live[:, col_b],
+                                dead=eval_dead_f,
                             )
-                            mb_y = elem_m_all[y_id, b_id].expand_as(rho_xy)
-                            h_e = gci3_bot(rho_xy, mb_y, dead=eval_dead_f)
                             elem_viol_count += int((h_e > 0.0).sum().item())
                             elem_total_count += int(h_e.numel())
-                    reg_total_axioms += 1
-                    h_s, t_s = sample_role_region(
-                        mod, r_id, generator=gen, n_samples=n_per_ax
-                    )
-                    if bool(h_s.valid.any().item()):
-                        zx = h_s.points[h_s.valid]
-                        zy = t_s.points[t_s.valid]
-                        rho_z = crisp_membership(
-                            mod.role_depth(zx, zy, r_id, crisp=True)
+                        reg_total_axioms += 1
+                        s_inter = sample_pair_region(
+                            mod, a_id, b_id, generator=gen, n_samples=n_per_ax
                         )
-                        mb_z = crisp_membership(mod.depth(zy, b_id, crisp=True))
-                        if bool((gci3_bot(rho_z, mb_z, dead=None) > 0.0).any().item()):
+                        if bool(s_inter.valid.any().item()):
                             reg_viol_axioms += 1
+                        else:
+                            s_a = sample_class_region(
+                                mod, a_id, generator=gen, n_samples=n_per_ax
+                            )
+                            pts_list = [eval_pos]
+                            if bool(s_a.valid.any().item()):
+                                pts_list.append(s_a.points[s_a.valid])
+                            pts = th.cat(pts_list, dim=0)
+                            if pts.shape[0] > 0:
+                                ma = crisp_membership(mod.depth(pts, a_id, crisp=True))
+                                mb = crisp_membership(mod.depth(pts, b_id, crisp=True))
+                                if bool((gci1_bot(ma, mb, dead=None) > 0.0).any().item()):
+                                    reg_viol_axioms += 1
+
+                # 5. GCI2: A <= exists r.B
+                if "gci2" in td and len(td["gci2"]) > 0:
+                    for row in td["gci2"][:].detach().cpu().tolist():
+                        a_id, r_id, b_id = int(row[0]), int(row[1]), int(row[2])
+                        col_a = int(cls_to_col[a_id].item())
+                        pb = pos_all[b_id]
+                        if eval_elem_ids.numel() > 0:
+                            rho_e = crisp_membership(
+                                mod.role_depth(eval_pos, pb, r_id, crisp=True)
+                            )
+                            db_e = dead_f[b_id].expand_as(eval_dead_f)
+                            h_e = gci2(
+                                elem_m_live[:, col_a],
+                                rho_e,
+                                dead=eval_dead_f,
+                                dead_filler=db_e,
+                            )
+                            elem_viol_count += int((h_e > 0.0).sum().item())
+                            elem_total_count += int(h_e.numel())
+                        reg_total_axioms += 1
+                        s_reg = sample_class_region(
+                            mod, a_id, generator=gen, n_samples=n_per_ax
+                        )
+                        reg_a = mod.class_regions(a_id)
+                        corners = self._box_corner_samples(
+                            reg_a.cen, reg_a.w, reg_a.active, gen
+                        )
+                        pts_list = [eval_pos]
+                        if bool(s_reg.valid.any().item()):
+                            pts_list.append(s_reg.points[s_reg.valid])
+                        if corners.numel() > 0:
+                            pts_list.append(corners)
+                        pts = th.cat(pts_list, dim=0)
+                        if pts.shape[0] > 0:
+                            ma = crisp_membership(mod.depth(pts, a_id, crisp=True))
+                            rho_z = crisp_membership(
+                                mod.role_depth(pts, pb, r_id, crisp=True)
+                            )
+                            db_z = dead_f[b_id].expand_as(ma)
+                            if bool(
+                                (gci2(ma, rho_z, dead=None, dead_filler=db_z) > 0.0)
+                                .any()
+                                .item()
+                            ):
+                                reg_viol_axioms += 1
+
+                # 6. GCI3: exists r.B <= C
+                if "gci3" in td and len(td["gci3"]) > 0:
+                    n_y = min(int(eval_elem_ids.numel()), 32)
+                    y_eval_ids = eval_elem_ids[:n_y]
+                    for row in td["gci3"][:].detach().cpu().tolist():
+                        r_id, b_id, c_id = int(row[0]), int(row[1]), int(row[2])
+                        col_b = int(cls_to_col[b_id].item())
+                        col_c = int(cls_to_col[c_id].item())
+                        if eval_elem_ids.numel() > 0 and n_y > 0:
+                            for y_idx in range(n_y):
+                                y_id = int(y_eval_ids[y_idx].item())
+                                rho_xy = crisp_membership(
+                                    mod.role_depth(
+                                        eval_pos, pos_all[y_id], r_id, crisp=True
+                                    )
+                                )
+                                mb_y = elem_m_live[y_idx, col_b].expand_as(rho_xy)
+                                h_e = gci3(
+                                    rho_xy,
+                                    mb_y,
+                                    elem_m_live[:, col_c],
+                                    dead=eval_dead_f,
+                                )
+                                elem_viol_count += int((h_e > 0.0).sum().item())
+                                elem_total_count += int(h_e.numel())
+                        reg_total_axioms += 1
+                        h_s, t_s = sample_role_region(
+                            mod, r_id, generator=gen, n_samples=n_per_ax
+                        )
+                        if bool(h_s.valid.any().item()):
+                            zx = h_s.points[h_s.valid]
+                            zy = t_s.points[t_s.valid]
+                            rho_z = crisp_membership(
+                                mod.role_depth(zx, zy, r_id, crisp=True)
+                            )
+                            mb_z = crisp_membership(mod.depth(zy, b_id, crisp=True))
+                            mc_z = crisp_membership(mod.depth(zx, c_id, crisp=True))
+                            if bool(
+                                (gci3(rho_z, mb_z, mc_z, dead=None) > 0.0).any().item()
+                            ):
+                                reg_viol_axioms += 1
+
+                # 7. GCI3_bot: exists r.B <= bot
+                if "gci3_bot" in td and len(td["gci3_bot"]) > 0:
+                    n_y = min(int(eval_elem_ids.numel()), 32)
+                    y_eval_ids = eval_elem_ids[:n_y]
+                    for row in td["gci3_bot"][:].detach().cpu().tolist():
+                        r_id, b_id = int(row[0]), int(row[1])
+                        col_b = int(cls_to_col[b_id].item())
+                        if eval_elem_ids.numel() > 0 and n_y > 0:
+                            for y_idx in range(n_y):
+                                y_id = int(y_eval_ids[y_idx].item())
+                                rho_xy = crisp_membership(
+                                    mod.role_depth(
+                                        eval_pos, pos_all[y_id], r_id, crisp=True
+                                    )
+                                )
+                                mb_y = elem_m_live[y_idx, col_b].expand_as(rho_xy)
+                                h_e = gci3_bot(rho_xy, mb_y, dead=eval_dead_f)
+                                elem_viol_count += int((h_e > 0.0).sum().item())
+                                elem_total_count += int(h_e.numel())
+                        reg_total_axioms += 1
+                        h_s, t_s = sample_role_region(
+                            mod, r_id, generator=gen, n_samples=n_per_ax
+                        )
+                        if bool(h_s.valid.any().item()):
+                            zx = h_s.points[h_s.valid]
+                            zy = t_s.points[t_s.valid]
+                            rho_z = crisp_membership(
+                                mod.role_depth(zx, zy, r_id, crisp=True)
+                            )
+                            mb_z = crisp_membership(mod.depth(zy, b_id, crisp=True))
+                            if bool(
+                                (gci3_bot(rho_z, mb_z, dead=None) > 0.0).any().item()
+                            ):
+                                reg_viol_axioms += 1
+            else:
+                # Chunked vectorised evaluation for large ontologies (e.g. GO)
+                n_per_ax = max(1, min(16, n_eval // max(total_region_axioms, 1)))
+                ax_chunk = 512
+
+                if "gci0" in td and len(td["gci0"]) > 0:
+                    data_g0 = td["gci0"][:].to(device=device, dtype=th.long)
+                    for s_i in range(0, data_g0.shape[0], ax_chunk):
+                        rows = data_g0[s_i : s_i + ax_chunk]
+                        bsz = int(rows.shape[0])
+                        a_c = rows[:, 0]
+                        b_c = rows[:, 1]
+                        ca = cls_to_col[a_c]
+                        cb = cls_to_col[b_c]
+                        viol_b = th.zeros((bsz,), dtype=th.bool, device=device)
+                        if eval_elem_ids.numel() > 0:
+                            ma_e = elem_m_live[:, ca]  # (L, B)
+                            mb_e = elem_m_live[:, cb]  # (L, B)
+                            h_e = gci0(
+                                ma_e,
+                                mb_e,
+                                dead=eval_dead_f.unsqueeze(1).expand_as(ma_e),
+                            )
+                            elem_viol_count += int((h_e > 0.0).sum().item())
+                            elem_total_count += int(h_e.numel())
+                            viol_b = (gci0(ma_e, mb_e, dead=None) > 0.0).any(dim=0)
+                        a_rep = a_c.repeat_interleave(n_per_ax)
+                        b_rep = b_c.repeat_interleave(n_per_ax)
+                        s_reg = sample_class_region(mod, a_rep, generator=gen)
+                        if bool(s_reg.valid.any().item()):
+                            ma_r = crisp_membership(
+                                mod.depth(s_reg.points, a_rep, crisp=True)
+                            )
+                            mb_r = crisp_membership(
+                                mod.depth(s_reg.points, b_rep, crisp=True)
+                            )
+                            v_r = (
+                                (gci0(ma_r, mb_r, dead=None) > 0.0) & s_reg.valid
+                            ).view(bsz, n_per_ax).any(dim=1)
+                            viol_b = viol_b | v_r
+                        reg_viol_axioms += int(viol_b.sum().item())
+                        reg_total_axioms += bsz
+
+                if "gci0_bot" in td and len(td["gci0_bot"]) > 0:
+                    data_g0b = td["gci0_bot"][:].to(device=device, dtype=th.long)
+                    for s_i in range(0, data_g0b.shape[0], ax_chunk):
+                        rows = data_g0b[s_i : s_i + ax_chunk]
+                        bsz = int(rows.shape[0])
+                        a_c = rows[:, 0]
+                        ca = cls_to_col[a_c]
+                        viol_b = th.zeros((bsz,), dtype=th.bool, device=device)
+                        if eval_elem_ids.numel() > 0:
+                            ma_e = elem_m_live[:, ca]
+                            h_e = gci0_bot(
+                                ma_e,
+                                dead=eval_dead_f.unsqueeze(1).expand_as(ma_e),
+                            )
+                            elem_viol_count += int((h_e > 0.0).sum().item())
+                            elem_total_count += int(h_e.numel())
+                            viol_b = (gci0_bot(ma_e, dead=None) > 0.0).any(dim=0)
+                        a_rep = a_c.repeat_interleave(n_per_ax)
+                        s_reg = sample_class_region(mod, a_rep, generator=gen)
+                        viol_b = viol_b | s_reg.valid.view(bsz, n_per_ax).any(dim=1)
+                        reg_viol_axioms += int(viol_b.sum().item())
+                        reg_total_axioms += bsz
+
+                if "gci1" in td and len(td["gci1"]) > 0:
+                    data_g1 = td["gci1"][:].to(device=device, dtype=th.long)
+                    for s_i in range(0, data_g1.shape[0], ax_chunk):
+                        rows = data_g1[s_i : s_i + ax_chunk]
+                        bsz = int(rows.shape[0])
+                        a_c, b_c, c_c = rows[:, 0], rows[:, 1], rows[:, 2]
+                        ca, cb, cc = cls_to_col[a_c], cls_to_col[b_c], cls_to_col[c_c]
+                        viol_b = th.zeros((bsz,), dtype=th.bool, device=device)
+                        if eval_elem_ids.numel() > 0:
+                            ma_e = elem_m_live[:, ca]
+                            mb_e = elem_m_live[:, cb]
+                            mc_e = elem_m_live[:, cc]
+                            h_e = gci1(
+                                ma_e,
+                                mb_e,
+                                mc_e,
+                                dead=eval_dead_f.unsqueeze(1).expand_as(ma_e),
+                            )
+                            elem_viol_count += int((h_e > 0.0).sum().item())
+                            elem_total_count += int(h_e.numel())
+                            viol_b = (gci1(ma_e, mb_e, mc_e, dead=None) > 0.0).any(
+                                dim=0
+                            )
+                        a_rep = a_c.repeat_interleave(n_per_ax)
+                        b_rep = b_c.repeat_interleave(n_per_ax)
+                        c_rep = c_c.repeat_interleave(n_per_ax)
+                        s_reg = sample_pair_region(mod, a_rep, b_rep, generator=gen)
+                        if bool(s_reg.valid.any().item()):
+                            ma_r = crisp_membership(
+                                mod.depth(s_reg.points, a_rep, crisp=True)
+                            )
+                            mb_r = crisp_membership(
+                                mod.depth(s_reg.points, b_rep, crisp=True)
+                            )
+                            mc_r = crisp_membership(
+                                mod.depth(s_reg.points, c_rep, crisp=True)
+                            )
+                            v_r = (
+                                (gci1(ma_r, mb_r, mc_r, dead=None) > 0.0) & s_reg.valid
+                            ).view(bsz, n_per_ax).any(dim=1)
+                            viol_b = viol_b | v_r
+                        reg_viol_axioms += int(viol_b.sum().item())
+                        reg_total_axioms += bsz
+
+                if "gci1_bot" in td and len(td["gci1_bot"]) > 0:
+                    data_g1b = td["gci1_bot"][:].to(device=device, dtype=th.long)
+                    for s_i in range(0, data_g1b.shape[0], ax_chunk):
+                        rows = data_g1b[s_i : s_i + ax_chunk]
+                        bsz = int(rows.shape[0])
+                        a_c, b_c = rows[:, 0], rows[:, 1]
+                        ca, cb = cls_to_col[a_c], cls_to_col[b_c]
+                        viol_b = th.zeros((bsz,), dtype=th.bool, device=device)
+                        if eval_elem_ids.numel() > 0:
+                            ma_e = elem_m_live[:, ca]
+                            mb_e = elem_m_live[:, cb]
+                            h_e = gci1_bot(
+                                ma_e,
+                                mb_e,
+                                dead=eval_dead_f.unsqueeze(1).expand_as(ma_e),
+                            )
+                            elem_viol_count += int((h_e > 0.0).sum().item())
+                            elem_total_count += int(h_e.numel())
+                            viol_b = (gci1_bot(ma_e, mb_e, dead=None) > 0.0).any(dim=0)
+                        a_rep = a_c.repeat_interleave(n_per_ax)
+                        b_rep = b_c.repeat_interleave(n_per_ax)
+                        s_inter = sample_pair_region(mod, a_rep, b_rep, generator=gen)
+                        viol_b = viol_b | s_inter.valid.view(bsz, n_per_ax).any(dim=1)
+                        reg_viol_axioms += int(viol_b.sum().item())
+                        reg_total_axioms += bsz
+
+                if "gci2" in td and len(td["gci2"]) > 0:
+                    data_g2 = td["gci2"][:].to(device=device, dtype=th.long)
+                    for s_i in range(0, data_g2.shape[0], ax_chunk):
+                        rows = data_g2[s_i : s_i + ax_chunk]
+                        bsz = int(rows.shape[0])
+                        a_c, r_c, b_c = rows[:, 0], rows[:, 1], rows[:, 2]
+                        ca = cls_to_col[a_c]
+                        viol_b = th.zeros((bsz,), dtype=th.bool, device=device)
+                        if eval_elem_ids.numel() > 0:
+                            l_cnt = int(eval_elem_ids.numel())
+                            x_mat = eval_elem_ids.unsqueeze(0).expand(bsz, l_cnt)
+                            y_mat = b_c.unsqueeze(1)
+                            _, r_dep_c = self._grid_role_membership(
+                                pos_all, x_mat, y_mat, r_c, need_crisp=True
+                            )
+                            assert r_dep_c is not None
+                            rho_e = crisp_membership(r_dep_c).view(bsz, l_cnt).t()
+                            ma_e = elem_m_live[:, ca]  # (L, B)
+                            db_e = dead_f[b_c].unsqueeze(0).expand_as(ma_e)
+                            h_e = gci2(
+                                ma_e,
+                                rho_e,
+                                dead=eval_dead_f.unsqueeze(1).expand_as(ma_e),
+                                dead_filler=db_e,
+                            )
+                            elem_viol_count += int((h_e > 0.0).sum().item())
+                            elem_total_count += int(h_e.numel())
+                            viol_b = (
+                                gci2(ma_e, rho_e, dead=None, dead_filler=db_e) > 0.0
+                            ).any(dim=0)
+                        a_rep = a_c.repeat_interleave(n_per_ax)
+                        r_rep = r_c.repeat_interleave(n_per_ax)
+                        b_rep = b_c.repeat_interleave(n_per_ax)
+                        s_reg = sample_class_region(mod, a_rep, generator=gen)
+                        if bool(s_reg.valid.any().item()):
+                            ma_r = crisp_membership(
+                                mod.depth(s_reg.points, a_rep, crisp=True)
+                            )
+                            rho_r = crisp_membership(
+                                mod.role_depth(
+                                    s_reg.points, pos_all[b_rep], r_rep, crisp=True
+                                )
+                            )
+                            db_r = dead_f[b_rep]
+                            v_r = (
+                                (gci2(ma_r, rho_r, dead=None, dead_filler=db_r) > 0.0)
+                                & s_reg.valid
+                            ).view(bsz, n_per_ax).any(dim=1)
+                            viol_b = viol_b | v_r
+                        reg_viol_axioms += int(viol_b.sum().item())
+                        reg_total_axioms += bsz
+
+                if "gci3" in td and len(td["gci3"]) > 0:
+                    data_g3 = td["gci3"][:].to(device=device, dtype=th.long)
+                    n_y = min(int(eval_elem_ids.numel()), 32)
+                    y_eval_ids = eval_elem_ids[:n_y]
+                    for s_i in range(0, data_g3.shape[0], ax_chunk):
+                        rows = data_g3[s_i : s_i + ax_chunk]
+                        bsz = int(rows.shape[0])
+                        r_c, b_c, c_c = rows[:, 0], rows[:, 1], rows[:, 2]
+                        cb, cc = cls_to_col[b_c], cls_to_col[c_c]
+                        if eval_elem_ids.numel() > 0 and n_y > 0:
+                            l_cnt = int(eval_elem_ids.numel())
+                            x_mat = eval_elem_ids.unsqueeze(0).expand(bsz, l_cnt)
+                            y_mat = y_eval_ids.unsqueeze(0).expand(bsz, n_y)
+                            _, r_dep_c = self._grid_role_membership(
+                                pos_all, x_mat, y_mat, r_c, need_crisp=True
+                            )
+                            assert r_dep_c is not None
+                            rho_xy = crisp_membership(r_dep_c).view(bsz, l_cnt, n_y)
+                            mb_y = elem_m_live[:n_y, cb].t().unsqueeze(1).expand(
+                                bsz, l_cnt, n_y
+                            )
+                            mc_x = elem_m_live[:, cc].t().unsqueeze(2).expand(
+                                bsz, l_cnt, n_y
+                            )
+                            dead_x = eval_dead_f.view(1, l_cnt, 1).expand(
+                                bsz, l_cnt, n_y
+                            )
+                            h_e = gci3(rho_xy, mb_y, mc_x, dead=dead_x)
+                            elem_viol_count += int((h_e > 0.0).sum().item())
+                            elem_total_count += int(h_e.numel())
+                        r_rep = r_c.repeat_interleave(n_per_ax)
+                        b_rep = b_c.repeat_interleave(n_per_ax)
+                        c_rep = c_c.repeat_interleave(n_per_ax)
+                        h_s, t_s = sample_role_region(mod, r_rep, generator=gen)
+                        if bool(h_s.valid.any().item()):
+                            rho_r = crisp_membership(
+                                mod.role_depth(
+                                    h_s.points, t_s.points, r_rep, crisp=True
+                                )
+                            )
+                            mb_r = crisp_membership(
+                                mod.depth(t_s.points, b_rep, crisp=True)
+                            )
+                            mc_r = crisp_membership(
+                                mod.depth(h_s.points, c_rep, crisp=True)
+                            )
+                            v_r = (
+                                (gci3(rho_r, mb_r, mc_r, dead=None) > 0.0) & h_s.valid
+                            ).view(bsz, n_per_ax).any(dim=1)
+                            reg_viol_axioms += int(v_r.sum().item())
+                        reg_total_axioms += bsz
+
+                if "gci3_bot" in td and len(td["gci3_bot"]) > 0:
+                    data_g3b = td["gci3_bot"][:].to(device=device, dtype=th.long)
+                    n_y = min(int(eval_elem_ids.numel()), 32)
+                    y_eval_ids = eval_elem_ids[:n_y]
+                    for s_i in range(0, data_g3b.shape[0], ax_chunk):
+                        rows = data_g3b[s_i : s_i + ax_chunk]
+                        bsz = int(rows.shape[0])
+                        r_c, b_c = rows[:, 0], rows[:, 1]
+                        cb = cls_to_col[b_c]
+                        if eval_elem_ids.numel() > 0 and n_y > 0:
+                            l_cnt = int(eval_elem_ids.numel())
+                            x_mat = eval_elem_ids.unsqueeze(0).expand(bsz, l_cnt)
+                            y_mat = y_eval_ids.unsqueeze(0).expand(bsz, n_y)
+                            _, r_dep_c = self._grid_role_membership(
+                                pos_all, x_mat, y_mat, r_c, need_crisp=True
+                            )
+                            assert r_dep_c is not None
+                            rho_xy = crisp_membership(r_dep_c).view(bsz, l_cnt, n_y)
+                            mb_y = elem_m_live[:n_y, cb].t().unsqueeze(1).expand(
+                                bsz, l_cnt, n_y
+                            )
+                            dead_x = eval_dead_f.view(1, l_cnt, 1).expand(
+                                bsz, l_cnt, n_y
+                            )
+                            h_e = gci3_bot(rho_xy, mb_y, dead=dead_x)
+                            elem_viol_count += int((h_e > 0.0).sum().item())
+                            elem_total_count += int(h_e.numel())
+                        r_rep = r_c.repeat_interleave(n_per_ax)
+                        b_rep = b_c.repeat_interleave(n_per_ax)
+                        h_s, t_s = sample_role_region(mod, r_rep, generator=gen)
+                        if bool(h_s.valid.any().item()):
+                            rho_r = crisp_membership(
+                                mod.role_depth(
+                                    h_s.points, t_s.points, r_rep, crisp=True
+                                )
+                            )
+                            mb_r = crisp_membership(
+                                mod.depth(t_s.points, b_rep, crisp=True)
+                            )
+                            v_r = (
+                                (gci3_bot(rho_r, mb_r, dead=None) > 0.0) & h_s.valid
+                            ).view(bsz, n_per_ax).any(dim=1)
+                            reg_viol_axioms += int(v_r.sum().item())
+                        reg_total_axioms += bsz
 
             # 8. Role inclusion: r <= s
+            n_per_role_ax = max(16, min(2000, n_eval // max(total_region_axioms, 1)))
             if "role_inclusion" in td and len(td["role_inclusion"]) > 0:
                 y_eval_ids = (
                     eval_elem_ids[:32]
@@ -1975,7 +2447,7 @@ class GroundedEL(EmbeddingELModel):
                             elem_total_count += int(h_e.numel())
                     reg_total_axioms += 1
                     h_s, t_s = sample_role_region(
-                        mod, r_id, generator=gen, n_samples=n_per_ax
+                        mod, r_id, generator=gen, n_samples=n_per_role_ax
                     )
                     if bool(h_s.valid.any().item()):
                         zx = h_s.points[h_s.valid]
@@ -2016,10 +2488,10 @@ class GroundedEL(EmbeddingELModel):
                                 elem_total_count += int(h_e.numel())
                     reg_total_axioms += 1
                     hx, hy = sample_role_region(
-                        mod, r_id, generator=gen, n_samples=n_per_ax
+                        mod, r_id, generator=gen, n_samples=n_per_role_ax
                     )
                     _, tz = sample_role_region(
-                        mod, s_id, generator=gen, n_samples=n_per_ax
+                        mod, s_id, generator=gen, n_samples=n_per_role_ax
                     )
                     v_c = hx.valid & tz.valid
                     if bool(v_c.any().item()):
@@ -2034,27 +2506,36 @@ class GroundedEL(EmbeddingELModel):
 
             # 10. ABox assertions
             if "class_assertion" in td and len(td["class_assertion"]) > 0:
-                for row in td["class_assertion"][:].detach().cpu().tolist():
-                    el_a = self.nb_classes + int(row[0])
-                    c_id = int(row[1])
-                    h_e = class_assertion(elem_m_all[el_a : el_a + 1, c_id])
+                ca_data = td["class_assertion"][:].to(device=device, dtype=th.long)
+                for s_i in range(0, ca_data.shape[0], 4096):
+                    rows = ca_data[s_i : s_i + 4096]
+                    el_a = self.nb_classes + rows[:, 0]
+                    c_id = rows[:, 1]
+                    m_ca = crisp_membership(
+                        mod.depth(pos_all[el_a], c_id, crisp=True)
+                    )
+                    h_e = class_assertion(m_ca)
                     elem_viol_count += int((h_e > 0.0).sum().item())
-                    elem_total_count += 1
+                    elem_total_count += int(h_e.numel())
 
             if (
                 "object_property_assertion" in td
                 and len(td["object_property_assertion"]) > 0
             ):
-                for row in td["object_property_assertion"][:].detach().cpu().tolist():
-                    el_a = self.nb_classes + int(row[0])
-                    r_id = int(row[1])
-                    el_b = self.nb_classes + int(row[2])
+                opa_data = td["object_property_assertion"][:].to(
+                    device=device, dtype=th.long
+                )
+                for s_i in range(0, opa_data.shape[0], 4096):
+                    rows = opa_data[s_i : s_i + 4096]
+                    el_a = self.nb_classes + rows[:, 0]
+                    r_id = rows[:, 1]
+                    el_b = self.nb_classes + rows[:, 2]
                     rho_ab = crisp_membership(
                         mod.role_depth(pos_all[el_a], pos_all[el_b], r_id, crisp=True)
                     )
                     h_e = role_assertion(rho_ab)
                     elem_viol_count += int((h_e > 0.0).sum().item())
-                    elem_total_count += 1
+                    elem_total_count += int(h_e.numel())
 
             elem_viol = (
                 float(elem_viol_count / elem_total_count)
@@ -2120,18 +2601,12 @@ class GroundedEL(EmbeddingELModel):
             if self.bot_id is not None:
                 dead_cls[self.bot_id] = True
 
-            self_inside = th.tensor(
-                [
-                    bool(
-                        (
-                            mod.depth(pos_all[c_id], c_id, crisp=True) > 0.0
-                        ).item()
-                    )
-                    and not bool(dead_cls[c_id].item())
-                    for c_id in range(self.nb_classes)
-                ],
-                dtype=th.bool,
-            )
+            self_inside = th.zeros((self.nb_classes,), dtype=th.bool)
+            for c_start in range(0, self.nb_classes, 8192):
+                c_end = min(c_start + 8192, self.nb_classes)
+                c_ids = th.arange(c_start, c_end, dtype=th.long, device=device)
+                dep_c = mod.depth(pos_all[c_ids], c_ids, crisp=True).cpu()
+                self_inside[c_start:c_end] = (dep_c > 0.0) & (~dead_cls[c_start:c_end])
 
             if not use_reasoner:
                 live_cls = ~dead_cls

@@ -1002,3 +1002,27 @@ def test_no_reasoner_or_canonical_model_in_grounded_ast() -> None:
             path,
             allow_evaluate_model=(path.name == "model.py"),
         )
+        if path.name == "model.py":
+            forbidden_reseed_keys = {
+                "gci0",
+                "gci1",
+                "gci2",
+                "gci3",
+                "gci0_bot",
+                "gci1_bot",
+                "gci3_bot",
+                "role_inclusion",
+                "role_chain",
+                "object_property_assertion",
+            }
+            for n in ast.walk(tree):
+                if isinstance(n, ast.FunctionDef) and n.name == "reseed_idle":
+                    for sub in ast.walk(n):
+                        if (
+                            isinstance(sub, ast.Constant)
+                            and isinstance(sub.value, str)
+                            and sub.value in forbidden_reseed_keys
+                        ):
+                            raise AssertionError(
+                                f"reseed_idle must not access axiom table {sub.value!r} ({path.name}:{sub.lineno})"
+                            )
