@@ -7,6 +7,7 @@ from .el.boxsquaredel.module import BoxSquaredELModule
 from .el.multiboxel.module import MultiBoxELModule
 from .el.prism.module import PrismModule
 from .el.canonical_mixture.module import CanonicalMixtureModule
+from .el.grounded.module import GroundedELModule
 from .el.transbox.module import TransBoxModule
 from .alc.module import ALCModule
 from .alc.falcon.module import FALCONModule
