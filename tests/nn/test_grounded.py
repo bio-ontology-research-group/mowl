@@ -918,12 +918,14 @@ def test_argument_validation() -> None:
 
 
 def test_no_reasoner_or_canonical_model_in_grounded_ast() -> None:
-    """No module under mowl/nn/el/grounded/ may import or call CanonicalModel, reasoners, or entails/joint_satisfiable."""
-    grounded_dir = (
-        Path(__file__).resolve().parents[2] / "mowl" / "nn" / "el" / "grounded"
-    )
-    py_files = sorted(grounded_dir.glob("*.py"))
-    assert len(py_files) >= 4
+    """No module under mowl/nn/el/grounded/ or mowl/models/grounded/ may import or call CanonicalModel, reasoners, or entails/joint_satisfiable (except evaluate_model in mowl/models/grounded/model.py)."""
+    repo_root = Path(__file__).resolve().parents[2]
+    nn_grounded_dir = repo_root / "mowl" / "nn" / "el" / "grounded"
+    models_grounded_dir = repo_root / "mowl" / "models" / "grounded"
+    nn_files = sorted(nn_grounded_dir.glob("*.py"))
+    model_files = sorted(models_grounded_dir.glob("*.py"))
+    assert len(nn_files) >= 4
+    assert len(model_files) >= 2
 
     forbidden_import_substrings = (
         "mowl.geometric",
@@ -941,15 +943,21 @@ def test_no_reasoner_or_canonical_model_in_grounded_ast() -> None:
         "ELReasoner",
         "MOWLReasoner",
         "ElkReasoner",
-        " ElkReasonerFactory",
+        "ElkReasonerFactory",
         "entails",
         "joint_satisfiable",
     }
 
-    for path in py_files:
-        source = path.read_text(encoding="utf-8")
-        tree = ast.parse(source, filename=str(path))
-        for node in ast.walk(tree):
+    def _check_subtree(root: ast.AST, path: Path, allow_evaluate_model: bool) -> None:
+        allowlisted_nodes: set[int] = set()
+        if allow_evaluate_model:
+            for n in ast.walk(root):
+                if isinstance(n, ast.FunctionDef) and n.name == "evaluate_model":
+                    for sub in ast.walk(n):
+                        allowlisted_nodes.add(id(sub))
+
+        for node in ast.walk(root):
+            in_eval = id(node) in allowlisted_nodes
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     for bad in forbidden_import_substrings:
@@ -958,6 +966,12 @@ def test_no_reasoner_or_canonical_model_in_grounded_ast() -> None:
                         )
             elif isinstance(node, ast.ImportFrom):
                 mod_name = node.module or ""
+                if in_eval and mod_name == "mowl.geometric.completion":
+                    for alias in node.names:
+                        assert alias.name == "CanonicalModel", (
+                            f"Only CanonicalModel may be imported in evaluate_model ({path.name}:{node.lineno})"
+                        )
+                    continue
                 for bad in forbidden_import_substrings:
                     assert bad not in mod_name, (
                         f"Forbidden from-import '{mod_name}' in {path.name}:{node.lineno}"
@@ -967,6 +981,8 @@ def test_no_reasoner_or_canonical_model_in_grounded_ast() -> None:
                         f"Forbidden imported symbol '{alias.name}' in {path.name}:{node.lineno}"
                     )
             elif isinstance(node, ast.Name):
+                if in_eval and node.id == "CanonicalModel":
+                    continue
                 assert node.id not in forbidden_identifiers, (
                     f"Forbidden identifier '{node.id}' in {path.name}:{node.lineno}"
                 )
@@ -974,3 +990,15 @@ def test_no_reasoner_or_canonical_model_in_grounded_ast() -> None:
                 assert node.attr not in forbidden_identifiers, (
                     f"Forbidden attribute/method '{node.attr}' in {path.name}:{node.lineno}"
                 )
+
+    for path in nn_files:
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        _check_subtree(tree, path, allow_evaluate_model=False)
+
+    for path in model_files:
+        tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
+        _check_subtree(
+            tree,
+            path,
+            allow_evaluate_model=(path.name == "model.py"),
+        )
