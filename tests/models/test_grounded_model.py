@@ -71,18 +71,26 @@ def test_t3_elements_init_zero_epochs_exact(
     assert history == []
 
     crisp = model.crisp_report(n_eval=2000)
-    assert set(crisp.keys()) == {"elem_viol", "region_viol"}
+    assert set(crisp.keys()) == {
+        "elem_viol",
+        "region_viol",
+        "worst_depth",
+        "n_axioms_violated_by_depth",
+    }
     assert crisp["elem_viol"] == 0.0
     assert crisp["region_viol"] == 0.0
+    assert all(v == 0 for v in crisp["n_axioms_violated_by_depth"].values())
 
     metrics = model.evaluate_model(use_reasoner=True, n_eval=2000)
     assert metrics["elem_viol"] == 0.0
     assert metrics["region_viol"] == 0.0
+    assert metrics["region_viol_tol1e-4"] == 0.0
     assert metrics["exist"] == 1.0
     assert metrics["dead_ok"] is True
     assert metrics["faithful_named_precision"] == 1.0
     assert metrics["faithful_named_recall"] == 1.0
     assert metrics["exact"] is True
+    assert metrics["exact_tol1e-4"] is True
 
     no_reasoner_metrics = model.evaluate_model(use_reasoner=False, n_eval=2000)
     assert no_reasoner_metrics["exact"] is True
@@ -744,6 +752,274 @@ def test_train_lr_schedule_cosine_linear_and_constant(
         model_const.train(epochs=2, lr_final=0.0)
     with pytest.raises(ValueError, match="lr_schedule"):
         model_const.train(epochs=2, lr_final=lr_final, lr_schedule="invalid")
+
+
+def _reference_tol0_crisp_rates(model: GroundedEL, n_eval: int = 2000) -> Dict[str, float]:
+    """Reference pre-Task-9 bit-for-bit implementation of crisp_report(n_eval) at tol=0."""
+    from mowl.nn.el.grounded.losses import gci0, gci0_bot, gci1, gci1_bot
+    from mowl.nn.el.grounded.sampling import sample_class_region, sample_pair_region
+
+    mod = model.module
+    td = model.training_datasets
+    device = model.device
+    gen = th.Generator(device="cpu").manual_seed(int(model.seed) + 9999)
+    with th.no_grad():
+        pos_all = mod.positions()
+        dead_c = mod.dead() > 0.5
+        if model.bot_id is not None:
+            dead_c[model.bot_id] = True
+        dead_f = dead_c.to(dtype=th.float32)
+        live_ids = th.nonzero(~dead_c, as_tuple=False).view(-1)
+        eval_elem_ids = live_ids
+        eval_pos = pos_all[eval_elem_ids]
+        eval_dead_f = dead_f[eval_elem_ids]
+
+        cls_parts: List[th.Tensor] = []
+        for k_ax, cols in (
+            ("gci0", (0, 1)),
+            ("gci0_bot", (0,)),
+            ("gci1", (0, 1, 2)),
+            ("gci1_bot", (0, 1)),
+        ):
+            if k_ax in td and len(td[k_ax]) > 0:
+                t_ax = td[k_ax][:].to(device=device, dtype=th.long)
+                for col_i in cols:
+                    cls_parts.append(t_ax[:, col_i])
+        mentioned_classes = th.unique(th.cat(cls_parts))
+        cls_to_col = th.full((model.nb_classes,), -1, dtype=th.long, device=device)
+        cls_to_col[mentioned_classes] = th.arange(
+            mentioned_classes.numel(), dtype=th.long, device=device
+        )
+        elem_m_live = model._eval_elem_memberships_chunked(
+            eval_pos, mentioned_classes, chunk_size=512
+        )
+
+        elem_viol_count = 0
+        elem_total_count = 0
+        total_region_axioms = sum(
+            len(td[k])
+            for k in ("gci0", "gci0_bot", "gci1", "gci1_bot")
+            if k in td and len(td[k]) > 0
+        )
+        n_per_ax = max(16, min(2000, n_eval // max(total_region_axioms, 1)))
+        reg_viol_axioms = 0
+        reg_total_axioms = 0
+
+        if "gci0" in td and len(td["gci0"]) > 0:
+            for row in td["gci0"][:].detach().cpu().tolist():
+                a_id, b_id = int(row[0]), int(row[1])
+                col_a = int(cls_to_col[a_id].item())
+                col_b = int(cls_to_col[b_id].item())
+                h_e = gci0(elem_m_live[:, col_a], elem_m_live[:, col_b], dead=eval_dead_f)
+                elem_viol_count += int((h_e > 0.0).sum().item())
+                elem_total_count += int(h_e.numel())
+                reg_total_axioms += 1
+                s_reg = sample_class_region(mod, a_id, generator=gen, n_samples=n_per_ax)
+                reg_a = mod.class_regions(a_id)
+                corners = model._box_corner_samples(reg_a.cen, reg_a.w, reg_a.active, gen)
+                pts_list = [eval_pos]
+                if bool(s_reg.valid.any().item()):
+                    pts_list.append(s_reg.points[s_reg.valid])
+                if corners.numel() > 0:
+                    pts_list.append(corners)
+                pts = th.cat(pts_list, dim=0)
+                da = mod.depth(pts, a_id, crisp=True)
+                db = mod.depth(pts, b_id, crisp=True)
+                if bool(((da > 0.0) & (db <= 0.0)).any().item()):
+                    reg_viol_axioms += 1
+
+        if "gci0_bot" in td and len(td["gci0_bot"]) > 0:
+            for row in td["gci0_bot"][:].detach().cpu().tolist():
+                a_id = int(row[0])
+                col_a = int(cls_to_col[a_id].item())
+                h_e = gci0_bot(elem_m_live[:, col_a], dead=eval_dead_f)
+                elem_viol_count += int((h_e > 0.0).sum().item())
+                elem_total_count += int(h_e.numel())
+                reg_total_axioms += 1
+                s_reg = sample_class_region(mod, a_id, generator=gen, n_samples=n_per_ax)
+                if bool(s_reg.valid.any().item()):
+                    reg_viol_axioms += 1
+
+        if "gci1" in td and len(td["gci1"]) > 0:
+            for row in td["gci1"][:].detach().cpu().tolist():
+                a_id, b_id, c_id = int(row[0]), int(row[1]), int(row[2])
+                col_a = int(cls_to_col[a_id].item())
+                col_b = int(cls_to_col[b_id].item())
+                col_c = int(cls_to_col[c_id].item())
+                h_e = gci1(
+                    elem_m_live[:, col_a],
+                    elem_m_live[:, col_b],
+                    elem_m_live[:, col_c],
+                    dead=eval_dead_f,
+                )
+                elem_viol_count += int((h_e > 0.0).sum().item())
+                elem_total_count += int(h_e.numel())
+                reg_total_axioms += 1
+                s_reg = sample_pair_region(mod, a_id, b_id, generator=gen, n_samples=n_per_ax)
+                pts_list = [eval_pos]
+                if bool(s_reg.valid.any().item()):
+                    pts_list.append(s_reg.points[s_reg.valid])
+                pts = th.cat(pts_list, dim=0)
+                da = mod.depth(pts, a_id, crisp=True)
+                db = mod.depth(pts, b_id, crisp=True)
+                dc = mod.depth(pts, c_id, crisp=True)
+                if bool(((da > 0.0) & (db > 0.0) & (dc <= 0.0)).any().item()):
+                    reg_viol_axioms += 1
+
+        if "gci1_bot" in td and len(td["gci1_bot"]) > 0:
+            for row in td["gci1_bot"][:].detach().cpu().tolist():
+                a_id, b_id = int(row[0]), int(row[1])
+                col_a = int(cls_to_col[a_id].item())
+                col_b = int(cls_to_col[b_id].item())
+                h_e = gci1_bot(elem_m_live[:, col_a], elem_m_live[:, col_b], dead=eval_dead_f)
+                elem_viol_count += int((h_e > 0.0).sum().item())
+                elem_total_count += int(h_e.numel())
+                reg_total_axioms += 1
+                s_inter = sample_pair_region(mod, a_id, b_id, generator=gen, n_samples=n_per_ax)
+                if bool(s_inter.valid.any().item()):
+                    reg_viol_axioms += 1
+                else:
+                    s_a = sample_class_region(mod, a_id, generator=gen, n_samples=n_per_ax)
+                    pts_list = [eval_pos]
+                    if bool(s_a.valid.any().item()):
+                        pts_list.append(s_a.points[s_a.valid])
+                    pts = th.cat(pts_list, dim=0)
+                    da = mod.depth(pts, a_id, crisp=True)
+                    db = mod.depth(pts, b_id, crisp=True)
+                    if bool(((da > 0.0) & (db > 0.0)).any().item()):
+                        reg_viol_axioms += 1
+
+        return {
+            "elem_viol": float(elem_viol_count) / float(max(elem_total_count, 1)),
+            "region_viol": float(reg_viol_axioms) / float(max(reg_total_axioms, 1)),
+        }
+
+
+def test_crisp_report_and_evaluate_model_tol_zero_unchanged_on_trained_t3(
+    t3_dataset: PathDataset,
+) -> None:
+    """On a trained-for-50-epochs T3, tol=0.0 reproduces pre-Task-9 numbers bit-for-bit and n_axioms_violated_by_depth is non-increasing."""
+    model = GroundedEL(
+        t3_dataset,
+        embed_dim=2,
+        n_components=4,
+        n_role_components=2,
+        epochs=50,
+        learning_rate=0.01,
+        reseed_every=50,
+        seed=0,
+        log_every=0,
+    )
+    model.train()
+
+    ref = _reference_tol0_crisp_rates(model, n_eval=2000)
+    crisp_default = model.crisp_report(n_eval=2000)
+    crisp_tol0 = model.crisp_report(n_eval=2000, tol=0.0)
+
+    assert crisp_default == crisp_tol0
+    assert crisp_tol0["elem_viol"] == ref["elem_viol"]
+    assert crisp_tol0["region_viol"] == ref["region_viol"]
+
+    counts = crisp_tol0["n_axioms_violated_by_depth"]
+    tol_levels = [0, 1e-5, 1e-4, 1e-3, 1e-2]
+    counts_seq = [counts[t] for t in tol_levels]
+    for i in range(len(counts_seq) - 1):
+        assert counts_seq[i] >= counts_seq[i + 1], (
+            f"Expected n_axioms_violated_by_depth to be non-increasing, got {counts_seq}"
+        )
+
+    ev_default = model.evaluate_model(use_reasoner=True, n_eval=2000)
+    ev_tol0 = model.evaluate_model(use_reasoner=True, n_eval=2000, tol=0.0)
+    assert ev_default == ev_tol0
+    assert ev_tol0["elem_viol"] == ref["elem_viol"]
+    assert ev_tol0["region_viol"] == ref["region_viol"]
+
+    crisp_1e4 = model.crisp_report(n_eval=2000, tol=1e-4)
+    assert ev_tol0["region_viol_tol1e-4"] == crisp_1e4["region_viol"]
+
+    ev_at_1e3 = model.evaluate_model(use_reasoner=True, n_eval=2000, tol=1e-3)
+    assert ev_at_1e3["region_viol_tol1e-4"] == ev_tol0["region_viol_tol1e-4"]
+    assert ev_at_1e3["exact_tol1e-4"] == ev_tol0["exact_tol1e-4"]
+
+    with pytest.raises(ValueError, match="tol"):
+        model.crisp_report(n_eval=100, tol=-1e-6)
+
+
+def test_crisp_report_hand_built_1e6_face_exceedance_and_depth_monotonicity(
+    t3_dataset: PathDataset,
+    t3_cm: CanonicalModel,
+) -> None:
+    """Hand-built config where A's box exceeds B's box by 1e-6 on one face is violated at tol=0 and satisfied at tol=1e-5."""
+    probe = GroundedEL(t3_dataset, embed_dim=2, n_components=4, epochs=0, seed=0)
+    labels = _least_model_labels_from_cm(probe, t3_cm)
+
+    model = GroundedEL(
+        t3_dataset,
+        embed_dim=2,
+        n_components=4,
+        n_role_components=2,
+        epochs=0,
+        init="elements",
+        init_labels=labels,
+        seed=0,
+    )
+    a_idx = model.class_index_dict[NS + "A"]
+    x1_idx = model.class_index_dict[NS + "X1"]
+    x2_idx = model.class_index_dict[NS + "X2"]
+
+    # Find A's active component and the matching component of X2 centered at element A
+    mod = model.module
+    with th.no_grad():
+        a_active_slots = th.nonzero(mod.class_active[a_idx], as_tuple=False).view(-1)
+        assert a_active_slots.numel() == 1
+        k_a = int(a_active_slots[0].item())
+        c_a = mod.class_centers[a_idx, k_a].clone()
+
+        # Shift A's box center along dim 0 by +1e-6 so its +x0 face exceeds X1's box by 1e-6.
+        # Also shift X2's matching component by +1e-6 so A <= X2 and X1 cap X2 <= A stay satisfied,
+        # leaving ONLY A <= X1 with a 1e-6 single-face exceedance.
+        mod.class_centers[a_idx, k_a, 0] = c_a[0] + 1e-6
+        for k_x2 in range(mod.n_components):
+            if bool(mod.class_active[x2_idx, k_x2].item()) and th.allclose(
+                mod.class_centers[x2_idx, k_x2], c_a, atol=1e-7
+            ):
+                mod.class_centers[x2_idx, k_x2, 0] = c_a[0] + 1e-6
+
+    crisp_tol0 = model.crisp_report(n_eval=2000, tol=0.0)
+    crisp_tol1e5 = model.crisp_report(n_eval=2000, tol=1e-5)
+
+    assert crisp_tol0["elem_viol"] == 0.0
+    assert crisp_tol0["region_viol"] > 0.0
+    assert crisp_tol1e5["region_viol"] == 0.0
+
+    # Exactly 1 axiom (A <= X1) is violated at tol=0, and 0 axioms at tol >= 1e-5
+    counts = crisp_tol0["n_axioms_violated_by_depth"]
+    assert counts[0] == 1
+    assert counts["0"] == 1
+    assert counts[1e-5] == 0
+    assert counts["1e-5"] == 0
+    assert counts[1e-4] == 0
+    assert counts[1e-3] == 0
+    assert counts[1e-2] == 0
+
+    tol_levels = [0, 1e-5, 1e-4, 1e-3, 1e-2]
+    for i in range(len(tol_levels) - 1):
+        assert counts[tol_levels[i]] >= counts[tol_levels[i + 1]]
+
+    # Check worst_depth on A <= X1 is around -1e-6 (specifically in [-1.5e-6, -5e-7])
+    a_x1_depth = crisp_tol0["worst_depth"]["gci0"]["A <= X1"]
+    assert -1.5e-6 <= a_x1_depth < 0.0
+    assert a_x1_depth >= -1e-5
+
+    ev_tol0 = model.evaluate_model(use_reasoner=True, n_eval=2000, tol=0.0)
+    ev_tol1e5 = model.evaluate_model(use_reasoner=True, n_eval=2000, tol=1e-5)
+    assert ev_tol0["exact"] is False
+    assert ev_tol0["exact_tol1e-4"] is True
+    assert ev_tol0["region_viol"] > 0.0
+    assert ev_tol0["region_viol_tol1e-4"] == 0.0
+    assert ev_tol1e5["exact"] is True
+    assert ev_tol1e5["region_viol"] == 0.0
+
 
 
 

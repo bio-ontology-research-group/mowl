@@ -84,8 +84,10 @@ from mowl.nn.el.grounded import (
 )
 from mowl.nn.el.grounded.module import (
     _DEAD_LOGIT,
+    _EMPTY_DEPTH_FLOOR,
     _INACTIVE_RAW_WIDTH,
     _LIVE_LOGIT,
+    _TOP_DEPTH_CEIL,
     _inv_softplus,
     _validate_int_ge,
     _validate_positive_float,
@@ -97,6 +99,68 @@ from mowl.owlapi.defaults import BOT as BOTTOM, TOP
 logger = logging.getLogger(__name__)
 
 __all__ = ["GroundedEL"]
+
+_TOL_DEPTH_LEVELS: Tuple[Tuple[str, float], ...] = (
+    ("0", 0.0),
+    ("1e-5", 1e-5),
+    ("1e-4", 1e-4),
+    ("1e-3", 1e-3),
+    ("1e-2", 1e-2),
+)
+
+
+class _ToleranceCountDict(dict):
+    """Dictionary of violated-axiom counts keyed by canonical tolerance string or numeric float."""
+
+    @staticmethod
+    def _normalize_key(key: object) -> object:
+        if isinstance(key, str):
+            if key in ("0", "1e-5", "1e-4", "1e-3", "1e-2"):
+                return key
+            try:
+                val = float(key)
+            except ValueError:
+                return key
+        elif not isinstance(key, bool) and isinstance(key, (int, float)):
+            val = float(key)
+        else:
+            return key
+        for k_str, tol_v in _TOL_DEPTH_LEVELS:
+            if abs(val - tol_v) <= 1e-12:
+                return k_str
+        return key
+
+    def __getitem__(self, key: object) -> Any:
+        return super().__getitem__(self._normalize_key(key))
+
+    def __contains__(self, key: object) -> bool:
+        return super().__contains__(self._normalize_key(key))
+
+    def get(self, key: object, default: Any = None) -> Any:
+        return super().get(self._normalize_key(key), default)
+
+
+def _short_iri_map(index_dict: Mapping[str, int]) -> Dict[int, str]:
+    """Build an index-to-short-name dictionary, falling back to full IRI on collisions."""
+    short_by_idx: Dict[int, str] = {}
+    full_by_idx: Dict[int, str] = {}
+    counts: Dict[str, int] = {}
+    for iri, idx in index_dict.items():
+        i = int(idx)
+        full_by_idx[i] = str(iri)
+        s = str(iri)
+        if "#" in s and s.rsplit("#", 1)[1]:
+            short = s.rsplit("#", 1)[1]
+        elif "/" in s and s.rsplit("/", 1)[1]:
+            short = s.rsplit("/", 1)[1]
+        else:
+            short = s
+        short_by_idx[i] = short
+        counts[short] = counts.get(short, 0) + 1
+    return {
+        i: (short_by_idx[i] if counts[short_by_idx[i]] == 1 else full_by_idx[i])
+        for i in full_by_idx
+    }
 
 
 class GroundedEL(EmbeddingELModel):
@@ -2144,13 +2208,13 @@ class GroundedEL(EmbeddingELModel):
         pts = c_act.unsqueeze(1) + w_act.unsqueeze(1) * u_bits
         return pts.reshape(-1, dim)
 
-    def _eval_elem_memberships_chunked(
+    def _eval_elem_depths_chunked(
         self,
         eval_pos: th.Tensor,
         mentioned_classes: th.Tensor,
         chunk_size: int = 512,
     ) -> th.Tensor:
-        """Compute crisp membership ``(L, M)`` only for ``eval_pos`` and ``mentioned_classes`` in chunks."""
+        """Compute signed crisp depth ``(L, M)`` only for ``eval_pos`` and ``mentioned_classes`` in chunks."""
         mod = self.module
         device = self.device
         n_eval_el = int(eval_pos.shape[0])
@@ -2168,25 +2232,55 @@ class GroundedEL(EmbeddingELModel):
                 - th.abs(eval_pos.unsqueeze(1).unsqueeze(2) - reg_sub.cen.unsqueeze(0)),
                 dim=-1,
             )  # (L, C_sub, K)
-            c_dep = c_dep.masked_fill(~reg_sub.active.unsqueeze(0), float("-inf"))
+            has_act = reg_sub.active.any(dim=-1, keepdim=True)  # (C_sub, 1)
+            fill_val = th.where(
+                has_act.unsqueeze(0),
+                th.full_like(c_dep, float("-inf")),
+                th.full_like(c_dep, _EMPTY_DEPTH_FLOOR),
+            )
+            c_dep = th.where(reg_sub.active.unsqueeze(0), c_dep, fill_val)
             max_dep = th.amax(c_dep, dim=-1)  # (L, C_sub)
             if self.top_id is not None:
                 max_dep = th.where(
                     (c_sub == self.top_id).unsqueeze(0),
-                    th.full_like(max_dep, 1.0),
+                    th.full_like(max_dep, _TOP_DEPTH_CEIL),
                     max_dep,
                 )
             if self.bot_id is not None:
                 max_dep = th.where(
                     (c_sub == self.bot_id).unsqueeze(0),
-                    th.full_like(max_dep, -1.0),
+                    th.full_like(max_dep, _EMPTY_DEPTH_FLOOR),
                     max_dep,
                 )
-            out[:, c_s:c_e] = crisp_membership(max_dep)
+            out[:, c_s:c_e] = max_dep
         return out
 
-    def crisp_report(self, n_eval: int = 10000) -> Dict[str, float]:
-        """Compute reasoner-free crisp violation metrics ``elem_viol`` and ``region_viol`` (§7).
+    def _eval_elem_memberships_chunked(
+        self,
+        eval_pos: th.Tensor,
+        mentioned_classes: th.Tensor,
+        chunk_size: int = 512,
+    ) -> th.Tensor:
+        """Compute crisp membership ``(L, M)`` only for ``eval_pos`` and ``mentioned_classes`` in chunks."""
+        return crisp_membership(
+            self._eval_elem_depths_chunked(
+                eval_pos, mentioned_classes, chunk_size=chunk_size
+            )
+        )
+
+    def crisp_report(
+        self,
+        n_eval: int = 10000,
+        tol: float = 0.0,
+    ) -> Dict[str, Any]:
+        """Compute reasoner-free crisp violation metrics, per-axiom worst depth, and depth-bucket violation counts (§7).
+
+        A sampled point :math:`z` is a counterexample for a region axiom at
+        tolerance ``tol >= 0`` only if its violating depth exceeds ``tol``:
+        ``depth_RHS(z) < -tol`` (``<= 0.0`` at ``tol == 0.0``) for containment
+        forms (``gci0``, ``gci1``, ``gci2``, ``gci3``, ``role_inclusion``,
+        ``role_chain``) and ``min(depth_A, depth_B) > tol`` (analogously for
+        ``gci0_bot`` and ``gci3_bot``) for disjointness/bottom forms.
 
         Guarantees:
         - Reasoner-free (R1): never imports or calls any reasoner or
@@ -2194,8 +2288,11 @@ class GroundedEL(EmbeddingELModel):
         - Never materialises a :math:`(|\\Delta| \\times |\\mathcal{C}|)` tensor;
           computes memberships only for the sampled evaluation elements and the
           classes mentioned by the evaluated axioms, in chunks.
-        - Returns ``{"elem_viol": float, "region_viol": float}`` with values in
-          ``[0.0, 1.0]``.
+        - ``tol=0.0`` reproduces exact strict-boundary ``elem_viol`` and
+          ``region_viol`` numbers bit-for-bit.
+        - Returns ``{"elem_viol": float, "region_viol": float, "worst_depth": dict, "n_axioms_violated_by_depth": dict}``
+          where ``n_axioms_violated_by_depth`` reports violated axiom counts at
+          ``tol`` in ``{0, 1e-5, 1e-4, 1e-3, 1e-2}`` and is non-increasing in ``tol``.
 
         Non-guarantees:
         - Does not compute reasoner-dependent metrics (``exist``, ``dead_ok``,
@@ -2205,18 +2302,73 @@ class GroundedEL(EmbeddingELModel):
         ----------
         n_eval : int, default 10000
             Total evaluation sample budget across axioms for ``region_viol``.
+        tol : float, default 0.0
+            Non-negative boundary tolerance :math:`\\ge 0` for region counterexamples.
 
         Returns
         -------
-        Dict[str, float]
-            ``{"elem_viol": ..., "region_viol": ...}``.
+        Dict[str, Any]
+            ``{"elem_viol": ..., "region_viol": ..., "worst_depth": ..., "n_axioms_violated_by_depth": ...}``.
         """
         _validate_int_ge("n_eval", n_eval, 1)
+        tol_f = _validate_nonneg_weight("tol", tol)
         mod = self.module
         device = self.device
         td = self.training_datasets
         gen = th.Generator(device="cpu")
         gen.manual_seed(self.seed + 9999)
+
+        cls_names = _short_iri_map(self.class_index_dict)
+        rel_names = _short_iri_map(self.object_property_index_dict)
+        worst_depth: Dict[str, Dict[str, float]] = {}
+        tol_counts: Dict[str, int] = {k_str: 0 for k_str, _ in _TOL_DEPTH_LEVELS}
+
+        def _record_containment_axiom(
+            ax_type: str,
+            ax_str: str,
+            has_lhs: bool,
+            min_rhs_dep: float,
+            viol_zero: bool,
+        ) -> bool:
+            bucket = worst_depth.setdefault(ax_type, {})
+            w_val = float(min_rhs_dep) if has_lhs else 0.0
+            if ax_str in bucket:
+                bucket[ax_str] = min(bucket[ax_str], w_val)
+            else:
+                bucket[ax_str] = w_val
+            for k_str, t_val in _TOL_DEPTH_LEVELS:
+                if t_val == 0.0:
+                    is_v = viol_zero
+                else:
+                    is_v = has_lhs and (w_val < -t_val)
+                if is_v:
+                    tol_counts[k_str] += 1
+            if tol_f == 0.0:
+                return viol_zero
+            return has_lhs and (w_val < -tol_f)
+
+        def _record_bot_axiom(
+            ax_type: str,
+            ax_str: str,
+            max_lhs_dep: float,
+            viol_zero: bool,
+        ) -> bool:
+            bucket = worst_depth.setdefault(ax_type, {})
+            w_val = float(max_lhs_dep)
+            if ax_str in bucket:
+                bucket[ax_str] = max(bucket[ax_str], w_val)
+            else:
+                bucket[ax_str] = w_val
+            for k_str, t_val in _TOL_DEPTH_LEVELS:
+                if t_val == 0.0:
+                    is_v = viol_zero
+                else:
+                    is_v = w_val > t_val
+                if is_v:
+                    tol_counts[k_str] += 1
+            if tol_f == 0.0:
+                return viol_zero
+            return w_val > tol_f
 
         with th.no_grad():
             pos_all = mod.positions()  # (nb_elements, d)
@@ -2265,10 +2417,11 @@ class GroundedEL(EmbeddingELModel):
                     mentioned_classes.numel(), dtype=th.long, device=device
                 )
 
-            # Compute crisp memberships ONLY for eval_elem_ids and mentioned_classes in chunks
-            elem_m_live = self._eval_elem_memberships_chunked(
+            # Compute signed depths and crisp memberships ONLY for eval_elem_ids and mentioned_classes in chunks
+            elem_dep_live = self._eval_elem_depths_chunked(
                 eval_pos, mentioned_classes, chunk_size=512
             )  # (L, M)
+            elem_m_live = crisp_membership(elem_dep_live)  # (L, M)
 
             elem_viol_count = 0
             elem_total_count = 0
@@ -2323,11 +2476,20 @@ class GroundedEL(EmbeddingELModel):
                         if corners.numel() > 0:
                             pts_list.append(corners)
                         pts = th.cat(pts_list, dim=0)
+                        has_lhs = False
+                        min_rhs = 0.0
+                        viol_0 = False
                         if pts.shape[0] > 0:
-                            ma = crisp_membership(mod.depth(pts, a_id, crisp=True))
-                            mb = crisp_membership(mod.depth(pts, b_id, crisp=True))
-                            if bool((gci0(ma, mb, dead=None) > 0.0).any().item()):
-                                reg_viol_axioms += 1
+                            da = mod.depth(pts, a_id, crisp=True)
+                            db = mod.depth(pts, b_id, crisp=True)
+                            mask = da > 0.0
+                            has_lhs = bool(mask.any().item())
+                            if has_lhs:
+                                min_rhs = float(db[mask].min().item())
+                                viol_0 = bool((db[mask] <= 0.0).any().item())
+                        ax_s = f"{cls_names.get(a_id, str(a_id))} <= {cls_names.get(b_id, str(b_id))}"
+                        if _record_containment_axiom("gci0", ax_s, has_lhs, min_rhs, viol_0):
+                            reg_viol_axioms += 1
 
                 # 2. GCI0_bot: A <= bot
                 if "gci0_bot" in td and len(td["gci0_bot"]) > 0:
@@ -2342,12 +2504,22 @@ class GroundedEL(EmbeddingELModel):
                         s_reg = sample_class_region(
                             mod, a_id, generator=gen, n_samples=n_per_ax
                         )
+                        pts_list = [eval_pos]
                         if bool(s_reg.valid.any().item()):
+                            pts_list.append(s_reg.points[s_reg.valid])
+                        pts = th.cat(pts_list, dim=0)
+                        if pts.shape[0] > 0:
+                            da = mod.depth(pts, a_id, crisp=True)
+                            max_lhs = float(da.max().item())
+                            viol_0 = bool(s_reg.valid.any().item()) or bool(
+                                (da > 0.0).any().item()
+                            )
+                        else:
+                            max_lhs = float(_EMPTY_DEPTH_FLOOR)
+                            viol_0 = bool(s_reg.valid.any().item())
+                        ax_s = f"{cls_names.get(a_id, str(a_id))} <= bot"
+                        if _record_bot_axiom("gci0_bot", ax_s, max_lhs, viol_0):
                             reg_viol_axioms += 1
-                        elif eval_pos.shape[0] > 0:
-                            ma = crisp_membership(mod.depth(eval_pos, a_id, crisp=True))
-                            if bool((gci0_bot(ma, dead=None) > 0.0).any().item()):
-                                reg_viol_axioms += 1
 
                 # 3. GCI1: A cap B <= C
                 if "gci1" in td and len(td["gci1"]) > 0:
@@ -2373,12 +2545,25 @@ class GroundedEL(EmbeddingELModel):
                         if bool(s_reg.valid.any().item()):
                             pts_list.append(s_reg.points[s_reg.valid])
                         pts = th.cat(pts_list, dim=0)
+                        has_lhs = False
+                        min_rhs = 0.0
+                        viol_0 = False
                         if pts.shape[0] > 0:
-                            ma = crisp_membership(mod.depth(pts, a_id, crisp=True))
-                            mb = crisp_membership(mod.depth(pts, b_id, crisp=True))
-                            mc = crisp_membership(mod.depth(pts, c_id, crisp=True))
-                            if bool((gci1(ma, mb, mc, dead=None) > 0.0).any().item()):
-                                reg_viol_axioms += 1
+                            da = mod.depth(pts, a_id, crisp=True)
+                            db = mod.depth(pts, b_id, crisp=True)
+                            dc = mod.depth(pts, c_id, crisp=True)
+                            mask = (da > 0.0) & (db > 0.0)
+                            has_lhs = bool(mask.any().item())
+                            if has_lhs:
+                                min_rhs = float(dc[mask].min().item())
+                                viol_0 = bool((dc[mask] <= 0.0).any().item())
+                        ax_s = (
+                            f"{cls_names.get(a_id, str(a_id))} cap "
+                            f"{cls_names.get(b_id, str(b_id))} <= "
+                            f"{cls_names.get(c_id, str(c_id))}"
+                        )
+                        if _record_containment_axiom("gci1", ax_s, has_lhs, min_rhs, viol_0):
+                            reg_viol_axioms += 1
 
                 # 4. GCI1_bot: A cap B <= bot
                 if "gci1_bot" in td and len(td["gci1_bot"]) > 0:
@@ -2399,7 +2584,7 @@ class GroundedEL(EmbeddingELModel):
                             mod, a_id, b_id, generator=gen, n_samples=n_per_ax
                         )
                         if bool(s_inter.valid.any().item()):
-                            reg_viol_axioms += 1
+                            pts_list = [eval_pos, s_inter.points[s_inter.valid]]
                         else:
                             s_a = sample_class_region(
                                 mod, a_id, generator=gen, n_samples=n_per_ax
@@ -2407,12 +2592,24 @@ class GroundedEL(EmbeddingELModel):
                             pts_list = [eval_pos]
                             if bool(s_a.valid.any().item()):
                                 pts_list.append(s_a.points[s_a.valid])
-                            pts = th.cat(pts_list, dim=0)
-                            if pts.shape[0] > 0:
-                                ma = crisp_membership(mod.depth(pts, a_id, crisp=True))
-                                mb = crisp_membership(mod.depth(pts, b_id, crisp=True))
-                                if bool((gci1_bot(ma, mb, dead=None) > 0.0).any().item()):
-                                    reg_viol_axioms += 1
+                        pts = th.cat(pts_list, dim=0)
+                        if pts.shape[0] > 0:
+                            da = mod.depth(pts, a_id, crisp=True)
+                            db = mod.depth(pts, b_id, crisp=True)
+                            ab_dep = th.minimum(da, db)
+                            max_lhs = float(ab_dep.max().item())
+                            viol_0 = bool(s_inter.valid.any().item()) or bool(
+                                (ab_dep > 0.0).any().item()
+                            )
+                        else:
+                            max_lhs = float(_EMPTY_DEPTH_FLOOR)
+                            viol_0 = bool(s_inter.valid.any().item())
+                        ax_s = (
+                            f"{cls_names.get(a_id, str(a_id))} cap "
+                            f"{cls_names.get(b_id, str(b_id))} <= bot"
+                        )
+                        if _record_bot_axiom("gci1_bot", ax_s, max_lhs, viol_0):
+                            reg_viol_axioms += 1
 
                 # 5. GCI2: A <= exists r.B
                 if "gci2" in td and len(td["gci2"]) > 0:
@@ -2447,18 +2644,28 @@ class GroundedEL(EmbeddingELModel):
                         if corners.numel() > 0:
                             pts_list.append(corners)
                         pts = th.cat(pts_list, dim=0)
+                        has_lhs = False
+                        min_rhs = 0.0
+                        viol_0 = False
                         if pts.shape[0] > 0:
-                            ma = crisp_membership(mod.depth(pts, a_id, crisp=True))
-                            rho_z = crisp_membership(
-                                mod.role_depth(pts, pb, r_id, crisp=True)
-                            )
-                            db_z = dead_f[b_id].expand_as(ma)
-                            if bool(
-                                (gci2(ma, rho_z, dead=None, dead_filler=db_z) > 0.0)
-                                .any()
-                                .item()
-                            ):
-                                reg_viol_axioms += 1
+                            da = mod.depth(pts, a_id, crisp=True)
+                            r_dep = mod.role_depth(pts, pb, r_id, crisp=True)
+                            mask = da > 0.0
+                            has_lhs = bool(mask.any().item())
+                            filler_dead = bool(dead_c[b_id].item())
+                            if has_lhs:
+                                rhs_dep = -da[mask] if filler_dead else r_dep[mask]
+                                min_rhs = float(rhs_dep.min().item())
+                                viol_0 = filler_dead or bool(
+                                    (rhs_dep <= 0.0).any().item()
+                                )
+                        ax_s = (
+                            f"{cls_names.get(a_id, str(a_id))} <= exists "
+                            f"{rel_names.get(r_id, str(r_id))}."
+                            f"{cls_names.get(b_id, str(b_id))}"
+                        )
+                        if _record_containment_axiom("gci2", ax_s, has_lhs, min_rhs, viol_0):
+                            reg_viol_axioms += 1
 
                 # 6. GCI3: exists r.B <= C
                 if "gci3" in td and len(td["gci3"]) > 0:
@@ -2489,18 +2696,27 @@ class GroundedEL(EmbeddingELModel):
                         h_s, t_s = sample_role_region(
                             mod, r_id, generator=gen, n_samples=n_per_ax
                         )
+                        has_lhs = False
+                        min_rhs = 0.0
+                        viol_0 = False
                         if bool(h_s.valid.any().item()):
                             zx = h_s.points[h_s.valid]
                             zy = t_s.points[t_s.valid]
-                            rho_z = crisp_membership(
-                                mod.role_depth(zx, zy, r_id, crisp=True)
-                            )
-                            mb_z = crisp_membership(mod.depth(zy, b_id, crisp=True))
-                            mc_z = crisp_membership(mod.depth(zx, c_id, crisp=True))
-                            if bool(
-                                (gci3(rho_z, mb_z, mc_z, dead=None) > 0.0).any().item()
-                            ):
-                                reg_viol_axioms += 1
+                            r_dep = mod.role_depth(zx, zy, r_id, crisp=True)
+                            db_z = mod.depth(zy, b_id, crisp=True)
+                            dc_z = mod.depth(zx, c_id, crisp=True)
+                            mask = (r_dep > 0.0) & (db_z > 0.0)
+                            has_lhs = bool(mask.any().item())
+                            if has_lhs:
+                                min_rhs = float(dc_z[mask].min().item())
+                                viol_0 = bool((dc_z[mask] <= 0.0).any().item())
+                        ax_s = (
+                            f"exists {rel_names.get(r_id, str(r_id))}."
+                            f"{cls_names.get(b_id, str(b_id))} <= "
+                            f"{cls_names.get(c_id, str(c_id))}"
+                        )
+                        if _record_containment_axiom("gci3", ax_s, has_lhs, min_rhs, viol_0):
+                            reg_viol_axioms += 1
 
                 # 7. GCI3_bot: exists r.B <= bot
                 if "gci3_bot" in td and len(td["gci3_bot"]) > 0:
@@ -2528,14 +2744,20 @@ class GroundedEL(EmbeddingELModel):
                         if bool(h_s.valid.any().item()):
                             zx = h_s.points[h_s.valid]
                             zy = t_s.points[t_s.valid]
-                            rho_z = crisp_membership(
-                                mod.role_depth(zx, zy, r_id, crisp=True)
-                            )
-                            mb_z = crisp_membership(mod.depth(zy, b_id, crisp=True))
-                            if bool(
-                                (gci3_bot(rho_z, mb_z, dead=None) > 0.0).any().item()
-                            ):
-                                reg_viol_axioms += 1
+                            r_dep = mod.role_depth(zx, zy, r_id, crisp=True)
+                            db_z = mod.depth(zy, b_id, crisp=True)
+                            rb_dep = th.minimum(r_dep, db_z)
+                            max_lhs = float(rb_dep.max().item())
+                            viol_0 = bool((rb_dep > 0.0).any().item())
+                        else:
+                            max_lhs = float(_EMPTY_DEPTH_FLOOR)
+                            viol_0 = False
+                        ax_s = (
+                            f"exists {rel_names.get(r_id, str(r_id))}."
+                            f"{cls_names.get(b_id, str(b_id))} <= bot"
+                        )
+                        if _record_bot_axiom("gci3_bot", ax_s, max_lhs, viol_0):
+                            reg_viol_axioms += 1
             else:
                 # Chunked vectorised evaluation for large ontologies (e.g. GO)
                 n_per_ax = max(1, min(16, n_eval // max(total_region_axioms, 1)))
@@ -2550,7 +2772,8 @@ class GroundedEL(EmbeddingELModel):
                         b_c = rows[:, 1]
                         ca = cls_to_col[a_c]
                         cb = cls_to_col[b_c]
-                        viol_b = th.zeros((bsz,), dtype=th.bool, device=device)
+                        min_dep = th.full((bsz,), float("inf"), dtype=th.float32, device=device)
+                        has_lhs = th.zeros((bsz,), dtype=th.bool, device=device)
                         if eval_elem_ids.numel() > 0:
                             ma_e = elem_m_live[:, ca]  # (L, B)
                             mb_e = elem_m_live[:, cb]  # (L, B)
@@ -2561,22 +2784,39 @@ class GroundedEL(EmbeddingELModel):
                             )
                             elem_viol_count += int((h_e > 0.0).sum().item())
                             elem_total_count += int(h_e.numel())
-                            viol_b = (gci0(ma_e, mb_e, dead=None) > 0.0).any(dim=0)
+                            da_e = elem_dep_live[:, ca]
+                            db_e = elem_dep_live[:, cb]
+                            mask_e = da_e > 0.0
+                            min_dep = th.where(
+                                mask_e, db_e, th.full_like(db_e, float("inf"))
+                            ).amin(dim=0)
+                            has_lhs = mask_e.any(dim=0)
                         a_rep = a_c.repeat_interleave(n_per_ax)
                         b_rep = b_c.repeat_interleave(n_per_ax)
                         s_reg = sample_class_region(mod, a_rep, generator=gen)
                         if bool(s_reg.valid.any().item()):
-                            ma_r = crisp_membership(
-                                mod.depth(s_reg.points, a_rep, crisp=True)
-                            )
-                            mb_r = crisp_membership(
-                                mod.depth(s_reg.points, b_rep, crisp=True)
-                            )
-                            v_r = (
-                                (gci0(ma_r, mb_r, dead=None) > 0.0) & s_reg.valid
-                            ).view(bsz, n_per_ax).any(dim=1)
-                            viol_b = viol_b | v_r
-                        reg_viol_axioms += int(viol_b.sum().item())
+                            da_r = mod.depth(s_reg.points, a_rep, crisp=True)
+                            db_r = mod.depth(s_reg.points, b_rep, crisp=True)
+                            mask_r = (da_r > 0.0) & s_reg.valid
+                            dep_r = th.where(
+                                mask_r, db_r, th.full_like(db_r, float("inf"))
+                            ).view(bsz, n_per_ax)
+                            min_dep = th.minimum(min_dep, dep_r.amin(dim=1))
+                            has_lhs = has_lhs | mask_r.view(bsz, n_per_ax).any(dim=1)
+                        viol_0_b = has_lhs & (min_dep <= 0.0)
+                        rows_list = rows.detach().cpu().tolist()
+                        has_list = has_lhs.detach().cpu().tolist()
+                        min_list = min_dep.detach().cpu().tolist()
+                        v0_list = viol_0_b.detach().cpu().tolist()
+                        for r_row, h_flag, m_val, v0_flag in zip(
+                            rows_list, has_list, min_list, v0_list
+                        ):
+                            a_i, b_i = int(r_row[0]), int(r_row[1])
+                            ax_s = f"{cls_names.get(a_i, str(a_i))} <= {cls_names.get(b_i, str(b_i))}"
+                            if _record_containment_axiom(
+                                "gci0", ax_s, bool(h_flag), float(m_val), bool(v0_flag)
+                            ):
+                                reg_viol_axioms += 1
                         reg_total_axioms += bsz
 
                 if "gci0_bot" in td and len(td["gci0_bot"]) > 0:
@@ -2586,7 +2826,9 @@ class GroundedEL(EmbeddingELModel):
                         bsz = int(rows.shape[0])
                         a_c = rows[:, 0]
                         ca = cls_to_col[a_c]
-                        viol_b = th.zeros((bsz,), dtype=th.bool, device=device)
+                        max_dep = th.full(
+                            (bsz,), _EMPTY_DEPTH_FLOOR, dtype=th.float32, device=device
+                        )
                         if eval_elem_ids.numel() > 0:
                             ma_e = elem_m_live[:, ca]
                             h_e = gci0_bot(
@@ -2595,11 +2837,31 @@ class GroundedEL(EmbeddingELModel):
                             )
                             elem_viol_count += int((h_e > 0.0).sum().item())
                             elem_total_count += int(h_e.numel())
-                            viol_b = (gci0_bot(ma_e, dead=None) > 0.0).any(dim=0)
+                            max_dep = elem_dep_live[:, ca].amax(dim=0)
                         a_rep = a_c.repeat_interleave(n_per_ax)
                         s_reg = sample_class_region(mod, a_rep, generator=gen)
-                        viol_b = viol_b | s_reg.valid.view(bsz, n_per_ax).any(dim=1)
-                        reg_viol_axioms += int(viol_b.sum().item())
+                        if bool(s_reg.valid.any().item()):
+                            da_r = mod.depth(s_reg.points, a_rep, crisp=True)
+                            da_r_m = th.where(
+                                s_reg.valid,
+                                da_r,
+                                th.full_like(da_r, _EMPTY_DEPTH_FLOOR),
+                            ).view(bsz, n_per_ax)
+                            max_dep = th.maximum(max_dep, da_r_m.amax(dim=1))
+                        viol_0_b = (max_dep > 0.0) | s_reg.valid.view(
+                            bsz, n_per_ax
+                        ).any(dim=1)
+                        for r_row, m_val, v0_flag in zip(
+                            rows.detach().cpu().tolist(),
+                            max_dep.detach().cpu().tolist(),
+                            viol_0_b.detach().cpu().tolist(),
+                        ):
+                            a_i = int(r_row[0])
+                            ax_s = f"{cls_names.get(a_i, str(a_i))} <= bot"
+                            if _record_bot_axiom(
+                                "gci0_bot", ax_s, float(m_val), bool(v0_flag)
+                            ):
+                                reg_viol_axioms += 1
                         reg_total_axioms += bsz
 
                 if "gci1" in td and len(td["gci1"]) > 0:
@@ -2609,7 +2871,8 @@ class GroundedEL(EmbeddingELModel):
                         bsz = int(rows.shape[0])
                         a_c, b_c, c_c = rows[:, 0], rows[:, 1], rows[:, 2]
                         ca, cb, cc = cls_to_col[a_c], cls_to_col[b_c], cls_to_col[c_c]
-                        viol_b = th.zeros((bsz,), dtype=th.bool, device=device)
+                        min_dep = th.full((bsz,), float("inf"), dtype=th.float32, device=device)
+                        has_lhs = th.zeros((bsz,), dtype=th.bool, device=device)
                         if eval_elem_ids.numel() > 0:
                             ma_e = elem_m_live[:, ca]
                             mb_e = elem_m_live[:, cb]
@@ -2622,28 +2885,45 @@ class GroundedEL(EmbeddingELModel):
                             )
                             elem_viol_count += int((h_e > 0.0).sum().item())
                             elem_total_count += int(h_e.numel())
-                            viol_b = (gci1(ma_e, mb_e, mc_e, dead=None) > 0.0).any(
-                                dim=0
-                            )
+                            da_e = elem_dep_live[:, ca]
+                            db_e = elem_dep_live[:, cb]
+                            dc_e = elem_dep_live[:, cc]
+                            mask_e = (da_e > 0.0) & (db_e > 0.0)
+                            min_dep = th.where(
+                                mask_e, dc_e, th.full_like(dc_e, float("inf"))
+                            ).amin(dim=0)
+                            has_lhs = mask_e.any(dim=0)
                         a_rep = a_c.repeat_interleave(n_per_ax)
                         b_rep = b_c.repeat_interleave(n_per_ax)
                         c_rep = c_c.repeat_interleave(n_per_ax)
                         s_reg = sample_pair_region(mod, a_rep, b_rep, generator=gen)
                         if bool(s_reg.valid.any().item()):
-                            ma_r = crisp_membership(
-                                mod.depth(s_reg.points, a_rep, crisp=True)
+                            da_r = mod.depth(s_reg.points, a_rep, crisp=True)
+                            db_r = mod.depth(s_reg.points, b_rep, crisp=True)
+                            dc_r = mod.depth(s_reg.points, c_rep, crisp=True)
+                            mask_r = (da_r > 0.0) & (db_r > 0.0) & s_reg.valid
+                            dep_r = th.where(
+                                mask_r, dc_r, th.full_like(dc_r, float("inf"))
+                            ).view(bsz, n_per_ax)
+                            min_dep = th.minimum(min_dep, dep_r.amin(dim=1))
+                            has_lhs = has_lhs | mask_r.view(bsz, n_per_ax).any(dim=1)
+                        viol_0_b = has_lhs & (min_dep <= 0.0)
+                        for r_row, h_flag, m_val, v0_flag in zip(
+                            rows.detach().cpu().tolist(),
+                            has_lhs.detach().cpu().tolist(),
+                            min_dep.detach().cpu().tolist(),
+                            viol_0_b.detach().cpu().tolist(),
+                        ):
+                            a_i, b_i, c_i = int(r_row[0]), int(r_row[1]), int(r_row[2])
+                            ax_s = (
+                                f"{cls_names.get(a_i, str(a_i))} cap "
+                                f"{cls_names.get(b_i, str(b_i))} <= "
+                                f"{cls_names.get(c_i, str(c_i))}"
                             )
-                            mb_r = crisp_membership(
-                                mod.depth(s_reg.points, b_rep, crisp=True)
-                            )
-                            mc_r = crisp_membership(
-                                mod.depth(s_reg.points, c_rep, crisp=True)
-                            )
-                            v_r = (
-                                (gci1(ma_r, mb_r, mc_r, dead=None) > 0.0) & s_reg.valid
-                            ).view(bsz, n_per_ax).any(dim=1)
-                            viol_b = viol_b | v_r
-                        reg_viol_axioms += int(viol_b.sum().item())
+                            if _record_containment_axiom(
+                                "gci1", ax_s, bool(h_flag), float(m_val), bool(v0_flag)
+                            ):
+                                reg_viol_axioms += 1
                         reg_total_axioms += bsz
 
                 if "gci1_bot" in td and len(td["gci1_bot"]) > 0:
@@ -2653,7 +2933,9 @@ class GroundedEL(EmbeddingELModel):
                         bsz = int(rows.shape[0])
                         a_c, b_c = rows[:, 0], rows[:, 1]
                         ca, cb = cls_to_col[a_c], cls_to_col[b_c]
-                        viol_b = th.zeros((bsz,), dtype=th.bool, device=device)
+                        max_dep = th.full(
+                            (bsz,), _EMPTY_DEPTH_FLOOR, dtype=th.float32, device=device
+                        )
                         if eval_elem_ids.numel() > 0:
                             ma_e = elem_m_live[:, ca]
                             mb_e = elem_m_live[:, cb]
@@ -2664,12 +2946,38 @@ class GroundedEL(EmbeddingELModel):
                             )
                             elem_viol_count += int((h_e > 0.0).sum().item())
                             elem_total_count += int(h_e.numel())
-                            viol_b = (gci1_bot(ma_e, mb_e, dead=None) > 0.0).any(dim=0)
+                            max_dep = th.minimum(
+                                elem_dep_live[:, ca], elem_dep_live[:, cb]
+                            ).amax(dim=0)
                         a_rep = a_c.repeat_interleave(n_per_ax)
                         b_rep = b_c.repeat_interleave(n_per_ax)
                         s_inter = sample_pair_region(mod, a_rep, b_rep, generator=gen)
-                        viol_b = viol_b | s_inter.valid.view(bsz, n_per_ax).any(dim=1)
-                        reg_viol_axioms += int(viol_b.sum().item())
+                        if bool(s_inter.valid.any().item()):
+                            da_r = mod.depth(s_inter.points, a_rep, crisp=True)
+                            db_r = mod.depth(s_inter.points, b_rep, crisp=True)
+                            ab_r = th.where(
+                                s_inter.valid,
+                                th.minimum(da_r, db_r),
+                                th.full_like(da_r, _EMPTY_DEPTH_FLOOR),
+                            ).view(bsz, n_per_ax)
+                            max_dep = th.maximum(max_dep, ab_r.amax(dim=1))
+                        viol_0_b = (max_dep > 0.0) | s_inter.valid.view(
+                            bsz, n_per_ax
+                        ).any(dim=1)
+                        for r_row, m_val, v0_flag in zip(
+                            rows.detach().cpu().tolist(),
+                            max_dep.detach().cpu().tolist(),
+                            viol_0_b.detach().cpu().tolist(),
+                        ):
+                            a_i, b_i = int(r_row[0]), int(r_row[1])
+                            ax_s = (
+                                f"{cls_names.get(a_i, str(a_i))} cap "
+                                f"{cls_names.get(b_i, str(b_i))} <= bot"
+                            )
+                            if _record_bot_axiom(
+                                "gci1_bot", ax_s, float(m_val), bool(v0_flag)
+                            ):
+                                reg_viol_axioms += 1
                         reg_total_axioms += bsz
 
                 if "gci2" in td and len(td["gci2"]) > 0:
@@ -2679,7 +2987,8 @@ class GroundedEL(EmbeddingELModel):
                         bsz = int(rows.shape[0])
                         a_c, r_c, b_c = rows[:, 0], rows[:, 1], rows[:, 2]
                         ca = cls_to_col[a_c]
-                        viol_b = th.zeros((bsz,), dtype=th.bool, device=device)
+                        min_dep = th.full((bsz,), float("inf"), dtype=th.float32, device=device)
+                        has_lhs = th.zeros((bsz,), dtype=th.bool, device=device)
                         if eval_elem_ids.numel() > 0:
                             l_cnt = int(eval_elem_ids.numel())
                             x_mat = eval_elem_ids.unsqueeze(0).expand(bsz, l_cnt)
@@ -2688,7 +2997,8 @@ class GroundedEL(EmbeddingELModel):
                                 pos_all, x_mat, y_mat, r_c, need_crisp=True
                             )
                             assert r_dep_c is not None
-                            rho_e = crisp_membership(r_dep_c).view(bsz, l_cnt).t()
+                            r_dep_e = r_dep_c.view(bsz, l_cnt).t()
+                            rho_e = crisp_membership(r_dep_e)
                             ma_e = elem_m_live[:, ca]  # (L, B)
                             db_e = dead_f[b_c].unsqueeze(0).expand_as(ma_e)
                             h_e = gci2(
@@ -2699,29 +3009,48 @@ class GroundedEL(EmbeddingELModel):
                             )
                             elem_viol_count += int((h_e > 0.0).sum().item())
                             elem_total_count += int(h_e.numel())
-                            viol_b = (
-                                gci2(ma_e, rho_e, dead=None, dead_filler=db_e) > 0.0
-                            ).any(dim=0)
+                            da_e = elem_dep_live[:, ca]
+                            rhs_e = th.where(
+                                dead_c[b_c].unsqueeze(0), -da_e, r_dep_e
+                            )
+                            mask_e = da_e > 0.0
+                            min_dep = th.where(
+                                mask_e, rhs_e, th.full_like(rhs_e, float("inf"))
+                            ).amin(dim=0)
+                            has_lhs = mask_e.any(dim=0)
                         a_rep = a_c.repeat_interleave(n_per_ax)
                         r_rep = r_c.repeat_interleave(n_per_ax)
                         b_rep = b_c.repeat_interleave(n_per_ax)
                         s_reg = sample_class_region(mod, a_rep, generator=gen)
                         if bool(s_reg.valid.any().item()):
-                            ma_r = crisp_membership(
-                                mod.depth(s_reg.points, a_rep, crisp=True)
+                            da_r = mod.depth(s_reg.points, a_rep, crisp=True)
+                            rd_r = mod.role_depth(
+                                s_reg.points, pos_all[b_rep], r_rep, crisp=True
                             )
-                            rho_r = crisp_membership(
-                                mod.role_depth(
-                                    s_reg.points, pos_all[b_rep], r_rep, crisp=True
-                                )
+                            rhs_r = th.where(dead_c[b_rep], -da_r, rd_r)
+                            mask_r = (da_r > 0.0) & s_reg.valid
+                            dep_r = th.where(
+                                mask_r, rhs_r, th.full_like(rhs_r, float("inf"))
+                            ).view(bsz, n_per_ax)
+                            min_dep = th.minimum(min_dep, dep_r.amin(dim=1))
+                            has_lhs = has_lhs | mask_r.view(bsz, n_per_ax).any(dim=1)
+                        viol_0_b = has_lhs & ((min_dep <= 0.0) | dead_c[b_c])
+                        for r_row, h_flag, m_val, v0_flag in zip(
+                            rows.detach().cpu().tolist(),
+                            has_lhs.detach().cpu().tolist(),
+                            min_dep.detach().cpu().tolist(),
+                            viol_0_b.detach().cpu().tolist(),
+                        ):
+                            a_i, r_i, b_i = int(r_row[0]), int(r_row[1]), int(r_row[2])
+                            ax_s = (
+                                f"{cls_names.get(a_i, str(a_i))} <= exists "
+                                f"{rel_names.get(r_i, str(r_i))}."
+                                f"{cls_names.get(b_i, str(b_i))}"
                             )
-                            db_r = dead_f[b_rep]
-                            v_r = (
-                                (gci2(ma_r, rho_r, dead=None, dead_filler=db_r) > 0.0)
-                                & s_reg.valid
-                            ).view(bsz, n_per_ax).any(dim=1)
-                            viol_b = viol_b | v_r
-                        reg_viol_axioms += int(viol_b.sum().item())
+                            if _record_containment_axiom(
+                                "gci2", ax_s, bool(h_flag), float(m_val), bool(v0_flag)
+                            ):
+                                reg_viol_axioms += 1
                         reg_total_axioms += bsz
 
                 if "gci3" in td and len(td["gci3"]) > 0:
@@ -2758,22 +3087,37 @@ class GroundedEL(EmbeddingELModel):
                         b_rep = b_c.repeat_interleave(n_per_ax)
                         c_rep = c_c.repeat_interleave(n_per_ax)
                         h_s, t_s = sample_role_region(mod, r_rep, generator=gen)
+                        min_dep = th.full((bsz,), float("inf"), dtype=th.float32, device=device)
+                        has_lhs = th.zeros((bsz,), dtype=th.bool, device=device)
                         if bool(h_s.valid.any().item()):
-                            rho_r = crisp_membership(
-                                mod.role_depth(
-                                    h_s.points, t_s.points, r_rep, crisp=True
-                                )
+                            rd_r = mod.role_depth(
+                                h_s.points, t_s.points, r_rep, crisp=True
                             )
-                            mb_r = crisp_membership(
-                                mod.depth(t_s.points, b_rep, crisp=True)
+                            db_r = mod.depth(t_s.points, b_rep, crisp=True)
+                            dc_r = mod.depth(h_s.points, c_rep, crisp=True)
+                            mask_r = (rd_r > 0.0) & (db_r > 0.0) & h_s.valid
+                            dep_r = th.where(
+                                mask_r, dc_r, th.full_like(dc_r, float("inf"))
+                            ).view(bsz, n_per_ax)
+                            min_dep = dep_r.amin(dim=1)
+                            has_lhs = mask_r.view(bsz, n_per_ax).any(dim=1)
+                        viol_0_b = has_lhs & (min_dep <= 0.0)
+                        for r_row, h_flag, m_val, v0_flag in zip(
+                            rows.detach().cpu().tolist(),
+                            has_lhs.detach().cpu().tolist(),
+                            min_dep.detach().cpu().tolist(),
+                            viol_0_b.detach().cpu().tolist(),
+                        ):
+                            r_i, b_i, c_i = int(r_row[0]), int(r_row[1]), int(r_row[2])
+                            ax_s = (
+                                f"exists {rel_names.get(r_i, str(r_i))}."
+                                f"{cls_names.get(b_i, str(b_i))} <= "
+                                f"{cls_names.get(c_i, str(c_i))}"
                             )
-                            mc_r = crisp_membership(
-                                mod.depth(h_s.points, c_rep, crisp=True)
-                            )
-                            v_r = (
-                                (gci3(rho_r, mb_r, mc_r, dead=None) > 0.0) & h_s.valid
-                            ).view(bsz, n_per_ax).any(dim=1)
-                            reg_viol_axioms += int(v_r.sum().item())
+                            if _record_containment_axiom(
+                                "gci3", ax_s, bool(h_flag), float(m_val), bool(v0_flag)
+                            ):
+                                reg_viol_axioms += 1
                         reg_total_axioms += bsz
 
                 if "gci3_bot" in td and len(td["gci3_bot"]) > 0:
@@ -2806,19 +3150,35 @@ class GroundedEL(EmbeddingELModel):
                         r_rep = r_c.repeat_interleave(n_per_ax)
                         b_rep = b_c.repeat_interleave(n_per_ax)
                         h_s, t_s = sample_role_region(mod, r_rep, generator=gen)
+                        max_dep = th.full(
+                            (bsz,), _EMPTY_DEPTH_FLOOR, dtype=th.float32, device=device
+                        )
                         if bool(h_s.valid.any().item()):
-                            rho_r = crisp_membership(
-                                mod.role_depth(
-                                    h_s.points, t_s.points, r_rep, crisp=True
-                                )
+                            rd_r = mod.role_depth(
+                                h_s.points, t_s.points, r_rep, crisp=True
                             )
-                            mb_r = crisp_membership(
-                                mod.depth(t_s.points, b_rep, crisp=True)
+                            db_r = mod.depth(t_s.points, b_rep, crisp=True)
+                            rb_r = th.where(
+                                h_s.valid,
+                                th.minimum(rd_r, db_r),
+                                th.full_like(rd_r, _EMPTY_DEPTH_FLOOR),
+                            ).view(bsz, n_per_ax)
+                            max_dep = rb_r.amax(dim=1)
+                        viol_0_b = max_dep > 0.0
+                        for r_row, m_val, v0_flag in zip(
+                            rows.detach().cpu().tolist(),
+                            max_dep.detach().cpu().tolist(),
+                            viol_0_b.detach().cpu().tolist(),
+                        ):
+                            r_i, b_i = int(r_row[0]), int(r_row[1])
+                            ax_s = (
+                                f"exists {rel_names.get(r_i, str(r_i))}."
+                                f"{cls_names.get(b_i, str(b_i))} <= bot"
                             )
-                            v_r = (
-                                (gci3_bot(rho_r, mb_r, dead=None) > 0.0) & h_s.valid
-                            ).view(bsz, n_per_ax).any(dim=1)
-                            reg_viol_axioms += int(v_r.sum().item())
+                            if _record_bot_axiom(
+                                "gci3_bot", ax_s, float(m_val), bool(v0_flag)
+                            ):
+                                reg_viol_axioms += 1
                         reg_total_axioms += bsz
 
             # 8. Role inclusion: r <= s
@@ -2846,13 +3206,22 @@ class GroundedEL(EmbeddingELModel):
                     h_s, t_s = sample_role_region(
                         mod, r_id, generator=gen, n_samples=n_per_role_ax
                     )
+                    has_lhs = False
+                    min_rhs = 0.0
+                    viol_0 = False
                     if bool(h_s.valid.any().item()):
                         zx = h_s.points[h_s.valid]
                         zy = t_s.points[t_s.valid]
-                        rr = crisp_membership(mod.role_depth(zx, zy, r_id, crisp=True))
-                        rs = crisp_membership(mod.role_depth(zx, zy, s_id, crisp=True))
-                        if bool((role_inclusion(rr, rs) > 0.0).any().item()):
-                            reg_viol_axioms += 1
+                        dep_r = mod.role_depth(zx, zy, r_id, crisp=True)
+                        dep_s = mod.role_depth(zx, zy, s_id, crisp=True)
+                        mask = dep_r > 0.0
+                        has_lhs = bool(mask.any().item())
+                        if has_lhs:
+                            min_rhs = float(dep_s[mask].min().item())
+                            viol_0 = bool((dep_s[mask] <= 0.0).any().item())
+                    ax_s = f"{rel_names.get(r_id, str(r_id))} <= {rel_names.get(s_id, str(s_id))}"
+                    if _record_containment_axiom("role_inclusion", ax_s, has_lhs, min_rhs, viol_0):
+                        reg_viol_axioms += 1
 
             # 9. Role chain: r o s <= t
             if "role_chain" in td and len(td["role_chain"]) > 0:
@@ -2891,15 +3260,28 @@ class GroundedEL(EmbeddingELModel):
                         mod, s_id, generator=gen, n_samples=n_per_role_ax
                     )
                     v_c = hx.valid & tz.valid
+                    has_lhs = False
+                    min_rhs = 0.0
+                    viol_0 = False
                     if bool(v_c.any().item()):
                         zx = hx.points[v_c]
                         zy = hy.points[v_c]
                         zz = tz.points[v_c]
-                        rr = crisp_membership(mod.role_depth(zx, zy, r_id, crisp=True))
-                        rs = crisp_membership(mod.role_depth(zy, zz, s_id, crisp=True))
-                        rt = crisp_membership(mod.role_depth(zx, zz, t_id, crisp=True))
-                        if bool((role_chain(rr, rs, rt) > 0.0).any().item()):
-                            reg_viol_axioms += 1
+                        dep_r = mod.role_depth(zx, zy, r_id, crisp=True)
+                        dep_s = mod.role_depth(zy, zz, s_id, crisp=True)
+                        dep_t = mod.role_depth(zx, zz, t_id, crisp=True)
+                        mask = (dep_r > 0.0) & (dep_s > 0.0)
+                        has_lhs = bool(mask.any().item())
+                        if has_lhs:
+                            min_rhs = float(dep_t[mask].min().item())
+                            viol_0 = bool((dep_t[mask] <= 0.0).any().item())
+                    ax_s = (
+                        f"{rel_names.get(r_id, str(r_id))} o "
+                        f"{rel_names.get(s_id, str(s_id))} <= "
+                        f"{rel_names.get(t_id, str(t_id))}"
+                    )
+                    if _record_containment_axiom("role_chain", ax_s, has_lhs, min_rhs, viol_0):
+                        reg_viol_axioms += 1
 
             # 10. ABox assertions
             if "class_assertion" in td and len(td["class_assertion"]) > 0:
@@ -2947,12 +3329,15 @@ class GroundedEL(EmbeddingELModel):
             return {
                 "elem_viol": elem_viol,
                 "region_viol": region_viol,
+                "worst_depth": worst_depth,
+                "n_axioms_violated_by_depth": _ToleranceCountDict(tol_counts),
             }
 
     def evaluate_model(
         self,
         use_reasoner: bool = True,
         n_eval: int = 10000,
+        tol: float = 0.0,
     ) -> Dict[str, Any]:
         """Compute §7 evaluation metrics dictionary.
 
@@ -2960,11 +3345,14 @@ class GroundedEL(EmbeddingELModel):
         this method ONLY when ``use_reasoner=True``.
 
         Guarantees:
-        - Returns a dict with keys ``"elem_viol"``, ``"region_viol"``, ``"exist"``,
-          ``"dead_ok"``, ``"faithful_named_precision"``, ``"faithful_named_recall"``,
-          ``"faithful_named"``, and ``"exact"``.
+        - Returns a dict with keys ``"elem_viol"``, ``"region_viol"``,
+          ``"region_viol_tol1e-4"``, ``"exist"``, ``"dead_ok"``,
+          ``"faithful_named_precision"``, ``"faithful_named_recall"``,
+          ``"faithful_named"``, ``"exact"``, and ``"exact_tol1e-4"``.
         - ``exact`` is ``True`` if and only if ``elem_viol == 0.0``,
           ``region_viol == 0.0``, ``exist == 1.0``, and ``dead_ok is True``.
+        - ``region_viol_tol1e-4`` and ``exact_tol1e-4`` are always computed at
+          tolerance ``1e-4``, independent of ``tol``.
 
         Non-guarantees:
         - When ``use_reasoner=False``, ``exist`` is evaluated over live classes
@@ -2977,15 +3365,38 @@ class GroundedEL(EmbeddingELModel):
             :class:`~mowl.geometric.completion.CanonicalModel`.
         n_eval : int, default 10000
             Sample budget for ``region_viol`` and region inclusion checks.
+        tol : float, default 0.0
+            Non-negative boundary tolerance :math:`\\ge 0` passed to :meth:`crisp_report`.
 
         Returns
         -------
         Dict[str, Any]
             §7 evaluation metrics dictionary.
         """
-        base = self.crisp_report(n_eval=n_eval)
+        base = self.crisp_report(n_eval=n_eval, tol=tol)
         elem_viol = base["elem_viol"]
         region_viol = base["region_viol"]
+        td = self.training_datasets
+        total_region_axioms = sum(
+            len(td[k])
+            for k in (
+                "gci0",
+                "gci0_bot",
+                "gci1",
+                "gci1_bot",
+                "gci2",
+                "gci3",
+                "gci3_bot",
+                "role_inclusion",
+                "role_chain",
+            )
+            if k in td and len(td[k]) > 0
+        )
+        region_viol_tol1e4 = (
+            float(base["n_axioms_violated_by_depth"]["1e-4"] / total_region_axioms)
+            if total_region_axioms > 0
+            else 0.0
+        )
 
         mod = self.module
         device = self.device
@@ -3019,15 +3430,23 @@ class GroundedEL(EmbeddingELModel):
                     and exist_val == 1.0
                     and dead_ok
                 )
+                exact_tol1e4 = bool(
+                    elem_viol == 0.0
+                    and region_viol_tol1e4 == 0.0
+                    and exist_val == 1.0
+                    and dead_ok
+                )
                 return {
                     "elem_viol": elem_viol,
                     "region_viol": region_viol,
+                    "region_viol_tol1e-4": region_viol_tol1e4,
                     "exist": exist_val,
                     "dead_ok": dead_ok,
                     "faithful_named_precision": None,
                     "faithful_named_recall": None,
                     "faithful_named": (None, None),
                     "exact": exact,
+                    "exact_tol1e-4": exact_tol1e4,
                 }
 
             from mowl.geometric.completion import CanonicalModel
@@ -3136,13 +3555,21 @@ class GroundedEL(EmbeddingELModel):
                 and exist_val == 1.0
                 and dead_ok
             )
+            exact_tol1e4 = bool(
+                elem_viol == 0.0
+                and region_viol_tol1e4 == 0.0
+                and exist_val == 1.0
+                and dead_ok
+            )
             return {
                 "elem_viol": elem_viol,
                 "region_viol": region_viol,
+                "region_viol_tol1e-4": region_viol_tol1e4,
                 "exist": exist_val,
                 "dead_ok": dead_ok,
                 "faithful_named_precision": precision,
                 "faithful_named_recall": recall,
                 "faithful_named": (precision, recall),
                 "exact": exact,
+                "exact_tol1e-4": exact_tol1e4,
             }
