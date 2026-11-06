@@ -76,9 +76,13 @@ def test_t3_elements_init_zero_epochs_exact(
         "region_viol",
         "worst_depth",
         "n_axioms_violated_by_depth",
+        "n_empty_classes",
+        "n_dead_elements",
     }
     assert crisp["elem_viol"] == 0.0
     assert crisp["region_viol"] == 0.0
+    assert crisp["n_empty_classes"] == 0
+    assert crisp["n_dead_elements"] == 0
     assert all(v == 0 for v in crisp["n_axioms_violated_by_depth"].values())
 
     metrics = model.evaluate_model(use_reasoner=True, n_eval=2000)
@@ -87,6 +91,9 @@ def test_t3_elements_init_zero_epochs_exact(
     assert metrics["region_viol_tol1e-4"] == 0.0
     assert metrics["exist"] == 1.0
     assert metrics["dead_ok"] is True
+    assert metrics["n_empty_classes"] == 0
+    assert metrics["n_dead_elements"] == 0
+    assert metrics["n_false_dead"] == 0
     assert metrics["faithful_named_precision"] == 1.0
     assert metrics["faithful_named_recall"] == 1.0
     assert metrics["exact"] is True
@@ -94,6 +101,9 @@ def test_t3_elements_init_zero_epochs_exact(
 
     no_reasoner_metrics = model.evaluate_model(use_reasoner=False, n_eval=2000)
     assert no_reasoner_metrics["exact"] is True
+    assert no_reasoner_metrics["n_empty_classes"] == 0
+    assert no_reasoner_metrics["n_dead_elements"] == 0
+    assert no_reasoner_metrics["n_false_dead"] is None
     assert no_reasoner_metrics["faithful_named_precision"] is None
     assert no_reasoner_metrics["faithful_named_recall"] is None
 
@@ -1019,6 +1029,591 @@ def test_crisp_report_hand_built_1e6_face_exceedance_and_depth_monotonicity(
     assert ev_tol0["region_viol_tol1e-4"] == 0.0
     assert ev_tol1e5["exact"] is True
     assert ev_tol1e5["region_viol"] == 0.0
+
+
+def test_t3_k1_300_epochs_dead_from_bot_only_no_dead_elements(
+    t3_dataset: PathDataset,
+) -> None:
+    """Task 10 (i): on T3 trained 300 epochs at K=1 with dead_from_bot_only=True, no element has delta > 0.5 across 3 seeds."""
+    with pytest.raises(ValueError, match="dead_from_bot_only"):
+        GroundedEL(t3_dataset, embed_dim=2, dead_from_bot_only="invalid")  # type: ignore[arg-type]
+
+    for seed in (0, 1, 2):
+        model = GroundedEL(
+            t3_dataset,
+            embed_dim=2,
+            n_components=1,
+            n_role_components=1,
+            epochs=300,
+            learning_rate=0.01,
+            reseed_every=100,
+            dead_from_bot_only=True,
+            seed=seed,
+            log_every=0,
+        )
+        model.train()
+        dead_scores = model.module.dead().detach()
+        for el_idx in range(model.nb_elements):
+            if el_idx == model.bot_id:
+                continue
+            assert float(dead_scores[el_idx].item()) <= 0.5, (
+                f"seed={seed}: element {el_idx} has delta={dead_scores[el_idx].item():.4f} > 0.5"
+            )
+        ev = model.evaluate_model(use_reasoner=True, n_eval=1000)
+        assert ev["n_dead_elements"] == 0
+        assert ev["n_false_dead"] == 0
+        assert ev["n_empty_classes"] == 0
+        assert ev["dead_ok"] is True
+
+
+def test_unsat_mix_300_epochs_dead_from_bot_only_three_seeds() -> None:
+    """Task 10 (ii): unsat_mix gets delta_Q > 0.5 within 300 epochs with dead_from_bot_only=True across 3 seeds."""
+    base_tmp = os.environ.get("TMPDIR") or os.path.expanduser("~/tmp")
+    os.makedirs(base_tmp, exist_ok=True)
+
+    with tempfile.TemporaryDirectory(dir=base_tmp, prefix="mowl_unsat_mix_t10_") as workdir:
+        ds = _build_unsat_mix_dataset(workdir)
+        for seed in (0, 1, 2):
+            model = GroundedEL(
+                ds,
+                embed_dim=2,
+                n_components=2,
+                n_role_components=2,
+                epochs=300,
+                learning_rate=0.01,
+                reseed_every=100,
+                dead_from_bot_only=True,
+                seed=seed,
+                log_every=0,
+            )
+            model.train()
+            q_idx = model.class_index_dict[NS + "Q"]
+            dead_scores = model.module.dead().detach()
+            assert float(dead_scores[q_idx].item()) > 0.5, (
+                f"seed={seed}: expected delta_Q > 0.5, got {dead_scores[q_idx].item():.4f}"
+            )
+            ev = model.evaluate_model(use_reasoner=True, n_eval=1000)
+            assert ev["n_false_dead"] == 0
+            assert ev["dead_ok"] is True
+
+
+def test_chain_a_sub_b_sub_bot_300_epochs_kills_x_a() -> None:
+    """Task 10 (iii): chain {A <= B, B <= bot} gives delta_{x_A} > 0.5 within 300 epochs under dead_from_bot_only=True."""
+    base_tmp = os.environ.get("TMPDIR") or os.path.expanduser("~/tmp")
+    os.makedirs(base_tmp, exist_ok=True)
+
+    with tempfile.TemporaryDirectory(dir=base_tmp, prefix="mowl_chain_bot_t10_") as workdir:
+        owl_path = os.path.join(workdir, "chain_bot.owl")
+        adapter = OWLAPIAdapter()
+        mgr = adapter.owl_manager
+        df = adapter.data_factory
+        ont = adapter.create_ontology("http://mowl.borg/geo/chain_bot")
+
+        a_cls = adapter.create_class(NS + "A")
+        b_cls = adapter.create_class(NS + "B")
+        c_cls = adapter.create_class(NS + "C")
+        bot_cls = adapter.create_class(BOTTOM)
+        for c_obj in (a_cls, b_cls, c_cls):
+            mgr.addAxiom(ont, df.getOWLDeclarationAxiom(c_obj))
+        mgr.addAxiom(ont, adapter.create_subclass_of(a_cls, b_cls))
+        mgr.addAxiom(ont, adapter.create_subclass_of(b_cls, bot_cls))
+
+        mgr.saveOntology(ont, IRI.create(File(owl_path).toURI()))
+        ds = PathDataset(owl_path)
+
+        model = GroundedEL(
+            ds,
+            embed_dim=2,
+            n_components=1,
+            n_role_components=1,
+            epochs=300,
+            learning_rate=0.01,
+            reseed_every=100,
+            dead_from_bot_only=True,
+            seed=0,
+            log_every=0,
+        )
+        model.train()
+        a_idx = model.class_index_dict[NS + "A"]
+        b_idx = model.class_index_dict[NS + "B"]
+        c_idx = model.class_index_dict[NS + "C"]
+        dead_scores = model.module.dead().detach()
+        assert float(dead_scores[a_idx].item()) > 0.5, (
+            f"Expected delta_A > 0.5, got {dead_scores[a_idx].item():.4f}"
+        )
+        assert float(dead_scores[b_idx].item()) > 0.5, (
+            f"Expected delta_B > 0.5, got {dead_scores[b_idx].item():.4f}"
+        )
+        assert float(dead_scores[c_idx].item()) <= 0.5, (
+            f"Expected satisfiable C to remain live, got {dead_scores[c_idx].item():.4f}"
+        )
+
+
+def test_dead_from_bot_only_false_reproduces_legacy_loss_bit_for_bit() -> None:
+    """Task 10 (iv): dead_from_bot_only=False reproduces the pre-Task-10 loss value on a fixed batch bit-for-bit."""
+    from mowl.nn.el.grounded.losses import (
+        fact,
+        gci0,
+        gci0_bot,
+        gci0_bot_region,
+        gci0_region,
+        gci1,
+        gci1_bot,
+        gci1_bot_region,
+        gci1_region,
+        gci2,
+        gci2_dead,
+        gci2_region,
+        gci3,
+        gci3_bot,
+        gci3_bot_region,
+        gci3_region,
+        minimality,
+    )
+    from mowl.nn.el.grounded.sampling import (
+        sample_class_region,
+        sample_elements,
+        sample_pair_region,
+        sample_role_region,
+    )
+
+    base_tmp = os.environ.get("TMPDIR") or os.path.expanduser("~/tmp")
+    os.makedirs(base_tmp, exist_ok=True)
+
+    with tempfile.TemporaryDirectory(dir=base_tmp, prefix="mowl_ablation_loss_t10_") as workdir:
+        owl_path = os.path.join(workdir, "all_forms.owl")
+        adapter = OWLAPIAdapter()
+        mgr = adapter.owl_manager
+        df = adapter.data_factory
+        ont = adapter.create_ontology("http://mowl.borg/geo/all_forms")
+
+        a_cls = adapter.create_class(NS + "A")
+        b_cls = adapter.create_class(NS + "B")
+        c_cls = adapter.create_class(NS + "C")
+        d_cls = adapter.create_class(NS + "D")
+        bot_cls = adapter.create_class(BOTTOM)
+        r_prop = adapter.create_object_property(NS + "r")
+        for c_obj in (a_cls, b_cls, c_cls, d_cls):
+            mgr.addAxiom(ont, df.getOWLDeclarationAxiom(c_obj))
+        mgr.addAxiom(ont, df.getOWLDeclarationAxiom(r_prop))
+
+        # Include gci0, gci0_bot, gci1, gci1_bot, gci2, gci3, gci3_bot
+        mgr.addAxiom(ont, adapter.create_subclass_of(a_cls, b_cls))
+        mgr.addAxiom(ont, adapter.create_subclass_of(d_cls, bot_cls))
+        mgr.addAxiom(
+            ont,
+            adapter.create_subclass_of(
+                adapter.create_object_intersection_of(a_cls, b_cls), c_cls
+            ),
+        )
+        mgr.addAxiom(
+            ont,
+            adapter.create_subclass_of(
+                adapter.create_object_intersection_of(b_cls, c_cls), bot_cls
+            ),
+        )
+        mgr.addAxiom(
+            ont,
+            adapter.create_subclass_of(
+                a_cls, adapter.create_object_some_values_from(r_prop, b_cls)
+            ),
+        )
+        mgr.addAxiom(
+            ont,
+            adapter.create_subclass_of(
+                adapter.create_object_some_values_from(r_prop, b_cls), c_cls
+            ),
+        )
+        mgr.addAxiom(
+            ont,
+            adapter.create_subclass_of(
+                adapter.create_object_some_values_from(r_prop, d_cls), bot_cls
+            ),
+        )
+
+        mgr.saveOntology(ont, IRI.create(File(owl_path).toURI()))
+        ds = PathDataset(owl_path)
+
+        model = GroundedEL(
+            ds,
+            embed_dim=2,
+            n_components=2,
+            n_role_components=2,
+            dead_from_bot_only=False,
+            seed=7,
+        )
+        # Set nontrivial positions and dead_logits (including both live and >0.5 elements)
+        with th.no_grad():
+            model.module.dead_logits.copy_(
+                th.linspace(0.1, 0.8, model.nb_elements, dtype=model.module.dead_logits.dtype)
+            )
+            if model.bot_id is not None:
+                model.module.dead_logits[model.bot_id] = 1.0
+
+        gen_actual = th.Generator(device="cpu")
+        gen_actual.manual_seed(12345)
+        losses_actual = model.compute_batch_losses(generator=gen_actual)
+
+        # Reference pre-Task-10 computation on the identical state and generator seed
+        gen_ref = th.Generator(device="cpu")
+        gen_ref.manual_seed(12345)
+        model._ensure_role_tables()
+        mod = model.module
+        device = model.device
+        dtype = mod.class_centers.dtype
+        td = model.training_datasets
+
+        pos_all = mod.positions()
+        dead_raw = mod.dead()
+        if model.bot_id is not None:
+            dead_all = dead_raw.clone()
+            dead_all[model.bot_id] = 1.0
+        else:
+            dead_all = dead_raw
+        dead_gate = (dead_all.detach() > 0.5).to(dtype=dtype)
+
+        live_cls_list = [c for c in range(model.nb_classes) if c != model.bot_id]
+        cls_ids = th.tensor(live_cls_list, dtype=th.long, device=device)
+        m_self = mod.membership(pos_all[cls_ids], cls_ids)
+        loss_fact_ref = fact(m_self, dead=dead_gate[cls_ids]).mean()
+
+        axiom_terms_ref = []
+        region_terms_ref = []
+
+        # GCI0
+        rows = model._sample_rows(td["gci0"][:], gen_ref)
+        bsz = int(rows.shape[0])
+        cand = model._batch_candidate_elements(rows.reshape(-1), gen_ref)
+        in_el = model._inside_candidate_elements(rows[:, 0], gen_ref, pos_all)
+        x_mat = sample_elements(
+            rows[:, 0], model.nb_elements, model.n_random_elements, gen_ref,
+            batch_elements=cand, inside_elements=in_el,
+        )
+        s_cnt = int(x_mat.shape[1])
+        x_flat = x_mat.reshape(-1)
+        a_flat = rows[:, 0].unsqueeze(1).expand(bsz, s_cnt).reshape(-1)
+        b_flat = rows[:, 1].unsqueeze(1).expand(bsz, s_cnt).reshape(-1)
+        px = pos_all[x_flat]
+        ma = mod.membership(px, a_flat)
+        mb = mod.membership(px, b_flat)
+        h_box = gci0(ma, mb, dead=dead_gate[x_flat])
+        is_self = x_flat == a_flat
+        is_self_dead = is_self & (dead_gate[x_flat] > 0.5)
+        crisp_viol_0 = (
+            is_self
+            & ((mod.depth(px, a_flat, crisp=True) > 0.0) | is_self_dead)
+            & (mod.depth(px, b_flat, crisp=True) <= 0.0)
+        )
+        ma_d = th.where(is_self_dead, th.ones_like(ma), ma.detach())
+        dead_eff_0 = th.where(crisp_viol_0, dead_all[x_flat], th.ones_like(dead_all[x_flat]))
+        h_dead = gci0(ma_d, mb.detach(), dead=dead_eff_0)
+        axiom_terms_ref.append((h_box + h_dead).mean())
+        a_reg = rows[:, 0].repeat(model.n_region_samples)
+        b_reg = rows[:, 1].repeat(model.n_region_samples)
+        h_fn = lambda z: gci0_region(
+            mod.depth(z, rows[:, 1].repeat(max(z.shape[0] // bsz, 1))), margin=model.region_margin
+        )
+        reg = sample_class_region(mod, rows[:, 0], generator=gen_ref, n_samples=model.n_region_samples, n_adv=model.n_adv, hinge_fn=h_fn)
+        if bool(reg.valid.any().item()):
+            pts_raw = reg.points[reg.valid]
+            pts = pts_raw if model.region_lhs_grad else pts_raw.detach()
+            av, bv = a_reg[reg.valid], b_reg[reg.valid]
+            reg_h = (1.0 - dead_gate[av]) * gci0_region(mod.depth(pts, bv), margin=model.region_margin) + dead_gate[av] * gci0_bot_region(mod.depth(pts_raw.detach(), av), margin=model.region_margin)
+            region_terms_ref.append(reg_h.mean())
+
+        # GCI0_bot
+        rows = model._sample_rows(td["gci0_bot"][:], gen_ref)
+        a_col = rows[:, 0]
+        bsz = int(a_col.shape[0])
+        cand = model._batch_candidate_elements(a_col, gen_ref)
+        in_el = model._inside_candidate_elements(a_col, gen_ref, pos_all)
+        x_mat = sample_elements(
+            a_col, model.nb_elements, model.n_random_elements, gen_ref,
+            batch_elements=cand, inside_elements=in_el,
+        )
+        s_cnt = int(x_mat.shape[1])
+        x_flat = x_mat.reshape(-1)
+        a_flat = a_col.unsqueeze(1).expand(bsz, s_cnt).reshape(-1)
+        px = pos_all[x_flat]
+        ma = mod.membership(px, a_flat)
+        h_box = gci0_bot(ma, dead=dead_gate[x_flat])
+        ma_d = th.where(x_flat == a_flat, th.ones_like(ma), ma.detach())
+        h_dead = gci0_bot(ma_d, dead=dead_all[x_flat])
+        axiom_terms_ref.append((h_box + h_dead).mean())
+        a_reg = a_col.repeat(model.n_region_samples)
+        h_fn = lambda z: gci0_bot_region(
+            mod.depth(z, a_col.repeat(max(z.shape[0] // bsz, 1))), margin=model.region_margin
+        )
+        reg = sample_class_region(mod, a_col, generator=gen_ref, n_samples=model.n_region_samples, n_adv=model.n_adv, hinge_fn=h_fn)
+        if bool(reg.valid.any().item()):
+            pts = reg.points[reg.valid].detach()
+            av = a_reg[reg.valid]
+            region_terms_ref.append(gci0_bot_region(mod.depth(pts, av), margin=model.region_margin).mean())
+
+        # GCI1
+        rows = model._sample_rows(td["gci1"][:], gen_ref)
+        bsz = int(rows.shape[0])
+        cand = model._batch_candidate_elements(rows.reshape(-1), gen_ref)
+        in_el = model._inside_candidate_elements(rows[:, :2], gen_ref, pos_all)
+        x_mat = sample_elements(
+            rows[:, :2], model.nb_elements, model.n_random_elements, gen_ref,
+            batch_elements=cand, inside_elements=in_el,
+        )
+        s_cnt = int(x_mat.shape[1])
+        x_flat = x_mat.reshape(-1)
+        a_flat = rows[:, 0].unsqueeze(1).expand(bsz, s_cnt).reshape(-1)
+        b_flat = rows[:, 1].unsqueeze(1).expand(bsz, s_cnt).reshape(-1)
+        c_flat = rows[:, 2].unsqueeze(1).expand(bsz, s_cnt).reshape(-1)
+        px = pos_all[x_flat]
+        axiom_terms_ref.append(
+            gci1(mod.membership(px, a_flat), mod.membership(px, b_flat), mod.membership(px, c_flat), dead=dead_gate[x_flat]).mean()
+        )
+        a_reg = rows[:, 0].repeat(model.n_region_samples)
+        b_reg = rows[:, 1].repeat(model.n_region_samples)
+        c_reg = rows[:, 2].repeat(model.n_region_samples)
+        h_fn = lambda z: gci1_region(
+            mod.depth(z, rows[:, 2].repeat(max(z.shape[0] // bsz, 1))), margin=model.region_margin
+        )
+        reg = sample_pair_region(mod, rows[:, 0], rows[:, 1], generator=gen_ref, n_samples=model.n_region_samples, n_adv=model.n_adv, hinge_fn=h_fn)
+        if bool(reg.valid.any().item()):
+            pts_raw = reg.points[reg.valid]
+            pts = pts_raw if model.region_lhs_grad else pts_raw.detach()
+            av, bv, cv = a_reg[reg.valid], b_reg[reg.valid], c_reg[reg.valid]
+            live_ab = (1.0 - dead_gate[av]) * (1.0 - dead_gate[bv])
+            region_terms_ref.append((live_ab * gci1_region(mod.depth(pts, cv), margin=model.region_margin)).mean())
+
+        # GCI1_bot
+        rows = model._sample_rows(td["gci1_bot"][:], gen_ref)
+        bsz = int(rows.shape[0])
+        cand = model._batch_candidate_elements(rows[:, :2].reshape(-1), gen_ref)
+        in_el = model._inside_candidate_elements(rows[:, :2], gen_ref, pos_all)
+        x_mat = sample_elements(
+            rows[:, :2], model.nb_elements, model.n_random_elements, gen_ref,
+            batch_elements=cand, inside_elements=in_el,
+        )
+        s_cnt = int(x_mat.shape[1])
+        x_flat = x_mat.reshape(-1)
+        a_flat = rows[:, 0].unsqueeze(1).expand(bsz, s_cnt).reshape(-1)
+        b_flat = rows[:, 1].unsqueeze(1).expand(bsz, s_cnt).reshape(-1)
+        px = pos_all[x_flat]
+        ma = mod.membership(px, a_flat)
+        mb = mod.membership(px, b_flat)
+        both_crisp = (mod.depth(px, a_flat, crisp=True) > 0.0) & (mod.depth(px, b_flat, crisp=True) > 0.0)
+        h_box = gci1_bot(ma, mb, dead=dead_gate[x_flat])
+        dead_eff_1b = th.where(both_crisp, dead_all[x_flat], th.ones_like(dead_all[x_flat]))
+        h_dead = gci1_bot(ma.detach(), mb.detach(), dead=dead_eff_1b)
+        axiom_terms_ref.append((h_box + h_dead).mean())
+        a_reg = rows[:, 0].repeat(model.n_region_samples)
+        b_reg = rows[:, 1].repeat(model.n_region_samples)
+        h_fn = lambda z: gci1_bot_region(
+            mod.depth(z, rows[:, 0].repeat(max(z.shape[0] // bsz, 1))),
+            mod.depth(z, rows[:, 1].repeat(max(z.shape[0] // bsz, 1))),
+            margin=model.region_margin,
+        )
+        reg = sample_pair_region(mod, rows[:, 0], rows[:, 1], generator=gen_ref, n_samples=model.n_region_samples, n_adv=model.n_adv, hinge_fn=h_fn)
+        if bool(reg.valid.any().item()):
+            pts = reg.points[reg.valid].detach()
+            av, bv = a_reg[reg.valid], b_reg[reg.valid]
+            region_terms_ref.append(gci1_bot_region(mod.depth(pts, av), mod.depth(pts, bv), margin=model.region_margin).mean())
+
+        # GCI2
+        rows = model._sample_rows(td["gci2"][:], gen_ref)
+        bsz = int(rows.shape[0])
+        cand = model._batch_candidate_elements(rows[:, [0, 2]].reshape(-1), gen_ref)
+        in_el = model._inside_candidate_elements(rows[:, 0], gen_ref, pos_all)
+        x_mat = sample_elements(
+            rows[:, 0], model.nb_elements, model.n_random_elements, gen_ref,
+            batch_elements=cand, inside_elements=in_el,
+        )
+        s_cnt = int(x_mat.shape[1])
+        x_flat = x_mat.reshape(-1)
+        a_flat = rows[:, 0].unsqueeze(1).expand(bsz, s_cnt).reshape(-1)
+        r_flat = rows[:, 1].unsqueeze(1).expand(bsz, s_cnt).reshape(-1)
+        b_flat = rows[:, 2].unsqueeze(1).expand(bsz, s_cnt).reshape(-1)
+        px = pos_all[x_flat]
+        pb = pos_all[b_flat]
+        ma = mod.membership(px, a_flat)
+        rho_xb = mod.role_membership(px, pb, r_flat)
+        df_b = dead_all[b_flat].detach()
+        is_self_dead = (x_flat == a_flat) & (dead_gate[x_flat] > 0.5)
+        ma_d = th.where(is_self_dead, th.ones_like(ma), ma.detach())
+        edge_h = gci2(ma, rho_xb, dead=dead_gate[x_flat], dead_filler=None)
+        dead_prop_h = gci2_dead(ma, dead_filler=df_b, dead=dead_gate[x_flat]) + th.where(
+            df_b > 0.5, gci2_dead(ma_d, dead_filler=df_b, dead=dead_all[x_flat]), th.zeros_like(ma)
+        )
+        axiom_terms_ref.append((edge_h + dead_prop_h).mean())
+        a_reg = rows[:, 0].repeat(model.n_region_samples)
+        r_reg = rows[:, 1].repeat(model.n_region_samples)
+        b_reg = rows[:, 2].repeat(model.n_region_samples)
+        h_fn = lambda z: gci2_region(
+            mod.role_depth(
+                z,
+                pos_all[rows[:, 2].repeat(max(z.shape[0] // bsz, 1))].detach(),
+                rows[:, 1].repeat(max(z.shape[0] // bsz, 1)),
+            ),
+            margin=model.region_margin,
+            agg=model.agg,
+            agg_tau=model.agg_tau,
+        )
+        reg = sample_class_region(mod, rows[:, 0], generator=gen_ref, n_samples=model.n_region_samples, n_adv=model.n_adv, hinge_fn=h_fn)
+        if bool(reg.valid.any().item()):
+            pts_raw = reg.points[reg.valid]
+            pts = pts_raw if model.region_lhs_grad else pts_raw.detach()
+            av, rv, bv = a_reg[reg.valid], r_reg[reg.valid], b_reg[reg.valid]
+            reg_h = (1.0 - dead_gate[av]) * gci2_region(
+                mod.role_depth(pts, pos_all[bv], rv),
+                margin=model.region_margin,
+                agg=model.agg,
+                agg_tau=model.agg_tau,
+                depth_a=mod.depth(pts_raw.detach(), av),
+                dead_filler=dead_all[bv].detach(),
+            ) + dead_gate[av] * gci0_bot_region(
+                mod.depth(pts_raw.detach(), av), margin=model.region_margin
+            )
+            region_terms_ref.append(reg_h.mean())
+
+        # GCI3
+        rows = model._sample_rows(td["gci3"][:], gen_ref)
+        bsz = int(rows.shape[0])
+        cand = model._batch_candidate_elements(rows[:, 1:].reshape(-1), gen_ref)
+        in_el = model._inside_candidate_elements(rows[:, 2], gen_ref, pos_all)
+        x_mat = sample_elements(
+            rows[:, 2], model.nb_elements, model.n_random_elements, gen_ref,
+            batch_elements=cand, inside_elements=in_el,
+        )
+        y_mat = model._sample_batch_y_fillers(rows, gen_ref)
+        sx, sy = int(x_mat.shape[1]), int(y_mat.shape[1])
+        rho_xy, _ = model._grid_role_membership(pos_all, x_mat, y_mat, rows[:, 0], need_crisp=False)
+        b_2d = rows[:, 1].unsqueeze(1).expand(bsz, sy).reshape(-1)
+        c_2d = rows[:, 2].unsqueeze(1).expand(bsz, sx).reshape(-1)
+        mb_grid = mod.membership(pos_all[y_mat.reshape(-1)], b_2d).view(bsz, 1, sy).expand(bsz, sx, sy).reshape(-1)
+        mc_grid = mod.membership(pos_all[x_mat.reshape(-1)], c_2d).view(bsz, sx, 1).expand(bsz, sx, sy).reshape(-1)
+        dead_x_grid = dead_gate[x_mat].unsqueeze(2).expand(bsz, sx, sy).reshape(-1)
+        axiom_terms_ref.append(gci3(rho_xy, mb_grid, mc_grid, dead=dead_x_grid).mean())
+        r_reg = rows[:, 0].repeat(model.n_region_samples)
+        b_reg = rows[:, 1].repeat(model.n_region_samples)
+        c_reg = rows[:, 2].repeat(model.n_region_samples)
+        h_fn_3 = lambda xy: gci3_region(
+            mod.role_depth(xy[:, : model.embed_dim], xy[:, model.embed_dim :], rows[:, 0].repeat(max(xy.shape[0] // bsz, 1))),
+            mod.depth(xy[:, model.embed_dim :], rows[:, 1].repeat(max(xy.shape[0] // bsz, 1))),
+            mod.depth(xy[:, : model.embed_dim], rows[:, 2].repeat(max(xy.shape[0] // bsz, 1))),
+            margin=model.region_margin,
+            smooth=True,
+        )
+        h_samp, t_samp = sample_role_region(mod, rows[:, 0], generator=gen_ref, n_samples=model.n_region_samples, n_adv=model.n_adv, hinge_fn=h_fn_3)
+        if bool(h_samp.valid.any().item()):
+            zx_raw, zy_raw = h_samp.points[h_samp.valid], t_samp.points[t_samp.valid]
+            zx = zx_raw if model.region_lhs_grad else zx_raw.detach()
+            zy = zy_raw if model.region_lhs_grad else zy_raw.detach()
+            rv, bv, cv = r_reg[h_samp.valid], b_reg[h_samp.valid], c_reg[h_samp.valid]
+            region_terms_ref.append(
+                gci3_region(
+                    mod.role_depth(zx_raw.detach(), zy_raw.detach(), rv),
+                    mod.depth(zy, bv),
+                    mod.depth(zx, cv),
+                    margin=model.region_margin,
+                ).mean()
+            )
+            py_fill = pos_all[bv]
+            region_terms_ref.append(
+                gci3_region(
+                    mod.role_depth(zx_raw.detach(), py_fill, rv),
+                    mod.depth(py_fill, bv),
+                    mod.depth(zx, cv),
+                    margin=model.region_margin,
+                ).mean()
+            )
+
+        # GCI3_bot
+        rows = model._sample_rows(td["gci3_bot"][:], gen_ref)
+        bsz = int(rows.shape[0])
+        cand = model._batch_candidate_elements(rows[:, 1], gen_ref)
+        in_el = model._inside_candidate_elements(rows[:, 1], gen_ref, pos_all)
+        x_mat = sample_elements(
+            rows[:, 1], model.nb_elements, model.n_random_elements, gen_ref,
+            batch_elements=cand, inside_elements=in_el,
+        )
+        y_mat = model._sample_batch_y_fillers(rows, gen_ref)
+        sx, sy = int(x_mat.shape[1]), int(y_mat.shape[1])
+        rho_xy, r_dep_crisp = model._grid_role_membership(pos_all, x_mat, y_mat, rows[:, 0], need_crisp=True)
+        assert r_dep_crisp is not None
+        b_2d = rows[:, 1].unsqueeze(1).expand(bsz, sy).reshape(-1)
+        py_flat = pos_all[y_mat.reshape(-1)]
+        mb_grid = mod.membership(py_flat, b_2d).view(bsz, 1, sy).expand(bsz, sx, sy).reshape(-1)
+        b_crisp_grid = (mod.depth(py_flat, b_2d, crisp=True) > 0.0).view(bsz, 1, sy).expand(bsz, sx, sy).reshape(-1)
+        both_crisp = (r_dep_crisp > 0.0) & b_crisp_grid
+        x_grid = x_mat.unsqueeze(2).expand(bsz, sx, sy).reshape(-1)
+        h_box = gci3_bot(rho_xy, mb_grid, dead=dead_gate[x_grid])
+        dead_eff_3b = th.where(both_crisp, dead_all[x_grid], th.ones_like(dead_all[x_grid]))
+        h_dead = gci3_bot(rho_xy.detach(), mb_grid.detach(), dead=dead_eff_3b)
+        axiom_terms_ref.append((h_box + h_dead).mean())
+        r_reg = rows[:, 0].repeat(model.n_region_samples)
+        b_reg = rows[:, 1].repeat(model.n_region_samples)
+        h_fn_3b = lambda xy: gci3_bot_region(
+            mod.role_depth(xy[:, : model.embed_dim], xy[:, model.embed_dim :], rows[:, 0].repeat(max(xy.shape[0] // bsz, 1))),
+            mod.depth(xy[:, model.embed_dim :], rows[:, 1].repeat(max(xy.shape[0] // bsz, 1))),
+            margin=model.region_margin,
+        )
+        h_samp, t_samp = sample_role_region(mod, rows[:, 0], generator=gen_ref, n_samples=model.n_region_samples, n_adv=model.n_adv, hinge_fn=h_fn_3b)
+        if bool(h_samp.valid.any().item()):
+            zx_raw, zy_raw = h_samp.points[h_samp.valid], t_samp.points[t_samp.valid]
+            zy = zy_raw if model.region_lhs_grad else zy_raw.detach()
+            rv, bv = r_reg[h_samp.valid], b_reg[h_samp.valid]
+            region_terms_ref.append(
+                gci3_bot_region(
+                    mod.role_depth(zx_raw.detach(), zy_raw.detach(), rv),
+                    mod.depth(zy, bv),
+                    margin=model.region_margin,
+                ).mean()
+            )
+
+        loss_axioms_ref = th.stack(axiom_terms_ref).sum()
+        loss_region_ref = th.stack(region_terms_ref).sum()
+        ord_cls_list = [
+            c for c in range(model.nb_classes) if c != model.top_id and c != model.bot_id
+        ]
+        ord_cls = th.tensor(ord_cls_list, dtype=th.long, device=device)
+        all_el = th.arange(model.nb_elements, dtype=th.long, device=device)
+        gx = all_el.unsqueeze(1).expand(model.nb_elements, ord_cls.numel()).reshape(-1)
+        ga = ord_cls.unsqueeze(0).expand(model.nb_elements, ord_cls.numel()).reshape(-1)
+        m_rand = mod.membership(pos_all[gx], ga)
+
+        all_r = th.arange(model.nb_rels, dtype=th.long, device=device)
+        rx = all_el.view(model.nb_elements, 1, 1).expand(model.nb_elements, model.nb_elements, model.nb_rels).reshape(-1)
+        ry = all_el.view(1, model.nb_elements, 1).expand(model.nb_elements, model.nb_elements, model.nb_rels).reshape(-1)
+        rr = all_r.view(1, 1, model.nb_rels).expand(model.nb_elements, model.nb_elements, model.nb_rels).reshape(-1)
+        rho_rand = mod.role_membership(pos_all[rx], pos_all[ry], rr)
+
+        dead_min_ids = [e for e in range(model.nb_elements) if e != model.bot_id]
+        dead_for_min = dead_all[th.tensor(dead_min_ids, dtype=th.long, device=device)]
+        loss_min_ref = minimality(
+            m_rand=m_rand,
+            rho_rand=rho_rand,
+            dead=dead_for_min,
+            eps=model.eps_min,
+            eps_r=model.eps_role,
+            eps_dead=model.eps_dead,
+        )
+        loss_total_ref = (
+            loss_fact_ref
+            + loss_axioms_ref
+            + model.lambda_reg * loss_region_ref
+            + loss_min_ref
+        )
+
+        assert losses_actual["fact"].item() == loss_fact_ref.item()
+        assert losses_actual["axioms"].item() == loss_axioms_ref.item()
+        assert losses_actual["region"].item() == loss_region_ref.item()
+        assert losses_actual["minimality"].item() == loss_min_ref.item()
+        assert losses_actual["total"].item() == loss_total_ref.item()
+
+        # And verify dead_from_bot_only=True differs on the same state (since live-delta routes on gci0 are removed)
+        model.dead_from_bot_only = True
+        gen_true = th.Generator(device="cpu")
+        gen_true.manual_seed(12345)
+        losses_true = model.compute_batch_losses(generator=gen_true)
+        assert losses_true["axioms"].item() != losses_actual["axioms"].item()
+
 
 
 
