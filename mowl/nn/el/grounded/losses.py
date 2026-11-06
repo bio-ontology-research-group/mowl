@@ -240,13 +240,16 @@ def gci0_region(
     - Returns a tensor of the same shape as ``depth_b``.
     - Equals ``0.0`` whenever :math:`\\operatorname{depth}_B(z) \\ge \\text{margin}`
       (containing configuration).
-    - Has nonzero gradient with respect to the active superclass box centres
-      and half-widths whenever :math:`\\operatorname{depth}_B(z) < \\text{margin}`
-      (violating point), regardless of :math:`\\tau`.
+    - **Parameters receiving gradient:** When :math:`\\operatorname{depth}_B(z) < \\text{margin}`
+      (violating point), has nonzero gradient with respect to (i) the active RHS
+      superclass box centres and half-widths of :math:`B` (via ``depth_b``), and
+      (ii) when :math:`z = c_{A,k} + w_{A,k} \\odot u` is reparametrised
+      (``region_lhs_grad=True``), the active LHS subclass box centres and
+      half-widths of :math:`A` (via :math:`z`), regardless of :math:`\\tau`.
 
     Non-guarantees:
-    - Assumes the caller sampled :math:`z \\in A`; does not depend on
-      :math:`\\operatorname{depth}_A(z)`.
+    - Assumes the caller sampled :math:`z \\in A`; if :math:`z` is detached
+      (``region_lhs_grad=False``), only :math:`B`'s parameters receive gradient.
 
     Parameters
     ----------
@@ -317,13 +320,17 @@ def gci1_region(
     - Returns a tensor of the same shape as ``depth_c``.
     - Equals ``0.0`` whenever :math:`\\operatorname{depth}_C(z) \\ge \\text{margin}`
       (containing configuration).
-    - Has nonzero gradient with respect to the active superclass box centres
-      and half-widths whenever :math:`\\operatorname{depth}_C(z) < \\text{margin}`
-      (violating intersection point), regardless of :math:`\\tau`.
+    - **Parameters receiving gradient:** When :math:`\\operatorname{depth}_C(z) < \\text{margin}`
+      (violating intersection point), has nonzero gradient with respect to (i) the
+      active RHS superclass box centres and half-widths of :math:`C` (via ``depth_c``),
+      and (ii) when :math:`z = \\text{lo} + (\\text{hi} - \\text{lo}) \\odot u` is
+      reparametrised (``region_lhs_grad=True``), the active LHS conjunct box
+      centres and half-widths of :math:`A` and :math:`B` that determine the
+      intersection bounds (via :math:`z`), regardless of :math:`\\tau`.
 
     Non-guarantees:
-    - Assumes the caller sampled :math:`z \\in A \\cap B`; does not depend on
-      :math:`\\operatorname{depth}_A(z)` or :math:`\\operatorname{depth}_B(z)`.
+    - Assumes the caller sampled :math:`z \\in A \\cap B`; if :math:`z` is detached
+      (``region_lhs_grad=False``), only :math:`C`'s parameters receive gradient.
 
     Parameters
     ----------
@@ -383,9 +390,10 @@ def gci0_bot_region(
     Guarantees:
     - Returns a tensor of the same shape as ``depth_a``.
     - Equals ``0.0`` whenever :math:`\\operatorname{depth}_A(z) + \\text{margin} \\le 0`.
-    - Has nonzero gradient with respect to the active box half-widths of :math:`A`
-      whenever :math:`\\operatorname{depth}_A(z) + \\text{margin} > 0`, regardless
-      of :math:`\\tau`.
+    - **Parameters receiving gradient:** Has nonzero gradient with respect to the
+      active LHS box half-widths (and centres when :math:`z \\ne c_A` is detached)
+      of :math:`A` whenever :math:`\\operatorname{depth}_A(z) + \\text{margin} > 0`,
+      regardless of :math:`\\tau`.
 
     Non-guarantees:
     - Vanishes once all components of :math:`A` are inactive or have
@@ -462,8 +470,9 @@ def gci1_bot_region(
     - Returns a tensor of the same shape as ``depth_a`` and ``depth_b``.
     - Equals ``0.0`` whenever :math:`A` and :math:`B` are separated by at least
       ``margin``.
-    - Has nonzero gradient with respect to the centres and half-widths of both
-      :math:`A` and :math:`B` at any violating point :math:`z \\in A \\cap B`
+    - **Parameters receiving gradient:** Has nonzero gradient with respect to the
+      active LHS centres and half-widths of both :math:`A` (via ``depth_a``) and
+      :math:`B` (via ``depth_b``) at any violating point :math:`z \\in A \\cap B`
       (and with respect to :math:`A` at :math:`z \\in B` with
       :math:`\\operatorname{depth}_A(z) > -\\text{margin}`), regardless of :math:`\\tau`.
 
@@ -605,9 +614,12 @@ def gci2_region(
     - Returns a 1-D tensor of shape ``(B,)``.
     - Equals ``0.0`` whenever the aggregated ``role_depth`` is :math:`\\ge \\text{margin}`
       (and ``dead_filler`` is ``0`` or ``None``).
-    - Has nonzero gradient with respect to the active role head/tail box centres
-      and half-widths whenever the aggregated ``role_depth`` is :math:`< \\text{margin}`,
-      regardless of :math:`\\tau`.
+    - **Parameters receiving gradient:** When the aggregated ``role_depth`` is
+      :math:`< \\text{margin}`, has nonzero gradient with respect to (i) the active
+      role head/tail box centres and half-widths of :math:`r` and filler position
+      :math:`p_y` (via ``role_depth``), and (ii) when :math:`z = c_{A,k} + w_{A,k} \\odot u`
+      is reparametrised (``region_lhs_grad=True``), the active LHS box centres and
+      half-widths of :math:`A` (via :math:`z`), regardless of :math:`\\tau`.
 
     Non-guarantees:
     - Raises :class:`ValueError` if ``agg`` is not ``"max"`` or ``"lse"``.
@@ -723,14 +735,18 @@ def gci3_region(
     - Returns a tensor of the same shape as ``role_depth``.
     - Equals ``0.0`` whenever :math:`\\operatorname{depth}_C(z) \\ge \\text{margin}`
       or (when ``smooth=False``) :math:`\\min(\\operatorname{role\\_depth}(z, y), \\operatorname{depth}_B(y)) \\le 0`.
-    - Has nonzero gradient with respect to the active superclass box centres and
-      half-widths of :math:`C` whenever :math:`\\operatorname{role\\_depth}(z, y) > 0`,
+    - **Parameters receiving gradient:** Whenever :math:`\\operatorname{role\\_depth}(z, y) > 0`,
       :math:`\\operatorname{depth}_B(y) > 0`, and :math:`\\operatorname{depth}_C(z) < \\text{margin}`,
-      regardless of :math:`\\tau`.
+      has nonzero gradient with respect to (i) the active RHS superclass box
+      centres and half-widths of :math:`C` (via ``depth_c``), and (ii) when
+      :math:`z` is reparametrised inside :math:`H_{r,k}` (``region_lhs_grad=True``),
+      the active LHS role head box centres and half-widths of :math:`r` (via
+      :math:`z` in ``depth_c``), regardless of :math:`\\tau`.
 
     Non-guarantees:
-    - Under ``smooth=False``, zero gradient with respect to :math:`r` and :math:`B`
-      (only expands :math:`C` to cover active role-filler pairs).
+    - Under ``smooth=False``, zero gradient through the crisp gate ``role_depth``
+      and ``depth_b``; if :math:`z` is detached (``region_lhs_grad=False``), only
+      :math:`C` receives gradient.
 
     Parameters
     ----------
@@ -815,9 +831,11 @@ def gci3_bot_region(
     - Returns a tensor of the same shape as ``role_depth`` and ``depth_b``.
     - Equals ``0.0`` whenever :math:`T_r` and :math:`B` are separated by at
       least ``margin``.
-    - Has nonzero gradient with respect to both :math:`T_r` and :math:`B` at
-      any violating pair :math:`(z, y)` with :math:`\\operatorname{role\\_depth}(z, y) > 0`
-      and :math:`\\operatorname{depth}_B(y) > 0`, regardless of :math:`\\tau`.
+    - **Parameters receiving gradient:** Has nonzero gradient with respect to
+      both :math:`r`'s product box (via ``role_depth``, and via reparametrised
+      :math:`y \\in T_{r,k}` inside ``depth_b`` when ``region_lhs_grad=True``) and
+      :math:`B`'s box centres and half-widths (via ``depth_b``) at any violating
+      pair :math:`(z, y)`, regardless of :math:`\\tau`.
 
     Non-guarantees:
     - Vanishes when neither :math:`\\operatorname{role\\_depth}(z, y) \\ge 0` nor
@@ -891,13 +909,17 @@ def role_inclusion_region(
     - Returns a tensor of the same shape as ``role_depth_s``.
     - Equals ``0.0`` whenever :math:`\\operatorname{role\\_depth}_s(x, y) \\ge \\text{margin}`
       (containing configuration).
-    - Has nonzero gradient with respect to the active super-role head/tail box
-      centres and half-widths of :math:`s` whenever
-      :math:`\\operatorname{role\\_depth}_s(x, y) < \\text{margin}`, regardless of
-      :math:`\\tau`.
+    - **Parameters receiving gradient:** Whenever
+      :math:`\\operatorname{role\\_depth}_s(x, y) < \\text{margin}`, has nonzero
+      gradient with respect to (i) the active RHS super-role head/tail box
+      centres and half-widths of :math:`s` (via ``role_depth_s``), and (ii) when
+      :math:`(x, y)` is reparametrised inside :math:`H_{r,k} \\times T_{r,k}`
+      (``region_lhs_grad=True``), the active LHS sub-role head/tail box centres
+      and half-widths of :math:`r` (via :math:`(x, y)`), regardless of :math:`\\tau`.
 
     Non-guarantees:
-    - Assumes the caller sampled :math:`(x, y) \\in H_r \\times T_r`.
+    - Assumes the caller sampled :math:`(x, y) \\in H_r \\times T_r`; if :math:`(x, y)`
+      is detached (``region_lhs_grad=False``), only :math:`s` receives gradient.
 
     Parameters
     ----------
@@ -975,15 +997,21 @@ def role_chain_region(
     - Returns a tensor of the same shape as ``role_depth_r``.
     - Equals ``0.0`` whenever :math:`\\operatorname{role\\_depth}_t(x, z) \\ge \\text{margin}`
       or (when ``smooth=False``) :math:`\\min(\\operatorname{role\\_depth}_r(x, y), \\operatorname{role\\_depth}_s(y, z)) \\le 0`.
-    - Has nonzero gradient with respect to the active super-role head/tail box
-      centres and half-widths of :math:`t` whenever
+    - **Parameters receiving gradient:** Whenever
       :math:`\\operatorname{role\\_depth}_r(x, y) > 0`,
       :math:`\\operatorname{role\\_depth}_s(y, z) > 0`, and
-      :math:`\\operatorname{role\\_depth}_t(x, z) < \\text{margin}`, regardless of
+      :math:`\\operatorname{role\\_depth}_t(x, z) < \\text{margin}`, has nonzero
+      gradient with respect to (i) the active RHS super-role head/tail box
+      centres and half-widths of :math:`t` (via ``role_depth_t``), and (ii) when
+      :math:`x \\in H_{r,k}` and :math:`z \\in T_{s,m}` are reparametrised
+      (``region_lhs_grad=True``), the active LHS head box of :math:`r` and tail
+      box of :math:`s` (via :math:`(x, z)` in ``role_depth_t``), regardless of
       :math:`\\tau`.
 
     Non-guarantees:
-    - Under ``smooth=False``, zero gradient with respect to :math:`r` and :math:`s`.
+    - Under ``smooth=False``, zero gradient through the crisp gate ``role_depth_r``
+      and ``role_depth_s``; if :math:`(x, z)` is detached (``region_lhs_grad=False``),
+      only :math:`t` receives gradient.
 
     Parameters
     ----------

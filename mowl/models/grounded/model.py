@@ -205,6 +205,10 @@ class GroundedEL(EmbeddingELModel):
     n_filler_samples : int, default 64
         Maximum number of candidate filler elements per batch row in ``gci3``
         and ``gci3_bot`` (always including the row's own filler :math:`x_B`).
+    region_lhs_grad : bool, default True
+        Whether to keep reparametrised region sample points :math:`z` attached to
+        the LHS boxes so gradients flow to both LHS and RHS boxes in the region
+        hinges (``False`` detaches :math:`z` for ablation).
     """
 
     def __init__(
@@ -244,6 +248,7 @@ class GroundedEL(EmbeddingELModel):
         load_normalized: bool = False,
         load_role_axioms: bool = True,
         n_filler_samples: int = 64,
+        region_lhs_grad: bool = True,
     ) -> None:
         _validate_int_ge("embed_dim", embed_dim, 1)
         _validate_int_ge("n_components", n_components, 1)
@@ -263,6 +268,8 @@ class GroundedEL(EmbeddingELModel):
         _validate_int_ge("n_random_elements", n_random_elements, 0)
         _validate_int_ge("n_inside_elements", n_inside_elements, 0)
         _validate_int_ge("n_filler_samples", n_filler_samples, 1)
+        if not isinstance(region_lhs_grad, bool):
+            raise ValueError(f"region_lhs_grad must be a bool, got {region_lhs_grad!r}")
         if not isinstance(agg, str) or agg not in ("max", "lse"):
             raise ValueError(f"agg must be 'max' or 'lse', got {agg!r}")
         _validate_int_ge("reseed_every", reseed_every, 0)
@@ -304,6 +311,7 @@ class GroundedEL(EmbeddingELModel):
         self.n_random_elements = int(n_random_elements)
         self.n_inside_elements = int(n_inside_elements)
         self.n_filler_samples = int(n_filler_samples)
+        self.region_lhs_grad = bool(region_lhs_grad)
         self.agg = agg
         self.agg_tau = agg_tau_f
         self.reseed_every = int(reseed_every)
@@ -807,7 +815,8 @@ class GroundedEL(EmbeddingELModel):
                     hinge_fn=h_fn,
                 )
                 if bool(reg.valid.any().item()):
-                    pts = reg.points[reg.valid].detach()
+                    pts_raw = reg.points[reg.valid]
+                    pts = pts_raw if self.region_lhs_grad else pts_raw.detach()
                     av = a_reg[reg.valid]
                     bv = b_reg[reg.valid]
                     live_a = 1.0 - dead_gate[av]
@@ -815,7 +824,7 @@ class GroundedEL(EmbeddingELModel):
                     reg_h = live_a * gci0_region(
                         mod.depth(pts, bv), margin=self.region_margin
                     ) + dead_a * gci0_bot_region(
-                        mod.depth(pts, av), margin=self.region_margin
+                        mod.depth(pts_raw.detach(), av), margin=self.region_margin
                     )
                     region_terms.append(reg_h.mean())
 
@@ -922,7 +931,8 @@ class GroundedEL(EmbeddingELModel):
                     hinge_fn=h_fn,
                 )
                 if bool(reg.valid.any().item()):
-                    pts = reg.points[reg.valid].detach()
+                    pts_raw = reg.points[reg.valid]
+                    pts = pts_raw if self.region_lhs_grad else pts_raw.detach()
                     av = a_reg[reg.valid]
                     bv = b_reg[reg.valid]
                     cv = c_reg[reg.valid]
@@ -1067,7 +1077,8 @@ class GroundedEL(EmbeddingELModel):
                     hinge_fn=h_fn,
                 )
                 if bool(reg.valid.any().item()):
-                    pts = reg.points[reg.valid].detach()
+                    pts_raw = reg.points[reg.valid]
+                    pts = pts_raw if self.region_lhs_grad else pts_raw.detach()
                     av = a_reg[reg.valid]
                     rv = r_reg[reg.valid]
                     bv = b_reg[reg.valid]
@@ -1078,10 +1089,10 @@ class GroundedEL(EmbeddingELModel):
                         margin=self.region_margin,
                         agg=self.agg,
                         agg_tau=self.agg_tau,
-                        depth_a=mod.depth(pts, av),
+                        depth_a=mod.depth(pts_raw.detach(), av),
                         dead_filler=dead_all[bv].detach(),
                     ) + dead_a * gci0_bot_region(
-                        mod.depth(pts, av), margin=self.region_margin
+                        mod.depth(pts_raw.detach(), av), margin=self.region_margin
                     )
                     region_terms.append(reg_h.mean())
 
@@ -1161,14 +1172,16 @@ class GroundedEL(EmbeddingELModel):
                     hinge_fn=h_fn_3,
                 )
                 if bool(h_samp.valid.any().item()):
-                    zx = h_samp.points[h_samp.valid].detach()
-                    zy = t_samp.points[t_samp.valid].detach()
+                    zx_raw = h_samp.points[h_samp.valid]
+                    zy_raw = t_samp.points[t_samp.valid]
+                    zx = zx_raw if self.region_lhs_grad else zx_raw.detach()
+                    zy = zy_raw if self.region_lhs_grad else zy_raw.detach()
                     rv = r_reg[h_samp.valid]
                     bv = b_reg[h_samp.valid]
                     cv = c_reg[h_samp.valid]
                     region_terms.append(
                         gci3_region(
-                            mod.role_depth(zx, zy, rv),
+                            mod.role_depth(zx_raw.detach(), zy_raw.detach(), rv),
                             mod.depth(zy, bv),
                             mod.depth(zx, cv),
                             margin=self.region_margin,
@@ -1178,7 +1191,7 @@ class GroundedEL(EmbeddingELModel):
                     py_fill = pos_all[bv]
                     region_terms.append(
                         gci3_region(
-                            mod.role_depth(zx, py_fill, rv),
+                            mod.role_depth(zx_raw.detach(), py_fill, rv),
                             mod.depth(py_fill, bv),
                             mod.depth(zx, cv),
                             margin=self.region_margin,
@@ -1260,13 +1273,14 @@ class GroundedEL(EmbeddingELModel):
                     hinge_fn=h_fn_3b,
                 )
                 if bool(h_samp.valid.any().item()):
-                    zx = h_samp.points[h_samp.valid].detach()
-                    zy = t_samp.points[t_samp.valid].detach()
+                    zx_raw = h_samp.points[h_samp.valid]
+                    zy_raw = t_samp.points[t_samp.valid]
+                    zy = zy_raw if self.region_lhs_grad else zy_raw.detach()
                     rv = r_reg[h_samp.valid]
                     bv = b_reg[h_samp.valid]
                     region_terms.append(
                         gci3_bot_region(
-                            mod.role_depth(zx, zy, rv),
+                            mod.role_depth(zx_raw.detach(), zy_raw.detach(), rv),
                             mod.depth(zy, bv),
                             margin=self.region_margin,
                         ).mean()
@@ -1317,8 +1331,10 @@ class GroundedEL(EmbeddingELModel):
                     hinge_fn=h_fn_ri,
                 )
                 if bool(h_samp.valid.any().item()):
-                    zx = h_samp.points[h_samp.valid].detach()
-                    zy = t_samp.points[t_samp.valid].detach()
+                    zx_raw = h_samp.points[h_samp.valid]
+                    zy_raw = t_samp.points[t_samp.valid]
+                    zx = zx_raw if self.region_lhs_grad else zx_raw.detach()
+                    zy = zy_raw if self.region_lhs_grad else zy_raw.detach()
                     sv = s_reg[h_samp.valid]
                     region_terms.append(
                         role_inclusion_region(
@@ -1365,16 +1381,19 @@ class GroundedEL(EmbeddingELModel):
                 )
                 v_chain = hx.valid & tz.valid
                 if bool(v_chain.any().item()):
-                    zx = hx.points[v_chain].detach()
-                    zy = hy.points[v_chain].detach()
-                    zz = tz.points[v_chain].detach()
+                    zx_raw = hx.points[v_chain]
+                    zy_raw = hy.points[v_chain]
+                    zz_raw = tz.points[v_chain]
+                    zx = zx_raw if self.region_lhs_grad else zx_raw.detach()
+                    zy = zy_raw if self.region_lhs_grad else zy_raw.detach()
+                    zz = zz_raw if self.region_lhs_grad else zz_raw.detach()
                     rv = r_reg[v_chain]
                     sv = s_reg[v_chain]
                     tv = t_reg[v_chain]
                     region_terms.append(
                         role_chain_region(
-                            mod.role_depth(zx, zy, rv),
-                            mod.role_depth(zy, zz, sv),
+                            mod.role_depth(zx_raw.detach(), zy_raw.detach(), rv),
+                            mod.role_depth(zy, zz_raw.detach(), sv),
                             mod.role_depth(zx, zz, tv),
                             margin=self.region_margin,
                         ).mean()

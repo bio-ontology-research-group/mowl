@@ -1241,3 +1241,192 @@ def test_sample_inside_elements_and_direct_dead_param() -> None:
     assert mod.dead_logits.grad is not None
     assert th.allclose(mod.dead_logits.grad, th.ones_like(mod.dead_logits))
 
+
+def test_reparametrised_region_sampling_lhs_gradients_and_sgd_step() -> None:
+    """Reparametrised region samples give nonzero LHS centre/width gradients and one SGD step with RHS fixed reduces loss."""
+    # 1. GCI1: A cap B <= C with C fixed (requires_grad=False) and A cap B sticking out of C
+    mod = GroundedELModule(
+        nb_elements=3,
+        nb_classes=3,
+        nb_rels=2,
+        embed_dim=2,
+        n_components=1,
+        n_role_components=1,
+        tau=0.05,
+    )
+    mod_fixed = GroundedELModule(
+        nb_elements=3,
+        nb_classes=3,
+        nb_rels=2,
+        embed_dim=2,
+        n_components=1,
+        n_role_components=1,
+        tau=0.05,
+    )
+    mod_fixed.requires_grad_(False)
+
+    with th.no_grad():
+        # C (class 2 in mod_fixed): [-0.5, 0.5]^2 (center (0, 0), w (0.5, 0.5)), fixed
+        mod_fixed.class_centers[2, 0] = th.tensor([0.0, 0.0])
+        mod_fixed.class_raw_widths[2, 0] = th.log(th.expm1(th.tensor([0.5, 0.5])))
+        # Also copy C into mod for adversarial hinge evaluation
+        mod.class_centers[2, 0] = th.tensor([0.0, 0.0])
+        mod.class_raw_widths[2, 0] = th.log(th.expm1(th.tensor([0.5, 0.5])))
+
+        # A (class 0): [0.0, 1.2] x [0.2, 1.4] -> center (0.6, 0.8), w = (0.6, 0.6)
+        # B (class 1): [0.2, 1.4] x [0.0, 1.2] -> center (0.8, 0.6), w = (0.6, 0.6)
+        # Intersection A cap B = [0.2, 1.2]^2, sticking out of C = [-0.5, 0.5]^2 in the +x, +y quadrant
+        mod.class_centers[0, 0] = th.tensor([0.6, 0.8])
+        mod.class_raw_widths[0, 0] = th.log(th.expm1(th.tensor([0.6, 0.6])))
+        mod.class_centers[1, 0] = th.tensor([0.8, 0.6])
+        mod.class_raw_widths[1, 0] = th.log(th.expm1(th.tensor([0.6, 0.6])))
+
+    def _eval_gci1_loss(seed_val: int) -> th.Tensor:
+        g = th.Generator().manual_seed(seed_val)
+        reg = sample_pair_region(
+            mod,
+            th.tensor([0]),
+            th.tensor([1]),
+            generator=g,
+            n_samples=4,
+            n_adv=2,
+            hinge_fn=lambda z: gci1_region(mod_fixed.depth(z, 2)),
+        )
+        assert bool(reg.valid.all().item())
+        return gci1_region(mod_fixed.depth(reg.points[reg.valid], 2)).mean()
+
+    mod.zero_grad()
+    loss_before_gci1 = _eval_gci1_loss(42)
+    assert float(loss_before_gci1.item()) > 0.0
+    loss_before_gci1.backward()
+
+    assert mod.class_centers.grad is not None
+    assert mod.class_raw_widths.grad is not None
+    grad_ca = mod.class_centers.grad[0, 0].clone()
+    grad_cb = mod.class_centers.grad[1, 0].clone()
+    grad_wa = mod.class_raw_widths.grad[0, 0].clone()
+    grad_wb = mod.class_raw_widths.grad[1, 0].clone()
+
+    # Nonzero gradient w.r.t. both A's and B's centres and widths
+    assert float(grad_ca.abs().sum().item()) > 0.0
+    assert float(grad_cb.abs().sum().item()) > 0.0
+    assert float(grad_wa.abs().sum().item()) > 0.0
+    assert float(grad_wb.abs().sum().item()) > 0.0
+    # C in mod_fixed has requires_grad=False (no grad)
+    assert mod_fixed.class_centers.grad is None
+
+    # Gradient sign on centres is positive, so -grad moves A cap B (at [0.2, 1.2]^2) towards C (at [-0.5, 0.5]^2)
+    assert float((grad_ca + grad_cb).sum().item()) > 0.0
+
+    with th.no_grad():
+        inter_center_before = 0.5 * (
+            th.maximum(
+                mod.class_centers[0, 0] - nn.functional.softplus(mod.class_raw_widths[0, 0]),
+                mod.class_centers[1, 0] - nn.functional.softplus(mod.class_raw_widths[1, 0]),
+            )
+            + th.minimum(
+                mod.class_centers[0, 0] + nn.functional.softplus(mod.class_raw_widths[0, 0]),
+                mod.class_centers[1, 0] + nn.functional.softplus(mod.class_raw_widths[1, 0]),
+            )
+        )
+        lr = 0.1
+        mod.class_centers[0, 0] -= lr * grad_ca
+        mod.class_centers[1, 0] -= lr * grad_cb
+        mod.class_raw_widths[0, 0] -= lr * grad_wa
+        mod.class_raw_widths[1, 0] -= lr * grad_wb
+        inter_center_after = 0.5 * (
+            th.maximum(
+                mod.class_centers[0, 0] - nn.functional.softplus(mod.class_raw_widths[0, 0]),
+                mod.class_centers[1, 0] - nn.functional.softplus(mod.class_raw_widths[1, 0]),
+            )
+            + th.minimum(
+                mod.class_centers[0, 0] + nn.functional.softplus(mod.class_raw_widths[0, 0]),
+                mod.class_centers[1, 0] + nn.functional.softplus(mod.class_raw_widths[1, 0]),
+            )
+        )
+    # Intersection centre moved closer to C's centre (0, 0)
+    assert float(inter_center_after.norm().item()) < float(inter_center_before.norm().item())
+
+    loss_after_gci1 = _eval_gci1_loss(42)
+    assert float(loss_after_gci1.item()) < float(loss_before_gci1.item())
+
+    # 2. GCI0: A <= B with B fixed (requires_grad=False) and A sticking out of B
+    with th.no_grad():
+        # B (class 1 in mod_fixed): [-0.5, 0.5]^2 (fixed)
+        mod_fixed.class_centers[1, 0] = th.tensor([0.0, 0.0])
+        mod_fixed.class_raw_widths[1, 0] = th.log(th.expm1(th.tensor([0.5, 0.5])))
+        # A (class 0 in mod): [0.2, 1.2]^2 -> center (0.7, 0.7), w = (0.5, 0.5)
+        mod.class_centers[0, 0] = th.tensor([0.7, 0.7])
+        mod.class_raw_widths[0, 0] = th.log(th.expm1(th.tensor([0.5, 0.5])))
+
+    def _eval_gci0_loss(seed_val: int) -> th.Tensor:
+        g = th.Generator().manual_seed(seed_val)
+        reg = sample_class_region(
+            mod,
+            th.tensor([0]),
+            generator=g,
+            n_samples=4,
+            n_adv=2,
+            hinge_fn=lambda z: gci0_region(mod_fixed.depth(z, 1)),
+        )
+        assert bool(reg.valid.all().item())
+        return gci0_region(mod_fixed.depth(reg.points[reg.valid], 1)).mean()
+
+    mod.zero_grad()
+    loss_before_gci0 = _eval_gci0_loss(99)
+    assert float(loss_before_gci0.item()) > 0.0
+    loss_before_gci0.backward()
+
+    grad_ca0 = mod.class_centers.grad[0, 0].clone()
+    grad_wa0 = mod.class_raw_widths.grad[0, 0].clone()
+    assert float(grad_ca0.abs().sum().item()) > 0.0
+    assert float(grad_wa0.abs().sum().item()) > 0.0
+    assert bool((grad_ca0 > 0.0).all().item())
+
+    with th.no_grad():
+        dist_before = float(mod.class_centers[0, 0].norm().item())
+        mod.class_centers[0, 0] -= 0.1 * grad_ca0
+        mod.class_raw_widths[0, 0] -= 0.1 * grad_wa0
+        dist_after = float(mod.class_centers[0, 0].norm().item())
+    assert dist_after < dist_before
+
+    loss_after_gci0 = _eval_gci0_loss(99)
+    assert float(loss_after_gci0.item()) < float(loss_before_gci0.item())
+
+    # 3. Role inclusion r <= s with s fixed (requires_grad=False) and r sticking out of s
+    with th.no_grad():
+        mod_fixed.role_head_centers[1, 0] = th.tensor([0.0, 0.0])
+        mod_fixed.role_tail_centers[1, 0] = th.tensor([0.0, 0.0])
+        mod_fixed.role_head_raw_widths[1, 0] = th.log(th.expm1(th.tensor([0.5, 0.5])))
+        mod_fixed.role_tail_raw_widths[1, 0] = th.log(th.expm1(th.tensor([0.5, 0.5])))
+
+        mod.role_head_centers[0, 0] = th.tensor([0.7, 0.7])
+        mod.role_tail_centers[0, 0] = th.tensor([0.7, 0.7])
+        mod.role_head_raw_widths[0, 0] = th.log(th.expm1(th.tensor([0.5, 0.5])))
+        mod.role_tail_raw_widths[0, 0] = th.log(th.expm1(th.tensor([0.5, 0.5])))
+
+    mod.zero_grad()
+    g_role = th.Generator().manual_seed(7)
+    h_s, t_s = sample_role_region(
+        mod,
+        th.tensor([0]),
+        generator=g_role,
+        n_samples=4,
+        n_adv=2,
+        hinge_fn=lambda xy: role_inclusion_region(
+            mod_fixed.role_depth(xy[:, :2], xy[:, 2:], 1)
+        ),
+    )
+    loss_ri = role_inclusion_region(
+        mod_fixed.role_depth(h_s.points[h_s.valid], t_s.points[t_s.valid], 1)
+    ).mean()
+    loss_ri.backward()
+    assert mod.role_head_centers.grad is not None
+    assert mod.role_tail_centers.grad is not None
+    assert (
+        float(mod.role_head_centers.grad[0, 0].abs().sum().item())
+        + float(mod.role_tail_centers.grad[0, 0].abs().sum().item())
+        > 0.0
+    )
+
+

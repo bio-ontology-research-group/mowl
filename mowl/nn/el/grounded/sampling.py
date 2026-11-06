@@ -460,15 +460,22 @@ def adversarial_ascent(
 ) -> th.Tensor:
     """Run ``n_adv`` steps of signed-gradient ascent on ``hinge_fn`` clipped to ``[lower, upper]``.
 
+    The ascent steps update the detached relative point offset inside
+    ``[lower, upper]`` while preserving the reparametrised autograd dependence on
+    the live box bounds ``lower`` and ``upper`` (and hence on the LHS centres and
+    half-widths :math:`c, w`).
+
     Guarantees:
-    - Returns a detached tensor of the same shape, dtype, and device as ``points``.
+    - Returns a tensor of the same shape, dtype, and device as ``points`` that
+      retains first-order autograd dependence on ``lower`` and ``upper``.
     - Every output coordinate satisfies ``lower <= out <= upper`` on valid rows.
-    - When ``n_adv == 0``, returns ``points.detach()`` unchanged.
+    - When ``n_adv == 0``, preserves the forward values of ``points`` while
+      maintaining reparametrised dependence on ``lower`` and ``upper``.
 
     Non-guarantees:
-    - Does not retain autograd history across the ascent steps; callers must
-      re-evaluate the hinge at the returned points to backpropagate into model
-      parameters.
+    - Does not retain second-order autograd history through ``hinge_fn`` across
+      the ascent steps; the relative offset :math:`u` is detached and applied to
+      live ``lower`` and ``upper``.
 
     Parameters
     ----------
@@ -490,7 +497,8 @@ def adversarial_ascent(
     Returns
     -------
     torch.Tensor
-        Adversarially refined points of shape ``(B, d)`` clipped to ``[lower, upper]``.
+        Adversarially refined reparametrised points of shape ``(B, d)`` clipped
+        to ``[lower, upper]``.
     """
     if isinstance(n_adv, bool) or not isinstance(n_adv, int) or n_adv < 0:
         raise ValueError(f"n_adv must be an int >= 0, got {n_adv!r}")
@@ -499,8 +507,22 @@ def adversarial_ascent(
             f"points, lower, and upper must have identical shapes, got "
             f"{tuple(points.shape)}, {tuple(lower.shape)}, {tuple(upper.shape)}"
         )
-    if n_adv == 0 or points.numel() == 0:
-        return points.detach()
+    if points.numel() == 0:
+        return points
+    if n_adv == 0:
+        lo = lower.detach()
+        hi = upper.detach()
+        span = hi - lo
+        u_01 = th.where(
+            span > 0.0,
+            (points.detach() - lo) / span.clamp(min=1e-12),
+            th.full_like(points, 0.5),
+        ).clamp(min=_INTERIOR_EPS, max=1.0 - _INTERIOR_EPS).detach()
+        reparam = lower + (upper - lower) * u_01
+        if valid is not None:
+            v_mask = valid.to(device=points.device, dtype=th.bool).unsqueeze(-1)
+            reparam = th.where(v_mask, reparam, th.zeros_like(reparam))
+        return points.detach() + (reparam - reparam.detach())
 
     lo = lower.detach()
     hi = upper.detach()
@@ -526,7 +548,17 @@ def adversarial_ascent(
     if valid is not None:
         v_mask = valid.to(device=z.device, dtype=th.bool).unsqueeze(-1)
         z = th.where(v_mask, z, orig)
-    return z
+
+    span = hi - lo
+    u_01 = th.where(
+        span > 0.0,
+        (z - lo) / span.clamp(min=1e-12),
+        th.full_like(z, 0.5),
+    ).clamp(min=0.05, max=0.95).detach()
+    reparam = lower + (upper - lower) * u_01
+    if valid is not None:
+        reparam = th.where(v_mask, reparam, th.zeros_like(reparam))
+    return z + (reparam - reparam.detach())
 
 
 def component_extremes(
@@ -537,11 +569,13 @@ def component_extremes(
     r"""Return the :math:`2^d` corner points (when :math:`d \le 4`) or :math:`2d` axis-extreme points (when :math:`d > 4`) of each box ``[lower, upper]``.
 
     Points are inset by ``_INTERIOR_EPS`` from the boundary so that every extreme
-    point of a non-degenerate box lies strictly inside the open box ``(lower, upper)``.
+    point of a non-degenerate box lies strictly inside the open box ``(lower, upper)``,
+    and remain live functions of ``lower`` and ``upper`` (:math:`c \pm (1 - \epsilon) w`).
 
     Guarantees:
-    - Returns a detached tensor of shape ``(B, 2^d, d)`` when ``d <= 4`` and
-      ``(B, 2 * d, d)`` when ``d > 4``.
+    - Returns a reparametrised tensor of shape ``(B, 2^d, d)`` when ``d <= 4`` and
+      ``(B, 2 * d, d)`` when ``d > 4`` that preserves autograd dependence on
+      ``lower`` and ``upper``.
     - For every valid row ``b`` with ``lower[b] < upper[b]``, all returned points
       satisfy ``lower[b] < pt < upper[b]``.
     - Invalid rows (``valid[b] == False``) are filled with exact zeros.
@@ -572,10 +606,8 @@ def component_extremes(
     bsz, dim = lower.shape
     device = lower.device
     dtype = lower.dtype
-    lo = lower.detach()
-    hi = upper.detach()
-    c = 0.5 * (lo + hi)
-    w = 0.5 * (hi - lo) * (1.0 - _INTERIOR_EPS)
+    c = 0.5 * (lower + upper)
+    w = 0.5 * (upper - lower) * (1.0 - _INTERIOR_EPS)
 
     if dim <= 4:
         n_ext = 1 << dim
@@ -596,7 +628,7 @@ def component_extremes(
     if valid is not None:
         v_mask = valid.to(device=device, dtype=th.bool).view(bsz, 1, 1)
         pts = th.where(v_mask, pts, th.zeros_like(pts))
-    return pts.detach()
+    return pts
 
 
 def _sample_regions_with_corners(
@@ -645,7 +677,7 @@ def _sample_regions_with_corners(
     val_u = base.valid.repeat(n_u)
     u_pt = _rand_with_generator(
         (n_u * bsz, dim), dtype=dtype, device=device, generator=generator
-    ).clamp(min=_INTERIOR_EPS, max=1.0 - _INTERIOR_EPS)
+    ).clamp(min=_INTERIOR_EPS, max=1.0 - _INTERIOR_EPS).detach()
     pts_u = th.where(val_u.unsqueeze(-1), lo_u + (hi_u - lo_u) * u_pt, th.zeros_like(lo_u))
 
     if n_adv > 0 and hinge_fn is not None and bool(val_u.any().item()):
@@ -658,8 +690,6 @@ def _sample_regions_with_corners(
             step_size=step_size,
             valid=val_u,
         )
-    else:
-        pts_u = pts_u.detach()
 
     if n_corn > 0:
         if n_corn < e_cnt:
@@ -669,7 +699,7 @@ def _sample_regions_with_corners(
             sel_ext = extremes[:, perm, :]
         else:
             sel_ext = extremes
-        pts_c = sel_ext.permute(1, 0, 2).reshape(n_corn * bsz, dim).detach()
+        pts_c = sel_ext.permute(1, 0, 2).reshape(n_corn * bsz, dim)
         all_pts = th.cat([pts_u, pts_c], dim=0)
     else:
         all_pts = pts_u
@@ -767,8 +797,15 @@ def sample_active_component(
     upper = c_sel + w_sel
 
     u_pt = _rand_with_generator((bsz, dim), dtype=dtype, device=device, generator=generator)
-    u_pt = u_pt.clamp(min=_INTERIOR_EPS, max=1.0 - _INTERIOR_EPS)
-    points = th.where(valid_d, lower + (upper - lower) * u_pt, th.zeros_like(lower))
+    u_pt = u_pt.clamp(min=_INTERIOR_EPS, max=1.0 - _INTERIOR_EPS).detach()
+    u_sym = (2.0 * u_pt - 1.0).detach()
+    raw_pts = lower + (upper - lower) * u_pt
+    reparam_pts = c_sel + w_sel * u_sym
+    points = th.where(
+        valid_d,
+        raw_pts + (reparam_pts - reparam_pts.detach()),
+        th.zeros_like(lower),
+    )
 
     if n_adv > 0 and hinge_fn is not None and bool(valid.any().item()):
         points = adversarial_ascent(
@@ -1101,7 +1138,7 @@ def sample_role_region(
         val_u = base.valid.repeat(n_u)
         u_pt = _rand_with_generator(
             (n_u * bsz, 2 * dim), dtype=dtype, device=device, generator=generator
-        ).clamp(min=_INTERIOR_EPS, max=1.0 - _INTERIOR_EPS)
+        ).clamp(min=_INTERIOR_EPS, max=1.0 - _INTERIOR_EPS).detach()
         pts_u = th.where(
             val_u.unsqueeze(-1), lo_u + (hi_u - lo_u) * u_pt, th.zeros_like(lo_u)
         )
@@ -1115,8 +1152,6 @@ def sample_role_region(
                 step_size=step_size,
                 valid=val_u,
             )
-        else:
-            pts_u = pts_u.detach()
 
         if n_corn > 0:
             if n_corn < e_cnt:
@@ -1126,7 +1161,7 @@ def sample_role_region(
                 sel_ext = prod_ext[:, perm, :]
             else:
                 sel_ext = prod_ext
-            pts_c = sel_ext.permute(1, 0, 2).reshape(n_corn * bsz, 2 * dim).detach()
+            pts_c = sel_ext.permute(1, 0, 2).reshape(n_corn * bsz, 2 * dim)
             all_pts = th.cat([pts_u, pts_c], dim=0)
         else:
             all_pts = pts_u

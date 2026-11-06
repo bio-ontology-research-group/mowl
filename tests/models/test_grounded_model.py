@@ -619,3 +619,61 @@ def test_unsat_mix_three_seeds_detects_unsatisfiable_class() -> None:
         )
 
 
+def test_region_lhs_grad_flag_controls_lhs_box_gradients(t3_dataset: PathDataset) -> None:
+    """GroundedEL region_lhs_grad=True propagates loss_region gradients to LHS boxes while region_lhs_grad=False detaches z."""
+    with pytest.raises(ValueError, match="region_lhs_grad"):
+        GroundedEL(t3_dataset, embed_dim=2, region_lhs_grad="invalid")  # type: ignore[arg-type]
+
+    m_true = GroundedEL(
+        t3_dataset,
+        embed_dim=2,
+        n_components=1,
+        epochs=0,
+        seed=0,
+        region_lhs_grad=True,
+    )
+    m_false = GroundedEL(
+        t3_dataset,
+        embed_dim=2,
+        n_components=1,
+        epochs=0,
+        seed=0,
+        region_lhs_grad=False,
+    )
+
+    # Set all class boxes to overlap at [0.2, 1.2]^2 except RHS classes of gci1 which sit at [-0.5, 0.5]^2
+    gci1_rows = m_true.training_datasets["gci1"][:]
+    rhs_ids = set(gci1_rows[:, 2].tolist())
+    lhs_only_ids = (
+        set(gci1_rows[:, 0].tolist()) | set(gci1_rows[:, 1].tolist())
+    ) - rhs_ids
+    assert len(lhs_only_ids) > 0
+    lhs_id = sorted(lhs_only_ids)[0]
+
+    for m in (m_true, m_false):
+        with th.no_grad():
+            m.module.class_centers.copy_(
+                th.tensor([0.7, 0.7]).view(1, 1, 2).expand_as(m.module.class_centers)
+            )
+            m.module.class_raw_widths.fill_(float(th.log(th.expm1(th.tensor(0.5))).item()))
+            for r_id in rhs_ids:
+                m.module.class_centers[r_id, 0] = th.tensor([0.0, 0.0])
+
+    # Keep only gci1 active to isolate gci1_region gradient on lhs_id
+    for m, expect_lhs_grad in ((m_true, True), (m_false, False)):
+        saved_td = dict(m.training_datasets)
+        m._training_datasets = {"gci1": saved_td["gci1"]}
+        m.module.zero_grad()
+        gen = th.Generator().manual_seed(123)
+        losses = m.compute_batch_losses(gen)
+        losses["region"].backward()
+        assert m.module.class_centers.grad is not None
+        lhs_grad_norm = float(m.module.class_centers.grad[lhs_id].abs().sum().item())
+        if expect_lhs_grad:
+            assert lhs_grad_norm > 0.0
+        else:
+            assert lhs_grad_norm == 0.0
+        m._training_datasets = saved_td
+
+
+
