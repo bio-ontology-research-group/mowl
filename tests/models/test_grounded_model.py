@@ -676,4 +676,75 @@ def test_region_lhs_grad_flag_controls_lhs_box_gradients(t3_dataset: PathDataset
         m._training_datasets = saved_td
 
 
+def test_train_lr_schedule_cosine_linear_and_constant(
+    t3_dataset: PathDataset,
+) -> None:
+    """With lr_final=lr/100, optimizer lr at epoch 0 is lr and at last epoch is lr_final (within 1e-9); lr_final=None keeps lr constant."""
+    lr = 0.01
+    lr_final = lr / 100.0
+    n_epochs = 6
+
+    for schedule in ("cosine", "linear"):
+        model = GroundedEL(
+            t3_dataset,
+            embed_dim=2,
+            n_components=2,
+            n_role_components=2,
+            epochs=n_epochs,
+            learning_rate=lr,
+            reseed_every=2,
+            seed=0,
+            log_every=0,
+        )
+        observed_lrs: List[float] = []
+
+        def _record_lr(_ep: int, m: GroundedEL) -> None:
+            assert m.optimizer is not None
+            observed_lrs.append(float(m.optimizer.param_groups[0]["lr"]))
+
+        model.train(
+            epochs=n_epochs,
+            lr_final=lr_final,
+            lr_schedule=schedule,
+            epoch_callback=_record_lr,
+        )
+        assert len(observed_lrs) == n_epochs
+        assert abs(observed_lrs[0] - lr) <= 1e-9
+        assert abs(observed_lrs[-1] - lr_final) <= 1e-9
+        assert model.optimizer is not None
+        assert abs(float(model.optimizer.param_groups[0]["lr"]) - lr_final) <= 1e-9
+        # Strictly decreasing across all epochs despite reseed at epochs 2 and 4
+        for i in range(n_epochs - 1):
+            assert observed_lrs[i + 1] < observed_lrs[i]
+
+    # lr_final=None leaves lr constant across all epochs
+    model_const = GroundedEL(
+        t3_dataset,
+        embed_dim=2,
+        n_components=2,
+        n_role_components=2,
+        epochs=n_epochs,
+        learning_rate=lr,
+        reseed_every=2,
+        seed=0,
+        log_every=0,
+    )
+    const_lrs: List[float] = []
+    model_const.train(
+        epochs=n_epochs,
+        lr_final=None,
+        epoch_callback=lambda _ep, m: const_lrs.append(
+            float(m.optimizer.param_groups[0]["lr"])  # type: ignore[union-attr]
+        ),
+    )
+    assert len(const_lrs) == n_epochs
+    assert all(abs(v - lr) <= 1e-12 for v in const_lrs)
+
+    with pytest.raises(ValueError, match="lr_final"):
+        model_const.train(epochs=2, lr_final=0.0)
+    with pytest.raises(ValueError, match="lr_schedule"):
+        model_const.train(epochs=2, lr_final=lr_final, lr_schedule="invalid")
+
+
+
 

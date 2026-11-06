@@ -334,6 +334,7 @@ class GroundedEL(EmbeddingELModel):
         self.bot_id: Optional[int] = self.class_index_dict.get(BOTTOM, None)
 
         self.loss_history: List[Dict[str, float]] = []
+        self.optimizer: Optional[th.optim.Optimizer] = None
         self._filler_by_role: Optional[Dict[int, th.Tensor]] = None
         self._lhs_by_role: Optional[Dict[int, th.Tensor]] = None
 
@@ -1893,17 +1894,51 @@ class GroundedEL(EmbeddingELModel):
             )
         self._eval_gci_name = value
 
+    @staticmethod
+    def _scheduled_lr(
+        epoch: int,
+        epochs: int,
+        lr: float,
+        lr_final: Optional[float],
+        lr_schedule: str = "cosine",
+    ) -> float:
+        """Compute per-epoch learning rate as a pure function of ``(epoch, epochs, lr, lr_final, lr_schedule)``.
+
+        Guarantees:
+        - Pure function of its arguments; independent of optimiser state or
+          idle-component re-seeding.
+        - Returns ``lr`` when ``lr_final is None``, when ``epoch == 0``, or when
+          ``epochs <= 1``.
+        - Returns ``lr_final`` (to floating-point precision) at
+          ``epoch == epochs - 1`` when ``epochs > 1`` and ``lr_final is not None``.
+
+        Non-guarantees:
+        - Assumes caller has already validated ``lr_final`` and ``lr_schedule``.
+        """
+        if lr_final is None or epochs <= 1:
+            return float(lr)
+        t = epoch / (epochs - 1)
+        if lr_schedule == "cosine":
+            w = 0.5 * (1.0 + math.cos(math.pi * t))
+            return float(w * lr + (1.0 - w) * lr_final)
+        return float((1.0 - t) * lr + t * lr_final)
+
     def train(
         self,
         epochs: Optional[int] = None,
         validate_every: int = 1,
         epoch_callback: Optional[Callable[[int, "GroundedEL"], None]] = None,
         log_every: Optional[int] = None,
+        lr_final: Optional[float] = None,
+        lr_schedule: str = "cosine",
     ) -> List[Dict[str, float]]:
         """Run the GroundedEL training loop (§3, §4, §5).
 
         Each epoch:
-        1. Anneals :math:`\\tau` geometrically from ``tau0`` to ``tau1``.
+        1. Anneals :math:`\\tau` geometrically from ``tau0`` to ``tau1`` and, when
+           ``lr_final is not None``, updates the Adam learning rate across
+           ``optimizer.param_groups`` from ``learning_rate`` to ``lr_final``
+           according to ``lr_schedule`` (``"cosine"`` or ``"linear"``).
         2. Computes ``L = L_fact + L_axioms + lambda_reg * L_region + L_minimality``
            via :meth:`compute_batch_losses` and performs one Adam step.
         3. Optionally calls :meth:`reseed_idle` when ``reseed_every > 0`` and
@@ -1919,6 +1954,10 @@ class GroundedEL(EmbeddingELModel):
         - Reasoner-free (R1): never imports or calls any reasoner or semantic
           completion algorithm.
         - Deterministic for a fixed ``self.seed``.
+        - When ``lr_final is None``, keeps ``learning_rate`` constant across all
+          epochs. When ``lr_final is not None``, computes the epoch learning rate
+          as a pure function of ``(epoch, epochs, learning_rate, lr_final)`` so
+          :meth:`reseed_idle` never resets the learning-rate schedule.
         - Calls :meth:`reseed_idle` if and only if ``reseed_every > 0`` and
           ``(epoch + 1) % reseed_every == 0``.
         - Records per-epoch loss dictionaries in :attr:`loss_history` and returns
@@ -1942,6 +1981,11 @@ class GroundedEL(EmbeddingELModel):
             of each epoch.
         log_every : Optional[int], default None
             Logging interval in epochs; defaults to ``self.log_every`` when ``None``.
+        lr_final : Optional[float], default None
+            Optional final learning rate :math:`> 0` at the last epoch. ``None``
+            keeps a constant learning rate equal to ``self.learning_rate``.
+        lr_schedule : {"cosine", "linear"}, default "cosine"
+            Learning-rate decay schedule used when ``lr_final is not None``.
 
         Returns
         -------
@@ -1955,11 +1999,21 @@ class GroundedEL(EmbeddingELModel):
             if log_every is None
             else _validate_int_ge("log_every", log_every, 0)
         )
+        eff_lr_final: Optional[float] = (
+            None
+            if lr_final is None
+            else _validate_positive_float("lr_final", lr_final)
+        )
+        if not isinstance(lr_schedule, str) or lr_schedule not in ("cosine", "linear"):
+            raise ValueError(
+                f"lr_schedule must be 'cosine' or 'linear', got {lr_schedule!r}"
+            )
         self.loss_history = []
         if eff_epochs == 0:
             return self.loss_history
 
         optimizer = th.optim.Adam(self.module.parameters(), lr=self.learning_rate)
+        self.optimizer = optimizer
         gen = th.Generator(device="cpu")
         gen.manual_seed(self.seed + 1337)
         best_val_loss = float("inf")
@@ -1967,6 +2021,16 @@ class GroundedEL(EmbeddingELModel):
 
         for epoch in range(eff_epochs):
             self.module.train()
+            if eff_lr_final is not None:
+                cur_lr = self._scheduled_lr(
+                    epoch,
+                    eff_epochs,
+                    self.learning_rate,
+                    eff_lr_final,
+                    lr_schedule,
+                )
+                for pg in optimizer.param_groups:
+                    pg["lr"] = cur_lr
             if eff_epochs > 1:
                 tau = self.tau0 * (
                     (self.tau1 / self.tau0) ** (epoch / (eff_epochs - 1))
