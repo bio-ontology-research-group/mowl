@@ -1430,3 +1430,111 @@ def test_reparametrised_region_sampling_lhs_gradients_and_sgd_step() -> None:
     )
 
 
+def test_grounded_module_class_assertion_scorer_on_t3_with_individual(
+    t3_dataset: PathDataset,
+    tmp_path: Path,
+) -> None:
+    """GroundedELModule(data, 'class_assertion') scores T3 with one individual as -depth(p_a, C, crisp=True)."""
+    from mowl.datasets import Dataset
+    from mowl.models.grounded import GroundedEL
+
+    adapter = OWLAPIAdapter()
+    mgr = adapter.owl_manager
+    df = adapter.data_factory
+    ont = mgr.createOntology(t3_dataset.ontology.getAxioms())
+
+    ind_a = adapter.create_individual(IND + "a")
+    cls_a = adapter.create_class(NS + "A")
+    cls_x1 = adapter.create_class(NS + "X1")
+    mgr.addAxiom(ont, df.getOWLClassAssertionAxiom(cls_a, ind_a))
+
+    val_ont = mgr.createOntology()
+    mgr.addAxiom(val_ont, df.getOWLClassAssertionAxiom(cls_x1, ind_a))
+
+    ds = Dataset(ont, validation=val_ont)
+    cm = CanonicalModel.from_ontology(ont)
+
+    probe = GroundedEL(ds, embed_dim=6, n_components=2, epochs=0, seed=0)
+    el_ds = ELDataset(
+        ont,
+        class_index_dict=probe.class_index_dict,
+        object_property_index_dict=probe.object_property_index_dict,
+        individual_index_dict=probe.individual_index_dict,
+        extended=True,
+        use_cache=False,
+        load_role_axioms=True,
+    )
+    el_ds.load()
+    labels, edges, _, _, _ = _build_least_model_tables_from_cm(el_ds, cm)
+
+    ckpt_file = tmp_path / "t3_ind_ckpt.pt"
+    model = GroundedEL(
+        ds,
+        embed_dim=6,
+        n_components=2,
+        n_role_components=2,
+        epochs=4,
+        init="elements",
+        init_labels=labels,
+        init_edges=edges,
+        seed=0,
+        model_filepath=str(ckpt_file),
+    )
+
+    assert model.nb_inds == 1
+    ind_idx = model.individual_index_dict[IND + "a"]
+    assert ind_idx == 0
+    el_a = model.nb_classes + ind_idx
+
+    c_a = model.class_index_dict[NS + "A"]
+    c_x1 = model.class_index_dict[NS + "X1"]
+    c_x2 = model.class_index_dict[NS + "X2"]
+    c_b = model.class_index_dict[NS + "B"]
+    c_z = model.class_index_dict[NS + "Z"]
+
+    pair_t = th.tensor(
+        [
+            [ind_idx, c_a],
+            [ind_idx, c_x1],
+            [ind_idx, c_x2],
+            [ind_idx, c_b],
+            [ind_idx, c_z],
+        ],
+        dtype=th.long,
+    )
+    scores = model.module(pair_t, "class_assertion")
+    assert scores.shape == (5,)
+
+    expected_depths = model.module.depth(
+        model.module.positions(th.full((5,), el_a, dtype=th.long)),
+        pair_t[:, 1],
+        crisp=True,
+    )
+    assert th.allclose(scores, -expected_depths)
+
+    # In T3 with A(a) where A == X1 cap X2: A(a), X1(a), X2(a) are entailed
+    # (crisp depth > 0 -> score < 0), while B(a) and Z(a) are not entailed (score > 0).
+    assert float(scores[0].item()) < 0.0
+    assert float(scores[1].item()) < 0.0
+    assert float(scores[2].item()) < 0.0
+    assert float(scores[3].item()) > 0.0
+    assert float(scores[4].item()) > 0.0
+
+    # Empty batch returns shape (0,)
+    empty_scores = model.module(th.empty((0, 2), dtype=th.long), "class_assertion")
+    assert empty_scores.shape == (0,)
+
+    # Unsupported gci_name or neg=True raises NotImplementedError
+    with pytest.raises(NotImplementedError):
+        model.module(pair_t, "gci0")
+    with pytest.raises(NotImplementedError):
+        model.module(pair_t, "class_assertion", neg=True)
+
+    # Check validate_every and eval_gci_name="class_assertion"
+    model.eval_gci_name = "class_assertion"
+    assert model.eval_gci_name == "class_assertion"
+    model.train(epochs=2, validate_every=1)
+    assert ckpt_file.exists()
+
+
+

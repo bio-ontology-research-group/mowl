@@ -287,6 +287,7 @@ class GroundedELModule(nn.Module):
         )
 
         self.register_buffer("tau", th.tensor(tau_f, dtype=th.float32))
+        self.last_reseed_count: int = 0
 
     def __setattr__(self, name: str, value: object) -> None:
         if name == "tau" and "_buffers" in self.__dict__ and "tau" in self._buffers:
@@ -1193,3 +1194,87 @@ class GroundedELModule(nn.Module):
                     self.role_tail_centers[r_idx, k_idx].copy_(pos_dev[y_i])
                     self.role_tail_raw_widths[r_idx, k_idx].fill_(raw_delta)
                     self.role_active[r_idx, k_idx] = True
+
+    def forward(
+        self,
+        data: th.Tensor,
+        gci_name: str,
+        neg: bool = False,
+    ) -> th.Tensor:
+        """Score evaluation queries in the mOWL ``ELModule(data, gci_name)`` convention.
+
+        Currently implements ``gci_name == "class_assertion"`` (with ``neg=False``),
+        where ``data[:, 0]`` holds individual indices in ``[0, nb_elements - nb_classes)``
+        (mapped to element rows ``nb_classes + data[:, 0]``) and ``data[:, 1]`` holds
+        class indices in ``[0, nb_classes)``. Returns crisp negated signed depth
+        :math:`-\\operatorname{dep}(p_a, C)` so that lower scores correspond to more
+        plausible class assertions without sigmoid saturation.
+
+        Guarantees:
+        - For ``gci_name == "class_assertion"`` and ``neg=False``, returns a 1-D
+          tensor of shape ``(B,)`` equal to ``-self.depth(self.positions(nb_classes + data[:, 0]), data[:, 1], crisp=True)``.
+        - Entry ``b`` is strictly negative if and only if individual ``data[b, 0]``
+          lies strictly inside at least one active component box of class ``data[b, 1]``
+          (or ``data[b, 1] == top_id``).
+        - Raises :class:`NotImplementedError` for ``gci_name != "class_assertion"``
+          or ``neg=True``.
+        - Raises :class:`ValueError` if ``data`` is not a 2-D integer tensor of shape
+          ``(B, 2)`` or if any individual/class index is out of bounds.
+
+        Non-guarantees:
+        - Intended as an evaluation / harness scorer; the GroundedEL training loop
+          calls :meth:`~mowl.models.GroundedEL.compute_batch_losses` directly rather
+          than routing through ``forward``.
+
+        Parameters
+        ----------
+        data : torch.Tensor
+            2-D integer index tensor of shape ``(B, 2)`` with ``data[:, 0]`` = individual
+            index and ``data[:, 1]`` = class index.
+        gci_name : str
+            Normal-form / assertion name; only ``"class_assertion"`` is supported.
+        neg : bool, default False
+            Negative-sampling flag; ``True`` is not supported and raises
+            :class:`NotImplementedError`.
+
+        Returns
+        -------
+        torch.Tensor
+            1-D score tensor of shape ``(B,)`` where lower values indicate higher
+            plausibility (:math:`-\\operatorname{dep}(p_a, C)`).
+        """
+        if neg:
+            raise NotImplementedError(
+                "GroundedELModule.forward does not support negative-sampled scoring (neg=True)"
+            )
+        if gci_name != "class_assertion":
+            raise NotImplementedError(
+                f"GroundedELModule.forward only supports gci_name='class_assertion', got {gci_name!r}"
+            )
+        if not isinstance(data, th.Tensor):
+            raise TypeError(f"data must be a torch.Tensor, got {type(data).__name__}")
+        if data.dtype == th.bool or data.is_floating_point() or data.is_complex():
+            raise ValueError(f"data must have integer dtype, got {data.dtype}")
+        if data.ndim != 2 or data.shape[1] != 2:
+            raise ValueError(
+                f"class_assertion data must have shape (B, 2), got {tuple(data.shape)}"
+            )
+
+        device = self.elem_pos.weight.device
+        dtype = self.elem_pos.weight.dtype
+        bsz = int(data.shape[0])
+        if bsz == 0:
+            return th.empty((0,), dtype=dtype, device=device)
+
+        nb_inds = self.nb_elements - self.nb_classes
+        if nb_inds <= 0:
+            raise ValueError(
+                "Cannot score class_assertion when the module has no individual elements "
+                f"(nb_elements={self.nb_elements}, nb_classes={self.nb_classes})"
+            )
+
+        ind_ids = self._to_index_tensor(data[:, 0], nb_inds, "individual_ids")
+        cls_ids = self._to_index_tensor(data[:, 1], self.nb_classes, "class_ids")
+        el_ids = self.nb_classes + ind_ids
+        pts = self.positions(el_ids)
+        return -self.depth(pts, cls_ids, crisp=True)

@@ -40,6 +40,7 @@ from __future__ import annotations
 
 import logging
 import math
+import os
 from typing import Any, Callable, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple, Union
 
 import numpy as np
@@ -1720,9 +1721,38 @@ class GroundedEL(EmbeddingELModel):
 
             # Determine which active slots need exact live-element counts:
             # - classes in need_own_mask that have all K slots active (to choose fewest-element slot)
+            # - classes in ABox class_assertion that may need re-seeding
             # - active slots not already containing x_A when prune_unused=True
             need_tiebreak_cls = need_own_mask & act.all(dim=1) & (k_slots > 1)
             query_slot_mask = need_tiebreak_cls.unsqueeze(1) & act
+
+            ca_el_a = th.empty((0,), dtype=th.long, device=device)
+            ca_c_id = th.empty((0,), dtype=th.long, device=device)
+            if self.nb_inds > 0:
+                td = self.training_datasets
+                if "class_assertion" in td and len(td["class_assertion"]) > 0:
+                    ca_rows = td["class_assertion"][:].to(device=device, dtype=th.long)
+                    ca_el_a_all = self.nb_classes + ca_rows[:, 0]
+                    ca_c_id_all = ca_rows[:, 1]
+                    ca_valid = live_mask[ca_el_a_all]
+                    if self.top_id is not None:
+                        ca_valid = ca_valid & (ca_c_id_all != self.top_id)
+                    if self.bot_id is not None:
+                        ca_valid = ca_valid & (ca_c_id_all != self.bot_id)
+                    ca_el_a = ca_el_a_all[ca_valid]
+                    ca_c_id = ca_c_id_all[ca_valid]
+                    if ca_c_id.numel() > 0 and k_slots > 1:
+                        ca_dep_pre = mod.depth(pos_all[ca_el_a], ca_c_id, crisp=True)
+                        ca_cand_c = ca_c_id[(ca_dep_pre <= 0.0) | need_own_mask[ca_c_id]]
+                        if ca_cand_c.numel() > 0:
+                            ca_cls_mask = th.zeros(
+                                (self.nb_classes,), dtype=th.bool, device=device
+                            )
+                            ca_cls_mask[ca_cand_c] = True
+                            query_slot_mask = query_slot_mask | (
+                                (ca_cls_mask & act.all(dim=1)).unsqueeze(1) & act
+                            )
+
             if prune_unused:
                 prune_candidates = act & (~own_in_slot)
                 if self.top_id is not None:
@@ -1783,38 +1813,39 @@ class GroundedEL(EmbeddingELModel):
                 moves += int(need_cls_ids.numel())
 
             # Step (a.2): ABox class assertions C(a) (element of individual a)
-            if self.nb_inds > 0:
-                td = self.training_datasets
-                if "class_assertion" in td and len(td["class_assertion"]) > 0:
-                    for row in td["class_assertion"][:].detach().cpu().tolist():
-                        el_a = self.nb_classes + int(row[0])
-                        c_id = int(row[1])
-                        if (
-                            c_id == self.top_id
-                            or c_id == self.bot_id
-                            or not bool(live_mask[el_a].item())
-                        ):
-                            continue
-                        reg_c = mod.class_regions(c_id)
-                        cen_c = reg_c.cen[0]  # (K, d)
-                        w_c = reg_c.w[0]  # (K, d)
-                        act_c = reg_c.active[0]  # (K,)
+            if ca_el_a.numel() > 0:
+                ca_dep = mod.depth(pos_all[ca_el_a], ca_c_id, crisp=True)
+                unsat_idx = th.nonzero(ca_dep <= 0.0, as_tuple=False).view(-1)
+                if unsat_idx.numel() > 0:
+                    unsat_el_list = ca_el_a[unsat_idx].detach().cpu().tolist()
+                    unsat_c_list = ca_c_id[unsat_idx].detach().cpu().tolist()
+                    for el_a, c_id in zip(unsat_el_list, unsat_c_list):
+                        cen_c = mod.class_centers[c_id]  # (K, d)
+                        raw_w_c = mod.class_raw_widths[c_id]  # (K, d)
+                        act_c = mod.class_active[c_id]  # (K,)
+                        w_pos_c = F.softplus(raw_w_c)
+                        w_c = th.where(
+                            act_c.unsqueeze(-1), w_pos_c, th.zeros_like(w_pos_c)
+                        )
+                        eff_act_c = act_c & (th.amin(w_c, dim=-1) > 0.0)
                         dep_a = th.amin(
                             w_c - th.abs(pos_all[el_a].unsqueeze(0) - cen_c), dim=-1
                         )
-                        if bool(((dep_a > 0.0) & act_c).any().item()):
+                        if bool(((dep_a > 0.0) & eff_act_c).any().item()):
                             continue
-                        cnt_c = self._class_slot_live_counts_chunked(
-                            cen_c, w_c, act_c, live_pos, chunk_size=8192
-                        )
-                        slot_counts[c_id] = cnt_c
-                        if bool((~act_c).any().item()):
+                        if bool((~eff_act_c).any().item()):
                             k_star = int(
-                                th.nonzero(~act_c, as_tuple=False)[0].item()
+                                th.nonzero(~eff_act_c, as_tuple=False)[0].item()
                             )
+                        elif k_slots == 1:
+                            k_star = 0
                         else:
+                            cnt_c = slot_counts[c_id]
                             lvol_c = (
-                                th.log(th.clamp(w_c, min=1e-12)).sum(dim=-1).cpu().tolist()
+                                th.log(th.clamp(w_c, min=1e-12))
+                                .sum(dim=-1)
+                                .cpu()
+                                .tolist()
                             )
                             cnt_list = cnt_c.cpu().tolist()
                             k_star = min(
@@ -1843,7 +1874,24 @@ class GroundedEL(EmbeddingELModel):
                     mod.class_raw_widths[unused_active] = _INACTIVE_RAW_WIDTH
                     moves += n_pruned
 
+        mod.last_reseed_count = int(moves)
         return moves
+
+    @property
+    def eval_gci_name(self) -> Optional[str]:
+        """Return the GCI / assertion name used for validation and evaluation."""
+        return self._eval_gci_name
+
+    @eval_gci_name.setter
+    def eval_gci_name(self, value: str) -> None:
+        valid_gci_names = ["gci0", "gci1", "gci2", "gci3", "class_assertion"]
+        if self._extended:
+            valid_gci_names.extend(["gci0_bot", "gci1_bot", "gci3_bot"])
+        if value not in valid_gci_names:
+            raise ValueError(
+                f"eval_gci_name must be one of {valid_gci_names}, got {value!r}"
+            )
+        self._eval_gci_name = value
 
     def train(
         self,
@@ -1863,6 +1911,9 @@ class GroundedEL(EmbeddingELModel):
            ``(epoch + 1) % reseed_every == 0``), followed by
            ``optimizer.state.clear()`` to reset Adam moments.
         4. Logs per-term losses every ``log_every`` epochs.
+        5. Invokes ``epoch_callback(epoch, self)`` when provided, and performs
+           validation / checkpoint saving every ``validate_every`` epochs when
+           configured.
 
         Guarantees:
         - Reasoner-free (R1): never imports or calls any reasoner or semantic
@@ -1882,8 +1933,10 @@ class GroundedEL(EmbeddingELModel):
             Number of training epochs :math:`\\ge 0`; defaults to ``self.epochs``
             when ``None``.
         validate_every : int, default 1
-            Retained for :class:`~mowl.base_models.elmodel.EmbeddingELModel`
-            interface compatibility.
+            Validation / checkpoint interval in epochs (:math:`\\ge 1`). When
+            ``validate_every > epochs``, end-of-loop checkpoint overwriting is
+            suppressed if ``epoch_callback`` has already written a checkpoint to
+            :attr:`model_filepath`.
         epoch_callback : Optional[Callable[[int, GroundedEL], None]], default None
             Optional callback ``epoch_callback(epoch, model)`` invoked at the end
             of each epoch.
@@ -1896,6 +1949,7 @@ class GroundedEL(EmbeddingELModel):
             Per-epoch recorded loss dictionaries.
         """
         eff_epochs = self.epochs if epochs is None else _validate_int_ge("epochs", epochs, 0)
+        eff_val_every = _validate_int_ge("validate_every", validate_every, 1)
         eff_log_every = (
             self.log_every
             if log_every is None
@@ -1908,6 +1962,8 @@ class GroundedEL(EmbeddingELModel):
         optimizer = th.optim.Adam(self.module.parameters(), lr=self.learning_rate)
         gen = th.Generator(device="cpu")
         gen.manual_seed(self.seed + 1337)
+        best_val_loss = float("inf")
+        saved_best_val = False
 
         for epoch in range(eff_epochs):
             self.module.train()
@@ -1957,8 +2013,30 @@ class GroundedEL(EmbeddingELModel):
             if epoch_callback is not None:
                 epoch_callback(epoch, self)
 
-        if self.model_filepath is not None:
-            th.save(self.module.state_dict(), self.model_filepath)
+            if (epoch + 1) % eff_val_every == 0:
+                if (
+                    self.dataset.validation is not None
+                    and self._eval_gci_name is not None
+                    and self._eval_gci_name in self.validation_datasets
+                    and len(self.validation_datasets[self._eval_gci_name]) > 0
+                ):
+                    with th.no_grad():
+                        self.module.eval()
+                        gci_data = self.validation_datasets[self._eval_gci_name][:]
+                        vloss = float(
+                            th.mean(self.module(gci_data, self._eval_gci_name))
+                            .detach()
+                            .item()
+                        )
+                        if vloss < best_val_loss:
+                            best_val_loss = vloss
+                            if self.model_filepath is not None:
+                                th.save(self.module.state_dict(), self.model_filepath)
+                                saved_best_val = True
+
+        if self.model_filepath is not None and not saved_best_val:
+            if eff_val_every <= eff_epochs or not os.path.exists(self.model_filepath):
+                th.save(self.module.state_dict(), self.model_filepath)
 
         return self.loss_history
 
