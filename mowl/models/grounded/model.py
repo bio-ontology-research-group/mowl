@@ -164,6 +164,115 @@ def _short_iri_map(index_dict: Mapping[str, int]) -> Dict[int, str]:
     }
 
 
+class _PrebuiltGCIDataset(th.utils.data.Dataset):
+    """Lightweight :class:`torch.utils.data.Dataset` wrapper around a prebuilt 2-D ``torch.long`` GCI tensor.
+
+    Matches the ``.data``, ``__getitem__``, and ``__len__`` interface of
+    :class:`~mowl.datasets.gci.GCIDataset` and
+    :class:`~mowl.datasets.el.el_dataset.RoleAxiomDataset` so
+    :meth:`GroundedEL.compute_batch_losses` and :meth:`GroundedEL.crisp_report`
+    consume prebuilt normal-form tables identically to OWL-normalised datasets.
+    """
+
+    def __init__(self, data: th.Tensor, device: str = "cpu") -> None:
+        super().__init__()
+        self.device = device
+        self._data = data.to(device=device, dtype=th.long).contiguous()
+
+    @property
+    def data(self) -> th.Tensor:
+        """Return the underlying 2-D ``torch.long`` axiom index tensor."""
+        return self._data
+
+    def __getitem__(self, idx: Any) -> th.Tensor:
+        return self._data[idx]
+
+    def __len__(self) -> int:
+        return int(self._data.shape[0])
+
+
+def _validate_index_dict(name: str, mapping: Mapping[str, int], allow_empty: bool = False) -> Dict[str, int]:
+    """Validate that ``mapping`` maps string keys bijectively to ``0 .. len(mapping) - 1``."""
+    if not isinstance(mapping, Mapping):
+        raise TypeError(f"{name} must be a Mapping[str, int], got {type(mapping).__name__}")
+    n = len(mapping)
+    if n == 0 and not allow_empty:
+        raise ValueError(f"{name} must be non-empty")
+    out: Dict[str, int] = {}
+    seen: set = set()
+    for k, v in mapping.items():
+        if not isinstance(k, str):
+            raise TypeError(f"{name} keys must be strings, got {type(k).__name__}")
+        if isinstance(v, bool) or not isinstance(v, (int, np.integer)):
+            raise TypeError(f"{name} values must be integers, got {type(v).__name__}")
+        idx = int(v)
+        if idx < 0 or idx >= n:
+            raise ValueError(f"{name}[{k!r}] = {idx} out of range [0, {n})")
+        if idx in seen:
+            raise ValueError(f"{name} contains duplicate index {idx}")
+        seen.add(idx)
+        out[k] = idx
+    return out
+
+
+def _coerce_gci_table(
+    name: str,
+    raw: Optional[Any],
+    arity: int,
+    col_bounds: Tuple[int, ...],
+    device: str,
+    allow_short_bot_col: bool = False,
+    bot_id: Optional[int] = None,
+) -> _PrebuiltGCIDataset:
+    """Validate and wrap a prebuilt normal-form table into :class:`_PrebuiltGCIDataset`."""
+    if raw is None:
+        empty = th.empty((0, arity), dtype=th.long, device=device)
+        return _PrebuiltGCIDataset(empty, device=device)
+    if isinstance(raw, _PrebuiltGCIDataset):
+        t = raw.data
+    elif hasattr(raw, "data") and isinstance(getattr(raw, "data"), th.Tensor):
+        t = getattr(raw, "data")
+    elif isinstance(raw, th.Tensor):
+        if raw.dtype == th.bool or raw.is_floating_point() or raw.is_complex():
+            raise ValueError(f"{name} tensor must have integer dtype, got {raw.dtype}")
+        t = raw.to(dtype=th.long)
+    elif isinstance(raw, (list, tuple, np.ndarray)):
+        arr = np.asarray(raw)
+        if arr.size == 0:
+            empty = th.empty((0, arity), dtype=th.long, device=device)
+            return _PrebuiltGCIDataset(empty, device=device)
+        if arr.dtype == np.bool_ or np.issubdtype(arr.dtype, np.floating):
+            raise ValueError(f"{name} must contain integer indices, got dtype {arr.dtype}")
+        t = th.as_tensor(arr, dtype=th.long)
+    else:
+        raise TypeError(
+            f"{name} must be a Tensor, sequence, ndarray, or None, got {type(raw).__name__}"
+        )
+
+    if t.numel() == 0:
+        empty = th.empty((0, arity), dtype=th.long, device=device)
+        return _PrebuiltGCIDataset(empty, device=device)
+
+    if t.ndim != 2:
+        raise ValueError(f"{name} must be a 2-D tensor of shape (N, {arity}), got {tuple(t.shape)}")
+    if allow_short_bot_col and t.shape[1] == arity - 1:
+        fill_col = int(bot_id) if bot_id is not None else 0
+        pad = th.full((t.shape[0], 1), fill_col, dtype=th.long, device=t.device)
+        t = th.cat([t, pad], dim=1)
+    if t.shape[1] != arity:
+        raise ValueError(f"{name} must have {arity} columns, got shape {tuple(t.shape)}")
+
+    for c_i, bound in enumerate(col_bounds):
+        col = t[:, c_i]
+        c_min = int(col.min().item())
+        c_max = int(col.max().item())
+        if c_min < 0 or c_max >= bound:
+            raise ValueError(
+                f"{name} column {c_i} indices out of range [0, {bound}): min={c_min}, max={c_max}"
+            )
+    return _PrebuiltGCIDataset(t, device=device)
+
+
 class GroundedEL(EmbeddingELModel):
     """Element-grounded multi-box and product-role :math:`\\mathcal{EL}^{++}` embedding model.
 
@@ -285,7 +394,7 @@ class GroundedEL(EmbeddingELModel):
 
     def __init__(
         self,
-        dataset,
+        dataset=None,
         embed_dim: int = 50,
         n_components: int = 2,
         n_role_components: int = 2,
@@ -322,6 +431,22 @@ class GroundedEL(EmbeddingELModel):
         n_filler_samples: int = 64,
         region_lhs_grad: bool = True,
         dead_from_bot_only: bool = True,
+        *,
+        class_index_dict: Optional[Mapping[str, int]] = None,
+        object_property_index_dict: Optional[Mapping[str, int]] = None,
+        individual_index_dict: Optional[Mapping[str, int]] = None,
+        named_class_index_dict: Optional[Mapping[str, int]] = None,
+        gci0: Optional[Any] = None,
+        gci1: Optional[Any] = None,
+        gci2: Optional[Any] = None,
+        gci3: Optional[Any] = None,
+        gci0_bot: Optional[Any] = None,
+        gci1_bot: Optional[Any] = None,
+        gci3_bot: Optional[Any] = None,
+        role_inclusion: Optional[Any] = None,
+        role_chain: Optional[Any] = None,
+        class_assertion: Optional[Any] = None,
+        object_property_assertion: Optional[Any] = None,
     ) -> None:
         _validate_int_ge("embed_dim", embed_dim, 1)
         _validate_int_ge("n_components", n_components, 1)
@@ -360,18 +485,135 @@ class GroundedEL(EmbeddingELModel):
         _validate_int_ge("log_every", log_every, 0)
         agg_tau_f = _validate_positive_float("agg_tau", agg_tau)
 
-        super().__init__(
-            dataset,
-            embed_dim=embed_dim,
-            batch_size=batch_size,
-            extended=True,
-            model_filepath=model_filepath,
-            load_normalized=load_normalized,
-            device=device,
-            learning_rate=learning_rate,
-            neg_sampling_gcis=[],
-            load_role_axioms=load_role_axioms,
-        )
+        if dataset is None and class_index_dict is None:
+            raise TypeError(
+                "GroundedEL requires either a mowl Dataset or prebuilt tables (class_index_dict=... or GroundedEL.from_tables(...))"
+            )
+
+        if dataset is not None:
+            super().__init__(
+                dataset,
+                embed_dim=embed_dim,
+                batch_size=batch_size,
+                extended=True,
+                model_filepath=model_filepath,
+                load_normalized=load_normalized,
+                device=device,
+                learning_rate=learning_rate,
+                neg_sampling_gcis=[],
+                load_role_axioms=load_role_axioms,
+            )
+        else:
+            # Prebuilt normal-form table construction without an OWL Dataset
+            if model_filepath is not None and not isinstance(model_filepath, str):
+                raise TypeError(
+                    f"Optional parameter model_filepath must be of type str, got {type(model_filepath).__name__}"
+                )
+            self.dataset = None
+            self.embed_dim = int(embed_dim)
+            self.batch_size = int(batch_size)
+            self._extended = True
+            self._model_filepath = model_filepath
+            self._load_normalized = bool(load_normalized)
+            self.device = device
+            self.learning_rate = float(learning_rate)
+            self.neg_sampling_gcis = []
+            self._load_role_axioms = bool(load_role_axioms)
+            self._eval_gci_name: Optional[str] = None
+
+            cls_map = _validate_index_dict(
+                "class_index_dict", class_index_dict, allow_empty=False  # type: ignore[arg-type]
+            )
+            rel_map = _validate_index_dict(
+                "object_property_index_dict",
+                object_property_index_dict if object_property_index_dict is not None else {},
+                allow_empty=True,
+            )
+            ind_map = _validate_index_dict(
+                "individual_index_dict",
+                individual_index_dict if individual_index_dict is not None else {},
+                allow_empty=True,
+            )
+            if named_class_index_dict is not None:
+                named_cls_map = dict(named_class_index_dict)
+            else:
+                named_cls_map = {
+                    k: v for k, v in cls_map.items() if k not in (TOP, BOTTOM)
+                }
+
+            self._class_index_dict = cls_map
+            self._class_index_dict_cache = cls_map
+            self._object_property_index_dict = rel_map
+            self._object_property_index_dict_cache = rel_map
+            self._individual_index_dict = ind_map
+            self._named_class_index_dict = named_cls_map
+            self._auxiliary_classes = []
+            self._auxiliary_object_properties = []
+
+            n_c = len(cls_map)
+            n_r = len(rel_map)
+            n_i = len(ind_map)
+            b_id = cls_map.get(BOTTOM, None)
+
+            td_prebuilt: Dict[str, Any] = {
+                "gci0": _coerce_gci_table("gci0", gci0, 2, (n_c, n_c), device),
+                "gci1": _coerce_gci_table("gci1", gci1, 3, (n_c, n_c, n_c), device),
+                "gci2": _coerce_gci_table("gci2", gci2, 3, (n_c, n_r, n_c), device),
+                "gci3": _coerce_gci_table("gci3", gci3, 3, (n_r, n_c, n_c), device),
+                "gci0_bot": _coerce_gci_table(
+                    "gci0_bot",
+                    gci0_bot,
+                    2,
+                    (n_c, n_c),
+                    device,
+                    allow_short_bot_col=True,
+                    bot_id=b_id,
+                ),
+                "gci1_bot": _coerce_gci_table(
+                    "gci1_bot",
+                    gci1_bot,
+                    3,
+                    (n_c, n_c, n_c),
+                    device,
+                    allow_short_bot_col=True,
+                    bot_id=b_id,
+                ),
+                "gci3_bot": _coerce_gci_table(
+                    "gci3_bot",
+                    gci3_bot,
+                    3,
+                    (n_r, n_c, n_c),
+                    device,
+                    allow_short_bot_col=True,
+                    bot_id=b_id,
+                ),
+            }
+            if role_inclusion is not None or self._load_role_axioms:
+                td_prebuilt["role_inclusion"] = _coerce_gci_table(
+                    "role_inclusion", role_inclusion, 2, (n_r, n_r), device
+                )
+            if role_chain is not None or self._load_role_axioms:
+                td_prebuilt["role_chain"] = _coerce_gci_table(
+                    "role_chain", role_chain, 3, (n_r, n_r, n_r), device
+                )
+            if class_assertion is not None:
+                td_prebuilt["class_assertion"] = _coerce_gci_table(
+                    "class_assertion", class_assertion, 2, (n_i, n_c), device
+                )
+            if object_property_assertion is not None:
+                td_prebuilt["object_property_assertion"] = _coerce_gci_table(
+                    "object_property_assertion",
+                    object_property_assertion,
+                    3,
+                    (n_i, n_r, n_i),
+                    device,
+                )
+
+            self._training_datasets = td_prebuilt
+            self._validation_datasets = {}
+            self._testing_datasets = {}
+            self._datasets_loaded = True
+            self._dataloaders_loaded = False
 
         self.n_components = int(n_components)
         self.n_role_components = int(n_role_components)
@@ -414,8 +656,143 @@ class GroundedEL(EmbeddingELModel):
         self.optimizer: Optional[th.optim.Optimizer] = None
         self._filler_by_role: Optional[Dict[int, th.Tensor]] = None
         self._lhs_by_role: Optional[Dict[int, th.Tensor]] = None
+        self.generator: th.Generator = th.Generator(device="cpu")
+        self.generator.manual_seed(self.seed + 1337)
 
         self.init_module()
+
+    @classmethod
+    def from_tables(
+        cls,
+        class_index_dict: Mapping[str, int],
+        object_property_index_dict: Optional[Mapping[str, int]] = None,
+        gci0: Optional[Any] = None,
+        gci1: Optional[Any] = None,
+        gci2: Optional[Any] = None,
+        gci3: Optional[Any] = None,
+        gci0_bot: Optional[Any] = None,
+        gci1_bot: Optional[Any] = None,
+        gci3_bot: Optional[Any] = None,
+        role_inclusion: Optional[Any] = None,
+        role_chain: Optional[Any] = None,
+        class_assertion: Optional[Any] = None,
+        object_property_assertion: Optional[Any] = None,
+        individual_index_dict: Optional[Mapping[str, int]] = None,
+        named_class_index_dict: Optional[Mapping[str, int]] = None,
+        **kwargs: Any,
+    ) -> "GroundedEL":
+        """Construct :class:`GroundedEL` directly from prebuilt normal-form index tables without an OWL file.
+
+        Produces the exact same ``training_datasets`` dictionary structure
+        (``"gci0"``, ``"gci1"``, ``"gci2"``, ``"gci3"``, ``"gci0_bot"``,
+        ``"gci1_bot"``, ``"gci3_bot"``, ``"role_inclusion"``, ``"role_chain"``)
+        consumed by :meth:`compute_batch_losses` and :meth:`crisp_report`.
+
+        Guarantees:
+        - Reasoner-free and JVM-free: never starts a JVM or reads an OWL file.
+        - Validates bijective ``0 .. N - 1`` index dictionaries and column bounds
+          of all supplied GCI tensors.
+        - Leaves the existing :class:`~mowl.datasets.Dataset` constructor path
+          completely untouched.
+
+        Non-guarantees:
+        - Calling :meth:`evaluate_model` with ``use_reasoner=True`` on a
+          table-constructed instance raises :class:`ValueError` because no OWL
+          ontology is attached; pass ``use_reasoner=False``.
+
+        Parameters
+        ----------
+        class_index_dict : Mapping[str, int]
+            Bijective mapping from class names/IRIs (including ``TOP`` and
+            ``BOTTOM`` if used) to integer indices ``0 .. nb_classes - 1``.
+        object_property_index_dict : Optional[Mapping[str, int]], default None
+            Bijective mapping from relation names/IRIs to ``0 .. nb_rels - 1``.
+        gci0 : Optional[Any], default None
+            2-D integer tensor/array of shape ``(N0, 2)`` with rows ``[C, D]``
+            for :math:`C \\sqsubseteq D`.
+        gci1 : Optional[Any], default None
+            2-D integer tensor/array of shape ``(N1, 3)`` with rows ``[C, D, E]``
+            for :math:`C \\sqcap D \\sqsubseteq E`.
+        gci2 : Optional[Any], default None
+            2-D integer tensor/array of shape ``(N2, 3)`` with rows ``[C, R, D]``
+            for :math:`C \\sqsubseteq \\exists R.D`.
+        gci3 : Optional[Any], default None
+            2-D integer tensor/array of shape ``(N3, 3)`` with rows ``[R, C, D]``
+            for :math:`\\exists R.C \\sqsubseteq D`.
+        gci0_bot : Optional[Any], default None
+            Optional 2-D integer tensor/array for :math:`C \\sqsubseteq \\bot`
+            (shape ``(N, 2)`` or ``(N, 1)``).
+        gci1_bot : Optional[Any], default None
+            Optional 2-D integer tensor/array for :math:`C \\sqcap D \\sqsubseteq \\bot`
+            (shape ``(N, 3)`` or ``(N, 2)``).
+        gci3_bot : Optional[Any], default None
+            Optional 2-D integer tensor/array for :math:`\\exists R.C \\sqsubseteq \\bot`
+            (shape ``(N, 3)`` or ``(N, 2)``).
+        role_inclusion : Optional[Any], default None
+            Optional 2-D integer tensor/array of shape ``(N, 2)`` for :math:`R \\sqsubseteq S`.
+        role_chain : Optional[Any], default None
+            Optional 2-D integer tensor/array of shape ``(N, 3)`` for :math:`R \\circ S \\sqsubseteq T`.
+        class_assertion : Optional[Any], default None
+            Optional 2-D integer tensor/array of shape ``(N, 2)`` for :math:`C(a)`.
+        object_property_assertion : Optional[Any], default None
+            Optional 2-D integer tensor/array of shape ``(N, 3)`` for :math:`R(a, b)`.
+        individual_index_dict : Optional[Mapping[str, int]], default None
+            Optional bijective mapping from individual names/IRIs to ``0 .. nb_inds - 1``.
+        named_class_index_dict : Optional[Mapping[str, int]], default None
+            Optional subset of ``class_index_dict`` representing named classes.
+        **kwargs : Any
+            Additional keyword arguments forwarded to :meth:`__init__`.
+
+        Returns
+        -------
+        GroundedEL
+            Initialised model instance backed by the prebuilt tables.
+        """
+        return cls(
+            None,
+            class_index_dict=class_index_dict,
+            object_property_index_dict=object_property_index_dict,
+            individual_index_dict=individual_index_dict,
+            named_class_index_dict=named_class_index_dict,
+            gci0=gci0,
+            gci1=gci1,
+            gci2=gci2,
+            gci3=gci3,
+            gci0_bot=gci0_bot,
+            gci1_bot=gci1_bot,
+            gci3_bot=gci3_bot,
+            role_inclusion=role_inclusion,
+            role_chain=role_chain,
+            class_assertion=class_assertion,
+            object_property_assertion=object_property_assertion,
+            **kwargs,
+        )
+
+    @property
+    def individual_index_dict(self) -> Dict[str, int]:
+        """Return mapping from individual IRI to integer index ``0 .. nb_inds - 1``."""
+        cached = getattr(self, "_individual_index_dict", None)
+        if cached is not None:
+            return cached
+        if self.dataset is None:
+            self._individual_index_dict = {}
+            return self._individual_index_dict
+        return super().individual_index_dict
+
+    @property
+    def named_class_index_dict(self) -> Dict[str, int]:
+        """Return mapping from named class IRI to integer index in ``class_index_dict``."""
+        cached = getattr(self, "_named_class_index_dict", None)
+        if cached is not None:
+            return cached
+        if self.dataset is None:
+            self._named_class_index_dict = {
+                k: v
+                for k, v in self.class_index_dict.items()
+                if k not in (TOP, BOTTOM)
+            }
+            return self._named_class_index_dict
+        return super().named_class_index_dict
 
     def init_module(self) -> None:
         """Initialise :class:`~mowl.nn.GroundedELModule` and apply ``init="elements"`` when configured.
@@ -809,17 +1186,305 @@ class GroundedEL(EmbeddingELModel):
             m = th.where(class_ids == self.bot_id, th.zeros_like(m), m)
         return dep, m
 
+    @property
+    def tau_s(self) -> th.Tensor:
+        """Return the learnable inductive score temperature :math:`\\tau_s = \\max(\\operatorname{softplus}(\\text{raw}), 10^{-3})`."""
+        return self.module.tau_s
+
+    def reset_generator(self, seed: Optional[int] = None) -> th.Generator:
+        """Reset and return ``self.generator`` for external training loops.
+
+        Guarantees:
+        - Seeds ``self.generator`` with ``seed`` when provided, or ``self.seed + 1337``
+          (matching :meth:`train`) when ``seed is None``.
+
+        Non-guarantees:
+        - Mutates ``self.generator`` in-place.
+        """
+        eff_seed = (self.seed + 1337) if seed is None else int(seed)
+        self.generator.manual_seed(eff_seed)
+        return self.generator
+
+    def scheduled_tau(self, step: int, total_steps: int) -> float:
+        """Return geometrically annealed :math:`\\tau` at ``(step, total_steps)`` from ``tau0`` to ``tau1``.
+
+        Guarantees:
+        - Pure function of ``(step, total_steps, self.tau0, self.tau1)``.
+        - Returns ``self.tau0`` when ``total_steps <= 1`` or ``step <= 0``.
+        - Returns ``self.tau1`` at ``step == total_steps - 1`` when ``total_steps > 1``.
+
+        Non-guarantees:
+        - Does not mutate ``self.module.tau`` (use :meth:`step_tau` to update in-place).
+        """
+        _validate_int_ge("step", step, 0)
+        _validate_int_ge("total_steps", total_steps, 1)
+        if total_steps <= 1:
+            return float(self.tau0)
+        frac = min(max(step / (total_steps - 1), 0.0), 1.0)
+        return float(self.tau0 * ((self.tau1 / self.tau0) ** frac))
+
+    def step_tau(self, step: int, total_steps: int) -> float:
+        """Update ``self.module.tau`` according to the geometric annealing schedule and return the new ``tau``."""
+        tau_val = self.scheduled_tau(step, total_steps)
+        self.module.set_tau(tau_val)
+        return tau_val
+
+    def scheduled_lr(
+        self,
+        step: int,
+        total_steps: int,
+        lr: Optional[float] = None,
+        lr_final: Optional[float] = None,
+        lr_schedule: str = "cosine",
+    ) -> float:
+        """Compute scheduled learning rate at ``(step, total_steps)`` for external training loops."""
+        _validate_int_ge("step", step, 0)
+        _validate_int_ge("total_steps", total_steps, 1)
+        base_lr = self.learning_rate if lr is None else _validate_positive_float("lr", lr)
+        eff_final = (
+            None
+            if lr_final is None
+            else _validate_positive_float("lr_final", lr_final)
+        )
+        if not isinstance(lr_schedule, str) or lr_schedule not in ("cosine", "linear"):
+            raise ValueError(
+                f"lr_schedule must be 'cosine' or 'linear', got {lr_schedule!r}"
+            )
+        return self._scheduled_lr(step, total_steps, base_lr, eff_final, lr_schedule)
+
+    def clamp_dead_logits(self) -> None:
+        """Clamp ``self.module.dead_logits`` to ``[0, 1]`` and keep ``dead_logits[bot_id] == +100.0``."""
+        with th.no_grad():
+            self.module.dead_logits.clamp_(0.0, 1.0)
+            if self.bot_id is not None:
+                self.module.dead_logits[self.bot_id] = _DEAD_LOGIT
+
+    def _encode_features(self, features: th.Tensor) -> th.Tensor:
+        """Validate ``features`` and map through ``self.module.encoder`` to ``(B, embed_dim)`` positions."""
+        mod = self.module
+        enc = mod.encoder if mod.encoder is not None else self.encoder
+        if enc is None:
+            raise ValueError(
+                "GroundedEL.encoder is None; pass encoder=... at construction to use compute_data_loss or score"
+            )
+        if mod.encoder is None:
+            mod.encoder = enc.to(self.device)
+        if not isinstance(features, th.Tensor):
+            raise TypeError(
+                f"features must be a torch.Tensor, got {type(features).__name__}"
+            )
+        if features.ndim == 1:
+            feat_2d = features.unsqueeze(0)
+        elif features.ndim == 2:
+            feat_2d = features
+        else:
+            raise ValueError(
+                f"features must be 2-D (B, feat_dim) (or 1-D (feat_dim,)), got shape {tuple(features.shape)}"
+            )
+        feat_dev = feat_2d.to(device=self.device, dtype=mod.class_centers.dtype)
+        pos = enc(feat_dev)
+        if pos.ndim != 2 or pos.shape[0] != feat_dev.shape[0] or pos.shape[1] != self.embed_dim:
+            raise ValueError(
+                f"encoder(features) must return shape ({feat_dev.shape[0]}, {self.embed_dim}), got {tuple(pos.shape)}"
+            )
+        return pos
+
+    def _chunked_term_scores(
+        self,
+        pos: th.Tensor,
+        term_ids: th.Tensor,
+        max_elements: int = 8_388_608,
+    ) -> th.Tensor:
+        """Compute ``sigmoid(depth(pos, term_ids, crisp=True) / tau_s)`` in term chunks bounded by ``max_elements``."""
+        mod = self.module
+        bsz = int(pos.shape[0])
+        n_terms = int(term_ids.numel())
+        tau_s = mod.tau_s.to(dtype=pos.dtype)
+        if bsz == 0 or n_terms == 0:
+            return th.empty((bsz, n_terms), dtype=pos.dtype, device=pos.device)
+
+        elems_per_term = max(1, bsz * max(1, mod.n_components) * max(1, self.embed_dim))
+        term_chunk = max(1, int(max_elements) // elems_per_term)
+
+        chunks: List[th.Tensor] = []
+        for t_start in range(0, n_terms, term_chunk):
+            t_end = min(t_start + term_chunk, n_terms)
+            c_sub = term_ids[t_start:t_end]
+            c_len = int(c_sub.numel())
+            pos_exp = (
+                pos.unsqueeze(1)
+                .expand(bsz, c_len, self.embed_dim)
+                .reshape(bsz * c_len, self.embed_dim)
+            )
+            c_exp = c_sub.unsqueeze(0).expand(bsz, c_len).reshape(bsz * c_len)
+            dep_sub = mod.depth(pos_exp, c_exp, crisp=True).view(bsz, c_len)
+            s_sub = th.sigmoid(dep_sub / tau_s)
+            chunks.append(s_sub)
+
+        if len(chunks) == 1:
+            return chunks[0]
+        return th.cat(chunks, dim=1)
+
+    def compute_data_loss(
+        self,
+        features: th.Tensor,
+        label_matrix: th.Tensor,
+        term_class_ids: Union[Sequence[int], th.Tensor],
+        max_elements: int = 8_388_608,
+    ) -> Tuple[th.Tensor, th.Tensor]:
+        """Compute inductive binary cross-entropy loss and scores for encoded data elements (§6 / E3).
+
+        Computes ``positions = self.encoder(features)`` (where ``self.encoder`` is a
+        trainable submodule registered on ``self.module`` and part of the model's
+        parameters/optimizer), crisp box depths ``depth(positions, term_class_ids, crisp=True)``,
+        and scores ``s = sigmoid(depth(positions, term_class_ids, crisp=True) / tau_s)``
+        with learnable scalar temperature ``tau_s = max(softplus(raw_tau_s), 1e-3)``
+        (initialised to ``0.1``). Returns ``(BCE(s, label_matrix), s)`` with mean
+        reduction.
+
+        Data elements never get a dead score (:math:`\\delta \\equiv 0`) or a
+        minimality penalty on their positions: there are no data elements in
+        :math:`\\Delta` here; proteins/data instances exist only through
+        ``self.encoder`` at forward/scoring time.
+
+        Guarantees:
+        - Reasoner-free (R1): never imports or calls any reasoner or completion algorithm.
+        - Chunks computation over ``term_class_ids`` whenever
+          ``B * n_terms * K * d > max_elements`` so peak intermediate memory stays
+          bounded even on large ontologies (e.g. GO BP with ``128 * 21356 * K * d``).
+        - Propagates gradients to ``self.encoder``, ``self.module.raw_tau_s``, and
+          the queried class boxes in ``self.module``.
+        - Never creates or reads ``dead_logits`` or minimality terms for the encoded
+          data positions.
+
+        Non-guarantees:
+        - Under ``crisp=True`` (hard ``max`` over active component slots), box
+          gradients for each ``(protein, term)`` pair route only to the single
+          active component slot attaining the maximum depth.
+
+        Parameters
+        ----------
+        features : torch.Tensor
+            Input feature matrix of shape ``(B, feat_dim)``.
+        label_matrix : torch.Tensor
+            Binary target matrix of shape ``(B, n_terms)`` with entries in ``[0, 1]``.
+        term_class_ids : Union[Sequence[int], torch.Tensor]
+            1-D sequence or tensor of ``n_terms`` class indices in
+            ``[0, nb_classes)`` (e.g. the ``Aux_G`` class indices).
+        max_elements : int, default 8_388_608
+            Maximum ``B * term_chunk * K * d`` elements per chunk before splitting
+            across ``term_class_ids``.
+
+        Returns
+        -------
+        Tuple[torch.Tensor, torch.Tensor]
+            ``(loss, scores)`` where ``loss`` is the mean binary cross-entropy
+            scalar tensor and ``scores`` has shape ``(B, n_terms)``.
+        """
+        _validate_int_ge("max_elements", max_elements, 1)
+        pos = self._encode_features(features)
+        bsz = int(pos.shape[0])
+        term_ids = self.module._to_index_tensor(
+            term_class_ids, self.nb_classes, "term_class_ids"
+        )
+        if term_ids.ndim != 1 or term_ids.numel() == 0:
+            raise ValueError(
+                f"term_class_ids must be a non-empty 1-D sequence/tensor, got shape {tuple(term_ids.shape)}"
+            )
+        n_terms = int(term_ids.numel())
+        if not isinstance(label_matrix, th.Tensor):
+            raise TypeError(
+                f"label_matrix must be a torch.Tensor, got {type(label_matrix).__name__}"
+            )
+        if label_matrix.shape != (bsz, n_terms):
+            raise ValueError(
+                f"label_matrix must have shape ({bsz}, {n_terms}), got {tuple(label_matrix.shape)}"
+            )
+        targets = label_matrix.to(device=self.device, dtype=pos.dtype)
+        scores = self._chunked_term_scores(pos, term_ids, max_elements=max_elements)
+        bce = F.binary_cross_entropy(scores, targets, reduction="mean")
+        return bce, scores
+
+    @th.no_grad()
+    def score(
+        self,
+        features: th.Tensor,
+        term_class_ids: Union[Sequence[int], th.Tensor],
+        max_elements: int = 8_388_608,
+    ) -> th.Tensor:
+        """Compute inductive prediction scores ``sigmoid(depth(encoder(features), term_class_ids, crisp=True) / tau_s)`` without gradients.
+
+        Data elements never get a dead score (:math:`\\delta \\equiv 0`) or a
+        minimality penalty on their positions: there are no data elements in
+        :math:`\\Delta` here; proteins/data instances exist only through
+        ``self.encoder``.
+
+        Guarantees:
+        - Runs under :func:`torch.no_grad` and returns a tensor of shape
+          ``(B, n_terms)`` (or ``(1, n_terms)`` when ``features`` is 1-D) with
+          values in ``(0, 1)``.
+        - Chunks over ``term_class_ids`` when ``B * n_terms * K * d > max_elements``.
+
+        Non-guarantees:
+        - Does not toggle ``self.module.eval()``; callers using dropout/batchnorm in
+          ``self.encoder`` should set ``model.module.eval()`` during evaluation.
+
+        Parameters
+        ----------
+        features : torch.Tensor
+            Input feature matrix of shape ``(B, feat_dim)`` (or 1-D ``(feat_dim,)``).
+        term_class_ids : Union[Sequence[int], torch.Tensor]
+            1-D sequence or tensor of ``n_terms`` class indices in ``[0, nb_classes)``.
+        max_elements : int, default 8_388_608
+            Maximum ``B * term_chunk * K * d`` elements per chunk.
+
+        Returns
+        -------
+        torch.Tensor
+            Predicted score matrix of shape ``(B, n_terms)``.
+        """
+        _validate_int_ge("max_elements", max_elements, 1)
+        pos = self._encode_features(features)
+        term_ids = self.module._to_index_tensor(
+            term_class_ids, self.nb_classes, "term_class_ids"
+        )
+        if term_ids.ndim != 1 or term_ids.numel() == 0:
+            raise ValueError(
+                f"term_class_ids must be a non-empty 1-D sequence/tensor, got shape {tuple(term_ids.shape)}"
+            )
+        return self._chunked_term_scores(pos, term_ids, max_elements=max_elements)
+
     def compute_batch_losses(
         self,
         generator: Optional[th.Generator] = None,
+        step: Optional[int] = None,
+        total_steps: Optional[int] = None,
     ) -> Dict[str, th.Tensor]:
-        """Compute one step of per-term GroundedEL losses (§3 and §4).
+        """Compute one step of per-term GroundedEL TBox/ABox losses (§3 and §4).
+
+        Can be used directly as the TBox step of an external training loop (such as
+        joint inductive protein + ontology training in DeepGO-SE / E3):
+
+        - **Generator state:** Pass ``generator=model.generator`` (or omit
+          ``generator`` to use ``self.generator`` automatically, which is seeded
+          with ``self.seed + 1337`` at construction and can be reset via
+          :meth:`reset_generator`). Consecutive calls advance ``self.generator`` so
+          each step samples a fresh TBox mini-batch and random/adversarial points.
+        - **Temperature schedule state:** Either pass ``step`` and ``total_steps``
+          directly to :meth:`compute_batch_losses` (which calls
+          ``self.step_tau(step, total_steps)`` before evaluating memberships) or
+          call :meth:`step_tau` / ``self.module.set_tau(tau)`` once per epoch/step.
+        - **Post-step deadness projection:** After ``optimizer.step()``, call
+          :meth:`clamp_dead_logits` to project ``self.module.dead_logits`` onto
+          ``[0, 1]`` and keep ``dead_logits[bot_id] = +100.0``.
 
         Guarantees:
         - Returns a dictionary containing ``"fact"``, ``"axioms"``, ``"region"``,
           ``"minimality"``, and ``"total"`` scalar tensors on ``self.device``.
-        - Uses only ``generator`` (or a freshly seeded generator from ``self.seed``
-          when ``None``) for all random element and region draws.
+        - Uses ``generator`` when provided, or ``self.generator`` when ``None``,
+          for all random element and region draws.
+        - When ``step`` and ``total_steps`` are provided, updates ``self.module.tau``
+          via :meth:`step_tau` prior to loss evaluation.
 
         Non-guarantees:
         - When ``n_region_samples == 0`` or ``lambda_reg == 0``, ``"region"`` is
@@ -828,16 +1493,27 @@ class GroundedEL(EmbeddingELModel):
         Parameters
         ----------
         generator : Optional[torch.Generator], default None
-            Explicit PyTorch RNG on CPU.
+            Explicit PyTorch RNG on CPU. Defaults to ``self.generator`` when ``None``.
+        step : Optional[int], default None
+            Optional 0-based schedule step index ``0 <= step < total_steps`` for
+            geometric :math:`\\tau` annealing from ``tau0`` to ``tau1``.
+        total_steps : Optional[int], default None
+            Optional total number of schedule steps :math:`\\ge 1` for :math:`\\tau`
+            annealing. Must be provided if and only if ``step`` is provided.
 
         Returns
         -------
         Dict[str, torch.Tensor]
             Dictionary of scalar loss tensors.
         """
+        if (step is None) != (total_steps is None):
+            raise ValueError(
+                "step and total_steps must both be provided or both be None"
+            )
+        if step is not None and total_steps is not None:
+            self.step_tau(step, total_steps)
         if generator is None:
-            generator = th.Generator(device="cpu")
-            generator.manual_seed(self.seed)
+            generator = self.generator
         self._ensure_role_tables()
 
         mod = self.module
@@ -2265,7 +2941,8 @@ class GroundedEL(EmbeddingELModel):
 
             if (epoch + 1) % eff_val_every == 0:
                 if (
-                    self.dataset.validation is not None
+                    self.dataset is not None
+                    and self.dataset.validation is not None
                     and self._eval_gci_name is not None
                     and self._eval_gci_name in self.validation_datasets
                     and len(self.validation_datasets[self._eval_gci_name]) > 0
@@ -3591,6 +4268,11 @@ class GroundedEL(EmbeddingELModel):
                     "exact": exact,
                     "exact_tol1e-4": exact_tol1e4,
                 }
+
+            if self.dataset is None or getattr(self.dataset, "ontology", None) is None:
+                raise ValueError(
+                    "use_reasoner=True requires an OWL dataset; pass use_reasoner=False for table-constructed GroundedEL models"
+                )
 
             from mowl.geometric.completion import CanonicalModel
 

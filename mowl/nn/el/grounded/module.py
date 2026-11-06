@@ -287,7 +287,38 @@ class GroundedELModule(nn.Module):
         )
 
         self.register_buffer("tau", th.tensor(tau_f, dtype=th.float32))
+        self.raw_tau_s: Optional[nn.Parameter] = (
+            nn.Parameter(th.tensor(_inv_softplus(0.1), dtype=th.float32))
+            if encoder is not None
+            else None
+        )
         self.last_reseed_count: int = 0
+
+    def ensure_tau_s(self) -> nn.Parameter:
+        """Ensure learnable score temperature parameter ``raw_tau_s`` is registered on this module.
+
+        Guarantees:
+        - Returns a scalar :class:`torch.nn.Parameter` ``raw_tau_s`` on the module's
+          device and dtype, initialised to ``_inv_softplus(0.1)`` so that
+          ``softplus(raw_tau_s) == 0.1``.
+
+        Non-guarantees:
+        - Calling this method for the first time when ``encoder`` was ``None`` at
+          construction adds ``raw_tau_s`` to :meth:`parameters`.
+        """
+        if self.raw_tau_s is None:
+            dev = self.elem_pos.weight.device
+            dt = self.elem_pos.weight.dtype
+            self.raw_tau_s = nn.Parameter(
+                th.tensor(_inv_softplus(0.1), dtype=dt, device=dev)
+            )
+        return self.raw_tau_s
+
+    @property
+    def tau_s(self) -> th.Tensor:
+        """Return positive inductive score temperature :math:`\\tau_s = \\max(\\operatorname{softplus}(\\text{raw}), 10^{-3})`."""
+        raw = self.ensure_tau_s()
+        return th.clamp(F.softplus(raw), min=1e-3)
 
     def __setattr__(self, name: str, value: object) -> None:
         if name == "tau" and "_buffers" in self.__dict__ and "tau" in self._buffers:
@@ -300,6 +331,10 @@ class GroundedELModule(nn.Module):
         elif name == "agg_tau":
             value = _validate_positive_float("agg_tau", value)  # type: ignore[arg-type]
         super().__setattr__(name, value)
+        if name == "encoder" and value is not None and "_parameters" in self.__dict__:
+            if self.__dict__.get("raw_tau_s") is None and self._parameters.get("raw_tau_s") is None:
+                if "elem_pos" in self._modules:
+                    self.ensure_tau_s()
 
     def set_tau(self, t: float) -> None:
         """Set the sigmoid membership temperature ``tau``.

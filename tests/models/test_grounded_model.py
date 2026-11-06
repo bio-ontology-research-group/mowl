@@ -1615,6 +1615,218 @@ def test_dead_from_bot_only_false_reproduces_legacy_loss_bit_for_bit() -> None:
         assert losses_true["axioms"].item() != losses_actual["axioms"].item()
 
 
+def test_from_tables_prebuilt_constructor_matches_training_datasets_structure() -> None:
+    """1a: GroundedEL.from_tables constructs without an OWL file and produces the exact training_datasets structure compute_batch_losses reads."""
+    class_index_dict = {
+        BOTTOM: 0,
+        TOP: 1,
+        "GO:0001": 2,
+        "GO:0002": 3,
+        "GO:0003": 4,
+        "Aux_GO:0001": 5,
+        "Aux_GO:0002": 6,
+    }
+    object_property_index_dict = {
+        "BFO:0000050": 0,
+        "hasFunction": 1,
+    }
+    gci0_t = th.tensor([[2, 3], [3, 4], [5, 6]], dtype=th.long)
+    gci1_t = th.tensor([[2, 3, 4]], dtype=th.long)
+    # Aux_G <= exists hasFunction.G (gci2: [C, R, D])
+    gci2_t = th.tensor([[5, 1, 2], [6, 1, 3], [2, 0, 3]], dtype=th.long)
+    # exists hasFunction.G <= Aux_G (gci3: [R, C, D])
+    gci3_t = th.tensor([[1, 2, 5], [1, 3, 6], [0, 2, 4]], dtype=th.long)
+
+    model = GroundedEL.from_tables(
+        class_index_dict=class_index_dict,
+        object_property_index_dict=object_property_index_dict,
+        gci0=gci0_t,
+        gci1=gci1_t,
+        gci2=gci2_t,
+        gci3=gci3_t,
+        embed_dim=8,
+        n_components=1,
+        n_role_components=1,
+        seed=7,
+    )
+
+    assert model.dataset is None
+    assert model.nb_classes == 7
+    assert model.nb_inds == 0
+    assert model.nb_elements == 7
+    assert model.nb_rels == 2
+    assert model.bot_id == 0
+    assert model.top_id == 1
+
+    td = model.training_datasets
+    for key in ("gci0", "gci1", "gci2", "gci3", "gci0_bot", "gci1_bot", "gci3_bot"):
+        assert key in td
+        assert isinstance(td[key].data, th.Tensor)
+        assert td[key].data.dtype == th.long
+
+    assert th.equal(td["gci0"][:], gci0_t)
+    assert th.equal(td["gci1"][:], gci1_t)
+    assert th.equal(td["gci2"][:], gci2_t)
+    assert th.equal(td["gci3"][:], gci3_t)
+    assert len(td["gci0_bot"]) == 0
+    assert len(td["gci1_bot"]) == 0
+    assert len(td["gci3_bot"]) == 0
+
+    losses = model.compute_batch_losses()
+    for k in ("fact", "axioms", "region", "minimality", "total"):
+        assert k in losses
+        assert losses[k].ndim == 0
+        assert th.isfinite(losses[k])
+
+    crisp = model.crisp_report(n_eval=256)
+    assert "elem_viol" in crisp and "region_viol" in crisp
+    ev = model.evaluate_model(use_reasoner=False, n_eval=256)
+    assert ev["n_dead_elements"] == 0
+    with pytest.raises(ValueError, match="use_reasoner=True"):
+        model.evaluate_model(use_reasoner=True, n_eval=64)
+
+
+def test_compute_data_loss_and_score_with_chunking_and_tau_s() -> None:
+    """1b: GroundedEL.compute_data_loss and score use encoder, crisp depth, learnable tau_s (init 0.1, floor 1e-3), and term chunking."""
+    th.manual_seed(11)
+    class_index_dict = {
+        BOTTOM: 0,
+        TOP: 1,
+        "GO:0001": 2,
+        "GO:0002": 3,
+        "GO:0003": 4,
+        "Aux_GO:0001": 5,
+        "Aux_GO:0002": 6,
+        "Aux_GO:0003": 7,
+    }
+    object_property_index_dict = {"hasFunction": 0}
+    gci0_t = th.tensor([[2, 3], [3, 4]], dtype=th.long)
+    gci2_t = th.tensor([[5, 0, 2], [6, 0, 3], [7, 0, 4]], dtype=th.long)
+    gci3_t = th.tensor([[0, 2, 5], [0, 3, 6], [0, 4, 7]], dtype=th.long)
+
+    encoder = th.nn.Sequential(
+        th.nn.Linear(16, 12),
+        th.nn.LayerNorm(12),
+        th.nn.ReLU(),
+        th.nn.Linear(12, 6),
+    )
+    model = GroundedEL.from_tables(
+        class_index_dict=class_index_dict,
+        object_property_index_dict=object_property_index_dict,
+        gci0=gci0_t,
+        gci2=gci2_t,
+        gci3=gci3_t,
+        embed_dim=6,
+        n_components=2,
+        n_role_components=1,
+        encoder=encoder,
+        seed=11,
+    )
+
+    # Check tau_s init (0.1) and floor (1e-3)
+    assert model.tau_s.item() == pytest.approx(0.1, abs=1e-6)
+    with th.no_grad():
+        orig_raw = model.module.raw_tau_s.clone()
+        model.module.raw_tau_s.fill_(-100.0)
+        assert model.tau_s.item() == pytest.approx(1e-3, abs=1e-7)
+        model.module.raw_tau_s.copy_(orig_raw)
+
+    # Ensure encoder parameters and raw_tau_s are in model.module.parameters()
+    param_ids = {id(p) for p in model.module.parameters()}
+    for p in encoder.parameters():
+        assert id(p) in param_ids
+    assert id(model.module.raw_tau_s) in param_ids
+
+    features = th.randn(10, 16)
+    labels = th.tensor(
+        [[1.0, 1.0, 0.0] if i % 2 == 0 else [0.0, 1.0, 1.0] for i in range(10)],
+        dtype=th.float32,
+    )
+    term_ids = th.tensor([5, 6, 7], dtype=th.long)
+
+    # Verify chunked vs unchunked produces identical scores and loss
+    loss_full, scores_full = model.compute_data_loss(
+        features, labels, term_ids, max_elements=10_000_000
+    )
+    loss_chunk, scores_chunk = model.compute_data_loss(
+        features, labels, term_ids, max_elements=12  # forces 1 term per chunk
+    )
+    assert th.allclose(scores_full, scores_chunk, atol=1e-7)
+    assert th.allclose(loss_full, loss_chunk, atol=1e-7)
+
+    # Verify score() runs under no_grad and matches compute_data_loss scores
+    scores_nograd = model.score(features, term_ids, max_elements=12)
+    assert not scores_nograd.requires_grad
+    assert th.allclose(scores_nograd, scores_full.detach(), atol=1e-7)
+
+    # Verify gradients flow to encoder, raw_tau_s, and Aux_G boxes, and NOT dead_logits
+    model.module.zero_grad()
+    loss_full.backward()
+    assert any(p.grad is not None and p.grad.abs().sum().item() > 0 for p in encoder.parameters())
+    assert model.module.raw_tau_s.grad is not None
+    assert model.module.class_centers.grad is not None
+    assert model.module.class_centers.grad[term_ids].abs().sum().item() > 0
+    assert (
+        model.module.dead_logits.grad is None
+        or model.module.dead_logits.grad.abs().sum().item() == 0.0
+    )
+
+    # Verify data loss decreases over 20 steps on toy encoder
+    opt = th.optim.Adam(model.module.parameters(), lr=1e-2)
+    initial_loss = float(loss_full.detach().item())
+    last_loss = initial_loss
+    for _ in range(20):
+        opt.zero_grad()
+        l_step, _ = model.compute_data_loss(features, labels, term_ids)
+        l_step.backward()
+        opt.step()
+        last_loss = float(l_step.detach().item())
+    assert last_loss < initial_loss
+
+
+def test_compute_batch_losses_external_loop_tau_and_generator_state() -> None:
+    """1c: compute_batch_losses works as the TBox step of an external training loop with step/total_steps and model.generator."""
+    class_index_dict = {BOTTOM: 0, TOP: 1, "A": 2, "B": 3, "C": 4}
+    object_property_index_dict = {"r": 0}
+    gci0_t = th.tensor([[2, 3], [3, 4], [2, 4]], dtype=th.long)
+    gci2_t = th.tensor([[2, 0, 3]], dtype=th.long)
+    gci3_t = th.tensor([[0, 3, 4]], dtype=th.long)
+
+    model = GroundedEL.from_tables(
+        class_index_dict=class_index_dict,
+        object_property_index_dict=object_property_index_dict,
+        gci0=gci0_t,
+        gci2=gci2_t,
+        gci3=gci3_t,
+        embed_dim=4,
+        n_components=1,
+        n_role_components=1,
+        batch_size=1,
+        tau0=1.0,
+        tau1=0.01,
+        seed=5,
+    )
+
+    model.reset_generator(123)
+    opt = th.optim.Adam(model.module.parameters(), lr=1e-2)
+    taus = []
+    for step in range(5):
+        lr_cur = model.scheduled_lr(step, 5, lr=1e-2, lr_final=1e-4)
+        for pg in opt.param_groups:
+            pg["lr"] = lr_cur
+        losses = model.compute_batch_losses(step=step, total_steps=5)
+        taus.append(float(model.module.tau.item()))
+        opt.zero_grad()
+        losses["total"].backward()
+        opt.step()
+        model.clamp_dead_logits()
+
+    assert taus[0] == pytest.approx(1.0)
+    assert taus[-1] == pytest.approx(0.01)
+    assert all(taus[i] > taus[i + 1] for i in range(len(taus) - 1))
+    assert float(model.module.dead_logits[model.bot_id].item()) == pytest.approx(1.0)
+
+
 
 
 
