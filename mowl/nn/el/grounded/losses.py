@@ -1094,7 +1094,12 @@ def minimality(
     Pushes unforced class memberships, role memberships, and element dead scores
     toward ``0`` so that in the small-:math:`\\varepsilon` limit at fixed
     positions, the unique minimiser on the zero-hinge polytope is the least
-    model.
+    model. Keeping :math:`\\varepsilon_\\delta > 0` (small but nonzero) is
+    essential because :math:`\\delta_x = 1` for all :math:`x` is a trivial zero
+    of every element hinge (including ``fact`` and all GCI/bot hinges); a
+    strictly positive :math:`\\varepsilon_\\delta` ensures :math:`\\delta_x` stays
+    at ``0`` for satisfiable classes and rises to ``1`` only when forced by an
+    unsatisfiable conjunction or bottom axiom.
 
     Guarantees:
     - Returns a scalar ``torch.Tensor`` of shape ``()``.

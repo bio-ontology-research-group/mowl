@@ -7,7 +7,8 @@ Implements §2 and §5 of the GroundedEL design:
    indices ``nb_classes .. nb_elements - 1`` correspond to ABox individuals. Each
    element has a learnable position :math:`p_x \\in \\mathbb{R}^d` (with an
    optional feature encoder hook for data elements) and a learnable deadness
-   logit :math:`\\ell_x` with :math:`\\delta_x = \\sigma(\\ell_x) \\in (0, 1)`.
+   parameter :math:`\\delta_x \\in [0, 1]` (clamped to :math:`[0, 1]` after each
+   optimiser step, initialised at ``0.0``).
 2. **Class multi-boxes:** Each class :math:`A` has :math:`K = \\text{n\\_components}`
    axis-aligned boxes with centres :math:`c_{A,k} \\in \\mathbb{R}^d`, half-widths
    :math:`w_{A,k} = \\operatorname{softplus}(\\tilde{w}_{A,k}) \\ge 0`, and an
@@ -55,8 +56,8 @@ from mowl.nn.el.structural import Regions, inside_measure
 __all__ = ["GroundedELModule"]
 
 _INACTIVE_RAW_WIDTH: float = -100.0
-_LIVE_LOGIT: float = -100.0
-_DEAD_LOGIT: float = 100.0
+_LIVE_LOGIT: float = 0.0
+_DEAD_LOGIT: float = 1.0
 _EMPTY_DEPTH_FLOOR: float = -1e6
 _TOP_DEPTH_CEIL: float = 1e6
 
@@ -151,9 +152,9 @@ class GroundedELModule(nn.Module):
         ``agg_tau * logsumexp(depth / agg_tau)``.
     agg_tau : float, default 0.1
         Temperature :math:`\\tau_{\\text{agg}} > 0` for ``agg="lse"``.
-    dead_init_logit : float, default -4.0
-        Initial value for per-element deadness logits :math:`\\ell_x` so initial
-        deadness is :math:`\\sigma(-4) \\approx 0.018`.
+    dead_init_logit : float, default 0.0
+        Initial value for per-element deadness parameter :math:`\\delta_x \\in [0, 1]`
+        (clamped to ``[0.0, 1.0]`` at initialisation; default ``0.0``).
     element_features : Optional[torch.Tensor], default None
         Optional feature matrix of shape ``(nb_elements, F)`` or
         ``(nb_elements - nb_classes, F)`` for data elements.
@@ -176,7 +177,7 @@ class GroundedELModule(nn.Module):
         tau: float = 1.0,
         agg: str = "max",
         agg_tau: float = 0.1,
-        dead_init_logit: float = -4.0,
+        dead_init_logit: float = 0.0,
         element_features: Optional[th.Tensor] = None,
         encoder: Optional[nn.Module] = None,
         top_id: Optional[int] = None,
@@ -237,8 +238,9 @@ class GroundedELModule(nn.Module):
         self.elem_pos = nn.Embedding(self.nb_elements, self.embed_dim)
         nn.init.uniform_(self.elem_pos.weight, a=-0.5, b=0.5)
 
+        init_dead_val = max(0.0, min(1.0, self.dead_init_logit))
         self.dead_logits = nn.Parameter(
-            th.full((self.nb_elements,), self.dead_init_logit, dtype=th.float32)
+            th.full((self.nb_elements,), init_dead_val, dtype=th.float32)
         )
 
         self.class_centers = nn.Parameter(
@@ -411,16 +413,22 @@ class GroundedELModule(nn.Module):
         self,
         element_ids: Optional[Union[int, Sequence[int], th.Tensor]] = None,
     ) -> th.Tensor:
-        """Return element dead scores :math:`\\delta_x = \\sigma(\\ell_x) \\in [0, 1]` for ``element_ids``.
+        """Return element dead scores :math:`\\delta_x \\in [0, 1]` for ``element_ids``.
+
+        ``dead_logits`` directly parametrises :math:`\\delta_x \\in [0, 1]` (clamped
+        to ``[0, 1]`` after each optimiser step and evaluated with straight-through
+        clamping so :math:`\\partial \\delta_x / \\partial \\text{dead\\_logits}_x = 1`
+        everywhere instead of suffering from sigmoid saturation).
 
         Guarantees:
         - Returns a tensor of shape ``element_ids.shape`` (or ``(nb_elements,)``
           when ``element_ids is None``) with values in ``[0, 1]``.
+        - Has unit gradient :math:`\\partial \\delta_x / \\partial \\text{dead\\_logits}_x = 1`.
         - Raises :class:`ValueError` if any index is outside ``[0, nb_elements)``.
 
         Non-guarantees:
-        - At extreme logits (``<= -100`` or ``>= 100`` in ``float32``), saturates
-          to exact ``0.0`` or ``1.0`` with zero gradient.
+        - Callers performing manual gradient updates must clamp ``dead_logits``
+          to ``[0, 1]`` after each step to keep the underlying parameter bounded.
 
         Parameters
         ----------
@@ -434,9 +442,12 @@ class GroundedELModule(nn.Module):
         """
         scalar_input = isinstance(element_ids, int) and not isinstance(element_ids, bool)
         if element_ids is None:
-            return th.sigmoid(self.dead_logits)
-        idx = self._to_index_tensor(element_ids, self.nb_elements, "element_ids")
-        out = th.sigmoid(self.dead_logits[idx])
+            raw = self.dead_logits
+        else:
+            idx = self._to_index_tensor(element_ids, self.nb_elements, "element_ids")
+            raw = self.dead_logits[idx]
+        clamped = th.clamp(raw, 0.0, 1.0)
+        out = raw + (clamped - raw).detach()
         return out.squeeze(0) if scalar_input else out
 
     def class_regions(

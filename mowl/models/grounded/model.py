@@ -62,6 +62,7 @@ from mowl.nn.el.grounded import (
     gci1_bot_region,
     gci1_region,
     gci2,
+    gci2_dead,
     gci2_region,
     gci3,
     gci3_bot,
@@ -76,6 +77,7 @@ from mowl.nn.el.grounded import (
     sample_class_region,
     sample_elements,
     sample_filler_elements,
+    sample_inside_elements,
     sample_pair_region,
     sample_role_region,
 )
@@ -144,17 +146,24 @@ class GroundedEL(EmbeddingELModel):
         memberships.
     eps_role : float, default 1e-2
         Minimality weight :math:`\\varepsilon_r \\ge 0` on random role triples.
-    eps_dead : float, default 1e-2
-        Minimality weight :math:`\\varepsilon_\\delta \\ge 0` on element dead scores.
+    eps_dead : float, default 1e-3
+        Minimality weight :math:`\\varepsilon_\\delta \\ge 0` on element dead scores
+        (kept small but nonzero because :math:`\\delta = 1` everywhere is a trivial
+        zero of all hinges).
     lambda_reg : float, default 1.0
         Weight :math:`\\lambda_{\\text{reg}} \\ge 0` on region soundness hinges (§4).
     n_region_samples : int, default 4
         Number of region points sampled per axiom in each step :math:`\\ge 0`.
-    n_adv : int, default 0
+    n_adv : int, default 2
         Number of signed-gradient ascent steps :math:`\\ge 0` for adversarial
         region sampling.
+    region_margin : float, default 0.0
+        Containment margin for geometric region depth hinges (§4).
     n_random_elements : int, default 4
         Number of uniform random elements :math:`\\ge 0` sampled per axiom row.
+    n_inside_elements : int, default 32
+        Maximum number of elements currently crisp-inside the row's LHS class(es)
+        evaluated per axiom row (reasoner-free; reads learned memberships only).
     agg : {"max", "lse"}, default "max"
         Component depth aggregation mode.
     reseed_every : int, default 0
@@ -181,8 +190,8 @@ class GroundedEL(EmbeddingELModel):
         Epoch interval for logging per-term losses in :meth:`train` (``0`` disables).
     agg_tau : float, default 0.1
         Temperature :math:`\\tau_{\\text{agg}} > 0` when ``agg="lse"``.
-    dead_init_logit : float, default -4.0
-        Initial logit for element deadness :math:`\\ell_x`.
+    dead_init_logit : float, default 0.0
+        Initial value for element deadness :math:`\\delta_x \\in [0, 1]`.
     element_features : Optional[torch.Tensor], default None
         Optional feature matrix for data elements (§6 DeepGO-SE hook).
     encoder : Optional[torch.nn.Module], default None
@@ -211,12 +220,13 @@ class GroundedEL(EmbeddingELModel):
         tau1: float = 0.01,
         eps_min: float = 1e-2,
         eps_role: float = 1e-2,
-        eps_dead: float = 1e-2,
+        eps_dead: float = 1e-3,
         lambda_reg: float = 1.0,
         n_region_samples: int = 4,
         n_adv: int = 2,
         region_margin: float = 0.0,
         n_random_elements: int = 4,
+        n_inside_elements: int = 32,
         agg: str = "max",
         reseed_every: int = 0,
         device: str = "cpu",
@@ -227,7 +237,7 @@ class GroundedEL(EmbeddingELModel):
         init_delta: float = 0.05,
         log_every: int = 100,
         agg_tau: float = 0.1,
-        dead_init_logit: float = -4.0,
+        dead_init_logit: float = 0.0,
         element_features: Optional[th.Tensor] = None,
         encoder: Optional[nn.Module] = None,
         model_filepath: Optional[str] = None,
@@ -251,6 +261,7 @@ class GroundedEL(EmbeddingELModel):
         _validate_int_ge("n_adv", n_adv, 0)
         region_margin_f = _validate_margin("region_margin", region_margin)
         _validate_int_ge("n_random_elements", n_random_elements, 0)
+        _validate_int_ge("n_inside_elements", n_inside_elements, 0)
         _validate_int_ge("n_filler_samples", n_filler_samples, 1)
         if not isinstance(agg, str) or agg not in ("max", "lse"):
             raise ValueError(f"agg must be 'max' or 'lse', got {agg!r}")
@@ -291,6 +302,7 @@ class GroundedEL(EmbeddingELModel):
         self.n_adv = int(n_adv)
         self.region_margin = region_margin_f
         self.n_random_elements = int(n_random_elements)
+        self.n_inside_elements = int(n_inside_elements)
         self.n_filler_samples = int(n_filler_samples)
         self.agg = agg
         self.agg_tau = agg_tau_f
@@ -577,6 +589,23 @@ class GroundedEL(EmbeddingELModel):
         ].to(device=uniq.device)
         return uniq[perm]
 
+    def _inside_candidate_elements(
+        self,
+        lhs_classes: th.Tensor,
+        gen: th.Generator,
+        pos_all: th.Tensor,
+    ) -> Optional[th.Tensor]:
+        """Return up to ``n_inside_elements`` crisp-inside elements when not already covered by full ``_batch_candidate_elements``."""
+        if self.n_inside_elements <= 0 or self.nb_elements <= 32:
+            return None
+        return sample_inside_elements(
+            self.module,
+            lhs_classes,
+            self.n_inside_elements,
+            gen,
+            pos_all=pos_all,
+        )
+
     def _sample_batch_y_fillers(
         self,
         rows: th.Tensor,
@@ -700,8 +729,9 @@ class GroundedEL(EmbeddingELModel):
             dead_all[self.bot_id] = 1.0
         else:
             dead_all = dead_raw
-        # Silencer gate for non-bottom rules so satisfiable elements are not killed to evade box motion
-        dead_gate = dead_all.detach()
+        # Crisp silencer gate for box/position hinges: live elements (delta <= 0.5)
+        # pull boxes to full containment (m = 1); dead elements (delta > 0.5) are silenced.
+        dead_gate = (dead_all.detach() > 0.5).to(dtype=dtype)
 
         # 1. Fact (existence) loss on class elements
         live_cls_list = [
@@ -725,21 +755,36 @@ class GroundedEL(EmbeddingELModel):
             rows = self._sample_rows(td["gci0"][:], generator)
             bsz = int(rows.shape[0])
             cand = self._batch_candidate_elements(rows.reshape(-1), generator)
+            in_el = self._inside_candidate_elements(rows[:, 0], generator, pos_all)
             x_mat = sample_elements(
-                rows[:, 0], self.nb_elements, self.n_random_elements, generator, batch_elements=cand
+                rows[:, 0],
+                self.nb_elements,
+                self.n_random_elements,
+                generator,
+                batch_elements=cand,
+                inside_elements=in_el,
             )
             s_cnt = int(x_mat.shape[1])
             x_flat = x_mat.reshape(-1)
             a_flat = rows[:, 0].unsqueeze(1).expand(bsz, s_cnt).reshape(-1)
             b_flat = rows[:, 1].unsqueeze(1).expand(bsz, s_cnt).reshape(-1)
             px = pos_all[x_flat]
-            axiom_terms.append(
-                gci0(
-                    mod.membership(px, a_flat),
-                    mod.membership(px, b_flat),
-                    dead=dead_gate[x_flat],
-                ).mean()
+            ma = mod.membership(px, a_flat)
+            mb = mod.membership(px, b_flat)
+            h_box = gci0(ma, mb, dead=dead_gate[x_flat])
+            is_self = x_flat == a_flat
+            is_self_dead = is_self & (dead_gate[x_flat] > 0.5)
+            crisp_viol_0 = (
+                is_self
+                & ((mod.depth(px, a_flat, crisp=True) > 0.0) | is_self_dead)
+                & (mod.depth(px, b_flat, crisp=True) <= 0.0)
             )
+            ma_d = th.where(is_self_dead, th.ones_like(ma), ma.detach())
+            dead_eff_0 = th.where(
+                crisp_viol_0, dead_all[x_flat], th.ones_like(dead_all[x_flat])
+            )
+            h_dead = gci0(ma_d, mb.detach(), dead=dead_eff_0)
+            axiom_terms.append((h_box + h_dead).mean())
             if do_region:
                 a_reg = rows[:, 0].repeat(self.n_region_samples)
                 b_reg = rows[:, 1].repeat(self.n_region_samples)
@@ -763,12 +808,16 @@ class GroundedEL(EmbeddingELModel):
                 )
                 if bool(reg.valid.any().item()):
                     pts = reg.points[reg.valid].detach()
+                    av = a_reg[reg.valid]
                     bv = b_reg[reg.valid]
-                    region_terms.append(
-                        gci0_region(
-                            mod.depth(pts, bv), margin=self.region_margin
-                        ).mean()
+                    live_a = 1.0 - dead_gate[av]
+                    dead_a = dead_gate[av]
+                    reg_h = live_a * gci0_region(
+                        mod.depth(pts, bv), margin=self.region_margin
+                    ) + dead_a * gci0_bot_region(
+                        mod.depth(pts, av), margin=self.region_margin
                     )
+                    region_terms.append(reg_h.mean())
 
         # 3. GCI0_bot: A <= bot
         if "gci0_bot" in td and len(td["gci0_bot"]) > 0:
@@ -776,18 +825,24 @@ class GroundedEL(EmbeddingELModel):
             a_col = rows[:, 0]
             bsz = int(a_col.shape[0])
             cand = self._batch_candidate_elements(a_col, generator)
+            in_el = self._inside_candidate_elements(a_col, generator, pos_all)
             x_mat = sample_elements(
-                a_col, self.nb_elements, self.n_random_elements, generator, batch_elements=cand
+                a_col,
+                self.nb_elements,
+                self.n_random_elements,
+                generator,
+                batch_elements=cand,
+                inside_elements=in_el,
             )
             s_cnt = int(x_mat.shape[1])
             x_flat = x_mat.reshape(-1)
             a_flat = a_col.unsqueeze(1).expand(bsz, s_cnt).reshape(-1)
             px = pos_all[x_flat]
             ma = mod.membership(px, a_flat)
-            # At x == A, fact + gci0_bot directly forces dead[A] >= 0.5 -> 1.0
-            is_self = x_flat == a_flat
-            ma_eff = th.where(is_self, th.maximum(ma, (1.0 - dead_all[x_flat]).detach()), ma)
-            axiom_terms.append(gci0_bot(ma_eff, dead=dead_all[x_flat]).mean())
+            h_box = gci0_bot(ma, dead=dead_gate[x_flat])
+            ma_d = th.where(x_flat == a_flat, th.ones_like(ma), ma.detach())
+            h_dead = gci0_bot(ma_d, dead=dead_all[x_flat])
+            axiom_terms.append((h_box + h_dead).mean())
             if do_region:
                 a_reg = a_col.repeat(self.n_region_samples)
                 h_fn = (
@@ -822,8 +877,14 @@ class GroundedEL(EmbeddingELModel):
             rows = self._sample_rows(td["gci1"][:], generator)
             bsz = int(rows.shape[0])
             cand = self._batch_candidate_elements(rows.reshape(-1), generator)
+            in_el = self._inside_candidate_elements(rows[:, :2], generator, pos_all)
             x_mat = sample_elements(
-                rows[:, :2], self.nb_elements, self.n_random_elements, generator, batch_elements=cand
+                rows[:, :2],
+                self.nb_elements,
+                self.n_random_elements,
+                generator,
+                batch_elements=cand,
+                inside_elements=in_el,
             )
             s_cnt = int(x_mat.shape[1])
             x_flat = x_mat.reshape(-1)
@@ -831,15 +892,15 @@ class GroundedEL(EmbeddingELModel):
             b_flat = rows[:, 1].unsqueeze(1).expand(bsz, s_cnt).reshape(-1)
             c_flat = rows[:, 2].unsqueeze(1).expand(bsz, s_cnt).reshape(-1)
             px = pos_all[x_flat]
+            ma = mod.membership(px, a_flat)
+            mb = mod.membership(px, b_flat)
+            mc = mod.membership(px, c_flat)
             axiom_terms.append(
-                gci1(
-                    mod.membership(px, a_flat),
-                    mod.membership(px, b_flat),
-                    mod.membership(px, c_flat),
-                    dead=dead_gate[x_flat],
-                ).mean()
+                gci1(ma, mb, mc, dead=dead_gate[x_flat]).mean()
             )
             if do_region:
+                a_reg = rows[:, 0].repeat(self.n_region_samples)
+                b_reg = rows[:, 1].repeat(self.n_region_samples)
                 c_reg = rows[:, 2].repeat(self.n_region_samples)
                 h_fn = (
                     (
@@ -862,10 +923,16 @@ class GroundedEL(EmbeddingELModel):
                 )
                 if bool(reg.valid.any().item()):
                     pts = reg.points[reg.valid].detach()
+                    av = a_reg[reg.valid]
+                    bv = b_reg[reg.valid]
                     cv = c_reg[reg.valid]
+                    live_ab = (1.0 - dead_gate[av]) * (1.0 - dead_gate[bv])
                     region_terms.append(
-                        gci1_region(
-                            mod.depth(pts, cv), margin=self.region_margin
+                        (
+                            live_ab
+                            * gci1_region(
+                                mod.depth(pts, cv), margin=self.region_margin
+                            )
                         ).mean()
                     )
 
@@ -874,8 +941,14 @@ class GroundedEL(EmbeddingELModel):
             rows = self._sample_rows(td["gci1_bot"][:], generator)
             bsz = int(rows.shape[0])
             cand = self._batch_candidate_elements(rows[:, :2].reshape(-1), generator)
+            in_el = self._inside_candidate_elements(rows[:, :2], generator, pos_all)
             x_mat = sample_elements(
-                rows[:, :2], self.nb_elements, self.n_random_elements, generator, batch_elements=cand
+                rows[:, :2],
+                self.nb_elements,
+                self.n_random_elements,
+                generator,
+                batch_elements=cand,
+                inside_elements=in_el,
             )
             s_cnt = int(x_mat.shape[1])
             x_flat = x_mat.reshape(-1)
@@ -884,12 +957,15 @@ class GroundedEL(EmbeddingELModel):
             px = pos_all[x_flat]
             ma = mod.membership(px, a_flat)
             mb = mod.membership(px, b_flat)
-            # Only allow dead_all[x] to rise when x is genuinely crisp-inside both A and B
-            both_crisp = (mod.depth(px, a_flat, crisp=True) > 0) & (
-                mod.depth(px, b_flat, crisp=True) > 0
+            both_crisp = (mod.depth(px, a_flat, crisp=True) > 0.0) & (
+                mod.depth(px, b_flat, crisp=True) > 0.0
             )
-            dead_eff = th.where(both_crisp, dead_all[x_flat], dead_gate[x_flat])
-            axiom_terms.append(gci1_bot(ma, mb, dead=dead_eff).mean())
+            h_box = gci1_bot(ma, mb, dead=dead_gate[x_flat])
+            dead_eff_1b = th.where(
+                both_crisp, dead_all[x_flat], th.ones_like(dead_all[x_flat])
+            )
+            h_dead = gci1_bot(ma.detach(), mb.detach(), dead=dead_eff_1b)
+            axiom_terms.append((h_box + h_dead).mean())
             if do_region:
                 a_reg = rows[:, 0].repeat(self.n_region_samples)
                 b_reg = rows[:, 1].repeat(self.n_region_samples)
@@ -930,8 +1006,14 @@ class GroundedEL(EmbeddingELModel):
             rows = self._sample_rows(td["gci2"][:], generator)
             bsz = int(rows.shape[0])
             cand = self._batch_candidate_elements(rows[:, [0, 2]].reshape(-1), generator)
+            in_el = self._inside_candidate_elements(rows[:, 0], generator, pos_all)
             x_mat = sample_elements(
-                rows[:, 0], self.nb_elements, self.n_random_elements, generator, batch_elements=cand
+                rows[:, 0],
+                self.nb_elements,
+                self.n_random_elements,
+                generator,
+                batch_elements=cand,
+                inside_elements=in_el,
             )
             s_cnt = int(x_mat.shape[1])
             x_flat = x_mat.reshape(-1)
@@ -943,13 +1025,15 @@ class GroundedEL(EmbeddingELModel):
             ma = mod.membership(px, a_flat)
             rho_xb = mod.role_membership(px, pb, r_flat)
             df_b = dead_all[b_flat].detach()
-            # Edge term uses dead_gate; dead propagation term uses differentiable dead_all[x] when filler is dead
+            is_self_dead = (x_flat == a_flat) & (dead_gate[x_flat] > 0.5)
+            ma_d = th.where(is_self_dead, th.ones_like(ma), ma.detach())
             edge_h = gci2(ma, rho_xb, dead=dead_gate[x_flat], dead_filler=None)
-            dead_prop_h = gci2(
-                ma,
-                th.ones_like(rho_xb),
-                dead=th.where(df_b > 0.5, dead_all[x_flat], dead_gate[x_flat]),
-                dead_filler=df_b,
+            dead_prop_h = gci2_dead(
+                ma, dead_filler=df_b, dead=dead_gate[x_flat]
+            ) + th.where(
+                df_b > 0.5,
+                gci2_dead(ma_d, dead_filler=df_b, dead=dead_all[x_flat]),
+                th.zeros_like(ma),
             )
             axiom_terms.append((edge_h + dead_prop_h).mean())
             if do_region:
@@ -987,24 +1071,33 @@ class GroundedEL(EmbeddingELModel):
                     av = a_reg[reg.valid]
                     rv = r_reg[reg.valid]
                     bv = b_reg[reg.valid]
-                    region_terms.append(
-                        gci2_region(
-                            mod.role_depth(pts, pos_all[bv], rv),
-                            margin=self.region_margin,
-                            agg=self.agg,
-                            agg_tau=self.agg_tau,
-                            depth_a=mod.depth(pts, av),
-                            dead_filler=dead_all[bv].detach(),
-                        ).mean()
+                    live_a = 1.0 - dead_gate[av]
+                    dead_a = dead_gate[av]
+                    reg_h = live_a * gci2_region(
+                        mod.role_depth(pts, pos_all[bv], rv),
+                        margin=self.region_margin,
+                        agg=self.agg,
+                        agg_tau=self.agg_tau,
+                        depth_a=mod.depth(pts, av),
+                        dead_filler=dead_all[bv].detach(),
+                    ) + dead_a * gci0_bot_region(
+                        mod.depth(pts, av), margin=self.region_margin
                     )
+                    region_terms.append(reg_h.mean())
 
         # 7. GCI3: exists r.B <= C
         if "gci3" in td and len(td["gci3"]) > 0:
             rows = self._sample_rows(td["gci3"][:], generator)
             bsz = int(rows.shape[0])
             cand = self._batch_candidate_elements(rows[:, 1:].reshape(-1), generator)
+            in_el = self._inside_candidate_elements(rows[:, 2], generator, pos_all)
             x_mat = sample_elements(
-                rows[:, 2], self.nb_elements, self.n_random_elements, generator, batch_elements=cand
+                rows[:, 2],
+                self.nb_elements,
+                self.n_random_elements,
+                generator,
+                batch_elements=cand,
+                inside_elements=in_el,
             )
             y_mat = self._sample_batch_y_fillers(rows, generator)
             sx = int(x_mat.shape[1])
@@ -1030,12 +1123,7 @@ class GroundedEL(EmbeddingELModel):
                 dead_gate[x_mat].unsqueeze(2).expand(bsz, sx, sy).reshape(-1)
             )
             axiom_terms.append(
-                gci3(
-                    rho_xy,
-                    mb_grid,
-                    mc_grid,
-                    dead=dead_x_grid,
-                ).mean()
+                gci3(rho_xy, mb_grid, mc_grid, dead=dead_x_grid).mean()
             )
             if do_region:
                 r_reg = rows[:, 0].repeat(self.n_region_samples)
@@ -1102,8 +1190,14 @@ class GroundedEL(EmbeddingELModel):
             rows = self._sample_rows(td["gci3_bot"][:], generator)
             bsz = int(rows.shape[0])
             cand = self._batch_candidate_elements(rows[:, 1], generator)
+            in_el = self._inside_candidate_elements(rows[:, 1], generator, pos_all)
             x_mat = sample_elements(
-                rows[:, 1], self.nb_elements, self.n_random_elements, generator, batch_elements=cand
+                rows[:, 1],
+                self.nb_elements,
+                self.n_random_elements,
+                generator,
+                batch_elements=cand,
+                inside_elements=in_el,
             )
             y_mat = self._sample_batch_y_fillers(rows, generator)
             sx = int(x_mat.shape[1])
@@ -1121,15 +1215,21 @@ class GroundedEL(EmbeddingELModel):
                 .reshape(-1)
             )
             b_crisp_grid = (
-                (mod.depth(py_flat, b_2d, crisp=True) > 0)
+                (mod.depth(py_flat, b_2d, crisp=True) > 0.0)
                 .view(bsz, 1, sy)
                 .expand(bsz, sx, sy)
                 .reshape(-1)
             )
-            both_crisp = (r_dep_crisp > 0) & b_crisp_grid
+            both_crisp = (r_dep_crisp > 0.0) & b_crisp_grid
             x_grid = x_mat.unsqueeze(2).expand(bsz, sx, sy).reshape(-1)
-            dead_eff = th.where(both_crisp, dead_all[x_grid], dead_gate[x_grid])
-            axiom_terms.append(gci3_bot(rho_xy, mb_grid, dead=dead_eff).mean())
+            h_box = gci3_bot(rho_xy, mb_grid, dead=dead_gate[x_grid])
+            dead_eff_3b = th.where(
+                both_crisp, dead_all[x_grid], th.ones_like(dead_all[x_grid])
+            )
+            h_dead = gci3_bot(
+                rho_xy.detach(), mb_grid.detach(), dead=dead_eff_3b
+            )
+            axiom_terms.append((h_box + h_dead).mean())
             if do_region:
                 r_reg = rows[:, 0].repeat(self.n_region_samples)
                 b_reg = rows[:, 1].repeat(self.n_region_samples)
@@ -1807,8 +1907,9 @@ class GroundedEL(EmbeddingELModel):
             total_loss.backward()
             optimizer.step()
 
-            if self.bot_id is not None:
-                with th.no_grad():
+            with th.no_grad():
+                self.module.dead_logits.clamp_(0.0, 1.0)
+                if self.bot_id is not None:
                     self.module.dead_logits[self.bot_id] = _DEAD_LOGIT
 
             if self.reseed_every > 0 and (epoch + 1) % self.reseed_every == 0:

@@ -50,6 +50,7 @@ from mowl.nn.el.grounded import (
     sample_component_intersection,
     sample_elements,
     sample_filler_elements,
+    sample_inside_elements,
     sample_pair_region,
     sample_role_region,
 )
@@ -1190,3 +1191,53 @@ def test_component_extremes_and_region_sample_cap() -> None:
         mod, th.tensor([0, 1]), th.tensor([0, 1]), generator=gen, n_samples=4
     )
     assert s_pair.points.shape == (8, 2)
+
+
+def test_sample_inside_elements_and_direct_dead_param() -> None:
+    """sample_inside_elements selects elements crisp-inside LHS classes and GroundedELModule.dead() has unit gradient."""
+    mod = GroundedELModule(
+        nb_elements=5,
+        nb_classes=4,
+        nb_rels=0,
+        embed_dim=2,
+        n_components=1,
+    )
+    with th.no_grad():
+        # Elements 0 and 4 inside class 0's box at [0, 0] with half-width 0.5; others outside
+        mod.elem_pos.weight.copy_(
+            th.tensor(
+                [
+                    [0.0, 0.0],
+                    [3.0, 3.0],
+                    [5.0, 5.0],
+                    [7.0, 7.0],
+                    [0.1, -0.1],
+                ]
+            )
+        )
+        mod.class_centers.fill_(10.0)
+        mod.class_centers[0, 0] = th.tensor([0.0, 0.0])
+        mod.class_raw_widths.fill_(float(th.log(th.expm1(th.tensor(0.5))).item()))
+
+    gen = th.Generator().manual_seed(99)
+    in_el = sample_inside_elements(mod, th.tensor([0, 1]), n_inside_elements=32, generator=gen)
+    assert in_el.shape == (2, 2)
+    assert sorted(in_el[0].tolist()) == [0, 4]
+
+    comb = sample_elements(
+        th.tensor([0, 1]),
+        nb_elements=5,
+        n_random=1,
+        generator=gen,
+        inside_elements=in_el,
+    )
+    assert comb.shape == (2, 1 + 1 + 2)
+    assert th.equal(comb[:, -2:], in_el)
+
+    # Direct dead parameterisation in [0, 1]: initial value 0.0 and unit gradient
+    assert th.all(mod.dead() == 0.0)
+    mod.zero_grad()
+    mod.dead().sum().backward()
+    assert mod.dead_logits.grad is not None
+    assert th.allclose(mod.dead_logits.grad, th.ones_like(mod.dead_logits))
+

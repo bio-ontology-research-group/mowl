@@ -36,6 +36,7 @@ from mowl.nn.el.grounded.sampling import (
     sample_component_intersection,
     sample_elements,
     sample_filler_elements,
+    sample_inside_elements,
     sample_pair_region,
     sample_role_region,
 )
@@ -70,6 +71,7 @@ __all__ = [
     "RegionSample",
     "sample_elements",
     "sample_filler_elements",
+    "sample_inside_elements",
     "adversarial_ascent",
     "component_extremes",
     "sample_active_component",

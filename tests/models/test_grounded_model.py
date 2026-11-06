@@ -506,3 +506,116 @@ def test_go_scale_memory_smoke() -> None:
         f"Expected peak RSS < 4 GB (4194304 KiB), got {peak_rss_kb} KiB"
     )
 
+
+def _build_unsat_mix_dataset(workdir: str) -> PathDataset:
+    """Build the unsat_mix ontology (T3 + {Q <= A1, Q <= A2} with Q unsatisfiable) in workdir."""
+    owl_path = os.path.join(workdir, "unsat_mix.owl")
+    adapter = OWLAPIAdapter()
+    mgr = adapter.owl_manager
+    df = adapter.data_factory
+    ont = adapter.create_ontology("http://mowl.borg/geo/unsat_mix")
+
+    cls_names = ("A1", "A2", "A3", "X1", "X2", "X3", "Q")
+    cls_objs = {name: adapter.create_class(NS + name) for name in cls_names}
+    bot_cls = adapter.create_class(BOTTOM)
+    for c_obj in cls_objs.values():
+        mgr.addAxiom(ont, df.getOWLDeclarationAxiom(c_obj))
+
+    # A_i <= X_j for j != i
+    for i in (1, 2, 3):
+        for j in (1, 2, 3):
+            if i != j:
+                mgr.addAxiom(
+                    ont,
+                    adapter.create_subclass_of(
+                        cls_objs[f"A{i}"], cls_objs[f"X{j}"]
+                    ),
+                )
+    # X_i cap X_j <= A_l for {i, j, l} = {1, 2, 3}
+    for i, j, l in ((1, 2, 3), (1, 3, 2), (2, 3, 1)):
+        mgr.addAxiom(
+            ont,
+            adapter.create_subclass_of(
+                adapter.create_object_intersection_of(
+                    cls_objs[f"X{i}"], cls_objs[f"X{j}"]
+                ),
+                cls_objs[f"A{l}"],
+            ),
+        )
+    # A_i cap A_j <= bot for i < j
+    for i, j in ((1, 2), (1, 3), (2, 3)):
+        mgr.addAxiom(
+            ont,
+            adapter.create_subclass_of(
+                adapter.create_object_intersection_of(
+                    cls_objs[f"A{i}"], cls_objs[f"A{j}"]
+                ),
+                bot_cls,
+            ),
+        )
+    # Q <= A1 and Q <= A2 (makes Q unsatisfiable while A1..A3, X1..X3 remain satisfiable)
+    mgr.addAxiom(ont, adapter.create_subclass_of(cls_objs["Q"], cls_objs["A1"]))
+    mgr.addAxiom(ont, adapter.create_subclass_of(cls_objs["Q"], cls_objs["A2"]))
+
+    mgr.saveOntology(ont, IRI.create(File(owl_path).toURI()))
+    return PathDataset(owl_path)
+
+
+def test_unsat_mix_fast_300_epochs_delta_q_exceeds_delta_a1() -> None:
+    """Fast 300-epoch variant on unsat_mix (K=2, d=2) drives delta_Q above delta_{A1}."""
+    base_tmp = os.environ.get("TMPDIR") or os.path.expanduser("~/tmp")
+    os.makedirs(base_tmp, exist_ok=True)
+
+    with tempfile.TemporaryDirectory(dir=base_tmp, prefix="mowl_unsat_mix_fast_") as workdir:
+        ds = _build_unsat_mix_dataset(workdir)
+        model = GroundedEL(
+            ds,
+            embed_dim=2,
+            n_components=2,
+            n_role_components=2,
+            epochs=300,
+            learning_rate=0.01,
+            reseed_every=100,
+            seed=0,
+            log_every=0,
+        )
+        model.train()
+        q_idx = model.class_index_dict[NS + "Q"]
+        a1_idx = model.class_index_dict[NS + "A1"]
+        dead_scores = model.module.dead().detach()
+        assert float(dead_scores[q_idx].item()) > float(dead_scores[a1_idx].item()), (
+            f"Expected delta_Q ({dead_scores[q_idx].item():.4f}) > delta_A1 ({dead_scores[a1_idx].item():.4f})"
+        )
+
+
+@pytest.mark.slow
+def test_unsat_mix_three_seeds_detects_unsatisfiable_class() -> None:
+    """unsat_mix (K=2, d=2, 1500 epochs, 3 seeds) reaches dead_ok=True and exist=1.0 on >= 2/3 seeds."""
+    base_tmp = os.environ.get("TMPDIR") or os.path.expanduser("~/tmp")
+    os.makedirs(base_tmp, exist_ok=True)
+
+    with tempfile.TemporaryDirectory(dir=base_tmp, prefix="mowl_unsat_mix_3seeds_") as workdir:
+        ds = _build_unsat_mix_dataset(workdir)
+        success_seeds = 0
+        for seed in (0, 1, 2):
+            model = GroundedEL(
+                ds,
+                embed_dim=2,
+                n_components=2,
+                n_role_components=2,
+                epochs=1500,
+                learning_rate=0.01,
+                reseed_every=100,
+                seed=seed,
+                log_every=0,
+            )
+            model.train()
+            ev = model.evaluate_model(use_reasoner=True, n_eval=2000)
+            if ev["dead_ok"] is True and ev["exist"] == 1.0:
+                success_seeds += 1
+
+        assert success_seeds >= 2, (
+            f"Expected dead_ok=True and exist=1.0 on >= 2/3 seeds of unsat_mix, got {success_seeds}/3"
+        )
+
+

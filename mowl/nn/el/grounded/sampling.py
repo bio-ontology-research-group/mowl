@@ -48,6 +48,7 @@ from mowl.nn.el.structural import Regions
 __all__ = [
     "RegionSample",
     "sample_elements",
+    "sample_inside_elements",
     "sample_filler_elements",
     "adversarial_ascent",
     "component_extremes",
@@ -123,16 +124,18 @@ def sample_elements(
     n_random: int,
     generator: th.Generator,
     batch_elements: Optional[th.Tensor] = None,
+    inside_elements: Optional[th.Tensor] = None,
 ) -> th.Tensor:
-    """Sample candidate domain elements combining LHS elements, uniform random elements, and optional batch elements.
+    """Sample candidate domain elements combining LHS elements, uniform random elements, optional batch elements, and optional crisp-inside elements.
 
     Implements §3 element sampling: for each row ``b`` of ``lhs_elements``,
     concatenates (i) ``lhs_elements[b]`` (always included), (ii) ``n_random``
-    elements drawn uniformly from ``[0, nb_elements)``, and (iii) ``batch_elements``
-    when provided.
+    elements drawn uniformly from ``[0, nb_elements)``, (iii) ``batch_elements``
+    when provided, and (iv) ``inside_elements`` (elements currently crisp-inside
+    the row's LHS class(es), read from learned memberships) when provided.
 
     Guarantees:
-    - Returns a 2-D ``torch.long`` tensor of shape ``(B, L + n_random + M)`` on
+    - Returns a 2-D ``torch.long`` tensor of shape ``(B, L + n_random + M + I)`` on
       ``lhs_elements.device``.
     - Leading column(s) ``[:, :L]`` equal ``lhs_elements``.
     - Uses only ``generator`` for random draws.
@@ -152,6 +155,9 @@ def sample_elements(
         Explicit PyTorch RNG.
     batch_elements : Optional[torch.Tensor], default None
         Optional 1-D ``(M,)`` or 2-D ``(B, M)`` tensor of in-batch element indices.
+    inside_elements : Optional[torch.Tensor], default None
+        Optional 1-D ``(I,)`` or 2-D ``(B, I)`` tensor of element indices currently
+        crisp-inside the row's LHS class(es).
 
     Returns
     -------
@@ -197,7 +203,189 @@ def sample_elements(
                 f"batch_elements must have shape (M,) or ({bsz}, M), got {tuple(be.shape)}"
             )
 
+    if inside_elements is not None and inside_elements.numel() > 0:
+        ie = inside_elements.to(device=device, dtype=th.long)
+        if ie.ndim == 1:
+            parts.append(ie.unsqueeze(0).expand(bsz, ie.shape[0]))
+        elif ie.ndim == 2 and ie.shape[0] == bsz:
+            parts.append(ie)
+        else:
+            raise ValueError(
+                f"inside_elements must have shape (I,) or ({bsz}, I), got {tuple(ie.shape)}"
+            )
+
     return th.cat(parts, dim=1)
+
+
+def sample_inside_elements(
+    module: GroundedELModule,
+    lhs_classes: th.Tensor,
+    n_inside_elements: int,
+    generator: th.Generator,
+    pos_all: Optional[th.Tensor] = None,
+) -> th.Tensor:
+    """Select up to ``n_inside_elements`` domain elements currently crisp-inside each row's LHS class(es).
+
+    Reasoner-free helper that reads only the learned geometric memberships of
+    ``module``: an element :math:`x \\in [0, |\\Delta|)` is crisp-inside a class
+    :math:`C` iff :math:`\\operatorname{depth}_C(p_x) > 0`. For binary LHS rows
+    :math:`(A_1, A_2)`, elements crisp-inside all LHS classes (:math:`A_1 \\cap A_2`)
+    are prioritized first, and any remaining capacity up to ``n_inside_elements``
+    is filled from elements crisp-inside at least one of the row's LHS classes
+    (:math:`A_1 \\cup A_2`) so that elements forced into one conjunct of a disjoint
+    pair :math:`A_1 \\sqcap A_2 \\sqsubseteq \\bot` are always evaluated on that row.
+
+    Guarantees:
+    - Returns a 2-D ``torch.long`` tensor of shape ``(B, I)`` with
+      ``0 <= I <= n_inside_elements`` on ``lhs_classes.device``.
+    - Uses only ``generator`` for random sub-sampling when more than
+      ``n_inside_elements`` elements qualify.
+    - Never calls any external reasoner or completion procedure.
+
+    Non-guarantees:
+    - Rows with fewer qualifying inside elements than the batch maximum ``I``
+      are padded with the row's first LHS element index ``lhs_classes[b, 0]``.
+
+    Parameters
+    ----------
+    module : GroundedELModule
+        Grounded EL module whose detached element positions and class boxes are queried.
+    lhs_classes : torch.Tensor
+        1-D ``(B,)`` or 2-D ``(B, L)`` tensor of LHS class indices.
+    n_inside_elements : int
+        Maximum number of inside elements :math:`\\ge 0` per row.
+    generator : torch.Generator
+        Explicit PyTorch RNG used when sub-sampling exceeding candidates.
+    pos_all : Optional[torch.Tensor], default None
+        Optional pre-fetched detached element positions of shape ``(nb_elements, d)``.
+
+    Returns
+    -------
+    torch.Tensor
+        2-D ``torch.long`` tensor of shape ``(B, I)`` with ``I <= n_inside_elements``.
+    """
+    _validate_generator(generator)
+    if not isinstance(module, GroundedELModule):
+        raise TypeError(
+            f"module must be a GroundedELModule, got {type(module).__name__}"
+        )
+    if not isinstance(lhs_classes, th.Tensor):
+        raise TypeError(
+            f"lhs_classes must be a torch.Tensor, got {type(lhs_classes).__name__}"
+        )
+    if (
+        isinstance(n_inside_elements, bool)
+        or not isinstance(n_inside_elements, int)
+        or n_inside_elements < 0
+    ):
+        raise ValueError(
+            f"n_inside_elements must be an int >= 0, got {n_inside_elements!r}"
+        )
+
+    device = lhs_classes.device
+    lhs = lhs_classes.to(dtype=th.long)
+    if lhs.ndim == 1:
+        lhs = lhs.unsqueeze(1)
+    elif lhs.ndim != 2:
+        raise ValueError(
+            f"lhs_classes must be 1-D or 2-D, got shape {tuple(lhs_classes.shape)}"
+        )
+
+    bsz, n_lhs = int(lhs.shape[0]), int(lhs.shape[1])
+    if n_inside_elements == 0 or bsz == 0:
+        return th.empty((bsz, 0), dtype=th.long, device=device)
+
+    with th.no_grad():
+        pts_full = (
+            pos_all.detach()
+            if pos_all is not None
+            else module.positions().detach()
+        )
+        n_elems = int(pts_full.shape[0])
+        uniq_cls, inv_idx = th.unique(lhs.reshape(-1), return_inverse=True)
+        n_uniq = int(uniq_cls.numel())
+
+        if n_elems * n_uniq <= 65536:
+            cand_pool = None
+            pts = pts_full
+        else:
+            pool_size = min(n_elems, max(n_inside_elements * 8, 128))
+            cand_pool = _randint_with_generator(
+                0, n_elems, (pool_size,), device=device, generator=generator
+            )
+            pts = pts_full[cand_pool]
+
+        n_pts = int(pts.shape[0])
+        reg = module.class_regions(uniq_cls)
+        # Compute crisp membership (depth > 0 in any active component) in chunks of classes
+        crisp_u = th.zeros((n_pts, n_uniq), dtype=th.bool, device=device)
+        chunk_u = max(1, 32768 // max(n_pts, 1))
+        for u_start in range(0, n_uniq, chunk_u):
+            u_end = min(u_start + chunk_u, n_uniq)
+            cen_c = reg.cen[u_start:u_end]  # (U_c, K, d)
+            w_c = reg.w[u_start:u_end]      # (U_c, K, d)
+            act_c = reg.active[u_start:u_end]  # (U_c, K)
+            c_dep = th.amin(
+                w_c.unsqueeze(0)
+                - th.abs(pts.unsqueeze(1).unsqueeze(2) - cen_c.unsqueeze(0)),
+                dim=-1,
+            )  # (n_pts, U_c, K)
+            crisp_u[:, u_start:u_end] = ((c_dep > 0.0) & act_c.unsqueeze(0)).any(
+                dim=-1
+            )
+            if module.top_id is not None:
+                is_top = uniq_cls[u_start:u_end] == module.top_id
+                if bool(is_top.any().item()):
+                    crisp_u[:, u_start:u_end][:, is_top] = True
+            if module.bot_id is not None:
+                is_bot = uniq_cls[u_start:u_end] == module.bot_id
+                if bool(is_bot.any().item()):
+                    crisp_u[:, u_start:u_end][:, is_bot] = False
+
+        # Map back to (n_pts, B, L)
+        crisp_bl = crisp_u[:, inv_idx].reshape(n_pts, bsz, n_lhs)
+        strict_mask = crisp_bl.all(dim=-1)  # (n_pts, B)
+        any_mask = crisp_bl.any(dim=-1)     # (n_pts, B)
+
+        row_candidates = []
+        max_len = 0
+        for b in range(bsz):
+            strict_idx = th.nonzero(strict_mask[:, b], as_tuple=False).squeeze(-1)
+            if strict_idx.numel() > n_inside_elements:
+                perm = _randperm_with_generator(
+                    int(strict_idx.numel()), device=device, generator=generator
+                )[:n_inside_elements]
+                chosen = strict_idx[perm]
+            elif n_lhs > 1 and strict_idx.numel() < n_inside_elements:
+                extra_mask = any_mask[:, b] & (~strict_mask[:, b])
+                extra_idx = th.nonzero(extra_mask, as_tuple=False).squeeze(-1)
+                rem = n_inside_elements - int(strict_idx.numel())
+                if extra_idx.numel() > rem:
+                    perm = _randperm_with_generator(
+                        int(extra_idx.numel()), device=device, generator=generator
+                    )[:rem]
+                    extra_idx = extra_idx[perm]
+                chosen = th.cat([strict_idx, extra_idx], dim=0)
+            else:
+                chosen = strict_idx
+            if cand_pool is not None and chosen.numel() > 0:
+                chosen = cand_pool[chosen]
+            row_candidates.append(chosen)
+            if int(chosen.numel()) > max_len:
+                max_len = int(chosen.numel())
+
+        if max_len == 0:
+            return th.empty((bsz, 0), dtype=th.long, device=device)
+
+        out = th.empty((bsz, max_len), dtype=th.long, device=device)
+        for b in range(bsz):
+            c = row_candidates[b]
+            k = int(c.numel())
+            if k > 0:
+                out[b, :k] = c
+            if k < max_len:
+                out[b, k:] = lhs[b, 0]
+        return out
 
 
 def sample_filler_elements(
