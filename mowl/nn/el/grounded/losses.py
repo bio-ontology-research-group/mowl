@@ -52,15 +52,24 @@ __all__ = [
     "crisp_membership",
     "fact",
     "gci0",
+    "gci0_region",
     "gci1",
+    "gci1_region",
     "gci0_bot",
+    "gci0_bot_region",
     "gci1_bot",
+    "gci1_bot_region",
     "gci2_dead",
     "gci2",
+    "gci2_region",
     "gci3",
+    "gci3_region",
     "gci3_bot",
+    "gci3_bot_region",
     "role_inclusion",
+    "role_inclusion_region",
     "role_chain",
+    "role_chain_region",
     "class_assertion",
     "role_assertion",
     "object_property_assertion",
@@ -110,6 +119,21 @@ def _validate_nonneg_weight(name: str, val: float) -> float:
         v = float(val)
     if v < 0.0 or math.isnan(v) or math.isinf(v):
         raise ValueError(f"{name} must be >= 0 and finite, got {val!r}")
+    return v
+
+
+def _validate_margin(name: str, val: float) -> float:
+    """Validate that a region margin is a finite float."""
+    if isinstance(val, th.Tensor):
+        if val.dtype == th.bool or val.numel() != 1:
+            raise ValueError(f"{name} must be a finite scalar, got {val!r}")
+        v = float(val.detach().item())
+    elif isinstance(val, bool) or not isinstance(val, (int, float)):
+        raise ValueError(f"{name} must be a finite number, got {val!r}")
+    else:
+        v = float(val)
+    if math.isnan(v) or math.isinf(v):
+        raise ValueError(f"{name} must be finite, got {val!r}")
     return v
 
 
@@ -206,6 +230,41 @@ def gci0(
     return th.relu(_subtract_dead(ma - mb, dead))
 
 
+def gci0_region(
+    depth_b: th.Tensor,
+    margin: float = 0.0,
+) -> th.Tensor:
+    """Compute the geometric region GCI0 hinge :math:`\\operatorname{relu}(\\text{margin} - \\operatorname{depth}_B(z))` for :math:`A \\sqsubseteq B` at :math:`z \\in A`.
+
+    Guarantees:
+    - Returns a tensor of the same shape as ``depth_b``.
+    - Equals ``0.0`` whenever :math:`\\operatorname{depth}_B(z) \\ge \\text{margin}`
+      (containing configuration).
+    - Has nonzero gradient with respect to the active superclass box centres
+      and half-widths whenever :math:`\\operatorname{depth}_B(z) < \\text{margin}`
+      (violating point), regardless of :math:`\\tau`.
+
+    Non-guarantees:
+    - Assumes the caller sampled :math:`z \\in A`; does not depend on
+      :math:`\\operatorname{depth}_A(z)`.
+
+    Parameters
+    ----------
+    depth_b : torch.Tensor
+        Signed depth :math:`\\operatorname{depth}(z, B)` of shape ``(B,)``.
+    margin : float, default 0.0
+        Containment margin ``region_margin``.
+
+    Returns
+    -------
+    torch.Tensor
+        Per-point geometric GCI0 hinge of shape ``(B,)``.
+    """
+    db = _as_float_tensor(depth_b)
+    m = _validate_margin("margin", margin)
+    return th.relu(m - db)
+
+
 def gci1(
     m_a: th.Tensor,
     m_b: th.Tensor,
@@ -248,6 +307,41 @@ def gci1(
     return th.relu(_subtract_dead(ma + mb - 1.0 - mc, dead))
 
 
+def gci1_region(
+    depth_c: th.Tensor,
+    margin: float = 0.0,
+) -> th.Tensor:
+    """Compute the geometric region GCI1 hinge :math:`\\operatorname{relu}(\\text{margin} - \\operatorname{depth}_C(z))` for :math:`A \\sqcap B \\sqsubseteq C` at :math:`z \\in A \\cap B`.
+
+    Guarantees:
+    - Returns a tensor of the same shape as ``depth_c``.
+    - Equals ``0.0`` whenever :math:`\\operatorname{depth}_C(z) \\ge \\text{margin}`
+      (containing configuration).
+    - Has nonzero gradient with respect to the active superclass box centres
+      and half-widths whenever :math:`\\operatorname{depth}_C(z) < \\text{margin}`
+      (violating intersection point), regardless of :math:`\\tau`.
+
+    Non-guarantees:
+    - Assumes the caller sampled :math:`z \\in A \\cap B`; does not depend on
+      :math:`\\operatorname{depth}_A(z)` or :math:`\\operatorname{depth}_B(z)`.
+
+    Parameters
+    ----------
+    depth_c : torch.Tensor
+        Signed depth :math:`\\operatorname{depth}(z, C)` of shape ``(B,)``.
+    margin : float, default 0.0
+        Containment margin ``region_margin``.
+
+    Returns
+    -------
+    torch.Tensor
+        Per-point geometric GCI1 hinge of shape ``(B,)``.
+    """
+    dc = _as_float_tensor(depth_c)
+    m = _validate_margin("margin", margin)
+    return th.relu(m - dc)
+
+
 def gci0_bot(
     m_a: th.Tensor,
     dead: Optional[th.Tensor] = None,
@@ -278,6 +372,40 @@ def gci0_bot(
     """
     ma = _as_float_tensor(m_a)
     return th.relu(_subtract_dead(ma, dead))
+
+
+def gci0_bot_region(
+    depth_a: th.Tensor,
+    margin: float = 0.0,
+) -> th.Tensor:
+    """Compute the geometric region GCI0-bot hinge :math:`\\operatorname{relu}(\\operatorname{depth}_A(z) + \\text{margin})` for :math:`A \\sqsubseteq \\bot` at :math:`z \\in A`.
+
+    Guarantees:
+    - Returns a tensor of the same shape as ``depth_a``.
+    - Equals ``0.0`` whenever :math:`\\operatorname{depth}_A(z) + \\text{margin} \\le 0`.
+    - Has nonzero gradient with respect to the active box half-widths of :math:`A`
+      whenever :math:`\\operatorname{depth}_A(z) + \\text{margin} > 0`, regardless
+      of :math:`\\tau`.
+
+    Non-guarantees:
+    - Vanishes once all components of :math:`A` are inactive or have
+      :math:`\\operatorname{depth}_A(z) \\le -\\text{margin}`.
+
+    Parameters
+    ----------
+    depth_a : torch.Tensor
+        Signed depth :math:`\\operatorname{depth}(z, A)` of shape ``(B,)``.
+    margin : float, default 0.0
+        Disjointness margin ``region_margin``.
+
+    Returns
+    -------
+    torch.Tensor
+        Per-point geometric GCI0-bot hinge of shape ``(B,)``.
+    """
+    da = _as_float_tensor(depth_a)
+    m = _validate_margin("margin", margin)
+    return th.relu(da + m)
 
 
 def gci1_bot(
@@ -315,6 +443,54 @@ def gci1_bot(
     mb = _as_float_tensor(m_b, ma.dtype).to(dtype=ma.dtype)
     _check_same_shape("m_a", ma, "m_b", mb)
     return th.relu(_subtract_dead(ma + mb - 1.0, dead))
+
+
+def gci1_bot_region(
+    depth_a: th.Tensor,
+    depth_b: th.Tensor,
+    margin: float = 0.0,
+) -> th.Tensor:
+    """Compute the geometric region GCI1-bot hinge for :math:`A \\sqcap B \\sqsubseteq \\bot`.
+
+    Evaluates
+    :math:`\\mathbb{1}[\\operatorname{depth}_B(z) \\ge 0] \\operatorname{relu}(\\operatorname{depth}_A(z) + \\text{margin}) + \\mathbb{1}[\\operatorname{depth}_A(z) \\ge 0] \\operatorname{relu}(\\operatorname{depth}_B(z) + \\text{margin})`,
+    penalising :math:`\\operatorname{depth}_A(z) + \\text{margin}` at :math:`z \\in B`,
+    :math:`\\operatorname{depth}_B(z) + \\text{margin}` at :math:`z \\in A`, and
+    both at :math:`z \\in A \\cap B`.
+
+    Guarantees:
+    - Returns a tensor of the same shape as ``depth_a`` and ``depth_b``.
+    - Equals ``0.0`` whenever :math:`A` and :math:`B` are separated by at least
+      ``margin``.
+    - Has nonzero gradient with respect to the centres and half-widths of both
+      :math:`A` and :math:`B` at any violating point :math:`z \\in A \\cap B`
+      (and with respect to :math:`A` at :math:`z \\in B` with
+      :math:`\\operatorname{depth}_A(z) > -\\text{margin}`), regardless of :math:`\\tau`.
+
+    Non-guarantees:
+    - Vanishes at points outside both :math:`A` and :math:`B`.
+
+    Parameters
+    ----------
+    depth_a : torch.Tensor
+        Signed depth :math:`\\operatorname{depth}(z, A)` of shape ``(B,)``.
+    depth_b : torch.Tensor
+        Signed depth :math:`\\operatorname{depth}(z, B)` of shape ``(B,)``.
+    margin : float, default 0.0
+        Disjointness margin ``region_margin``.
+
+    Returns
+    -------
+    torch.Tensor
+        Per-point geometric GCI1-bot hinge of shape ``(B,)``.
+    """
+    da = _as_float_tensor(depth_a)
+    db = _as_float_tensor(depth_b, da.dtype).to(device=da.device, dtype=da.dtype)
+    _check_same_shape("depth_a", da, "depth_b", db)
+    m = _validate_margin("margin", margin)
+    in_b = (db >= 0.0).to(dtype=da.dtype)
+    in_a = (da >= 0.0).to(dtype=da.dtype)
+    return in_b * th.relu(da + m) + in_a * th.relu(db + m)
 
 
 def gci2_dead(
@@ -409,6 +585,84 @@ def gci2(
     return edge_hinge + gci2_dead(ma, dead_filler, dead=dead)
 
 
+def gci2_region(
+    role_depth: th.Tensor,
+    margin: float = 0.0,
+    agg: str = "max",
+    agg_tau: float = 0.05,
+    depth_a: Optional[th.Tensor] = None,
+    dead_filler: Optional[th.Tensor] = None,
+) -> th.Tensor:
+    """Compute the geometric region GCI2 hinge :math:`\\operatorname{relu}(\\text{margin} - \\max_y \\operatorname{role\\_depth}(z, p_y, r))` for :math:`A \\sqsubseteq \\exists r.B` at :math:`z \\in A`.
+
+    Supports both a 1-D ``role_depth`` of shape ``(B,)`` (evaluated at the filler
+    element :math:`y = x_B`) and a 2-D ``role_depth`` of shape ``(B, M)`` over
+    multiple filler elements :math:`y`, aggregating across ``dim=-1`` with ``max``
+    or ``lse`` according to ``agg``. When ``depth_a`` and ``dead_filler`` are
+    provided, also shrinks :math:`A`'s region when the filler :math:`x_B` is dead.
+
+    Guarantees:
+    - Returns a 1-D tensor of shape ``(B,)``.
+    - Equals ``0.0`` whenever the aggregated ``role_depth`` is :math:`\\ge \\text{margin}`
+      (and ``dead_filler`` is ``0`` or ``None``).
+    - Has nonzero gradient with respect to the active role head/tail box centres
+      and half-widths whenever the aggregated ``role_depth`` is :math:`< \\text{margin}`,
+      regardless of :math:`\\tau`.
+
+    Non-guarantees:
+    - Raises :class:`ValueError` if ``agg`` is not ``"max"`` or ``"lse"``.
+
+    Parameters
+    ----------
+    role_depth : torch.Tensor
+        Signed product-box depth :math:`\\operatorname{role\\_depth}(z, p_y, r)`
+        of shape ``(B,)`` or ``(B, M)``.
+    margin : float, default 0.0
+        Containment margin ``region_margin``.
+    agg : str, default "max"
+        Aggregation over filler candidates when ``role_depth`` is 2-D
+        (``"max"`` or ``"lse"``).
+    agg_tau : float, default 0.05
+        Temperature for ``"lse"`` aggregation over filler candidates.
+    depth_a : Optional[th.Tensor], default None
+        Optional signed depth :math:`\\operatorname{depth}(z, A)` of shape ``(B,)``
+        for region dead-propagation when ``dead_filler`` is provided.
+    dead_filler : Optional[th.Tensor], default None
+        Optional filler deadness score :math:`\\delta_{x_B}` of shape ``(B,)``.
+
+    Returns
+    -------
+    torch.Tensor
+        Per-point geometric GCI2 hinge of shape ``(B,)``.
+    """
+    rd = _as_float_tensor(role_depth)
+    m = _validate_margin("margin", margin)
+    if agg not in ("max", "lse"):
+        raise ValueError(f"agg must be 'max' or 'lse', got {agg!r}")
+    if rd.ndim == 2:
+        if agg == "max":
+            rd = th.amax(rd, dim=-1)
+        else:
+            tau_f = _validate_nonneg_weight("agg_tau", agg_tau)
+            if tau_f <= 0.0:
+                raise ValueError(f"agg_tau must be > 0, got {agg_tau!r}")
+            rd = tau_f * th.logsumexp(rd / tau_f, dim=-1)
+    elif rd.ndim != 1:
+        raise ValueError(
+            f"role_depth must be 1-D or 2-D, got shape {tuple(role_depth.shape)}"
+        )
+    edge_h = th.relu(m - rd)
+    if depth_a is None or dead_filler is None:
+        return edge_h
+    da = _as_float_tensor(depth_a, rd.dtype).to(device=rd.device, dtype=rd.dtype)
+    df = _as_float_tensor(dead_filler, rd.dtype).to(device=rd.device, dtype=rd.dtype)
+    _check_same_shape("role_depth", rd, "depth_a", da)
+    _check_same_shape("role_depth", rd, "dead_filler", df)
+    live_gate = (df <= 0.5).to(dtype=rd.dtype)
+    dead_gate = (df > 0.5).to(dtype=rd.dtype)
+    return live_gate * edge_h + dead_gate * th.relu(da + m)
+
+
 def gci3(
     rho: th.Tensor,
     m_b: th.Tensor,
@@ -451,6 +705,65 @@ def gci3(
     return th.relu(_subtract_dead(r + mb - 1.0 - mc, dead))
 
 
+def gci3_region(
+    role_depth: th.Tensor,
+    depth_b: th.Tensor,
+    depth_c: th.Tensor,
+    margin: float = 0.0,
+    smooth: bool = False,
+) -> th.Tensor:
+    """Compute the geometric region GCI3 hinge for :math:`\\exists r.B \\sqsubseteq C` at :math:`(z, y)`.
+
+    Evaluates :math:`\\operatorname{relu}(\\text{margin} - \\operatorname{depth}_C(z))`
+    masked by crisp :math:`(\\operatorname{role\\_depth}(z, y) > 0 \\land \\operatorname{depth}_B(y) > 0)`
+    when ``smooth=False``, or gated by :math:`\\sigma(\\min(\\operatorname{role\\_depth}(z, y), \\operatorname{depth}_B(y)))`
+    when ``smooth=True``.
+
+    Guarantees:
+    - Returns a tensor of the same shape as ``role_depth``.
+    - Equals ``0.0`` whenever :math:`\\operatorname{depth}_C(z) \\ge \\text{margin}`
+      or (when ``smooth=False``) :math:`\\min(\\operatorname{role\\_depth}(z, y), \\operatorname{depth}_B(y)) \\le 0`.
+    - Has nonzero gradient with respect to the active superclass box centres and
+      half-widths of :math:`C` whenever :math:`\\operatorname{role\\_depth}(z, y) > 0`,
+      :math:`\\operatorname{depth}_B(y) > 0`, and :math:`\\operatorname{depth}_C(z) < \\text{margin}`,
+      regardless of :math:`\\tau`.
+
+    Non-guarantees:
+    - Under ``smooth=False``, zero gradient with respect to :math:`r` and :math:`B`
+      (only expands :math:`C` to cover active role-filler pairs).
+
+    Parameters
+    ----------
+    role_depth : torch.Tensor
+        Signed role depth :math:`\\operatorname{role\\_depth}(z, y, r)` of shape ``(B,)``.
+    depth_b : torch.Tensor
+        Signed filler depth :math:`\\operatorname{depth}(y, B)` of shape ``(B,)``.
+    depth_c : torch.Tensor
+        Signed superclass depth :math:`\\operatorname{depth}(z, C)` of shape ``(B,)``.
+    margin : float, default 0.0
+        Containment margin ``region_margin``.
+    smooth : bool, default False
+        If ``True``, replaces the crisp mask by ``sigmoid(min(role_depth, depth_b))``.
+
+    Returns
+    -------
+    torch.Tensor
+        Per-pair geometric GCI3 hinge of shape ``(B,)``.
+    """
+    rd = _as_float_tensor(role_depth)
+    db = _as_float_tensor(depth_b, rd.dtype).to(device=rd.device, dtype=rd.dtype)
+    dc = _as_float_tensor(depth_c, rd.dtype).to(device=rd.device, dtype=rd.dtype)
+    _check_same_shape("role_depth", rd, "depth_b", db)
+    _check_same_shape("role_depth", rd, "depth_c", dc)
+    m = _validate_margin("margin", margin)
+    rhs = th.relu(m - dc)
+    if smooth:
+        gate = th.sigmoid(th.minimum(rd, db))
+    else:
+        gate = ((rd > 0.0) & (db > 0.0)).to(dtype=dc.dtype)
+    return gate * rhs
+
+
 def gci3_bot(
     rho: th.Tensor,
     m_b: th.Tensor,
@@ -488,6 +801,51 @@ def gci3_bot(
     return th.relu(_subtract_dead(r + mb - 1.0, dead))
 
 
+def gci3_bot_region(
+    role_depth: th.Tensor,
+    depth_b: th.Tensor,
+    margin: float = 0.0,
+) -> th.Tensor:
+    """Compute the geometric region GCI3-bot hinge for :math:`\\exists r.B \\sqsubseteq \\bot` at :math:`(z, y)`.
+
+    Evaluates
+    :math:`\\mathbb{1}[\\operatorname{role\\_depth}(z, y) \\ge 0] \\operatorname{relu}(\\operatorname{depth}_B(y) + \\text{margin}) + \\mathbb{1}[\\operatorname{depth}_B(y) \\ge 0] \\operatorname{relu}(\\operatorname{role\\_depth}(z, y) + \\text{margin})`.
+
+    Guarantees:
+    - Returns a tensor of the same shape as ``role_depth`` and ``depth_b``.
+    - Equals ``0.0`` whenever :math:`T_r` and :math:`B` are separated by at
+      least ``margin``.
+    - Has nonzero gradient with respect to both :math:`T_r` and :math:`B` at
+      any violating pair :math:`(z, y)` with :math:`\\operatorname{role\\_depth}(z, y) > 0`
+      and :math:`\\operatorname{depth}_B(y) > 0`, regardless of :math:`\\tau`.
+
+    Non-guarantees:
+    - Vanishes when neither :math:`\\operatorname{role\\_depth}(z, y) \\ge 0` nor
+      :math:`\\operatorname{depth}_B(y) \\ge 0`.
+
+    Parameters
+    ----------
+    role_depth : torch.Tensor
+        Signed role depth :math:`\\operatorname{role\\_depth}(z, y, r)` of shape ``(B,)``.
+    depth_b : torch.Tensor
+        Signed filler depth :math:`\\operatorname{depth}(y, B)` of shape ``(B,)``.
+    margin : float, default 0.0
+        Disjointness margin ``region_margin``.
+
+    Returns
+    -------
+    torch.Tensor
+        Per-pair geometric GCI3-bot hinge of shape ``(B,)``.
+    """
+    rd = _as_float_tensor(role_depth)
+    db = _as_float_tensor(depth_b, rd.dtype).to(device=rd.device, dtype=rd.dtype)
+    _check_same_shape("role_depth", rd, "depth_b", db)
+    m = _validate_margin("margin", margin)
+    in_r = (rd >= 0.0).to(dtype=rd.dtype)
+    in_b = (db >= 0.0).to(dtype=rd.dtype)
+    return in_r * th.relu(db + m) + in_b * th.relu(rd + m)
+
+
 def role_inclusion(
     rho_r: th.Tensor,
     rho_s: th.Tensor,
@@ -521,6 +879,41 @@ def role_inclusion(
     rs = _as_float_tensor(rho_s, rr.dtype).to(dtype=rr.dtype)
     _check_same_shape("rho_r", rr, "rho_s", rs)
     return th.relu(_subtract_dead(rr - rs, dead))
+
+
+def role_inclusion_region(
+    role_depth_s: th.Tensor,
+    margin: float = 0.0,
+) -> th.Tensor:
+    """Compute the geometric region role-inclusion hinge :math:`\\operatorname{relu}(\\text{margin} - \\operatorname{role\\_depth}_s(x, y))` for :math:`r \\sqsubseteq s` at :math:`(x, y) \\in r`.
+
+    Guarantees:
+    - Returns a tensor of the same shape as ``role_depth_s``.
+    - Equals ``0.0`` whenever :math:`\\operatorname{role\\_depth}_s(x, y) \\ge \\text{margin}`
+      (containing configuration).
+    - Has nonzero gradient with respect to the active super-role head/tail box
+      centres and half-widths of :math:`s` whenever
+      :math:`\\operatorname{role\\_depth}_s(x, y) < \\text{margin}`, regardless of
+      :math:`\\tau`.
+
+    Non-guarantees:
+    - Assumes the caller sampled :math:`(x, y) \\in H_r \\times T_r`.
+
+    Parameters
+    ----------
+    role_depth_s : torch.Tensor
+        Signed super-role depth :math:`\\operatorname{role\\_depth}(x, y, s)` of shape ``(B,)``.
+    margin : float, default 0.0
+        Containment margin ``region_margin``.
+
+    Returns
+    -------
+    torch.Tensor
+        Per-pair geometric role-inclusion hinge of shape ``(B,)``.
+    """
+    rs = _as_float_tensor(role_depth_s)
+    m = _validate_margin("margin", margin)
+    return th.relu(m - rs)
 
 
 def role_chain(
@@ -562,6 +955,66 @@ def role_chain(
     _check_same_shape("rho_r", rr, "rho_s", rs)
     _check_same_shape("rho_r", rr, "rho_t", rt)
     return th.relu(_subtract_dead(rr + rs - 1.0 - rt, dead))
+
+
+def role_chain_region(
+    role_depth_r: th.Tensor,
+    role_depth_s: th.Tensor,
+    role_depth_t: th.Tensor,
+    margin: float = 0.0,
+    smooth: bool = False,
+) -> th.Tensor:
+    """Compute the geometric region role-chain hinge for :math:`r \\circ s \\sqsubseteq t` at :math:`(x, y, z)`.
+
+    Evaluates :math:`\\operatorname{relu}(\\text{margin} - \\operatorname{role\\_depth}_t(x, z))`
+    masked by crisp :math:`(\\operatorname{role\\_depth}_r(x, y) > 0 \\land \\operatorname{role\\_depth}_s(y, z) > 0)`
+    when ``smooth=False``, or gated by :math:`\\sigma(\\min(\\operatorname{role\\_depth}_r(x, y), \\operatorname{role\\_depth}_s(y, z)))`
+    when ``smooth=True``.
+
+    Guarantees:
+    - Returns a tensor of the same shape as ``role_depth_r``.
+    - Equals ``0.0`` whenever :math:`\\operatorname{role\\_depth}_t(x, z) \\ge \\text{margin}`
+      or (when ``smooth=False``) :math:`\\min(\\operatorname{role\\_depth}_r(x, y), \\operatorname{role\\_depth}_s(y, z)) \\le 0`.
+    - Has nonzero gradient with respect to the active super-role head/tail box
+      centres and half-widths of :math:`t` whenever
+      :math:`\\operatorname{role\\_depth}_r(x, y) > 0`,
+      :math:`\\operatorname{role\\_depth}_s(y, z) > 0`, and
+      :math:`\\operatorname{role\\_depth}_t(x, z) < \\text{margin}`, regardless of
+      :math:`\\tau`.
+
+    Non-guarantees:
+    - Under ``smooth=False``, zero gradient with respect to :math:`r` and :math:`s`.
+
+    Parameters
+    ----------
+    role_depth_r : torch.Tensor
+        Signed depth :math:`\\operatorname{role\\_depth}(x, y, r)` of shape ``(B,)``.
+    role_depth_s : torch.Tensor
+        Signed depth :math:`\\operatorname{role\\_depth}(y, z, s)` of shape ``(B,)``.
+    role_depth_t : torch.Tensor
+        Signed depth :math:`\\operatorname{role\\_depth}(x, z, t)` of shape ``(B,)``.
+    margin : float, default 0.0
+        Containment margin ``region_margin``.
+    smooth : bool, default False
+        If ``True``, replaces the crisp mask by ``sigmoid(min(role_depth_r, role_depth_s))``.
+
+    Returns
+    -------
+    torch.Tensor
+        Per-triple geometric role-chain hinge of shape ``(B,)``.
+    """
+    rr = _as_float_tensor(role_depth_r)
+    rs = _as_float_tensor(role_depth_s, rr.dtype).to(device=rr.device, dtype=rr.dtype)
+    rt = _as_float_tensor(role_depth_t, rr.dtype).to(device=rr.device, dtype=rr.dtype)
+    _check_same_shape("role_depth_r", rr, "role_depth_s", rs)
+    _check_same_shape("role_depth_r", rr, "role_depth_t", rt)
+    m = _validate_margin("margin", margin)
+    rhs = th.relu(m - rt)
+    if smooth:
+        gate = th.sigmoid(th.minimum(rr, rs))
+    else:
+        gate = ((rr > 0.0) & (rs > 0.0)).to(dtype=rt.dtype)
+    return gate * rhs
 
 
 def class_assertion(

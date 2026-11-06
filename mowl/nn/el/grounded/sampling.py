@@ -50,6 +50,7 @@ __all__ = [
     "sample_elements",
     "sample_filler_elements",
     "adversarial_ascent",
+    "component_extremes",
     "sample_active_component",
     "sample_component_intersection",
     "sample_class_region",
@@ -340,10 +341,163 @@ def adversarial_ascent(
     return z
 
 
+def component_extremes(
+    lower: th.Tensor,
+    upper: th.Tensor,
+    valid: Optional[th.Tensor] = None,
+) -> th.Tensor:
+    r"""Return the :math:`2^d` corner points (when :math:`d \le 4`) or :math:`2d` axis-extreme points (when :math:`d > 4`) of each box ``[lower, upper]``.
+
+    Points are inset by ``_INTERIOR_EPS`` from the boundary so that every extreme
+    point of a non-degenerate box lies strictly inside the open box ``(lower, upper)``.
+
+    Guarantees:
+    - Returns a detached tensor of shape ``(B, 2^d, d)`` when ``d <= 4`` and
+      ``(B, 2 * d, d)`` when ``d > 4``.
+    - For every valid row ``b`` with ``lower[b] < upper[b]``, all returned points
+      satisfy ``lower[b] < pt < upper[b]``.
+    - Invalid rows (``valid[b] == False``) are filled with exact zeros.
+
+    Non-guarantees:
+    - Does not subsample to ``n_region_samples``; callers cap the combined sample
+      count per axiom row.
+
+    Parameters
+    ----------
+    lower : torch.Tensor
+        Lower box bounds of shape ``(B, d)``.
+    upper : torch.Tensor
+        Upper box bounds of shape ``(B, d)``.
+    valid : Optional[torch.Tensor], default None
+        Optional boolean validity mask of shape ``(B,)``.
+
+    Returns
+    -------
+    torch.Tensor
+        Corner or axis-extreme points of shape ``(B, M, d)``.
+    """
+    if lower.ndim != 2 or upper.shape != lower.shape:
+        raise ValueError(
+            f"lower and upper must be 2-D tensors of identical shape, got "
+            f"{tuple(lower.shape)} and {tuple(upper.shape)}"
+        )
+    bsz, dim = lower.shape
+    device = lower.device
+    dtype = lower.dtype
+    lo = lower.detach()
+    hi = upper.detach()
+    c = 0.5 * (lo + hi)
+    w = 0.5 * (hi - lo) * (1.0 - _INTERIOR_EPS)
+
+    if dim <= 4:
+        n_ext = 1 << dim
+        signs = th.tensor(
+            [
+                [(1.0 if (mask >> bit) & 1 else -1.0) for bit in range(dim)]
+                for mask in range(n_ext)
+            ],
+            dtype=dtype,
+            device=device,
+        )  # (2^d, d)
+        pts = c.unsqueeze(1) + w.unsqueeze(1) * signs.unsqueeze(0)  # (B, 2^d, d)
+    else:
+        eye = th.eye(dim, dtype=dtype, device=device)  # (d, d)
+        signs = th.cat([-eye, eye], dim=0)  # (2d, d)
+        pts = c.unsqueeze(1) + w.unsqueeze(1) * signs.unsqueeze(0)  # (B, 2d, d)
+
+    if valid is not None:
+        v_mask = valid.to(device=device, dtype=th.bool).view(bsz, 1, 1)
+        pts = th.where(v_mask, pts, th.zeros_like(pts))
+    return pts.detach()
+
+
+def _sample_regions_with_corners(
+    regions: Regions,
+    generator: th.Generator,
+    n_samples: int,
+    n_adv: int = 2,
+    hinge_fn: Optional[Callable[[th.Tensor], th.Tensor]] = None,
+    step_size: Optional[Union[float, th.Tensor]] = None,
+) -> RegionSample:
+    """Sample ``n_samples`` region points per row of ``regions``, combining adversarial interior points and corner/axis-extreme points."""
+    bsz, _, dim = regions.cen.shape
+    device = regions.cen.device
+    dtype = regions.cen.dtype
+    if bsz == 0:
+        empty_pts = th.zeros((0, dim), dtype=dtype, device=device)
+        empty_val = th.zeros((0,), dtype=th.bool, device=device)
+        return RegionSample(
+            points=empty_pts, valid=empty_val, lower=empty_pts, upper=empty_pts
+        )
+
+    base = sample_active_component(regions, generator=generator, n_adv=0)
+    if n_samples == 1:
+        pts = base.points
+        if n_adv > 0 and hinge_fn is not None and bool(base.valid.any().item()):
+            pts = adversarial_ascent(
+                pts,
+                base.lower,
+                base.upper,
+                hinge_fn=hinge_fn,
+                n_adv=n_adv,
+                step_size=step_size,
+                valid=base.valid,
+            )
+        return RegionSample(
+            points=pts, valid=base.valid, lower=base.lower, upper=base.upper
+        )
+
+    extremes = component_extremes(base.lower, base.upper, valid=base.valid)  # (B, M, d)
+    e_cnt = int(extremes.shape[1])
+    n_corn = min(e_cnt, max(n_samples - 1, 0))
+    n_u = n_samples - n_corn
+
+    lo_u = base.lower.repeat(n_u, 1)
+    hi_u = base.upper.repeat(n_u, 1)
+    val_u = base.valid.repeat(n_u)
+    u_pt = _rand_with_generator(
+        (n_u * bsz, dim), dtype=dtype, device=device, generator=generator
+    ).clamp(min=_INTERIOR_EPS, max=1.0 - _INTERIOR_EPS)
+    pts_u = th.where(val_u.unsqueeze(-1), lo_u + (hi_u - lo_u) * u_pt, th.zeros_like(lo_u))
+
+    if n_adv > 0 and hinge_fn is not None and bool(val_u.any().item()):
+        pts_u = adversarial_ascent(
+            pts_u,
+            lo_u,
+            hi_u,
+            hinge_fn=hinge_fn,
+            n_adv=n_adv,
+            step_size=step_size,
+            valid=val_u,
+        )
+    else:
+        pts_u = pts_u.detach()
+
+    if n_corn > 0:
+        if n_corn < e_cnt:
+            perm = th.randperm(
+                e_cnt, device=generator.device, generator=generator
+            )[:n_corn].to(device=device)
+            sel_ext = extremes[:, perm, :]
+        else:
+            sel_ext = extremes
+        pts_c = sel_ext.permute(1, 0, 2).reshape(n_corn * bsz, dim).detach()
+        all_pts = th.cat([pts_u, pts_c], dim=0)
+    else:
+        all_pts = pts_u
+
+    return RegionSample(
+        points=all_pts,
+        valid=base.valid.repeat(n_samples),
+        lower=base.lower.repeat(n_samples, 1),
+        upper=base.upper.repeat(n_samples, 1),
+    )
+
+
 def sample_active_component(
     regions: Regions,
     generator: th.Generator,
-    n_adv: int = 0,
+    n_adv: int = 2,
     hinge_fn: Optional[Callable[[th.Tensor], th.Tensor]] = None,
     step_size: Optional[Union[float, th.Tensor]] = None,
 ) -> RegionSample:
@@ -385,8 +539,6 @@ def sample_active_component(
     _validate_generator(generator)
     if isinstance(n_adv, bool) or not isinstance(n_adv, int) or n_adv < 0:
         raise ValueError(f"n_adv must be an int >= 0, got {n_adv!r}")
-    if n_adv > 0 and hinge_fn is None:
-        raise ValueError("hinge_fn must be provided when n_adv > 0")
 
     cen = regions.cen
     w = regions.w
@@ -448,7 +600,7 @@ def sample_component_intersection(
     regions_a: Regions,
     regions_b: Regions,
     generator: th.Generator,
-    n_adv: int = 0,
+    n_adv: int = 2,
     hinge_fn: Optional[Callable[[th.Tensor], th.Tensor]] = None,
     step_size: Optional[Union[float, th.Tensor]] = None,
 ) -> RegionSample:
@@ -536,9 +688,10 @@ def sample_class_region(
     class_ids: Union[int, Sequence[int], th.Tensor],
     generator: th.Generator,
     n_samples: int = 1,
-    n_adv: int = 0,
+    n_adv: int = 2,
     hinge_fn: Optional[Callable[[th.Tensor], th.Tensor]] = None,
     step_size: Optional[Union[float, th.Tensor]] = None,
+    include_corners: bool = True,
 ) -> RegionSample:
     """Sample region points from active components of ``class_ids`` in ``module``.
 
@@ -577,8 +730,18 @@ def sample_class_region(
     if isinstance(n_samples, bool) or not isinstance(n_samples, int) or n_samples < 1:
         raise ValueError(f"n_samples must be an int >= 1, got {n_samples!r}")
     idx = module._to_index_tensor(class_ids, module.nb_classes, "class_ids")
-    if idx.numel() == 1 and n_samples > 1:
-        idx = idx.expand(n_samples)
+    if include_corners and n_samples > 1:
+        regions = module.class_regions(idx)
+        return _sample_regions_with_corners(
+            regions,
+            generator=generator,
+            n_samples=n_samples,
+            n_adv=n_adv,
+            hinge_fn=hinge_fn,
+            step_size=step_size,
+        )
+    if n_samples > 1:
+        idx = idx.repeat(n_samples)
     regions = module.class_regions(idx)
     return sample_active_component(
         regions,
@@ -595,9 +758,10 @@ def sample_pair_region(
     class_b_ids: Union[int, Sequence[int], th.Tensor],
     generator: th.Generator,
     n_samples: int = 1,
-    n_adv: int = 0,
+    n_adv: int = 2,
     hinge_fn: Optional[Callable[[th.Tensor], th.Tensor]] = None,
     step_size: Optional[Union[float, th.Tensor]] = None,
+    include_corners: bool = True,
 ) -> RegionSample:
     """Sample region points from active component intersections of ``class_a_ids`` and ``class_b_ids`` in ``module``.
 
@@ -641,9 +805,35 @@ def sample_pair_region(
         raise ValueError(
             f"class_a_ids and class_b_ids must have the same shape, got {tuple(idx_a.shape)} vs {tuple(idx_b.shape)}"
         )
-    if idx_a.numel() == 1 and n_samples > 1:
-        idx_a = idx_a.expand(n_samples)
-        idx_b = idx_b.expand(n_samples)
+    if include_corners and n_samples > 1:
+        reg_a = module.class_regions(idx_a)
+        reg_b = module.class_regions(idx_b)
+        bsz, ka, dim = reg_a.cen.shape
+        kb = reg_b.cen.shape[1]
+        ca = reg_a.cen.unsqueeze(2)
+        wa = reg_a.w.unsqueeze(2)
+        cb = reg_b.cen.unsqueeze(1)
+        wb = reg_b.w.unsqueeze(1)
+        lo_ij = th.maximum(ca - wa, cb - wb)
+        hi_ij = th.minimum(ca + wa, cb + wb)
+        inter_regions = Regions(
+            cen=(0.5 * (lo_ij + hi_ij)).reshape(bsz, ka * kb, dim),
+            w=(0.5 * (hi_ij - lo_ij)).reshape(bsz, ka * kb, dim),
+            active=(reg_a.active.unsqueeze(2) & reg_b.active.unsqueeze(1)).reshape(
+                bsz, ka * kb
+            ),
+        )
+        return _sample_regions_with_corners(
+            inter_regions,
+            generator=generator,
+            n_samples=n_samples,
+            n_adv=n_adv,
+            hinge_fn=hinge_fn,
+            step_size=step_size,
+        )
+    if n_samples > 1:
+        idx_a = idx_a.repeat(n_samples)
+        idx_b = idx_b.repeat(n_samples)
     reg_a = module.class_regions(idx_a)
     reg_b = module.class_regions(idx_b)
     return sample_component_intersection(
@@ -661,6 +851,10 @@ def sample_role_region(
     rel_ids: Union[int, Sequence[int], th.Tensor],
     generator: th.Generator,
     n_samples: int = 1,
+    n_adv: int = 2,
+    hinge_fn: Optional[Callable[[th.Tensor], th.Tensor]] = None,
+    step_size: Optional[Union[float, th.Tensor]] = None,
+    include_corners: bool = True,
 ) -> Tuple[RegionSample, RegionSample]:
     """Sample point pairs ``(x_sample, y_sample)`` uniformly inside a random active product component :math:`H_{r,k} \\times T_{r,k}` of ``rel_ids``.
 
@@ -693,21 +887,83 @@ def sample_role_region(
     if isinstance(n_samples, bool) or not isinstance(n_samples, int) or n_samples < 1:
         raise ValueError(f"n_samples must be an int >= 1, got {n_samples!r}")
     idx = module._to_index_tensor(rel_ids, module.nb_rels, "rel_ids")
-    if idx.numel() == 1 and n_samples > 1:
-        idx = idx.expand(n_samples)
-
     h_reg, t_reg = module.role_regions(idx)
-    bsz, kr, dim = h_reg.cen.shape
+    bsz, _, dim = h_reg.cen.shape
     device = h_reg.cen.device
     dtype = h_reg.cen.dtype
 
-    # Concatenate (H_{r,k}, T_{r,k}) as a 2d-dimensional box in R^{2d} so the same k is chosen
     prod_regions = Regions(
         cen=th.cat([h_reg.cen, t_reg.cen], dim=-1),
         w=th.cat([h_reg.w, t_reg.w], dim=-1),
         active=h_reg.active,
     )
-    prod_sample = sample_active_component(prod_regions, generator=generator)
+    if include_corners and n_samples > 1 and bsz > 0:
+        base = sample_active_component(prod_regions, generator=generator, n_adv=0)
+        h_lo, h_hi = base.lower[:, :dim], base.upper[:, :dim]
+        t_lo, t_hi = base.lower[:, dim:], base.upper[:, dim:]
+        h_ext = component_extremes(h_lo, h_hi, valid=base.valid)  # (B, M, d)
+        t_ext = component_extremes(t_lo, t_hi, valid=base.valid)  # (B, M, d)
+        prod_ext = th.cat([h_ext, t_ext], dim=-1)  # (B, M, 2d)
+        e_cnt = int(prod_ext.shape[1])
+        n_corn = min(e_cnt, max(n_samples - 1, 0))
+        n_u = n_samples - n_corn
+
+        lo_u = base.lower.repeat(n_u, 1)
+        hi_u = base.upper.repeat(n_u, 1)
+        val_u = base.valid.repeat(n_u)
+        u_pt = _rand_with_generator(
+            (n_u * bsz, 2 * dim), dtype=dtype, device=device, generator=generator
+        ).clamp(min=_INTERIOR_EPS, max=1.0 - _INTERIOR_EPS)
+        pts_u = th.where(
+            val_u.unsqueeze(-1), lo_u + (hi_u - lo_u) * u_pt, th.zeros_like(lo_u)
+        )
+        if n_adv > 0 and hinge_fn is not None and bool(val_u.any().item()):
+            pts_u = adversarial_ascent(
+                pts_u,
+                lo_u,
+                hi_u,
+                hinge_fn=hinge_fn,
+                n_adv=n_adv,
+                step_size=step_size,
+                valid=val_u,
+            )
+        else:
+            pts_u = pts_u.detach()
+
+        if n_corn > 0:
+            if n_corn < e_cnt:
+                perm = th.randperm(
+                    e_cnt, device=generator.device, generator=generator
+                )[:n_corn].to(device=device)
+                sel_ext = prod_ext[:, perm, :]
+            else:
+                sel_ext = prod_ext
+            pts_c = sel_ext.permute(1, 0, 2).reshape(n_corn * bsz, 2 * dim).detach()
+            all_pts = th.cat([pts_u, pts_c], dim=0)
+        else:
+            all_pts = pts_u
+
+        prod_sample = RegionSample(
+            points=all_pts,
+            valid=base.valid.repeat(n_samples),
+            lower=base.lower.repeat(n_samples, 1),
+            upper=base.upper.repeat(n_samples, 1),
+        )
+    else:
+        if n_samples > 1:
+            prod_regions = Regions(
+                cen=prod_regions.cen.repeat(n_samples, 1, 1),
+                w=prod_regions.w.repeat(n_samples, 1, 1),
+                active=prod_regions.active.repeat(n_samples, 1),
+            )
+        prod_sample = sample_active_component(
+            prod_regions,
+            generator=generator,
+            n_adv=n_adv,
+            hinge_fn=hinge_fn,
+            step_size=step_size,
+        )
+
     h_sample = RegionSample(
         points=prod_sample.points[:, :dim],
         valid=prod_sample.valid,

@@ -55,15 +55,24 @@ from mowl.nn.el.grounded import (
     fact,
     gci0,
     gci0_bot,
+    gci0_bot_region,
+    gci0_region,
     gci1,
     gci1_bot,
+    gci1_bot_region,
+    gci1_region,
     gci2,
+    gci2_region,
     gci3,
     gci3_bot,
+    gci3_bot_region,
+    gci3_region,
     minimality,
     role_assertion,
     role_chain,
+    role_chain_region,
     role_inclusion,
+    role_inclusion_region,
     sample_class_region,
     sample_elements,
     sample_filler_elements,
@@ -78,7 +87,7 @@ from mowl.nn.el.grounded.module import (
     _validate_int_ge,
     _validate_positive_float,
 )
-from mowl.nn.el.grounded.losses import _validate_nonneg_weight
+from mowl.nn.el.grounded.losses import _validate_margin, _validate_nonneg_weight
 from mowl.nn.el.structural import Regions, inside_measure
 from mowl.owlapi.defaults import BOT as BOTTOM, TOP
 
@@ -205,7 +214,8 @@ class GroundedEL(EmbeddingELModel):
         eps_dead: float = 1e-2,
         lambda_reg: float = 1.0,
         n_region_samples: int = 4,
-        n_adv: int = 0,
+        n_adv: int = 2,
+        region_margin: float = 0.0,
         n_random_elements: int = 4,
         agg: str = "max",
         reseed_every: int = 0,
@@ -239,6 +249,7 @@ class GroundedEL(EmbeddingELModel):
         lambda_reg_f = _validate_nonneg_weight("lambda_reg", lambda_reg)
         _validate_int_ge("n_region_samples", n_region_samples, 0)
         _validate_int_ge("n_adv", n_adv, 0)
+        region_margin_f = _validate_margin("region_margin", region_margin)
         _validate_int_ge("n_random_elements", n_random_elements, 0)
         _validate_int_ge("n_filler_samples", n_filler_samples, 1)
         if not isinstance(agg, str) or agg not in ("max", "lse"):
@@ -278,6 +289,7 @@ class GroundedEL(EmbeddingELModel):
         self.lambda_reg = lambda_reg_f
         self.n_region_samples = int(n_region_samples)
         self.n_adv = int(n_adv)
+        self.region_margin = region_margin_f
         self.n_random_elements = int(n_random_elements)
         self.n_filler_samples = int(n_filler_samples)
         self.agg = agg
@@ -732,19 +744,30 @@ class GroundedEL(EmbeddingELModel):
                 a_reg = rows[:, 0].repeat(self.n_region_samples)
                 b_reg = rows[:, 1].repeat(self.n_region_samples)
                 h_fn = (
-                    (lambda z: gci0(mod.membership(z, a_reg), mod.membership(z, b_reg), dead=None))
+                    (
+                        lambda z: gci0_region(
+                            mod.depth(z, rows[:, 1].repeat(max(z.shape[0] // bsz, 1))),
+                            margin=self.region_margin,
+                        )
+                    )
                     if self.n_adv > 0
                     else None
                 )
                 reg = sample_class_region(
-                    mod, a_reg, generator=generator, n_adv=self.n_adv, hinge_fn=h_fn
+                    mod,
+                    rows[:, 0],
+                    generator=generator,
+                    n_samples=self.n_region_samples,
+                    n_adv=self.n_adv,
+                    hinge_fn=h_fn,
                 )
                 if bool(reg.valid.any().item()):
                     pts = reg.points[reg.valid].detach()
-                    av = a_reg[reg.valid]
                     bv = b_reg[reg.valid]
                     region_terms.append(
-                        gci0(mod.membership(pts, av), mod.membership(pts, bv), dead=None).mean()
+                        gci0_region(
+                            mod.depth(pts, bv), margin=self.region_margin
+                        ).mean()
                     )
 
         # 3. GCI0_bot: A <= bot
@@ -768,18 +791,31 @@ class GroundedEL(EmbeddingELModel):
             if do_region:
                 a_reg = a_col.repeat(self.n_region_samples)
                 h_fn = (
-                    (lambda z: gci0_bot(mod.membership(z, a_reg), dead=None))
+                    (
+                        lambda z: gci0_bot_region(
+                            mod.depth(z, a_col.repeat(max(z.shape[0] // bsz, 1))),
+                            margin=self.region_margin,
+                        )
+                    )
                     if self.n_adv > 0
                     else None
                 )
                 reg = sample_class_region(
-                    mod, a_reg, generator=generator, n_adv=self.n_adv, hinge_fn=h_fn
+                    mod,
+                    a_col,
+                    generator=generator,
+                    n_samples=self.n_region_samples,
+                    n_adv=self.n_adv,
+                    hinge_fn=h_fn,
                 )
                 if bool(reg.valid.any().item()):
                     pts = reg.points[reg.valid].detach()
                     av = a_reg[reg.valid]
-                    # Region of A <= bot must be empty: penalise membership without detaching points from box center
-                    region_terms.append(gci0_bot(mod.membership(pts, av), dead=None).mean())
+                    region_terms.append(
+                        gci0_bot_region(
+                            mod.depth(pts, av), margin=self.region_margin
+                        ).mean()
+                    )
 
         # 4. GCI1: A cap B <= C
         if "gci1" in td and len(td["gci1"]) > 0:
@@ -804,35 +840,32 @@ class GroundedEL(EmbeddingELModel):
                 ).mean()
             )
             if do_region:
-                a_reg = rows[:, 0].repeat(self.n_region_samples)
-                b_reg = rows[:, 1].repeat(self.n_region_samples)
                 c_reg = rows[:, 2].repeat(self.n_region_samples)
                 h_fn = (
                     (
-                        lambda z: gci1(
-                            mod.membership(z, a_reg),
-                            mod.membership(z, b_reg),
-                            mod.membership(z, c_reg),
-                            dead=None,
+                        lambda z: gci1_region(
+                            mod.depth(z, rows[:, 2].repeat(max(z.shape[0] // bsz, 1))),
+                            margin=self.region_margin,
                         )
                     )
                     if self.n_adv > 0
                     else None
                 )
                 reg = sample_pair_region(
-                    mod, a_reg, b_reg, generator=generator, n_adv=self.n_adv, hinge_fn=h_fn
+                    mod,
+                    rows[:, 0],
+                    rows[:, 1],
+                    generator=generator,
+                    n_samples=self.n_region_samples,
+                    n_adv=self.n_adv,
+                    hinge_fn=h_fn,
                 )
                 if bool(reg.valid.any().item()):
                     pts = reg.points[reg.valid].detach()
-                    av = a_reg[reg.valid]
-                    bv = b_reg[reg.valid]
                     cv = c_reg[reg.valid]
                     region_terms.append(
-                        gci1(
-                            mod.membership(pts, av),
-                            mod.membership(pts, bv),
-                            mod.membership(pts, cv),
-                            dead=None,
+                        gci1_region(
+                            mod.depth(pts, cv), margin=self.region_margin
                         ).mean()
                     )
 
@@ -862,22 +895,34 @@ class GroundedEL(EmbeddingELModel):
                 b_reg = rows[:, 1].repeat(self.n_region_samples)
                 h_fn = (
                     (
-                        lambda z: gci1_bot(
-                            mod.membership(z, a_reg), mod.membership(z, b_reg), dead=None
+                        lambda z: gci1_bot_region(
+                            mod.depth(z, rows[:, 0].repeat(max(z.shape[0] // bsz, 1))),
+                            mod.depth(z, rows[:, 1].repeat(max(z.shape[0] // bsz, 1))),
+                            margin=self.region_margin,
                         )
                     )
                     if self.n_adv > 0
                     else None
                 )
                 reg = sample_pair_region(
-                    mod, a_reg, b_reg, generator=generator, n_adv=self.n_adv, hinge_fn=h_fn
+                    mod,
+                    rows[:, 0],
+                    rows[:, 1],
+                    generator=generator,
+                    n_samples=self.n_region_samples,
+                    n_adv=self.n_adv,
+                    hinge_fn=h_fn,
                 )
                 if bool(reg.valid.any().item()):
                     pts = reg.points[reg.valid].detach()
                     av = a_reg[reg.valid]
                     bv = b_reg[reg.valid]
                     region_terms.append(
-                        gci1_bot(mod.membership(pts, av), mod.membership(pts, bv), dead=None).mean()
+                        gci1_bot_region(
+                            mod.depth(pts, av),
+                            mod.depth(pts, bv),
+                            margin=self.region_margin,
+                        ).mean()
                     )
 
         # 6. GCI2: A <= exists r.B
@@ -911,22 +956,31 @@ class GroundedEL(EmbeddingELModel):
                 a_reg = rows[:, 0].repeat(self.n_region_samples)
                 r_reg = rows[:, 1].repeat(self.n_region_samples)
                 b_reg = rows[:, 2].repeat(self.n_region_samples)
-                pb_reg = pos_all[b_reg].detach()
-                df_reg = dead_all[b_reg].detach()
                 h_fn = (
                     (
-                        lambda z: gci2(
-                            mod.membership(z, a_reg),
-                            mod.role_membership(z, pb_reg, r_reg),
-                            dead=None,
-                            dead_filler=df_reg,
+                        lambda z: gci2_region(
+                            mod.role_depth(
+                                z,
+                                pos_all[
+                                    rows[:, 2].repeat(max(z.shape[0] // bsz, 1))
+                                ].detach(),
+                                rows[:, 1].repeat(max(z.shape[0] // bsz, 1)),
+                            ),
+                            margin=self.region_margin,
+                            agg=self.agg,
+                            agg_tau=self.agg_tau,
                         )
                     )
                     if self.n_adv > 0
                     else None
                 )
                 reg = sample_class_region(
-                    mod, a_reg, generator=generator, n_adv=self.n_adv, hinge_fn=h_fn
+                    mod,
+                    rows[:, 0],
+                    generator=generator,
+                    n_samples=self.n_region_samples,
+                    n_adv=self.n_adv,
+                    hinge_fn=h_fn,
                 )
                 if bool(reg.valid.any().item()):
                     pts = reg.points[reg.valid].detach()
@@ -934,10 +988,12 @@ class GroundedEL(EmbeddingELModel):
                     rv = r_reg[reg.valid]
                     bv = b_reg[reg.valid]
                     region_terms.append(
-                        gci2(
-                            mod.membership(pts, av),
-                            mod.role_membership(pts, pos_all[bv], rv),
-                            dead=None,
+                        gci2_region(
+                            mod.role_depth(pts, pos_all[bv], rv),
+                            margin=self.region_margin,
+                            agg=self.agg,
+                            agg_tau=self.agg_tau,
+                            depth_a=mod.depth(pts, av),
                             dead_filler=dead_all[bv].detach(),
                         ).mean()
                     )
@@ -985,7 +1041,37 @@ class GroundedEL(EmbeddingELModel):
                 r_reg = rows[:, 0].repeat(self.n_region_samples)
                 b_reg = rows[:, 1].repeat(self.n_region_samples)
                 c_reg = rows[:, 2].repeat(self.n_region_samples)
-                h_samp, t_samp = sample_role_region(mod, r_reg, generator=generator)
+                h_fn_3 = (
+                    (
+                        lambda xy: gci3_region(
+                            mod.role_depth(
+                                xy[:, : self.embed_dim],
+                                xy[:, self.embed_dim :],
+                                rows[:, 0].repeat(max(xy.shape[0] // bsz, 1)),
+                            ),
+                            mod.depth(
+                                xy[:, self.embed_dim :],
+                                rows[:, 1].repeat(max(xy.shape[0] // bsz, 1)),
+                            ),
+                            mod.depth(
+                                xy[:, : self.embed_dim],
+                                rows[:, 2].repeat(max(xy.shape[0] // bsz, 1)),
+                            ),
+                            margin=self.region_margin,
+                            smooth=True,
+                        )
+                    )
+                    if self.n_adv > 0
+                    else None
+                )
+                h_samp, t_samp = sample_role_region(
+                    mod,
+                    rows[:, 0],
+                    generator=generator,
+                    n_samples=self.n_region_samples,
+                    n_adv=self.n_adv,
+                    hinge_fn=h_fn_3,
+                )
                 if bool(h_samp.valid.any().item()):
                     zx = h_samp.points[h_samp.valid].detach()
                     zy = t_samp.points[t_samp.valid].detach()
@@ -993,21 +1079,21 @@ class GroundedEL(EmbeddingELModel):
                     bv = b_reg[h_samp.valid]
                     cv = c_reg[h_samp.valid]
                     region_terms.append(
-                        gci3(
-                            mod.role_membership(zx, zy, rv),
-                            mod.membership(zy, bv),
-                            mod.membership(zx, cv),
-                            dead=None,
+                        gci3_region(
+                            mod.role_depth(zx, zy, rv),
+                            mod.depth(zy, bv),
+                            mod.depth(zx, cv),
+                            margin=self.region_margin,
                         ).mean()
                     )
                     # Also evaluate at z = zx with y = filler element x_B (§4)
                     py_fill = pos_all[bv]
                     region_terms.append(
-                        gci3(
-                            mod.role_membership(zx, py_fill, rv),
-                            mod.membership(py_fill, bv),
-                            mod.membership(zx, cv),
-                            dead=None,
+                        gci3_region(
+                            mod.role_depth(zx, py_fill, rv),
+                            mod.depth(py_fill, bv),
+                            mod.depth(zx, cv),
+                            margin=self.region_margin,
                         ).mean()
                     )
 
@@ -1047,17 +1133,42 @@ class GroundedEL(EmbeddingELModel):
             if do_region:
                 r_reg = rows[:, 0].repeat(self.n_region_samples)
                 b_reg = rows[:, 1].repeat(self.n_region_samples)
-                h_samp, t_samp = sample_role_region(mod, r_reg, generator=generator)
+                h_fn_3b = (
+                    (
+                        lambda xy: gci3_bot_region(
+                            mod.role_depth(
+                                xy[:, : self.embed_dim],
+                                xy[:, self.embed_dim :],
+                                rows[:, 0].repeat(max(xy.shape[0] // bsz, 1)),
+                            ),
+                            mod.depth(
+                                xy[:, self.embed_dim :],
+                                rows[:, 1].repeat(max(xy.shape[0] // bsz, 1)),
+                            ),
+                            margin=self.region_margin,
+                        )
+                    )
+                    if self.n_adv > 0
+                    else None
+                )
+                h_samp, t_samp = sample_role_region(
+                    mod,
+                    rows[:, 0],
+                    generator=generator,
+                    n_samples=self.n_region_samples,
+                    n_adv=self.n_adv,
+                    hinge_fn=h_fn_3b,
+                )
                 if bool(h_samp.valid.any().item()):
                     zx = h_samp.points[h_samp.valid].detach()
                     zy = t_samp.points[t_samp.valid].detach()
                     rv = r_reg[h_samp.valid]
                     bv = b_reg[h_samp.valid]
                     region_terms.append(
-                        gci3_bot(
-                            mod.role_membership(zx, zy, rv),
-                            mod.membership(zy, bv),
-                            dead=None,
+                        gci3_bot_region(
+                            mod.role_depth(zx, zy, rv),
+                            mod.depth(zy, bv),
+                            margin=self.region_margin,
                         ).mean()
                     )
 
@@ -1082,18 +1193,37 @@ class GroundedEL(EmbeddingELModel):
                 ).mean()
             )
             if do_region:
-                r_reg = rows[:, 0].repeat(self.n_region_samples)
                 s_reg = rows[:, 1].repeat(self.n_region_samples)
-                h_samp, t_samp = sample_role_region(mod, r_reg, generator=generator)
+                h_fn_ri = (
+                    (
+                        lambda xy: role_inclusion_region(
+                            mod.role_depth(
+                                xy[:, : self.embed_dim],
+                                xy[:, self.embed_dim :],
+                                rows[:, 1].repeat(max(xy.shape[0] // bsz, 1)),
+                            ),
+                            margin=self.region_margin,
+                        )
+                    )
+                    if self.n_adv > 0
+                    else None
+                )
+                h_samp, t_samp = sample_role_region(
+                    mod,
+                    rows[:, 0],
+                    generator=generator,
+                    n_samples=self.n_region_samples,
+                    n_adv=self.n_adv,
+                    hinge_fn=h_fn_ri,
+                )
                 if bool(h_samp.valid.any().item()):
                     zx = h_samp.points[h_samp.valid].detach()
                     zy = t_samp.points[t_samp.valid].detach()
-                    rv = r_reg[h_samp.valid]
                     sv = s_reg[h_samp.valid]
                     region_terms.append(
-                        role_inclusion(
-                            mod.role_membership(zx, zy, rv),
-                            mod.role_membership(zx, zy, sv),
+                        role_inclusion_region(
+                            mod.role_depth(zx, zy, sv),
+                            margin=self.region_margin,
                         ).mean()
                     )
 
@@ -1127,8 +1257,12 @@ class GroundedEL(EmbeddingELModel):
                 r_reg = rows[:, 0].repeat(self.n_region_samples)
                 s_reg = rows[:, 1].repeat(self.n_region_samples)
                 t_reg = rows[:, 2].repeat(self.n_region_samples)
-                hx, hy = sample_role_region(mod, r_reg, generator=generator)
-                _, tz = sample_role_region(mod, s_reg, generator=generator)
+                hx, hy = sample_role_region(
+                    mod, rows[:, 0], generator=generator, n_samples=self.n_region_samples, n_adv=0
+                )
+                _, tz = sample_role_region(
+                    mod, rows[:, 1], generator=generator, n_samples=self.n_region_samples, n_adv=0
+                )
                 v_chain = hx.valid & tz.valid
                 if bool(v_chain.any().item()):
                     zx = hx.points[v_chain].detach()
@@ -1138,10 +1272,11 @@ class GroundedEL(EmbeddingELModel):
                     sv = s_reg[v_chain]
                     tv = t_reg[v_chain]
                     region_terms.append(
-                        role_chain(
-                            mod.role_membership(zx, zy, rv),
-                            mod.role_membership(zy, zz, sv),
-                            mod.role_membership(zx, zz, tv),
+                        role_chain_region(
+                            mod.role_depth(zx, zy, rv),
+                            mod.role_depth(zy, zz, sv),
+                            mod.role_depth(zx, zz, tv),
+                            margin=self.region_margin,
                         ).mean()
                     )
 

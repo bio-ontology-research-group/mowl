@@ -21,20 +21,30 @@ from mowl.nn.el.grounded import (
     RegionSample,
     adversarial_ascent,
     class_assertion,
+    component_extremes,
     crisp_membership,
     fact,
     gci0,
     gci0_bot,
+    gci0_bot_region,
+    gci0_region,
     gci1,
     gci1_bot,
+    gci1_bot_region,
+    gci1_region,
     gci2,
     gci2_dead,
+    gci2_region,
     gci3,
     gci3_bot,
+    gci3_bot_region,
+    gci3_region,
     minimality,
     role_assertion,
     role_chain,
+    role_chain_region,
     role_inclusion,
+    role_inclusion_region,
     sample_active_component,
     sample_class_region,
     sample_component_intersection,
@@ -1026,3 +1036,157 @@ def test_no_reasoner_or_canonical_model_in_grounded_ast() -> None:
                             raise AssertionError(
                                 f"reseed_idle must not access axiom table {sub.value!r} ({path.name}:{sub.lineno})"
                             )
+
+
+def test_geometric_region_hinges_zero_on_containing_and_nonzero_grad_at_small_tau() -> None:
+    """Geometric *_region hinges are 0 on containing boxes and > 0 with nonzero superclass gradient at tau=1e-3."""
+    mod = GroundedELModule(
+        nb_elements=5,
+        nb_classes=5,
+        nb_rels=3,
+        embed_dim=2,
+        n_components=1,
+        n_role_components=1,
+        tau=1e-3,
+    )
+    with th.no_grad():
+        # Class 0 (A): [0.0, 1.0]^2 -> center (0.5, 0.5), w = 0.5
+        # Class 1 (B_contain): [-0.5, 1.5]^2 -> center (0.5, 0.5), w = 1.0 (contains A)
+        # Class 2 (B_viol): [2.0, 3.0]^2 -> center (2.5, 2.5), w = 0.5 (far from A, |depth| >> tau=1e-3)
+        # Class 3 (A2_inter): [0.2, 1.2]^2 -> overlaps A on [0.2, 1.0]^2
+        mod.class_centers[0, 0] = th.tensor([0.5, 0.5])
+        mod.class_centers[1, 0] = th.tensor([0.5, 0.5])
+        mod.class_centers[2, 0] = th.tensor([2.5, 2.5])
+        mod.class_centers[3, 0] = th.tensor([0.7, 0.7])
+        mod.class_raw_widths[0, 0] = th.log(th.expm1(th.tensor([0.5, 0.5])))
+        mod.class_raw_widths[1, 0] = th.log(th.expm1(th.tensor([1.0, 1.0])))
+        mod.class_raw_widths[2, 0] = th.log(th.expm1(th.tensor([0.5, 0.5])))
+        mod.class_raw_widths[3, 0] = th.log(th.expm1(th.tensor([0.5, 0.5])))
+
+        # Role 0 (r_contain): head [-0.5, 1.5]^2, tail [-0.5, 1.5]^2
+        # Role 1 (r_viol): head [2.0, 3.0]^2, tail [2.0, 3.0]^2
+        # Role 2 (s_mid): head [-0.5, 1.5]^2, tail [-0.5, 1.5]^2
+        mod.role_head_centers[0, 0] = th.tensor([0.5, 0.5])
+        mod.role_tail_centers[0, 0] = th.tensor([0.5, 0.5])
+        mod.role_head_raw_widths[0, 0] = th.log(th.expm1(th.tensor([1.0, 1.0])))
+        mod.role_tail_raw_widths[0, 0] = th.log(th.expm1(th.tensor([1.0, 1.0])))
+
+        mod.role_head_centers[1, 0] = th.tensor([2.5, 2.5])
+        mod.role_tail_centers[1, 0] = th.tensor([2.5, 2.5])
+        mod.role_head_raw_widths[1, 0] = th.log(th.expm1(th.tensor([0.5, 0.5])))
+        mod.role_tail_raw_widths[1, 0] = th.log(th.expm1(th.tensor([0.5, 0.5])))
+
+        mod.role_head_centers[2, 0] = th.tensor([0.5, 0.5])
+        mod.role_tail_centers[2, 0] = th.tensor([0.5, 0.5])
+        mod.role_head_raw_widths[2, 0] = th.log(th.expm1(th.tensor([1.0, 1.0])))
+        mod.role_tail_raw_widths[2, 0] = th.log(th.expm1(th.tensor([1.0, 1.0])))
+
+    z_in_a = th.tensor([[0.5, 0.5]])
+    y_in_a = th.tensor([[0.6, 0.6]])
+
+    # 1. Containing configurations: all geometric region hinges are exact 0.0
+    assert gci0_region(mod.depth(z_in_a, 1)).item() == 0.0
+    assert gci1_region(mod.depth(z_in_a, 1)).item() == 0.0
+    assert gci0_bot_region(mod.depth(z_in_a, 2)).item() == 0.0
+    assert gci1_bot_region(mod.depth(z_in_a, 0), mod.depth(z_in_a, 2)).item() == 0.0
+    assert gci2_region(mod.role_depth(z_in_a, y_in_a, 0)).item() == 0.0
+    assert (
+        gci3_region(
+            mod.role_depth(z_in_a, y_in_a, 0),
+            mod.depth(y_in_a, 0),
+            mod.depth(z_in_a, 1),
+        ).item()
+        == 0.0
+    )
+    assert (
+        gci3_bot_region(
+            mod.role_depth(z_in_a, y_in_a, 0),
+            mod.depth(y_in_a, 2),
+        ).item()
+        == 0.0
+    )
+    assert role_inclusion_region(mod.role_depth(z_in_a, y_in_a, 0)).item() == 0.0
+    assert (
+        role_chain_region(
+            mod.role_depth(z_in_a, y_in_a, 0),
+            mod.role_depth(y_in_a, z_in_a, 2),
+            mod.role_depth(z_in_a, z_in_a, 0),
+        ).item()
+        == 0.0
+    )
+
+    # 2. Violating configurations at tau = 1e-3: positive loss AND nonzero gradient w.r.t. superclass/role box
+    for loss_fn, target_param, target_idx in [
+        (lambda: gci0_region(mod.depth(z_in_a, 2)), mod.class_centers, 2),
+        (lambda: gci1_region(mod.depth(z_in_a, 2)), mod.class_centers, 2),
+        (lambda: gci0_bot_region(mod.depth(z_in_a, 0)), mod.class_raw_widths, 0),
+        (
+            lambda: gci1_bot_region(mod.depth(z_in_a, 0), mod.depth(z_in_a, 3)),
+            mod.class_centers,
+            3,
+        ),
+        (lambda: gci2_region(mod.role_depth(z_in_a, y_in_a, 1)), mod.role_head_centers, 1),
+        (
+            lambda: gci3_region(
+                mod.role_depth(z_in_a, y_in_a, 0),
+                mod.depth(y_in_a, 0),
+                mod.depth(z_in_a, 2),
+            ),
+            mod.class_centers,
+            2,
+        ),
+        (
+            lambda: gci3_bot_region(
+                mod.role_depth(z_in_a, y_in_a, 0),
+                mod.depth(y_in_a, 0),
+            ),
+            mod.class_raw_widths,
+            0,
+        ),
+        (
+            lambda: role_inclusion_region(mod.role_depth(z_in_a, y_in_a, 1)),
+            mod.role_head_centers,
+            1,
+        ),
+        (
+            lambda: role_chain_region(
+                mod.role_depth(z_in_a, y_in_a, 0),
+                mod.role_depth(y_in_a, z_in_a, 2),
+                mod.role_depth(z_in_a, z_in_a, 1),
+            ),
+            mod.role_head_centers,
+            1,
+        ),
+    ]:
+        mod.zero_grad()
+        val = loss_fn()
+        assert float(val.item()) > 0.0
+        val.backward()
+        assert target_param.grad is not None
+        grad_norm = float(target_param.grad[target_idx].abs().sum().item())
+        assert grad_norm > 0.0
+
+
+def test_component_extremes_and_region_sample_cap() -> None:
+    """component_extremes returns 2^d corners for d <= 4, 2d axis-extremes for d > 4, and region samplers cap at n_samples."""
+    lo_3d = th.zeros((2, 3))
+    hi_3d = th.ones((2, 3))
+    ext_3d = component_extremes(lo_3d, hi_3d)
+    assert ext_3d.shape == (2, 8, 3)
+    assert bool(((ext_3d > 0.0) & (ext_3d < 1.0)).all().item())
+
+    lo_6d = th.zeros((2, 6))
+    hi_6d = th.ones((2, 6))
+    ext_6d = component_extremes(lo_6d, hi_6d)
+    assert ext_6d.shape == (2, 12, 6)
+    assert bool(((ext_6d > 0.0) & (ext_6d < 1.0)).all().item())
+
+    gen = th.Generator().manual_seed(11)
+    mod = GroundedELModule(nb_elements=4, nb_classes=4, nb_rels=1, embed_dim=2, n_components=2)
+    # 3 axiom rows with n_samples=4 -> capped at 4 samples per row = 12 total points
+    s_cls = sample_class_region(mod, th.tensor([0, 1, 2]), generator=gen, n_samples=4)
+    assert s_cls.points.shape == (12, 2)
+    s_pair = sample_pair_region(
+        mod, th.tensor([0, 1]), th.tensor([0, 1]), generator=gen, n_samples=4
+    )
+    assert s_pair.points.shape == (8, 2)
