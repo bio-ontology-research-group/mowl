@@ -1538,3 +1538,19 @@ def test_grounded_module_class_assertion_scorer_on_t3_with_individual(
 
 
 
+
+
+def test_randperm_with_generator_is_a_permutation_and_reproducible():
+    """Regression: ``sample_inside_elements`` subsamples with ``_randperm_with_generator``
+    when more elements are crisp-inside the LHS than ``n_inside_elements`` (hit on B1,
+    never on the small synthetic theories); the helper must exist and be deterministic."""
+    import torch as th
+    from mowl.nn.el.grounded.sampling import _randperm_with_generator
+
+    g1 = th.Generator().manual_seed(7)
+    g2 = th.Generator().manual_seed(7)
+    p1 = _randperm_with_generator(11, device=th.device("cpu"), generator=g1)
+    p2 = _randperm_with_generator(11, device=th.device("cpu"), generator=g2)
+    assert p1.dtype == th.long and p1.shape == (11,)
+    assert th.equal(th.sort(p1).values, th.arange(11))
+    assert th.equal(p1, p2)

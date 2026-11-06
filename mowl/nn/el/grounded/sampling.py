@@ -118,6 +118,17 @@ def _randint_with_generator(
     return out if out.device == device else out.to(device=device)
 
 
+def _randperm_with_generator(
+    n: int,
+    device: th.device,
+    generator: th.Generator,
+) -> th.Tensor:
+    """Draw a random permutation of ``range(n)`` using ``generator`` and move to ``device``."""
+    gen_dev = generator.device
+    perm = th.randperm(int(n), dtype=th.long, device=gen_dev, generator=generator)
+    return perm if perm.device == device else perm.to(device=device)
+
+
 def sample_elements(
     lhs_elements: th.Tensor,
     nb_elements: int,
