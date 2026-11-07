@@ -1827,6 +1827,183 @@ def test_compute_batch_losses_external_loop_tau_and_generator_state() -> None:
     assert float(model.module.dead_logits[model.bot_id].item()) == pytest.approx(1.0)
 
 
+def test_sample_batch_y_fillers_no_host_sync_and_matches_reference() -> None:
+    """Task 13: _sample_batch_y_fillers with >= 3 roles and gci2 rows uses a subset of the reference filler set and contains each row's own filler."""
+    class_index_dict = {BOTTOM: 0, TOP: 1}
+    for i in range(2, 20):
+        class_index_dict[f"C{i}"] = i
+    object_property_index_dict = {"r0": 0, "r1": 1, "r2": 2, "r3": 3}
+
+    # gci2 rows: [C, R, D] -> role 0 has fillers {3, 4, 5}, role 1 has {6, 7}, role 2 has {8, 9, 10}, role 3 has {11, 12}
+    gci2_t = th.tensor(
+        [
+            [2, 0, 3],
+            [2, 0, 4],
+            [3, 0, 5],
+            [4, 1, 6],
+            [5, 1, 7],
+            [6, 2, 8],
+            [7, 2, 9],
+            [8, 2, 10],
+            [9, 3, 11],
+            [10, 3, 12],
+        ],
+        dtype=th.long,
+    )
+    # gci3 rows: [R, B, C] using only roles 0 and 2, with own fillers 3, 14, 9, 15
+    gci3_t = th.tensor(
+        [
+            [0, 3, 2],
+            [0, 14, 3],
+            [2, 9, 4],
+            [2, 15, 5],
+        ],
+        dtype=th.long,
+    )
+
+    for n_filler_samples in (64, 4):
+        model = GroundedEL.from_tables(
+            class_index_dict=class_index_dict,
+            object_property_index_dict=object_property_index_dict,
+            gci2=gci2_t,
+            gci3=gci3_t,
+            embed_dim=4,
+            n_components=1,
+            n_role_components=1,
+            n_filler_samples=n_filler_samples,
+            n_random_elements=3,
+            seed=19,
+        )
+        model._ensure_role_tables()
+        assert model._filler_by_role is not None
+        assert model._filler_mask_by_role is not None
+        assert model._filler_mask_by_role.shape == (model.nb_rels, model.nb_elements)
+
+        # Reference set computed with the old Python-loop logic
+        ref_parts = [gci3_t[:, 1]] + [
+            model._filler_by_role[int(r_i)]
+            for r_i in th.unique(gci3_t[:, 0]).cpu().tolist()
+            if int(r_i) in model._filler_by_role
+        ]
+        ref_all_fillers = th.unique(th.cat(ref_parts))
+        ref_set = set(ref_all_fillers.cpu().tolist())
+        # Roles 0 and 2 fillers {3, 4, 5, 8, 9, 10} union own fillers {3, 14, 9, 15}
+        assert ref_set == {3, 4, 5, 8, 9, 10, 14, 15}
+
+        gen = th.Generator(device="cpu").manual_seed(4242)
+        y_mat = model._sample_batch_y_fillers(gci3_t, gen)
+        n_filler_cols = min(len(ref_set), n_filler_samples)
+        assert y_mat.shape == (gci3_t.shape[0], n_filler_cols + model.n_random_elements)
+
+        filler_cols = y_mat[:, :n_filler_cols]
+        used_filler_set = set(filler_cols.reshape(-1).cpu().tolist())
+        assert used_filler_set.issubset(ref_set)
+        for b in range(gci3_t.shape[0]):
+            own_filler = int(gci3_t[b, 1].item())
+            assert own_filler in set(filler_cols[b].cpu().tolist())
+
+
+def test_cached_ids_and_compute_batch_losses_bit_identical_t3_and_2k_go_subset(
+    t3_dataset: PathDataset,
+) -> None:
+    """Task 13: compute_batch_losses matches pre-change CPU reference values on T3 and on a 2k-class GO subset fixture (with n_inside_elements=0)."""
+    # 1. T3 fixture (pre-change reference computed on CPU)
+    ref_t3 = {
+        "fact": 0.5172087550163269,
+        "axioms": 0.42916926741600037,
+        "region": 0.6834956407546997,
+        "minimality": 0.0042516449466347694,
+        "total": 1.6341252326965332,
+    }
+    for n_in in (32, 0):
+        m_t3 = GroundedEL(
+            t3_dataset,
+            embed_dim=4,
+            n_components=2,
+            n_role_components=2,
+            epochs=0,
+            n_inside_elements=n_in,
+            seed=42,
+        )
+        gen_t3 = th.Generator(device="cpu").manual_seed(1234)
+        losses_t3 = m_t3.compute_batch_losses(generator=gen_t3)
+        for k, expected in ref_t3.items():
+            assert float(losses_t3[k].item()) == pytest.approx(expected, abs=1e-6), (
+                f"T3 (n_inside_elements={n_in}) mismatch on {k}: {losses_t3[k].item()} vs {expected}"
+            )
+
+        # Verify static ID tensors are cached across steps and reset by init_module()
+        live_id_ptr = id(m_t3._live_cls_ids)
+        ord_id_ptr = id(m_t3._ord_cls_ids)
+        dead_id_ptr = id(m_t3._dead_min_ids)
+        _ = m_t3.compute_batch_losses(generator=gen_t3)
+        assert id(m_t3._live_cls_ids) == live_id_ptr
+        assert id(m_t3._ord_cls_ids) == ord_id_ptr
+        assert id(m_t3._dead_min_ids) == dead_id_ptr
+
+        m_t3.init_module()
+        assert m_t3._live_cls_ids is None
+        assert m_t3._ord_cls_ids is None
+        assert m_t3._dead_min_ids is None
+
+    # 2. 2k-class GO subset fixture (_SyntheticLargeDataset(n_classes=2000, n_roles=8)) with n_inside_elements=0
+    n_classes = 2000
+    n_roles = 8
+    ds_2k = _SyntheticLargeDataset(n_classes=n_classes, n_roles=n_roles)
+    gen_data = th.Generator(device="cpu").manual_seed(2026)
+    gci0_rows = th.randint(0, n_classes, (4000, 2), dtype=th.long, generator=gen_data)
+    gci1_rows = th.randint(0, n_classes, (1000, 3), dtype=th.long, generator=gen_data)
+    gci2_rows = th.cat(
+        [
+            th.randint(0, n_classes, (1500, 1), dtype=th.long, generator=gen_data),
+            th.randint(0, n_roles, (1500, 1), dtype=th.long, generator=gen_data),
+            th.randint(0, n_classes, (1500, 1), dtype=th.long, generator=gen_data),
+        ],
+        dim=1,
+    )
+    gci3_rows = th.cat(
+        [
+            th.randint(0, n_roles, (1000, 1), dtype=th.long, generator=gen_data),
+            th.randint(0, n_classes, (1000, 1), dtype=th.long, generator=gen_data),
+            th.randint(0, n_classes, (1000, 1), dtype=th.long, generator=gen_data),
+        ],
+        dim=1,
+    )
+
+    ref_2k_no_inside = {
+        "fact": 0.6264722347259521,
+        "axioms": 0.6083047389984131,
+        "region": 1.8540884256362915,
+        "minimality": 0.007214468438178301,
+        "total": 3.0960798263549805,
+    }
+    m_2k = GroundedEL(
+        ds_2k,
+        embed_dim=16,
+        n_components=2,
+        n_role_components=2,
+        epochs=0,
+        batch_size=512,
+        n_filler_samples=64,
+        n_inside_elements=0,
+        seed=7,
+    )
+    m_2k._datasets_loaded = True
+    m_2k._training_datasets = {
+        "gci0": gci0_rows,
+        "gci1": gci1_rows,
+        "gci2": gci2_rows,
+        "gci3": gci3_rows,
+    }
+    gen_2k = th.Generator(device="cpu").manual_seed(5678)
+    losses_2k = m_2k.compute_batch_losses(generator=gen_2k)
+    for k, expected in ref_2k_no_inside.items():
+        assert float(losses_2k[k].item()) == pytest.approx(expected, abs=1e-6), (
+            f"2k GO subset mismatch on {k}: {losses_2k[k].item()} vs {expected}"
+        )
+
+
+
 
 
 

@@ -656,6 +656,10 @@ class GroundedEL(EmbeddingELModel):
         self.optimizer: Optional[th.optim.Optimizer] = None
         self._filler_by_role: Optional[Dict[int, th.Tensor]] = None
         self._lhs_by_role: Optional[Dict[int, th.Tensor]] = None
+        self._filler_mask_by_role: Optional[th.Tensor] = None
+        self._live_cls_ids: Optional[th.Tensor] = None
+        self._ord_cls_ids: Optional[th.Tensor] = None
+        self._dead_min_ids: Optional[th.Tensor] = None
         self.generator: th.Generator = th.Generator(device="cpu")
         self.generator.manual_seed(self.seed + 1337)
 
@@ -809,6 +813,12 @@ class GroundedEL(EmbeddingELModel):
           construction for deterministic parameter initialisation.
         """
         th.manual_seed(self.seed)
+        self._live_cls_ids = None
+        self._ord_cls_ids = None
+        self._dead_min_ids = None
+        self._filler_by_role = None
+        self._lhs_by_role = None
+        self._filler_mask_by_role = None
         eff_k = (
             max(self.n_components, self.nb_elements)
             if self.init == "elements"
@@ -1011,9 +1021,39 @@ class GroundedEL(EmbeddingELModel):
 
         return labels_t, sorted(edges_set)
 
+    def _ensure_static_id_tensors(self) -> None:
+        """Lazily build cached class and element index tensors on ``self.device``."""
+        device = self.device
+        if self._live_cls_ids is None:
+            self._live_cls_ids = th.tensor(
+                [c for c in range(self.nb_classes) if c != self.bot_id],
+                dtype=th.long,
+                device=device,
+            )
+        if self._ord_cls_ids is None:
+            self._ord_cls_ids = th.tensor(
+                [
+                    c
+                    for c in range(self.nb_classes)
+                    if c != self.top_id and c != self.bot_id
+                ],
+                dtype=th.long,
+                device=device,
+            )
+        if self._dead_min_ids is None:
+            self._dead_min_ids = th.tensor(
+                [e for e in range(self.nb_elements) if e != self.bot_id],
+                dtype=th.long,
+                device=device,
+            )
+
     def _ensure_role_tables(self) -> None:
         """Build cached per-role filler and LHS element index tables from ``training_datasets``."""
-        if self._filler_by_role is not None and self._lhs_by_role is not None:
+        if (
+            self._filler_by_role is not None
+            and self._lhs_by_role is not None
+            and self._filler_mask_by_role is not None
+        ):
             return
         td = self.training_datasets
         fillers: Dict[int, Dict[int, None]] = {r: {} for r in range(self.nb_rels)}
@@ -1041,6 +1081,13 @@ class GroundedEL(EmbeddingELModel):
             r: th.tensor(list(vals.keys()), dtype=th.long, device=self.device)
             for r, vals in lhs_map.items()
         }
+        filler_mask = th.zeros(
+            (self.nb_rels, self.nb_elements), dtype=th.bool, device=self.device
+        )
+        for r, f_ids in self._filler_by_role.items():
+            if f_ids.numel() > 0:
+                filler_mask[r, f_ids] = True
+        self._filler_mask_by_role = filler_mask
 
     def _sample_rows(self, data: th.Tensor, gen: th.Generator) -> th.Tensor:
         """Sample up to ``self.batch_size`` rows from ``data`` using ``gen``."""
@@ -1093,13 +1140,12 @@ class GroundedEL(EmbeddingELModel):
     ) -> th.Tensor:
         """Subsample ``all_fillers`` to at most ``self.n_filler_samples`` per batch, always including each row's own filler ``rows[:, 1]``."""
         bsz = int(rows.shape[0])
-        assert self._filler_by_role is not None
-        role_filler_parts = [rows[:, 1]] + [
-            self._filler_by_role[int(r_i)]
-            for r_i in th.unique(rows[:, 0]).cpu().tolist()
-            if int(r_i) in self._filler_by_role
-        ]
-        all_fillers = th.unique(th.cat(role_filler_parts))
+        assert self._filler_mask_by_role is not None
+        present = th.zeros((self.nb_rels,), dtype=th.bool, device=self.device)
+        present[rows[:, 0]] = True
+        mask = (self._filler_mask_by_role & present.unsqueeze(1)).any(0)
+        mask[rows[:, 1]] = True
+        all_fillers = th.nonzero(mask).squeeze(1)
         if all_fillers.numel() <= self.n_filler_samples:
             return sample_filler_elements(
                 all_fillers,
@@ -1515,6 +1561,7 @@ class GroundedEL(EmbeddingELModel):
         if generator is None:
             generator = self.generator
         self._ensure_role_tables()
+        self._ensure_static_id_tensors()
 
         mod = self.module
         device = self.device
@@ -1534,11 +1581,9 @@ class GroundedEL(EmbeddingELModel):
         dead_gate = (dead_all.detach() > dead_thresh).to(dtype=dtype)
 
         # 1. Fact (existence) loss on class elements
-        live_cls_list = [
-            c for c in range(self.nb_classes) if c != self.bot_id
-        ]
-        if live_cls_list:
-            cls_ids = th.tensor(live_cls_list, dtype=th.long, device=device)
+        assert self._live_cls_ids is not None
+        cls_ids = self._live_cls_ids
+        if cls_ids.numel() > 0:
             if cls_ids.numel() > self.batch_size:
                 cls_ids = self._sample_rows(cls_ids.unsqueeze(1), generator).squeeze(1)
             m_self = mod.membership(pos_all[cls_ids], cls_ids)
@@ -2299,13 +2344,9 @@ class GroundedEL(EmbeddingELModel):
         )
 
         # 13. Minimality (principled negatives)
-        ord_cls_list = [
-            c
-            for c in range(self.nb_classes)
-            if c != self.top_id and c != self.bot_id
-        ]
-        if ord_cls_list and self.eps_min > 0.0:
-            ord_cls = th.tensor(ord_cls_list, dtype=th.long, device=device)
+        assert self._ord_cls_ids is not None
+        ord_cls = self._ord_cls_ids
+        if ord_cls.numel() > 0 and self.eps_min > 0.0:
             if self.nb_elements * ord_cls.numel() <= 1024:
                 all_el = th.arange(self.nb_elements, dtype=th.long, device=device)
                 gx = all_el.unsqueeze(1).expand(self.nb_elements, ord_cls.numel()).reshape(-1)
@@ -2345,12 +2386,10 @@ class GroundedEL(EmbeddingELModel):
         else:
             rho_rand = None
 
-        dead_min_ids = [
-            e for e in range(self.nb_elements) if e != self.bot_id
-        ]
+        assert self._dead_min_ids is not None
         dead_for_min = (
-            dead_all[th.tensor(dead_min_ids, dtype=th.long, device=device)]
-            if dead_min_ids
+            dead_all[self._dead_min_ids]
+            if self._dead_min_ids.numel() > 0
             else None
         )
         loss_min = minimality(

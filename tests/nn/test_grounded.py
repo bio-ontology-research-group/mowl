@@ -1554,3 +1554,148 @@ def test_randperm_with_generator_is_a_permutation_and_reproducible():
     assert p1.dtype == th.long and p1.shape == (11,)
     assert th.equal(th.sort(p1).values, th.arange(11))
     assert th.equal(p1, p2)
+
+
+def test_sample_inside_elements_batched_contract_and_loop_freedom(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Task 13: batched sample_inside_elements satisfies (a)-(e) including strict-then-any priority and loop freedom."""
+    mod = GroundedELModule(
+        nb_elements=10,
+        nb_classes=6,
+        nb_rels=0,
+        embed_dim=2,
+        n_components=1,
+    )
+    with th.no_grad():
+        # Place 10 elements along the x-axis: element i at (float(i), 0.0)
+        pts = th.stack(
+            [th.arange(10, dtype=th.float32), th.zeros(10, dtype=th.float32)],
+            dim=1,
+        )
+        mod.elem_pos.weight.copy_(pts)
+        # Class 0: [0, 3] -> center (1.5, 0), hw (1.6, 0.5) -> contains {0, 1, 2, 3}
+        # Class 1: [2, 5] -> center (3.5, 0), hw (1.6, 0.5) -> contains {2, 3, 4, 5}
+        #   => Class 0 cap Class 1 = {2, 3}; (Class 0 cup Class 1) \ cap = {0, 1, 4, 5}
+        # Class 2: [0, 6] -> center (3.0, 0), hw (3.1, 0.5) -> contains {0, 1, 2, 3, 4, 5, 6} (7 elems)
+        # Class 3: [8, 8] -> center (8.0, 0), hw (0.4, 0.5) -> contains {8} (1 elem)
+        # Class 4: [20, 20] -> center (20.0, 0), hw (0.4, 0.5) -> contains {} (0 elems)
+        # Class 5: [6, 7] -> center (6.5, 0), hw (0.6, 0.5) -> contains {6, 7} (2 elems)
+        centers = th.tensor(
+            [
+                [[1.5, 0.0]],
+                [[3.5, 0.0]],
+                [[3.0, 0.0]],
+                [[8.0, 0.0]],
+                [[20.0, 0.0]],
+                [[6.5, 0.0]],
+            ],
+            dtype=th.float32,
+        )
+        hws = th.tensor(
+            [
+                [[1.6, 0.5]],
+                [[1.6, 0.5]],
+                [[3.1, 0.5]],
+                [[0.4, 0.5]],
+                [[0.4, 0.5]],
+                [[0.6, 0.5]],
+            ],
+            dtype=th.float32,
+        )
+        mod.class_centers.copy_(centers)
+        mod.class_raw_widths.copy_(th.log(th.expm1(hws)))
+
+    # (a) 1-D LHS rows with <= n_inside_elements:
+    # Row 0 (class 5 -> {6, 7}) has 2 elements; row 1 (class 0 -> {0, 1, 2, 3}) has 4 elements;
+    # row 2 (class 3 -> {8}) has 1 element; row 3 (class 4 -> {}) has 0 elements.
+    lhs_a = th.tensor([5, 0, 3, 4], dtype=th.long)
+    out_a = sample_inside_elements(
+        mod, lhs_a, n_inside_elements=4, generator=th.Generator().manual_seed(10)
+    )
+    assert out_a.shape == (4, 4)
+    # Row 1 (class 0, 4 elements == max_len): all 4 are crisp-inside class 0 and equal {0, 1, 2, 3}
+    assert set(out_a[1].tolist()) == {0, 1, 2, 3}
+    assert bool((mod.depth(pts[out_a[1]], 0, crisp=True) > 0.0).all().item())
+    # Row 0 (class 5, 2 elements < max_len): first 2 are {6, 7} (crisp-inside class 5), padded with lhs[0]=5
+    assert set(out_a[0, :2].tolist()) == {6, 7}
+    assert bool((mod.depth(pts[out_a[0, :2]], 5, crisp=True) > 0.0).all().item())
+    assert out_a[0, 2:].tolist() == [5, 5]
+    assert set(out_a[0].tolist()) == {6, 7, 5}
+    # Row 2 (class 3, 1 element < max_len): first is 8 (crisp-inside class 3), padded with lhs[2]=3
+    assert out_a[2, 0].item() == 8
+    assert bool((mod.depth(pts[out_a[2, :1]], 3, crisp=True) > 0.0).all().item())
+    assert out_a[2, 1:].tolist() == [3, 3, 3]
+    # Row 3 (class 4, 0 elements): all padded with lhs[3]=4
+    assert out_a[3].tolist() == [4, 4, 4, 4]
+
+    # (b) When a class has more than n_inside_elements, exactly n_inside_elements distinct inside elements are returned
+    lhs_b = th.tensor([2, 0], dtype=th.long)
+    out_b = sample_inside_elements(
+        mod, lhs_b, n_inside_elements=3, generator=th.Generator().manual_seed(20)
+    )
+    assert out_b.shape == (2, 3)
+    assert len(set(out_b[0].tolist())) == 3
+    assert set(out_b[0].tolist()).issubset({0, 1, 2, 3, 4, 5, 6})
+    assert bool((mod.depth(pts[out_b[0]], 2, crisp=True) > 0.0).all().item())
+    assert len(set(out_b[1].tolist())) == 3
+    assert set(out_b[1].tolist()).issubset({0, 1, 2, 3})
+    assert bool((mod.depth(pts[out_b[1]], 0, crisp=True) > 0.0).all().item())
+
+    # (c) For 2-D rows (A1, A2), elements inside A1 cap A2 come first and remaining slots are filled from A1 cup A2
+    lhs_c = th.tensor([[0, 1], [3, 5]], dtype=th.long)
+    out_c = sample_inside_elements(
+        mod, lhs_c, n_inside_elements=5, generator=th.Generator().manual_seed(30)
+    )
+    assert out_c.shape == (2, 5)
+    # Row 0 (classes 0 and 1): A1 cap A2 = {2, 3} (2 elems) come first; next 3 slots from (A1 cup A2) \ (A1 cap A2) = {0, 1, 4, 5}
+    assert set(out_c[0, :2].tolist()) == {2, 3}
+    assert len(set(out_c[0, 2:].tolist())) == 3
+    assert set(out_c[0, 2:].tolist()).issubset({0, 1, 4, 5})
+    # Row 1 (classes 3 and 5): A1 cap A2 = {}, A1 cup A2 = {6, 7, 8} (3 elems), last 2 slots padded with lhs_c[1, 0] == 3
+    assert set(out_c[1, :3].tolist()) == {6, 7, 8}
+    assert out_c[1, 3:].tolist() == [3, 3]
+
+    # (d) Same generator seed gives the same output twice
+    out_d1 = sample_inside_elements(
+        mod, lhs_c, n_inside_elements=4, generator=th.Generator().manual_seed(777)
+    )
+    out_d2 = sample_inside_elements(
+        mod, lhs_c, n_inside_elements=4, generator=th.Generator().manual_seed(777)
+    )
+    assert th.equal(out_d1, out_d2)
+
+    # (e) Loop-freedom test: bsz = 256 makes <= 4 torch.nonzero calls and <= 4 Tensor.item syncs
+    lhs_256 = th.randint(
+        0, 6, (256, 2), dtype=th.long, generator=th.Generator().manual_seed(99)
+    )
+    pos_cached = mod.positions().detach()
+    orig_nonzero = th.nonzero
+    orig_item = th.Tensor.item
+    nonzero_calls = 0
+    item_calls = 0
+
+    def _counted_nonzero(*args, **kwargs):
+        nonlocal nonzero_calls
+        nonzero_calls += 1
+        return orig_nonzero(*args, **kwargs)
+
+    def _counted_item(self_tensor):
+        nonlocal item_calls
+        item_calls += 1
+        return orig_item(self_tensor)
+
+    monkeypatch.setattr(th, "nonzero", _counted_nonzero)
+    monkeypatch.setattr(th.Tensor, "item", _counted_item)
+
+    out_e = sample_inside_elements(
+        mod,
+        lhs_256,
+        n_inside_elements=4,
+        generator=th.Generator().manual_seed(42),
+        pos_all=pos_cached,
+    )
+    assert out_e.shape[0] == 256 and out_e.shape[1] <= 4
+    assert nonzero_calls <= 4, f"Expected <= 4 torch.nonzero calls, got {nonzero_calls}"
+    assert item_calls <= 4, f"Expected <= 4 Tensor.item calls, got {item_calls}"
+

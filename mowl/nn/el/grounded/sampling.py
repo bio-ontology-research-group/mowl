@@ -327,6 +327,8 @@ def sample_inside_elements(
             pts = pts_full[cand_pool]
 
         n_pts = int(pts.shape[0])
+        if n_pts == 0:
+            return th.empty((bsz, 0), dtype=th.long, device=device)
         reg = module.class_regions(uniq_cls)
         # Compute crisp membership (depth > 0 in any active component) in chunks of classes
         crisp_u = th.zeros((n_pts, n_uniq), dtype=th.bool, device=device)
@@ -341,61 +343,47 @@ def sample_inside_elements(
                 - th.abs(pts.unsqueeze(1).unsqueeze(2) - cen_c.unsqueeze(0)),
                 dim=-1,
             )  # (n_pts, U_c, K)
-            crisp_u[:, u_start:u_end] = ((c_dep > 0.0) & act_c.unsqueeze(0)).any(
-                dim=-1
-            )
+            chunk_crisp = ((c_dep > 0.0) & act_c.unsqueeze(0)).any(dim=-1)
             if module.top_id is not None:
-                is_top = uniq_cls[u_start:u_end] == module.top_id
-                if bool(is_top.any().item()):
-                    crisp_u[:, u_start:u_end][:, is_top] = True
+                chunk_crisp = chunk_crisp | (
+                    uniq_cls[u_start:u_end] == module.top_id
+                ).unsqueeze(0)
             if module.bot_id is not None:
-                is_bot = uniq_cls[u_start:u_end] == module.bot_id
-                if bool(is_bot.any().item()):
-                    crisp_u[:, u_start:u_end][:, is_bot] = False
+                chunk_crisp = chunk_crisp & (
+                    uniq_cls[u_start:u_end] != module.bot_id
+                ).unsqueeze(0)
+            crisp_u[:, u_start:u_end] = chunk_crisp
 
         # Map back to (n_pts, B, L)
         crisp_bl = crisp_u[:, inv_idx].reshape(n_pts, bsz, n_lhs)
         strict_mask = crisp_bl.all(dim=-1)  # (n_pts, B)
-        any_mask = crisp_bl.any(dim=-1)     # (n_pts, B)
 
-        row_candidates = []
-        max_len = 0
-        for b in range(bsz):
-            strict_idx = th.nonzero(strict_mask[:, b], as_tuple=False).squeeze(-1)
-            if strict_idx.numel() > n_inside_elements:
-                perm = _randperm_with_generator(
-                    int(strict_idx.numel()), device=device, generator=generator
-                )[:n_inside_elements]
-                chosen = strict_idx[perm]
-            elif n_lhs > 1 and strict_idx.numel() < n_inside_elements:
-                extra_mask = any_mask[:, b] & (~strict_mask[:, b])
-                extra_idx = th.nonzero(extra_mask, as_tuple=False).squeeze(-1)
-                rem = n_inside_elements - int(strict_idx.numel())
-                if extra_idx.numel() > rem:
-                    perm = _randperm_with_generator(
-                        int(extra_idx.numel()), device=device, generator=generator
-                    )[:rem]
-                    extra_idx = extra_idx[perm]
-                chosen = th.cat([strict_idx, extra_idx], dim=0)
-            else:
-                chosen = strict_idx
-            if cand_pool is not None and chosen.numel() > 0:
-                chosen = cand_pool[chosen]
-            row_candidates.append(chosen)
-            if int(chosen.numel()) > max_len:
-                max_len = int(chosen.numel())
+        keys = _rand_with_generator(
+            (n_pts, bsz), dtype=pts.dtype, device=device, generator=generator
+        )
+        two = th.full_like(keys, 2.0)
+        if n_lhs > 1:
+            any_mask = crisp_bl.any(dim=-1)  # (n_pts, B)
+            priority = th.where(
+                strict_mask,
+                keys,
+                th.where(any_mask, keys + 1.0, two),
+            )
+        else:
+            priority = th.where(strict_mask, keys, two)
 
+        k = min(n_inside_elements, n_pts)
+        vals, idx = th.topk(priority, k=k, dim=0, largest=False)
+        eligible = vals < 2.0
+        max_len = min(k, int(eligible.sum(0).max().item()))
         if max_len == 0:
             return th.empty((bsz, 0), dtype=th.long, device=device)
 
-        out = th.empty((bsz, max_len), dtype=th.long, device=device)
-        for b in range(bsz):
-            c = row_candidates[b]
-            k = int(c.numel())
-            if k > 0:
-                out[b, :k] = c
-            if k < max_len:
-                out[b, k:] = lhs[b, 0]
+        out = idx[:max_len].T.contiguous()
+        if cand_pool is not None:
+            out = cand_pool[out]
+        elig_t = eligible[:max_len].T
+        out = th.where(elig_t, out, lhs[:, :1].expand(bsz, max_len))
         return out
 
 
