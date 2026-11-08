@@ -32,6 +32,20 @@ from mowl.nn.el.grounded.losses import (
     role_inclusion_region_trans,
 )
 from mowl.nn.el.grounded.module import GroundedELModule
+from mowl.nn.el.grounded.queries import (
+    MultiBox,
+    anchor,
+    class_boxes,
+    compile_query,
+    depth,
+    intersect,
+    overlap_depth,
+    project,
+    project_exact,
+    score_concepts,
+    score_entities,
+    union,
+)
 from mowl.nn.el.grounded.sampling import (
     RegionSample,
     adversarial_ascent,
@@ -49,6 +63,18 @@ from mowl.nn.el.grounded.sampling import (
 
 __all__ = [
     "GroundedELModule",
+    "MultiBox",
+    "anchor",
+    "project",
+    "intersect",
+    "union",
+    "class_boxes",
+    "depth",
+    "overlap_depth",
+    "compile_query",
+    "score_entities",
+    "score_concepts",
+    "project_exact",
     "crisp_membership",
     "fact",
     "gci0",
