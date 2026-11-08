@@ -2157,3 +2157,31 @@ def test_translation_region_hinge_skipped_for_top_fillers_and_not_skipped_otherw
 
 
 
+
+
+def test_translation_crisp_report_with_role_inclusion_runs() -> None:
+    """Issue #177: crisp_report / evaluate_model in translation mode with a role_inclusion table asserted on the
+    (NamedTuple) RegionSample returned by sample_role_region; they must run and report the satisfied inclusion."""
+    model = GroundedEL.from_tables(
+        class_index_dict={BOTTOM: 0, TOP: 1, "A": 2},
+        object_property_index_dict={"r": 0, "s": 1},
+        individual_index_dict={"a": 0, "b": 1},
+        object_property_assertion=th.tensor([[0, 0, 1], [0, 1, 1]], dtype=th.long),
+        role_inclusion=th.tensor([[0, 1]], dtype=th.long),
+        role_mode="translation",
+        embed_dim=2,
+        n_components=2,
+        n_role_components=2,
+        epochs=2,
+        learning_rate=0.1,
+        tau0=0.3,
+        tau1=0.3,
+        reseed_every=0,
+        seed=0,
+        log_every=0,
+    )
+    model.train(epochs=2)
+    crisp = model.crisp_report(n_eval=128)
+    assert "elem_viol" in crisp and "region_viol" in crisp
+    ev = model.evaluate_model(use_reasoner=False, n_eval=128)
+    assert "error" not in ev

@@ -4534,7 +4534,7 @@ class GroundedEL(EmbeddingELModel):
                         v_s = sample_role_region(
                             mod, r_id, generator=gen, n_samples=n_per_role_ax
                         )
-                        assert not isinstance(v_s, tuple)
+                        assert isinstance(v_s, RegionSample)  # NamedTuple: a plain tuple check would reject it (#177)
                         if bool(v_s.valid.any().item()):
                             zy = v_s.points[v_s.valid]
                             zx = th.zeros_like(zy)
