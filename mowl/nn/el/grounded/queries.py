@@ -988,7 +988,7 @@ def project_exact(
         )
 
     pts = module.positions(elem_idx)  # (N, d)
-    dep = depth(pts, R_val, crisp=True)  # (B, N)
+    dep = score_entities(module, R_val, candidate_element_ids=elem_idx)  # (B, N), memory-chunked crisp depth
     valid_w = dep > 0.0  # (B, N)
     masked_dep = th.where(valid_w, dep, th.full_like(dep, float("-inf")))
 
