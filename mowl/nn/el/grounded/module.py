@@ -103,6 +103,87 @@ def _inv_softplus(y: float) -> float:
     return y + math.log(-math.expm1(-y))
 
 
+def _validate_inverse_of(
+    nb_rels: int,
+    inverse_of: Optional[Union[Sequence[int], th.Tensor]],
+) -> th.Tensor:
+    """Validate ``inverse_of`` (length ``nb_rels``, symmetric, no self-inverse) and return a ``torch.long`` tensor."""
+    if inverse_of is None:
+        return th.full((nb_rels,), -1, dtype=th.long)
+    if isinstance(inverse_of, th.Tensor):
+        if (
+            inverse_of.dtype == th.bool
+            or inverse_of.is_floating_point()
+            or inverse_of.is_complex()
+            or inverse_of.ndim != 1
+        ):
+            raise ValueError(
+                f"inverse_of tensor must be a 1-D integer tensor, got dtype={inverse_of.dtype}, shape={tuple(inverse_of.shape)}"
+            )
+        inv_list = [int(x) for x in inverse_of.detach().cpu().tolist()]
+    elif isinstance(inverse_of, (list, tuple, np.ndarray)):
+        if isinstance(inverse_of, np.ndarray) and (
+            inverse_of.ndim != 1 or inverse_of.dtype == np.bool_
+        ):
+            raise ValueError(
+                f"inverse_of array must be 1-D integer array, got dtype={inverse_of.dtype}, shape={inverse_of.shape}"
+            )
+        inv_list = []
+        for x in inverse_of:
+            if isinstance(x, (bool, np.bool_)) or not isinstance(x, (int, np.integer)):
+                raise ValueError(f"inverse_of entries must be integers, got {x!r}")
+            inv_list.append(int(x))
+    else:
+        raise TypeError(
+            f"inverse_of must be a Sequence[int], Tensor, or None, got {type(inverse_of).__name__}"
+        )
+
+    if len(inv_list) != nb_rels:
+        raise ValueError(
+            f"inverse_of must have length nb_rels ({nb_rels}), got {len(inv_list)}"
+        )
+    for r, p in enumerate(inv_list):
+        if p == -1:
+            continue
+        if not (0 <= p < nb_rels):
+            raise ValueError(
+                f"inverse_of[{r}] = {p} out of range [-1, {nb_rels})"
+            )
+        if p == r:
+            raise ValueError(
+                f"inverse_of[{r}] cannot be self-inverse ({r})"
+            )
+        if inv_list[p] != r:
+            raise ValueError(
+                f"inverse_of must be symmetric: inverse_of[{r}] = {p} but inverse_of[{p}] = {inv_list[p]}"
+            )
+    return th.tensor(inv_list, dtype=th.long)
+
+
+class _ExistsRegions(Regions):
+    """Materialised existential :class:`~mowl.nn.el.structural.Regions` carrying an ``is_top`` marker."""
+
+    is_top: bool
+    is_top_mask: th.Tensor
+
+    def __new__(
+        cls,
+        cen: th.Tensor,
+        w: th.Tensor,
+        active: th.Tensor,
+        is_top: bool = False,
+        is_top_mask: Optional[th.Tensor] = None,
+    ) -> "_ExistsRegions":
+        obj = super().__new__(cls, cen, w, active)
+        obj.is_top = bool(is_top)
+        obj.is_top_mask = (
+            is_top_mask
+            if is_top_mask is not None
+            else th.zeros((cen.shape[0],), dtype=th.bool, device=cen.device)
+        )
+        return obj
+
+
 class GroundedELModule(nn.Module):
     """Element-grounded multi-box and product-role neural module for :math:`\\mathcal{EL}^{++}`.
 
@@ -164,6 +245,15 @@ class GroundedELModule(nn.Module):
         Optional class index for :math:`\\top` (``owl:Thing``).
     bot_id : Optional[int], default None
         Optional class index for :math:`\\bot` (``owl:Nothing``).
+    role_mode : {"product", "translation"}, default "product"
+        Role geometry mode: ``"product"`` represents each role component as a
+        product box :math:`H_{r,k} \\times T_{r,k}`; ``"translation"`` represents
+        each role component as a translation box :math:`V_{r,k} \\subset \\mathbb{R}^d`.
+    inverse_of : Optional[Sequence[int]], default None
+        Optional symmetric partner mapping of length ``nb_rels`` where entry
+        ``r`` is ``-1`` (no inverse) or the partner role index ``p != r`` with
+        ``inverse_of[p] == r``. A role with ``0 <= inverse_of[r] < r`` owns no
+        parameters of its own and is derived from its lower-indexed partner.
     """
 
     def __init__(
@@ -182,6 +272,8 @@ class GroundedELModule(nn.Module):
         encoder: Optional[nn.Module] = None,
         top_id: Optional[int] = None,
         bot_id: Optional[int] = None,
+        role_mode: str = "product",
+        inverse_of: Optional[Union[Sequence[int], th.Tensor]] = None,
     ) -> None:
         super().__init__()
         self.nb_classes = _validate_int_ge("nb_classes", nb_classes, 1)
@@ -198,6 +290,13 @@ class GroundedELModule(nn.Module):
         self.agg = agg
         self.agg_tau = _validate_positive_float("agg_tau", agg_tau)
         self.dead_init_logit = _validate_finite_float("dead_init_logit", dead_init_logit)
+        if not isinstance(role_mode, str) or role_mode not in ("product", "translation"):
+            raise ValueError(
+                f"role_mode must be 'product' or 'translation', got {role_mode!r}"
+            )
+        self.role_mode: str = role_mode
+        inv_buf = _validate_inverse_of(self.nb_rels, inverse_of)
+        self.register_buffer("inverse_of", inv_buf)
 
         if top_id is not None:
             if isinstance(top_id, bool) or not isinstance(top_id, int) or not (0 <= top_id < self.nb_classes):
@@ -256,31 +355,58 @@ class GroundedELModule(nn.Module):
             th.ones((self.nb_classes, self.n_components), dtype=th.bool),
         )
 
-        self.role_head_centers = nn.Parameter(
-            th.empty(
-                (self.nb_rels, self.n_role_components, self.embed_dim), dtype=th.float32
+        if self.role_mode == "product":
+            self.role_head_centers: Optional[nn.Parameter] = nn.Parameter(
+                th.empty(
+                    (self.nb_rels, self.n_role_components, self.embed_dim),
+                    dtype=th.float32,
+                )
             )
-        )
-        self.role_head_raw_widths = nn.Parameter(
-            th.empty(
-                (self.nb_rels, self.n_role_components, self.embed_dim), dtype=th.float32
+            self.role_head_raw_widths: Optional[nn.Parameter] = nn.Parameter(
+                th.empty(
+                    (self.nb_rels, self.n_role_components, self.embed_dim),
+                    dtype=th.float32,
+                )
             )
-        )
-        self.role_tail_centers = nn.Parameter(
-            th.empty(
-                (self.nb_rels, self.n_role_components, self.embed_dim), dtype=th.float32
+            self.role_tail_centers: Optional[nn.Parameter] = nn.Parameter(
+                th.empty(
+                    (self.nb_rels, self.n_role_components, self.embed_dim),
+                    dtype=th.float32,
+                )
             )
-        )
-        self.role_tail_raw_widths = nn.Parameter(
-            th.empty(
-                (self.nb_rels, self.n_role_components, self.embed_dim), dtype=th.float32
+            self.role_tail_raw_widths: Optional[nn.Parameter] = nn.Parameter(
+                th.empty(
+                    (self.nb_rels, self.n_role_components, self.embed_dim),
+                    dtype=th.float32,
+                )
             )
-        )
-        if self.nb_rels > 0:
-            nn.init.uniform_(self.role_head_centers, a=-0.5, b=0.5)
-            nn.init.constant_(self.role_head_raw_widths, _inv_softplus(0.2))
-            nn.init.uniform_(self.role_tail_centers, a=-0.5, b=0.5)
-            nn.init.constant_(self.role_tail_raw_widths, _inv_softplus(0.2))
+            self.role_centers: Optional[nn.Parameter] = None
+            self.role_raw_widths: Optional[nn.Parameter] = None
+            if self.nb_rels > 0:
+                nn.init.uniform_(self.role_head_centers, a=-0.5, b=0.5)
+                nn.init.constant_(self.role_head_raw_widths, _inv_softplus(0.2))
+                nn.init.uniform_(self.role_tail_centers, a=-0.5, b=0.5)
+                nn.init.constant_(self.role_tail_raw_widths, _inv_softplus(0.2))
+        else:
+            self.role_head_centers = None
+            self.role_head_raw_widths = None
+            self.role_tail_centers = None
+            self.role_tail_raw_widths = None
+            self.role_centers = nn.Parameter(
+                th.empty(
+                    (self.nb_rels, self.n_role_components, self.embed_dim),
+                    dtype=th.float32,
+                )
+            )
+            self.role_raw_widths = nn.Parameter(
+                th.empty(
+                    (self.nb_rels, self.n_role_components, self.embed_dim),
+                    dtype=th.float32,
+                )
+            )
+            if self.nb_rels > 0:
+                nn.init.uniform_(self.role_centers, a=-0.5, b=0.5)
+                nn.init.constant_(self.role_raw_widths, _inv_softplus(0.2))
         self.register_buffer(
             "role_active",
             th.ones((self.nb_rels, self.n_role_components), dtype=th.bool),
@@ -534,16 +660,88 @@ class GroundedELModule(nn.Module):
         eff_active = act_buf & (th.amin(w, dim=-1) > 0.0)
         return Regions(cen=cen, w=w, active=eff_active)
 
+    def translation_regions(
+        self,
+        rel_ids: Optional[Union[int, Sequence[int], th.Tensor]] = None,
+    ) -> Regions:
+        """Materialise translation :class:`~mowl.nn.el.structural.Regions` for ``rel_ids`` in ``"translation"`` mode.
+
+        Roles whose ``inverse_of`` partner has a strictly lower index own no
+        parameters of their own and are derived as ``(-c_partner, w_partner)``.
+
+        Guarantees:
+        - Returns :class:`~mowl.nn.el.structural.Regions` with shapes
+          ``(B, n_role_components, embed_dim)`` for ``cen`` and ``w`` and
+          ``(B, n_role_components)`` for ``active``.
+        - Inactive role components have ``w == 0.0`` and ``active == False``.
+        - For any role ``r`` with ``p = inverse_of[r] >= 0``, its regions equal
+          ``(-cen_p, w_p, active_p)``.
+
+        Non-guarantees:
+        - Raises :class:`ValueError` if ``role_mode != "translation"`` or if
+          ``rel_ids`` is non-empty when ``nb_rels == 0``.
+
+        Parameters
+        ----------
+        rel_ids : Optional[Union[int, Sequence[int], torch.Tensor]], default None
+            1-D role indices in ``[0, nb_rels)``, or ``None`` for all roles.
+
+        Returns
+        -------
+        Regions
+            Materialised translation role regions.
+        """
+        if self.role_mode != "translation":
+            raise ValueError(
+                f"translation_regions is only available when role_mode='translation', got {self.role_mode!r}"
+            )
+        assert self.role_centers is not None and self.role_raw_widths is not None
+        device = self.role_centers.device
+        if rel_ids is None:
+            idx = th.arange(self.nb_rels, dtype=th.long, device=device)
+        else:
+            idx = self._to_index_tensor(rel_ids, self.nb_rels, "rel_ids")
+            if idx.ndim != 1:
+                raise ValueError(
+                    f"rel_ids must be 1-D (or scalar), got shape {tuple(idx.shape)}"
+                )
+
+        if idx.numel() > 0 and bool((self.inverse_of >= 0).any().item()):
+            inv = self.inverse_of[idx]
+            is_derived = (inv >= 0) & (inv < idx)
+            owner_idx = th.where(is_derived, inv, idx)
+            cen_owner = self.role_centers[owner_idx]
+            cen = th.where(is_derived.view(-1, 1, 1), -cen_owner, cen_owner)
+            raw_w = self.role_raw_widths[owner_idx]
+            act_buf = self.role_active[owner_idx]
+        else:
+            cen = self.role_centers[idx]
+            raw_w = self.role_raw_widths[idx]
+            act_buf = self.role_active[idx]
+
+        w_pos = F.softplus(raw_w)
+        w = th.where(act_buf.unsqueeze(-1), w_pos, th.zeros_like(w_pos))
+        eff_active = act_buf & (th.amin(w, dim=-1) > 0.0)
+        return Regions(cen=cen, w=w, active=eff_active)
+
     def role_regions(
         self,
         rel_ids: Optional[Union[int, Sequence[int], th.Tensor]] = None,
-    ) -> Tuple[Regions, Regions]:
-        """Materialise head and tail :class:`~mowl.nn.el.structural.Regions` for ``rel_ids``.
+    ) -> Union[Tuple[Regions, Regions], Regions]:
+        """Materialise role :class:`~mowl.nn.el.structural.Regions` for ``rel_ids``.
+
+        In ``"product"`` mode returns ``(head_regions, tail_regions)`` (with roles
+        whose ``inverse_of`` partner has a lower index derived by swapping
+        ``(T_partner, H_partner)``). In ``"translation"`` mode delegates to
+        :meth:`translation_regions` and returns a single :class:`~mowl.nn.el.structural.Regions`
+        (with lower-indexed partners negated as ``(-c_partner, w_partner)``).
 
         Guarantees:
-        - Returns ``(head_regions, tail_regions)`` each of shape
-          ``(B, n_role_components, embed_dim)`` with a shared ``active`` mask
-          of shape ``(B, n_role_components)``.
+        - In ``"product"`` mode, returns ``(head_regions, tail_regions)`` each of
+          shape ``(B, n_role_components, embed_dim)`` with a shared ``active``
+          mask of shape ``(B, n_role_components)``.
+        - In ``"translation"`` mode, returns a single :class:`~mowl.nn.el.structural.Regions`
+          of shape ``(B, n_role_components, embed_dim)``.
         - Inactive role components have ``w == 0.0`` and ``active == False``.
 
         Non-guarantees:
@@ -556,9 +754,18 @@ class GroundedELModule(nn.Module):
 
         Returns
         -------
-        Tuple[Regions, Regions]
-            ``(head_regions, tail_regions)`` for the requested roles.
+        Union[Tuple[Regions, Regions], Regions]
+            ``(head_regions, tail_regions)`` in ``"product"`` mode, or
+            translation ``Regions`` in ``"translation"`` mode.
         """
+        if self.role_mode == "translation":
+            return self.translation_regions(rel_ids)
+        assert (
+            self.role_head_centers is not None
+            and self.role_head_raw_widths is not None
+            and self.role_tail_centers is not None
+            and self.role_tail_raw_widths is not None
+        )
         device = self.role_head_centers.device
         if rel_ids is None:
             idx = th.arange(self.nb_rels, dtype=th.long, device=device)
@@ -569,11 +776,26 @@ class GroundedELModule(nn.Module):
                     f"rel_ids must be 1-D (or scalar), got shape {tuple(idx.shape)}"
                 )
 
-        h_cen = self.role_head_centers[idx]
-        h_raw = self.role_head_raw_widths[idx]
-        t_cen = self.role_tail_centers[idx]
-        t_raw = self.role_tail_raw_widths[idx]
-        act_buf = self.role_active[idx]
+        if idx.numel() > 0 and bool((self.inverse_of >= 0).any().item()):
+            inv = self.inverse_of[idx]
+            is_derived = (inv >= 0) & (inv < idx)
+            owner_idx = th.where(is_derived, inv, idx)
+            h_cen_o = self.role_head_centers[owner_idx]
+            h_raw_o = self.role_head_raw_widths[owner_idx]
+            t_cen_o = self.role_tail_centers[owner_idx]
+            t_raw_o = self.role_tail_raw_widths[owner_idx]
+            mask3 = is_derived.view(-1, 1, 1)
+            h_cen = th.where(mask3, t_cen_o, h_cen_o)
+            h_raw = th.where(mask3, t_raw_o, h_raw_o)
+            t_cen = th.where(mask3, h_cen_o, t_cen_o)
+            t_raw = th.where(mask3, h_raw_o, t_raw_o)
+            act_buf = self.role_active[owner_idx]
+        else:
+            h_cen = self.role_head_centers[idx]
+            h_raw = self.role_head_raw_widths[idx]
+            t_cen = self.role_tail_centers[idx]
+            t_raw = self.role_tail_raw_widths[idx]
+            act_buf = self.role_active[idx]
 
         h_w_pos = F.softplus(h_raw)
         t_w_pos = F.softplus(t_raw)
@@ -865,7 +1087,20 @@ class GroundedELModule(nn.Module):
         if bsz == 0:
             return th.empty((0,), dtype=xp.dtype, device=xp.device)
 
-        h_reg, t_reg = self.role_regions(idx)
+        if self.role_mode == "translation":
+            v_reg = self.role_regions(idx)
+            assert isinstance(v_reg, Regions)
+            diff = yp - xp
+            v_cen = v_reg.cen.to(dtype=diff.dtype)
+            v_w = v_reg.w.to(dtype=diff.dtype)
+            slot_depth = th.amin(
+                v_w - th.abs(diff.unsqueeze(1) - v_cen), dim=-1
+            )  # (B, K_r)
+            return self._aggregate_slot_depth(slot_depth, v_reg.active, crisp=crisp)
+
+        reg_pair = self.role_regions(idx)
+        assert isinstance(reg_pair, tuple)
+        h_reg, t_reg = reg_pair
         h_cen = h_reg.cen.to(dtype=xp.dtype)
         h_w = h_reg.w.to(dtype=xp.dtype)
         t_cen = t_reg.cen.to(dtype=yp.dtype)
@@ -906,6 +1141,269 @@ class GroundedELModule(nn.Module):
         """
         dep = self.role_depth(x_points, y_points, rel_ids)
         return th.sigmoid(dep / self.tau.to(dtype=dep.dtype))
+
+    def _align_rel_and_class_ids(
+        self,
+        rel_ids: Union[int, Sequence[int], th.Tensor],
+        class_ids: Union[int, Sequence[int], th.Tensor],
+    ) -> Tuple[th.Tensor, th.Tensor]:
+        """Validate and broadcast ``rel_ids`` and ``class_ids`` to 1-D tensors of shape ``(B,)``."""
+        r_idx = self._to_index_tensor(rel_ids, self.nb_rels, "rel_ids")
+        c_idx = self._to_index_tensor(class_ids, self.nb_classes, "class_ids")
+        if r_idx.ndim != 1:
+            raise ValueError(
+                f"rel_ids must be 1-D (or scalar), got shape {tuple(r_idx.shape)}"
+            )
+        if c_idx.ndim != 1:
+            raise ValueError(
+                f"class_ids must be 1-D (or scalar), got shape {tuple(c_idx.shape)}"
+            )
+        b_r = int(r_idx.shape[0])
+        b_c = int(c_idx.shape[0])
+        if b_r == b_c:
+            return r_idx, c_idx
+        if b_r == 1 and b_c > 1:
+            return r_idx.expand(b_c), c_idx
+        if b_c == 1 and b_r > 1:
+            return r_idx, c_idx.expand(b_r)
+        raise ValueError(
+            f"Incompatible batch sizes between rel_ids ({b_r}) and class_ids ({b_c})"
+        )
+
+    def _exists_box_impl(
+        self,
+        rel_ids: Union[int, Sequence[int], th.Tensor],
+        class_ids: Union[int, Sequence[int], th.Tensor],
+        inverse: bool,
+        fn_name: str,
+    ) -> Regions:
+        """Materialise existential multi-box ``(c_{B,j} -/+ c_{r,k}, w_{B,j} + w_{r,k})`` in translation mode."""
+        if self.role_mode != "translation":
+            raise ValueError(
+                f"{fn_name} is only available when role_mode='translation', got {self.role_mode!r}"
+            )
+        r_idx, c_idx = self._align_rel_and_class_ids(rel_ids, class_ids)
+        bsz = int(r_idx.shape[0])
+        device = self.class_centers.device
+        dtype = self.class_centers.dtype
+        n_pair = self.n_components * self.n_role_components
+        if bsz == 0:
+            return _ExistsRegions(
+                cen=th.empty((0, n_pair, self.embed_dim), dtype=dtype, device=device),
+                w=th.empty((0, n_pair, self.embed_dim), dtype=dtype, device=device),
+                active=th.empty((0, n_pair), dtype=th.bool, device=device),
+                is_top=False,
+            )
+
+        is_top_row = (
+            (c_idx == self.top_id)
+            if self.top_id is not None
+            else th.zeros((bsz,), dtype=th.bool, device=device)
+        )
+        if bool(is_top_row.all().item()):
+            cen_top = th.zeros((bsz, 1, self.embed_dim), dtype=dtype, device=device)
+            w_top = th.full(
+                (bsz, 1, self.embed_dim), _TOP_DEPTH_CEIL, dtype=dtype, device=device
+            )
+            act_top = th.ones((bsz, 1), dtype=th.bool, device=device)
+            return _ExistsRegions(
+                cen=cen_top,
+                w=w_top,
+                active=act_top,
+                is_top=True,
+                is_top_mask=is_top_row,
+            )
+
+        cls_reg = self.class_regions(c_idx)
+        rel_reg = self.translation_regions(r_idx)
+        if inverse:
+            cen_jk = cls_reg.cen.unsqueeze(2) + rel_reg.cen.unsqueeze(1)
+        else:
+            cen_jk = cls_reg.cen.unsqueeze(2) - rel_reg.cen.unsqueeze(1)
+        w_jk = cls_reg.w.unsqueeze(2) + rel_reg.w.unsqueeze(1)
+        act_jk = cls_reg.active.unsqueeze(2) & rel_reg.active.unsqueeze(1)
+
+        cen = cen_jk.reshape(bsz, n_pair, self.embed_dim)
+        w_raw = w_jk.reshape(bsz, n_pair, self.embed_dim)
+        act = act_jk.reshape(bsz, n_pair)
+
+        if self.bot_id is not None:
+            is_bot_row = c_idx == self.bot_id
+            if bool(is_bot_row.any().item()):
+                act = act & (~is_bot_row.unsqueeze(1))
+
+        if bool(is_top_row.any().item()):
+            cen = cen.clone()
+            w_raw = w_raw.clone()
+            act = act.clone()
+            cen[is_top_row] = 0.0
+            w_raw[is_top_row] = 0.0
+            w_raw[is_top_row, 0, :] = _TOP_DEPTH_CEIL
+            act[is_top_row] = False
+            act[is_top_row, 0] = True
+
+        w = th.where(act.unsqueeze(-1), w_raw, th.zeros_like(w_raw))
+        return _ExistsRegions(
+            cen=cen,
+            w=w,
+            active=act,
+            is_top=False,
+            is_top_mask=is_top_row,
+        )
+
+    def exists_box(
+        self,
+        rel_ids: Union[int, Sequence[int], th.Tensor],
+        class_ids: Union[int, Sequence[int], th.Tensor],
+    ) -> Regions:
+        """Materialise existential multi-box :math:`\\mathcal{B}(\\exists r.B)` in ``"translation"`` mode.
+
+        Component ``(j, k)`` has centre :math:`c_{B,j} - c_{r,k}`, half-width
+        :math:`w_{B,j} + w_{r,k}`, and active flag ``active_B[j] & active_r[k]``.
+        When all ``class_ids == top_id``, returns a 1-component :class:`~mowl.nn.el.structural.Regions`
+        with half-width ``1e6`` and ``is_top=True``.
+
+        Guarantees:
+        - For ordinary classes, returns :class:`~mowl.nn.el.structural.Regions` of
+          shape ``(B, n_components * n_role_components, embed_dim)`` whose union of
+          active boxes equals :math:`\\{z \\in \\mathbb{R}^d : \\exists v \\in V_r,\\, z + v \\in \\mathcal{B}(B)\\}`.
+        - When ``class_ids == top_id``, returns a :class:`~mowl.nn.el.structural.Regions`
+          with ``is_top == True``, 1 component, and half-width ``1e6``.
+        - Raises :class:`ValueError` if ``role_mode != "translation"``.
+
+        Non-guarantees:
+        - Only defined in ``"translation"`` mode.
+
+        Parameters
+        ----------
+        rel_ids : Union[int, Sequence[int], torch.Tensor]
+            1-D role indices in ``[0, nb_rels)`` (or scalar).
+        class_ids : Union[int, Sequence[int], torch.Tensor]
+            1-D filler class indices in ``[0, nb_classes)`` (or scalar).
+
+        Returns
+        -------
+        Regions
+            Materialised existential multi-box regions.
+        """
+        return self._exists_box_impl(rel_ids, class_ids, inverse=False, fn_name="exists_box")
+
+    def exists_inverse_box(
+        self,
+        rel_ids: Union[int, Sequence[int], th.Tensor],
+        class_ids: Union[int, Sequence[int], th.Tensor],
+    ) -> Regions:
+        """Materialise inverse existential multi-box :math:`\\mathcal{B}(\\exists r^-.B)` in ``"translation"`` mode.
+
+        Component ``(j, k)`` has centre :math:`c_{B,j} + c_{r,k}`, half-width
+        :math:`w_{B,j} + w_{r,k}`, and active flag ``active_B[j] & active_r[k]``.
+        When all ``class_ids == top_id``, returns a 1-component :class:`~mowl.nn.el.structural.Regions`
+        with half-width ``1e6`` and ``is_top=True``.
+
+        Guarantees:
+        - For ordinary classes, returns :class:`~mowl.nn.el.structural.Regions` of
+          shape ``(B, n_components * n_role_components, embed_dim)`` whose union of
+          active boxes equals :math:`\\{z \\in \\mathbb{R}^d : \\exists v \\in V_r,\\, z - v \\in \\mathcal{B}(B)\\}`.
+        - When ``class_ids == top_id``, returns a :class:`~mowl.nn.el.structural.Regions`
+          with ``is_top == True``, 1 component, and half-width ``1e6``.
+        - Raises :class:`ValueError` if ``role_mode != "translation"``.
+
+        Non-guarantees:
+        - Only defined in ``"translation"`` mode.
+
+        Parameters
+        ----------
+        rel_ids : Union[int, Sequence[int], torch.Tensor]
+            1-D role indices in ``[0, nb_rels)`` (or scalar).
+        class_ids : Union[int, Sequence[int], torch.Tensor]
+            1-D filler class indices in ``[0, nb_classes)`` (or scalar).
+
+        Returns
+        -------
+        Regions
+            Materialised inverse existential multi-box regions.
+        """
+        return self._exists_box_impl(
+            rel_ids, class_ids, inverse=True, fn_name="exists_inverse_box"
+        )
+
+    def exists_depth(
+        self,
+        points: th.Tensor,
+        rel_ids: Union[int, Sequence[int], th.Tensor],
+        class_ids: Union[int, Sequence[int], th.Tensor],
+        crisp: bool = False,
+    ) -> th.Tensor:
+        """Compute signed multi-box depth of ``points`` inside :meth:`exists_box` in ``"translation"`` mode.
+
+        Guarantees:
+        - Returns a 1-D tensor of shape ``(B,)``.
+        - Under ``agg="max"`` (or ``crisp=True``), entry ``b`` is strictly
+          positive if and only if ``points[b]`` lies strictly inside at least
+          one active component of ``exists_box(rel_ids[b], class_ids[b])``.
+        - Entries with zero active existential components return the finite floor ``-1e6``.
+        - Raises :class:`ValueError` if ``role_mode != "translation"``.
+
+        Non-guarantees:
+        - Under ``agg="max"``, gradients flow only through the winning active
+          existential component and bottleneck coordinate.
+
+        Parameters
+        ----------
+        points : torch.Tensor
+            Point coordinates of shape ``(B, d)`` (or ``(1, d)`` / ``(d,)``).
+        rel_ids : Union[int, Sequence[int], torch.Tensor]
+            Role indices of shape ``(B,)`` (or scalar).
+        class_ids : Union[int, Sequence[int], torch.Tensor]
+            Filler class indices of shape ``(B,)`` (or scalar).
+        crisp : bool, default False
+            If ``True``, forces hard ``max`` aggregation even when ``self.agg == "lse"``.
+
+        Returns
+        -------
+        torch.Tensor
+            Signed existential depths of shape ``(B,)``.
+        """
+        if self.role_mode != "translation":
+            raise ValueError(
+                f"exists_depth is only available when role_mode='translation', got {self.role_mode!r}"
+            )
+        if not isinstance(points, th.Tensor):
+            raise TypeError(f"points must be a torch.Tensor, got {type(points).__name__}")
+        pts = points.unsqueeze(0) if points.ndim == 1 else points
+        if pts.ndim != 2 or pts.shape[1] != self.embed_dim:
+            raise ValueError(
+                f"points must have shape (B, {self.embed_dim}), got {tuple(points.shape)}"
+            )
+        r_idx, c_idx = self._align_rel_and_class_ids(rel_ids, class_ids)
+        b_pts = int(pts.shape[0])
+        b_ids = int(r_idx.shape[0])
+        if b_pts != b_ids:
+            if b_pts == 1 and b_ids > 1:
+                pts = pts.expand(b_ids, self.embed_dim)
+            elif b_ids == 1 and b_pts > 1:
+                r_idx = r_idx.expand(b_pts)
+                c_idx = c_idx.expand(b_pts)
+            else:
+                raise ValueError(
+                    f"Incompatible batch sizes between points ({b_pts}) and (rel_ids, class_ids) ({b_ids})"
+                )
+        bsz = int(pts.shape[0])
+        if bsz == 0:
+            return th.empty((0,), dtype=pts.dtype, device=pts.device)
+
+        reg = self.exists_box(r_idx, c_idx)
+        if pts.dtype != reg.cen.dtype:
+            reg = Regions(
+                cen=reg.cen.to(dtype=pts.dtype),
+                w=reg.w.to(dtype=pts.dtype),
+                active=reg.active,
+            )
+        if self.agg == "max" or crisp:
+            return inside_measure(pts, reg)
+        coord_depth = reg.w - th.abs(pts.unsqueeze(1) - reg.cen)
+        slot_depth = th.amin(coord_depth, dim=-1)
+        return self._aggregate_slot_depth(slot_depth, reg.active, crisp=False)
 
     def expand_components(
         self,
@@ -969,8 +1467,8 @@ class GroundedELModule(nn.Module):
             )
             if target_rk > self.n_role_components:
                 extra_r = target_rk - self.n_role_components
-                device = self.role_head_centers.device
-                dtype = self.role_head_centers.dtype
+                device = self.class_centers.device
+                dtype = self.class_centers.dtype
                 with th.no_grad():
                     pad_cen = th.zeros(
                         (self.nb_rels, extra_r, self.embed_dim),
@@ -986,18 +1484,36 @@ class GroundedELModule(nn.Module):
                     pad_act = th.zeros(
                         (self.nb_rels, extra_r), dtype=th.bool, device=device
                     )
-                    self.role_head_centers = nn.Parameter(
-                        th.cat([self.role_head_centers.data, pad_cen], dim=1)
-                    )
-                    self.role_head_raw_widths = nn.Parameter(
-                        th.cat([self.role_head_raw_widths.data, pad_raw], dim=1)
-                    )
-                    self.role_tail_centers = nn.Parameter(
-                        th.cat([self.role_tail_centers.data, pad_cen], dim=1)
-                    )
-                    self.role_tail_raw_widths = nn.Parameter(
-                        th.cat([self.role_tail_raw_widths.data, pad_raw], dim=1)
-                    )
+                    if self.role_mode == "translation":
+                        assert (
+                            self.role_centers is not None
+                            and self.role_raw_widths is not None
+                        )
+                        self.role_centers = nn.Parameter(
+                            th.cat([self.role_centers.data, pad_cen], dim=1)
+                        )
+                        self.role_raw_widths = nn.Parameter(
+                            th.cat([self.role_raw_widths.data, pad_raw], dim=1)
+                        )
+                    else:
+                        assert (
+                            self.role_head_centers is not None
+                            and self.role_head_raw_widths is not None
+                            and self.role_tail_centers is not None
+                            and self.role_tail_raw_widths is not None
+                        )
+                        self.role_head_centers = nn.Parameter(
+                            th.cat([self.role_head_centers.data, pad_cen], dim=1)
+                        )
+                        self.role_head_raw_widths = nn.Parameter(
+                            th.cat([self.role_head_raw_widths.data, pad_raw], dim=1)
+                        )
+                        self.role_tail_centers = nn.Parameter(
+                            th.cat([self.role_tail_centers.data, pad_cen], dim=1)
+                        )
+                        self.role_tail_raw_widths = nn.Parameter(
+                            th.cat([self.role_tail_raw_widths.data, pad_raw], dim=1)
+                        )
                     self.role_active = th.cat([self.role_active, pad_act], dim=1)
                     self.n_role_components = target_rk
 
@@ -1130,6 +1646,16 @@ class GroundedELModule(nn.Module):
                         )
                     edges_by_role[ri].append((xi, yi))
 
+        if self.nb_rels > 0 and bool((self.inverse_of >= 0).any().item()):
+            inv_list = self.inverse_of.detach().cpu().tolist()
+            for r_idx, inv_r in enumerate(inv_list):
+                if 0 <= inv_r < r_idx:
+                    owner_set = set(edges_by_role[inv_r])
+                    for xi, yi in edges_by_role[r_idx]:
+                        if (yi, xi) not in owner_set:
+                            edges_by_role[inv_r].append((yi, xi))
+                            owner_set.add((yi, xi))
+
         max_role_edges = max((len(lst) for lst in edges_by_role), default=0)
         if max_role_edges > self.n_role_components:
             self.expand_components(self.n_components, new_role_K=max_role_edges)
@@ -1152,6 +1678,28 @@ class GroundedELModule(nn.Module):
             target_sep = 4.0 * delta_f
             if min_sep < target_sep:
                 raw_pos = raw_pos * (target_sep / max(min_sep, 1e-12))
+
+            if self.role_mode == "translation" and self.nb_elements <= 256:
+                pair_diffs = (raw_pos.unsqueeze(0) - raw_pos.unsqueeze(1)).reshape(
+                    -1, self.embed_dim
+                )  # (N^2, d): entry (i, j) is p_j - p_i
+                non_diag = ~eye_mask.reshape(-1)
+                nd_diffs = pair_diffs[non_diag]  # (N*(N-1), d)
+                if nd_diffs.shape[0] > 0:
+                    min_zero_sep = float(th.amax(th.abs(nd_diffs), dim=-1).min().item())
+                    if nd_diffs.shape[0] > 1:
+                        dd = th.amax(
+                            th.abs(nd_diffs.unsqueeze(1) - nd_diffs.unsqueeze(0)),
+                            dim=-1,
+                        )
+                        dd = dd.masked_fill(
+                            th.eye(nd_diffs.shape[0], dtype=th.bool), float("inf")
+                        )
+                        min_dd_sep = min(min_zero_sep, float(dd.min().item()))
+                    else:
+                        min_dd_sep = min_zero_sep
+                    if min_dd_sep < target_sep:
+                        raw_pos = raw_pos * (target_sep / max(min_dd_sep, 1e-12))
 
         pos_dev = raw_pos.to(device=device, dtype=dtype)
         raw_delta = _inv_softplus(delta_f)
@@ -1216,19 +1764,46 @@ class GroundedELModule(nn.Module):
             self.class_active[:, : self.nb_elements] = active_ca
 
             # Initialize all role components to inactive zero-width, then populate edges
-            self.role_head_centers.zero_()
-            self.role_head_raw_widths.fill_(_INACTIVE_RAW_WIDTH)
-            self.role_tail_centers.zero_()
-            self.role_tail_raw_widths.fill_(_INACTIVE_RAW_WIDTH)
             self.role_active.zero_()
+            if self.role_mode == "translation":
+                assert (
+                    self.role_centers is not None
+                    and self.role_raw_widths is not None
+                )
+                self.role_centers.zero_()
+                self.role_raw_widths.fill_(_INACTIVE_RAW_WIDTH)
+                for r_idx, r_edges in enumerate(edges_by_role):
+                    inv_r = int(self.inverse_of[r_idx].item())
+                    if 0 <= inv_r < r_idx:
+                        continue
+                    for k_idx, (x_i, y_i) in enumerate(r_edges):
+                        self.role_centers[r_idx, k_idx].copy_(
+                            pos_dev[y_i] - pos_dev[x_i]
+                        )
+                        self.role_raw_widths[r_idx, k_idx].fill_(raw_delta)
+                        self.role_active[r_idx, k_idx] = True
+            else:
+                assert (
+                    self.role_head_centers is not None
+                    and self.role_head_raw_widths is not None
+                    and self.role_tail_centers is not None
+                    and self.role_tail_raw_widths is not None
+                )
+                self.role_head_centers.zero_()
+                self.role_head_raw_widths.fill_(_INACTIVE_RAW_WIDTH)
+                self.role_tail_centers.zero_()
+                self.role_tail_raw_widths.fill_(_INACTIVE_RAW_WIDTH)
 
-            for r_idx, r_edges in enumerate(edges_by_role):
-                for k_idx, (x_i, y_i) in enumerate(r_edges):
-                    self.role_head_centers[r_idx, k_idx].copy_(pos_dev[x_i])
-                    self.role_head_raw_widths[r_idx, k_idx].fill_(raw_delta)
-                    self.role_tail_centers[r_idx, k_idx].copy_(pos_dev[y_i])
-                    self.role_tail_raw_widths[r_idx, k_idx].fill_(raw_delta)
-                    self.role_active[r_idx, k_idx] = True
+                for r_idx, r_edges in enumerate(edges_by_role):
+                    inv_r = int(self.inverse_of[r_idx].item())
+                    if 0 <= inv_r < r_idx:
+                        continue
+                    for k_idx, (x_i, y_i) in enumerate(r_edges):
+                        self.role_head_centers[r_idx, k_idx].copy_(pos_dev[x_i])
+                        self.role_head_raw_widths[r_idx, k_idx].fill_(raw_delta)
+                        self.role_tail_centers[r_idx, k_idx].copy_(pos_dev[y_i])
+                        self.role_tail_raw_widths[r_idx, k_idx].fill_(raw_delta)
+                        self.role_active[r_idx, k_idx] = True
 
     def forward(
         self,

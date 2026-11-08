@@ -57,6 +57,7 @@ __all__ = [
     "sample_class_region",
     "sample_pair_region",
     "sample_role_region",
+    "sample_exists_region",
 ]
 
 _INTERIOR_EPS: float = 1e-6
@@ -1079,17 +1080,21 @@ def sample_role_region(
     hinge_fn: Optional[Callable[[th.Tensor], th.Tensor]] = None,
     step_size: Optional[Union[float, th.Tensor]] = None,
     include_corners: bool = True,
-) -> Tuple[RegionSample, RegionSample]:
-    """Sample point pairs ``(x_sample, y_sample)`` uniformly inside a random active product component :math:`H_{r,k} \\times T_{r,k}` of ``rel_ids``.
+) -> Union[Tuple[RegionSample, RegionSample], RegionSample]:
+    """Sample role region points from active components of ``rel_ids``.
 
     Guarantees:
-    - Returns ``(head_sample, tail_sample)`` drawn from the *same* randomly
-      chosen active product component :math:`k` per row so that
-      ``(head_sample.points[b], tail_sample.points[b])`` lies inside
+    - In ``"product"`` mode, returns ``(head_sample, tail_sample)`` drawn from
+      the *same* randomly chosen active product component :math:`k` per row so
+      that ``(head_sample.points[b], tail_sample.points[b])`` lies inside
       :math:`H_{r,k} \\times T_{r,k}` whenever ``head_sample.valid[b]`` is ``True``.
+    - In ``"translation"`` mode, returns a single :class:`RegionSample` of
+      translation vectors :math:`v` drawn uniformly inside a random active
+      translation component :math:`V_{r,k}` (with corners and adversarial
+      ascent as for classes).
 
     Non-guarantees:
-    - Roles with no active non-empty product component have ``valid[b] == False``.
+    - Roles with no active non-empty component have ``valid[b] == False``.
 
     Parameters
     ----------
@@ -1100,17 +1105,41 @@ def sample_role_region(
     generator : torch.Generator
         Explicit PyTorch RNG.
     n_samples : int, default 1
-        Number of samples when ``rel_ids`` has length 1.
+        Number of samples per role index.
 
     Returns
     -------
-    Tuple[RegionSample, RegionSample]
-        ``(head_sample, tail_sample)`` for :math:`x` and :math:`y`.
+    Union[Tuple[RegionSample, RegionSample], RegionSample]
+        ``(head_sample, tail_sample)`` in ``"product"`` mode, or a single
+        :class:`RegionSample` of translation vectors :math:`v` in
+        ``"translation"`` mode.
     """
     _validate_generator(generator)
     if isinstance(n_samples, bool) or not isinstance(n_samples, int) or n_samples < 1:
         raise ValueError(f"n_samples must be an int >= 1, got {n_samples!r}")
     idx = module._to_index_tensor(rel_ids, module.nb_rels, "rel_ids")
+    if module.role_mode == "translation":
+        if include_corners and n_samples > 1:
+            regions = module.translation_regions(idx)
+            return _sample_regions_with_corners(
+                regions,
+                generator=generator,
+                n_samples=n_samples,
+                n_adv=n_adv,
+                hinge_fn=hinge_fn,
+                step_size=step_size,
+            )
+        if n_samples > 1:
+            idx = idx.repeat(n_samples)
+        regions = module.translation_regions(idx)
+        return sample_active_component(
+            regions,
+            generator=generator,
+            n_adv=n_adv,
+            hinge_fn=hinge_fn,
+            step_size=step_size,
+        )
+
     h_reg, t_reg = module.role_regions(idx)
     bsz, _, dim = h_reg.cen.shape
     device = h_reg.cen.device
@@ -1199,3 +1228,79 @@ def sample_role_region(
         upper=prod_sample.upper[:, dim:],
     )
     return h_sample, t_sample
+
+
+def sample_exists_region(
+    module: GroundedELModule,
+    rel_ids: Union[int, Sequence[int], th.Tensor],
+    class_ids: Union[int, Sequence[int], th.Tensor],
+    generator: th.Generator,
+    n_samples: int = 1,
+    n_adv: int = 2,
+    hinge_fn: Optional[Callable[[th.Tensor], th.Tensor]] = None,
+    step_size: Optional[Union[float, th.Tensor]] = None,
+    include_corners: bool = True,
+) -> RegionSample:
+    """Sample points :math:`z` uniformly inside active components of :meth:`GroundedELModule.exists_box`.
+
+    Guarantees:
+    - Returns a :class:`RegionSample` of points :math:`z \\in (\\exists r.B)^{\\mathcal{I}}`
+      drawn from a randomly selected active Minkowski difference component
+      :math:`B_j - V_{r,k}` (with corners and adversarial ascent as for classes).
+
+    Non-guarantees:
+    - Raises :class:`ValueError` if ``module.role_mode != "translation"`` or
+      ``n_samples < 1``.
+    - Rows with no active pair :math:`(j, k)` have ``valid[b] == False``.
+
+    Parameters
+    ----------
+    module : GroundedELModule
+        GroundedEL neural module in ``"translation"`` mode.
+    rel_ids : Union[int, Sequence[int], torch.Tensor]
+        Role index or 1-D tensor of role indices.
+    class_ids : Union[int, Sequence[int], torch.Tensor]
+        Filler class index or 1-D tensor of class indices.
+    generator : torch.Generator
+        Explicit PyTorch RNG.
+    n_samples : int, default 1
+        Number of samples per row.
+    n_adv : int, default 2
+        Number of signed-gradient ascent steps :math:`\\ge 0`.
+    hinge_fn : Optional[Callable[[torch.Tensor], torch.Tensor]], default None
+        Optional hinge function for adversarial ascent.
+    step_size : Optional[Union[float, torch.Tensor]], default None
+        Optional step size for adversarial ascent.
+    include_corners : bool, default True
+        Whether to include corner/face-centre probes when ``n_samples > 1``.
+
+    Returns
+    -------
+    RegionSample
+        Sampled points :math:`z`, validity mask, and box bounds.
+    """
+    _validate_generator(generator)
+    if isinstance(n_samples, bool) or not isinstance(n_samples, int) or n_samples < 1:
+        raise ValueError(f"n_samples must be an int >= 1, got {n_samples!r}")
+    r_idx, c_idx = module._align_rel_and_class_ids(rel_ids, class_ids)
+    if include_corners and n_samples > 1:
+        regions = module.exists_box(r_idx, c_idx)
+        return _sample_regions_with_corners(
+            regions,
+            generator=generator,
+            n_samples=n_samples,
+            n_adv=n_adv,
+            hinge_fn=hinge_fn,
+            step_size=step_size,
+        )
+    if n_samples > 1:
+        r_idx = r_idx.repeat(n_samples)
+        c_idx = c_idx.repeat(n_samples)
+    regions = module.exists_box(r_idx, c_idx)
+    return sample_active_component(
+        regions,
+        generator=generator,
+        n_adv=n_adv,
+        hinge_fn=hinge_fn,
+        step_size=step_size,
+    )

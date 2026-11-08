@@ -52,6 +52,7 @@ import torch.nn.functional as F
 from mowl.base_models.elmodel import EmbeddingELModel
 from mowl.nn.el.grounded import (
     GroundedELModule,
+    RegionSample,
     class_assertion,
     crisp_membership,
     fact,
@@ -66,18 +67,24 @@ from mowl.nn.el.grounded import (
     gci2,
     gci2_dead,
     gci2_region,
+    gci2_region_trans,
     gci3,
     gci3_bot,
     gci3_bot_region,
+    gci3_bot_region_trans,
     gci3_region,
+    gci3_region_trans,
     minimality,
     role_assertion,
     role_chain,
     role_chain_region,
+    role_chain_region_trans,
     role_inclusion,
     role_inclusion_region,
+    role_inclusion_region_trans,
     sample_class_region,
     sample_elements,
+    sample_exists_region,
     sample_filler_elements,
     sample_inside_elements,
     sample_pair_region,
@@ -91,6 +98,7 @@ from mowl.nn.el.grounded.module import (
     _TOP_DEPTH_CEIL,
     _inv_softplus,
     _validate_int_ge,
+    _validate_inverse_of,
     _validate_positive_float,
 )
 from mowl.nn.el.grounded.losses import _validate_margin, _validate_nonneg_weight
@@ -100,6 +108,79 @@ from mowl.owlapi.defaults import BOT as BOTTOM, TOP
 logger = logging.getLogger(__name__)
 
 __all__ = ["GroundedEL"]
+
+
+class _CountInt(int):
+    """Integer count with 0-D tensor-compatible ``.detach()``, ``.item()``, and ``.ndim``."""
+
+    ndim: int = 0
+
+    def detach(self) -> "_CountInt":
+        return self
+
+    def item(self) -> int:
+        return int(self)
+
+
+def _resolve_inverse_of(
+    inverse_of: Optional[
+        Union[Sequence[int], th.Tensor, Mapping[Union[str, int], Union[str, int]]]
+    ],
+    rel_map: Mapping[str, int],
+    nb_rels: int,
+) -> Optional[List[int]]:
+    """Resolve ``inverse_of`` (mapping role-name -> role-name or index sequence) into a validated index list."""
+    if inverse_of is None:
+        return None
+    if isinstance(inverse_of, Mapping):
+        inv_list = [-1] * nb_rels
+
+        def _to_rel_idx(key: Union[str, int]) -> int:
+            if isinstance(key, str):
+                if key not in rel_map:
+                    raise ValueError(
+                        f"Unknown role name {key!r} in inverse_of; not in object_property_index_dict"
+                    )
+                return int(rel_map[key])
+            if isinstance(key, (bool, np.bool_)) or not isinstance(
+                key, (int, np.integer)
+            ):
+                raise ValueError(
+                    f"inverse_of keys/values must be role names or integer indices, got {key!r}"
+                )
+            idx = int(key)
+            if idx < 0 or idx >= nb_rels:
+                raise ValueError(
+                    f"inverse_of role index {idx} out of range [0, {nb_rels})"
+                )
+            return idx
+
+        for k_raw, v_raw in inverse_of.items():
+            k_idx = _to_rel_idx(k_raw)
+            if v_raw is None or (
+                not isinstance(v_raw, (str, bool, np.bool_))
+                and isinstance(v_raw, (int, np.integer))
+                and int(v_raw) == -1
+            ):
+                continue
+            v_idx = _to_rel_idx(v_raw)
+            if k_idx == v_idx:
+                raise ValueError(
+                    f"inverse_of cannot contain self-inverse role {k_raw!r} (index {k_idx})"
+                )
+            if inv_list[k_idx] not in (-1, v_idx) or inv_list[v_idx] not in (
+                -1,
+                k_idx,
+            ):
+                raise ValueError(
+                    f"inverse_of mapping has conflicting partner assignments for role {k_raw!r} <-> {v_raw!r}"
+                )
+            inv_list[k_idx] = v_idx
+            inv_list[v_idx] = k_idx
+
+        return _validate_inverse_of(nb_rels, inv_list).tolist()
+
+    return _validate_inverse_of(nb_rels, inverse_of).tolist()
 
 _TOL_DEPTH_LEVELS: Tuple[Tuple[str, float], ...] = (
     ("0", 0.0),
@@ -431,6 +512,10 @@ class GroundedEL(EmbeddingELModel):
         n_filler_samples: int = 64,
         region_lhs_grad: bool = True,
         dead_from_bot_only: bool = True,
+        role_mode: str = "product",
+        inverse_of: Optional[
+            Union[Sequence[int], th.Tensor, Mapping[Union[str, int], Union[str, int]]]
+        ] = None,
         *,
         class_index_dict: Optional[Mapping[str, int]] = None,
         object_property_index_dict: Optional[Mapping[str, int]] = None,
@@ -471,6 +556,13 @@ class GroundedEL(EmbeddingELModel):
         if not isinstance(dead_from_bot_only, bool):
             raise ValueError(
                 f"dead_from_bot_only must be a bool, got {dead_from_bot_only!r}"
+            )
+        if not isinstance(role_mode, str) or role_mode not in (
+            "product",
+            "translation",
+        ):
+            raise ValueError(
+                f"role_mode must be 'product' or 'translation', got {role_mode!r}"
             )
         if not isinstance(agg, str) or agg not in ("max", "lse"):
             raise ValueError(f"agg must be 'max' or 'lse', got {agg!r}")
@@ -632,6 +724,7 @@ class GroundedEL(EmbeddingELModel):
         self.n_filler_samples = int(n_filler_samples)
         self.region_lhs_grad = bool(region_lhs_grad)
         self.dead_from_bot_only = bool(dead_from_bot_only)
+        self.role_mode = role_mode
         self.agg = agg
         self.agg_tau = agg_tau_f
         self.reseed_every = int(reseed_every)
@@ -649,6 +742,9 @@ class GroundedEL(EmbeddingELModel):
         self.nb_inds = len(self.individual_index_dict)
         self.nb_elements = self.nb_classes + self.nb_inds
         self.nb_rels = len(self.object_property_index_dict)
+        self.inverse_of: Optional[List[int]] = _resolve_inverse_of(
+            inverse_of, self.object_property_index_dict, self.nb_rels
+        )
         self.top_id: Optional[int] = self.class_index_dict.get(TOP, None)
         self.bot_id: Optional[int] = self.class_index_dict.get(BOTTOM, None)
 
@@ -683,6 +779,10 @@ class GroundedEL(EmbeddingELModel):
         object_property_assertion: Optional[Any] = None,
         individual_index_dict: Optional[Mapping[str, int]] = None,
         named_class_index_dict: Optional[Mapping[str, int]] = None,
+        role_mode: str = "product",
+        inverse_of: Optional[
+            Union[Sequence[int], th.Tensor, Mapping[Union[str, int], Union[str, int]]]
+        ] = None,
         **kwargs: Any,
     ) -> "GroundedEL":
         """Construct :class:`GroundedEL` directly from prebuilt normal-form index tables without an OWL file.
@@ -744,6 +844,10 @@ class GroundedEL(EmbeddingELModel):
             Optional bijective mapping from individual names/IRIs to ``0 .. nb_inds - 1``.
         named_class_index_dict : Optional[Mapping[str, int]], default None
             Optional subset of ``class_index_dict`` representing named classes.
+        role_mode : str, default "product"
+            Role representation mode (``"product"`` or ``"translation"``).
+        inverse_of : Optional[Union[Sequence[int], torch.Tensor, Mapping[Union[str, int], Union[str, int]]]], default None
+            Optional inverse-role mapping (role-name -> role-name or index sequence).
         **kwargs : Any
             Additional keyword arguments forwarded to :meth:`__init__`.
 
@@ -769,6 +873,8 @@ class GroundedEL(EmbeddingELModel):
             role_chain=role_chain,
             class_assertion=class_assertion,
             object_property_assertion=object_property_assertion,
+            role_mode=role_mode,
+            inverse_of=inverse_of,
             **kwargs,
         )
 
@@ -840,6 +946,8 @@ class GroundedEL(EmbeddingELModel):
             encoder=self.encoder,
             top_id=self.top_id,
             bot_id=self.bot_id,
+            role_mode=self.role_mode,
+            inverse_of=self.inverse_of,
         ).to(self.device)
 
         with th.no_grad():
@@ -998,12 +1106,21 @@ class GroundedEL(EmbeddingELModel):
                 for row in td["role_chain"][:].detach().cpu().tolist()
             ]
 
-        if r_inc or r_chain:
+        if r_inc or r_chain or self.inverse_of is not None:
             changed = True
             while changed:
                 changed = False
                 current = list(edges_set)
                 for u, v, r_sub in current:
+                    if (
+                        self.inverse_of is not None
+                        and 0 <= r_sub < len(self.inverse_of)
+                        and self.inverse_of[r_sub] >= 0
+                    ):
+                        inv_id = int(self.inverse_of[r_sub])
+                        if (v, u, inv_id) not in edges_set:
+                            edges_set.add((v, u, inv_id))
+                            changed = True
                     for sub_id, sup_id in r_inc:
                         if r_sub == sub_id and (u, v, sup_id) not in edges_set:
                             edges_set.add((u, v, sup_id))
@@ -1179,13 +1296,38 @@ class GroundedEL(EmbeddingELModel):
         r_ids: th.Tensor,
         need_crisp: bool = False,
     ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
-        """Compute ``role_membership`` (and optional crisp role depth) on a ``(B, sx, sy)`` grid by reducing over ``d`` on ``(B, sx)`` and ``(B, sy)`` first."""
+        """Compute ``role_membership`` (and optional crisp role depth) on a ``(B, sx, sy)`` grid."""
         mod = self.module
         bsz, sx = x_mat.shape
         sy = int(y_mat.shape[1])
-        h_reg, t_reg = mod.role_regions(r_ids)
         px_2d = pos_all[x_mat]  # (B, sx, d)
         py_2d = pos_all[y_mat]  # (B, sy, d)
+        if mod.role_mode == "translation":
+            t_reg = mod.translation_regions(r_ids)
+            t_cen = t_reg.cen.to(dtype=px_2d.dtype)
+            t_w = t_reg.w.to(dtype=px_2d.dtype)
+            diff = py_2d.unsqueeze(1) - px_2d.unsqueeze(2)  # (B, sx, sy, d)
+            slot_depth = th.amin(
+                t_w.view(bsz, 1, 1, -1, self.embed_dim)
+                - th.abs(
+                    diff.unsqueeze(3)
+                    - t_cen.view(bsz, 1, 1, -1, self.embed_dim)
+                ),
+                dim=-1,
+            ).reshape(bsz * sx * sy, -1)
+            act_flat = (
+                t_reg.active.view(bsz, 1, 1, -1)
+                .expand(bsz, sx, sy, -1)
+                .reshape(bsz * sx * sy, -1)
+            )
+            dep_soft = mod._aggregate_slot_depth(slot_depth, act_flat, crisp=False)
+            rho_xy = th.sigmoid(dep_soft / mod.tau.to(dtype=dep_soft.dtype))
+            if not need_crisp:
+                return rho_xy, None
+            dep_crisp = mod._aggregate_slot_depth(slot_depth, act_flat, crisp=True)
+            return rho_xy, dep_crisp
+
+        h_reg, t_reg = mod.role_regions(r_ids)
         h_cen = h_reg.cen.to(dtype=px_2d.dtype)
         h_w = h_reg.w.to(dtype=px_2d.dtype)
         t_cen = t_reg.cen.to(dtype=py_2d.dtype)
@@ -1594,6 +1736,7 @@ class GroundedEL(EmbeddingELModel):
         axiom_terms: List[th.Tensor] = []
         region_terms: List[th.Tensor] = []
         do_region = self.lambda_reg > 0.0 and self.n_region_samples > 0
+        n_region_skipped_top = 0
 
         # 2. GCI0: A <= B
         if "gci0" in td and len(td["gci0"]) > 0:
@@ -1951,51 +2094,100 @@ class GroundedEL(EmbeddingELModel):
                 a_reg = rows[:, 0].repeat(self.n_region_samples)
                 r_reg = rows[:, 1].repeat(self.n_region_samples)
                 b_reg = rows[:, 2].repeat(self.n_region_samples)
-                h_fn = (
-                    (
-                        lambda z: gci2_region(
-                            mod.role_depth(
-                                z,
-                                pos_all[
-                                    rows[:, 2].repeat(max(z.shape[0] // bsz, 1))
-                                ].detach(),
-                                rows[:, 1].repeat(max(z.shape[0] // bsz, 1)),
-                            ),
+                if mod.role_mode == "translation":
+                    h_fn = (
+                        (
+                            lambda z: gci2_region_trans(
+                                mod.membership(
+                                    z,
+                                    rows[:, 0].repeat(max(z.shape[0] // bsz, 1)),
+                                ),
+                                th.sigmoid(
+                                    mod.exists_depth(
+                                        z,
+                                        rows[:, 1].repeat(max(z.shape[0] // bsz, 1)),
+                                        rows[:, 2].repeat(max(z.shape[0] // bsz, 1)),
+                                    )
+                                    / mod.tau.to(dtype=z.dtype)
+                                ),
+                            )
+                        )
+                        if self.n_adv > 0
+                        else None
+                    )
+                    reg = sample_class_region(
+                        mod,
+                        rows[:, 0],
+                        generator=generator,
+                        n_samples=self.n_region_samples,
+                        n_adv=self.n_adv,
+                        hinge_fn=h_fn,
+                    )
+                    if bool(reg.valid.any().item()):
+                        pts_raw = reg.points[reg.valid]
+                        pts = pts_raw if self.region_lhs_grad else pts_raw.detach()
+                        av = a_reg[reg.valid]
+                        rv = r_reg[reg.valid]
+                        bv = b_reg[reg.valid]
+                        live_a = 1.0 - dead_gate[av]
+                        dead_a = dead_gate[av]
+                        m_a_z = mod.membership(pts, av)
+                        ex_dep = mod.exists_depth(pts, rv, bv)
+                        m_exists_z = th.sigmoid(
+                            ex_dep / mod.tau.to(dtype=ex_dep.dtype)
+                        ) * (1.0 - dead_gate[bv])
+                        reg_h = live_a * gci2_region_trans(
+                            m_a_z, m_exists_z
+                        ) + dead_a * gci0_bot_region(
+                            mod.depth(pts_raw.detach(), av), margin=self.region_margin
+                        )
+                        region_terms.append(reg_h.mean())
+                else:
+                    h_fn = (
+                        (
+                            lambda z: gci2_region(
+                                mod.role_depth(
+                                    z,
+                                    pos_all[
+                                        rows[:, 2].repeat(max(z.shape[0] // bsz, 1))
+                                    ].detach(),
+                                    rows[:, 1].repeat(max(z.shape[0] // bsz, 1)),
+                                ),
+                                margin=self.region_margin,
+                                agg=self.agg,
+                                agg_tau=self.agg_tau,
+                            )
+                        )
+                        if self.n_adv > 0
+                        else None
+                    )
+                    reg = sample_class_region(
+                        mod,
+                        rows[:, 0],
+                        generator=generator,
+                        n_samples=self.n_region_samples,
+                        n_adv=self.n_adv,
+                        hinge_fn=h_fn,
+                    )
+                    if bool(reg.valid.any().item()):
+                        pts_raw = reg.points[reg.valid]
+                        pts = pts_raw if self.region_lhs_grad else pts_raw.detach()
+                        av = a_reg[reg.valid]
+                        rv = r_reg[reg.valid]
+                        bv = b_reg[reg.valid]
+                        live_a = 1.0 - dead_gate[av]
+                        dead_a = dead_gate[av]
+                        reg_h = live_a * gci2_region(
+                            mod.role_depth(pts, pos_all[bv], rv),
                             margin=self.region_margin,
                             agg=self.agg,
                             agg_tau=self.agg_tau,
+                            depth_a=mod.depth(pts_raw.detach(), av),
+                            dead_filler=dead_all[bv].detach(),
+                        ) + dead_a * gci0_bot_region(
+                            mod.depth(pts_raw.detach(), av), margin=self.region_margin
                         )
-                    )
-                    if self.n_adv > 0
-                    else None
-                )
-                reg = sample_class_region(
-                    mod,
-                    rows[:, 0],
-                    generator=generator,
-                    n_samples=self.n_region_samples,
-                    n_adv=self.n_adv,
-                    hinge_fn=h_fn,
-                )
-                if bool(reg.valid.any().item()):
-                    pts_raw = reg.points[reg.valid]
-                    pts = pts_raw if self.region_lhs_grad else pts_raw.detach()
-                    av = a_reg[reg.valid]
-                    rv = r_reg[reg.valid]
-                    bv = b_reg[reg.valid]
-                    live_a = 1.0 - dead_gate[av]
-                    dead_a = dead_gate[av]
-                    reg_h = live_a * gci2_region(
-                        mod.role_depth(pts, pos_all[bv], rv),
-                        margin=self.region_margin,
-                        agg=self.agg,
-                        agg_tau=self.agg_tau,
-                        depth_a=mod.depth(pts_raw.detach(), av),
-                        dead_filler=dead_all[bv].detach(),
-                    ) + dead_a * gci0_bot_region(
-                        mod.depth(pts_raw.detach(), av), margin=self.region_margin
-                    )
-                    region_terms.append(reg_h.mean())
+                        region_terms.append(reg_h.mean())
 
         # 7. GCI3: exists r.B <= C
         if "gci3" in td and len(td["gci3"]) > 0:
@@ -2038,66 +2230,136 @@ class GroundedEL(EmbeddingELModel):
                 gci3(rho_xy, mb_grid, mc_grid, dead=dead_x_grid).mean()
             )
             if do_region:
-                r_reg = rows[:, 0].repeat(self.n_region_samples)
-                b_reg = rows[:, 1].repeat(self.n_region_samples)
-                c_reg = rows[:, 2].repeat(self.n_region_samples)
-                h_fn_3 = (
-                    (
-                        lambda xy: gci3_region(
-                            mod.role_depth(
-                                xy[:, : self.embed_dim],
-                                xy[:, self.embed_dim :],
-                                rows[:, 0].repeat(max(xy.shape[0] // bsz, 1)),
-                            ),
-                            mod.depth(
-                                xy[:, self.embed_dim :],
-                                rows[:, 1].repeat(max(xy.shape[0] // bsz, 1)),
-                            ),
-                            mod.depth(
-                                xy[:, : self.embed_dim],
-                                rows[:, 2].repeat(max(xy.shape[0] // bsz, 1)),
-                            ),
-                            margin=self.region_margin,
-                            smooth=True,
+                if self.top_id is not None:
+                    top_mask_3 = rows[:, 1] == self.top_id
+                    n_skip_3 = int(top_mask_3.sum().item())
+                    n_region_skipped_top += n_skip_3
+                    rows_3 = rows[~top_mask_3] if n_skip_3 > 0 else rows
+                else:
+                    rows_3 = rows
+                bsz_3 = int(rows_3.shape[0])
+                if bsz_3 > 0:
+                    r_reg = rows_3[:, 0].repeat(self.n_region_samples)
+                    b_reg = rows_3[:, 1].repeat(self.n_region_samples)
+                    c_reg = rows_3[:, 2].repeat(self.n_region_samples)
+                    if mod.role_mode == "translation":
+                        h_fn_3 = (
+                            (
+                                lambda z: gci3_region_trans(
+                                    th.sigmoid(
+                                        mod.exists_depth(
+                                            z,
+                                            rows_3[:, 0].repeat(
+                                                max(z.shape[0] // bsz_3, 1)
+                                            ),
+                                            rows_3[:, 1].repeat(
+                                                max(z.shape[0] // bsz_3, 1)
+                                            ),
+                                        )
+                                        / mod.tau.to(dtype=z.dtype)
+                                    ),
+                                    mod.membership(
+                                        z,
+                                        rows_3[:, 2].repeat(
+                                            max(z.shape[0] // bsz_3, 1)
+                                        ),
+                                    ),
+                                )
+                            )
+                            if self.n_adv > 0
+                            else None
                         )
-                    )
-                    if self.n_adv > 0
-                    else None
-                )
-                h_samp, t_samp = sample_role_region(
-                    mod,
-                    rows[:, 0],
-                    generator=generator,
-                    n_samples=self.n_region_samples,
-                    n_adv=self.n_adv,
-                    hinge_fn=h_fn_3,
-                )
-                if bool(h_samp.valid.any().item()):
-                    zx_raw = h_samp.points[h_samp.valid]
-                    zy_raw = t_samp.points[t_samp.valid]
-                    zx = zx_raw if self.region_lhs_grad else zx_raw.detach()
-                    zy = zy_raw if self.region_lhs_grad else zy_raw.detach()
-                    rv = r_reg[h_samp.valid]
-                    bv = b_reg[h_samp.valid]
-                    cv = c_reg[h_samp.valid]
-                    region_terms.append(
-                        gci3_region(
-                            mod.role_depth(zx_raw.detach(), zy_raw.detach(), rv),
-                            mod.depth(zy, bv),
-                            mod.depth(zx, cv),
-                            margin=self.region_margin,
-                        ).mean()
-                    )
-                    # Also evaluate at z = zx with y = filler element x_B (§4)
-                    py_fill = pos_all[bv]
-                    region_terms.append(
-                        gci3_region(
-                            mod.role_depth(zx_raw.detach(), py_fill, rv),
-                            mod.depth(py_fill, bv),
-                            mod.depth(zx, cv),
-                            margin=self.region_margin,
-                        ).mean()
-                    )
+                        ex_samp = sample_exists_region(
+                            mod,
+                            rows_3[:, 0],
+                            rows_3[:, 1],
+                            generator=generator,
+                            n_samples=self.n_region_samples,
+                            n_adv=self.n_adv,
+                            hinge_fn=h_fn_3,
+                        )
+                        if bool(ex_samp.valid.any().item()):
+                            pts_raw = ex_samp.points[ex_samp.valid]
+                            pts = (
+                                pts_raw if self.region_lhs_grad else pts_raw.detach()
+                            )
+                            rv = r_reg[ex_samp.valid]
+                            bv = b_reg[ex_samp.valid]
+                            cv = c_reg[ex_samp.valid]
+                            ex_dep = mod.exists_depth(pts, rv, bv)
+                            m_exists_z = th.sigmoid(
+                                ex_dep / mod.tau.to(dtype=ex_dep.dtype)
+                            ) * (1.0 - dead_gate[bv])
+                            m_c_z = mod.membership(pts, cv)
+                            region_terms.append(
+                                gci3_region_trans(m_exists_z, m_c_z).mean()
+                            )
+                    else:
+                        h_fn_3 = (
+                            (
+                                lambda xy: gci3_region(
+                                    mod.role_depth(
+                                        xy[:, : self.embed_dim],
+                                        xy[:, self.embed_dim :],
+                                        rows_3[:, 0].repeat(
+                                            max(xy.shape[0] // bsz_3, 1)
+                                        ),
+                                    ),
+                                    mod.depth(
+                                        xy[:, self.embed_dim :],
+                                        rows_3[:, 1].repeat(
+                                            max(xy.shape[0] // bsz_3, 1)
+                                        ),
+                                    ),
+                                    mod.depth(
+                                        xy[:, : self.embed_dim],
+                                        rows_3[:, 2].repeat(
+                                            max(xy.shape[0] // bsz_3, 1)
+                                        ),
+                                    ),
+                                    margin=self.region_margin,
+                                    smooth=True,
+                                )
+                            )
+                            if self.n_adv > 0
+                            else None
+                        )
+                        h_samp, t_samp = sample_role_region(
+                            mod,
+                            rows_3[:, 0],
+                            generator=generator,
+                            n_samples=self.n_region_samples,
+                            n_adv=self.n_adv,
+                            hinge_fn=h_fn_3,
+                        )
+                        if bool(h_samp.valid.any().item()):
+                            zx_raw = h_samp.points[h_samp.valid]
+                            zy_raw = t_samp.points[t_samp.valid]
+                            zx = zx_raw if self.region_lhs_grad else zx_raw.detach()
+                            zy = zy_raw if self.region_lhs_grad else zy_raw.detach()
+                            rv = r_reg[h_samp.valid]
+                            bv = b_reg[h_samp.valid]
+                            cv = c_reg[h_samp.valid]
+                            region_terms.append(
+                                gci3_region(
+                                    mod.role_depth(
+                                        zx_raw.detach(), zy_raw.detach(), rv
+                                    ),
+                                    mod.depth(zy, bv),
+                                    mod.depth(zx, cv),
+                                    margin=self.region_margin,
+                                ).mean()
+                            )
+                            # Also evaluate at z = zx with y = filler element x_B (§4)
+                            py_fill = pos_all[bv]
+                            region_terms.append(
+                                gci3_region(
+                                    mod.role_depth(zx_raw.detach(), py_fill, rv),
+                                    mod.depth(py_fill, bv),
+                                    mod.depth(zx, cv),
+                                    margin=self.region_margin,
+                                ).mean()
+                            )
 
         # 8. GCI3_bot: exists r.B <= bot
         if "gci3_bot" in td and len(td["gci3_bot"]) > 0:
@@ -2153,47 +2415,107 @@ class GroundedEL(EmbeddingELModel):
                 )
             axiom_terms.append((h_box + h_dead).mean())
             if do_region:
-                r_reg = rows[:, 0].repeat(self.n_region_samples)
-                b_reg = rows[:, 1].repeat(self.n_region_samples)
-                h_fn_3b = (
-                    (
-                        lambda xy: gci3_bot_region(
-                            mod.role_depth(
-                                xy[:, : self.embed_dim],
-                                xy[:, self.embed_dim :],
-                                rows[:, 0].repeat(max(xy.shape[0] // bsz, 1)),
-                            ),
-                            mod.depth(
-                                xy[:, self.embed_dim :],
-                                rows[:, 1].repeat(max(xy.shape[0] // bsz, 1)),
-                            ),
-                            margin=self.region_margin,
+                if self.top_id is not None:
+                    top_mask_3b = rows[:, 1] == self.top_id
+                    n_skip_3b = int(top_mask_3b.sum().item())
+                    n_region_skipped_top += n_skip_3b
+                    rows_3b = rows[~top_mask_3b] if n_skip_3b > 0 else rows
+                else:
+                    rows_3b = rows
+                bsz_3b = int(rows_3b.shape[0])
+                if bsz_3b > 0:
+                    r_reg = rows_3b[:, 0].repeat(self.n_region_samples)
+                    b_reg = rows_3b[:, 1].repeat(self.n_region_samples)
+                    if mod.role_mode == "translation":
+                        h_fn_3b = (
+                            (
+                                lambda z: gci3_bot_region_trans(
+                                    th.sigmoid(
+                                        mod.exists_depth(
+                                            z,
+                                            rows_3b[:, 0].repeat(
+                                                max(z.shape[0] // bsz_3b, 1)
+                                            ),
+                                            rows_3b[:, 1].repeat(
+                                                max(z.shape[0] // bsz_3b, 1)
+                                            ),
+                                        )
+                                        / mod.tau.to(dtype=z.dtype)
+                                    )
+                                )
+                            )
+                            if self.n_adv > 0
+                            else None
                         )
-                    )
-                    if self.n_adv > 0
-                    else None
-                )
-                h_samp, t_samp = sample_role_region(
-                    mod,
-                    rows[:, 0],
-                    generator=generator,
-                    n_samples=self.n_region_samples,
-                    n_adv=self.n_adv,
-                    hinge_fn=h_fn_3b,
-                )
-                if bool(h_samp.valid.any().item()):
-                    zx_raw = h_samp.points[h_samp.valid]
-                    zy_raw = t_samp.points[t_samp.valid]
-                    zy = zy_raw if self.region_lhs_grad else zy_raw.detach()
-                    rv = r_reg[h_samp.valid]
-                    bv = b_reg[h_samp.valid]
-                    region_terms.append(
-                        gci3_bot_region(
-                            mod.role_depth(zx_raw.detach(), zy_raw.detach(), rv),
-                            mod.depth(zy, bv),
-                            margin=self.region_margin,
-                        ).mean()
-                    )
+                        ex_samp = sample_exists_region(
+                            mod,
+                            rows_3b[:, 0],
+                            rows_3b[:, 1],
+                            generator=generator,
+                            n_samples=self.n_region_samples,
+                            n_adv=self.n_adv,
+                            hinge_fn=h_fn_3b,
+                        )
+                        if bool(ex_samp.valid.any().item()):
+                            pts_raw = ex_samp.points[ex_samp.valid]
+                            pts = (
+                                pts_raw if self.region_lhs_grad else pts_raw.detach()
+                            )
+                            rv = r_reg[ex_samp.valid]
+                            bv = b_reg[ex_samp.valid]
+                            ex_dep = mod.exists_depth(pts, rv, bv)
+                            m_exists_z = th.sigmoid(
+                                ex_dep / mod.tau.to(dtype=ex_dep.dtype)
+                            ) * (1.0 - dead_gate[bv])
+                            region_terms.append(
+                                gci3_bot_region_trans(m_exists_z).mean()
+                            )
+                    else:
+                        h_fn_3b = (
+                            (
+                                lambda xy: gci3_bot_region(
+                                    mod.role_depth(
+                                        xy[:, : self.embed_dim],
+                                        xy[:, self.embed_dim :],
+                                        rows_3b[:, 0].repeat(
+                                            max(xy.shape[0] // bsz_3b, 1)
+                                        ),
+                                    ),
+                                    mod.depth(
+                                        xy[:, self.embed_dim :],
+                                        rows_3b[:, 1].repeat(
+                                            max(xy.shape[0] // bsz_3b, 1)
+                                        ),
+                                    ),
+                                    margin=self.region_margin,
+                                )
+                            )
+                            if self.n_adv > 0
+                            else None
+                        )
+                        h_samp, t_samp = sample_role_region(
+                            mod,
+                            rows_3b[:, 0],
+                            generator=generator,
+                            n_samples=self.n_region_samples,
+                            n_adv=self.n_adv,
+                            hinge_fn=h_fn_3b,
+                        )
+                        if bool(h_samp.valid.any().item()):
+                            zx_raw = h_samp.points[h_samp.valid]
+                            zy_raw = t_samp.points[t_samp.valid]
+                            zy = zy_raw if self.region_lhs_grad else zy_raw.detach()
+                            rv = r_reg[h_samp.valid]
+                            bv = b_reg[h_samp.valid]
+                            region_terms.append(
+                                gci3_bot_region(
+                                    mod.role_depth(
+                                        zx_raw.detach(), zy_raw.detach(), rv
+                                    ),
+                                    mod.depth(zy, bv),
+                                    margin=self.region_margin,
+                                ).mean()
+                            )
 
         # 9. Role inclusion: r <= s
         if "role_inclusion" in td and len(td["role_inclusion"]) > 0:
@@ -2216,41 +2538,83 @@ class GroundedEL(EmbeddingELModel):
                 ).mean()
             )
             if do_region:
+                r_reg = rows[:, 0].repeat(self.n_region_samples)
                 s_reg = rows[:, 1].repeat(self.n_region_samples)
-                h_fn_ri = (
-                    (
-                        lambda xy: role_inclusion_region(
-                            mod.role_depth(
-                                xy[:, : self.embed_dim],
-                                xy[:, self.embed_dim :],
-                                rows[:, 1].repeat(max(xy.shape[0] // bsz, 1)),
-                            ),
-                            margin=self.region_margin,
+                if mod.role_mode == "translation":
+                    h_fn_ri = (
+                        (
+                            lambda v: role_inclusion_region_trans(
+                                mod.role_membership(
+                                    th.zeros_like(v),
+                                    v,
+                                    rows[:, 0].repeat(max(v.shape[0] // bsz, 1)),
+                                ),
+                                mod.role_membership(
+                                    th.zeros_like(v),
+                                    v,
+                                    rows[:, 1].repeat(max(v.shape[0] // bsz, 1)),
+                                ),
+                            )
                         )
+                        if self.n_adv > 0
+                        else None
                     )
-                    if self.n_adv > 0
-                    else None
-                )
-                h_samp, t_samp = sample_role_region(
-                    mod,
-                    rows[:, 0],
-                    generator=generator,
-                    n_samples=self.n_region_samples,
-                    n_adv=self.n_adv,
-                    hinge_fn=h_fn_ri,
-                )
-                if bool(h_samp.valid.any().item()):
-                    zx_raw = h_samp.points[h_samp.valid]
-                    zy_raw = t_samp.points[t_samp.valid]
-                    zx = zx_raw if self.region_lhs_grad else zx_raw.detach()
-                    zy = zy_raw if self.region_lhs_grad else zy_raw.detach()
-                    sv = s_reg[h_samp.valid]
-                    region_terms.append(
-                        role_inclusion_region(
-                            mod.role_depth(zx, zy, sv),
-                            margin=self.region_margin,
-                        ).mean()
+                    v_samp = sample_role_region(
+                        mod,
+                        rows[:, 0],
+                        generator=generator,
+                        n_samples=self.n_region_samples,
+                        n_adv=self.n_adv,
+                        hinge_fn=h_fn_ri,
                     )
+                    assert isinstance(v_samp, RegionSample)
+                    if bool(v_samp.valid.any().item()):
+                        v_raw = v_samp.points[v_samp.valid]
+                        v_pts = v_raw if self.region_lhs_grad else v_raw.detach()
+                        rv = r_reg[v_samp.valid]
+                        sv = s_reg[v_samp.valid]
+                        z0 = th.zeros_like(v_pts)
+                        region_terms.append(
+                            role_inclusion_region_trans(
+                                mod.role_membership(z0, v_pts, rv),
+                                mod.role_membership(z0, v_pts, sv),
+                            ).mean()
+                        )
+                else:
+                    h_fn_ri = (
+                        (
+                            lambda xy: role_inclusion_region(
+                                mod.role_depth(
+                                    xy[:, : self.embed_dim],
+                                    xy[:, self.embed_dim :],
+                                    rows[:, 1].repeat(max(xy.shape[0] // bsz, 1)),
+                                ),
+                                margin=self.region_margin,
+                            )
+                        )
+                        if self.n_adv > 0
+                        else None
+                    )
+                    h_samp, t_samp = sample_role_region(
+                        mod,
+                        rows[:, 0],
+                        generator=generator,
+                        n_samples=self.n_region_samples,
+                        n_adv=self.n_adv,
+                        hinge_fn=h_fn_ri,
+                    )
+                    if bool(h_samp.valid.any().item()):
+                        zx_raw = h_samp.points[h_samp.valid]
+                        zy_raw = t_samp.points[t_samp.valid]
+                        zx = zx_raw if self.region_lhs_grad else zx_raw.detach()
+                        zy = zy_raw if self.region_lhs_grad else zy_raw.detach()
+                        sv = s_reg[h_samp.valid]
+                        region_terms.append(
+                            role_inclusion_region(
+                                mod.role_depth(zx, zy, sv),
+                                margin=self.region_margin,
+                            ).mean()
+                        )
 
         # 10. Role chain: r o s <= t
         if "role_chain" in td and len(td["role_chain"]) > 0:
@@ -2282,31 +2646,77 @@ class GroundedEL(EmbeddingELModel):
                 r_reg = rows[:, 0].repeat(self.n_region_samples)
                 s_reg = rows[:, 1].repeat(self.n_region_samples)
                 t_reg = rows[:, 2].repeat(self.n_region_samples)
-                hx, hy = sample_role_region(
-                    mod, rows[:, 0], generator=generator, n_samples=self.n_region_samples, n_adv=0
-                )
-                _, tz = sample_role_region(
-                    mod, rows[:, 1], generator=generator, n_samples=self.n_region_samples, n_adv=0
-                )
-                v_chain = hx.valid & tz.valid
-                if bool(v_chain.any().item()):
-                    zx_raw = hx.points[v_chain]
-                    zy_raw = hy.points[v_chain]
-                    zz_raw = tz.points[v_chain]
-                    zx = zx_raw if self.region_lhs_grad else zx_raw.detach()
-                    zy = zy_raw if self.region_lhs_grad else zy_raw.detach()
-                    zz = zz_raw if self.region_lhs_grad else zz_raw.detach()
-                    rv = r_reg[v_chain]
-                    sv = s_reg[v_chain]
-                    tv = t_reg[v_chain]
-                    region_terms.append(
-                        role_chain_region(
-                            mod.role_depth(zx_raw.detach(), zy_raw.detach(), rv),
-                            mod.role_depth(zy, zz_raw.detach(), sv),
-                            mod.role_depth(zx, zz, tv),
-                            margin=self.region_margin,
-                        ).mean()
+                if mod.role_mode == "translation":
+                    v1_samp = sample_role_region(
+                        mod,
+                        rows[:, 0],
+                        generator=generator,
+                        n_samples=self.n_region_samples,
+                        n_adv=0,
                     )
+                    v2_samp = sample_role_region(
+                        mod,
+                        rows[:, 1],
+                        generator=generator,
+                        n_samples=self.n_region_samples,
+                        n_adv=0,
+                    )
+                    assert isinstance(v1_samp, RegionSample) and isinstance(
+                        v2_samp, RegionSample
+                    )
+                    v_chain = v1_samp.valid & v2_samp.valid
+                    if bool(v_chain.any().item()):
+                        v1_raw = v1_samp.points[v_chain]
+                        v2_raw = v2_samp.points[v_chain]
+                        v1 = v1_raw if self.region_lhs_grad else v1_raw.detach()
+                        v2 = v2_raw if self.region_lhs_grad else v2_raw.detach()
+                        rv = r_reg[v_chain]
+                        sv = s_reg[v_chain]
+                        tv = t_reg[v_chain]
+                        z0 = th.zeros_like(v1)
+                        region_terms.append(
+                            role_chain_region_trans(
+                                mod.role_membership(z0, v1, rv),
+                                mod.role_membership(z0, v2, sv),
+                                mod.role_membership(z0, v1 + v2, tv),
+                            ).mean()
+                        )
+                else:
+                    hx, hy = sample_role_region(
+                        mod,
+                        rows[:, 0],
+                        generator=generator,
+                        n_samples=self.n_region_samples,
+                        n_adv=0,
+                    )
+                    _, tz = sample_role_region(
+                        mod,
+                        rows[:, 1],
+                        generator=generator,
+                        n_samples=self.n_region_samples,
+                        n_adv=0,
+                    )
+                    v_chain = hx.valid & tz.valid
+                    if bool(v_chain.any().item()):
+                        zx_raw = hx.points[v_chain]
+                        zy_raw = hy.points[v_chain]
+                        zz_raw = tz.points[v_chain]
+                        zx = zx_raw if self.region_lhs_grad else zx_raw.detach()
+                        zy = zy_raw if self.region_lhs_grad else zy_raw.detach()
+                        zz = zz_raw if self.region_lhs_grad else zz_raw.detach()
+                        rv = r_reg[v_chain]
+                        sv = s_reg[v_chain]
+                        tv = t_reg[v_chain]
+                        region_terms.append(
+                            role_chain_region(
+                                mod.role_depth(
+                                    zx_raw.detach(), zy_raw.detach(), rv
+                                ),
+                                mod.role_depth(zy, zz_raw.detach(), sv),
+                                mod.role_depth(zx, zz, tv),
+                                margin=self.region_margin,
+                            ).mean()
+                        )
 
         # 11. Class assertion: A(a)
         if "class_assertion" in td and len(td["class_assertion"]) > 0:
@@ -2413,6 +2823,7 @@ class GroundedEL(EmbeddingELModel):
             "region": loss_region,
             "minimality": loss_min,
             "total": total,
+            "n_region_skipped_top": _CountInt(n_region_skipped_top),  # type: ignore[dict-item]
         }
 
     @staticmethod
@@ -3531,23 +3942,46 @@ class GroundedEL(EmbeddingELModel):
                                 elem_viol_count += int((h_e > 0.0).sum().item())
                                 elem_total_count += int(h_e.numel())
                         reg_total_axioms += 1
-                        h_s, t_s = sample_role_region(
-                            mod, r_id, generator=gen, n_samples=n_per_ax
-                        )
                         has_lhs = False
                         min_rhs = 0.0
                         viol_0 = False
-                        if bool(h_s.valid.any().item()):
-                            zx = h_s.points[h_s.valid]
-                            zy = t_s.points[t_s.valid]
-                            r_dep = mod.role_depth(zx, zy, r_id, crisp=True)
-                            db_z = mod.depth(zy, b_id, crisp=True)
-                            dc_z = mod.depth(zx, c_id, crisp=True)
-                            mask = (r_dep > 0.0) & (db_z > 0.0)
-                            has_lhs = bool(mask.any().item())
-                            if has_lhs:
-                                min_rhs = float(dc_z[mask].min().item())
-                                viol_0 = bool((dc_z[mask] <= 0.0).any().item())
+                        if mod.role_mode == "translation":
+                            if eval_elem_ids.numel() > 0 and n_y > 0:
+                                l_cnt = int(eval_elem_ids.numel())
+                                zx = (
+                                    eval_pos.unsqueeze(1)
+                                    .expand(l_cnt, n_y, self.embed_dim)
+                                    .reshape(-1, self.embed_dim)
+                                )
+                                zy = (
+                                    pos_all[y_eval_ids]
+                                    .unsqueeze(0)
+                                    .expand(l_cnt, n_y, self.embed_dim)
+                                    .reshape(-1, self.embed_dim)
+                                )
+                                r_dep = mod.role_depth(zx, zy, r_id, crisp=True)
+                                db_z = mod.depth(zy, b_id, crisp=True)
+                                dc_z = mod.depth(zx, c_id, crisp=True)
+                                mask = (r_dep > 0.0) & (db_z > 0.0)
+                                has_lhs = bool(mask.any().item())
+                                if has_lhs:
+                                    min_rhs = float(dc_z[mask].min().item())
+                                    viol_0 = bool((dc_z[mask] <= 0.0).any().item())
+                        else:
+                            h_s, t_s = sample_role_region(
+                                mod, r_id, generator=gen, n_samples=n_per_ax
+                            )
+                            if bool(h_s.valid.any().item()):
+                                zx = h_s.points[h_s.valid]
+                                zy = t_s.points[t_s.valid]
+                                r_dep = mod.role_depth(zx, zy, r_id, crisp=True)
+                                db_z = mod.depth(zy, b_id, crisp=True)
+                                dc_z = mod.depth(zx, c_id, crisp=True)
+                                mask = (r_dep > 0.0) & (db_z > 0.0)
+                                has_lhs = bool(mask.any().item())
+                                if has_lhs:
+                                    min_rhs = float(dc_z[mask].min().item())
+                                    viol_0 = bool((dc_z[mask] <= 0.0).any().item())
                         ax_s = (
                             f"exists {rel_names.get(r_id, str(r_id))}."
                             f"{cls_names.get(b_id, str(b_id))} <= "
@@ -3576,20 +4010,43 @@ class GroundedEL(EmbeddingELModel):
                                 elem_viol_count += int((h_e > 0.0).sum().item())
                                 elem_total_count += int(h_e.numel())
                         reg_total_axioms += 1
-                        h_s, t_s = sample_role_region(
-                            mod, r_id, generator=gen, n_samples=n_per_ax
-                        )
-                        if bool(h_s.valid.any().item()):
-                            zx = h_s.points[h_s.valid]
-                            zy = t_s.points[t_s.valid]
-                            r_dep = mod.role_depth(zx, zy, r_id, crisp=True)
-                            db_z = mod.depth(zy, b_id, crisp=True)
-                            rb_dep = th.minimum(r_dep, db_z)
-                            max_lhs = float(rb_dep.max().item())
-                            viol_0 = bool((rb_dep > 0.0).any().item())
+                        if mod.role_mode == "translation":
+                            if eval_elem_ids.numel() > 0 and n_y > 0:
+                                l_cnt = int(eval_elem_ids.numel())
+                                zx = (
+                                    eval_pos.unsqueeze(1)
+                                    .expand(l_cnt, n_y, self.embed_dim)
+                                    .reshape(-1, self.embed_dim)
+                                )
+                                zy = (
+                                    pos_all[y_eval_ids]
+                                    .unsqueeze(0)
+                                    .expand(l_cnt, n_y, self.embed_dim)
+                                    .reshape(-1, self.embed_dim)
+                                )
+                                r_dep = mod.role_depth(zx, zy, r_id, crisp=True)
+                                db_z = mod.depth(zy, b_id, crisp=True)
+                                rb_dep = th.minimum(r_dep, db_z)
+                                max_lhs = float(rb_dep.max().item())
+                                viol_0 = bool((rb_dep > 0.0).any().item())
+                            else:
+                                max_lhs = float(_EMPTY_DEPTH_FLOOR)
+                                viol_0 = False
                         else:
-                            max_lhs = float(_EMPTY_DEPTH_FLOOR)
-                            viol_0 = False
+                            h_s, t_s = sample_role_region(
+                                mod, r_id, generator=gen, n_samples=n_per_ax
+                            )
+                            if bool(h_s.valid.any().item()):
+                                zx = h_s.points[h_s.valid]
+                                zy = t_s.points[t_s.valid]
+                                r_dep = mod.role_depth(zx, zy, r_id, crisp=True)
+                                db_z = mod.depth(zy, b_id, crisp=True)
+                                rb_dep = th.minimum(r_dep, db_z)
+                                max_lhs = float(rb_dep.max().item())
+                                viol_0 = bool((rb_dep > 0.0).any().item())
+                            else:
+                                max_lhs = float(_EMPTY_DEPTH_FLOOR)
+                                viol_0 = False
                         ax_s = (
                             f"exists {rel_names.get(r_id, str(r_id))}."
                             f"{cls_names.get(b_id, str(b_id))} <= bot"
@@ -3921,24 +4378,42 @@ class GroundedEL(EmbeddingELModel):
                             h_e = gci3(rho_xy, mb_y, mc_x, dead=dead_x)
                             elem_viol_count += int((h_e > 0.0).sum().item())
                             elem_total_count += int(h_e.numel())
-                        r_rep = r_c.repeat_interleave(n_per_ax)
-                        b_rep = b_c.repeat_interleave(n_per_ax)
-                        c_rep = c_c.repeat_interleave(n_per_ax)
-                        h_s, t_s = sample_role_region(mod, r_rep, generator=gen)
                         min_dep = th.full((bsz,), float("inf"), dtype=th.float32, device=device)
                         has_lhs = th.zeros((bsz,), dtype=th.bool, device=device)
-                        if bool(h_s.valid.any().item()):
-                            rd_r = mod.role_depth(
-                                h_s.points, t_s.points, r_rep, crisp=True
-                            )
-                            db_r = mod.depth(t_s.points, b_rep, crisp=True)
-                            dc_r = mod.depth(h_s.points, c_rep, crisp=True)
-                            mask_r = (rd_r > 0.0) & (db_r > 0.0) & h_s.valid
-                            dep_r = th.where(
-                                mask_r, dc_r, th.full_like(dc_r, float("inf"))
-                            ).view(bsz, n_per_ax)
-                            min_dep = dep_r.amin(dim=1)
-                            has_lhs = mask_r.view(bsz, n_per_ax).any(dim=1)
+                        if mod.role_mode == "translation":
+                            if eval_elem_ids.numel() > 0 and n_y > 0:
+                                l_cnt = int(eval_elem_ids.numel())
+                                assert r_dep_c is not None
+                                rd_grid = r_dep_c.view(bsz, l_cnt, n_y)
+                                db_grid = elem_dep_live[:n_y, cb].t().unsqueeze(1).expand(
+                                    bsz, l_cnt, n_y
+                                )
+                                dc_grid = elem_dep_live[:, cc].t().unsqueeze(2).expand(
+                                    bsz, l_cnt, n_y
+                                )
+                                mask_r = (rd_grid > 0.0) & (db_grid > 0.0)
+                                dep_r = th.where(
+                                    mask_r, dc_grid, th.full_like(dc_grid, float("inf"))
+                                ).view(bsz, l_cnt * n_y)
+                                min_dep = dep_r.amin(dim=1)
+                                has_lhs = mask_r.view(bsz, l_cnt * n_y).any(dim=1)
+                        else:
+                            r_rep = r_c.repeat_interleave(n_per_ax)
+                            b_rep = b_c.repeat_interleave(n_per_ax)
+                            c_rep = c_c.repeat_interleave(n_per_ax)
+                            h_s, t_s = sample_role_region(mod, r_rep, generator=gen)
+                            if bool(h_s.valid.any().item()):
+                                rd_r = mod.role_depth(
+                                    h_s.points, t_s.points, r_rep, crisp=True
+                                )
+                                db_r = mod.depth(t_s.points, b_rep, crisp=True)
+                                dc_r = mod.depth(h_s.points, c_rep, crisp=True)
+                                mask_r = (rd_r > 0.0) & (db_r > 0.0) & h_s.valid
+                                dep_r = th.where(
+                                    mask_r, dc_r, th.full_like(dc_r, float("inf"))
+                                ).view(bsz, n_per_ax)
+                                min_dep = dep_r.amin(dim=1)
+                                has_lhs = mask_r.view(bsz, n_per_ax).any(dim=1)
                         viol_0_b = has_lhs & (min_dep <= 0.0)
                         for r_row, h_flag, m_val, v0_flag in zip(
                             rows.detach().cpu().tolist(),
@@ -3985,23 +4460,34 @@ class GroundedEL(EmbeddingELModel):
                             h_e = gci3_bot(rho_xy, mb_y, dead=dead_x)
                             elem_viol_count += int((h_e > 0.0).sum().item())
                             elem_total_count += int(h_e.numel())
-                        r_rep = r_c.repeat_interleave(n_per_ax)
-                        b_rep = b_c.repeat_interleave(n_per_ax)
-                        h_s, t_s = sample_role_region(mod, r_rep, generator=gen)
                         max_dep = th.full(
                             (bsz,), _EMPTY_DEPTH_FLOOR, dtype=th.float32, device=device
                         )
-                        if bool(h_s.valid.any().item()):
-                            rd_r = mod.role_depth(
-                                h_s.points, t_s.points, r_rep, crisp=True
-                            )
-                            db_r = mod.depth(t_s.points, b_rep, crisp=True)
-                            rb_r = th.where(
-                                h_s.valid,
-                                th.minimum(rd_r, db_r),
-                                th.full_like(rd_r, _EMPTY_DEPTH_FLOOR),
-                            ).view(bsz, n_per_ax)
-                            max_dep = rb_r.amax(dim=1)
+                        if mod.role_mode == "translation":
+                            if eval_elem_ids.numel() > 0 and n_y > 0:
+                                l_cnt = int(eval_elem_ids.numel())
+                                assert r_dep_c is not None
+                                rd_grid = r_dep_c.view(bsz, l_cnt, n_y)
+                                db_grid = elem_dep_live[:n_y, cb].t().unsqueeze(1).expand(
+                                    bsz, l_cnt, n_y
+                                )
+                                rb_r = th.minimum(rd_grid, db_grid).view(bsz, l_cnt * n_y)
+                                max_dep = rb_r.amax(dim=1)
+                        else:
+                            r_rep = r_c.repeat_interleave(n_per_ax)
+                            b_rep = b_c.repeat_interleave(n_per_ax)
+                            h_s, t_s = sample_role_region(mod, r_rep, generator=gen)
+                            if bool(h_s.valid.any().item()):
+                                rd_r = mod.role_depth(
+                                    h_s.points, t_s.points, r_rep, crisp=True
+                                )
+                                db_r = mod.depth(t_s.points, b_rep, crisp=True)
+                                rb_r = th.where(
+                                    h_s.valid,
+                                    th.minimum(rd_r, db_r),
+                                    th.full_like(rd_r, _EMPTY_DEPTH_FLOOR),
+                                ).view(bsz, n_per_ax)
+                                max_dep = rb_r.amax(dim=1)
                         viol_0_b = max_dep > 0.0
                         for r_row, m_val, v0_flag in zip(
                             rows.detach().cpu().tolist(),
@@ -4041,22 +4527,38 @@ class GroundedEL(EmbeddingELModel):
                             elem_viol_count += int((h_e > 0.0).sum().item())
                             elem_total_count += int(h_e.numel())
                     reg_total_axioms += 1
-                    h_s, t_s = sample_role_region(
-                        mod, r_id, generator=gen, n_samples=n_per_role_ax
-                    )
                     has_lhs = False
                     min_rhs = 0.0
                     viol_0 = False
-                    if bool(h_s.valid.any().item()):
-                        zx = h_s.points[h_s.valid]
-                        zy = t_s.points[t_s.valid]
-                        dep_r = mod.role_depth(zx, zy, r_id, crisp=True)
-                        dep_s = mod.role_depth(zx, zy, s_id, crisp=True)
-                        mask = dep_r > 0.0
-                        has_lhs = bool(mask.any().item())
-                        if has_lhs:
-                            min_rhs = float(dep_s[mask].min().item())
-                            viol_0 = bool((dep_s[mask] <= 0.0).any().item())
+                    if mod.role_mode == "translation":
+                        v_s = sample_role_region(
+                            mod, r_id, generator=gen, n_samples=n_per_role_ax
+                        )
+                        assert not isinstance(v_s, tuple)
+                        if bool(v_s.valid.any().item()):
+                            zy = v_s.points[v_s.valid]
+                            zx = th.zeros_like(zy)
+                            dep_r = mod.role_depth(zx, zy, r_id, crisp=True)
+                            dep_s = mod.role_depth(zx, zy, s_id, crisp=True)
+                            mask = dep_r > 0.0
+                            has_lhs = bool(mask.any().item())
+                            if has_lhs:
+                                min_rhs = float(dep_s[mask].min().item())
+                                viol_0 = bool((dep_s[mask] <= 0.0).any().item())
+                    else:
+                        h_s, t_s = sample_role_region(
+                            mod, r_id, generator=gen, n_samples=n_per_role_ax
+                        )
+                        if bool(h_s.valid.any().item()):
+                            zx = h_s.points[h_s.valid]
+                            zy = t_s.points[t_s.valid]
+                            dep_r = mod.role_depth(zx, zy, r_id, crisp=True)
+                            dep_s = mod.role_depth(zx, zy, s_id, crisp=True)
+                            mask = dep_r > 0.0
+                            has_lhs = bool(mask.any().item())
+                            if has_lhs:
+                                min_rhs = float(dep_s[mask].min().item())
+                                viol_0 = bool((dep_s[mask] <= 0.0).any().item())
                     ax_s = f"{rel_names.get(r_id, str(r_id))} <= {rel_names.get(s_id, str(s_id))}"
                     if _record_containment_axiom("role_inclusion", ax_s, has_lhs, min_rhs, viol_0):
                         reg_viol_axioms += 1
@@ -4091,28 +4593,55 @@ class GroundedEL(EmbeddingELModel):
                                 elem_viol_count += int((h_e > 0.0).sum().item())
                                 elem_total_count += int(h_e.numel())
                     reg_total_axioms += 1
-                    hx, hy = sample_role_region(
-                        mod, r_id, generator=gen, n_samples=n_per_role_ax
-                    )
-                    _, tz = sample_role_region(
-                        mod, s_id, generator=gen, n_samples=n_per_role_ax
-                    )
-                    v_c = hx.valid & tz.valid
                     has_lhs = False
                     min_rhs = 0.0
                     viol_0 = False
-                    if bool(v_c.any().item()):
-                        zx = hx.points[v_c]
-                        zy = hy.points[v_c]
-                        zz = tz.points[v_c]
-                        dep_r = mod.role_depth(zx, zy, r_id, crisp=True)
-                        dep_s = mod.role_depth(zy, zz, s_id, crisp=True)
-                        dep_t = mod.role_depth(zx, zz, t_id, crisp=True)
-                        mask = (dep_r > 0.0) & (dep_s > 0.0)
-                        has_lhs = bool(mask.any().item())
-                        if has_lhs:
-                            min_rhs = float(dep_t[mask].min().item())
-                            viol_0 = bool((dep_t[mask] <= 0.0).any().item())
+                    if mod.role_mode == "translation":
+                        if c_eval_ids.numel() > 0:
+                            n_c = int(c_pos.shape[0])
+                            zx = (
+                                c_pos.view(n_c, 1, 1, mod.embed_dim)
+                                .expand(n_c, n_c, n_c, mod.embed_dim)
+                                .reshape(-1, mod.embed_dim)
+                            )
+                            zy = (
+                                c_pos.view(1, n_c, 1, mod.embed_dim)
+                                .expand(n_c, n_c, n_c, mod.embed_dim)
+                                .reshape(-1, mod.embed_dim)
+                            )
+                            zz = (
+                                c_pos.view(1, 1, n_c, mod.embed_dim)
+                                .expand(n_c, n_c, n_c, mod.embed_dim)
+                                .reshape(-1, mod.embed_dim)
+                            )
+                            dep_r = mod.role_depth(zx, zy, r_id, crisp=True)
+                            dep_s = mod.role_depth(zy, zz, s_id, crisp=True)
+                            dep_t = mod.role_depth(zx, zz, t_id, crisp=True)
+                            mask = (dep_r > 0.0) & (dep_s > 0.0)
+                            has_lhs = bool(mask.any().item())
+                            if has_lhs:
+                                min_rhs = float(dep_t[mask].min().item())
+                                viol_0 = bool((dep_t[mask] <= 0.0).any().item())
+                    else:
+                        hx, hy = sample_role_region(
+                            mod, r_id, generator=gen, n_samples=n_per_role_ax
+                        )
+                        _, tz = sample_role_region(
+                            mod, s_id, generator=gen, n_samples=n_per_role_ax
+                        )
+                        v_c = hx.valid & tz.valid
+                        if bool(v_c.any().item()):
+                            zx = hx.points[v_c]
+                            zy = hy.points[v_c]
+                            zz = tz.points[v_c]
+                            dep_r = mod.role_depth(zx, zy, r_id, crisp=True)
+                            dep_s = mod.role_depth(zy, zz, s_id, crisp=True)
+                            dep_t = mod.role_depth(zx, zz, t_id, crisp=True)
+                            mask = (dep_r > 0.0) & (dep_s > 0.0)
+                            has_lhs = bool(mask.any().item())
+                            if has_lhs:
+                                min_rhs = float(dep_t[mask].min().item())
+                                viol_0 = bool((dep_t[mask] <= 0.0).any().item())
                     ax_s = (
                         f"{rel_names.get(r_id, str(r_id))} o "
                         f"{rel_names.get(s_id, str(s_id))} <= "

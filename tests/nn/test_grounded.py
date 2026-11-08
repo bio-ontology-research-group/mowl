@@ -35,20 +35,26 @@ from mowl.nn.el.grounded import (
     gci2,
     gci2_dead,
     gci2_region,
+    gci2_region_trans,
     gci3,
     gci3_bot,
     gci3_bot_region,
+    gci3_bot_region_trans,
     gci3_region,
+    gci3_region_trans,
     minimality,
     role_assertion,
     role_chain,
     role_chain_region,
+    role_chain_region_trans,
     role_inclusion,
     role_inclusion_region,
+    role_inclusion_region_trans,
     sample_active_component,
     sample_class_region,
     sample_component_intersection,
     sample_elements,
+    sample_exists_region,
     sample_filler_elements,
     sample_inside_elements,
     sample_pair_region,
@@ -1698,4 +1704,616 @@ def test_sample_inside_elements_batched_contract_and_loop_freedom(
     assert out_e.shape[0] == 256 and out_e.shape[1] <= 4
     assert nonzero_calls <= 4, f"Expected <= 4 torch.nonzero calls, got {nonzero_calls}"
     assert item_calls <= 4, f"Expected <= 4 Tensor.item calls, got {item_calls}"
+
+
+# ---------------------------------------------------------------------------
+# 11. Translation-box roles, inverse roles, and existential boxes (Task 14)
+# ---------------------------------------------------------------------------
+
+
+def test_translation_role_depth_brute_force_and_inverse_roles_bitwise() -> None:
+    """Task 14: translation role_depth > 0 iff p_y - p_x strictly inside an active component; inverse role depth equals partner's with x and y swapped bitwise."""
+    # Validate role_mode and inverse_of arguments
+    with pytest.raises(ValueError, match="role_mode"):
+        GroundedELModule(4, 4, 2, role_mode="invalid")
+    with pytest.raises(ValueError, match="inverse_of"):
+        GroundedELModule(4, 4, 2, inverse_of=[0, 1])  # self-inverse
+    with pytest.raises(ValueError, match="inverse_of"):
+        GroundedELModule(4, 4, 3, inverse_of=[1, -1, -1])  # asymmetric
+    with pytest.raises(ValueError, match="inverse_of"):
+        GroundedELModule(4, 4, 2, inverse_of=[1])  # wrong length
+
+    gen = th.Generator().manual_seed(20261108)
+    for trial in range(5):
+        mod = GroundedELModule(
+            nb_elements=6,
+            nb_classes=4,
+            nb_rels=4,
+            embed_dim=2,
+            n_components=2,
+            n_role_components=2,
+            role_mode="translation",
+            inverse_of=[1, 0, -1, -1],
+            agg="max" if trial % 2 == 0 else "lse",
+        )
+        with th.no_grad():
+            assert mod.role_centers is not None and mod.role_raw_widths is not None
+            mod.role_centers.copy_(th.randn((4, 2, 2), generator=gen) * 0.6)
+            raw_w = th.randn((4, 2, 2), generator=gen) * 0.5 - 0.3
+            mod.role_raw_widths.copy_(raw_w)
+            # Role 0 active: [True, trial % 2 == 0]; role 2 active: [False, True]; role 3 all inactive
+            mod.role_active[0] = th.tensor([True, trial % 2 == 0])
+            mod.role_active[1] = th.tensor([False, False])  # ignored; derived from partner 0
+            mod.role_active[2] = th.tensor([False, True])
+            mod.role_active[3] = th.tensor([False, False])
+
+        pts_x = th.randn((120, 2), generator=gen)
+        pts_y = th.randn((120, 2), generator=gen)
+        diff = pts_y - pts_x
+
+        for r_id in (0, 1, 2):
+            reg_r = mod.translation_regions(r_id)
+            cen_r = reg_r.cen[0]  # (K_r, d)
+            w_r = reg_r.w[0]  # (K_r, d)
+            act_r = reg_r.active[0]  # (K_r,)
+
+            # Brute-force strict-interior check: exists active k with |diff - c_{r,k}|_i < w_{r,k,i} for all i
+            strictly_inside = th.zeros((120,), dtype=th.bool)
+            bf_depths = []
+            for k in range(2):
+                if bool(act_r[k].item()):
+                    d_k = th.amin(w_r[k].unsqueeze(0) - th.abs(diff - cen_r[k].unsqueeze(0)), dim=-1)
+                    strictly_inside = strictly_inside | (d_k > 0.0)
+                    bf_depths.append(d_k)
+            expected_crisp = th.stack(bf_depths, dim=-1).amax(dim=-1)
+
+            dep_crisp = mod.role_depth(pts_x, pts_y, r_id, crisp=True)
+            dep_soft = mod.role_depth(pts_x, pts_y, r_id, crisp=False)
+            assert th.allclose(dep_crisp, expected_crisp, atol=1e-6)
+            assert th.equal(dep_crisp > 0.0, strictly_inside)
+            if mod.agg == "max":
+                assert th.equal(dep_soft > 0.0, strictly_inside)
+
+        # Role 3 has no active components -> floor -1e6
+        dep_inactive = mod.role_depth(pts_x, pts_y, 3, crisp=True)
+        assert th.equal(dep_inactive, th.full_like(dep_inactive, -1e6))
+
+        # Bitwise inverse equality: role_depth(x, y, 1) == role_depth(y, x, 0)
+        for crisp_flag in (True, False):
+            d_0_xy = mod.role_depth(pts_x, pts_y, 0, crisp=crisp_flag)
+            d_1_yx = mod.role_depth(pts_y, pts_x, 1, crisp=crisp_flag)
+            d_1_xy = mod.role_depth(pts_x, pts_y, 1, crisp=crisp_flag)
+            d_0_yx = mod.role_depth(pts_y, pts_x, 0, crisp=crisp_flag)
+            assert th.equal(d_1_xy, d_0_yx)
+            assert th.equal(d_0_xy, d_1_yx)
+
+        # Partner with higher index (role 1) owns no effective parameters:
+        # mutating role_centers[1] / role_raw_widths[1] does not change role 1's regions or depth,
+        # and backward through role 1 populates gradients on role 0, leaving role 1's slot at 0.
+        with th.no_grad():
+            mod.role_centers[1].fill_(999.0)
+            mod.role_raw_widths[1].fill_(999.0)
+        assert th.equal(mod.role_depth(pts_x, pts_y, 1, crisp=True), mod.role_depth(pts_y, pts_x, 0, crisp=True))
+
+        mod.zero_grad()
+        loss_inv = mod.role_membership(pts_x[:8], pts_y[:8], 1).sum()
+        loss_inv.backward()
+        assert mod.role_centers.grad is not None
+        assert float(mod.role_centers.grad[0].abs().sum().item()) > 0.0
+        assert float(mod.role_centers.grad[1].abs().sum().item()) == 0.0
+
+        # expand_components preserves translation role_depth bitwise
+        with th.no_grad():
+            before_all = mod.role_depth(
+                pts_x[:16], pts_y[:16], th.tensor([0, 1, 2, 3] * 4), crisp=False
+            ).clone()
+        mod.expand_components(new_K=4, new_role_K=5)
+        with th.no_grad():
+            after_all = mod.role_depth(
+                pts_x[:16], pts_y[:16], th.tensor([0, 1, 2, 3] * 4), crisp=False
+            )
+        assert th.equal(before_all, after_all)
+
+    # Also check product mode inverse_of swaps head and tail bitwise
+    mod_prod = GroundedELModule(
+        nb_elements=5,
+        nb_classes=3,
+        nb_rels=2,
+        embed_dim=2,
+        n_components=2,
+        n_role_components=2,
+        role_mode="product",
+        inverse_of=[1, 0],
+    )
+    with pytest.raises(ValueError, match="translation_regions"):
+        mod_prod.translation_regions(0)
+    px = th.randn((30, 2), generator=gen)
+    py = th.randn((30, 2), generator=gen)
+    assert th.equal(
+        mod_prod.role_depth(px, py, 1, crisp=True),
+        mod_prod.role_depth(py, px, 0, crisp=True),
+    )
+
+
+def test_exists_box_and_exists_inverse_box_match_brute_force_1d_and_2d() -> None:
+    """Task 14: exists_box and exists_inverse_box match brute-force max_{k, v in V_k} dep(z +/- v, B) on 1-D and 2-D instances at 200 random points."""
+    gen = th.Generator().manual_seed(1402)
+
+    for dim, grid_steps in ((1, 201), (2, 81)):
+        mod = GroundedELModule(
+            nb_elements=5,
+            nb_classes=4,
+            nb_rels=2,
+            embed_dim=dim,
+            n_components=2,
+            n_role_components=2,
+            role_mode="translation",
+            top_id=0,
+            bot_id=1,
+        )
+        with th.no_grad():
+            assert mod.role_centers is not None and mod.role_raw_widths is not None
+            # Class 2 has 2 active components; Class 3 has 1 active and 1 inactive component
+            mod.class_centers[2].copy_(th.randn((2, dim), generator=gen) * 0.5)
+            mod.class_raw_widths[2].copy_(
+                th.log(th.expm1(th.tensor([[0.25] * dim, [0.4] * dim])))
+            )
+            mod.class_active[2] = th.tensor([True, True])
+
+            mod.class_centers[3].copy_(th.randn((2, dim), generator=gen) * 0.5)
+            mod.class_raw_widths[3].copy_(
+                th.log(th.expm1(th.tensor([[0.35] * dim, [0.3] * dim])))
+            )
+            mod.class_active[3] = th.tensor([True, False])
+
+            # Role 0 has 2 active components; Role 1 has 1 active and 1 inactive
+            mod.role_centers[0].copy_(th.randn((2, dim), generator=gen) * 0.5)
+            mod.role_raw_widths[0].copy_(
+                th.log(th.expm1(th.tensor([[0.2] * dim, [0.3] * dim])))
+            )
+            mod.role_active[0] = th.tensor([True, True])
+
+            mod.role_centers[1].copy_(th.randn((2, dim), generator=gen) * 0.5)
+            mod.role_raw_widths[1].copy_(
+                th.log(th.expm1(th.tensor([[0.3] * dim, [0.25] * dim])))
+            )
+            mod.role_active[1] = th.tensor([False, True])
+
+        # Build unit grid in [-1, 1]^dim (includes all corners and interior grid)
+        lin = th.linspace(-1.0, 1.0, grid_steps)
+        if dim == 1:
+            unit_grid = lin.unsqueeze(-1)  # (G, 1)
+        else:
+            gx, gy = th.meshgrid(lin, lin, indexing="ij")
+            unit_grid = th.stack([gx.reshape(-1), gy.reshape(-1)], dim=-1)  # (G, 2)
+
+        pts_z = (th.rand((200, dim), generator=gen) * 2.4) - 1.2  # (200, dim)
+
+        for r_id, b_id in ((0, 2), (1, 3)):
+            reg_v = mod.translation_regions(r_id)
+            cen_v, w_v, act_v = reg_v.cen[0], reg_v.w[0], reg_v.active[0]
+
+            # Check shapes of exists_box and exists_inverse_box
+            eb = mod.exists_box(th.tensor([r_id]), th.tensor([b_id]))
+            eib = mod.exists_inverse_box(th.tensor([r_id]), th.tensor([b_id]))
+            assert eb.cen.shape == (1, 4, dim)
+            assert eib.cen.shape == (1, 4, dim)
+            assert not getattr(eb, "is_top", False)
+
+            # Brute-force over v in corner/grid of active V_{r,k}: max_k max_v dep(z + v, B)
+            bf_pos_list = []
+            bf_inv_list = []
+            for k in range(2):
+                if not bool(act_v[k].item()):
+                    continue
+                # v_grid in V_{r,k}: cen_v[k] + unit_grid * w_v[k] -> shape (G, dim)
+                v_grid = cen_v[k].unsqueeze(0) + unit_grid * w_v[k].unsqueeze(0)
+                z_plus_v = (pts_z.unsqueeze(1) + v_grid.unsqueeze(0)).reshape(-1, dim)
+                z_minus_v = (pts_z.unsqueeze(1) - v_grid.unsqueeze(0)).reshape(-1, dim)
+                dep_plus = mod.depth(z_plus_v, b_id, crisp=True).view(200, -1).amax(dim=1)
+                dep_minus = mod.depth(z_minus_v, b_id, crisp=True).view(200, -1).amax(dim=1)
+                bf_pos_list.append(dep_plus)
+                bf_inv_list.append(dep_minus)
+
+            bf_pos = th.stack(bf_pos_list, dim=-1).amax(dim=-1)
+            bf_inv = th.stack(bf_inv_list, dim=-1).amax(dim=-1)
+
+            ed_crisp = mod.exists_depth(pts_z, r_id, b_id, crisp=True)
+            inv_dep_k = th.amin(
+                eib.w[0].unsqueeze(0) - th.abs(pts_z.unsqueeze(1) - eib.cen[0].unsqueeze(0)),
+                dim=-1,
+            )
+            inv_dep_k = th.where(eib.active[0].unsqueeze(0), inv_dep_k, th.full_like(inv_dep_k, -1e6))
+            eid_crisp = inv_dep_k.amax(dim=-1)
+
+            # Depth signs and crisp memberships agree at all 200 random points
+            assert th.equal(ed_crisp > 0.0, bf_pos > 0.0)
+            assert th.equal(eid_crisp > 0.0, bf_inv > 0.0)
+            assert th.equal(crisp_membership(ed_crisp), crisp_membership(bf_pos))
+            assert th.equal(crisp_membership(eid_crisp), crisp_membership(bf_inv))
+
+        # Check top_id returns Regions marked is_top with 1 component and width 1e6
+        eb_top = mod.exists_box(th.tensor([0, 1]), th.tensor([0, 0]))
+        assert getattr(eb_top, "is_top", False) is True
+        assert eb_top.cen.shape == (2, 1, dim)
+        assert th.equal(eb_top.w, th.full((2, 1, dim), 1e6))
+        assert th.equal(
+            mod.exists_depth(th.zeros((10, dim)), 0, 0, crisp=True),
+            th.full((10,), 1e6),
+        )
+
+
+def test_translation_region_hinges_hand_built_model_zero_and_broken_positive() -> None:
+    """Task 14: translation region hinges are 0 on a hand-built model of {A <= exists r.B, exists r.B <= C, r <= s, exists r.D <= bot, r o s <= t} and > 0 when broken."""
+    # Classes: 0=A, 1=B, 2=C, 3=D; Roles: 0=r, 1=s, 2=t
+    # Hand-built geometry in d=2, K=1, K_r=1:
+    #   B = centered at (2.0, 2.0), half-width (0.4, 0.4)
+    #   V_r = centered at (1.0, 1.0), half-width (0.2, 0.2)
+    #   => exists_box(r, B) = centered at (1.0, 1.0), half-width (0.6, 0.6) = [0.4, 1.6]^2
+    #   A = centered at (1.0, 1.0), half-width (0.3, 0.3) <= exists_box(r, B)
+    #   C = centered at (1.0, 1.0), half-width (0.8, 0.8) >= exists_box(r, B)
+    #   D = inactive (empty) => exists_box(r, D) is empty => exists r.D <= bot satisfied
+    #   V_s = centered at (1.0, 1.0), half-width (0.4, 0.4) >= V_r
+    #   V_t = centered at (2.0, 2.0), half-width (0.8, 0.8) >= V_r + V_s (which has center (2,2), hw (0.6,0.6))
+    mod = GroundedELModule(
+        nb_elements=4,
+        nb_classes=4,
+        nb_rels=3,
+        embed_dim=2,
+        n_components=1,
+        n_role_components=1,
+        role_mode="translation",
+    )
+    with th.no_grad():
+        assert mod.role_centers is not None and mod.role_raw_widths is not None
+        mod.class_centers[0, 0] = th.tensor([1.0, 1.0])
+        mod.class_raw_widths[0, 0] = th.log(th.expm1(th.tensor([0.3, 0.3])))
+        mod.class_centers[1, 0] = th.tensor([2.0, 2.0])
+        mod.class_raw_widths[1, 0] = th.log(th.expm1(th.tensor([0.4, 0.4])))
+        mod.class_centers[2, 0] = th.tensor([1.0, 1.0])
+        mod.class_raw_widths[2, 0] = th.log(th.expm1(th.tensor([0.8, 0.8])))
+        mod.class_active[3, 0] = False
+        mod.class_raw_widths[3, 0] = -20.0
+
+        mod.role_centers[0, 0] = th.tensor([1.0, 1.0])
+        mod.role_raw_widths[0, 0] = th.log(th.expm1(th.tensor([0.2, 0.2])))
+        mod.role_centers[1, 0] = th.tensor([1.0, 1.0])
+        mod.role_raw_widths[1, 0] = th.log(th.expm1(th.tensor([0.4, 0.4])))
+        mod.role_centers[2, 0] = th.tensor([2.0, 2.0])
+        mod.role_raw_widths[2, 0] = th.log(th.expm1(th.tensor([0.8, 0.8])))
+
+    gen = th.Generator().manual_seed(1403)
+
+    # 1. A <= exists r.B: sample z in A
+    s_a = sample_class_region(mod, 0, generator=gen, n_samples=256)
+    assert bool(s_a.valid.all().item())
+    za = s_a.points[s_a.valid]
+    h_gci2 = gci2_region_trans(
+        crisp_membership(mod.depth(za, 0, crisp=True)),
+        crisp_membership(mod.exists_depth(za, 0, 1, crisp=True)),
+    )
+    assert float(h_gci2.max().item()) == 0.0
+
+    # 2. exists r.B <= C: sample z in exists_box(r, B)
+    s_eb = sample_exists_region(mod, 0, 1, generator=gen, n_samples=256)
+    assert bool(s_eb.valid.all().item())
+    zeb = s_eb.points[s_eb.valid]
+    h_gci3 = gci3_region_trans(
+        crisp_membership(mod.exists_depth(zeb, 0, 1, crisp=True)),
+        crisp_membership(mod.depth(zeb, 2, crisp=True)),
+    )
+    assert float(h_gci3.max().item()) == 0.0
+
+    # 3. exists r.D <= bot: D is empty, and on any probe points crisp exists_depth <= 0
+    s_ed = sample_exists_region(mod, 0, 3, generator=gen, n_samples=64)
+    assert not bool(s_ed.valid.any().item())
+    h_gci3_bot = gci3_bot_region_trans(
+        crisp_membership(mod.exists_depth(zeb, 0, 3, crisp=True))
+    )
+    assert float(h_gci3_bot.max().item()) == 0.0
+
+    # 4. r <= s: sample v in V_r
+    s_vr = sample_role_region(mod, 0, generator=gen, n_samples=256)
+    assert isinstance(s_vr, RegionSample) and bool(s_vr.valid.all().item())
+    v1 = s_vr.points[s_vr.valid]
+    z0 = th.zeros_like(v1)
+    h_ri = role_inclusion_region_trans(
+        crisp_membership(mod.role_depth(z0, v1, 0, crisp=True)),
+        crisp_membership(mod.role_depth(z0, v1, 1, crisp=True)),
+    )
+    assert float(h_ri.max().item()) == 0.0
+
+    # 5. r o s <= t: sample v1 in V_r, v2 in V_s
+    s_vs = sample_role_region(mod, 1, generator=gen, n_samples=256)
+    assert isinstance(s_vs, RegionSample) and bool(s_vs.valid.all().item())
+    v2 = s_vs.points[s_vs.valid]
+    v_sum = v1 + v2
+    h_rc = role_chain_region_trans(
+        crisp_membership(mod.role_depth(z0, v1, 0, crisp=True)),
+        crisp_membership(mod.role_depth(z0, v2, 1, crisp=True)),
+        crisp_membership(mod.role_depth(z0, v_sum, 2, crisp=True)),
+    )
+    assert float(h_rc.max().item()) == 0.0
+
+    # Now move boxes to break each axiom and assert the corresponding hinge is > 0
+    with th.no_grad():
+        # Break A <= exists r.B by shifting A to (5.0, 5.0)
+        mod.class_centers[0, 0] = th.tensor([5.0, 5.0])
+    s_a_brk = sample_class_region(mod, 0, generator=gen, n_samples=64)
+    za_brk = s_a_brk.points[s_a_brk.valid]
+    assert float(
+        gci2_region_trans(
+            crisp_membership(mod.depth(za_brk, 0, crisp=True)),
+            crisp_membership(mod.exists_depth(za_brk, 0, 1, crisp=True)),
+        ).max().item()
+    ) > 0.0
+
+    with th.no_grad():
+        # Break exists r.B <= C by shifting C to (-5.0, -5.0)
+        mod.class_centers[2, 0] = th.tensor([-5.0, -5.0])
+    assert float(
+        gci3_region_trans(
+            crisp_membership(mod.exists_depth(zeb, 0, 1, crisp=True)),
+            crisp_membership(mod.depth(zeb, 2, crisp=True)),
+        ).max().item()
+    ) > 0.0
+
+    with th.no_grad():
+        # Break exists r.D <= bot by activating D at (2.0, 2.0)
+        mod.class_active[3, 0] = True
+        mod.class_centers[3, 0] = th.tensor([2.0, 2.0])
+        mod.class_raw_widths[3, 0] = th.log(th.expm1(th.tensor([0.3, 0.3])))
+    s_ed_brk = sample_exists_region(mod, 0, 3, generator=gen, n_samples=64)
+    assert bool(s_ed_brk.valid.all().item())
+    zed_brk = s_ed_brk.points[s_ed_brk.valid]
+    assert float(
+        gci3_bot_region_trans(
+            crisp_membership(mod.exists_depth(zed_brk, 0, 3, crisp=True))
+        ).max().item()
+    ) > 0.0
+
+    with th.no_grad():
+        # Break r <= s by shifting V_s to (-3.0, -3.0)
+        mod.role_centers[1, 0] = th.tensor([-3.0, -3.0])
+    assert float(
+        role_inclusion_region_trans(
+            crisp_membership(mod.role_depth(z0, v1, 0, crisp=True)),
+            crisp_membership(mod.role_depth(z0, v1, 1, crisp=True)),
+        ).max().item()
+    ) > 0.0
+
+    with th.no_grad():
+        # Restore V_s to (1.0, 1.0) and break r o s <= t by shifting V_t to (-3.0, -3.0)
+        mod.role_centers[1, 0] = th.tensor([1.0, 1.0])
+        mod.role_centers[2, 0] = th.tensor([-3.0, -3.0])
+    assert float(
+        role_chain_region_trans(
+            crisp_membership(mod.role_depth(z0, v1, 0, crisp=True)),
+            crisp_membership(mod.role_depth(z0, v2, 1, crisp=True)),
+            crisp_membership(mod.role_depth(z0, v_sum, 2, crisp=True)),
+        ).max().item()
+    ) > 0.0
+
+
+def _assert_exact_limit_zero_hinges_translation(
+    el_ds: ELDataset,
+    cm: CanonicalModel,
+    n_region_samples: int = 2000,
+    seed: int = 42,
+) -> None:
+    """Initialise GroundedELModule (role_mode='translation') via exact_limit_init and assert crisp losses == 0."""
+    labels, edges, top_id, bot_id, sat_classes = _build_least_model_tables_from_cm(
+        el_ds, cm
+    )
+    nb_classes = labels.shape[1]
+    nb_elements = labels.shape[0]
+    nb_rels = len(el_ds.object_property_index_dict)
+
+    mod = GroundedELModule(
+        nb_elements=nb_elements,
+        nb_classes=nb_classes,
+        nb_rels=nb_rels,
+        embed_dim=3,
+        n_components=nb_elements,
+        n_role_components=max(1, len(edges)),
+        tau=0.05,
+        top_id=top_id,
+        bot_id=bot_id,
+        role_mode="translation",
+    )
+    mod.exact_limit_init(labels, edges, delta=0.05, seed=seed)
+
+    dead_crisp = mod.dead() > 0.5
+    live_cls_elements = ~dead_crisp[:nb_classes]
+    assert th.equal(live_cls_elements, sat_classes)
+    if nb_elements > nb_classes:
+        assert not bool(dead_crisp[nb_classes:].any().item())
+
+    all_pos = mod.positions()
+    dead_f = dead_crisp.to(dtype=th.float32)
+    elem_m = th.stack(
+        [crisp_membership(mod.depth(all_pos, c_idx, crisp=True)) for c_idx in range(nb_classes)],
+        dim=1,
+    )
+
+    for c_idx in range(nb_classes):
+        if c_idx == bot_id:
+            continue
+        assert fact(elem_m[c_idx : c_idx + 1, c_idx], dead=dead_f[c_idx : c_idx + 1]).item() == 0.0
+
+    gci_datasets = el_ds.get_gci_datasets()
+    gen = th.Generator().manual_seed(seed + 100)
+
+    if "gci0" in gci_datasets and len(gci_datasets["gci0"]) > 0:
+        for row in gci_datasets["gci0"][:]:
+            a_id, b_id = int(row[0].item()), int(row[1].item())
+            assert float(gci0(elem_m[:, a_id], elem_m[:, b_id], dead=dead_f).max().item()) == 0.0
+            reg = sample_class_region(mod, a_id, generator=gen, n_samples=n_region_samples)
+            if bool(reg.valid.any().item()):
+                pts = reg.points[reg.valid]
+                ma = crisp_membership(mod.depth(pts, a_id, crisp=True))
+                mb = crisp_membership(mod.depth(pts, b_id, crisp=True))
+                assert float(gci0(ma, mb, dead=None).max().item()) == 0.0
+
+    if "gci0_bot" in gci_datasets and len(gci_datasets["gci0_bot"]) > 0:
+        for row in gci_datasets["gci0_bot"][:]:
+            a_id = int(row[0].item())
+            assert float(gci0_bot(elem_m[:, a_id], dead=dead_f).max().item()) == 0.0
+            reg = sample_class_region(mod, a_id, generator=gen, n_samples=n_region_samples)
+            assert not bool(reg.valid.any().item())
+
+    if "gci1" in gci_datasets and len(gci_datasets["gci1"]) > 0:
+        for row in gci_datasets["gci1"][:]:
+            a_id, b_id, c_id = int(row[0].item()), int(row[1].item()), int(row[2].item())
+            assert float(gci1(elem_m[:, a_id], elem_m[:, b_id], elem_m[:, c_id], dead=dead_f).max().item()) == 0.0
+            reg = sample_pair_region(mod, a_id, b_id, generator=gen, n_samples=n_region_samples)
+            if bool(reg.valid.any().item()):
+                pts = reg.points[reg.valid]
+                ma = crisp_membership(mod.depth(pts, a_id, crisp=True))
+                mb = crisp_membership(mod.depth(pts, b_id, crisp=True))
+                mc = crisp_membership(mod.depth(pts, c_id, crisp=True))
+                assert float(gci1(ma, mb, mc, dead=None).max().item()) == 0.0
+
+    if "gci1_bot" in gci_datasets and len(gci_datasets["gci1_bot"]) > 0:
+        for row in gci_datasets["gci1_bot"][:]:
+            a_id, b_id = int(row[0].item()), int(row[1].item())
+            assert float(gci1_bot(elem_m[:, a_id], elem_m[:, b_id], dead=dead_f).max().item()) == 0.0
+            reg_inter = sample_pair_region(mod, a_id, b_id, generator=gen, n_samples=n_region_samples)
+            assert not bool(reg_inter.valid.any().item())
+
+    if "gci2" in gci_datasets and len(gci_datasets["gci2"]) > 0:
+        for row in gci_datasets["gci2"][:]:
+            a_id, r_id, b_id = int(row[0].item()), int(row[1].item()), int(row[2].item())
+            rho_x_xb = crisp_membership(mod.role_depth(all_pos, all_pos[b_id], r_id, crisp=True))
+            dead_b = dead_f[b_id].expand_as(dead_f)
+            assert float(gci2(elem_m[:, a_id], rho_x_xb, dead=dead_f, dead_filler=dead_b).max().item()) == 0.0
+            reg = sample_class_region(mod, a_id, generator=gen, n_samples=n_region_samples)
+            if bool(reg.valid.any().item()):
+                pts = reg.points[reg.valid]
+                ma = crisp_membership(mod.depth(pts, a_id, crisp=True))
+                if not bool(dead_crisp[b_id].item()):
+                    m_ex = crisp_membership(mod.exists_depth(pts, r_id, b_id, crisp=True))
+                    assert float(gci2_region_trans(ma, m_ex).max().item()) == 0.0
+                rho_z = crisp_membership(mod.role_depth(pts, all_pos[b_id], r_id, crisp=True))
+                db_z = dead_f[b_id].expand_as(ma)
+                assert float(gci2(ma, rho_z, dead=None, dead_filler=db_z).max().item()) == 0.0
+
+    if "gci3" in gci_datasets and len(gci_datasets["gci3"]) > 0:
+        for row in gci_datasets["gci3"][:]:
+            r_id, b_id, c_id = int(row[0].item()), int(row[1].item()), int(row[2].item())
+            for y_id in range(nb_elements):
+                rho_xy = crisp_membership(mod.role_depth(all_pos, all_pos[y_id], r_id, crisp=True))
+                mb_y = elem_m[y_id, b_id].expand_as(rho_xy)
+                assert float(gci3(rho_xy, mb_y, elem_m[:, c_id], dead=dead_f).max().item()) == 0.0
+
+    if "gci3_bot" in gci_datasets and len(gci_datasets["gci3_bot"]) > 0:
+        for row in gci_datasets["gci3_bot"][:]:
+            r_id, b_id = int(row[0].item()), int(row[1].item())
+            for y_id in range(nb_elements):
+                rho_xy = crisp_membership(mod.role_depth(all_pos, all_pos[y_id], r_id, crisp=True))
+                mb_y = elem_m[y_id, b_id].expand_as(rho_xy)
+                assert float(gci3_bot(rho_xy, mb_y, dead=dead_f).max().item()) == 0.0
+            s_eb = sample_exists_region(mod, r_id, b_id, generator=gen, n_samples=n_region_samples)
+            if bool(s_eb.valid.any().item()):
+                pts = s_eb.points[s_eb.valid]
+                m_ex = crisp_membership(mod.exists_depth(pts, r_id, b_id, crisp=True))
+                assert float(gci3_bot_region_trans(m_ex).max().item()) == 0.0
+
+    if "role_inclusion" in gci_datasets and len(gci_datasets["role_inclusion"]) > 0:
+        for row in gci_datasets["role_inclusion"][:]:
+            r_id, s_id = int(row[0].item()), int(row[1].item())
+            for y_id in range(nb_elements):
+                rho_r = crisp_membership(mod.role_depth(all_pos, all_pos[y_id], r_id, crisp=True))
+                rho_s = crisp_membership(mod.role_depth(all_pos, all_pos[y_id], s_id, crisp=True))
+                assert float(role_inclusion(rho_r, rho_s).max().item()) == 0.0
+            v_samp = sample_role_region(mod, r_id, generator=gen, n_samples=n_region_samples)
+            assert isinstance(v_samp, RegionSample)
+            if bool(v_samp.valid.any().item()):
+                zy = v_samp.points[v_samp.valid]
+                zx = th.zeros_like(zy)
+                m_vr = crisp_membership(mod.role_depth(zx, zy, r_id, crisp=True))
+                m_vs = crisp_membership(mod.role_depth(zx, zy, s_id, crisp=True))
+                assert float(role_inclusion_region_trans(m_vr, m_vs).max().item()) == 0.0
+
+    if "role_chain" in gci_datasets and len(gci_datasets["role_chain"]) > 0:
+        for row in gci_datasets["role_chain"][:]:
+            r_id, s_id, t_id = int(row[0].item()), int(row[1].item()), int(row[2].item())
+            for y_id in range(nb_elements):
+                rho_xy_r = crisp_membership(mod.role_depth(all_pos, all_pos[y_id], r_id, crisp=True))
+                for z_id in range(nb_elements):
+                    rho_yz_s = crisp_membership(
+                        mod.role_depth(all_pos[y_id], all_pos[z_id], s_id, crisp=True)
+                    ).expand_as(rho_xy_r)
+                    rho_xz_t = crisp_membership(mod.role_depth(all_pos, all_pos[z_id], t_id, crisp=True))
+                    assert float(role_chain(rho_xy_r, rho_yz_s, rho_xz_t).max().item()) == 0.0
+
+    if "class_assertion" in gci_datasets and len(gci_datasets["class_assertion"]) > 0:
+        for row in gci_datasets["class_assertion"][:]:
+            ind_id, c_id = int(row[0].item()), int(row[1].item())
+            elem_id = nb_classes + ind_id
+            assert class_assertion(elem_m[elem_id : elem_id + 1, c_id]).item() == 0.0
+
+    if (
+        "object_property_assertion" in gci_datasets
+        and len(gci_datasets["object_property_assertion"]) > 0
+    ):
+        for row in gci_datasets["object_property_assertion"][:]:
+            ind_a, r_id, ind_b = int(row[0].item()), int(row[1].item()), int(row[2].item())
+            el_a = nb_classes + ind_a
+            el_b = nb_classes + ind_b
+            rho_ab = crisp_membership(mod.role_depth(all_pos[el_a], all_pos[el_b], r_id, crisp=True))
+            assert role_assertion(rho_ab).item() == 0.0
+
+
+def test_exact_limit_init_translation_mode_role_theories_zero_crisp_loss(
+    t3_dataset: PathDataset,
+    t3_cm: CanonicalModel,
+    roles_dataset: PathDataset,
+    roles_cm: CanonicalModel,
+) -> None:
+    """Task 14: exact_limit_init with edges in translation mode gives crisp loss 0 on T3, roles.owl, and full_role_theory."""
+    for ds, cm, seed in ((t3_dataset, t3_cm, 42), (roles_dataset, roles_cm, 77)):
+        el_ds = ELDataset(ds.ontology, extended=True, use_cache=False, load_role_axioms=True)
+        el_ds.load()
+        _assert_exact_limit_zero_hinges_translation(el_ds, cm, n_region_samples=2000, seed=seed)
+
+    # Also test full_role_theory in translation mode
+    adapter = OWLAPIAdapter()
+    mgr = adapter.owl_manager
+    df = adapter.data_factory
+    ont = adapter.create_ontology("http://mowl.borg/geo/full_role_theory_trans")
+    bot = adapter.create_class(BOTTOM)
+    A = adapter.create_class(NS + "A")
+    B = adapter.create_class(NS + "B")
+    C = adapter.create_class(NS + "C")
+    D = adapter.create_class(NS + "D")
+    U = adapter.create_class(NS + "U")
+    W = adapter.create_class(NS + "W")
+    r = adapter.create_object_property(NS + "r")
+    s = adapter.create_object_property(NS + "s")
+    t = adapter.create_object_property(NS + "t")
+    ind_a = adapter.create_individual(IND + "a")
+    ind_b = adapter.create_individual(IND + "b")
+
+    mgr.addAxiom(ont, adapter.create_subclass_of(A, B))
+    mgr.addAxiom(ont, adapter.create_subclass_of(adapter.create_object_intersection_of(A, B), C))
+    mgr.addAxiom(ont, adapter.create_subclass_of(U, bot))
+    mgr.addAxiom(ont, adapter.create_subclass_of(adapter.create_object_intersection_of(C, U), bot))
+    mgr.addAxiom(ont, adapter.create_subclass_of(A, adapter.create_object_some_values_from(r, D)))
+    mgr.addAxiom(ont, adapter.create_subclass_of(W, adapter.create_object_some_values_from(r, U)))
+    mgr.addAxiom(ont, adapter.create_subclass_of(adapter.create_object_some_values_from(s, D), C))
+    mgr.addAxiom(ont, adapter.create_subclass_of(adapter.create_object_some_values_from(t, U), bot))
+    from java.util import Arrays
+
+    mgr.addAxiom(ont, df.getOWLSubObjectPropertyOfAxiom(r, s))
+    mgr.addAxiom(ont, df.getOWLSubPropertyChainOfAxiom(Arrays.asList([r, s]), t))
+    mgr.addAxiom(ont, df.getOWLClassAssertionAxiom(A, ind_a))
+    mgr.addAxiom(ont, df.getOWLClassAssertionAxiom(D, ind_b))
+    mgr.addAxiom(ont, df.getOWLObjectPropertyAssertionAxiom(r, ind_a, ind_b))
+
+    cm_full = CanonicalModel.from_ontology(ont)
+    el_ds_full = ELDataset(ont, extended=True, use_cache=False, load_role_axioms=True)
+    el_ds_full.load()
+    _assert_exact_limit_zero_hinges_translation(el_ds_full, cm_full, n_region_samples=2000, seed=101)
+
 

@@ -62,14 +62,19 @@ __all__ = [
     "gci2_dead",
     "gci2",
     "gci2_region",
+    "gci2_region_trans",
     "gci3",
     "gci3_region",
+    "gci3_region_trans",
     "gci3_bot",
     "gci3_bot_region",
+    "gci3_bot_region_trans",
     "role_inclusion",
     "role_inclusion_region",
+    "role_inclusion_region_trans",
     "role_chain",
     "role_chain_region",
+    "role_chain_region_trans",
     "class_assertion",
     "role_assertion",
     "object_property_assertion",
@@ -1192,3 +1197,194 @@ def minimality(
         )
         total = total + w_d * d_f.mean()
     return total
+
+
+def gci2_region_trans(
+    m_a_z: th.Tensor,
+    m_exists_z: th.Tensor,
+) -> th.Tensor:
+    """Compute the translation-mode region GCI2 hinge :math:`\\operatorname{relu}(m_A(z) - m_{\\exists r.B}(z))` for :math:`A \\sqsubseteq \\exists r.B` at :math:`z \\in \\mathcal{B}(A)`.
+
+    Guarantees:
+    - Returns a tensor of the same shape as ``m_a_z``.
+    - On crisp :math:`\\{0, 1\\}` memberships, equals ``0.0`` if and only if
+      :math:`m_A(z) = 1 \\implies m_{\\exists r.B}(z) = 1` (i.e. :math:`\\mathcal{B}(A) \\subseteq \\mathcal{B}(\\exists r.B)`).
+    - **Parameters receiving gradient:** Whenever :math:`m_A(z) > m_{\\exists r.B}(z)`,
+      has nonzero gradient with respect to the active existential box parameters
+      of :math:`\\exists r.B` (filler class :math:`B` and role :math:`r` via
+      ``m_exists_z``) and ``m_a_z``.
+
+    Non-guarantees:
+    - When :math:`m_A(z) \\le m_{\\exists r.B}(z)`, value and gradient are ``0.0``.
+
+    Parameters
+    ----------
+    m_a_z : torch.Tensor
+        Membership :math:`m(z, A)` of sampled points :math:`z \\in \\mathcal{B}(A)`,
+        shape ``(B,)``.
+    m_exists_z : torch.Tensor
+        Existential box membership :math:`m_{\\exists r.B}(z)` in
+        :meth:`~mowl.nn.el.grounded.GroundedELModule.exists_box`, shape ``(B,)``.
+
+    Returns
+    -------
+    torch.Tensor
+        Per-point translation-mode GCI2 region hinge of shape ``(B,)``.
+    """
+    ma = _as_float_tensor(m_a_z)
+    me = _as_float_tensor(m_exists_z, ma.dtype).to(device=ma.device, dtype=ma.dtype)
+    _check_same_shape("m_a_z", ma, "m_exists_z", me)
+    return th.relu(ma - me)
+
+
+def gci3_region_trans(
+    m_exists_z: th.Tensor,
+    m_c_z: th.Tensor,
+) -> th.Tensor:
+    """Compute the translation-mode region GCI3 hinge :math:`\\operatorname{relu}(m_{\\exists r.B}(z) - m_C(z))` for :math:`\\exists r.B \\sqsubseteq C` (:math:`B \\neq \\top`) at :math:`z \\in \\mathcal{B}(\\exists r.B)`.
+
+    Guarantees:
+    - Returns a tensor of the same shape as ``m_exists_z``.
+    - On crisp :math:`\\{0, 1\\}` memberships, equals ``0.0`` if and only if
+      :math:`m_{\\exists r.B}(z) = 1 \\implies m_C(z) = 1` (i.e.
+      :math:`\\mathcal{B}(\\exists r.B) \\subseteq \\mathcal{B}(C)`).
+    - **Parameters receiving gradient:** Whenever :math:`m_{\\exists r.B}(z) > m_C(z)`,
+      has nonzero gradient with respect to ``m_exists_z`` and the active target
+      class box parameters of :math:`C` via ``m_c_z``.
+
+    Non-guarantees:
+    - Domain/range axioms with :math:`B = \\top` are not enforced over regions
+      (skipped by the caller so an unbounded :math:`\\top` does not force
+      :math:`C` to cover :math:`\\mathbb{R}^d`).
+
+    Parameters
+    ----------
+    m_exists_z : torch.Tensor
+        Existential box membership :math:`m_{\\exists r.B}(z)` at sampled points
+        :math:`z \\in \\mathcal{B}(\\exists r.B)`, shape ``(B,)``.
+    m_c_z : torch.Tensor
+        Target class membership :math:`m(z, C)` at :math:`z`, shape ``(B,)``.
+
+    Returns
+    -------
+    torch.Tensor
+        Per-point translation-mode GCI3 region hinge of shape ``(B,)``.
+    """
+    me = _as_float_tensor(m_exists_z)
+    mc = _as_float_tensor(m_c_z, me.dtype).to(device=me.device, dtype=me.dtype)
+    _check_same_shape("m_exists_z", me, "m_c_z", mc)
+    return th.relu(me - mc)
+
+
+def gci3_bot_region_trans(
+    m_exists_z: th.Tensor,
+) -> th.Tensor:
+    """Compute the translation-mode region GCI3-bottom hinge :math:`\\operatorname{relu}(m_{\\exists r.B}(z))` for :math:`\\exists r.B \\sqsubseteq \\bot` (:math:`B \\neq \\top`) at :math:`z \\in \\mathcal{B}(\\exists r.B)`.
+
+    Guarantees:
+    - Returns a tensor of the same shape as ``m_exists_z``.
+    - On crisp :math:`\\{0, 1\\}` memberships, equals ``0.0`` if and only if
+      :math:`m_{\\exists r.B}(z) = 0` (i.e. :math:`\\mathcal{B}(\\exists r.B) = \\emptyset`).
+    - **Parameters receiving gradient:** Whenever :math:`m_{\\exists r.B}(z) > 0`,
+      has nonzero gradient with respect to the active existential box parameters
+      of :math:`\\exists r.B` via ``m_exists_z``.
+
+    Non-guarantees:
+    - Domain-bottom axioms with :math:`B = \\top` are skipped over regions by the caller.
+
+    Parameters
+    ----------
+    m_exists_z : torch.Tensor
+        Existential box membership :math:`m_{\\exists r.B}(z)` at sampled points
+        :math:`z \\in \\mathcal{B}(\\exists r.B)`, shape ``(B,)``.
+
+    Returns
+    -------
+    torch.Tensor
+        Per-point translation-mode GCI3-bottom region hinge of shape ``(B,)``.
+    """
+    me = _as_float_tensor(m_exists_z)
+    return th.relu(me)
+
+
+def role_inclusion_region_trans(
+    m_vr_v: th.Tensor,
+    m_vs_v: th.Tensor,
+) -> th.Tensor:
+    """Compute the translation-mode region role-inclusion hinge :math:`\\operatorname{relu}(m_{V_r}(v) - m_{V_s}(v))` for :math:`r \\sqsubseteq s` at :math:`v \\in V_r`.
+
+    Guarantees:
+    - Returns a tensor of the same shape as ``m_vr_v``.
+    - On crisp :math:`\\{0, 1\\}` memberships, equals ``0.0`` if and only if
+      :math:`m_{V_r}(v) = 1 \\implies m_{V_s}(v) = 1` (i.e. :math:`V_r \\subseteq V_s`).
+    - **Parameters receiving gradient:** Whenever :math:`m_{V_r}(v) > m_{V_s}(v)`,
+      has nonzero gradient with respect to ``m_vr_v`` and the active translation
+      box parameters of :math:`s` via ``m_vs_v``.
+
+    Non-guarantees:
+    - When :math:`m_{V_r}(v) \\le m_{V_s}(v)`, value and gradient are ``0.0``.
+
+    Parameters
+    ----------
+    m_vr_v : torch.Tensor
+        Sub-role translation membership :math:`m_{V_r}(v)` at sampled translation
+        vectors :math:`v \\in V_r`, shape ``(B,)``.
+    m_vs_v : torch.Tensor
+        Super-role translation membership :math:`m_{V_s}(v)` at :math:`v`, shape ``(B,)``.
+
+    Returns
+    -------
+    torch.Tensor
+        Per-vector translation-mode role-inclusion region hinge of shape ``(B,)``.
+    """
+    mr = _as_float_tensor(m_vr_v)
+    ms = _as_float_tensor(m_vs_v, mr.dtype).to(device=mr.device, dtype=mr.dtype)
+    _check_same_shape("m_vr_v", mr, "m_vs_v", ms)
+    return th.relu(mr - ms)
+
+
+def role_chain_region_trans(
+    m_vr_v1: th.Tensor,
+    m_vs_v2: th.Tensor,
+    m_vt_sum: th.Tensor,
+) -> th.Tensor:
+    """Compute the translation-mode region role-chain hinge :math:`\\operatorname{relu}(\\min(m_{V_r}(v_1), m_{V_s}(v_2)) - m_{V_t}(v_1 + v_2))` for :math:`r \\circ s \\sqsubseteq t` at :math:`v_1 \\in V_r,\\, v_2 \\in V_s`.
+
+    Guarantees:
+    - Returns a tensor of the same shape as ``m_vr_v1``.
+    - On crisp :math:`\\{0, 1\\}` memberships, equals ``0.0`` if and only if
+      :math:`(m_{V_r}(v_1) = 1 \\land m_{V_s}(v_2) = 1) \\implies m_{V_t}(v_1 + v_2) = 1`
+      (i.e. :math:`V_r + V_s \\subseteq V_t`).
+    - **Parameters receiving gradient:** Whenever
+      :math:`\\min(m_{V_r}(v_1), m_{V_s}(v_2)) > m_{V_t}(v_1 + v_2)`, has nonzero
+      gradient with respect to the active translation box parameters of :math:`t`
+      via ``m_vt_sum`` and the bottleneck chain role via ``min(m_vr_v1, m_vs_v2)``.
+
+    Non-guarantees:
+    - When :math:`\\min(m_{V_r}(v_1), m_{V_s}(v_2)) \\le m_{V_t}(v_1 + v_2)`, value
+      and gradient are ``0.0``.
+
+    Parameters
+    ----------
+    m_vr_v1 : torch.Tensor
+        First chain role translation membership :math:`m_{V_r}(v_1)` at
+        :math:`v_1 \\in V_r`, shape ``(B,)``.
+    m_vs_v2 : torch.Tensor
+        Second chain role translation membership :math:`m_{V_s}(v_2)` at
+        :math:`v_2 \\in V_s`, shape ``(B,)``.
+    m_vt_sum : torch.Tensor
+        Super-role translation membership :math:`m_{V_t}(v_1 + v_2)` at the
+        summed translation vector :math:`v_1 + v_2`, shape ``(B,)``.
+
+    Returns
+    -------
+    torch.Tensor
+        Per-sample translation-mode role-chain region hinge of shape ``(B,)``.
+    """
+    mr = _as_float_tensor(m_vr_v1)
+    ms = _as_float_tensor(m_vs_v2, mr.dtype).to(device=mr.device, dtype=mr.dtype)
+    mt = _as_float_tensor(m_vt_sum, mr.dtype).to(device=mr.device, dtype=mr.dtype)
+    _check_same_shape("m_vr_v1", mr, "m_vs_v2", ms)
+    _check_same_shape("m_vr_v1", mr, "m_vt_sum", mt)
+    return th.relu(th.minimum(mr, ms) - mt)
+

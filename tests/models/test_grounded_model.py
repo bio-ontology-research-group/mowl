@@ -2003,6 +2003,155 @@ def test_cached_ids_and_compute_batch_losses_bit_identical_t3_and_2k_go_subset(
         )
 
 
+def test_from_tables_translation_inverse_trains_3_epochs_and_satisfies_both_directions(
+    t3_dataset: PathDataset,
+    t3_cm: CanonicalModel,
+) -> None:
+    """Task 14: GroundedEL.from_tables(..., role_mode='translation', inverse_of=...) trains 3 epochs on a tiny KB with a role assertion table and its inverse, and crisp_report shows both directions satisfied."""
+    class_index_dict = {BOTTOM: 0, TOP: 1, "A": 2}
+    object_property_index_dict = {"r": 0, "r_inv": 1}
+    individual_index_dict = {"a": 0, "b": 1}
+
+    # Role assertion table and its inverse: r(a, b) and r_inv(b, a)
+    opa_both = th.tensor([[0, 0, 1], [1, 1, 0]], dtype=th.long)
+
+    for inv_spec in ({"r": "r_inv", "r_inv": "r"}, [1, 0]):
+        model = GroundedEL.from_tables(
+            class_index_dict=class_index_dict,
+            object_property_index_dict=object_property_index_dict,
+            individual_index_dict=individual_index_dict,
+            object_property_assertion=opa_both,
+            role_mode="translation",
+            inverse_of=inv_spec,
+            embed_dim=2,
+            n_components=2,
+            n_role_components=4,
+            epochs=3,
+            learning_rate=0.15,
+            tau0=0.3,
+            tau1=0.3,
+            reseed_every=0,
+            seed=0,
+            log_every=0,
+        )
+        history = model.train(epochs=3)
+        assert len(history) == 3
+        assert history[-1]["total"] < history[0]["total"]
+
+        # Verify both r(a, b) and r_inv(b, a) have positive crisp depth and bitwise-equal depths
+        pos_all = model.module.positions()
+        el_a = model.nb_classes + 0
+        el_b = model.nb_classes + 1
+        dep_fwd = model.module.role_depth(pos_all[el_a], pos_all[el_b], 0, crisp=True)
+        dep_inv = model.module.role_depth(pos_all[el_b], pos_all[el_a], 1, crisp=True)
+        assert float(dep_fwd.item()) > 0.0
+        assert float(dep_inv.item()) > 0.0
+        assert th.equal(dep_fwd, dep_inv)
+
+        crisp = model.crisp_report(n_eval=256)
+        assert crisp["elem_viol"] == 0.0
+        assert crisp["region_viol"] == 0.0
+        ev = model.evaluate_model(use_reasoner=False, n_eval=256)
+        assert ev["elem_viol"] == 0.0
+        assert ev["region_viol"] == 0.0
+
+    # Also verify GroundedEL(t3_dataset, role_mode="translation", init="elements") is exact with 0 epochs
+    probe = GroundedEL(t3_dataset, embed_dim=2, n_components=4, epochs=0, seed=0)
+    labels = _least_model_labels_from_cm(probe, t3_cm)
+    m_t3_trans = GroundedEL(
+        t3_dataset,
+        embed_dim=2,
+        n_components=4,
+        n_role_components=2,
+        epochs=0,
+        role_mode="translation",
+        init="elements",
+        init_labels=labels,
+        seed=0,
+    )
+    ev_t3 = m_t3_trans.evaluate_model(use_reasoner=True, n_eval=2000)
+    assert ev_t3["elem_viol"] == 0.0
+    assert ev_t3["region_viol"] == 0.0
+    assert ev_t3["exact"] is True
+
+
+def test_translation_region_hinge_skipped_for_top_fillers_and_not_skipped_otherwise() -> None:
+    """Task 14: in translation mode, region hinge is skipped for gci3/gci3_bot rows with filler top_id (n_region_skipped_top > 0) and not skipped otherwise."""
+    class_index_dict = {BOTTOM: 0, TOP: 1, "A": 2, "B": 3, "C": 4}
+    object_property_index_dict = {"r": 0, "r_inv": 1}
+
+    # Case 1: gci3 has 2 rows with filler TOP (1) and 1 row with filler B (3);
+    # gci3_bot has 1 row with filler TOP (1) => total 3 skipped rows
+    gci2_t = th.tensor([[2, 0, 3]], dtype=th.long)
+    gci3_with_top = th.tensor(
+        [
+            [0, 1, 2],  # exists r.TOP <= A (domain axiom) -> skip region hinge
+            [1, 1, 3],  # exists r_inv.TOP <= B (range axiom) -> skip region hinge
+            [0, 3, 4],  # exists r.B <= C -> keep region hinge
+        ],
+        dtype=th.long,
+    )
+    gci3_bot_with_top = th.tensor([[0, 1]], dtype=th.long)  # exists r.TOP <= bot -> skip region hinge
+    role_inc_t = th.tensor([[0, 1]], dtype=th.long)
+    role_chain_t = th.tensor([[0, 0, 1]], dtype=th.long)
+
+    m_with_top = GroundedEL.from_tables(
+        class_index_dict=class_index_dict,
+        object_property_index_dict=object_property_index_dict,
+        gci2=gci2_t,
+        gci3=gci3_with_top,
+        gci3_bot=gci3_bot_with_top,
+        role_inclusion=role_inc_t,
+        role_chain=role_chain_t,
+        role_mode="translation",
+        inverse_of={"r": "r_inv", "r_inv": "r"},
+        embed_dim=4,
+        n_components=1,
+        n_role_components=1,
+        seed=21,
+    )
+    losses_top = m_with_top.compute_batch_losses()
+    assert int(losses_top["n_region_skipped_top"]) == 3
+    assert float(losses_top["axioms"].item()) > 0.0
+    assert float(losses_top["region"].item()) > 0.0
+
+    # Case 2: ONLY top-filler gci3/gci3_bot rows (no gci2/role_inclusion/role_chain) -> region loss is exact 0.0 while element axioms loss > 0
+    m_only_top = GroundedEL.from_tables(
+        class_index_dict=class_index_dict,
+        object_property_index_dict=object_property_index_dict,
+        gci3=th.tensor([[0, 1, 2], [1, 1, 3]], dtype=th.long),
+        gci3_bot=th.tensor([[0, 1]], dtype=th.long),
+        role_mode="translation",
+        inverse_of=[1, 0],
+        embed_dim=4,
+        n_components=1,
+        n_role_components=1,
+        seed=21,
+    )
+    losses_only_top = m_only_top.compute_batch_losses()
+    assert int(losses_only_top["n_region_skipped_top"]) == 3
+    assert float(losses_only_top["region"].item()) == 0.0
+    assert float(losses_only_top["axioms"].item()) > 0.0
+
+    # Case 3: No top-filler rows -> n_region_skipped_top == 0 and region loss > 0
+    m_no_top = GroundedEL.from_tables(
+        class_index_dict=class_index_dict,
+        object_property_index_dict=object_property_index_dict,
+        gci3=th.tensor([[0, 3, 4], [1, 2, 4]], dtype=th.long),
+        gci3_bot=th.tensor([[0, 2]], dtype=th.long),
+        role_mode="translation",
+        inverse_of=[1, 0],
+        embed_dim=4,
+        n_components=1,
+        n_role_components=1,
+        seed=21,
+    )
+    losses_no_top = m_no_top.compute_batch_losses()
+    assert int(losses_no_top["n_region_skipped_top"]) == 0
+    assert float(losses_no_top["region"].item()) > 0.0
+
+
+
 
 
 
