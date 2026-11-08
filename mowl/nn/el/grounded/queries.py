@@ -749,6 +749,7 @@ def score_entities(
     R: MultiBox,
     candidate_element_ids: Optional[Union[int, Sequence[int], np.ndarray, th.Tensor]] = None,
     chunk: int = 65536,
+    max_elems: int = 1 << 27,
 ) -> th.Tensor:
     """Score candidate domain elements against query region ``R`` by crisp depth.
 
@@ -772,7 +773,10 @@ def score_entities(
         1-D candidate element indices in ``[0, module.nb_elements)``, or ``None``
         for all elements ``0 .. module.nb_elements - 1``.
     chunk : int, default 65536
-        Candidate chunk size :math:`\\ge 1`.
+        Candidate chunk size :math:`\\ge 1`; additionally capped so that the
+        ``(B, chunk, M, d)`` depth intermediate holds at most ``max_elems`` scalars.
+    max_elems : int, default 2**27
+        Memory budget (number of scalars) for the per-chunk depth intermediate.
 
     Returns
     -------
@@ -790,6 +794,10 @@ def score_entities(
         cand_idx = _to_1d_long(candidate_element_ids, device, "candidate_element_ids")
 
     n_cand = cand_idx.shape[0]
+    # the depth intermediate is (B, n, M, d); bound it by ``max_elems`` scalars per chunk
+    bsz, m_slots, dim = R_val.cen.shape
+    per_cand = max(1, bsz * max(1, m_slots) * dim)
+    chunk_sz = max(1, min(chunk_sz, _validate_int_ge("max_elems", max_elems, 1) // per_cand))
     if n_cand <= chunk_sz:
         pts = module.positions(cand_idx)
         return depth(pts, R_val, crisp=True)
@@ -805,6 +813,7 @@ def score_concepts(
     module: GroundedELModule,
     R: MultiBox,
     class_ids: Optional[Union[int, Sequence[int], np.ndarray, th.Tensor]] = None,
+    max_elems: int = 1 << 27,
 ) -> th.Tensor:
     """Score candidate ontology classes against query region ``R`` by box overlap depth.
 
@@ -838,12 +847,32 @@ def score_concepts(
     _validate_module(module, require_translation=False)
     R_val = _validate_multibox(R, "R", expected_dim=module.embed_dim)
     c_boxes = class_boxes(module, class_ids)
+    bsz, m_slots, dim = R_val.cen.shape
+    n_cls = c_boxes.cen.shape[0]
+    if bsz == 0 or n_cls == 0:
+        return th.empty((bsz, n_cls), dtype=R_val.cen.dtype, device=R_val.cen.device)
+    # the overlap intermediate is (B, C, M, K, d); chunk over classes to bound it by ``max_elems`` scalars
+    per_cls = max(1, bsz * max(1, m_slots * c_boxes.cen.shape[1]) * dim)
+    c_chunk = max(1, _validate_int_ge("max_elems", max_elems, 1) // per_cls)
+    if n_cls > c_chunk:
+        parts = [
+            _score_concepts_boxes(R_val, _slice_multibox(c_boxes, start, start + c_chunk))
+            for start in range(0, n_cls, c_chunk)
+        ]
+        return th.cat(parts, dim=1)
+    return _score_concepts_boxes(R_val, c_boxes)
 
+
+def _slice_multibox(mb: MultiBox, start: int, stop: int) -> MultiBox:
+    """Slice a :class:`MultiBox` along its first (batch or class) axis."""
+    return MultiBox(cen=mb.cen[start:stop], w=mb.w[start:stop], active=mb.active[start:stop])
+
+
+def _score_concepts_boxes(R_val: MultiBox, c_boxes: MultiBox) -> th.Tensor:
+    """Overlap depth between query boxes ``R_val`` ``(B, M, d)`` and class boxes ``c_boxes`` ``(C, K, d)``."""
     bsz, m_slots, dim = R_val.cen.shape
     n_cls, k_slots, _ = c_boxes.cen.shape
     total_pairs = m_slots * k_slots
-    if bsz == 0 or n_cls == 0:
-        return th.empty((bsz, n_cls), dtype=R_val.cen.dtype, device=R_val.cen.device)
     if total_pairs == 0:
         return th.full(
             (bsz, n_cls),
