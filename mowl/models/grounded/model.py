@@ -375,6 +375,10 @@ class GroundedEL(EmbeddingELModel):
       metrics (``exist``, ``dead_ok``, ``faithful_named_precision``,
       ``faithful_named_recall``, ``exact``) are computed syntactically or omitted
       in :meth:`crisp_report`.
+    - When ``neg_weight > 0``, corrupted pairs are not filtered against the ABox
+      (a corruption may coincide with a stated or entailed fact).
+    - :attr:`dual_weights` are plain floats transient across module
+      ``state_dict`` checkpoints.
 
     Parameters
     ----------
@@ -408,6 +412,26 @@ class GroundedEL(EmbeddingELModel):
         zero of all hinges).
     lambda_reg : float, default 1.0
         Weight :math:`\\lambda_{\\text{reg}} \\ge 0` on region soundness hinges (§4).
+    neg_weight : float, default 0.0
+        Weight :math:`\\ge 0` on corrupted-fact negatives sampled by replacing
+        the head or tail of ``object_property_assertion`` rows with a random
+        individual element.
+    neg_k : int, default 1
+        Number of corrupted negative rows sampled per positive
+        ``object_property_assertion`` batch row (:math:`\\ge 1`).
+    constraint_mode : {"fixed", "lagrangian"}, default "fixed"
+        Constraint weighting mode for ``fact``, ``axioms``, and ``region``
+        satisfaction terms: ``"fixed"`` keeps all weights at ``1.0``, whereas
+        ``"lagrangian"`` updates :attr:`dual_weights` via dual ascent
+        (:meth:`dual_update`).
+    dual_rho : float, default 1.0
+        Dual-ascent step size :math:`\\rho_{\\text{dual}} \\ge 0` used by
+        :meth:`dual_update` in ``"lagrangian"`` mode.
+    dual_max : float, default 1e3
+        Upper bound :math:`\\ge 1.0` on each weight in :attr:`dual_weights`.
+    dual_target : float, default 0.0
+        Target violation tolerance :math:`\\ge 0` subtracted from per-term mean
+        losses in :meth:`dual_update`.
     n_region_samples : int, default 4
         Number of region points sampled per axiom in each step :math:`\\ge 0`.
     n_adv : int, default 2
@@ -516,6 +540,12 @@ class GroundedEL(EmbeddingELModel):
         inverse_of: Optional[
             Union[Sequence[int], th.Tensor, Mapping[Union[str, int], Union[str, int]]]
         ] = None,
+        neg_weight: float = 0.0,
+        neg_k: int = 1,
+        constraint_mode: str = "fixed",
+        dual_rho: float = 1.0,
+        dual_max: float = 1e3,
+        dual_target: float = 0.0,
         *,
         class_index_dict: Optional[Mapping[str, int]] = None,
         object_property_index_dict: Optional[Mapping[str, int]] = None,
@@ -545,6 +575,20 @@ class GroundedEL(EmbeddingELModel):
         eps_role_f = _validate_nonneg_weight("eps_role", eps_role)
         eps_dead_f = _validate_nonneg_weight("eps_dead", eps_dead)
         lambda_reg_f = _validate_nonneg_weight("lambda_reg", lambda_reg)
+        neg_weight_f = _validate_nonneg_weight("neg_weight", neg_weight)
+        _validate_int_ge("neg_k", neg_k, 1)
+        if not isinstance(constraint_mode, str) or constraint_mode not in (
+            "fixed",
+            "lagrangian",
+        ):
+            raise ValueError(
+                f"constraint_mode must be 'fixed' or 'lagrangian', got {constraint_mode!r}"
+            )
+        dual_rho_f = _validate_nonneg_weight("dual_rho", dual_rho)
+        dual_max_f = _validate_nonneg_weight("dual_max", dual_max)
+        if dual_max_f < 1.0:
+            raise ValueError(f"dual_max must be >= 1.0, got {dual_max!r}")
+        dual_target_f = _validate_nonneg_weight("dual_target", dual_target)
         _validate_int_ge("n_region_samples", n_region_samples, 0)
         _validate_int_ge("n_adv", n_adv, 0)
         region_margin_f = _validate_margin("region_margin", region_margin)
@@ -716,6 +760,17 @@ class GroundedEL(EmbeddingELModel):
         self.eps_role = eps_role_f
         self.eps_dead = eps_dead_f
         self.lambda_reg = lambda_reg_f
+        self.neg_weight = neg_weight_f
+        self.neg_k = int(neg_k)
+        self.constraint_mode = constraint_mode
+        self.dual_rho = dual_rho_f
+        self.dual_max = dual_max_f
+        self.dual_target = dual_target_f
+        self.dual_weights: Dict[str, float] = {
+            "fact": 1.0,
+            "axioms": 1.0,
+            "region": 1.0,
+        }
         self.n_region_samples = int(n_region_samples)
         self.n_adv = int(n_adv)
         self.region_margin = region_margin_f
@@ -1216,6 +1271,47 @@ class GroundedEL(EmbeddingELModel):
         ).to(device=data.device)
         return data[idx].to(device=self.device, dtype=th.long)
 
+    def _sample_corrupted_opa(
+        self,
+        opa_data: th.Tensor,
+        gen: th.Generator,
+    ) -> Tuple[th.Tensor, th.Tensor, th.Tensor]:
+        """Sample ``min(len(opa_data), batch_size) * neg_k`` rows of ``opa_data`` and corrupt head or tail with a random individual element ID."""
+        n = int(opa_data.shape[0])
+        n_neg = min(n, self.batch_size) * self.neg_k
+        idx = th.randint(
+            0, n, (n_neg,), dtype=th.long, device=gen.device, generator=gen
+        ).to(device=opa_data.device)
+        neg_rows = opa_data[idx].to(device=self.device, dtype=th.long)
+        el_x = self.nb_classes + neg_rows[:, 0]
+        r_id = neg_rows[:, 1]
+        el_y = self.nb_classes + neg_rows[:, 2]
+        rand_ind = (
+            self.nb_classes
+            + th.randint(
+                0,
+                self.nb_inds,
+                (n_neg,),
+                dtype=th.long,
+                device=gen.device,
+                generator=gen,
+            ).to(device=self.device)
+        )
+        replace_head = (
+            th.randint(
+                0,
+                2,
+                (n_neg,),
+                dtype=th.long,
+                device=gen.device,
+                generator=gen,
+            ).to(device=self.device)
+            == 0
+        )
+        x_neg = th.where(replace_head, rand_ind, el_x)
+        y_neg = th.where(replace_head, el_y, rand_ind)
+        return x_neg, y_neg, r_id
+
     def _batch_candidate_elements(
         self,
         batch_elems: th.Tensor,
@@ -1447,6 +1543,77 @@ class GroundedEL(EmbeddingELModel):
             if self.bot_id is not None:
                 self.module.dead_logits[self.bot_id] = _DEAD_LOGIT
 
+    def dual_update(self, mean_losses: Mapping[str, float]) -> Dict[str, float]:
+        """One dual-ascent step: w_t <- min(dual_max, w_t + dual_rho * max(0, mean_losses[t] - dual_target)) for
+        t in ("fact", "axioms", "region"); a no-op in "fixed" mode. Returns the (new) weights.
+
+        Guarantees:
+        - Reasoner-free (R1).
+        - In ``constraint_mode == "fixed"``, leaves :attr:`dual_weights` unchanged
+          at ``1.0`` and returns them.
+        - In ``constraint_mode == "lagrangian"``, updates each ``t`` in
+          ``("fact", "axioms", "region")`` by
+          ``min(dual_max, w_t + dual_rho * max(0.0, mean_losses[t] - dual_target))``
+          and caps at ``self.dual_max``.
+
+        Non-guarantees:
+        - Mutates :attr:`dual_weights` in-place when ``constraint_mode == "lagrangian"``.
+
+        Parameters
+        ----------
+        mean_losses : Mapping[str, float]
+            Per-term mean losses mapping ``"fact"``, ``"axioms"``, and ``"region"``
+            to numeric values (or 0-D scalar tensors).
+
+        Returns
+        -------
+        Dict[str, float]
+            The (new) ``{"fact": ..., "axioms": ..., "region": ...}`` dual weights.
+        """
+        if not isinstance(mean_losses, Mapping):
+            raise TypeError(
+                f"mean_losses must be a Mapping[str, float], got {type(mean_losses).__name__}"
+            )
+        if self.constraint_mode == "fixed":
+            for t in ("fact", "axioms", "region"):
+                self.dual_weights[t] = 1.0
+            return dict(self.dual_weights)
+        for t in ("fact", "axioms", "region"):
+            if t not in mean_losses:
+                continue
+            raw_v = mean_losses[t]
+            val = (
+                float(raw_v.detach().item())
+                if isinstance(raw_v, th.Tensor)
+                else float(raw_v)
+            )
+            excess = max(0.0, val - self.dual_target)
+            self.dual_weights[t] = float(
+                min(self.dual_max, self.dual_weights[t] + self.dual_rho * excess)
+            )
+        return dict(self.dual_weights)
+
+    def reset_dual_weights(self) -> Dict[str, float]:
+        """Reset :attr:`dual_weights` to ``{"fact": 1.0, "axioms": 1.0, "region": 1.0}`` and return them.
+
+        Guarantees:
+        - Resets ``self.dual_weights["fact"] = self.dual_weights["axioms"] = self.dual_weights["region"] = 1.0``.
+
+        Non-guarantees:
+        - Mutates :attr:`dual_weights` in-place.
+
+        Returns
+        -------
+        Dict[str, float]
+            Reset ``{"fact": 1.0, "axioms": 1.0, "region": 1.0}`` dictionary.
+        """
+        self.dual_weights = {
+            "fact": 1.0,
+            "axioms": 1.0,
+            "region": 1.0,
+        }
+        return dict(self.dual_weights)
+
     def _encode_features(self, features: th.Tensor) -> th.Tensor:
         """Validate ``features`` and map through ``self.module.encoder`` to ``(B, embed_dim)`` positions."""
         mod = self.module
@@ -1668,7 +1835,8 @@ class GroundedEL(EmbeddingELModel):
 
         Guarantees:
         - Returns a dictionary containing ``"fact"``, ``"axioms"``, ``"region"``,
-          ``"minimality"``, and ``"total"`` scalar tensors on ``self.device``.
+          ``"minimality"``, ``"neg"``, ``"total"``, and detached 0-dim tensors
+          ``"w_fact"``, ``"w_axioms"``, ``"w_region"`` on ``self.device``.
         - Uses ``generator`` when provided, or ``self.generator`` when ``None``,
           for all random element and region draws.
         - When ``step`` and ``total_steps`` are provided, updates ``self.module.tau``
@@ -1677,6 +1845,8 @@ class GroundedEL(EmbeddingELModel):
         Non-guarantees:
         - When ``n_region_samples == 0`` or ``lambda_reg == 0``, ``"region"`` is
           exact ``0.0``.
+        - When ``neg_weight > 0``, corrupted pairs are not filtered against the
+          ABox (a corruption may coincide with a stated or entailed fact).
 
         Parameters
         ----------
@@ -2742,6 +2912,21 @@ class GroundedEL(EmbeddingELModel):
                 ).mean()
             )
 
+        # 12b. Corrupted-fact negatives on object property assertions
+        if (
+            self.neg_weight > 0.0
+            and self.nb_inds > 0
+            and "object_property_assertion" in td
+            and len(td["object_property_assertion"]) > 0
+        ):
+            x_neg, y_neg, r_neg = self._sample_corrupted_opa(
+                td["object_property_assertion"][:], generator
+            )
+            rho_neg = mod.role_membership(pos_all[x_neg], pos_all[y_neg], r_neg)
+            loss_neg = rho_neg.mean()
+        else:
+            loss_neg = th.zeros((), dtype=dtype, device=device)
+
         loss_axioms = (
             th.stack(axiom_terms).sum()
             if axiom_terms
@@ -2811,18 +2996,39 @@ class GroundedEL(EmbeddingELModel):
             eps_dead=self.eps_dead,
         )
 
-        total = (
-            loss_fact
-            + loss_axioms
-            + self.lambda_reg * loss_region
-            + loss_min
-        )
+        if self.constraint_mode == "fixed":
+            w_fact_f = 1.0
+            w_axioms_f = 1.0
+            w_region_f = 1.0
+            total = (
+                loss_fact
+                + loss_axioms
+                + self.lambda_reg * loss_region
+                + loss_min
+            )
+        else:
+            w_fact_f = float(self.dual_weights["fact"])
+            w_axioms_f = float(self.dual_weights["axioms"])
+            w_region_f = float(self.dual_weights["region"])
+            total = (
+                w_fact_f * loss_fact
+                + w_axioms_f * loss_axioms
+                + w_region_f * self.lambda_reg * loss_region
+                + loss_min
+            )
+        if self.neg_weight > 0.0:
+            total = total + self.neg_weight * loss_neg
+
         return {
             "fact": loss_fact,
             "axioms": loss_axioms,
             "region": loss_region,
             "minimality": loss_min,
+            "neg": loss_neg,
             "total": total,
+            "w_fact": th.tensor(w_fact_f, dtype=dtype, device=device).detach(),
+            "w_axioms": th.tensor(w_axioms_f, dtype=dtype, device=device).detach(),
+            "w_region": th.tensor(w_region_f, dtype=dtype, device=device).detach(),
             "n_region_skipped_top": _CountInt(n_region_skipped_top),  # type: ignore[dict-item]
         }
 
@@ -3368,6 +3574,11 @@ class GroundedEL(EmbeddingELModel):
                 optimizer.state.clear()
 
             rec = {k: float(v.detach().item()) for k, v in losses.items()}
+            if self.constraint_mode == "lagrangian":
+                new_weights = self.dual_update(rec)
+                rec["w_fact"] = float(new_weights["fact"])
+                rec["w_axioms"] = float(new_weights["axioms"])
+                rec["w_region"] = float(new_weights["region"])
             rec["tau"] = float(tau)
             self.loss_history.append(rec)
 
@@ -3375,7 +3586,7 @@ class GroundedEL(EmbeddingELModel):
                 (epoch + 1) % eff_log_every == 0 or epoch == 0 or epoch + 1 == eff_epochs
             ):
                 logger.info(
-                    "Epoch %d/%d (tau=%.4f): total=%.4e fact=%.4e axioms=%.4e region=%.4e min=%.4e",
+                    "Epoch %d/%d (tau=%.4f): total=%.4e fact=%.4e axioms=%.4e region=%.4e min=%.4e neg=%.4e w=(%.2f,%.2f,%.2f)",
                     epoch + 1,
                     eff_epochs,
                     tau,
@@ -3384,6 +3595,10 @@ class GroundedEL(EmbeddingELModel):
                     rec["axioms"],
                     rec["region"],
                     rec["minimality"],
+                    rec["neg"],
+                    rec["w_fact"],
+                    rec["w_axioms"],
+                    rec["w_region"],
                 )
 
             if epoch_callback is not None:
