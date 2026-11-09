@@ -22,6 +22,7 @@ from mowl.nn.el.grounded import (
     project_exact,
     score_concepts,
     score_entities,
+    score_query_beam,
     union,
 )
 
@@ -691,3 +692,428 @@ def test_differentiability_and_static_hygiene() -> None:
             mod_name = getattr(node, "module", "") or ""
             assert "completion" not in mod_name
             assert "reasoner" not in mod_name
+
+
+# ---------------------------------------------------------------------------
+# 7. Beam (max-min) query scoring: score_query_beam
+# ---------------------------------------------------------------------------
+
+
+def _np_role_depth_matrix(
+    pos: np.ndarray,
+    role_c: np.ndarray,
+    role_w: np.ndarray,
+    role_act: np.ndarray,
+) -> np.ndarray:
+    """Precompute pairwise crisp role depths dep_r(z, x) of shape (R, E, E) in pure numpy."""
+    n_elem = pos.shape[0]
+    nb_rels, kr, _ = role_c.shape
+    diff = pos[None, :, :] - pos[:, None, :]  # (E_z, E_x, d) = p_x - p_z
+    dep = np.full((nb_rels, n_elem, n_elem), -1e6, dtype=np.float64)
+    for r in range(nb_rels):
+        active_k = [k for k in range(kr) if role_act[r, k]]
+        if not active_k:
+            continue
+        k_depths = [
+            np.min(
+                role_w[r, k][None, None, :] - np.abs(diff - role_c[r, k][None, None, :]),
+                axis=-1,
+            )
+            for k in active_k
+        ]
+        dep[r] = np.max(np.stack(k_depths, axis=0), axis=0)
+    return dep
+
+
+def _np_beam_max_min_eval(
+    structure: Any,
+    query: Any,
+    dep_mat: np.ndarray,
+) -> np.ndarray:
+    """Brute-force max-min Gödel beam scores over all elements (k = nb_elements) in pure numpy."""
+    n_elem = dep_mat.shape[1]
+    neg = -1e6
+    big = 1e6
+
+    def _project_all(s: np.ndarray, r: int) -> np.ndarray:
+        valid = s > neg
+        if not np.any(valid):
+            return np.full((n_elem,), neg, dtype=np.float64)
+        # min(s[z], dep_r(z, x)) for valid z, then max over z
+        comb = np.minimum(s[valid, None], dep_mat[r, valid, :])
+        return np.max(comb, axis=0)
+
+    def _eval(struct: Any, q: Any) -> np.ndarray:
+        if isinstance(struct, tuple) and len(struct) == 2 and struct[0] == "e":
+            e_id = int(q[0])
+            rels = [int(r) for r in q[1]]
+            s = np.full((n_elem,), neg, dtype=np.float64)
+            s[e_id] = big
+            for r in rels:
+                s = _project_all(s, r)
+            return s
+
+        if (
+            isinstance(struct, tuple)
+            and len(struct) == 2
+            and isinstance(struct[1], tuple)
+            and all(x == "r" for x in struct[1])
+        ):
+            s = _eval(struct[0], q[0])
+            for r in [int(x) for x in q[1]]:
+                s = _project_all(s, r)
+            return s
+
+        if isinstance(struct, tuple) and struct[-1] == ("u",):
+            acc = _eval(struct[0], q[0])
+            for i in range(1, len(struct) - 1):
+                acc = np.maximum(acc, _eval(struct[i], q[i]))
+            return acc
+
+        acc = _eval(struct[0], q[0])
+        for i in range(1, len(struct)):
+            acc = np.minimum(acc, _eval(struct[i], q[i]))
+        return acc
+
+    return _eval(structure, query)
+
+
+def test_score_query_beam_1p_matches_compile_query_and_type_inv_rel() -> None:
+    """1. 1p: score_query_beam equals score_entities(compile_query(...)) including type_inv_rel."""
+    mod = _make_translation_module(seed=101)
+    rng = np.random.default_rng(1701)
+
+    q_1p = [
+        _sample_random_query_instance(("e", ("r",)), rng, mod.nb_elements, mod.nb_rels)
+        for _ in range(20)
+    ]
+    with th.no_grad():
+        expected_1p = score_entities(mod, compile_query(mod, ("e", ("r",)), q_1p))
+        for k_val in (1, 8, mod.nb_elements, 64):
+            got_1p = score_query_beam(mod, ("e", ("r",)), q_1p, k=k_val, chunk=7)
+            th.testing.assert_close(got_1p, expected_1p)
+
+        # Subset of candidate_element_ids
+        cand_ids = [0, 5, 12, 29]
+        got_sub = score_query_beam(
+            mod, ("e", ("r",)), q_1p, k=16, candidate_element_ids=cand_ids
+        )
+        th.testing.assert_close(got_sub, expected_1p[:, cand_ids])
+
+    # type_inv_rel anchor case (pure and mixed with normal 1p)
+    class_of_entity = th.tensor([0, 1, 2, 3, -1, -1, -1, -1], dtype=th.long)
+    entity_to_element = th.tensor([-1, -1, -1, -1, 10, 11, 12, 13], dtype=th.long)
+    type_rel = 98
+    type_inv_rel = 99
+
+    q_inv = [(0, (type_inv_rel,)), (2, (type_inv_rel,)), (3, (type_inv_rel,))]
+    q_mixed = [(1, (type_inv_rel,)), (4, (0,)), (2, (type_inv_rel,)), (6, (2,))]
+    with th.no_grad():
+        exp_inv = score_entities(
+            mod,
+            compile_query(
+                mod,
+                ("e", ("r",)),
+                q_inv,
+                type_rel=type_rel,
+                type_inv_rel=type_inv_rel,
+                class_of_entity=class_of_entity,
+                entity_to_element=entity_to_element,
+            ),
+        )
+        got_inv = score_query_beam(
+            mod,
+            ("e", ("r",)),
+            q_inv,
+            k=8,
+            type_rel=type_rel,
+            type_inv_rel=type_inv_rel,
+            class_of_entity=class_of_entity,
+            entity_to_element=entity_to_element,
+        )
+        th.testing.assert_close(got_inv, exp_inv)
+
+        exp_mix = score_entities(
+            mod,
+            compile_query(
+                mod,
+                ("e", ("r",)),
+                q_mixed,
+                type_rel=type_rel,
+                type_inv_rel=type_inv_rel,
+                class_of_entity=class_of_entity,
+                entity_to_element=entity_to_element,
+            ),
+        )
+        got_mix = score_query_beam(
+            mod,
+            ("e", ("r",)),
+            q_mixed,
+            k=8,
+            type_rel=type_rel,
+            type_inv_rel=type_inv_rel,
+            class_of_entity=class_of_entity,
+            entity_to_element=entity_to_element,
+        )
+        th.testing.assert_close(got_mix, exp_mix)
+
+
+@pytest.mark.parametrize(
+    "name,structure",
+    (
+        ("2p", ("e", ("r", "r"))),
+        ("ip", ((("e", ("r",)), ("e", ("r",))), ("r",))),
+        ("3p", ("e", ("r", "r", "r"))),
+        ("up", ((("e", ("r",)), ("e", ("r",)), ("u",)), ("r",))),
+    ),
+)
+def test_score_query_beam_full_k_matches_numpy_max_min_and_element_answers(
+    name: str,
+    structure: Any,
+) -> None:
+    """2. 2p and ip (and 3p, up) with k=nb_elements equal numpy brute-force max-min and element-semantics answer set."""
+    mod = _make_translation_module(seed=303)
+    pos, role_c, role_w, role_act = _extract_numpy_geometry(mod)
+    dep_mat = _np_role_depth_matrix(pos, role_c, role_w, role_act)
+    rng = np.random.default_rng(1702)
+
+    batch_size = 24
+    queries = [
+        _sample_random_query_instance(structure, rng, mod.nb_elements, mod.nb_rels)
+        for _ in range(batch_size)
+    ]
+
+    with th.no_grad():
+        got = score_query_beam(
+            mod, structure, queries, k=mod.nb_elements, chunk=11
+        ).cpu().numpy()
+
+    expected_scores = np.zeros_like(got, dtype=np.float64)
+    expected_ans = np.zeros(got.shape, dtype=bool)
+    for b, q in enumerate(queries):
+        expected_scores[b] = _np_beam_max_min_eval(structure, q, dep_mat)
+        expected_ans[b] = _np_element_witness_answers(
+            structure, q, pos, role_c, role_w, role_act
+        )
+
+    np.testing.assert_allclose(
+        got,
+        expected_scores,
+        rtol=1e-5,
+        atol=1e-5,
+        err_msg=f"Max-min score mismatch on {name}",
+    )
+    np.testing.assert_array_equal(
+        got >= 0.0,
+        expected_ans,
+        err_msg=f"Crisp sign pattern (>= 0) mismatch against element-semantics answers on {name}",
+    )
+
+
+def test_score_query_beam_intersection_min_and_union_max() -> None:
+    """3. Intersection = elementwise min and union = elementwise max of branch scores (2i, 2u, pi, up)."""
+    mod = _make_translation_module(seed=404)
+    rng = np.random.default_rng(1703)
+    batch_size = 16
+
+    for k_val in (4, mod.nb_elements):
+        # 2i: (('e', ('r',)), ('e', ('r',)))
+        q_2i = [
+            _sample_random_query_instance(
+                (("e", ("r",)), ("e", ("r",))), rng, mod.nb_elements, mod.nb_rels
+            )
+            for _ in range(batch_size)
+        ]
+        b0_2i = [q[0] for q in q_2i]
+        b1_2i = [q[1] for q in q_2i]
+        with th.no_grad():
+            s_2i = score_query_beam(mod, (("e", ("r",)), ("e", ("r",))), q_2i, k=k_val)
+            s_b0 = score_query_beam(mod, ("e", ("r",)), b0_2i, k=k_val)
+            s_b1 = score_query_beam(mod, ("e", ("r",)), b1_2i, k=k_val)
+            th.testing.assert_close(s_2i, th.minimum(s_b0, s_b1))
+
+        # 2u: (('e', ('r',)), ('e', ('r',)), ('u',))
+        q_2u = [
+            _sample_random_query_instance(
+                (("e", ("r",)), ("e", ("r",)), ("u",)), rng, mod.nb_elements, mod.nb_rels
+            )
+            for _ in range(batch_size)
+        ]
+        b0_2u = [q[0] for q in q_2u]
+        b1_2u = [q[1] for q in q_2u]
+        with th.no_grad():
+            s_2u = score_query_beam(
+                mod, (("e", ("r",)), ("e", ("r",)), ("u",)), q_2u, k=k_val
+            )
+            s_u0 = score_query_beam(mod, ("e", ("r",)), b0_2u, k=k_val)
+            s_u1 = score_query_beam(mod, ("e", ("r",)), b1_2u, k=k_val)
+            th.testing.assert_close(s_2u, th.maximum(s_u0, s_u1))
+
+        # pi: (('e', ('r', 'r')), ('e', ('r',)))
+        q_pi = [
+            _sample_random_query_instance(
+                (("e", ("r", "r")), ("e", ("r",))), rng, mod.nb_elements, mod.nb_rels
+            )
+            for _ in range(batch_size)
+        ]
+        b0_pi = [q[0] for q in q_pi]
+        b1_pi = [q[1] for q in q_pi]
+        with th.no_grad():
+            s_pi = score_query_beam(
+                mod, (("e", ("r", "r")), ("e", ("r",))), q_pi, k=k_val
+            )
+            s_pi0 = score_query_beam(mod, ("e", ("r", "r")), b0_pi, k=k_val)
+            s_pi1 = score_query_beam(mod, ("e", ("r",)), b1_pi, k=k_val)
+            th.testing.assert_close(s_pi, th.minimum(s_pi0, s_pi1))
+
+    # up: ((('e', ('r',)), ('e', ('r',)), ('u',)), ('r',)) with k = nb_elements
+    # When k = nb_elements, projection distributes over union (max), so up equals elementwise max of the two 2p branches.
+    q_up = [
+        _sample_random_query_instance(
+            ((("e", ("r",)), ("e", ("r",)), ("u",)), ("r",)),
+            rng,
+            mod.nb_elements,
+            mod.nb_rels,
+        )
+        for _ in range(batch_size)
+    ]
+    b0_2p = [(q[0][0][0], (q[0][0][1][0], q[1][0])) for q in q_up]
+    b1_2p = [(q[0][1][0], (q[0][1][1][0], q[1][0])) for q in q_up]
+    with th.no_grad():
+        s_up = score_query_beam(
+            mod,
+            ((("e", ("r",)), ("e", ("r",)), ("u",)), ("r",)),
+            q_up,
+            k=mod.nb_elements,
+        )
+        s_up0 = score_query_beam(mod, ("e", ("r", "r")), b0_2p, k=mod.nb_elements)
+        s_up1 = score_query_beam(mod, ("e", ("r", "r")), b1_2p, k=mod.nb_elements)
+        th.testing.assert_close(s_up, th.maximum(s_up0, s_up1))
+
+
+def test_score_query_beam_type_rel_step() -> None:
+    """4. type_rel step: class elements get max_{z in Z} min(S(z), depth(p_z, class_boxes(c))); individuals get NEG."""
+    mod = _make_translation_module(seed=505)
+    type_rel = 98
+    q_hop1 = [(5, (0,)), (12, (1,)), (20, (2,))]
+    q_2p_type = [(5, (0, type_rel)), (12, (1, type_rel)), (20, (2, type_rel))]
+
+    all_pos = mod.positions().detach()
+    c_boxes = class_boxes(mod, None)  # (4, 2, 2)
+
+    for k_val in (1, 4, mod.nb_elements):
+        with th.no_grad():
+            s1 = score_query_beam(mod, ("e", ("r",)), q_hop1, k=k_val)  # (B, E)
+            s_type = score_query_beam(
+                mod,
+                ("e", ("r", "r")),
+                q_2p_type,
+                k=k_val,
+                type_rel=type_rel,
+            )  # (B, E)
+
+        # Individuals (id >= nb_classes) must all equal NEG (-1e6)
+        assert s_type.shape == (len(q_2p_type), mod.nb_elements)
+        th.testing.assert_close(
+            s_type[:, mod.nb_classes :],
+            th.full((len(q_2p_type), mod.nb_elements - mod.nb_classes), -1e6),
+        )
+
+        # Explicitly verify class scores (0 .. nb_classes - 1) against formula
+        k_keep = min(k_val, mod.nb_elements)
+        top_z = th.argsort(s1, dim=1, descending=True, stable=True)[:, :k_keep]
+        for b in range(len(q_2p_type)):
+            z_idx = top_z[b]
+            s_z = s1[b, z_idx]  # (K,)
+            p_z = all_pos[z_idx]  # (K, d)
+            dep_zc = depth(p_z, c_boxes, crisp=True)  # (C, K)
+            expected_c = th.amax(th.minimum(s_z.unsqueeze(0), dep_zc), dim=1)  # (C,)
+            th.testing.assert_close(s_type[b, : mod.nb_classes], expected_c)
+
+    # Projecting again after type_rel with k=10 > nb_classes=4: the 6 individual elements
+    # in top-10 have S(z) == NEG (-1e6) and must contribute NEG, matching k=4.
+    q_3p_after_type = [(5, (0, type_rel, 1)), (12, (1, type_rel, 0))]
+    with th.no_grad():
+        s_after_k4 = score_query_beam(
+            mod, ("e", ("r", "r", "r")), q_3p_after_type, k=4, type_rel=type_rel
+        )
+        s_after_k10 = score_query_beam(
+            mod, ("e", ("r", "r", "r")), q_3p_after_type, k=10, type_rel=type_rel
+        )
+        # Note: at hop 1 (1p), k=4 vs k=10 is identical; at hop 2 (type_rel), we check when hop 1 is type_inv_rel:
+        class_of_entity = th.tensor([0, 1, 2, 3, -1, -1], dtype=th.long)
+        type_inv_rel = 99
+        q_inv_type_r = [(0, (type_inv_rel, type_rel, 1)), (2, (type_inv_rel, type_rel, 0))]
+        s_it_k4 = score_query_beam(
+            mod,
+            ("e", ("r", "r", "r")),
+            q_inv_type_r,
+            k=mod.nb_elements,
+            type_rel=type_rel,
+            type_inv_rel=type_inv_rel,
+            class_of_entity=class_of_entity,
+        )
+        # Only class elements 0..3 have S > NEG after type_rel, so projecting from s_type with k=4 vs k=30 is identical
+        s_type_inv = score_query_beam(
+            mod,
+            ("e", ("r", "r")),
+            [(0, (type_inv_rel, type_rel)), (2, (type_inv_rel, type_rel))],
+            k=mod.nb_elements,
+            type_rel=type_rel,
+            type_inv_rel=type_inv_rel,
+            class_of_entity=class_of_entity,
+        )
+        assert bool((s_type_inv[:, mod.nb_classes :] == -1e6).all())
+        assert s_after_k4.shape == s_after_k10.shape == s_it_k4.shape
+
+
+def test_score_query_beam_monotonicity_in_k() -> None:
+    """5. Monotonicity in k: scores with k=1 <= k=4 <= k=all elementwise."""
+    mod = _make_translation_module(seed=606)
+    rng = np.random.default_rng(1705)
+    batch_size = 16
+
+    monotone_structures = (
+        ("1p", ("e", ("r",))),
+        ("2p", ("e", ("r", "r"))),
+        ("2i", (("e", ("r",)), ("e", ("r",)))),
+        ("3i", (("e", ("r",)), ("e", ("r",)), ("e", ("r",)))),
+        ("2u", (("e", ("r",)), ("e", ("r",)), ("u",))),
+        ("ip", ((("e", ("r",)), ("e", ("r",))), ("r",))),
+        ("pi", (("e", ("r", "r")), ("e", ("r",)))),
+        ("up", ((("e", ("r",)), ("e", ("r",)), ("u",)), ("r",))),
+    )
+    for name, structure in monotone_structures:
+        queries = [
+            _sample_random_query_instance(structure, rng, mod.nb_elements, mod.nb_rels)
+            for _ in range(batch_size)
+        ]
+        with th.no_grad():
+            s_k1 = score_query_beam(mod, structure, queries, k=1)
+            s_k4 = score_query_beam(mod, structure, queries, k=4)
+            s_all = score_query_beam(mod, structure, queries, k=mod.nb_elements)
+
+        assert bool((s_k1 <= s_k4).all()), f"k=1 > k=4 on {name}"
+        assert bool((s_k4 <= s_all).all()), f"k=4 > k=all on {name}"
+
+
+def test_score_query_beam_differentiability() -> None:
+    """score_query_beam is differentiable with respect to element positions, role boxes, and class boxes."""
+    mod = _make_translation_module(seed=808)
+    type_rel = 98
+    q_2p = [(0, (0, 1)), (2, (1, 2))]
+    q_type = [(1, (0, type_rel)), (3, (2, type_rel))]
+
+    s_2p = score_query_beam(mod, ("e", ("r", "r")), q_2p, k=6, chunk=8)
+    s_t = score_query_beam(
+        mod, ("e", ("r", "r")), q_type, k=6, type_rel=type_rel, chunk=8
+    )
+    loss = s_2p.sum() + s_t[:, : mod.nb_classes].sum()
+    loss.backward()
+
+    assert mod.elem_pos.weight.grad is not None
+    assert mod.role_centers.grad is not None
+    assert mod.role_raw_widths.grad is not None
+    assert mod.class_centers.grad is not None
+    assert mod.class_raw_widths.grad is not None
+

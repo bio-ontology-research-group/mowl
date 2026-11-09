@@ -44,6 +44,7 @@ from mowl.nn.el.grounded.queries import (
     project_exact,
     score_concepts,
     score_entities,
+    score_query_beam,
     union,
 )
 from mowl.nn.el.grounded.sampling import (
@@ -75,6 +76,7 @@ __all__ = [
     "score_entities",
     "score_concepts",
     "project_exact",
+    "score_query_beam",
     "crisp_membership",
     "fact",
     "gci0",

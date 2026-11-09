@@ -24,6 +24,9 @@ Implements §4 of ``2026-11-08-query-answering-design.md``:
    ``pi``, ``up``) into a single :class:`MultiBox` batch, supporting dataset
    entity-to-element index mappings, special ``type_inv_rel`` / ``type_rel``
    relations, and ``exact=True`` element-witness projection after the first hop.
+5. **Beam (max-min) query scorer (:func:`score_query_beam`):** Scores queries
+   recursively over all domain elements using Gödel t-norm (max-min) combination
+   of crisp depths over the top-``k`` witness elements per hop.
 
 Guarantees:
 - **Reasoner-free (R1):** Contains no imports or calls to reasoners or semantic
@@ -68,6 +71,7 @@ __all__ = [
     "score_entities",
     "score_concepts",
     "project_exact",
+    "score_query_beam",
 ]
 
 _EMPTY_DEPTH_FLOOR: float = -1e6
@@ -1604,3 +1608,671 @@ def compile_query(
         element_ids=element_ids,
         max_witnesses=max_w,
     )
+
+
+def _beam_project_rel(
+    module: GroundedELModule,
+    S: th.Tensor,
+    rel_ids: th.Tensor,
+    *,
+    k: int,
+    chunk: int,
+    all_pos: th.Tensor,
+    max_elems: int = 1 << 26,
+) -> th.Tensor:
+    """Project element score tensor ``S`` ``(B, E)`` along translation ``rel_ids`` using top-``k`` beam witnesses."""
+    bsz, n_elem = S.shape
+    dim = module.embed_dim
+    device = S.device
+    dtype = S.dtype
+
+    rel_reg = module.translation_regions(rel_ids)
+    kr = rel_reg.cen.shape[1]
+    if bsz == 0 or n_elem == 0:
+        return th.empty((bsz, n_elem), dtype=dtype, device=device)
+    k_keep = min(k, n_elem)
+    if kr == 0 or k_keep == 0:
+        return th.full((bsz, n_elem), _EMPTY_DEPTH_FLOOR, dtype=dtype, device=device)
+
+    top_z = th.argsort(S, dim=1, descending=True, stable=True)[:, :k_keep]  # (B, K)
+    s_z = th.gather(S, 1, top_z)  # (B, K)
+    valid_z = s_z > _EMPTY_DEPTH_FLOOR  # (B, K)
+    has_valid_z = valid_z.any(dim=1, keepdim=True)  # (B, 1)
+    z_pos = all_pos[top_z].to(dtype=dtype)  # (B, K, d)
+
+    r_cen = rel_reg.cen.to(dtype=dtype)  # (B, K_r, d)
+    r_w = rel_reg.w.to(dtype=dtype)  # (B, K_r, d)
+    r_act = rel_reg.active  # (B, K_r)
+    has_r_act = r_act.any(dim=1)  # (B,)
+
+    c_x = min(n_elem, chunk)
+    per_x = max(1, bsz * k_keep * kr * dim)
+    if c_x * per_x > max_elems:
+        c_x = max(1, min(c_x, max_elems // per_x))
+    per_k = max(1, bsz * c_x * kr * dim)
+    c_k = max(1, min(k_keep, max_elems // per_k)) if k_keep * per_k > max_elems else k_keep
+
+    out_chunks: List[th.Tensor] = []
+    for x_start in range(0, n_elem, c_x):
+        p_chunk = all_pos[x_start : x_start + c_x].to(dtype=dtype)  # (n_x, d)
+        best_x: Optional[th.Tensor] = None
+        for k_start in range(0, k_keep, c_k):
+            z_pos_k = z_pos[:, k_start : k_start + c_k, :]  # (B, n_k, d)
+            s_z_k = s_z[:, k_start : k_start + c_k]  # (B, n_k)
+            valid_z_k = valid_z[:, k_start : k_start + c_k]  # (B, n_k)
+
+            cen_zm = z_pos_k.unsqueeze(2) + r_cen.unsqueeze(1)  # (B, n_k, K_r, d)
+            coord_dep = r_w[:, None, None, :, :] - th.abs(
+                p_chunk[None, :, None, None, :] - cen_zm[:, None, :, :, :]
+            )  # (B, n_x, n_k, K_r, d)
+            slot_dep = th.amin(coord_dep, dim=-1)  # (B, n_x, n_k, K_r)
+
+            r_act_mask = r_act[:, None, None, :]  # (B, 1, 1, K_r)
+            r_inactive_fill = th.where(
+                has_r_act[:, None, None, None],
+                th.full_like(slot_dep, float("-inf")),
+                th.full_like(slot_dep, _EMPTY_DEPTH_FLOOR),
+            )
+            dep_r = th.amax(
+                th.where(r_act_mask, slot_dep, r_inactive_fill), dim=-1
+            )  # (B, n_x, n_k)
+
+            cand_val = th.minimum(s_z_k.unsqueeze(1), dep_r)  # (B, n_x, n_k)
+            z_inactive_fill = th.where(
+                has_valid_z.unsqueeze(-1),
+                th.full_like(cand_val, float("-inf")),
+                th.full_like(cand_val, _EMPTY_DEPTH_FLOOR),
+            )
+            masked_val = th.where(valid_z_k.unsqueeze(1), cand_val, z_inactive_fill)
+            chunk_k_best = th.amax(masked_val, dim=-1)  # (B, n_x)
+            best_x = chunk_k_best if best_x is None else th.maximum(best_x, chunk_k_best)
+
+        assert best_x is not None
+        out_chunks.append(best_x)
+
+    return out_chunks[0] if len(out_chunks) == 1 else th.cat(out_chunks, dim=1)
+
+
+def _beam_project_type_rel(
+    module: GroundedELModule,
+    S: th.Tensor,
+    *,
+    k: int,
+    all_pos: th.Tensor,
+    max_elems: int = 1 << 26,
+) -> th.Tensor:
+    """Execute the ``type_rel`` step on beam scores ``S``: class elements get ``max_z min(S(z), depth(p_z, C))``, individuals get ``NEG``."""
+    bsz, n_elem = S.shape
+    n_cls = module.nb_classes
+    dim = module.embed_dim
+    dtype = S.dtype
+    device = S.device
+
+    if bsz == 0 or n_elem == 0:
+        return th.empty((bsz, n_elem), dtype=dtype, device=device)
+
+    k_keep = min(k, n_elem)
+    cls_mb = class_boxes(module, None)  # (C, M_c, d)
+    m_c = cls_mb.cen.shape[1]
+    if m_c == 0 or k_keep == 0 or n_cls == 0:
+        return th.full((bsz, n_elem), _EMPTY_DEPTH_FLOOR, dtype=dtype, device=device)
+
+    top_z = th.argsort(S, dim=1, descending=True, stable=True)[:, :k_keep]  # (B, K)
+    s_z = th.gather(S, 1, top_z)  # (B, K)
+    valid_z = s_z > _EMPTY_DEPTH_FLOOR  # (B, K)
+    has_valid_z = valid_z.any(dim=1, keepdim=True)  # (B, 1)
+    z_pos = all_pos[top_z].to(dtype=dtype)  # (B, K, d)
+
+    per_cls = max(1, bsz * k_keep * m_c * dim)
+    c_chunk = max(1, min(n_cls, max_elems // per_cls))
+
+    cls_chunks: List[th.Tensor] = []
+    for c_start in range(0, n_cls, c_chunk):
+        c_cen = cls_mb.cen[c_start : c_start + c_chunk].to(dtype=dtype)  # (n_c, M_c, d)
+        c_w = cls_mb.w[c_start : c_start + c_chunk].to(dtype=dtype)  # (n_c, M_c, d)
+        c_act = cls_mb.active[c_start : c_start + c_chunk]  # (n_c, M_c)
+        c_has_act = c_act.any(dim=1)  # (n_c,)
+
+        coord_dep = c_w[None, :, None, :, :] - th.abs(
+            z_pos[:, None, :, None, :] - c_cen[None, :, None, :, :]
+        )  # (B, n_c, K, M_c, d)
+        slot_dep = th.amin(coord_dep, dim=-1)  # (B, n_c, K, M_c)
+
+        c_act_mask = c_act[None, :, None, :]  # (1, n_c, 1, M_c)
+        c_inactive_fill = th.where(
+            c_has_act[None, :, None, None],
+            th.full_like(slot_dep, float("-inf")),
+            th.full_like(slot_dep, _EMPTY_DEPTH_FLOOR),
+        )
+        dep_zc = th.amax(
+            th.where(c_act_mask, slot_dep, c_inactive_fill), dim=-1
+        )  # (B, n_c, K)
+
+        cand_val = th.minimum(s_z.unsqueeze(1), dep_zc)  # (B, n_c, K)
+        z_inactive_fill = th.where(
+            has_valid_z.unsqueeze(-1),
+            th.full_like(cand_val, float("-inf")),
+            th.full_like(cand_val, _EMPTY_DEPTH_FLOOR),
+        )
+        masked_val = th.where(valid_z.unsqueeze(1), cand_val, z_inactive_fill)
+        cls_chunks.append(th.amax(masked_val, dim=-1))  # (B, n_c)
+
+    cls_scores = cls_chunks[0] if len(cls_chunks) == 1 else th.cat(cls_chunks, dim=1)
+    if n_elem > n_cls:
+        ind_pad = th.full(
+            (bsz, n_elem - n_cls), _EMPTY_DEPTH_FLOOR, dtype=dtype, device=device
+        )
+        return th.cat([cls_scores, ind_pad], dim=1)
+    return cls_scores
+
+
+def _apply_beam_hop(
+    module: GroundedELModule,
+    S: th.Tensor,
+    hop_rels_tuple: Tuple[int, ...],
+    *,
+    is_first_hop: bool,
+    anchor_cls_ids: Optional[th.Tensor],
+    all_anchors_are_classes: bool,
+    type_rel: Optional[int],
+    type_inv_rel: Optional[int],
+    k: int,
+    chunk: int,
+    all_pos: th.Tensor,
+) -> th.Tensor:
+    """Apply a single relation hop to element score matrix ``S`` ``(B, E)`` without Python loops over the batch."""
+    device = S.device
+    rel_set = set(hop_rels_tuple)
+    r_t = _to_1d_long(hop_rels_tuple, device, "rel_ids")
+
+    has_type_inv = (
+        is_first_hop
+        and type_inv_rel is not None
+        and anchor_cls_ids is not None
+        and (type_inv_rel in rel_set)
+    )
+    only_type_inv = (
+        has_type_inv
+        and rel_set == {type_inv_rel}
+        and all_anchors_are_classes
+    )
+    has_type = type_rel is not None and (type_rel in rel_set)
+    only_type = has_type and (not has_type_inv) and rel_set == {type_rel}
+    only_normal = (not has_type_inv) and (not has_type)
+
+    if only_type_inv:
+        assert anchor_cls_ids is not None
+        return score_entities(
+            module, class_boxes(module, anchor_cls_ids), chunk=chunk
+        )
+
+    if only_type:
+        return _beam_project_type_rel(module, S, k=k, all_pos=all_pos)
+
+    if only_normal:
+        return _beam_project_rel(
+            module, S, r_t, k=k, chunk=chunk, all_pos=all_pos
+        )
+
+    special_rels = set()
+    if has_type_inv and all_anchors_are_classes and type_inv_rel is not None:
+        special_rels.add(type_inv_rel)
+    if has_type and type_rel is not None:
+        special_rels.add(type_rel)
+    has_normal = len(rel_set - special_rels) > 0
+
+    cur: Optional[th.Tensor] = None
+    if has_normal:
+        safe_r = r_t
+        if type_inv_rel is not None:
+            safe_r = th.where(safe_r == type_inv_rel, th.zeros_like(safe_r), safe_r)
+        if type_rel is not None:
+            safe_r = th.where(safe_r == type_rel, th.zeros_like(safe_r), safe_r)
+        cur = _beam_project_rel(
+            module, S, safe_r, k=k, chunk=chunk, all_pos=all_pos
+        )
+
+    if has_type:
+        s_type = _beam_project_type_rel(module, S, k=k, all_pos=all_pos)
+        if cur is None:
+            cur = s_type
+        else:
+            t_mask = (r_t == type_rel).unsqueeze(1)
+            cur = th.where(t_mask, s_type, cur)
+
+    if has_type_inv:
+        assert anchor_cls_ids is not None
+        inv_mask = (r_t == type_inv_rel) & (anchor_cls_ids >= 0)
+        safe_cls = th.clamp_min(anchor_cls_ids, 0)
+        s_inv = score_entities(
+            module, class_boxes(module, safe_cls), chunk=chunk
+        )
+        if cur is None:
+            cur = th.where(
+                inv_mask.unsqueeze(1),
+                s_inv,
+                th.full_like(s_inv, _EMPTY_DEPTH_FLOOR),
+            )
+        else:
+            cur = th.where(inv_mask.unsqueeze(1), s_inv, cur)
+
+    assert cur is not None
+    return cur
+
+
+def _score_beam_recursive(
+    module: GroundedELModule,
+    structure: Any,
+    queries: Sequence[Any],
+    *,
+    e2el_t: Optional[th.Tensor],
+    c2e_t: Optional[th.Tensor],
+    c2e_arr: Optional[np.ndarray],
+    type_rel: Optional[int],
+    type_inv_rel: Optional[int],
+    k: int,
+    chunk: int,
+    all_pos: th.Tensor,
+) -> th.Tensor:
+    """Recursively compute ``(B, E)`` beam scores for ``queries`` matching ``structure``."""
+    bsz = len(queries)
+    n_elem = module.nb_elements
+    device = all_pos.device
+    dtype = all_pos.dtype
+
+    # Case 1: Path starting from an anchor ('e', ('r', ...)) or ('e',) or 'e'
+    if structure == "e" or (
+        isinstance(structure, tuple) and len(structure) >= 1 and structure[0] == "e"
+    ):
+        if structure == "e":
+            ents_seq: Any = queries
+            hop_tuples: Tuple[Tuple[int, ...], ...] = ()
+            n_hops = 0
+        elif len(structure) == 1:
+            (ents_seq,) = tuple(zip(*queries))
+            hop_tuples = ()
+            n_hops = 0
+        elif (
+            len(structure) == 2
+            and isinstance(structure[1], tuple)
+            and all(x == "r" for x in structure[1])
+        ):
+            n_hops = len(structure[1])
+            unpacked = tuple(zip(*queries))
+            if len(unpacked) != 2:
+                raise ValueError(
+                    f"Queries do not match anchor structure {structure!r}"
+                )
+            ents_seq, rels_seq = unpacked
+            if n_hops > 0:
+                hop_tuples = tuple(zip(*rels_seq))
+                if len(hop_tuples) != n_hops:
+                    raise ValueError(
+                        f"Query relation tuples do not match structure {structure!r}"
+                    )
+            else:
+                hop_tuples = ()
+        else:
+            raise ValueError(f"Unsupported anchor query structure: {structure!r}")
+
+        ent_ids = _to_1d_long(ents_seq, device, "anchor_ids")
+        ent_arr = np.asarray(ents_seq, dtype=np.int64)
+
+        if c2e_t is not None and c2e_arr is not None:
+            if ent_arr.min() < 0 or ent_arr.max() >= c2e_arr.shape[0]:
+                raise ValueError(
+                    f"Anchor entity id out of range [0, {c2e_arr.shape[0]}) for class_of_entity"
+                )
+            anchor_cls_ids: Optional[th.Tensor] = c2e_t[ent_ids]
+            all_anchors_are_classes = bool(np.all(c2e_arr[ent_arr] >= 0))
+        elif type_inv_rel is not None:
+            if e2el_t is not None:
+                if ent_arr.min() < 0 or ent_arr.max() >= int(e2el_t.shape[0]):
+                    raise ValueError(
+                        f"Anchor entity id out of range [0, {int(e2el_t.shape[0])}) for entity_to_element"
+                    )
+                mapped_ids = e2el_t[ent_ids]
+            else:
+                mapped_ids = ent_ids
+            is_cls_elem = (mapped_ids >= 0) & (mapped_ids < module.nb_classes)
+            anchor_cls_ids = th.where(
+                is_cls_elem, mapped_ids, th.full_like(mapped_ids, -1)
+            )
+            all_anchors_are_classes = (
+                e2el_t is None
+                and bool(np.all((ent_arr >= 0) & (ent_arr < module.nb_classes)))
+            )
+        else:
+            anchor_cls_ids = None
+            all_anchors_are_classes = False
+
+        if e2el_t is not None:
+            if ent_arr.min() < 0 or ent_arr.max() >= int(e2el_t.shape[0]):
+                raise ValueError(
+                    f"Anchor entity id out of range [0, {int(e2el_t.shape[0])}) for entity_to_element"
+                )
+            elem_ids = e2el_t[ent_ids]
+        else:
+            elem_ids = ent_ids
+
+        hop0_only_type_inv = (
+            n_hops > 0
+            and type_inv_rel is not None
+            and set(hop_tuples[0]) == {type_inv_rel}
+            and all_anchors_are_classes
+        )
+        if hop0_only_type_inv:
+            S = th.full(
+                (bsz, n_elem), _EMPTY_DEPTH_FLOOR, dtype=dtype, device=device
+            )
+        else:
+            if (
+                n_hops > 0
+                and type_inv_rel is not None
+                and (type_inv_rel in set(hop_tuples[0]))
+                and anchor_cls_ids is not None
+            ):
+                r0_t = _to_1d_long(hop_tuples[0], device, "rel_ids")
+                is_replaced = (r0_t == type_inv_rel) & (anchor_cls_ids >= 0)
+                safe_elem_ids = th.where(
+                    is_replaced & (elem_ids < 0),
+                    th.zeros_like(elem_ids),
+                    elem_ids,
+                )
+            else:
+                safe_elem_ids = elem_ids
+            if safe_elem_ids.numel() > 0 and bool(
+                ((safe_elem_ids < 0) | (safe_elem_ids >= n_elem)).any()
+            ):
+                raise ValueError(
+                    f"Anchor element id out of range [0, {n_elem})"
+                )
+            elem_grid = th.arange(n_elem, dtype=th.long, device=device).unsqueeze(0)
+            S = th.where(
+                elem_grid == safe_elem_ids.unsqueeze(1),
+                th.full((bsz, n_elem), _TOP_DEPTH_CEIL, dtype=dtype, device=device),
+                th.full((bsz, n_elem), _EMPTY_DEPTH_FLOOR, dtype=dtype, device=device),
+            )
+
+        for hop in range(n_hops):
+            S = _apply_beam_hop(
+                module,
+                S,
+                hop_tuples[hop],
+                is_first_hop=(hop == 0),
+                anchor_cls_ids=anchor_cls_ids if hop == 0 else None,
+                all_anchors_are_classes=all_anchors_are_classes if hop == 0 else False,
+                type_rel=type_rel,
+                type_inv_rel=type_inv_rel,
+                k=k,
+                chunk=chunk,
+                all_pos=all_pos,
+            )
+        return S
+
+    if not isinstance(structure, tuple) or len(structure) < 2:
+        raise ValueError(f"Unsupported query structure: {structure!r}")
+
+    cols = tuple(zip(*queries))
+
+    # Case 2: Compound projection (sub_structure, ('r', ...)) such as ip or up
+    if len(structure) == 2 and _is_rel_tuple(structure[1]):
+        if len(cols) != 2:
+            raise ValueError(f"Queries do not match compound structure {structure!r}")
+        sub_struct = structure[0]
+        rel_spec = structure[1]
+        n_hops = len(rel_spec)
+        sub_queries, rels_seq = cols
+        hop_tuples = tuple(zip(*rels_seq))
+        if len(hop_tuples) != n_hops:
+            raise ValueError(
+                f"Query relation tuples do not match structure {structure!r}"
+            )
+        S = _score_beam_recursive(
+            module,
+            sub_struct,
+            sub_queries,
+            e2el_t=e2el_t,
+            c2e_t=c2e_t,
+            c2e_arr=c2e_arr,
+            type_rel=type_rel,
+            type_inv_rel=type_inv_rel,
+            k=k,
+            chunk=chunk,
+            all_pos=all_pos,
+        )
+        for hop in range(n_hops):
+            S = _apply_beam_hop(
+                module,
+                S,
+                hop_tuples[hop],
+                is_first_hop=False,
+                anchor_cls_ids=None,
+                all_anchors_are_classes=False,
+                type_rel=type_rel,
+                type_inv_rel=type_inv_rel,
+                k=k,
+                chunk=chunk,
+                all_pos=all_pos,
+            )
+        return S
+
+    # Case 3: Union (sub_1, sub_2, ..., ('u',))
+    if structure[-1] == ("u",):
+        if len(structure) < 3:
+            raise ValueError(
+                f"Union structure must have at least 2 disjuncts before ('u',), got {structure!r}"
+            )
+        n_disj = len(structure) - 1
+        if len(cols) < n_disj:
+            raise ValueError(f"Queries do not match union structure {structure!r}")
+        S_acc = _score_beam_recursive(
+            module,
+            structure[0],
+            cols[0],
+            e2el_t=e2el_t,
+            c2e_t=c2e_t,
+            c2e_arr=c2e_arr,
+            type_rel=type_rel,
+            type_inv_rel=type_inv_rel,
+            k=k,
+            chunk=chunk,
+            all_pos=all_pos,
+        )
+        for i in range(1, n_disj):
+            S_i = _score_beam_recursive(
+                module,
+                structure[i],
+                cols[i],
+                e2el_t=e2el_t,
+                c2e_t=c2e_t,
+                c2e_arr=c2e_arr,
+                type_rel=type_rel,
+                type_inv_rel=type_inv_rel,
+                k=k,
+                chunk=chunk,
+                all_pos=all_pos,
+            )
+            S_acc = th.maximum(S_acc, S_i)
+        return S_acc
+
+    # Case 4: Intersection (sub_1, sub_2, ...)
+    n_conj = len(structure)
+    if len(cols) != n_conj:
+        raise ValueError(f"Queries do not match intersection structure {structure!r}")
+    S_acc = _score_beam_recursive(
+        module,
+        structure[0],
+        cols[0],
+        e2el_t=e2el_t,
+        c2e_t=c2e_t,
+        c2e_arr=c2e_arr,
+        type_rel=type_rel,
+        type_inv_rel=type_inv_rel,
+        k=k,
+        chunk=chunk,
+        all_pos=all_pos,
+    )
+    for i in range(1, n_conj):
+        S_i = _score_beam_recursive(
+            module,
+            structure[i],
+            cols[i],
+            e2el_t=e2el_t,
+            c2e_t=c2e_t,
+            c2e_arr=c2e_arr,
+            type_rel=type_rel,
+            type_inv_rel=type_inv_rel,
+            k=k,
+            chunk=chunk,
+            all_pos=all_pos,
+        )
+        S_acc = th.minimum(S_acc, S_i)
+    return S_acc
+
+
+def score_query_beam(
+    module: GroundedELModule,
+    structure: Any,
+    queries: Sequence[Any],
+    *,
+    k: int = 64,
+    type_rel: Optional[int] = None,
+    type_inv_rel: Optional[int] = None,
+    class_of_entity: Optional[Union[Sequence[int], np.ndarray, th.Tensor]] = None,
+    entity_to_element: Optional[Union[Sequence[int], np.ndarray, th.Tensor]] = None,
+    candidate_element_ids: Optional[Union[int, Sequence[int], np.ndarray, th.Tensor]] = None,
+    chunk: int = 65536,
+) -> th.Tensor:
+    """Score a batch of Query2Box-structured ``queries`` via recursive top-``k`` max-min (Gödel t-norm) beam search.
+
+    Maintains a score tensor :math:`S` of shape ``(B, E)`` over all domain elements
+    :math:`E = \\text{module.nb\\_elements}` (with unreachable floor ``NEG = -1e6``
+    and anchor ceiling ``BIG = +1e6``):
+
+    - **Anchor** :math:`e`: :math:`S[b, \\text{el}(e)] = +10^6` and :math:`-10^6`
+      elsewhere.
+    - **Projection** by relation :math:`r` from :math:`S`: selects the top-``k``
+      element indices :math:`Z` of :math:`S` per query (ties broken by smaller
+      element index) and evaluates
+      :math:`S'(x) = \\max_{z \\in Z} \\min(S(z),\\, \\operatorname{dep}_r(z, x))`,
+      where :math:`\\operatorname{dep}_r(z, x) = \\max_m \\min_j (w_{r,m,j} - |p_{x,j} - p_{z,j} - c_{r,m,j}|)`
+      over active translation boxes :math:`m` of :math:`r` and entries with
+      :math:`S(z) \\le \\text{NEG}` contribute ``NEG``.
+    - **``type_inv_rel``** from a class-entity anchor :math:`A`:
+      :math:`S'(x) = \\operatorname{depth}(p_x,\\, \\text{class\\_boxes}(A))`.
+    - **``type_rel``** from :math:`S`: for every class :math:`c < \\text{nb\\_classes}`,
+      :math:`S'(c) = \\max_{z \\in Z} \\min(S(z),\\, \\operatorname{depth}(p_z,\\, \\text{class\\_boxes}(c)))`;
+      all individual elements (:math:`\\text{id} \\ge \\text{nb\\_classes}`) receive ``NEG``.
+    - **Intersection / Union:** elementwise ``min`` / ``max`` of branch score tensors.
+
+    Guarantees:
+    - **Reasoner-free (R1):** Contains no imports or calls to reasoners or semantic
+      completion routines.
+    - **1p equivalence:** On single-hop queries ``('e', ('r',))`` (including
+      ``type_inv_rel`` class-entity anchors), ``score_query_beam`` equals
+      ``score_entities(module, compile_query(module, ('e', ('r',)), ...))`` for any ``k >= 1``.
+    - **Crisp consistency:** With ``k >= module.nb_elements``, the crisp answer set
+      :math:`\\{x : S(x) \\ge 0\\}` (strict interior :math:`\\{x : S(x) > 0\\}` off
+      measure-zero box boundaries) equals the element-semantics answer set of
+      :func:`project_exact` with unlimited witnesses and boxes.
+    - **Monotonicity in ``k``:** For any single-hop or two-stage query structure
+      (``1p``, ``2p``, ``2i``, ``3i``, ``2u``, ``ip``, ``pi``, ``up``), scores are
+      monotone non-decreasing in ``k`` (``k_1 <= k_2`` implies
+      ``score_query_beam(..., k=k_1) <= score_query_beam(..., k=k_2)`` elementwise).
+    - **Memory-bounded and differentiable:** Evaluates projections in chunks of at
+      most ``chunk`` elements without calling ``.item()``, remaining ``no_grad``-safe
+      and differentiable when gradients are enabled.
+
+    Non-guarantees:
+    - When ``k < module.nb_elements``, witnesses outside the top-``k`` elements of
+      :math:`S` at an intermediate projection step are pruned.
+    - Gradients flow through the selected top-``k`` witness paths and winning
+      box/coordinate indices, not through the discrete ``argsort`` witness selection.
+
+    Parameters
+    ----------
+    module : GroundedELModule
+        Grounded EL module in ``"translation"`` role mode.
+    structure : Any
+        Query2Box structure tuple describing the query syntax tree.
+    queries : Sequence[Any]
+        Batch of query instances matching ``structure``.
+    k : int, default 64
+        Beam width (number of top-scoring witness elements retained per projection step) :math:`\\ge 1`.
+    type_rel : Optional[int], default None
+        Optional relation id representing ``rdf:type`` (concept-level step).
+    type_inv_rel : Optional[int], default None
+        Optional relation id representing ``rdf:type^-`` (class-instance step).
+    class_of_entity : Optional[Union[Sequence[int], numpy.ndarray, torch.Tensor]], default None
+        Optional 1-D mapping from dataset entity ids to class ids in
+        ``[0, module.nb_classes)`` (or ``-1`` for non-class entities).
+    entity_to_element : Optional[Union[Sequence[int], numpy.ndarray, torch.Tensor]], default None
+        Optional 1-D mapping from dataset entity ids to module element ids in
+        ``[0, module.nb_elements)``. When ``None``, anchor ids in ``queries``
+        are used directly as module element ids.
+    candidate_element_ids : Optional[Union[int, Sequence[int], numpy.ndarray, torch.Tensor]], default None
+        Optional 1-D candidate element indices in ``[0, module.nb_elements)`` to
+        gather at the end, or ``None`` for all elements ``0 .. module.nb_elements - 1``.
+    chunk : int, default 65536
+        Element chunk size :math:`\\ge 1` for projection steps.
+
+    Returns
+    -------
+    torch.Tensor
+        Candidate element scores of shape ``(B, N)`` where ``N = module.nb_elements``
+        when ``candidate_element_ids is None``.
+    """
+    _validate_module(module, require_translation=True)
+    k_val = _validate_int_ge("k", k, 1)
+    chunk_sz = _validate_int_ge("chunk", chunk, 1)
+    if not isinstance(queries, (list, tuple)):
+        raise TypeError(
+            f"queries must be a Sequence (list or tuple) of query instances, got {type(queries).__name__}"
+        )
+
+    device = module.elem_pos.weight.device
+    dtype = module.elem_pos.weight.dtype
+    n_elem = module.nb_elements
+
+    cand_idx: Optional[th.Tensor] = None
+    if candidate_element_ids is not None:
+        cand_idx = _to_1d_long(candidate_element_ids, device, "candidate_element_ids")
+        if cand_idx.numel() > 0 and bool(
+            ((cand_idx < 0) | (cand_idx >= n_elem)).any()
+        ):
+            raise ValueError(
+                f"candidate_element_ids indices out of range [0, {n_elem})"
+            )
+
+    if len(queries) == 0:
+        n_out = n_elem if cand_idx is None else int(cand_idx.shape[0])
+        return th.empty((0, n_out), dtype=dtype, device=device)
+
+    e2el_t: Optional[th.Tensor] = None
+    if entity_to_element is not None:
+        e2el_t = _to_1d_long(entity_to_element, device, "entity_to_element")
+
+    c2e_t: Optional[th.Tensor] = None
+    c2e_arr: Optional[np.ndarray] = None
+    if class_of_entity is not None:
+        c2e_t = _to_1d_long(class_of_entity, device, "class_of_entity")
+        c2e_arr = c2e_t.detach().cpu().numpy()
+
+    all_pos = module.positions()  # (E, d)
+    S = _score_beam_recursive(
+        module,
+        structure,
+        queries,
+        e2el_t=e2el_t,
+        c2e_t=c2e_t,
+        c2e_arr=c2e_arr,
+        type_rel=type_rel,
+        type_inv_rel=type_inv_rel,
+        k=k_val,
+        chunk=chunk_sz,
+        all_pos=all_pos,
+    )
+    if cand_idx is None:
+        return S
+    return S[:, cand_idx]
