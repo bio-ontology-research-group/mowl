@@ -214,6 +214,11 @@ def test_sparse_scale_synthetic():
             lm, gci0=gci0, gci1=gci1, gci2=gci2, gci3=gci3, role_chain=[[0, 0, 0]]
         ).values()
     )
+    real = interval_realisation(lm, "dfs")
+    assert real.runs_per_class.sum() >= (lm.labels.getnnz(axis=0) > 0).sum()
+    sub = lm.subsumption_matrix(np.arange(5_000), empty_subsumed_by_all=False)
+    assert sub.diagonal().all()
+    assert resource.getrusage(resource.RUSAGE_SELF).ru_maxrss < 30 * 1024 * 1024
 
 
 def test_t3_groundedel_integration(t3_dataset, t3_cm):
@@ -259,3 +264,98 @@ def test_t3_groundedel_integration(t3_dataset, t3_cm):
     assert report["region_viol"] == 0
     tables = {k: getattr(v, "data", v) for k, v in probe.training_datasets.items()}
     assert all(v == 0 for v in check_model(lm, **tables).values())
+
+
+def _random_theory(rng, nc=9, nr=2, ni=3):
+    bot = nc - 1
+    cls = lambda k: rng.integers(0, nc - 1, size=k)  # noqa: E731
+    return dict(
+        gci0=np.column_stack((cls(6), cls(6))),
+        gci1=np.column_stack((cls(3), cls(3), cls(3))),
+        gci2=np.column_stack((cls(4), rng.integers(0, nr, 4), cls(4))),
+        gci3=np.column_stack((rng.integers(0, nr, 3), cls(3), cls(3))),
+        gci1_bot=np.column_stack((cls(2), cls(2), np.full(2, bot))),
+        gci3_bot=np.column_stack((rng.integers(0, nr, 1), cls(1), np.full(1, bot))),
+        role_inclusion=np.array([[0, 1]]),
+        role_chain=np.array([[1, 1, 1]]),
+        class_assertion=np.column_stack((rng.integers(0, ni, 3), cls(3))),
+        object_property_assertion=np.column_stack(
+            (rng.integers(0, ni, 3), rng.integers(0, nr, 3), rng.integers(0, ni, 3))
+        ),
+    )
+
+
+def test_interval_realisation_with_dead_blocks():
+    # bottom's own block is always dead; C is unsatisfiable; r-edges exist
+    tables = dict(
+        gci0=[[1, 0], [2, 0], [3, 1], [3, 2]],
+        gci1_bot=[[1, 2, 4]],
+        gci2=[[1, 0, 2]],
+    )
+    lm = least_model(5, nb_rels=1, bot_id=4, **tables)
+    assert lm.unsatisfiable_classes().tolist() == [3]
+    for order in ("dfs", "identity"):
+        real = interval_realisation(lm, order)
+        assert sorted(real.order.tolist()) == [0, 1, 2]
+        rank = {b: i for i, b in enumerate(real.order.tolist())}
+        for c in range(5):
+            got = {i for lo, hi in real.intervals[c] for i in range(lo, hi + 1)}
+            assert got == {rank[b] for b in lm.labels[:, c].nonzero()[0]}
+        assert real.role_products == 1
+    with pytest.raises(ValueError):
+        interval_realisation(lm, [0, 1, 4])
+
+
+def test_vectorised_checker_matches_reference_on_valid_and_broken_models():
+    from scipy import sparse
+
+    from mowl.geometric.least_model import _check_model_reference
+
+    rng = np.random.default_rng(5)
+    n_broken = 0
+    for _ in range(50):
+        tables = _random_theory(rng)
+        lm = least_model(9, nb_rels=2, nb_individuals=3, bot_id=8, **tables)
+        assert check_model(lm, **tables) == _check_model_reference(lm, **tables)
+        clean = check_model(lm, **tables)
+        # the pruned view is a model iff the KB is consistent; otherwise only
+        # assertions about dead individuals fail
+        bad = {k for k, v in clean.items() if v}
+        assert bad <= ({"class_assertion", "object_property_assertion"} if not lm.consistent else set())
+        # break the model: drop random labels and edges
+        coo = lm.labels.tocoo()
+        keep = rng.random(coo.nnz) > 0.3
+        lm.labels = sparse.csr_matrix(
+            (np.ones(keep.sum(), dtype=bool), (coo.row[keep], coo.col[keep])),
+            shape=lm.labels.shape,
+        )
+        lm.edges = lm.edges[rng.random(len(lm.edges)) > 0.3]
+        got = check_model(lm, **tables)
+        assert got == _check_model_reference(lm, **tables)
+        n_broken += any(v > 0 for v in got.values())
+    assert n_broken > 25
+
+
+def test_subsumption_matrix_chunked_and_empty_columns():
+    rng = np.random.default_rng(11)
+    for _ in range(10):
+        tables = _random_theory(rng)
+        lm = least_model(9, nb_rels=2, nb_individuals=3, bot_id=8, **tables)
+        dense = lm.labels.toarray()
+        brute = np.array(
+            [[not (dense[:, i] & ~dense[:, j]).any() for j in range(9)] for i in range(9)]
+        )
+        assert np.array_equal(lm.subsumption_matrix(chunk=2).toarray(), brute)
+        nonempty = dense.any(axis=0)
+        lazy = lm.subsumption_matrix(empty_subsumed_by_all=False).toarray()
+        assert np.array_equal(lazy, brute & nonempty[:, None])
+        assert not dense[:, 8].any()
+
+
+def test_lp_callable_weights_are_deterministic():
+    tables = dict(gci0=[[0, 1]], gci1=[[0, 1, 2]])
+    w = lambda rng: rng.uniform(0.5, 2.0, size=3 * 3 + 3)  # noqa: E731
+    a = least_model(3, method="lp", objective_weights=w, **tables)
+    b = least_model(3, method="lp", objective_weights=w, **tables)
+    assert a.lp_objective == b.lp_objective
+    assert np.array_equal(a.labels.toarray(), least_model(3, **tables).labels.toarray())

@@ -24,6 +24,36 @@ from scipy import sparse
 
 @dataclass
 class LeastModel:
+    """Finite least model of a normalised EL++ ontology over blocks of syntactic elements.
+
+    Elements ``0 .. nb_classes - 1`` are the class elements ``x_A`` (element id =
+    class id); elements ``nb_classes ..`` are individuals. ``element_map`` sends
+    every element to its block (the identity unless a quotient was requested).
+
+    Guarantees
+    ----------
+    - ``raw_labels`` / ``raw_edges`` / ``dead`` are the fixpoint of the grounded
+      completion rules (see :func:`least_model`).
+    - ``labels`` / ``edges`` are the pruned view: rows of dead blocks are empty,
+      no edge touches a dead block, and column ``bot_id`` is empty. The pruned
+      view is a model of the tables it was computed from.
+
+    Non-guarantees
+    --------------
+    - A class whose own block is dead is unsatisfiable and has an empty column.
+    - With a non-identity ``element_map`` the model need not be the least model
+      of the ontology; it is the least model in which merged elements coincide.
+
+    Attributes
+    ----------
+    labels : scipy.sparse.csr_matrix
+        Boolean ``(n_blocks, nb_classes)`` membership matrix (pruned).
+    edges : numpy.ndarray
+        ``(m, 3)`` int64 rows ``(block_x, block_y, role)``, sorted, unique (pruned).
+    dead : numpy.ndarray
+        Boolean ``(n_blocks,)``; a dead block derives bottom.
+    """
+
     nb_classes: int
     nb_rels: int
     nb_individuals: int
@@ -41,23 +71,49 @@ class LeastModel:
 
     @property
     def consistent(self):
+        """``True`` iff no block of an individual (or of top) is dead."""
         return not (
             self.dead[self.element_map[self.nb_classes:]].any()
             or (self.top_id is not None and self.dead[self.element_map[self.top_id]])
         )
 
     def unsatisfiable_classes(self):
+        """Class ids (``bot_id`` excluded) whose own block is dead."""
         ids = np.flatnonzero(self.dead[self.element_map[: self.nb_classes]])
         if self.bot_id is not None:
             ids = ids[ids != self.bot_id]
         return ids.astype(np.int64)
 
     def holds(self, sub, sup):
+        """``True`` iff column ``sub`` is contained in column ``sup`` (pruned model)."""
         a = self.labels[:, int(sub)]
         b = self.labels[:, int(sup)]
         return (a - a.multiply(b)).nnz == 0
 
-    def subsumption_matrix(self, class_ids=None):
+    def subsumption_matrix(self, class_ids=None, empty_subsumed_by_all=True, chunk=4096):
+        """Sparse matrix of the subsumptions that hold in the pruned model.
+
+        Parameters
+        ----------
+        class_ids : array-like of int, optional
+            Classes to compare (default: all classes).
+        empty_subsumed_by_all : bool, default True
+            If ``True`` an empty column is contained in every column (one dense
+            row per empty column). If ``False`` empty columns get no entries.
+        chunk : int, default 4096
+            Number of source classes per sparse product.
+
+        Returns
+        -------
+        scipy.sparse.csr_matrix
+            Boolean ``(len(ids), len(ids))``; entry ``(i, j)`` iff column
+            ``ids[i]`` is a subset of column ``ids[j]`` (reflexive).
+
+        Guarantees
+        ----------
+        Exact (not sampled); never materialises a dense ``n x n`` array except
+        the rows of empty columns when ``empty_subsumed_by_all`` is ``True``.
+        """
         ids = (
             np.arange(self.nb_classes, dtype=np.int64)
             if class_ids is None
@@ -67,46 +123,43 @@ class LeastModel:
             raise ValueError(
                 "class_ids must be a one-dimensional array of valid class ids"
             )
-        # For each nonempty source column, its supersets are found by sparse
-        # intersections; chunking bounds temporary storage for large signatures.
+        n = len(ids)
+        cols = self.labels[:, ids].astype(np.int32).tocsc()
+        sizes = np.asarray(cols.getnnz(axis=0)).ravel()
+        cols_r = cols.tocsr()
         out_r, out_c = [], []
-        cols = self.labels[:, ids].tocsc()
-        row_frequency = np.asarray(cols.getnnz(axis=1)).ravel()
-        for start in range(0, len(ids), 256):
-            for j in range(start, min(start + 256, len(ids))):
-                src = cols[:, j]
-                if src.nnz == 0:
-                    out_r.extend([j] * len(ids))
-                    out_c.extend(range(len(ids)))
-                    continue
-                # Every superset contains the rarest element in the source.
-                anchor = int(src.indices[np.argmin(row_frequency[src.indices])])
-                candidates = cols.getrow(anchor).indices
-                candidate_cols = cols[:, candidates].astype(np.int32)
-                counts = (src.T.astype(np.int32) @ candidate_cols).toarray().ravel()
-                valid = candidates[counts == src.nnz]
-                out_r.extend([j] * len(valid))
-                out_c.extend(valid.tolist())
-        return sparse.csr_matrix(
-            (np.ones(len(out_r), dtype=bool), (out_r, out_c)),
-            shape=(len(ids), len(ids)),
-        )
+        for start in range(0, n, int(chunk)):
+            stop = min(start + int(chunk), n)
+            m = (cols[:, start:stop].T @ cols_r).tocoo()
+            keep = m.data == sizes[start + m.row]
+            out_r.append(start + m.row[keep])
+            out_c.append(m.col[keep])
+        empty = np.flatnonzero(sizes == 0)
+        if empty_subsumed_by_all and len(empty):
+            out_r.append(np.repeat(empty, n))
+            out_c.append(np.tile(np.arange(n), len(empty)))
+        rows = np.concatenate(out_r) if out_r else np.empty(0, dtype=np.int64)
+        cs = np.concatenate(out_c) if out_c else np.empty(0, dtype=np.int64)
+        res = sparse.coo_matrix(
+            (np.ones(len(rows), dtype=bool), (rows, cs)), shape=(n, n)
+        ).tocsr()
+        res.data[:] = True
+        return res
 
     def instances(self, class_id):
-        blocks = set(self.labels[:, int(class_id)].nonzero()[0].tolist())
-        return np.asarray(
-            [
-                i
-                for i in range(self.nb_individuals)
-                if int(self.element_map[self.nb_classes + i]) in blocks
-            ],
-            dtype=np.int64,
+        """Individual ids whose block belongs to ``class_id`` in the pruned model."""
+        member = np.zeros(self.n_blocks, dtype=bool)
+        member[self.labels[:, int(class_id)].nonzero()[0]] = True
+        return np.flatnonzero(member[self.element_map[self.nb_classes:]]).astype(
+            np.int64
         )
 
     def dense_labels(self):
+        """Boolean ``(nb_elements, nb_classes)`` array: each element gets its block's row."""
         return self.labels[self.element_map].toarray().astype(bool, copy=False)
 
     def element_edges(self):
+        """Edges as element ids; requires an identity ``element_map``."""
         if not np.array_equal(self.element_map, np.arange(len(self.element_map))):
             raise ValueError("element_edges requires an identity element_map")
         return self.edges.copy()
@@ -479,17 +532,18 @@ def least_model(
         raise ValueError("method must be 'iteration' or 'lp'")
     rawL = L.tocsr()
     raw_edges = _role_edges(roles)
-    pruned = rawL.copy().tolil()
-    pruned[np.flatnonzero(dead), :] = False
-    pruned = pruned.tocsr()
+    col_keep = np.ones(nc, dtype=bool)
+    if bot_id is not None:
+        col_keep[bot_id] = False
+    rawL = (rawL @ sparse.diags(col_keep.astype(np.int8))).astype(bool).tocsr()
+    rawL.eliminate_zeros()
+    pruned = (sparse.diags((~dead).astype(np.int8)) @ rawL).astype(bool).tocsr()
+    pruned.eliminate_zeros()
     edges = (
         raw_edges[~(dead[raw_edges[:, 0]] | dead[raw_edges[:, 1]])]
         if len(raw_edges)
         else raw_edges
     )
-    if bot_id is not None:
-        pruned[:, bot_id] = False
-        rawL[:, bot_id] = False
     return LeastModel(
         nc,
         nr,
@@ -509,11 +563,20 @@ def least_model(
 
 
 def _role_edges(roles):
-    rows = []
+    parts = []
     for r, m in enumerate(roles):
         coo = m.tocoo()
-        rows.extend((int(x), int(y), r) for x, y in zip(coo.row, coo.col))
-    return np.asarray(sorted(set(rows)), dtype=np.int64).reshape((-1, 3))
+        if coo.nnz:
+            parts.append(
+                np.stack(
+                    [coo.row.astype(np.int64), coo.col.astype(np.int64),
+                     np.full(coo.nnz, r, dtype=np.int64)],
+                    axis=1,
+                )
+            )
+    if not parts:
+        return np.empty((0, 3), dtype=np.int64)
+    return np.unique(np.concatenate(parts), axis=0)
 
 
 def least_model_from_model(model, **kwargs):
@@ -546,6 +609,33 @@ def least_model_from_model(model, **kwargs):
     return least_model(**dims, **kwargs)
 
 
+def _split_bot(t, bot_id):
+    for key, botkey, hcol in (
+        ("gci0", "gci0_bot", 1),
+        ("gci1", "gci1_bot", 2),
+        ("gci3", "gci3_bot", 2),
+    ):
+        if bot_id is not None and t[key].size:
+            mask = t[key][:, hcol] == bot_id
+            t[botkey] = np.vstack((t[botkey], t[key][mask]))
+            t[key] = t[key][~mask]
+    return t
+
+
+def _binary(m):
+    m = m.tocsr().astype(np.int32)
+    m.eliminate_zeros()
+    m.data[:] = 1
+    return m
+
+
+def _selector(ids, nc):
+    m = len(ids)
+    return sparse.csr_matrix(
+        (np.ones(m, dtype=np.int32), (np.asarray(ids), np.arange(m))), shape=(nc, m)
+    )
+
+
 def check_model(
     lm,
     *,
@@ -562,166 +652,281 @@ def check_model(
     object_property_assertion=None,
     pruned=True,
 ):
-    """Count violated ground instances by direct finite set evaluation."""
-    names = _TABLE_WIDTHS
-    vals = locals()
-    t = {k: _table(vals[k], w, k) for k, w in names.items()}
-    for key, botkey, hcol in (
-        ("gci0", "gci0_bot", 1),
-        ("gci1", "gci1_bot", 2),
-        ("gci3", "gci3_bot", 2),
-    ):
-        if lm.bot_id is not None and t[key].size:
-            mask = t[key][:, hcol] == lm.bot_id
-            t[botkey] = np.vstack((t[botkey], t[key][mask]))
-            t[key] = t[key][~mask]
+    """Count violated ground axiom instances in the finite model, independently of the solver.
+
+    Table conventions are those of :func:`least_model`. Rows of ``gci0`` / ``gci1`` /
+    ``gci3`` whose head is ``lm.bot_id`` are treated as bottom rules.
+
+    Parameters
+    ----------
+    lm : LeastModel
+        Model to check.
+    pruned : bool, default True
+        Check the pruned view (``labels`` / ``edges``) or the raw fixpoint.
+
+    Returns
+    -------
+    Dict[str, int]
+        Per table, the number of violated ground instances: ``gci0`` /
+        ``gci1`` / ``gci2`` / ``gci3`` and the bottom tables count pairs
+        (rule row, block) whose body holds and whose head fails (for
+        ``gci3`` the body is "has an r-successor in B"); ``role_inclusion``
+        and ``role_chain`` count pairs (rule row, (x, y)); assertions count
+        rows. ``non_degenerate_violations`` counts live class elements that
+        are not members of their own class.
+
+    Guarantees
+    ----------
+    Evaluates set semantics directly with sparse products; shares no rule
+    code with :func:`least_model`. All zeros iff the view is a model of the
+    tables (and non-degenerate at the class elements).
+    """
+    vals = dict(
+        gci0=gci0, gci1=gci1, gci2=gci2, gci3=gci3, gci0_bot=gci0_bot,
+        gci1_bot=gci1_bot, gci3_bot=gci3_bot, role_inclusion=role_inclusion,
+        role_chain=role_chain, class_assertion=class_assertion,
+        object_property_assertion=object_property_assertion,
+    )
+    t = _split_bot({k: _table(vals[k], w, k) for k, w in _TABLE_WIDTHS.items()}, lm.bot_id)
+    nc, nb, nr = lm.nb_classes, lm.n_blocks, lm.nb_rels
+    L = _binary(lm.labels if pruned else lm.raw_labels)
+    edges = lm.edges if pruned else lm.raw_edges
+    R = []
+    for r in range(nr):
+        e = edges[edges[:, 2] == r] if len(edges) else edges
+        R.append(
+            sparse.csr_matrix(
+                (np.ones(len(e), dtype=np.int32), (e[:, 0], e[:, 1])), shape=(nb, nb)
+            )
+        )
+    v = {k: 0 for k in _TABLE_WIDTHS}
+
+    def missing(body, head):
+        return int(body.nnz - body.multiply(head).nnz)
+
+    def conj(a, b):
+        return _binary((L @ _selector(a, nc)).multiply(L @ _selector(b, nc)))
+
+    g = t["gci0"]
+    if g.size:
+        v["gci0"] = missing(_binary(L @ _selector(g[:, 0], nc)), L @ _selector(g[:, 1], nc))
+    g = t["gci1"]
+    if g.size:
+        v["gci1"] = missing(conj(g[:, 0], g[:, 1]), L @ _selector(g[:, 2], nc))
+    g = t["gci0_bot"]
+    if g.size:
+        v["gci0_bot"] = int(_binary(L @ _selector(g[:, 0], nc)).nnz)
+    g = t["gci1_bot"]
+    if g.size:
+        v["gci1_bot"] = int(conj(g[:, 0], g[:, 1]).nnz)
+    need = set(t["gci2"][:, 1].tolist()) | set(t["gci3"][:, 0].tolist()) | set(
+        t["gci3_bot"][:, 0].tolist()
+    )
+    for r in sorted(need):
+        W = _binary(R[r] @ L)  # W[x, B] iff x has an r-successor in B
+        g = t["gci2"][t["gci2"][:, 1] == r]
+        if g.size:
+            v["gci2"] += missing(_binary(L @ _selector(g[:, 0], nc)), W @ _selector(g[:, 2], nc))
+        g = t["gci3"][t["gci3"][:, 0] == r]
+        if g.size:
+            v["gci3"] += missing(_binary(W @ _selector(g[:, 1], nc)), L @ _selector(g[:, 2], nc))
+        g = t["gci3_bot"][t["gci3_bot"][:, 0] == r]
+        if g.size:
+            v["gci3_bot"] += int(_binary(W @ _selector(g[:, 1], nc)).nnz)
+    for r, s in t["role_inclusion"]:
+        v["role_inclusion"] += missing(R[int(r)], R[int(s)])
+    for r1, r2, s in t["role_chain"]:
+        v["role_chain"] += missing(_binary(R[int(r1)] @ R[int(r2)]), R[int(s)])
+    em = lm.element_map
+    g = t["class_assertion"]
+    if g.size:
+        v["class_assertion"] = int(len(g) - np.asarray(L[em[nc + g[:, 0]], g[:, 1]]).astype(bool).sum())
+    g = t["object_property_assertion"]
+    for r in np.unique(g[:, 1]) if g.size else []:
+        rows = g[g[:, 1] == r]
+        got = np.asarray(R[int(r)][em[nc + rows[:, 0]], em[nc + rows[:, 2]]]).astype(bool).sum()
+        v["object_property_assertion"] += int(len(rows) - got)
+    cls = np.arange(nc)
+    if lm.bot_id is not None:
+        cls = cls[cls != lm.bot_id]
+    own = np.asarray(L[em[cls], cls]).ravel().astype(bool)
+    v["non_degenerate_violations"] = int((~lm.dead[em[cls]] & ~own).sum())
+    return v
+
+
+def _check_model_reference(lm, pruned=True, **tables):
+    """Set-based reference for :func:`check_model` (small inputs, tests only)."""
+    t = _split_bot(
+        {k: _table(tables.get(k), w, k) for k, w in _TABLE_WIDTHS.items()}, lm.bot_id
+    )
     L = lm.labels if pruned else lm.raw_labels
-    labels = [set(L[:, c].nonzero()[0]) for c in range(lm.nb_classes)]
+    labels = [set(L[:, c].nonzero()[0].tolist()) for c in range(lm.nb_classes)]
     edges = lm.edges if pruned else lm.raw_edges
     es = set(map(tuple, edges.tolist()))
-    violations = {k: 0 for k in names}
-    outgoing = {}
-    for x, y, r in es:
-        outgoing.setdefault((r, x), set()).add(y)
-    witnessed = {}
-    for x, y, r in es:
-        for c in L.getrow(y).indices:
-            witnessed.setdefault((r, int(c)), set()).add(x)
+    v = {k: 0 for k in _TABLE_WIDTHS}
+
+    def has(r, b):
+        return {x for x, y, rr in es if rr == r and y in labels[b]}
+
     for a, b in t["gci0"]:
-        violations["gci0"] += len(labels[int(a)] - labels[int(b)])
+        v["gci0"] += len(labels[a] - labels[b])
     for a, b, c in t["gci1"]:
-        violations["gci1"] += len((labels[int(a)] & labels[int(b)]) - labels[int(c)])
+        v["gci1"] += len((labels[a] & labels[b]) - labels[c])
     for a, r, b in t["gci2"]:
-        violations["gci2"] += len(
-            labels[int(a)] - witnessed.get((int(r), int(b)), set())
-        )
+        v["gci2"] += len(labels[a] - has(r, b))
     for r, b, c in t["gci3"]:
-        for x, y, rr in es:
-            if rr == r and y in labels[int(b)] and x not in labels[int(c)]:
-                violations["gci3"] += 1
+        v["gci3"] += len(has(r, b) - labels[c])
     for a, _ in t["gci0_bot"]:
-        violations["gci0_bot"] += len(labels[int(a)])
+        v["gci0_bot"] += len(labels[a])
     for a, b, _ in t["gci1_bot"]:
-        violations["gci1_bot"] += len(labels[int(a)] & labels[int(b)])
+        v["gci1_bot"] += len(labels[a] & labels[b])
     for r, b, _ in t["gci3_bot"]:
-        violations["gci3_bot"] += sum(
-            1 for x, y, rr in es if rr == r and y in labels[int(b)]
-        )
+        v["gci3_bot"] += len(has(r, b))
     for r, s in t["role_inclusion"]:
-        violations["role_inclusion"] += sum(
-            (x, y, int(r)) in es and (x, y, int(s)) not in es for x, y, _ in es
-        )
+        v["role_inclusion"] += sum((x, y, s) not in es for x, y, rr in es if rr == r)
     for r1, r2, s in t["role_chain"]:
-        for x, m, r in es:
-            if r == r1:
-                violations["role_chain"] += sum(
-                    (x, y, int(s)) not in es for y in outgoing.get((int(r2), m), ())
-                )
+        pairs = {(x, y) for x, m, ra in es if ra == r1 for m2, y, rb in es if rb == r2 and m2 == m}
+        v["role_chain"] += sum((x, y, s) not in es for x, y in pairs)
+    em, nc = lm.element_map, lm.nb_classes
     for a, c in t["class_assertion"]:
-        block = lm.element_map[lm.nb_classes + int(a)]
-        violations["class_assertion"] += int(block not in labels[int(c)])
+        v["class_assertion"] += int(em[nc + a] not in labels[c])
     for a, r, b in t["object_property_assertion"]:
-        x = lm.element_map[lm.nb_classes + int(a)]
-        y = lm.element_map[lm.nb_classes + int(b)]
-        violations["object_property_assertion"] += int((x, y, int(r)) not in es)
-    # Non-degenerate: every non-dead class element except bot has itself in its class.
-    violations["non_degenerate_violations"] = sum(
-        not lm.dead[lm.element_map[c]]
-        and c != lm.bot_id
-        and lm.element_map[c] not in labels[c]
-        for c in range(lm.nb_classes)
+        v["object_property_assertion"] += int((em[nc + a], em[nc + b], r) not in es)
+    v["non_degenerate_violations"] = sum(
+        not lm.dead[em[c]] and c != lm.bot_id and em[c] not in labels[c] for c in range(nc)
     )
-    return violations
+    return v
+
+
+def _dfs_order(lm):
+    """Depth-first order of live blocks along the most-specific-superclass forest."""
+    nc = lm.nb_classes
+    em = lm.element_map
+    live = ~lm.dead
+    L = lm.labels.tocsr()
+    sizes = np.asarray(L.getnnz(axis=0)).ravel()
+    parent = np.full(nc, -1, dtype=np.int64)
+    is_node = np.zeros(nc, dtype=bool)
+    for a in range(nc):
+        b = em[a]
+        if a == lm.bot_id or not live[b]:
+            continue
+        is_node[a] = True
+        if a == lm.top_id:
+            continue
+        cand = L.indices[L.indptr[b]:L.indptr[b + 1]]
+        cand = cand[(cand != a) & (cand != (-1 if lm.top_id is None else lm.top_id))]
+        if len(cand) == 0:
+            continue
+        cand = cand[live[em[cand]] & (em[cand] != b)]
+        # only classes that come after ``a`` in the (size, id) order: acyclic
+        cand = cand[(sizes[cand] > sizes[a]) | ((sizes[cand] == sizes[a]) & (cand > a))]
+        if len(cand):
+            parent[a] = cand[np.lexsort((cand, sizes[cand]))[0]]
+    nodes = np.flatnonzero(is_node)
+    children = [[] for _ in range(nc)]
+    for a in nodes:
+        if parent[a] >= 0:
+            children[parent[a]].append(int(a))
+    subtree = np.ones(nc, dtype=np.int64)
+    for a in nodes[np.lexsort((nodes, sizes[nodes]))]:  # children before parents
+        if parent[a] >= 0:
+            subtree[parent[a]] += subtree[a]
+    seen = np.zeros(lm.n_blocks, dtype=bool)
+    order = []
+    roots = [int(a) for a in nodes if parent[a] < 0]
+    stack = roots[::-1]
+    while stack:
+        a = stack.pop()
+        b = int(em[a])
+        if not seen[b]:
+            seen[b] = True
+            order.append(b)
+        ch = sorted(children[a], key=lambda c: (-subtree[c], c))
+        stack.extend(ch[::-1])
+    rest = np.flatnonzero(live & ~seen)
+    return np.concatenate([np.asarray(order, dtype=np.int64), rest.astype(np.int64)])
 
 
 def interval_realisation(lm, order="dfs"):
-    """Represent the pruned finite model as unions of intervals on a line."""
-    live = np.flatnonzero(~lm.dead)
-    if isinstance(order, str) and order == "identity":
-        ordering = live
-    elif isinstance(order, str) and order == "dfs":
-        # Build the immediate containment forest from live class columns.
-        sets = [
-            set(lm.labels[:, c].nonzero()[0]) & set(live.tolist())
-            for c in range(lm.nb_classes)
-        ]
-        class_parent = {c: None for c in range(lm.nb_classes)}
-        for c in range(lm.nb_classes):
-            supers = [d for d in range(lm.nb_classes) if sets[c] < sets[d]]
-            if supers:
-                class_parent[c] = min(supers, key=lambda d: (len(sets[d]), d))
-        class_children = {c: [] for c in range(lm.nb_classes)}
-        for c, p in class_parent.items():
-            if p is not None:
-                class_children[p].append(c)
-        for children_c in class_children.values():
-            children_c.sort(key=lambda c: (-len(sets[c]), c))
-        ordering = []
-        seen = set()
+    """Realise the pruned model in one dimension: every class is a union of intervals.
 
-        def visit_class(c):
-            b = int(lm.element_map[c])
-            if b in live and b not in seen:
-                seen.add(b)
-                ordering.append(b)
-            for child in class_children[c]:
-                visit_class(child)
+    Live blocks are placed at the integer positions ``0 .. n_live - 1`` given by
+    ``order``; a class is the union of the maximal runs of consecutive positions
+    of its members; a role is covered by products (run of sources) x {target}.
 
-        for c in range(lm.nb_classes):
-            if class_parent[c] is None:
-                visit_class(c)
-        # Individuals, quotient blocks, and class elements without a distinct
-        # named-superclass path are placed deterministically after the forest.
-        for b in live:
-            if int(b) not in seen:
-                seen.add(int(b))
-                ordering.append(int(b))
-        ordering = np.asarray(ordering, dtype=np.int64)
-    elif not isinstance(order, str):
-        ordering = np.asarray(order, dtype=np.int64)
-        if (
-            ordering.ndim != 1
-            or len(ordering) != len(live)
-            or set(ordering.tolist()) != set(live.tolist())
-        ):
-            raise ValueError("explicit order must permute live block ids")
+    Parameters
+    ----------
+    lm : LeastModel
+    order : {"dfs", "identity"} or array-like of int
+        ``"dfs"``: forest on the classes whose own block is live, where the
+        parent of ``A`` is the class ``B`` in the label row of ``x_A`` (``B`` not
+        ``A``, not top, own block live and different) that is smallest in the
+        (column size, id) order among those after ``A`` in that order; roots in
+        id order, children by decreasing subtree size then id, iterative
+        pre-order; live blocks not reached (e.g. individuals) follow in id
+        order. ``"identity"``: live blocks in id order. An array must be a
+        permutation of the live block ids.
+
+    Returns
+    -------
+    IntervalRealisation
+
+    Guarantees
+    ----------
+    The total length of the intervals of each class equals the size of its
+    column, so membership read from the intervals equals ``lm.labels``
+    restricted to live blocks. A tree-shaped hierarchy (every class has at most
+    one direct superclass, no other axioms) gets one interval per class under
+    ``"dfs"``.
+
+    Non-guarantees
+    --------------
+    The number of runs is not minimal; minimising it is NP-hard in general.
+    """
+    live_ids = np.flatnonzero(~lm.dead)
+    if isinstance(order, str):
+        if order == "identity":
+            ordering = live_ids.astype(np.int64)
+        elif order == "dfs":
+            ordering = _dfs_order(lm)
+        else:
+            raise ValueError("order must be 'dfs', 'identity', or a permutation")
     else:
-        raise ValueError("order must be 'dfs', 'identity', or a permutation")
+        ordering = np.asarray(order, dtype=np.int64)
+        if ordering.ndim != 1 or not np.array_equal(np.sort(ordering), live_ids):
+            raise ValueError("explicit order must permute live block ids")
+    nc = lm.nb_classes
     rank = np.full(lm.n_blocks, -1, dtype=np.int64)
     rank[ordering] = np.arange(len(ordering))
-    runs = np.zeros(lm.nb_classes, dtype=np.int64)
-    intervals = {}
-    for c in range(lm.nb_classes):
-        pos = np.sort(rank[lm.labels[:, c].nonzero()[0]])
-        pos = pos[pos >= 0]
-        if len(pos):
-            cuts = np.r_[0, np.flatnonzero(np.diff(pos) > 1) + 1, len(pos)]
-            ints = np.asarray(
-                [[pos[cuts[i]], pos[cuts[i + 1] - 1]] for i in range(len(cuts) - 1)],
-                dtype=np.int64,
-            )
-        else:
-            ints = np.empty((0, 2), dtype=np.int64)
-        runs[c] = len(ints)
-        intervals[c] = ints
-    # For each role and target, source positions are covered in maximal runs.
-    products = 0
-    for r in range(lm.nb_rels):
-        re = lm.edges[lm.edges[:, 2] == r] if len(lm.edges) else np.empty((0, 3), int)
-        for target in np.unique(re[:, 1]) if len(re) else []:
-            p = np.sort(rank[re[re[:, 1] == target, 0]])
-            p = p[p >= 0]
-            if len(p):
-                products += 1 + int(np.sum(np.diff(p) > 1))
-    result = IntervalRealisation(ordering, runs, intervals, products)
-    # Exact membership guarantee.
-    recovered = np.zeros((lm.n_blocks, lm.nb_classes), dtype=bool)
-    for c, ints in intervals.items():
-        for a, b in ints:
-            recovered[a:b + 1, c] = True
-    if not np.array_equal(recovered, lm.labels[ordering].toarray()):
+    coo = lm.labels.tocoo()
+    pos = rank[coo.row]
+    keep = pos >= 0
+    cls, pos = coo.col[keep].astype(np.int64), pos[keep]
+    srt = np.lexsort((pos, cls))
+    cls, pos = cls[srt], pos[srt]
+    if len(cls):
+        start = np.r_[True, (cls[1:] != cls[:-1]) | (pos[1:] != pos[:-1] + 1)]
+        end = np.r_[start[1:], True]
+        run_cls, run_lo, run_hi = cls[start], pos[start], pos[end]
+    else:
+        run_cls = run_lo = run_hi = np.empty(0, dtype=np.int64)
+    runs = np.bincount(run_cls, minlength=nc).astype(np.int64)
+    covered = np.bincount(run_cls, weights=run_hi - run_lo + 1, minlength=nc)
+    if not np.array_equal(covered.astype(np.int64), np.bincount(cls, minlength=nc)):
         raise RuntimeError("interval membership reconstruction failed")
-    return result
+    bounds = np.stack([run_lo, run_hi], axis=1) if len(run_cls) else np.empty((0, 2), dtype=np.int64)
+    cuts = np.cumsum(runs)[:-1]
+    intervals = {c: part for c, part in enumerate(np.split(bounds, cuts))}
+    products = 0
+    if len(lm.edges):
+        src = rank[lm.edges[:, 0]]
+        tgt, rol = lm.edges[:, 1], lm.edges[:, 2]
+        srt = np.lexsort((src, tgt, rol))
+        src, tgt, rol = src[srt], tgt[srt], rol[srt]
+        new = np.r_[True, (rol[1:] != rol[:-1]) | (tgt[1:] != tgt[:-1]) | (src[1:] != src[:-1] + 1)]
+        products = int(new.sum())
+    return IntervalRealisation(ordering, runs, intervals, products)
 
 
 def _least_model_lp(
@@ -849,7 +1054,7 @@ def _least_model_lp(
     if objective_weights is None:
         weights = np.ones(nvar, dtype=float)
     elif callable(objective_weights):
-        weights = np.asarray(objective_weights(np.random.default_rng()), dtype=float)
+        weights = np.asarray(objective_weights(np.random.default_rng(0)), dtype=float)
     else:
         weights = np.asarray(objective_weights, dtype=float)
     if (
