@@ -42,9 +42,11 @@ from mowl.nn.el.grounded.queries import (
     overlap_depth,
     project,
     project_exact,
+    query_witness_loss,
     score_concepts,
     score_entities,
     score_query_beam,
+    score_query_witness,
     union,
 )
 from mowl.nn.el.grounded.sampling import (
@@ -77,6 +79,8 @@ __all__ = [
     "score_concepts",
     "project_exact",
     "score_query_beam",
+    "score_query_witness",
+    "query_witness_loss",
     "crisp_membership",
     "fact",
     "gci0",
