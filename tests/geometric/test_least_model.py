@@ -359,3 +359,16 @@ def test_lp_callable_weights_are_deterministic():
     b = least_model(3, method="lp", objective_weights=w, **tables)
     assert a.lp_objective == b.lp_objective
     assert np.array_equal(a.labels.toarray(), least_model(3, **tables).labels.toarray())
+
+
+def test_death_propagates_over_256_dead_successors():
+    # Regression: counting dead successors in int8 wrapped to 0 at multiples of 256,
+    # so a class with exactly 256 unsatisfiable fillers stayed alive.
+    n = 256
+    args = dict(
+        gci2=[[0, 0, 1 + i] for i in range(n)],
+        gci0_bot=[[1 + i, n + 1] for i in range(n)],
+    )
+    lm = least_model(n + 2, nb_rels=1, bot_id=n + 1, **args)
+    assert lm.dead[lm.element_map[0]]
+    assert all(v == 0 for v in check_model(lm, **args).values())

@@ -18,6 +18,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Dict, Optional
 
+import logging
+import time
 import numpy as np
 from scipy import sparse
 
@@ -175,6 +177,8 @@ class IntervalRealisation:
     def n_parameters(self):
         return 2 * int(self.runs_per_class.sum()) + 3 * int(self.role_products)
 
+
+logger = logging.getLogger(__name__)
 
 _TABLE_WIDTHS = {
     "gci0": 2,
@@ -403,11 +407,19 @@ def least_model(
         g1_left = sparse.csr_matrix((nc, 0), dtype=bool)
         g1_right = sparse.csr_matrix((nc, 0), dtype=bool)
         g1_heads = sparse.csr_matrix((0, nc), dtype=bool)
-    # gci2 source class -> role/filler block adjacency, precomputed as sparse class maps.
-    g2_by_role = []
-    for r in range(nr):
-        rr = g2[g2[:, 1] == r] if g2.size else g2
-        g2_by_role.append(_as_sparse(rr[:, 0], rr[:, 2], (nc, nc)))
+    # gci2: (source class, rule) selector, one column per existential rule.
+    g2_sel = (
+        _as_sparse(g2[:, 0], np.arange(len(g2)), (nc, len(g2)))
+        if g2.size
+        else sparse.csr_matrix((nc, 0), dtype=bool)
+    )
+    # gci3 rules per role: distinct filler classes and a (filler, head) selector.
+    g3_by_role = {}
+    if g3.size:
+        for r in np.unique(g3[:, 0]):
+            rules = g3[g3[:, 0] == r]
+            bs, pos = np.unique(rules[:, 1], return_inverse=True)
+            g3_by_role[int(r)] = (bs, _as_sparse(pos, rules[:, 2], (len(bs), nc)))
     # Relation matrices per role are maintained sparsely as (source,target) matrices.
     roles = [sparse.csr_matrix((nb, nb), dtype=bool) for _ in range(nr)]
     for r in range(nr):
@@ -444,14 +456,24 @@ def least_model(
             conclusions = (pair_present @ g1_heads).tocsr()
             L, ch = union(L, conclusions)
             changed |= ch
-        for r in range(nr):
-            if g2_by_role[r].nnz:
-                targets = (L @ g2_by_role[r]).tocoo()
-                if targets.nnz:
-                    dst = em[targets.col]
-                    add = _as_sparse(targets.row, dst, (nb, nb))
+        if g2.size:
+            # One product for all existential rules: (block, rule) pairs, then
+            # grouped by role.  Avoids one pass over L per role.
+            hits = (L @ g2_sel).tocoo()
+            if hits.nnz:
+                h_role = g2[hits.col, 1]
+                h_dst = em[g2[hits.col, 2]]
+                order = np.argsort(h_role, kind="stable")
+                h_role, h_src, h_dst = h_role[order], hits.row[order], h_dst[order]
+                cuts = np.flatnonzero(np.diff(h_role)) + 1
+                starts = np.concatenate(([0], cuts))
+                ends = np.concatenate((cuts, [len(h_role)]))
+                for lo, hi in zip(starts, ends):
+                    r = int(h_role[lo])
+                    add = _as_sparse(h_src[lo:hi], h_dst[lo:hi], (nb, nb))
                     roles[r], ch = union(roles[r], add)
                     changed |= ch
+        for r in range(nr):
             if inv is not None and inv[r] >= 0:
                 rev = roles[r].T.tocsr()
                 roles[int(inv[r])], ch = union(roles[int(inv[r])], rev)
@@ -478,13 +500,23 @@ def least_model(
                     roles[int(s)], ch = union(roles[int(s)], prod)
                     changed |= ch
         if g3.size:
-            for r in range(nr):
-                rules = g3[g3[:, 0] == r]
-                if rules.size:
-                    S = _as_sparse(rules[:, 1], rules[:, 2], (nc, nc))
-                    conclusions = (roles[r] @ L @ S).tocsr()
-                    L, ch = union(L, conclusions)
-                    changed |= ch
+            # Slice the filler columns of each role's rules from a CSC copy of L,
+            # so the cost per role is the size of those columns, not of L; all
+            # conclusions are collected and merged into L once.
+            Lc = L.tocsc()
+            acc = None
+            for r, (bs, heads) in g3_by_role.items():
+                if roles[r].nnz == 0:
+                    continue
+                filler = Lc[:, bs]
+                if filler.nnz == 0:
+                    continue
+                part = roles[r] @ (filler.tocsr() @ heads)
+                if part.nnz:
+                    acc = part if acc is None else acc + part
+            if acc is not None:
+                L, ch = union(L, acc.tocsr())
+                changed |= ch
         # Bottom rules and backwards propagation across existential edges.
         if g0b.size:
             As = np.unique(g0b[:, 0])
@@ -501,7 +533,8 @@ def least_model(
                     dead |= np.asarray((roles[r] @ L[:, Bs]).getnnz(axis=1) > 0).ravel()
         for r in range(nr):
             if roles[r].nnz:
-                dead |= np.asarray(roles[r] @ dead.astype(np.int8)).ravel() > 0
+                # int32 counts: an int8 sum wraps to 0 at 256 dead successors.
+                dead |= np.asarray(roles[r] @ dead.astype(np.int32)).ravel() > 0
         return changed or int(dead.sum()) != old_dead_count
 
     if method == "iteration":
@@ -510,7 +543,17 @@ def least_model(
             if max_sweeps is not None and sweeps >= max_sweeps:
                 raise RuntimeError("max_sweeps exceeded before reaching fixpoint")
             sweeps += 1
+            t_sweep = time.perf_counter()
             changed = do_iteration()
+            if logger.isEnabledFor(logging.DEBUG):
+                logger.debug(
+                    "sweep %d: %.1f s, labels %d, edges %d, dead %d",
+                    sweeps,
+                    time.perf_counter() - t_sweep,
+                    L.nnz,
+                    sum(m.nnz for m in roles),
+                    int(dead.sum()),
+                )
             if not changed:
                 break
     elif method == "lp":
