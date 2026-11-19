@@ -23,3 +23,12 @@ from mowl.models.falcon.model import FALCONModel
 from mowl.models.graph_random_walk.random_walk_w2v_model import RandomWalkPlusW2VModel
 from mowl.models.graph_kge.graph_pykeen_model import GraphPlusPyKEENModel
 from mowl.models.syntactic.w2v_model import SyntacticPlusW2VModel
+
+from mowl.models.elkem.model import ELKEm
+from mowl.models.emelpp.model import EmELPP, EmELVar
+from mowl.models.regd.model import RegDELBE, RegDELEm
+from mowl.models.mcmultibox.model import VolumeMultiBoxEL
+from mowl.models.octagon.model import OctagonEL
+from mowl.models.bcbox.model import BinaryCodeBox
+from mowl.models.alcone.model import ALConeModel
+from mowl.models.e2r.model import E2R

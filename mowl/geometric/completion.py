@@ -36,7 +36,10 @@ from typing import Dict, FrozenSet, Iterable, List, Optional, Set, Tuple
 
 from org.semanticweb.owlapi.model import OWLOntology
 
-from mowl.datasets import Dataset
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:  # avoid a circular import: mowl.datasets.el imports this module
+    from mowl.datasets import Dataset
 from mowl.geometric.errors import InconsistentOntology
 from mowl.geometric.normal_forms import (
     AUX_NS,
