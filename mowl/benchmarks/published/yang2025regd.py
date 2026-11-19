@@ -30,7 +30,7 @@ _METHODS = {
     "ELBE": ("elbe", "ELBE (box baseline), without RegD."),
     "ELEM": ("elem", "ELEM (ball baseline), without RegD."),
     "ELBE+RegD": ("regd", "ELBE + RegD (boxes): RegDELBE."),
-    "ELEM+RegD": ("regd", "ELEM + RegD (balls): RegDELEm."),
+    "ELEM+RegD": ("regd_elem", "ELEM + RegD (balls): RegDELEm."),
 }
 _COLUMNS = [("galen", 5), ("galen", 10), ("go", 5), ("go", 10), ("anatomy", 5),
             ("anatomy", 10)]

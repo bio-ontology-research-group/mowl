@@ -1,5 +1,7 @@
 """RegD (Yang and Chen, 2026)."""
 
+import dataclasses
+
 from mowl.catalog.card import (Family, Guarantee, GuaranteeKind as K, MethodCard, Origin,
                                Reference, Status)
 from mowl.catalog.entries import _refs as R
@@ -103,4 +105,15 @@ CARD = MethodCard(
         "prediction task on C subclass of exists r.D (gci2) in an orientation that is not "
         "consistent with its training energy, mOWL uses the consistent one. Margins are 0 "
         "for ontologies (appendix C.1); DAG experiments are not implemented."),
+)
+
+#: The same method with ELEm (balls) as the host model. A separate key, so the ball
+#: variant can be selected by name (for example by the benchmark runner).
+CARDS = (
+    dataclasses.replace(
+        CARD, key="regd_elem", name="RegD (ELEm host)", region="ball (dissimilarity-based)",
+        concepts="ball (RegDELEm)",
+        implementation="mowl.models.regd.model.RegDELEm",
+        module="mowl.nn.el.regd.module.RegDELEmModule",
+        related=("regd", "elem")),
 )
