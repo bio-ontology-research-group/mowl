@@ -236,6 +236,30 @@ _FAMILIES = [
 ]
 
 
+class _LazyFamily:
+    """A :class:`ModelFamily` defined in another module, imported on first use (so that
+    optional families do not have to be importable when the runner is)."""
+
+    def __init__(self, path):
+        self._path = path
+        self._family = None
+
+    def _resolve(self):
+        if self._family is None:
+            import importlib
+            module_name, _, attr = self._path.rpartition(".")
+            self._family = getattr(importlib.import_module(module_name), attr)()
+        return self._family
+
+    def __getattr__(self, name):
+        return getattr(self._resolve(), name)
+
+
+#: Language-model based methods (HiT, OnT): they train and select their checkpoint
+#: themselves.
+_FAMILIES.insert(0, _LazyFamily("mowl.benchmarks.protocols.ont.LanguageModelFamily"))
+
+
 def register_family(family, first=True):
     """Add a :class:`ModelFamily` handler (before the built-in ones by default)."""
     if first:

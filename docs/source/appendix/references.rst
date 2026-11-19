@@ -58,3 +58,7 @@ References
 .. [ozcep2023] Özçep, Ö. L., Leemhuis, M., & Wolter, D. (2023). `Embedding Ontologies in the Description Logic ALC by Axis-Aligned Cones <https://doi.org/10.1613/jair.1.13939>`_. Journal of Artificial Intelligence Research, 78.
 
 .. [leemhuis2020] Leemhuis, M., Özçep, Ö. L., & Wolter, D. (2020). `Orthologics for Cones <https://arxiv.org/abs/2008.03172>`_. ArXiv, abs/2008.03172.
+
+.. [he2024hit] He, Y., Yuan, Z., Chen, J., & Horrocks, I. (2024). `Language Models as Hierarchy Encoders <https://arxiv.org/abs/2401.11374>`_. In: Advances in Neural Information Processing Systems 37 (NeurIPS 2024).
+
+.. [yang2025ont] Yang, H., Chen, J., He, Y., Gao, Y., & Horrocks, I. (2025). `Language Models as Ontology Encoders <https://arxiv.org/abs/2507.14334>`_. In: The Semantic Web – ISWC 2025. ArXiv, abs/2507.14334.

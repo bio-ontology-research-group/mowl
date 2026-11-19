@@ -27,6 +27,8 @@ relevant published methods it does not implement, with the reason.
    bcbox
    alcone
    e2r
+   hit
+   ont
 
 
 Representation, training and evaluation
