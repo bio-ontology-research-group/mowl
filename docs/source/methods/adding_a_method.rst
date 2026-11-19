@@ -1,0 +1,116 @@
+Adding a method to mOWL
+=======================
+
+Every embedding method in mOWL consists of the same pieces, in the same places. This page
+is the checklist. A method that cannot be implemented (for example because the publication
+gives no learning procedure, or needs proprietary software) still gets the first piece, the
+catalogue card.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 22 38 40
+
+   * - Piece
+     - Location
+     - Purpose
+   * - Catalogue card
+     - ``mowl/catalog/entries/<key>.py``
+     - Classification, logic, guarantees with sources, limitations, references.
+   * - Neural module
+     - ``mowl/nn/<logic>/<key>/`` (``module.py``, ``losses.py``)
+     - The geometry and the per-axiom losses, with no I/O.
+   * - Model
+     - ``mowl/models/<key>/model.py``
+     - Dataset handling, training loop, scoring; subclasses a base model.
+   * - Tests
+     - ``tests/nn/test_<key>_*.py``, ``tests/models/test_<key>_*.py``
+     - Loss semantics, guarantees, a small end-to-end run.
+   * - Documentation
+     - ``docs/source/methods/<key>.rst``
+     - Short description and a runnable ``.. testcode::`` example.
+   * - Published results
+     - ``mowl/benchmarks/published/<source>.py``
+     - Numbers printed in the paper, for the benchmarks in :mod:`mowl.benchmarks`.
+
+``<key>`` is the lower-case catalogue key of the method (``elem``, ``box2el``, ``elkem``).
+
+1. The catalogue card
+---------------------
+
+Create ``mowl/catalog/entries/<key>.py`` with a module-level ``CARD``
+(:class:`mowl.catalog.MethodCard`), or ``CARDS`` for several closely related methods. The
+module is discovered automatically.
+
+Rules:
+
+* **Every guarantee names its source** (publication and theorem, proposition or section) and
+  the **condition** under which it holds. The usual conditions are ``"zero loss"`` (a learned
+  embedding is a model only if the loss reaches zero), ``"by construction"`` and
+  ``"always"``. Do not record a claim you have not read in the source.
+* Negative results are guarantees of kind ``LIMITATION`` (for example the Helly property of
+  box semantics).
+* ``origin`` says how the code relates to the paper: ``REIMPLEMENTATION`` (follows the
+  published losses), ``ADAPTATION`` (the paper gives a geometry or construction, the training
+  objective is ours) or ``ORIGINAL``. An adaptation must say in ``notes`` what was added.
+* A method that is not implemented has ``status=Status.CATALOGUED`` and a
+  ``not_implemented_reason``.
+
+2. The implementation
+---------------------
+
+For :math:`\mathcal{EL}^{++}` methods:
+
+* The module subclasses :class:`mowl.nn.ELModule` and implements the per-normal-form losses
+  (``gci0_loss`` ... ``gci3_bot_loss``, and ``role_inclusion_loss`` / ``role_chain_loss`` if
+  the method covers role axioms). Each loss takes a batch of index tensors and ``neg`` and
+  returns one non-negative value per row. Declare ``neg_capable_gcis`` and
+  ``role_axiom_capable`` truthfully.
+* The model subclasses :class:`mowl.base_models.EmbeddingELModel` and overrides
+  ``init_module`` and, where needed, the training hooks (``get_negative_sampling_config``,
+  ``compute_loss``, ``get_regularization_loss``, ``on_epoch_start``,
+  ``additional_training_loss``). Reuse the generic training loop unless the method needs a
+  different optimisation procedure.
+
+For :math:`\mathcal{ALC}` methods, subclass :class:`mowl.base_models.EmbeddingALCModel` and
+use :mod:`mowl.datasets.alc`.
+
+Methods that are not trained by gradient descent (exact constructions, convex programmes)
+subclass :class:`mowl.base_models.Model` directly, or live in :mod:`mowl.geometric` if they
+construct a geometric interpretation from the canonical model.
+
+Training regimes that apply to several methods (negative sampling strategies, deductive
+closure filtering) belong in :mod:`mowl.training`, and evaluation regimes in
+:mod:`mowl.evaluation`. They are not methods and have no catalogue card.
+
+Optional dependencies (a language model, a conic solver) are imported inside the functions
+that need them and raise an :class:`ImportError` that names the package. They are listed in
+``optional_dependencies`` of the card and are never added to ``install_requires``.
+
+3. Tests
+--------
+
+* **Semantics.** For hand-built configurations, the loss of an axiom is zero when the
+  geometric condition holds and positive when it does not. This is the test that catches a
+  wrong sign or a swapped argument.
+* **Guarantees.** Each ``Guarantee`` of kind ``SOUNDNESS`` on the card has a test: build or
+  train a zero-loss embedding of a small ontology and check, with code that is independent
+  of the loss, that it satisfies every axiom. Name the test in ``verified_in_mowl``.
+* **End to end.** Train for a few epochs on a small dataset and check that the loss
+  decreases and that scoring and evaluation run.
+* Tests that train for longer than a few seconds are marked ``@pytest.mark.slow``.
+
+4. Documentation
+----------------
+
+``docs/source/methods/<key>.rst`` gives a short description (geometry, how each axiom type
+is interpreted, differences from the paper) and one runnable example in a ``.. testcode::``
+block. The table of guarantees is generated from the card and must not be repeated by hand.
+
+5. Published results
+--------------------
+
+If the paper reports results on a benchmark of :mod:`mowl.benchmarks`, add them to
+``mowl/benchmarks/published/<source>.py`` as :class:`mowl.benchmarks.PublishedResult`
+objects, with the table number as ``locator`` and the stated hyperparameters as
+``settings``. Record only numbers read from the publication itself. If the paper uses a
+benchmark mOWL does not have yet, add it to ``mowl/benchmarks/entries/``.
