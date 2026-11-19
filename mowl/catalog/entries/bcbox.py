@@ -59,8 +59,8 @@ CARD = MethodCard(
             "are 1.",
             "zhang2022bcbox, Theorem 3 and Corollary 4",
             condition="always",
-            verified_in_mowl=(_TESTS + "test_theorem3_premise_holds_for_gbox, "
-                              + _TESTS + "test_gbox_cannot_fit_a_directed_3_cycle_but_vbc_can")),
+            verified_in_mowl=(f"{_TESTS}test_theorem3_premise_holds_for_gbox, "
+                              f"{_TESTS}test_gbox_cannot_fit_a_directed_3_cycle_but_vbc_can")),
         Guarantee(
             K.EXPRESSIVITY,
             "A chordless cycle plus one reverse edge can be modelled by G-Box in 2 "
