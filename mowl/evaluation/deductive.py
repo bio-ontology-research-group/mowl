@@ -431,8 +431,11 @@ class DELEEvaluation(EvaluationRegime):
         return test
 
     def evaluate(self, model, dataset):
-        """:return: ``{"all": metrics}`` with the metrics of
-            :meth:`DeductiveRankingEvaluator.compute_ranking_metrics`."""
+        """Evaluate ``model`` on ``dataset``.
+
+        :return: ``{"all": metrics}`` with the metrics of
+            :meth:`DeductiveRankingEvaluator.compute_ranking_metrics`.
+        """
         ev = self.evaluator(dataset)
         train_closure = None
         if self.test_set == "closure" or self.remove_entailed_test or \

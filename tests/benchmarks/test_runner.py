@@ -131,6 +131,19 @@ def test_run_benchmark_end_to_end(dataset):
     assert mr["regime_match"] is False
 
 
+
+def test_run_benchmark_with_rank_selection(dataset):
+    """A model selection regime chooses the parameters; the runner must not replace them
+    with the best-validation-loss checkpoint afterwards."""
+    r = run_benchmark(TINY_BENCH, method="elem", model_kwargs={"embed_dim": 4}, epochs=6,
+                      seed=1, dataset=dataset, workdir=scratch_dir(),
+                      training_regime="validation-rank-selection", validate_every=2)
+    training = r.protocol_info["training"]
+    assert training["selected"] == "validation-rank-selection"
+    assert training["selected_epoch"] in (2, 4, 6)
+    assert r.training_regime == "validation-rank-selection"
+
+
 def test_run_benchmark_with_factory(dataset):
     from mowl.models.elbe.model import ELBE
 

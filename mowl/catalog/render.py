@@ -4,6 +4,8 @@ Used by ``docs/source/conf.py`` to generate ``docs/source/methods/catalogue.rst`
 documentation build time, so the documentation can never drift from the cards.
 """
 
+import re
+
 from mowl.catalog.card import Family, Status, RegimeKind
 from mowl.catalog.registry import list_methods, list_regimes, regimes_of
 
@@ -25,9 +27,20 @@ STATUS_LABELS = {
 }
 
 
-def _esc(text):
-    # A bare "|" starts a substitution reference in reStructuredText.
-    return " ".join(str(text).split()).replace("|", "\\|")
+_LITERAL = re.compile(r"(``.*?``)")
+_SPECIAL = re.compile(r"([|*])|(?<=[^\W_])(_)(?=\W|$)")
+
+
+def rst_escape(text):
+    """Collapse whitespace and escape the characters that reStructuredText would read as
+    markup in plain text: ``|`` (substitution), ``*`` (emphasis) and a ``_`` at the end of
+    a word (hyperlink reference). Text inside double backquotes is left as it is."""
+    parts = _LITERAL.split(" ".join(str(text).split()))
+    return "".join(part if part.startswith("``") else _SPECIAL.sub(r"\\\1\2", part)
+                   for part in parts)
+
+
+_esc = rst_escape
 
 
 def _title(text, char):

@@ -16,9 +16,9 @@ the positive validation axioms alone keeps decreasing when all regions grow, whi
 metric penalises.
 
 :class:`ValidationSelection` evaluates the parameters reached after epoch ``e - 1`` in the
-``on_epoch_start`` hook of epoch ``e`` and keeps the best ``state_dict`` in memory. Because
-there is no hook after the last epoch, call :meth:`ValidationSelection.finalize` after
-``train()`` to evaluate the final parameters and load the best ones into the module.
+``on_epoch_start`` hook of epoch ``e`` and keeps the best ``state_dict`` in memory. After
+the last epoch (``on_train_end``) it evaluates the final parameters and loads the best
+ones into the module; :meth:`ValidationSelection.finalize` does the same by hand.
 """
 
 import copy
@@ -143,6 +143,9 @@ class ValidationSelection(TrainingRegime):
         if restore and self.best_state is not None:
             self.model.module.load_state_dict(self.best_state)
         return self.best_epoch
+
+    def on_train_end(self):
+        self.finalize(restore=True)
 
 
 class ValidationRankSelection(ValidationSelection):

@@ -1496,8 +1496,10 @@ class FaithfulnessHierarchy(EvaluationRegime):
         return (oracle or self.oracle(dataset)).classes
 
     def evaluate(self, model, dataset):
-        """:return: ``{normal_form: {metric: value}}`` for the normal forms with a test
-            set."""
+        """Evaluate ``model`` on ``dataset``.
+
+        :return: ``{normal_form: {metric: value}}`` for the normal forms with a test set.
+        """
         oracle = None
         if not hasattr(dataset, "faithfulness_test_sets") or self.exact_admissibility:
             oracle = self.oracle(dataset)

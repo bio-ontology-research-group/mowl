@@ -15,7 +15,7 @@ Models embeddings the :math:`\mathcal{EL}` language
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper EL Embeddings: Geometric Construction of Models for the Description Logic EL++.">
+    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper EL Embeddings: Geometric Construction of Models for the D...">
 
 .. only:: html
 
@@ -32,7 +32,7 @@ Models embeddings the :math:`\mathcal{EL}` language
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This example is based on the paper Description Logic EL++ Embeddings with Intersectional Closure. This paper is based on the idea of /examples/elmodels/plot_1_elembeddings, but in this work the main point is to solve the intersectional closure problem.">
+    <div class="sphx-glr-thumbcontainer" tooltip="This example is based on the paper Description Logic EL++ Embeddings with Intersectional Closur...">
 
 .. only:: html
 
@@ -49,7 +49,7 @@ Models embeddings the :math:`\mathcal{EL}` language
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="All three geometric EL models embed ontology classes as 2-D shapes when trained with embed_dim=2, letting us watch the geometry evolve directly — no dimensionality reduction needed.">
+    <div class="sphx-glr-thumbcontainer" tooltip="All three geometric EL models embed ontology classes as 2-D shapes when trained with embed_dim=...">
 
 .. only:: html
 

@@ -36,20 +36,20 @@ class E2R(Model):
 
     Axioms used for training (everything else is listed in :attr:`skipped_axioms`):
 
-    =====================================================  ===========================
-    OWL axiom                                              loss
-    =====================================================  ===========================
-    ``ClassAssertion(A, a)``                               eq. (4)
-    ``ObjectPropertyAssertion(R, a, b)``                   eq. (4)
-    ``SubClassOf(A, B)``, ``SubClassOf(A, B1 ⊓ ... ⊓ Bk)`` eq. (5) (per conjunct)
-    ``EquivalentClasses(A, B)``                            eq. (5) both directions
-    ``EquivalentClasses(A, B1 ⊓ ... ⊓ Bk)``                eq. (6)
-    ``EquivalentClasses(A, B1 ⊔ ... ⊔ Bk)``                eq. (7)
-    ``EquivalentClasses(A, ¬B)``                           eq. (8) (real half)
-    ``DisjointClasses(A, B)``, ``SubClassOf(A, ¬B)``       eq. (6) with A ⊓ B = ⊥ = {0}
-    ``SubObjectPropertyOf(R, S)``, equivalences            eq. (5) for relations
-    ``ObjectPropertyRange(R, C)``, ``⊤ ⊑ ∀R.C``            eq. (9)
-    =====================================================  ===========================
+    ======================================================  ===========================
+    OWL axiom                                               loss
+    ======================================================  ===========================
+    ``ClassAssertion(A, a)``                                eq. (4)
+    ``ObjectPropertyAssertion(R, a, b)``                    eq. (4)
+    ``SubClassOf(A, B)``, ``SubClassOf(A, B1 ⊓ … ⊓ Bk)``    eq. (5) (per conjunct)
+    ``EquivalentClasses(A, B)``                             eq. (5) both directions
+    ``EquivalentClasses(A, B1 ⊓ ... ⊓ Bk)``                 eq. (6)
+    ``EquivalentClasses(A, B1 ⊔ ... ⊔ Bk)``                 eq. (7)
+    ``EquivalentClasses(A, ¬B)``                            eq. (8) (real half)
+    ``DisjointClasses(A, B)``, ``SubClassOf(A, ¬B)``        eq. (6) with A ⊓ B = ⊥ = {0}
+    ``SubObjectPropertyOf(R, S)``, equivalences             eq. (5) for relations
+    ``ObjectPropertyRange(R, C)``, ``⊤ ⊑ ∀R.C``             eq. (9)
+    ======================================================  ===========================
 
     All class and property operands must be named. The paper's universal type
     restriction (Sec. 4) is the statement "every :math:`R`-successor is in :math:`C_j`",

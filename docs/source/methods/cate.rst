@@ -12,7 +12,7 @@ The lattice
 
 :class:`~mowl.projection.categorical.lattice.CatELattice` collects the concept descriptions
 of the training ontology and all their sub-descriptions, following the category-theoretical
-semantics of ALC (Le Duc 2021). Each constructor and axiom adds a fixed set of morphisms
+semantics of ALC [duc2021]_. Each constructor and axiom adds a fixed set of morphisms
 (paper, Section 3):
 
 .. list-table::

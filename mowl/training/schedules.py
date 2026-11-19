@@ -58,8 +58,10 @@ class _Schedule(TrainingRegime):
 
 
 class StepDecay(_Schedule):
-    """Multiply the learning rate by ``gamma`` after each epoch in ``milestones``:
-    epochs ``0 .. m-1`` use the initial rate, epoch ``m`` onwards the decayed one.
+    """Multiply the learning rate by ``gamma`` after each epoch in ``milestones``.
+
+    Epochs before a milestone ``m`` use the initial rate, epoch ``m`` onwards the decayed
+    one.
 
     :param milestones: Epoch numbers, or a single one.
     :param gamma: Decay factor.

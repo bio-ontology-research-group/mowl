@@ -5,6 +5,7 @@ Markdown or reStructuredText.
 documentation calls it from ``docs/source/conf.py``.
 """
 
+from mowl.catalog.render import rst_escape
 from mowl.benchmarks.registry import get_benchmark, list_benchmarks, published_results
 
 FORMATS = ("text", "markdown", "rst")
@@ -51,6 +52,7 @@ def table(header, rows, fmt="text", title=None):
         out = [f".. list-table:: {title}" if title else ".. list-table::",
                "   :header-rows: 1", ""]
         for r in [header] + cells:
+            r = [rst_escape(c) for c in r]
             out.append("   * - " + (r[0] or " "))
             out += [f"     - {c or ' '}" for c in r[1:]]
         return "\n".join(out) + "\n"
@@ -111,10 +113,10 @@ def published_to_rst(heading_char="~"):
     out = []
     for bench in list_benchmarks():
         title = f"{bench.key}"
-        out += [title, heading_char * len(title), "", f"**{bench.name}** "
-                f"(task ``{bench.task.value}``). {bench.description}", ""]
+        out += [title, heading_char * len(title), "", f"**{rst_escape(bench.name)}** "
+                f"(task ``{bench.task.value}``). {rst_escape(bench.description)}", ""]
         if bench.notes:
-            out += [f"*Notes.* {bench.notes}", ""]
+            out += [f"*Notes.* {rst_escape(bench.notes)}", ""]
         if published_results(benchmark=bench.key):
             out.append(published_table(bench.key, fmt="rst"))
         else:

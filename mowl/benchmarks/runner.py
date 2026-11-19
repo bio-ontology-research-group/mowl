@@ -32,6 +32,10 @@ import time
 from mowl.benchmarks.registry import get_benchmark, published_results
 from mowl.benchmarks.spec import Benchmark
 
+__all__ = ["UnsupportedModelError", "BenchmarkResult", "ModelFamily", "ELFamily",
+           "register_family", "family_for", "set_seed", "environment",
+           "resolve_training_regime", "run_benchmark", "settings_differences", "compare"]
+
 
 class UnsupportedModelError(TypeError):
     """The model cannot be run on the benchmark (no family handler applies)."""
@@ -188,11 +192,29 @@ class ELFamily(ModelFamily):
         kwargs = {}
         if validate_every is not None and _accepts(model.train, "validate_every"):
             kwargs["validate_every"] = validate_every
+        selection = self._selection_regime(model)
+        if selection is not None and validate_every is not None:
+            selection.every = max(1, int(validate_every))
         model.train(epochs=epochs, **kwargs)
+        eval_gci = getattr(model, "eval_gci_name", None)
+        if selection is not None:
+            # The regime has already loaded the parameters it selected.
+            return {"selected": selection.key, "selected_epoch": selection.best_epoch,
+                    "selection_value": selection.best_value, "eval_gci_name": eval_gci}
         if select_best and validated and os.path.exists(model.model_filepath):
             model.load_best_model()
         return {"selected": "best validation loss" if (select_best and validated)
-                else "last epoch", "eval_gci_name": getattr(model, "eval_gci_name", None)}
+                else "last epoch", "eval_gci_name": eval_gci}
+
+    @staticmethod
+    def _selection_regime(model):
+        """The model selection regime attached to the model, if any."""
+        from mowl.training.selection import ValidationSelection
+        regime = getattr(model, "training_regime", None)
+        for part in getattr(regime, "regimes", None) or [regime]:
+            if isinstance(part, ValidationSelection):
+                return part
+        return None
 
 
 class _UnsupportedFamily(ModelFamily):

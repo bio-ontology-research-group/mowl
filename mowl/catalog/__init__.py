@@ -29,12 +29,12 @@ from mowl.catalog.card import (Family, Status, Origin, GuaranteeKind, Reference,
 from mowl.catalog.registry import (get_method, list_methods, load_method, get_regime,
                                    list_regimes, regimes_of)
 from mowl.catalog.render import (catalogue_to_rst, card_to_rst, overview_table_rst,
-                                 regime_to_rst, regimes_to_rst)
+                                 regime_to_rst, regimes_to_rst, rst_escape)
 
 __all__ = [
     "Family", "Status", "Origin", "GuaranteeKind", "Reference", "Guarantee", "MethodCard",
     "get_method", "list_methods", "load_method",
     "RegimeKind", "RegimeCard", "get_regime", "list_regimes", "regimes_of",
     "catalogue_to_rst", "card_to_rst", "overview_table_rst",
-    "regime_to_rst", "regimes_to_rst",
+    "regime_to_rst", "regimes_to_rst", "rst_escape",
 ]
