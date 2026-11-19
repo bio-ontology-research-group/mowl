@@ -63,6 +63,18 @@ class TrainingRegime:
         """
         return NotImplemented
 
+    def filter_negatives(self, gci_name, gci_dataset, negatives):
+        """Post-process negative samples, wherever they came from (this regime, another
+        regime of a composition, or the model's own sampler). Typical use: replace or
+        drop sampled negatives that are known or entailed to be true.
+
+        :param negatives: Tensor of corrupted rows, or ``None``.
+        :return: The negatives to use. Must keep the number of rows per positive that the
+            model's loss expects (resample rather than drop if the model requires it).
+            The default returns ``negatives`` unchanged.
+        """
+        return negatives
+
     def loss(self, gci_name, pos_scores, neg_scores):
         """Combine the scores of positives and negatives of one axiom type into a loss.
 
@@ -87,6 +99,7 @@ class ComposedRegime(TrainingRegime):
     """Combination of several regimes.
 
     Dataset transformations are applied in order, per-epoch hooks are all called,
+    negative filters are chained in order,
     additional losses are summed, and for :meth:`negatives`, :meth:`loss` and
     :meth:`optimizer` the first regime that does not return ``NotImplemented`` decides.
 
@@ -120,6 +133,11 @@ class ComposedRegime(TrainingRegime):
 
     def negatives(self, gci_name, gci_dataset):
         return self._first("negatives", gci_name, gci_dataset)
+
+    def filter_negatives(self, gci_name, gci_dataset, negatives):
+        for r in self.regimes:
+            negatives = r.filter_negatives(gci_name, gci_dataset, negatives)
+        return negatives
 
     def loss(self, gci_name, pos_scores, neg_scores):
         return self._first("loss", gci_name, pos_scores, neg_scores)
