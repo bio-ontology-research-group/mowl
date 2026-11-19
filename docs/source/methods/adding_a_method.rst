@@ -34,6 +34,30 @@ catalogue card.
 
 ``<key>`` is the lower-case catalogue key of the method (``elem``, ``box2el``, ``elkem``).
 
+Representation, training and evaluation are separate
+----------------------------------------------------
+
+A publication usually bundles three things: a representation (the method), a way to train it
+and a way to evaluate it. In mOWL they are catalogued and implemented separately, so that any
+training or evaluation procedure can be combined with any compatible method, and so that it
+is explicit under which procedures a published number was obtained.
+
+* The representation is the *method*: a catalogue card and a model, as described below.
+* A procedure for training that is not specific to one representation (a negative sampling
+  scheme, a way to combine positive and negative scores, a schedule, a model selection rule)
+  is a *training regime*: a :class:`mowl.training.TrainingRegime` subclass in
+  :mod:`mowl.training` with a :class:`mowl.catalog.RegimeCard` in
+  ``mowl/catalog/regimes/<key>.py``.
+* A procedure for testing (how the test set is built, what is ranked against what, what is
+  filtered, which metrics) is an *evaluation regime*: a
+  :class:`mowl.evaluation.EvaluationRegime` subclass in :mod:`mowl.evaluation`, again with a
+  ``RegimeCard``.
+
+A regime is catalogued whether or not it was ever published on its own. When a new paper
+trains or tests in a way that mOWL does not have yet, add the regime; when it uses existing
+ones, name them in the ``training`` and ``evaluation`` fields of the method card. See
+:doc:`training_and_evaluation` for how the literature trains and tests.
+
 1. The catalogue card
 ---------------------
 
@@ -78,9 +102,11 @@ Methods that are not trained by gradient descent (exact constructions, convex pr
 subclass :class:`mowl.base_models.Model` directly, or live in :mod:`mowl.geometric` if they
 construct a geometric interpretation from the canonical model.
 
-Training regimes that apply to several methods (negative sampling strategies, deductive
-closure filtering) belong in :mod:`mowl.training`, and evaluation regimes in
-:mod:`mowl.evaluation`. They are not methods and have no catalogue card.
+Training that is specific to the representation stays in the model. Anything that could be
+used with another representation is a training regime (see above); the generic training loop
+of :class:`mowl.base_models.EmbeddingELModel` consults the regime attached to
+``model.training_regime`` and falls back to the model's own behaviour for every hook the
+regime does not implement.
 
 Optional dependencies (a language model, a conic solver) are imported inside the functions
 that need them and raise an :class:`ImportError` that names the package. They are listed in

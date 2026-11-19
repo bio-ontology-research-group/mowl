@@ -12,7 +12,21 @@ relevant published methods it does not implement, with the reason.
 
    catalogue
    regimes
+   training_and_evaluation
    adding_a_method
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Methods added with the catalogue
+
+   elkem
+   emelpp
+   regd
+   mcmultibox
+   octagon
+   bcbox
+   alcone
+   e2r
 
 
 Representation, training and evaluation

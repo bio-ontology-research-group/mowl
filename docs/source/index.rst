@@ -113,7 +113,10 @@ If you used mOWL in your work, please consider citing `this article <https://doi
    embedding_el/index
    embedding_alc/index
    geometric/index
+   methods/index
+   training/index
    evaluation/index
+   benchmarks/index
    visualization/index
    examples/index
    
@@ -132,6 +135,9 @@ If you used mOWL in your work, please consider citing `this article <https://doi
    :glob:
 
    api/base_models/index
+   api/catalog/index
+   api/benchmarks/index
+   api/training/index
    api/corpus/index
    api/datasets/index
    api/evaluation/index

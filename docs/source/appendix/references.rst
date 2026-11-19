@@ -32,3 +32,29 @@ References
 .. [hoehndorf2025] Hoehndorf, R., Pesquita, C., & Zhapa-Camacho, F. (2025). Neuro-Symbolic AI in Life Sciences. In Frontiers in Artificial Intelligence and Applications. Frontiers in Artificial Intelligence and Applications. doi:10.3233/faia250239
 
 .. [zhapa2026] Zhapa-Camacho, F., Muhammed, N., & Hoehndorf, R. Beyond similarity: inductive gene--disease associations as link prediction. Manuscript in preparation. *(Placeholder — update on publication, see* `#143 <https://github.com/bio-ontology-research-group/mowl/issues/143>`_ *.)*
+
+.. [singh2026] Singh, N., Jiménez-Ruiz, E., & Weyde, T. (2026). `ELK-Em: Closure-Aware Embeddings for EL+⊥ Ontologies <https://ceur-ws.org/Vol-4313/kgnesy-paper14.pdf>`_. In: Third Workshop on Knowledge Graphs and Neurosymbolic AI (KG-NeSy 2026), CEUR-WS Vol-4313, paper 14.
+
+.. [mondal2021] Mondal, S., Bhatia, S., & Mutharaju, R. (2021). `EmEL++: Embeddings for EL++ Description Logic <https://ceur-ws.org/Vol-2846/paper19.pdf>`_. In: AAAI Spring Symposium on Combining Machine Learning and Knowledge Engineering (AAAI-MAKE 2021), CEUR-WS Vol-2846, paper 19.
+
+.. [mohapatra2021] Mohapatra, B., Bhatia, S., Mutharaju, R., & Srinivasaraghavan, G. (2021). `Why Settle for Just One? Extending EL++ Ontology Embeddings with Many-to-Many Relationships <https://arxiv.org/abs/2110.10555>`_. ArXiv, abs/2110.10555.
+
+.. [yang2025regd] Yang, H., & Chen, J. (2025). `RegD: Hierarchical Embeddings via Dissimilarity between Arbitrary Euclidean Regions <https://arxiv.org/abs/2501.17518>`_. ArXiv, abs/2501.17518 (v3, 2026; KR 2026).
+
+.. [aharoni2024] Aharoni, A. (2024). `Pushing the BoxEL Envelope <https://eprints.illc.uva.nl/id/document/13037>`_. MSc thesis, Institute for Logic, Language and Computation, University of Amsterdam.
+
+.. [zhang2022bcbox] Zhang, D., Boratko, M., Musco, C., & McCallum, A. (2022). `Modeling Transitivity and Cyclicity in Directed Graphs via Binary Code Box Embeddings <https://proceedings.neurips.cc/paper_files/paper/2022/hash/44a1f18afd6d5cc34d7e5c3d8a80f63b-Abstract.html>`_. In: Advances in Neural Information Processing Systems 35 (NeurIPS 2022).
+
+.. [mashkova2024nesy] Mashkova, O., Zhapa-Camacho, F., & Hoehndorf, R. (2024). `Enhancing Geometric Ontology Embeddings for EL++ with Negative Sampling and Deductive Closure Filtering <https://arxiv.org/abs/2405.04868>`_. In: Neural-Symbolic Learning and Reasoning (NeSy 2024). ArXiv, abs/2405.04868.
+
+.. [mashkova2024dele] Mashkova, O., Zhapa-Camacho, F., & Hoehndorf, R. (2024). `DELE: Deductive EL++ Embeddings for Knowledge Base Completion <https://arxiv.org/abs/2411.01574>`_. ArXiv, abs/2411.01574.
+
+.. [mashkova2026] Mashkova, O., & Hoehndorf, R. (2026). `A hierarchy of faithfulness criteria for knowledge base completion <https://arxiv.org/abs/2609.27863>`_. ArXiv, abs/2609.27863.
+
+.. [garg2019] Garg, D., Ikbal, S., Srivastava, S. K., Vishwakarma, H., Karanam, H., & Subramaniam, L. V. (2019). `Quantum Embedding of Knowledge for Reasoning <https://papers.nips.cc/paper_files/paper/2019/hash/cb12d7f933e7d102c52231bf62b8a678-Abstract.html>`_. In: Advances in Neural Information Processing Systems 32 (NeurIPS 2019).
+
+.. [ozcep2020] Özçep, Ö. L., Leemhuis, M., & Wolter, D. (2020). `Cone Semantics for Logics with Negation <https://doi.org/10.24963/ijcai.2020/252>`_. In: Proceedings of the Twenty-Ninth International Joint Conference on Artificial Intelligence (IJCAI-20), 1820–1826.
+
+.. [ozcep2023] Özçep, Ö. L., Leemhuis, M., & Wolter, D. (2023). `Embedding Ontologies in the Description Logic ALC by Axis-Aligned Cones <https://doi.org/10.1613/jair.1.13939>`_. Journal of Artificial Intelligence Research, 78.
+
+.. [leemhuis2020] Leemhuis, M., Özçep, Ö. L., & Wolter, D. (2020). `Orthologics for Cones <https://arxiv.org/abs/2008.03172>`_. ArXiv, abs/2008.03172.

@@ -34,3 +34,17 @@ In the case of the |ppievaluator|, the entities involved in the evaluation are o
 For the |ppievaluator|, the axioms to be evaluated is :math:`p_i \sqsubseteq \exists interacts\_wih. p_j`, where :math:`p_i` and :math:`p_j` are proteins.
 
 Every dataset has the attribute `evaluation_classes`, which is a 2-tuple of objects :class:`mowl.datasets.OWLClasses`. 
+
+Evaluation regimes
+------------------
+
+Evaluation procedures that are independent of a particular model are implemented as
+:class:`~mowl.evaluation.regime.EvaluationRegime` classes and described in the
+:doc:`catalogue of regimes </methods/regimes>`. A benchmark of :doc:`/benchmarks/index` is
+a dataset together with one of these regimes.
+
+.. toctree::
+   :maxdepth: 1
+
+   deductive
+   faithfulness

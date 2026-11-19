@@ -140,3 +140,27 @@ autodoc_mock_imports = ['jpype', 'owlready2', 'rdflib', 'networkx', 'node2vec', 
 import mowl
 mowl.init_jvm("4g")
 
+
+
+# -- Generated pages ---------------------------------------------------------
+# The method catalogue, the training / evaluation regimes and the table of published
+# benchmark results are rendered from the registries, so the documentation cannot drift
+# from the code. The generated files are not committed (see .gitignore).
+def _write_generated_pages():
+    from mowl.catalog import catalogue_to_rst, regimes_to_rst
+    from mowl.benchmarks.report import published_to_rst
+
+    here = os.path.dirname(os.path.abspath(__file__))
+    pages = {
+        os.path.join("methods", "catalogue.rst"): catalogue_to_rst(),
+        os.path.join("methods", "regimes.rst"): regimes_to_rst(),
+        os.path.join("benchmarks", "_published.rst"): published_to_rst(),
+    }
+    for relative, text in pages.items():
+        path = os.path.join(here, relative)
+        if not os.path.exists(path) or open(path, encoding="utf-8").read() != text:
+            with open(path, "w", encoding="utf-8") as handle:
+                handle.write(text)
+
+
+_write_generated_pages()
