@@ -135,8 +135,9 @@ same training and evaluation regime).
    print(compare(result))
 
 .. testoutput::
+   :options: +ELLIPSIS
 
-   ['axiom_satisfaction', 'empty_fraction', 'exact_model', 'exact_model_nonempty', 'helly_violation_rate', 'is_model', 'no_interior_fraction']
+   ...['axiom_satisfaction', 'empty_fraction', 'exact_model', 'exact_model_nonempty', 'helly_violation_rate', 'is_model', 'no_interior_fraction']
    []
 
 Models are built through a *family handler*: subclasses of

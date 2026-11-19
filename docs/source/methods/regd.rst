@@ -79,3 +79,9 @@ Example
 
    ball_model = RegDELEm(dataset, embed_dim=5, learning_rate=0.01)
    ball_model.train(epochs=5)
+
+.. testoutput::
+   :hide:
+   :options: +ELLIPSIS
+
+   ...

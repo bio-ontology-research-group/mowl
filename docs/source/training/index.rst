@@ -18,6 +18,12 @@ that is assigned to any :class:`~mowl.base_models.EmbeddingELModel`:
    model.training_regime = dele_regime()   # ELEm+l+n of DELE
    model.train(epochs=2)
 
+.. testoutput::
+   :hide:
+   :options: +ELLIPSIS
+
+   ...
+
 Without a regime (``model.training_regime = None``, the default) training is exactly as
 before. The generic training loop of :meth:`EmbeddingELModel.train
 <mowl.base_models.EmbeddingELModel.train>` consults the regime's hooks
