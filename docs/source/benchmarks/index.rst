@@ -87,7 +87,8 @@ Helly family (``helly-tk``)
    An expressivity benchmark: train on :math:`\mathcal{T}_k`
    (:math:`A_i \equiv \bigsqcap_{j \ne i} X_j`, :math:`A_i \sqcap A_j \sqsubseteq \bot`),
    then decide exactly whether the trained regions are a model, whether some satisfiable
-   name got an empty region, and how many Helly certificates the regions violate
+   name got an empty region or one without interior, and how many Helly certificates the
+   regions violate, for boxes, balls, prisms, octagons and unions of boxes
    (:class:`~mowl.evaluation.exact_model.ExactModelRegime`). No numbers have been
    published for it.
 
@@ -135,7 +136,7 @@ same training and evaluation regime).
 
 .. testoutput::
 
-   ['axiom_satisfaction', 'empty_fraction', 'exact_model', 'helly_violation_rate', 'is_model']
+   ['axiom_satisfaction', 'empty_fraction', 'exact_model', 'exact_model_nonempty', 'helly_violation_rate', 'is_model', 'no_interior_fraction']
    []
 
 Models are built through a *family handler*: subclasses of

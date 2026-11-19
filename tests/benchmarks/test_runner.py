@@ -161,5 +161,6 @@ def test_helly_benchmark_via_registry():
     res = run_benchmark("helly-tk", method="elbe", model_kwargs={"embed_dim": 2},
                         epochs=2, dataset_kwargs={"directory": scratch_dir()})
     assert set(res.metrics["all"]) == {"axiom_satisfaction", "is_model", "empty_fraction",
-                                       "exact_model", "helly_violation_rate"}
+                                       "no_interior_fraction", "exact_model",
+                                       "exact_model_nonempty", "helly_violation_rate"}
     assert compare(res) == []
