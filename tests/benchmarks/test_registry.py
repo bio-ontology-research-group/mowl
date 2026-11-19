@@ -1,0 +1,130 @@
+"""Consistency of the benchmark registry and of the published results (no JVM)."""
+
+import importlib
+import warnings
+
+import pytest
+
+from mowl.benchmarks import Task, get_benchmark, list_benchmarks, published_results
+from mowl.benchmarks.spec import Benchmark
+
+FIXED_KEYS = [
+    "box2el-galen-prediction", "box2el-go-prediction", "box2el-anatomy-prediction",
+    "box2el-galen-inference", "box2el-go-inference", "box2el-anatomy-inference",
+    "box2el-yeast-ppi", "box2el-human-ppi",
+    "dele-yeast-ppi", "dele-human-ppi", "dele-yeast-function", "dele-human-function",
+    "dele-foodon-subsumption", "dele-galen-subsumption",
+    "cate-ore1-membership", "cate-go-completion", "cate-foodon-completion", "cate-yeast-ppi",
+    "helly-tk",
+    "regd-galen-inference", "regd-go-inference", "regd-anatomy-inference",
+    "regd-galen-prediction", "regd-go-prediction", "regd-anatomy-prediction",
+    "emelpp-galen-prediction", "emelpp-go-prediction", "emelpp-anatomy-prediction",
+]
+
+
+@pytest.mark.parametrize("key", FIXED_KEYS)
+def test_fixed_keys_exist(key):
+    b = get_benchmark(key)
+    assert isinstance(b, Benchmark)
+    assert b.key == key
+
+
+def test_every_benchmark_is_well_formed():
+    for b in list_benchmarks():
+        assert b.metrics and b.subsets
+        assert len(set(b.metrics)) == len(b.metrics)
+        if b.higher_is_better:
+            assert set(b.higher_is_better) <= set(b.metrics), b.key
+        for path in (b.dataset, b.protocol):
+            module, _, attr = path.rpartition(".")
+            spec = importlib.util.find_spec(module)
+            assert spec is not None, f"{b.key}: module {module} not found"
+
+
+def test_task_filter():
+    keys = {b.key for b in list_benchmarks(task=Task.EXACT_MODEL)}
+    assert "helly-tk" in keys
+    assert all(b.task is Task.DEDUCTIVE_INFERENCE
+               for b in list_benchmarks(task="deductive_inference"))
+
+
+def test_published_results_are_consistent():
+    results = published_results()
+    assert results
+    for r in results:
+        b = get_benchmark(r.benchmark)
+        assert r.subset in b.subsets, (r.benchmark, r.subset)
+        assert set(r.metrics) <= set(b.metrics), (r.benchmark, set(r.metrics) - set(b.metrics))
+        for value in r.metrics.values():
+            assert isinstance(value, (int, float)) and not isinstance(value, bool)
+        assert r.locator
+
+
+def test_published_method_keys_against_catalogue():
+    """Method keys must be catalogued eventually; other agents add cards concurrently, so
+    unknown keys only produce a warning."""
+    from mowl.catalog import get_method
+    unknown = set()
+    for r in published_results():
+        try:
+            get_method(r.method)
+        except KeyError:
+            unknown.add(r.method)
+    if unknown:
+        warnings.warn(f"Published results reference uncatalogued methods: {sorted(unknown)}")
+
+
+def test_training_regimes_in_settings_are_catalogued():
+    from mowl.catalog import get_regime
+    for r in published_results():
+        keys = r.settings.get("training_regime")
+        if keys is None:
+            continue
+        for key in (keys if isinstance(keys, (tuple, list)) else (keys,)):
+            try:
+                assert get_regime(key).kind.value == "training"
+            except KeyError:
+                warnings.warn(f"Training regime {key!r} of {r.benchmark} is not catalogued.")
+
+
+def test_transcribed_spot_values():
+    """A few values checked against the PDFs by hand."""
+    r = published_results(benchmark="box2el-galen-prediction", method="box2el",
+                          subset="combined")
+    jack = [x for x in r if x.source.key == "jackermeier2024"][0]
+    assert jack.metrics == {"hits@1": 0.05, "hits@10": 0.20, "hits@100": 0.35, "med": 669,
+                            "mrr": 0.10, "mr": 4375, "auc": 0.81}
+    trans = [x for x in r if x.source.key == "yang2025"][0]
+    assert trans.metrics["med"] == 1360
+    r = published_results(benchmark="box2el-human-ppi", method="emelpp")[0]
+    assert r.metrics["f_mr"] == 700 and r.metrics["hits@10"] == 0.04
+    r = published_results(benchmark="dele-yeast-function", method="box2el")
+    assert sorted(x.metrics["f_hits@10"] for x in r) == [0.27, 0.27, 0.31]
+    r = published_results(benchmark="cate-ore1-membership", method="cate")[0]
+    assert r.metrics["f_mr"] == 37
+    cate = published_results(benchmark="box2el-go-prediction", method="cate")[0]
+    assert "med" not in cate.metrics
+
+
+def test_no_published_numbers_for_helly():
+    assert published_results(benchmark="helly-tk") == []
+
+
+@pytest.mark.parametrize("key", ["box2el-normal-form-ranking", "inferred-subsumption-ranking",
+                                 "ppi-ranking", "regd-sampled-f1", "exact-model-check",
+                                 "cate-filtered-ranking", "emelpp-subsumee-ranking"])
+def test_regime_cards(key):
+    from mowl.catalog import get_regime
+    card = get_regime(key)
+    assert card.kind.value == "evaluation"
+    module, _, attr = card.implementation.rpartition(".")
+    assert importlib.util.find_spec(module) is not None
+
+
+def test_published_to_rst_and_tables():
+    from mowl.benchmarks import report
+    text = report.published_to_rst()
+    assert "box2el-galen-prediction" in text and ".. list-table::" in text
+    for fmt in report.FORMATS:
+        out = report.published_table("box2el-yeast-ppi", fmt=fmt)
+        assert "box2el" in out
