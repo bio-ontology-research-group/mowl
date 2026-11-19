@@ -226,4 +226,61 @@ def reg_loss(bump, reg_factor):
     return reg_loss
 
 
+# ---------------------------------------------------------------------------------------
+# Negative losses of DELE (Mashkova et al., "DELE: Deductive EL++ Embeddings for Knowledge
+# Base Completion", Section 4.3, Eqs. 13-18). Used only when the module was built with
+# ``all_negative_losses=True`` (see BoxSquaredELModule). As in the paper, Eqs. 13-17 are
+# not squared (the positive Box2EL losses are).
+# ---------------------------------------------------------------------------------------
 
+def _boxes(data, class_center, class_offset, cols):
+    return [(class_center(data[:, i]), th.abs(class_offset(data[:, i]))) for i in cols]
+
+
+def gci0_loss_neg(data, class_center, class_offset, gamma):
+    """Eq. 13, :math:`A \\not\\sqsubseteq B`: ``‖relu(-(d(A, B) + γ))‖``, zero iff
+    ``d(A, B) >= -γ`` in every dimension."""
+    box_c, box_d = _boxes(data, class_center, class_offset, (0, 1))
+    return th.linalg.norm(th.relu(-(box_distance(box_c, box_d) + gamma)), dim=1)
+
+
+def gci1_loss_neg(data, class_center, class_offset, gamma):
+    """Eq. 14, :math:`A \\sqcap B \\not\\sqsubseteq E`: Eq. 13 between
+    ``Box(A) ∩ Box(B)`` and ``Box(E)``."""
+    box_c, box_d, box_e = _boxes(data, class_center, class_offset, (0, 1, 2))
+    inter, _, _ = box_intersection(box_c, box_d)
+    return th.linalg.norm(th.relu(-(box_distance(inter, box_e) + gamma)), dim=1)
+
+
+def gci0_bot_loss_neg(data, class_offset, epsilon):
+    """Eq. 15, :math:`A \\not\\sqsubseteq \\bot`: zero iff ``‖o(A)‖ >= epsilon``."""
+    return th.relu(epsilon - th.linalg.norm(th.abs(class_offset(data[:, 0])), dim=1))
+
+
+def gci1_bot_loss_neg(data, class_center, class_offset, epsilon):
+    """Eq. 16, :math:`A \\sqcap B \\not\\sqsubseteq \\bot`: zero iff
+    ``‖o(Box(A) ∩ Box(B))‖ >= epsilon`` (offset ``|upper - lower| / 2``)."""
+    box_c, box_d = _boxes(data, class_center, class_offset, (0, 1))
+    (_, off), _, _ = box_intersection(box_c, box_d)
+    return th.relu(epsilon - th.linalg.norm(off, dim=1))
+
+
+def gci3_bot_loss_neg(data, class_offset, epsilon):
+    """Eq. 17, :math:`\\exists r.A \\not\\sqsubseteq \\bot`: zero iff ``‖o(A)‖ >= epsilon``
+    (the offset of the filler class A, as written in the paper)."""
+    return th.relu(epsilon - th.linalg.norm(th.abs(class_offset(data[:, 1])), dim=1))
+
+
+def gci3_loss_neg(data, class_center, class_offset, head_center, head_offset, bump, gamma,
+                  delta):
+    """Eq. 18, :math:`\\exists r.A \\not\\sqsubseteq B`:
+    ``(δ - µ(Head(r) - Bump(A), Box(B)))^2`` with ``µ(X, Y) = ‖relu(d(X, Y) + γ)‖``; zero
+    iff that minimal distance equals ``δ``."""
+    center_d = class_center(data[:, 2])
+    off_d = th.abs(class_offset(data[:, 2]))
+    center_head = head_center(data[:, 0])
+    offset_head = th.abs(head_offset(data[:, 0]))
+    bumped_head = (center_head - bump(data[:, 1]), offset_head)
+    min_dist = th.linalg.norm(th.relu(box_distance(bumped_head, (center_d, off_d)) + gamma),
+                              dim=1)
+    return (delta - min_dist).square()

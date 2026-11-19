@@ -123,3 +123,72 @@ def regularization_loss(class_embed, ind_embed = None, reg_norm = 1):
         reg += th.abs(th.linalg.norm(ind_embed.weight, axis=1) - reg_norm).mean()
     return reg
 
+
+# ---------------------------------------------------------------------------------------
+# Negative losses of DELE (Mashkova et al., "DELE: Deductive EL++ Embeddings for Knowledge
+# Base Completion", Section 4.1, Eqs. 1-6). They are used only when the module was built
+# with ``all_negative_losses=True`` (see ELEmModule). The regularisation terms
+# |‖f(x)‖ - 1| of Eqs. 1-4 are not repeated here: ELEmModule.regularization_loss already
+# applies them to every class centre.
+# ---------------------------------------------------------------------------------------
+
+def gci0_loss_neg(data, class_embed, class_rad, margin):
+    """Eq. 1, :math:`A \\not\\sqsubseteq B`: zero iff the balls of A and B are at least
+    ``margin`` apart, i.e. ``‖c_A - c_B‖ >= r_A + r_B + margin``."""
+    c = class_embed(data[:, 0])
+    d = class_embed(data[:, 1])
+    rc = th.abs(class_rad(data[:, 0]))
+    rd = th.abs(class_rad(data[:, 1]))
+    dst = th.linalg.norm(c - d, dim=1, keepdim=True)
+    return th.relu(rc + rd - dst + margin)
+
+
+def gci1_loss_neg(data, class_embed, class_rad, margin):
+    """Eq. 3, :math:`A \\sqcap B \\not\\sqsubseteq E`: zero iff the balls of A and B overlap
+    (``‖c_A - c_B‖ <= r_A + r_B + margin``) and the centre of E lies outside both balls by at
+    least ``margin``."""
+    c = class_embed(data[:, 0])
+    d = class_embed(data[:, 1])
+    e = class_embed(data[:, 2])
+    rc = th.abs(class_rad(data[:, 0]))
+    rd = th.abs(class_rad(data[:, 1]))
+    dst = th.linalg.norm(c - d, dim=1, keepdim=True)
+    dst_ce = th.linalg.norm(c - e, dim=1, keepdim=True)
+    dst_de = th.linalg.norm(d - e, dim=1, keepdim=True)
+    loss = th.relu(dst - rc - rd - margin) + th.relu(rc - dst_ce + margin)
+    return loss + th.relu(rd - dst_de + margin)
+
+
+def gci3_loss_neg(data, class_embed, class_rad, rel_embed, margin):
+    """Eq. 2, :math:`\\exists r.A \\not\\sqsubseteq B`: zero iff the ball of A translated by
+    ``-r`` and the ball of B are at least ``margin`` apart."""
+    r = rel_embed(data[:, 0])
+    c = class_embed(data[:, 1])
+    d = class_embed(data[:, 2])
+    rc = th.abs(class_rad(data[:, 1]))
+    rd = th.abs(class_rad(data[:, 2]))
+    dst = th.linalg.norm(c - r - d, dim=1, keepdim=True)
+    return th.relu(rc + rd - dst + margin)
+
+
+def gci0_bot_loss_neg(data, class_rad, epsilon):
+    """Eq. 5, :math:`A \\not\\sqsubseteq \\bot`: zero iff the radius of A is at least
+    ``epsilon``."""
+    return th.relu(epsilon - th.abs(class_rad(data[:, 0])))
+
+
+def gci1_bot_loss_neg(data, class_embed, class_rad, margin):
+    """Eq. 4, :math:`A \\sqcap B \\not\\sqsubseteq \\bot`: zero iff the balls of A and B
+    overlap, ``‖c_A - c_B‖ <= r_A + r_B + margin``."""
+    c = class_embed(data[:, 0])
+    d = class_embed(data[:, 1])
+    rc = th.abs(class_rad(data[:, 0]))
+    rd = th.abs(class_rad(data[:, 1]))
+    dst = th.linalg.norm(c - d, dim=1, keepdim=True)
+    return th.relu(dst - rc - rd - margin)
+
+
+def gci3_bot_loss_neg(data, class_rad, epsilon):
+    """Eq. 6, :math:`\\exists r.A \\not\\sqsubseteq \\bot`: zero iff the radius of A is at
+    least ``epsilon``."""
+    return th.relu(epsilon - th.abs(class_rad(data[:, 1])))
