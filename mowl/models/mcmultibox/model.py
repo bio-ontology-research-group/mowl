@@ -151,6 +151,9 @@ class VolumeMultiBoxEL(EmbeddingELModel):
                         continue
                     data = full[name][splits[name][b].to(full[name].device)]
                     loss = loss + th.mean(self.module(data, name))
+                if not loss.requires_grad:
+                    # Fewer axioms than batches: this batch is empty for every axiom type.
+                    continue
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
