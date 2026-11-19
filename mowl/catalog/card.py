@@ -162,7 +162,10 @@ class MethodCard:
     :param guarantees: Proven statements (:class:`Guarantee`).
     :param limitations: Known limitations that are not formal theorems.
     :param intersection_closed: Whether the concept representation is closed under
-        intersection (``None`` if not applicable).
+        intersection: ``True``, ``False``, a short string when the answer is conditional
+        (e.g. ``"only if the number of boxes may grow"``), or ``None`` if not applicable.
+    :param related: Keys of related catalogue methods (e.g. the construction that
+        realises a theoretical result, or the method this one extends).
     :param helly: What is known about the Helly number of the concept regions, e.g.
         ``"2 (axis-parallel boxes, any dimension)"``, ``"d+1 (convex sets in R^d)"``,
         ``"unbounded (non-convex)"``. Empty if not applicable.
@@ -206,6 +209,7 @@ class MethodCard:
     optional_dependencies: tuple = ()
     training: tuple = ()
     evaluation: tuple = ()
+    related: tuple = ()
     notes: str = ""
 
     def __post_init__(self):

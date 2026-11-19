@@ -26,7 +26,8 @@ STATUS_LABELS = {
 
 
 def _esc(text):
-    return " ".join(str(text).split())
+    # A bare "|" starts a substitution reference in reStructuredText.
+    return " ".join(str(text).split()).replace("|", "\\|")
 
 
 def _title(text, char):
@@ -54,9 +55,14 @@ def card_to_rst(card):
     else:
         rows.append(("Why not implemented", card.not_implemented_reason))
     if card.intersection_closed is not None:
-        rows.append(("Closed under intersection", "yes" if card.intersection_closed else "no"))
+        closed = card.intersection_closed
+        rows.append(("Closed under intersection",
+                     closed if isinstance(closed, str) else ("yes" if closed else "no")))
     if card.helly:
         rows.append(("Helly number", card.helly))
+    if card.related:
+        rows.append(("Related methods",
+                     ", ".join(f":ref:`{k} <method-{k}>`" for k in card.related)))
     if card.optional_dependencies:
         rows.append(("Optional dependencies", ", ".join(card.optional_dependencies)))
     if card.code_url:
