@@ -66,8 +66,8 @@ CARD = MethodCard(
             "intersection, ⊕ and the positive-slope map T_r preserve boxes.",
             "singh2026, Section 4.1 (singh2026tr, Lemma 1)",
             condition="by construction",
-            verified_in_mowl=_NN_TESTS +
-            "TestExistentialBox::test_box_matches_relational_definition"),
+            verified_in_mowl=(_NN_TESTS + "TestExistentialBox::"
+                              "test_box_matches_relational_definition")),
         Guarantee(
             K.EXPRESSIVITY,
             "Rule R∃: if C ⊆ D then (∃r.C) ⊆ (∃r.D).",
