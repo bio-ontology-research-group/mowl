@@ -69,6 +69,17 @@ class Origin(str, Enum):
     NONE = "none"
 
 
+class RegimeKind(str, Enum):
+    """Kinds of regimes."""
+
+    #: How a model is trained: negative sampling, choice of positives, loss combination,
+    #: initialisation, schedules, model selection.
+    TRAINING = "training"
+    #: How a model is evaluated: construction of test sets, candidate sets, filtering,
+    #: metrics.
+    EVALUATION = "evaluation"
+
+
 class GuaranteeKind(str, Enum):
     """Kinds of theoretical statements recorded on a card."""
 
@@ -163,6 +174,10 @@ class MethodCard:
         ``("gci0", "gci1", "gci2", "gci3", "gci0_bot", "gci1_bot", "gci3_bot",
         "role_inclusion", "role_chain")``.
     :param optional_dependencies: Extra packages needed by the implementation.
+    :param training: Keys of the training regimes (:class:`RegimeCard`) the publication
+        trains the method with; the first one is the default of the mOWL implementation.
+    :param evaluation: Keys of the evaluation regimes (:class:`RegimeCard`) the
+        publication evaluates the method with.
     :param notes: Free text (deviations from the paper, implementation remarks).
     """
 
@@ -189,6 +204,8 @@ class MethodCard:
     benchmarks: tuple = ()
     axioms: tuple = ()
     optional_dependencies: tuple = ()
+    training: tuple = ()
+    evaluation: tuple = ()
     notes: str = ""
 
     def __post_init__(self):
@@ -234,6 +251,88 @@ class MethodCard:
 
         :raises NotImplementedError: If the method is catalogued only.
         """
+        if not self.implemented:
+            raise NotImplementedError(
+                f"{self.name} is documented in the catalogue but not implemented in mOWL: "
+                f"{self.not_implemented_reason}")
+        module_name, _, attr = self.implementation.rpartition(".")
+        return getattr(importlib.import_module(module_name), attr)
+
+
+@dataclass(frozen=True)
+class RegimeCard:
+    """Catalogue entry for a training or evaluation regime.
+
+    A regime is a way to train or to evaluate embeddings that is independent of the
+    representation. Some regimes were published on their own; many were introduced
+    inside a method paper and never named. Both kinds are catalogued, so that it is
+    explicit which regime a published result was obtained with, and so that any regime
+    can be combined with any compatible method.
+
+    :param key: Unique lower-case identifier, e.g. ``"deductive-closure-filtering"``.
+    :param name: Display name.
+    :param kind: :class:`RegimeKind`.
+    :param summary: Two or three sentences describing the regime.
+    :param components: What the regime determines, e.g. ``("negative sampling",
+        "positives")`` for training or ``("test set", "candidate set", "filtering",
+        "metrics")`` for evaluation.
+    :param applies_to: Which models or logics it can be used with.
+    :param references: Publications that introduce or define it, primary first.
+    :param standalone: ``True`` if it was published as a contribution of its own,
+        ``False`` if it is part of a method paper (or was never published separately).
+    :param introduced_with: Keys of the methods whose publication introduced it.
+    :param used_by: Keys of further methods whose publications use it.
+    :param implementation: Dotted path of the mOWL class or function implementing it
+        (a :class:`mowl.training.TrainingRegime` or
+        :class:`mowl.evaluation.EvaluationRegime` subclass where possible).
+    :param not_implemented_reason: Required when there is no implementation.
+    :param properties: Proven or by-construction properties (:class:`Guarantee`), e.g.
+        "sampled negatives are never entailed".
+    :param limitations: Known limitations.
+    :param notes: Free text.
+    """
+
+    key: str
+    name: str
+    kind: RegimeKind
+    summary: str
+    components: tuple
+    applies_to: str
+    references: tuple
+    standalone: bool = False
+    introduced_with: tuple = ()
+    used_by: tuple = ()
+    implementation: str = ""
+    not_implemented_reason: str = ""
+    properties: tuple = ()
+    limitations: tuple = ()
+    notes: str = ""
+
+    def __post_init__(self):
+        if not self.key or self.key != self.key.lower() or " " in self.key:
+            raise ValueError(f"Regime key must be a lower-case identifier: {self.key!r}")
+        if not isinstance(self.kind, RegimeKind):
+            raise TypeError("kind must be a mowl.catalog.RegimeKind.")
+        if not self.references:
+            raise ValueError(f"Regime {self.key!r} needs at least one reference.")
+        for r in self.references:
+            if not isinstance(r, Reference):
+                raise TypeError("references must contain mowl.catalog.Reference objects.")
+        for g in self.properties:
+            if not isinstance(g, Guarantee):
+                raise TypeError("properties must contain mowl.catalog.Guarantee objects.")
+        if not self.implementation and not self.not_implemented_reason:
+            raise ValueError(
+                f"Regime {self.key!r} must name its implementation or state "
+                f"'not_implemented_reason'.")
+
+    @property
+    def implemented(self):
+        """``True`` if mOWL ships an implementation of the regime."""
+        return bool(self.implementation)
+
+    def load(self):
+        """Import and return the implementing class or function."""
         if not self.implemented:
             raise NotImplementedError(
                 f"{self.name} is documented in the catalogue but not implemented in mOWL: "

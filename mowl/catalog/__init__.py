@@ -15,17 +15,26 @@ theoretical guarantees and limitations, and where its implementation lives.
    for g in card.guarantees:
        print(g.kind, g.statement, g.source)
 
+A publication usually bundles a representation with a way to train it and a way to
+evaluate it. mOWL catalogues the three separately: methods (:class:`MethodCard`),
+training regimes and evaluation regimes (:class:`RegimeCard`, see
+:func:`list_regimes`), so that any regime can be combined with any compatible method.
+
 The catalogue does not need the JVM. Only :meth:`MethodCard.load` (and
 :func:`load_method`) import model code.
 """
 
 from mowl.catalog.card import (Family, Status, Origin, GuaranteeKind, Reference, Guarantee,
-                               MethodCard)
-from mowl.catalog.registry import get_method, list_methods, load_method
-from mowl.catalog.render import catalogue_to_rst, card_to_rst, overview_table_rst
+                               MethodCard, RegimeKind, RegimeCard)
+from mowl.catalog.registry import (get_method, list_methods, load_method, get_regime,
+                                   list_regimes)
+from mowl.catalog.render import (catalogue_to_rst, card_to_rst, overview_table_rst,
+                                 regime_to_rst, regimes_to_rst)
 
 __all__ = [
     "Family", "Status", "Origin", "GuaranteeKind", "Reference", "Guarantee", "MethodCard",
     "get_method", "list_methods", "load_method",
+    "RegimeKind", "RegimeCard", "get_regime", "list_regimes",
     "catalogue_to_rst", "card_to_rst", "overview_table_rst",
+    "regime_to_rst", "regimes_to_rst",
 ]

@@ -1,4 +1,8 @@
-"""Registry of :class:`~mowl.catalog.card.MethodCard` objects.
+"""Registry of :class:`~mowl.catalog.card.MethodCard` and
+:class:`~mowl.catalog.card.RegimeCard` objects.
+
+Regime cards live in :mod:`mowl.catalog.regimes`, one module per regime or group of
+regimes, exposing ``REGIME`` or ``REGIMES``.
 
 Cards live in the modules of :mod:`mowl.catalog.entries`, one module per method (or per
 closely related group of methods). A module exposes its cards as a module-level ``CARD``
@@ -9,9 +13,10 @@ automatically, so adding a method to the catalogue means adding one file.
 import importlib
 import pkgutil
 
-from mowl.catalog.card import MethodCard, Family, Status
+from mowl.catalog.card import MethodCard, Family, Status, RegimeCard, RegimeKind
 
 _CARDS = None
+_REGIMES = None
 
 
 def _discover():
@@ -84,3 +89,56 @@ def list_methods(family=None, status=None, logic=None, implemented=None):
 def load_method(key):
     """Import and return the class implementing the method ``key`` (needs the JVM)."""
     return get_method(key).load()
+
+
+def _discover_regimes():
+    from mowl.catalog import regimes
+
+    found = {}
+    for info in sorted(pkgutil.iter_modules(regimes.__path__), key=lambda i: i.name):
+        if info.name.startswith("_"):
+            continue
+        module = importlib.import_module(f"{regimes.__name__}.{info.name}")
+        items = list(getattr(module, "REGIMES", ()))
+        if hasattr(module, "REGIME"):
+            items.append(module.REGIME)
+        if not items:
+            raise ImportError(f"{module.__name__} defines neither REGIME nor REGIMES.")
+        for card in items:
+            if not isinstance(card, RegimeCard):
+                raise TypeError(f"{module.__name__} exposes a non-RegimeCard object.")
+            if card.key in found:
+                raise ValueError(f"Duplicate regime key {card.key!r}.")
+            found[card.key] = card
+    return found
+
+
+def _regimes():
+    global _REGIMES
+    if _REGIMES is None:
+        _REGIMES = _discover_regimes()
+    return _REGIMES
+
+
+def get_regime(key):
+    """Return the regime card registered under ``key``."""
+    regimes = _regimes()
+    if key not in regimes:
+        raise KeyError(f"Unknown regime {key!r}. Known regimes: {sorted(regimes)}")
+    return regimes[key]
+
+
+def list_regimes(kind=None, implemented=None, method=None):
+    """Return catalogued regimes, optionally filtered, sorted by kind and key.
+
+    :param kind: Keep only this :class:`~mowl.catalog.card.RegimeKind` (or its value).
+    :param implemented: If ``True``/``False``, keep only implemented/unimplemented ones.
+    :param method: Keep only regimes introduced with or used by this method key.
+    :rtype: list[RegimeCard]
+    """
+    kind = RegimeKind(kind) if kind is not None else None
+    out = [c for c in _regimes().values()
+           if (kind is None or c.kind is kind)
+           and (implemented is None or c.implemented == implemented)
+           and (method is None or method in c.introduced_with or method in c.used_by)]
+    return sorted(out, key=lambda c: (c.kind.value, c.key))

@@ -4,8 +4,8 @@ Used by ``docs/source/conf.py`` to generate ``docs/source/methods/catalogue.rst`
 documentation build time, so the documentation can never drift from the cards.
 """
 
-from mowl.catalog.card import Family, Status
-from mowl.catalog.registry import list_methods
+from mowl.catalog.card import Family, Status, RegimeKind
+from mowl.catalog.registry import list_methods, list_regimes
 
 FAMILY_TITLES = {
     Family.GEOMETRIC: "Geometric (region-based) methods",
@@ -61,6 +61,12 @@ def card_to_rst(card):
         rows.append(("Optional dependencies", ", ".join(card.optional_dependencies)))
     if card.code_url:
         rows.append(("Reference code", f"`{card.code_url} <{card.code_url}>`__"))
+    if card.training:
+        rows.append(("Training regime (paper)",
+                     ", ".join(f":ref:`{k} <regime-{k}>`" for k in card.training)))
+    if card.evaluation:
+        rows.append(("Evaluation regime (paper)",
+                     ", ".join(f":ref:`{k} <regime-{k}>`" for k in card.evaluation)))
     if card.benchmarks:
         rows.append(("Published results recorded for",
                      ", ".join(f"``{b}``" for b in card.benchmarks)))
@@ -119,4 +125,59 @@ def catalogue_to_rst():
             continue
         out.append(_title(title, "-"))
         out.extend(card_to_rst(c) for c in cards)
+    return "\n".join(out)
+
+
+def regime_to_rst(card):
+    """Return the reStructuredText section describing one regime card."""
+    lines = [f".. _regime-{card.key}:\n", _title(card.name, "^"), _esc(card.summary) + "\n"]
+    rows = [("Key", f"``{card.key}``"),
+            ("Determines", ", ".join(card.components)),
+            ("Applies to", card.applies_to),
+            ("Published", "as a contribution of its own" if card.standalone
+             else "as part of a method publication")]
+    if card.introduced_with:
+        rows.append(("Introduced with",
+                     ", ".join(f":ref:`{k} <method-{k}>`" for k in card.introduced_with)))
+    if card.used_by:
+        rows.append(("Also used by",
+                     ", ".join(f":ref:`{k} <method-{k}>`" for k in card.used_by)))
+    if card.implemented:
+        rows.append(("Implementation", f":class:`{card.implementation}`"))
+    else:
+        rows.append(("Why not implemented", card.not_implemented_reason))
+    lines.append(".. list-table::\n   :widths: 25 75\n")
+    for k, v in rows:
+        lines.append(f"   * - {k}\n     - {_esc(v)}")
+    lines.append("")
+    if card.properties:
+        lines.append("**Properties**\n")
+        for g in card.properties:
+            lines.append(f"* ({_esc(g.condition)}) {_esc(g.statement)} [{_esc(g.source)}]")
+        lines.append("")
+    if card.limitations:
+        lines.append("**Known limitations**\n")
+        lines.extend(f"* {_esc(t)}" for t in card.limitations)
+        lines.append("")
+    if card.notes:
+        lines.append(f"**Notes.** {_esc(card.notes)}\n")
+    lines.append("**References**\n")
+    for r in card.references:
+        url = f" `{r.url} <{r.url}>`__" if r.url else ""
+        lines.append(f"* {_esc(r.citation)}{url}")
+    lines.append("")
+    return "\n".join(lines)
+
+
+def regimes_to_rst():
+    """Return the full page of training and evaluation regimes."""
+    out = [".. This file is generated from mowl.catalog by docs/source/conf.py. "
+           "Do not edit.\n", _title("Training and evaluation regimes", "=")]
+    for kind, title in ((RegimeKind.TRAINING, "Training regimes"),
+                        (RegimeKind.EVALUATION, "Evaluation regimes")):
+        cards = list_regimes(kind=kind)
+        if not cards:
+            continue
+        out.append(_title(title, "-"))
+        out.extend(regime_to_rst(c) for c in cards)
     return "\n".join(out)
