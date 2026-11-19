@@ -97,6 +97,9 @@ class GuaranteeKind(str, Enum):
     EXPRESSIVITY = "expressivity"
     #: A proven negative result (something the method cannot represent).
     LIMITATION = "limitation"
+    #: A property of a training or evaluation regime that holds by construction or by
+    #: proof (for example "sampled negatives are never entailed").
+    REGIME_PROPERTY = "regime_property"
 
 
 @dataclass(frozen=True)

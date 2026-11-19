@@ -83,6 +83,22 @@ class TrainingRegime:
         """
         return NotImplemented
 
+    #: How the negatives handed to :meth:`loss` are scored. ``False`` (default): with the
+    #: module's negative-form loss (``module(neg, gci_name, neg=True)``), as the model
+    #: itself does. ``True``: with the same score as positives
+    #: (``module(neg, gci_name)``), which is what score-contrasting losses (pairwise
+    #: ranking, log-sigmoid, BPR, correlation) need.
+    score_negatives_like_positives = False
+
+    def should_stop(self, epoch):
+        """Called at the end of every epoch. Return ``True`` to end training (early
+        stopping)."""
+        return False
+
+    def on_train_end(self):
+        """Called once after the last epoch (for example to restore the selected
+        checkpoint)."""
+
     def on_epoch_start(self, epoch, epochs):
         """Called at the beginning of every epoch (schedules, annealing, resampling)."""
 
@@ -100,7 +116,8 @@ class ComposedRegime(TrainingRegime):
 
     Dataset transformations are applied in order, per-epoch hooks are all called,
     negative filters are chained in order,
-    additional losses are summed, and for :meth:`negatives`, :meth:`loss` and
+    additional losses are summed, training stops as soon
+    as one regime asks for it, and for :meth:`negatives`, :meth:`loss` and
     :meth:`optimizer` the first regime that does not return ``NotImplemented`` decides.
 
     :param regimes: The regimes to combine, in order of precedence.
@@ -144,6 +161,23 @@ class ComposedRegime(TrainingRegime):
 
     def optimizer(self):
         return self._first("optimizer")
+
+    @property
+    def score_negatives_like_positives(self):
+        """Taken from the regime that decides :meth:`loss` (the first one overriding
+        it)."""
+        for r in self.regimes:
+            if type(r).loss is not TrainingRegime.loss:
+                return r.score_negatives_like_positives
+        return False
+
+    def should_stop(self, epoch):
+        # Every regime is asked, so each sees every epoch.
+        return any([r.should_stop(epoch) for r in self.regimes])
+
+    def on_train_end(self):
+        for r in self.regimes:
+            r.on_train_end()
 
     def on_epoch_start(self, epoch, epochs):
         for r in self.regimes:
