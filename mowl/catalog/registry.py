@@ -142,3 +142,25 @@ def list_regimes(kind=None, implemented=None, method=None):
            and (implemented is None or c.implemented == implemented)
            and (method is None or method in c.introduced_with or method in c.used_by)]
     return sorted(out, key=lambda c: (c.kind.value, c.key))
+
+
+def regimes_of(method, kind=None):
+    """Return the keys of the regimes linked to the method ``method``.
+
+    The link is recorded on either side: a method card names regimes in ``training`` and
+    ``evaluation``, and a regime card names methods in ``introduced_with`` and ``used_by``.
+    This function returns the union, the method card's own entries first.
+
+    :param method: A catalogue key.
+    :param kind: Keep only this :class:`~mowl.catalog.card.RegimeKind` (or its value).
+    :rtype: list[str]
+    """
+    kind = RegimeKind(kind) if kind is not None else None
+    card = get_method(method)
+    keys = []
+    if kind is None or kind is RegimeKind.TRAINING:
+        keys.extend(card.training)
+    if kind is None or kind is RegimeKind.EVALUATION:
+        keys.extend(card.evaluation)
+    keys.extend(c.key for c in list_regimes(kind=kind, method=method))
+    return list(dict.fromkeys(keys))

@@ -16,5 +16,6 @@ from .el.regd.module import RegDELBEModule, RegDELEmModule
 from .el.mcmultibox.module import VolumeMultiBoxELModule
 from .el.octagon.module import OctagonELModule
 from .graph.bcbox import BinaryCodeBoxModule
+from .graph.cate import CatEModule
 from .alc.alcone.module import ALConeModule
 from .alc.e2r.module import E2RModule

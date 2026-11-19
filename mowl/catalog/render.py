@@ -5,7 +5,7 @@ documentation build time, so the documentation can never drift from the cards.
 """
 
 from mowl.catalog.card import Family, Status, RegimeKind
-from mowl.catalog.registry import list_methods, list_regimes
+from mowl.catalog.registry import list_methods, list_regimes, regimes_of
 
 FAMILY_TITLES = {
     Family.GEOMETRIC: "Geometric (region-based) methods",
@@ -67,12 +67,14 @@ def card_to_rst(card):
         rows.append(("Optional dependencies", ", ".join(card.optional_dependencies)))
     if card.code_url:
         rows.append(("Reference code", f"`{card.code_url} <{card.code_url}>`__"))
-    if card.training:
-        rows.append(("Training regime (paper)",
-                     ", ".join(f":ref:`{k} <regime-{k}>`" for k in card.training)))
-    if card.evaluation:
-        rows.append(("Evaluation regime (paper)",
-                     ", ".join(f":ref:`{k} <regime-{k}>`" for k in card.evaluation)))
+    training = regimes_of(card.key, RegimeKind.TRAINING)
+    if training:
+        rows.append(("Training regimes (paper)",
+                     ", ".join(f":ref:`{k} <regime-{k}>`" for k in training)))
+    evaluation = regimes_of(card.key, RegimeKind.EVALUATION)
+    if evaluation:
+        rows.append(("Evaluation regimes (paper)",
+                     ", ".join(f":ref:`{k} <regime-{k}>`" for k in evaluation)))
     if card.benchmarks:
         rows.append(("Published results recorded for",
                      ", ".join(f"``{b}``" for b in card.benchmarks)))

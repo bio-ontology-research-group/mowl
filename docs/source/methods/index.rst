@@ -30,6 +30,7 @@ relevant published methods it does not implement, with the reason.
    hit
    ont
    boxlite
+   cate
 
 
 Representation, training and evaluation

@@ -64,3 +64,7 @@ References
 .. [yang2025ont] Yang, H., Chen, J., He, Y., Gao, Y., & Horrocks, I. (2025). `Language Models as Ontology Encoders <https://arxiv.org/abs/2507.14334>`_. In: The Semantic Web – ISWC 2025. ArXiv, abs/2507.14334.
 
 .. [lourenco2026] Lourenço, B. F., Morgan, H., Ozaki, A., Pavlović, A., & Sallinger, E. (2026). `BoxLitE: A Faithful Knowledge Base Embedding Based on Convex Optimization <https://arxiv.org/abs/2605.23937>`_. In: Proceedings of the 23rd International Conference on Principles of Knowledge Representation and Reasoning (KR 2026). ArXiv, abs/2605.23937.
+
+.. [mohapatra2021a] Mohapatra, B., Bhatia, S., Mutharaju, R., & Srinivasaraghavan, G. (2021). EmELvar: A NeuroSymbolic Reasoner for the EL++ Description Logic. SemREC'21 workshop at ISWC 2021.
+
+.. [duc2021] Le Duc, C. (2021). Category-theoretical semantics of the description logic ALC. Proceedings of the 34th International Workshop on Description Logics (DL 2021), CEUR-WS vol. 2954.
