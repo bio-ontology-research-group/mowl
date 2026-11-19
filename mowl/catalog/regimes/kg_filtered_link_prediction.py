@@ -16,9 +16,7 @@ REGIME = RegimeCard(
     standalone=False,
     introduced_with=(),
     used_by=('boxlite', 'octagon', 'e2r'),
-    not_implemented_reason=("mOWL's ranking regimes rank classes in C ⊑ D, C ⊑ ∃r.D and C(a); "
-                            'ranking individuals in role assertions r(a, b) is not implemented '
-                            '(FilteredRankingRegime has no object_property_assertion support).'),
+    implementation="mowl.evaluation.assertion_ranking.RoleAssertionRankingRegime",
     notes=('BoxLitE, Section 6 (inferred role assertions, filtered MRR/H@k); octagon embeddings, '
            'Section 6 (FB15k-237, WN18RR); E2R, Section 5 (filtered, membership queries averaged '
            'per query on LUBM1U).'),

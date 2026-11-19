@@ -29,6 +29,7 @@ relevant published methods it does not implement, with the reason.
    e2r
    hit
    ont
+   boxlite
 
 
 Representation, training and evaluation

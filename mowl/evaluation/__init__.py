@@ -16,3 +16,5 @@ from mowl.evaluation.normal_form_ranking import (NormalFormRankingRegime,
 from mowl.evaluation.filtered_ranking import FilteredRankingRegime
 from mowl.evaluation.sampled_f1 import SampledF1Regime
 from mowl.evaluation.exact_model import ExactModelRegime
+from mowl.evaluation.assertion_ranking import RoleAssertionRankingRegime
+from mowl.evaluation.ont_ranking import OnTRankingRegime, OnTInferenceRankingRegime

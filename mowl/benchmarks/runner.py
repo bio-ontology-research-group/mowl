@@ -258,6 +258,8 @@ class _LazyFamily:
 #: Language-model based methods (HiT, OnT): they train and select their checkpoint
 #: themselves.
 _FAMILIES.insert(0, _LazyFamily("mowl.benchmarks.protocols.ont.LanguageModelFamily"))
+#: Models obtained by solving an optimisation problem once (BoxLitE): ``epochs`` is ignored.
+_FAMILIES.insert(0, _LazyFamily("mowl.benchmarks.protocols.boxlite.SolverModelFamily"))
 
 
 def register_family(family, first=True):

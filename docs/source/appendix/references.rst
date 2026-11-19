@@ -62,3 +62,5 @@ References
 .. [he2024hit] He, Y., Yuan, Z., Chen, J., & Horrocks, I. (2024). `Language Models as Hierarchy Encoders <https://arxiv.org/abs/2401.11374>`_. In: Advances in Neural Information Processing Systems 37 (NeurIPS 2024).
 
 .. [yang2025ont] Yang, H., Chen, J., He, Y., Gao, Y., & Horrocks, I. (2025). `Language Models as Ontology Encoders <https://arxiv.org/abs/2507.14334>`_. In: The Semantic Web – ISWC 2025. ArXiv, abs/2507.14334.
+
+.. [lourenco2026] Lourenço, B. F., Morgan, H., Ozaki, A., Pavlović, A., & Sallinger, E. (2026). `BoxLitE: A Faithful Knowledge Base Embedding Based on Convex Optimization <https://arxiv.org/abs/2605.23937>`_. In: Proceedings of the 23rd International Conference on Principles of Knowledge Representation and Reasoning (KR 2026). ArXiv, abs/2605.23937.

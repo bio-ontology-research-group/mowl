@@ -53,5 +53,7 @@ setuptools.setup(
     extras_require={
         # Language-model based methods (mowl.models.HiT, mowl.models.OnT)
         "lm": ["sentence-transformers"],
+        # Convex-programme methods (mowl.models.BoxLitE)
+        "convex": ["cvxpy"],
     },
 )

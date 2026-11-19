@@ -34,3 +34,4 @@ from mowl.models.alcone.model import ALConeModel
 from mowl.models.e2r.model import E2R
 from mowl.models.hit.model import HiT
 from mowl.models.ont.model import OnT
+from mowl.models.boxlite.model import BoxLitE
