@@ -27,7 +27,8 @@ def parse_assignment(text):
     try:
         value = json.loads(raw)
     except json.JSONDecodeError:
-        value = raw
+        # Python spellings of the JSON constants are accepted too.
+        value = {"True": True, "False": False, "None": None}.get(raw.strip(), raw)
     return name.strip(), value
 
 
