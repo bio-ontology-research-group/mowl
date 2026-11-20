@@ -76,9 +76,12 @@ RegD (``regd-*``)
    :math:`A \sqsubseteq \exists r.B`) inside the candidate. 10 random candidates per
    positive are negatives, the threshold that maximises F1 on the first 1,000 validation
    subsumptions is applied to the test split, and F1 is reported. As in the authors'
-   code, the F1's positive score of a prediction query is read from the role column
-   (an arbitrary class, not the query), which the published Table 4 numbers carry;
-   the regime parameter ``positive_scores`` reproduces or fixes this. Inference uses
+   code, the F1's positive score of a prediction query is read from the role column:
+   the score of the class whose index in the reference data equals the role's index
+   (for GO, *biological_process* for every ``part_of`` query), not of the query. The
+   published Table 4 numbers carry this; the regime rebuilds that class from the
+   reference index files (``positive_scores="reference"``) and also reports the F1 of
+   the query's own score (``f1_pair``). Inference uses
    the reasoner-inferred subsumptions, prediction the axioms
    :math:`A \sqsubseteq \exists r.B` of the 80/10/10 split. Regime:
    :class:`~mowl.evaluation.sampled_f1.SampledF1Regime`, with model selection by

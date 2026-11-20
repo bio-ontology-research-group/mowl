@@ -51,8 +51,10 @@ code (regime ``regd-code-training``): a softmax cross-entropy over the energies 
 positive and its 10 negatives (:class:`~mowl.training.SoftmaxEnergyContrastiveLoss`),
 and only on the normal form of the task -- ``gci0`` for the inference benchmarks,
 ``gci2`` for the prediction benchmarks, where the code also constrains the reversed
-inclusion (``flip_gci2``). Every other normal form keeps the host model's squared-error
-loss of the RegD energy.
+inclusion (``flip_gci2``). Every other normal form is trained on its *raw* (not
+rectified) RegD energy, with squared error for boxes and a plain mean for balls, as the
+code's ``Elbe`` and ``Elem`` do; the regime also initialises the regions as the code
+does, and the ball model of the recipes uses softplus radii (``radius="softplus"``).
 
 RegD speaks about hierarchies. The faithfulness result of the paper (every partial order has a
 faithful embedding in :math:`\mathbb{R}^2`) says nothing about conjunction or disjointness,
@@ -68,8 +70,9 @@ negatives replace the superclass or filler, as in the code; the loss of the code
 softmax cross-entropy over the full energies, not Eq. 10, and it is applied to one normal
 form per task; the prediction task is evaluated with the code's own rules (regime
 ``regd-sampled-f1``: rectified boundary dissimilarity as the score, threshold tuned on
-validation, and the positive score of the code's Table 4 read from the role column -- see
-the regime card).
+validation, and -- for Table 4 -- the positive score the code reads from the role
+column: the score of the class whose reference index equals the role's index, e.g.
+*biological_process* for every GO ``part_of`` query; see the regime card).
 
 Example
 -------
