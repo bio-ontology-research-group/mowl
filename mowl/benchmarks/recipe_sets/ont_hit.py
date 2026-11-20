@@ -37,7 +37,8 @@ def _build():
     out = []
     for name in ("galen", "go", "anatomy"):
         for task in ("prediction", "inference"):
-            kwargs = {"verbalisation_style": "release", "learning_rate": 1e-5,
+            kwargs = {"encoder": "sentence-transformers/all-MiniLM-L12-v2",
+                      "verbalisation_style": "release", "learning_rate": 1e-5,
                       "batch_size": 64, "num_negatives": 1, "warmup_steps": 500,
                       "centri_weight_grid": list(_CODE_GRID)}
             out.append(Recipe(
