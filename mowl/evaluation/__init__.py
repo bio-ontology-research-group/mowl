@@ -11,6 +11,7 @@ from mowl.evaluation.faithfulness import (FaithfulnessHierarchy, LossModelness,
 from mowl.evaluation.properties import KBEmbeddingProperties
 from mowl.evaluation.inclusion_accuracy import InclusionAccuracyRegime
 from mowl.evaluation.normal_form_ranking import (NormalFormRankingRegime,
+                                                 TransBoxNormalFormRankingRegime,
                                                  InferredSubsumptionRankingRegime,
                                                  SubsumeeRankingRegime)
 from mowl.evaluation.filtered_ranking import FilteredRankingRegime

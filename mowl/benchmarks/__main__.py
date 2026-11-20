@@ -51,15 +51,22 @@ def _build_parser():
     p = sub.add_parser("run", help="train a method on a benchmark and evaluate it")
     p.add_argument("benchmark")
     p.add_argument("--method", required=True, help="catalogue key of the method")
-    p.add_argument("--epochs", type=int, default=100)
+    p.add_argument("--epochs", type=int, default=None,
+                   help="training epochs (default: the recipe's, otherwise 100)")
+    p.add_argument("--recipe", nargs="?", const=True, default=None, metavar="SOURCE",
+                   help="train as the publication did (model arguments, training "
+                        "regime, epochs); give the publication key if several "
+                        "publications have a recipe")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--device", default="cpu")
     p.add_argument("--param", action="append", default=[], type=parse_assignment,
                    help="model keyword argument name=value (repeatable)")
     p.add_argument("--dataset-param", action="append", default=[], type=parse_assignment)
     p.add_argument("--protocol-param", action="append", default=[], type=parse_assignment)
-    p.add_argument("--training-regime", default=None,
-                   help="catalogue key of a training regime to attach to the model")
+    p.add_argument("--training-regime", action="append", default=None,
+                   help="catalogue key of a training regime to attach to the model, "
+                        "optionally with constructor arguments as JSON after a colon "
+                        "(key:{\"name\": value}); repeat to combine regimes")
     p.add_argument("--validate-every", type=int, default=None)
     p.add_argument("--no-select-best", action="store_true",
                    help="keep the last epoch instead of the best validation loss")
@@ -101,6 +108,7 @@ def main(argv=None):
             dataset_kwargs=dict(args.dataset_param) or None,
             protocol_kwargs=dict(args.protocol_param) or None,
             validate_every=args.validate_every, select_best=not args.no_select_best,
+            recipe=args.recipe,
             workdir=args.workdir, jvm_memory=args.jvm_memory)
         if args.out:
             result.save(args.out)

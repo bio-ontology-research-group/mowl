@@ -25,6 +25,8 @@ class TransBoxModule(ELModule):
     #: ``load_role_axioms=True`` can train on role inclusions and chains.
     role_axiom_capable = True
 
+    margin_semantics = "strict"
+
     def __init__(self, nb_ont_classes, nb_rels, nb_inds=None, embed_dim=50,
                  margin=0.1, use_enhancement=True, reg_factor=0.1):
         super().__init__()

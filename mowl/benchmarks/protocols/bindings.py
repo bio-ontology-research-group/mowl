@@ -49,6 +49,14 @@ class Box2ELPredictionProtocol(RegimeProtocol):
         return NormalFormRankingRegime(**kwargs)
 
 
+class TransBoxPredictionProtocol(RegimeProtocol):
+    """:class:`mowl.evaluation.normal_form_ranking.TransBoxNormalFormRankingRegime`."""
+
+    def build(self, **kwargs):
+        from mowl.evaluation.normal_form_ranking import TransBoxNormalFormRankingRegime
+        return TransBoxNormalFormRankingRegime(**kwargs)
+
+
 class InferredSubsumptionProtocol(RegimeProtocol):
     """:class:`mowl.evaluation.normal_form_ranking.InferredSubsumptionRankingRegime`."""
 

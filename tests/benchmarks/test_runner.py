@@ -144,6 +144,22 @@ def test_run_benchmark_with_rank_selection(dataset):
     assert r.training_regime == "validation-rank-selection"
 
 
+def test_run_benchmark_with_combined_regimes(dataset):
+    """Several regimes, given as keys with constructor arguments, are composed; the
+    selection regime is still found inside the composition."""
+    regimes = ['per-normal-form-minibatch:{"batch_size": 8}',
+               'per-column-corruption:{"columns": {"gci2": [0, 2]}}',
+               ("mse-to-target", {"neg_target": 2.0}),
+               "validation-rank-selection"]
+    r = run_benchmark(TINY_BENCH, method="elbe", model_kwargs={"embed_dim": 4,
+                                                               "margin": -0.05},
+                      epochs=4, seed=1, dataset=dataset, workdir=scratch_dir(),
+                      training_regime=regimes, validate_every=2)
+    assert r.training_regime == ["per-normal-form-minibatch", "per-column-corruption",
+                                 "mse-to-target", "validation-rank-selection"]
+    assert r.protocol_info["training"]["selected"] == "validation-rank-selection"
+
+
 def test_run_benchmark_with_factory(dataset):
     from mowl.models.elbe.model import ELBE
 
@@ -177,3 +193,21 @@ def test_helly_benchmark_via_registry():
                                        "no_interior_fraction", "exact_model",
                                        "exact_model_nonempty", "helly_violation_rate"}
     assert compare(res) == []
+
+
+def test_run_benchmark_with_recipe(dataset):
+    """A recipe supplies model arguments, the training regime and epochs; explicit
+    arguments take precedence."""
+    from mowl.benchmarks.recipes import Recipe
+    from mowl.benchmarks.entries._refs import JACKERMEIER2024
+    recipe = Recipe(benchmark=TINY_BENCH.key, method="elbe", source=JACKERMEIER2024,
+                    model_kwargs={"embed_dim": 4, "learning_rate": 0.01},
+                    training_regime="box2el-code-training",
+                    regime_kwargs={"batch_size": 8, "margin": 0.05, "neg_target": 2.0},
+                    epochs=4, validate_every=2)
+    r = run_benchmark(TINY_BENCH, method="elbe", model_kwargs={"embed_dim": 3}, seed=1,
+                      dataset=dataset, workdir=scratch_dir(), recipe=recipe)
+    assert r.epochs == 4 and r.settings["embed_dim"] == 3
+    assert r.settings["learning_rate"] == 0.01 and r.settings["margin"] == -0.05
+    assert r.training_regime == "box2el-code-training"
+    assert r.protocol_info["training"]["selected"] == "validation-rank-selection"

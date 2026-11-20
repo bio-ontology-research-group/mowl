@@ -163,6 +163,7 @@ for _bench, _subset, _loc, _text in _TABLES:
         RESULTS.append(PublishedResult(
             benchmark=_bench, method=_method, metrics=_metrics, source=JACKERMEIER2024,
             locator=_loc, subset=_subset,
+            settings={"training_regime": "box2el-code-training"},
             note="Mean over 5 seeds; baselines re-run by the authors with the Box2EL "
                  "evaluation code."))
 for _bench, _loc, _text in _PPI_TABLES:

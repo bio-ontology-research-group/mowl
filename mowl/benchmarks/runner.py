@@ -367,11 +367,34 @@ def _ensure_jvm(memory):
 
 
 def resolve_training_regime(regime):
-    """An instance of :class:`mowl.training.TrainingRegime` from an instance, a class or a
-    catalogue key."""
+    """An instance of :class:`mowl.training.TrainingRegime` from an instance, a class, a
+    catalogue key, a ``(key, kwargs)`` pair, or a list of these.
+
+    A list is combined with :class:`mowl.training.ComposedRegime`, in the order given
+    (for negatives, loss and optimizer the first regime that implements the hook
+    decides). A string may carry constructor arguments as a JSON object after a colon:
+    ``'per-normal-form-minibatch:{"batch_size": 512}'``.
+    """
     if regime is None:
         return None
+    if isinstance(regime, list):
+        parts = [resolve_training_regime(r) for r in regime]
+        parts = [r for r in parts if r is not None]
+        if not parts:
+            return None
+        if len(parts) == 1:
+            return parts[0]
+        from mowl.training import ComposedRegime
+        return ComposedRegime(*parts)
+    kwargs = {}
+    if isinstance(regime, tuple):
+        regime, kwargs = regime
+        kwargs = dict(kwargs or {})
     if isinstance(regime, str):
+        if ":" in regime:
+            import json
+            regime, raw = regime.split(":", 1)
+            kwargs = {**json.loads(raw), **kwargs}
         from mowl.catalog import get_regime
         card = get_regime(regime)
         if card.kind.value != "training":
@@ -379,15 +402,18 @@ def resolve_training_regime(regime):
                              f"training regime.")
         regime = card.load()
     if isinstance(regime, type):
-        regime = regime()
+        regime = regime(**kwargs)
+    elif kwargs:
+        raise ValueError("Constructor arguments were given for a regime instance.")
     return regime
 
 
 def _regime_key(regime):
     if regime is None:
         return None
+    from mowl.training import ComposedRegime
     parts = getattr(regime, "regimes", None)
-    if parts:
+    if parts and type(regime) is ComposedRegime:
         return [_regime_key(r) for r in parts]
     return getattr(regime, "key", "") or type(regime).__name__
 
@@ -404,9 +430,10 @@ def _read_settings(model, model_kwargs):
 
 
 def run_benchmark(benchmark, method=None, model_factory=None, model_kwargs=None,
-                  epochs=100, seed=0, device="cpu", training_regime=None, dataset=None,
+                  epochs=None, seed=0, device="cpu", training_regime=None, dataset=None,
                   dataset_kwargs=None, protocol_kwargs=None, validate_every=None,
-                  select_best=True, workdir=None, jvm_memory="8g", deterministic=True):
+                  select_best=True, workdir=None, jvm_memory="8g", deterministic=True,
+                  recipe=None):
     """Train a method on a benchmark and evaluate it with the benchmark's protocol.
 
     :param benchmark: A :class:`~mowl.benchmarks.Benchmark` or its key.
@@ -414,7 +441,7 @@ def run_benchmark(benchmark, method=None, model_factory=None, model_kwargs=None,
     :param model_factory: Alternatively, ``model_factory(dataset) -> model``; called after
         seeding. ``model_kwargs`` are then ignored.
     :param model_kwargs: Keyword arguments of the model class (e.g. ``embed_dim``).
-    :param epochs: Training epochs.
+    :param epochs: Training epochs (default: the recipe's, otherwise 100).
     :param seed: Random seed (Python, NumPy, PyTorch).
     :param device: Torch device, e.g. ``"cuda"``.
     :param training_regime: A :class:`mowl.training.TrainingRegime` (instance, class or
@@ -430,6 +457,11 @@ def run_benchmark(benchmark, method=None, model_factory=None, model_kwargs=None,
         ``$TMPDIR`` or ``~/tmp``).
     :param jvm_memory: Heap size if the runner has to start the JVM.
     :param deterministic: Request deterministic PyTorch algorithms.
+    :param recipe: Train as a publication did: ``True`` (the only recipe of the method on
+        the benchmark), the key of the publication, or a
+        :class:`~mowl.benchmarks.recipes.Recipe`. The recipe supplies model arguments,
+        training regime, epochs and validation interval; arguments given explicitly
+        take precedence (``model_kwargs`` are merged).
     :rtype: :class:`BenchmarkResult`
     """
     t0 = time.time()
@@ -438,6 +470,24 @@ def run_benchmark(benchmark, method=None, model_factory=None, model_kwargs=None,
     if method is None and model_factory is None:
         raise ValueError("Give a catalogue method key or a model_factory.")
     model_kwargs = dict(model_kwargs or {})
+    if recipe is not None and recipe is not False:
+        from mowl.benchmarks.recipes import Recipe, get_recipe
+        if not isinstance(recipe, Recipe):
+            if method is None:
+                raise ValueError("A recipe needs a catalogue method key.")
+            recipe = get_recipe(benchmark.key, method,
+                                None if recipe is True else recipe)
+        model_kwargs = {**recipe.model_kwargs, **model_kwargs}
+        if training_regime is None:
+            training_regime = recipe.regime_spec()
+        if epochs is None:
+            epochs = recipe.epochs
+        if validate_every is None:
+            validate_every = recipe.validate_every
+    else:
+        recipe = None
+    if epochs is None:
+        epochs = 100
     _ensure_jvm(jvm_memory)
     set_seed(seed, deterministic)
 

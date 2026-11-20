@@ -94,15 +94,18 @@ def test_transcribed_spot_values():
     jack = [x for x in r if x.source.key == "jackermeier2024"][0]
     assert jack.metrics == {"hits@1": 0.05, "hits@10": 0.20, "hits@100": 0.35, "med": 669,
                             "mrr": 0.10, "mr": 4375, "auc": 0.81}
-    trans = [x for x in r if x.source.key == "yang2025"][0]
-    assert trans.metrics["med"] == 1360
+    assert all(x.source.key != "yang2025" for x in r)
+    # The TransBox paper tests differently and has its own benchmarks.
+    trans = published_results(benchmark="transbox-galen-prediction", method="box2el",
+                              subset="combined")[0]
+    assert trans.source.key == "yang2025" and trans.metrics["med"] == 1360
     r = published_results(benchmark="box2el-human-ppi", method="emelpp")[0]
     assert r.metrics["f_mr"] == 700 and r.metrics["hits@10"] == 0.04
     r = published_results(benchmark="dele-yeast-function", method="box2el")
     assert sorted(x.metrics["f_hits@10"] for x in r) == [0.27, 0.27, 0.31]
     r = published_results(benchmark="cate-ore1-membership", method="cate")[0]
     assert r.metrics["f_mr"] == 37
-    cate = published_results(benchmark="box2el-go-prediction", method="cate")[0]
+    cate = published_results(benchmark="transbox-go-prediction", method="cate")[0]
     assert "med" not in cate.metrics
 
 

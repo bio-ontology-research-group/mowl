@@ -10,8 +10,13 @@ literature:
   Appendix F): the distance between the centres of the regions on both sides of the
   subsumption, with model-specific formulas for :math:`C \\sqsubseteq \\exists r.D` and
   :math:`\\exists r.C \\sqsubseteq D` (bump vectors for Box\\ :sup:`2`\\ EL, translations
-  for the translational baselines ELEm and ELBE). Published Box\\ :sup:`2`\\ EL-protocol
-  numbers were obtained with these scores.
+  for the translational baselines ELEm, EmEL++ and ELBE; TransBox's own formulas, which
+  mask the dimensions of an empty intersection; for BoxEL one minus an overlap volume,
+  as in the Box\\ :sup:`2`\\ EL code). Published Box\\ :sup:`2`\\ EL-protocol numbers
+  were obtained with these scores.
+* **centre distance, zero on empty intersection**: the variant of the TransBox paper
+  (Yang et al., WWW 2025, Appendix E) for :math:`C \\sqcap D \\sqsubseteq E`; see
+  :func:`centre_distance_zero_empty_scores`.
 
 All scorers take rows in mOWL's column layout (``gci0``: ``[C, D]``; ``gci1``:
 ``[C, D, E]``; ``gci2``: ``[C, r, D]``; ``gci3``: ``[r, C, D]``; ``class_assertion``:
@@ -97,18 +102,96 @@ def _elem_scores(module, gci_name, rows):
                                  module.rel_embed.weight, gci_name, rows)
 
 
+def _transbox_scores(module, gci_name, rows):
+    """Centre distances of the TransBox reference code (``evaluate.py``,
+    ``compute_nf*_ranks_transbox``): :math:`\\exists r.D` has centre
+    :math:`c(r) + c(D)`, and for :math:`C \\sqcap D \\sqsubseteq E` only the dimensions
+    in which the boxes of :math:`C` and :math:`D` intersect are compared."""
+    centre = module.class_center_embedding.weight
+    offset = module.class_offset_embedding.weight.abs()
+    rel = module.relation_center_embedding.weight
+    if gci_name == "gci0":
+        return th.linalg.norm(centre[rows[:, 0]] - centre[rows[:, 1]], dim=1)
+    if gci_name == "gci1":
+        c, d = rows[:, 0], rows[:, 1]
+        lower = th.maximum(centre[c] - offset[c], centre[d] - offset[d])
+        upper = th.minimum(centre[c] + offset[c], centre[d] + offset[d])
+        mask = (lower <= upper).to(centre.dtype)
+        return th.linalg.norm(((lower + upper) / 2 - centre[rows[:, 2]]) * mask, dim=1)
+    if gci_name == "gci2":
+        c, r, d = rows[:, 0], rows[:, 1], rows[:, 2]
+        return th.linalg.norm(rel[r] + centre[d] - centre[c], dim=1)
+    if gci_name == "gci3":
+        r, c, d = rows[:, 0], rows[:, 1], rows[:, 2]
+        return th.linalg.norm(rel[r] + centre[c] - centre[d], dim=1)
+    raise NotImplementedError(gci_name)
+
+
+def boxel_overlap_scores(module, gci_name, rows):
+    """BoxEL in the Box2EL code (``evaluate.py``, ``compute_nf*_ranks_boxel``): one minus
+    the soft volume of the intersection of the two sides (divided by the volume of the
+    transformed left-hand side for :math:`C \\sqsubseteq \\exists r.D`). Not a centre
+    distance, but the score the published BoxEL baseline numbers were obtained with.
+
+    The reference function for :math:`\\exists r.C \\sqsubseteq D` ranks the class whose
+    index equals the *role* index (``batch_data[:, 0]``); here the score is the same but
+    the protocol ranks :math:`D`, so that normal form is not comparable with the
+    published BoxEL numbers."""
+    import torch.nn.functional as F
+    lo_all = module.min_embedding.weight
+    hi_all = lo_all + th.exp(module.delta_embedding.weight)
+    rel = module.relation_embedding.weight
+    scale = module.scaling_embedding.weight
+
+    def volume(lo, hi):
+        return th.clamp(F.softplus(hi - lo).prod(1), 1e-10, 1e4)
+
+    def inter(lo1, hi1, lo2, hi2):
+        return th.maximum(lo1, lo2), th.minimum(hi1, hi2)
+
+    if gci_name == "gci0":
+        c, d = rows[:, 0], rows[:, 1]
+        return 1 - volume(*inter(lo_all[c], hi_all[c], lo_all[d], hi_all[d]))
+    if gci_name == "gci1":
+        c, d, e = rows[:, 0], rows[:, 1], rows[:, 2]
+        lo, hi = inter(lo_all[c], hi_all[c], lo_all[d], hi_all[d])
+        return 1 - volume(*inter(lo, hi, lo_all[e], hi_all[e]))
+    if gci_name == "gci2":
+        c, r, d = rows[:, 0], rows[:, 1], rows[:, 2]
+        t_lo = lo_all[c] * (scale[r] + 1e-8) + rel[r]
+        t_hi = hi_all[c] * (scale[r] + 1e-8) + rel[r]
+        return 1 - volume(*inter(lo_all[d], hi_all[d], t_lo, t_hi)) / volume(t_lo, t_hi)
+    if gci_name == "gci3":
+        r, c, d = rows[:, 0], rows[:, 1], rows[:, 2]
+        t_lo = (lo_all[c] - rel[r]) / (scale[r] + 1e-8)
+        t_hi = (hi_all[c] - rel[r]) / (scale[r] + 1e-8)
+        return 1 - volume(*inter(t_lo, t_hi, lo_all[d], hi_all[d]))
+    raise NotImplementedError(gci_name)
+
+
 #: Centre-distance scorers of Jackermeier et al. (WWW 2024, Appendix F), by module class
 #: name. Box2EL uses its bump-vector formulas, ELBE and ELEm the translational ones.
 CENTRE_DISTANCE_SCORERS = {
     "BoxSquaredELModule": _box2el_scores,
     "ELBEModule": _elbe_scores,
     "ELEmModule": _elem_scores,
+    "TransBoxModule": _transbox_scores,
+    "BoxELModule": boxel_overlap_scores,
 }
+
+
+def _scorer_of(model):
+    """The scorer registered for the module's class or the nearest base class (EmEL++
+    is scored like ELEm, as in the Box2EL code)."""
+    for cls in type(getattr(model, "module", None)).__mro__:
+        if cls.__name__ in CENTRE_DISTANCE_SCORERS:
+            return CENTRE_DISTANCE_SCORERS[cls.__name__]
+    return None
 
 
 def has_centre_distance_scorer(model):
     """Whether :data:`CENTRE_DISTANCE_SCORERS` has an entry for the model's module."""
-    return type(getattr(model, "module", None)).__name__ in CENTRE_DISTANCE_SCORERS
+    return _scorer_of(model) is not None
 
 
 def centre_distance_scores(model, gci_name, rows):
@@ -117,17 +200,77 @@ def centre_distance_scores(model, gci_name, rows):
     :raises NotImplementedError: If no scorer is registered for the module.
     """
     name = type(model.module).__name__
-    if name not in CENTRE_DISTANCE_SCORERS:
+    scorer = _scorer_of(model)
+    if scorer is None:
         raise NotImplementedError(
             f"No centre-distance scorer is registered for {name}. Register one in "
             f"mowl.evaluation.el_scoring.CENTRE_DISTANCE_SCORERS or use scoring='loss'.")
-    return CENTRE_DISTANCE_SCORERS[name](model.module, gci_name, rows)
+    return scorer(model.module, gci_name, rows)
+
+
+def _box2el_boxes(module):
+    return module.class_center.weight, module.class_offset.weight.abs()
+
+
+def _elbe_boxes(module):
+    return module.class_embed.weight, module.class_offset.weight.abs()
+
+
+def _elem_boxes(module):
+    centre = module.class_embed.weight
+    return centre, module.class_rad.weight.abs().expand(-1, centre.shape[1])
+
+
+#: ``(centres, half-widths)`` of the class boxes by module class name, for the models
+#: whose :math:`C \\sqcap D \\sqsubseteq E` score depends on whether the boxes of
+#: :math:`C` and :math:`D` intersect. Balls count as boxes, as in the Box2EL code.
+CLASS_BOXES = {
+    "BoxSquaredELModule": _box2el_boxes,
+    "ELBEModule": _elbe_boxes,
+    "ELEmModule": _elem_boxes,
+}
+
+
+def empty_intersection(model, rows):
+    """For rows ``[C, D, ...]``: whether the boxes of ``C`` and ``D`` are disjoint (in at
+    least one dimension), or ``None`` if mOWL has no box reader for the module."""
+    reader = None
+    for cls in type(getattr(model, "module", None)).__mro__:
+        if cls.__name__ in CLASS_BOXES:
+            reader = CLASS_BOXES[cls.__name__]
+            break
+    if reader is None:
+        return None
+    centre, half = reader(model.module)
+    c, d = rows[:, 0], rows[:, 1]
+    lower = th.maximum(centre[c] - half[c], centre[d] - half[d])
+    upper = th.minimum(centre[c] + half[c], centre[d] + half[d])
+    return (lower > upper).any(dim=1)
+
+
+def centre_distance_zero_empty_scores(model, gci_name, rows):
+    """:func:`centre_distance_scores` with the rule of the TransBox evaluation (Yang et
+    al., WWW 2025, Appendix E; ``evaluate.py``, ``compute_nf2_ranks``): for
+    :math:`C \\sqcap D \\sqsubseteq E`, every candidate gets score 0 when the boxes of
+    :math:`C` and :math:`D` do not intersect. All candidates then tie, and the rank of
+    the true answer is its position in the candidate list. Models with a scorer that
+    handles empty intersections itself (TransBox masks the empty dimensions) and models
+    without a box reader in :data:`CLASS_BOXES` are scored as by
+    :func:`centre_distance_scores`."""
+    scores = centre_distance_scores(model, gci_name, rows)
+    if gci_name != "gci1":
+        return scores
+    empty = empty_intersection(model, rows)
+    if empty is None:
+        return scores
+    return th.where(empty, th.zeros_like(scores), scores)
 
 
 def resolve_scorer(model, scoring):
     """Return ``(scorer, name)`` for a scoring choice.
 
-    :param scoring: ``"loss"``, ``"centre_distance"``, ``"auto"`` (centre distance if a
+    :param scoring: ``"loss"``, ``"centre_distance"``, ``"centre_distance_zero_empty"``
+        (see :func:`centre_distance_zero_empty_scores`), ``"auto"`` (centre distance if a
         scorer is registered for the module, otherwise loss) or a callable
         ``f(model, gci_name, rows)``.
     :return: The function and the name of the scoring actually used (recorded in results).
@@ -138,6 +281,8 @@ def resolve_scorer(model, scoring):
         return loss_scores, "loss"
     if scoring == "centre_distance":
         return centre_distance_scores, "centre_distance"
+    if scoring == "centre_distance_zero_empty":
+        return centre_distance_zero_empty_scores, "centre_distance_zero_empty"
     if scoring == "auto":
         if has_centre_distance_scorer(model):
             return centre_distance_scores, "centre_distance"

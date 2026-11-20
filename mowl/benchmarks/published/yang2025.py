@@ -116,5 +116,6 @@ for _onto, _subset, _loc, _text in _TABLES:
         if _parts[0] == "CatE":
             _note += " The median rank of CatE is not reported ('-')."
         RESULTS.append(PublishedResult(
-            benchmark=f"box2el-{_onto}-prediction", method=_KEYS[_parts[0]],
-            metrics=_metrics, source=YANG2025, locator=_loc, subset=_subset, note=_note))
+            benchmark=f"transbox-{_onto}-prediction", method=_KEYS[_parts[0]],
+            metrics=_metrics, source=YANG2025, locator=_loc, subset=_subset,
+            settings={"training_regime": "transbox-code-training"}, note=_note))

@@ -20,9 +20,13 @@ from mowl.training.schedules import StepDecay, ConstantThenCosine, CyclicLearnin
     ReduceOnPlateau
 from mowl.training.selection import ValidationSelection, ValidationRankSelection
 from mowl.training.batching import PerNormalFormMiniBatches
+from mowl.training.margin import SlackMargin, StrictMargin, margin_semantics
+from mowl.training.reference import Box2ELCodeTraining, TransBoxCodeTraining
 
 __all__ = [
     "TrainingRegime", "ComposedRegime",
+    "SlackMargin", "StrictMargin", "margin_semantics",
+    "Box2ELCodeTraining", "TransBoxCodeTraining",
     "DeductiveClosure", "NORMAL_FORMS",
     "AllNormalFormNegatives", "ClosureFilteredNegatives", "ClosurePositives", "dele_regime",
     "CorruptionNegatives", "FixedColumnCorruption", "EitherSideCorruption",

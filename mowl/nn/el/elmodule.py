@@ -26,6 +26,16 @@ class ELModule(nn.Module):
     #: this, so that the axioms are never silently dropped nor silently unusable.
     role_axiom_capable = False
 
+    #: What a positive margin means in the module's inclusion losses: ``"strict"`` (the
+    #: inclusion must hold with a gap; zero loss implies the axiom) or ``"slack"`` (the
+    #: inclusion may be violated by up to the margin; zero loss does not imply the
+    #: axiom), or ``None`` if the module has no such margin. See
+    #: :mod:`mowl.training.margin`.
+    margin_semantics = None
+
+    #: Name of the attribute holding that margin.
+    margin_attribute = "margin"
+
     def __init__(self):
         super().__init__()
 

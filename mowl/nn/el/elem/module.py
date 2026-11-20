@@ -41,6 +41,8 @@ parameter ``all_negative_losses``) and extend :attr:`neg_capable_gcis` according
     def _dele_neg(self, neg):
         return neg and self.all_negative_losses
 
+    margin_semantics = "slack"
+
     def __init__(self, nb_ont_classes, nb_rels, nb_inds, embed_dim=50, margin=0.1, reg_norm=1,
                  all_negative_losses=False, epsilon=0.01):
         super().__init__()

@@ -33,6 +33,43 @@ its neutral default. Several regimes are combined with
 :class:`~mowl.training.ComposedRegime`. Models that override ``train`` with a loop of their
 own may ignore regimes.
 
+Strict and slack margins
+------------------------
+
+The margin :math:`\gamma` of an inclusion loss has two meanings in the literature, and
+implementations of the same method disagree on which one they use.
+
+* *Strict*: the inner box must lie inside the outer one with a gap of :math:`\gamma`.
+  Zero loss implies that the axiom holds.
+* *Slack*: the inner box may stick out by up to :math:`\gamma`. Zero loss does not imply
+  that the axiom holds, so the embedding need not be a model of the ontology.
+
+Each module declares the meaning of its ``margin`` parameter in
+:attr:`mowl.nn.ELModule.margin_semantics` (ELBE and TransBox: strict;
+ELEmbeddings, EmEL++ and Box\ :sup:`2`\ EL: slack). The regimes
+:class:`~mowl.training.StrictMargin` and :class:`~mowl.training.SlackMargin` set the
+margin by meaning, whatever the module's convention:
+
+.. testcode::
+
+   from mowl.datasets.builtin import FamilyDataset
+   from mowl.models import ELBE
+   from mowl.training import SlackMargin, margin_semantics
+
+   model = ELBE(FamilyDataset(), embed_dim=4)
+   print(margin_semantics(model))
+   model.training_regime = SlackMargin(0.05)
+   print(model.module.margin)
+
+.. testoutput::
+   :options: +ELLIPSIS
+
+   ...strict
+   -0.05
+
+The published Box\ :sup:`2`\ EL-benchmark numbers of ELBE, Box\ :sup:`2`\ EL and
+TransBox were obtained with a slack margin; see :doc:`../benchmarks/index`.
+
 DELE
 ----
 

@@ -163,9 +163,60 @@ makes them scriptable:
    python -m mowl.benchmarks compare galen_box2el_s0.json --format markdown
 
 ``--param``, ``--dataset-param`` and ``--protocol-param`` take ``name=value`` (values are
-read as JSON when possible); ``--training-regime`` attaches a catalogued training regime.
+read as JSON when possible). ``--training-regime`` attaches a catalogued training regime;
+it can be repeated to combine regimes, and constructor arguments follow the key as JSON
+(``--training-regime 'per-normal-form-minibatch:{"batch_size": 512}'``). ``--recipe``
+trains the way the publication did (see below).
 The papers average several seeds (5 for Box\ :sup:`2`\ EL, 10 for TransBox); run one job
 per seed and average the JSON results.
+
+Reproducing published numbers: recipes
+--------------------------------------
+
+A published number depends on three things that the paper's method section does not fix:
+how the model was trained, how it was tested, and the hyperparameters. mOWL makes each of
+them explicit.
+
+* The *evaluation regime* is part of the benchmark. Two papers that test differently on
+  the same data get different benchmarks. For example, the TransBox paper re-implements
+  the Box\ :sup:`2`\ EL ranking with a different score for
+  :math:`C \sqcap D \sqsubseteq E` (every candidate scores 0 when the boxes of
+  :math:`C` and :math:`D` are disjoint); its numbers are filed under
+  ``transbox-*-prediction``
+  (:class:`~mowl.evaluation.normal_form_ranking.TransBoxNormalFormRankingRegime`), not
+  under ``box2el-*-prediction``.
+* The *training regime* names the training design of the code that produced the numbers:
+  :class:`~mowl.training.Box2ELCodeTraining` and
+  :class:`~mowl.training.TransBoxCodeTraining`. They train on a random sample of axioms
+  per normal form and step, corrupt both sides of :math:`C \sqsubseteq \exists r.D`,
+  use a *slack* margin (:class:`~mowl.training.SlackMargin`) and select the model by the
+  validation rank of :math:`C \sqsubseteq D`. With a slack margin an inclusion may be
+  violated by up to the margin, so the trained embedding is in general not a model of
+  the ontology; the design targets ranking by centre distance.
+* A :class:`~mowl.benchmarks.Recipe` adds the hyperparameters of the publication.
+
+.. testcode::
+
+   from mowl.benchmarks import get_recipe, list_recipes
+
+   recipe = get_recipe("box2el-go-prediction", "box2el")
+   print(recipe.training_regime, recipe.epochs)
+   print(sorted(recipe.regime_kwargs.items()))
+   print(len(list_recipes(source="jackermeier2024")))
+
+.. testoutput::
+
+   box2el-code-training 10000
+   [('margin', 0.15), ('num_negatives', 5)]
+   30
+
+``run_benchmark(benchmark, method=..., recipe=True)`` and ``--recipe`` on the command line
+apply a recipe; arguments given explicitly take precedence.
+
+.. code-block:: bash
+
+   python -m mowl.benchmarks run box2el-go-prediction --method box2el --recipe \
+       --seed 0 --device cuda --out go_box2el_s0.json
 
 Published results
 -----------------

@@ -19,13 +19,18 @@ _PREDICTION_DESCRIPTION = (
     "are not evaluated.")
 
 _PREDICTION_NOTES = (
-    "Scores: the centre-distance scores of the paper's Appendix F are used for Box2EL, "
-    "ELBE and ELEmbeddings ('auto' scoring); other models are scored by their own loss, "
-    "which the result records as scoring='loss' (not comparable with the published "
-    "numbers in a strict sense). The paper selects the model with the best validation "
-    "performance every 100 epochs and averages 5 seeds; mOWL's EL training loop keeps "
-    "the parameters with the lowest validation loss of eval_gci_name. TransBox's numbers "
-    "(Yang et al. 2025) use a modified score for NF2 when Box(C) ∩ Box(D) is empty.")
+    "Scores: the scores of the reference code are used for Box2EL, ELBE, ELEmbeddings, "
+    "EmEL++, TransBox (centre distances) and BoxEL (overlap volume) ('auto' scoring); "
+    "other models are scored by their own loss, which the result records as "
+    "scoring='loss' (not comparable with the published numbers in a strict sense). The "
+    "paper selects the model with the best validation performance every 100 epochs "
+    "(training regime 'validation-rank-selection') and averages 5 seeds; without that "
+    "regime mOWL keeps the parameters with the lowest validation loss. The published "
+    "numbers were obtained with the training regime 'box2el-code-training'. The "
+    "published BoxEL numbers for NF4 (gci3) come from a reference function that ranks "
+    "the wrong column and cannot be reproduced. The numbers of the TransBox paper (Yang "
+    "et al. 2025) use a different score for NF2 and are recorded under the "
+    "'transbox-*-prediction' benchmarks.")
 
 _PREDICTION = [
     Benchmark(
@@ -46,6 +51,37 @@ _PREDICTION = [
         ("go", "GO", "GOJackermeier2024Dataset", ""),
         ("anatomy", "Anatomy", "AnatomyJackermeier2024Dataset",
          " Class IRIs of this dataset are opaque (see the dataset class)."),
+    )
+]
+
+_TRANSBOX_NOTES = (
+    "Same data, candidates, ranks and metrics as the 'box2el-*-prediction' benchmark of "
+    "the same ontology; the only difference is the score of C ⊓ D ⊑ ?E, which is 0 for "
+    "every candidate when Box(C) ∩ Box(D) is empty (TransBox itself masks the empty "
+    "dimensions instead). gci0, gci2 and gci3 are therefore comparable between the two "
+    "benchmark families, gci1 and combined are not. The paper averages 10 runs of 5,000 "
+    "epochs; its numbers were obtained with the training regime "
+    "'transbox-code-training'.")
+
+_TRANSBOX_PREDICTION = [
+    Benchmark(
+        key=f"transbox-{name}-prediction",
+        name=f"TransBox normalised-axiom prediction ({label})",
+        task=Task.AXIOM_PREDICTION,
+        description=_PREDICTION_DESCRIPTION + (
+            " Evaluation as re-implemented for TransBox (Yang et al. 2025, Appendix E)."),
+        dataset=f"mowl.datasets.builtin.jackermeier2024.{cls}",
+        protocol=_P + "TransBoxPredictionProtocol",
+        metrics=_RANK_METRICS,
+        higher_is_better=_HIB,
+        subsets=("gci0", "gci1", "gci2", "gci3", "combined"),
+        references=(YANG2025, JACKERMEIER2024),
+        notes=_TRANSBOX_NOTES,
+    )
+    for name, label, cls in (
+        ("galen", "GALEN", "GALENJackermeier2024Dataset"),
+        ("go", "GO", "GOJackermeier2024Dataset"),
+        ("anatomy", "Anatomy", "AnatomyJackermeier2024Dataset"),
     )
 ]
 
@@ -111,4 +147,4 @@ _PPI = [
     for org in ("yeast", "human")
 ]
 
-BENCHMARKS = _PREDICTION + _INFERENCE + _PPI
+BENCHMARKS = _PREDICTION + _TRANSBOX_PREDICTION + _INFERENCE + _PPI

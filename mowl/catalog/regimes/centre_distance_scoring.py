@@ -15,7 +15,7 @@ REGIME = RegimeCard(
     references=(JACKERMEIER2024, YANG2025, MONDAL2021, AHARONI2024),
     standalone=False,
     introduced_with=('box2el',),
-    used_by=('transbox', 'emelpp', 'emelvar', 'mcmultibox'),
+    used_by=('transbox', 'elem', 'elbe', 'emelpp', 'emelvar', 'mcmultibox'),
     implementation='mowl.evaluation.el_scoring.centre_distance_scores',
     limitations=(
         ('Centre distance is symmetric for C ⊑ D and ignores region size, so an embedding whose '

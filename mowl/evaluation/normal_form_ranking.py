@@ -107,6 +107,43 @@ class NormalFormRankingRegime(EvaluationRegime):
         return results
 
 
+class TransBoxNormalFormRankingRegime(NormalFormRankingRegime):
+    """The per-normal-form ranking as re-implemented for TransBox (Yang, Chen, Sattler,
+    WWW 2025, Section 6.2 and Appendix E; ``evaluate.py`` of the TransBox code).
+
+    It differs from :class:`NormalFormRankingRegime` in one rule: for
+    :math:`C \\sqcap D \\sqsubseteq E`, every candidate gets score 0 when the boxes of
+    :math:`C` and :math:`D` do not intersect
+    (``scoring="centre_distance_zero_empty"``,
+    :func:`mowl.evaluation.el_scoring.centre_distance_zero_empty_scores`). A model whose
+    conjuncts are disjoint therefore gets an uninformative rank for that query, which is
+    why this regime reports near-zero :math:`C \\sqcap D \\sqsubseteq E` scores for
+    Box\\ :sup:`2`\\ EL and ELBE where the Box\\ :sup:`2`\\ EL paper does not. Numbers
+    of the two regimes are not comparable for ``gci1`` and ``combined``.
+    """
+
+    key = "transbox-normal-form-ranking"
+
+    def __init__(self, normal_forms=("gci0", "gci1", "gci2", "gci3"), split="test",
+                 candidates=None, scoring="centre_distance_zero_empty", combined=True,
+                 max_rows=2 ** 22):
+        super().__init__(normal_forms=normal_forms, split=split, candidates=candidates,
+                         scoring=scoring, combined=combined, max_rows=max_rows)
+
+    def evaluate(self, model, dataset):
+        from mowl.evaluation.el_scoring import has_centre_distance_scorer
+        if self.scoring == "centre_distance_zero_empty" \
+                and not has_centre_distance_scorer(model):
+            # No centre-distance scorer for this model: fall back to its loss, as
+            # scoring="auto" does, and say so in the result.
+            saved, self.scoring = self.scoring, "loss"
+            try:
+                return super().evaluate(model, dataset)
+            finally:
+                self.scoring = saved
+        return super().evaluate(model, dataset)
+
+
 class InferredSubsumptionRankingRegime(NormalFormRankingRegime):
     """"Approximating deductive reasoning" of Box\\ :sup:`2`\\ EL (Section 4.4): the model
     is trained on the full ontology and ranks the atomic subsumptions
