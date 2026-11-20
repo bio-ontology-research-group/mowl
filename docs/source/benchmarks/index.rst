@@ -102,6 +102,16 @@ Helly family (``helly-tk``)
    (:class:`~mowl.evaluation.exact_model.ExactModelRegime`). No numbers have been
    published for it.
 
+BoxLitE Family (``boxlite-family-v{1..4}``)
+   Filtered head/tail ranking of the test role assertions of the Family subsets F_v1 -
+   F_v4 (Section 6 and Appendix G of the BoxLitE paper). BoxLitE is *solved* (a conic
+   programme through CVXPY), so the runner ignores the epochs; the recipes pin the
+   published best lambdas (Table 9). The published numbers were obtained with the
+   commercial solver MOSEK, which is not available to mOWL. With the open-source CVXPY
+   solvers the same programme returns other near-optimal embeddings, and the metrics
+   depend strongly on which one (ECOS: MRR 0.66 on F_v1 against the published 0.72;
+   SCS: 0.31), so the published numbers are not reproducible without MOSEK.
+
 Every benchmark's ``notes`` list how the data and protocol differ from the original
 publication, and every regime has a card in the catalogue
 (:func:`mowl.catalog.list_regimes`).

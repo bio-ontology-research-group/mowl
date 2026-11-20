@@ -18,18 +18,22 @@ _LOCATOR = (
     "numbers themselves; Configurations/*.py of AleksVap/BoxLitE for the variant")
 
 _NOTE = (
-    "The published Table 2 numbers were obtained with the commercial conic solver MOSEK, "
-    "which is not available here: the recipe solves the same programme (same feasible set "
-    "and objective, variant 'reference' = the authors' code) with the open-source solvers "
-    "shipped with CVXPY (Clarabel, then ECOS, then SCS). What does not transfer without "
-    "MOSEK: (i) solution accuracy - the open-source solvers return 'optimal_inaccurate' "
-    "solutions whose embeddings give filtered MRR a few points below the published ones "
-    "(e.g. F_v1 MRR 0.66 vs 0.720); (ii) the paper's model selection - the grid search of "
-    "7^3 = 343 solves per version is impractical without a fast solver, so the recipes fix "
-    "the published best lambdas instead of re-selecting them. What remains reproducible: "
-    "the KB, the programme (variant 'reference'), the published lambdas, the filtered "
-    "head/tail ranking with ordinal ties, and the relative order of the metrics. The "
-    "ablation rows BoxLitE_1/2/3 of Table 2 are the same recipe with lambda_i = 0.")
+    "The published Table 2 numbers were obtained with the commercial conic solver MOSEK "
+    "(main.py of the code: solver=cp.MOSEK), which is not available here: the recipe "
+    "solves the same programme (same feasible set and objective, variant 'reference' = "
+    "the authors' code) with the open-source solvers shipped with CVXPY (Clarabel, then "
+    "ECOS, then SCS; pass --param solver=... to choose). Measured with ECOS (status "
+    "'optimal_inaccurate' on all four subsets), filtered MRR ours / published: F_v1 "
+    "0.659 / 0.720, F_v2 0.339 / 0.549, F_v3 0.367 / 0.433, F_v4 0.222 / 0.444. The "
+    "metrics depend strongly on which near-optimal point the solver returns: on F_v1, "
+    "SCS reaches status 'optimal' with an objective only 3% above ECOS's (0.001905 vs "
+    "0.001851) but gives MRR 0.305 instead of 0.659, and Clarabel stops with "
+    "'InsufficientProgress'. What does not transfer without MOSEK is therefore the "
+    "embedding itself (and with it every published metric), and the paper's model "
+    "selection (7^3 = 343 solves per subset), which the recipes replace by the published "
+    "best lambdas. What does transfer: the KB, the programme, the lambdas and the "
+    "filtered head/tail ranking with ordinal ties. The ablation rows BoxLitE_1/2/3 of "
+    "Table 2 are the same recipe with the lambdas of Tables 10-12.")
 
 RECIPES = tuple(
     Recipe(
