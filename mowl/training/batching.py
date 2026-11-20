@@ -67,19 +67,24 @@ class PerNormalFormMiniBatches(TrainingRegime):
         restarts (the DELE code does not shuffle).
     :param normal_forms: Axiom types that are batched (default: all); the others are used
         in full at every step.
+    :param sample_small: For ``order="random"``: also draw ``batch_size`` axioms with
+        replacement from normal forms with at most ``batch_size`` axioms, instead of using
+        all of them once (the Keras generators of the ELEmbeddings and EmEL++ code do
+        this, so that every normal form contributes exactly ``batch_size`` rows).
     :param seed: Seed.
     """
 
     key = "per-normal-form-minibatch"
 
     def __init__(self, batch_size=None, order="random", shuffle=False, normal_forms=None,
-                 seed=None):
+                 sample_small=False, seed=None):
         super().__init__()
         if order not in ("random", "cyclic"):
             raise ValueError("order must be 'random' or 'cyclic'.")
         self.batch_size = batch_size
         self.order = order
         self.shuffle = bool(shuffle)
+        self.sample_small = bool(sample_small)
         self.normal_forms = None if normal_forms is None else tuple(normal_forms)
         self.rng = np.random.default_rng(seed)
         self.views = {}
@@ -117,7 +122,7 @@ class PerNormalFormMiniBatches(TrainingRegime):
         if n == 0:
             return th.zeros(0, dtype=th.long)
         if self.order == "random":
-            if n <= b:
+            if n <= b and not self.sample_small:
                 return th.arange(n)
             return th.as_tensor(self.rng.integers(0, n, size=b), dtype=th.long)
         steps = math.ceil(n / b)

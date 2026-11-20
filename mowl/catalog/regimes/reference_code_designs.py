@@ -79,7 +79,7 @@ REGIMES = (
             "a learning-rate step, and selection of the parameters with the best "
             "validation median rank of C ⊑ D every 100 epochs."),
         components=("batching", "negative sampling", "margin", "loss", "schedule",
-                    "model selection"),
+                    "initialisation", "model selection"),
         applies_to="EmbeddingELModel",
         references=(JACKERMEIER2024,),
         standalone=False,
@@ -99,8 +99,12 @@ REGIMES = (
             "interval (Section 4.2) and refers to Appendix H for hyperparameters. A "
             "composition of per-normal-form-minibatch, per-column-corruption, "
             "slack-inclusion-margin, mse-to-target, step-lr-decay and "
-            "validation-rank-selection. Deviation in mOWL: the code samples the "
-            "negatives of the baselines once before training."),
+            "validation-rank-selection. The baselines of the code (ELEm, EmEL++, ELBE, "
+            "BoxEL) are trained with three more parts, switched on by baseline_code=True: "
+            "fixed-negatives, joint-normalised-initialisation and "
+            "box2el-baseline-losses. Without them ELEm and EmEL++ fall far below the "
+            "paper on C ⊓ D ⊑ E and ∃r.C ⊑ D, and ELEm, EmEL++ and ELBE score far above "
+            "it on GO."),
     ),
     RegimeCard(
         key="transbox-code-training",
@@ -214,6 +218,11 @@ REGIMES = (
             "class whose index equals the role index instead of D; the published BoxEL "
             "numbers for that normal form (e.g. Hits@100 0.69 on GALEN) and the combined "
             "numbers that include them cannot be reproduced by a correct evaluation.",),
-        notes=("evaluate.py of KRR-Oxford/BoxSquaredEL, compute_nf*_ranks_boxel."),
+        notes=("evaluate.py of KRR-Oxford/BoxSquaredEL, compute_nf*_ranks_boxel. For "
+               "C ⊓ D ⊑ E the score is one minus the absolute volume of a box in 25-50 "
+               "dimensions, which is about 1 for every candidate; the published 0.00 "
+               "for that normal form reflects these ties. Reproducible with the recipe "
+               "(box2el-code-training with baseline_code): the BoxEL numbers for C ⊑ D, "
+               "C ⊓ D ⊑ E, C ⊑ ∃r.D and the deductive-reasoning numbers."),
     ),
 )

@@ -228,6 +228,14 @@ them explicit.
   squares every per-axiom loss and uses loss formulas of its own; mOWL's
   :class:`~mowl.models.TransBox` has them as ``formulation="reference"``, which the
   TransBox recipes set.
+  The Box\ :sup:`2`\ EL code trains its
+  baselines (ELEm, EmEL++, ELBE, BoxEL) differently from Box\ :sup:`2`\ EL: the
+  negatives are drawn once before training, centre and radius (offset) are initialised
+  as one unit vector, and some loss terms differ (``baseline_code=True``; see
+  :class:`~mowl.training.FixedNegatives`,
+  :class:`~mowl.training.JointNormalisedInitialisation` and
+  :class:`~mowl.training.Box2ELBaselineLosses`). The EmEL++ benchmarks are reproduced
+  with :class:`~mowl.training.EmELppCodeTraining`, the design of the EmEL++ Keras code.
 * A :class:`~mowl.benchmarks.Recipe` adds the hyperparameters of the publication.
 
 .. testcode::

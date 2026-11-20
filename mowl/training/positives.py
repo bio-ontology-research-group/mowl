@@ -175,3 +175,43 @@ class TransitiveClosurePositives(_HierarchyRegime):
             return data
         extra = th.tensor(new, dtype=data.dtype, device=data.device)
         return th.cat([data, extra], dim=0)
+
+
+class ValidationAxiomsAsPositives(TrainingRegime):
+    """Add the validation axioms of a normal form to the training data.
+
+    Some reference implementations train on data that still contains the validation
+    axioms. The EmEL++ code (kracr/EmELpp, ``*_EmEL.py``) trains on the normalised
+    ontology ``*_norm_mod.owl``, from which only the *test* subsumptions were removed: all
+    validation subsumptions (20% of the split) are training axioms there, and model
+    selection is done on the first 100 of them. mOWL's dataset follows the paper's text
+    and removes them; this regime puts them back. The test axioms are never added.
+
+    :param normal_forms: Normal forms whose validation axioms are added (default
+        ``("gci0",)``).
+    """
+
+    key = "validation-axioms-as-positives"
+
+    def __init__(self, normal_forms=("gci0",)):
+        super().__init__()
+        self.normal_forms = tuple(normal_forms)
+        self.num_added = {}
+
+    def training_datasets(self, datasets):
+        try:
+            valid = self.model.validation_datasets or {}
+        except AttributeError:  # the dataset has no validation ontology
+            valid = {}
+        out = dict(datasets)
+        for name in self.normal_forms:
+            extra = valid.get(name)
+            if extra is None or len(extra) == 0:
+                continue
+            extra = extra[:]
+            base = datasets.get(name)
+            rows = extra if base is None or len(base) == 0 else \
+                th.cat([base[:], extra.to(base[:].device)], dim=0)
+            self.num_added[name] = len(extra)
+            out[name] = _TensorDataset(rows)
+        return out

@@ -22,10 +22,14 @@ BENCHMARKS = [
                           "med": False, "p90": False},
         references=(MONDAL2021,),
         notes=("Data: kracr/EmELpp (commit 267f2c7). The reference training script trains "
-               "on the whole normalised ontology, which still contains the test pairs "
-               "(leakage noted by Jackermeier et al. 2024, footnote 5); mOWL removes the "
-               "validation and test pairs from the training ontology, following the "
-               "paper's text, so published numbers are not directly comparable. The "
+               "on the normalised ontology *_norm_mod.owl, from which the test pairs were "
+               "removed but which still contains every validation pair (checked against "
+               "the released files); mOWL removes the validation and test pairs, "
+               "following the paper's text. The recipes put the validation pairs back "
+               "(regime 'validation-axioms-as-positives'), as the code does. "
+               "(Jackermeier et al. 2024, footnote 5, report leakage between the testing "
+               "and training sets of the deductive-reasoning data of EmEL++, which this "
+               "benchmark does not use.) The "
                "reference AUC drops the first rank value before integrating; mOWL "
                "integrates over all ranks. Models without centres are scored by their "
                "gci0 loss. SNOMED CT is not provided (no normalised ontology in the "

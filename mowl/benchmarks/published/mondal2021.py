@@ -12,9 +12,10 @@ from mowl.benchmarks.entries._refs import MONDAL2021
 _NOTE = (
     "Embedding dimension and margin were tuned on the validation set over n in {50, 100, "
     "200} and margin in {-0.1, 0, 0.1} (Section 4.3); the chosen values are in the paper's "
-    "Table 2. The reference training script trains on the whole normalised ontology, "
-    "which still contains the test pairs, so these numbers are not directly comparable "
-    "with a run that removes the test pairs (see the notes of the benchmark).")
+    "Table 2. The reference training script trains on a normalised ontology that still "
+    "contains the validation pairs (not the test pairs) and selects the model on them; "
+    "the recipes do the same (see the notes of the benchmark and the regime "
+    "'emelpp-code-training').")
 
 # (benchmark, method): hits@1, hits@10, hits@100, auc, median rank, 90th percentile rank
 _ROWS = {
