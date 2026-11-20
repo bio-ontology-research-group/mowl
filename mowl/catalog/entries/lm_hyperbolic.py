@@ -81,7 +81,7 @@ HIT = MethodCard(
                 "ont-galen-inference", "ont-go-inference", "ont-anatomy-inference"),
     optional_dependencies=_OPTIONAL,
     training=("pairwise-margin-ranking", "transitive-reduction-positives",
-              "sibling-hard-negatives"),
+              "sibling-hard-negatives", "hit-code-training", "ont-code-training"),
     evaluation=("hierarchy-threshold-f1", "ont-normal-form-ranking",
                 "ont-inferred-subsumption-ranking"),
     related=("ont",),
@@ -154,7 +154,7 @@ ONT = MethodCard(
     benchmarks=("ont-galen-prediction", "ont-go-prediction", "ont-anatomy-prediction",
                 "ont-galen-inference", "ont-go-inference", "ont-anatomy-inference"),
     optional_dependencies=_OPTIONAL,
-    training=("pairwise-margin-ranking",),
+    training=("pairwise-margin-ranking", "ont-code-training"),
     evaluation=("ont-normal-form-ranking", "ont-inferred-subsumption-ranking"),
     related=("hit",),
     notes=(

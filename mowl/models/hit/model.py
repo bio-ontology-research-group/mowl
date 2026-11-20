@@ -131,6 +131,37 @@ class HiT(Model):
         self.history = []
         self.best_validation = None
         self._cache = {}
+        self._training_regime = None
+
+    @property
+    def training_regime(self):
+        """The named training design attached to the model
+        (:class:`mowl.training.TrainingRegime`).
+
+        HiT's training loop implements the reference design itself and does not
+        consult regime hooks, so only the descriptive designs of
+        :mod:`mowl.training.lm_reference` (``hit-code-training``,
+        ``ont-code-training``) can be attached; attaching one records, in
+        benchmark results, which published design the run follows.
+        """
+        return self._training_regime
+
+    @training_regime.setter
+    def training_regime(self, regime):
+        from mowl.training.regime import TrainingRegime
+        from mowl.training.lm_reference import LMCodeTraining
+        if regime is not None and not isinstance(regime, TrainingRegime):
+            raise TypeError("training_regime must be a mowl.training.TrainingRegime "
+                            "instance or None.")
+        if regime is not None and not isinstance(regime, LMCodeTraining):
+            raise ValueError(
+                f"{type(self).__name__}.train implements the reference training design "
+                f"itself and does not consult regime hooks; attaching "
+                f"{type(regime).__name__} would have no effect. Only the descriptive "
+                f"designs of mowl.training.lm_reference can be attached.")
+        self._training_regime = regime
+        if regime is not None:
+            regime.attach(self)
 
     # ------------------------------------------------------------------ set-up
     def init_module(self):
