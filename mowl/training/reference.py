@@ -114,8 +114,8 @@ def _elkem_validation_median_rank(model):
     (``paper/ranking/eval.py``, ``evaluate_ranking_metrics``)."""
     import torch as th
     top = set(getattr(model, "_top_ids", None) or ())
-    cands = th.tensor(sorted(i for i in model.named_class_index_dict.values()
-                              if i not in top), dtype=th.long)
+    ids = sorted(i for i in model.named_class_index_dict.values() if i not in top)
+    cands = th.tensor(ids, dtype=th.long)
     return validation_rank(model, gci_name="gci0", target_col=1, statistic="median",
                            max_queries=None, candidates=cands, scoring="margin_free",
                            ties="average", exclude_cols=(0,))
@@ -132,17 +132,23 @@ class ELKEmCodeTraining(ComposedRegime):
     * Axioms of concepts fixed to the empty box are dropped or rerouted to their
       ``_bot`` normal form, and ``nf1_bot`` is not trained (the boxes are fixed);
       :class:`~mowl.models.elkem.model.ELKEm` implements this itself.
-    * The positive per-axiom losses of every normal form are summed (the model's
-      ``compute_loss``; the code squares them before averaging, see ``notes``).
+    * The per-axiom losses of every normal form are squared and averaged, and the means
+      are summed (``positive_power=2``: ``loss_fn(batch).pow(2).mean()`` in the code;
+      :class:`~mowl.training.MSETargetLoss` with target 0 for the normal forms without
+      negatives). ``positive_power=1`` gives the plain sum of Table 2 of the paper.
     * Negatives only for the Pearson contrastive term
       (:class:`~mowl.training.PearsonCorrelationLoss`, weight
       ``contrastive_factor`` = 3.0 in the code): ``k_neg`` corruptions per positive of
       :math:`C \\sqsubseteq D` with :math:`D` replaced
       (:class:`~mowl.training.FixedColumnCorruption`) and of
       :math:`C \\sqsubseteq \\exists r.D` with either side corrupted
-      (:class:`~mowl.training.EitherSideCorruption`), drawn from the named classes
-      except :math:`\\top`, :math:`\\bot` and the unsatisfiable concepts. Corruptions
-      are not filtered against entailed axioms.
+      (:class:`~mowl.training.EitherSideCorruption`). The correlation is computed from
+      the *margin-free* scores (``margin_free_contrast=True``; the code sets the margin
+      to 0 while scoring positives and corruptions). Corruptions are not filtered
+      against entailed axioms. They are drawn from all classes except :math:`\\top` and
+      ``owl:Nothing`` (``corruption_pool="code"``: the code draws class indices
+      ``1 .. M-2``), or, with ``corruption_pool="satisfiable"``, also without the
+      classes fixed to the empty box.
     * The learning rate is multiplied by 0.1 after each epoch of ``lr_milestones``
       (:class:`~mowl.training.StepDecay`; 5,000 in the paper).
     * Every ``validate_every`` epochs the median rank of *all* validation subsumptions
@@ -150,20 +156,23 @@ class ELKEmCodeTraining(ComposedRegime):
       from the candidates) and the best parameters are kept
       (:class:`~mowl.training.ValidationSelection`).
 
+    The geometry of the code (interval-arithmetic existential boxes, an overlap term in
+    the ``gci2`` loss) is a property of the model, not of the training: construct
+    :class:`~mowl.models.elkem.model.ELKEm` with ``variant="reference"``.
+
     Only the TBox design of the ranking experiments; the ABox losses and the lexical
     regulariser of the protein-function experiments stay with the model's own loop.
 
-    Differences from the authors' code, accepted deliberately (see the regime card
+    Remaining differences from the authors' code (see the regime card
     'elkem-code-training'):
 
-    * the correlation is computed from margin-ful module scores, whereas the code sets
-      the margin to zero while scoring positives and corruptions;
-    * the per-axiom losses are not squared and not multiplied by 1,000;
+    * the code multiplies the total loss by 1,000; Adam is invariant to a constant
+      factor of the loss (up to its :math:`\\epsilon`), so this is left out;
     * ``different=True`` redraws a replacement equal to the corrupted column only, so a
       rare negative :math:`C \\sqsubseteq C` can appear (the code also redraws
       :math:`D = C`);
-    * the corruption pool excludes :math:`\\top`, :math:`\\bot` and the unsatisfiable
-      concepts; the code draws from all class indices except the first and the last.
+    * the code draws the ``gci2`` positives of the Pearson term and of the positive
+      loss as two independent batches; here they are the same batch.
 
     :param batch_size: Axioms per normal form and step (1,024 in the code).
     :param k_neg: Corruptions per positive (3 for GALEN and Anatomy, 5 for GO).
@@ -171,20 +180,30 @@ class ELKEmCodeTraining(ComposedRegime):
     :param lr_milestones: Epochs at which the learning rate is multiplied by 0.1.
     :param validate_every: Epochs between validations.
     :param select: Set to ``False`` to train without model selection.
+    :param positive_power: 2 (code: squared per-axiom losses) or 1 (paper).
+    :param margin_free_contrast: Correlate margin-free scores (code) or the
+        training-mode scores with margin.
+    :param corruption_pool: ``"code"`` or ``"satisfiable"`` (see above).
     :param seed: Seed of the batch and negative samplers.
     """
 
     key = "elkem-code-training"
 
     def __init__(self, batch_size=1024, k_neg=3, contrastive_factor=3.0,
-                 lr_milestones=(5000,), validate_every=100, select=True, seed=None):
+                 lr_milestones=(5000,), validate_every=100, select=True, positive_power=2,
+                 margin_free_contrast=True, corruption_pool="code", seed=None):
         super().__init__()
+        if corruption_pool not in ("code", "satisfiable"):
+            raise ValueError("corruption_pool must be 'code' or 'satisfiable'.")
         self.batch_size = int(batch_size)
         self.k_neg = int(k_neg)
         self.contrastive_factor = float(contrastive_factor)
         self.lr_milestones = tuple(lr_milestones or ())
         self.validate_every = max(1, int(validate_every))
         self.select = bool(select)
+        self.positive_power = int(positive_power)
+        self.margin_free_contrast = bool(margin_free_contrast)
+        self.corruption_pool = corruption_pool
         self.seed = seed
         self.key = type(self).key
 
@@ -194,9 +213,18 @@ class ELKEmCodeTraining(ComposedRegime):
                                           seed=self.seed)]
         return parts
 
+    def _pool(self, model):
+        excluded = set(model._top_ids)
+        if self.corruption_pool == "code":
+            nothing = model.class_index_dict.get("http://www.w3.org/2002/07/owl#Nothing")
+            if nothing is not None:
+                excluded.add(nothing)
+        else:
+            excluded |= set(model._bot_ids)
+        return sorted(i for i in model.named_class_index_dict.values() if i not in excluded)
+
     def attach(self, model):
-        pool = sorted(i for i in model.named_class_index_dict.values()
-                      if i not in set(model._bot_ids) and i not in set(model._top_ids))
+        pool = self._pool(model)
         parts = self._parts() + [
             FixedColumnCorruption(
                 columns={"gci0": (1,)}, num_negatives=self.k_neg, different=True,
@@ -206,8 +234,13 @@ class ELKEmCodeTraining(ComposedRegime):
                 require_negative_loss=False, pools={"gci2": {0: pool, 2: pool}},
                 seed=self.seed),
             PearsonCorrelationLoss(weight=self.contrastive_factor,
-                                   normal_forms=("gci0", "gci2")),
+                                   normal_forms=("gci0", "gci2"),
+                                   positive_power=self.positive_power,
+                                   margin_free=self.margin_free_contrast),
         ]
+        if self.positive_power == 2:
+            # every other normal form: mean of the squared per-axiom losses
+            parts.append(MSETargetLoss(pos_target=0.0, reduce="per_axiom"))
         if self.lr_milestones:
             parts.append(StepDecay(self.lr_milestones, gamma=0.1))
         if self.select:
@@ -218,4 +251,3 @@ class ELKEmCodeTraining(ComposedRegime):
         super().attach(model)
         if self.select and getattr(model, "eval_gci_name", "") is None:
             model.eval_gci_name = "gci0"
-

@@ -16,7 +16,7 @@ REGIME = RegimeCard(
     components=('test set', 'candidate set', 'scoring', 'metrics'),
     applies_to='EmbeddingELModel (modules with zero_margin_loss; others are scored by '
                'their loss)',
-    references=(SINGH2026,),
+    references=(SINGH2026, JACKERMEIER2024),
     standalone=False,
     introduced_with=('elkem',),
     used_by=(),

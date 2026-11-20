@@ -66,6 +66,15 @@ class ELKEmModule(ELModule):
       ignored. :class:`~mowl.models.elkem.model.ELKEm` fixes every such class, so this loss
       is zero in training.
 
+    .. rubric:: Variants
+
+    ``variant="paper"`` (default) implements Table 2 of the paper with the deviations above.
+    ``variant="reference"`` reproduces the geometry of the authors' ranking code
+    (``paper/ranking/ELK_Em.py``, ``geometry.py``), with which the published Table 3
+    numbers were obtained: the box of :math:`\exists r.C` is computed by plain interval
+    arithmetic (no empty special case), and the ``gci2`` loss gets the overlap term
+    :math:`\ell_{\cap+}(R_r, B_D)` that the code adds (``nf3_loss``) but Table 2 does not.
+
     :param nb_ont_classes: Number of classes.
     :param nb_rels: Number of object properties.
     :param nb_inds: Number of individuals (``None`` for no individual embeddings).
@@ -76,7 +85,10 @@ class ELKEmModule(ELModule):
     :param top_ids: Indices of the classes fixed to the full box (:math:`\top`).
     :param abox_threshold: Target-score threshold :math:`\tau` of corrupted assertions.
     :param epsilon: Lower bound added to class half-widths and role slopes.
+    :param variant: ``"paper"`` (default) or ``"reference"`` (see *Variants*).
     """
+
+    VARIANTS = ("paper", "reference")
 
     #: Only the assertion losses have a distinct negative version (``ReLU(δ - ℓ)``). The
     #: contrastive term for ``gci0``/``gci2`` is built from the margin-free scores of
@@ -86,8 +98,11 @@ class ELKEmModule(ELModule):
     role_axiom_capable = True
 
     def __init__(self, nb_ont_classes, nb_rels, nb_inds=None, embed_dim=50, margin=0.1,
-                 bot_ids=(), top_ids=(), abox_threshold=0.4, epsilon=1e-5):
+                 bot_ids=(), top_ids=(), abox_threshold=0.4, epsilon=1e-5, variant="paper"):
         super().__init__()
+        if variant not in self.VARIANTS:
+            raise ValueError(f"variant must be one of {self.VARIANTS}, got {variant!r}.")
+        self.variant = variant
         self.nb_ont_classes = nb_ont_classes
         self.nb_rels = nb_rels
         self.nb_inds = nb_inds
@@ -160,7 +175,8 @@ class ELKEmModule(ELModule):
     def existential_box(self, role_idx, class_idx):
         r"""Box of :math:`\exists r.C` for role indices ``role_idx`` and class indices
         ``class_idx``."""
-        return L.existential_box(self.role(role_idx), *self.class_box(class_idx))
+        return L.existential_box(self.role(role_idx), *self.class_box(class_idx),
+                                 sound=self.variant == "paper")
 
     def _fixed_empty(self, idx):
         return self.bot_mask[idx]
@@ -192,11 +208,15 @@ class ELKEmModule(ELModule):
                                    margin)
         if gci_name == "gci2":
             el, eu = self.existential_box(data[:, 1], data[:, 2])
-            return L.inclusion_loss(*self.class_box(data[:, 0]), el, eu, margin)
+            incl = L.inclusion_loss(*self.class_box(data[:, 0]), el, eu, margin)
+            if self.variant == "reference":
+                rl, ru = self.role(data[:, 1])[:2]
+                incl = incl + L.overlap_loss(rl, ru, *self.class_box(data[:, 2]), margin)
+            return incl
         if gci_name == "gci3":
             role = self.role(data[:, 0])
             cl, cu = self.class_box(data[:, 1])
-            el, eu = L.existential_box(role, cl, cu)
+            el, eu = L.existential_box(role, cl, cu, sound=self.variant == "paper")
             incl = L.inclusion_loss(el, eu, *self.class_box(data[:, 2]), margin)
             over = L.overlap_loss(role[0], role[1], cl, cu, margin)
             trivial = self._fixed_empty(data[:, 1])

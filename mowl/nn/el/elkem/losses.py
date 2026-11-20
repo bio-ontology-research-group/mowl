@@ -98,16 +98,21 @@ def affine_image(lower, upper, slope, shift):
     return slope * lower + shift, slope * upper + shift
 
 
-def existential_box(role, lower, upper):
+def existential_box(role, lower, upper, sound=True):
     r"""Box of :math:`\exists r.C`: :math:`T_r(C^{\mathcal{E}} \cap R_r) \oplus E_r`.
 
     :param role: Role tuple ``(range_l, range_u, error_l, error_u, slope, shift)``.
     :param lower: Lower corners of :math:`C`.
     :param upper: Upper corners of :math:`C`.
+    :param sound: Keep the box empty when :math:`C \cap R_r` is empty (default). With
+        ``False``, plain interval arithmetic is applied to the possibly inverted box, as in
+        the authors' code (``geometry.py``, ``Role.existential``).
     """
     rl, ru, el, eu, m, c = role
     il, iu = intersection(lower, upper, rl, ru)
     tl, tu = affine_image(il, iu, m, c)
+    if not sound:
+        return tl + el, tu + eu
     # The Minkowski sum of the empty set with E_r is empty, but interval arithmetic on an
     # "inverted" box would make it non-empty again whenever the gap is smaller than the
     # width of E_r (which would make a zero GCI2 loss unsound). An empty C ∩ R_r is

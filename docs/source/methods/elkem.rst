@@ -90,6 +90,11 @@ Differences from the paper and the authors' code are listed in the class docstri
 the card's ``notes``. The most important ones: per-axiom losses are not squared (as in the
 paper, unlike the authors' code), ``gci2`` has no overlap term (as in Table 2, unlike the
 code), and the box of :math:`\exists r.C` is kept empty when :math:`C \cap R_r` is empty.
+All three are switchable: ``ELKEm(..., variant="reference")`` uses the code's geometry
+(interval-arithmetic existential boxes, the ``gci2`` overlap term), and the regime
+``elkem-code-training`` squares the per-axiom losses and computes the Pearson term from
+margin-free scores (``positive_power=2``, ``margin_free_contrast=True``). The recipes use
+both, because the published Table 3 numbers were produced by the code.
 
 Example
 -------
