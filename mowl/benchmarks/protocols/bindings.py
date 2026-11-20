@@ -65,6 +65,14 @@ class InferredSubsumptionProtocol(RegimeProtocol):
         return InferredSubsumptionRankingRegime(**kwargs)
 
 
+class ELKEmSubsumptionProtocol(RegimeProtocol):
+    """:class:`mowl.evaluation.normal_form_ranking.ELKEmSubsumptionRankingRegime`."""
+
+    def build(self, **kwargs):
+        from mowl.evaluation.normal_form_ranking import ELKEmSubsumptionRankingRegime
+        return ELKEmSubsumptionRankingRegime(**kwargs)
+
+
 class PPIRankingProtocol(RegimeProtocol):
     """:func:`mowl.evaluation.filtered_ranking.ppi_ranking`."""
 

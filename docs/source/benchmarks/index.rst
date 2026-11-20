@@ -48,6 +48,16 @@ Approximating deductive reasoning (``box2el-{galen,go,anatomy}-inference``)
    validation, from the release), exactly as NF1 above.
    Data: :class:`~mowl.datasets.builtin.jackermeier2024_reference.Jackermeier2024InferencesDataset`.
 
+ELK-Em (``elkem-{galen,go,anatomy}-subsumption``)
+   The same inferred-subsumption data, ranked as the ELK-Em paper does: the superclass
+   :math:`D` of every inferred :math:`C \sqsubseteq D` among all classes except
+   :math:`\top` and :math:`C`, scored by the margin-free loss :math:`\ell^0`, tied
+   candidates at their average rank, Hits@\ :math:`k` over fractional ranks and AUC
+   :math:`\mathrm{mean}((n - r)/(n - 1))`. Regime:
+   :class:`~mowl.evaluation.normal_form_ranking.ELKEmSubsumptionRankingRegime`; recipe
+   and training regime 'elkem-code-training' from
+   :mod:`mowl.benchmarks.recipe_sets.singh2026`.
+
 Box\ :sup:`2`\ EL PPI prediction (``box2el-{yeast,human}-ppi``)
    For each test axiom :math:`\{P_1\} \sqsubseteq \exists \mathit{interacts}.\{P_2\}`,
    :math:`P_1` is ranked among all proteins; filtered metrics (``f_`` prefix) move the

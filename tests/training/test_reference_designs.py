@@ -131,3 +131,65 @@ def test_recipes_and_benchmarks_are_consistent():
     assert published_results(benchmark="transbox-go-prediction", method="transbox")
     assert get_benchmark("transbox-go-prediction").protocol.endswith(
         "TransBoxPredictionProtocol")
+
+
+def test_elkem_code_training():
+    """The ELK-Em code design: batched sums, fixed/either-side corruptions for the
+    Pearson term only, step decay, selection by the validation median rank."""
+    from mowl.models import ELKEm
+    from mowl.training import ELKEmCodeTraining
+
+    regime = ELKEmCodeTraining(batch_size=4, k_neg=2, contrastive_factor=3.0,
+                               lr_milestones=[3], validate_every=2, seed=0)
+    assert regime.key == "elkem-code-training"
+    model = ELKEm(tiny_dataset(), embed_dim=4, batch_size=4,
+                  model_filepath=os.path.join(scratch_dir(), "elkem.pt"))
+    model.training_regime = regime
+    assert [r.key for r in regime.regimes] == [
+        "", "per-normal-form-minibatch", "fixed-column-corruption",
+        "either-side-corruption", "pearson-correlation-loss", "step-lr-decay",
+        "validation-rank-selection"]
+    # the generic loop needs to know the normal form to validate on
+    assert model.eval_gci_name == "gci0"
+
+    # Corruptions for the Pearson term: k_neg per positive, never a class fixed to the
+    # empty box and never the (fixed) top class.
+    gci0 = model._training_tensors()["gci0"]
+    negs = regime.regimes[2].negatives("gci0", gci0)
+    assert negs.shape == (2 * len(gci0), 2)
+    excluded = set(model._bot_ids) | set(model._top_ids)
+    assert not set(negs[:, 1].tolist()) & excluded
+    gci2 = model._training_tensors()["gci2"]
+    negs = regime.regimes[3].negatives("gci2", gci2)
+    assert negs.shape[0] == 2 * len(gci2)
+    changed = (negs[:, 0] != gci2.repeat_interleave(2, dim=0)[:, 0]) | \
+              (negs[:, 2] != gci2.repeat_interleave(2, dim=0)[:, 2])
+    assert bool(changed.any()) and not bool((~changed).any())
+
+    th.manual_seed(1)
+    before = float(model.module(gci0, "gci0").mean().detach())
+    model.train(epochs=4, validate_every=2)
+    after = float(model.module(gci0, "gci0").mean().detach())
+    assert after < before
+    assert regime.regimes[-1].best_epoch is not None
+
+    # With no regime attached the model trains with its own built-in loop.
+    model2 = ELKEm(tiny_dataset(), embed_dim=4, batch_size=4,
+                   model_filepath=os.path.join(scratch_dir(), "elkem2.pt"))
+    model2.train(epochs=2)
+    assert model2.best_validation_median_rank is not None
+
+
+def test_elkem_recipe_resolves():
+    from mowl.benchmarks import get_benchmark, get_recipe, published_results
+    r = get_recipe("elkem-galen-subsumption", "elkem")
+    assert r.epochs == 10000 and r.validate_every == 100
+    assert r.regime_kwargs["k_neg"] == 3
+    assert get_recipe("elkem-go-subsumption", "elkem").regime_kwargs["k_neg"] == 5
+    assert r.model_kwargs["load_role_axioms"] is True
+    pub = published_results(benchmark="elkem-go-subsumption", method="elkem")[0]
+    assert pub.metrics["hits@100"] == 0.71
+    # the published numbers moved to the ELK-Em evaluation regime's benchmarks
+    assert not published_results(benchmark="box2el-go-inference", method="elkem")
+    assert get_benchmark("elkem-go-subsumption").protocol.endswith(
+        "ELKEmSubsumptionProtocol")

@@ -418,11 +418,22 @@ class ELKEm(EmbeddingELModel):
     def train(self, epochs, validate_every=1, epoch_callback=None):
         """Train the model (see the class docstring for the objective).
 
+        With a :attr:`~mowl.base_models.elmodel.EmbeddingELModel.training_regime` attached
+        (for example the regime 'elkem-code-training' of
+        :class:`mowl.training.reference.ELKEmCodeTraining`), the *generic* training loop of
+        :meth:`mowl.base_models.elmodel.EmbeddingELModel.train` runs instead of the
+        built-in one, and every hook (batches, negatives, loss, schedule, selection) is
+        the regime's. The built-in loop below is the model's own design and is used
+        without a regime.
+
         :param epochs: Number of epochs (one mini-batch per normal form and epoch).
         :param validate_every: Validate every N epochs. Defaults to 1; the paper uses 100.
         :param epoch_callback: Optional ``epoch_callback(epoch, model)`` called after each
             epoch.
         """
+        if self.training_regime is not None:
+            return super().train(epochs, validate_every=validate_every,
+                                 epoch_callback=epoch_callback)
         tensors = self._training_tensors()
         logger.info("Training axioms: " + ", ".join(f"{k}: {len(v)}"
                                                     for k, v in tensors.items()))

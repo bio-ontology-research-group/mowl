@@ -19,6 +19,7 @@ FIXED_KEYS = [
     "regd-galen-inference", "regd-go-inference", "regd-anatomy-inference",
     "regd-galen-prediction", "regd-go-prediction", "regd-anatomy-prediction",
     "emelpp-galen-prediction", "emelpp-go-prediction", "emelpp-anatomy-prediction",
+    "elkem-galen-subsumption", "elkem-go-subsumption", "elkem-anatomy-subsumption",
 ]
 
 
@@ -113,13 +114,19 @@ def test_no_published_numbers_for_helly():
     assert published_results(benchmark="helly-tk") == []
 
 
-@pytest.mark.parametrize("key", ["box2el-normal-form-ranking", "inferred-subsumption-ranking",
-                                 "ppi-ranking", "regd-sampled-f1", "exact-model-check",
-                                 "cate-filtered-ranking", "emelpp-subsumee-ranking"])
-def test_regime_cards(key):
+@pytest.mark.parametrize("key,kind", [
+    ("box2el-normal-form-ranking", "evaluation"),
+    ("inferred-subsumption-ranking", "evaluation"),
+    ("ppi-ranking", "evaluation"), ("regd-sampled-f1", "evaluation"),
+    ("exact-model-check", "evaluation"), ("cate-filtered-ranking", "evaluation"),
+    ("emelpp-subsumee-ranking", "evaluation"), ("elkem-subsumption-ranking", "evaluation"),
+    ("elkem-code-training", "training"), ("box2el-code-training", "training"),
+    ("transbox-code-training", "training"),
+])
+def test_regime_cards(key, kind):
     from mowl.catalog import get_regime
     card = get_regime(key)
-    assert card.kind.value == "evaluation"
+    assert card.kind.value == kind
     module, _, attr = card.implementation.rpartition(".")
     assert importlib.util.find_spec(module) is not None
 
