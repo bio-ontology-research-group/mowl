@@ -429,6 +429,24 @@ def _read_settings(model, model_kwargs):
     return settings
 
 
+def resolve_recipe(benchmark, method, recipe):
+    """The :class:`~mowl.benchmarks.recipes.Recipe` that a ``recipe`` argument of
+    :func:`run_benchmark` names.
+
+    :param recipe: ``True``, the key of the publication, ``"key:name"`` (one publication,
+        several recipes -- e.g. the model variants of DELE), or a :class:`Recipe`.
+    """
+    from mowl.benchmarks.recipes import Recipe, get_recipe
+    if isinstance(recipe, Recipe):
+        return recipe
+    if method is None:
+        raise ValueError("A recipe needs a catalogue method key.")
+    if recipe is True:
+        return get_recipe(benchmark, method, None)
+    source, _, name = recipe.partition(":")
+    return get_recipe(benchmark, method, source or None, name or None)
+
+
 def run_benchmark(benchmark, method=None, model_factory=None, model_kwargs=None,
                   epochs=None, seed=0, device="cpu", training_regime=None, dataset=None,
                   dataset_kwargs=None, protocol_kwargs=None, validate_every=None,
@@ -458,7 +476,9 @@ def run_benchmark(benchmark, method=None, model_factory=None, model_kwargs=None,
     :param jvm_memory: Heap size if the runner has to start the JVM.
     :param deterministic: Request deterministic PyTorch algorithms.
     :param recipe: Train as a publication did: ``True`` (the only recipe of the method on
-        the benchmark), the key of the publication, or a
+        the benchmark), the key of the publication (``"source"``), the key and a recipe
+        name (``"source:name"``, when one publication has several recipes for the pair,
+        e.g. the model variants of DELE), or a
         :class:`~mowl.benchmarks.recipes.Recipe`. The recipe supplies model arguments,
         training regime, epochs and validation interval; arguments given explicitly
         take precedence (``model_kwargs`` are merged).
@@ -471,12 +491,7 @@ def run_benchmark(benchmark, method=None, model_factory=None, model_kwargs=None,
         raise ValueError("Give a catalogue method key or a model_factory.")
     model_kwargs = dict(model_kwargs or {})
     if recipe is not None and recipe is not False:
-        from mowl.benchmarks.recipes import Recipe, get_recipe
-        if not isinstance(recipe, Recipe):
-            if method is None:
-                raise ValueError("A recipe needs a catalogue method key.")
-            recipe = get_recipe(benchmark.key, method,
-                                None if recipe is True else recipe)
+        recipe = resolve_recipe(benchmark.key, method, recipe)
         model_kwargs = {**recipe.model_kwargs, **model_kwargs}
         if training_regime is None:
             training_regime = recipe.regime_spec()

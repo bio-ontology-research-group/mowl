@@ -39,6 +39,24 @@ class TestDELERecipes(TestCase):
             self.assertEqual(r.epochs, expected_epochs)
             self.assertEqual(r.validate_every, 9 if expected_epochs == 18000 else 1)
 
+    def test_get_recipe_selects_the_variant(self):
+        from mowl.benchmarks.recipes import get_recipe
+        with self.assertRaises(KeyError):
+            get_recipe("dele-galen-subsumption", "elem", "mashkova2024")
+        r = get_recipe("dele-galen-subsumption", "elem", "mashkova2024", "+l+n")
+        self.assertTrue(r.regime_kwargs["filter_negatives"])
+        self.assertEqual(r.model_kwargs["embed_dim"], 400)
+        r = get_recipe("dele-galen-subsumption", "elem", "mashkova2024", "base")
+        self.assertEqual(r.regime_kwargs["negatives"], "gci2")
+        self.assertNotIn("filter_negatives", r.regime_kwargs)
+
+    def test_runner_resolves_source_and_name(self):
+        from mowl.benchmarks.runner import resolve_recipe
+        r = resolve_recipe("dele-galen-subsumption", "elem", "mashkova2024:+l")
+        self.assertEqual(r.name, "+l")
+        r = resolve_recipe("box2el-go-prediction", "box2el", True)
+        self.assertEqual(r.name, "")
+
     def test_regime_builds(self):
         from mowl.benchmarks.runner import resolve_training_regime
         for r in list_recipes(source="mashkova2024"):

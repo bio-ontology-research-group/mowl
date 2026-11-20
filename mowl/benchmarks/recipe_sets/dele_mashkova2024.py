@@ -111,7 +111,7 @@ def _build():
         kind = _KIND.get(benchmark)
         for variant in ("", "+l", "+ln"):
             base = "+l" if variant == "+ln" else variant
-            label = {"": "", "+l": "+l", "+ln": "+l+n"}[variant]
+            label = {"": "base", "+l": "+l", "+ln": "+l+n"}[variant]
             for method, model_kwargs in _HP[benchmark][base].items():
                 regime_kwargs = {"negatives": "all" if base == "+l" else "gci2"}
                 if base == "+l":
@@ -122,11 +122,12 @@ def _build():
                     regime_kwargs["kind_prefixes"] = list(kind)
                 out.append(Recipe(
                     benchmark=benchmark, method=method, source=MASHKOVA2024,
-                    model_kwargs=dict(model_kwargs),
+                    name=label, model_kwargs=dict(model_kwargs),
                     training_regime="dele-code-training", regime_kwargs=regime_kwargs,
                     epochs=epochs * steps, validate_every=steps,
                     locator=_LOCATOR,
-                    notes=(f"DELE variant '{benchmark} {method}{label}'. "
+                    notes=(f"DELE variant '{benchmark} {method}"
+                           f"{'+' + label if label != 'base' else ''}'. "
                            + _VARIANT_NOTES[variant]
                            + (" Epsilon is not stated in the paper for ELEmbeddings; "
                               "0.01 as in the reference code's run.py."
