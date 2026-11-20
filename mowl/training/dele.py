@@ -66,8 +66,8 @@ def _pool(model, gci_name, column):
     return np.fromiter(model.named_class_index_dict.values(), dtype=np.int64)
 
 
-def _corrupt(data, column, pool, device):
-    idx = np.random.choice(pool, size=len(data), replace=True)
+def _corrupt(data, column, pool, device, rng=np.random):
+    idx = rng.choice(pool, size=len(data), replace=True)
     out = data.clone()
     out[:, column] = th.tensor(idx, dtype=out.dtype, device=device)
     return out
@@ -132,6 +132,13 @@ class AllNormalFormNegatives(TrainingRegime):
         classes whose IRI contains ``label``), exactly as the GO & STRING dataloader of
         the DELE reference code does. ``None`` (default) corrupts with any named class.
     :type kind_prefixes: iterable of str, optional
+    :param fixed_seed: ``None`` (default): draw new negatives at every call. An integer
+        ``s``: restart the random draws from seed ``s`` at every call, as the DELE
+        reference dataloaders do (``np.random.seed(0)`` at the start of
+        ``generate_negatives``). Since the reference takes consecutive, unshuffled
+        batches, every positive then gets the same corrupted entity at every epoch: a
+        *fixed* set of negatives, one per positive.
+    :type fixed_seed: int, optional
 
     .. note:: The reference implementation samples the corrupting class from the dataset's
        evaluation classes; mOWL samples from all named classes, as its default sampler does.
@@ -141,8 +148,9 @@ class AllNormalFormNegatives(TrainingRegime):
     key = "dele-all-normal-form-negatives"
 
     def __init__(self, epsilon=None, normal_forms=NORMAL_FORMS, enable_module=True,
-                 override_model_sampler=False, kind_prefixes=None):
+                 override_model_sampler=False, kind_prefixes=None, fixed_seed=None):
         super().__init__()
+        self.fixed_seed = None if fixed_seed is None else int(fixed_seed)
         self.epsilon = epsilon
         self.normal_forms = tuple(normal_forms)
         for nf in self.normal_forms:
@@ -210,8 +218,10 @@ class AllNormalFormNegatives(TrainingRegime):
         data = gci_dataset[:]
         column = DELE_CORRUPT_COLUMN[gci_name]
         pools = self._pools(gci_name, column)
+        rng = np.random if self.fixed_seed is None else \
+            np.random.RandomState(self.fixed_seed)
         if len(pools) == 1:
-            return _corrupt(data, column, pools[0], data.device)
+            return _corrupt(data, column, pools[0], data.device, rng=rng)
         values = data[:, column].cpu().numpy()
         is_match = np.isin(values, pools[0])
         out = data.clone()
@@ -219,7 +229,7 @@ class AllNormalFormNegatives(TrainingRegime):
             rows = np.nonzero(mask)[0]
             if len(rows) == 0:
                 continue
-            idx = np.random.choice(pool, size=len(rows), replace=True)
+            idx = rng.choice(pool, size=len(rows), replace=True)
             out[th.tensor(rows, device=data.device), column] = th.tensor(
                 idx, dtype=out.dtype, device=data.device)
         return out
@@ -544,11 +554,67 @@ class DELECodeLosses(TrainingRegime):
             self._apply()
 
 
+def _sq_mean(x):
+    return (x * x).mean()
+
+
+class DELECodeLoss(TrainingRegime):
+    r"""How the DELE reference code combines the per-axiom losses of one normal form
+    (``models/*.py``, the training loops), per model:
+
+    * **ELEm**: the GCI2 loss is :math:`\mathrm{mean}(\ell_+^2) +
+      \mathrm{mean}(\ell_-^2)` when GCI2 has negatives; every other normal form
+      :math:`\mathrm{mean}(\ell_+) + \mathrm{mean}(\ell_-)` (``mean(pos)`` alone
+      without negatives).
+    * **ELBE**: every normal form :math:`\mathrm{mean}(\ell_+^2) +
+      \mathrm{mean}(\ell_-^2)` (positives squared also without negatives).
+    * **Box2EL**: every normal form :math:`\mathrm{mean}(\ell_+^2) +
+      \mathrm{mean}(\ell_-^2)` of the reference module's losses. mOWL's module already
+      squares the positive losses other than GCI2 per axiom, so those are averaged as
+      they are; the GCI2 and GCI3 negative losses of the reference return the *mean* of
+      :math:`(\delta - d)^2` over the batch, which the loop squares again, so they enter
+      as :math:`\mathrm{mean}(\ell_-)^2`.
+
+    mOWL's own combinations differ: :class:`~mowl.models.ELBE` squares the *means* and
+    pulls the negative loss to 1 (``MSE(mean(s+), 0) + MSE(mean(s-), 1)``), which with
+    the DELE negative losses (zero iff the negative is satisfied) trains the negatives to
+    be *violated*; the other models add the plain means. Negatives that a filter removed
+    completely contribute nothing.
+    """
+
+    key = "dele-code-loss"
+
+    def loss(self, gci_name, pos_scores, neg_scores):
+        name = type(self.model.module).__name__
+        pos = pos_scores.reshape(-1)
+        neg = None if neg_scores is None or neg_scores.numel() == 0 else \
+            neg_scores.reshape(-1)
+        if name == "ELEmModule":
+            if gci_name == "gci2" and neg is not None:
+                return _sq_mean(pos) + _sq_mean(neg)
+            loss = pos.mean()
+            return loss if neg is None else loss + neg.mean()
+        if name == "ELBEModule":
+            loss = _sq_mean(pos)
+            return loss if neg is None else loss + _sq_mean(neg)
+        if name == "BoxSquaredELModule":
+            loss = _sq_mean(pos) if gci_name == "gci2" else pos.mean()
+            if neg is None:
+                return loss
+            if gci_name in ("gci2", "gci3"):
+                return loss + neg.mean() ** 2
+            return loss + _sq_mean(neg)
+        raise TypeError(f"DELECodeLoss combines the losses of ELEmModule, ELBEModule and "
+                        f"BoxSquaredELModule; got {name}.")
+
+
 class DELECodeTraining(ComposedRegime):
     """How the DELE reference code (bio-ontology-research-group/DELE) trains, and how the
     numbers of DELE's Tables 3-6 were obtained: the composition of
 
     * :class:`~mowl.training.DELECodeLosses` -- the reference's loss functions;
+    * :class:`~mowl.training.DELECodeLoss` -- how the reference combines them (per-axiom
+      squares, per model);
     * :class:`~mowl.training.PerNormalFormMiniBatches` with ``order="cyclic"`` -- an
       epoch of the reference is :math:`\\max_t \\lceil n_t / b \\rceil` steps; step
       :math:`j` takes the :math:`(j \\bmod \\lceil n_t/b \\rceil)`-th consecutive
@@ -568,9 +634,10 @@ class DELECodeTraining(ComposedRegime):
     Model selection (best validation loss of the predicted normal form, every
     ``steps_per_epoch`` epochs) is mOWL's built-in; pass ``validate_every`` accordingly.
 
-    Deviations from the reference code: negatives are drawn anew at every step (the
-    reference resets NumPy's seed to 0 in every batch call, drawing the same sequence
-    repeatedly); entailed GCI0-BOT and GCI3-BOT negatives are dropped only if entailed
+    Deviations from the reference code: by default negatives are drawn anew at every
+    step; the reference resets NumPy's seed to 0 in every batch call, so that every
+    positive keeps the same negative for the whole training (pass ``negative_seed=0``
+    to do the same); entailed GCI0-BOT and GCI3-BOT negatives are dropped only if entailed
     (the reference drops all of them when filtering); mOWL's ELEm applies the
     :math:`|\\|f(x)\\| - 1|` regularisation globally, per step, not per axiom (the
     released reference code cannot run its own per-axiom regularisation: it references
@@ -586,13 +653,17 @@ class DELECodeTraining(ComposedRegime):
     :param patience: Scheduler patience, in paper epochs.
     :param stop_patience: Early-stopping patience, in paper epochs.
     :param seed: Seed of the batching regime.
+    :param negative_seed: ``None``: new negatives at every step. An integer: restart the
+        negative draws from this seed at every step, as the reference code does with
+        seed 0 (fixed negatives; see ``fixed_seed`` of
+        :class:`~mowl.training.AllNormalFormNegatives`).
     """
 
     key = "dele-code-training"
 
     def __init__(self, batch_size=32768, negatives="all", filter_negatives=False,
                  epsilon=None, kind_prefixes=None, max_resample=0, patience=10,
-                 stop_patience=20, seed=None):
+                 stop_patience=20, seed=None, negative_seed=None):
         from mowl.training.batching import PerNormalFormMiniBatches
         from mowl.training.schedules import ReduceOnPlateau
         if negatives not in ("all", "gci2"):
@@ -600,15 +671,16 @@ class DELECodeTraining(ComposedRegime):
         parts = [DELECodeLosses(),
                  PerNormalFormMiniBatches(batch_size=batch_size, order="cyclic",
                                           seed=seed)]
-        if negatives == "all" or kind_prefixes:
+        if negatives == "all" or kind_prefixes or negative_seed is not None:
             parts.append(AllNormalFormNegatives(
                 epsilon=epsilon,
                 normal_forms=NORMAL_FORMS if negatives == "all" else ("gci2",),
                 enable_module=(negatives == "all"),
-                override_model_sampler=bool(kind_prefixes),
-                kind_prefixes=kind_prefixes))
+                override_model_sampler=bool(kind_prefixes) or negative_seed is not None,
+                kind_prefixes=kind_prefixes, fixed_seed=negative_seed))
         if filter_negatives:
             parts.append(ClosureFilteredNegatives(max_resample=max_resample))
+        parts.append(DELECodeLoss())
         parts.append(ReduceOnPlateau(patience=patience, stop_patience=stop_patience,
                                      every=None, stop=True))
         super().__init__(*parts)

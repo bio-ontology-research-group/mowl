@@ -209,7 +209,8 @@ REGIMES = (
         summary=(
             "The complete training design behind DELE's Tables 3-6: cyclic mini-batches "
             "of 32,768 axioms per normal form, negatives with per-kind corruption pools "
-            "on the GO & STRING data, the reference's loss functions, entailed negatives "
+            "on the GO & STRING data, the reference's loss functions and their "
+            "combination (dele-code-loss), entailed negatives "
             "dropped for the '+n' rows, ReduceLROnPlateau (patience 10) and early "
             "stopping (patience 20) on the validation loss of the predicted normal form, "
             "monitored once per paper epoch."),
@@ -239,9 +240,10 @@ REGIMES = (
             "From run.py, models/*.py and data_utils/dataloader*.py of "
             "bio-ontology-research-group/DELE. An epoch is max_t ceil(n_t / 32768) steps; "
             "train for E paper epochs as train(epochs=E * steps_per_epoch) with "
-            "validate_every=steps_per_epoch. Deviations in mOWL: negatives are drawn "
-            "anew at every step (the reference resets the NumPy seed inside every batch "
-            "and so repeats the same draws); ELEm's |norm - 1| regularisation is applied "
+            "validate_every=steps_per_epoch. Negatives are drawn anew at every step by "
+            "default; the reference resets the NumPy seed to 0 inside every batch, so "
+            "every positive keeps one fixed negative for the whole training "
+            "(negative_seed=0 does the same). Deviations in mOWL: ELEm's |norm - 1| regularisation is applied "
             "globally once per step, not per axiom (the released reference code cannot "
             "run its own per-axiom regularisation: it reads an attribute its modules "
             "never define); entailed GCI0-BOT and GCI3-BOT negatives are dropped only if "

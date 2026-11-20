@@ -11,7 +11,8 @@ import mowl.nn.el.elem.losses as EL
 import mowl.nn.el.elbe.losses as LB
 from mowl.models import BoxSquaredEL, ELBE, ELEmbeddings
 from mowl.nn import ELBEModule, ELEmModule
-from mowl.training import AllNormalFormNegatives, DELECodeLosses, DELECodeTraining
+from mowl.training import AllNormalFormNegatives, DELECodeLoss, DELECodeLosses, \
+    DELECodeTraining
 from tests.datasetFactory import FamilyDataset
 
 
@@ -191,7 +192,16 @@ class TestDELECodeTraining(TestCase):
                             epsilon=0.01)
         keys = [p.key for p in model.training_regime.regimes]
         self.assertIn("dele-closure-filtered-negatives", keys)
-        self.assertEqual(len(keys), 5)
+        self.assertIn("dele-code-loss", keys)
+        self.assertEqual(len(keys), 6)
+
+    def test_negative_seed_baseline_uses_fixed_negatives(self):
+        model = self._train(ELEmbeddings, negatives="gci2", negative_seed=0)
+        parts = {p.key: p for p in model.training_regime.regimes}
+        negs = parts["dele-all-normal-form-negatives"]
+        self.assertEqual(negs.fixed_seed, 0)
+        self.assertEqual(negs.normal_forms, ("gci2",))
+        self.assertFalse(model.module.all_negative_losses)
 
     def test_kind_prefixes(self):
         model = ELEmbeddings(self.dataset, embed_dim=4, batch_size=64)
@@ -208,3 +218,76 @@ class TestDELECodeTraining(TestCase):
                             "a corrupted class changed its kind")
         # the corrupting class is drawn from the kind pool only
         self.assertTrue(set(negs[:, 1].tolist()) <= set(named.values()))
+
+
+class TestDELECodeLoss(TestCase):
+    """The per-model loss combination of the reference training loops."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.dataset = FamilyDataset()
+        cls.pos = th.tensor([[1.0], [3.0]])
+        cls.neg = th.tensor([[2.0], [4.0]])
+
+    def _loss(self, cls_):
+        model = cls_(self.dataset, embed_dim=4, batch_size=64)
+        regime = DELECodeLoss()
+        regime.attach(model)
+        return regime
+
+    def test_elem_squares_gci2_only(self):
+        r = self._loss(ELEmbeddings)
+        self.assertAlmostEqual(float(r.loss("gci2", self.pos, self.neg)), 5.0 + 10.0)
+        self.assertAlmostEqual(float(r.loss("gci0", self.pos, self.neg)), 2.0 + 3.0)
+        self.assertAlmostEqual(float(r.loss("gci2", self.pos, None)), 2.0)
+
+    def test_elbe_squares_every_form(self):
+        r = self._loss(ELBE)
+        self.assertAlmostEqual(float(r.loss("gci0", self.pos, self.neg)), 5.0 + 10.0)
+        self.assertAlmostEqual(float(r.loss("gci0", self.pos, None)), 5.0)
+        # mOWL's own ELBE loss pulls the negative mean to 1 instead
+        model = ELBE(self.dataset, embed_dim=4, batch_size=64)
+        self.assertAlmostEqual(float(model.compute_loss(self.pos, self.neg)),
+                               4.0 + (3.0 - 1.0) ** 2)
+
+    def test_box2el(self):
+        r = self._loss(BoxSquaredEL)
+        # module already squares the positives other than gci2
+        self.assertAlmostEqual(float(r.loss("gci0", self.pos, self.neg)), 2.0 + 10.0)
+        self.assertAlmostEqual(float(r.loss("gci2", self.pos, self.neg)), 5.0 + 9.0)
+        self.assertAlmostEqual(float(r.loss("gci3", self.pos, self.neg)), 2.0 + 9.0)
+
+    def test_empty_negatives_contribute_nothing(self):
+        r = self._loss(ELBE)
+        self.assertAlmostEqual(float(r.loss("gci2", self.pos, th.zeros(0, 1))), 5.0)
+
+
+class TestFixedNegatives(TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.dataset = FamilyDataset()
+
+    def _negatives(self, **kwargs):
+        model = ELEmbeddings(self.dataset, embed_dim=4, batch_size=64)
+        regime = AllNormalFormNegatives(override_model_sampler=True, **kwargs)
+        model.training_regime = regime
+        ds = model.training_datasets["gci0"]
+        return regime, ds
+
+    def test_fixed_seed_repeats_the_draws(self):
+        regime, ds = self._negatives(fixed_seed=0)
+        a = regime.negatives("gci0", ds)
+        b = regime.negatives("gci0", ds)
+        self.assertTrue(th.equal(a, b))
+        # as NumPy's global stream restarted from the seed
+        pool = np.fromiter(regime.model.named_class_index_dict.values(), dtype=np.int64)
+        expected = np.random.RandomState(0).choice(pool, size=len(ds), replace=True)
+        self.assertEqual(a[:, 1].tolist(), expected.tolist())
+
+    def test_default_draws_anew(self):
+        regime, ds = self._negatives()
+        np.random.seed(1)
+        a = regime.negatives("gci0", ds)
+        b = regime.negatives("gci0", ds)
+        self.assertFalse(th.equal(a, b))

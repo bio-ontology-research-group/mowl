@@ -117,8 +117,12 @@ logic EL language.
         # Save to file. OWL functional syntax writes every IRI in full; RDF/XML would
         # write relative IRIs (e.g. ``A01lu``) unchanged and resolve them against the
         # cache's own xml:base on reloading, renaming the entities.
+        # Written to a temporary file and renamed, so that a process reading the cache
+        # while another one writes it sees either the old or the complete new file.
+        tmp_path = f"{cache_path}.{os.getpid()}.tmp"
         manager.saveOntology(normalized_ont, FunctionalSyntaxDocumentFormat(),
-                             IRI.create("file:" + os.path.abspath(cache_path)))
+                             IRI.create("file:" + os.path.abspath(tmp_path)))
+        os.replace(tmp_path, cache_path)
         logger.info(f"Saved normalized ontology to cache: {cache_path}")
 
     @staticmethod
