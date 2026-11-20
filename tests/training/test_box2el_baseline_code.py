@@ -231,3 +231,13 @@ def test_emelpp_code_objective_squares_row_sums(dataset):
     obj.loss("gci1", th.tensor([[1.0], [0.0]]), None)
     # rows: 1 - 1 + 1 = 1 and 2 + 1 + 0 = 3 -> mean(1, 9) = 5
     assert float(obj.additional_loss(0)) == pytest.approx(5.0)
+
+
+def test_emelpp_batch_direction_term():
+    from mowl.nn.el.emelpp import losses as EL
+    r = th.tensor([[1.0, 0.0], [0.0, 1.0]])
+    s = th.tensor([[1.0, 0.0], [0.0, 1.0]])
+    # Per row: identical vectors, cosine 1 -> 0. Batch axis: each coordinate column of r
+    # and s is the same unit vector -> sum of products 2 -> |1 - 2| = 1 on every row.
+    assert th.allclose(EL._direction_term(r, s, "row"), th.zeros(2, 1))
+    assert th.allclose(EL._direction_term(r, s, "batch"), th.ones(2, 1))

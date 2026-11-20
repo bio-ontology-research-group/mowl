@@ -102,21 +102,38 @@ def bot_loss(rc):
     return rc
 
 
-def role_inclusion_loss(r, s, margin):
+def _direction_term(a, b, direction):
+    """:math:`|1 - \\cos(a, b)|` per row (``"row"``), or the term of the EmEL++ Keras
+    code (``"batch"``): every coordinate is normalised over the *batch*
+    (``tf.nn.l2_normalize(x, 0)``) and all products are summed, giving one number per
+    batch that is added to every row."""
+    if direction == "batch":
+        total = (F.normalize(a, dim=0) * F.normalize(b, dim=0)).sum()
+        return th.abs(1 - total).expand(len(a), 1)
+    return th.abs(1 - F.cosine_similarity(a, b, dim=1).unsqueeze(1))
+
+
+def role_inclusion_loss(r, s, margin, direction="row"):
     """Eq. 8: :math:`R \\sqsubseteq S`.
 
     The loss is symmetric in ``r`` and ``s``: the distance, the cosine and the two
     normalisation terms are all symmetric, so it also penalises a violation of
     :math:`S \\sqsubseteq R` (see the limitation recorded on the catalogue card).
+
+    :param direction: ``"row"`` (the cosine of every pair, as in the paper) or
+        ``"batch"`` (the EmEL++ code, see :func:`_direction_term`).
     """
     dist = th.linalg.norm(s - r, dim=1, keepdim=True)
-    direction = th.abs(1 - F.cosine_similarity(r, s, dim=1).unsqueeze(1))
+    direction = _direction_term(r, s, direction)
     return th.relu(dist - margin) + direction + unit_norm_penalty(r, s)
 
 
-def role_chain_loss(r1, r2, s, margin):
-    """Eq. 9: :math:`R_1 \\circ R_2 \\sqsubseteq S`."""
+def role_chain_loss(r1, r2, s, margin, direction="row"):
+    """Eq. 9: :math:`R_1 \\circ R_2 \\sqsubseteq S`.
+
+    :param direction: See :func:`role_inclusion_loss`.
+    """
     total = r1 + r2
     dist = th.linalg.norm(s - total, dim=1, keepdim=True)
-    direction = th.abs(1 - F.cosine_similarity(total, s, dim=1).unsqueeze(1))
+    direction = _direction_term(total, s, direction)
     return th.relu(dist - margin) + direction + unit_norm_penalty(r1, r2, s)

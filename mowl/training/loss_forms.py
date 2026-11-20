@@ -152,14 +152,20 @@ class EmELppCodeObjective(TrainingRegime):
     :param batch_size: Rows per normal form and step (256 in the code).
     :param top_radius: Target radius of ``owl:Thing`` (``self.inf = 5.0``).
     :param subclass_translation: Train :math:`C \\sqsubseteq D` with the translation.
+    :param batch_direction: Compute the direction term of the EmEL++ role axiom losses
+        as the code does (``tf.nn.l2_normalize`` along the batch axis: one number per
+        batch, added to every row; a bug of the code, kept here because the published
+        numbers were obtained with it). ``False`` uses the per-row cosine of the paper.
     :param seed: Seed of the class draws of the radius term and of the initial
         translation.
     """
 
     key = "emelpp-code-objective"
 
-    def __init__(self, batch_size=256, top_radius=5.0, subclass_translation=True, seed=None):
+    def __init__(self, batch_size=256, top_radius=5.0, subclass_translation=True,
+                 batch_direction=True, seed=None):
         super().__init__()
+        self.batch_direction = bool(batch_direction)
         self.batch_size = int(batch_size)
         self.top_radius = float(top_radius)
         self.subclass_translation = bool(subclass_translation)
@@ -176,6 +182,8 @@ class EmELppCodeObjective(TrainingRegime):
         module.negative_loss_form = "linear"
         if self._emelpp:
             module.radius_form = "relu"
+            if self.batch_direction:
+                module.role_direction = "batch"
         else:
             module.norm_penalty = "per_axiom"
         gen = th.Generator(device="cpu")

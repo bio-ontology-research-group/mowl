@@ -55,7 +55,9 @@ def _pairs(path):
 
 
 def _write(path, iri, lines):
-    tmp = f"{path}.part"
+    # A per-process temporary name: jobs that build the same dataset at the same time
+    # must not write into one file.
+    tmp = f"{path}.{os.getpid()}.part"
     with open(tmp, "w") as f:
         f.write("Prefix(owl:=<http://www.w3.org/2002/07/owl#>)\n")
         f.write(f"Ontology(<{iri}>\n")

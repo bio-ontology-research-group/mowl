@@ -139,13 +139,20 @@ class EmELPPModule(ELEmModule):
 
     # ---------------------------------------------------------------- role axioms
 
+    #: How the direction term of the role axiom losses is computed: ``"row"`` (default,
+    #: the cosine of every pair, Eq. 8-9) or ``"batch"`` (the EmEL++ Keras code normalises
+    #: along the batch axis, which gives one number per batch). Set by the training regime
+    #: :class:`~mowl.training.EmELppCodeObjective`.
+    role_direction = "row"
+
     def role_inclusion_loss(self, data, neg=False):
         return L.role_inclusion_loss(self.rel_embed(data[:, 0]), self.rel_embed(data[:, 1]),
-                                     self.margin)
+                                     self.margin, direction=self.role_direction)
 
     def role_chain_loss(self, data, neg=False):
         return L.role_chain_loss(self.rel_embed(data[:, 0]), self.rel_embed(data[:, 1]),
-                                 self.rel_embed(data[:, 2]), self.margin)
+                                 self.rel_embed(data[:, 2]), self.margin,
+                                 direction=self.role_direction)
 
     def regularization_loss(self):
         # The normalisation terms are part of each axiom loss (Eq. 1-10).

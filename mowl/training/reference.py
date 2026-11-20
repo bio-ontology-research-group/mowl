@@ -155,19 +155,23 @@ class EmELppCodeTraining(ComposedRegime):
 
     Deviations: the code draws the replacement classes from the classes of the training,
     validation *and test* pairs; here only training and validation pairs are used. The
-    role inclusion and chain losses of mOWL compare the role vectors row by row; the code
-    normalises along the batch axis (``tf.nn.l2_normalize(r, 0)``), which turns the
-    direction term into one number per batch.
+    role inclusion and chain losses of the paper compare the role vectors row by row; the
+    code normalises along the batch axis (``tf.nn.l2_normalize(r, 0)``), which turns the
+    direction term into one number per batch. This bug is reproduced by default
+    (``batch_direction=True``) because the published numbers were obtained with it.
 
     :param batch_size: Axioms per normal form and step.
     :param validate_every: Steps between validations (one epoch of the code).
     :param select: Set to ``False`` to train without model selection.
+    :param batch_direction: See :class:`~mowl.training.EmELppCodeObjective` (``True``:
+        the direction term of the role axiom losses as computed by the code).
     :param seed: Seed of the samplers and of the initialisation.
     """
 
     key = "emelpp-code-training"
 
-    def __init__(self, batch_size=256, validate_every=1, select=True, seed=None):
+    def __init__(self, batch_size=256, validate_every=1, select=True, batch_direction=True,
+                 seed=None):
         from mowl.training.positives import ValidationAxiomsAsPositives
         from mowl.training.loss_forms import EmELppCodeObjective
         self._corruption = PerColumnCorruption(columns={"gci2": (0, 2)}, different=True,
@@ -178,7 +182,8 @@ class EmELppCodeTraining(ComposedRegime):
                                           sample_small=True, seed=seed),
                  FixedNegatives(self._corruption, batch_size=batch_size, seed=seed),
                  self._init,
-                 EmELppCodeObjective(batch_size=batch_size, seed=seed)]
+                 EmELppCodeObjective(batch_size=batch_size,
+                                     batch_direction=batch_direction, seed=seed)]
         if select:
             parts.append(ValidationRankSelection(every=validate_every, statistic="mean",
                                                  max_queries=100, scoring="loss",
