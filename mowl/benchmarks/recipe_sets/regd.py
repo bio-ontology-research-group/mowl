@@ -22,12 +22,23 @@ _NOTE = (
 
 _ONTO = {"galen": "GALEN", "go": "GO", "anatomy": "ANATOMY"}
 
-#: Learning rate per (method, task), chosen by validation F1 (d = 10, seed 0).
+#: Learning rate per (method, ontology, task): the best VALIDATION F1 of the code's
+#: learning rates {0.0005, 0.005, 0.01} at d = 10, seed 0 (runs regd2-w1-*; the ELEm
+#: ANATOMY prediction run at 0.01 failed, 0.005 is used).
 _LR = {
-    ("regd", "inference"): 0.01, ("regd", "prediction"): 0.01,
-    ("regd_elem", "inference"): 0.01, ("regd_elem", "prediction"): 0.01,
-    ("elbe", "inference"): 0.01, ("elbe", "prediction"): 0.01,
-    ("elem", "inference"): 0.01, ("elem", "prediction"): 0.01,
+    ("regd", "galen", "inference"): 0.01, ("regd", "galen", "prediction"): 0.005,
+    ("regd", "go", "inference"): 0.0005, ("regd", "go", "prediction"): 0.005,
+    ("regd", "anatomy", "inference"): 0.01, ("regd", "anatomy", "prediction"): 0.0005,
+    ("regd_elem", "galen", "inference"): 0.0005, ("regd_elem", "galen", "prediction"): 0.01,
+    ("regd_elem", "go", "inference"): 0.005, ("regd_elem", "go", "prediction"): 0.01,
+    ("regd_elem", "anatomy", "inference"): 0.005,
+    ("regd_elem", "anatomy", "prediction"): 0.01,
+    ("elbe", "galen", "inference"): 0.005, ("elbe", "galen", "prediction"): 0.01,
+    ("elbe", "go", "inference"): 0.01, ("elbe", "go", "prediction"): 0.005,
+    ("elbe", "anatomy", "inference"): 0.01, ("elbe", "anatomy", "prediction"): 0.01,
+    ("elem", "galen", "inference"): 0.01, ("elem", "galen", "prediction"): 0.01,
+    ("elem", "go", "inference"): 0.01, ("elem", "go", "prediction"): 0.01,
+    ("elem", "anatomy", "inference"): 0.01, ("elem", "anatomy", "prediction"): 0.005,
 }
 
 
@@ -55,7 +66,7 @@ def _build():
                 out.append(Recipe(
                     benchmark=benchmark, method=method, source=YANG2025_REGD,
                     model_kwargs={**_regd_model_kwargs(method, task), "embed_dim": 10,
-                                  "learning_rate": _LR[(method, task)]},
+                                  "learning_rate": _LR[(method, onto, task)]},
                     training_regime="regd-code-training",
                     regime_kwargs={**common, "design": "regd",
                                    "host_loss": "mse" if method == "regd" else "mean"},
@@ -65,14 +76,14 @@ def _build():
                                    if method == "regd_elem" else " Boxes: p = 1.")))
             out.append(Recipe(
                 benchmark=benchmark, method="elbe", source=YANG2025_REGD,
-                model_kwargs={"embed_dim": 10, "learning_rate": _LR[("elbe", task)]},
+                model_kwargs={"embed_dim": 10, "learning_rate": _LR[("elbe", onto, task)]},
                 training_regime="regd-code-training",
                 regime_kwargs={**common, "design": "baseline", "margin": 0.0,
                                "neg_target": 2.0},
                 epochs=5000, validate_every=100, locator=_LOC, notes=_NOTE))
             out.append(Recipe(
                 benchmark=benchmark, method="elem", source=YANG2025_REGD,
-                model_kwargs={"embed_dim": 10, "learning_rate": _LR[("elem", task)]},
+                model_kwargs={"embed_dim": 10, "learning_rate": _LR[("elem", onto, task)]},
                 training_regime="regd-code-training",
                 regime_kwargs={**common, "design": "baseline", "margin": 0.0},
                 epochs=5000, validate_every=100, locator=_LOC,
