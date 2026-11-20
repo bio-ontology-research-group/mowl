@@ -39,6 +39,24 @@ def loss_scores(model, gci_name, rows):
     return out.reshape(len(rows), -1).mean(dim=1)
 
 
+def margin_free_loss_scores(model, gci_name, rows):
+    r"""Score rows with the model's *margin-free* loss (``module.zero_margin_loss``).
+
+    This is the test-time score of ELK-Em (Singh et al. 2026, Eq. 4: the score of an
+    axiom is :math:`s(\alpha) = e^{-\ell^0(\alpha)}` with :math:`\ell^0` the per-axiom
+    loss with margin zero; the exponential is monotone, so ranking by :math:`\ell^0`
+    ranks by :math:`s`). The reference evaluation code scores positives and corruptions
+    with the margin set to zero while training uses :math:`\gamma = 0.1`. Modules
+    without ``zero_margin_loss`` fall back to their ordinary loss.
+    """
+    module = model.module
+    if hasattr(module, "zero_margin_loss"):
+        out = module.zero_margin_loss(rows, gci_name)
+    else:
+        out = module(rows, gci_name)
+    return out.reshape(len(rows), -1).mean(dim=1)
+
+
 def _box_intersection_centres(c1, o1, c2, o2):
     lower = th.maximum(c1 - o1, c2 - o2)
     upper = th.minimum(c1 + o1, c2 + o2)
@@ -279,6 +297,8 @@ def resolve_scorer(model, scoring):
         return scoring, getattr(scoring, "__name__", "custom")
     if scoring == "loss":
         return loss_scores, "loss"
+    if scoring == "margin_free":
+        return margin_free_loss_scores, "margin_free"
     if scoring == "centre_distance":
         return centre_distance_scores, "centre_distance"
     if scoring == "centre_distance_zero_empty":

@@ -147,5 +147,17 @@ CARD = MethodCard(
         "code models. No extension to EL++ conjunction or disjointness is implemented: a "
         "set-theoretic reading of the codes collapses to unions of boxes (MultiBoxEL) and "
         "loses the cycle capacity, and any other reading would be invented, not taken from "
-        "the paper."),
+        "the paper.\n"
+        "Benchmark status (checked against Section 5 and the supplement): the graph "
+        "reconstruction experiments (Table 1: directed cycles with 2^2..2^12 vertices, "
+        "with and without one bidirectional edge; Table 2: balanced trees; Figure 2: "
+        "scale-free networks) use synthetic graphs that could be regenerated, and the "
+        "metric (F1 at the best energy threshold over all vertex pairs) is clear. They are "
+        "nevertheless not added: every number comes from a per-graph Bayesian "
+        "hyperparameter search on the reconstruction F1 whose selected values (and, for "
+        "reconstruction, whose search space) are not published (supplement Appendix G "
+        "gives ranges for link prediction only), so no recipe with the paper's arguments "
+        "can be written; and the benchmark runner has no family for graph-projection "
+        "models yet. The link-prediction experiments (Table 3: Google, Epinions, CORA, "
+        "Twitter, DREAM5) are graph benchmarks with the same hyperparameter gap."),
 )

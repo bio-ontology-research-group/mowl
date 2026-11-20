@@ -120,7 +120,8 @@ def test_recipes_and_benchmarks_are_consistent():
     for r in recipes:
         get_benchmark(r.benchmark)
         get_method(r.method)
-        assert get_regime(r.training_regime).implemented
+        if r.training_regime is not None:
+            assert get_regime(r.training_regime).implemented
     r = get_recipe("box2el-galen-inference", "box2el")
     assert r.regime_kwargs["lr_milestones"] == [2000]
     assert get_recipe("transbox-go-prediction", "transbox").epochs == 5000
@@ -131,3 +132,147 @@ def test_recipes_and_benchmarks_are_consistent():
     assert published_results(benchmark="transbox-go-prediction", method="transbox")
     assert get_benchmark("transbox-go-prediction").protocol.endswith(
         "TransBoxPredictionProtocol")
+
+
+def test_elkem_code_training():
+    """The ELK-Em code design: batched sums, fixed/either-side corruptions for the
+    Pearson term only, step decay, selection by the validation median rank."""
+    from mowl.models import ELKEm
+    from mowl.training import ELKEmCodeTraining
+
+    regime = ELKEmCodeTraining(batch_size=4, k_neg=2, contrastive_factor=3.0,
+                               lr_milestones=[3], validate_every=2, seed=0)
+    assert regime.key == "elkem-code-training"
+    model = ELKEm(tiny_dataset(), embed_dim=4, batch_size=4,
+                  model_filepath=os.path.join(scratch_dir(), "elkem.pt"))
+    model.training_regime = regime
+    assert [r.key for r in regime.regimes] == [
+        "", "per-normal-form-minibatch", "fixed-column-corruption",
+        "either-side-corruption", "pearson-correlation-loss", "mse-to-target",
+        "step-lr-decay", "validation-rank-selection"]
+    pearson = regime.regimes[4]
+    assert pearson.positive_power == 2 and pearson.margin_free
+    # the generic loop needs to know the normal form to validate on
+    assert model.eval_gci_name == "gci0"
+
+    # Corruptions for the Pearson term: k_neg per positive, never a class fixed to the
+    # empty box and never the (fixed) top class.
+    gci0 = model._training_tensors()["gci0"]
+    negs = regime.regimes[2].negatives("gci0", gci0)
+    assert negs.shape == (2 * len(gci0), 2)
+    nothing = model.class_index_dict.get("http://www.w3.org/2002/07/owl#Nothing")
+    excluded = set(model._top_ids) | ({nothing} if nothing is not None else set())
+    assert not set(negs[:, 1].tolist()) & excluded
+    gci2 = model._training_tensors()["gci2"]
+    negs = regime.regimes[3].negatives("gci2", gci2)
+    assert negs.shape[0] == 2 * len(gci2)
+    changed = (negs[:, 0] != gci2.repeat(2, 1)[:, 0]) | \
+              (negs[:, 2] != gci2.repeat(2, 1)[:, 2])
+    assert bool(changed.any()) and not bool((~changed).any())
+
+    th.manual_seed(1)
+    before = float(model.module(gci0, "gci0").mean().detach())
+    model.train(epochs=4, validate_every=2)
+    after = float(model.module(gci0, "gci0").mean().detach())
+    assert after < before
+    assert regime.regimes[-1].best_epoch is not None
+
+    # With no regime attached the model trains with its own built-in loop.
+    model2 = ELKEm(tiny_dataset(), embed_dim=4, batch_size=4,
+                   model_filepath=os.path.join(scratch_dir(), "elkem2.pt"))
+    model2.train(epochs=2)
+    assert model2.best_validation_median_rank is not None
+
+
+def test_elkem_code_loss_options():
+    """Squared positive losses and a Pearson term on margin-free scores (ELK-Em code)."""
+    from mowl.models import ELKEm
+    from mowl.training import PearsonCorrelationLoss, ELKEmCodeTraining
+
+    model = ELKEm(tiny_dataset(), embed_dim=4, batch_size=4, margin=0.5,
+                  model_filepath=os.path.join(scratch_dir(), "elkem_opts.pt"))
+    gci0 = model._training_tensors()["gci0"]
+    neg = gci0.flip(1)
+    model.module.train()
+    pos_scores = model.module(gci0, "gci0")
+    loss = PearsonCorrelationLoss(weight=2.0, positive_power=2, margin_free=True)
+    loss.attach(model)
+    loss.filter_negatives("gci0", gci0, neg)
+    got = loss.loss("gci0", pos_scores, model.module(neg, "gci0"))
+    free = loss.correlation(model.module.zero_margin_loss(gci0, "gci0"),
+                            model.module.zero_margin_loss(neg, "gci0"))
+    want = pos_scores.pow(2).mean() + 2.0 * (1 - free)
+    assert th.allclose(got, want)
+    # paper text: plain mean and the training-mode scores
+    plain = PearsonCorrelationLoss(weight=2.0)
+    plain.attach(model)
+    plain.filter_negatives("gci0", gci0, neg)
+    got = plain.loss("gci0", pos_scores, model.module(neg, "gci0"))
+    want = pos_scores.mean() + 2.0 * (1 - plain.correlation(pos_scores,
+                                                            model.module(neg, "gci0")))
+    assert th.allclose(got, want)
+    with pytest.raises(ValueError):
+        ELKEmCodeTraining(corruption_pool="all")
+    paper = ELKEmCodeTraining(positive_power=1, corruption_pool="satisfiable", seed=0)
+    model.training_regime = paper
+    assert "mse-to-target" not in [r.key for r in paper.regimes]
+    pool = paper.regimes[2].pools["gci0"][1]
+    assert not set(pool) & (set(model._bot_ids) | set(model._top_ids))
+
+
+def test_elkem_reference_variant():
+    """The code's geometry: interval-arithmetic existential and the gci2 overlap term."""
+    from mowl.nn.el.elkem.module import ELKEmModule
+    paper = ELKEmModule(3, 1, embed_dim=1, margin=0.0).eval()
+    ref = ELKEmModule(3, 1, embed_dim=1, margin=0.0, variant="reference").eval()
+    ref.load_state_dict(paper.state_dict())
+    with th.no_grad():
+        for m in (paper, ref):
+            # C = [-0.1, 0.1] at 0, D = [1.9, 2.1] at 2; range R = [-1, 1], error 0.5
+            m.class_center.weight[:] = th.tensor([[0.0], [2.0], [0.0]])
+            m.class_offset.weight[:] = th.tensor([[0.1], [0.1], [0.1]])
+            m.range_center.weight[:] = 0.0
+            m.range_offset.weight[:] = 1.0
+            m.error_offset.weight[:] = 0.5
+            m.slope.weight[:] = 1.0
+            m.shift.weight[:] = 0.0
+    row = th.tensor([[0, 0, 1]])     # C ⊑ ∃r.D with D ∩ R empty
+    el, eu = paper.existential_box(th.tensor([0]), th.tensor([1]))
+    assert bool((el > eu).all())     # sound: empty, so C ⊑ ∃r.D is violated
+    el, eu = ref.existential_box(th.tensor([0]), th.tensor([1]))
+    # interval arithmetic: [1.9, 1.0] + [-0.5, 0.5] = [1.4, 1.5], no longer empty
+    assert float(el) == pytest.approx(1.4, abs=1e-4) and float(eu) == pytest.approx(1.5, abs=1e-4)
+    # inclusion |0 - 1.45| + 0.1 - 0.05 = 1.5, plus the overlap of R and D:
+    # |0 - 2| - 1 - 0.1 = 0.9
+    assert float(ref.zero_margin_loss(row, "gci2")) == pytest.approx(2.4, abs=1e-4)
+    with pytest.raises(ValueError):
+        ELKEmModule(3, 1, variant="other")
+
+
+def test_elkem_recipe_resolves():
+    from mowl.benchmarks import get_benchmark, get_recipe, published_results
+    r = get_recipe("elkem-galen-subsumption", "elkem")
+    assert r.epochs == 10000 and r.validate_every == 100
+    assert r.regime_kwargs["k_neg"] == 3
+    assert get_recipe("elkem-go-subsumption", "elkem").regime_kwargs["k_neg"] == 5
+    assert r.model_kwargs["load_role_axioms"] is True
+    assert r.model_kwargs["variant"] == "reference" and r.model_kwargs["embed_dim"] == 50
+    pub = published_results(benchmark="elkem-go-subsumption", method="elkem")[0]
+    assert pub.metrics["hits@100"] == 0.71
+    # the published numbers moved to the ELK-Em evaluation regime's benchmarks
+    assert not published_results(benchmark="box2el-go-inference", method="elkem")
+    assert get_benchmark("elkem-go-subsumption").protocol.endswith(
+        "ELKEmSubsumptionProtocol")
+
+
+def test_boxlite_recipes():
+    """BoxLitE is solved, not trained: recipes carry the published lambdas and no
+    training regime; the solver family ignores the epochs."""
+    from mowl.benchmarks import get_recipe
+    r = get_recipe("boxlite-family-v1", "boxlite")
+    assert r.epochs == 0 and r.training_regime is None
+    assert r.model_kwargs["variant"] == "reference"
+    assert (r.model_kwargs["lambda1"], r.model_kwargs["lambda2"],
+            r.model_kwargs["lambda3"]) == (0.001, 3.0, 0.001)
+    assert get_recipe("boxlite-family-v4", "boxlite").model_kwargs["lambda3"] == 0.003
+

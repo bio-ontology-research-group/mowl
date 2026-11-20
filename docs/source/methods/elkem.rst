@@ -76,10 +76,25 @@ example protein language model embeddings) given as a matrix. Adam with a step d
 learning rate; with a validation ontology, the checkpoint with the best validation median
 rank of the ``gci0`` subsumptions is kept.
 
+With a :attr:`~mowl.base_models.elmodel.EmbeddingELModel.training_regime` attached, the
+generic regime-aware loop of
+:meth:`~mowl.base_models.elmodel.EmbeddingELModel.train` runs instead of the built-in one.
+The regime ``elkem-code-training``
+(:class:`~mowl.training.reference.ELKEmCodeTraining`) is the design of the authors'
+ranking code, and the recipes of the ELK-Em paper
+(:mod:`mowl.benchmarks.recipe_sets.singh2026`) use it together with the evaluation regime
+:class:`~mowl.evaluation.normal_form_ranking.ELKEmSubsumptionRankingRegime` of the
+``elkem-*-subsumption`` benchmarks.
+
 Differences from the paper and the authors' code are listed in the class docstring and in
 the card's ``notes``. The most important ones: per-axiom losses are not squared (as in the
 paper, unlike the authors' code), ``gci2`` has no overlap term (as in Table 2, unlike the
 code), and the box of :math:`\exists r.C` is kept empty when :math:`C \cap R_r` is empty.
+All three are switchable: ``ELKEm(..., variant="reference")`` uses the code's geometry
+(interval-arithmetic existential boxes, the ``gci2`` overlap term), and the regime
+``elkem-code-training`` squares the per-axiom losses and computes the Pearson term from
+margin-free scores (``positive_power=2``, ``margin_free_contrast=True``). The recipes use
+both, because the published Table 3 numbers were produced by the code.
 
 Example
 -------

@@ -30,9 +30,11 @@ _NOTES = (
     "TBox. Model selection in the paper: grid search of lambda_1..3 in {0, .001, .003, .1, "
     ".3, 1, 3} on the validation MRR (Appendix G.3; mowl.benchmarks.protocols.boxlite."
     "select_lambdas). Ties are broken by individual index (ordinal), as the reference "
-    "code's stable sort over IRI-sorted individuals. The benchmark runner needs "
-    "register_family(SolverModelFamily()) from mowl.benchmarks.protocols.boxlite to run "
-    "BoxLitE (it is solved, not trained by epochs).")
+    "code's stable sort over IRI-sorted individuals. BoxLitE is solved, not trained "
+    "(the runner's solver family ignores the epochs); the recipes "
+    "(mowl.benchmarks.recipe_sets.lourenco2026) fix the published best lambdas and "
+    "solve with the open-source CVXPY solvers, as MOSEK is not available: expect "
+    "lower numbers than Table 2 (see the recipe notes).")
 
 BENCHMARKS = [
     Benchmark(

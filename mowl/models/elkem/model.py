@@ -84,6 +84,10 @@ class ELKEm(EmbeddingELModel):
 
     .. rubric:: Differences from the paper and the authors' code
 
+    The built-in loop below follows the paper. The design of the authors' code is available
+    as ``variant="reference"`` (geometry) plus the training regime
+    ``elkem-code-training`` (:class:`~mowl.training.reference.ELKEmCodeTraining`).
+
     * The paper sums the per-axiom losses; the authors' code squares them before averaging.
       This implementation follows the paper (mean of the unsquared losses per normal form).
     * The authors' code adds an overlap term :math:`\ell_{\cap+}(R_r, B_D)` to the ``gci2``
@@ -127,6 +131,10 @@ class ELKEm(EmbeddingELModel):
     :param device: Torch device. Defaults to ``"cpu"``.
     :param load_role_axioms: Train on role inclusions and binary role chains. Defaults to
         ``False``.
+    :param variant: Geometry of the module: ``"paper"`` (default; Table 2 of the paper) or
+        ``"reference"`` (the authors' ranking code: interval-arithmetic existential boxes and
+        an overlap term in the ``gci2`` loss); see
+        :class:`~mowl.nn.el.elkem.module.ELKEmModule`.
     """
 
     def __init__(self, dataset, embed_dim=50, margin=0.1, learning_rate=0.01,
@@ -135,7 +143,7 @@ class ELKEm(EmbeddingELModel):
                  abox_threshold=0.4, abox_k_neg=2, abox_pos_weight=1.0, abox_neg_weight=1.0,
                  lexical_features=None, lexical_weight=1.0, lexical_decay=1.0,
                  lexical_batch_size=2000, model_filepath=None, device="cpu",
-                 load_role_axioms=False):
+                 load_role_axioms=False, variant="paper"):
         super().__init__(dataset, embed_dim, batch_size, extended=True,
                          model_filepath=model_filepath, device=device,
                          learning_rate=learning_rate, load_role_axioms=load_role_axioms)
@@ -158,6 +166,7 @@ class ELKEm(EmbeddingELModel):
         self.lexical_decay = lexical_decay
         self.lexical_batch_size = lexical_batch_size
         self.best_validation_median_rank = None
+        self.variant = variant
 
         self._bot_ids, self._top_ids = self._fixed_classes()
         self._tensors = None
@@ -174,6 +183,7 @@ class ELKEm(EmbeddingELModel):
             bot_ids=self._bot_ids,
             top_ids=self._top_ids,
             abox_threshold=self.abox_threshold,
+            variant=self.variant,
         ).to(self.device)
 
     # ------------------------------------------------------------------ data
@@ -418,11 +428,22 @@ class ELKEm(EmbeddingELModel):
     def train(self, epochs, validate_every=1, epoch_callback=None):
         """Train the model (see the class docstring for the objective).
 
+        With a :attr:`~mowl.base_models.elmodel.EmbeddingELModel.training_regime` attached
+        (for example the regime 'elkem-code-training' of
+        :class:`mowl.training.reference.ELKEmCodeTraining`), the *generic* training loop of
+        :meth:`mowl.base_models.elmodel.EmbeddingELModel.train` runs instead of the
+        built-in one, and every hook (batches, negatives, loss, schedule, selection) is
+        the regime's. The built-in loop below is the model's own design and is used
+        without a regime.
+
         :param epochs: Number of epochs (one mini-batch per normal form and epoch).
         :param validate_every: Validate every N epochs. Defaults to 1; the paper uses 100.
         :param epoch_callback: Optional ``epoch_callback(epoch, model)`` called after each
             epoch.
         """
+        if self.training_regime is not None:
+            return super().train(epochs, validate_every=validate_every,
+                                 epoch_callback=epoch_callback)
         tensors = self._training_tensors()
         logger.info("Training axioms: " + ", ".join(f"{k}: {len(v)}"
                                                     for k, v in tensors.items()))

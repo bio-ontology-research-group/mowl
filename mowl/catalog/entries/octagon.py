@@ -178,5 +178,13 @@ CARD = MethodCard(
         "as ELBE's and lie between 1 and sqrt(5) times ELBE's value. Role chains are not "
         "supported because roles are translations; using the paper's octagon relations "
         "with their composition (Proposition 2) would be a different design. No published "
-        "ontology benchmark results exist."),
+        "ontology benchmark results exist.\n"
+        "Benchmark status (checked against the paper, Section 6 and Appendix C): the only "
+        "published experiments are knowledge-graph link prediction on FB15k-237 and WN18RR "
+        "(Tables 1, 3, 4) with octagons as RELATION regions over (head, tail) pairs, "
+        "self-adversarial negatives and up to 1,000 dimensions. The data are public, but "
+        "the experiment evaluates a different model from mOWL's octagon CONCEPT model, so "
+        "running mOWL's octagon on it would not reproduce anything; a benchmark entry is "
+        "therefore not added. Reproducing Table 1 would require implementing the uvxy "
+        "relation model itself (a new method, code at github.com/vcharpenay/uvxy)."),
 )

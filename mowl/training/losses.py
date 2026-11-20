@@ -303,27 +303,77 @@ class PearsonCorrelationLoss(_ScoreLoss):
     ELK-Em correlates the margin-free *axiom scores* :math:`s(\\alpha) = e^{-\\ell_0(\\alpha)}`
     (Eq. 4; higher is better) with the labels. ``score_transform="exp_neg"`` (default)
     applies :math:`e^{-\\ell}` to the module's loss scores; ``"neg"`` uses :math:`-\\ell`.
-    The module's scores include its margin, whereas ELK-Em's use :math:`\\gamma = 0`; give
-    the module margin 0 to match. ELK-Em uses this loss in addition to (not instead of) the
+    The module's scores include its margin, whereas ELK-Em's use :math:`\\gamma = 0`
+    (``margin_free=True`` below). ELK-Em uses this loss in addition to (not instead of) the
     positive per-axiom losses and only when training on the TBox alone:
     ``include_positive_loss=True`` (default) adds the mean positive loss.
     :class:`~mowl.models.elkem.model.ELKEm` has this loss built in.
 
+    The authors' code differs from the paper's text in two points, both available here:
+    it squares the per-axiom positive losses before averaging (``positive_power=2``), and
+    it correlates the *margin-free* scores :math:`e^{-\\ell^0}` while the positive loss keeps
+    the margin (``margin_free=True``: positives and corruptions are re-scored with the
+    module's ``zero_margin_loss``).
+
     :param eps: :math:`\\varepsilon`.
     :param weight: Factor of the correlation term.
+    :param positive_power: Power of the per-axiom positive losses before averaging (1: the
+        paper's sum; 2: ``loss.pow(2).mean()`` of the ELK-Em code).
+    :param margin_free: Correlate the margin-free scores (requires a module method
+        ``zero_margin_loss(rows, gci_name)``) instead of the training-mode scores.
     """
 
     key = "pearson-correlation-loss"
 
     def __init__(self, eps=1e-8, weight=1.0, score_transform="exp_neg",
-                 include_positive_loss=True, normal_forms=None, neg_scores="positive"):
+                 include_positive_loss=True, normal_forms=None, neg_scores="positive",
+                 positive_power=1, margin_free=False):
         super().__init__(normal_forms=normal_forms, neg_scores=neg_scores)
         if score_transform not in ("exp_neg", "neg"):
             raise ValueError("score_transform must be 'exp_neg' or 'neg'.")
+        if positive_power not in (1, 2):
+            raise ValueError("positive_power must be 1 or 2.")
         self.eps = float(eps)
         self.weight = float(weight)
         self.score_transform = score_transform
         self.include_positive_loss = bool(include_positive_loss)
+        self.positive_power = int(positive_power)
+        self.margin_free = bool(margin_free)
+        self._last_positives = {}
+
+    def filter_negatives(self, gci_name, gci_dataset, negatives):
+        if self.margin_free:
+            self._last_positives[gci_name] = gci_dataset[:]
+        return super().filter_negatives(gci_name, gci_dataset, negatives)
+
+    def _margin_free(self, rows, gci_name):
+        module = self.model.module
+        if not hasattr(module, "zero_margin_loss"):
+            raise ValueError(f"margin_free=True needs {type(module).__name__}."
+                             "zero_margin_loss(rows, gci_name).")
+        return _flat(module.zero_margin_loss(rows, gci_name))
+
+    def loss(self, gci_name, pos_scores, neg_scores):
+        if self.normal_forms is not None and gci_name not in self.normal_forms:
+            return NotImplemented
+        if not self.margin_free or neg_scores is None:
+            return super().loss(gci_name, pos_scores, neg_scores)
+        pos_rows = self._last_positives.get(gci_name)
+        neg_rows = self._last_negatives.get(gci_name)
+        if pos_rows is None or neg_rows is None or len(pos_rows) != len(pos_scores):
+            raise RuntimeError("PearsonCorrelationLoss(margin_free=True) could not find the "
+                               f"rows of {gci_name!r}; put it last in a ComposedRegime.")
+        loss = self._positive_term(_flat(pos_scores))
+        if len(neg_rows) == 0:
+            return loss
+        corr = self.correlation(self._margin_free(pos_rows, gci_name),
+                                self._margin_free(neg_rows, gci_name))
+        return loss + self.weight * (1.0 - corr)
+
+    def _positive_term(self, pos):
+        if not self.include_positive_loss:
+            return pos.sum() * 0.0
+        return pos.pow(self.positive_power).mean()
 
     def correlation(self, pos, neg):
         """The Pearson correlation of the transformed scores with the labels."""
@@ -335,7 +385,7 @@ class PearsonCorrelationLoss(_ScoreLoss):
         return (sc * tc).sum() / (sc.norm() * tc.norm() + self.eps)
 
     def combine(self, gci_name, pos, neg):
-        loss = pos.mean() if self.include_positive_loss else pos.sum() * 0.0
+        loss = self._positive_term(pos)
         if neg is None or len(neg) == 0:
             return loss
         return loss + self.weight * (1.0 - self.correlation(pos, neg))

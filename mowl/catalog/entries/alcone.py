@@ -195,7 +195,11 @@ CARDS = (
               "negative sampling and no anonymous entities. Training can stop in a local "
               "minimum with a few violated axioms (on a 4-class family ontology 6 of 8 "
               "seeds reached zero loss, on a 3-class ontology 8 of 8); check "
-              "ALConeModel.violations(). No published benchmark numbers exist. "
+              "ALConeModel.violations(). No published benchmark numbers exist: JAIR "
+              "Sec. 7 leaves learning and evaluation to future work and the IJCAI 2020 "
+              "and orthologic papers are theoretical, so no experiment can be added to "
+              "the benchmark set (the Ann. Math. AI 2022 paper could not be read here and "
+              "is not checked). "
               f"{_NOTES_SHARED}"),
     MethodCard(
         key="alcone-exact",

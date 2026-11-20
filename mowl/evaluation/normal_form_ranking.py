@@ -1,6 +1,7 @@
 """The subsumption-prediction and deductive-reasoning evaluation of Box\\ :sup:`2`\\ EL
 (Jackermeier, Chen, Horrocks, WWW 2024, Section 4.2 "Evaluation protocol", Section 4.4,
-Appendices F and G), as reusable evaluation regimes.
+Appendices F and G) and of ELK-Em (Singh, Jiménez-Ruiz & Weyde, KG-NeSy 2026, Section
+5.1), as reusable evaluation regimes.
 """
 
 import numpy as np
@@ -195,6 +196,76 @@ class InferredSubsumptionRankingRegime(NormalFormRankingRegime):
     def evaluate(self, model, dataset):
         res = super().evaluate(model, dataset)
         return {"all": res["gci0"]}
+
+
+class ELKEmSubsumptionRankingRegime(EvaluationRegime):
+    r"""Subsumption ranking of ELK-Em (Singh, Jiménez-Ruiz & Weyde 2026, Section 5.1,
+    Table 3; ``paper/ranking/eval.py`` of the authors' code).
+
+    For every atomic subsumption :math:`C \sqsubseteq D` of the test split, the
+    superclass :math:`D` is ranked among all classes of the dataset except
+    :math:`\top` and the query :math:`C` by the margin-free loss :math:`\ell^0`
+    (equivalently, by the score :math:`e^{-\ell^0}`; ``scoring="margin_free"``).
+    Candidates with equal scores share their average rank; ranks are unfiltered;
+    Hits@\ :math:`k` counts fractional ranks :math:`\le k`; the AUC is
+    :math:`\mathrm{mean}((n - r)/(n - 1))` over the :math:`n` candidates per query.
+
+    The reference evaluation code masks :math:`\top` because its box saturates to the
+    full space and would otherwise dominate every tie block (a deliberate deviation
+    from the authors' own specification §8 D8, which keeps it).
+
+    :param split: ``"test"`` (``dataset.testing``) or ``"valid"``
+        (``dataset.validation``).
+    :param candidates: IRIs of the candidate classes. Default: all classes of the
+        dataset except :math:`\top`.
+    :param scoring: ``"margin_free"`` (default), ``"loss"`` or a callable; see
+        :func:`mowl.evaluation.el_scoring.resolve_scorer`.
+    :param max_rows: Number of candidate axioms scored at once.
+    """
+
+    key = "elkem-subsumption-ranking"
+    metrics = BOX2EL_METRICS
+    subsets = ("all",)
+
+    def __init__(self, split="test", candidates=None, scoring="margin_free",
+                 max_rows=2 ** 22):
+        self.split = split
+        self.candidates = candidates
+        self.scoring = scoring
+        self.max_rows = max_rows
+        self.info = {}
+
+    def _ontology(self, dataset):
+        if self.split == "test":
+            return dataset.testing
+        if self.split == "valid":
+            return dataset.validation
+        raise ValueError(f"Unknown split {self.split!r}.")
+
+    def candidate_iris(self, dataset):
+        if self.candidates is not None:
+            return list(self.candidates)
+        top = "http://www.w3.org/2002/07/owl#Thing"
+        return [c for c in dataset.classes.as_str if c != top]
+
+    def evaluate(self, model, dataset):
+        scorer, scoring_name = resolve_scorer(model, self.scoring)
+        rows, skipped = el_rows(model, self._ontology(dataset))
+        cands = candidate_indices(model, self.candidate_iris(dataset))
+        gci0 = rows.get("gci0", th.zeros((0, 2), dtype=th.long))
+        ranks, _, kept = rank_queries(model, "gci0", gci0, 1, cands, scorer,
+                                      ties="average", exclude_cols=(0,),
+                                      max_rows=self.max_rows)
+        # n - 1: the query C is excluded from its own candidate list, so every query
+        # has len(cands) - 1 effective candidates (as the reference's n_cands).
+        metrics = summarise_ranks(ranks.tolist(), len(cands) - 1, hits=(1, 10, 100),
+                                 auc="mowl")
+        self.info = {"scoring": scoring_name, "num_candidates": int(len(cands)),
+                     "ties": "average", "excluded": "owl:Thing",
+                     "skipped_axioms": skipped,
+                     "queries": {"gci0": {"queries": int(kept.sum()),
+                                          "dropped": int((~kept).sum())}}}
+        return {"all": {k: metrics[k] for k in self.metrics}}
 
 
 class SubsumeeRankingRegime(EvaluationRegime):

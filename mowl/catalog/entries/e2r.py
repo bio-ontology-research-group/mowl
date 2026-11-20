@@ -178,5 +178,9 @@ CARD = MethodCard(
           "WN18 are knowledge-graph benchmarks outside mOWL's scope, and the LUBM1U "
           "reasoning protocol cannot be reproduced (69,628 training triples of unstated "
           "selection, eight custom test queries whose answer sets, candidate sets and "
-          "ranking of binary queries are not specified). No authors' code was found.",
+          "ranking of binary queries are not specified). No authors' code was found. "
+          "Benchmark status (re-checked): FB15K and WN18 are public and mOWL has the "
+          "'kg-filtered-link-prediction' regime, but no recipe can be written because the "
+          "paper states neither learning rate, term weights, initialisation nor epochs "
+          "and no code exists; so neither Table 1 experiment is added.",
 )

@@ -100,5 +100,16 @@ CARD = MethodCard(
         "witness is a knowledge base with a:A, b:B, c:C, A, B, C pairwise disjoint and "
         "AB, BC, AC with AB ⊓ BC ⊑ B etc., the same pattern as the T3 counterexample of "
         "Leemhuis and Kutz. mOWL's tests build an exact multibox model of T3 with n = 2 "
-        "boxes in d = 1 and d = 2."),
+        "boxes in d = 1 and d = 2.\n"
+        "Benchmark status (checked against Chapter 7 of the thesis): Tables 7.2-7.4 report "
+        "mean/median rank and Top10/Top100 per normal form on the Box2EL prediction splits "
+        "of GALEN and GO (public data). The experiment is not added as a benchmark: (i) "
+        "the ranking score of a multibox (a count of sampled points of one box inside "
+        "the candidate, Section 7.1.2) leaves the number of points, the box whose points "
+        "are used and the aggregation over boxes unspecified; (ii) the Top-k values move "
+        "in steps of 0.002, i.e. about 500 test queries per normal form, but the "
+        "sub-sampling is not described; (iii) Top-k is defined with a 0-based rank "
+        "(R(i) < k); (iv) the thesis' code is not available. With every Top10 at or "
+        "below 0.06 the published numbers would not discriminate a reproduction from a "
+        "failure anyway."),
 )

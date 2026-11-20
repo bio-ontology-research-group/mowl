@@ -48,6 +48,16 @@ Approximating deductive reasoning (``box2el-{galen,go,anatomy}-inference``)
    validation, from the release), exactly as NF1 above.
    Data: :class:`~mowl.datasets.builtin.jackermeier2024_reference.Jackermeier2024InferencesDataset`.
 
+ELK-Em (``elkem-{galen,go,anatomy}-subsumption``)
+   The same inferred-subsumption data, ranked as the ELK-Em paper does: the superclass
+   :math:`D` of every inferred :math:`C \sqsubseteq D` among all classes except
+   :math:`\top` and :math:`C`, scored by the margin-free loss :math:`\ell^0`, tied
+   candidates at their average rank, Hits@\ :math:`k` over fractional ranks and AUC
+   :math:`\mathrm{mean}((n - r)/(n - 1))`. Regime:
+   :class:`~mowl.evaluation.normal_form_ranking.ELKEmSubsumptionRankingRegime`; recipe
+   and training regime 'elkem-code-training' from
+   :mod:`mowl.benchmarks.recipe_sets.singh2026`.
+
 Box\ :sup:`2`\ EL PPI prediction (``box2el-{yeast,human}-ppi``)
    For each test axiom :math:`\{P_1\} \sqsubseteq \exists \mathit{interacts}.\{P_2\}`,
    :math:`P_1` is ranked among all proteins; filtered metrics (``f_`` prefix) move the
@@ -91,6 +101,28 @@ Helly family (``helly-tk``)
    regions violate, for boxes, balls, prisms, octagons and unions of boxes
    (:class:`~mowl.evaluation.exact_model.ExactModelRegime`). No numbers have been
    published for it.
+
+BoxLitE Family (``boxlite-family-v{1..4}``)
+   Filtered head/tail ranking of the test role assertions of the Family subsets F_v1 -
+   F_v4 (Section 6 and Appendix G of the BoxLitE paper). BoxLitE is *solved* (a conic
+   programme through CVXPY), so the runner ignores the epochs; the recipes pin the
+   published best lambdas (Table 9). The published numbers were obtained with the
+   commercial solver MOSEK, which is not available to mOWL. With the open-source CVXPY
+   solvers the same programme returns other near-optimal embeddings, and the metrics
+   depend strongly on which one (ECOS: MRR 0.66 on F_v1 against the published 0.72;
+   SCS: 0.31), so the published numbers are not reproducible without MOSEK.
+
+Faithfulness hierarchy (``faithfulness-{pizza,goplus}``)
+   The faithfulness criteria L0-L3 of Mashkova & Hoehndorf on reasoner-generated test
+   sets of entailed, contradictory and undetermined axioms, per EL normal form: every
+   run trains on one split, chosen with ``dataset_kwargs={'normal_form': ...}``, and
+   reports AUC+/-, Adm@10, FVR, Pair-FVR, the Spearman correlation with the relative
+   model counts published with the paper, MRR and Hits@10
+   (:class:`mowl.evaluation.faithfulness.FaithfulnessHierarchy`). The recipes train with
+   the regime ``kbc-code-training`` (:class:`mowl.training.kbc.KBCCodeTraining`: one
+   fixed corruption per ``gci2`` axiom, the pooled mean of all per-axiom losses, plateau
+   schedule and early stopping on the validation loss) and pin the reference code's
+   fallback hyperparameters, as the per-cell selected hyperparameters were not released.
 
 Every benchmark's ``notes`` list how the data and protocol differ from the original
 publication, and every regime has a card in the catalogue

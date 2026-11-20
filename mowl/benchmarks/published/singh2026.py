@@ -3,6 +3,10 @@
 Only the ELK-Em rows of Table 3 are recorded here. The baseline rows of Table 3 are copied
 by the paper from Table 6 of Jackermeier et al. (2024) and belong to that source. Table 4
 (CAFA5 protein function prediction) has no matching mOWL benchmark.
+
+The paper evaluates on the same inferred-subsumption data as Box2EL but with its own
+ranking protocol (owl:Thing removed from the candidates, average-rank ties, margin-free
+score), so the numbers are filed under the 'elkem-*-subsumption' benchmarks.
 """
 
 from mowl.benchmarks.spec import PublishedResult
@@ -22,21 +26,25 @@ _SETTINGS = {
 
 _NOTE = (
     "Means over five seeds; the paper prints standard deviations {std}. Unfiltered "
-    "ranking over the whole concept signature by s(α) = exp(−ℓ⁰(α)). The authors' "
-    "evaluation code gives tied candidates their average rank and leaves out owl:Thing; "
-    "the paper itself does not describe tie handling.")
+    "ranking over the whole concept signature by s(α) = exp(−ℓ⁰(α)), with owl:Thing and "
+    "the query removed from the candidates; the authors' evaluation code gives tied "
+    "candidates their average rank (its specification §8 D7 says so; D8 asks to keep "
+    "owl:Thing, which the code deliberately does not, because owl:Thing saturates the "
+    "score and would dominate every tie block). The paper itself does not describe tie "
+    "handling. contrastive_factor 3.0 is the default of the authors' training script, "
+    "not stated in the paper.")
 
 # (benchmark, k_neg, metrics, standard deviations as printed)
 _ROWS = (
-    ("box2el-galen-inference", 3,
+    ("elkem-galen-subsumption", 3,
      {"hits@1": 0.00, "hits@10": 0.08, "hits@100": 0.35, "med": 226, "mrr": 0.03,
       "mr": 2323, "auc": 0.90},
      "H@1 0.00, H@10 0.00, H@100 0.00, Med 3, MRR 0.00, MR 30, AUC 0.00"),
-    ("box2el-go-inference", 5,
+    ("elkem-go-subsumption", 5,
      {"hits@1": 0.00, "hits@10": 0.10, "hits@100": 0.71, "med": 43, "mrr": 0.04,
       "mr": 529, "auc": 0.99},
      "H@1 0.00, H@10 0.01, H@100 0.01, Med 1, MRR 0.00, MR 51, AUC 0.00"),
-    ("box2el-anatomy-inference", 3,
+    ("elkem-anatomy-subsumption", 3,
      {"hits@1": 0.03, "hits@10": 0.20, "hits@100": 0.50, "med": 104, "mrr": 0.08,
       "mr": 1368, "auc": 0.99},
      "H@1 0.00, H@10 0.01, H@100 0.01, Med 3, MRR 0.00, MR 95, AUC 0.00"),

@@ -32,7 +32,7 @@ from mowl.training.schedules import validation_loss
 
 def validation_rank(model, gci_name="gci0", target_col=None, statistic="median",
                     max_queries=1000, candidates=None, scoring="auto", ties="ordinal",
-                    split="valid"):
+                    split="valid", exclude_cols=()):
     """A rank statistic of the validation axioms of one normal form (lower is better).
 
     For every validation axiom (the first ``max_queries``, as in the reference code of
@@ -48,6 +48,8 @@ def validation_rank(model, gci_name="gci0", target_col=None, statistic="median",
     :param scoring: See :func:`mowl.evaluation.el_scoring.resolve_scorer`.
     :param split: ``"valid"`` (the model's validation axioms) or ``"train"`` (its training
         axioms; useful for ontologies without a validation part).
+    :param exclude_cols: Columns whose entity is removed from the candidates of its own
+        query (ELK-Em removes the subclass).
     """
     from mowl.evaluation.axiom_ranking import rank_queries
     from mowl.evaluation.el_scoring import resolve_scorer
@@ -65,7 +67,7 @@ def validation_rank(model, gci_name="gci0", target_col=None, statistic="median",
         candidates = th.tensor(sorted(model.named_class_index_dict.values()), dtype=th.long)
     scorer, _ = resolve_scorer(model, scoring)
     ranks, _, _ = rank_queries(model, gci_name, rows.cpu(), target_col, candidates, scorer,
-                               ties=ties)
+                               ties=ties, exclude_cols=exclude_cols)
     r = ranks.double().numpy()
     if len(r) == 0:
         return float("inf")
