@@ -26,8 +26,8 @@ _RAW = ("hits@10", "hits@100", "macro_mr", "micro_mr", "macro_auc", "micro_auc")
 
 _REGIMES = {
     "": (),
-    "+l": ("dele-all-normal-form-negatives",),
-    "+l+n": ("dele-all-normal-form-negatives", "dele-closure-filtered-negatives"),
+    "+l": ("dele-code-training",),
+    "+l+n": ("dele-code-training",),
 }
 
 # Appendix D: (dim, learning rate, margin) per dataset and model; "+l+n" uses "+l".
@@ -44,6 +44,21 @@ _HYPER = {
     "galen": {"ELEm": (400, 0.0010, -0.10), "ELEm+l": (400, 0.0010, -0.01),
               "ELBE": (100, 0.0010, 0.10), "ELBE+l": (200, 0.0010, 0.01),
               "Box2EL": (200, 0.0010, 0.00), "Box2EL+l": (200, 0.0100, 0.00)},
+}
+
+# Appendix D: ε of the "+l" rows (ELEm: not stated in the paper; 0.01 as in the
+# reference code's run.py), δ and λ of the Box2EL rows (baseline and "+l").
+_EPSILON = {
+    "yeast_ppi": {"ELEm+l": 0.01, "ELBE+l": 0.001, "Box2EL+l": 0.010},
+    "yeast_function": {"ELEm+l": 0.01, "ELBE+l": 0.010, "Box2EL+l": 0.010},
+    "foodon": {"ELEm+l": 0.01, "ELBE+l": 0.001, "Box2EL+l": 0.010},
+    "galen": {"ELEm+l": 0.01, "ELBE+l": 0.010, "Box2EL+l": 0.100},
+}
+_BOX2EL_EXTRA = {
+    "yeast_ppi": {"Box2EL": (1, 0.05), "Box2EL+l": (2, 0.05)},
+    "yeast_function": {"Box2EL": (4, 0.20), "Box2EL+l": (4, 0.05)},
+    "foodon": {"Box2EL": (1, 0.20), "Box2EL+l": (4, 0.10)},
+    "galen": {"Box2EL": (4, 0.05), "Box2EL+l": (1, 0.05)},
 }
 
 _TABLES = [
@@ -101,8 +116,15 @@ for _bench, _data, _loc, _names, _text in _TABLES:
         if len(_parts) - 1 != len(_names):
             raise ValueError(f"{_loc}: {_label} has {len(_parts) - 1} values")
         _metrics = {n: float(v) for n, v in zip(_names, _parts[1:]) if n is not None}
-        _hp = _HYPER[_data][_base + ("+l" if _variant else "")]
+        _row = _base + ("+l" if _variant else "")
+        _hp = _HYPER[_data][_row]
         _settings = {"embed_dim": _hp[0], "learning_rate": _hp[1], "margin": _hp[2]}
+        if _variant:
+            _settings["epsilon"] = _EPSILON[_data][_row]
+        if _base == "Box2EL":
+            _delta, _reg = _BOX2EL_EXTRA[_data][_row]
+            _settings["delta"] = _delta
+            _settings["reg_factor"] = _reg
         if _REGIMES[_variant]:
             _settings["training_regime"] = _REGIMES[_variant]
         RESULTS.append(PublishedResult(

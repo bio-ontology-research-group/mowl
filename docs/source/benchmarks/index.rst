@@ -192,7 +192,10 @@ them explicit.
   use a *slack* margin (:class:`~mowl.training.SlackMargin`) and select the model by the
   validation rank of :math:`C \sqsubseteq D`. With a slack margin an inclusion may be
   violated by up to the margin, so the trained embedding is in general not a model of
-  the ontology; the design targets ranking by centre distance.
+  the ontology; the design targets ranking by centre distance. The recipes of the
+  DELE benchmarks (:class:`~mowl.training.DELECodeTraining`) combine the reference
+  code's loss functions and training design with the DELE regimes of
+  :doc:`../training/index`.
 * A :class:`~mowl.benchmarks.Recipe` adds the hyperparameters of the publication.
 
 .. testcode::

@@ -68,6 +68,33 @@ class TestSchedules(TestCase):
         self.assertLess(r.history[-1], 0.1)
         self.assertEqual(r.stop_epoch, 3)
 
+    def test_plateau_every_and_stop(self):
+        values = iter([1.0] * 20)
+        r = self._attach(ReduceOnPlateau(metric=lambda m: next(values), patience=1,
+                                         stop_patience=1, every=3, stop=True))
+        _run_epochs(r, 7)
+        # monitored at epochs 3 and 6 only
+        self.assertEqual(len(r.values), 2)
+        self.assertEqual(r.stop_epoch, 5)
+        self.assertTrue(r.should_stop(7))
+
+    def test_plateau_every_from_batching(self):
+        # every=None: monitor once per steps-per-epoch of the composed batching regime
+        values = iter([1.0] * 20)
+        plateau = ReduceOnPlateau(metric=lambda m: next(values), patience=1,
+                                  stop_patience=1, every=None, stop=True)
+        data = {"gci0": [[i, i + 1] for i in range(5)]}
+        regime = ComposedRegime(PerNormalFormMiniBatches(batch_size=2), plateau)
+        model = StubModel(data, batch_size=8)
+        regime.attach(model)
+        model.training_regime = regime
+        model.training_datasets = regime.training_datasets(model.training_datasets)
+        regime.optimizer()
+        _run_epochs(regime, 7)
+        self.assertEqual(len(plateau.values), 2)   # epochs 3 and 6
+        self.assertEqual(plateau.stop_epoch, 5)
+        self.assertTrue(regime.should_stop(7))
+
     def test_schedule_without_optimizer_raises(self):
         class Opt(TrainingRegime):
             def optimizer(self):

@@ -63,8 +63,12 @@ REGIMES = (
             "extends them to the BOT normal forms and to ELBE and Box2EL. The loss "
             "regularisation terms |‖f(x)‖ - 1| of the ELEm negative losses are applied by "
             "the module's global regularisation instead of per axiom. The reference code "
-            "samples corrupting classes from the evaluation classes; mOWL from all named "
-            "classes."),
+            "samples corrupting classes from the evaluation classes (mOWL: all named "
+            "classes; kind_prefixes reproduces the GO & STRING per-kind pools). The GCI1 "
+            "negative losses of ELBE and Box2EL include the distance of the intersection "
+            "box from being non-empty, a term the paper's Eqs. 8 and 14 omit but the "
+            "reference code adds. With enable_module=False the module keeps its original "
+            "negative losses (DELE's baseline rows)."),
     ),
     RegimeCard(
         key="dele-closure-filtered-negatives",
@@ -160,5 +164,88 @@ REGIMES = (
             "multiplying scores by 1e6, which also affects the test axiom and zero "
             "scores; mOWL removes filtered candidates from the ranking instead. NeSy 2024 "
             "filters with the training axioms only: filter_with='train'."),
+    ),
+    RegimeCard(
+        key="dele-code-losses",
+        name="Loss functions of the DELE reference code",
+        kind=RegimeKind.TRAINING,
+        summary=(
+            "Trains and scores ELEmbeddings and ELBE with the loss functions of the "
+            "reference implementation of DELE, which differ from the papers' and from "
+            "mOWL's modules in points the DELE paper does not mention."),
+        components=("loss",),
+        applies_to="ELEmModule, ELBEModule (BoxSquaredELModule is unchanged)",
+        references=(MASHKOVA2024DELE,),
+        standalone=False,
+        introduced_with=("elem", "elbe"),
+        used_by=_USED_BY,
+        implementation="mowl.training.dele.DELECodeLosses",
+        properties=(
+            Guarantee(
+                GuaranteeKind.REGIME_PROPERTY,
+                "ELEm and ELBE GCI3: the (corrected) loss is zero only if the translated "
+                "ball / box of the filler lies inside the superclass region, so a "
+                "zero-loss embedding of the GCI3 training axioms makes them true (for "
+                "margin <= 0).",
+                "bio-ontology-research-group/DELE, losses/{elembeddings,elbe}_losses.py; "
+                "Mashkova & Hoehndorf 2026, Appendix C",
+                condition="margin <= 0",
+                verified_in_mowl="tests/training/test_dele_regimes.py"),
+        ),
+        notes=(
+            "The reference code silently corrects the GCI3 losses of ELEmbeddings and "
+            "ELBE (the radius / offset of the filler is added instead of subtracted; the "
+            "original ELEmbeddings and ELBE codes subtract it) and changes ELBE: "
+            "inclusion margins become slack (- margin, as in ELEmbeddings) and the GCI2 "
+            "negative loss penalises overlap of the translated C-box and the D-box "
+            "instead of their separation. mOWL's modules keep the original losses; this "
+            "regime switches a module instance to the reference's. The published numbers "
+            "of DELE's tables were produced with the reference's losses."),
+    ),
+    RegimeCard(
+        key="dele-code-training",
+        name="Training design of the DELE reference code",
+        kind=RegimeKind.TRAINING,
+        summary=(
+            "The complete training design behind DELE's Tables 3-6: cyclic mini-batches "
+            "of 32,768 axioms per normal form, negatives with per-kind corruption pools "
+            "on the GO & STRING data, the reference's loss functions, entailed negatives "
+            "dropped for the '+n' rows, ReduceLROnPlateau (patience 10) and early "
+            "stopping (patience 20) on the validation loss of the predicted normal form, "
+            "monitored once per paper epoch."),
+        components=("batching", "negative sampling", "loss", "optimiser schedule",
+                    "model selection", "early stopping"),
+        applies_to="ELEmbeddings, ELBE, BoxSquaredEL (EmbeddingELModel with a module the "
+                   "DELE losses support)",
+        references=(MASHKOVA2024DELE,),
+        standalone=False,
+        introduced_with=_USED_BY,
+        used_by=_USED_BY,
+        implementation="mowl.training.dele.DELECodeTraining",
+        properties=(
+            Guarantee(
+                GuaranteeKind.REGIME_PROPERTY,
+                "No entailed axiom is used as a negative in the '+n' configuration "
+                "(filter_negatives=True).",
+                "mashkova2024dele, Section 5 and Appendix F",
+                condition="the approximate deductive closure (sound rules)",
+                verified_in_mowl="tests/training/test_dele_regimes.py"),
+        ),
+        limitations=(
+            "Model selection looks at the validation loss of one normal form (the "
+            "predicted one), as in the reference code.",
+        ),
+        notes=(
+            "From run.py, models/*.py and data_utils/dataloader*.py of "
+            "bio-ontology-research-group/DELE. An epoch is max_t ceil(n_t / 32768) steps; "
+            "train for E paper epochs as train(epochs=E * steps_per_epoch) with "
+            "validate_every=steps_per_epoch. Deviations in mOWL: negatives are drawn "
+            "anew at every step (the reference resets the NumPy seed inside every batch "
+            "and so repeats the same draws); ELEm's |norm - 1| regularisation is applied "
+            "globally once per step, not per axiom (the released reference code cannot "
+            "run its own per-axiom regularisation: it reads an attribute its modules "
+            "never define); entailed GCI0-BOT and GCI3-BOT negatives are dropped only if "
+            "entailed, whereas the reference drops all negatives of the bottom forms "
+            "when filtering."),
     ),
 )

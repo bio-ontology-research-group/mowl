@@ -125,6 +125,31 @@ def regularization_loss(class_embed, ind_embed = None, reg_norm = 1):
 
 
 # ---------------------------------------------------------------------------------------
+# Variant of the positive GCI3 loss used by the reference implementation of DELE
+# (bio-ontology-research-group/DELE, losses/elembeddings_losses.py): the radius of the
+# filler is *added*, ``relu(‖c − r − d‖ + rc − rd − margin)``, the inclusion of the
+# translated ball of C in the ball of D. mOWL keeps the original ELEmbeddings loss
+# ``relu(euc − rc − rd − margin)`` above (faithful to Kulmanov et al.), which subtracts
+# rc; the DELE code silently corrects it (see also Mashkova & Hoehndorf 2026,
+# Appendix C). Switching is done by the regime ``dele-code-losses``.
+# ---------------------------------------------------------------------------------------
+
+def gci3_loss_reference(data, class_embed, class_rad, rel_embed, margin, neg=False):
+    r"""The GCI3 (:math:`\exists r.C \sqsubseteq D`) loss of the DELE reference code:
+    zero iff the ball of C translated by ``-r`` lies inside the ball of D (up to
+    ``margin``)."""
+    if neg:
+        return gci3_loss_neg(data, class_embed, class_rad, rel_embed, margin)
+    rE = rel_embed(data[:, 0])
+    c = class_embed(data[:, 1])
+    d = class_embed(data[:, 2])
+    rc = th.abs(class_rad(data[:, 1]))
+    rd = th.abs(class_rad(data[:, 2]))
+    euc = th.linalg.norm(c - rE - d, dim=1, keepdim=True)
+    return th.relu(euc + rc - rd - margin)
+
+
+# ---------------------------------------------------------------------------------------
 # Negative losses of DELE (Mashkova et al., "DELE: Deductive EL++ Embeddings for Knowledge
 # Base Completion", Section 4.1, Eqs. 1-6). They are used only when the module was built
 # with ``all_negative_losses=True`` (see ELEmModule). The regularisation terms
