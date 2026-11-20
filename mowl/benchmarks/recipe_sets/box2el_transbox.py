@@ -46,7 +46,7 @@ _TRANSBOX_NOTE = (
     "section 'transbox'); the section 'transrolebox' belongs to a model class that the "
     "published code does not contain. formulation='reference' gives the code's losses "
     "and initialisation; the regime squares them per axiom. Role inclusions and chains "
-    "are trained, as in the code. Checked on ORIX with seed 0 (2026-11-20): all "
+    "are trained, as in the code. Checked on ORIX with 3 seeds (2026-11-20): all "
     "normal forms and the combined ranks of GALEN, GO and Anatomy agree with Tables 7, "
     "8 and 11-13 within seed noise; the paper averages 10 seeds.")
 
