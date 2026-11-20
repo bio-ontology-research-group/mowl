@@ -120,6 +120,12 @@ for _onto, _subset, _loc, _text in _TABLES:
         _note = _NOTE
         if _parts[0] == "CatE":
             _note += " The median rank of CatE is not reported ('-')."
+        if _parts[0] == "BoxEL" and _subset in ("gci3", "combined"):
+            _note += (" Not reproducible: compute_nf4_ranks_boxel of the evaluation code "
+                      "ranks the class whose index equals the role index instead of D.")
+        if _parts[0] in ("Box2EL", "BoxEL", "ELBE") and _subset in ("gci1", "combined"):
+            _note += (" When all candidates score 0 the rank is the position of the true "
+                      "class in the class index order of the reference release.")
         RESULTS.append(PublishedResult(
             benchmark=f"transbox-{_onto}-prediction", method=_KEYS[_parts[0]],
             metrics=_metrics, source=YANG2025, locator=_loc, subset=_subset,
