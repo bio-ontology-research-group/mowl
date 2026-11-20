@@ -85,17 +85,26 @@ class DELEDataset(PathDataset):
     @property
     def evaluation_classes(self):
         """Heads and tails of the evaluation: proteins (``http://4932.*`` or
-        ``http://9606.*``) for PPI; proteins and GO classes for function prediction; all
-        classes for subsumption prediction."""
+        ``http://9606.*``) for PPI; for function prediction the proteins (heads) and every
+        other class except :math:`\top`, :math:`\bot` and the ``label`` classes (tails);
+        all classes for subsumption prediction.
+
+        The function-prediction tails are those of the reference code
+        (``AFPYeastDataset.evaluation_classes``: classes without ``4932.``, ``label`` or
+        ``hing`` in the IRI): the GO classes *and* the classes that the authors'
+        normalisation introduced (``A01lu``, ...; 11,924 of 55,808 candidates), not only
+        the GO classes."""
         if self._evaluation_classes is None:
             names = self.classes.as_dict
             prots = [c for n, c in names.items() if n.startswith(("http://4932.", "http://9606."))]
             if self.task.endswith("_ppi"):
                 self._evaluation_classes = OWLClasses(prots), OWLClasses(prots)
             elif self.task.endswith("_function"):
-                gos = [c for n, c in names.items()
-                       if n.startswith("http://purl.obolibrary.org/obo/GO_")]
-                self._evaluation_classes = OWLClasses(prots), OWLClasses(gos)
+                from mowl.owlapi.defaults import TOP, BOT
+                prot_ids = {n for n in names if n.startswith(("http://4932.", "http://9606."))}
+                others = [c for n, c in names.items()
+                          if n not in prot_ids and n not in (TOP, BOT) and "label" not in n]
+                self._evaluation_classes = OWLClasses(prots), OWLClasses(others)
             else:
                 self._evaluation_classes = self.classes, self.classes
         return self._evaluation_classes

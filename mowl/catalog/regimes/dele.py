@@ -174,7 +174,7 @@ REGIMES = (
             "reference implementation of DELE, which differ from the papers' and from "
             "mOWL's modules in points the DELE paper does not mention."),
         components=("loss",),
-        applies_to="ELEmModule, ELBEModule (BoxSquaredELModule is unchanged)",
+        applies_to="ELEmModule, ELBEModule, BoxSquaredELModule",
         references=(MASHKOVA2024DELE,),
         standalone=False,
         introduced_with=("elem", "elbe"),
@@ -198,7 +198,11 @@ REGIMES = (
             "original ELEmbeddings and ELBE codes subtract it) and changes ELBE: "
             "inclusion margins become slack (- margin, as in ELEmbeddings) and the GCI2 "
             "negative loss penalises overlap of the translated C-box and the D-box "
-            "instead of their separation. mOWL's modules keep the original losses; this "
+            "instead of their separation. Box2EL: the positive losses return the "
+            "unsquared scores of the reference module (mOWL's module squares them; the "
+            "reference squares them in its training loop), so that the validation loss "
+            "used for the schedule and model selection is the reference's. mOWL's "
+            "modules keep the original losses; this "
             "regime switches a module instance to the reference's. The published numbers "
             "of DELE's tables were produced with the reference's losses."),
     ),
@@ -209,7 +213,8 @@ REGIMES = (
         summary=(
             "The complete training design behind DELE's Tables 3-6: cyclic mini-batches "
             "of 32,768 axioms per normal form, negatives with per-kind corruption pools "
-            "on the GO & STRING data, the reference's loss functions, entailed negatives "
+            "on the GO & STRING data, the reference's loss functions and their "
+            "combination (dele-code-loss), entailed negatives "
             "dropped for the '+n' rows, ReduceLROnPlateau (patience 10) and early "
             "stopping (patience 20) on the validation loss of the predicted normal form, "
             "monitored once per paper epoch."),
@@ -239,9 +244,10 @@ REGIMES = (
             "From run.py, models/*.py and data_utils/dataloader*.py of "
             "bio-ontology-research-group/DELE. An epoch is max_t ceil(n_t / 32768) steps; "
             "train for E paper epochs as train(epochs=E * steps_per_epoch) with "
-            "validate_every=steps_per_epoch. Deviations in mOWL: negatives are drawn "
-            "anew at every step (the reference resets the NumPy seed inside every batch "
-            "and so repeats the same draws); ELEm's |norm - 1| regularisation is applied "
+            "validate_every=steps_per_epoch. Negatives are drawn anew at every step by "
+            "default; the reference resets the NumPy seed to 0 inside every batch, so "
+            "every positive keeps one fixed negative for the whole training "
+            "(negative_seed=0 does the same). Deviations in mOWL: ELEm's |norm - 1| regularisation is applied "
             "globally once per step, not per axiom (the released reference code cannot "
             "run its own per-axiom regularisation: it reads an attribute its modules "
             "never define); entailed GCI0-BOT and GCI3-BOT negatives are dropped only if "

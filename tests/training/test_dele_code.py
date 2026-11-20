@@ -11,7 +11,8 @@ import mowl.nn.el.elem.losses as EL
 import mowl.nn.el.elbe.losses as LB
 from mowl.models import BoxSquaredEL, ELBE, ELEmbeddings
 from mowl.nn import ELBEModule, ELEmModule
-from mowl.training import AllNormalFormNegatives, DELECodeLosses, DELECodeTraining
+from mowl.training import AllNormalFormNegatives, DELECodeLoss, DELECodeLosses, \
+    DELECodeTraining
 from tests.datasetFactory import FamilyDataset
 
 
@@ -108,7 +109,7 @@ class TestDELECodeLosses(TestCase):
         model.module.class_rad.weight.data = th.rand_like(
             model.module.class_rad.weight.data) * 0.5
         before = model.module(th.tensor([[0, 1, 2]]), "gci3").detach().clone()
-        model.training_regime = DELECodeLosses()
+        model.training_regime = DELECodeLosses(elem_axiom_reg=False)
         after = model.module(th.tensor([[0, 1, 2]]), "gci3").detach()
         expected = EL.gci3_loss_reference(
             th.tensor([[0, 1, 2]]), model.module.class_embed, model.module.class_rad,
@@ -135,12 +136,17 @@ class TestDELECodeLosses(TestCase):
                 model.module.class_embed(d[:, 2]), th.abs(model.module.class_offset(d[:, 2])),
                 model.module.rel_embed(d[:, 1]), model.module.margin)))
 
-    def test_box2el_unchanged(self):
+    def test_box2el_positives_unsquared(self):
         model = BoxSquaredEL(self.dataset, embed_dim=4, batch_size=64)
         d = th.tensor([[0, 1], [2, 3]])
         before = model.module(d, "gci0").detach().clone()
+        neg_before = model.module(d, "gci0", neg=True).detach().clone()
         model.training_regime = DELECodeLosses()
-        self.assertTrue(th.equal(model.module(d, "gci0"), before))
+        after = model.module(d, "gci0").detach()
+        self.assertTrue(th.allclose(after.square(), before))
+        self.assertTrue(th.equal(model.module(d, "gci0", neg=True).detach(), neg_before))
+        d2 = th.tensor([[0, 0, 1]])
+        self.assertEqual(model.module(d2, "gci2").shape[0], 1)
 
     def test_rejects_other_modules(self):
         from mowl.models import BoxEL
@@ -191,7 +197,16 @@ class TestDELECodeTraining(TestCase):
                             epsilon=0.01)
         keys = [p.key for p in model.training_regime.regimes]
         self.assertIn("dele-closure-filtered-negatives", keys)
-        self.assertEqual(len(keys), 5)
+        self.assertIn("dele-code-loss", keys)
+        self.assertEqual(len(keys), 6)
+
+    def test_negative_seed_baseline_uses_fixed_negatives(self):
+        model = self._train(ELEmbeddings, negatives="gci2", negative_seed=0)
+        parts = {p.key: p for p in model.training_regime.regimes}
+        negs = parts["dele-all-normal-form-negatives"]
+        self.assertEqual(negs.fixed_seed, 0)
+        self.assertEqual(negs.normal_forms, ("gci2",))
+        self.assertFalse(model.module.all_negative_losses)
 
     def test_kind_prefixes(self):
         model = ELEmbeddings(self.dataset, embed_dim=4, batch_size=64)
@@ -208,3 +223,114 @@ class TestDELECodeTraining(TestCase):
                             "a corrupted class changed its kind")
         # the corrupting class is drawn from the kind pool only
         self.assertTrue(set(negs[:, 1].tolist()) <= set(named.values()))
+
+
+class TestDELECodeLoss(TestCase):
+    """The per-model loss combination of the reference training loops."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.dataset = FamilyDataset()
+        cls.pos = th.tensor([[1.0], [3.0]])
+        cls.neg = th.tensor([[2.0], [4.0]])
+
+    def _loss(self, cls_):
+        model = cls_(self.dataset, embed_dim=4, batch_size=64)
+        regime = DELECodeLoss()
+        regime.attach(model)
+        return regime
+
+    def test_elem_squares_gci2_only(self):
+        r = self._loss(ELEmbeddings)
+        self.assertAlmostEqual(float(r.loss("gci2", self.pos, self.neg)), 5.0 + 10.0)
+        self.assertAlmostEqual(float(r.loss("gci0", self.pos, self.neg)), 2.0 + 3.0)
+        self.assertAlmostEqual(float(r.loss("gci2", self.pos, None)), 2.0)
+
+    def test_elbe_squares_every_form(self):
+        r = self._loss(ELBE)
+        self.assertAlmostEqual(float(r.loss("gci0", self.pos, self.neg)), 5.0 + 10.0)
+        self.assertAlmostEqual(float(r.loss("gci0", self.pos, None)), 5.0)
+        # mOWL's own ELBE loss pulls the negative mean to 1 instead
+        model = ELBE(self.dataset, embed_dim=4, batch_size=64)
+        self.assertAlmostEqual(float(model.compute_loss(self.pos, self.neg)),
+                               4.0 + (3.0 - 1.0) ** 2)
+
+    def test_box2el_switched(self):
+        model = BoxSquaredEL(self.dataset, embed_dim=4, batch_size=64)
+        model.training_regime = DELECodeLosses()
+        r = DELECodeLoss()
+        r.attach(model)
+        self.assertAlmostEqual(float(r.loss("gci0", self.pos, self.neg)), 5.0 + 10.0)
+        self.assertAlmostEqual(float(r.loss("gci3", self.pos, self.neg)), 5.0 + 9.0)
+
+    def test_box2el(self):
+        r = self._loss(BoxSquaredEL)
+        # module already squares the positives other than gci2
+        self.assertAlmostEqual(float(r.loss("gci0", self.pos, self.neg)), 2.0 + 10.0)
+        self.assertAlmostEqual(float(r.loss("gci2", self.pos, self.neg)), 5.0 + 9.0)
+        self.assertAlmostEqual(float(r.loss("gci3", self.pos, self.neg)), 2.0 + 9.0)
+
+    def test_empty_negatives_contribute_nothing(self):
+        r = self._loss(ELBE)
+        self.assertAlmostEqual(float(r.loss("gci2", self.pos, th.zeros(0, 1))), 5.0)
+
+
+class TestFixedNegatives(TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.dataset = FamilyDataset()
+
+    def _negatives(self, **kwargs):
+        model = ELEmbeddings(self.dataset, embed_dim=4, batch_size=64)
+        regime = AllNormalFormNegatives(override_model_sampler=True, **kwargs)
+        model.training_regime = regime
+        ds = model.training_datasets["gci0"]
+        return regime, ds
+
+    def test_fixed_seed_repeats_the_draws(self):
+        regime, ds = self._negatives(fixed_seed=0)
+        a = regime.negatives("gci0", ds)
+        b = regime.negatives("gci0", ds)
+        self.assertTrue(th.equal(a, b))
+        # as NumPy's global stream restarted from the seed
+        pool = np.fromiter(regime.model.named_class_index_dict.values(), dtype=np.int64)
+        expected = np.random.RandomState(0).choice(pool, size=len(ds), replace=True)
+        self.assertEqual(a[:, 1].tolist(), expected.tolist())
+
+    def test_default_draws_anew(self):
+        regime, ds = self._negatives()
+        np.random.seed(1)
+        a = regime.negatives("gci0", ds)
+        b = regime.negatives("gci0", ds)
+        self.assertFalse(th.equal(a, b))
+
+
+class TestELEmAxiomRegularisation(TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.dataset = FamilyDataset()
+
+    def test_losses_add_norm_term_and_ranking_omits_it(self):
+        model = ELEmbeddings(self.dataset, embed_dim=4, batch_size=64)
+        m = model.module
+        m.class_embed.weight.data *= 3.0      # norms far from 1
+        d = th.tensor([[0, 1], [2, 3]])
+        plain = m(d, "gci0").detach().clone()
+        model.training_regime = DELECodeLosses()
+        reg = sum(th.abs(th.linalg.norm(m.class_embed(d[:, i]), dim=1, keepdim=True) - 1)
+                  for i in (0, 1)).detach()
+        self.assertTrue(th.allclose(m(d, "gci0").detach(), plain + reg))
+        self.assertTrue(th.allclose(m.ranking_score(d, "gci0").detach(), plain))
+        self.assertEqual(float(model.get_regularization_loss()), 0.0)
+        # GCI3 keeps the corrected reference loss under the regularisation
+        d3 = th.tensor([[0, 1, 2]])
+        expected = EL.gci3_loss_reference(d3, m.class_embed, m.class_rad, m.rel_embed,
+                                          m.margin)
+        self.assertTrue(th.allclose(m.ranking_score(d3, "gci3").detach(), expected.detach()))
+
+    def test_can_be_switched_off(self):
+        model = ELEmbeddings(self.dataset, embed_dim=4, batch_size=64)
+        model.training_regime = DELECodeLosses(elem_axiom_reg=False)
+        self.assertFalse(hasattr(model.module, "ranking_score"))

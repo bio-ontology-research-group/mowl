@@ -453,6 +453,12 @@ class DELEEvaluation(EvaluationRegime):
             filter_data = ev.create_tuples(dataset.ontology)
 
         scorer = model.module if hasattr(model, "module") else model
+        if callable(getattr(scorer, "ranking_score", None)):
+            # a training regime may score test axioms without its training-only terms
+            # (e.g. the per-axiom regularisation of the DELE reference code for ELEm)
+            module = scorer
+            module.eval()
+            scorer = module.ranking_score
         metrics = ev.compute_ranking_metrics(scorer, test, filter_data=filter_data,
                                              filter_closure=filter_closure)
         return {"all": metrics}

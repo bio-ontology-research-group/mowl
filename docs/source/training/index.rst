@@ -110,15 +110,25 @@ the modules:
 :class:`~mowl.training.DELECodeLosses`
    The reference's loss functions. It corrects the GCI3 losses of ELEmbeddings and ELBE
    (the filler's radius / offset is added, not subtracted) and gives ELBE slack margins
-   and a GCI2 negative loss that penalises overlap instead of separation. Box\ :sup:`2`   EL needs no switch: its module already agrees with the reference.
+   and a GCI2 negative loss that penalises overlap instead of separation. For
+   Box\ :sup:`2`\ EL the positive losses return the unsquared scores of the reference
+   module, so that the validation loss is the reference's.
+
+:class:`~mowl.training.DELECodeLoss`
+   How the reference training loops combine the per-axiom losses: squares for every
+   normal form of ELBE and Box\ :sup:`2`\ EL, for GCI2 with negatives only in
+   ELEmbeddings. Without it mOWL's ELBE combination (squared means, negatives pulled to 1)
+   trains the DELE negatives to be violated.
 
 :class:`~mowl.training.DELECodeTraining`
    The reference's training design: cyclic mini-batches of 32,768 axioms per normal
    form (an epoch is :math:`\max_t \lceil n_t / b \rceil` steps), negatives corrupted
    with a class of the same kind on the GO & STRING data (``kind_prefixes``), entailed
    negatives dropped for the "+n" rows, and ReduceLROnPlateau with early stopping acting
-   once per paper epoch. It composes ``DELECodeLosses`` with the regimes above; the
-   recipes of the ``dele-*`` benchmarks use it.
+   once per paper epoch. It composes ``DELECodeLosses`` and ``DELECodeLoss`` with the
+   regimes above; the recipes of the ``dele-*`` benchmarks use it. ``negative_seed=0``
+   restarts the negative draws from seed 0 at every step, as the reference does, so that
+   every positive keeps one fixed negative.
 
 .. testcode::
 
