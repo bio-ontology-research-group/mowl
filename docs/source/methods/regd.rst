@@ -72,7 +72,11 @@ form per task; the prediction task is evaluated with the code's own rules (regim
 ``regd-sampled-f1``: rectified boundary dissimilarity as the score, threshold tuned on
 validation, and -- for Table 4 -- the positive score the code reads from the role
 column: the score of the class whose reference index equals the role's index, e.g.
-*biological_process* for every GO ``part_of`` query; see the regime card).
+*biological_process* for every GO ``part_of`` query; see the regime card). The weight
+:math:`\lambda` of the depth term is a hyperparameter of the paper (grid
+:math:`\{0, 0.5, 1\}`) but fixed to 1 in the released code; the recipes choose it by
+validation F1, which gives :math:`\lambda = 0` (no depth term) for boxes on the
+inference benchmarks.
 
 Example
 -------

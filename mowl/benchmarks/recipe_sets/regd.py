@@ -42,6 +42,17 @@ _LR = {
 }
 
 
+#: Weight lambda of the depth term per (method, task), from the paper's grid {0, 0.5, 1}
+#: (appendix C.1; the released code has no lambda, i.e. 1), chosen by VALIDATION F1 at
+#: d = 10, seed 0 (runs regd2-w1, regd2-w3-*-lamda*, regd2-w5-*). For boxes on the
+#: inference task lambda = 0 (no depth term) has the best validation F1 on GO and
+#: ANATOMY (and ties on GALEN); everywhere else lambda = 1.
+_LAMDA = {
+    ("regd", "inference"): 0.0, ("regd", "prediction"): 1.0,
+    ("regd_elem", "inference"): 1.0, ("regd_elem", "prediction"): 1.0,
+}
+
+
 def _task(benchmark):
     return "prediction" if benchmark.endswith("-prediction") else "inference"
 
@@ -53,6 +64,7 @@ def _regd_model_kwargs(method, task):
         kwargs["flip_gci2"] = True
     if method == "regd_elem":
         kwargs["radius"] = "softplus"
+    kwargs["lamda"] = _LAMDA[(method, task)]
     return kwargs
 
 
