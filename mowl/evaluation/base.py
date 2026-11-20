@@ -46,6 +46,8 @@ class BaseRankingEvaluator():
 
         
          
+        # work on the evaluation device from here on (heads/tails may arrive on the CPU)
+        heads, tails = self.heads, self.tails
         head_idx = th.arange(len(heads), dtype=th.long, device=self.device)
         tail_idx = th.arange(len(tails), dtype=th.long, device=self.device)
 

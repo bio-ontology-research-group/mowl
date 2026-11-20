@@ -561,3 +561,18 @@ class TestBaseRankingEvaluatorSubsetIdSpace(TestCase):
         self.assertEqual(metrics["mr"], true_mr)
         self.assertEqual(metrics["mrr"], true_mrr)
         self.assertLess(abs(metrics["auc"] - true_auc), allowed_diff)
+
+
+import pytest as _pytest
+import torch as _th
+
+
+def test_ranking_evaluator_tensors_on_evaluation_device():
+    """Heads/tails given on the CPU must end up on the evaluation device
+    (regression: comparison of CPU heads with CUDA indices failed)."""
+    device = "cuda" if _th.cuda.is_available() else "cpu"
+    heads = _th.tensor([0, 2, 5])
+    tails = _th.tensor([0, 1, 2])
+    ev = BaseRankingEvaluator(heads, tails, 4, device)
+    for t in (ev.heads, ev.tails, ev.mapped_heads, ev.mapped_tails, ev.filtering_labels):
+        assert t.device.type == _th.device(device).type
