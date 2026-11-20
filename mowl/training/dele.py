@@ -15,6 +15,12 @@ part consists of two independent pieces, implemented here as two composable
 
 :func:`dele_regime` composes them into the regime of the "+l+n" rows of DELE's tables.
 
+:class:`DELECodeLosses` and :class:`DELECodeTraining` add what the *reference code* of
+DELE does beyond the papers: the loss functions the published numbers were actually
+trained with (several of which differ from the papers' and mOWL's models) and the
+reference's training design (cyclic mini-batches of 32,768 axioms per normal form,
+ReduceLROnPlateau, early stopping, per-kind negative pools on the GO & STRING data).
+
 :class:`ClosurePositives` (deductive-closure axioms as additional training positives) is
 *not* part of either paper; it is provided because the closure makes it cheap, and is
 documented as an mOWL extension.
@@ -104,27 +110,48 @@ class AllNormalFormNegatives(TrainingRegime):
     column). For the normal forms that the model's own negative sampling configuration
     already covers, the model's sampler is used unchanged (``negatives`` returns
     ``NotImplemented``), so a model's own scheme for GCI2 (e.g. TransBox corrupting both
-    sides) is kept.
+    sides) is kept; ``override_model_sampler=True`` makes this regime sample them itself.
 
     :param epsilon: :math:`\\varepsilon` of the bottom negative losses, or ``None`` to keep
         the module's value (default ``0.01``).
     :type epsilon: float, optional
     :param normal_forms: Normal forms to sample negatives for. Defaults to all seven.
     :type normal_forms: iterable of str, optional
+    :param enable_module: Switch the module's DELE negative losses on at attach. Set to
+        ``False`` to sample (and score) negatives with the module's original losses, as
+        the baseline rows of DELE (original negative sampling, GCI2 only) do.
+    :type enable_module: bool, optional
+    :param override_model_sampler: Sample every normal form in ``normal_forms`` here, even
+        those covered by the model's own negative sampling configuration (needed with
+        ``kind_prefixes``).
+    :type override_model_sampler: bool, optional
+    :param kind_prefixes: IRI substrings (e.g. ``("4932.",)`` for the yeast proteins of
+        the GO & STRING data). A corrupted class is replaced by a class of the same
+        *kind*: one whose IRI contains one of the prefixes if the original does, else
+        one from the remaining named classes (without :math:`\\top`, :math:`\\bot` and
+        classes whose IRI contains ``label``), exactly as the GO & STRING dataloader of
+        the DELE reference code does. ``None`` (default) corrupts with any named class.
+    :type kind_prefixes: iterable of str, optional
 
     .. note:: The reference implementation samples the corrupting class from the dataset's
        evaluation classes; mOWL samples from all named classes, as its default sampler does.
+       With ``kind_prefixes`` the GO & STRING behaviour of the reference is reproduced.
     """
 
     key = "dele-all-normal-form-negatives"
 
-    def __init__(self, epsilon=None, normal_forms=NORMAL_FORMS):
+    def __init__(self, epsilon=None, normal_forms=NORMAL_FORMS, enable_module=True,
+                 override_model_sampler=False, kind_prefixes=None):
         super().__init__()
         self.epsilon = epsilon
         self.normal_forms = tuple(normal_forms)
         for nf in self.normal_forms:
             if nf not in DELE_CORRUPT_COLUMN:
                 raise ValueError(f"Unknown normal form {nf!r}.")
+        self.enable_module = bool(enable_module)
+        self.override_model_sampler = bool(override_model_sampler)
+        self.kind_prefixes = tuple(kind_prefixes) if kind_prefixes else None
+        self._kind_pools = None
 
     def _enable(self):
         module = self.model.module
@@ -142,21 +169,60 @@ class AllNormalFormNegatives(TrainingRegime):
         super().attach(model)
         if getattr(model, "module", None) is None:
             raise TypeError("AllNormalFormNegatives needs a model with a module.")
-        self._enable()
+        if self.enable_module:
+            self._enable()
 
     def on_epoch_start(self, epoch, epochs):
         # The module may have been rebuilt (init_module) since attach.
-        if not set(self.normal_forms) <= set(self.model.module.neg_capable_gcis):
+        if self.enable_module and \
+                not set(self.normal_forms) <= set(self.model.module.neg_capable_gcis):
             self._enable()
+
+    def _pools(self, gci_name, column):
+        """Index pools the corrupted column may draw from."""
+        if column in ROLE_COLUMNS.get(gci_name, ()):
+            return [np.fromiter(self.model.object_property_index_dict.values(),
+                                dtype=np.int64)]
+        named = self.model.named_class_index_dict
+        if self.kind_prefixes is None:
+            return [np.fromiter(named.values(), dtype=np.int64)]
+        if self._kind_pools is None:
+            from mowl.owlapi.defaults import TOP, BOT
+            prefixes = self.kind_prefixes
+            match = [i for iri, i in named.items() if any(p in iri for p in prefixes)]
+            other = [i for iri, i in named.items()
+                     if not any(p in iri for p in prefixes)
+                     and iri not in (TOP, BOT) and "label" not in iri]
+            if not match or not other:
+                raise ValueError(
+                    "kind_prefixes did not split the classes into two non-empty pools; "
+                    f"prefixes: {list(prefixes)}.")
+            self._kind_pools = {"match": np.asarray(match, dtype=np.int64),
+                                "other": np.asarray(other, dtype=np.int64)}
+        return [self._kind_pools["match"], self._kind_pools["other"]]
 
     def negatives(self, gci_name, gci_dataset):
         if gci_name not in self.normal_forms:
             return NotImplemented
-        if gci_name in self.model.get_negative_sampling_config():
+        if not self.override_model_sampler and \
+                gci_name in self.model.get_negative_sampling_config():
             return NotImplemented
         data = gci_dataset[:]
         column = DELE_CORRUPT_COLUMN[gci_name]
-        return _corrupt(data, column, _pool(self.model, gci_name, column), data.device)
+        pools = self._pools(gci_name, column)
+        if len(pools) == 1:
+            return _corrupt(data, column, pools[0], data.device)
+        values = data[:, column].cpu().numpy()
+        is_match = np.isin(values, pools[0])
+        out = data.clone()
+        for mask, pool in ((is_match, pools[0]), (~is_match, pools[1])):
+            rows = np.nonzero(mask)[0]
+            if len(rows) == 0:
+                continue
+            idx = np.random.choice(pool, size=len(rows), replace=True)
+            out[th.tensor(rows, device=data.device), column] = th.tensor(
+                idx, dtype=out.dtype, device=data.device)
+        return out
 
 
 class ClosureFilteredNegatives(_Closure, TrainingRegime):
@@ -363,3 +429,187 @@ def dele_regime(closure=None, epsilon=None, filter_negatives=True, reasoner="can
                                                 max_resample=max_resample,
                                                 cache_dir=cache_dir))
     return ComposedRegime(*regimes)
+
+
+# ---------------------------------------------------------------------------------------
+# The training design of the DELE reference code
+# (bio-ontology-research-group/DELE, models/*.py, data_utils/dataloader*.py), as one named
+# composition. The differences between that code and mOWL's models are switched on
+# explicitly (DELECodeLosses) instead of being hidden in the modules.
+# ---------------------------------------------------------------------------------------
+
+def _elem_gci3_loss(module, data, neg=False):
+    import mowl.nn.el.elem.losses as L
+    if module._dele_neg(neg):
+        return L.gci3_loss_neg(data, module.class_embed, module.class_rad,
+                               module.rel_embed, module.margin)
+    return L.gci3_loss_reference(data, module.class_embed, module.class_rad,
+                                 module.rel_embed, module.margin)
+
+
+def _elbe_gci0_loss(module, data, neg=False):
+    import mowl.nn.el.elbe.losses as L
+    if module._dele_neg(neg):
+        return L.gci0_loss_neg(data, module.class_embed, module.class_offset, module.margin)
+    return L.gci0_loss_dele(data, module.class_embed, module.class_offset, module.margin)
+
+
+def _elbe_gci1_loss(module, data, neg=False):
+    import mowl.nn.el.elbe.losses as L
+    if module._dele_neg(neg):
+        return L.gci1_loss_neg(data, module.class_embed, module.class_offset, module.margin)
+    return L.gci1_loss_dele(data, module.class_embed, module.class_offset, module.margin)
+
+
+def _elbe_gci2_loss(module, data, neg=False):
+    import mowl.nn.el.elbe.losses as L
+    return L.gci2_loss_dele(data, module.class_embed, module.class_offset, module.rel_embed,
+                            module.margin, neg=neg)
+
+
+def _elbe_gci3_loss(module, data, neg=False):
+    import mowl.nn.el.elbe.losses as L
+    if module._dele_neg(neg):
+        return L.gci3_loss_neg(data, module.class_embed, module.class_offset,
+                               module.rel_embed, module.margin)
+    return L.gci3_loss_dele(data, module.class_embed, module.class_offset,
+                            module.rel_embed, module.margin)
+
+
+#: Methods to switch on the module, per module class (BoxSquaredEL needs none: its
+#: losses already agree with the reference code up to where the squaring happens).
+_DELE_LOSSES = {
+    "ELEmModule": {"gci3_loss": _elem_gci3_loss},
+    "ELBEModule": {"gci0_loss": _elbe_gci0_loss, "gci1_loss": _elbe_gci1_loss,
+                   "gci2_loss": _elbe_gci2_loss, "gci3_loss": _elbe_gci3_loss},
+    "BoxSquaredELModule": {},
+}
+
+
+class DELECodeLosses(TrainingRegime):
+    """Train (and score) with the loss functions of the DELE reference code.
+
+    The reference implementation (bio-ontology-research-group/DELE, ``losses/*.py``)
+    silently modifies the losses of the models it embeds, and the published numbers of
+    DELE's tables were produced with the modified losses. This regime switches an
+    attached module to them; the module's default losses are untouched:
+
+    * **ELEm**: the GCI3 positive loss adds the filler radius
+      (:math:`\\mathrm{relu}(\\|c - r - d\\| + r_c - r_d - \\gamma)`) instead of
+      subtracting it -- the corrected inclusion of the translated ball (Mashkova &
+      Hoehndorf 2026, Appendix C, call it "the corrected GCI3 loss").
+    * **ELBE**: the inclusion margins become slack (``- margin``, as in ELEmbeddings),
+      the GCI3 loss is corrected as for ELEm, and the GCI2 negative loss penalises
+      overlap of the translated box of :math:`C` and the box of :math:`D` instead of
+      their separation. The GCI1-BOT loss keeps its original form (``+ margin``).
+    * **Box2EL**: unchanged; the module's losses already agree with the reference code
+      (the reference squares the scores in the training loop, which the loss
+      composition of :class:`DELECodeTraining` does instead).
+
+    Evaluation through the module uses the switched losses, as the reference's
+    ``eval_method`` does. Attach ``DELECodeLosses`` before regimes that inspect the
+    module. The switch is re-applied if the model rebuilds its module.
+    """
+
+    key = "dele-code-losses"
+
+    def __init__(self):
+        super().__init__()
+        self.patched = None
+
+    def attach(self, model):
+        super().attach(model)
+        self._apply()
+
+    def _apply(self):
+        from types import MethodType
+        module = getattr(self.model, "module", None)
+        name = type(module).__name__
+        if name not in _DELE_LOSSES:
+            raise TypeError(
+                f"DELECodeLosses switches ELEmModule, ELBEModule and BoxSquaredELModule; "
+                f"got {name}.")
+        for method, function in _DELE_LOSSES[name].items():
+            setattr(module, method, MethodType(function, module))
+        if name == "ELBEModule":
+            # Inclusions are slack in the reference code, whatever the module's
+            # convention; the margin value is used as published (Appendix D).
+            module.margin_semantics = "slack"
+        self.patched = name
+
+    def on_epoch_start(self, epoch, epochs):
+        module = self.model.module
+        if type(module).__name__ != self.patched or (
+                self.patched == "ELBEModule" and "gci2_loss" not in module.__dict__):
+            self._apply()
+
+
+class DELECodeTraining(ComposedRegime):
+    """How the DELE reference code (bio-ontology-research-group/DELE) trains, and how the
+    numbers of DELE's Tables 3-6 were obtained: the composition of
+
+    * :class:`~mowl.training.DELECodeLosses` -- the reference's loss functions;
+    * :class:`~mowl.training.PerNormalFormMiniBatches` with ``order="cyclic"`` -- an
+      epoch of the reference is :math:`\\max_t \\lceil n_t / b \\rceil` steps; step
+      :math:`j` takes the :math:`(j \\bmod \\lceil n_t/b \\rceil)`-th consecutive
+      batch of every normal form (batch size 32,768);
+    * :class:`~mowl.training.AllNormalFormNegatives` for the "+l" rows (negatives of all
+      normal forms, one per positive, corrupted column as in DELE) -- or, with
+      ``negatives="gci2"``, the original negative sampling of the models (GCI2 only,
+      baseline rows). With ``kind_prefixes`` (the GO & STRING data) the corruption pool
+      is split by kind (proteins vs the rest), as the reference dataloader does;
+    * :class:`~mowl.training.ClosureFilteredNegatives` with ``max_resample=0`` for the
+      "+n" rows: entailed negatives are dropped, as in the papers;
+    * :class:`~mowl.training.ReduceOnPlateau` with ``every=None, stop=True`` -- the
+      scheduler and the early stop act once per *paper* epoch (the steps per epoch of the
+      batching regime above), patience 10 and early stop after 20 paper epochs without
+      validation-loss improvement, as in the reference code.
+
+    Model selection (best validation loss of the predicted normal form, every
+    ``steps_per_epoch`` epochs) is mOWL's built-in; pass ``validate_every`` accordingly.
+
+    Deviations from the reference code: negatives are drawn anew at every step (the
+    reference resets NumPy's seed to 0 in every batch call, drawing the same sequence
+    repeatedly); entailed GCI0-BOT and GCI3-BOT negatives are dropped only if entailed
+    (the reference drops all of them when filtering); mOWL's ELEm applies the
+    :math:`|\\|f(x)\\| - 1|` regularisation globally, per step, not per axiom (the
+    released reference code cannot run its own per-axiom regularisation: it references
+    an attribute its modules never define).
+
+    :param batch_size: Axioms per normal form and step (32,768 in the code).
+    :param negatives: ``"all"`` (the "+l" rows) or ``"gci2"`` (baseline).
+    :param filter_negatives: Drop entailed negatives (the "+n" rows).
+    :param epsilon: :math:`\\varepsilon` of the bottom negative losses ("+l" rows).
+    :param kind_prefixes: See :class:`~mowl.training.AllNormalFormNegatives`.
+    :param max_resample: Re-sampling attempts for entailed negatives (0: drop, as the
+        papers do).
+    :param patience: Scheduler patience, in paper epochs.
+    :param stop_patience: Early-stopping patience, in paper epochs.
+    :param seed: Seed of the batching regime.
+    """
+
+    key = "dele-code-training"
+
+    def __init__(self, batch_size=32768, negatives="all", filter_negatives=False,
+                 epsilon=None, kind_prefixes=None, max_resample=0, patience=10,
+                 stop_patience=20, seed=None):
+        from mowl.training.batching import PerNormalFormMiniBatches
+        from mowl.training.schedules import ReduceOnPlateau
+        if negatives not in ("all", "gci2"):
+            raise ValueError("negatives must be 'all' or 'gci2'.")
+        parts = [DELECodeLosses(),
+                 PerNormalFormMiniBatches(batch_size=batch_size, order="cyclic",
+                                          seed=seed)]
+        if negatives == "all" or kind_prefixes:
+            parts.append(AllNormalFormNegatives(
+                epsilon=epsilon,
+                normal_forms=NORMAL_FORMS if negatives == "all" else ("gci2",),
+                enable_module=(negatives == "all"),
+                override_model_sampler=bool(kind_prefixes),
+                kind_prefixes=kind_prefixes))
+        if filter_negatives:
+            parts.append(ClosureFilteredNegatives(max_resample=max_resample))
+        parts.append(ReduceOnPlateau(patience=patience, stop_patience=stop_patience,
+                                     every=None, stop=True))
+        super().__init__(*parts)
+        self.key = type(self).key

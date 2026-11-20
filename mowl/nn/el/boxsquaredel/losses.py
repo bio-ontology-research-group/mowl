@@ -246,10 +246,13 @@ def gci0_loss_neg(data, class_center, class_offset, gamma):
 
 def gci1_loss_neg(data, class_center, class_offset, gamma):
     """Eq. 14, :math:`A \\sqcap B \\not\\sqsubseteq E`: Eq. 13 between
-    ``Box(A) ∩ Box(B)`` and ``Box(E)``."""
+    ``Box(A) ∩ Box(B)`` and ``Box(E)``, plus (as in the reference code, which adds a
+    term the paper's Eq. 14 omits) the distance of the intersection box from being
+    non-empty."""
     box_c, box_d, box_e = _boxes(data, class_center, class_offset, (0, 1, 2))
-    inter, _, _ = box_intersection(box_c, box_d)
-    return th.linalg.norm(th.relu(-(box_distance(inter, box_e) + gamma)), dim=1)
+    inter, lower, upper = box_intersection(box_c, box_d)
+    return (th.linalg.norm(th.relu(-(box_distance(inter, box_e) + gamma)), dim=1)
+            + th.linalg.norm(th.relu(lower - upper), dim=1))
 
 
 def gci0_bot_loss_neg(data, class_offset, epsilon):

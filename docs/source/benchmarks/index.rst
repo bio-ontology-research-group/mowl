@@ -236,6 +236,10 @@ them explicit.
   :class:`~mowl.training.JointNormalisedInitialisation` and
   :class:`~mowl.training.Box2ELBaselineLosses`). The EmEL++ benchmarks are reproduced
   with :class:`~mowl.training.EmELppCodeTraining`, the design of the EmEL++ Keras code.
+  The recipes of the
+  DELE benchmarks (:class:`~mowl.training.DELECodeTraining`) combine the reference
+  code's loss functions and training design with the DELE regimes of
+  :doc:`../training/index`.
 * A :class:`~mowl.benchmarks.Recipe` adds the hyperparameters of the publication.
 
 .. testcode::

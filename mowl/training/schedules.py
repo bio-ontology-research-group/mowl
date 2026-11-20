@@ -179,42 +179,73 @@ class ReduceOnPlateau(_Schedule):
 
     DELE (Mashkova et al., Section 6.3) and the NeSy 2024 paper (Section 4.4) use "Adam
     optimizer and ReduceLROnPlateau scheduler with patience parameter 10", monitoring the
-    validation loss of the predicted normal form (reference implementation). Their
-    *early stopping* ("if validation loss does not improve for 20 epochs") cannot be
-    expressed with the current hooks (no hook can end the loop); this regime records the
-    epoch at which it would have stopped in :attr:`stop_epoch` (with ``stop_patience``).
+    validation loss of the predicted normal form (reference implementation), and stop
+    early "if validation loss does not improve for 20 epochs". With
+    :class:`~mowl.training.PerNormalFormMiniBatches` one epoch of mOWL is one *step*, so
+    pass ``every`` (or ``every=None`` to take the steps per epoch of the batching regime
+    of the same composition) to reduce and stop once per paper epoch, and ``stop=True``
+    to end training when ``stop_patience`` paper epochs passed without improvement (the
+    epoch at which it would stop is recorded in :attr:`stop_epoch` either way).
 
     :param metric: ``f(model) -> float`` to minimise (default: :func:`validation_loss`).
     :param patience: Epochs without improvement before the rate is reduced.
     :param factor: Reduction factor (PyTorch's default 0.1, as in the reference code).
     :param stop_patience: Epochs without improvement after which early stopping would stop.
-    :param early_stop: If ``True``, training actually ends (through :meth:`should_stop`)
-        once :attr:`stop_epoch` is set, as in the reference code of DELE and of the
-        faithfulness paper (Mashkova & Hoehndorf 2026, ``box2el.py``: ``epochs_no_improve``).
+    :param every: Monitor (and step the scheduler) every ``every`` epochs (mOWL epochs,
+        i.e. optimisation steps when a batching regime is composed). ``1`` (the default)
+        monitors every epoch; ``None`` takes the steps per epoch of a
+        :class:`~mowl.training.PerNormalFormMiniBatches` regime of the same composition.
+    :param stop: End training (:meth:`should_stop`) once ``stop_patience`` monitored
+        epochs passed without improvement. The default ``False`` only records
+        :attr:`stop_epoch`, as before.
+    :param early_stop: Alias of ``stop`` (the reference code of the faithfulness paper,
+        Mashkova & Hoehndorf 2026, ``box2el.py``: ``epochs_no_improve``).
     """
 
     key = "reduce-lr-on-plateau"
 
     def __init__(self, metric=None, patience=10, factor=0.1, stop_patience=20,
-                 base_optimizer=None, early_stop=False):
+                 every=1, stop=False, base_optimizer=None, early_stop=None):
         super().__init__(base_optimizer)
-        self.early_stop = bool(early_stop)
+        if early_stop is not None:
+            stop = early_stop
+        self.early_stop = bool(stop)
         self.metric = metric or validation_loss
         self.patience = int(patience)
         self.factor = float(factor)
         self.stop_patience = stop_patience
+        self.stop = bool(stop)
+        self.every = None if every is None else max(1, int(every))
         self.scheduler = None
         self.values = []
         self.stop_epoch = None
         self._best = math.inf
         self._bad = 0
+        self._interval = None
 
     def setup(self, opt):
         self.scheduler = th.optim.lr_scheduler.ReduceLROnPlateau(
             opt, patience=self.patience, factor=self.factor)
 
+    def _steps_per_epoch(self):
+        """The steps per epoch of a batching regime attached to the same model."""
+        from mowl.training.batching import PerNormalFormMiniBatches
+        regime = getattr(self.model, "training_regime", None)
+        for part in getattr(regime, "regimes", None) or [regime]:
+            if isinstance(part, PerNormalFormMiniBatches):
+                return max(1, part.steps_per_epoch)
+        return 1
+
+    def _monitor_every(self):
+        if self._interval is None:
+            self._interval = self.every or self._steps_per_epoch()
+        return self._interval
+
     def update(self, epoch, epochs):
         if epoch == 0:
+            return
+        every = self._monitor_every()
+        if epoch % every != 0:
             return
         value = float(self.metric(self.model))
         self.values.append(value)
@@ -228,4 +259,4 @@ class ReduceOnPlateau(_Schedule):
                 self.stop_epoch = epoch - 1
 
     def should_stop(self, epoch):
-        return self.early_stop and self.stop_epoch is not None
+        return self.stop and self.stop_epoch is not None

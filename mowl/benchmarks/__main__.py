@@ -56,7 +56,8 @@ def _build_parser():
     p.add_argument("--recipe", nargs="?", const=True, default=None, metavar="SOURCE",
                    help="train as the publication did (model arguments, training "
                         "regime, epochs); give the publication key if several "
-                        "publications have a recipe")
+                        "publications have a recipe, or 'key:name' if one publication "
+                        "has several recipes (e.g. DELE's model variants)")
     p.add_argument("--seed", type=int, default=0)
     p.add_argument("--device", default="cpu")
     p.add_argument("--param", action="append", default=[], type=parse_assignment,

@@ -143,9 +143,16 @@ def gci3_bot_loss(data, class_offset, neg=False):
 def _intersection(c, off_c, d, off_d):
     """Centre and offset of the intersection box as in ELBE's GCI1 loss: the offset is
     ``|upper - lower| / 2``, which is also positive when the boxes do not intersect."""
+    cen, off, _, _ = _intersection_corners(c, off_c, d, off_d)
+    return cen, off
+
+
+def _intersection_corners(c, off_c, d, off_d):
+    """As :func:`_intersection`, also returning the lower and upper corners (the
+    intersection is non-empty iff ``lower <= upper``)."""
     lower = th.maximum(c - off_c, d - off_d)
     upper = th.minimum(c + off_c, d + off_d)
-    return (lower + upper) / 2, th.abs(upper - lower) / 2
+    return (lower + upper) / 2, th.abs(upper - lower) / 2, lower, upper
 
 
 def _disjointness(c, off_c, d, off_d, margin):
@@ -166,15 +173,17 @@ def gci0_loss_neg(data, class_embed, class_offset, margin):
 
 def gci1_loss_neg(data, class_embed, class_offset, margin):
     """Eq. 8, :math:`A \\sqcap B \\not\\sqsubseteq E`: Eq. 7 between the intersection box of
-    A and B and the box of E."""
+    A and B and the box of E, plus (as in the reference code, which adds a term the
+    paper's Eq. 8 omits) the distance of the intersection box from being non-empty."""
     c = class_embed(data[:, 0])
     d = class_embed(data[:, 1])
     e = class_embed(data[:, 2])
     off_c = th.abs(class_offset(data[:, 0]))
     off_d = th.abs(class_offset(data[:, 1]))
     off_e = th.abs(class_offset(data[:, 2]))
-    cen, off = _intersection(c, off_c, d, off_d)
-    return _disjointness(cen, off, e, off_e, margin)
+    cen, off, lower, upper = _intersection_corners(c, off_c, d, off_d)
+    return (_disjointness(cen, off, e, off_e, margin)
+            + th.linalg.norm(th.relu(lower - upper), dim=1, keepdim=True))
 
 
 def gci1_bot_loss_neg(data, class_embed, class_offset, epsilon):
@@ -209,3 +218,88 @@ def gci3_bot_loss_neg(data, class_offset, epsilon):
     """Eq. 12, :math:`\\exists r.A \\not\\sqsubseteq \\bot`: zero iff ``‖o_A‖ >= epsilon``."""
     off_c = th.abs(class_offset(data[:, 1]))
     return th.relu(epsilon - th.linalg.norm(off_c, dim=1, keepdim=True))
+
+
+# ---------------------------------------------------------------------------------------
+# The loss variants that the reference implementation of DELE
+# (bio-ontology-research-group/DELE, losses/elbe_losses.py) trains ELBE with. They differ
+# from the ELBE code of Peng et al. 2022 (and therefore from the losses above, which are
+# faithful to it) in four points, none of them mentioned in the DELE paper:
+#
+# * the margin of the inclusion losses is a *slack* (``- margin``) instead of a strict
+#   gap (``+ margin``) -- as in ELEmbeddings and Box2EL;
+# * the GCI3 loss is corrected: ``relu(|c - r - d| + o_c - o_d - margin)`` (the
+#   inclusion of the translated box of C in the box of D) instead of the original
+#   ``relu(|c - r - d| - o_c - o_d + margin)``; see also Mashkova & Hoehndorf 2026,
+#   Appendix C;
+# * the GCI2 negative loss penalises overlap of the translated C-box and the D-box
+#   (``relu(-|c + r - d| + o_c + o_d + margin)``) instead of their separation;
+# * the GCI1 negative loss adds the distance of the intersection box from being
+#   non-empty (see gci1_loss_neg above).
+#
+# The regime ``dele-code-losses`` switches a module to these variants; the default losses
+# above are unchanged. Evaluation through the module (module(data, "gci0")) uses the
+# switched loss, as the reference's eval_method does.
+# ---------------------------------------------------------------------------------------
+
+def gci0_loss_dele(data, class_embed, class_offset, margin):
+    r"""GCI0 (:math:`C \sqsubseteq D`) loss of the DELE reference code (slack margin)."""
+    c = class_embed(data[:, 0])
+    d = class_embed(data[:, 1])
+    off_c = th.abs(class_offset(data[:, 0]))
+    off_d = th.abs(class_offset(data[:, 1]))
+    euc = th.abs(c - d)
+    return th.linalg.norm(th.relu(euc + off_c - off_d - margin), dim=1).reshape(-1, 1)
+
+
+def gci1_loss_dele(data, class_embed, class_offset, margin):
+    r"""GCI1 (:math:`C \sqcap D \sqsubseteq E`) loss of the DELE reference code (slack
+    margin)."""
+    c = class_embed(data[:, 0])
+    d = class_embed(data[:, 1])
+    e = class_embed(data[:, 2])
+    off_c = th.abs(class_offset(data[:, 0]))
+    off_d = th.abs(class_offset(data[:, 1]))
+    off_e = th.abs(class_offset(data[:, 2]))
+    cen, off, lower, upper = _intersection_corners(c, off_c, d, off_d)
+    euc = th.abs(cen - e)
+    return (th.linalg.norm(th.relu(euc + off - off_e - margin), dim=1).reshape(-1, 1)
+            + th.linalg.norm(th.relu(lower - upper), dim=1).reshape(-1, 1))
+
+
+def gci2_score_dele(c, off_c, d, off_d, rel, margin):
+    r"""GCI2 (:math:`C \sqsubseteq \exists r.D`) score of the DELE reference code."""
+    euc = th.abs(c + rel - d)
+    return th.linalg.norm(th.relu(euc + off_c - off_d - margin), dim=1).reshape(-1, 1)
+
+
+def gci2_score_neg_dele(c, off_c, d, off_d, rel, margin):
+    """GCI2 negative score of the DELE reference code: zero iff the translated C-box and
+    the D-box are separated by ``margin`` in every dimension."""
+    euc = th.abs(c + rel - d)
+    return th.linalg.norm(th.relu(-euc + off_c + off_d + margin), dim=1).reshape(-1, 1)
+
+
+def gci2_loss_dele(data, class_embed, class_offset, rel_embed, margin, neg=False):
+    if neg:
+        fn = gci2_score_neg_dele
+    else:
+        fn = gci2_score_dele
+    c = class_embed(data[:, 0])
+    r = rel_embed(data[:, 1])
+    d = class_embed(data[:, 2])
+    off_c = th.abs(class_offset(data[:, 0]))
+    off_d = th.abs(class_offset(data[:, 2]))
+    return fn(c, off_c, d, off_d, r, margin)
+
+
+def gci3_loss_dele(data, class_embed, class_offset, rel_embed, margin):
+    r"""GCI3 (:math:`\exists r.C \sqsubseteq D`) loss of the DELE reference code (corrected
+    inclusion, slack margin)."""
+    r = rel_embed(data[:, 0])
+    c = class_embed(data[:, 1])
+    d = class_embed(data[:, 2])
+    off_c = th.abs(class_offset(data[:, 1]))
+    off_d = th.abs(class_offset(data[:, 2]))
+    euc = th.abs(c - r - d)
+    return th.linalg.norm(th.relu(euc + off_c - off_d - margin), dim=1).reshape(-1, 1)

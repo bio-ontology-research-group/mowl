@@ -140,12 +140,14 @@ class TestELBENegativeLosses(TestCase):
         _check_iff(self, self.m(th.tensor(d), "gci0", neg=True),
                    self._sep(self.c[a], self.o[a], self.c[b], self.o[b]))
 
-    def test_gci1(self):  # Eq. 8
+    def test_gci1(self):  # Eq. 8 plus the reference code's non-empty-intersection term
         d = _rows("ccc").numpy()
         a, b, e = d[:, 0], d[:, 1], d[:, 2]
         cn, on = _box_inter(self.c[a], self.o[a], self.c[b], self.o[b])
+        lo = np.maximum(self.c[a] - self.o[a], self.c[b] - self.o[b])
+        up = np.minimum(self.c[a] + self.o[a], self.c[b] + self.o[b])
         _check_iff(self, self.m(th.tensor(d), "gci1", neg=True),
-                   self._sep(cn, on, self.c[e], self.o[e]))
+                   self._sep(cn, on, self.c[e], self.o[e]) & (lo <= up).all(axis=1))
 
     def test_gci3(self):  # Eq. 10
         d = _rows("rcc").numpy()
@@ -190,12 +192,14 @@ class TestBoxSquaredELNegativeLosses(TestCase):
         _check_iff(self, self.m(th.tensor(d), "gci0", neg=True),
                    self._apart(self.c[a], self.o[a], self.c[b], self.o[b]))
 
-    def test_gci1(self):  # Eq. 14
+    def test_gci1(self):  # Eq. 14 plus the reference code's non-empty-intersection term
         d = _rows("ccc").numpy()
         a, b, e = d[:, 0], d[:, 1], d[:, 2]
         cn, on = _box_inter(self.c[a], self.o[a], self.c[b], self.o[b])
+        lo = np.maximum(self.c[a] - self.o[a], self.c[b] - self.o[b])
+        up = np.minimum(self.c[a] + self.o[a], self.c[b] + self.o[b])
         _check_iff(self, self.m(th.tensor(d), "gci1", neg=True),
-                   self._apart(cn, on, self.c[e], self.o[e]))
+                   self._apart(cn, on, self.c[e], self.o[e]) & (lo <= up).all(axis=1))
 
     def test_gci1_bot(self):  # Eq. 16
         d = _rows("ccc").numpy()

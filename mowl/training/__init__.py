@@ -6,7 +6,8 @@ batching)."""
 from mowl.training.regime import TrainingRegime, ComposedRegime
 from mowl.training.closure import DeductiveClosure, NORMAL_FORMS
 from mowl.training.dele import (AllNormalFormNegatives, ClosureFilteredNegatives,
-                                ClosurePositives, dele_regime)
+                                ClosurePositives, DELECodeLosses, DELECodeTraining,
+                                dele_regime)
 from mowl.training.negatives import (CorruptionNegatives, FixedColumnCorruption,
                                      EitherSideCorruption, PerColumnCorruption,
                                      TypeConstrainedCorruption, KnownPositiveFilter,
@@ -35,6 +36,7 @@ __all__ = [
     "Box2ELCodeTraining", "TransBoxCodeTraining", "ELKEmCodeTraining",
     "EmELppCodeTraining", "EmELppCodeObjective", "ValidationAxiomsAsPositives",
     "DeductiveClosure", "NORMAL_FORMS",
+    "DELECodeLosses", "DELECodeTraining",
     "AllNormalFormNegatives", "ClosureFilteredNegatives", "ClosurePositives", "dele_regime",
     "CorruptionNegatives", "FixedColumnCorruption", "EitherSideCorruption",
     "PerColumnCorruption", "TypeConstrainedCorruption", "KnownPositiveFilter",

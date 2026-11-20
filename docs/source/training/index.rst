@@ -98,6 +98,36 @@ model is evaluated on entailed knowledge as well as on novel axioms.
 :class:`~mowl.training.ClosurePositives` adds entailed axioms as training positives. It is
 **not** part of the papers and is provided as an extension.
 
+The reference code
+------------------
+
+The published numbers of DELE's tables were not produced with the losses and the
+training loop described above, but with the reference implementation
+(bio-ontology-research-group/DELE), which differs from mOWL's models in ways the paper
+does not mention. Two regimes make those differences explicit instead of hiding them in
+the modules:
+
+:class:`~mowl.training.DELECodeLosses`
+   The reference's loss functions. It corrects the GCI3 losses of ELEmbeddings and ELBE
+   (the filler's radius / offset is added, not subtracted) and gives ELBE slack margins
+   and a GCI2 negative loss that penalises overlap instead of separation. Box\ :sup:`2`   EL needs no switch: its module already agrees with the reference.
+
+:class:`~mowl.training.DELECodeTraining`
+   The reference's training design: cyclic mini-batches of 32,768 axioms per normal
+   form (an epoch is :math:`\max_t \lceil n_t / b \rceil` steps), negatives corrupted
+   with a class of the same kind on the GO & STRING data (``kind_prefixes``), entailed
+   negatives dropped for the "+n" rows, and ReduceLROnPlateau with early stopping acting
+   once per paper epoch. It composes ``DELECodeLosses`` with the regimes above; the
+   recipes of the ``dele-*`` benchmarks use it.
+
+.. testcode::
+
+   from mowl.models import ELEmbeddings
+   from mowl.training import DELECodeTraining
+
+   model.training_regime = DELECodeTraining(   # baseline: GCI2 negatives only
+       negatives="gci2", kind_prefixes=("4932.",))
+
 The deductive closure
 ---------------------
 

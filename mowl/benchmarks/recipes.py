@@ -25,6 +25,9 @@ class Recipe:
     :param benchmark: Key of the :class:`~mowl.benchmarks.Benchmark`.
     :param method: Key of the method in :mod:`mowl.catalog`.
     :param source: The publication.
+    :param name: A name that distinguishes several recipes of the same publication for
+        the same (benchmark, method) -- for example a model variant of the paper. Recipes
+        without a name are selected by source alone.
     :param model_kwargs: Arguments of the model class.
     :param training_regime: Key of a training regime (or a list of keys).
     :param regime_kwargs: Constructor arguments of the training regime.
@@ -37,6 +40,7 @@ class Recipe:
     benchmark: str
     method: str
     source: Reference
+    name: str = ""
     model_kwargs: dict = field(default_factory=dict)
     training_regime: object = None
     regime_kwargs: dict = field(default_factory=dict)
@@ -79,26 +83,32 @@ def _recipes():
 
 
 
-def list_recipes(benchmark=None, method=None, source=None):
-    """Recipes, optionally filtered by benchmark key, method key and source key."""
+def list_recipes(benchmark=None, method=None, source=None, name=None):
+    """Recipes, optionally filtered by benchmark key, method key, source key and name."""
     return [r for r in _recipes()
             if (benchmark is None or r.benchmark == benchmark)
             and (method is None or r.method == method)
-            and (source is None or r.source.key == source)]
+            and (source is None or r.source.key == source)
+            and (name is None or r.name == name)]
 
 
-def get_recipe(benchmark, method, source=None):
+def get_recipe(benchmark, method, source=None, name=None):
     """The recipe of ``method`` on ``benchmark``.
 
     :param source: Key of the publication, needed only if several publications have a
         recipe for the pair.
-    :raises KeyError: If there is none, or several and no ``source`` is given.
+    :param name: Name of the recipe (the model variant of the paper, for instance),
+        needed only if one publication has several recipes for the pair.
+    :raises KeyError: If there is none, or several and no ``source`` / ``name`` is given.
     """
-    found = list_recipes(benchmark, method, source)
+    found = list_recipes(benchmark, method, source, name)
     if not found:
         raise KeyError(f"No recipe for method {method!r} on benchmark {benchmark!r}"
-                       + (f" from {source!r}." if source else "."))
+                       + (f" from {source!r}" if source else "")
+                       + (f" named {name!r}" if name else "") + ".")
     if len(found) > 1:
-        raise KeyError(f"Several recipes for {method!r} on {benchmark!r}: give source, "
-                       f"one of {sorted(r.source.key for r in found)}.")
+        names = sorted(r.name or "(unnamed)" for r in found)
+        raise KeyError(f"Several recipes for {method!r} on {benchmark!r}"
+                       + (f" from {source!r}" if source else "")
+                       + f": give name, one of {names} (as 'source:name').")
     return found[0]

@@ -38,16 +38,16 @@ BENCHMARKS = [
         task=Task.LINK_PREDICTION,
         description=("Predict {P1} ⊑ ∃interacts_with.{P2}; candidates: yeast proteins. "
                      f"{_COMMON} Only non-filtered metrics are published (Table 4)."),
-        dataset="mowl.datasets.builtin.ppi_yeast.PPIYeastDataset",
+        dataset=_DS, dataset_kwargs={"task": "yeast_ppi"},
         protocol=_P,
         protocol_kwargs={"gci_name": "gci2", "relation": "http://interacts_with",
                          "filter_with": None, "remove_entailed_test": False},
         metrics=_RAW, higher_is_better=_hib(_RAW), references=(MASHKOVA2024,),
-        notes=("DELE uses mOWL's PPIYeastDataset (Section 6.1.1). Verified: the test and "
-               "validation files of PPIYeastDataset are byte-identical to "
-               "data/go_string/{test,valid}_yeast.owl of the DELE release; the training "
-               "files differ in size (DELE 93 MB, mOWL 198 MB) and were not compared "
-               "axiom by axiom. " + _CLOSURE_NOTE)),
+        notes=("DELE says it uses mOWL's PPIYeastDataset (Section 6.1.1), but the "
+               "training file of the DELE release (data/go_string/train_yeast.owl, "
+               "93 MB) is not mOWL's (198 MB); the test and validation files are "
+               "byte-identical. The release is used, as the code is followed. "
+               + _CLOSURE_NOTE)),
     Benchmark(
         key="dele-human-ppi", name="DELE PPI prediction (human)",
         task=Task.LINK_PREDICTION,
