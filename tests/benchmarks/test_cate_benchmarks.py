@@ -196,6 +196,7 @@ def test_cate_recipes_resolve():
         assert recipe.model_kwargs["obvious_morphisms"] is False
     assert ppi.model_kwargs["complete_negation"] is False
     assert "obvious_morphisms" not in ppi.model_kwargs
+    assert get_recipe("cate-ore1-membership", "cate").model_kwargs["p"] == 1
 
 
 @pytest.mark.slow

@@ -15,7 +15,7 @@ _NOTE = ("The loss is Eq. 7 of the paper as the reference code computes it (the 
          "(loss_type='bpr') that is not catalogued. The norm p is not in Table 6: the "
          "paper's Eq. 6 prints the L2 norm, the ORE1 run script defaults to p=1, and "
          "the released PPI run script passes its arguments in the wrong order, so the "
-         "norms actually used are unknown; the recipes use p=2. Early stopping: the "
+         "norms actually used are unknown; the recipes use p=2, except ORE1 (p=1, the default of its run script; measured: p=1 gives MR 43.7 and Hits@10 0.63, p=2 gives MR 95.6 and Hits@10 0.41, published 37 and 0.51, seed 0). Early stopping: the "
          "code validates every 100 epochs and stops after 10 non-improving "
          "validations.")
 
@@ -42,6 +42,8 @@ def _build():
         notes = _NOTE
         if benchmark != "cate-yeast-ppi":
             model_kwargs.update(_RELEASED_GRAPH)
+        if benchmark == "cate-ore1-membership":
+            model_kwargs["p"] = 1
         if benchmark == "cate-yeast-ppi":
             # The released PPI training graph is ontology_extended.cat.s1.edgelist:
             # the lattice extended with the protein existentials and one round of the
