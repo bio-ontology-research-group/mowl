@@ -142,3 +142,27 @@ def test_reference_candidate_order_decides_ties():
     assert NormalFormRankingRegime().candidate_order == "model"
     with pytest.raises(ValueError):
         NormalFormRankingRegime(candidate_order="alphabetical")
+
+
+def test_elbe_options_of_the_transbox_code(dataset):
+    from mowl.models import ELBE
+    path = os.path.join(scratch_dir(), "elbe-opts.pt")
+    model = ELBE(dataset, embed_dim=2, model_filepath=path, gci3_form="inclusion",
+                 init="joint")
+    module = model.module
+    rows = th.cat([module.class_embed.weight, module.class_offset.weight], dim=1)
+    assert th.allclose(th.linalg.norm(rows, dim=1), th.ones(len(rows)), atol=1e-5)
+    module.margin = 0.0
+    default = ELBE(dataset, embed_dim=2, model_filepath=path).module
+    default.margin = 0.0
+    for m in (module, default):
+        with th.no_grad():
+            m.rel_embed.weight[0] = 0.0
+            m.class_embed.weight[:2] = 0.0
+            m.class_offset.weight[0] = 1.0     # C is larger than D: overlap, no inclusion
+            m.class_offset.weight[1] = 0.5
+    row = th.tensor([[0, 0, 1]])
+    assert float(default(row, "gci3").sum()) == pytest.approx(0.0, abs=1e-6)
+    assert float(module(row, "gci3").sum()) > 0
+    with pytest.raises(ValueError):
+        ELBE(dataset, embed_dim=2, model_filepath=path, gci3_form="volume")

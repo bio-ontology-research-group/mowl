@@ -15,6 +15,16 @@ Defaults to ``False``, which leaves the module exactly as before. See also \
     :param epsilon: The :math:`\\varepsilon` of the DELE negative losses for bottom normal \
 forms (minimal radius / offset norm of a satisfiable class). Defaults to ``0.01``.
     :type epsilon: float, optional
+    :param gci3_form: Loss of :math:`\\exists r.C \\sqsubseteq D`. ``"overlap"`` (default, \
+as in the ELBE and Box2EL codes): :math:`\\lVert\\max(0, |c - r - d| - o_C - o_D + m)\\rVert`, \
+zero as soon as the translated box of :math:`C` overlaps the box of :math:`D`. \
+``"inclusion"`` (the corrected loss of the TransBox code, ``model/Elbe.py``): \
+:math:`\\lVert\\max(0, |c - r - d| + o_C - o_D + m)\\rVert`.
+    :type gci3_form: str, optional
+    :param init: ``"separate"`` (default): centres and offsets are each drawn from \
+:math:`U(-1, 1)^n` and scaled to unit norm. ``"joint"`` (the Box2EL and TransBox codes): \
+centre and offset of a class form one row of :math:`U(-1, 1)^{2n}` scaled to unit norm.
+    :type init: str, optional
     """
 
     neg_capable_gcis = frozenset({"gci2", "object_property_assertion"})
@@ -41,8 +51,15 @@ parameter ``all_negative_losses``) and extend :attr:`neg_capable_gcis` according
     margin_semantics = "strict"
 
     def __init__(self, nb_ont_classes, nb_rels, nb_inds=None, embed_dim=50, margin=0.1,
-                 all_negative_losses=False, epsilon=0.01):
+                 all_negative_losses=False, epsilon=0.01, gci3_form="overlap",
+                 init="separate"):
         super().__init__()
+        if gci3_form not in ("overlap", "inclusion"):
+            raise ValueError("gci3_form must be 'overlap' or 'inclusion'.")
+        if init not in ("separate", "joint"):
+            raise ValueError("init must be 'separate' or 'joint'.")
+        self.gci3_form = gci3_form
+        self.init = init
         self.nb_ont_classes = nb_ont_classes
         self.nb_rels = nb_rels
         self.nb_inds = nb_inds
@@ -61,6 +78,14 @@ parameter ``all_negative_losses``) and extend :attr:`neg_capable_gcis` according
         weight_data_normalized = th.linalg.norm(self.class_offset.weight.data, axis=1)
         weight_data_normalized = weight_data_normalized.reshape(-1, 1)
         self.class_offset.weight.data /= weight_data_normalized
+
+        if init == "joint":
+            weight = th.empty(self.nb_ont_classes, 2 * embed_dim)
+            nn.init.uniform_(weight, a=-1, b=1)
+            weight = weight / th.linalg.norm(weight, dim=1, keepdim=True)
+            with th.no_grad():
+                self.class_embed.weight.copy_(weight[:, :embed_dim])
+                self.class_offset.weight.copy_(weight[:, embed_dim:])
 
         self.rel_embed = nn.Embedding(nb_rels, embed_dim)
         nn.init.uniform_(self.rel_embed.weight, a=-1, b=1)
@@ -121,6 +146,9 @@ parameter ``all_negative_losses``) and extend :attr:`neg_capable_gcis` according
         if self._dele_neg(neg):
             return L.gci3_loss_neg(data, self.class_embed, self.class_offset, self.rel_embed,
                                    self.margin)
+        if self.gci3_form == "inclusion" and not neg:
+            return L.gci3_inclusion_loss(data, self.class_embed, self.class_offset,
+                                         self.rel_embed, self.margin)
         return L.gci3_loss(data, self.class_embed, self.class_offset, self.rel_embed,
                            self.margin, neg=neg)
 

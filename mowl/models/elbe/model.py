@@ -22,6 +22,12 @@ class ELBE(EmbeddingELModel):
         Non-negative weight multiplying ``init_boxes.anchor_loss(self.module)``
         in :meth:`get_regularization_loss` when ``init_boxes`` is provided.
         Defaults leave behaviour unchanged.
+    gci3_form : str, default "overlap"
+        Loss of ``∃r.C ⊑ D``; ``"inclusion"`` is the corrected loss of the TransBox code
+        (see :class:`~mowl.nn.ELBEModule`).
+    init : str, default "separate"
+        ``"joint"`` initialises centre and offset of a class together, as the Box2EL and
+        TransBox codes do (see :class:`~mowl.nn.ELBEModule`).
     """
 
     def __init__(self,
@@ -35,7 +41,9 @@ class ELBE(EmbeddingELModel):
                  device='cpu',
                  neg_sampling_gcis=None,
                  init_boxes=None,
-                 anchor_weight=0.0
+                 anchor_weight=0.0,
+                 gci3_form="overlap",
+                 init="separate"
                  ):
         if float(anchor_weight) < 0:
             raise ValueError(f"anchor_weight must be >= 0, got {anchor_weight!r}")
@@ -48,6 +56,8 @@ class ELBE(EmbeddingELModel):
         self.reg_norm = reg_norm
         self.init_boxes = init_boxes
         self.anchor_weight = float(anchor_weight)
+        self.gci3_form = gci3_form
+        self.init = init
         self._loaded = False
         self.extended = False
         self._mse_criterion = th.nn.MSELoss()
@@ -59,7 +69,9 @@ class ELBE(EmbeddingELModel):
             len(self.object_property_index_dict),
             len(self.individual_index_dict),
             embed_dim=self.embed_dim,
-            margin=self.margin
+            margin=self.margin,
+            gci3_form=self.gci3_form,
+            init=self.init
         ).to(self.device)
         if self.init_boxes is not None:
             self.init_boxes.apply_to_module(

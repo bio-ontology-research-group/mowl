@@ -115,6 +115,19 @@ def gci3_loss(data, class_embed, class_offset, rel_embed, margin, neg=False):
 
 
 
+def gci3_inclusion_loss(data, class_embed, class_offset, rel_embed, margin):
+    """:math:`\\exists r.C \\sqsubseteq D` as the inclusion of the box of :math:`C`,
+    translated by :math:`-r`, in the box of :math:`D` (``nf4Loss`` of ``model/Elbe.py`` in
+    the TransBox code)."""
+    r = rel_embed(data[:, 0])
+    c = class_embed(data[:, 1])
+    d = class_embed(data[:, 2])
+    off_c = th.abs(class_offset(data[:, 1]))
+    off_d = th.abs(class_offset(data[:, 2]))
+    euc = th.abs(c - r - d)
+    return th.reshape(th.linalg.norm(th.relu(euc + off_c - off_d + margin), axis=1), [-1, 1])
+
+
 def gci3_bot_loss(data, class_offset, neg=False):
     off_c = th.abs(class_offset(data[:, 1]))
     loss = th.linalg.norm(off_c, axis=1)

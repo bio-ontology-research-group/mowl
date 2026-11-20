@@ -19,6 +19,11 @@ from mowl.benchmarks.entries._refs import YANG2025
 
 _KEYS = {"Box2EL": "box2el", "BoxEL": "boxel", "ELBE": "elbe", "TransBox": "transbox",
          "CatE": "cate"}
+#: Training design behind each row: TransBox was trained by the TransBox code, the
+#: baselines by the Box2EL code design (ELBE and BoxEL through baseline_sweep.py of the
+#: TransBox code, Box2EL with the Box2EL code); CatE is not an EL model of mOWL.
+_REGIME = {"transbox": "transbox-code-training", "box2el": "box2el-code-training",
+           "elbe": "box2el-code-training", "boxel": "box2el-code-training"}
 _NAMES = ("hits@1", "hits@10", "hits@100", "med", "mrr", "mr", "auc")
 
 _NOTE = ("Average of 10 runs, 5,000 epochs, hyperparameters selected on validation "
@@ -118,4 +123,5 @@ for _onto, _subset, _loc, _text in _TABLES:
         RESULTS.append(PublishedResult(
             benchmark=f"transbox-{_onto}-prediction", method=_KEYS[_parts[0]],
             metrics=_metrics, source=YANG2025, locator=_loc, subset=_subset,
-            settings={"training_regime": "transbox-code-training"}, note=_note))
+            settings=({"training_regime": _REGIME[_KEYS[_parts[0]]]}
+                      if _KEYS[_parts[0]] in _REGIME else {}), note=_note))

@@ -107,17 +107,43 @@ REGIMES = (
         name="Training design of the TransBox code",
         kind=RegimeKind.TRAINING,
         summary=(
-            "The design of box2el-code-training with 1024 axioms per normal form and "
-            "step; the margin is a slack margin although the paper writes a strict one."),
-        components=("batching", "negative sampling", "margin", "model selection"),
-        applies_to="EmbeddingELModel",
+            "One step per epoch on 1024 random axioms of every normal form (role "
+            "inclusions and chains included), every per-axiom loss squared, negatives "
+            "for C ⊑ ∃r.D with each side corrupted pushed to the distance neg_dist with "
+            "a squared loss, a slack margin, Adam without schedule, and selection of "
+            "the parameters with the best validation median rank of C ⊑ D every 100 "
+            "epochs. For TransBox it needs the per-axiom losses of the code "
+            "(TransBox(formulation='reference'))."),
+        components=("batching", "negative sampling", "margin", "loss",
+                    "model selection"),
+        applies_to="TransBox with formulation='reference'",
         references=(YANG2025, JACKERMEIER2024),
         standalone=False,
         introduced_with=("transbox",),
+        used_by=("transbox",),
         implementation="mowl.training.reference.TransBoxCodeTraining",
         properties=(_ZERO_LOSS,),
-        notes=("From model/TransBox_reg.py and configs_our.json of HuiYang1997/TransBox, "
-               "which is derived from the Box2EL code."),
+        limitations=(
+            "Model selection looks at C ⊑ D only.",
+            "The code's loss for C ⊓ D ⊑ E only asks the intersection to overlap Box(E) "
+            "(signed half-width), not to lie inside it; see "
+            "mowl.nn.el.transbox.code_losses.",
+        ),
+        notes=(
+            "From run_many_seeds.py, baseline_sweep.py, model/TransBox_reg.py and "
+            "configs_our.json (section 'transbox') of HuiYang1997/TransBox, derived from "
+            "the Box2EL code. A composition of per-normal-form-minibatch, "
+            "per-column-corruption, slack-inclusion-margin, mse-to-target (target 0 for "
+            "positives, neg_dist for negatives) and validation-rank-selection. "
+            "Differences of the code's losses from mOWL's default TransBox losses "
+            "(centre-norm term inside every axiom with weight 1, Minkowski-difference "
+            "loss for C ⊑ ∃r.D without clamping, signed intersection half-width, "
+            "overlap-shaped negative loss, regularisation of role offsets only, joint "
+            "initialisation of centre and offset) are the module option "
+            "formulation='reference'. Not replicated: negatives drawn once before "
+            "training; 1024 draws with replacement from normal forms with fewer axioms; "
+            "an (n, n) broadcast in the C ⊓ D ⊑ E loss that changes only the cross term "
+            "of the squared sum."),
     ),
     RegimeCard(
         key="transbox-normal-form-ranking",
@@ -141,7 +167,15 @@ REGIMES = (
             "ELBE on GALEN where the Box2EL paper reports 0.28 and 0.11.",),
         notes=("Yang et al. 2025, Section 6.2 and Appendix E; evaluate.py of the TransBox "
                "code (compute_nf2_ranks). TransBox itself is scored with the empty "
-               "dimensions masked (compute_nf2_ranks_transbox)."),
+               "dimensions masked (compute_nf2_ranks_transbox); its other normal forms "
+               "use centre distances with ∃r.D centred at c(r) + c(D) "
+               "(compute_nf3/nf4_ranks_transbox), ELBE translations (c ± r), Box2EL its "
+               "bump vectors, BoxEL overlap volumes, all as in the Box2EL code. Ties "
+               "follow the class index order of the reference release "
+               "(candidate_order='reference'): when all candidates score 0 the rank is "
+               "the position of the true class in that order, which decides the median "
+               "and mean rank of C ⊓ D ⊑ E for models whose conjunct boxes are "
+               "disjoint."),
     ),
     RegimeCard(
         key="empty-intersection-zero-scoring",
