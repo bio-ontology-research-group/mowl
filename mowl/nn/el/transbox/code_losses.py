@@ -55,7 +55,9 @@ def gci0_loss(data, class_center, class_offset, margin):
     return dst + centre_norm_penalty(c) + centre_norm_penalty(d)
 
 
-def gci1_loss(data, class_center, class_offset, margin):
+def gci1_terms(data, class_center, class_offset, margin):
+    """The two parts of :func:`gci1_loss`: the emptiness penalty :math:`p` and the
+    masked inclusion term plus centre-norm terms :math:`q` (``gci1_loss = p + q``)."""
     c, oc = class_center(data[:, 0]), class_offset(data[:, 0])
     d, od = class_center(data[:, 1]), class_offset(data[:, 1])
     e, oe = class_center(data[:, 2]), class_offset(data[:, 2])
@@ -63,11 +65,15 @@ def gci1_loss(data, class_center, class_offset, margin):
     end = th.minimum(c + oc, d + od)
     mask = (start <= end).to(start.dtype)
     empty = _norm(F.relu(start - end))
-    signed_half = (start - end) / 2
-    centre = (start + end) / 2
-    s = ((centre - e).abs() + signed_half - oe) * mask
-    dst = empty + _norm(F.relu(s + margin * mask))
-    return dst + centre_norm_penalty(c) + centre_norm_penalty(d) + centre_norm_penalty(e)
+    s = ((((start + end) / 2) - e).abs() + (start - end) / 2 - oe) * mask
+    rest = _norm(F.relu(s + margin * mask))
+    rest = rest + centre_norm_penalty(c) + centre_norm_penalty(d) + centre_norm_penalty(e)
+    return empty, rest
+
+
+def gci1_loss(data, class_center, class_offset, margin):
+    p, q = gci1_terms(data, class_center, class_offset, margin)
+    return p + q
 
 
 def disjointness_loss(data, class_center, class_offset, margin):

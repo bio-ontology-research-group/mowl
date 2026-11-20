@@ -166,3 +166,20 @@ def test_elbe_options_of_the_transbox_code(dataset):
     assert float(module(row, "gci3").sum()) > 0
     with pytest.raises(ValueError):
         ELBE(dataset, embed_dim=2, model_filepath=path, gci3_form="volume")
+
+
+def test_nf2_pairwise_option():
+    from mowl.nn.el.transbox.code_losses import gci1_terms
+    model = _model(tiny_dataset(), formulation="reference")
+    regime = TransBoxCodeTraining(batch_size=4, margin=0.0, nf2_pairwise=True,
+                                  select=False)
+    model.training_regime = regime
+    regime.training_datasets(model.training_datasets)
+    regime.on_epoch_start(0, 1)
+    rows = regime._datasets["gci1"][:]
+    m = model.module
+    p, q = gci1_terms(rows, m.class_center, m.class_offset, m.margin)
+    expected = ((p[:, None] + q[None, :]) ** 2).mean()
+    assert float(regime.loss("gci1", m(rows, "gci1"), None)) == pytest.approx(
+        float(expected))
+    assert th.allclose(m(rows, "gci1"), p + q)

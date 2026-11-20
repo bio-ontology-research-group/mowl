@@ -124,18 +124,37 @@ class TransBoxCodeTraining(Box2ELCodeTraining):
     :param validate_every: Epochs between validations (100).
     :param select: Set to ``False`` to train without model selection.
     :param seed: Seed of the batch and negative samplers.
+    :param nf2_pairwise: Replicate the broadcasting slip of the code for
+        :math:`C \\sqcap D \\sqsubseteq E`: loss :math:`\\mathrm{mean}_{i,j}(p_i + q_j)^2`
+        instead of :math:`\\mathrm{mean}_i(p_i + q_i)^2` (default ``False``).
     """
 
     key = "transbox-code-training"
     _default_batch_size = 1024
 
     def __init__(self, batch_size=None, num_negatives=1, margin=None, neg_dist=1.0,
-                 lr_milestones=None, validate_every=100, select=True, seed=None):
+                 lr_milestones=None, validate_every=100, select=True, seed=None,
+                 nf2_pairwise=False):
         super().__init__(batch_size=batch_size, num_negatives=num_negatives,
                          margin=margin, neg_target=neg_dist, lr_milestones=lr_milestones,
                          validate_every=validate_every, select=select, seed=seed)
         self.key = type(self).key
         self.neg_dist = float(neg_dist)
+        self.nf2_pairwise = bool(nf2_pairwise)
+        self._datasets = {}
+
+    def training_datasets(self, datasets):
+        self._datasets = super().training_datasets(datasets)
+        return self._datasets
+
+    def loss(self, gci_name, pos_scores, neg_scores):
+        if self.nf2_pairwise and gci_name == "gci1" and "gci1" in self._datasets:
+            from mowl.nn.el.transbox.code_losses import gci1_terms
+            module = self.model.module
+            p, q = gci1_terms(self._datasets["gci1"][:], module.class_center,
+                              module.class_offset, module.margin)
+            return ((p[:, None] + q[None, :]) ** 2).mean()
+        return super().loss(gci_name, pos_scores, neg_scores)
 
     def attach(self, model):
         formulation = getattr(getattr(model, "module", None), "formulation", None)
