@@ -61,6 +61,15 @@ def test_joint_initialisation_rejects_unknown_module(dataset):
     model = _model(BoxEL, dataset)
     with pytest.raises(TypeError):
         model.training_regime = JointNormalisedInitialisation()
+    before = model.module.min_embedding.weight.detach().clone()
+    model.training_regime = JointNormalisedInitialisation(strict=False)
+    assert th.equal(before, model.module.min_embedding.weight)
+
+
+def test_box2el_code_training_baseline_code_on_boxel(dataset):
+    model = _model(BoxEL, dataset)
+    model.training_regime = Box2ELCodeTraining(batch_size=4, baseline_code=True, seed=0)
+    assert model.module.regulariser == "box2el_code"
 
 
 def test_unbounded_negative_loss(dataset):

@@ -92,7 +92,8 @@ class Box2ELCodeTraining(ComposedRegime):
                                           seed=seed),
                  corruption]
         if initialisation == "joint":
-            parts.append(JointNormalisedInitialisation(seed=seed))
+            # BoxEL has no such pair; the code initialises it as mOWL does.
+            parts.append(JointNormalisedInitialisation(strict=False, seed=seed))
         if baseline_losses:
             parts.append(Box2ELBaselineLosses())
         if margin is not None:

@@ -184,6 +184,11 @@ REGIMES = (
             "class whose index equals the role index instead of D; the published BoxEL "
             "numbers for that normal form (e.g. Hits@100 0.69 on GALEN) and the combined "
             "numbers that include them cannot be reproduced by a correct evaluation.",),
-        notes=("evaluate.py of KRR-Oxford/BoxSquaredEL, compute_nf*_ranks_boxel."),
+        notes=("evaluate.py of KRR-Oxford/BoxSquaredEL, compute_nf*_ranks_boxel. For "
+               "C ⊓ D ⊑ E the score is one minus the absolute volume of a box in 25-50 "
+               "dimensions, which is about 1 for every candidate; the published 0.00 "
+               "for that normal form reflects these ties. Reproducible with the recipe "
+               "(box2el-code-training with baseline_code): the BoxEL numbers for C ⊑ D, "
+               "C ⊓ D ⊑ E, C ⊑ ∃r.D and the deductive-reasoning numbers."),
     ),
 )

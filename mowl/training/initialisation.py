@@ -62,13 +62,17 @@ class JointNormalisedInitialisation(TrainingRegime):
     :param size_low: Lower end of the uniform draw of the radius (offset) coordinates
         before normalisation: ``-1`` (default; ELEm and the Box2EL code) or ``0`` (the
         EmEL++ code draws radii from :math:`[0, 1]`).
+    :param strict: Raise :class:`TypeError` for a module without registered
+        ``(centre, size)`` embeddings. With ``False`` such a module keeps its own
+        initialisation (BoxEL in the Box2EL code is initialised as in mOWL).
     :param seed: Seed of the draw (``None``: PyTorch's global generator).
     """
 
     key = "joint-normalised-initialisation"
 
-    def __init__(self, size_low=-1.0, seed=None):
+    def __init__(self, size_low=-1.0, strict=True, seed=None):
         super().__init__()
+        self.strict = bool(strict)
         self.size_low = float(size_low)
         if not -1.0 <= self.size_low < 1.0:
             raise ValueError("size_low must be in [-1, 1).")
@@ -79,6 +83,8 @@ class JointNormalisedInitialisation(TrainingRegime):
         module = getattr(model, "module", None)
         groups = _lookup(JOINT_GROUPS, module)
         if groups is None:
+            if not self.strict:
+                return
             raise TypeError(
                 f"{type(module).__name__} has no registered (centre, size) embeddings; "
                 f"register them in mowl.training.initialisation.JOINT_GROUPS.")
