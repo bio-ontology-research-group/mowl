@@ -18,6 +18,19 @@ _BOX2EL = {
                 "inference": (0.05, 0.001, 2, 2, 0.05, None, 7000)},
 }
 
+_BASELINE_NOTE = {
+    "elem": (" The Box2EL code trains the baselines with negatives drawn once before "
+             "training and initialises centre and radius jointly (radii start near 0.06, "
+             "mOWL's default is 1); without these the C ⊓ D ⊑ E and ∃r.C ⊑ D numbers "
+             "stay far below the paper and the C ⊑ D numbers on GO far above it."),
+    "boxel": (" The published numbers for ∃r.C ⊑ D, and the combined numbers that "
+              "include them, come from a bug of the reference evaluation (see the "
+              "regime 'overlap-volume-scoring') and cannot be reproduced."),
+}
+_BASELINE_NOTE["emelpp"] = _BASELINE_NOTE["elem"]
+_BASELINE_NOTE["elbe"] = (" The Box2EL code trains ELBE with negatives drawn once before "
+                          "training and a joint initialisation of centre and offset.")
+
 # method -> ontology -> task -> (embed_dim, margin or None, lr)
 _BASELINES = {
     "elem": {"galen": {"prediction": (200, 0.05, 0.0005), "inference": (200, 0, 0.0005)},
@@ -56,19 +69,25 @@ def _build():
     for method, ontos in _BASELINES.items():
         for onto, tasks in ontos.items():
             for task, (dim, margin, lr) in tasks.items():
-                kwargs = {"num_negatives": 1}
+                # The baselines of the code: negatives drawn once, joint initialisation,
+                # the loss details of model/*.py (see Box2ELCodeTraining).
+                kwargs = {"num_negatives": 1, "baseline_code": True}
                 if margin is not None:
                     kwargs["margin"] = margin
                 if method == "elbe":
                     kwargs["neg_target"] = 2.0
+                model_kwargs = {"embed_dim": dim, "learning_rate": lr}
+                if method == "emelpp":
+                    # model/EmELpp.py trains on the role inclusions and chains.
+                    model_kwargs["load_role_axioms"] = True
                 out.append(Recipe(
                     benchmark=f"box2el-{onto}-{task}", method=method,
                     source=JACKERMEIER2024,
-                    model_kwargs={"embed_dim": dim, "learning_rate": lr},
+                    model_kwargs=model_kwargs,
                     training_regime="box2el-code-training", regime_kwargs=kwargs,
                     epochs=10000, validate_every=100,
                     locator="Table 10 of the paper; model/*.py of KRR-Oxford/BoxSquaredEL",
-                    notes=_B2E_NOTE))
+                    notes=_B2E_NOTE + _BASELINE_NOTE.get(method, "")))
     for onto, (margin, reg) in _TRANSBOX.items():
         out.append(Recipe(
             benchmark=f"transbox-{onto}-prediction", method="transbox", source=YANG2025,

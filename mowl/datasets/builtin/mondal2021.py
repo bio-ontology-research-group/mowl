@@ -70,12 +70,12 @@ class EmELppSubsumptionDataset(PathDataset):
 
     The paper (Section 4.3) removes 30% of the atomic subclass pairs of the normalised
     ontology for validation (20%) and testing (10%) and trains on the rest. The release
-    contains the normalised ontology (``*_norm_mod.owl``) and the three pair lists; the
-    reference training script, however, loads the *whole* normalised ontology, which
-    still contains the validation and test pairs (the leakage pointed out by
-    Jackermeier et al., WWW 2024, footnote 5). mOWL follows the paper's text: the
-    training ontology is the normalised ontology without the atomic subsumptions
-    listed in the validation or test files.
+    contains the normalised ontology (``*_norm_mod.owl``) and the three pair lists. The
+    released ontology no longer contains the test pairs but still contains every
+    validation pair, and the reference training script trains on it. mOWL follows the
+    paper's text: the training ontology is the normalised ontology without the atomic
+    subsumptions listed in the validation or test files. The training regime
+    :class:`~mowl.training.ValidationAxiomsAsPositives` adds the validation pairs back.
 
     SNOMED CT is not provided: the release has no normalised SNOMED ontology, and
     SNOMED CT cannot be redistributed.

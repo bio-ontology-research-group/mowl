@@ -43,6 +43,32 @@ parameter ``all_negative_losses``) and extend :attr:`neg_capable_gcis` according
 
     margin_semantics = "slack"
 
+    #: Form of the negative loss of :math:`C \not\sqsubseteq \exists R.D`: ``"hinge"``
+    #: (default) :math:`\max(0, r_C + r_D - \lVert c + R - d \rVert + \gamma)`, or
+    #: ``"linear"``, the same expression without the hinge, as in the ELEm and EmEL++
+    #: baselines of the Box\ :sup:`2`\ EL code. Set by the training regime
+    #: :class:`~mowl.training.UnboundedNegativeLoss`; the default leaves the module unchanged.
+    negative_loss_form = "hinge"
+
+    #: Where the unit-norm penalty :math:`|\lVert c \rVert - 1|` of the class centres is
+    #: applied: ``"global"`` (default) once per step, averaged over all classes
+    #: (:meth:`regularization_loss`), or ``"per_axiom"``, added to the loss of every axiom
+    #: for every class centre it contains (including negatives), with
+    #: :meth:`regularization_loss` zero, as in the original ELEmbeddings code and the
+    #: baselines of the Box\ :sup:`2`\ EL code. Set by the training regime
+    #: :class:`~mowl.training.PerAxiomNormPenalty`.
+    norm_penalty = "global"
+
+    def _penalised(self, loss, data, columns):
+        """``loss`` plus, with ``norm_penalty="per_axiom"``, the unit-norm penalty of the
+        class centres in ``columns`` of ``data``."""
+        if self.norm_penalty != "per_axiom":
+            return loss
+        for col in columns:
+            centre = self.class_embed(data[:, col])
+            loss = loss + th.abs(th.linalg.norm(centre, dim=1, keepdim=True) - self.reg_norm)
+        return loss
+
     def __init__(self, nb_ont_classes, nb_rels, nb_inds, embed_dim=50, margin=0.1, reg_norm=1,
                  all_negative_losses=False, epsilon=0.01):
         super().__init__()
@@ -96,10 +122,20 @@ parameter ``all_negative_losses``) and extend :attr:`neg_capable_gcis` according
             self.enable_all_negative_losses()
 
     def gci0_loss(self, data, neg=False):
+        shift = getattr(self, "subclass_relation", None)
         if self._dele_neg(neg):
-            return L.gci0_loss_neg(data, self.class_embed, self.class_rad, self.margin)
-        return L.gci0_loss(data, self.class_embed, self.class_rad, self.margin,
-                           neg=neg)
+            loss = L.gci0_loss_neg(data, self.class_embed, self.class_rad, self.margin)
+        elif shift is not None:
+            # C ⊑ D as a translation by a learned "SubClassOf" vector (set by the training
+            # regime EmELppCodeObjective, as in the ELEmbeddings/EmEL++ Keras code).
+            c = self.class_embed(data[:, 0]) + shift
+            d = self.class_embed(data[:, 1])
+            rc = th.abs(self.class_rad(data[:, 0]))
+            rd = th.abs(self.class_rad(data[:, 1]))
+            loss = L.ball_inclusion_score(c, rc, d, rd, self.margin)
+        else:
+            loss = L.gci0_loss(data, self.class_embed, self.class_rad, self.margin, neg=neg)
+        return self._penalised(loss, data, (0, 1))
 
     def gci0_bot_loss(self, data, neg=False):
         if self._dele_neg(neg):
@@ -108,26 +144,33 @@ parameter ``all_negative_losses``) and extend :attr:`neg_capable_gcis` according
         
     def gci1_loss(self, data, neg=False):
         if self._dele_neg(neg):
-            return L.gci1_loss_neg(data, self.class_embed, self.class_rad, self.margin)
-        return L.gci1_loss(data, self.class_embed, self.class_rad, self.margin,
-                           neg=neg)
+            loss = L.gci1_loss_neg(data, self.class_embed, self.class_rad, self.margin)
+        else:
+            loss = L.gci1_loss(data, self.class_embed, self.class_rad, self.margin, neg=neg)
+        return self._penalised(loss, data, (0, 1, 2))
 
     def gci1_bot_loss(self, data, neg=False):
         if self._dele_neg(neg):
-            return L.gci1_bot_loss_neg(data, self.class_embed, self.class_rad, self.margin)
-        return L.gci1_bot_loss(data, self.class_embed, self.class_rad, self.margin,
-                               neg=neg)
+            loss = L.gci1_bot_loss_neg(data, self.class_embed, self.class_rad, self.margin)
+        else:
+            loss = L.gci1_bot_loss(data, self.class_embed, self.class_rad, self.margin,
+                                   neg=neg)
+        return self._penalised(loss, data, (0, 1))
 
     def gci2_loss(self, data, neg=False, idxs_for_negs=None):
-        return L.gci2_loss(data, self.class_embed, self.class_rad, self.rel_embed,
-                           self.margin, neg=neg)
+        loss = L.gci2_loss(data, self.class_embed, self.class_rad, self.rel_embed,
+                           self.margin, neg=neg,
+                           linear_neg=self.negative_loss_form == "linear")
+        return self._penalised(loss, data, (0, 2))
 
     def gci3_loss(self, data, neg=False):
         if self._dele_neg(neg):
-            return L.gci3_loss_neg(data, self.class_embed, self.class_rad, self.rel_embed,
+            loss = L.gci3_loss_neg(data, self.class_embed, self.class_rad, self.rel_embed,
                                    self.margin)
-        return L.gci3_loss(data, self.class_embed, self.class_rad, self.rel_embed,
-                           self.margin, neg=neg)
+        else:
+            loss = L.gci3_loss(data, self.class_embed, self.class_rad, self.rel_embed,
+                               self.margin, neg=neg)
+        return self._penalised(loss, data, (1, 2))
 
     def gci3_bot_loss(self, data, neg=False):
         if self._dele_neg(neg):
@@ -150,4 +193,6 @@ parameter ``all_negative_losses``) and extend :attr:`neg_capable_gcis` according
 
     
     def regularization_loss(self):
+        if self.norm_penalty == "per_axiom":
+            return th.zeros((), device=self.class_embed.weight.device)
         return L.regularization_loss(self.class_embed, self.ind_embed, self.reg_norm)

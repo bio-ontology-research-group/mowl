@@ -83,10 +83,18 @@ def gci2_score_neg(c, rad_c, d, rad_d, rel, margin):
     return loss 
 
 
-def gci2_loss(data, class_embed, class_rad, rel_embed, margin, neg=False):
+def gci2_score_neg_linear(c, rad_c, d, rad_d, rel, margin):
+    """The negative loss of :func:`gci2_score_neg` without the hinge (ELEm baseline of the
+    Box2EL code, ``model/Elem.py``, ``neg_loss``): it keeps decreasing as the balls move
+    apart and as their radii shrink."""
+    dst = th.linalg.norm(c + rel - d, dim=1, keepdim=True)
+    return rad_c + rad_d - dst + margin
+
+
+def gci2_loss(data, class_embed, class_rad, rel_embed, margin, neg=False, linear_neg=False):
 
     if neg:
-        fn = gci2_score_neg
+        fn = gci2_score_neg_linear if linear_neg else gci2_score_neg
     else:
         fn = gci2_score
 

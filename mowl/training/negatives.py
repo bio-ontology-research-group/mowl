@@ -735,3 +735,59 @@ class ContradictionNegatives(TrainingRegime):
             block[:, tail_col] = th.as_tensor(new, dtype=th.long, device=data.device)
             blocks.append(block)
         return th.cat(blocks, dim=0)
+
+
+class FixedNegatives(TrainingRegime):
+    """Negatives drawn *once*, before training, and reused at every step.
+
+    Most implementations draw new negatives at every step. The baselines of the
+    Box\\ :sup:`2`\\ EL code (ELEm, EmEL++, ELBE, BoxEL; ``train.py``,
+    ``sample_negatives``, called once because these models have
+    ``negative_sampling = False``) instead corrupt every training axiom once and then, at
+    every step, take ``batch_size`` rows at random (with replacement) from this fixed pool,
+    independently of the positives of the step. Box\\ :sup:`2`\\ EL itself redraws.
+
+    The pool is produced by ``sampler`` from the *full* training data of the normal form
+    (also when :class:`~mowl.training.PerNormalFormMiniBatches` serves mini-batches), the
+    first time the normal form asks for negatives.
+
+    :param sampler: The regime that generates the pool (a
+        :class:`CorruptionNegatives`; default: :class:`PerColumnCorruption` of
+        ``gci2``, both sides, one negative each -- the Box\\ :sup:`2`\\ EL code).
+    :param batch_size: Rows drawn from the pool at every step, or ``None`` for the whole
+        pool at every step.
+    :param seed: Seed of the draws from the pool.
+    """
+
+    key = "fixed-negatives"
+
+    def __init__(self, sampler=None, batch_size=None, seed=None):
+        super().__init__()
+        if sampler is None:
+            sampler = PerColumnCorruption(columns={"gci2": (0, 2)}, seed=seed)
+        if not isinstance(sampler, TrainingRegime):
+            raise TypeError("sampler must be a TrainingRegime that generates negatives.")
+        self.sampler = sampler
+        self.batch_size = None if batch_size is None else int(batch_size)
+        self.rng = np.random.default_rng(seed)
+        self.pools = {}
+
+    def attach(self, model):
+        super().attach(model)
+        self.sampler.attach(model)
+        self.pools = {}
+
+    def negatives(self, gci_name, gci_dataset):
+        if gci_name not in self.pools:
+            full = getattr(gci_dataset, "full", None)
+            if full is None:
+                full = gci_dataset[:]
+            self.pools[gci_name] = self.sampler.negatives(gci_name, full)
+        pool = self.pools[gci_name]
+        if pool is NotImplemented or pool is None or self.batch_size is None:
+            return pool
+        if len(pool) == 0:
+            return None
+        idx = th.as_tensor(self.rng.integers(0, len(pool), size=self.batch_size),
+                           dtype=th.long, device=pool.device)
+        return pool[idx]

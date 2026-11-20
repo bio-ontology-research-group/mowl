@@ -21,22 +21,33 @@ def unit_norm_penalty(*vectors):
     return total
 
 
-def gci0_loss(c, rc, d, rd, margin):
-    """Eq. 1: :math:`C \\sqsubseteq D`."""
-    dist = th.linalg.norm(c - d, dim=1, keepdim=True)
+def gci0_loss(c, rc, d, rd, margin, shift=None):
+    """Eq. 1: :math:`C \\sqsubseteq D`.
+
+    :param shift: Optional vector added to the centre of :math:`C` before the distance is
+        taken (the learned "SubClassOf" translation of the EmEL++ Keras code).
+    """
+    moved = c if shift is None else c + shift
+    dist = th.linalg.norm(moved - d, dim=1, keepdim=True)
     return th.relu(dist + rc - rd - margin) + unit_norm_penalty(c, d)
 
 
-def gci1_loss(c, rc, d, rd, e, re, margin):
-    """Eq. 2: :math:`C \\sqcap D \\sqsubseteq E`, including the term on the smaller radius."""
+def gci1_loss(c, rc, d, rd, e, re, margin, radius_term=True):
+    """Eq. 2: :math:`C \\sqcap D \\sqsubseteq E`, including the term on the smaller radius.
+
+    :param radius_term: Set to ``False`` to drop the term
+        :math:`\\max(0, \\min(r_C, r_D) - r_E - \\gamma)`, which the EmEL++ baseline of the
+        Box\\ :sup:`2`\\ EL code (``model/EmELpp.py``) has commented out.
+    """
     dist_cd = th.linalg.norm(c - d, dim=1, keepdim=True)
     dist_ce = th.linalg.norm(c - e, dim=1, keepdim=True)
     dist_de = th.linalg.norm(d - e, dim=1, keepdim=True)
     terms = [th.relu(dist_cd - rc - rd - margin),
              th.relu(dist_ce - rc - margin),
              th.relu(dist_de - rd - margin),
-             th.relu(th.minimum(rc, rd) - re - margin),
              unit_norm_penalty(c, d, e)]
+    if radius_term:
+        terms.append(th.relu(th.minimum(rc, rd) - re - margin))
     return sum(terms)
 
 
@@ -67,10 +78,17 @@ def gci3_loss(rel, c, rc, d, rd, margin, sigma=None, sigma_reg_weight=1.0):
     return loss
 
 
-def gci2_neg_loss(c, rc, rel, d, rd, margin):
-    """Eq. 10: negative loss for :math:`C \\not\\sqsubseteq \\exists R.D`."""
+def gci2_neg_loss(c, rc, rel, d, rd, margin, linear=False):
+    """Eq. 10: negative loss for :math:`C \\not\\sqsubseteq \\exists R.D`.
+
+    :param linear: Drop the hinge, as the EmEL++ baseline of the Box\\ :sup:`2`\\ EL code
+        does (``model/EmELpp.py``, ``neg_loss``).
+    """
     dist = th.linalg.norm(c + rel - d, dim=1, keepdim=True)
-    return th.relu(rc + rd - dist + margin) + unit_norm_penalty(c, d)
+    violation = rc + rd - dist + margin
+    if not linear:
+        violation = th.relu(violation)
+    return violation + unit_norm_penalty(c, d)
 
 
 def gci1_bot_loss(c, rc, d, rd, margin):

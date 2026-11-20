@@ -40,13 +40,30 @@ class EmELPPModule(ELEmModule):
 
     role_axiom_capable = True
 
+    #: Whether the loss of :math:`C \sqcap D \sqsubseteq E` contains the term on the
+    #: smaller radius (Eq. 2 of the paper). The EmEL++ baseline of the
+    #: Box\ :sup:`2`\ EL code leaves it out; the training regime
+    #: :class:`~mowl.training.Box2ELBaselineLosses` sets this to ``False``.
+    intersection_radius_term = True
+
+    #: The unit-norm penalties are part of every axiom loss (Eq. 1-10), so the penalty is
+    #: always per axiom (see :attr:`ELEmModule.norm_penalty`).
+    norm_penalty = "per_axiom"
+
     def __init__(self, nb_ont_classes, nb_rels, nb_inds=0, embed_dim=50, margin=0.1):
         super().__init__(nb_ont_classes, nb_rels, nb_inds or 0, embed_dim=embed_dim,
                          margin=margin)
 
     # ----------------------------------------------------------------- helpers
 
+    #: How the stored radius is turned into a non-negative radius: ``"abs"`` (default) or
+    #: ``"relu"`` (:math:`\max(0, r)`, the EmEL++ Keras code). Set by the training regime
+    #: :class:`~mowl.training.EmELppCodeObjective`.
+    radius_form = "abs"
+
     def _rad(self, idx):
+        if self.radius_form == "relu":
+            return th.relu(self.class_rad(idx))
         return th.abs(self.class_rad(idx))
 
     def _sigma(self, rel_idx):
@@ -56,7 +73,8 @@ class EmELPPModule(ELEmModule):
     def _gci2(self, c, rc, rel_idx, d, rd, neg):
         rel = self.rel_embed(rel_idx)
         if neg:
-            return L.gci2_neg_loss(c, rc, rel, d, rd, self.margin)
+            return L.gci2_neg_loss(c, rc, rel, d, rd, self.margin,
+                                   linear=self.negative_loss_form == "linear")
         return self._gci2_pos(c, rc, rel, rel_idx, d, rd)
 
     def _gci2_pos(self, c, rc, rel, rel_idx, d, rd):
@@ -67,7 +85,8 @@ class EmELPPModule(ELEmModule):
 
     def gci0_loss(self, data, neg=False):
         return L.gci0_loss(self.class_embed(data[:, 0]), self._rad(data[:, 0]),
-                           self.class_embed(data[:, 1]), self._rad(data[:, 1]), self.margin)
+                           self.class_embed(data[:, 1]), self._rad(data[:, 1]), self.margin,
+                           shift=getattr(self, "subclass_relation", None))
 
     def gci0_bot_loss(self, data, neg=False):
         return L.bot_loss(self._rad(data[:, 0]))
@@ -75,7 +94,8 @@ class EmELPPModule(ELEmModule):
     def gci1_loss(self, data, neg=False):
         return L.gci1_loss(self.class_embed(data[:, 0]), self._rad(data[:, 0]),
                            self.class_embed(data[:, 1]), self._rad(data[:, 1]),
-                           self.class_embed(data[:, 2]), self._rad(data[:, 2]), self.margin)
+                           self.class_embed(data[:, 2]), self._rad(data[:, 2]), self.margin,
+                           radius_term=self.intersection_radius_term)
 
     def gci1_bot_loss(self, data, neg=False):
         return L.gci1_bot_loss(self.class_embed(data[:, 0]), self._rad(data[:, 0]),

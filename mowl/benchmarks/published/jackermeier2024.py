@@ -157,6 +157,22 @@ def _rows(text, names):
         yield _KEYS[parts[0]], dict(zip(names, (float(v) for v in parts[1:])))
 
 
+_BOXEL_NF4_NOTE = (
+    " Not reproducible: the reference evaluation of BoxEL for ∃r.C ⊑ D "
+    "(evaluate.py, compute_nf4_ranks_boxel) ranks the class whose index equals the role "
+    "index instead of D (see the regime 'overlap-volume-scoring'); the combined numbers "
+    "include these ranks.")
+
+
+def _note(method, subset, bench):
+    note = ("Mean over 5 seeds; baselines re-run by the authors with the Box2EL "
+            "evaluation code.")
+    if (method == "boxel" and bench.endswith("-prediction")
+            and subset in ("gci3", "combined")):
+        note += _BOXEL_NF4_NOTE
+    return note
+
+
 RESULTS = []
 for _bench, _subset, _loc, _text in _TABLES:
     for _method, _metrics in _rows(_text, _RANK):
@@ -164,8 +180,7 @@ for _bench, _subset, _loc, _text in _TABLES:
             benchmark=_bench, method=_method, metrics=_metrics, source=JACKERMEIER2024,
             locator=_loc, subset=_subset,
             settings={"training_regime": "box2el-code-training"},
-            note="Mean over 5 seeds; baselines re-run by the authors with the Box2EL "
-                 "evaluation code."))
+            note=_note(_method, _subset, _bench)))
 for _bench, _loc, _text in _PPI_TABLES:
     for _method, _metrics in _rows(_text, _PPI):
         RESULTS.append(PublishedResult(
