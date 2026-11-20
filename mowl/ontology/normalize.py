@@ -9,6 +9,7 @@ from uk.ac.manchester.cs.owl.owlapi import OWLClassImpl, OWLObjectSomeValuesFrom
 from org.semanticweb.owlapi.model import OWLAxiom, OWLOntology, AxiomType, \
     ClassExpressionType, IRI, OWLObjectProperty
 from org.semanticweb.owlapi.apibinding import OWLManager
+from org.semanticweb.owlapi.formats import FunctionalSyntaxDocumentFormat
 
 from java.util import HashSet
 from jpype import java
@@ -113,9 +114,32 @@ logic EL language.
             for axiom in axioms_dict.get(key, []):
                 manager.addAxiom(normalized_ont, axiom.owl_axiom)
 
-        # Save to file
-        manager.saveOntology(normalized_ont, IRI.create("file:" + os.path.abspath(cache_path)))
+        # Save to file. OWL functional syntax writes every IRI in full; RDF/XML would
+        # write relative IRIs (e.g. ``A01lu``) unchanged and resolve them against the
+        # cache's own xml:base on reloading, renaming the entities.
+        manager.saveOntology(normalized_ont, FunctionalSyntaxDocumentFormat(),
+                             IRI.create("file:" + os.path.abspath(cache_path)))
         logger.info(f"Saved normalized ontology to cache: {cache_path}")
+
+    @staticmethod
+    def _cache_matches(cached_ont, ontology):
+        """``True`` if every class and object property of the cached normalised ontology
+        is an entity of ``ontology`` or an auxiliary entity of the normaliser. A cache
+        whose entities were renamed (caches written in RDF/XML before mOWL wrote them in
+        functional syntax lose relative IRIs this way) does not match."""
+        known = {str(e.toStringID()) for e in ontology.getClassesInSignature(
+            Imports.fromBoolean(True))}
+        known |= {str(e.toStringID()) for e in ontology.getObjectPropertiesInSignature(
+            Imports.fromBoolean(True))}
+        known |= {"http://www.w3.org/2002/07/owl#Thing",
+                  "http://www.w3.org/2002/07/owl#Nothing"}
+        entities = list(cached_ont.getClassesInSignature()) + \
+            list(cached_ont.getObjectPropertiesInSignature())
+        for entity in entities:
+            name = str(entity.toStringID())
+            if name not in known and not is_auxiliary_iri(name):
+                return False
+        return True
 
     def _load_cached_ontology(self, cache_path):
         """Load a cached normalized ontology from file.
@@ -161,9 +185,17 @@ type org.semanticweb.owlapi.model.OWLOntology. Found: {type(ontology)}")
         cache_path = None
         if ontology_path is not None and use_cache:
             cache_path = self.get_cache_path(ontology_path)
+            cached_ont = None
             if os.path.exists(cache_path):
                 logger.info(f"Loading normalized ontology from cache: {cache_path}")
                 cached_ont = self._load_cached_ontology(cache_path)
+                if not self._cache_matches(cached_ont, ontology):
+                    logger.warning(
+                        "The cached normalised ontology %s names entities that are not in "
+                        "the ontology (a cache written in RDF/XML loses relative IRIs). "
+                        "Normalising again and replacing the cache.", cache_path)
+                    cached_ont = None
+            if cached_ont is not None:
                 axioms_dict = self.__load_normalized_ontology(cached_ont)
 
                 # Add ABox axioms from original ontology
