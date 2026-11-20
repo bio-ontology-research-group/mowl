@@ -163,3 +163,69 @@ class ValidationRankSelection(ValidationSelection):
 
     def __init__(self, every=1, **rank_kwargs):
         super().__init__(metric="rank", every=every, rank_kwargs=rank_kwargs)
+
+
+def validation_f1(model, gci_name="gci0", num_positives=1000, num_negatives=10,
+                  positive_scores="reference", reference_ontology=None, seed=0,
+                  score="boundary"):
+    """Best achievable F1 on the first validation axioms of one normal form, negated
+    (so that lower is better): the model-selection quantity of the RegD code
+    (``train`` of ``EXP_ontology/baseline_sweep.py`` computes
+    ``compute_ranks(val_data[nf][:1000], threshold=None)`` every 100 epochs and keeps
+    the checkpoint with the best F1).
+
+    The F1 is computed exactly as at test time
+    (:func:`mowl.evaluation.sampled_f1.validation_best_f1`): the threshold is tuned on
+    the validation pairs themselves, and with ``positive_scores="reference"`` the
+    positive score of a ``gci2`` row is the score the code reads (the class indexed by
+    the role in the reference data, see
+    :func:`mowl.evaluation.sampled_f1.reference_role_classes`).
+
+    :param positive_scores: ``"reference"`` (the code) or ``"pair"`` (the axiom's own
+        score; identical for ``gci0``).
+    :param reference_ontology: ``"GALEN"``, ``"GO"`` or ``"ANATOMY"``; needed for
+        ``gci2`` with ``"reference"``.
+    :param seed: Seed of the negative sampling.
+    :param score: ``"boundary"`` or ``"energy"`` (see
+        :class:`mowl.evaluation.sampled_f1.SampledF1Regime`).
+    """
+    from mowl.evaluation.sampled_f1 import validation_best_f1
+    f1, _ = validation_best_f1(model, gci_name=gci_name, num_positives=num_positives,
+                               num_negatives=num_negatives,
+                               positive_scores=positive_scores,
+                               reference_ontology=reference_ontology, seed=seed,
+                               score=score)
+    return -f1
+
+
+class ValidationF1Selection(ValidationSelection):
+    """:class:`ValidationSelection` with :func:`validation_f1`: keep the parameters with
+    the best F1 on the first 1,000 validation axioms of the task's normal form, the
+    threshold tuned on that split, as the RegD code selects its checkpoint every 100
+    epochs.
+
+    Ties are resolved towards the *later* epoch (``<=``), as in the code (``>=``).
+
+    :param every: Evaluation interval in epochs.
+    :param gci_name: Normal form of the validation axioms (the task's: ``gci0`` for
+        RegD's inference task, ``gci2`` for the prediction task).
+    :param num_positives: Validation axioms to score (the first ones, as in the code).
+    :param num_negatives: Random candidates per validation axiom.
+    :param positive_scores: See :func:`validation_f1`.
+    :param reference_ontology: See :func:`validation_f1`.
+    :param seed: Seed of the negative sampling.
+    :param score: See :func:`validation_f1`.
+    """
+
+    key = "validation-f1-selection"
+
+    def __init__(self, every=1, gci_name="gci0", num_positives=1000, num_negatives=10,
+                 positive_scores="reference", reference_ontology=None, seed=0,
+                 score="boundary"):
+        super().__init__(
+            metric=lambda model: validation_f1(
+                model, gci_name=gci_name, num_positives=num_positives,
+                num_negatives=num_negatives, positive_scores=positive_scores,
+                reference_ontology=reference_ontology, seed=seed, score=score),
+            every=every)
+        self.key = type(self).key

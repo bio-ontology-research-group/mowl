@@ -70,8 +70,11 @@ def test_other_regimes(trained_elem, dataset):
     for regime in (InferredSubsumptionRankingRegime(), SubsumeeRankingRegime(),
                    ppi_ranking(NS + "r"), cate_ranking("gci0", candidates="classes"),
                    cate_ranking("gci0", candidates="classes", closure=True),
-                   SampledF1Regime(num_positives=10, num_negatives=2),
-                   SampledF1Regime(gci_name="gci2", num_positives=10, num_negatives=2)):
+                   SampledF1Regime(test_positives=10, valid_positives=10,
+                                   num_negatives=2),
+                   SampledF1Regime(gci_name="gci2", test_positives=10,
+                                   valid_positives=10, num_negatives=2,
+                                   positive_scores="pair")):
         res = regime.evaluate(trained_elem, dataset)
         _check(res, regime.subsets, regime.metrics)
     # Filtering can only improve ranks.

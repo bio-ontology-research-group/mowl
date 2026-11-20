@@ -293,6 +293,95 @@ class LogSumExpContrastiveLoss(_ScoreLoss):
         return loss
 
 
+class SoftmaxEnergyContrastiveLoss(_ScoreLoss):
+    r"""The loss the RegD *code* trains with (``PluginRegD.loss_cross`` of
+    HuiYang1997/RegD, inherited from the ShadowCones code): for every positive pair,
+    the cross-entropy of :math:`e^{-E}` against its :math:`K` sampled negatives,
+
+    .. math::
+        -\log \frac{e^{-s^+}}{e^{-s^+} + \sum_{k} e^{-s^-_k}}
+        \qquad
+        s^+ = \max\{E^+, \gamma_1\}, \quad
+        s^-_k = \min\{E^-_k - \gamma_2, 0\},
+
+    averaged over the positive pairs. A positive is satisfied when its energy reaches
+    :math:`\gamma_1` (with :math:`\gamma_1 = 0`: when the child region is contained) and
+    a negative when its energy reaches :math:`\gamma_2` (with :math:`\gamma_2 = 0`: when
+    it is *no longer* contained) -- the loss does not push negatives further out. Both
+    terms use the full energy :math:`E = d_{bd} + \lambda d_{dep}`, unlike Eq. 10 of the
+    paper, whose negatives use :math:`d_{bd}` only and whose combination is a max-margin
+    rather than a softmax (:class:`LogSumExpContrastiveLoss`).
+
+    The positive energies are the module's scores as the training loop passes them,
+    clamped here at :math:`\gamma_1`; the negative energies are re-scored *raw*, which
+    requires a module with the scoring context of :mod:`mowl.nn.el.regd`
+    (:meth:`RegDELBEModule.scoring`).
+
+    :param gamma1: The margin :math:`\gamma_1` at which a positive energy is clamped (0 in
+        the RegD code).
+
+    :param gamma2: The margin :math:`\gamma_2` subtracted from the negative energies
+        before clamping (0 in the RegD code).
+    :param rectify_negatives: Rectify the negative energies before the clamp (the
+        released code's commented-out ``relu`` in ``PluginRegD.our_dist``); with
+        :math:`\gamma_2 = 0` the negatives then exert no force.
+    :param normal_forms: The axiom types trained with this loss (in the RegD code, only
+        the normal form of the task: ``gci0`` for the inference task, ``gci2`` for the
+        prediction task); the others fall back to the model's own loss.
+    """
+
+    key = "softmax-energy-contrastive"
+
+    def __init__(self, gamma1=0.0, gamma2=0.0, normal_forms=None, rectify_negatives=False):
+        super().__init__(normal_forms=normal_forms, neg_scores="positive")
+        self.gamma1 = float(gamma1)
+        self.gamma2 = float(gamma2)
+        self.rectify_negatives = bool(rectify_negatives)
+
+    def _negative_scores(self, gci_name, neg_scores):
+        if neg_scores is None:
+            return None
+        rows = self._last_negatives.get(gci_name)
+        if rows is None or len(rows) != len(neg_scores):
+            raise RuntimeError(
+                f"{type(self).__name__} could not find the negatives of {gci_name!r} it "
+                f"needs to re-score. Put it last in a ComposedRegime (it records the "
+                f"negatives in filter_negatives).")
+        module = self.model.module
+        scoring = getattr(module, "scoring", None)
+        if scoring is None:
+            raise TypeError(
+                f"{type(self).__name__} needs the raw energies of the negatives; the "
+                f"module {type(module).__name__} has no scoring context. It is the loss "
+                "of the RegD code and applies to RegD modules "
+                "(mowl.nn.el.regd).")
+        with scoring():
+            energy = module(rows, gci_name)
+        return energy.reshape(len(rows), -1).mean(dim=1)
+
+    def combine(self, gci_name, pos, neg):
+        # The module may pass raw energies (RegDCodeTraining trains in energy mode); the
+        # code clamps the positive energy in the loss itself (idempotent otherwise).
+        pos = th.clamp(pos, min=self.gamma1)
+        if neg is None or not len(neg):
+            return pos.mean()
+        if self.rectify_negatives:
+            # The variant with the line `our_dist = relu(our_dist + margin)` of
+            # PluginRegD.our_dist active (commented out in the released code): negative
+            # energies are rectified first, so with gamma2 = 0 they contribute a constant.
+            neg = th.relu(neg)
+        neg = th.clamp(neg - self.gamma2, max=0.0)
+        paired = self._paired(pos, neg)
+        if paired is None:
+            # Unaligned negatives: one shared pool against every positive.
+            logits = th.cat([-pos.reshape(-1, 1),
+                             -neg.reshape(1, -1).expand(len(pos), -1)], dim=1)
+        else:
+            logits = th.cat([-pos.reshape(-1, 1), -paired], dim=1)
+        target = th.zeros(len(logits), dtype=th.long, device=logits.device)
+        return F.cross_entropy(logits, target)
+
+
 class PearsonCorrelationLoss(_ScoreLoss):
     """ELK-Em's contrastive loss (Singh et al. 2026, Section 4.2, Eq. 5):
     :math:`1 - \\frac{(\\sigma - \\bar\\sigma)^\\top (t - \\bar t)}

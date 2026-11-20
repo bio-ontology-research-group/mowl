@@ -289,7 +289,11 @@ The recurring, representation-independent procedures, with their catalogue keys
      - binary-code boxes, Gumbel boxes
    * - ``logsumexp-contrastive``
      - loss
-     - RegD
+     - RegD (paper, Eq. 10)
+   * - ``softmax-energy-contrastive``
+     - loss
+     - RegD (code: softmax over the energies of one positive and its 10 negatives, on the
+       task's normal form only)
    * - ``pearson-correlation-loss``
      - loss
      - ELK-Em
@@ -304,10 +308,11 @@ The recurring, representation-independent procedures, with their catalogue keys
      - NeSy 2024, DELE
    * - ``per-normal-form-minibatch``
      - batching
-     - ELEmbeddings, EmEL++, Box²EL (code), DELE (code), Aharoni
-   * - ``validation-loss-selection``, ``validation-rank-selection``
+     - ELEmbeddings, EmEL++, Box²EL (code), DELE (code), Aharoni, RegD (code)
+   * - ``validation-loss-selection``, ``validation-rank-selection``,
+     ``validation-f1-selection``
      - model selection
-     - mOWL default, DELE; Box²EL, ELK-Em
+     - mOWL default, DELE; Box²EL, ELK-Em; RegD (code, the task's normal form)
 
 Training regimes are :class:`~mowl.training.TrainingRegime` objects in
 :mod:`mowl.training.negatives`, :mod:`mowl.training.positives`,
