@@ -182,6 +182,8 @@ class RegDCodeTraining(ComposedRegime):
     :param validate_every: Epochs between validations (100 in the code).
     :param select: Set to ``False`` to train without model selection.
     :param seed: Seed of the batch and negative samplers.
+    :param score: Score of model selection, ``"boundary"`` (the released code) or
+        ``"energy"`` (its ``depth_type='norm'`` branch); use the same as the evaluation.
     """
 
     key = "regd-code-training"
@@ -190,7 +192,7 @@ class RegDCodeTraining(ComposedRegime):
     def __init__(self, task="inference", design="regd", batch_size=512,
                  num_negatives=1, margin=None, neg_target=None, host_loss="mse",
                  raw_energy=True, init="joint", reference_ontology=None,
-                 validate_every=100, select=True, seed=None):
+                 validate_every=100, select=True, seed=None, score="boundary"):
         if task not in self._TASK_GCI:
             raise ValueError("task must be 'inference' or 'prediction'.")
         if design not in ("regd", "baseline"):
@@ -220,7 +222,7 @@ class RegDCodeTraining(ComposedRegime):
             parts.append(ValidationF1Selection(
                 every=validate_every, gci_name=gci,
                 positive_scores="reference" if reference_ontology else "pair",
-                reference_ontology=reference_ontology))
+                reference_ontology=reference_ontology, score=score))
         super().__init__(*parts)
         self.key = type(self).key
         self.task = task

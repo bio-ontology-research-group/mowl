@@ -218,3 +218,14 @@ class TestCodeDesignHooks:
             model.module.class_rad.weight[0] = -5.0
         _, r = model.module._region(th.tensor([0]))
         assert float(r) < 0.01
+
+
+def test_energy_score_adds_the_depth_term():
+    from mowl.evaluation.sampled_f1 import candidate_dists, pair_scores
+    m = _toy_module()
+    # child box 0 (offset 2) in candidate 2 (offset 3): bd = -1, depth = (0 + 1) / (2 * 3)
+    d = candidate_dists(m, "gci0", th.tensor([[0, 2]]), score="energy")
+    assert float(d[0, 2]) == pytest.approx(-1 + 1 / 6)
+    assert float(pair_scores(m, "gci0", th.tensor([[0, 2]]), score="energy")) == \
+        pytest.approx(-1 + 1 / 6)
+    assert float(candidate_dists(m, "gci0", th.tensor([[0, 2]]))[0, 2]) == 0.0

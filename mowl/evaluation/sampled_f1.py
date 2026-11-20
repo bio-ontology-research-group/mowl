@@ -76,30 +76,55 @@ def _child_regions(module, gci_name, rows):
     raise ValueError(f"Unsupported normal form {gci_name!r}.")
 
 
-def _boundary(child_center, child_size, centers, sizes, is_ball):
-    """Boundary dissimilarity of the child inside every candidate region."""
+SCORES = ("boundary", "energy")
+
+
+def _score(child_center, child_size, cand_center, cand_size, is_ball, score="boundary"):
+    """Score of child regions inside candidate regions, on broadcast tensors (centres of
+    shape ``(..., n)``; box offsets ``(..., n)``, ball radii ``(...)``).
+
+    ``"boundary"``: ``relu(d_bd)``, the released code's score (``depth_type`` is never
+    ``'norm'`` in ``baseline_sweep.py``). ``"energy"``: the code's other branch
+    (``depth_type == 'norm'`` in ``compute_nf1_ranks`` / ``compute_nf3_ranks``):
+    ``d_bd + d_dep`` unrectified, the depth term always added, for balls with the code's
+    broadcast of the radius difference over the ``n`` coordinates
+    (:math:`\\sum_i \\Delta c_i^2 + n\\,\\Delta r^2`).
+    """
+    dc = child_center - cand_center
     if is_ball:
-        return (th.linalg.norm(child_center[:, None, :] - centers[None], dim=-1)
-                + child_size[:, None] - sizes[None])  # noqa: W503
-    diff = (child_center[:, None, :] - centers[None]).abs() \
-        + child_size[:, None, :] - sizes[None]
+        dr = child_size - cand_size
+        bd = th.linalg.norm(dc, dim=-1) + dr
+        if score == "boundary":
+            return th.relu(bd)
+        depth = (dc.square().sum(-1) + dc.shape[-1] * dr.square()) \
+            / (child_size.abs() * cand_size.abs())
+        return bd + depth
+    do = child_size - cand_size
+    diff = dc.abs() + do
     contained = diff.max(dim=-1).values
     outside = th.linalg.norm(th.relu(diff), dim=-1)
-    return th.where(contained < 0, contained, outside)
+    bd = th.where(contained < 0, contained, outside)
+    if score == "boundary":
+        return th.relu(bd)
+    size_product = th.linalg.norm(child_size, dim=-1) * th.linalg.norm(cand_size, dim=-1)
+    depth = (dc.abs() + do.abs()).sum(-1) / size_product
+    return bd + depth
 
 
-def candidate_dists(module, gci_name, rows, row_batch=64, candidate_chunk=16384):
+def candidate_dists(module, gci_name, rows, row_batch=64, candidate_chunk=16384,
+                    score="boundary"):
     """The score matrix of the RegD code's evaluation.
 
-    Entry ``[i, X]`` is ``relu(d_bd)`` of the fixed child region of row ``i`` inside the
-    region of class ``X``; the entry of the row's column-0 class is ``+inf`` (the code
-    filters ``C ⊑ C``).
+    Entry ``[i, X]`` is the score (:func:`_score`; by default ``relu(d_bd)``) of the
+    fixed child region of row ``i`` inside the region of class ``X``; the entry of the
+    row's column-0 class is ``+inf`` (the code filters ``C ⊑ C``).
 
     :param module: An EL module with boxes (``class_offset``) or balls (``class_rad``)
         and translations (``rel_embed``): ELBE, ELEm, RegD.
     :param gci_name: ``"gci0"`` (candidates replace the superclass) or ``"gci2"``
         (candidates replace the subclass; the child is the filler translated by ``-r``).
     :param rows: Query rows in mOWL's column layout, on any device.
+    :param score: ``"boundary"`` or ``"energy"`` (see :func:`_score`).
     :return: A float tensor of shape ``(len(rows), number of classes)`` on the CPU.
     """
     centers, sizes, is_ball = class_regions(module)
@@ -113,31 +138,24 @@ def candidate_dists(module, gci_name, rows, row_batch=64, candidate_chunk=16384)
         for j in range(0, n_classes, candidate_chunk):
             cc = centers[j:j + candidate_chunk]
             cs = sizes[j:j + candidate_chunk]
-            bd = _boundary(child_center, child_size, cc, cs, is_ball)
-            out[i:i + len(chunk), j:j + candidate_chunk] = th.relu(bd).cpu()
+            val = _score(child_center[:, None], child_size[:, None], cc[None], cs[None],
+                         is_ball, score)
+            out[i:i + len(chunk), j:j + candidate_chunk] = val.cpu()
         # filter "C ⊑ C": the class of the query column is not a candidate
         out[i:i + len(chunk)].scatter_(1, chunk[:, 0:1].cpu(), float("inf"))
     return out
 
 
-def pair_scores(module, gci_name, rows):
-    """The axiom's own score: ``relu(d_bd)`` of the child region inside the region of
+def pair_scores(module, gci_name, rows, score="boundary"):
+    """The axiom's own score (:func:`_score`) of the child region inside the region of
     the kept class -- the superclass D for ``gci0``, the subclass A for ``gci2``."""
     centers, sizes, is_ball = class_regions(module)
     device = centers.device
     rows = rows.to(device)
     head_col = 1 if gci_name == "gci0" else 0
     child_center, child_size = _child_regions(module, gci_name, rows)
-    head_center = centers[rows[:, head_col]]
-    head_size = sizes[rows[:, head_col]]
-    if is_ball:
-        bd = th.linalg.norm(head_center - child_center, dim=-1) + child_size - head_size
-    else:
-        diff = (head_center - child_center).abs() + child_size - head_size
-        contained = diff.max(dim=-1).values
-        outside = th.linalg.norm(th.relu(diff), dim=-1)
-        bd = th.where(contained < 0, contained, outside)
-    return th.relu(bd).cpu()
+    return _score(child_center, child_size, centers[rows[:, head_col]],
+                  sizes[rows[:, head_col]], is_ball, score).cpu()
 
 
 def reference_role_classes(model, ontology, data_root=None, zip_path=None,
@@ -241,7 +259,7 @@ def _apply_threshold(pos, neg, threshold):
 
 
 def _split_scores(model, gci_name, rows, num_rows, num_negatives, gen,
-                  role_classes=None, row_batch=64):
+                  role_classes=None, row_batch=64, score="boundary"):
     """Positive and negative scores of one split, sampled as the reference code does.
 
     :param num_rows: Number of rows to take from the front of ``rows`` (all if
@@ -262,7 +280,8 @@ def _split_scores(model, gci_name, rows, num_rows, num_negatives, gen,
     with th.no_grad():
         for i in range(0, len(rows), row_batch):
             chunk = rows[i:i + row_batch]
-            dists = candidate_dists(module, gci_name, chunk, row_batch=row_batch)
+            dists = candidate_dists(module, gci_name, chunk, row_batch=row_batch,
+                                    score=score)
             idx = th.randint(dists.shape[1], (len(chunk), num_negatives), generator=gen)
             neg.append(th.gather(dists, 1, idx).reshape(-1).numpy())
             if gci_name == "gci0":
@@ -270,7 +289,7 @@ def _split_scores(model, gci_name, rows, num_rows, num_negatives, gen,
                 ref.append(p)
                 pair.append(p)
                 continue
-            pair.append(pair_scores(module, gci_name, chunk).numpy())
+            pair.append(pair_scores(module, gci_name, chunk, score=score).numpy())
             if role_classes is not None:
                 cls = role_classes[chunk[:, 1].cpu()]
                 vals = th.gather(dists, 1, cls.clamp_min(0).reshape(-1, 1)).reshape(-1)
@@ -298,7 +317,8 @@ _ROLE_CLASS_CACHE = {}
 
 
 def validation_best_f1(model, gci_name="gci0", num_positives=1000, num_negatives=10,
-                       positive_scores="reference", reference_ontology=None, seed=0):
+                       positive_scores="reference", reference_ontology=None, seed=0,
+                       score="boundary"):
     """Best achievable F1 (with its threshold tuned on the split itself) on the first
     ``num_positives`` validation axioms -- the model-selection quantity of the RegD code
     (``train`` in ``EXP_ontology/baseline_sweep.py``).
@@ -318,7 +338,7 @@ def validation_best_f1(model, gci_name="gci0", num_positives=1000, num_negatives
                                      _ROLE_CLASS_CACHE)
     gen = th.Generator().manual_seed(seed)
     pos_ref, pos_pair, neg = _split_scores(model, gci_name, rows.cpu(), num_positives,
-                                           num_negatives, gen, role_classes)
+                                           num_negatives, gen, role_classes, score=score)
     pos = pos_pair if positive_scores == "pair" else pos_ref
     threshold, f1 = reference_best_threshold(pos, neg)
     return f1, threshold
@@ -352,6 +372,9 @@ class SampledF1Regime(EvaluationRegime):
     :param reference_ontology: ``"GALEN"``, ``"GO"`` or ``"ANATOMY"``: the reference data
         whose index files define the slip (needed for ``gci2`` with ``"reference"``).
     :param seed: Seed of the negative sampling (independent of the training seed).
+    :param score: ``"boundary"`` (default: ``relu(d_bd)``, what the released code
+        computes) or ``"energy"`` (``d_bd + d_dep``, the code's unused
+        ``depth_type='norm'`` branch; see :func:`_score`).
     """
 
     key = "regd-sampled-f1"
@@ -360,7 +383,7 @@ class SampledF1Regime(EvaluationRegime):
 
     def __init__(self, gci_name="gci0", num_negatives=10, valid_positives=1000,
                  test_positives=None, positive_scores="reference", reference_ontology=None,
-                 seed=0):
+                 seed=0, score="boundary"):
         if gci_name not in REFERENCE_POSITIVE_COLUMN:
             raise ValueError(f"Unsupported normal form {gci_name!r}.")
         if positive_scores not in ("reference", "pair"):
@@ -371,6 +394,9 @@ class SampledF1Regime(EvaluationRegime):
         self.test_positives = test_positives
         self.positive_scores = positive_scores
         self.reference_ontology = reference_ontology
+        if score not in SCORES:
+            raise ValueError(f"score must be one of {SCORES}.")
+        self.score = score
         self.seed = seed
         self.info = {}
 
@@ -408,15 +434,16 @@ class SampledF1Regime(EvaluationRegime):
         trows = self._rows(model, dataset.testing)
         v_ref, v_pair, vneg = _split_scores(model, self.gci_name, vrows,
                                             self.valid_positives, self.num_negatives, gen,
-                                            role_classes)
+                                            role_classes, score=self.score)
         t_ref, t_pair, tneg = _split_scores(model, self.gci_name, trows,
                                             self.test_positives, self.num_negatives, gen,
-                                            role_classes)
+                                            role_classes, score=self.score)
         pair = self._classify(v_pair, vneg, t_pair, tneg)
         ref = self._classify(v_ref, vneg, t_ref, tneg) if t_ref is not None else None
         chosen = pair if self.positive_scores == "pair" else ref
         f1, precision, recall, threshold, source = chosen
-        self.info = {"scoring": "relu-boundary", "positive_scores": self.positive_scores,
+        self.info = {"scoring": "relu-boundary" if self.score == "boundary" else "energy",
+                     "positive_scores": self.positive_scores,
                      "threshold": None if threshold is None else float(threshold),
                      "threshold_source": source,
                      "test_positives": int(len(t_pair)),

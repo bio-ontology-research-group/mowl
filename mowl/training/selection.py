@@ -164,7 +164,8 @@ class ValidationRankSelection(ValidationSelection):
 
 
 def validation_f1(model, gci_name="gci0", num_positives=1000, num_negatives=10,
-                  positive_scores="reference", reference_ontology=None, seed=0):
+                  positive_scores="reference", reference_ontology=None, seed=0,
+                  score="boundary"):
     """Best achievable F1 on the first validation axioms of one normal form, negated
     (so that lower is better): the model-selection quantity of the RegD code
     (``train`` of ``EXP_ontology/baseline_sweep.py`` computes
@@ -183,12 +184,15 @@ def validation_f1(model, gci_name="gci0", num_positives=1000, num_negatives=10,
     :param reference_ontology: ``"GALEN"``, ``"GO"`` or ``"ANATOMY"``; needed for
         ``gci2`` with ``"reference"``.
     :param seed: Seed of the negative sampling.
+    :param score: ``"boundary"`` or ``"energy"`` (see
+        :class:`mowl.evaluation.sampled_f1.SampledF1Regime`).
     """
     from mowl.evaluation.sampled_f1 import validation_best_f1
     f1, _ = validation_best_f1(model, gci_name=gci_name, num_positives=num_positives,
                                num_negatives=num_negatives,
                                positive_scores=positive_scores,
-                               reference_ontology=reference_ontology, seed=seed)
+                               reference_ontology=reference_ontology, seed=seed,
+                               score=score)
     return -f1
 
 
@@ -208,16 +212,18 @@ class ValidationF1Selection(ValidationSelection):
     :param positive_scores: See :func:`validation_f1`.
     :param reference_ontology: See :func:`validation_f1`.
     :param seed: Seed of the negative sampling.
+    :param score: See :func:`validation_f1`.
     """
 
     key = "validation-f1-selection"
 
     def __init__(self, every=1, gci_name="gci0", num_positives=1000, num_negatives=10,
-                 positive_scores="reference", reference_ontology=None, seed=0):
+                 positive_scores="reference", reference_ontology=None, seed=0,
+                 score="boundary"):
         super().__init__(
             metric=lambda model: validation_f1(
                 model, gci_name=gci_name, num_positives=num_positives,
                 num_negatives=num_negatives, positive_scores=positive_scores,
-                reference_ontology=reference_ontology, seed=seed),
+                reference_ontology=reference_ontology, seed=seed, score=score),
             every=every)
         self.key = type(self).key
