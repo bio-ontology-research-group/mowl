@@ -229,3 +229,14 @@ def test_energy_score_adds_the_depth_term():
     assert float(pair_scores(m, "gci0", th.tensor([[0, 2]]), score="energy")) == \
         pytest.approx(-1 + 1 / 6)
     assert float(candidate_dists(m, "gci0", th.tensor([[0, 2]]))[0, 2]) == 0.0
+
+
+def test_rectified_negatives_exert_no_force():
+    m = _toy_module()
+    regime = SoftmaxEnergyContrastiveLoss(normal_forms=("gci0",), rectify_negatives=True)
+    regime.attach(_FakeModel(m))
+    regime.filter_negatives("gci0", None, th.tensor([[0, 2], [0, 2]], dtype=th.long))
+    loss = regime.loss("gci0", th.tensor([[1.5]]), th.zeros(2, 1))
+    # contained negatives (E = -1) are rectified to 0: -log(e^-1.5 / (e^-1.5 + 2))
+    assert float(loss) == pytest.approx(math.log(1 + 2 * math.exp(1.5)), rel=1e-5)
+    assert RegDCodeTraining(rectified=True).raw_energy is False

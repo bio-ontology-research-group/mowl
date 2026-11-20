@@ -322,6 +322,9 @@ class SoftmaxEnergyContrastiveLoss(_ScoreLoss):
 
     :param gamma2: The margin :math:`\gamma_2` subtracted from the negative energies
         before clamping (0 in the RegD code).
+    :param rectify_negatives: Rectify the negative energies before the clamp (the
+        released code's commented-out ``relu`` in ``PluginRegD.our_dist``); with
+        :math:`\gamma_2 = 0` the negatives then exert no force.
     :param normal_forms: The axiom types trained with this loss (in the RegD code, only
         the normal form of the task: ``gci0`` for the inference task, ``gci2`` for the
         prediction task); the others fall back to the model's own loss.
@@ -329,10 +332,11 @@ class SoftmaxEnergyContrastiveLoss(_ScoreLoss):
 
     key = "softmax-energy-contrastive"
 
-    def __init__(self, gamma1=0.0, gamma2=0.0, normal_forms=None):
+    def __init__(self, gamma1=0.0, gamma2=0.0, normal_forms=None, rectify_negatives=False):
         super().__init__(normal_forms=normal_forms, neg_scores="positive")
         self.gamma1 = float(gamma1)
         self.gamma2 = float(gamma2)
+        self.rectify_negatives = bool(rectify_negatives)
 
     def _negative_scores(self, gci_name, neg_scores):
         if neg_scores is None:
@@ -361,6 +365,11 @@ class SoftmaxEnergyContrastiveLoss(_ScoreLoss):
         pos = th.clamp(pos, min=self.gamma1)
         if neg is None or not len(neg):
             return pos.mean()
+        if self.rectify_negatives:
+            # The variant with the line `our_dist = relu(our_dist + margin)` of
+            # PluginRegD.our_dist active (commented out in the released code): negative
+            # energies are rectified first, so with gamma2 = 0 they contribute a constant.
+            neg = th.relu(neg)
         neg = th.clamp(neg - self.gamma2, max=0.0)
         paired = self._paired(pos, neg)
         if paired is None:

@@ -182,6 +182,10 @@ class RegDCodeTraining(ComposedRegime):
     :param validate_every: Epochs between validations (100 in the code).
     :param select: Set to ``False`` to train without model selection.
     :param seed: Seed of the batch and negative samplers.
+    :param rectified: The variant with ``relu`` applied to every RegD energy (the line
+        commented out in ``PluginRegD.our_dist``): the other normal forms train on
+        :math:`\\max\\{E, 0\\}` and the task's negatives exert no force. Not the
+        released code; an ablation.
     :param score: Score of model selection, ``"boundary"`` (the released code) or
         ``"energy"`` (its ``depth_type='norm'`` branch); use the same as the evaluation.
     """
@@ -192,7 +196,8 @@ class RegDCodeTraining(ComposedRegime):
     def __init__(self, task="inference", design="regd", batch_size=512,
                  num_negatives=1, margin=None, neg_target=None, host_loss="mse",
                  raw_energy=True, init="joint", reference_ontology=None,
-                 validate_every=100, select=True, seed=None, score="boundary"):
+                 validate_every=100, select=True, seed=None, score="boundary",
+                 rectified=False):
         if task not in self._TASK_GCI:
             raise ValueError("task must be 'inference' or 'prediction'.")
         if design not in ("regd", "baseline"):
@@ -205,7 +210,8 @@ class RegDCodeTraining(ComposedRegime):
         parts = [PerNormalFormMiniBatches(batch_size=batch_size, order="random",
                                           seed=seed)]
         if design == "regd":
-            parts.append(SoftmaxEnergyContrastiveLoss(normal_forms=(gci,)))
+            parts.append(SoftmaxEnergyContrastiveLoss(normal_forms=(gci,),
+                                                      rectify_negatives=rectified))
             if host_loss == "mse":
                 parts.append(MSETargetLoss(pos_target=0.0, reduce="per_axiom"))
             else:
@@ -227,7 +233,7 @@ class RegDCodeTraining(ComposedRegime):
         self.key = type(self).key
         self.task = task
         self.design = design
-        self.raw_energy = bool(raw_energy) and design == "regd"
+        self.raw_energy = bool(raw_energy) and design == "regd" and not rectified
         self.init = init
 
     def attach(self, model):
