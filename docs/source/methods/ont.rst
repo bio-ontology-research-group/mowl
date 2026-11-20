@@ -37,8 +37,9 @@ text encodings of :math:`\exists r.A` and :math:`\exists r.B` that are scored at
 (``existential_mode="role"`` scores with the role images instead).
 
 Subsumptions are scored with Eq. 8, :math:`-(d(x_C, x_D) + \lambda(\lVert x_D\rVert -
-\lVert x_C\rVert))`, with :math:`\lambda \in \{0, 0.1, \dots, 1\}` chosen on the validation
-subsumptions.
+\lVert x_C\rVert))`, with :math:`\lambda` chosen on the validation subsumptions. The
+paper states the grid :math:`\{0, 0.1, \dots, 1\}`; the reference code searches
+:math:`\{0.0, \dots, 1.9\}`, which the recipes use (``centri_weight_grid``).
 
 Differences from the paper are listed on the card; the main ones are that OnT is trained
 on the axioms of the given ontology (mOWL does not reimplement OnT's name-preserving
@@ -90,7 +91,12 @@ of the authors' release (:class:`mowl.datasets.builtin.yang2025ont.Yang2025OnTDa
 labels included) and the ranking regimes of :mod:`mowl.evaluation.ont_ranking`. The
 published Tables 2-4 are recorded for OnT, HiT and the baselines the OnT authors re-ran
 under their normalisation; those numbers are not comparable with the ``box2el-*``
-benchmarks. The ``box2el-*`` datasets themselves have no ``rdfs:label`` annotations: GALEN's
+benchmarks. The recipes of the paper (``--recipe`` with methods ``ont`` and ``hit`` on
+these benchmarks) train with the named design ``ont-code-training``
+(:mod:`mowl.training.lm_reference`, cards in :mod:`mowl.catalog.regimes.lm_code_designs`):
+1 epoch, batch size 64, 1 negative per axiom, margins :math:`\alpha = 3.0`,
+:math:`\beta = 0.5`, learning rate :math:`10^{-5}`, 500 warm-up steps, and the code's
+:math:`\lambda` grid; the HiT baseline is restricted to the atomic axioms. The ``box2el-*`` datasets themselves have no ``rdfs:label`` annotations: GALEN's
 IRI fragments are readable CamelCase names (``label_fallback="camel_case"``), while GO and
 ANATOMY have opaque identifiers, so text-based methods should not be run on them.
 
@@ -102,6 +108,6 @@ command line interface. A run on a GPU, and the comparison with the published nu
 
    python -c "import mowl; mowl.init_jvm('16g'); \
    from mowl.benchmarks.protocols.ont import main; main()" \
-       run ont-galen-prediction --method ont --epochs 1 --device cuda \
-       --param verbalisation_style=release --out ont-galen.json
+       run ont-galen-prediction --method ont --recipe --device cuda \
+       --out ont-galen.json
    python -m mowl.benchmarks compare ont-galen.json
