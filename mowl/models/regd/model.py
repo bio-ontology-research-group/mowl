@@ -198,6 +198,8 @@ class RegDELEm(_RegDModel):
     :param eps: Lower bound of the radii.
     :param depth_on_containment: Whether the depth term is also added to contained pairs.
     :param flip_gci2: See :class:`RegDELBE`.
+    :param radius: ``"abs"`` (default) or ``"softplus"`` (the RegD code's ``Elem``); see
+        :class:`~mowl.nn.el.regd.RegDELEmModule`.
     """
 
     def __init__(self,
@@ -213,6 +215,7 @@ class RegDELEm(_RegDModel):
                  eps=1e-4,
                  depth_on_containment=True,
                  flip_gci2=False,
+                 radius="abs",
                  learning_rate=0.005,
                  batch_size=4096 * 8,
                  model_filepath=None,
@@ -229,6 +232,7 @@ class RegDELEm(_RegDModel):
         self.extended = False
         self._set_regd_options(num_neg, lamda, p, gamma1, gamma2, eps, depth_on_containment)
         self.flip_gci2 = bool(flip_gci2)
+        self.radius = radius
         self.init_module()
 
     def init_module(self):
@@ -241,6 +245,6 @@ class RegDELEm(_RegDModel):
             reg_norm=self.reg_norm,
             lamda=self.lamda, p=self.p, gamma1=self.gamma1, gamma2=self.gamma2,
             eps=self.eps, depth_on_containment=self.depth_on_containment,
-            flip_gci2=self.flip_gci2,
+            flip_gci2=self.flip_gci2, radius=self.radius,
         ).to(self.device)
         self._after_init_module()

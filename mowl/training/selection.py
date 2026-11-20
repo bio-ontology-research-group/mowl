@@ -164,7 +164,7 @@ class ValidationRankSelection(ValidationSelection):
 
 
 def validation_f1(model, gci_name="gci0", num_positives=1000, num_negatives=10,
-                  positive_scores="reference", seed=0):
+                  positive_scores="reference", reference_ontology=None, seed=0):
     """Best achievable F1 on the first validation axioms of one normal form, negated
     (so that lower is better): the model-selection quantity of the RegD code
     (``train`` of ``EXP_ontology/baseline_sweep.py`` computes
@@ -174,17 +174,21 @@ def validation_f1(model, gci_name="gci0", num_positives=1000, num_negatives=10,
     The F1 is computed exactly as at test time
     (:func:`mowl.evaluation.sampled_f1.validation_best_f1`): the threshold is tuned on
     the validation pairs themselves, and with ``positive_scores="reference"`` the
-    positive score of a ``gci2`` row is the score of the class indexed by the role -- the
-    slip of the reference evaluation that the published prediction-task numbers carry.
+    positive score of a ``gci2`` row is the score the code reads (the class indexed by
+    the role in the reference data, see
+    :func:`mowl.evaluation.sampled_f1.reference_role_classes`).
 
     :param positive_scores: ``"reference"`` (the code) or ``"pair"`` (the axiom's own
         score; identical for ``gci0``).
+    :param reference_ontology: ``"GALEN"``, ``"GO"`` or ``"ANATOMY"``; needed for
+        ``gci2`` with ``"reference"``.
     :param seed: Seed of the negative sampling.
     """
     from mowl.evaluation.sampled_f1 import validation_best_f1
     f1, _ = validation_best_f1(model, gci_name=gci_name, num_positives=num_positives,
                                num_negatives=num_negatives,
-                               positive_scores=positive_scores, seed=seed)
+                               positive_scores=positive_scores,
+                               reference_ontology=reference_ontology, seed=seed)
     return -f1
 
 
@@ -202,16 +206,18 @@ class ValidationF1Selection(ValidationSelection):
     :param num_positives: Validation axioms to score (the first ones, as in the code).
     :param num_negatives: Random candidates per validation axiom.
     :param positive_scores: See :func:`validation_f1`.
+    :param reference_ontology: See :func:`validation_f1`.
     :param seed: Seed of the negative sampling.
     """
 
     key = "validation-f1-selection"
 
     def __init__(self, every=1, gci_name="gci0", num_positives=1000, num_negatives=10,
-                 positive_scores="reference", seed=0):
+                 positive_scores="reference", reference_ontology=None, seed=0):
         super().__init__(
             metric=lambda model: validation_f1(
                 model, gci_name=gci_name, num_positives=num_positives,
-                num_negatives=num_negatives, positive_scores=positive_scores, seed=seed),
+                num_negatives=num_negatives, positive_scores=positive_scores,
+                reference_ontology=reference_ontology, seed=seed),
             every=every)
         self.key = type(self).key

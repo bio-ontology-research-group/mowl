@@ -203,6 +203,12 @@ class RegDELEmModule(_RegDMixin, ELEmModule):
     :param eps: Lower bound of the radii, which are divided by in the depth dissimilarity.
     :param depth_on_containment: See :func:`~mowl.nn.el.regd.dissimilarity.ball_energy`.
     :param flip_gci2: See :class:`RegDELBEModule`.
+    :param radius: ``"abs"`` (default, as mOWL's ELEm: the radius is ``|class_rad|``) or
+        ``"softplus"`` (the radius is ``softplus(class_rad)``, as the training code of
+        the RegD paper's ``Elem``; with it, the ELEm normal forms ``gci1`` and
+        ``gci1_bot`` use the softplus radii too). Note that the RegD code *evaluates*
+        with ``|class_rad|`` whatever the training used; the evaluation regime
+        ``regd-sampled-f1`` does the same.
     """
 
     regd_gcis = frozenset({"gci0", "gci2", "gci3"})
@@ -211,13 +217,42 @@ class RegDELEmModule(_RegDMixin, ELEmModule):
 
     def __init__(self, nb_ont_classes, nb_rels, nb_inds=None, embed_dim=50, margin=0.1,
                  reg_norm=1, lamda=1.0, p=2, gamma1=0.0, gamma2=0.0, eps=1e-4,
-                 depth_on_containment=True, flip_gci2=False):
+                 depth_on_containment=True, flip_gci2=False, radius="abs"):
         super().__init__(nb_ont_classes, nb_rels, nb_inds, embed_dim=embed_dim, margin=margin,
                          reg_norm=reg_norm)
         self._init_regd(lamda, p, gamma1, gamma2, eps, depth_on_containment,
                         flip_gci2=flip_gci2)
+        if radius not in ("abs", "softplus"):
+            raise ValueError("radius must be 'abs' or 'softplus'.")
+        self.radius = radius
+
+    def _radius(self, index):
+        raw = self.class_rad(index).squeeze(-1)
+        if self.radius == "softplus":
+            return th.nn.functional.softplus(raw)
+        return th.abs(raw)
 
     def _region(self, index):
         center = self.class_embed(index)
-        radius = th.abs(self.class_rad(index)).squeeze(-1).clamp_min(self.eps)
-        return center, radius
+        return center, self._radius(index).clamp_min(self.eps)
+
+    def gci1_loss(self, data, neg=False):
+        if self.radius == "abs" or neg:
+            return super().gci1_loss(data, neg=neg)
+        # ELEm's C1 ⊓ C2 ⊑ D with softplus radii (Elem.nf2Loss of the RegD code).
+        c, d, e = (self.class_embed(data[:, i]) for i in range(3))
+        rc, rd = self._radius(data[:, 0]).unsqueeze(-1), self._radius(data[:, 1]).unsqueeze(-1)
+        dst = th.linalg.norm(d - c, dim=1, keepdim=True)
+        dst2 = th.linalg.norm(e - c, dim=1, keepdim=True)
+        dst3 = th.linalg.norm(e - d, dim=1, keepdim=True)
+        m = self.margin
+        return th.relu(dst - rc - rd - m) + th.relu(dst2 - rc - m) + th.relu(dst3 - rd - m)
+
+    def gci1_bot_loss(self, data, neg=False):
+        if self.radius == "abs" or neg:
+            return super().gci1_bot_loss(data, neg=neg)
+        # ELEm's disjointness with softplus radii (Elem.disJointLoss of the RegD code).
+        c, d = self.class_embed(data[:, 0]), self.class_embed(data[:, 1])
+        rc, rd = self._radius(data[:, 0]).unsqueeze(-1), self._radius(data[:, 1]).unsqueeze(-1)
+        dst = th.linalg.norm(d - c, dim=1, keepdim=True)
+        return th.relu(rc + rd - dst + self.margin)

@@ -312,10 +312,13 @@ class SoftmaxEnergyContrastiveLoss(_ScoreLoss):
     paper, whose negatives use :math:`d_{bd}` only and whose combination is a max-margin
     rather than a softmax (:class:`LogSumExpContrastiveLoss`).
 
-    The positive energies are the module's scores as the training loop passes them (for
-    RegD modules, :math:`\max\{E, \gamma_1\}`); the negative energies are re-scored
-    *raw*, which requires a module with the scoring context of
-    :mod:`mowl.nn.el.regd` (:meth:`RegDELBEModule.scoring`).
+    The positive energies are the module's scores as the training loop passes them,
+    clamped here at :math:`\gamma_1`; the negative energies are re-scored *raw*, which
+    requires a module with the scoring context of :mod:`mowl.nn.el.regd`
+    (:meth:`RegDELBEModule.scoring`).
+
+    :param gamma1: The margin :math:`\gamma_1` at which a positive energy is clamped (0 in
+        the RegD code).
 
     :param gamma2: The margin :math:`\gamma_2` subtracted from the negative energies
         before clamping (0 in the RegD code).
@@ -326,8 +329,9 @@ class SoftmaxEnergyContrastiveLoss(_ScoreLoss):
 
     key = "softmax-energy-contrastive"
 
-    def __init__(self, gamma2=0.0, normal_forms=None):
+    def __init__(self, gamma1=0.0, gamma2=0.0, normal_forms=None):
         super().__init__(normal_forms=normal_forms, neg_scores="positive")
+        self.gamma1 = float(gamma1)
         self.gamma2 = float(gamma2)
 
     def _negative_scores(self, gci_name, neg_scores):
@@ -352,6 +356,9 @@ class SoftmaxEnergyContrastiveLoss(_ScoreLoss):
         return energy.reshape(len(rows), -1).mean(dim=1)
 
     def combine(self, gci_name, pos, neg):
+        # The module may pass raw energies (RegDCodeTraining trains in energy mode); the
+        # code clamps the positive energy in the loss itself (idempotent otherwise).
+        pos = th.clamp(pos, min=self.gamma1)
         if neg is None or not len(neg):
             return pos.mean()
         neg = th.clamp(neg - self.gamma2, max=0.0)

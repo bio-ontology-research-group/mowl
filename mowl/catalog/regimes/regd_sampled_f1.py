@@ -30,7 +30,11 @@ REGIME = RegimeCard(
         "The F1 depends on the sampling seed and on the 1:10 positive:negative ratio.",
         "The prediction-task numbers of the paper (Table 4) are NOT comparable with an "
         "evaluation that scores the query itself (positive_scores='pair'); they are "
-        "reproduced only with the code's slip below.",
+        "reproduced only with the code's slip below, which needs the reference index "
+        "files (classes.json, relations.json).",
+        "The threshold search follows the code: every position of the sorted scores is "
+        "tried, so with tied scores the validation F1 can be one that no threshold "
+        "achieves; the threshold is then applied as score <= t.",
     ),
     notes=(
         "arXiv:2501.17518v3, Sections 5.1-5.3, Tables 2-4, and EXP_ontology/evaluate.py "
@@ -45,11 +49,17 @@ REGIME = RegimeCard(
         "A ⊑ ∃r.B the subclass A. The paper describes the score only as the model's "
         "energy; the code uses relu of the boundary dissimilarity alone. Two slips of "
         "the code that the published numbers carry: (1) for the prediction task the "
-        "positive score of a query is score-matrix column 1 -- the role index read as a "
-        "class index, an arbitrary class instead of the query (positive_scores="
-        "'reference' reproduces this; 'pair' scores the axiom itself); (2) the code "
+        "positive score of a query A ⊑ ∃r.B is score-matrix column 1, which holds the "
+        "role index: the code scores the class whose index in the reference "
+        "classes.json equals the role's index in relations.json, not A (GO: part_of "
+        "has index 1 and class 1 is GO:0008150 biological_process, 45% of the test "
+        "queries; GALEN and ANATOMY: assorted classes). positive_scores='reference' "
+        "with reference_ontology rebuilds exactly these classes from the index files of "
+        "the pinned data release; 'pair' scores the axiom itself, and the regime "
+        "reports both; (2) the code "
         "trains the prediction task with the reversed inclusion (see RegDELBE's "
         "flip_gci2) but scores box(B) - R, so the signs of R differ between training "
-        "and testing. For balls the code's evaluation uses absolute radii (mOWL agrees) "
-        "although its training uses softplus radii, which mOWL does not."),
+        "and testing. (3) For balls the code's evaluation reads the radius as |w| of the "
+        "raw parameter although its training uses softplus(w); the regime reads |w| as "
+        "the code does (RegDELEm with radius='softplus' reproduces the training side)."),
 )

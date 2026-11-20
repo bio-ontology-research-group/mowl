@@ -73,8 +73,6 @@ def test_other_regimes(trained_elem, dataset):
                    SampledF1Regime(test_positives=10, valid_positives=10,
                                    num_negatives=2),
                    SampledF1Regime(gci_name="gci2", test_positives=10,
-                                   valid_positives=10, num_negatives=2),
-                   SampledF1Regime(gci_name="gci2", test_positives=10,
                                    valid_positives=10, num_negatives=2,
                                    positive_scores="pair")):
         res = regime.evaluate(trained_elem, dataset)

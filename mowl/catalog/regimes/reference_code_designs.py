@@ -124,14 +124,17 @@ REGIMES = (
         name="Training design of the RegD code",
         kind=RegimeKind.TRAINING,
         summary=(
-            "One step per epoch on 512 random axioms of every normal form, the "
+            "Class regions initialised as one unit-norm row (centre and size together), "
+            "one step per epoch on 512 random axioms of every normal form, the "
             "softmax-energy-contrastive loss of the code on the task's normal form only "
             "(C ⊑ D for the inference task, C ⊑ ∃r.D with the reversed inclusion for "
-            "the prediction task), the host model's squared-error loss elsewhere, and "
+            "the prediction task), the RAW (unrectified) RegD energy of the other normal "
+            "forms with squared error (box host) or plain mean (ball host), and "
             "selection of the parameters with the best validation F1 every 100 epochs. "
             "For the baselines (design='baseline') the negative sampling, losses and "
-            "margins of box2el-code-training in the same loop."),
-        components=("batching", "negative sampling", "loss", "model selection"),
+            "margins of the Box2EL-derived code in the same loop."),
+        components=("initialisation", "batching", "negative sampling", "loss",
+                    "model selection"),
         applies_to="RegD models (design='regd'), ELBE / ELEm (design='baseline')",
         references=(YANG2025_REGD, JACKERMEIER2024),
         standalone=False,
@@ -141,32 +144,44 @@ REGIMES = (
         properties=(
             Guarantee(
                 GuaranteeKind.REGIME_PROPERTY,
-                "Zero training loss says that on every sampled minibatch every positive "
-                "is contained in its parent region and every sampled negative is not "
-                "contained (the contrastive term saturates at non-containment); with "
-                "entailed negatives or the depth term only active outside containment, "
-                "zero loss does not imply a model of the ontology.",
-                "the loss is the softmax of the clamped energies (PluginRegD.loss_cross)",
+                "Zero loss is not reachable for the RegD design: the raw energy of a "
+                "contained pair is negative and its square (or, for balls, its mean) is "
+                "minimised at the boundary or below, so the non-task normal forms are "
+                "pulled towards (box host) or pushed past (ball host) the parent's "
+                "boundary; on the task's normal form a zero contribution requires every "
+                "positive contained and every sampled negative not contained.",
+                "Elbe.forward / Elem.forward of the code apply MSE / mean to our_dist, "
+                "which is not rectified",
                 "gamma_1 = gamma_2 = 0"),
         ),
         limitations=(
             "Model selection optimises the reported F1 on the validation split.",
-            "The published numbers were taken as the best of a learning-rate and margin "
-            "sweep per dataset, task, model and dimension, judged by the test F1 that "
-            "the evaluation writes out; mOWL's recipes fix one configuration and say so.",
+            "The published numbers were taken from a learning-rate x margin sweep per "
+            "dataset, task, model and dimension, whose results file holds only TEST "
+            "F1s; mOWL's recipes fix one configuration chosen by validation F1.",
+            "The released baseline_sweep.py passes depth_type= to Elbe/Elem, whose "
+            "constructors take plugin_type=; the released script raises a TypeError, so "
+            "the published runs used a different (unreleased) version of it.",
         ),
         notes=(
             "From EXP_ontology/baseline_sweep.py, run_all_sweeps.py and model/*.py of "
             "HuiYang1997/RegD, which adapts the Box2EL code. A composition of "
             "per-normal-form-minibatch (512), softmax-energy-contrastive (the task's "
-            "normal form; the model's own sampler gives its 10 negatives), "
-            "mse-to-target (the other normal forms) and validation-f1-selection. The "
-            "RegD models need depth_on_containment=False (the code adds the depth term "
-            "only to non-contained pairs) and neg_sampling_gcis restricted to the task's "
-            "normal form; for the prediction task flip_gci2=True reproduces the code's "
-            "reversed inclusion. Deviations kept by mOWL: the code clips the parent "
-            "offsets at exp(-1e-4) in the plugin energy and uses softplus radii for "
-            "the ball host; neither is replicated."),
+            "normal form; the model's own sampler gives its 10 negatives, redrawn every "
+            "step), mse-to-target or loss-sum (the other normal forms, on raw energies) "
+            "and validation-f1-selection. The RegD models need "
+            "depth_on_containment=False (the code adds the depth term only to "
+            "non-contained pairs) and neg_sampling_gcis restricted to the task's normal "
+            "form; for the prediction task flip_gci2=True reproduces the code's reversed "
+            "inclusion; the ball model needs radius='softplus' (the code's Elem). "
+            "Deviations kept by mOWL: the code clips the parent offsets at exp(-1e-4) in "
+            "the plugin energy; the code draws the baselines' negatives once before "
+            "training (mOWL every step); mOWL's ELEm baseline keeps |radius|, its "
+            "rectified negative loss and its overlap loss for ∃r.C ⊑ D, where the code's "
+            "Elem uses softplus radii, an unrectified linear negative loss and a "
+            "containment loss; mOWL's ELBE disjointness loss differs from the code's "
+            "(relu(min_i(-|c-d| + o_c + o_d - margin))). The validation subsets are "
+            "the first 1,000 axioms in mOWL's order, not the reference file order."),
     ),
     RegimeCard(
         key="transbox-normal-form-ranking",

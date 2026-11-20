@@ -13,11 +13,14 @@ _NOTES = (
     "evaluated (the paper says 1,000 sampled), negatives are 10 random classes per "
     "query replacing the superclass of C ⊑ D and the subclass of A ⊑ ∃r.B, and the "
     "threshold is the best-F1 threshold of the first 1,000 validation subsumptions, "
-    "applied to the test split. For the prediction task the positive score of a query "
-    "is score-matrix column 1 -- the role index read as a class index, an arbitrary "
-    "class rather than the query -- which is the slip the published Table 4 numbers "
-    "carry (the regime parameter positive_scores reproduces or fixes it); the "
-    "prediction benchmarks keep it to stay comparable with the published numbers.")
+    "applied to the test split. For the prediction task the code reads the positive score "
+    "of a query A ⊑ ∃r.B from score-matrix column 1, which holds the role index: it scores "
+    "the class whose index in the reference classes.json equals the role's index in "
+    "relations.json, not A (for GO, part_of -> GO:0008150 biological_process, 45% of the "
+    "test queries). The published Table 4 numbers carry this slip; the prediction "
+    "benchmarks reproduce it from the reference index files (positive_scores='reference', "
+    "reference_ontology) and also report the F1 of the axiom's own score (protocol_info "
+    "f1_pair).")
 _INFERENCE_DESC = (
     "Train on the full ontology (Box2EL inference data). All inferred subsumptions "
     "C ⊑ D of the test set are queries; for each, the superclass D is replaced by every "
@@ -32,8 +35,8 @@ _PREDICTION_DESC = (
     "translated by -r inside the candidate (the code trains this task with the "
     "reversed inclusion, flip_gci2); 10 random candidates per query are negatives; "
     "the threshold maximises F1 on validation queries. As in the code, the F1's "
-    "positive score is the score of the class indexed by the role (see the benchmark "
-    "notes). F1 (Section 5.3, Table 4).")
+    "positive score is the score of the class that the role's reference index names "
+    "(see the benchmark notes). F1 (Section 5.3, Table 4).")
 
 _ONTS = (("galen", "GALEN", "GALENJackermeier2024Dataset"),
          ("go", "GO", "GOJackermeier2024Dataset"),
@@ -57,7 +60,7 @@ BENCHMARKS = [
         task=Task.AXIOM_PREDICTION,
         description=_PREDICTION_DESC,
         dataset=f"mowl.datasets.builtin.jackermeier2024.{cls}",
-        protocol=_P, protocol_kwargs={"gci_name": "gci2"},
+        protocol=_P, protocol_kwargs={"gci_name": "gci2", "reference_ontology": label},
         metrics=("f1",), higher_is_better={"f1": True},
         references=(YANG2025_REGD, JACKERMEIER2024), notes=_NOTES)
     for name, label, cls in _ONTS

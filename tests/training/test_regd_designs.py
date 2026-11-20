@@ -153,3 +153,68 @@ class TestRegDCodeTrainingEndToEnd:
         model.training_regime = regime
         model.train(epochs=2)
         assert regime.regimes[-1].best_epoch is not None
+
+
+class TestReferenceThresholdAndSlip(TestCase):
+
+    def test_reference_best_threshold_sweeps_sorted_positions(self):
+        from mowl.evaluation.sampled_f1 import reference_best_threshold, _apply_threshold
+        # sorted: 0.0(+) 0.1(-) 0.2(+) 0.9(-): F1 at positions 1..4 = 2/3, 1/2, 2/3*?, ...
+        t, f1 = reference_best_threshold([0.0, 0.2], [0.1, 0.9])
+        # position 1: p=1, r=.5 -> .667; position 3: p=2/3, r=1 -> .8 (the best)
+        self.assertAlmostEqual(t, 0.2)
+        self.assertAlmostEqual(f1, 0.8)
+        f1_t, p, r = _apply_threshold([0.0, 0.2], [0.1, 0.9], t)
+        self.assertAlmostEqual(f1_t, 0.8)
+        self.assertEqual(reference_best_threshold([], [1.0]), (None, 0.0))
+
+    def test_reference_role_classes_reads_the_class_at_the_role_index(self):
+        from mowl.evaluation.sampled_f1 import reference_role_classes
+
+        class _M:
+            class_index_dict = {"http://x/A": 0, "http://x/B": 1,
+                                "http://y/aux/5": 2}
+            object_property_index_dict = {"http://x/r": 0, "http://x/s": 1,
+                                          "http://x/t": 2}
+        classes = {"<http://x/B>": 0, "<http://x/A>": 1, "<http://z/Q>": 5}
+        relations = {"SubClassOf": 0, "<http://x/r>": 1, "<http://x/s>": 5,
+                     "<http://x/t>": 9}
+        out = reference_role_classes(_M(), "GO", index_files=(classes, relations))
+        # r has reference index 1 -> reference class 1 = A -> model class 0
+        # s has index 5 -> reference class 5 (unknown IRI) -> aux/5 -> model class 2
+        # t has index 9 -> no class -> -1
+        self.assertEqual(out.tolist(), [0, 2, -1])
+
+    def test_gci2_reference_needs_the_reference_ontology(self):
+        from mowl.evaluation.sampled_f1 import SampledF1Regime, _role_classes_for
+        with pytest.raises(ValueError):
+            _role_classes_for(object(), "gci2", "reference", None, {})
+        assert _role_classes_for(object(), "gci0", "reference", None, {}) is None
+        SampledF1Regime(gci_name="gci2", positive_scores="pair")
+
+
+class TestCodeDesignHooks:
+
+    def test_joint_init_and_raw_energy(self):
+        from mowl.models.regd.model import RegDELEm
+        from mowl.training.reference import joint_unit_init
+        dataset = tiny_dataset()
+        model = RegDELEm(dataset, embed_dim=3, depth_on_containment=False,
+                         radius="softplus", neg_sampling_gcis=["gci0"],
+                         model_filepath=os.path.join(scratch_dir(), "regd_elem2.pt"))
+        joint_unit_init(model.module)
+        w = th.cat([model.module.class_embed.weight, model.module.class_rad.weight], 1)
+        assert th.allclose(th.linalg.norm(w, dim=1), th.ones(len(w)), atol=1e-5)
+        regime = RegDCodeTraining(task="inference", design="regd", host_loss="mean",
+                                  batch_size=4, validate_every=1)
+        assert [r.key for r in regime.regimes][2] == "loss-sum"
+        model.eval_gci_name = "gci0"
+        model.training_regime = regime
+        assert model.module.energy_mode is True
+        model.train(epochs=2)
+        assert model.module.energy_mode is False
+        # softplus radii: the RegD region of a class with raw radius -5 is small, not 5
+        with th.no_grad():
+            model.module.class_rad.weight[0] = -5.0
+        _, r = model.module._region(th.tensor([0]))
+        assert float(r) < 0.01

@@ -18,11 +18,16 @@ of Tables 3 and 4) is:
   or otherwise entailed).
 * the positive score of a row is the matrix entry of **column 1**. For ``gci0`` that is
   the superclass D, the axiom's own score; for ``gci2`` column 1 is the *role index*,
-  so the code scores an arbitrary class (the one whose index equals the role's) instead
-  of the axiom -- :attr:`SampledF1Regime.positive_scores` reproduces this; it is what
-  the published prediction-task numbers are computed with.
+  so the code scores the class whose index in the reference data equals the role's
+  index instead of the axiom (for GO, *biological_process* for every ``part_of``
+  query). :func:`reference_role_classes` rebuilds that class from the reference index
+  files and ``SampledF1Regime(positive_scores="reference")`` reproduces the slip; the
+  published prediction-task numbers are computed with it. The regime reports the F1
+  of the axiom's own score (``"pair"``) next to it.
 * the threshold is the best-F1 threshold on the validation split, evaluated the same
-  way; F1, precision and recall of the test split at that threshold.
+  way and searched over the sorted scores as the code does
+  (:func:`reference_best_threshold`); F1, precision and recall of the test split at
+  that threshold (``score <= threshold`` is positive).
 
 The matrix entry ``relu(d_bd)`` of the boxes is computed from the raw embedding
 parameters (absolute offsets), for balls from the absolute radii; this matches the code
@@ -35,7 +40,6 @@ import torch as th
 
 from mowl.evaluation.regime import EvaluationRegime
 from mowl.evaluation.axiom_ranking import el_rows
-from mowl.evaluation.ranking_metrics import binary_f1, best_threshold
 
 #: Column of the score matrix whose entry is the positive score of a row, per normal
 #: form, as in the reference code (``compute_nf1_ranks`` / ``compute_nf3_ranks`` of
@@ -136,56 +140,187 @@ def pair_scores(module, gci_name, rows):
     return th.relu(bd).cpu()
 
 
+def reference_role_classes(model, ontology, data_root=None, zip_path=None,
+                           index_files=None):
+    """The class the RegD code scores as the "positive" of a prediction query, per role.
+
+    ``compute_nf3_ranks`` of the code reads the positive score of a query ``[C, r, D]``
+    from score-matrix column ``batch_data[:, 1]`` -- the *role* index of the reference
+    data, read as a *class* index. The class it reads is therefore the class whose index
+    in the reference ``classes.json`` equals the role's index in ``relations.json``
+    (for GO, ``part_of`` has index 1 and class 1 is ``GO:0008150``, *biological_process*;
+    45% of the GO test queries are scored against it). This function rebuilds that map
+    from the index files of the pinned data release that the RegD code ships
+    (identical to the Box\\ :sup:`2`\\ EL release,
+    :func:`~mowl.datasets.builtin.jackermeier2024_reference.fetch_box2el_release`).
+
+    Class IRIs are matched by name; the ANATOMY dataset of mOWL names its classes
+    ``.../aux/<i>`` with ``i`` the reference index, which is matched by number.
+
+    :param model: An :class:`~mowl.base_models.EmbeddingELModel`.
+    :param ontology: ``"GALEN"``, ``"GO"`` or ``"ANATOMY"``.
+    :param index_files: ``(classes, relations)``: the two index dictionaries (IRI in
+        angle brackets to index) instead of reading them from the release.
+    :return: A ``LongTensor`` indexed by the model's role index: the model's class index
+        of the class the code scores, ``-1`` where there is none.
+    """
+    import json
+    import re
+    import zipfile
+    if index_files is None:
+        from mowl.datasets.builtin.jackermeier2024_reference import fetch_box2el_release
+        ontology = ontology.upper()
+        with zipfile.ZipFile(fetch_box2el_release(data_root, zip_path)) as zf:
+            classes = json.loads(zf.read(f"data/{ontology}/prediction/classes.json"))
+            relations = json.loads(zf.read(f"data/{ontology}/prediction/relations.json"))
+    else:
+        classes, relations = index_files
+    cid = model.class_index_dict
+    rid = model.object_property_index_dict
+    aux = {}
+    for iri, i in cid.items():
+        m = re.search(r"/aux/(\d+)$", iri)
+        if m:
+            aux[int(m.group(1))] = i
+    by_ref_index = {}
+    for iri, idx in classes.items():
+        key = iri.strip("<>")
+        if key in cid:
+            by_ref_index[int(idx)] = cid[key]
+        elif int(idx) in aux:
+            by_ref_index[int(idx)] = aux[int(idx)]
+    n_roles = (max(rid.values()) + 1) if rid else 0
+    out = th.full((n_roles,), -1, dtype=th.long)
+    for iri, ridx in relations.items():
+        r = rid.get(iri.strip("<>"))
+        if r is not None and int(ridx) in by_ref_index:
+            out[r] = by_ref_index[int(ridx)]
+    return out
+
+
+def reference_best_threshold(pos, neg):
+    """Best-F1 threshold as ``compute_best_threshold`` of the RegD code computes it.
+
+    The scores are sorted (ascending) and every *position* of the sorted list is tried:
+    the F1 of predicting the first ``i`` scores positive, with ties broken by the sort
+    order. The first position with the largest F1 gives the threshold (its score); applied
+    as ``score <= threshold``, all scores tied with it count as positive.
+
+    :return: ``(threshold, f1)``; ``(None, 0.0)`` if no position has a positive F1.
+    """
+    pos = np.asarray(pos, dtype=float)
+    neg = np.asarray(neg, dtype=float)
+    scores = np.concatenate([pos, neg])
+    labels = np.concatenate([np.ones(len(pos)), np.zeros(len(neg))])
+    if len(pos) == 0:
+        return None, 0.0
+    order = np.argsort(scores, kind="quicksort")
+    sorted_scores, sorted_labels = scores[order], labels[order]
+    tp = np.cumsum(sorted_labels)
+    k = np.arange(1, len(scores) + 1)
+    precision = tp / k
+    recall = tp / len(pos)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        f1 = np.where(tp > 0, 2 * precision * recall / (precision + recall), 0.0)
+    best = int(np.argmax(f1))
+    if f1[best] <= 0:
+        return None, 0.0
+    return float(sorted_scores[best]), float(f1[best])
+
+
+def _apply_threshold(pos, neg, threshold):
+    """F1, precision and recall of ``score <= threshold``, as the code computes them."""
+    pos = np.asarray(pos, dtype=float)
+    neg = np.asarray(neg, dtype=float)
+    tp = float(np.sum(pos <= threshold))
+    fp = float(np.sum(neg <= threshold))
+    precision = tp / (tp + fp) if tp + fp > 0 else 0.0
+    recall = tp / len(pos) if len(pos) else 0.0
+    f1 = 2 * precision * recall / (precision + recall) if precision + recall > 0 else 0.0
+    return f1, precision, recall
+
+
 def _split_scores(model, gci_name, rows, num_rows, num_negatives, gen,
-                  positive_scores, row_batch=64):
+                  role_classes=None, row_batch=64):
     """Positive and negative scores of one split, sampled as the reference code does.
 
     :param num_rows: Number of rows to take from the front of ``rows`` (all if
         ``None``), as the code takes ``val_data[nf][:1000]``.
-    :param positive_scores: ``"reference"`` (matrix column 1, as in the code) or
-        ``"pair"`` (the axiom's own score).
-    :return: ``(pos, neg)`` numpy arrays; ``neg`` has ``num_negatives`` entries per row.
+    :param role_classes: For ``gci2``, the map of :func:`reference_role_classes`; the
+        reference positive score of a row is then the matrix entry of that class.
+    :return: ``(pos_reference, pos_pair, neg)`` numpy arrays: the positive score as the
+        code reads it, the axiom's own score, and ``num_negatives`` negatives per row.
+        For ``gci0`` the two positive scores agree; for ``gci2`` without ``role_classes``
+        the reference scores are ``None``.
     """
     module = model.module
     if len(rows) == 0:
-        return np.zeros(0), np.zeros(0)
+        return np.zeros(0), np.zeros(0), np.zeros(0)
     if num_rows is not None:
         rows = rows[:int(num_rows)]
-    pos, neg = [], []
+    ref, pair, neg = [], [], []
     with th.no_grad():
         for i in range(0, len(rows), row_batch):
             chunk = rows[i:i + row_batch]
             dists = candidate_dists(module, gci_name, chunk, row_batch=row_batch)
             idx = th.randint(dists.shape[1], (len(chunk), num_negatives), generator=gen)
             neg.append(th.gather(dists, 1, idx).reshape(-1).numpy())
-            if positive_scores == "pair":
-                pos.append(pair_scores(module, gci_name, chunk).numpy())
-            else:
-                pos.append(th.gather(dists, 1, chunk[:, 1:2].cpu()).reshape(-1).numpy())
-    return np.concatenate(pos), np.concatenate(neg)
+            if gci_name == "gci0":
+                p = th.gather(dists, 1, chunk[:, 1:2].cpu()).reshape(-1).numpy()
+                ref.append(p)
+                pair.append(p)
+                continue
+            pair.append(pair_scores(module, gci_name, chunk).numpy())
+            if role_classes is not None:
+                cls = role_classes[chunk[:, 1].cpu()]
+                vals = th.gather(dists, 1, cls.clamp_min(0).reshape(-1, 1)).reshape(-1)
+                vals[cls < 0] = float("inf")
+                ref.append(vals.numpy())
+    pos_ref = np.concatenate(ref) if ref else None
+    return pos_ref, np.concatenate(pair), np.concatenate(neg)
+
+
+def _role_classes_for(model, gci_name, positive_scores, reference_ontology, cache):
+    if gci_name != "gci2" or positive_scores != "reference":
+        return None
+    if reference_ontology is None:
+        raise ValueError(
+            "positive_scores='reference' on gci2 reproduces the RegD code's positive score "
+            "(the class indexed by the role in the reference data) and needs "
+            "reference_ontology ('GALEN', 'GO' or 'ANATOMY').")
+    key = (id(model), reference_ontology)
+    if key not in cache:
+        cache[key] = reference_role_classes(model, reference_ontology)
+    return cache[key]
+
+
+_ROLE_CLASS_CACHE = {}
 
 
 def validation_best_f1(model, gci_name="gci0", num_positives=1000, num_negatives=10,
-                       positive_scores="reference", seed=0):
+                       positive_scores="reference", reference_ontology=None, seed=0):
     """Best achievable F1 (with its threshold tuned on the split itself) on the first
     ``num_positives`` validation axioms -- the model-selection quantity of the RegD code
     (``train`` in ``EXP_ontology/baseline_sweep.py``).
 
+    :param positive_scores: ``"reference"`` (the code's positive score, see
+        :class:`SampledF1Regime`) or ``"pair"`` (the axiom's own score).
     :return: ``(f1, threshold)``; ``(0.0, None)`` if the validation split is empty.
     """
-    empty = th.zeros((0, 2), dtype=th.long)
     try:
         rows = model.validation_datasets.get(gci_name)
     except AttributeError:
         rows = None
-    rows = empty if rows is None else rows[:]
-    if len(rows) == 0:
+    if rows is None or len(rows) == 0:
         return 0.0, None
+    rows = rows[:]
+    role_classes = _role_classes_for(model, gci_name, positive_scores, reference_ontology,
+                                     _ROLE_CLASS_CACHE)
     gen = th.Generator().manual_seed(seed)
-    pos, neg = _split_scores(model, gci_name, rows.cpu(), num_positives, num_negatives,
-                             gen, positive_scores)
-    labels = np.concatenate([np.ones(len(pos)), np.zeros(len(neg))])
-    threshold, f1 = best_threshold(np.concatenate([pos, neg]), labels)
+    pos_ref, pos_pair, neg = _split_scores(model, gci_name, rows.cpu(), num_positives,
+                                           num_negatives, gen, role_classes)
+    pos = pos_pair if positive_scores == "pair" else pos_ref
+    threshold, f1 = reference_best_threshold(pos, neg)
     return f1, threshold
 
 
@@ -196,7 +331,8 @@ class SampledF1Regime(EvaluationRegime):
     The score is the rectified boundary dissimilarity read from the model's regions
     (boxes: absolute offsets; balls: absolute radii), *not* the model's loss: the depth
     dissimilarity and any margins of the training loss are not part of the score. The
-    threshold maximising F1 on the validation split is applied to the test split.
+    threshold maximising F1 on the validation split (searched as the code does,
+    :func:`reference_best_threshold`) is applied to the test split.
 
     :param gci_name: ``"gci0"`` (:math:`C \\sqsubseteq D`, RegD's inference task) or
         ``"gci2"`` (:math:`A \\sqsubseteq \\exists r.B`, RegD's prediction task, whose
@@ -206,12 +342,15 @@ class SampledF1Regime(EvaluationRegime):
         (the code takes the first 1,000); ``None`` takes all.
     :param test_positives: Test queries to take from the front of the split; ``None``
         (the default) takes **all**, as the code does (the paper says 1,000 sampled).
-    :param positive_scores: ``"reference"`` (default; the positive score of a query is
-        score-matrix column 1, as in the code) or ``"pair"`` (the axiom's own score).
-        The two agree for ``gci0``; for ``gci2`` column 1 is the role index read as a
-        class index, so ``"reference"`` scores an arbitrary class -- the published
-        prediction-task numbers (Table 4) are computed this way, and
-        :attr:`REFERENCE_POSITIVE_COLUMN` documents it.
+    :param positive_scores: ``"reference"`` (default) or ``"pair"``. They agree for
+        ``gci0``. For ``gci2``, ``"reference"`` reproduces the code's slip: the positive
+        score of ``A ⊑ ∃r.B`` is the score of the class whose reference index equals the
+        role's reference index (:func:`reference_role_classes`), not of ``A``; the
+        published Table 4 numbers are computed this way. ``"pair"`` scores the axiom
+        itself. The regime always reports both (``f1`` follows ``positive_scores``;
+        ``info["f1_pair"]`` and ``info["f1_reference"]``).
+    :param reference_ontology: ``"GALEN"``, ``"GO"`` or ``"ANATOMY"``: the reference data
+        whose index files define the slip (needed for ``gci2`` with ``"reference"``).
     :param seed: Seed of the negative sampling (independent of the training seed).
     """
 
@@ -220,7 +359,8 @@ class SampledF1Regime(EvaluationRegime):
     subsets = ("all",)
 
     def __init__(self, gci_name="gci0", num_negatives=10, valid_positives=1000,
-                 test_positives=None, positive_scores="reference", seed=0):
+                 test_positives=None, positive_scores="reference", reference_ontology=None,
+                 seed=0):
         if gci_name not in REFERENCE_POSITIVE_COLUMN:
             raise ValueError(f"Unsupported normal form {gci_name!r}.")
         if positive_scores not in ("reference", "pair"):
@@ -230,6 +370,7 @@ class SampledF1Regime(EvaluationRegime):
         self.valid_positives = valid_positives
         self.test_positives = test_positives
         self.positive_scores = positive_scores
+        self.reference_ontology = reference_ontology
         self.seed = seed
         self.info = {}
 
@@ -240,33 +381,50 @@ class SampledF1Regime(EvaluationRegime):
         rows = el_rows(model, ontology)[0].get(self.gci_name, empty)
         return rows.cpu()
 
+    @staticmethod
+    def _classify(vpos, vneg, tpos, tneg):
+        threshold, source = None, "validation"
+        if vpos is not None and len(vpos):
+            threshold, _ = reference_best_threshold(vpos, vneg)
+        if threshold is None:
+            # As in the code: without a validation threshold, the best one on the test
+            # split itself.
+            threshold, _ = reference_best_threshold(tpos, tneg)
+            source = "test"
+        if threshold is None:
+            return 0.0, 0.0, 0.0, None, source
+        f1, precision, recall = _apply_threshold(tpos, tneg, threshold)
+        return f1, precision, recall, threshold, source
+
     def evaluate(self, model, dataset):
         gen = th.Generator().manual_seed(self.seed)
+        want_reference = self.gci_name == "gci2" and (
+            self.positive_scores == "reference" or self.reference_ontology is not None)
+        role_classes = None
+        if want_reference:
+            role_classes = _role_classes_for(model, self.gci_name, "reference",
+                                             self.reference_ontology, _ROLE_CLASS_CACHE)
         vrows = self._rows(model, dataset.validation)
         trows = self._rows(model, dataset.testing)
-        vpos, vneg = _split_scores(model, self.gci_name, vrows, self.valid_positives,
-                                   self.num_negatives, gen, self.positive_scores)
-        tpos, tneg = _split_scores(model, self.gci_name, trows, self.test_positives,
-                                   self.num_negatives, gen, self.positive_scores)
-        if len(vpos):
-            vlabels = np.concatenate([np.ones(len(vpos)), np.zeros(len(vneg))])
-            threshold, _ = best_threshold(np.concatenate([vpos, vneg]), vlabels)
-            threshold_source = "validation"
-        else:
-            threshold, threshold_source = None, "test"
-        ts = np.concatenate([tpos, tneg])
-        tl = np.concatenate([np.ones(len(tpos)), np.zeros(len(tneg))]).astype(bool)
-        if threshold is None:
-            threshold, _ = best_threshold(ts, tl)
-        pred = ts <= threshold
-        tp = float(np.sum(pred & tl))
-        precision = tp / max(float(np.sum(pred)), 1.0)
-        recall = tp / max(float(np.sum(tl)), 1.0)
+        v_ref, v_pair, vneg = _split_scores(model, self.gci_name, vrows,
+                                            self.valid_positives, self.num_negatives, gen,
+                                            role_classes)
+        t_ref, t_pair, tneg = _split_scores(model, self.gci_name, trows,
+                                            self.test_positives, self.num_negatives, gen,
+                                            role_classes)
+        pair = self._classify(v_pair, vneg, t_pair, tneg)
+        ref = self._classify(v_ref, vneg, t_ref, tneg) if t_ref is not None else None
+        chosen = pair if self.positive_scores == "pair" else ref
+        f1, precision, recall, threshold, source = chosen
         self.info = {"scoring": "relu-boundary", "positive_scores": self.positive_scores,
-                     "threshold": float(threshold),
-                     "threshold_source": threshold_source,
-                     "test_positives": int(len(tpos)),
+                     "threshold": None if threshold is None else float(threshold),
+                     "threshold_source": source,
+                     "test_positives": int(len(t_pair)),
                      "test_negatives": int(len(tneg)),
-                     "valid_positives": int(len(vpos))}
-        return {"all": {"f1": binary_f1(tl, pred), "precision": precision,
-                        "recall": recall}}
+                     "valid_positives": int(len(v_pair)),
+                     "f1_pair": pair[0]}
+        if ref is not None:
+            self.info["f1_reference"] = ref[0]
+            if role_classes is not None:
+                self.info["reference_role_classes_found"] = int((role_classes >= 0).sum())
+        return {"all": {"f1": f1, "precision": precision, "recall": recall}}
