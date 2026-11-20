@@ -96,3 +96,43 @@ def test_held_out_individual_index_consistent_across_splits(tmp_path):
     assert test_opa.shape == (1, 3)
     assert int(test_opa[0, 0].item()) == c_idx
     assert int(test_opa[0, 2].item()) == d_idx
+
+
+def test_assertions_about_anonymous_individuals_are_skipped(tmp_path):
+    """A blank node typed with a class (e.g. a stray ``<Ontology/>`` element under a
+    non-OWL default namespace, as in the DELE yeast function files) is an assertion about
+    an anonymous individual. It is not in the individual index (built from named
+    individuals) and must be left out of the class assertions instead of raising a
+    KeyError when the dataset tensors are built."""
+    adapter = OWLAPIAdapter()
+    manager = adapter.owl_manager
+    factory = adapter.data_factory
+    ns = "http://test.org/anon#"
+    cls_A = adapter.create_class(ns + "A")
+    cls_B = adapter.create_class(ns + "B")
+    rel_r = adapter.create_object_property(ns + "r")
+    ind_a = adapter.create_individual(ns + "a")
+    anon = factory.getOWLAnonymousIndividual()
+
+    train_ont = adapter.create_ontology("http://test.org/anon/train")
+    manager.addAxiom(train_ont, adapter.create_subclass_of(cls_A, cls_B))
+    manager.addAxiom(train_ont, adapter.create_class_assertion(cls_A, ind_a))
+    valid_ont = adapter.create_ontology("http://test.org/anon/valid")
+    manager.addAxiom(valid_ont, adapter.create_subclass_of(cls_B, cls_A))
+    manager.addAxiom(valid_ont, factory.getOWLClassAssertionAxiom(cls_B, anon))
+    manager.addAxiom(valid_ont, factory.getOWLObjectPropertyAssertionAxiom(rel_r, ind_a,
+                                                                           anon))
+    train_path = tmp_path / "train.owl"
+    valid_path = tmp_path / "valid.owl"
+    manager.saveOntology(train_ont, IRI.create("file:" + str(train_path)))
+    manager.saveOntology(valid_ont, IRI.create("file:" + str(valid_path)))
+
+    dataset = PathDataset(str(train_path), validation_path=str(valid_path))
+    assert dataset.validation.getAnonymousIndividuals().size() == 1
+    model = ELBE(dataset, embed_dim=8, batch_size=4)
+    valid = model.validation_datasets
+    assert len(valid["gci0"]) == 1
+    assert len(valid.get("class_assertion", [])) == 0
+    assert len(valid.get("object_property_assertion", [])) == 0
+    train_ca = model.training_datasets["class_assertion"][:]
+    assert train_ca.shape == (1, 2)

@@ -168,8 +168,7 @@ type org.semanticweb.owlapi.model.OWLOntology. Found: {type(ontology)}")
 
                 # Add ABox axioms from original ontology
                 abox = ontology.getABoxAxioms(Imports.fromBoolean(True))
-                axioms_dict["class_assertion"] = [ClassAssertion(axiom) for axiom in abox if axiom.getAxiomType() == AxiomType.CLASS_ASSERTION and axiom.getClassExpression().getClassExpressionType() == ClassExpressionType.OWL_CLASS]
-                axioms_dict["object_property_assertion"] = [ObjectPropertyAssertion(axiom) for axiom in abox if axiom.getAxiomType() == AxiomType.OBJECT_PROPERTY_ASSERTION]
+                axioms_dict.update(abox_assertions(abox))
 
                 return axioms_dict
 
@@ -210,8 +209,7 @@ type org.semanticweb.owlapi.model.OWLOntology. Found: {type(ontology)}")
 
             axioms_dict = self.__revert_translation(normalized_ontology)
 
-        axioms_dict["class_assertion"] = [ClassAssertion(axiom) for axiom in abox if axiom.getAxiomType() == AxiomType.CLASS_ASSERTION and axiom.getClassExpression().getClassExpressionType() == ClassExpressionType.OWL_CLASS]
-        axioms_dict["object_property_assertion"] = [ObjectPropertyAssertion(axiom) for axiom in abox if axiom.getAxiomType() == AxiomType.OBJECT_PROPERTY_ASSERTION]
+        axioms_dict.update(abox_assertions(abox))
 
         # Save normalized ontology to cache if ontology_path is provided
         if ontology_path is not None and use_cache and not load:
@@ -366,6 +364,45 @@ type org.semanticweb.owlapi.model.OWLOntology")
         owl_manager = OWLAPIAdapter().owl_manager
         new_ontology = owl_manager.createOntology(new_tbox_axioms)
         return new_ontology
+
+
+def abox_assertions(abox):
+    """The class assertions :math:`A(a)` (``A`` a named class) and object property
+    assertions :math:`r(a, b)` of ``abox``, as the ``"class_assertion"`` and
+    ``"object_property_assertion"`` entries of the normalised axiom dictionary.
+
+    Assertions about *anonymous* individuals (RDF blank nodes, ``_:genid...``) are left
+    out, with a warning: a blank node has no identity outside the document it was parsed
+    from (the same node gets a different identifier in every parse, and training and
+    test files cannot refer to it), and OWLAPI's ``getIndividualsInSignature`` -- from
+    which mOWL's individual index is built -- lists named individuals only. Such an
+    assertion therefore cannot be embedded and would break the index lookup.
+
+    :param abox: ABox axioms (e.g. ``ontology.getABoxAxioms(Imports.INCLUDED)``).
+    :rtype: dict
+    """
+    class_assertions, property_assertions = [], []
+    skipped = 0
+    for axiom in abox:
+        axiom_type = axiom.getAxiomType()
+        if axiom_type == AxiomType.CLASS_ASSERTION:
+            if axiom.getClassExpression().getClassExpressionType() != \
+                    ClassExpressionType.OWL_CLASS:
+                continue
+            if axiom.getIndividual().isAnonymous():
+                skipped += 1
+                continue
+            class_assertions.append(ClassAssertion(axiom))
+        elif axiom_type == AxiomType.OBJECT_PROPERTY_ASSERTION:
+            if axiom.getSubject().isAnonymous() or axiom.getObject().isAnonymous():
+                skipped += 1
+                continue
+            property_assertions.append(ObjectPropertyAssertion(axiom))
+    if skipped:
+        logger.warning("%d assertions about anonymous individuals were not included.",
+                       skipped)
+    return {"class_assertion": class_assertions,
+            "object_property_assertion": property_assertions}
 
 
 def process_axiom(axiom: OWLAxiom):
