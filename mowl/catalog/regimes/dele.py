@@ -174,7 +174,7 @@ REGIMES = (
             "reference implementation of DELE, which differ from the papers' and from "
             "mOWL's modules in points the DELE paper does not mention."),
         components=("loss",),
-        applies_to="ELEmModule, ELBEModule (BoxSquaredELModule is unchanged)",
+        applies_to="ELEmModule, ELBEModule, BoxSquaredELModule",
         references=(MASHKOVA2024DELE,),
         standalone=False,
         introduced_with=("elem", "elbe"),
@@ -198,7 +198,11 @@ REGIMES = (
             "original ELEmbeddings and ELBE codes subtract it) and changes ELBE: "
             "inclusion margins become slack (- margin, as in ELEmbeddings) and the GCI2 "
             "negative loss penalises overlap of the translated C-box and the D-box "
-            "instead of their separation. mOWL's modules keep the original losses; this "
+            "instead of their separation. Box2EL: the positive losses return the "
+            "unsquared scores of the reference module (mOWL's module squares them; the "
+            "reference squares them in its training loop), so that the validation loss "
+            "used for the schedule and model selection is the reference's. mOWL's "
+            "modules keep the original losses; this "
             "regime switches a module instance to the reference's. The published numbers "
             "of DELE's tables were produced with the reference's losses."),
     ),

@@ -486,13 +486,61 @@ def _elbe_gci3_loss(module, data, neg=False):
                             module.rel_embed, module.margin)
 
 
-#: Methods to switch on the module, per module class (BoxSquaredEL needs none: its
-#: losses already agree with the reference code up to where the squaring happens).
+def _box2el_positive(score_fn, original):
+    """A Box2EL positive loss returning the unsquared score, as the reference module does
+    (its training loop squares it); negatives keep the module's loss."""
+    def loss(module, data, neg=False):
+        if neg:
+            return original(data, neg=True)
+        return score_fn(module, data)
+    return loss
+
+
+def _b2_gci0(module, data):
+    import mowl.nn.el.boxsquaredel.losses as L
+    return L.gci0_score(data, module.class_center, module.class_offset, module.gamma)
+
+
+def _b2_gci1(module, data):
+    import mowl.nn.el.boxsquaredel.losses as L
+    return L.gci1_score(data, module.class_center, module.class_offset, module.gamma)
+
+
+def _b2_gci1_bot(module, data):
+    import mowl.nn.el.boxsquaredel.losses as L
+    return L.gci1_bot_score(data, module.class_center, module.class_offset, module.gamma)
+
+
+def _b2_gci3(module, data):
+    import mowl.nn.el.boxsquaredel.losses as L
+    return L.gci3_score(data, module.class_center, module.class_offset, module.head_center,
+                        module.head_offset, module.tail_center, module.tail_offset,
+                        module.bump_classes, module.gamma)
+
+
+def _b2_gci0_bot(module, data):
+    return th.linalg.norm(th.abs(module.class_offset(data[:, 0])), dim=1)
+
+
+def _b2_gci3_bot(module, data):
+    # the reference takes the offset of the filler class (column 1); mOWL's module takes
+    # the head offset of the role
+    return th.linalg.norm(th.abs(module.class_offset(data[:, 1])), dim=1)
+
+
+_B2_POSITIVES = {"gci0_loss": _b2_gci0, "gci1_loss": _b2_gci1,
+                 "gci1_bot_loss": _b2_gci1_bot, "gci3_loss": _b2_gci3,
+                 "gci0_bot_loss": _b2_gci0_bot, "gci3_bot_loss": _b2_gci3_bot}
+
+#: Methods to switch on the module, per module class. BoxSquaredEL: the positive losses
+#: return the unsquared scores of the reference module (mOWL squares them inside the
+#: module, the reference in its training loop, see DELECodeLoss); validation losses and
+#: the model selection then see the same quantity as in the reference.
 _DELE_LOSSES = {
     "ELEmModule": {"gci3_loss": _elem_gci3_loss},
     "ELBEModule": {"gci0_loss": _elbe_gci0_loss, "gci1_loss": _elbe_gci1_loss,
                    "gci2_loss": _elbe_gci2_loss, "gci3_loss": _elbe_gci3_loss},
-    "BoxSquaredELModule": {},
+    "BoxSquaredELModule": _B2_POSITIVES,
 }
 
 
@@ -512,9 +560,14 @@ class DELECodeLosses(TrainingRegime):
       the GCI3 loss is corrected as for ELEm, and the GCI2 negative loss penalises
       overlap of the translated box of :math:`C` and the box of :math:`D` instead of
       their separation. The GCI1-BOT loss keeps its original form (``+ margin``).
-    * **Box2EL**: unchanged; the module's losses already agree with the reference code
-      (the reference squares the scores in the training loop, which the loss
-      composition of :class:`DELECodeTraining` does instead).
+    * **Box2EL**: the loss functions agree with the reference, but mOWL's module squares
+      the positive losses (other than GCI2) itself, whereas the reference module returns
+      the unsquared scores and squares them in the training loop. The positives are
+      switched to the unsquared scores (the GCI3-BOT one taking the offset of the filler
+      class, as the reference does), so that the validation loss -- and with it the
+      learning-rate schedule, early stopping and model selection -- is the reference's;
+      :class:`DELECodeLoss` squares them for training. Rankings are unchanged (the
+      square is monotone on non-negative scores).
 
     Evaluation through the module uses the switched losses, as the reference's
     ``eval_method`` does. Attach ``DELECodeLosses`` before regimes that inspect the
@@ -540,7 +593,12 @@ class DELECodeLosses(TrainingRegime):
                 f"DELECodeLosses switches ELEmModule, ELBEModule and BoxSquaredELModule; "
                 f"got {name}.")
         for method, function in _DELE_LOSSES[name].items():
+            if name == "BoxSquaredELModule":
+                original = getattr(type(module), method).__get__(module)
+                function = _box2el_positive(function, original)
             setattr(module, method, MethodType(function, module))
+        if name == "BoxSquaredELModule":
+            module._dele_unsquared = True
         if name == "ELBEModule":
             # Inclusions are slack in the reference code, whatever the module's
             # convention; the margin value is used as published (Appendix D).
@@ -550,7 +608,8 @@ class DELECodeLosses(TrainingRegime):
     def on_epoch_start(self, epoch, epochs):
         module = self.model.module
         if type(module).__name__ != self.patched or (
-                self.patched == "ELBEModule" and "gci2_loss" not in module.__dict__):
+                self.patched in ("ELBEModule", "BoxSquaredELModule")
+                and not set(_DELE_LOSSES[self.patched]) <= set(module.__dict__)):
             self._apply()
 
 
@@ -569,9 +628,9 @@ class DELECodeLoss(TrainingRegime):
     * **ELBE**: every normal form :math:`\mathrm{mean}(\ell_+^2) +
       \mathrm{mean}(\ell_-^2)` (positives squared also without negatives).
     * **Box2EL**: every normal form :math:`\mathrm{mean}(\ell_+^2) +
-      \mathrm{mean}(\ell_-^2)` of the reference module's losses. mOWL's module already
-      squares the positive losses other than GCI2 per axiom, so those are averaged as
-      they are; the GCI2 and GCI3 negative losses of the reference return the *mean* of
+      \mathrm{mean}(\ell_-^2)` of the reference module's losses (if mOWL's module was
+      not switched by :class:`DELECodeLosses`, it already squares the positive losses
+      other than GCI2, and those are averaged as they are); the GCI2 and GCI3 negative losses of the reference return the *mean* of
       :math:`(\delta - d)^2` over the batch, which the loop squares again, so they enter
       as :math:`\mathrm{mean}(\ell_-)^2`.
 
@@ -598,7 +657,11 @@ class DELECodeLoss(TrainingRegime):
             loss = _sq_mean(pos)
             return loss if neg is None else loss + _sq_mean(neg)
         if name == "BoxSquaredELModule":
-            loss = _sq_mean(pos) if gci_name == "gci2" else pos.mean()
+            # positives: DELECodeLosses makes the module return unsquared scores, as the
+            # reference module does; without it mOWL's module squares all but GCI2
+            squared = gci_name != "gci2" and not getattr(self.model.module,
+                                                         "_dele_unsquared", False)
+            loss = pos.mean() if squared else _sq_mean(pos)
             if neg is None:
                 return loss
             if gci_name in ("gci2", "gci3"):

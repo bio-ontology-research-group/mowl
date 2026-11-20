@@ -136,12 +136,17 @@ class TestDELECodeLosses(TestCase):
                 model.module.class_embed(d[:, 2]), th.abs(model.module.class_offset(d[:, 2])),
                 model.module.rel_embed(d[:, 1]), model.module.margin)))
 
-    def test_box2el_unchanged(self):
+    def test_box2el_positives_unsquared(self):
         model = BoxSquaredEL(self.dataset, embed_dim=4, batch_size=64)
         d = th.tensor([[0, 1], [2, 3]])
         before = model.module(d, "gci0").detach().clone()
+        neg_before = model.module(d, "gci0", neg=True).detach().clone()
         model.training_regime = DELECodeLosses()
-        self.assertTrue(th.equal(model.module(d, "gci0"), before))
+        after = model.module(d, "gci0").detach()
+        self.assertTrue(th.allclose(after.square(), before))
+        self.assertTrue(th.equal(model.module(d, "gci0", neg=True).detach(), neg_before))
+        d2 = th.tensor([[0, 0, 1]])
+        self.assertEqual(model.module(d2, "gci2").shape[0], 1)
 
     def test_rejects_other_modules(self):
         from mowl.models import BoxEL
@@ -249,6 +254,14 @@ class TestDELECodeLoss(TestCase):
         model = ELBE(self.dataset, embed_dim=4, batch_size=64)
         self.assertAlmostEqual(float(model.compute_loss(self.pos, self.neg)),
                                4.0 + (3.0 - 1.0) ** 2)
+
+    def test_box2el_switched(self):
+        model = BoxSquaredEL(self.dataset, embed_dim=4, batch_size=64)
+        model.training_regime = DELECodeLosses()
+        r = DELECodeLoss()
+        r.attach(model)
+        self.assertAlmostEqual(float(r.loss("gci0", self.pos, self.neg)), 5.0 + 10.0)
+        self.assertAlmostEqual(float(r.loss("gci3", self.pos, self.neg)), 5.0 + 9.0)
 
     def test_box2el(self):
         r = self._loss(BoxSquaredEL)
