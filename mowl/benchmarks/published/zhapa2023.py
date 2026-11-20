@@ -46,7 +46,9 @@ for _bench, _loc, _names, _text in _TABLES:
         _note = ""
         if _parts[0] == "FALCON" and _bench in ("cate-go-completion", "cate-foodon-completion"):
             _note = "Reported as 'FALCON (5 models)' in Table 3."
+        _settings = {} if _parts[0] != "CatE" else {
+            "training_regime": "cate-code-training"}
         RESULTS.append(PublishedResult(
             benchmark=_bench, method=_KEYS[_parts[0]],
             metrics={n: float(v) for n, v in zip(_names, _parts[1:])},
-            source=ZHAPA2023, locator=_loc, note=_note))
+            source=ZHAPA2023, locator=_loc, note=_note, settings=_settings))

@@ -85,9 +85,19 @@ class DELEProtocol(RegimeProtocol):
 class CatEProtocol(RegimeProtocol):
     """:func:`mowl.evaluation.filtered_ranking.cate_ranking`."""
 
-    def build(self, gci_name="gci0", relation=None, closure=False, **kwargs):
+    def build(self, gci_name="gci0", relation=None, closure=False, queries=None,
+              exclude_head=False, **kwargs):
         from mowl.evaluation.filtered_ranking import cate_ranking
-        return cate_ranking(gci_name, relation=relation, closure=closure, **kwargs)
+        return cate_ranking(gci_name, relation=relation, closure=closure,
+                            queries=queries, exclude_head=exclude_head, **kwargs)
+
+
+class CatEPPIProtocol(RegimeProtocol):
+    """:func:`mowl.evaluation.filtered_ranking.cate_ppi_ranking`."""
+
+    def build(self, relation="http://interacts", **kwargs):
+        from mowl.evaluation.filtered_ranking import cate_ppi_ranking
+        return cate_ppi_ranking(relation, **kwargs)
 
 
 class RegDProtocol(RegimeProtocol):

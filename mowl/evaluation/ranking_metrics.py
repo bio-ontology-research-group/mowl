@@ -119,7 +119,8 @@ def auc_mowl(ranks, num_candidates):
 AUC_FUNCTIONS = {"box2el": auc_box2el, "rank_curve": auc_rank_curve, "mowl": auc_mowl}
 
 
-def summarise_ranks(ranks, num_candidates, hits=(1, 10, 100), auc="box2el", prefix=""):
+def summarise_ranks(ranks, num_candidates, hits=(1, 10, 100), auc="box2el", prefix="",
+                    strict_hits=False):
     """Standard rank metrics of a list of ranks.
 
     :param ranks: Iterable of 1-based ranks.
@@ -127,6 +128,10 @@ def summarise_ranks(ranks, num_candidates, hits=(1, 10, 100), auc="box2el", pref
     :param hits: The :math:`k` of the reported Hits@\\ :math:`k`.
     :param auc: AUC variant, a key of :data:`AUC_FUNCTIONS`.
     :param prefix: Prefix of every metric name (``"f_"`` for filtered metrics).
+    :param strict_hits: Count a query at :math:`k` iff its rank is *strictly* below
+        :math:`k` (``rank < k``), as the evaluation code of CatE does
+        (``src/cat_completion.py``: ``if rank < k``), instead of the usual
+        :math:`\\mathit{rank} \\le k`. With ``strict_hits`` a Hits@1 is always 0.
     :return: ``{"hits@k": ..., "med": ..., "mrr": ..., "mr": ..., "auc": ...}`` with
         ``prefix`` prepended. Empty input gives ``nan`` values.
     """
@@ -139,7 +144,7 @@ def summarise_ranks(ranks, num_candidates, hits=(1, 10, 100), auc="box2el", pref
             out[f"{prefix}{name}"] = float("nan")
         return out
     for k in hits:
-        out[f"{prefix}hits@{k}"] = float(np.mean(r <= k))
+        out[f"{prefix}hits@{k}"] = float(np.mean(r < k if strict_hits else r <= k))
     out[f"{prefix}med"] = float(np.median(r))
     out[f"{prefix}mrr"] = float(np.mean(1.0 / r))
     out[f"{prefix}mr"] = float(np.mean(r))

@@ -304,8 +304,11 @@ def test_benchmark_runner_family_and_tiny_runs():
     assert family_for(CatE).name == "cate"
     ds = tiny_dataset()
     kwargs = {"embed_dim": 8, "batch_size": 64, "learning_rate": 0.01}
+    # The completion benchmark ranks the released query lists, which the tiny dataset
+    # does not have; queries=None falls back to the test axioms.
     res = run_benchmark("cate-go-completion", method="cate", dataset=ds,
-                        model_kwargs=kwargs, epochs=4)
+                        model_kwargs=kwargs, epochs=4,
+                        protocol_kwargs={"queries": None, "closure": False})
     assert set(res.metrics["all"]) == {"f_mr", "f_hits@10", "f_hits@100", "f_auc"}
     assert res.protocol_info["queries"] > 0
     res = run_benchmark("cate-yeast-ppi", method="cate", dataset=ds, epochs=4,
