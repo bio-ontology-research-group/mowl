@@ -112,6 +112,18 @@ BoxLitE Family (``boxlite-family-v{1..4}``)
    depend strongly on which one (ECOS: MRR 0.66 on F_v1 against the published 0.72;
    SCS: 0.31), so the published numbers are not reproducible without MOSEK.
 
+Faithfulness hierarchy (``faithfulness-{pizza,goplus}``)
+   The faithfulness criteria L0-L3 of Mashkova & Hoehndorf on reasoner-generated test
+   sets of entailed, contradictory and undetermined axioms, per EL normal form: every
+   run trains on one split, chosen with ``dataset_kwargs={'normal_form': ...}``, and
+   reports AUC+/-, Adm@10, FVR, Pair-FVR, the Spearman correlation with the relative
+   model counts published with the paper, MRR and Hits@10
+   (:class:`mowl.evaluation.faithfulness.FaithfulnessHierarchy`). The recipes train with
+   the regime ``kbc-code-training`` (:class:`mowl.training.kbc.KBCCodeTraining`: one
+   fixed corruption per ``gci2`` axiom, the pooled mean of all per-axiom losses, plateau
+   schedule and early stopping on the validation loss) and pin the reference code's
+   fallback hyperparameters, as the per-cell selected hyperparameters were not released.
+
 Every benchmark's ``notes`` list how the data and protocol differ from the original
 publication, and every regime has a card in the catalogue
 (:func:`mowl.catalog.list_regimes`).

@@ -188,13 +188,17 @@ class ReduceOnPlateau(_Schedule):
     :param patience: Epochs without improvement before the rate is reduced.
     :param factor: Reduction factor (PyTorch's default 0.1, as in the reference code).
     :param stop_patience: Epochs without improvement after which early stopping would stop.
+    :param early_stop: If ``True``, training actually ends (through :meth:`should_stop`)
+        once :attr:`stop_epoch` is set, as in the reference code of DELE and of the
+        faithfulness paper (Mashkova & Hoehndorf 2026, ``box2el.py``: ``epochs_no_improve``).
     """
 
     key = "reduce-lr-on-plateau"
 
     def __init__(self, metric=None, patience=10, factor=0.1, stop_patience=20,
-                 base_optimizer=None):
+                 base_optimizer=None, early_stop=False):
         super().__init__(base_optimizer)
+        self.early_stop = bool(early_stop)
         self.metric = metric or validation_loss
         self.patience = int(patience)
         self.factor = float(factor)
@@ -222,3 +226,6 @@ class ReduceOnPlateau(_Schedule):
             waiting = self.stop_patience is not None and self.stop_epoch is None
             if waiting and self._bad >= self.stop_patience:
                 self.stop_epoch = epoch - 1
+
+    def should_stop(self, epoch):
+        return self.early_stop and self.stop_epoch is not None
