@@ -65,6 +65,11 @@ class TestDELERecipes(TestCase):
             self.assertIn("dele-code-losses", keys)
             self.assertIn("per-normal-form-minibatch", keys)
             self.assertIn("reduce-lr-on-plateau", keys)
+            self.assertIn("dele-code-loss", keys)
+            # fixed negatives, as the reference (np.random.seed(0) in every batch)
+            negs = [p for p in regime.regimes if p.key == "dele-all-normal-form-negatives"]
+            self.assertEqual(len(negs), 1)
+            self.assertEqual(negs[0].fixed_seed, 0)
             if "filter_negatives" in r.regime_kwargs:
                 self.assertIn("dele-closure-filtered-negatives", keys)
             else:

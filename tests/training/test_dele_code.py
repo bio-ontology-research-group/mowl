@@ -109,7 +109,7 @@ class TestDELECodeLosses(TestCase):
         model.module.class_rad.weight.data = th.rand_like(
             model.module.class_rad.weight.data) * 0.5
         before = model.module(th.tensor([[0, 1, 2]]), "gci3").detach().clone()
-        model.training_regime = DELECodeLosses()
+        model.training_regime = DELECodeLosses(elem_axiom_reg=False)
         after = model.module(th.tensor([[0, 1, 2]]), "gci3").detach()
         expected = EL.gci3_loss_reference(
             th.tensor([[0, 1, 2]]), model.module.class_embed, model.module.class_rad,
@@ -304,3 +304,33 @@ class TestFixedNegatives(TestCase):
         a = regime.negatives("gci0", ds)
         b = regime.negatives("gci0", ds)
         self.assertFalse(th.equal(a, b))
+
+
+class TestELEmAxiomRegularisation(TestCase):
+
+    @classmethod
+    def setUpClass(cls):
+        cls.dataset = FamilyDataset()
+
+    def test_losses_add_norm_term_and_ranking_omits_it(self):
+        model = ELEmbeddings(self.dataset, embed_dim=4, batch_size=64)
+        m = model.module
+        m.class_embed.weight.data *= 3.0      # norms far from 1
+        d = th.tensor([[0, 1], [2, 3]])
+        plain = m(d, "gci0").detach().clone()
+        model.training_regime = DELECodeLosses()
+        reg = sum(th.abs(th.linalg.norm(m.class_embed(d[:, i]), dim=1, keepdim=True) - 1)
+                  for i in (0, 1)).detach()
+        self.assertTrue(th.allclose(m(d, "gci0").detach(), plain + reg))
+        self.assertTrue(th.allclose(m.ranking_score(d, "gci0").detach(), plain))
+        self.assertEqual(float(model.get_regularization_loss()), 0.0)
+        # GCI3 keeps the corrected reference loss under the regularisation
+        d3 = th.tensor([[0, 1, 2]])
+        expected = EL.gci3_loss_reference(d3, m.class_embed, m.class_rad, m.rel_embed,
+                                          m.margin)
+        self.assertTrue(th.allclose(m.ranking_score(d3, "gci3").detach(), expected.detach()))
+
+    def test_can_be_switched_off(self):
+        model = ELEmbeddings(self.dataset, embed_dim=4, batch_size=64)
+        model.training_regime = DELECodeLosses(elem_axiom_reg=False)
+        self.assertFalse(hasattr(model.module, "ranking_score"))

@@ -569,16 +569,30 @@ class DELECodeLosses(TrainingRegime):
       :class:`DELECodeLoss` squares them for training. Rankings are unchanged (the
       square is monotone on non-negative scores).
 
+    * **ELEm** (``elem_axiom_reg=True``): every loss of a normal form with class
+      centres (GCI0, GCI1, GCI1-BOT, GCI2, GCI3; positive and negative) adds
+      :math:`|\|c\| - 1|` for each class of the axiom, the per-axiom regularisation of
+      the reference (``class_reg``, as in mOWL 0.2.1's ELEmbeddings, on which the
+      reference builds; the released reference code reads ``self.reg_norm``, which its
+      module never sets, so it presumably ran with mOWL 0.2.1's ``reg_norm=1``), and
+      mOWL's global regularisation term is switched off. The ranking score omits the
+      regularisation, as the reference's ``eval_method`` does (``class_reg=None``): the
+      module gets a ``ranking_score(data, gci_name)`` method that the DELE evaluation
+      uses. The validation loss includes it, as in the reference.
+
     Evaluation through the module uses the switched losses, as the reference's
     ``eval_method`` does. Attach ``DELECodeLosses`` before regimes that inspect the
     module. The switch is re-applied if the model rebuilds its module.
+
+    :param elem_axiom_reg: Per-axiom norm regularisation of ELEm (see above).
     """
 
     key = "dele-code-losses"
 
-    def __init__(self):
+    def __init__(self, elem_axiom_reg=True):
         super().__init__()
         self.patched = None
+        self.elem_axiom_reg = bool(elem_axiom_reg)
 
     def attach(self, model):
         super().attach(model)
@@ -599,6 +613,8 @@ class DELECodeLosses(TrainingRegime):
             setattr(module, method, MethodType(function, module))
         if name == "BoxSquaredELModule":
             module._dele_unsquared = True
+        if name == "ELEmModule" and self.elem_axiom_reg:
+            _elem_axiom_regularisation(module)
         if name == "ELBEModule":
             # Inclusions are slack in the reference code, whatever the module's
             # convention; the margin value is used as published (Appendix D).
@@ -607,10 +623,58 @@ class DELECodeLosses(TrainingRegime):
 
     def on_epoch_start(self, epoch, epochs):
         module = self.model.module
-        if type(module).__name__ != self.patched or (
-                self.patched in ("ELBEModule", "BoxSquaredELModule")
-                and not set(_DELE_LOSSES[self.patched]) <= set(module.__dict__)):
+        if type(module).__name__ != self.patched or \
+                not set(_DELE_LOSSES[self.patched]) <= set(module.__dict__) or (
+                    self.patched == "ELEmModule" and self.elem_axiom_reg
+                    and "ranking_score" not in module.__dict__):
             self._apply()
+
+
+#: Class columns of every ELEm normal form whose loss uses class centres.
+_ELEM_REG_COLUMNS = {"gci0": (0, 1), "gci1": (0, 1, 2), "gci1_bot": (0, 1),
+                     "gci2": (0, 2), "gci3": (1, 2)}
+
+
+def _elem_axiom_regularisation(module):
+    """Add the reference's per-axiom |norm - 1| term to the ELEm losses of ``module``
+    (instance attributes wrapping whatever loss methods it has now) and switch its
+    global regularisation off; ``module.ranking_score`` scores without the term."""
+    from types import MethodType
+    module._dele_skip_reg = False
+    reg_norm = getattr(module, "reg_norm", 1) or 1
+
+    def wrap(gci_name, inner):
+        cols = _ELEM_REG_COLUMNS[gci_name]
+
+        def loss(self, data, neg=False):
+            value = inner(data, neg=neg)
+            if self._dele_skip_reg:
+                return value
+            reg = sum(th.abs(th.linalg.norm(self.class_embed(data[:, i]), dim=1,
+                                             keepdim=True) - reg_norm) for i in cols)
+            return value + reg.reshape(value.shape)
+        return loss
+
+    for gci_name in _ELEM_REG_COLUMNS:
+        attr = f"{gci_name}_loss"
+        inner = module.__dict__.get(attr)
+        inner = (lambda f: (lambda data, neg=False: f(module, data, neg=neg)))(
+            inner.__func__) if inner is not None else getattr(type(module), attr).__get__(
+                module)
+        setattr(module, attr, MethodType(wrap(gci_name, inner), module))
+
+    def regularization_loss(self):
+        return th.zeros((), device=self.class_embed.weight.device)
+
+    def ranking_score(self, data, gci_name):
+        self._dele_skip_reg = True
+        try:
+            return self(data, gci_name)
+        finally:
+            self._dele_skip_reg = False
+
+    module.regularization_loss = MethodType(regularization_loss, module)
+    module.ranking_score = MethodType(ranking_score, module)
 
 
 def _sq_mean(x):
@@ -720,18 +784,20 @@ class DELECodeTraining(ComposedRegime):
         negative draws from this seed at every step, as the reference code does with
         seed 0 (fixed negatives; see ``fixed_seed`` of
         :class:`~mowl.training.AllNormalFormNegatives`).
+    :param elem_axiom_reg: ELEm's per-axiom norm regularisation of the reference (see
+        :class:`~mowl.training.DELECodeLosses`).
     """
 
     key = "dele-code-training"
 
     def __init__(self, batch_size=32768, negatives="all", filter_negatives=False,
                  epsilon=None, kind_prefixes=None, max_resample=0, patience=10,
-                 stop_patience=20, seed=None, negative_seed=None):
+                 stop_patience=20, seed=None, negative_seed=None, elem_axiom_reg=True):
         from mowl.training.batching import PerNormalFormMiniBatches
         from mowl.training.schedules import ReduceOnPlateau
         if negatives not in ("all", "gci2"):
             raise ValueError("negatives must be 'all' or 'gci2'.")
-        parts = [DELECodeLosses(),
+        parts = [DELECodeLosses(elem_axiom_reg=elem_axiom_reg),
                  PerNormalFormMiniBatches(batch_size=batch_size, order="cyclic",
                                           seed=seed)]
         if negatives == "all" or kind_prefixes or negative_seed is not None:

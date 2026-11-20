@@ -4,7 +4,11 @@ implementation (bio-ontology-research-group/DELE, commit 5974c7d) trained.
 
 Every recipe uses the ``dele-code-training`` regime, which bundles the reference's loss
 functions (several of which differ from mOWL's and the papers' models; see the
-``dele-code-losses`` regime card), cyclic mini-batches of 32,768 axioms per normal form,
+``dele-code-losses`` regime card) and how its training loops combine them
+(``dele-code-loss``), fixed negatives (``negative_seed=0``: the reference resets NumPy's
+seed to 0 before drawing the negatives of every batch, so that every positive keeps one
+negative for the whole training; runs with negatives drawn anew moved several cells
+away from the published numbers, e.g. ELBE on yeast PPI), cyclic mini-batches of 32,768 axioms per normal form,
 ReduceLROnPlateau (patience 10) and early stopping (patience 20) on the validation loss
 of the predicted normal form, monitored once per paper epoch. Model arguments are from
 Appendix D of the paper; the "+l+n" rows reuse the "+l" hyperparameters (Section 6.3).
@@ -113,7 +117,8 @@ def _build():
             base = "+l" if variant == "+ln" else variant
             label = {"": "base", "+l": "+l", "+ln": "+l+n"}[variant]
             for method, model_kwargs in _HP[benchmark][base].items():
-                regime_kwargs = {"negatives": "all" if base == "+l" else "gci2"}
+                regime_kwargs = {"negatives": "all" if base == "+l" else "gci2",
+                                 "negative_seed": 0}
                 if base == "+l":
                     regime_kwargs["epsilon"] = _EPSILON[benchmark][method]
                 if variant == "+ln":
