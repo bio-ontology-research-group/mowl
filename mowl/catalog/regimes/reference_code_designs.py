@@ -162,6 +162,12 @@ REGIMES = (
             "The released baseline_sweep.py passes depth_type= to Elbe/Elem, whose "
             "constructors take plugin_type=; the released script raises a TypeError, so "
             "the published runs used a different (unreleased) version of it.",
+            "Runs on ORIX (d = 10, seed 0): for the ball host the published ELEM+RegD "
+            "inference F1 (GO 0.400, ANATOMY 0.555) is matched by the variant with all "
+            "RegD energies rectified (rectified=True: GO 0.421, ANATOMY 0.590), not by "
+            "the released code (GO 0.30, ANATOMY 0.45); the published numbers were "
+            "probably produced with the relu that the released PluginRegD.our_dist has "
+            "commented out.",
         ),
         notes=(
             "From EXP_ontology/baseline_sweep.py, run_all_sweeps.py and model/*.py of "
