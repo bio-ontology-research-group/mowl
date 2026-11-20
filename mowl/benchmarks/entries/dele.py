@@ -63,8 +63,10 @@ BENCHMARKS = [
         key="dele-yeast-function", name="DELE protein function prediction (yeast)",
         task=Task.MEMBERSHIP_PREDICTION,
         description=("Predict {P} ⊑ ∃has_function.{GO}; heads: yeast proteins, candidates: "
-                     "GO classes. Entailed axioms were removed from the test set by the "
-                     "authors. " + _COMMON + _FILTER + " Table 3."),
+                     "every class that is not a protein, ⊤, ⊥ or a 'label' class (the GO "
+                     "classes and the classes of the authors' normalisation, as in the "
+                     "reference code). Entailed axioms were removed from the test set by "
+                     "the authors. " + _COMMON + _FILTER + " Table 3."),
         dataset=_DS, dataset_kwargs={"task": "yeast_function"},
         protocol=_P,
         protocol_kwargs={"gci_name": "gci2", "relation": "http://has_function"},
