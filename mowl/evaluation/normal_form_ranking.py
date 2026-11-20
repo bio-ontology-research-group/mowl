@@ -51,13 +51,21 @@ class NormalFormRankingRegime(EvaluationRegime):
         ``"loss"`` or a callable; see :func:`mowl.evaluation.el_scoring.resolve_scorer`.
     :param combined: Whether to report the ``"combined"`` subset.
     :param max_rows: Number of candidate axioms scored at once.
+    :param candidate_order: Order of the candidates, which decides ties: ``"model"``
+        (model class index) or ``"reference"``: the classes of the reference release in
+        the order of their indices (``dataset.reference_class_order()``, e.g.
+        :meth:`mowl.datasets.builtin.GALENJackermeier2024Dataset.reference_class_order`),
+        which is the order the reference code breaks ties in; candidates are then exactly
+        the classes of the release that the model knows. Without ``candidates`` only.
     """
 
     key = "box2el-normal-form-ranking"
     metrics = BOX2EL_METRICS
+    _default_candidate_order = "model"
 
     def __init__(self, normal_forms=("gci0", "gci1", "gci2", "gci3"), split="test",
-                 candidates=None, scoring="auto", combined=True, max_rows=2 ** 22):
+                 candidates=None, scoring="auto", combined=True, max_rows=2 ** 22,
+                 candidate_order=None):
         for nf in normal_forms:
             if nf not in BOX2EL_SIDES:
                 raise ValueError(f"Unsupported normal form {nf!r}.")
@@ -67,6 +75,11 @@ class NormalFormRankingRegime(EvaluationRegime):
         self.scoring = scoring
         self.combined = combined
         self.max_rows = max_rows
+        if candidate_order is None:
+            candidate_order = self._default_candidate_order
+        if candidate_order not in ("model", "reference"):
+            raise ValueError("candidate_order must be 'model' or 'reference'.")
+        self.candidate_order = candidate_order
         self.subsets = self.normal_forms + (("combined",) if combined else ())
         #: Details of the last evaluation (scoring used, counts), for the result record.
         self.info = {}
@@ -86,7 +99,15 @@ class NormalFormRankingRegime(EvaluationRegime):
     def evaluate(self, model, dataset):
         scorer, scoring_name = resolve_scorer(model, self.scoring)
         rows, skipped = el_rows(model, self._ontology(dataset))
-        cands = candidate_indices(model, self.candidate_iris(dataset))
+        order = self.candidate_order
+        if order == "reference" and (self.candidates is not None
+                                     or not hasattr(dataset, "reference_class_order")):
+            order = "model"
+        if order == "reference":
+            cands = candidate_indices(model, dataset.reference_class_order(),
+                                      keep_order=True)
+        else:
+            cands = candidate_indices(model, self.candidate_iris(dataset))
         results, all_ranks = {}, []
         counts = {}
         for nf in self.normal_forms:
@@ -103,7 +124,8 @@ class NormalFormRankingRegime(EvaluationRegime):
             results["combined"] = summarise_ranks(all_ranks, len(cands), hits=(1, 10, 100),
                                                   auc="box2el")
         self.info = {"scoring": scoring_name, "num_candidates": int(len(cands)),
-                     "skipped_axioms": skipped, "queries": counts}
+                     "candidate_order": order, "skipped_axioms": skipped,
+                     "queries": counts}
         return results
 
 
@@ -120,15 +142,25 @@ class TransBoxNormalFormRankingRegime(NormalFormRankingRegime):
     why this regime reports near-zero :math:`C \\sqcap D \\sqsubseteq E` scores for
     Box\\ :sup:`2`\\ EL and ELBE where the Box\\ :sup:`2`\\ EL paper does not. Numbers
     of the two regimes are not comparable for ``gci1`` and ``combined``.
+
+    The rank of a query whose candidates all score 0 is the position of the true answer
+    in the candidate list, so the order of that list matters for the median rank, mean
+    rank and AUC of :math:`C \\sqcap D \\sqsubseteq E`. By default
+    (``candidate_order="reference"``) the candidates are the classes of the reference
+    release in the order of their indices, as in ``evaluate.py`` of the TransBox code
+    (``argsort`` of each score row, ties in index order); datasets without
+    ``reference_class_order()`` fall back to the model's class order.
     """
 
     key = "transbox-normal-form-ranking"
+    _default_candidate_order = "reference"
 
     def __init__(self, normal_forms=("gci0", "gci1", "gci2", "gci3"), split="test",
                  candidates=None, scoring="centre_distance_zero_empty", combined=True,
-                 max_rows=2 ** 22):
+                 max_rows=2 ** 22, candidate_order=None):
         super().__init__(normal_forms=normal_forms, split=split, candidates=candidates,
-                         scoring=scoring, combined=combined, max_rows=max_rows)
+                         scoring=scoring, combined=combined, max_rows=max_rows,
+                         candidate_order=candidate_order)
 
     def evaluate(self, model, dataset):
         from mowl.evaluation.el_scoring import has_centre_distance_scorer

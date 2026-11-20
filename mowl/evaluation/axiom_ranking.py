@@ -51,14 +51,21 @@ def el_rows(model, ontology):
     return rows, int(getattr(ds, "num_skipped_axioms", 0) or 0)
 
 
-def candidate_indices(model, iris):
+def candidate_indices(model, iris, keep_order=False):
     """Model class indices of the candidate IRIs (unknown IRIs are dropped, with a
-    warning)."""
+    warning).
+
+    :param keep_order: Keep the order of ``iris`` (duplicates removed) instead of sorting
+        by model index. The order decides ties under ``ties="ordinal"``.
+    """
     cid = model.class_index_dict
+    iris = list(iris)
     idx = [cid[i] for i in iris if i in cid]
-    if len(idx) < len(list(iris)):
+    if len(idx) < len(iris):
         logger.warning("%d candidate classes are not known to the model and were dropped.",
-                       len(list(iris)) - len(idx))
+                       len(iris) - len(idx))
+    if keep_order:
+        return th.tensor(list(dict.fromkeys(idx)), dtype=th.long)
     return th.tensor(sorted(set(idx)), dtype=th.long)
 
 
