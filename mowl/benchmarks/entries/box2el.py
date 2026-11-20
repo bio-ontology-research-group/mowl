@@ -59,9 +59,11 @@ _TRANSBOX_NOTES = (
     "the same ontology; the only difference is the score of C ⊓ D ⊑ ?E, which is 0 for "
     "every candidate when Box(C) ∩ Box(D) is empty (TransBox itself masks the empty "
     "dimensions instead). gci0, gci2 and gci3 are therefore comparable between the two "
-    "benchmark families, gci1 and combined are not. The paper averages 10 runs of 5,000 "
-    "epochs; its numbers were obtained with the training regime "
-    "'transbox-code-training'.")
+    "benchmark families, gci1 and combined are not. Candidates are the classes of the "
+    "reference release in the order of their indices, which decides ties (all-zero "
+    "scores rank the true class by its position). The paper averages 10 runs of 5,000 "
+    "epochs; TransBox was trained with 'transbox-code-training' and "
+    "TransBox(formulation='reference'), the baselines with 'box2el-code-training'.")
 
 _TRANSBOX_PREDICTION = [
     Benchmark(

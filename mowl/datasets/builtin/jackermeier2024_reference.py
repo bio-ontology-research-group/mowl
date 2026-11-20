@@ -67,6 +67,35 @@ def fetch_box2el_release(data_root=None, zip_path=None):
     return zip_path
 
 
+_OWL_BUILTINS = {"owl:Thing": "http://www.w3.org/2002/07/owl#Thing",
+                 "owl:Nothing": "http://www.w3.org/2002/07/owl#Nothing"}
+
+
+def reference_class_order(ontology, iri_of_index=None, data_root=None, zip_path=None):
+    """Classes of the reference prediction data (``data/<ONTOLOGY>/prediction/
+    classes.json``) in the order of their indices, as IRIs.
+
+    The reference code ranks candidates by index; equal scores are therefore ordered by
+    this index (see :class:`~mowl.evaluation.normal_form_ranking.NormalFormRankingRegime`,
+    ``candidate_order="reference"``).
+
+    :param ontology: ``"GALEN"``, ``"GO"`` or ``"ANATOMY"``.
+    :param iri_of_index: Optional ``f(index) -> IRI`` for datasets whose IRIs are derived
+        from the reference index (ANATOMY); ``owl:Thing``/``owl:Nothing`` are mapped to the
+        OWL built-ins there. Otherwise the names of ``classes.json`` without angle
+        brackets are used.
+    """
+    with zipfile.ZipFile(fetch_box2el_release(data_root, zip_path)) as zf:
+        index = json.loads(zf.read(f"data/{ontology}/prediction/classes.json"))
+    out = []
+    for name in sorted(index, key=index.get):
+        if iri_of_index is not None:
+            out.append(_OWL_BUILTINS.get(name) or iri_of_index(index[name]))
+        else:
+            out.append(name[1:-1] if name.startswith("<") and name.endswith(">") else name)
+    return out
+
+
 def _write_ontology(path, iri, axiom_lines):
     tmp = f"{path}.{os.getpid()}.part"
     with open(tmp, "w") as out:

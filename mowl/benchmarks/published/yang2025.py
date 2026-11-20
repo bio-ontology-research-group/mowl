@@ -19,6 +19,11 @@ from mowl.benchmarks.entries._refs import YANG2025
 
 _KEYS = {"Box2EL": "box2el", "BoxEL": "boxel", "ELBE": "elbe", "TransBox": "transbox",
          "CatE": "cate"}
+#: Training design behind each row: TransBox was trained by the TransBox code, the
+#: baselines by the Box2EL code design (ELBE and BoxEL through baseline_sweep.py of the
+#: TransBox code, Box2EL with the Box2EL code); CatE is not an EL model of mOWL.
+_REGIME = {"transbox": "transbox-code-training", "box2el": "box2el-code-training",
+           "elbe": "box2el-code-training", "boxel": "box2el-code-training"}
 _NAMES = ("hits@1", "hits@10", "hits@100", "med", "mrr", "mr", "auc")
 
 _NOTE = ("Average of 10 runs, 5,000 epochs, hyperparameters selected on validation "
@@ -115,7 +120,14 @@ for _onto, _subset, _loc, _text in _TABLES:
         _note = _NOTE
         if _parts[0] == "CatE":
             _note += " The median rank of CatE is not reported ('-')."
+        if _parts[0] == "BoxEL" and _subset in ("gci3", "combined"):
+            _note += (" Not reproducible: compute_nf4_ranks_boxel of the evaluation code "
+                      "ranks the class whose index equals the role index instead of D.")
+        if _parts[0] in ("Box2EL", "BoxEL", "ELBE") and _subset in ("gci1", "combined"):
+            _note += (" When all candidates score 0 the rank is the position of the true "
+                      "class in the class index order of the reference release.")
         RESULTS.append(PublishedResult(
             benchmark=f"transbox-{_onto}-prediction", method=_KEYS[_parts[0]],
             metrics=_metrics, source=YANG2025, locator=_loc, subset=_subset,
-            settings={"training_regime": "transbox-code-training"}, note=_note))
+            settings=({"training_regime": _REGIME[_KEYS[_parts[0]]]}
+                      if _KEYS[_parts[0]] in _REGIME else {}), note=_note))

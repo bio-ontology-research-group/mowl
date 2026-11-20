@@ -83,12 +83,85 @@ class Box2ELCodeTraining(ComposedRegime):
 
 
 class TransBoxCodeTraining(Box2ELCodeTraining):
-    """How the TransBox code (HuiYang1997/TransBox, ``model/TransBox_reg.py``) trains,
-    and how the numbers of Yang et al. (WWW 2025) were obtained: the design of
-    :class:`Box2ELCodeTraining` (the code is derived from the Box\\ :sup:`2`\\ EL code)
-    with 1024 axioms per normal form and step. As there, the margin is a slack margin,
-    although the paper's loss (Section 4.3) is written with a strict one.
+    """How the TransBox code (HuiYang1997/TransBox, ``model/TransBox_reg.py`` and
+    ``baseline_sweep.py``) trains TransBox, and how the numbers of Yang et al. (WWW 2025)
+    were obtained.
+
+    * One step per "epoch" on 1024 axioms drawn at random from every normal form,
+      including role inclusions and chains (:class:`~mowl.training.PerNormalFormMiniBatches`).
+    * Every per-axiom loss is squared and averaged, :math:`\\mathrm{mean}(\\ell^2)`
+      (the paper's Eq. 14); negatives of :math:`C \\sqsubseteq \\exists r.D` (each side
+      corrupted, :class:`~mowl.training.PerColumnCorruption`) contribute
+      :math:`\\mathrm{mean}((\\delta - \\ell^-)^2)` with :math:`\\delta` = ``neg_dist``
+      (:class:`~mowl.training.MSETargetLoss`).
+    * Slack margin (:class:`~mowl.training.SlackMargin`), if ``margin`` is given (the
+      paper writes a strict one).
+    * Adam, no schedule; every ``validate_every`` epochs the median rank of the first
+      1000 validation axioms :math:`C \\sqsubseteq D` selects the parameters
+      (:class:`~mowl.training.ValidationRankSelection`).
+
+    The per-axiom losses themselves are those of the code: for :class:`~mowl.models.TransBox`
+    this regime requires ``formulation="reference"``
+    (:mod:`mowl.nn.el.transbox.code_losses`), whose negative loss is an overlap that the
+    squared target loss pushes to ``neg_dist``.
+
+    Deviations, not replicated: the code draws the negatives once before training and
+    takes 1024 of them per step independently of the positives (here: drawn anew from
+    the positives of the step); the code draws 1024 axioms with replacement also from
+    normal forms with fewer axioms (here: all of them, same expectation); in the code the
+    loss of :math:`C \\sqcap D \\sqsubseteq E` is, by a broadcasting slip, the mean over
+    all pairs :math:`(i, j)` of :math:`(p_i + q_j)^2` (emptiness penalty of axiom
+    :math:`i`, inclusion term of axiom :math:`j`) instead of :math:`(p_i + q_i)^2`, which
+    changes only the cross term :math:`2\\bar p \\bar q` versus
+    :math:`2\\overline{pq}`.
+
+    :param batch_size: Axioms per normal form and step (1024 in the code).
+    :param num_negatives: Negatives per side and positive (``num_neg``).
+    :param margin: Slack :math:`\\gamma`; ``None`` leaves the model's margin unchanged.
+    :param neg_dist: Target of the negative losses (``neg_dist``, 1 in all configurations).
+    :param lr_milestones: Epochs at which the learning rate is multiplied by 0.1 (none in
+        the code).
+    :param validate_every: Epochs between validations (100).
+    :param select: Set to ``False`` to train without model selection.
+    :param seed: Seed of the batch and negative samplers.
+    :param nf2_pairwise: Replicate the broadcasting slip of the code for
+        :math:`C \\sqcap D \\sqsubseteq E`: loss :math:`\\mathrm{mean}_{i,j}(p_i + q_j)^2`
+        instead of :math:`\\mathrm{mean}_i(p_i + q_i)^2` (default ``False``).
     """
 
     key = "transbox-code-training"
     _default_batch_size = 1024
+
+    def __init__(self, batch_size=None, num_negatives=1, margin=None, neg_dist=1.0,
+                 lr_milestones=None, validate_every=100, select=True, seed=None,
+                 nf2_pairwise=False):
+        super().__init__(batch_size=batch_size, num_negatives=num_negatives,
+                         margin=margin, neg_target=neg_dist, lr_milestones=lr_milestones,
+                         validate_every=validate_every, select=select, seed=seed)
+        self.key = type(self).key
+        self.neg_dist = float(neg_dist)
+        self.nf2_pairwise = bool(nf2_pairwise)
+        self._datasets = {}
+
+    def training_datasets(self, datasets):
+        self._datasets = super().training_datasets(datasets)
+        return self._datasets
+
+    def loss(self, gci_name, pos_scores, neg_scores):
+        if self.nf2_pairwise and gci_name == "gci1" and "gci1" in self._datasets:
+            from mowl.nn.el.transbox.code_losses import gci1_terms
+            module = self.model.module
+            p, q = gci1_terms(self._datasets["gci1"][:], module.class_center,
+                              module.class_offset, module.margin)
+            return ((p[:, None] + q[None, :]) ** 2).mean()
+        return super().loss(gci_name, pos_scores, neg_scores)
+
+    def attach(self, model):
+        formulation = getattr(getattr(model, "module", None), "formulation", None)
+        if formulation is not None and formulation != "reference":
+            raise TypeError(
+                "transbox-code-training squares the per-axiom losses of the TransBox code "
+                "and pushes negatives to neg_dist; build the model with "
+                "formulation='reference' (mOWL's default TransBox losses already square "
+                "their negative loss).")
+        super().attach(model)

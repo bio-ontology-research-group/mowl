@@ -1,4 +1,5 @@
 from ..base import RemoteDataset
+from .jackermeier2024_reference import reference_class_order
 
 
 DATA_GALEN_URL = 'https://bio2vec.net/data/mowl/galen_jackermeier2024.tar.gz'
@@ -35,6 +36,12 @@ class GALENJackermeier2024Dataset(RemoteDataset):
     def __init__(self, data_root=None):
         super().__init__(url=DATA_GALEN_URL, data_root=data_root)
 
+    def reference_class_order(self):
+        """Class IRIs in the index order of the reference release (``classes.json``),
+        which decides ties in the reference evaluation. Reads the pinned ``data.zip`` of
+        the Box2EL code (downloaded on first use)."""
+        return reference_class_order("GALEN")
+
 
 class GOJackermeier2024Dataset(RemoteDataset):
     """Dataset containing the \
@@ -65,6 +72,12 @@ class GOJackermeier2024Dataset(RemoteDataset):
 
     def __init__(self, data_root=None):
         super().__init__(url=DATA_GO_URL, data_root=data_root)
+
+    def reference_class_order(self):
+        """Class IRIs in the index order of the reference release (``classes.json``),
+        which decides ties in the reference evaluation. Reads the pinned ``data.zip`` of
+        the Box2EL code (downloaded on first use)."""
+        return reference_class_order("GO")
 
 
 class AnatomyJackermeier2024Dataset(RemoteDataset):
@@ -106,3 +119,10 @@ class AnatomyJackermeier2024Dataset(RemoteDataset):
 
     def __init__(self, data_root=None):
         super().__init__(url=DATA_ANATOMY_URL, data_root=data_root)
+
+    def reference_class_order(self):
+        """Class IRIs in the index order of the reference release (``classes.json``),
+        which decides ties in the reference evaluation. Reads the pinned ``data.zip`` of
+        the Box2EL code (downloaded on first use)."""
+        base = "http://bio2vec.net/data/mowl/anatomy_jackermeier2024/aux/"
+        return reference_class_order("ANATOMY", iri_of_index=lambda i: f"{base}{i}")
