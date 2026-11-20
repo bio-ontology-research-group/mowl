@@ -209,6 +209,8 @@ class RegDELEmModule(_RegDMixin, ELEmModule):
         ``gci1_bot`` use the softplus radii too). Note that the RegD code *evaluates*
         with ``|class_rad|`` whatever the training used; the evaluation regime
         ``regd-sampled-f1`` does the same.
+    :param gci1_radius_term: See :class:`~mowl.nn.ELEmModule`. The RegD code's ``Elem``
+        has the term commented out (``False``).
     """
 
     regd_gcis = frozenset({"gci0", "gci2", "gci3"})
@@ -217,9 +219,10 @@ class RegDELEmModule(_RegDMixin, ELEmModule):
 
     def __init__(self, nb_ont_classes, nb_rels, nb_inds=None, embed_dim=50, margin=0.1,
                  reg_norm=1, lamda=1.0, p=2, gamma1=0.0, gamma2=0.0, eps=1e-4,
-                 depth_on_containment=True, flip_gci2=False, radius="abs"):
+                 depth_on_containment=True, flip_gci2=False, radius="abs",
+                 gci1_radius_term=True):
         super().__init__(nb_ont_classes, nb_rels, nb_inds, embed_dim=embed_dim, margin=margin,
-                         reg_norm=reg_norm)
+                         reg_norm=reg_norm, gci1_radius_term=gci1_radius_term)
         self._init_regd(lamda, p, gamma1, gamma2, eps, depth_on_containment,
                         flip_gci2=flip_gci2)
         if radius not in ("abs", "softplus"):
@@ -246,7 +249,11 @@ class RegDELEmModule(_RegDMixin, ELEmModule):
         dst2 = th.linalg.norm(e - c, dim=1, keepdim=True)
         dst3 = th.linalg.norm(e - d, dim=1, keepdim=True)
         m = self.margin
-        return th.relu(dst - rc - rd - m) + th.relu(dst2 - rc - m) + th.relu(dst3 - rd - m)
+        loss = th.relu(dst - rc - rd - m) + th.relu(dst2 - rc - m) + th.relu(dst3 - rd - m)
+        if self.gci1_radius_term:
+            re = self._radius(data[:, 2]).unsqueeze(-1)
+            loss = loss + th.relu(th.minimum(rc, rd) - re - m)
+        return loss
 
     def gci1_bot_loss(self, data, neg=False):
         if self.radius == "abs" or neg:

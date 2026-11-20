@@ -42,7 +42,15 @@ def gci0_bot_loss(data, class_rad, neg=False):
     return rc
 
 
-def gci1_loss(data, class_embed, class_rad, margin, neg=False):
+def gci1_loss(data, class_embed, class_rad, margin, neg=False, radius_term=True):
+    """Loss of :math:`C \\sqcap D \\sqsubseteq E` (Eq. 2 of Kulmanov et al., 2019).
+
+    :param radius_term: If ``True`` (default), include the fourth term of the published
+        loss, :math:`\\max(0, \\min(r_C, r_D) - r_E - \\gamma)`, which relates the radius
+        of the superclass to the radii of the intersected classes. The authors' released
+        code, and the reference codes derived from it, have this term commented out;
+        ``False`` gives that behaviour (the behaviour of mOWL before this term was added).
+    """
     c = class_embed(data[:, 0])
     d = class_embed(data[:, 1])
     e = class_embed(data[:, 2])
@@ -55,6 +63,9 @@ def gci1_loss(data, class_embed, class_rad, margin, neg=False):
     dst2 = th.linalg.norm(e - c, dim=1, keepdim=True)
     dst3 = th.linalg.norm(e - d, dim=1, keepdim=True)
     loss = (th.relu(dst - sr - margin) + th.relu(dst2 - rc - margin) + th.relu(dst3 - rd - margin))
+    if radius_term:
+        re = th.abs(class_rad(data[:, 2]))
+        loss = loss + th.relu(th.minimum(rc, rd) - re - margin)
 
     return loss 
 

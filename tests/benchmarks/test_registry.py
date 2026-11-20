@@ -138,3 +138,14 @@ def test_published_to_rst_and_tables():
     for fmt in report.FORMATS:
         out = report.published_table("box2el-yeast-ppi", fmt=fmt)
         assert "box2el" in out
+
+
+def test_elem_recipes_use_the_released_loss():
+    """Every reference code has the radius term of the ELEm loss of C ⊓ D ⊑ E commented
+    out, so every recipe that trains ELEm balls must switch it off explicitly."""
+    from mowl.benchmarks.recipes import list_recipes
+    recipes = [r for r in list_recipes() if r.method in ("elem", "regd_elem")]
+    assert recipes
+    for recipe in recipes:
+        assert recipe.model_kwargs.get("gci1_radius_term") is False, (
+            recipe.benchmark, recipe.method)

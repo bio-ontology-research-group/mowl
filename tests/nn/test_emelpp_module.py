@@ -177,13 +177,18 @@ class TestAgainstELEm(TestCase):
         b = self.emel.gci2_loss(self.g3, neg=True)
         self.assertTrue(th.allclose(a, b, atol=1e-6))
 
-    def test_gci1_differs_by_the_radius_term(self):
+    def test_gci1_agrees_and_released_elem_loss_differs_by_the_radius_term(self):
         d = self.g111
         rc, rd, re = (th.abs(self.emel.class_rad(d[:, i])) for i in range(3))
         extra = th.relu(th.minimum(rc, rd) - re - 0.1)
-        a = self.elem.gci1_loss(d)
         b = self.emel.gci1_loss(d)
-        self.assertTrue(th.allclose(a + extra, b, atol=1e-6))
+        self.assertTrue(th.allclose(self.elem.gci1_loss(d), b, atol=1e-6))
+        self.elem.gci1_radius_term = False   # the released ELEm loss
+        try:
+            released = self.elem.gci1_loss(d)
+        finally:
+            self.elem.gci1_radius_term = True
+        self.assertTrue(th.allclose(released + extra, b, atol=1e-6))
         self.assertGreater(extra.sum().item(), 0)
 
     def test_bottom_losses_use_absolute_radius(self):

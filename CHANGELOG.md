@@ -82,6 +82,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added the `lm` (sentence-transformers) and `convex` (cvxpy) optional dependency groups.
 
 ### Changed
+- Changed `ELEmbeddings` / `ELEmModule` (and `RegDELEm`) to include, by default, the fourth term of the published loss of `C ⊓ D ⊑ E`, `max(0, min(r_C, r_D) - r_E - γ)`, which the authors' released code has commented out and mOWL lacked. Pass `gci1_radius_term=False` for the previous loss; the benchmark recipes do so wherever a publication used such code.
 - Changed `RemoteDataset` to cache datasets under `$XDG_CACHE_HOME/mowl/datasets` (falling back to `~/.cache/mowl/datasets`) instead of the current working directory. Datasets are now shared between working directories rather than re-downloaded per directory, and running the tests or an example no longer scatters dataset directories through the checkout. Existing downloads in a working directory are not picked up and will be fetched once into the cache [#150][i150].
 - Changed the test suite to resolve dataset files through the cache instead of assuming pytest runs from the repository root.
 ### Fixed

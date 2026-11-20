@@ -18,6 +18,12 @@ Defaults to ``False``, which leaves the module exactly as before. See also \
     :param epsilon: The :math:`\\varepsilon` of the DELE negative losses for bottom normal \
 forms (minimal radius / offset norm of a satisfiable class). Defaults to ``0.01``.
     :type epsilon: float, optional
+    :param gci1_radius_term: If ``True`` (default), the loss of \
+:math:`C \\sqcap D \\sqsubseteq E` includes the term \
+:math:`\\max(0, \\min(r_C, r_D) - r_E - \\gamma)` of the published loss. ``False`` drops it, \
+as the authors' released code does (and as mOWL did before); use it to reproduce numbers \
+obtained with that code.
+    :type gci1_radius_term: bool, optional
     """
 
     neg_capable_gcis = frozenset({"gci2", "object_property_assertion"})
@@ -70,8 +76,9 @@ parameter ``all_negative_losses``) and extend :attr:`neg_capable_gcis` according
         return loss
 
     def __init__(self, nb_ont_classes, nb_rels, nb_inds, embed_dim=50, margin=0.1, reg_norm=1,
-                 all_negative_losses=False, epsilon=0.01):
+                 all_negative_losses=False, epsilon=0.01, gci1_radius_term=True):
         super().__init__()
+        self.gci1_radius_term = bool(gci1_radius_term)
         self.nb_ont_classes = nb_ont_classes
         self.nb_rels = nb_rels
         self.nb_inds = nb_inds
@@ -146,7 +153,8 @@ parameter ``all_negative_losses``) and extend :attr:`neg_capable_gcis` according
         if self._dele_neg(neg):
             loss = L.gci1_loss_neg(data, self.class_embed, self.class_rad, self.margin)
         else:
-            loss = L.gci1_loss(data, self.class_embed, self.class_rad, self.margin, neg=neg)
+            loss = L.gci1_loss(data, self.class_embed, self.class_rad, self.margin, neg=neg,
+                               radius_term=self.gci1_radius_term)
         return self._penalised(loss, data, (0, 1, 2))
 
     def gci1_bot_loss(self, data, neg=False):

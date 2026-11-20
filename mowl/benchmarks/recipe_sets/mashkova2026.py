@@ -16,7 +16,7 @@ _LOCATOR = (
 _COMMON = {"embed_dim": 50, "learning_rate": 0.001, "batch_size": 32768}
 
 _MODEL_KWARGS = {
-    "elem": dict(_COMMON, margin=0.0, reg_norm=1),
+    "elem": dict(_COMMON, margin=0.0, reg_norm=1, gci1_radius_term=False),
     "emelpp": dict(_COMMON, margin=0.0),
     "box2el": dict(_COMMON, margin=0.0, delta=2, reg_factor=0.05),
 }

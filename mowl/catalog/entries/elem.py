@@ -60,11 +60,14 @@ CARD = MethodCard(
             "falcon2022, Appendix A.4, Lemma 1(1)"),
     ),
     limitations=(
-        "mOWL's gci1 loss (mowl.nn.el.elem.losses.gci1_loss) has only the three centre "
-        "terms of Eq. (2) of Kulmanov et al.; the fourth term relating the radius of the "
-        "superclass E to the radii of C and D is absent, as in the authors' released code. "
-        "Zero loss therefore does not imply C ⊓ D ⊑ E, and Theorem 1 does not carry over to "
-        "this loss as implemented (Mashkova & Hoehndorf 2026, Appendix C).",
+        "The authors' released code, and the reference codes derived from it, leave out the "
+        "fourth term of the gci1 loss of Eq. (2) of Kulmanov et al., which relates the "
+        "radius of the superclass E to the radii of C and D; Theorem 1 does not carry over "
+        "to that loss (Mashkova & Hoehndorf 2026, Appendix C). mOWL includes the term by "
+        "default (gci1_radius_term=True); gci1_radius_term=False gives the released loss, "
+        "which the recipes use where a publication was run with such code. Even with the "
+        "term, the intersection of two balls is not a ball, so zero loss is a sufficient "
+        "condition only in the sense of the published loss.",
         "Evaluated with the released loss on the Pizza ontology, ELEmbeddings ranks "
         "contradictory C ⊓ D ⊑ E axioms above entailed ones (AUC+/− near 0.02-0.05); "
         "disjointness is separated well (Mashkova & Hoehndorf 2026, Section 6.2, Table 3; "

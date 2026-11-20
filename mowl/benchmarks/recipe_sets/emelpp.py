@@ -28,6 +28,9 @@ def _build():
             model_kwargs = {"embed_dim": dim, "margin": margin, "learning_rate": 3e-4}
             if method == "emelpp":
                 model_kwargs["load_role_axioms"] = True
+            else:
+                # the reference code has the radius term of C ⊓ D ⊑ E commented out
+                model_kwargs["gci1_radius_term"] = False
             out.append(Recipe(
                 benchmark=f"emelpp-{onto}-prediction", method=method, source=MONDAL2021,
                 model_kwargs=model_kwargs,

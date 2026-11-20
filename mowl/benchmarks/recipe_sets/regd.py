@@ -64,6 +64,7 @@ def _regd_model_kwargs(method, task):
         kwargs["flip_gci2"] = True
     if method == "regd_elem":
         kwargs["radius"] = "softplus"
+        kwargs["gci1_radius_term"] = False  # commented out in the code's Elem.nf2Loss
     kwargs["lamda"] = _LAMDA[(method, task)]
     return kwargs
 
@@ -95,7 +96,8 @@ def _build():
                 epochs=5000, validate_every=100, locator=_LOC, notes=_NOTE))
             out.append(Recipe(
                 benchmark=benchmark, method="elem", source=YANG2025_REGD,
-                model_kwargs={"embed_dim": 10, "learning_rate": _LR[("elem", onto, task)]},
+                model_kwargs={"embed_dim": 10, "learning_rate": _LR[("elem", onto, task)],
+                              "gci1_radius_term": False},
                 training_regime="regd-code-training",
                 regime_kwargs={**common, "design": "baseline", "margin": 0.0},
                 epochs=5000, validate_every=100, locator=_LOC,

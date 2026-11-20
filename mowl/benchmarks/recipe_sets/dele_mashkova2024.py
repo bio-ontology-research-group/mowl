@@ -122,7 +122,10 @@ def _build():
                     regime_kwargs["kind_prefixes"] = list(kind)
                 out.append(Recipe(
                     benchmark=benchmark, method=method, source=MASHKOVA2024,
-                    name=label, model_kwargs=dict(model_kwargs),
+                    name=label,
+                    # the DELE code's ELEm loss of C ⊓ D ⊑ E has no radius term
+                    model_kwargs=dict(model_kwargs, **({"gci1_radius_term": False}
+                                                       if method == "elem" else {})),
                     training_regime="dele-code-training", regime_kwargs=regime_kwargs,
                     epochs=epochs * steps, validate_every=steps,
                     locator=_LOCATOR,

@@ -91,6 +91,9 @@ def _build():
                 if method == "emelpp":
                     # model/EmELpp.py trains on the role inclusions and chains.
                     model_kwargs["load_role_axioms"] = True
+                if method == "elem":
+                    # model/Elem.py has the radius term of C ⊓ D ⊑ E commented out
+                    model_kwargs["gci1_radius_term"] = False
                 out.append(Recipe(
                     benchmark=f"box2el-{onto}-{task}", method=method,
                     source=JACKERMEIER2024,
