@@ -23,6 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   the baseline design of the Box²EL code (`Box2ELCodeTraining(baseline_code=True)`:
   `FixedNegatives`, `JointNormalisedInitialisation`, `UnboundedNegativeLoss`,
   `PerAxiomNormPenalty`). `TransBox(formulation="reference")` follows the TransBox code.
+- CatE: the training design of the reference code as the regime `CateCodeTraining`, with recipes;
+  the ORE1 recipe uses the norm p=1 (the default of the reference run script).
 - RegD: the evaluation reproduces the reference code's prediction-task positive score
   exactly and also reports the corrected `f1_pair`; recipes with learning rate and depth
   weight chosen by validation F1.

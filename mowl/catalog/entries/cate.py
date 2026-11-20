@@ -109,8 +109,8 @@ CARD = MethodCard(
     code_url="https://github.com/bio-ontology-research-group/catE",
     benchmarks=("cate-ore1-membership", "cate-go-completion", "cate-foodon-completion",
                 "cate-yeast-ppi"),
-    training=("fixed-column-corruption", "cyclic-lr"),
-    evaluation=("cate-filtered-ranking", "loss-scoring"),
+    training=("fixed-column-corruption", "cyclic-lr", "cate-code-training"),
+    evaluation=("cate-filtered-ranking", "cate-ppi-ranking", "loss-scoring"),
     related=("graph_kge", "order_embeddings", "falcon"),
     notes=(
         "Construction (Section 3) per constructor: A ⊓ B ⊑ A, B; A, B ⊑ A ⊔ B; for ¬C the "
@@ -139,7 +139,8 @@ CARD = MethodCard(
         "all elements; the reference code averages the k negative scores before the "
         "hinge (option negative_aggregation='mean'), uses Adam with weight decay 1e-4 and "
         "CyclicLR(lr/10, lr, 20 steps), validates every 100 epochs by raw MRR with "
-        "patience 10. Paper hyperparameters: Appendix A, Table 6. "
+        "patience 10; attaching the regime 'cate-code-training' switches a CatE "
+        "model to this design. Paper hyperparameters: Appendix A, Table 6. "
         "Why Helly-type limits do not apply: the Helly obstruction of box methods "
         "(e.g. the T3 pattern A ≡ X1 ⊓ X2, B ≡ X2 ⊓ X3, C ≡ X1 ⊓ X3 with A, B, C pairwise "
         "disjoint) says that convex regions that intersect pairwise must intersect "

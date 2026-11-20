@@ -31,6 +31,7 @@ from mowl.training.margin import SlackMargin, StrictMargin, margin_semantics
 from mowl.training.reference import (Box2ELCodeTraining, TransBoxCodeTraining,
                                      ELKEmCodeTraining, EmELppCodeTraining,
                                      RegDCodeTraining)
+from mowl.training.cate import CateCodeTraining
 
 __all__ = [
     "TrainingRegime", "ComposedRegime",
@@ -38,6 +39,7 @@ __all__ = [
     "Box2ELCodeTraining", "TransBoxCodeTraining", "ELKEmCodeTraining",
     "EmELppCodeTraining", "EmELppCodeObjective", "ValidationAxiomsAsPositives",
     "RegDCodeTraining",
+    "CateCodeTraining",
     "DeductiveClosure", "NORMAL_FORMS",
     "DELECodeLosses", "DELECodeTraining",
     "AllNormalFormNegatives", "ClosureFilteredNegatives", "ClosurePositives", "dele_regime",

@@ -63,9 +63,11 @@ class CatE(Model):
     could share a vector. (c) ``complete_negation=True`` adds the full negation diagram of
     Figure 2c for complex operands (see
     :func:`~mowl.projection.categorical.saturation.complete_negation`); ``False`` gives the
-    projector's lattice. (d) The reference PPI script adds a second loss on the training
-    interactions with negatives drawn among the :math:`\\exists interacts.p` elements;
-    this is not described in the paper and not implemented. (e) Every class and
+    projector's lattice. (d) The reference PPI training adds a second loss for the
+    morphisms of a batch whose head is a protein, with negatives drawn among the
+    :math:`\\exists
+    interacts.p` elements; this is not described in the paper and is optional
+    here (interaction_loss, part of the cate-code-training regime). (e) Every class and
     individual of the dataset (including those that occur only in the validation or test
     ontology) is an element, with only :math:`\\bot \\sqsubseteq X \\sqsubseteq \\top` (and
     the negation diagram for classes) if it is not in the training ontology.
@@ -107,11 +109,23 @@ class CatE(Model):
     :type transitive_closure: bool or str
     :param complete_negation: See deviation (c).
     :type complete_negation: bool
+    :param obvious_morphisms: Keep :math:`\\bot \\sqsubseteq X` and
+        :math:`X \\sqsubseteq \\top` for complex :math:`X` (the paper keeps them for
+        every element). The released training graphs of the ORE1, GO and FoodOn
+        benchmarks drop them; ``False`` matches those graphs (the recipes do so).
+    :type obvious_morphisms: bool
     :param existentials: Elements :math:`\\exists r.D` to add: a dict from role IRI to
         ``"classes"``, ``"evaluation_classes"`` or an iterable of class IRIs; ``None``;
         or ``"auto"`` (default): if the dataset defines ``get_evaluation_property()`` (the
         PPI and GDA datasets), :math:`\\exists r.D` for that role and every tail
         evaluation class, otherwise none.
+    :param interaction_loss: Add the PPI training term of the reference code
+        (``src/cat_ppi_evaluator.py``, ``train``): for every morphism of the batch whose
+        head is one of the dataset's head evaluation classes (the proteins), the mean
+        order violation of the morphism plus a hinge on the violation of a corruption
+        whose tail is drawn uniformly among the elements :math:`\\exists r.p` of the
+        dataset's evaluation property. Not described in the paper; the published Table 4
+        was produced with it.
     :param early_stopping_patience: Validations without improvement before stopping
         (``None``: never stop early).
     :type early_stopping_patience: int or None
@@ -126,8 +140,8 @@ class CatE(Model):
                  cyclic_lr=True, negative_aggregation="per_negative", filter_negatives=True,
                  saturation_steps=0,
                  saturation_rules=sat.S1, transitive_closure=False, complete_negation=True,
-                 existentials="auto", early_stopping_patience=10, model_filepath=None,
-                 device="cpu"):
+                 existentials="auto", interaction_loss=False, obvious_morphisms=True,
+                 early_stopping_patience=10, model_filepath=None, device="cpu"):
         super().__init__(dataset, model_filepath=model_filepath)
         if negative_aggregation not in ("per_negative", "mean"):
             raise ValueError("negative_aggregation must be 'per_negative' or 'mean'.")
@@ -146,12 +160,16 @@ class CatE(Model):
         self.transitive_closure = transitive_closure
         self.complete_negation = complete_negation
         self.existentials = existentials
+        self.interaction_loss = interaction_loss
+        self.obvious_morphisms = obvious_morphisms
         self.early_stopping_patience = early_stopping_patience
         self.device = device
+        self._training_regime = None
         self._lattice = None
         self._module = None
         self._validation = None
         self._keys = None
+        self._interaction = None
 
     # ---------------------------------------------------------------- lattice
     def _resolve_existentials(self):
@@ -187,7 +205,8 @@ class CatE(Model):
                 existentials=self._resolve_existentials(),
                 complete_negation=self.complete_negation,
                 saturation_steps=self.saturation_steps, rules=self.saturation_rules,
-                transitive_closure=self.transitive_closure)
+                transitive_closure=self.transitive_closure,
+                obvious_morphisms=self.obvious_morphisms)
             logger.info("CatE lattice: %s", self._lattice.stats)
         return self._lattice
 
@@ -214,6 +233,28 @@ class CatE(Model):
         :rtype: dict
         """
         return self.lattice.role_to_id
+
+    @property
+    def training_regime(self):
+        """A :class:`~mowl.training.TrainingRegime`, or ``None`` to train with the
+        model's own behaviour.
+
+        Assigning a regime calls its ``attach`` method with this model; the
+        'cate-code-training' regime switches the model to the training design of the
+        CatE reference code. (CatE's own :meth:`train` loop does not consult the
+        regime's per-axiom-type hooks.)
+        """
+        return self._training_regime
+
+    @training_regime.setter
+    def training_regime(self, regime):
+        if regime is not None:
+            from mowl.training.regime import TrainingRegime
+            if not isinstance(regime, TrainingRegime):
+                raise TypeError("training_regime must be a mowl.training.TrainingRegime "
+                                "or None.")
+            regime.attach(self)
+        self._training_regime = regime
 
     # ----------------------------------------------------------------- module
     def init_module(self):
@@ -262,15 +303,61 @@ class CatE(Model):
         return neg_dst, mask
 
     def compute_loss(self, pos):
-        """Loss of Eq. 7 for a batch of morphisms ``pos`` (shape ``(b, 2)``)."""
+        """Loss of Eq. 7 for a batch of morphisms ``pos`` (shape ``(b, 2)``), plus the
+        interaction loss of the reference code if :attr:`interaction_loss` is set."""
         module = self.module
         neg_dst, mask = self.sample_negatives(pos)
         pos_scores = module.order_violation(pos[:, 0], pos[:, 1])
         neg_scores = module.order_violation(
             pos[:, 0].unsqueeze(1).expand(-1, self.num_negs), neg_dst)
-        return order_margin_loss(pos_scores, neg_scores, self.margin,
+        loss = order_margin_loss(pos_scores, neg_scores, self.margin,
                                  negative_aggregation=self.negative_aggregation,
                                  neg_mask=mask)
+        if self.interaction_loss:
+            loss = loss + self._interaction_loss(pos[:, 0], pos_scores)
+        return loss
+
+    def _interaction_ids(self):
+        """(head ids, existential ids) of the interaction loss: the lattice elements of
+        the dataset's head evaluation classes and the elements :math:`\\exists r.p` for
+        the dataset's evaluation property."""
+        if self._interaction is not None and self._interaction[0].device == th.device(self.device):
+            return self._interaction
+        ds = self.dataset
+        prop = getattr(ds, "get_evaluation_property", None)
+        if prop is None:
+            raise ValueError(
+                "interaction_loss needs a dataset with get_evaluation_property() "
+                "(the PPI and GDA datasets).")
+        role = str(prop())
+        heads, tails = ds.evaluation_classes
+        lat = self.lattice
+        head_ids = [lat.class_to_id[c] for c in heads.as_str if c in lat.class_to_id]
+        pairs = [(lat.role_to_id[role], lat.class_to_id[t]) for t in tails.as_str
+                 if t in lat.class_to_id]
+        ex_ids = [lat.existential_to_id[k] for k in pairs if k in lat.existential_to_id]
+        if not head_ids or not ex_ids:
+            raise ValueError(
+                "interaction_loss found no interaction elements for role "
+                f"{role}: the model needs existentials='auto' (or a matching "
+                "'existentials' argument).")
+        self._interaction = (
+            th.tensor(head_ids, dtype=th.long, device=self.device),
+            th.tensor(ex_ids, dtype=th.long, device=self.device))
+        return self._interaction
+
+    def _interaction_loss(self, heads, pos_scores):
+        """The PPI term of the reference training loop: mean order violation of the
+        protein-headed morphisms of the batch plus a hinge on one corruption per row
+        whose tail is drawn uniformly among the elements :math:`\\exists r.p`."""
+        head_ids, ex_ids = self._interaction_ids()
+        sel = th.isin(heads, head_ids)
+        if not sel.any():
+            return pos_scores.sum() * 0.0
+        neg = ex_ids[th.randint(0, len(ex_ids), (int(sel.sum()),), device=ex_ids.device)]
+        s_pos = pos_scores[sel]
+        s_neg = self.module.order_violation(heads[sel], neg)
+        return s_pos.mean() + th.relu(self.margin - s_neg).mean()
 
     def train(self, epochs=100, validate_every=None, verbose=False):
         """Train on all morphisms of the lattice.
@@ -336,9 +423,11 @@ class CatE(Model):
 
     # ------------------------------------------------------------- validation
     def validation_queries(self):
-        """Validation queries ``(kind, head_id, true_id, candidate_ids)`` from the
-        validation ontology: named subsumptions :math:`C \\sqsubseteq D` and
-        memberships :math:`D(a)` (candidates: all named classes), and
+        """Validation queries ``(head_id, true_id, candidate_ids)``: the released
+        validation subsumptions of the dataset if it defines
+        ``cate_validation_query_pairs`` (the CatE completion benchmarks), otherwise the
+        named subsumptions :math:`C \\sqsubseteq D` and memberships :math:`D(a)` of
+        the validation ontology (candidates: all named classes) and
         :math:`C \\sqsubseteq \\exists r.D` (candidates: the elements
         :math:`\\exists r.D'`). Axioms with elements outside the lattice are skipped."""
         if self._validation is not None:
@@ -346,6 +435,16 @@ class CatE(Model):
         lat = self.lattice
         bounds = {lat.top_id, lat.bot_id}
         classes = th.tensor(sorted(set(lat.class_to_id.values()) - bounds), dtype=th.long)
+        pairs = getattr(self.dataset, "cate_validation_query_pairs", None)
+        if pairs:
+            out = []
+            for head_iri, tail_iri in pairs:
+                head_iri, tail_iri = str(head_iri), str(tail_iri)
+                if head_iri in lat.class_to_id and tail_iri in lat.class_to_id:
+                    out.append((lat.class_to_id[head_iri], lat.class_to_id[tail_iri],
+                                classes))
+            self._validation = out
+            return out
         by_role = {}
         for (r, _), node in lat.existential_to_id.items():
             by_role.setdefault(r, []).append(node)
