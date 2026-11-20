@@ -86,6 +86,8 @@ Benchmarks
 ----------
 
 The HiT paper evaluates on WordNet, SNOMED CT and transfer to Schema.org, FoodOn and DOID
-with threshold classification, which mOWL does not ship. The OnT paper [yang2025ont]_
+with threshold classification, which mOWL does not ship; its training design is the named
+regime ``hit-code-training``. The OnT paper [yang2025ont]_
 reports HiT on GALEN, GO and ANATOMY under its own normalisation (``ont-*`` benchmarks);
-see :doc:`ont`.
+those numbers were obtained with the OnT training pipeline (``ont-code-training``), and
+the ``hit`` recipes on the ``ont-*`` benchmarks follow it. See :doc:`ont`.

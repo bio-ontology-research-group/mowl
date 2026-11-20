@@ -36,13 +36,14 @@ _WORD2VEC_NOTE = (
 
 _LM_NOTE = (
     "all-MiniLM-L12-v2, 1 epoch, 1 negative per axiom, α = 3.0, β = 0.5, learning rate "
-    "1e-5, λ in {0, 0.1, ..., 1} selected on validation (Section 5.1). Run by the OnT "
+    "1e-5, λ in {0, 0.1, ..., 1} selected on validation (Section 5.1; the reference "
+    "code searches {0.0, ..., 1.9}, ont/evaluation/ont_eval.py). Run by the OnT "
     "authors under OnT's own normalisation and splits; not comparable with the box2el-* "
     "benchmarks.")
 
 _LM_SETTINGS = {"encoder": "sentence-transformers/all-MiniLM-L12-v2", "epochs": 1,
                 "num_negatives": 1, "clustering_margin": 3.0, "centripetal_margin": 0.5,
-                "learning_rate": 1e-5}
+                "learning_rate": 1e-5, "training_regime": "ont-code-training"}
 
 # Method H@1 H@10 H@100 MRR MR, per ontology (GALEN, GO, ANATOMY).
 _TABLE2 = """
