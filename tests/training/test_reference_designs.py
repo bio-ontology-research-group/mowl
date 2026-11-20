@@ -120,7 +120,8 @@ def test_recipes_and_benchmarks_are_consistent():
     for r in recipes:
         get_benchmark(r.benchmark)
         get_method(r.method)
-        assert get_regime(r.training_regime).implemented
+        if r.training_regime is not None:
+            assert get_regime(r.training_regime).implemented
     r = get_recipe("box2el-galen-inference", "box2el")
     assert r.regime_kwargs["lr_milestones"] == [2000]
     assert get_recipe("transbox-go-prediction", "transbox").epochs == 5000
@@ -193,3 +194,15 @@ def test_elkem_recipe_resolves():
     assert not published_results(benchmark="box2el-go-inference", method="elkem")
     assert get_benchmark("elkem-go-subsumption").protocol.endswith(
         "ELKEmSubsumptionProtocol")
+
+
+def test_boxlite_recipes():
+    """BoxLitE is solved, not trained: recipes carry the published lambdas and no
+    training regime; the solver family ignores the epochs."""
+    from mowl.benchmarks import get_recipe
+    r = get_recipe("boxlite-family-v1", "boxlite")
+    assert r.epochs == 0 and r.training_regime is None
+    assert r.model_kwargs["variant"] == "reference"
+    assert (r.model_kwargs["lambda1"], r.model_kwargs["lambda2"],
+            r.model_kwargs["lambda3"]) == (0.001, 3.0, 0.001)
+    assert get_recipe("boxlite-family-v4", "boxlite").model_kwargs["lambda3"] == 0.003
