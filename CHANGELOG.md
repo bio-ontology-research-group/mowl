@@ -25,6 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `PerAxiomNormPenalty`). `TransBox(formulation="reference")` follows the TransBox code.
 - CatE: the training design of the reference code as the regime `CateCodeTraining`, with recipes;
   the ORE1 recipe uses the norm p=1 (the default of the reference run script).
+- DELE: the loss combination of the reference code as the regime `DELECodeLoss` (`dele-code-loss`) and fixed negatives (`DELECodeTraining(negative_seed=)`, `AllNormalFormNegatives(fixed_seed=)`); the DELE recipes use them. `DELECodeLosses` gives Box²EL the reference's unsquared positive scores and ELEm its per-axiom norm term (`elem_axiom_reg`). DELE function prediction ranks the reference code's candidate classes.
 - RegD: the evaluation reproduces the reference code's prediction-task positive score
   exactly and also reports the corrected `f1_pair`; recipes with learning rate and depth
   weight chosen by validation F1.
@@ -88,6 +89,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Changed `RemoteDataset` to cache datasets under `$XDG_CACHE_HOME/mowl/datasets` (falling back to `~/.cache/mowl/datasets`) instead of the current working directory. Datasets are now shared between working directories rather than re-downloaded per directory, and running the tests or an example no longer scatters dataset directories through the checkout. Existing downloads in a working directory are not picked up and will be fetched once into the cache [#150][i150].
 - Changed the test suite to resolve dataset files through the cache instead of assuming pytest runs from the repository root.
 ### Fixed
+- Fixed the EL normaliser cache renaming relative IRIs when it was reloaded, which silently dropped the axioms that mention them (23,646 of the DELE yeast axioms). The cache is now written in functional syntax, atomically, and a stale cache is rebuilt.
+- Fixed dataset building crashing on assertions about anonymous individuals; they are skipped with a warning.
 - Fixed `BoxEL`'s loss for `∃r.C ⊑ D`, and `BaseRankingEvaluator` comparing CPU tensors with
   GPU indices when evaluating on a GPU.
 - Fixed `EmbeddingELModel._load_datasets` not passing `individual_index_dict=self.individual_index_dict` when constructing the training, validation, and testing `ELDataset` instances. Previously, each split built its own individual index from only the individuals occurring in that split's ontology, whereas `model.individual_index_dict` is sorted over the union of individuals across all splits (`dataset.individuals`). Consequently, validation and testing `class_assertion` and `object_property_assertion` tensors — and the training split as well whenever validation or testing introduced individuals absent from the training ontology — indexed individuals inconsistently with `model.individual_index_dict` and the module's individual embedding table; checkpoints saved with earlier versions on datasets with held-out individuals have permuted individual embedding rows.
