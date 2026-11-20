@@ -70,12 +70,19 @@ CatE (``cate-*``)
    of the training set). Regime: :func:`~mowl.evaluation.filtered_ranking.cate_ranking`.
 
 RegD (``regd-*``)
-   1,000 test subsumptions are sampled, 10 random negatives are generated per positive,
-   a pair is predicted true iff its score is below the threshold that maximises F1 on
-   validation pairs sampled the same way, and F1 is reported. Inference uses the
-   reasoner-inferred subsumptions, prediction the axioms
+   All test subsumptions are scored against every class: for each candidate the
+   rectified *boundary* dissimilarity of a fixed child region (the subclass for
+   :math:`C \sqsubseteq D`, the filler translated by :math:`-r` for
+   :math:`A \sqsubseteq \exists r.B`) inside the candidate. 10 random candidates per
+   positive are negatives, the threshold that maximises F1 on the first 1,000 validation
+   subsumptions is applied to the test split, and F1 is reported. As in the authors'
+   code, the F1's positive score of a prediction query is read from the role column
+   (an arbitrary class, not the query), which the published Table 4 numbers carry;
+   the regime parameter ``positive_scores`` reproduces or fixes this. Inference uses
+   the reasoner-inferred subsumptions, prediction the axioms
    :math:`A \sqsubseteq \exists r.B` of the 80/10/10 split. Regime:
-   :class:`~mowl.evaluation.sampled_f1.SampledF1Regime`.
+   :class:`~mowl.evaluation.sampled_f1.SampledF1Regime`, with model selection by
+   validation F1 (:class:`~mowl.training.ValidationF1Selection`).
 
 EmEL++ (``emelpp-*``)
    For every test pair :math:`C \sqsubseteq D` of the 70/20/10 split, all classes but

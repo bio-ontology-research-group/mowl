@@ -19,7 +19,8 @@ class _RegDMixin:
     contrastive_gcis = frozenset({"gci0", "gci2"})
     neg_capable_gcis = frozenset({"gci0", "gci2", "object_property_assertion"})
 
-    def _init_regd(self, lamda, p, gamma1, gamma2, eps, depth_on_containment):
+    def _init_regd(self, lamda, p, gamma1, gamma2, eps, depth_on_containment,
+                   flip_gci2=False):
         if lamda < 0:
             raise ValueError("lamda must be non-negative.")
         if eps <= 0:
@@ -30,6 +31,7 @@ class _RegDMixin:
         self.gamma2 = gamma2
         self.eps = eps
         self.depth_on_containment = depth_on_containment
+        self.flip_gci2 = bool(flip_gci2)
         self.energy_mode = False
         self.last_gci_name = None
 
@@ -75,6 +77,14 @@ class _RegDMixin:
         return parent, child
 
     def _gci2_regions(self, data):
+        if self.flip_gci2:
+            # The authors' prediction-task code (nf3Loss_ours) constrains the *reverse*
+            # inclusion: box(D) + R inside box(C) (with the sign of R flipped relative to
+            # the evaluation, which scores box(D) - R inside the candidates).
+            parent = self._region(data[:, 0])
+            child_center, child_size = self._region(data[:, 2])
+            child_center = child_center + self.rel_embed(data[:, 1])
+            return parent, (child_center, child_size)
         child_center, child_size = self._region(data[:, 0])
         parent = self._region(data[:, 2])
         child_center = child_center + self.rel_embed(data[:, 1])
@@ -141,6 +151,9 @@ class RegDELBEModule(_RegDMixin, ELBEModule):
     :param gamma2: Margin of the negative term. Defaults to 0.
     :param eps: Lower bound of the offsets, which are divided by in the depth dissimilarity.
     :param depth_on_containment: See :func:`~mowl.nn.el.regd.dissimilarity.box_energy`.
+    :param flip_gci2: Train the *reverse* inclusion for ``gci2`` (box(D) + R inside
+        box(C)), as the authors' prediction-task code (``nf3Loss_ours``) does. Defaults
+        to ``False`` (the normal form's own direction).
     """
 
     regd_gcis = frozenset({"gci0", "gci1", "gci2", "gci3"})
@@ -149,10 +162,11 @@ class RegDELBEModule(_RegDMixin, ELBEModule):
 
     def __init__(self, nb_ont_classes, nb_rels, nb_inds=None, embed_dim=50, margin=0.1,
                  lamda=1.0, p=1, gamma1=0.0, gamma2=0.0, eps=1e-4,
-                 depth_on_containment=True):
+                 depth_on_containment=True, flip_gci2=False):
         super().__init__(nb_ont_classes, nb_rels, nb_inds=nb_inds, embed_dim=embed_dim,
                          margin=margin)
-        self._init_regd(lamda, p, gamma1, gamma2, eps, depth_on_containment)
+        self._init_regd(lamda, p, gamma1, gamma2, eps, depth_on_containment,
+                        flip_gci2=flip_gci2)
 
     def _region(self, index):
         center = self.class_embed(index)
@@ -188,6 +202,7 @@ class RegDELEmModule(_RegDMixin, ELEmModule):
     :param gamma2: Margin of the negative term. Defaults to 0.
     :param eps: Lower bound of the radii, which are divided by in the depth dissimilarity.
     :param depth_on_containment: See :func:`~mowl.nn.el.regd.dissimilarity.ball_energy`.
+    :param flip_gci2: See :class:`RegDELBEModule`.
     """
 
     regd_gcis = frozenset({"gci0", "gci2", "gci3"})
@@ -196,10 +211,11 @@ class RegDELEmModule(_RegDMixin, ELEmModule):
 
     def __init__(self, nb_ont_classes, nb_rels, nb_inds=None, embed_dim=50, margin=0.1,
                  reg_norm=1, lamda=1.0, p=2, gamma1=0.0, gamma2=0.0, eps=1e-4,
-                 depth_on_containment=True):
+                 depth_on_containment=True, flip_gci2=False):
         super().__init__(nb_ont_classes, nb_rels, nb_inds, embed_dim=embed_dim, margin=margin,
                          reg_norm=reg_norm)
-        self._init_regd(lamda, p, gamma1, gamma2, eps, depth_on_containment)
+        self._init_regd(lamda, p, gamma1, gamma2, eps, depth_on_containment,
+                        flip_gci2=flip_gci2)
 
     def _region(self, index):
         center = self.class_embed(index)

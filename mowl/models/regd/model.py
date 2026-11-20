@@ -81,17 +81,25 @@ class RegDELBE(_RegDModel):
     boxes, and 10 negatives per positive.
 
     .. note::
-        Deviations and ambiguities. (1) Eq. 9 adds :math:`\lambda d_{dep}` to every positive
-        pair; the authors' training code adds it only to pairs that are not yet contained.
-        This class follows Eq. 9; pass ``depth_on_containment=False`` for the code's variant.
-        (2) The negatives of Eq. 10 use :math:`d_{bd}` only (as in the paper); the authors' code
-        uses the full energy. (3) The negatives replace the superclass of ``gci0`` and the
-        filler of ``gci2`` (the code's choice); the text says "the child". (4) The authors'
-        code applies the contrastive loss to one normal form per task (``gci0`` for inference,
-        ``gci2`` for prediction); this class applies it to both. (5) The paper does not state
-        batch size or initialisation; the host model's defaults are kept. (6) In the paper's text
-        the box host is called ELEM and the ball host ELBE in Section 5.2; the tables and the
-        code use ELBE for boxes.
+        Deviations and ambiguities (paper text vs the authors' released code, which produced
+        the published numbers). (1) Eq. 9 adds :math:`\lambda d_{dep}` to every positive
+        pair; the code adds it only to pairs that are not yet contained
+        (``depth_on_containment=False`` reproduces the code; this class follows Eq. 9).
+        (2) Eq. 10 combines a clamped positive energy with a max-margin over the
+        negatives' *boundary* dissimilarity; the code instead minimises a softmax
+        cross-entropy over the full energies of one positive and its 10 negatives
+        (:class:`~mowl.training.SoftmaxEnergyContrastiveLoss`), and only on the normal
+        form of the task (``gci0`` for the inference task, ``gci2`` for the prediction
+        task); the other normal forms keep the host model's mean-squared-error loss.
+        (3) The negatives replace the superclass of ``gci0`` and the filler of ``gci2``
+        (the code's choice); the text says "the child". (4) For the prediction task the
+        code's ``nf3Loss_ours`` constrains the *reverse* inclusion (see ``flip_gci2``).
+        (5) The paper does not state batch size or initialisation; the code draws 512
+        axioms per normal form per step, initialises uniformly in [-1, 1] and renormalises
+        the rows (as mOWL's ELBE and ELEm modules do), and selects the checkpoint by the
+        best F1 on the validation set (:class:`~mowl.training.ValidationF1Selection`).
+        (6) In the paper's text the box host is called ELEM and the ball host ELBE in
+        Section 5.2; the tables and the code use ELBE for boxes.
 
     :param dataset: mOWL dataset.
     :param embed_dim: Dimension of the boxes.
@@ -103,6 +111,11 @@ class RegDELBE(_RegDModel):
     :param num_neg: Negatives per positive axiom of ``gci0`` and ``gci2``.
     :param eps: Lower bound of the offsets.
     :param depth_on_containment: Whether the depth term is also added to contained pairs.
+    :param flip_gci2: Train the *reverse* inclusion for ``gci2`` (box(D) + R inside
+        box(C) instead of box(C) + R inside box(D)). This is what the authors'
+        prediction-task code does (``nf3Loss_ours``); its evaluation then scores
+        box(D) − R inside the candidates (a different sign of R than in training).
+        Defaults to ``False`` (the normal form's own direction).
     """
 
     def __init__(self,
@@ -116,6 +129,7 @@ class RegDELBE(_RegDModel):
                  num_neg=10,
                  eps=1e-4,
                  depth_on_containment=True,
+                 flip_gci2=False,
                  learning_rate=0.005,
                  batch_size=4096 * 8,
                  model_filepath=None,
@@ -130,6 +144,7 @@ class RegDELBE(_RegDModel):
         self._loaded = False
         self.extended = False
         self._set_regd_options(num_neg, lamda, p, gamma1, gamma2, eps, depth_on_containment)
+        self.flip_gci2 = bool(flip_gci2)
         self.init_module()
 
     def init_module(self):
@@ -141,6 +156,7 @@ class RegDELBE(_RegDModel):
             margin=self.margin,
             lamda=self.lamda, p=self.p, gamma1=self.gamma1, gamma2=self.gamma2,
             eps=self.eps, depth_on_containment=self.depth_on_containment,
+            flip_gci2=self.flip_gci2,
         ).to(self.device)
         self._after_init_module()
 
@@ -181,6 +197,7 @@ class RegDELEm(_RegDModel):
     :param num_neg: Negatives per positive axiom of ``gci0`` and ``gci2``.
     :param eps: Lower bound of the radii.
     :param depth_on_containment: Whether the depth term is also added to contained pairs.
+    :param flip_gci2: See :class:`RegDELBE`.
     """
 
     def __init__(self,
@@ -195,6 +212,7 @@ class RegDELEm(_RegDModel):
                  num_neg=10,
                  eps=1e-4,
                  depth_on_containment=True,
+                 flip_gci2=False,
                  learning_rate=0.005,
                  batch_size=4096 * 8,
                  model_filepath=None,
@@ -210,6 +228,7 @@ class RegDELEm(_RegDModel):
         self._loaded = False
         self.extended = False
         self._set_regd_options(num_neg, lamda, p, gamma1, gamma2, eps, depth_on_containment)
+        self.flip_gci2 = bool(flip_gci2)
         self.init_module()
 
     def init_module(self):
@@ -222,5 +241,6 @@ class RegDELEm(_RegDModel):
             reg_norm=self.reg_norm,
             lamda=self.lamda, p=self.p, gamma1=self.gamma1, gamma2=self.gamma2,
             eps=self.eps, depth_on_containment=self.depth_on_containment,
+            flip_gci2=self.flip_gci2,
         ).to(self.device)
         self._after_init_module()

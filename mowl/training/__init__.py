@@ -13,30 +13,34 @@ from mowl.training.negatives import (CorruptionNegatives, FixedColumnCorruption,
                                      SiblingHardNegatives, ContradictionNegatives)
 from mowl.training.losses import (SumLoss, MSETargetLoss, PairwiseMarginRankingLoss,
                                   LogSigmoidLoss, BPRLoss, LogSumExpContrastiveLoss,
-                                  PearsonCorrelationLoss, ProbabilisticBCELoss,
-                                  NormalFormFrequencyWeighting)
+                                  SoftmaxEnergyContrastiveLoss, PearsonCorrelationLoss,
+                                  ProbabilisticBCELoss, NormalFormFrequencyWeighting)
 from mowl.training.positives import TransitiveReductionPositives, TransitiveClosurePositives
 from mowl.training.schedules import StepDecay, ConstantThenCosine, CyclicLearningRate, \
     ReduceOnPlateau
-from mowl.training.selection import ValidationSelection, ValidationRankSelection
+from mowl.training.selection import (ValidationSelection, ValidationRankSelection,
+                                     ValidationF1Selection, validation_f1)
 from mowl.training.batching import PerNormalFormMiniBatches
 from mowl.training.margin import SlackMargin, StrictMargin, margin_semantics
-from mowl.training.reference import Box2ELCodeTraining, TransBoxCodeTraining
+from mowl.training.reference import (Box2ELCodeTraining, TransBoxCodeTraining,
+                                     RegDCodeTraining)
 
 __all__ = [
     "TrainingRegime", "ComposedRegime",
     "SlackMargin", "StrictMargin", "margin_semantics",
-    "Box2ELCodeTraining", "TransBoxCodeTraining",
+    "Box2ELCodeTraining", "TransBoxCodeTraining", "RegDCodeTraining",
     "DeductiveClosure", "NORMAL_FORMS",
     "AllNormalFormNegatives", "ClosureFilteredNegatives", "ClosurePositives", "dele_regime",
     "CorruptionNegatives", "FixedColumnCorruption", "EitherSideCorruption",
     "PerColumnCorruption", "TypeConstrainedCorruption", "KnownPositiveFilter",
     "SiblingHardNegatives", "ContradictionNegatives",
     "SumLoss", "MSETargetLoss", "PairwiseMarginRankingLoss", "LogSigmoidLoss", "BPRLoss",
-    "LogSumExpContrastiveLoss", "PearsonCorrelationLoss", "ProbabilisticBCELoss",
+    "LogSumExpContrastiveLoss", "SoftmaxEnergyContrastiveLoss",
+    "PearsonCorrelationLoss", "ProbabilisticBCELoss",
     "NormalFormFrequencyWeighting",
     "TransitiveReductionPositives", "TransitiveClosurePositives",
     "StepDecay", "ConstantThenCosine", "CyclicLearningRate", "ReduceOnPlateau",
-    "ValidationSelection", "ValidationRankSelection",
+    "ValidationSelection", "ValidationRankSelection", "ValidationF1Selection",
+    "validation_f1",
     "PerNormalFormMiniBatches",
 ]

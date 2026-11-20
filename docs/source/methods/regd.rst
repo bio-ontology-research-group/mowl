@@ -43,9 +43,16 @@ RegD only changes the *inclusion* energy; the host model keeps everything else.
   non-emptiness term (boxes only). With balls, the ELEm loss is kept.
 * Bottom forms and assertions keep the host losses.
 
-``gci0`` and ``gci2`` are trained with the contrastive loss of the paper (Eq. 10) with 10
-sampled negatives per positive, which push a wrong superclass or filler outside the parent.
-The other forms minimise :math:`\max\{E, \gamma_1\}`.
+``gci0`` and ``gci2`` are trained with the built-in contrastive loss of the paper
+(Eq. 10) with 10 sampled negatives per positive, which push a wrong superclass or
+filler outside the parent. The other forms minimise :math:`\max\{E, \gamma_1\}`.
+The *recipes* of the ``regd-*`` benchmarks instead train with the loss of the authors'
+code (regime ``regd-code-training``): a softmax cross-entropy over the energies of one
+positive and its 10 negatives (:class:`~mowl.training.SoftmaxEnergyContrastiveLoss`),
+and only on the normal form of the task -- ``gci0`` for the inference benchmarks,
+``gci2`` for the prediction benchmarks, where the code also constrains the reversed
+inclusion (``flip_gci2``). Every other normal form keeps the host model's squared-error
+loss of the RegD energy.
 
 RegD speaks about hierarchies. The faithfulness result of the paper (every partial order has a
 faithful embedding in :math:`\mathbb{R}^2`) says nothing about conjunction or disjointness,
@@ -56,8 +63,13 @@ Differences from the paper
 
 See the class docstring of :class:`~mowl.models.regd.RegDELBE` and the card notes. The main
 ones: Eq. 9 adds the depth term to every positive pair while the authors' code adds it only to
-pairs that are not contained (``depth_on_containment=False`` gives that variant); the negatives
-replace the superclass or filler, as in the code.
+pairs that are not contained (``depth_on_containment=False`` gives that variant); the
+negatives replace the superclass or filler, as in the code; the loss of the code is a
+softmax cross-entropy over the full energies, not Eq. 10, and it is applied to one normal
+form per task; the prediction task is evaluated with the code's own rules (regime
+``regd-sampled-f1``: rectified boundary dissimilarity as the score, threshold tuned on
+validation, and the positive score of the code's Table 4 read from the role column -- see
+the regime card).
 
 Example
 -------
