@@ -249,6 +249,44 @@ def test_unseen_complex_concept_raises(trained):
         model.score(df.getOWLDeclarationAxiom(c("Cat")))
 
 
+def test_obvious_morphisms_filter():
+    """obvious_morphisms=False drops the trivial morphisms of complex elements, as
+    remove_obvious_morphisms.py of the reference code does to produce the released
+    training graphs; named classes keep them."""
+    lat = CatELattice(pets_dataset().ontology, obvious_morphisms=False)
+    bot, top = lat.bot_id, lat.top_id
+    cat = lat.class_to_id[NS + "Cat"]
+    complex_ids = [i for i, n in enumerate(lat.names)
+                   if n.startswith(("ObjectIntersectionOf", "ObjectUnionOf",
+                                    "ObjectComplementOf"))]
+    edges = set(map(tuple, lat.edges.tolist()))
+    for i in complex_ids:
+        assert (bot, i) not in edges
+        assert (i, top) not in edges
+    assert (bot, cat) in edges and (cat, top) in edges
+    # The default keeps them (the paper: every element has bot ⊑ X ⊑ top).
+    lat_default = CatELattice(pets_dataset().ontology)
+    edges = set(map(tuple, lat_default.edges.tolist()))
+    assert all((bot, i) in edges and (i, top) in edges for i in complex_ids)
+
+
+def test_punned_individual_shares_the_class_element():
+    """An individual whose IRI is also a class (punning, as throughout the ORE1 data)
+    is the class's element, as in the reference code whose node names are strings."""
+    famous = c("FamousHuman")
+    axioms = [SUB(c("Person"), famous),
+              df.getOWLClassAssertionAxiom(famous, i("clinton")),
+              df.getOWLClassAssertionAxiom(c("Person"), i("FamousHuman"))]
+    ds = Dataset(ontology(axioms))
+    model = CatE(ds, existentials=None, model_filepath=scratch_file("punned.pt"))
+    lat = model.lattice
+    assert lat.individual_to_id[NS + "FamousHuman"] == lat.class_to_id[NS + "FamousHuman"]
+    assert lat.individual_to_id[NS + "clinton"] != lat.class_to_id.get(NS + "Person")
+    assert len(model.validation_queries()) == 0  # no validation ontology
+    s = model.score(df.getOWLClassAssertionAxiom(c("Person"), i("clinton")))
+    assert s >= 0.0
+
+
 def test_embedding_dictionaries(trained):
     model, _ = trained
     assert NS + "Cat" in model.class_embeddings

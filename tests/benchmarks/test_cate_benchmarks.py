@@ -187,6 +187,15 @@ def test_cate_recipes_resolve():
     ppi = get_recipe("cate-yeast-ppi", "cate")
     assert ppi.model_kwargs["saturation_steps"] == 1
     assert ppi.regime_kwargs["interaction_loss"] is True
+    # The completion recipes match the released training graphs (reference projector,
+    # trivial morphisms removed); the PPI graph keeps them.
+    for benchmark in ("cate-ore1-membership", "cate-go-completion",
+                      "cate-foodon-completion"):
+        recipe = get_recipe(benchmark, "cate")
+        assert recipe.model_kwargs["complete_negation"] is False
+        assert recipe.model_kwargs["obvious_morphisms"] is False
+    assert ppi.model_kwargs["complete_negation"] is False
+    assert "obvious_morphisms" not in ppi.model_kwargs
 
 
 @pytest.mark.slow

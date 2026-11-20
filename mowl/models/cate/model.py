@@ -109,6 +109,11 @@ class CatE(Model):
     :type transitive_closure: bool or str
     :param complete_negation: See deviation (c).
     :type complete_negation: bool
+    :param obvious_morphisms: Keep :math:`\\bot \\sqsubseteq X` and
+        :math:`X \\sqsubseteq \\top` for complex :math:`X` (the paper keeps them for
+        every element). The released training graphs of the ORE1, GO and FoodOn
+        benchmarks drop them; ``False`` matches those graphs (the recipes do so).
+    :type obvious_morphisms: bool
     :param existentials: Elements :math:`\\exists r.D` to add: a dict from role IRI to
         ``"classes"``, ``"evaluation_classes"`` or an iterable of class IRIs; ``None``;
         or ``"auto"`` (default): if the dataset defines ``get_evaluation_property()`` (the
@@ -135,8 +140,8 @@ class CatE(Model):
                  cyclic_lr=True, negative_aggregation="per_negative", filter_negatives=True,
                  saturation_steps=0,
                  saturation_rules=sat.S1, transitive_closure=False, complete_negation=True,
-                 existentials="auto", interaction_loss=False, early_stopping_patience=10,
-                 model_filepath=None, device="cpu"):
+                 existentials="auto", interaction_loss=False, obvious_morphisms=True,
+                 early_stopping_patience=10, model_filepath=None, device="cpu"):
         super().__init__(dataset, model_filepath=model_filepath)
         if negative_aggregation not in ("per_negative", "mean"):
             raise ValueError("negative_aggregation must be 'per_negative' or 'mean'.")
@@ -156,6 +161,7 @@ class CatE(Model):
         self.complete_negation = complete_negation
         self.existentials = existentials
         self.interaction_loss = interaction_loss
+        self.obvious_morphisms = obvious_morphisms
         self.early_stopping_patience = early_stopping_patience
         self.device = device
         self._training_regime = None
@@ -199,7 +205,8 @@ class CatE(Model):
                 existentials=self._resolve_existentials(),
                 complete_negation=self.complete_negation,
                 saturation_steps=self.saturation_steps, rules=self.saturation_rules,
-                transitive_closure=self.transitive_closure)
+                transitive_closure=self.transitive_closure,
+                obvious_morphisms=self.obvious_morphisms)
             logger.info("CatE lattice: %s", self._lattice.stats)
         return self._lattice
 

@@ -70,7 +70,9 @@ class CatELattice:
 
     1. every class in ``classes`` and individual in ``individuals`` that is not yet an
        element is added (with :math:`\\bot \\sqsubseteq X \\sqsubseteq \\top`), so that
-       every named class can be a ranking candidate;
+       every named class can be a ranking candidate; an individual whose IRI is also a
+       class (punning, as in the ORE1 data) *is* that class's element, as in the
+       reference code, whose nodes are identified by strings;
     2. for every role IRI ``r`` and class IRI ``D`` in ``existentials``, the axiom
        :math:`\\exists r.D \\sqsubseteq \\top` is projected, which adds the element
        :math:`\\exists r.D` with its existential construction (the paper's treatment of
@@ -97,16 +99,27 @@ class CatELattice:
         ``True`` for the paper's Tr as the reference code computes it (paths through
         :math:`\\bot` and :math:`\\top` are not followed), ``"full"`` for the complete
         closure (see :func:`~mowl.projection.categorical.saturation.rule_transitivity`).
+    :param obvious_morphisms: Keep :math:`\\bot \\sqsubseteq X` and
+        :math:`X \\sqsubseteq \\top` for *complex* :math:`X` (the paper keeps them for
+        every element). The released training graphs of the ORE1, GO and FoodOn
+        benchmarks drop them (``remove_obvious_morphisms.py`` of the reference code);
+        pass ``False`` to match those graphs element for element.
     """
 
     def __init__(self, ontology, classes=(), individuals=(), existentials=None,
                  complete_negation=True, saturation_steps=0, rules=sat.S1,
-                 transitive_closure=False):
+                 transitive_closure=False, obvious_morphisms=True):
         self.ontology = ontology
+        #: IRI -> graph id of an element of the *other* kind: an individual that is
+        #: also a class (punning, as in the ORE1 data) shares the class's element, as
+        #: in the reference code, whose node names are strings.
+        self._individual_alias = {}
+        self._class_alias = {}
         self.complete_negation = complete_negation
         self.saturation_steps = saturation_steps
         self.rules = tuple(rules)
         self.transitive_closure = transitive_closure
+        self.obvious_morphisms = obvious_morphisms
         self.stats = {}
         self.adapter = OWLAPIAdapter()
         self.projector = CategoricalProjector("owl")
@@ -134,10 +147,18 @@ class CatELattice:
             node = Node(owl_class=self.adapter.create_class(str(iri)))
             if node not in self.graph.node_to_id:
                 self.graph.add_node(node)
+            elif not self.graph.id_to_node[self.graph.node_to_id[node]].is_individual:
+                pass  # already a class element
+            else:
+                self._class_alias[str(iri)] = self.graph.node_to_id[node]
         for iri in individuals:
             node = Node(owl_class=self.adapter.create_class(str(iri)), is_individual=True)
             if node not in self.graph.node_to_id:
                 self.graph.add_node(node)
+            elif self.graph.id_to_node[self.graph.node_to_id[node]].is_individual:
+                pass  # already an individual element
+            else:
+                self._individual_alias[str(iri)] = self.graph.node_to_id[node]
         if existentials:
             top = self.adapter.create_class(TOP)
             for role_iri, fillers in existentials.items():
@@ -147,6 +168,8 @@ class CatELattice:
                         role, self.adapter.create_class(str(filler)))
                     axiom = self.adapter.create_subclass_of(ex, top)
                     self.graph.add_all_edges(*list(self.projector.process_axiom(axiom)))
+        if not self.obvious_morphisms:
+            self.stats["obvious_removed"] = self._remove_obvious()
         if self.complete_negation:
             self.stats["negation_completion_added"] = sat.complete_negation(self.graph)
         if self.saturation_steps is None or self.saturation_steps > 0:
@@ -159,6 +182,34 @@ class CatELattice:
 
     def num_morphisms(self):
         return sum(len(v) for v in self.graph.out_edges.values())
+
+    def _remove_obvious(self):
+        """Remove :math:`\\bot \\sqsubseteq X` and :math:`X \\sqsubseteq \\top` for
+        complex :math:`X`, as ``remove_obvious_morphisms.py`` of the reference code
+        does to produce the released training graphs."""
+        bot = Node(owl_class=self.adapter.create_class(BOT))
+        top = Node(owl_class=self.adapter.create_class(TOP))
+
+        def trivial(node):
+            """Everything that is not a named class or individual: a complex concept
+            description or one of the role elements (their reference rendering
+            contains a space, which is what remove_obvious_morphisms.py keys on)."""
+            if node.relation is not None:
+                return True
+            return node.owl_class is not None and node.owl_class.isAnonymous()
+
+        removed = 0
+        for dst in list(self.graph.out_edges.get(bot, ())):
+            if trivial(dst):
+                self.graph.out_edges[bot].discard(dst)
+                self.graph.in_edges[dst].discard(bot)
+                removed += 1
+        for src, dsts in list(self.graph.out_edges.items()):
+            if trivial(src) and top in dsts:
+                dsts.discard(top)
+                self.graph.in_edges[top].discard(src)
+                removed += 1
+        return removed
 
     def _freeze(self):
         nodes = list(self.graph.node_to_id.keys())
@@ -202,6 +253,12 @@ class CatELattice:
         for iri in (TOP, BOT):
             if iri not in self.class_to_id:
                 self.class_to_id[iri] = self.name_to_id[iri]
+        for iri, gid in self._individual_alias.items():
+            self.individual_to_id.setdefault(
+                str(iri), self.node_to_id[self.graph.id_to_node[gid]])
+        for iri, gid in self._class_alias.items():
+            self.class_to_id.setdefault(
+                str(iri), self.node_to_id[self.graph.id_to_node[gid]])
         self.role_to_id = {r: i for i, r in enumerate(sorted(roles))}
         self.existential_to_id = {(self.role_to_id[r], f): i for r, f, i in existentials}
         self.stats.update(nodes=len(self.nodes), edges=len(self.edges))

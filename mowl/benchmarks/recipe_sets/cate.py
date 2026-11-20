@@ -27,6 +27,11 @@ _CATE = {
     "cate-yeast-ppi": (256, 1e-4, 0.1, 2048, 4, 10000),
 }
 
+#: The released training graphs of ORE1, GO and FoodOn were produced by the reference
+#: projector (no negation completion) and then filtered (remove_obvious_morphisms.py
+#: drops the trivial morphisms of complex elements).
+_RELEASED_GRAPH = {"complete_negation": False, "obvious_morphisms": False}
+
 
 def _build():
     out = []
@@ -35,12 +40,17 @@ def _build():
         model_kwargs = {"embed_dim": dim, "learning_rate": lr, "margin": margin,
                         "batch_size": bs, "num_negs": negs}
         notes = _NOTE
+        if benchmark != "cate-yeast-ppi":
+            model_kwargs.update(_RELEASED_GRAPH)
         if benchmark == "cate-yeast-ppi":
             # The released PPI training graph is ontology_extended.cat.s1.edgelist:
             # the lattice extended with the protein existentials and one round of the
             # S1 saturation rules; the PPI term of the training loop is not described
-            # in the paper.
+            # in the paper. The file name carries no "_filtered", so the trivial
+            # morphisms are kept (obvious_morphisms stays True); as everywhere, the
+            # reference projector does not complete negations.
             model_kwargs["saturation_steps"] = 1
+            model_kwargs["complete_negation"] = False
             kwargs["interaction_loss"] = True
             notes = (_NOTE + " The lattice is the S1-saturated extended lattice of the "
                      "code's graph file (ontology_extended.cat.s1.edgelist) and the "
