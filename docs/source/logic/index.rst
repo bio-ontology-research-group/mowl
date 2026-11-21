@@ -47,8 +47,8 @@ ontology, which can be less than the paper covers. The catalogue can be queried 
 
    from mowl.catalog import get_method, list_methods
 
+   print(get_method("elem").supported_expressivity)
    print(get_method("box2el").supported_expressivity)
-   print(get_method("transbox").supported_expressivity)
    print(sorted(c.key for c in list_methods(implemented=True, covers="ALC",
                                             task="subsumption")))
 
@@ -56,7 +56,7 @@ ontology, which can be less than the paper covers. The catalogue can be queried 
 
    EL⊥ with ABox
    ELH(∘)⊥ with ABox
-   ['alcone', 'alcone-exact', 'cate', 'e2r', 'falcon']
+   ['alcone', 'alcone-exact', 'cate', 'falcon']
 
 Checking an ontology before embedding it
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
