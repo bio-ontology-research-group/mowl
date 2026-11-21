@@ -303,14 +303,13 @@ The recurring, representation-independent procedures, with their catalogue keys
    * - ``step-lr-decay``, ``cosine-lr-decay``, ``cyclic-lr``, ``reduce-lr-on-plateau``
      - schedule
      - Box²EL and ELK-Em; ELK-Em; CatE; NeSy 2024 and DELE
-   * - ``early-stopping`` (not implemented)
+   * - ``early-stopping``
      - schedule
      - NeSy 2024, DELE
    * - ``per-normal-form-minibatch``
      - batching
      - ELEmbeddings, EmEL++, Box²EL (code), DELE (code), Aharoni, RegD (code)
-   * - ``validation-loss-selection``, ``validation-rank-selection``,
-     ``validation-f1-selection``
+   * - ``validation-loss-selection``, ``validation-rank-selection``, ``validation-f1-selection``
      - model selection
      - mOWL default, DELE; Box²EL, ELK-Em; RegD (code, the task's normal form)
 

@@ -6,6 +6,10 @@ mOWL (Machine Learning with Ontologies) is a Python library for building ML mode
 
 Key dependency: **a JVM is required at runtime** (OpenJDK 11+). JAR files are bundled in `mowl/lib/`.
 
+## Embedding methods, training, evaluation, benchmarks
+
+Embedding code is organised as four separate parts: methods, training regimes, evaluation regimes and benchmarks (with recipes that reproduce published numbers). **Read `AGENTS.md` before changing any of them**; it gives the layout, the rules and the checklist. Reproduction status per publication is in `docs/source/benchmarks/reproduction.rst`.
+
 ## Development Setup
 
 Use the conda environments in `envs/`. Dev variants install extra tooling:

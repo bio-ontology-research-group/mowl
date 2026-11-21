@@ -78,6 +78,16 @@ class TestSchedules(TestCase):
         self.assertEqual(r.stop_epoch, 5)
         self.assertTrue(r.should_stop(7))
 
+    def test_early_stopping_stops_and_keeps_the_learning_rate(self):
+        from mowl.training import EarlyStopping
+        values = iter([1.0] * 20)
+        r = self._attach(EarlyStopping(metric=lambda m: next(values), patience=3))
+        _run_epochs(r, 6)
+        self.assertEqual(r.key, "early-stopping")
+        self.assertEqual(r.stop_epoch, 3)
+        self.assertTrue(r.should_stop(6))
+        self.assertAlmostEqual(r.history[-1], r.history[0])
+
     def test_plateau_every_from_batching(self):
         # every=None: monitor once per steps-per-epoch of the composed batching regime
         values = iter([1.0] * 20)

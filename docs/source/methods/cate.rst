@@ -76,24 +76,6 @@ uniformly from the lattice. If the loss is zero, every morphism is preserved by 
 :math:`10^{-4}` and a cyclic learning rate between ``learning_rate / 10`` and
 ``learning_rate``.
 
-Two choices differ from the reference code and can be switched back:
-``filter_negatives=True`` discards corruptions that are morphisms (Eq. 7 sums over
-non-morphisms only), and ``negative_aggregation="per_negative"`` puts one hinge on each
-corruption as in Eq. 7 (the code averages the scores first, ``"mean"``). Attaching the
-regime :class:`~mowl.training.cate.CateCodeTraining` switches both (plus the code's PPI
-term for the interaction task) in one go:
-
-.. testcode::
-
-    from mowl.training import CateCodeTraining
-
-    model.training_regime = CateCodeTraining()
-    print(model.negative_aggregation, model.filter_negatives)
-
-.. testoutput::
-
-    mean False
-
 The recipes of the paper's Tables 2-4 (``--recipe``, Appendix A, Table 6) train with this
 regime, the released hyperparameters and early stopping on the raw validation MRR; the
 benchmarks evaluate on the released query lists with the code's conventions (strict
@@ -148,6 +130,24 @@ Example
 
     True
     True
+
+Two choices differ from the reference code and can be switched back:
+``filter_negatives=True`` discards corruptions that are morphisms (Eq. 7 sums over
+non-morphisms only), and ``negative_aggregation="per_negative"`` puts one hinge on each
+corruption as in Eq. 7 (the code averages the scores first, ``"mean"``). Attaching the
+regime :class:`~mowl.training.cate.CateCodeTraining` switches both (plus the code's PPI
+term for the interaction task) in one go:
+
+.. testcode::
+
+    from mowl.training import CateCodeTraining
+
+    model.training_regime = CateCodeTraining()
+    print(model.negative_aggregation, model.filter_negatives)
+
+.. testoutput::
+
+    mean False
 
 Guarantees and limitations, including why Helly-type limits of convex regions do not apply
 to an order embedding, are listed on the card ``cate`` of the :doc:`method catalogue

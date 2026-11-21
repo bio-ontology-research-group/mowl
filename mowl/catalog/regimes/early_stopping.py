@@ -14,10 +14,9 @@ REGIME = RegimeCard(
     standalone=False,
     introduced_with=(),
     used_by=(),
-    not_implemented_reason=('No TrainingRegime hook can end the training loop (a hook such as '
-                            'should_stop(epoch) -> bool, consulted after every epoch, is needed).'
-                            ' ReduceOnPlateau records the epoch at which training would have '
-                            'stopped.'),
+    implementation='mowl.training.schedules.EarlyStopping',
     notes=("NeSy 2024, Section 4.4 and DELE, Section 6.3 ('early stopping if validation loss does"
-           " not improve for 20 epochs')."),
+           " not improve for 20 epochs'). Implemented by EarlyStopping(patience=20) (and by "
+           "ReduceOnPlateau(stop=True) together with a learning-rate reduction): the training loop asks the regime's should_stop(epoch) after "
+           "every epoch."),
 )

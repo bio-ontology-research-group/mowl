@@ -150,14 +150,13 @@ Python API
 
    for r in published_results(benchmark="box2el-galen-prediction", method="box2el",
                               subset="combined"):
-       if r.source.key in ("jackermeier2024", "yang2025"):
+       if r.source.key == "jackermeier2024":
            print(r.source.key, r.locator, r.metrics["med"])
 
 .. testoutput::
 
    True
    jackermeier2024 Table 1 (GALEN) 669.0
-   yang2025 Table 7 (GALEN) 1360.0
 
 Running a method on a benchmark trains it with a fixed seed and evaluates it with the
 benchmark's protocol. The result records the metrics per subset, the settings, the
@@ -274,6 +273,13 @@ apply a recipe; arguments given explicitly take precedence.
 
    python -m mowl.benchmarks run box2el-go-prediction --method box2el --recipe \
        --seed 0 --device cuda --out go_box2el_s0.json
+
+Whether mOWL reproduces each publication is recorded in :doc:`reproduction`.
+
+.. toctree::
+   :maxdepth: 1
+
+   reproduction
 
 Published results
 -----------------

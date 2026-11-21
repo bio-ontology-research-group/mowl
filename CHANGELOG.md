@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CatE: the training design of the reference code as the regime `CateCodeTraining`, with recipes;
   the ORE1 recipe uses the norm p=1 (the default of the reference run script).
 - DELE: the loss combination of the reference code as the regime `DELECodeLoss` (`dele-code-loss`) and fixed negatives (`DELECodeTraining(negative_seed=)`, `AllNormalFormNegatives(fixed_seed=)`); the DELE recipes use them. `DELECodeLosses` gives Box²EL the reference's unsquared positive scores and ELEm its per-axiom norm term (`elem_axiom_reg`). DELE function prediction ranks the reference code's candidate classes.
+- `mowl.training.EarlyStopping`: end training when a validation quantity stops improving (the regime `early-stopping`, previously catalogued as not implemented).
+- `AGENTS.md`, a guide for AI coding agents to the layout of methods, training regimes, evaluation regimes and benchmarks, and a reproduction status page in the documentation (`docs/source/benchmarks/reproduction.rst`).
 - RegD: the evaluation reproduces the reference code's prediction-task positive score
   exactly and also reports the corrected `f1_pair`; recipes with learning rate and depth
   weight chosen by validation F1.
@@ -89,6 +91,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Changed `RemoteDataset` to cache datasets under `$XDG_CACHE_HOME/mowl/datasets` (falling back to `~/.cache/mowl/datasets`) instead of the current working directory. Datasets are now shared between working directories rather than re-downloaded per directory, and running the tests or an example no longer scatters dataset directories through the checkout. Existing downloads in a working directory are not picked up and will be fetched once into the cache [#150][i150].
 - Changed the test suite to resolve dataset files through the cache instead of assuming pytest runs from the repository root.
 ### Fixed
+- Fixed the EmEL++ ANATOMY dataset being unparsable: the released file contains role chains without roles, which are now dropped when the dataset is built.
 - Fixed the EL normaliser cache renaming relative IRIs when it was reloaded, which silently dropped the axioms that mention them (23,646 of the DELE yeast axioms). The cache is now written in functional syntax, atomically, and a stale cache is rebuilt.
 - Fixed dataset building crashing on assertions about anonymous individuals; they are skipped with a warning.
 - Fixed `BoxEL`'s loss for `∃r.C ⊑ D`, and `BaseRankingEvaluator` comparing CPU tensors with

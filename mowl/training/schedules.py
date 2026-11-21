@@ -260,3 +260,30 @@ class ReduceOnPlateau(_Schedule):
 
     def should_stop(self, epoch):
         return self.stop and self.stop_epoch is not None
+
+
+class EarlyStopping(ReduceOnPlateau):
+    """End training when a validation quantity has not improved for ``patience`` monitored
+    epochs, without changing the learning rate ("early stopping if validation loss does
+    not improve for 20 epochs", Mashkova et al., 2024).
+
+    This is :class:`ReduceOnPlateau` with ``stop=True`` and a learning rate that is never
+    reduced; use :class:`ReduceOnPlateau` directly to combine both.
+
+    :param metric: ``metric(model) -> float`` to minimise. Defaults to the validation loss.
+    :param patience: Monitored epochs without improvement after which training ends.
+    :param every: Monitor every this many epochs (see :class:`ReduceOnPlateau`).
+    :param base_optimizer: Optimizer class, see :class:`ReduceOnPlateau`.
+    """
+
+    key = "early-stopping"
+
+    def __init__(self, metric=None, patience=20, every=1, base_optimizer=None):
+        super().__init__(metric=metric, patience=10, factor=1.0, stop_patience=patience,
+                         every=every, stop=True, base_optimizer=base_optimizer)
+
+    def setup(self, opt):
+        # No learning-rate reduction: a constant schedule that accepts ``step(value)``.
+        self.scheduler = th.optim.lr_scheduler.ReduceLROnPlateau(
+            opt, patience=10 ** 9, factor=0.999999)
+

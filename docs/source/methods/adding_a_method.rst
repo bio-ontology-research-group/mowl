@@ -140,3 +140,26 @@ If the paper reports results on a benchmark of :mod:`mowl.benchmarks`, add them 
 objects, with the table number as ``locator`` and the stated hyperparameters as
 ``settings``. Record only numbers read from the publication itself. If the paper uses a
 benchmark mOWL does not have yet, add it to ``mowl/benchmarks/entries/``.
+
+6. Recipe and reproduction
+--------------------------
+
+A published number depends on how the paper's *code* trained and tested, which is often
+not what the paper's text or mOWL's defaults do. If the method has published results:
+
+* Read the reference code and write down its training design: meaning of the margin,
+  negatives (which columns, how many, redrawn or fixed), what a step is, schedule, model
+  selection. Read its evaluation: score, candidates, filtering, ties.
+* Express each difference from mOWL's defaults as a training regime, an evaluation regime,
+  or an argument of one. Do not add a flag to the model for it. A design that belongs to
+  one code base is a named composition in :mod:`mowl.training.reference` (for example
+  :class:`mowl.training.Box2ELCodeTraining`), with a ``RegimeCard``.
+* Add a :class:`mowl.benchmarks.Recipe` in ``mowl/benchmarks/recipe_sets/<source>.py``:
+  model arguments, training regime with its arguments, and epochs. Modules of that package
+  are discovered automatically and expose ``RECIPES``.
+* If the reference code has a defect that the published number depends on, mOWL's default
+  is the correct behaviour and the recipe names the option that gives the published one.
+  Say so in the recipe's ``notes`` and on the card.
+* Run the recipe (``python -m mowl.benchmarks run <benchmark> --method <key> --recipe``)
+  with three seeds and record the outcome in ``docs/source/benchmarks/reproduction.rst``.
+  Never tune on the test set, and state the number of seeds.

@@ -67,6 +67,12 @@ def _write(path, iri, lines):
     os.replace(tmp, path)
 
 
+#: The released ANATOMY ontology contains role chains with no roles
+#: (``SubObjectPropertyOf(ObjectPropertyChain( ) R)``), which are not OWL and make the
+#: file unparsable; such lines are dropped.
+_EMPTY_CHAIN = re.compile(r"ObjectPropertyChain\(\s*\)")
+
+
 class EmELppSubsumptionDataset(PathDataset):
     """The 70/20/10 subsumption split of EmEL++ for GALEN, GO or ANATOMY.
 
@@ -112,7 +118,7 @@ class EmELppSubsumptionDataset(PathDataset):
                         m = _ATOMIC_SUBCLASS.match(line.strip())
                         if m and (m.group(1), m.group(2)) in held_out:
                             continue
-                        if line.strip():
+                        if line.strip() and not _EMPTY_CHAIN.search(line):
                             yield line
             _write(out["ontology.owl"], iri + "/train", train_lines())
             for name, src in (("valid.owl", valid), ("test.owl", test)):
