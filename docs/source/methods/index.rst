@@ -37,6 +37,7 @@ relevant published methods it does not implement, with the reason.
    grounded
    temporal_cones
    attributed_dl
+   kg_region
 
 
 Representation, training and evaluation

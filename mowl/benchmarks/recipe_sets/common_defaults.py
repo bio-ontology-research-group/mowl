@@ -59,6 +59,11 @@ _DEFAULTS = {
     "canonical_mixture": {"model_kwargs": {}, "epochs": 500},
     "grounded": {"model_kwargs": {}, "epochs": 500},
     "graph_kge": {"model_kwargs": {"embed_dim": 200}, "epochs": 100},
+    # region-based KGEs of the projection (PyKEEN loop) and the two-view box model
+    "boxe": {"model_kwargs": {"embed_dim": 200}, "epochs": 100},
+    "expressive": {"model_kwargs": {"embed_dim": 200}, "epochs": 100},
+    "reshuffle": {"model_kwargs": {}, "epochs": 50},
+    "concept2box": {"model_kwargs": {"embed_dim": 50}, "epochs": 500},
     # Word2Vec on walks or on a corpus, scored with the pair classifier head
     "dl2vec": {"model_kwargs": {"embed_dim": 100}, "epochs": 10},
     "owl2vec_star": {"model_kwargs": {"embed_dim": 100}, "epochs": 10},
