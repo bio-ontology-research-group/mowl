@@ -35,7 +35,20 @@ For :math:`\mathcal{EL}^{++}` subsumption prediction, mOWL provides the GALEN, G
 
 The training ontologies also contain :math:`\mathcal{EL}^{++}` role inclusion and role chain axioms. Models built on top of :class:`EmbeddingELModel <mowl.base_models.EmbeddingELModel>` train on them when constructed with ``load_role_axioms=True`` and their module implements the two role axiom losses (see :doc:`the EL guide </embedding_el/index>`).
 
-The axioms and the split are the frozen release of the reference benchmark, which distributes
+.. warning::
+
+   In the reference release, the helper classes that the normalisation introduced carry the
+   IRIs of existing, unrelated classes of the same ontology (`issue 178
+   <https://github.com/bio-ontology-research-group/mowl/issues/178>`_). Read as ontologies,
+   the released files therefore entail nonsense: 25,710 of the classes of the GO training
+   ontology and 74,917 of Anatomy are unsatisfiable. By default mOWL gives every such
+   helper an IRI of its own (``repaired=True``); the axioms, their number and the split
+   are unchanged, and 19 (GO), 0 (GALEN) and 22 (Anatomy) unsatisfiable classes remain.
+   ``GALENJackermeier2024Dataset(repaired=False)`` serves the release as it is. The
+   benchmarks that reproduce published numbers (``box2el-*``, ``transbox-*``, ``regd-*``)
+   use the release; the joint ``common-*`` benchmarks use the repaired data.
+
+The axioms and the split are those of the release of the reference benchmark, which distributes
 them as integer-indexed splits plus the class and relation index files; mOWL serves the same
 axioms serialized as OWL. The terms of the underlying ontologies and of the reference
 benchmark apply to this redistribution.

@@ -21,6 +21,11 @@ class RandomWalkPlusW2VModel(RandomWalkModel):
     Embedding model that combines graph projections + random walks.
     """
     
+    # Word2Vec gives one vector per class; an asymmetric axiom score needs a scoring head
+    # (mowl.evaluation.model_scoring.PairClassifierHead).
+    axiom_scoring = "vectors"
+    scored_forms = ("gci0", "gci2")
+
     def __init__(self, *args, **kwargs):
         super(RandomWalkPlusW2VModel, self).__init__(*args, **kwargs)
 

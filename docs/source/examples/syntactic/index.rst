@@ -15,7 +15,7 @@ Syntactic models
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper Onto2Vec: joint vector-based representation of biological entities and their ontology-based annotations. ">
+    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper Onto2Vec: joint vector-based representation of biological...">
 
 .. only:: html
 
@@ -32,7 +32,7 @@ Syntactic models
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper OPA2Vec: combining formal and informal content of biomedical ontologies to improve similarity-based prediction. ">
+    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper OPA2Vec: combining formal and informal content of biomedi...">
 
 .. only:: html
 

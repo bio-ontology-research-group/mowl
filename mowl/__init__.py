@@ -4,8 +4,21 @@ import os
 import platform
 
 
-def init_jvm(memory):
+def init_jvm(memory, extra_classpath=None):
+    """Start the JVM with the JAR files that mOWL packages on the class path.
+
+    :param memory: Maximum heap size, e.g. ``"4g"``.
+    :param extra_classpath: Further JAR files (a path or a list of paths) to put on the
+        class path, for example an additional reasoner (see :mod:`mowl.reasoning`). The
+        environment variable ``MOWL_EXTRA_CLASSPATH`` (paths separated by the system path
+        separator) is added as well. The class path can only be set before the JVM starts.
+    """
     dirname = os.path.dirname(__file__)
+    extra = []
+    if extra_classpath:
+        extra += [extra_classpath] if isinstance(extra_classpath, str) else list(
+            extra_classpath)
+    extra += [p for p in os.environ.get("MOWL_EXTRA_CLASSPATH", "").split(os.pathsep) if p]
 
     jars_dir = os.path.join(dirname, "lib/")
     if not os.path.exists(jars_dir):
@@ -16,6 +29,9 @@ and contains the JAR dependencies.")
         jars = f'{str.join(";", [jars_dir + name for name in os.listdir(jars_dir)])}'
     else:
         jars = f'{str.join(":", [jars_dir + name for name in os.listdir(jars_dir)])}'
+
+    if extra:
+        jars = os.pathsep.join([jars] + extra)
 
     if not jpype.isJVMStarted():
 

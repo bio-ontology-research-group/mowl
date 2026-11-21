@@ -5,15 +5,39 @@ import mowl
 from mowl.datasets import PathDataset, default_data_root
 from mowl.datasets.base import OWLClasses
 
-# The builtin datasets that conftest downloads land in the user-level cache, not
-# in the working directory, so resolve every path against the same root instead
-# of assuming pytest runs from the repository root.
+# The builtin datasets land in the user-level cache, not in the working
+# directory, so resolve every path against the same root instead of assuming
+# pytest runs from the repository root. When a test requests a cached file that
+# has not yet been downloaded/extracted into DATA_ROOT, fetch it lazily on
+# demand rather than eagerly instantiating every dataset in conftest.py.
 DATA_ROOT = default_data_root()
+
+_BUILTIN_LOADERS = {
+    "family": "FamilyDataset",
+    "gda_human": "GDAHumanDataset",
+    "gda_human_el": "GDAHumanELDataset",
+    "gda_mouse": "GDAMouseDataset",
+    "gda_mouse_el": "GDAMouseELDataset",
+    "ppi_yeast": "PPIYeastDataset",
+    "ppi_yeast_slim": "PPIYeastSlimDataset",
+    "ppi_human": "PPIHumanDataset",
+    "hpi": "HPIDataset",
+    "go_subsumption": "GOSubsumptionDataset",
+    "foodon_subsumption": "FoodOnSubsumptionDataset",
+    "gda2": "GDADatasetV2",
+}
 
 
 def data_path(*parts):
-    """Path of a file inside the dataset cache."""
-    return os.path.join(DATA_ROOT, *parts)
+    """Path of a file inside the dataset cache, downloading lazily if missing."""
+    path = os.path.join(DATA_ROOT, *parts)
+    if not os.path.exists(path) and parts:
+        top_dir = parts[0].split("/")[0]
+        cls_name = _BUILTIN_LOADERS.get(top_dir)
+        if cls_name is not None:
+            from mowl.datasets import builtin
+            getattr(builtin, cls_name)()
+    return path
 
 
 class FamilyDataset(PathDataset):

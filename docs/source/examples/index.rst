@@ -35,7 +35,7 @@ Models embeddings the :math:`\mathcal{EL}` language
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper EL Embeddings: Geometric Construction of Models for the Description Logic EL++.">
+    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper EL Embeddings: Geometric Construction of Models for the D...">
 
 .. only:: html
 
@@ -52,7 +52,7 @@ Models embeddings the :math:`\mathcal{EL}` language
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This example is based on the paper Description Logic EL++ Embeddings with Intersectional Closure. This paper is based on the idea of /examples/elmodels/plot_1_elembeddings, but in this work the main point is to solve the intersectional closure problem.">
+    <div class="sphx-glr-thumbcontainer" tooltip="This example is based on the paper Description Logic EL++ Embeddings with Intersectional Closur...">
 
 .. only:: html
 
@@ -69,7 +69,7 @@ Models embeddings the :math:`\mathcal{EL}` language
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="All three geometric EL models embed ontology classes as 2-D shapes when trained with embed_dim=2, letting us watch the geometry evolve directly — no dimensionality reduction needed.">
+    <div class="sphx-glr-thumbcontainer" tooltip="All three geometric EL models embed ontology classes as 2-D shapes when trained with embed_dim=...">
 
 .. only:: html
 
@@ -81,6 +81,23 @@ Models embeddings the :math:`\mathcal{EL}` language
 .. raw:: html
 
       <div class="sphx-glr-thumbnail-title">Geometric EL Embeddings: Training Animation</div>
+    </div>
+
+
+.. raw:: html
+
+    <div class="sphx-glr-thumbcontainer" tooltip="Axis-aligned boxes satisfy Helly&#x27;s theorem: in \mathbb{R}^d, if every pair among k boxes has a ...">
+
+.. only:: html
+
+  .. image:: /examples/elmodels/images/thumb/sphx_glr_plot_4_multibox_structural_tk_thumb.png
+    :alt:
+
+  :ref:`sphx_glr_examples_elmodels_plot_4_multibox_structural_tk.py`
+
+.. raw:: html
+
+      <div class="sphx-glr-thumbnail-title">Witness-Point Structural Training on the Helly Counterexample T_k</div>
     </div>
 
 
@@ -103,7 +120,7 @@ Graph-based models
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper Predicting candidate genes from phenotypes, functions and anatomical site of expression. ">
+    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper Predicting candidate genes from phenotypes, functions and...">
 
 .. only:: html
 
@@ -137,7 +154,7 @@ Syntactic models
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper Onto2Vec: joint vector-based representation of biological entities and their ontology-based annotations. ">
+    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper Onto2Vec: joint vector-based representation of biological...">
 
 .. only:: html
 
@@ -154,7 +171,7 @@ Syntactic models
 
 .. raw:: html
 
-    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper OPA2Vec: combining formal and informal content of biomedical ontologies to improve similarity-based prediction. ">
+    <div class="sphx-glr-thumbcontainer" tooltip="This example corresponds to the paper OPA2Vec: combining formal and informal content of biomedi...">
 
 .. only:: html
 

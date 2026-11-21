@@ -226,4 +226,94 @@ def reg_loss(bump, reg_factor):
     return reg_loss
 
 
+# ---------------------------------------------------------------------------------------
+# Negative losses of DELE (Mashkova et al., "DELE: Deductive EL++ Embeddings for Knowledge
+# Base Completion", Section 4.3, Eqs. 13-18). Used only when the module was built with
+# ``all_negative_losses=True`` (see BoxSquaredELModule). As in the paper, Eqs. 13-17 are
+# not squared (the positive Box2EL losses are).
+# ---------------------------------------------------------------------------------------
+
+def _boxes(data, class_center, class_offset, cols):
+    return [(class_center(data[:, i]), th.abs(class_offset(data[:, i]))) for i in cols]
+
+
+def gci0_loss_neg(data, class_center, class_offset, gamma):
+    """Eq. 13, :math:`A \\not\\sqsubseteq B`: ``‖relu(-(d(A, B) + γ))‖``, zero iff
+    ``d(A, B) >= -γ`` in every dimension."""
+    box_c, box_d = _boxes(data, class_center, class_offset, (0, 1))
+    return th.linalg.norm(th.relu(-(box_distance(box_c, box_d) + gamma)), dim=1)
+
+
+def gci1_loss_neg(data, class_center, class_offset, gamma):
+    """Eq. 14, :math:`A \\sqcap B \\not\\sqsubseteq E`: Eq. 13 between
+    ``Box(A) ∩ Box(B)`` and ``Box(E)``, plus (as in the reference code, which adds a
+    term the paper's Eq. 14 omits) the distance of the intersection box from being
+    non-empty."""
+    box_c, box_d, box_e = _boxes(data, class_center, class_offset, (0, 1, 2))
+    inter, lower, upper = box_intersection(box_c, box_d)
+    return (th.linalg.norm(th.relu(-(box_distance(inter, box_e) + gamma)), dim=1)
+            + th.linalg.norm(th.relu(lower - upper), dim=1))
+
+
+def gci0_bot_loss_neg(data, class_offset, epsilon):
+    """Eq. 15, :math:`A \\not\\sqsubseteq \\bot`: zero iff ``‖o(A)‖ >= epsilon``."""
+    return th.relu(epsilon - th.linalg.norm(th.abs(class_offset(data[:, 0])), dim=1))
+
+
+def gci1_bot_loss_neg(data, class_center, class_offset, epsilon):
+    """Eq. 16, :math:`A \\sqcap B \\not\\sqsubseteq \\bot`: zero iff
+    ``‖o(Box(A) ∩ Box(B))‖ >= epsilon`` (offset ``|upper - lower| / 2``)."""
+    box_c, box_d = _boxes(data, class_center, class_offset, (0, 1))
+    (_, off), _, _ = box_intersection(box_c, box_d)
+    return th.relu(epsilon - th.linalg.norm(off, dim=1))
+
+
+def gci3_bot_loss_neg(data, class_offset, epsilon):
+    """Eq. 17, :math:`\\exists r.A \\not\\sqsubseteq \\bot`: zero iff ``‖o(A)‖ >= epsilon``
+    (the offset of the filler class A, as written in the paper)."""
+    return th.relu(epsilon - th.linalg.norm(th.abs(class_offset(data[:, 1])), dim=1))
+
+
+def gci3_loss_neg(data, class_center, class_offset, head_center, head_offset, bump, gamma,
+                  delta):
+    """Eq. 18, :math:`\\exists r.A \\not\\sqsubseteq B`:
+    ``(δ - µ(Head(r) - Bump(A), Box(B)))^2`` with ``µ(X, Y) = ‖relu(d(X, Y) + γ)‖``; zero
+    iff that minimal distance equals ``δ``."""
+    center_d = class_center(data[:, 2])
+    off_d = th.abs(class_offset(data[:, 2]))
+    center_head = head_center(data[:, 0])
+    offset_head = th.abs(head_offset(data[:, 0]))
+    bumped_head = (center_head - bump(data[:, 1]), offset_head)
+    min_dist = th.linalg.norm(th.relu(box_distance(bumped_head, (center_d, off_d)) + gamma),
+                              dim=1)
+    return (delta - min_dist).square()
+
+
+def _role_boxes(data, column, head_center, head_offset, tail_center, tail_offset):
+    index = data[:, column]
+    return ((head_center(index), th.abs(head_offset(index))),
+            (tail_center(index), th.abs(tail_offset(index))))
+
+
+def role_inclusion_loss(data, head_center, head_offset, tail_center, tail_offset, gamma):
+    """Loss of the role inclusion :math:`r \\sqsubseteq s` (Jackermeier et al., 2024,
+    Section 4.2): the head box of ``r`` is included in the head box of ``s`` and the tail
+    box of ``r`` in the tail box of ``s``; the mean of the two inclusion losses, as
+    ``BoxSquaredEL.role_inclusion_loss`` of the reference code."""
+    r_head, r_tail = _role_boxes(data, 0, head_center, head_offset, tail_center, tail_offset)
+    s_head, s_tail = _role_boxes(data, 1, head_center, head_offset, tail_center, tail_offset)
+    loss = (inclusion_score(r_head, s_head, gamma) + inclusion_score(r_tail, s_tail, gamma)) / 2
+    return loss.reshape(-1, 1)
+
+
+def role_chain_loss(data, head_center, head_offset, tail_center, tail_offset, gamma):
+    """Loss of the role chain :math:`r_1 \\circ r_2 \\sqsubseteq s` (Jackermeier et al.,
+    2024, Section 4.2): the head box of ``r1`` is included in the head box of ``s`` and the
+    tail box of ``r2`` in the tail box of ``s``; the mean of the two inclusion losses, as
+    ``BoxSquaredEL.role_chain_loss`` of the reference code."""
+    r1_head, _ = _role_boxes(data, 0, head_center, head_offset, tail_center, tail_offset)
+    _, r2_tail = _role_boxes(data, 1, head_center, head_offset, tail_center, tail_offset)
+    s_head, s_tail = _role_boxes(data, 2, head_center, head_offset, tail_center, tail_offset)
+    loss = (inclusion_score(r1_head, s_head, gamma) + inclusion_score(r2_tail, s_tail, gamma)) / 2
+    return loss.reshape(-1, 1)
 
