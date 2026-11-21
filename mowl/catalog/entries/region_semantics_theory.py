@@ -107,16 +107,25 @@ FAITHEL = MethodCard(
     concepts="union of intervals (non-convex) or convex hull of element vectors (convex)",
     roles="union of regions in R^2 / convex hull of concatenated vectors",
     individuals="point",
-    expressivity="ELH⊥",
-    tasks=("subsumption", "satisfiability", "disjointness",),
-    status=Status.CONSTRUCTIVE,
+    expressivity="ELH⊥ with ABox",
+    tasks=("subsumption", "instance-checking", "role-assertion"),
+    status=Status.LEARNABLE,
     origin=Origin.REIMPLEMENTATION,
-    implementation="mowl.geometric.faithfulness.StronglyFaithfulModel",
+    implementation="mowl.models.faithel.model.FaithEL",
+    code_url="https://github.com/victorlacerdab/FaithEL_method",
     related=("interval_union", "convex_polyhedral", "convex_regions"),
     limitations=(
-        "Only the constructions of the TGDK article are implemented. The FaithEL learning "
-        "procedure (RuleML+RR 2024) is not: that paper could not be obtained and no code "
-        "was located, so nothing is trained and no FaithEL numbers are reproduced.",
+        "The learning model (mowl.models.faithel.FaithEL) follows the authors' public code; "
+        "the RuleML+RR 2024 paper text could not be obtained, so details stated only in the "
+        "paper are unchecked and no FaithEL numbers are reproduced. The TBox is not learned: "
+        "it is the fixed convex construction "
+        "(mowl.geometric.faithfulness.StronglyFaithfulModel), the ABox is learned.",
+        "The code trains on concept and role assertions with a mean-squared-error loss and "
+        "uniformly drawn negatives (not filtered against true assertions); mOWL keeps this "
+        "as the default. Individuals live in dimension n - 1 (n canonical elements), so the "
+        "embedding dimension is not a free parameter and grows with the ontology. "
+        "TBox scores are 0 or 1 (the axiom holds in the fixed geometry or not), so ranking "
+        "TBox candidates yields ties.",
         "The non-convex construction is the 1-dimensional one (the article proves it for "
         "every dimension m >= 1; mOWL builds m = 1).",
         "Strong faithfulness is tested for TBox and RBox axioms of the forms A <= B, "
@@ -168,8 +177,8 @@ FAITHEL = MethodCard(
             "191-199."),
     ),
     notes=(
-        "The FaithEL paper itself was not read; only the TGDK article's constructions are "
-        "implemented. Strong TBox faithfulness needs the canonical model of Definition 26, "
+        "The FaithEL paper itself was not read; the model is implemented from the authors' "
+        "code and the TGDK article. Strong TBox faithfulness needs the canonical model of Definition 26, "
         "which has an element for every conjunction of two names and every existential "
         "restriction; mOWL's CanonicalModel (one element per name) is faithful on concept "
         "names only, so StronglyFaithfulModel adds the missing elements as fresh names "

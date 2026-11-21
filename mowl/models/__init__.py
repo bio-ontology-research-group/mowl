@@ -16,6 +16,7 @@ from mowl.models.multiboxel.model import MultiBoxEL
 from mowl.models.grounded.model import GroundedEL
 from mowl.models.prism.model import PrismEL
 from mowl.models.canonical_mixture.model import CanonicalMixture
+from mowl.models.faithel.model import FaithEL
 
 from mowl.models.transbox.model import TransBox
 

@@ -41,6 +41,7 @@ relevant published methods it does not implement, with the reason.
    hyperbolic_cones
    shadow_cones
    disk_embeddings
+   faithel
 
 
 Representation, training and evaluation

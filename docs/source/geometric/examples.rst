@@ -180,7 +180,7 @@ model:
    assert cm.entails(NS + "A", NS + "X1") and cm.entails(NS + "A", NS + "X2")
    assert not cm.joint_satisfiable((NS + "X1", NS + "X2", NS + "X3"))
 
-   # 2. 1-D interval-union model is an exact, non-degenerate, strongly faithful model
+   # 2. 1-D interval-union model is an exact, non-degenerate model, faithful on concept names
    ivl = IntervalUnionModel.from_canonical_model(cm)
    assert ivl.is_model()
    assert ivl.is_nondegenerate()

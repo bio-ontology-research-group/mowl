@@ -48,10 +48,25 @@ CANONICAL_MODEL = MethodCard(
             condition="by construction, ELH⊥ fragment"),
         Guarantee(
             K.STRONG_FAITHFULNESS,
-            "For a normalised ELH ontology, the canonical model satisfies a CI or IQ in "
-            "normal form, or an RI, over the signature iff it is entailed.",
-            "lacerda2024, Theorem 27 (for the canonical model of Definition 26)",
-            condition="by construction, ELH"),
+            "mOWL's canonical model (one element per concept name) satisfies every "
+            "entailed axiom, and A ⊑ B and A ⊑ ∃r.B exactly when they are entailed (tested "
+            "on small ontologies). It also satisfies some non-entailed A ⊓ B ⊑ C, ∃r.A ⊑ B "
+            "and r ⊑ s, so the full statement of Theorem 27 does not hold for it.",
+            "lacerda2024, Theorem 27 (restricted: mOWL's model is smaller than Definition 26)",
+            condition="by construction for A ⊑ B; tested for A ⊑ ∃r.B",
+            verified_in_mowl="tests/geometric/test_faithfulness.py::TestStrongFaithfulness::"
+                             "test_name_only_canonical_model_is_faithful_only_on_some_forms"),
+        Guarantee(
+            K.STRONG_FAITHFULNESS,
+            "The canonical model of Definition 26 (extra elements for every conjunction of two "
+            "names and every existential restriction), built by "
+            "mowl.geometric.faithfulness.StronglyFaithfulModel, satisfies A ⊑ B, "
+            "A ⊓ B ⊑ C, A ⊑ ∃r.B, ∃r.A ⊑ B and r ⊑ s over the signature iff they are "
+            "entailed (tested on small ELH⊥ ontologies).",
+            "lacerda2024, Theorem 27 and Theorems 28, 32",
+            condition="by construction, ELH",
+            verified_in_mowl="tests/geometric/test_faithfulness.py::TestStrongFaithfulness::"
+                             "test_both_constructions_are_strongly_tbox_faithful"),
     ),
     limitations=(
         "Unsupported ABox axioms (complex class assertions, same/different individuals, "
@@ -63,8 +78,8 @@ CANONICAL_MODEL = MethodCard(
         "The soundness and completeness statement is taken from the mOWL geometric "
         "documentation, which cites Kazakov et al. (2014); it is checked in mOWL by a "
         "differential test against the ELK reasoner. mOWL's canonical model is not "
-        "literally Definition 26 of Lacerda et al., whose Theorem 27 is recorded for the "
-        "ELH case."),
+        "literally Definition 26 of Lacerda et al. (see the guarantees above); "
+        "StronglyFaithfulModel builds Definition 26."),
 )
 
 CONVEX_POLYHEDRAL = MethodCard(
@@ -100,7 +115,8 @@ CONVEX_POLYHEDRAL = MethodCard(
             K.STRONG_FAITHFULNESS,
             "Strongly faithful on concept names: η(A) ⊆ η(B) iff O ⊨ A ⊑ B (the "
             "construction realises the canonical model, φ(η) = M).",
-            "gutierrez2018, Proposition 3; lacerda2024, Theorem 32 (convex, ELH)",
+            "gutierrez2018, Proposition 3 (Theorem 32 of lacerda2024 needs the larger Definition 26 "
+            "model: see card faithel)",
             condition="by construction"),
         Guarantee(
             K.COMPLETENESS,
@@ -170,11 +186,16 @@ INTERVAL_UNION = MethodCard(
                              "faithful_models"),
         Guarantee(
             K.STRONG_FAITHFULNESS,
-            "The geometric interpretation of the canonical model is strongly IQ- and "
-            "TBox-faithful; ELH has the strong faithfulness property over m-dimensional "
-            "geometric interpretations for every m ≥ 1.",
+            "The geometric interpretation of the canonical model of Definition 26 is strongly "
+            "IQ- and TBox-faithful; ELH has the strong faithfulness property over "
+            "m-dimensional geometric interpretations for every m ≥ 1. This card's class "
+            "uses mOWL's smaller canonical model, for which only concept-name subsumption "
+            "is exact; the faithful model is mowl.geometric.faithfulness.StronglyFaithfulModel "
+            "(regions=\"intervals\", m = 1).",
             "lacerda2024, Theorem 16 and Corollary 17",
-            condition="by construction"),
+            condition="by construction (Definition 26 model)",
+            verified_in_mowl="tests/geometric/test_faithfulness.py::TestStrongFaithfulness::"
+                             "test_both_constructions_are_strongly_tbox_faithful"),
         Guarantee(
             K.COMPLETENESS,
             "Every satisfiable ELHO(∘) ontology has a multibox model in R^n for every n; "

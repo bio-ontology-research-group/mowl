@@ -116,10 +116,25 @@ class TestStrongFaithfulness(TestCase):
         rep = check_strong_faithfulness(ConvexPolyhedralModel.from_canonical_model(t3), t3)
         self.assertTrue(any(isinstance(x, NF2) for x in rep.unsound))
 
-    def test_candidates_cover_all_forms(self):
-        cm = _cms()[1][1]
-        kinds = {type(x).__name__ for x in candidate_axioms(cm)}
-        self.assertEqual(kinds, {"NF1", "NF2", "NF3", "NF4", "NF6"})
+    def test_name_only_canonical_model_is_faithful_only_on_some_forms(self):
+        """Regression for the counter-example: with one element per name, A and Z <= B (A, Z
+        unrelated) holds vacuously. Over all tested ontologies and both region families the
+        model satisfies every entailed axiom, never satisfies a non-entailed A <= B or
+        A <= exists r.B, but does satisfy non-entailed A and B <= C, exists r.A <= B and
+        r <= s."""
+        from collections import Counter
+        from mowl.geometric.intervals import IntervalUnionModel
+        wrong = Counter()
+        for label, no in _nos() + _random_nos():
+            cm = CanonicalModel.from_normalised(no)
+            for cls in (ConvexPolyhedralModel, IntervalUnionModel):
+                rep = check_strong_faithfulness(cls.from_canonical_model(cm), cm)
+                self.assertEqual(rep.incomplete, [], (label, cls))
+                wrong.update(type(x).__name__ for x in rep.unsound)
+        self.assertEqual(wrong["NF1"], 0)
+        self.assertEqual(wrong["NF3"], 0)
+        self.assertGreater(wrong["NF2"], 0)
+        self.assertGreater(wrong["NF4"], 0)
 
 
 class TestConvexRegionModel(TestCase):
