@@ -545,6 +545,10 @@ def run_benchmark(benchmark, method=None, model_factory=None, model_kwargs=None,
     elif getattr(model, "training_regime", None) is not None:
         regime = model.training_regime
 
+    initialise = getattr(protocol, "initialise_model", None)
+    if initialise is not None:
+        initialise(model, dataset)
+
     train_info = family.train(model, epochs, protocol, validate_every=validate_every,
                               select_best=select_best)
     t_train = time.time()

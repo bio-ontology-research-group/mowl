@@ -32,6 +32,12 @@ class EvaluationRegime:
         restrict the evaluation classes). Returns the dataset to train on."""
         return dataset
 
+    def initialise_model(self, model, dataset):
+        """Hook called once on the built, untrained model before training (after a
+        training regime, if any, is attached). A regime whose task fixes part of the
+        starting point of the model uses it: the masked grounding of the DF-ALC revision
+        task, the probabilistic conditionals of the BoxSEL task. Default: nothing."""
+
     def evaluate(self, model, dataset):
         """Evaluate ``model``, already trained on ``dataset``.
 
