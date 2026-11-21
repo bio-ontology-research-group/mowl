@@ -491,3 +491,55 @@ The tables below are generated from the registry
 (:func:`mowl.benchmarks.report.published_to_rst`).
 
 .. include:: _published.rst
+
+Logical query answering benchmarks
+----------------------------------
+
+The ``query-<kg>-betae`` and ``query-<kg>-q2b`` benchmarks (``kg`` is ``fb15k``,
+``fb15k237`` or ``nell995``) are the released query sets of BetaE and Query2Box, on which
+Query2Box, BetaE, ConE and AConE report their results. ``query-wn18rr-qa`` is the
+WN18RR-QA set that AConE adds; mOWL does not download it (pass the directory as
+``dataset_kwargs={"data_dir": ...}``).
+
+The dataset (:class:`mowl.datasets.builtin.query_sets.QueryAnsweringDataset`) downloads the
+archive ``KG_data.zip`` (1.4 GB, checksum pinned) once and converts it. The training graph is
+an ontology of axioms :math:`h \sqsubseteq \exists r.t` between entity classes; the released
+validation and test queries, with easy and hard answers and including the negation
+structures 2in, 3in, inp, pin, pni and the unions 2u, up, are read with the entity and
+relation ids of the model that is evaluated, and ranked by
+:class:`mowl.evaluation.ReleasedQueryAnswering`, which reports one subset per structure and
+the averages ``average_epfo`` and ``average_negation`` that the papers print.
+
+.. testcode::
+
+   from mowl.benchmarks import get_benchmark, get_recipe, published_results
+
+   b = get_benchmark("query-nell995-betae")
+   print(b.assumption.value, b.target.value)
+   print(b.subsets)
+   recipe = get_recipe("query-nell995-betae", "acone")
+   print(recipe.model_kwargs["queries"], recipe.epochs * recipe.model_kwargs["steps_per_epoch"])
+   print([r.metrics for r in published_results("query-nell995-betae", "acone", "3i")])
+
+.. testoutput::
+
+   closed world over stated axioms inductive prediction
+   ('1p', '2p', '3p', '2i', '3i', 'pi', 'ip', '2u', 'up', '2in', '3in', 'inp', 'pin', 'pni', 'average_epfo', 'average_negation', 'average')
+   released 300000
+   [{'mrr': 0.53}]
+
+These benchmarks are **closed world with negation as absence**
+(:class:`mowl.logic.WorldAssumption` ``CLOSED_STATED``): the answers of a query are those
+in the graph of stated edges, an entity that no stated edge makes an answer of :math:`q` is
+an answer of :math:`\neg q`, and a hidden complete graph defines which answers are
+"correct". A reasoner over an open world would give a negated query almost no answers.
+
+The recipes train on the **released training queries** (``queries="released"``), as the
+four papers do, not on queries that mOWL samples from the graph. Both are options of
+:class:`~mowl.models.query.model.QueryEmbeddingModel`; the sampler is the default because it works
+on any ontology.
+
+.. code-block:: bash
+
+   python -m mowl.benchmarks run query-nell995-betae --method cone_qe --recipe \
+       --seed 0 --device cuda --out nell_cone_s0.json

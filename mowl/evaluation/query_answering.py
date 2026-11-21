@@ -32,8 +32,13 @@ import numpy as np
 from mowl.evaluation.regime import EvaluationRegime
 
 _1P = ("e", ("r",))
+_1PN = ("e", ("r", "n"))
 
-#: The query structures of the Query2Box / BetaE benchmarks, by their usual names.
+#: The query structures of the Query2Box / BetaE benchmarks, by their usual names. In an
+#: instance, ``"n"`` is a negation (id ``-2``) and ``("u",)`` a union (id ``-1``).
+#: ``2u-DM`` and ``up-DM`` are the unions written with De Morgan's law (negations of
+#: intersections of negations), the form BetaE's code evaluates for its "DM" variant; the
+#: answers are those of ``2u`` and ``up``.
 QUERY_STRUCTURES = {
     "1p": _1P,
     "2p": ("e", ("r", "r")),
@@ -44,6 +49,20 @@ QUERY_STRUCTURES = {
     "pi": (("e", ("r", "r")), _1P),
     "2u": (_1P, _1P, ("u",)),
     "up": ((_1P, _1P, ("u",)), ("r",)),
+    "2in": (_1P, _1PN),
+    "3in": (_1P, _1P, _1PN),
+    "inp": ((_1P, _1PN), ("r",)),
+    "pin": (("e", ("r", "r")), _1PN),
+    "pni": (("e", ("r", "r", "n")), _1P),
+    "2u-DM": ((_1PN, _1PN), ("n",)),
+    "up-DM": ((_1PN, _1PN), ("n", "r")),
+}
+
+#: The groups of structures whose averages the literature reports separately: the nine
+#: positive (existential positive first-order) structures and the five with negation.
+STRUCTURE_GROUPS = {
+    "epfo": ("1p", "2p", "3p", "2i", "3i", "ip", "pi", "2u", "up"),
+    "negation": ("2in", "3in", "inp", "pin", "pni"),
 }
 
 TIES = ("average", "optimistic", "pessimistic")
@@ -52,7 +71,7 @@ TIES = ("average", "optimistic", "pessimistic")
 def _is_chain(structure):
     return (isinstance(structure, tuple) and len(structure) == 2
             and isinstance(structure[1], tuple) and len(structure[1]) > 0
-            and all(x == "r" for x in structure[1]))
+            and all(isinstance(x, str) and x in ("r", "n") for x in structure[1]))
 
 
 def _is_union(structure):
@@ -82,28 +101,39 @@ class Graph:
         return result
 
 
-def answer_query(structure, query, graph):
+def answer_query(structure, query, graph, universe=None):
     """The exact answers of ``query`` (an instance of ``structure``) on ``graph``.
 
+    A negation (``"n"`` in a chain, id ``-2`` in the instance) is the complement in
+    ``universe``: closed world, an entity that no stated edge makes an answer is an answer of
+    the negation.
+
     :param graph: A :class:`Graph` or an array of ``(head, role, tail)`` rows.
+    :param universe: All entities, needed for structures with negation (default: the
+        entities that occur in ``graph``).
     :rtype: set of int
     """
     if not isinstance(graph, Graph):
         graph = Graph(graph)
+    if universe is None:
+        universe = {h for h, _, _ in graph.triples} | {t for _, _, t in graph.triples}
     if _is_chain(structure):
         if structure[0] == "e":
             current = {int(query[0])}
         else:
-            current = answer_query(structure[0], query[0], graph)
-        for role in query[1]:
-            current = graph.project(current, int(role))
+            current = answer_query(structure[0], query[0], graph, universe)
+        for op, role in zip(structure[1], query[1]):
+            if op == "n":
+                current = set(universe) - current
+            else:
+                current = graph.project(current, int(role))
         return current
     if _is_union(structure):
         result = set()
         for sub, q in zip(structure[:-1], query[:-1]):
-            result |= answer_query(sub, q, graph)
+            result |= answer_query(sub, q, graph, universe)
         return result
-    parts = [answer_query(sub, q, graph) for sub, q in zip(structure, query)]
+    parts = [answer_query(sub, q, graph, universe) for sub, q in zip(structure, query)]
     return set.intersection(*parts) if parts else set()
 
 
@@ -168,6 +198,10 @@ def sample_queries(known, complete, structures=("1p", "2p", "2i"), num_queries=1
     complete_graph = Graph(np.concatenate([known, complete], axis=0))
     if not isinstance(structures, dict):
         structures = {name: QUERY_STRUCTURES[name] for name in structures}
+    negated = sorted(n for n, st in structures.items() if "'n'" in repr(st))
+    if negated:
+        raise ValueError(f"Queries with negation ({negated}) cannot be sampled here; read "
+                         f"them from a released query dataset.")
     rng = np.random.default_rng(seed)
     entities = sorted({h for h, _, _ in complete_graph.triples}
                       | {t for _, _, t in complete_graph.triples})
@@ -213,13 +247,18 @@ class LogicalQueryAnswering(EvaluationRegime):
         (default), ``"optimistic"`` or ``"pessimistic"``. Region-based scores tie often
         (all individuals outside the query region), so ``"optimistic"`` overstates.
     :param batch_size: Queries scored per call of ``model.score_query``.
+    :param groups: ``{group: [structure names]}``; every group adds a subset
+        ``"average_<group>"``, the mean over the group's structures that have queries.
+        :data:`STRUCTURE_GROUPS` gives the groups of the literature (the "AVG" columns of the
+        papers: ``epfo`` for the nine positive structures, ``negation`` for the five with
+        negation).
     :param score_kwargs: Extra keyword arguments for ``model.score_query``.
     """
 
     key = "query-answering"
 
     def __init__(self, queries, structures=None, hits=(1, 3, 10), ties="average",
-                 batch_size=256, score_kwargs=None):
+                 batch_size=256, score_kwargs=None, groups=None):
         if ties not in TIES:
             raise ValueError(f"ties must be one of {TIES}.")
         self.queries = {name: list(qs) for name, qs in queries.items()}
@@ -233,15 +272,20 @@ class LogicalQueryAnswering(EvaluationRegime):
         self.batch_size = int(batch_size)
         self.score_kwargs = dict(score_kwargs or {})
         self.metrics = ("mrr",) + tuple(f"hits@{k}" for k in self.hits)
-        self.subsets = tuple(self.queries) + ("average",)
+        self.groups = {g: tuple(names) for g, names in (groups or {}).items()}
+        self.subsets = (tuple(self.queries) + ("average",)
+                        + tuple(f"average_{g}" for g in self.groups))
 
-    def _rank(self, scores, answer, exclude):
-        s = scores[answer]
+    def _ranks(self, scores, hard, answers):
+        """Ranks of the hard answers among the non-answers and themselves (the other answers
+        of the query are removed: filtered setting)."""
         mask = np.ones(len(scores), dtype=bool)
-        mask[list(exclude)] = False
-        others = scores[mask]
-        greater = int((others > s).sum())
-        equal = int((others == s).sum())
+        mask[list(answers)] = False
+        others = np.sort(scores[mask])
+        s = scores[hard]
+        greater = len(others) - np.searchsorted(others, s, side="right")
+        equal = np.searchsorted(others, s, side="right") - np.searchsorted(others, s,
+                                                                           side="left")
         if self.ties == "optimistic":
             return 1.0 + greater
         if self.ties == "pessimistic":
@@ -267,13 +311,76 @@ class LogicalQueryAnswering(EvaluationRegime):
                           else np.asarray(scores))
                 for row, (_, easy, hard) in zip(scores, batch):
                     answers = set(easy) | set(hard)
-                    ranks = np.array([self._rank(row, a, answers) for a in sorted(hard)])
+                    ranks = self._ranks(row, np.array(sorted(hard), dtype=np.int64), answers)
                     per_query["mrr"].append(float((1.0 / ranks).mean()))
                     for k in self.hits:
                         per_query[f"hits@{k}"].append(float((ranks <= k).mean()))
             results[name] = {m: float(np.mean(per_query[m])) for m in self.metrics}
             results[name]["queries"] = len(items)
         if results:
-            results["average"] = {m: float(np.mean([r[m] for r in results.values()]))
+            per_structure = dict(results)
+            results["average"] = {m: float(np.mean([r[m] for r in per_structure.values()]))
                                   for m in self.metrics}
+            for group, names in self.groups.items():
+                found = [per_structure[n] for n in names if n in per_structure]
+                if found:
+                    results[f"average_{group}"] = {
+                        m: float(np.mean([r[m] for r in found])) for m in self.metrics}
+        return results
+
+
+class ReleasedQueryAnswering(EvaluationRegime):
+    """:class:`LogicalQueryAnswering` on the released validation or test queries of a query
+    dataset (:class:`mowl.datasets.builtin.query_sets.QueryAnsweringDataset`).
+
+    The queries are read from ``dataset.queries(...)`` at evaluation time with the entity
+    and relation ids of the model (``model.entity_id``, ``model.relation_id``), so that any
+    model with ``score_query`` and these two methods can be evaluated. Reports one subset
+    per structure, ``"average"`` (all structures) and ``"average_epfo"`` /
+    ``"average_negation"`` (the "AVG" columns of the papers).
+
+    A model whose operators do not include negation (``model.module.supports_negation`` is
+    false, e.g. Query2Box) is evaluated on the structures without negation only; the
+    skipped names are in :attr:`info`.
+
+    :param split: ``"valid"`` or ``"test"``.
+    :param names: Structure names (default: all of the split except the De Morgan forms).
+    :param limit: At most this many queries per structure (a seeded subset), for quick runs.
+    :param seed: Seed of the subset.
+    :param hits, ties, batch_size: See :class:`LogicalQueryAnswering`.
+    """
+
+    key = "query-answering"
+
+    def __init__(self, split="test", names=None, limit=None, seed=0, hits=(1, 3, 10),
+                 ties="average", batch_size=32):
+        self.split = split
+        self.names = None if names is None else tuple(names)
+        self.limit = limit
+        self.seed = seed
+        self.hits = tuple(hits)
+        self.ties = ties
+        self.batch_size = batch_size
+        self.metrics = ("mrr",) + tuple(f"hits@{k}" for k in self.hits)
+        self.info = {}
+
+    def evaluate(self, model, dataset):
+        for attr in ("score_query", "entity_id", "relation_id"):
+            if not callable(getattr(model, attr, None)):
+                raise TypeError(f"{type(model).__name__} has no '{attr}': it cannot be "
+                                f"evaluated on released query datasets.")
+        names = self.names
+        if names is None:
+            names = [n for n in dataset.structure_names if not n.endswith("-DM")]
+        skipped = []
+        if getattr(getattr(model, "module", None), "supports_negation", True) is False:
+            skipped = [n for n in names if "'n'" in repr(QUERY_STRUCTURES[n])]
+            names = [n for n in names if n not in skipped]
+        queries = dataset.queries(self.split, model.entity_id, model.relation_id,
+                                  names=names, limit=self.limit, seed=self.seed)
+        regime = LogicalQueryAnswering(queries, hits=self.hits, ties=self.ties,
+                                       batch_size=self.batch_size, groups=STRUCTURE_GROUPS)
+        results = regime.evaluate(model)
+        self.info = {"split": self.split, "queries": {n: len(q) for n, q in queries.items()},
+                     "skipped_structures": skipped, "ties": self.ties}
         return results

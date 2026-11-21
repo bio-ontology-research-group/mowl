@@ -31,7 +31,13 @@ _QUERY_NOTES = (
     "is an answer of the class', gci2 'the entity is an answer of ∃r.D'; gci1 and gci3 "
     "are not scored. Evaluation regime 'query-answering' through score_query (the "
     "negation structures are not sampled by mowl.evaluation.sample_queries). Default "
-    "sizes (dimension, hidden width, layers) are small; the papers' are larger. ")
+    "sizes (dimension, hidden width, layers) are small; the papers' are larger. The "
+    "default trains on queries that mOWL samples from the graph; queries='released' trains "
+    "on the released training queries of the query datasets (mowl.datasets.builtin."
+    "query_sets), as the papers do, with the reference loop and the 1/sqrt(answers) "
+    "weights of their code, and the benchmarks query-*-betae / query-*-q2b / "
+    "query-wn18rr-qa evaluate on the released validation and test queries (closed world, "
+    "negation as absence). ")
 
 _QUERY_FIELDS = dict(
     status=Status.LEARNABLE, origin=Origin.ADAPTATION,

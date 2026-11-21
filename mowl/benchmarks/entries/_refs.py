@@ -94,3 +94,28 @@ PAVLOVIC2023 = Reference(
     "Pavlović, A., Sallinger, E. (2023). ExpressivE: A Spatio-Functional Embedding For "
     "Knowledge Graph Completion. ICLR 2023.",
     "https://arxiv.org/abs/2206.04192")
+
+REN2020Q2B = Reference(
+    "ren2020q2b",
+    "Ren, H., Hu, W., Leskovec, J. (2020). Query2box: Reasoning over Knowledge Graphs in "
+    "Vector Space using Box Embeddings. ICLR 2020.",
+    "https://arxiv.org/abs/2002.05969")
+
+REN2020BETAE = Reference(
+    "ren2020betae",
+    "Ren, H., Leskovec, J. (2020). Beta Embeddings for Multi-Hop Logical Reasoning in "
+    "Knowledge Graphs. NeurIPS 2020.",
+    "https://arxiv.org/abs/2010.11465")
+
+ZHANG2021CONE = Reference(
+    "zhang2021cone",
+    "Zhang, Z., Wang, J., Chen, J., Ji, S., Wu, F. (2021). ConE: Cone Embeddings for "
+    "Multi-Hop Reasoning over Knowledge Graphs. NeurIPS 2021.",
+    "https://arxiv.org/abs/2110.13715")
+
+HE2024ACONE = Reference(
+    "he2024acone",
+    "He, Y., Hernandez, D., Nayyeri, M., Xiong, B., Zhu, Y., Kharlamov, E., Staab, S. "
+    "(2024). Generating SROI- Ontologies via Knowledge Graph Query Embedding Learning. "
+    "arXiv:2407.09212.",
+    "https://arxiv.org/abs/2407.09212")

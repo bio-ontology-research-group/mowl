@@ -154,3 +154,19 @@ class KGLinkPredictionProtocol(RegimeProtocol):
     def build(self, **kwargs):
         from mowl.evaluation.filtered_ranking import KGLinkPredictionRegime
         return KGLinkPredictionRegime(**kwargs)
+
+
+class QueryAnsweringProtocol(RegimeProtocol):
+    """:class:`mowl.evaluation.query_answering.ReleasedQueryAnswering`: the released
+    validation or test queries of a query dataset. Subsets the model cannot answer (the
+    negation structures for a model without negation) are not reported."""
+
+    def build(self, **kwargs):
+        from mowl.evaluation.query_answering import ReleasedQueryAnswering
+        return ReleasedQueryAnswering(**kwargs)
+
+    def evaluate(self, model, dataset):
+        results = self.regime.evaluate(model, dataset)
+        self.info = dict(self.regime.info)
+        return {subset: {m: results[subset][m] for m in self.metrics}
+                for subset in self.subsets if subset in results}
