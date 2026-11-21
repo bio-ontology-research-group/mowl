@@ -1,6 +1,7 @@
 """Further ontology embedding methods that mOWL catalogues but does not implement."""
 
-from mowl.catalog.card import Family, Guarantee, GuaranteeKind as K, MethodCard, Reference
+from mowl.catalog.card import (Family, Guarantee, GuaranteeKind as K, MethodCard, Origin,
+                               Reference, Status)
 
 EIKE = MethodCard(
     key="eike",
@@ -78,35 +79,51 @@ BOXSEL = MethodCard(
 
 DFALC = MethodCard(
     key="dfalc",
+    expressivity="ALC with ABox",
+    tasks=("subsumption", "instance-checking", "role-assertion"),
     name="Differentiable fuzzy ALC (DF-ALC)",
     family=Family.FUZZY,
-    region="fuzzy set over grounded individuals",
+    region="fuzzy set over a finite domain",
     summary=(
-        "A neural-symbolic representation language: concept and role names are grounded "
-        "as fuzzy membership values of individuals (e.g. produced by image classifiers), "
-        "and a normalised ALC ontology is enforced through a hierarchical loss on fuzzy "
-        "concept inclusions, revising the grounding."),
-    logic="ALC (normalised)",
-    concepts="fuzzy membership vector over individuals",
-    roles="fuzzy membership matrix over pairs of individuals",
-    individuals="domain element (grounded, e.g. by an image)",
-    not_implemented_reason=(
-        "Designed for symbol grounding of perceptual data (e.g. images), with membership "
-        "degrees coming from external neural classifiers; it does not learn vector "
-        "embeddings of an ontology's concepts. FALCON (card 'falcon') is the closest "
-        "method in mOWL."),
+        "A fuzzy grounding of ALC over a finite domain (the individuals): every concept "
+        "name is a vector of truth values over the domain, every role name a matrix of "
+        "truth values, complex concepts use the Gödel semantics. The TBox is enforced by "
+        "a hierarchical loss on fuzzy inclusions (C^I(a) <= D^I(a) for all a), which "
+        "revises an initial (e.g. perceptual) grounding into a model of the ontology."),
+    logic="ALC (TBox GCIs, EquivalentClasses, DisjointClasses; class and object "
+          "property assertions)",
+    concepts="fuzzy membership vector over the domain (sigmoid of logits)",
+    roles="fuzzy membership matrix over pairs of domain elements",
+    individuals="domain element (index = individual)",
+    status=Status.LEARNABLE,
+    origin=Origin.ADAPTATION,
+    implementation="mowl.models.dfalc.model.DFALCModel",
+    module="mowl.nn.alc.dfalc.module.DFALCModule",
+    axioms=("subclass_of", "equivalent_classes", "disjoint_classes", "class_assertion",
+            "object_property_assertion"),
     guarantees=(
         Guarantee(
             K.SOUNDNESS,
             "Fuzzy entailment in the translated DF-ALC ontology is consistent with "
-            "entailment in ALC.",
+            "entailment in ALC (three-valued crisp transformation with threshold alpha).",
             "wu2022, Proposition 1"),
         Guarantee(
             K.SOUNDNESS,
             "When the hierarchical loss converges to 0, the learned interpretation is a "
-            "model of the given ALC ontology.",
-            "wu2022, Proposition 2",
-            condition="zero loss"),
+            "model of the (normalised) ALC ontology: every inclusion holds pointwise, "
+            "C^I(a) <= D^I(a) (Eq. 6). In mOWL the loss is applied to un-normalised "
+            "inclusions, for which the statement holds directly.",
+            "wu2022, Proposition 2 and Eq. 8",
+            condition="zero loss",
+            verified_in_mowl="tests/models/test_dfalc_model.py::"
+                             "test_perceptual_grounding_is_kept_where_consistent; "
+                             "tests/models/test_dfalc_model.py::"
+                             "test_hierarchical_loss_is_zero_iff_pointwise_inclusion"),
+        Guarantee(
+            K.LIMITATION,
+            "C ⊓ ¬C ≅ ⊥ and C ⊔ ¬C ≅ ⊤ do not hold in the Gödel/fuzzy ALC semantics "
+            "(only (C ⊔ ¬C)^I >= 0.5 and (C ⊓ ¬C)^I <= 0.5).",
+            "wu2022, Table 2 and the paragraph after it"),
     ),
     references=(
         Reference("wu2022",
@@ -114,6 +131,23 @@ DFALC = MethodCard(
                   "Neural-Symbolic Representation Language for Symbol Grounding. "
                   "arXiv:2211.12006.",
                   "https://arxiv.org/abs/2211.12006"),),
+    related=("falcon",),
+    notes=(
+        "ADAPTATION. Implemented: the DF-ALC representation (truth-value vectors and "
+        "matrices over Delta = the individuals, plus optional anonymous elements), Gödel "
+        "operators (Eqs. 1-5), the hierarchical loss (Eq. 8), the rule-based loss of "
+        "normal forms 1-3 (Eq. 9, loss_type='rule'; inclusions with quantifiers keep Eq. "
+        "8) and initialisation from a perceptual grounding (DFALCModel.set_grounding). "
+        "Not implemented: the normalisation (the hierarchical loss is applied to "
+        "arbitrary ALC inclusions, which it handles directly), the rule-based losses of "
+        "normal forms 4-7 (Eqs. 10-13, whose printed formulas are partly illegible in the "
+        "PDF text), the masked-ABox-revision and conjunctive-query experiments, and the "
+        "neural classifiers that produce a perceptual grounding (image models are out of "
+        "scope; pass the grounding in). ABox assertions are fuzzy assertions with truth "
+        "value 1 (loss: distance to 1). The paper's code is not linked and was not "
+        "checked. Truth values live in a table over the domain, so the representation is "
+        "transductive (O(|Delta|^2) per role) and only suits small domains. Axiom scores "
+        "for the benchmarks are the hierarchical loss of the candidate inclusion."),
 )
 
 CARDS = (EIKE, BOXSEL, DFALC)

@@ -26,6 +26,7 @@ relevant published methods it does not implement, with the reason.
    octagon
    bcbox
    alcone
+   dfalc
    e2r
    hit
    ont
