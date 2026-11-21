@@ -24,6 +24,23 @@ Cards, benchmarks, published results and recipes are discovered automatically fr
 packages: adding one means adding a file that exposes `CARD`/`CARDS`, `REGIME`/`REGIMES`,
 `RESULTS` or `RECIPES`.
 
+## Papers are combinations, not limits
+
+The point of the split is recombination: a model from one paper, the training regime of a
+second and the evaluation of a third. A publication is recorded as one combination (a
+recipe), which documents and reproduces it, but nothing in the library may assume that
+combination. When you add a method, make every part of its training and testing that could
+serve another method a shared regime, and state on its card:
+
+- `expressivity`: the logic the implementation supports, in description logic notation
+  (`mowl.logic.Expressivity`); a test compares it with what the module implements;
+- `tasks`: the inference tasks it gives a score for (`mowl.logic.TASKS`).
+
+Evaluation regime cards state the `task` they measure and their `target` (entailed test
+axioms: deductive inference; held-out ones: inductive prediction). Logical ground truth
+comes from a reasoner backend chosen by expressivity (`mowl.reasoning`). See
+`docs/source/logic/index.rst`.
+
 ## Finding things
 
 ```bash

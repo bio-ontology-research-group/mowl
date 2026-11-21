@@ -13,6 +13,8 @@ _LIMITATION = (
 
 ONTO2VEC = MethodCard(
     key="onto2vec",
+    expressivity="OWL 2 DL",
+    tasks=(),
     name="Onto2Vec",
     family=Family.SYNTACTIC,
     region="Word2Vec on an axiom corpus",
@@ -37,6 +39,8 @@ ONTO2VEC = MethodCard(
 
 OPA2VEC = MethodCard(
     key="opa2vec",
+    expressivity="OWL 2 DL",
+    tasks=(),
     name="OPA2Vec",
     family=Family.SYNTACTIC,
     region="Word2Vec on axiom and annotation corpus",

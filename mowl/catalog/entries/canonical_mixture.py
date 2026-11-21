@@ -7,6 +7,9 @@ _TESTS = "tests/nn/test_canonical_mixture.py::"
 
 CARD = MethodCard(
     key="canonical_mixture",
+    expressivity="ELH(∘)⊥ with ABox",
+    tasks=("subsumption", "satisfiability", "disjointness",
+           "instance-checking", "role-assertion",),
     name="CanonicalMixture",
     family=Family.CONSTRUCTIVE,
     region="distribution over canonical-model elements",

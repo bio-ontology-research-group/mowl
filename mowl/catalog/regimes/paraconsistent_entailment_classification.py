@@ -5,6 +5,8 @@ from mowl.catalog.regimes._regime_refs import FALCON2022
 
 REGIME = RegimeCard(
     key='paraconsistent-entailment-classification',
+    task="axiom-ranking",
+    target="logical status",
     name='Entailment classification under injected inconsistency (FALCON)',
     kind=RegimeKind.EVALUATION,
     summary=('Reasoner-entailed axioms versus axioms that are neither asserted nor entailed are '

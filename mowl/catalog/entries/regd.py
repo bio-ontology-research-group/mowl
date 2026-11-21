@@ -14,6 +14,9 @@ YANG2025_REGD = Reference(
 
 CARD = MethodCard(
     key="regd",
+    expressivity="EL⊥ with ABox",
+    tasks=("subsumption", "satisfiability", "disjointness", "instance-checking",
+           "role-assertion"),
     name="RegD",
     family=Family.GEOMETRIC,
     region="box or ball (dissimilarity-based)",

@@ -12,6 +12,9 @@ _DOCS = "mOWL docs, docs/source/geometric/index.rst, 'Guarantees by model and pr
 
 CANONICAL_MODEL = MethodCard(
     key="canonical_model",
+    expressivity="ELH(∘)⊥ with ABox",
+    tasks=("subsumption", "satisfiability", "disjointness", "instance-checking",
+           "role-assertion", "classification", "consistency",),
     name="Canonical model (EL++ completion)",
     family=Family.CONSTRUCTIVE,
     region="finite canonical interpretation (one element per satisfiable name)",
@@ -66,6 +69,8 @@ CANONICAL_MODEL = MethodCard(
 
 CONVEX_POLYHEDRAL = MethodCard(
     key="convex_polyhedral",
+    expressivity="ELH(∘)⊥",
+    tasks=("subsumption", "satisfiability", "disjointness",),
     name="Convex polyhedral model",
     family=Family.CONSTRUCTIVE,
     region="convex polytope (simplex face)",
@@ -136,6 +141,8 @@ CONVEX_POLYHEDRAL = MethodCard(
 
 INTERVAL_UNION = MethodCard(
     key="interval_union",
+    expressivity="ELH(∘)⊥",
+    tasks=("subsumption", "satisfiability", "disjointness",),
     name="Interval-union model",
     family=Family.CONSTRUCTIVE,
     region="union of intervals (1-D)",
@@ -193,6 +200,8 @@ INTERVAL_UNION = MethodCard(
 
 BOX_MILP = MethodCard(
     key="box_milp",
+    expressivity="propositional EL⊥",
+    tasks=("subsumption", "satisfiability", "disjointness",),
     name="Box model builder (MILP)",
     family=Family.CONSTRUCTIVE,
     region="box",

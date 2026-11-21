@@ -106,12 +106,6 @@ without OpenMP thread-synchronisation overhead.
     from mowl.owlapi import OWLAPIAdapter
 
 
-
-
-
-
-
-
 .. GENERATED FROM PYTHON SOURCE LINES 85-96
 
 Building :math:`\mathcal{T}_k` with the OWLAPI adapter
@@ -182,12 +176,6 @@ temporary directory (which honours ``$TMPDIR``).
 
 
 
-
-
-
-
-
-
 .. GENERATED FROM PYTHON SOURCE LINES 148-161
 
 Why single boxes cannot model :math:`\mathcal{T}_k`: Helly check & canonical model
@@ -227,19 +215,6 @@ returns ``box_representable_strong=False``.
             f"box_representable_strong={report.box_representable_strong}, "
             f"strong_certificates={len(report.certificates_strong)}"
         )
-
-
-
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-    T_3: satisfiable A-witnesses=['A1', 'A2', 'A3'], box_representable_strong=False, strong_certificates=1
-    T_5: satisfiable A-witnesses=['A1', 'A2', 'A3', 'A4', 'A5'], box_representable_strong=False, strong_certificates=10
-
-
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 182-232
@@ -358,12 +333,6 @@ slots share a common intersection and all :math:`\binom{k}{2}` pairs
                     bot_ok = False
 
             return bool(sat_ok and bot_ok), int(n_nonempty_a), int(ov_pairs)
-
-
-
-
-
-
 
 
 
@@ -490,23 +459,6 @@ Helly trap).
         print(
             f"{k:>3} | {recipe_name:<10} | {f'{exact_count}/3':>15} | {str(ov_counts):<24}"
         )
-
-
-
-
-
-.. rst-class:: sphx-glr-script-out
-
- .. code-block:: none
-
-      k | recipe     | exact models /3 | overlapping slot pairs  
-    --------------------------------------------------------------
-      3 | default    |             1/3 | [3, 0, 3]               
-      3 | witness    |             3/3 | [0, 0, 0]               
-      5 | default    |             0/3 | [10, 10, 10]            
-      5 | witness    |             2/3 | [0, 0, 10]              
-
-
 
 
 .. GENERATED FROM PYTHON SOURCE LINES 412-426
@@ -639,23 +591,7 @@ For :math:`k = 5`, we plot the learned 2-D primitive class components
     plt.tight_layout()
     plt.show()
 
-
-
-.. image-sg:: /examples/elmodels/images/sphx_glr_plot_4_multibox_structural_tk_001.png
-   :alt: T_5 primitive class regions X_1..X_5 (solid = comp 0, dashed = comp 1) and witness points, Round-4 default recipe (Helly trap) (seed=0, exact=False, non-empty A_i=5/5, overlapping slot pairs=10), Round-5 witness-point recipe (Exact model) (seed=0, exact=True, non-empty A_i=5/5, overlapping slot pairs=0)
-   :srcset: /examples/elmodels/images/sphx_glr_plot_4_multibox_structural_tk_001.png
-   :class: sphx-glr-single-img
-
-
-
-
-
-
-.. rst-class:: sphx-glr-timing
-
-   **Total running time of the script:** (8 minutes 54.512 seconds)
-
-**Estimated memory usage:**  129 MB
+**Estimated memory usage:**  0 MB
 
 
 .. _sphx_glr_download_examples_elmodels_plot_4_multibox_structural_tk.py:

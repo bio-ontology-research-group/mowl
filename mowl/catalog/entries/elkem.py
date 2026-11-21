@@ -22,6 +22,9 @@ _NN_TESTS = "tests/nn/test_elkem_module.py::"
 
 CARD = MethodCard(
     key="elkem",
+    expressivity="ELH(∘)⊥ with ABox",
+    tasks=("subsumption", "satisfiability", "disjointness",
+           "instance-checking", "role-assertion",),
     name="ELK-Em",
     family=Family.GEOMETRIC,
     region="box",

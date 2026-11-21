@@ -5,6 +5,8 @@ from mowl.catalog.regimes.modelness import BOURGAUX2024
 
 REGIME = RegimeCard(
     key="kb-embedding-properties",
+    task="axiom-ranking",
+    target="deductive inference",
     name="KB embedding properties: model, entailment closure, weak/strong faithfulness",
     kind=RegimeKind.EVALUATION,
     summary=(

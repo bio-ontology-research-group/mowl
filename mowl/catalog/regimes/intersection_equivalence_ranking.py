@@ -5,6 +5,8 @@ from mowl.catalog.regimes._regime_refs import PENG2020
 
 REGIME = RegimeCard(
     key='intersection-equivalence-ranking',
+    task="subsumption-prediction",
+    target="inductive prediction",
     name='Ranking of intersection equivalences (ELBE)',
     kind=RegimeKind.EVALUATION,
     summary=('For triples E ⊑ C, E ⊑ D, C ⊓ D ⊑ E held out from GO, rank E by the distance of its'

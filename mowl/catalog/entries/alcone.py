@@ -158,6 +158,9 @@ _NOTES_SHARED = (
 CARDS = (
     MethodCard(
         key="alcone",
+        expressivity="ALC with ABox",
+        tasks=("subsumption", "satisfiability", "disjointness",
+               "instance-checking", "role-assertion",),
         name="Al-cone embedding (learned)",
         family=Family.GEOMETRIC,
         region="axis-aligned cone",
@@ -203,6 +206,8 @@ CARDS = (
               f"{_NOTES_SHARED}"),
     MethodCard(
         key="alcone-exact",
+        expressivity="ALC",
+        tasks=("subsumption", "satisfiability", "disjointness",),
         name="Al-cone model construction",
         family=Family.CONSTRUCTIVE,
         region="axis-aligned cone",

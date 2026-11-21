@@ -5,6 +5,9 @@ from mowl.catalog.entries import _refs as R
 
 CARD = MethodCard(
     key="elbe",
+    expressivity="EL⊥ with ABox",
+    tasks=("subsumption", "satisfiability", "disjointness",
+           "instance-checking", "role-assertion",),
     name="ELBE",
     family=Family.GEOMETRIC,
     region="box",

@@ -5,6 +5,8 @@ from mowl.catalog.regimes._regime_refs import SINGH2026
 
 REGIME = RegimeCard(
     key='protein-centric-threshold-f1',
+    task="type-prediction",
+    target="inductive prediction",
     name='Protein-centric F1 at a validation threshold (CAFA)',
     kind=RegimeKind.EVALUATION,
     summary=('Function predictions for held-out proteins are propagated through GO, a score '

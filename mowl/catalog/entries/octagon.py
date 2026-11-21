@@ -8,6 +8,9 @@ _OURS = "mOWL analysis, docs/source/methods/octagon.rst"
 
 CARD = MethodCard(
     key="octagon",
+    expressivity="EL⊥ with ABox",
+    tasks=("subsumption", "satisfiability", "disjointness", "instance-checking",
+           "role-assertion"),
     name="Octagon embeddings (OctagonEL)",
     family=Family.GEOMETRIC,
     region="octagon (product of 2-D octagons)",

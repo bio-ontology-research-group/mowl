@@ -20,6 +20,8 @@ _NO_SEMANTICS = (
 
 OWL2VEC_STAR = MethodCard(
     key="owl2vec_star",
+    expressivity="OWL 2 DL",
+    tasks=(),
     name="OWL2Vec*",
     family=Family.GRAPH,
     region="random walks + Word2Vec",
@@ -49,6 +51,8 @@ OWL2VEC_STAR = MethodCard(
 
 DL2VEC = MethodCard(
     key="dl2vec",
+    expressivity="OWL 2 DL",
+    tasks=(),
     name="DL2Vec",
     family=Family.GRAPH,
     region="random walks + Word2Vec",
@@ -74,6 +78,8 @@ DL2VEC = MethodCard(
 
 TAXONOMY_WALKS = MethodCard(
     key="taxonomy_walks",
+    expressivity="taxonomy",
+    tasks=(),
     name="Taxonomy projection + random walks",
     family=Family.GRAPH,
     region="random walks + Word2Vec",

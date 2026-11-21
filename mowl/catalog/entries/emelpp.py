@@ -104,6 +104,9 @@ _NOTES_VAR = (
 CARDS = (
     MethodCard(
         key="emelpp",
+        expressivity="ELH(∘)⊥ with ABox",
+        tasks=("subsumption", "satisfiability", "disjointness",
+               "instance-checking", "role-assertion",),
         name="EmEL++",
         family=Family.GEOMETRIC,
         region="ball",
@@ -128,6 +131,9 @@ CARDS = (
         notes=_NOTES_COMMON),
     MethodCard(
         key="emelvar",
+        expressivity="ELH(∘)⊥ with ABox",
+        tasks=("subsumption", "satisfiability", "disjointness",
+               "instance-checking", "role-assertion",),
         name="EmEL(var)",
         family=Family.GEOMETRIC,
         region="ball",

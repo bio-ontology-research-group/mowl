@@ -27,6 +27,9 @@ VENDROV2016 = Reference(
 
 CARD = MethodCard(
     key="cate",
+    expressivity="ALC with ABox",
+    tasks=("subsumption", "satisfiability", "disjointness",
+           "instance-checking", "role-assertion",),
     name="CatE",
     family=Family.ORDER,
     region="order embedding of the concept-description lattice",

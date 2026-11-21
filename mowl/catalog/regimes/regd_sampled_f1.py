@@ -5,6 +5,7 @@ from mowl.catalog.regimes._benchmark_refs import YANG2025_REGD
 
 REGIME = RegimeCard(
     key="regd-sampled-f1",
+    task="subsumption-prediction",
     name="Threshold classification of subsumptions with F1 (RegD)",
     kind=RegimeKind.EVALUATION,
     summary=(

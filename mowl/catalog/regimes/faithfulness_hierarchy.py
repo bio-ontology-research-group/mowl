@@ -10,6 +10,8 @@ MASHKOVA2026 = Reference(
 
 REGIME = RegimeCard(
     key="faithfulness-hierarchy",
+    task="axiom-ranking",
+    target="logical status",
     name="Faithfulness hierarchy (entailed / contradictory / undetermined axioms)",
     kind=RegimeKind.EVALUATION,
     summary=(

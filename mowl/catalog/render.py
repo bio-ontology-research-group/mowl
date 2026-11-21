@@ -61,6 +61,12 @@ def card_to_rst(card):
     ]
     if card.individuals:
         rows.append(("Individuals", card.individuals))
+    logic = card.supported_expressivity
+    if logic is not None:
+        rows.insert(3, ("Expressivity", f"{logic}"
+                        + (f" ({logic.note})" if logic.note else "")))
+    if card.tasks:
+        rows.append(("Inference tasks", ", ".join(card.tasks)))
     if card.implemented:
         rows.append(("Implementation", f":class:`{card.implementation}`"))
         if card.axioms:
@@ -167,6 +173,8 @@ def regime_to_rst(card):
         rows.append(("Implementation", f":class:`{card.implementation}`"))
     else:
         rows.append(("Why not implemented", card.not_implemented_reason))
+    if card.task:
+        rows.append(("Task", card.task + (f" ({card.target})" if card.target else "")))
     lines.append(".. list-table::\n   :widths: 25 75\n")
     for k, v in rows:
         lines.append(f"   * - {k}\n     - {_esc(v)}")

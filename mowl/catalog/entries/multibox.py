@@ -41,6 +41,9 @@ _INTERSECTION_NOTE = (
 
 MULTIBOXEL = MethodCard(
     key="multiboxel",
+    expressivity="EL⊥ with ABox",
+    tasks=("subsumption", "satisfiability", "disjointness",
+           "instance-checking", "role-assertion",),
     name="MultiBoxEL",
     family=Family.GEOMETRIC,
     region="union of boxes",
@@ -108,6 +111,9 @@ MULTIBOXEL = MethodCard(
 
 MULTIELBE = MethodCard(
     key="multielbe",
+    expressivity="EL⊥ with ABox",
+    tasks=("subsumption", "satisfiability", "disjointness",
+           "instance-checking", "role-assertion",),
     name="MultiELBE",
     family=Family.GEOMETRIC,
     region="union of boxes",

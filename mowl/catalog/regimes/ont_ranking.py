@@ -15,6 +15,7 @@ _DIFF = (
 REGIMES = (
     RegimeCard(
         key="ont-normal-form-ranking",
+        task="subsumption-prediction",
         name="Per-normal-form axiom ranking over all concepts (OnT)",
         kind=RegimeKind.EVALUATION,
         summary=(
@@ -47,6 +48,8 @@ REGIMES = (
     ),
     RegimeCard(
         key="ont-inferred-subsumption-ranking",
+        task="subsumption-prediction",
+        target="deductive inference",
         name="Ranking of inferred atomic subsumptions over all concepts (OnT)",
         kind=RegimeKind.EVALUATION,
         summary=(

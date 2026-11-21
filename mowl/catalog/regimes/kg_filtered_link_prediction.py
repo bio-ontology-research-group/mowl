@@ -5,6 +5,8 @@ from mowl.catalog.regimes._regime_refs import LOURENCO2026, CHARPENAY2024, GARG2
 
 REGIME = RegimeCard(
     key='kg-filtered-link-prediction',
+    task="link-prediction",
+    target="inductive prediction",
     name='Filtered link prediction on role or membership assertions',
     kind=RegimeKind.EVALUATION,
     summary=('Each test assertion r(a, b) (or C(a)) is ranked against all corruptions of one '

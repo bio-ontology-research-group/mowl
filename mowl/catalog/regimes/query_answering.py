@@ -5,6 +5,8 @@ from mowl.catalog.regimes._regime_refs import REN2020, ZHANG2021CONE, HE2024ACON
 
 REGIME = RegimeCard(
     key='query-answering',
+    task="query-answering",
+    target="inductive prediction",
     name='Complex query answering on incomplete KGs',
     kind=RegimeKind.EVALUATION,
     summary=('For logical queries of fixed structures (1p, 2i, ip, ...), the non-trivial answers '

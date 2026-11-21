@@ -5,6 +5,9 @@ from mowl.catalog.entries import _refs as R
 
 CARD = MethodCard(
     key="prism",
+    expressivity="EL⊥ with ABox",
+    tasks=("subsumption", "satisfiability", "disjointness",
+           "instance-checking", "role-assertion",),
     name="PrismEL",
     family=Family.GEOMETRIC,
     region="prism",

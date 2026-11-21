@@ -5,6 +5,8 @@ from mowl.catalog.entries import _refs as R
 
 CARD = MethodCard(
     key="mcmultibox",
+    expressivity="ELH(∘)",
+    tasks=("subsumption",),
     name="MultiBoxEL (Aharoni, volume-based)",
     family=Family.GEOMETRIC,
     region="union of boxes",

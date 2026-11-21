@@ -129,6 +129,7 @@ REGIMES = (
     ),
     RegimeCard(
         key="dele-evaluation",
+        task="subsumption-prediction",
         name="Deductive-closure-aware ranking evaluation (DELE)",
         kind=RegimeKind.EVALUATION,
         summary=(

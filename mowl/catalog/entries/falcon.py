@@ -5,6 +5,8 @@ from mowl.catalog.entries import _refs as R
 
 CARD = MethodCard(
     key="falcon",
+    expressivity="ALC with ABox",
+    tasks=("subsumption", "satisfiability", "instance-checking", "role-assertion",),
     name="FALCON",
     family=Family.FUZZY,
     region="fuzzy set over named and sampled entities",

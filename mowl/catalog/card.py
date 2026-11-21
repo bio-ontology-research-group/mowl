@@ -184,6 +184,15 @@ class MethodCard:
         trains the method with; the first one is the default of the mOWL implementation.
     :param evaluation: Keys of the evaluation regimes (:class:`RegimeCard`) the
         publication evaluates the method with.
+    :param expressivity: The logic the method supports, in description logic notation
+        readable by :meth:`mowl.logic.Expressivity.parse` (``"EL⊥ with ABox"``,
+        ``"ELH(∘)⊥"``, ``"ALC"``), or a :class:`mowl.logic.Expressivity`. For an implemented
+        method this is what the implementation uses of an ontology; axioms beyond it are
+        ignored (see :func:`mowl.logic.check_ontology`). Empty if the method is not defined
+        on a description logic (``logic`` then says what it is defined on).
+    :param tasks: Keys of the inference tasks (:data:`mowl.logic.TASKS`) for which the
+        method gives a score, e.g. ``("subsumption", "instance-checking")``. Empty for
+        methods that only produce feature vectors.
     :param notes: Free text (deviations from the paper, implementation remarks).
     """
 
@@ -213,6 +222,8 @@ class MethodCard:
     training: tuple = ()
     evaluation: tuple = ()
     related: tuple = ()
+    expressivity: object = ""
+    tasks: tuple = ()
     notes: str = ""
 
     def __post_init__(self):
@@ -245,6 +256,33 @@ class MethodCard:
         for r in self.references:
             if not isinstance(r, Reference):
                 raise TypeError("references must contain mowl.catalog.Reference objects.")
+        from mowl.logic import TASKS
+        for task in self.tasks:
+            if task not in TASKS:
+                raise ValueError(f"Card {self.key!r} names the unknown inference task "
+                                 f"{task!r}. Known tasks: {sorted(TASKS)}")
+        self.supported_expressivity  # raises if the notation cannot be read
+
+    @property
+    def supported_expressivity(self):
+        """The :class:`mowl.logic.Expressivity` of :attr:`expressivity`, or ``None`` if
+        the method is not defined on a description logic."""
+        from mowl.logic import Expressivity
+        if not self.expressivity:
+            return None
+        if isinstance(self.expressivity, Expressivity):
+            return self.expressivity
+        return Expressivity.parse(self.expressivity)
+
+    def check_ontology(self, ontology, warn=True):
+        """Report the axioms of ``ontology`` (an OWL API ontology) that go beyond what
+        this method supports. See :func:`mowl.logic.check_ontology`. Needs the JVM."""
+        from mowl.logic import check_ontology
+        supported = self.supported_expressivity
+        if supported is None:
+            raise ValueError(f"Method {self.key!r} states no description logic "
+                             f"expressivity (it is defined on: {self.logic}).")
+        return check_ontology(ontology, supported, warn=warn)
 
     @property
     def implemented(self):
@@ -296,6 +334,13 @@ class RegimeCard:
     :param properties: Proven or by-construction properties (:class:`Guarantee`), e.g.
         "sampled negatives are never entailed".
     :param limitations: Known limitations.
+    :param task: For an evaluation regime, the key of the completion task it measures
+        (:data:`mowl.logic.COMPLETION_TASKS`), or of an inference task
+        (:data:`mowl.logic.TASKS`). Empty for regimes that only fix a detail (a score, a
+        tie rule) and for training regimes.
+    :param target: For an evaluation regime, which axioms count as correct: a value of
+        :class:`mowl.logic.Target` (``"deductive inference"``, ``"inductive prediction"``
+        or ``"logical status"``), or empty if the regime can be used with either.
     :param notes: Free text.
     """
 
@@ -313,6 +358,8 @@ class RegimeCard:
     not_implemented_reason: str = ""
     properties: tuple = ()
     limitations: tuple = ()
+    task: str = ""
+    target: str = ""
     notes: str = ""
 
     def __post_init__(self):
@@ -320,6 +367,12 @@ class RegimeCard:
             raise ValueError(f"Regime key must be a lower-case identifier: {self.key!r}")
         if not isinstance(self.kind, RegimeKind):
             raise TypeError("kind must be a mowl.catalog.RegimeKind.")
+        from mowl.logic import TASKS, COMPLETION_TASKS, Target
+        if self.task and self.task not in TASKS and self.task not in COMPLETION_TASKS:
+            raise ValueError(f"Regime {self.key!r} names the unknown task {self.task!r}.")
+        if self.target and self.target not in {t.value for t in Target}:
+            raise ValueError(f"Regime {self.key!r}: target must be one of "
+                             f"{sorted(t.value for t in Target)}.")
         if not self.references:
             raise ValueError(f"Regime {self.key!r} needs at least one reference.")
         for r in self.references:

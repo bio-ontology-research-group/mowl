@@ -30,6 +30,8 @@ _TESTS = "tests/nn/test_bcbox.py::"
 
 CARD = MethodCard(
     key="bcbox",
+    expressivity="taxonomy",
+    tasks=("subsumption",),
     name="Binary Code Box (GBC-Box / VBC-Box)",
     family=Family.GEOMETRIC,
     region="union of intersections of boxes (binary codes)",

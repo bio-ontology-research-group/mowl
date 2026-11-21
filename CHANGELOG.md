@@ -7,6 +7,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+- `mowl.logic`: description logic expressivity in standard notation (`Expressivity`, `Construct`; `Expressivity.parse("ELH(∘)⊥ with ABox")`), the expressivity an ontology uses (`ontology_expressivity`) and the check of an ontology against what a method supports (`check_ontology`, `ExpressivityReport`). Every catalogued method states its `expressivity`; every model checks its training ontology when it is created and warns about axioms beyond it (`Model.check_expressivity`, `Model.expressivity_report`).
+- `mowl.logic.tasks`: the standard inference tasks (subsumption, classification, satisfiability, consistency, instance checking, realization, ...), their reduction to subsumption tests, the completion tasks of knowledge graph and knowledge base completion, and `LogicalStatus` / `FaithfulnessCriterion`. Method cards list the `tasks` they score, evaluation regime cards the `task` and `target` they measure; `list_methods(task=..., covers=...)`.
+- `mowl.reasoning`: reasoner backends chosen by expressivity (`create_reasoner`, `select_reasoner`, `register_reasoner`; ELK, HermiT and the structural reasoner are registered) and `SubsumptionOracle`, which answers inference tasks and the logical status of a candidate axiom through subsumption between class expressions.
 - Explicit training and evaluation designs behind the Box²EL and TransBox numbers:
   `mowl.training.SlackMargin` / `StrictMargin` (the margin set by meaning; modules declare
   `margin_semantics`), `mowl.training.Box2ELCodeTraining` / `TransBoxCodeTraining` (the

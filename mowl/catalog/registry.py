@@ -61,17 +61,26 @@ def get_method(key):
     return cards[key]
 
 
-def list_methods(family=None, status=None, logic=None, implemented=None):
+def list_methods(family=None, status=None, logic=None, implemented=None, task=None,
+                 covers=None):
     """Return catalogued methods, optionally filtered, sorted by family and key.
 
     :param family: Keep only this :class:`~mowl.catalog.card.Family` (or its value).
     :param status: Keep only this :class:`~mowl.catalog.card.Status` (or its value).
     :param logic: Keep only cards whose ``logic`` contains this string (case-insensitive).
     :param implemented: If ``True``/``False``, keep only implemented/unimplemented methods.
+    :param task: Keep only methods that give a score for this inference task (a key of
+        :data:`mowl.logic.TASKS`).
+    :param covers: Keep only methods whose supported expressivity includes this one (a
+        :class:`mowl.logic.Expressivity` or its name), e.g. the expressivity of an ontology
+        (:func:`mowl.logic.ontology_expressivity`).
     :rtype: list[MethodCard]
     """
     family = Family(family) if family is not None else None
     status = Status(status) if status is not None else None
+    if isinstance(covers, str):
+        from mowl.logic import Expressivity
+        covers = Expressivity.parse(covers)
     out = []
     for card in _cards().values():
         if family is not None and card.family is not family:
@@ -82,8 +91,27 @@ def list_methods(family=None, status=None, logic=None, implemented=None):
             continue
         if implemented is not None and card.implemented != implemented:
             continue
+        if task is not None and task not in card.tasks:
+            continue
+        if covers is not None:
+            supported = card.supported_expressivity
+            if supported is None or not covers <= supported:
+                continue
         out.append(card)
     return sorted(out, key=lambda c: (c.family.value, c.region, c.key))
+
+
+def card_for(cls):
+    """Return the card of the method implemented by the class ``cls`` (or by the class of
+    an instance), looking along its base classes; ``None`` if it has no card."""
+    if not isinstance(cls, type):
+        cls = type(cls)
+    by_path = {c.implementation: c for c in _cards().values() if c.implementation}
+    for base in cls.__mro__:
+        card = by_path.get(f"{base.__module__}.{base.__qualname__}")
+        if card is not None:
+            return card
+    return None
 
 
 def load_method(key):

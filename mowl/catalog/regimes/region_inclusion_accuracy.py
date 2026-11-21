@@ -5,6 +5,8 @@ from mowl.catalog.regimes._regime_refs import MONDAL2021, XIONG2022
 
 REGIME = RegimeCard(
     key='region-inclusion-accuracy',
+    task="subsumption",
+    target="deductive inference",
     name='Geometric inclusion accuracy',
     kind=RegimeKind.EVALUATION,
     summary=('Fraction of the atomic subsumptions of a split (train, validation, test) whose '

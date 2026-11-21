@@ -5,6 +5,8 @@ from mowl.catalog.regimes._regime_refs import ZHANG2022
 
 REGIME = RegimeCard(
     key='sampled-negative-auc',
+    task="link-prediction",
+    target="inductive prediction",
     name='Link classification AUC with sampled test negatives',
     kind=RegimeKind.EVALUATION,
     summary=('Test edges are scored against sampled negatives (uniform pairs, or corruptions of '

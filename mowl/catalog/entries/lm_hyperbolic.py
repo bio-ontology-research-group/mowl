@@ -43,6 +43,8 @@ _INDUCTIVE = Guarantee(
 
 HIT = MethodCard(
     key="hit",
+    expressivity="taxonomy",
+    tasks=("subsumption",),
     name="HiT (Hierarchy Transformer)",
     family=Family.LANGUAGE_MODEL,
     region=_REGION,
@@ -100,6 +102,8 @@ HIT = MethodCard(
 
 ONT = MethodCard(
     key="ont",
+    expressivity="EL",
+    tasks=("subsumption",),
     name="OnT (Ontology Transformer)",
     family=Family.LANGUAGE_MODEL,
     region=_REGION,

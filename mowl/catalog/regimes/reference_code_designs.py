@@ -221,6 +221,7 @@ REGIMES = (
     ),
     RegimeCard(
         key="transbox-normal-form-ranking",
+        task="subsumption-prediction",
         name="Per-normal-form subsumption ranking (TransBox variant)",
         kind=RegimeKind.EVALUATION,
         summary=(

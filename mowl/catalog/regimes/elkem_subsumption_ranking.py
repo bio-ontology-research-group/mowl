@@ -6,6 +6,8 @@ from mowl.catalog.regimes._regime_refs import SINGH2026
 
 REGIME = RegimeCard(
     key='elkem-subsumption-ranking',
+    task="subsumption-prediction",
+    target="inductive prediction",
     name='Unfiltered subsumption ranking with averaged ties (ELK-Em)',
     kind=RegimeKind.EVALUATION,
     summary=(
