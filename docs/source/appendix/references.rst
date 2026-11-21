@@ -55,6 +55,10 @@ References
 
 .. [ozcep2020] Özçep, Ö. L., Leemhuis, M., & Wolter, D. (2020). `Cone Semantics for Logics with Negation <https://doi.org/10.24963/ijcai.2020/252>`_. In: Proceedings of the Twenty-Ninth International Joint Conference on Artificial Intelligence (IJCAI-20), 1820–1826.
 
+.. [bourgaux2021] Bourgaux, C., Ozaki, A., & Pan, J. Z. (2021). `Geometric Models for (Temporally) Attributed Description Logics <https://arxiv.org/abs/2108.12239>`_. Proceedings of DL 2021.
+
+.. [leemhuis2024temporal] Leemhuis, M. (2024). `Embedding Temporal Description Logic Ontologies by Cone-based Geometric Models <https://ceur-ws.org/Vol-3763/paper3.pdf>`_. Proceedings of FCR 2024, CEUR-WS Vol-3763.
+
 .. [ozcep2023] Özçep, Ö. L., Leemhuis, M., & Wolter, D. (2023). `Embedding Ontologies in the Description Logic ALC by Axis-Aligned Cones <https://doi.org/10.1613/jair.1.13939>`_. Journal of Artificial Intelligence Research, 78.
 
 .. [leemhuis2020] Leemhuis, M., Özçep, Ö. L., & Wolter, D. (2020). `Orthologics for Cones <https://arxiv.org/abs/2008.03172>`_. ArXiv, abs/2008.03172.
