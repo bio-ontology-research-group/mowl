@@ -126,3 +126,57 @@ def test_unsatisfied_grounding_is_reported_and_costs_follow_inclusion():
 
 def test_declared_scoring():
     assert DFALCModel.axiom_scoring == "method"
+
+
+# -- rule-based losses of normal forms 4-7 (Eqs. 10-13; paper Examples 1 and 2) -----------
+from mowl.nn.alc.dfalc.module import rule_nf4, rule_nf5, rule_nf6, rule_nf7  # noqa: E402
+
+
+def _r(s1s2):
+    r = th.zeros(1, 2, 2)
+    r[0, 0, 1] = s1s2
+    return r
+
+
+def test_rule_losses_revise_where_the_rule_fires_and_not_otherwise():
+    B = T([[0.9, 0.0]])
+    A0 = T([[0.0, 0.0]], requires_grad=True)
+    # Example 1, NF4: B(s1) = 0.9, r(s1, s2) = 0.9 -> A(s2) should be raised
+    loss = rule_nf4(B, A0, _r(0.9), 0.8)
+    assert loss.item() > 0
+    loss.sum().backward()
+    assert A0.grad[0, 1] < 0 and A0.grad[0, 0] == 0
+    # r(s1, s2) = 0.5: B(s1) r(s1, s2) = 0.45 is below the threshold: no revision
+    assert rule_nf5(B, A0.detach(), _r(0.5), 0.8).item() == 0.0
+    # A(s2) already above the threshold: nothing to revise
+    assert rule_nf5(B, T([[0.0, 0.9]]), _r(0.9), 0.8).item() == 0.0
+    # Example 2, NF6: A(s2) = 0.9, r(s1, s2) = 0.9, B = 0 -> B(s1) should be raised
+    A = T([[0.0, 0.9]])
+    B0 = T([[0.0, 0.0]], requires_grad=True)
+    l6 = rule_nf6(A, B0, _r(0.9), 0.8)
+    assert l6.item() > 0
+    l6.sum().backward()
+    assert B0.grad[0, 0] < 0
+    assert rule_nf6(A, T([[0.9, 0.0]]), _r(0.9), 0.8).item() == 0.0
+    # NF7 contains the NF6 term and the NF4/NF5 term
+    assert rule_nf7(A, T([[0.0, 0.0]]), _r(0.9), 0.8).item() >= l6.item()
+
+
+def test_rule_loss_on_quantified_axioms_trains_in_the_model():
+    ad = OWLAPIAdapter()
+    ont = ad.create_ontology("http://mowl/dfalc/nf4")
+    A, B = ad.create_class(NS + "A"), ad.create_class(NS + "B")
+    r = ad.create_object_property(NS + "r")
+    axs = HashSet()
+    axs.add(ad.create_subclass_of(B, ad.create_object_some_values_from(r, A)))
+    for n in ("s1", "s2"):
+        axs.add(ad.create_class_assertion(ad.create_object_union_of(A, B),
+                                          ad.create_individual(NS + n)))
+    ad.owl_manager.addAxioms(ont, axs)
+    m = DFALCModel(Dataset(ont), loss_type="rule", learning_rate=0.1)
+    s1, s2 = m.individual_index_dict[NS + "s1"], m.individual_index_dict[NS + "s2"]
+    b = np.full(2, 0.01); b[s1] = 0.9
+    rm = np.full((2, 2), 0.01); rm[s1, s2] = 0.9
+    m.set_grounding(concepts={NS + "A": np.zeros(2) + 0.01, NS + "B": b}, roles={NS + "r": rm})
+    m.train(epochs=200)
+    assert m.concept_grounding()[NS + "A"][s2] > 0.5

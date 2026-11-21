@@ -33,10 +33,9 @@ What mOWL implements
 * Axiom forms: ``SubClassOf``, ``EquivalentClasses`` and ``DisjointClasses`` between
   arbitrary :math:`\mathcal{ALC}` class expressions, class assertions and object property
   assertions (a fuzzy assertion with truth value 1; the loss is the distance to 1).
-* ``loss_type="rule"`` uses the rule-based loss of Eq. 9 for inclusions without quantifiers.
+* ``loss_type="rule"`` uses the rule-based losses of the paper: Eq. 9 for inclusions without quantifiers and the losses of normal forms 4-7 for ``L ⊑ ∃r.L``, ``L ⊑ ∀r.L``, ``∃r.L ⊑ L`` and ``∀r.L ⊑ L`` (``threshold`` is the paper's :math:`\alpha`).
 
-Not implemented: the normalisation procedure (not needed for the hierarchical loss), the
-rule-based losses of normal forms 4-7, the paper's experiments and the neural classifiers
+Not implemented: the normalisation procedure (not needed for the hierarchical loss), the paper's experiments and the neural classifiers
 that produce a perceptual grounding. The grounding is a table over the domain, so the model
 is transductive and meant for small domains. Compared to FALCON
 (:class:`~mowl.models.FALCONModel`) there are no entity embeddings, membership networks or

@@ -54,7 +54,7 @@ class BoxSEL(EmbeddingELModel):
     :param beta: Side length of the cube the boxes lie in (paper: 1 or 10).
     :param location_weight: Weight of :math:`L_{loc}`.
     :param volume_weight: Weight of :math:`L_{vol}` as printed (Eq. 10); off by default
-        because as printed it rewards boxes that fill the whole cube (see the catalogue card).
+        because it is zero only for boxes that fill the cube (see the catalogue card).
     :param conditional_weight: Weight of the mean conditional loss.
     :param temperature: Softplus sharpness of the volumes (``beta`` of ``softplus``).
     :param temperature_final: If given, the sharpness grows geometrically from
