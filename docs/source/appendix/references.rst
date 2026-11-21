@@ -78,3 +78,11 @@ References
 .. [yu2023shadow] Yu, T., Liu, T. J. B., Tseng, A., & De Sa, C. (2024). `Shadow Cones: A Generalized Framework for Partial Order Embeddings <https://arxiv.org/abs/2305.15215>`_. In: The Twelfth International Conference on Learning Representations (ICLR 2024).
 
 .. [suzuki2019] Suzuki, R., Takahama, R., & Onoda, S. (2019). `Hyperbolic Disk Embeddings for Directed Acyclic Graphs <https://arxiv.org/abs/1902.04335>`_. In: Proceedings of the 36th International Conference on Machine Learning (ICML 2019).
+
+.. [ren2020q2b] Ren, H., Hu, W., & Leskovec, J. (2020). `Query2box: Reasoning over Knowledge Graphs in Vector Space using Box Embeddings <https://arxiv.org/abs/2002.05969>`_. ICLR 2020.
+
+.. [ren2020betae] Ren, H., & Leskovec, J. (2020). `Beta Embeddings for Multi-Hop Logical Reasoning in Knowledge Graphs <https://arxiv.org/abs/2010.11465>`_. NeurIPS 2020.
+
+.. [zhang2021cone] Zhang, Z., Wang, J., Chen, J., Ji, S., & Wu, F. (2021). `ConE: Cone Embeddings for Multi-Hop Reasoning over Knowledge Graphs <https://arxiv.org/abs/2110.13715>`_. NeurIPS 2021.
+
+.. [he2024acone] He, Y., Hernandez, D., Nayyeri, M., Xiong, B., Zhu, Y., Kharlamov, E., & Staab, S. (2024). `Generating SROI⁻ Ontologies via Knowledge Graph Query Embedding Learning <https://arxiv.org/abs/2407.09212>`_. ArXiv, abs/2407.09212.

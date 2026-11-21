@@ -48,3 +48,7 @@ from mowl.models.concept2box.model import Concept2Box
 from mowl.models.hyperbolic_cones.model import HyperbolicCones
 from mowl.models.shadow_cones.model import ShadowCones
 from mowl.models.disk_embeddings.model import DiskEmbeddings
+from mowl.models.query2box.model import Query2Box
+from mowl.models.betae.model import BetaE
+from mowl.models.cone_qe.model import ConE
+from mowl.models.acone.model import AConE

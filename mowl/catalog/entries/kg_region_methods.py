@@ -11,6 +11,36 @@ from mowl.catalog.card import (Family, Guarantee, GuaranteeKind as K, MethodCard
 from mowl.catalog.entries import _refs as R
 from mowl.logic import Construct, Expressivity
 
+_QUERY_NOTES = (
+    "ADAPTATION of the data and the task, reimplementation of the geometry: the paper is "
+    "about queries over a knowledge graph. mOWL reads the ontology as a graph (entities: "
+    "named classes and individuals; edges: A ⊑ B and a:B as 'isa', A ⊑ ∃r.B and r(a,b) as "
+    "r, each with its inverse; isa closed transitively by default; role edges are NOT "
+    "propagated down the hierarchy) and reads a class expression as a query on it through "
+    "the shared layer mowl.nn.query.expression (named class = everything below it, ∃r.C = "
+    "projection along r backwards, ⊓ = intersection, ⊔ = union by disjunctive normal "
+    "form, ¬ = negation, ∀r.C = ¬∃r.¬C). Answers are entities of the graph: closed world "
+    "over the entities, not entailment. Read for training: named left-hand side with named "
+    "classes and ∃r.B conjuncts on the right, equivalences of those, class and role "
+    "assertions; the rest is skipped (counted in model.skipped_axioms), so the declared "
+    "expressivity is that of the part read; queries themselves may be ALC class "
+    "expressions where the geometry has the operators. Own training loop (query sampling "
+    "and the negative sampling loss of the reference codes) shared by the four query "
+    "methods in mowl.models.query; it is not a TrainingRegime (those are tied to EL normal "
+    "forms). Axiom scores for the joint rankings: gci0 and class_assertion are 'the entity "
+    "is an answer of the class', gci2 'the entity is an answer of ∃r.D'; gci1 and gci3 "
+    "are not scored. Evaluation regime 'query-answering' through score_query (the "
+    "negation structures are not sampled by mowl.evaluation.sample_queries). Default "
+    "sizes (dimension, hidden width, layers) are small; the papers' are larger. ")
+
+_QUERY_FIELDS = dict(
+    status=Status.LEARNABLE, origin=Origin.ADAPTATION,
+    expressivity="EL with ABox",
+    tasks=("subsumption", "instance-checking", "query-answering"),
+    evaluation=("query-answering",),
+    axioms=("subclass_of", "equivalent_classes", "class_assertion",
+            "object_property_assertion"))
+
 _KG_ONLY = ("Defined for knowledge graphs, not for DL ontologies: there is no "
             "interpretation of TBox axioms (GCIs over complex concepts).")
 
@@ -202,15 +232,20 @@ QUERY2BOX = MethodCard(
     concepts="query box",
     roles="box translation (projection operator)",
     individuals="point",
-    not_implemented_reason=_KG_ONLY + " It answers queries over triples.",
-    guarantees=(
-        Guarantee(
-            K.LIMITATION,
-            "With M conjunctive queries with pairwise disjoint answers, modelling every "
-            "EPFO query by a distance threshold requires VC dimension at least M; hence "
-            "unions cannot be embedded directly in low dimension.",
-            "ren2020q2b, Theorem 1"),
-    ),
+    implementation="mowl.models.query2box.model.Query2Box",
+    module="mowl.nn.query.geometry.Query2BoxGeometry",
+    notes=_QUERY_NOTES + (
+        "Query2Box has no negation: a class expression with ¬ or ∀ raises UnsupportedOperator. "
+        "Geometry as in the reference code of the BetaE/Query2Box authors (KGReasoning, "
+        "geo='box'): attention-averaged centers, min-offset with sigmoid gate, offsets activated "
+        "by relu (option softplus/none). Not recorded as a guarantee because mOWL has no "
+        "test for it: Theorem 1 of ren2020q2b (with M conjunctive queries with disjoint "
+        "answers, answering every EPFO query by a distance threshold needs VC dimension "
+        "at least M, so unions are answered by DNF with the best branch, which mOWL does). "
+        "Paper and code agree on the distance (checked against the LaTeX source): "
+        "d_out + alpha * d_in with alpha = center_weight, d_in the distance of the centre "
+        "to the entity clamped into the box. "),
+    **_QUERY_FIELDS,
     intersection_closed=True,
     helly="2 (axis-parallel boxes; eckhoff1988)",
     references=(
@@ -233,13 +268,21 @@ BETAE = MethodCard(
     concepts="Beta distribution embedding of a query",
     roles="neural projection operator",
     individuals="Beta distribution embedding",
-    not_implemented_reason=_KG_ONLY + " It answers queries over triples.",
+    implementation="mowl.models.betae.model.BetaE",
+    module="mowl.nn.query.geometry.BetaEGeometry",
+    notes=_QUERY_NOTES + (
+        "Geometry as in the authors' code (KGReasoning, geo='beta'): parameters clamped to [0.05,"
+        " 1e9], KL(entity || query), negation 1/parameter, DNF for unions (not the De Morgan "
+        "variant). Default MLP is 1 hidden layer of 128 units (code: 2 layers of 1600). "),
+    **_QUERY_FIELDS,
     guarantees=(
         Guarantee(
             K.EXPRESSIVITY,
             "Negation is an involution, N(N(S)) = S, and intersection is idempotent, "
             "I({S, ..., S}) = S.",
-            "ren2020betae, Proposition 1"),
+            "ren2020betae, Proposition 1",
+            verified_in_mowl="tests/nn/test_query_geometry.py::"
+                             "test_betae_negation_is_an_involution_and_intersection_idempotent"),
     ),
     references=(
         Reference("ren2020betae",
@@ -260,13 +303,25 @@ CONE_QE = MethodCard(
     concepts="product of 2-D sector-cones",
     roles="neural projection operator",
     individuals="cone (degenerate)",
-    not_implemented_reason=_KG_ONLY + " It answers queries over triples.",
+    implementation="mowl.models.cone_qe.model.ConE",
+    module="mowl.nn.query.geometry.ConEGeometry",
+    notes=_QUERY_NOTES + (
+        "Geometry as in the authors' code (QE-ConE): tanh-scaled axes, projection MLP, "
+        "SemanticAverage and CardMin intersection, complement negation, distance with learnable "
+        "modulus. Differences: the intersection axis uses atan2 instead of the code's clamp of "
+        "|x| < 1e-3 and quadrant patching, and negation is not done in place. "
+        "Learning rates above about 5e-3 made the loss collapse to log 2 on a "
+        "14-entity test ontology (the code uses 1e-4); default MLP 1 layer "
+        "of 128 (code: 2 of 1600). "),
+    **_QUERY_FIELDS,
     guarantees=(
         Guarantee(
             K.CLOSURE,
             "Sector-cones are closed under closure-complement; their union and "
             "intersection are again cones.",
-            "zhang2021cone, Section 3.1 (after Definition 3)"),
+            "zhang2021cone, Section 3.1 (after Definition 3)",
+            verified_in_mowl="tests/nn/test_query_geometry.py::"
+                             "test_cone_negation_is_the_complement_and_an_involution"),
     ),
     references=(
         Reference("zhang2021cone",
@@ -289,17 +344,34 @@ ACONE = MethodCard(
     concepts="cone (multicone) in complex space",
     roles="rotation (with aperture scaling)",
     individuals="complex vector",
-    not_implemented_reason=(
-        "Trained from KG query answering, not from an ontology's axioms; the DL concepts "
-        "are an interpretation of the learned query embeddings. Outside mOWL's scope of "
-        "embedding a given ontology."),
+    implementation="mowl.models.acone.model.AConE",
+    module="mowl.nn.query.geometry.AConEGeometry",
+    notes=_QUERY_NOTES + (
+        "Geometry as in the paper (Eq. 2, rotations; aperture-additive) and the authors' code "
+        "(models.py: the projection is the complex product of axis and aperture with the "
+        "relation's angles; the unused MLP of the code is not built). Intersection, negation and "
+        "score are ConE's, as in the code. The aperture-multiplicative variant and the multicone "
+        "semantics of the union are not implemented (unions: DNF with best branch, as in the "
+        "code). The paper's claims that learned relations satisfy axioms (role inclusion, "
+        "composition) are not checked by mOWL: only the algebra of the operators is tested; the "
+        "paper's SROI⁻ axiom extraction from a learned model is not implemented. Observed on a "
+        "14-entity test ontology: with rotation-only projection, paths of several isa steps "
+        "(2p, 3p) were fitted worse than single steps in a short run (not investigated "
+        "further). "),
+    **_QUERY_FIELDS,
     guarantees=(
         Guarantee(
             K.EXPRESSIVITY,
-            "∃R.(C ⊔ D) ≡ ∃R.C ⊔ ∃R.D holds in multicone embeddings for rotations with "
-            "γ = 1 and δ ≥ 0; composition, inversion and hierarchy properties of rotations "
-            "are given in Propositions 2-5 and Corollaries 6-7.",
-            "he2024acone, Propositions 2-5, Corollaries 6-7"),
+            "∃R.(C ⊔ D) ≡ ∃R.C ⊔ ∃R.D holds for rotations with γ = 1 and δ ≥ 0 "
+            "(Proposition 3), and R ⊑ S holds for rotations with the same θ if γ1 ≤ γ2 and "
+            "δ1 ≤ δ2 (Proposition 5). The other statements (Propositions 2 and 4, Corollaries "
+            "6-7: commutation, composition, transitivity) are not recorded: mOWL has no test "
+            "for them.",
+            "he2024acone, Propositions 3 and 5",
+            condition="for the aperture-additive rotation, any parameters (Prop. 5: δ1 ≤ δ2)",
+            verified_in_mowl="tests/nn/test_query_geometry.py::"
+                             "test_acone_proposition_5_role_inclusion_and_"
+                             "proposition_3_union_distribution"),
     ),
     references=(
         Reference("he2024acone",
