@@ -89,7 +89,7 @@ def test_negative_pairs_do_not_update_delta():
 
 
 def test_trains_on_the_taxonomy_and_declares_scoring():
-    model = train(BoxLattice, epochs=600, embed_dim=8, learning_rate=0.01)
+    model = train(BoxLattice, epochs=600, seed=0, embed_dim=8, learning_rate=0.01)
     assert axiom_scoring_of(model) == "module" and model.scored_forms == ("gci0",)
     check_trained_taxonomy(model)
     first = train(BoxLattice, epochs=1, embed_dim=8, learning_rate=0.01)

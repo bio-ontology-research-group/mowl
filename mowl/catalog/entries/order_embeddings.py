@@ -192,7 +192,8 @@ BOX_LATTICE = MethodCard(
         "latter are optional via unary_weight). Ours: for disjoint boxes the positive loss "
         "is the linear form of the paper's lower bound of the joint; the paper's printed "
         "log of the bound has an inconsistent sign and is undefined for non-positive "
-        "bounds."),
+        "bounds. min_delta defaults to 0.01 (paper: 1e-6 for WordNet; with 1e-6 boxes "
+        "collapse in a dimension on small taxonomies)."),
     intersection_closed=True,
     helly="2 (axis-parallel boxes; eckhoff1988)",
     references=(

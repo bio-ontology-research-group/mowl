@@ -47,7 +47,11 @@ class TaxonomyEmbeddingModel(EmbeddingELModel):
         ds = datasets["gci0"]
         n = len(self.named_class_index_dict)
         if ds._data.dim() == 2:
-            ds._data = ds._data[(ds._data < n).all(dim=1)]
+            rows = ds._data[(ds._data < n).all(dim=1)]
+            # The normaliser returns axioms in the iteration order of a hash set, which
+            # changes between processes; negatives are drawn per row position, so sort the
+            # rows to make a seeded run reproducible.
+            ds._data = th.unique(rows, dim=0)
         return {"gci0": ds}
 
     def _load_datasets(self):

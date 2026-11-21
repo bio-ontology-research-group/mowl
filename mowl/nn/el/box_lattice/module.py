@@ -1,4 +1,6 @@
 r"""Box lattice embeddings (Vilnis et al., ACL 2018) as a module over the class taxonomy."""
+import math
+
 import torch as th
 import torch.nn as nn
 
@@ -32,7 +34,11 @@ class UnitCubeBoxModule(TaxonomyModule):
 
     :param nb_ont_classes: Number of classes.
     :param embed_dim: Dimension :math:`d` of the cube.
-    :param min_delta: :math:`\Delta_{\min}` (the paper: ``1e-6``).
+    :param min_delta: :math:`\Delta_{\min}`. The paper tunes it in ``{0.01, ..., 1e-6}`` and reports
+        ``1e-6`` for WordNet; the mOWL default is ``0.01``: with ``1e-6`` a dimension of a
+        box can collapse to the floor during training (the log-probabilities then ignore it)
+        and some stated pairs stay disjoint (about 1 seed in 12 on the tiny taxonomy test,
+        0 of 60 with ``0.01``).
     :param init_side: Sides are initialised uniformly in ``[init_side[0], init_side[1]]``
         and minima so that the box lies in the cube.
     :param max_regularization: Weight of the L1 penalty :math:`\mathrm{mean}(1 - \max)`
@@ -40,7 +46,7 @@ class UnitCubeBoxModule(TaxonomyModule):
         "dimension-max regularization"; paper value 0.005).
     """
 
-    def __init__(self, nb_ont_classes, embed_dim=50, min_delta=1e-6, init_side=(0.3, 0.9),
+    def __init__(self, nb_ont_classes, embed_dim=50, min_delta=0.01, init_side=(0.3, 0.9),
                  max_regularization=0.0):
         super().__init__(nb_ont_classes)
         self.embed_dim = embed_dim
@@ -100,7 +106,7 @@ class BoxLatticeModule(UnitCubeBoxModule):
     :math:`C \subseteq D`. With :math:`p` the joint estimate divided by
     :math:`\mathrm{vol}(C)` (lower bound if the boxes are disjoint, true value otherwise):
 
-    - positive loss :math:`-\log(\max(p, 0) + \varepsilon) + g`, with :math:`g =
+    - positive loss :math:`-\log(\max(p, 0) + \varepsilon) + w g`, with :math:`g =
       -(\text{lower bound}) / \mathrm{vol}(C \vee D) \in [0, 1)` for disjoint boxes and 0
       otherwise. For intersecting boxes this is the negative log conditional probability
       (the paper's cross entropy with target 1). The second term is *ours*: it keeps a
@@ -116,12 +122,19 @@ class BoxLatticeModule(UnitCubeBoxModule):
     :param eps: :math:`\varepsilon`, the constant inside the logarithms.
     :param freeze_delta_negatives: Do not update delta through negative pairs (the paper's
         WordNet setting).
+    :param disjoint_weight: Weight :math:`w` of :math:`g` in the positive loss. Default
+        :math:`-\log\varepsilon`, so that the penalty of a disjoint stated pair has the same
+        scale as the log term; with weight 1 its gradient is much smaller than that of the
+        negatives and such a pair can stay disjoint.
     """
 
-    def __init__(self, nb_ont_classes, embed_dim=50, min_delta=1e-6, init_side=(0.3, 0.9),
-                 max_regularization=0.0, eps=1e-6, freeze_delta_negatives=True):
+    def __init__(self, nb_ont_classes, embed_dim=50, min_delta=0.01, init_side=(0.3, 0.9),
+                 max_regularization=0.0, eps=1e-6, freeze_delta_negatives=True,
+                 disjoint_weight=None):
         super().__init__(nb_ont_classes, embed_dim, min_delta, init_side, max_regularization)
         self.eps = float(eps)
+        self.disjoint_weight = -math.log(self.eps) if disjoint_weight is None \
+            else float(disjoint_weight)
         self.freeze_delta_negatives = freeze_delta_negatives
 
     def _estimate(self, sub, sup, detach_delta=False):
@@ -145,7 +158,7 @@ class BoxLatticeModule(UnitCubeBoxModule):
 
     def positive_loss(self, sub, sup):
         p, gap = self._estimate(sub, sup)
-        return (-th.log(p.clamp(min=0.0) + self.eps) + gap).float()
+        return (-th.log(p.clamp(min=0.0) + self.eps) + self.disjoint_weight * gap).float()
 
     def negative_loss(self, sub, sup):
         p = self.conditional(sub, sup, detach_delta=self.freeze_delta_negatives)
