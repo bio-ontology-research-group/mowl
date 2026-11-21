@@ -106,6 +106,17 @@ class TrainingRegime:
         """Extra loss term added once per epoch, or ``None``."""
         return None
 
+    def on_epoch_end(self, epoch, losses):
+        """Called at the end of every epoch, after the optimisation step and before
+        validation (structural changes of the model such as re-seeding components,
+        updates of loss weights).
+
+        :param losses: Mapping from loss term name to its value in this epoch as a
+            float. Always has ``"total"``; models that report their loss per term (for
+            example :class:`mowl.models.GroundedEL`: ``"fact"``, ``"axioms"``,
+            ``"region"``) add those.
+        """
+
     def optimizer(self):
         """Return the optimiser, or ``NotImplemented`` to use the model's."""
         return NotImplemented
@@ -114,7 +125,8 @@ class TrainingRegime:
 class ComposedRegime(TrainingRegime):
     """Combination of several regimes.
 
-    Dataset transformations are applied in order, per-epoch hooks are all called,
+    Dataset transformations are applied in order, per-epoch hooks (start and end) are
+    all called in order,
     negative filters are chained in order,
     additional losses are summed, training stops as soon
     as one regime asks for it, and for :meth:`negatives`, :meth:`loss` and
@@ -182,6 +194,10 @@ class ComposedRegime(TrainingRegime):
     def on_epoch_start(self, epoch, epochs):
         for r in self.regimes:
             r.on_epoch_start(epoch, epochs)
+
+    def on_epoch_end(self, epoch, losses):
+        for r in self.regimes:
+            r.on_epoch_end(epoch, losses)
 
     def additional_loss(self, epoch):
         total = None

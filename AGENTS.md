@@ -71,6 +71,11 @@ Documentation to read for the area you touch:
 
 1. **A difference from a paper's code is a named regime or a regime argument**, with a
    card and a test, and a recipe that uses it. It is not a flag hidden in a model.
+   A model with a training loop of its own still calls the regime hooks, and its
+   default design is a composition of shared regimes (example: `GroundedEL` and
+   `mowl.training.GroundedELTraining`). A regime that needs something from the model
+   names a small protocol (`set_tau`, `reseed_components`, `dual_weights`,
+   `score_query`) and refuses other models in `attach`.
 2. **Known defects are fixed, and the fix is the default.** If a published number depends
    on a defect of the reference code, keep the old behaviour as an explicit option and
    let the recipe select it (example: `gci1_radius_term=False` for ELEmbeddings).

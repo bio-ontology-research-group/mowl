@@ -530,6 +530,12 @@ class MultiBoxEL(EmbeddingELModel):
         ):
             self.module.reseed(np.random.default_rng(self.points_seed + int(epoch)))
 
+    def reseed_components(self, epoch: int = 0) -> int:
+        """Re-seed dead or idle components (:meth:`~mowl.nn.MultiBoxELModule.reseed`):
+        the protocol of :class:`mowl.training.IdleComponentReseeding`, for use instead
+        of the built-in ``reseed_every`` (leave that at 0 when the regime is used)."""
+        return self.module.reseed(np.random.default_rng(self.points_seed + int(epoch)))
+
     def additional_training_loss(self, epoch: int) -> Optional[th.Tensor]:
         """Compute per-epoch extra training loss for point or structural objectives.
 

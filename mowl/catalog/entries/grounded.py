@@ -57,11 +57,11 @@ GROUNDED = MethodCard(
             condition="random initialisation"),
     ),
     limitations=(
-        "Corrupted-fact negatives (neg_weight > 0) are not filtered against the ABox: a "
-        "corruption may coincide with a stated or entailed fact.",
-        "The training procedure (temperature annealing, element and region sampling, "
-        "idle-component re-seeding, Lagrangian dual weights) is implemented inside the "
-        "model and is not yet available as training regimes for other methods.",
+        "The model's own corrupted-fact negatives (neg_weight > 0) are not filtered "
+        "against the ABox; compose the training with KnownPositiveFilter to remove "
+        "stated facts (entailed ones are still not excluded).",
+        "The loss (element memberships, sampled region points, minimality) is part of "
+        "the method; a training regime's per-axiom loss hook is not used.",
     ),
     intersection_closed="finite unions of boxes are closed under intersection, but the "
                         "number of boxes multiplies (K·K), so unions of at most K boxes "
@@ -76,7 +76,12 @@ GROUNDED = MethodCard(
         "unions of boxes (anchor, projection as Minkowski sum, intersection, union) and "
         "scored over entities or concepts, or scored by a beam (max-min) search over "
         "witness elements; available in translation mode. The box algebra is exact while "
-        "the number of boxes stays below max_boxes."),
+        "the number of boxes stays below max_boxes. GroundedEL.score_query exposes it to "
+        "the evaluation regime 'query-answering' (mowl.evaluation.LogicalQueryAnswering). "
+        "Training: the regime 'grounded-el-training', a composition of "
+        "'temperature-annealing', 'cosine-lr-decay' / 'linear-lr-decay', "
+        "'idle-component-reseeding' and 'lagrangian-dual-weights', each usable with "
+        "other models."),
 )
 
 LEAST_MODEL = MethodCard(

@@ -24,7 +24,10 @@ from mowl.training.losses import (SumLoss, MSETargetLoss, PairwiseMarginRankingL
 from mowl.training.positives import (TransitiveReductionPositives,
                                      TransitiveClosurePositives, ValidationAxiomsAsPositives)
 from mowl.training.schedules import StepDecay, ConstantThenCosine, CyclicLearningRate, \
-    ReduceOnPlateau, EarlyStopping
+    ReduceOnPlateau, EarlyStopping, LinearDecay, TemperatureAnnealing
+from mowl.training.structure import IdleComponentReseeding
+from mowl.training.constraints import LagrangianDualWeights, dual_ascent_step
+from mowl.training.grounded import GroundedELTraining
 from mowl.training.selection import (ValidationSelection, ValidationRankSelection,
                                      ValidationF1Selection, validation_f1)
 from mowl.training.batching import PerNormalFormMiniBatches
@@ -55,7 +58,9 @@ __all__ = [
     "NormalFormFrequencyWeighting",
     "TransitiveReductionPositives", "TransitiveClosurePositives",
     "StepDecay", "ConstantThenCosine", "CyclicLearningRate", "ReduceOnPlateau",
-    "EarlyStopping",
+    "EarlyStopping", "LinearDecay", "TemperatureAnnealing",
+    "IdleComponentReseeding", "LagrangianDualWeights", "dual_ascent_step",
+    "GroundedELTraining",
     "ValidationSelection", "ValidationRankSelection", "ValidationF1Selection",
     "validation_f1",
     "PerNormalFormMiniBatches",

@@ -1578,19 +1578,9 @@ class GroundedEL(EmbeddingELModel):
             for t in ("fact", "axioms", "region"):
                 self.dual_weights[t] = 1.0
             return dict(self.dual_weights)
-        for t in ("fact", "axioms", "region"):
-            if t not in mean_losses:
-                continue
-            raw_v = mean_losses[t]
-            val = (
-                float(raw_v.detach().item())
-                if isinstance(raw_v, th.Tensor)
-                else float(raw_v)
-            )
-            excess = max(0.0, val - self.dual_target)
-            self.dual_weights[t] = float(
-                min(self.dual_max, self.dual_weights[t] + self.dual_rho * excess)
-            )
+        from mowl.training.constraints import dual_ascent_step
+        dual_ascent_step(self.dual_weights, mean_losses, rho=self.dual_rho,
+                         max_weight=self.dual_max, target=self.dual_target)
         return dict(self.dual_weights)
 
     def reset_dual_weights(self) -> Dict[str, float]:
@@ -2919,8 +2909,8 @@ class GroundedEL(EmbeddingELModel):
             and "object_property_assertion" in td
             and len(td["object_property_assertion"]) > 0
         ):
-            x_neg, y_neg, r_neg = self._sample_corrupted_opa(
-                td["object_property_assertion"][:], generator
+            x_neg, y_neg, r_neg = self._regime_corrupted_opa(
+                td["object_property_assertion"], generator
             )
             rho_neg = mod.role_membership(pos_all[x_neg], pos_all[y_neg], r_neg)
             loss_neg = rho_neg.mean()
@@ -3468,6 +3458,19 @@ class GroundedEL(EmbeddingELModel):
            validation / checkpoint saving every ``validate_every`` epochs when
            configured.
 
+        The training design is a :class:`mowl.training.TrainingRegime`. Without one
+        assigned (``model.training_regime is None``), the model uses
+        :meth:`mowl.training.GroundedELTraining.for_model`: temperature annealing, the
+        optional learning-rate decay, idle-component re-seeding and Lagrangian dual
+        weights, each a shared regime configured by the model's hyperparameters and
+        the arguments below. An assigned regime replaces that composition as a whole
+        (``lr_final`` and ``lr_schedule`` are then not used); its hooks
+        ``optimizer``, ``on_epoch_start``, ``negatives`` and ``filter_negatives`` (for
+        the corrupted object property assertions, when ``neg_weight > 0``),
+        ``additional_loss``, ``on_epoch_end``, ``should_stop`` and ``on_train_end``
+        are honoured. The loss itself (:meth:`compute_batch_losses`) and the
+        projection of the dead scores are part of the method.
+
         Guarantees:
         - Reasoner-free (R1): never imports or calls any reasoner or semantic
           completion algorithm.
@@ -3530,107 +3533,200 @@ class GroundedEL(EmbeddingELModel):
         if eff_epochs == 0:
             return self.loss_history
 
-        optimizer = th.optim.Adam(self.module.parameters(), lr=self.learning_rate)
+        # The training design is a regime: the one assigned to the model, or the
+        # composition of shared regimes given by the model's hyperparameters.
+        from mowl.training.grounded import GroundedELTraining
+        regime = self.training_regime
+        if regime is None:
+            regime = GroundedELTraining.for_model(
+                self, lr_final=eff_lr_final, lr_schedule=lr_schedule)
+            regime.attach(self)
+        self._active_regime = regime
+        from mowl.training.schedules import TemperatureAnnealing
+
+        def _find_annealer(r: Any) -> Any:
+            if isinstance(r, TemperatureAnnealing):
+                return r
+            for sub in getattr(r, "regimes", ()):
+                found = _find_annealer(sub)
+                if found is not None:
+                    return found
+            return None
+
+        annealer = _find_annealer(regime)
+
+        optimizer = regime.optimizer()
+        if optimizer is NotImplemented:
+            optimizer = th.optim.Adam(self.module.parameters(), lr=self.learning_rate)
         self.optimizer = optimizer
         gen = th.Generator(device="cpu")
         gen.manual_seed(self.seed + 1337)
+        self._train_generator = gen
         best_val_loss = float("inf")
         saved_best_val = False
 
-        for epoch in range(eff_epochs):
-            self.module.train()
-            if eff_lr_final is not None:
-                cur_lr = self._scheduled_lr(
-                    epoch,
-                    eff_epochs,
-                    self.learning_rate,
-                    eff_lr_final,
-                    lr_schedule,
-                )
-                for pg in optimizer.param_groups:
-                    pg["lr"] = cur_lr
-            if eff_epochs > 1:
-                tau = self.tau0 * (
-                    (self.tau1 / self.tau0) ** (epoch / (eff_epochs - 1))
-                )
-            else:
-                tau = self.tau0
-            self.module.set_tau(float(tau))
+        try:
+            for epoch in range(eff_epochs):
+                self.module.train()
+                regime.on_epoch_start(epoch, eff_epochs)
+                # Recorded at full precision when a schedule set it (the module keeps
+                # the temperature in single precision).
+                tau = annealer.history[-1] if annealer is not None else float(self.module.tau)
 
-            losses = self.compute_batch_losses(generator=gen)
-            total_loss = losses["total"]
+                losses = self.compute_batch_losses(generator=gen)
+                total_loss = losses["total"]
+                extra_loss = regime.additional_loss(epoch)
+                if extra_loss is not None:
+                    total_loss = total_loss + extra_loss
 
-            optimizer.zero_grad()
-            total_loss.backward()
-            optimizer.step()
+                optimizer.zero_grad()
+                total_loss.backward()
+                optimizer.step()
 
-            with th.no_grad():
-                self.module.dead_logits.clamp_(0.0, 1.0)
-                if self.bot_id is not None:
-                    self.module.dead_logits[self.bot_id] = _DEAD_LOGIT
+                # Projection of the method's parameters onto their domain.
+                self.clamp_dead_logits()
 
-            if self.reseed_every > 0 and (epoch + 1) % self.reseed_every == 0:
-                self.reseed_idle(generator=gen, prune_unused=True)
-                optimizer.state.clear()
+                rec = {k: float(v.detach().item()) for k, v in losses.items()}
+                regime.on_epoch_end(epoch, rec)
+                if self.constraint_mode == "lagrangian":
+                    rec["w_fact"] = float(self.dual_weights["fact"])
+                    rec["w_axioms"] = float(self.dual_weights["axioms"])
+                    rec["w_region"] = float(self.dual_weights["region"])
+                rec["tau"] = float(tau)
+                self.loss_history.append(rec)
 
-            rec = {k: float(v.detach().item()) for k, v in losses.items()}
-            if self.constraint_mode == "lagrangian":
-                new_weights = self.dual_update(rec)
-                rec["w_fact"] = float(new_weights["fact"])
-                rec["w_axioms"] = float(new_weights["axioms"])
-                rec["w_region"] = float(new_weights["region"])
-            rec["tau"] = float(tau)
-            self.loss_history.append(rec)
-
-            if eff_log_every > 0 and (
-                (epoch + 1) % eff_log_every == 0 or epoch == 0 or epoch + 1 == eff_epochs
-            ):
-                logger.info(
-                    "Epoch %d/%d (tau=%.4f): total=%.4e fact=%.4e axioms=%.4e region=%.4e min=%.4e neg=%.4e w=(%.2f,%.2f,%.2f)",
-                    epoch + 1,
-                    eff_epochs,
-                    tau,
-                    rec["total"],
-                    rec["fact"],
-                    rec["axioms"],
-                    rec["region"],
-                    rec["minimality"],
-                    rec["neg"],
-                    rec["w_fact"],
-                    rec["w_axioms"],
-                    rec["w_region"],
-                )
-
-            if epoch_callback is not None:
-                epoch_callback(epoch, self)
-
-            if (epoch + 1) % eff_val_every == 0:
-                if (
-                    self.dataset is not None
-                    and self.dataset.validation is not None
-                    and self._eval_gci_name is not None
-                    and self._eval_gci_name in self.validation_datasets
-                    and len(self.validation_datasets[self._eval_gci_name]) > 0
+                if eff_log_every > 0 and (
+                    (epoch + 1) % eff_log_every == 0 or epoch == 0 or epoch + 1 == eff_epochs
                 ):
-                    with th.no_grad():
-                        self.module.eval()
-                        gci_data = self.validation_datasets[self._eval_gci_name][:]
-                        vloss = float(
-                            th.mean(self.module(gci_data, self._eval_gci_name))
-                            .detach()
-                            .item()
-                        )
-                        if vloss < best_val_loss:
-                            best_val_loss = vloss
-                            if self.model_filepath is not None:
-                                th.save(self.module.state_dict(), self.model_filepath)
-                                saved_best_val = True
+                    logger.info(
+                        "Epoch %d/%d (tau=%.4f): total=%.4e fact=%.4e axioms=%.4e region=%.4e min=%.4e neg=%.4e w=(%.2f,%.2f,%.2f)",
+                        epoch + 1,
+                        eff_epochs,
+                        tau,
+                        rec["total"],
+                        rec["fact"],
+                        rec["axioms"],
+                        rec["region"],
+                        rec["minimality"],
+                        rec["neg"],
+                        rec["w_fact"],
+                        rec["w_axioms"],
+                        rec["w_region"],
+                    )
+
+                if epoch_callback is not None:
+                    epoch_callback(epoch, self)
+
+                if (epoch + 1) % eff_val_every == 0:
+                    if (
+                        self.dataset is not None
+                        and self.dataset.validation is not None
+                        and self._eval_gci_name is not None
+                        and self._eval_gci_name in self.validation_datasets
+                        and len(self.validation_datasets[self._eval_gci_name]) > 0
+                    ):
+                        with th.no_grad():
+                            self.module.eval()
+                            gci_data = self.validation_datasets[self._eval_gci_name][:]
+                            vloss = float(
+                                th.mean(self.module(gci_data, self._eval_gci_name))
+                                .detach()
+                                .item()
+                            )
+                            if vloss < best_val_loss:
+                                best_val_loss = vloss
+                                if self.model_filepath is not None:
+                                    th.save(self.module.state_dict(), self.model_filepath)
+                                    saved_best_val = True
+
+                if regime.should_stop(epoch):
+                    break
+        finally:
+            self._train_generator = None
+            self._active_regime = None
+
+        regime.on_train_end()
 
         if self.model_filepath is not None and not saved_best_val:
             if eff_val_every <= eff_epochs or not os.path.exists(self.model_filepath):
                 th.save(self.module.state_dict(), self.model_filepath)
 
         return self.loss_history
+
+    def score_query(
+        self,
+        structure: Any,
+        queries: Sequence[Any],
+        method: str = "beam",
+        **kwargs: Any,
+    ) -> th.Tensor:
+        """Score every individual as an answer of logical queries: the protocol of
+        :class:`mowl.evaluation.LogicalQueryAnswering`.
+
+        Anchors and answers are individuals (indices of ``individual_index_dict``),
+        roles are indices of ``object_property_index_dict``.
+
+        :param structure: Query structure, e.g. ``("e", ("r", "r"))`` for two hops
+            (:data:`mowl.evaluation.QUERY_STRUCTURES`).
+        :param queries: Instances of ``structure``.
+        :param method: ``"beam"`` (max-min search over witness elements,
+            :func:`mowl.nn.el.grounded.queries.score_query_beam`) or ``"box"`` (the query
+            compiled to a union of boxes, :func:`~mowl.nn.el.grounded.queries.compile_query`
+            and :func:`~mowl.nn.el.grounded.queries.score_entities`).
+        :param kwargs: Passed to the scorer (``k`` for the beam; ``max_boxes``,
+            ``exact``, ``max_witnesses`` for the boxes).
+        :return: Scores of shape ``(len(queries), number of individuals)``; higher is
+            better, positive means inside the query region.
+
+        Needs ``role_mode="translation"``.
+        """
+        from mowl.nn.el.grounded import queries as Q
+
+        if method not in ("beam", "box"):
+            raise ValueError(f"method must be 'beam' or 'box', got {method!r}")
+        device = self.module.elem_pos.weight.device
+        individuals = self.nb_classes + th.arange(self.nb_inds, dtype=th.long, device=device)
+        with th.no_grad():
+            if method == "beam":
+                return Q.score_query_beam(
+                    self.module, structure, list(queries),
+                    entity_to_element=individuals,
+                    candidate_element_ids=individuals, **kwargs)
+            region = Q.compile_query(
+                self.module, structure, list(queries),
+                entity_to_element=individuals, **kwargs)
+            return Q.score_entities(self.module, region, candidate_element_ids=individuals)
+
+    def reseed_components(self, epoch: int = 0) -> int:
+        """Re-seed idle components (:meth:`reseed_idle` with pruning): the protocol of
+        :class:`mowl.training.IdleComponentReseeding`. Inside :meth:`train` the
+        training generator is used, so a run stays a function of the seed."""
+        gen = getattr(self, "_train_generator", None)
+        return self.reseed_idle(generator=gen, prune_unused=True)
+
+    def _regime_corrupted_opa(
+        self, opa_dataset: Any, gen: th.Generator
+    ) -> Tuple[th.Tensor, th.Tensor, th.Tensor]:
+        """Corrupted object property assertions as element ids ``(x, y, r)``: from the
+        active training regime's ``negatives`` hook if it provides them, otherwise from
+        the model's own sampler, and in both cases passed through the regime's
+        ``filter_negatives`` (for example to remove stated facts). Without a regime
+        this is exactly :meth:`_sample_corrupted_opa`."""
+        regime = getattr(self, "_active_regime", None)
+        if regime is None:
+            regime = self.training_regime
+        if regime is None:
+            return self._sample_corrupted_opa(opa_dataset[:], gen)
+        rows = regime.negatives("object_property_assertion", opa_dataset)
+        if rows is NotImplemented or rows is None:
+            x_neg, y_neg, r_neg = self._sample_corrupted_opa(opa_dataset[:], gen)
+            rows = th.stack(
+                [x_neg - self.nb_classes, r_neg, y_neg - self.nb_classes], dim=1)
+        filtered = regime.filter_negatives("object_property_assertion", opa_dataset, rows)
+        if filtered is not None:
+            rows = filtered
+        rows = rows.to(device=self.device, dtype=th.long)
+        return self.nb_classes + rows[:, 0], self.nb_classes + rows[:, 2], rows[:, 1]
 
     def _box_corner_samples(
         self,
