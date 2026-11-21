@@ -33,6 +33,7 @@ relevant published methods it does not implement, with the reason.
    hit
    ont
    boxlite
+   order_embeddings
    cate
    grounded
    temporal_cones

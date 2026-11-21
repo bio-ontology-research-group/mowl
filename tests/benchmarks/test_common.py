@@ -89,6 +89,9 @@ def test_learnable_methods_with_tasks_declare_how_they_score():
 @pytest.mark.parametrize("method,kwargs,scoring", [
     ("elem", {"embed_dim": 8}, "centre_distance"),
     ("octagon", {"embed_dim": 8}, "loss"),
+    ("order_embeddings", {"embed_dim": 8}, "loss"),
+    ("box_lattice", {"embed_dim": 8}, "loss"),
+    ("gumbel_box", {"embed_dim": 8}, "loss"),
     ("cate", {"embed_dim": 8}, "loss"),
     ("alcone", {}, "model"),
     ("falcon", {"embed_dim": 8}, "model"),

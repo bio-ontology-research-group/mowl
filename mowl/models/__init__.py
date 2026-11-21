@@ -52,3 +52,6 @@ from mowl.models.query2box.model import Query2Box
 from mowl.models.betae.model import BetaE
 from mowl.models.cone_qe.model import ConE
 from mowl.models.acone.model import AConE
+from mowl.models.order_embeddings.model import OrderEmbeddings
+from mowl.models.box_lattice.model import BoxLattice
+from mowl.models.gumbel_box.model import GumbelBox

@@ -19,6 +19,15 @@ _TAXONOMY = (
     "only; conjunction, existential restrictions, roles, individuals and disjointness have no "
     "interpretation and the axioms that use them are ignored.")
 
+_TAXONOMY_NOTE = (
+    "Adaptation to ontologies: the subclass axioms C ⊑ D between named classes are the order "
+    "pairs; the training data is the 'gci0' normal form restricted to named classes. "
+    "Conjunction, existential restrictions, bottom, assertions and role axioms are not used "
+    "(dropped from training, no score). Tasks: subsumption prediction and inference between "
+    "named classes. Training is the generic full-batch EL loop with negatives from corrupting "
+    "the stated pairs; the paper's mini-batches and early stopping are not reproduced. "
+    "Reference code was not consulted (not fetched); the implementation follows the paper text.")
+
 ORDER_EMBEDDINGS = MethodCard(
     key="order_embeddings",
     name="Order embeddings",
@@ -31,7 +40,31 @@ ORDER_EMBEDDINGS = MethodCard(
     logic="Partial order (hypernymy, entailment, caption-image order)",
     concepts="vector (orthant above it)",
     roles="not represented",
-    not_implemented_reason=_ORDER_ONLY,
+    expressivity="taxonomy",
+    tasks=("subsumption",),
+    status=Status.LEARNABLE,
+    origin=Origin.ADAPTATION,
+    implementation="mowl.models.order_embeddings.model.OrderEmbeddings",
+    module="mowl.nn.el.order_embeddings.module.OrderEmbeddingsModule",
+    axioms=("gci0",),
+    guarantees=(
+        Guarantee(
+            K.SOUNDNESS,
+            "The violation E(x, y) = ||max(0, y - x)||_2 is zero iff x ⪯ y in the reversed "
+            "product order; a zero loss on stated pairs therefore implies the pairs of "
+            "their transitive closure (transitivity of the order).",
+            "vendrov2016, Section 2 (Eq. 2)",
+            condition="zero loss",
+            verified_in_mowl="tests/models/test_order_embeddings_model.py::"
+                             "test_violation_is_zero_iff_order_holds_and_order_is_transitive"),
+    ),
+    limitations=(
+        "Only the subclass order between named classes; no conjunction, existentials, "
+        "bottom, assertions or roles.",
+        "The paper's order embeddings are a distributive vector lattice; they cannot model "
+        "disjointness as box lattices can (Vilnis et al. 2018, Appendix B).",
+    ),
+    notes=_TAXONOMY_NOTE,
     references=(
         Reference("vendrov2016",
                   "Vendrov, I., Kiros, R., Fidler, S., Urtasun, R. (2016). Order-Embeddings "
@@ -203,20 +236,41 @@ BOX_LATTICE = MethodCard(
     region="box (probabilistic, with volume as probability)",
     summary=(
         "Concepts are boxes; box volume gives a probability, so joint "
-        "and conditional probabilities come from intersection volumes and the boxes form a "
-        "lattice (meet = intersection, join = smallest enclosing box)."),
+        "and conditional probabilities come from intersection volumes and the boxes form "
+        "a lattice (meet = intersection, join = smallest enclosing box)."),
     logic="Partial order / lattice with probabilities (e.g. WordNet, Flickr captions)",
     concepts="box",
     roles="not represented",
-    not_implemented_reason=_ORDER_ONLY,
+    expressivity="taxonomy",
+    tasks=("subsumption",),
+    status=Status.LEARNABLE,
+    origin=Origin.ADAPTATION,
+    implementation="mowl.models.box_lattice.model.BoxLattice",
+    module="mowl.nn.el.box_lattice.module.BoxLatticeModule",
+    axioms=("gci0",),
     guarantees=(
         Guarantee(
             K.EXPRESSIVITY,
             "Boxes ordered by inclusion form a lattice (meet: intersection or ⊥; join: "
             "smallest enclosing box) that is strictly more general than the order-embedding "
-            "lattice in any dimension.",
-            "vilnis2018, Section 4 and Appendix B"),
+            "lattice in any dimension (the box lattice is non-distributive).",
+            "vilnis2018, Section 4 and Appendix B",
+            verified_in_mowl="tests/models/test_box_lattice_model.py::"
+                             "test_lattice_operations_and_non_distributivity"),
     ),
+    limitations=(
+        "Only the subclass order between named classes; no conjunction, existentials, "
+        "bottom, assertions or roles. The box meet is not the class conjunction.",
+        "The complement of a box is not a box (vilnis2018, Section 4.2).",
+    ),
+    notes=_TAXONOMY_NOTE + (
+        " Probabilities: stated pairs get the target P(D|C) = 1, corrupted pairs P(D|C) = 0 "
+        "(the paper uses calibrated targets for Flickr and unary marginals for WordNet; the "
+        "latter are optional via unary_weight). Ours: for disjoint boxes the positive loss "
+        "is the linear form of the paper's lower bound of the joint; the paper's printed "
+        "log of the bound has an inconsistent sign and is undefined for non-positive "
+        "bounds. min_delta defaults to 0.01 (paper: 1e-6 for WordNet; with 1e-6 boxes "
+        "collapse in a dimension on small taxonomies)."),
     intersection_closed=True,
     helly="2 (axis-parallel boxes; eckhoff1988)",
     references=(
@@ -239,14 +293,34 @@ GUMBEL_BOX = MethodCard(
     logic="Partial order / lattice with probabilities",
     concepts="random box (Gumbel corners)",
     roles="not represented",
-    not_implemented_reason=_ORDER_ONLY,
+    expressivity="taxonomy",
+    tasks=("subsumption",),
+    status=Status.LEARNABLE,
+    origin=Origin.ADAPTATION,
+    implementation="mowl.models.gumbel_box.model.GumbelBox",
+    module="mowl.nn.el.gumbel_box.module.GumbelBoxModule",
+    axioms=("gci0",),
     guarantees=(
         Guarantee(
             K.CLOSURE,
             "The space of Gumbel boxes is closed under intersection (max of max-Gumbels is "
             "max-Gumbel).",
-            "dasgupta2020, abstract and Lemma 1"),
+            "dasgupta2020, abstract and Lemma 1",
+            verified_in_mowl="tests/models/test_gumbel_box_model.py::"
+                             "test_lemma_1_max_of_max_gumbels"),
     ),
+    limitations=(
+        "Only the subclass order between named classes; no conjunction, existentials, "
+        "bottom, assertions or roles.",
+        "Volumes and conditionals use the softplus approximation of the Bessel expression "
+        "and the first-order approximation of the conditional (dasgupta2020, Sections 4.1 "
+        "and 4.2); P(D|C) < 1 even for identical boxes at finite beta.",
+    ),
+    notes=_TAXONOMY_NOTE + (
+        " Locations are kept in the unit cube by projection. The signs of Algorithm 1's "
+        "log-sum-exp terms are swapped relative to Lemma 1; the implementation follows "
+        "Lemma 1. The paper's code and hyperparameter search (Bayesian, Hyperband) were not "
+        "reproduced."),
     intersection_closed=True,
     references=(
         Reference("dasgupta2020",
