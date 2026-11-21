@@ -99,7 +99,8 @@ class PairClassifierHead:
     """A classifier on pairs of class vectors, trained on the training axioms.
 
     For the axioms :math:`C \\sqsubseteq D` (``gci0``) and, per role :math:`r`,
-    :math:`C \\sqsubseteq \\exists r.D` (``gci2``) of the training ontology, a small
+    :math:`C \\sqsubseteq \\exists r.D` (``gci2``) of the training ontology (for a role
+    without training axioms: over all roles), a small
     network on the features :math:`[x_C, x_D, x_C \\odot x_D, |x_C - x_D|]` is trained to
     separate the stated pairs from pairs with a uniformly drawn second class. The cost of
     a candidate axiom is minus its logit. One network is trained per axiom form and
@@ -175,7 +176,8 @@ class PairClassifierHead:
         if rows is None or len(rows) == 0:
             return th.zeros((0, 2), dtype=th.long)
         if gci_name == "gci2":
-            rows = rows[rows[:, 1] == relation]
+            if relation is not None:
+                rows = rows[rows[:, 1] == relation]
             return rows[:, [0, 2]]
         if gci_name == "gci0":
             return rows[:, [0, 1]]
@@ -190,6 +192,11 @@ class PairClassifierHead:
             return self._nets[key]
         vectors = self.vectors(model)
         pairs = self._pairs(model, gci_name, relation)
+        if len(pairs) == 0 and relation is not None:
+            # A role without a training axiom: the network trained on the pairs of all
+            # roles.
+            self._nets[key] = self.fit(model, gci_name, None)
+            return self._nets[key]
         if len(pairs) == 0:
             raise UnsupportedAxiomForm(
                 f"The training ontology has no {gci_name!r} axiom"

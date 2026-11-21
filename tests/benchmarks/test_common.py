@@ -248,3 +248,14 @@ def test_every_runnable_method_has_default_settings_on_the_joint_benchmarks():
     assert recipe.model_kwargs == original.model_kwargs
     assert recipe.training_regime == original.training_regime
     assert "jackermeier2024" in recipe.locator
+
+
+def test_pair_classifier_head_falls_back_to_all_roles(monkeypatch):
+    model = _Vectors()
+    rows = th.tensor([[i, 0, i + 1] for i in range(model.n - 1)])
+    head = PairClassifierHead(epochs=5, seed=0)
+    monkeypatch.setattr(head, "_training_rows", lambda m: {"gci2": rows})
+    unseen = th.tensor([[0, 7, 1], [1, 7, 0]])           # role 7 has no training axiom
+    costs = head(model, "gci2", unseen)
+    assert costs.shape == (2,) and th.isfinite(costs).all()
+    assert head._nets[("gci2", 7)] is head._nets[("gci2", None)]

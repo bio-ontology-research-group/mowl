@@ -338,7 +338,7 @@ class BinaryCodeBox(GraphModel):
             node_to_id = self.graph_node_to_id
             mapping = [node_to_id.get(c, 0) for c in self.dataset.classes.as_str]
             self._evaluation_model = _SubsumptionScorer(
-                self.module, th.tensor(mapping, dtype=th.long))
+                self.module, th.tensor(mapping, dtype=th.long)).to(self.device)
         return self._evaluation_model
 
     @property
