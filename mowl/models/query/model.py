@@ -38,11 +38,25 @@ class QueryEmbeddingModel(Model):
     operators. Its answers are the entities that fall under it; named classes can be
     answers, so ``A ⊑ B`` is "``A`` is an answer of ``B``".
 
-    **Training** samples queries of the structures 1p, 2p, 3p, 2i, 3i, ip, pi (and the
-    negation structures 2in, 3in, inp, pin, pni for geometries with negation) from the
-    graph, backwards from a random answer, and minimises
-    ``-log σ(logit(answer)) - mean log σ(-logit(negative))`` (all four reference codes),
-    with uniformly drawn negative entities.
+    **Training** minimises ``-log σ(logit(answer)) - mean log σ(-logit(negative))`` (all
+    four reference codes) with uniformly drawn negative entities. Where the queries come
+    from is the ``queries`` argument (a training regime in the sense of mOWL: the model does
+    not depend on it):
+
+    * ``"sampled"`` (default): queries of the structures 1p, 2p, 3p, 2i, 3i, ip, pi (and the
+      negation structures 2in, 3in, inp, pin, pni for geometries with negation) are sampled
+      from the graph, backwards from a random answer, in every step.
+    * ``"released"``: the training queries of a released query dataset (the dataset must
+      have ``training_queries(entity_id, relation_id, names)``, e.g.
+      :class:`~mowl.datasets.builtin.query_sets.QueryAnsweringDataset`), as in the four
+      papers. Every update draws ``batch_size`` queries uniformly from the pool of
+      the path structures (1p, 2p, 3p) or of the other structures, so structures
+      are drawn in proportion to their number in the release; the positive is a random
+      answer on the training graph, the negatives are uniform non-answers, and every query
+      is weighted by ``1/sqrt(number of answers)``. One step is an update on a batch of path
+      queries, then one on a batch of the other queries, then again one of path queries
+      (a single update if there are no other queries), the loop of the reference code
+      (KGReasoning ``main.py``, which ConE and AConE copy).
 
     :param dataset: mOWL dataset (the training ontology is read).
     :param embed_dim: Embedding dimension.
@@ -57,6 +71,11 @@ class QueryEmbeddingModel(Model):
     :param extension: Whether a named class in a class expression query means everything
         below it (default) or only the class entity itself.
     :param seed: Seed of the query sampler.
+    :param queries: ``"sampled"`` or ``"released"`` (see above).
+    :param steps_per_epoch: Steps (see above) per epoch; :meth:`train` uses it unless it is
+        given there. The papers count steps (300,000 to 450,000): epochs times this.
+    :param batch_per_structure: With ``queries="sampled"``: ``batch_size`` queries of every
+        structure per step (Query2Box, Appendix) instead of ``batch_size`` in total.
     :param geometry_kwargs: Extra arguments of the geometry.
     """
 
@@ -71,7 +90,8 @@ class QueryEmbeddingModel(Model):
 
     def __init__(self, dataset, embed_dim=32, gamma=None, learning_rate=1e-3, batch_size=64,
                  negatives=16, structures=None, hierarchy_closure=True, extension=True,
-                 seed=0, model_filepath=None, device="cpu", **geometry_kwargs):
+                 seed=0, queries="sampled", steps_per_epoch=10, batch_per_structure=False,
+                 model_filepath=None, device="cpu", **geometry_kwargs):
         super().__init__(dataset, model_filepath=model_filepath)
         self.embed_dim = embed_dim
         self.gamma = self.default_gamma if gamma is None else gamma
@@ -79,6 +99,11 @@ class QueryEmbeddingModel(Model):
         self.batch_size = batch_size
         self.negatives = negatives
         self.extension = extension
+        if queries not in ("sampled", "released"):
+            raise ValueError("queries must be 'sampled' or 'released'.")
+        self.query_source = queries
+        self.steps_per_epoch = int(steps_per_epoch)
+        self.batch_per_structure = bool(batch_per_structure)
         self.device = device
         self.rng = np.random.default_rng(seed)
         self._class_ids = dict(super().class_index_dict)
@@ -100,14 +125,26 @@ class QueryEmbeddingModel(Model):
             class_id=self._class_entity, individual_id=self._individual_entity,
             relation_id=self._relation, isa_inverse=ISA_INV, extension=extension)
         templates = sampling.structures(self.module.supports_negation, structures)
+        self.loss_history = []
+        if queries == "released":
+            self._load_released(dataset, templates, structures)
+            self._pool, self.training_structures = [], {}
+            return
         pool = sorted(self.graph.inc)
         self._pool = pool
         self.training_structures = (sampling.usable_structures(templates, self.graph,
                                                                self.rng, pool)
                                     if pool else {})
-        self.loss_history = []
 
     # -- ids ----------------------------------------------------------------------------
+    def entity_id(self, iri):
+        """Entity id of a named class (the id used in :meth:`score_query`)."""
+        return self._class_ids[iri]
+
+    def relation_id(self, role_iri, inverse=False):
+        """Relation id of a role (``inverse``: the relation from filler to subject)."""
+        return role_relation(self._role_ids[role_iri], inverse)
+
     def _class_entity(self, iri):
         return self._class_ids[iri]
 
@@ -127,7 +164,8 @@ class QueryEmbeddingModel(Model):
     # -- training -----------------------------------------------------------------------
     def _batch(self):
         names = list(self.training_structures)
-        per = max(1, self.batch_size // len(names))
+        per = (self.batch_size if self.batch_per_structure
+               else max(1, self.batch_size // len(names)))
         groups = {}
         for name in names:
             template = self.training_structures[name]
@@ -149,6 +187,93 @@ class QueryEmbeddingModel(Model):
                                 th.tensor(np.array(negs), dtype=th.long, device=dev))
         return groups
 
+    def _load_released(self, dataset, templates, structures):
+        """The released training queries, grouped as path and other structures."""
+        if not hasattr(dataset, "training_queries"):
+            raise ValueError("queries='released' needs a dataset with training_queries(), "
+                             "e.g. mowl.datasets.builtin.query_sets.QueryAnsweringDataset.")
+        pool = dataset.training_queries(self.entity_id, self.relation_id)
+        names = [n for n in pool if n in templates]
+        if structures is not None:
+            names = [n for n in names if n in structures]
+        if not names:
+            raise ValueError(f"None of the released training structures {sorted(pool)} can "
+                             f"be trained by this geometry (it trains {sorted(templates)}).")
+        self.released = {n: pool[n] for n in names}
+        self.released_templates = {n: templates[n] for n in names}
+        self._released_columns = {}
+        from mowl.datasets.builtin.query_sets import _kinds
+        for n, q in self.released.items():
+            kinds = _kinds(q.structure)
+            self._released_columns[n] = [i for i, k in enumerate(kinds) if k in ("e", "r")]
+        path = [n for n in names if n in ("1p", "2p", "3p")]
+        other = [n for n in names if n not in path]
+        self._released_groups = {"path": path, "other": other}
+
+    def _released_samples(self, q, local):
+        """Positives, negatives and weights for the queries ``local`` of a
+        :class:`~mowl.datasets.builtin.query_sets.ReleasedTrainingQueries` (vectorised): a
+        uniformly drawn answer, ``negatives`` uniform entities that are not answers (the
+        ones that are redrawn up to three times), and ``1/sqrt(number of answers)``."""
+        n_entities = self.graph.num_entities
+        counts = q.offsets[local + 1] - q.offsets[local]
+        starts = q.offsets[local]
+        pick = starts + (self.rng.random(len(local)) * counts).astype(np.int64)
+        positives = q.answers[pick]
+        total = int(counts.sum())
+        owner = np.repeat(np.arange(len(local)), counts)
+        within = np.arange(total) - np.repeat(np.cumsum(counts) - counts, counts)
+        keys = owner * n_entities + q.answers[np.repeat(starts, counts) + within]
+        is_answer = np.zeros(len(local) * n_entities, dtype=bool)
+        is_answer[keys] = True
+        rows = np.arange(len(local))[:, None]
+        negatives = self.rng.integers(n_entities, size=(len(local), self.negatives))
+        for _ in range(3):
+            bad = is_answer[rows * n_entities + negatives]
+            if not bad.any():
+                break
+            negatives[bad] = self.rng.integers(n_entities, size=int(bad.sum()))
+        return positives, negatives, 1.0 / np.sqrt(counts)
+
+    def _released_batch(self, group):
+        """``batch_size`` training queries drawn uniformly from the structures of a group
+        (``"path"`` or ``"other"``), as ``{name: (signature, rows, positives, negatives,
+        weights)}``."""
+        names = self._released_groups[group]
+        sizes = np.array([len(self.released[n]) for n in names])
+        draw = self.rng.integers(int(sizes.sum()), size=self.batch_size)
+        bounds = np.concatenate([[0], np.cumsum(sizes)])
+        which = np.searchsorted(bounds, draw, side="right") - 1
+        out = {}
+        dev = self.device
+        for j, name in enumerate(names):
+            local = draw[which == j] - bounds[j]
+            if len(local) == 0:
+                continue
+            q = self.released[name]
+            rows = q.rows[local][:, self._released_columns[name]]
+            pos, negs, weights = self._released_samples(q, local)
+            out[name] = (signature(self.released_templates[name]),
+                         th.tensor(rows, dtype=th.long, device=dev),
+                         th.tensor(pos, dtype=th.long, device=dev).unsqueeze(1),
+                         th.tensor(negs, dtype=th.long, device=dev),
+                         th.tensor(weights, dtype=th.float, device=dev))
+        return out
+
+    def released_loss(self, groups):
+        """The negative sampling loss of a batch from :meth:`_released_batch`, each query
+        weighted by ``1/sqrt(number of answers)`` and the weights normalised over the batch
+        (as in the reference code)."""
+        pos_loss, neg_loss, total = 0.0, 0.0, 0.0
+        for sig, rows, pos, neg, w in groups.values():
+            state = self.module.embed(sig, rows)
+            p = self.module.logit(state, pos).squeeze(1)
+            n = self.module.logit(state, neg)
+            pos_loss = pos_loss - (w * F.logsigmoid(p)).sum()
+            neg_loss = neg_loss - (w * F.logsigmoid(-n).mean(dim=1)).sum()
+            total = total + w.sum()
+        return (pos_loss / total + neg_loss / total) / 2
+
     def loss(self, groups):
         """The negative sampling loss of a batch from :meth:`_batch`."""
         pos_loss, neg_loss, count = 0.0, 0.0, 0
@@ -165,15 +290,18 @@ class QueryEmbeddingModel(Model):
         """The optimiser of :meth:`train` (Adam with ``learning_rate``)."""
         return th.optim.Adam(self.module.parameters(), lr=self.learning_rate)
 
-    def train(self, epochs=10, steps_per_epoch=10, **kwargs):
-        """Train with Adam. One epoch is ``steps_per_epoch`` optimisation steps, each on
-        ``batch_size`` freshly sampled queries. The mean loss per epoch is appended to
+    def train(self, epochs=10, steps_per_epoch=None, **kwargs):
+        """Train with Adam. One epoch is ``steps_per_epoch`` steps (default: the value of
+        the constructor), each on ``batch_size`` queries (sampled afresh or drawn from the
+        released training queries, see the class). The mean loss per epoch is appended to
         :attr:`loss_history`. If ``model_filepath`` was given the parameters are saved.
 
         :raises ValueError: If no query structure can be sampled from the graph (an
             ontology without subclass or role axioms).
         """
-        if not self.training_structures:
+        steps_per_epoch = self.steps_per_epoch if steps_per_epoch is None else steps_per_epoch
+        released = self.query_source == "released"
+        if not released and not self.training_structures:
             raise ValueError("No training query can be sampled from the graph of this "
                              "ontology: it has no subclass, role or assertion edges.")
         regime = self.training_regime
@@ -184,18 +312,28 @@ class QueryEmbeddingModel(Model):
         for epoch in range(epochs):
             if regime is not None:
                 regime.on_epoch_start(epoch, epochs)
-            total = 0.0
+            total, updates = 0.0, 0
             for _ in range(steps_per_epoch):
-                loss = self.loss(self._batch())
-                if regime is not None:
-                    extra = regime.additional_loss(epoch)
-                    if extra is not None:
-                        loss = loss + extra
-                opt.zero_grad()
-                loss.backward()
-                opt.step()
-                total += float(loss)
-            self.loss_history.append(total / steps_per_epoch)
+                if released:
+                    pattern = (["path", "other", "path"] if self._released_groups["other"]
+                               and self._released_groups["path"]
+                               else [g for g in ("path", "other") if self._released_groups[g]])
+                    batches = [(g, self._released_batch(g)) for g in pattern]
+                else:
+                    batches = [(None, None)]
+                for group, batch in batches:
+                    loss = (self.released_loss(batch) if released
+                            else self.loss(self._batch()))
+                    if regime is not None:
+                        extra = regime.additional_loss(epoch)
+                        if extra is not None:
+                            loss = loss + extra
+                    opt.zero_grad()
+                    loss.backward()
+                    opt.step()
+                    total += float(loss)
+                    updates += 1
+            self.loss_history.append(total / updates)
             if regime is not None:
                 regime.on_epoch_end(epoch, {"total": self.loss_history[-1]})
                 if regime.should_stop(epoch):

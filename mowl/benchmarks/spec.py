@@ -41,6 +41,9 @@ class Task(str, Enum):
     #: Find an embedding that is an exact model of the ontology (expressivity benchmarks,
     #: such as the Helly family :math:`T_k`).
     EXACT_MODEL = "exact_model"
+    #: Rank the answers of logical queries (paths, intersections, unions, negations) that
+    #: need an edge missing from the training graph.
+    QUERY_ANSWERING = "query_answering"
 
 
 #: For each :class:`Task`: the completion tasks, the inference tasks beyond those the
@@ -54,6 +57,7 @@ TASK_DEFAULTS = {
     # An exact model satisfies every axiom: each check is a subsumption test on the
     # geometry, with the axioms of the ontology (all entailed) as the test set.
     Task.EXACT_MODEL: ((), ("subsumption",), Target.ENTAILED),
+    Task.QUERY_ANSWERING: (("multi-hop-query-answering",), (), Target.UNDETERMINED),
 }
 
 
