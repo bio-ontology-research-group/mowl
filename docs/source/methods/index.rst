@@ -32,6 +32,8 @@ relevant published methods it does not implement, with the reason.
    boxlite
    cate
    grounded
+   temporal_cones
+   attributed_dl
 
 
 Representation, training and evaluation
