@@ -159,3 +159,24 @@ HE2024ACONE = Reference(
     "(2024). Generating SROI- Ontologies via Knowledge Graph Query Embedding Learning. "
     "arXiv:2407.09212.",
     "https://arxiv.org/abs/2407.09212")
+
+
+LACERDA2024FAITHEL = Reference(
+    "lacerda2024faithel",
+    "Lacerda, V., Ozaki, A., Guimarães, R. (2024). FaithEL: Strongly TBox Faithful Knowledge "
+    "Base Embeddings for EL. In Rules and Reasoning (RuleML+RR 2024), LNCS 15183, "
+    "pp. 191-199. Code: https://github.com/victorlacerdab/FaithEL_method.",
+    "https://doi.org/10.1007/978-3-031-72407-7_14")
+
+WU2022 = Reference(
+    "wu2022",
+    "Wu, X., Zhu, X., Zhao, Y., Dai, X. (2022). Differentiable Fuzzy ALC: A Neural-Symbolic "
+    "Representation Language for Symbol Grounding. arXiv:2211.12006.",
+    "https://arxiv.org/abs/2211.12006")
+
+ZHU2024 = Reference(
+    "zhu2024",
+    "Zhu, Y., Potyka, N., Xiong, B., Tran, T.-K., Nayyeri, M., Kharlamov, E., Staab, S. "
+    "(2024). Approximating Probabilistic Inference in Statistical EL with Knowledge Graph "
+    "Embeddings. arXiv:2407.11821.",
+    "https://arxiv.org/abs/2407.11821")

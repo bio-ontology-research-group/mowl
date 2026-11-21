@@ -26,6 +26,9 @@ class RegimeProtocol(Protocol):
     def prepare(self, dataset):
         return self.regime.prepare(dataset)
 
+    def initialise_model(self, model, dataset):
+        self.regime.initialise_model(model, dataset)
+
     def evaluate(self, model, dataset):
         results = self.regime.evaluate(model, dataset)
         self.info = dict(getattr(self.regime, "info", {}))
@@ -203,3 +206,27 @@ class QueryAnsweringProtocol(RegimeProtocol):
         self.info = dict(self.regime.info)
         return {subset: {m: results[subset][m] for m in self.metrics}
                 for subset in self.subsets if subset in results}
+
+
+class AssertionQueryProtocol(RegimeProtocol):
+    """:class:`mowl.evaluation.assertion_queries.AssertionQueryHitsRegime`."""
+
+    def build(self, **kwargs):
+        from mowl.evaluation.assertion_queries import AssertionQueryHitsRegime
+        return AssertionQueryHitsRegime(**kwargs)
+
+
+class MaskedABoxRevisionProtocol(RegimeProtocol):
+    """:class:`mowl.evaluation.abox_revision.MaskedABoxRevisionRegime`."""
+
+    def build(self, **kwargs):
+        from mowl.evaluation.abox_revision import MaskedABoxRevisionRegime
+        return MaskedABoxRevisionRegime(**kwargs)
+
+
+class SELProbabilityProtocol(RegimeProtocol):
+    """:class:`mowl.evaluation.sel_probability.SELProbabilityRegime`."""
+
+    def build(self, **kwargs):
+        from mowl.evaluation.sel_probability import SELProbabilityRegime
+        return SELProbabilityRegime(**kwargs)
