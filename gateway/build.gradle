@@ -73,15 +73,13 @@ dependencies {
     implementation 'de.tu-dresden.inf.lat.jcel:jcel-ontology:0.24.1'
     implementation 'de.tu-dresden.inf.lat.jcel:jcel-reasoner:0.24.1'
     jcelSources 'de.tu-dresden.inf.lat.jcel:jcel-owlapi:0.24.1:sources'
-    // The KM reasoner (kobayashi-marust-protege5-*.jar, not on Maven Central) needs gson.
+    // The KM reasoner (kobayashi-marust-protege6-*.jar, its build for OWL API 5; not on Maven Central) needs gson.
     runtimeOnly 'com.google.code.gson:gson:2.11.0'
 
     implementation "org.slf4j:slf4j-simple:${slf4jVersion}"
     implementation 'com.beust:jcommander:1.72'
-    implementation 'org.apache.jena:apache-jena-libs:3.17.0'
     implementation 'org.codehaus.groovy:groovy-all:2.4.15'
     implementation 'org.scala-lang:scala-library:2.11.12'
-    implementation 'com.github.sharispe:slib-sml:0.9.1'
 }
 
 tasks.withType(JavaCompile).configureEach {

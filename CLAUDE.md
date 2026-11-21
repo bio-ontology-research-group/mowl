@@ -24,7 +24,7 @@ Environments exist for Python 3.10, 3.11, 3.12, and 3.13.
 
 ## Java libraries (`mowl/lib`)
 
-`mowl/lib` holds OWL API 5 (module JARs only), ELK, HermiT, jcel, mOWL's own `gateway.jar` and their dependencies. All of them except the KM reasoner (`kobayashi-marust-protege5-*.jar`, from its GitHub releases) are resolved from Maven Central by `gateway/build.gradle`. To change a version, edit `gateway/build.gradle` and rebuild (JDK 11+, Gradle comes with the wrapper):
+`mowl/lib` holds OWL API 5 (module JARs only), ELK, HermiT, jcel, mOWL's own `gateway.jar` and their dependencies. All of them except the KM reasoner (`kobayashi-marust-protege6-*.jar`, from its GitHub releases) are resolved from Maven Central by `gateway/build.gradle`. To change a version, edit `gateway/build.gradle` and rebuild (JDK 11+, Gradle comes with the wrapper):
 
 ```bash
 cd gateway && ./gradlew --no-daemon clean installLibs   # or ./build_jars.sh

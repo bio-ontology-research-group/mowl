@@ -111,15 +111,12 @@ KM_FACTORY = "org.bioontology.kobayashimarust.protege.KMReasonerFactory"
 
 
 def _km_owlapi_ok():
-    """KM's OWL API binding is built against OWL API 4.5.29 and uses a constructor of the
-    functional syntax renderer that older 4.5 releases do not have."""
+    """KM's OWL API binding for OWL API 5 (``kobayashi-marust-protege6-*.jar``) needs OWL
+    API 5; the ``protege5`` JAR of KM is built against OWL API 4 and does not link."""
     import jpype
     try:
-        renderer = jpype.JClass(
-            "org.semanticweb.owlapi.functional.renderer.FunctionalSyntaxObjectRenderer")
-        return any(len(c.getParameterTypes()) == 3
-                   and "OWLDocumentFormat" in str(c.getParameterTypes()[1].getName())
-                   for c in renderer.class_.getConstructors())
+        version = jpype.JClass("org.semanticweb.owlapi.util.VersionInfo").getVersionInfo()
+        return str(version.getVersion()).startswith("5.")
     except Exception:
         return False
 
@@ -140,25 +137,30 @@ def _km(ontology):
     except Exception as error:
         raise ImportError(
             "The Kobayashi-MaRust (KM) reasoner is not on the class path. Download "
-            "kobayashi-marust-protege5-<version>.jar from "
+            "kobayashi-marust-protege6-<version>.jar from "
             "https://github.com/bio-ontology-research-group/kobayashi-marust/releases and "
             "start the JVM with mowl.init_jvm(memory, extra_classpath='<path to the jar>') "
             "or set MOWL_EXTRA_CLASSPATH.") from error
     if not _km_owlapi_ok():
         raise RuntimeError(
-            "The Kobayashi-MaRust (KM) OWL API binding needs OWL API 4.5.29 or later; the "
-            "OWL API on the class path is older.")
+            "The packaged Kobayashi-MaRust (KM) OWL API binding needs OWL API 5; the OWL "
+            "API on the class path is another generation.")
     return factory.createReasoner(ontology)
 
 
 register_reasoner(
-    "km", _km, Expressivity.parse("SROIQ(D)").with_abox(equality=True), cost=5,
+    "hermit", _hermit, Expressivity.parse("SROIQ(D)").with_abox(equality=True), cost=10,
+    summary="HermiT 1.4.5: hypertableau, sound and complete for OWL 2 DL. The default "
+            "beyond what ELK covers.")
+# KM costs more than HermiT, so it is never chosen automatically: ask for it by name
+# (reasoner="km"). KM 1.6.5 can need minutes on small ontologies with constructs beyond
+# EL.
+register_reasoner(
+    "km", _km, Expressivity.parse("SROIQ(D)").with_abox(equality=True), cost=20,
     available=_km_available, instance_queries=False,
     summary="Kobayashi-MaRust 1.6.5: classifier for OWL 2 DL with verified certificates. "
-            "Its OWL API binding classifies; instances are checked as {a} ⊑ C.")
-register_reasoner(
-    "hermit", _hermit, Expressivity.parse("SROIQ(D)").with_abox(equality=True), cost=10,
-    summary="HermiT 1.4.5: hypertableau, sound and complete for OWL 2 DL.")
+            "Optional: chosen only by name. Its OWL API binding classifies; instances "
+            "are checked as {a} ⊑ C.")
 
 
 def list_reasoners():

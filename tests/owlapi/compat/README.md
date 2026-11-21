@@ -57,18 +57,24 @@ Upgrade to OWL API 5.5.1, ELK 0.6.0, HermiT 1.4.5.519:
   an incremental change). The recorded file already had the same query with `B`, `C` and
   `D` in place of `A` as unsatisfiable.
 
+Reasoner default (a decision, not an effect of the upgrade):
+
+- `el.reasoner_selection`, `rich.reasoner_selection`: `km` became `hermit`. HermiT is the
+  default beyond what ELK covers and KM is chosen only by name, because KM 1.6.5 can
+  need minutes on small ontologies (see below). The answers of the query-time entailment
+  probe on `el.ofn`, now given by HermiT, are the recorded ones.
+
 ## Known limits of the reference behaviour
 
 - `rich.ofn` has no `HasKey` axiom: the KM reasoner refuses ontologies with keys
   ("out of fragment: DL-safe rules"), and the automatic selection still picks it.
 - ELK is not probed on `rich.ofn` (outside its fragment).
-- The KM reasoner (1.6.5) does not reliably answer on `rich.ofn` with OWL API 4.5.29. It
-  classified the ontology once (`golden/rich.reasoner_km.json`, kept as a record) and
-  then never returned in every later attempt, at start-up or after the first change of
-  the ontology: its helper process sits idle while the Java side waits in
-  `Classifier$Session.exchange`, which has no time limit. The case is therefore in
-  `probes.UNSTABLE` and not compared, and the query-time entailment probe uses HermiT on
-  this ontology. On `el.ofn`, `t3.owl` and `roles.owl` KM answers and is compared; these
-  cases run under a watchdog that aborts the test run after 10 minutes without an
-  answer. An upgrade must not make KM worse on these three; fixing the behaviour on
-  `rich.ofn` is a separate task.
+- The KM reasoner (1.6.5) needs about 340 seconds for `rich.ofn`, an ontology of a few
+  dozen axioms, at start-up and again after every change of the ontology; its helper
+  process sits idle meanwhile, which suggests an internal time limit followed by another
+  route. The answer is then the recorded one (`golden/rich.reasoner_km.json`; checked by
+  hand with the OWL API 4 and the OWL API 5 build of KM). Because of the time the case is
+  in `probes.UNSTABLE` and not compared in the test run, and the query-time entailment
+  probe uses HermiT on this ontology. On `el.ofn`, `t3.owl` and `roles.owl` KM answers at
+  once and is compared; these cases run under a watchdog that aborts the test run after
+  10 minutes without an answer.

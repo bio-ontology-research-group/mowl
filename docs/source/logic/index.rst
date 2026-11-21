@@ -204,8 +204,10 @@ complete for an ontology, and warns when a backend is asked to reason over const
 does not cover. Other reasoners are added with :func:`mowl.reasoning.register_reasoner`.
 
 mOWL also packages the Kobayashi-MaRust reasoner (``km``), a classifier for OWL 2 DL with
-verified certificates, which is preferred to HermiT for ontologies beyond what ELK covers.
-Its OWL API binding classifies; instance checks are made as the subsumption ``{a} ⊑ C``.
+verified certificates. It is optional: HermiT is the default beyond what ELK covers, and KM
+is used when asked for by name (``create_reasoner(ontology, "km")``,
+``SubsumptionOracle(ontology, reasoner="km")``). Its OWL API binding classifies; instance
+checks are made as the subsumption ``{a} ⊑ C``.
 Further JAR files can be put on the class path with
 ``mowl.init_jvm(memory, extra_classpath=...)`` or ``MOWL_EXTRA_CLASSPATH``.
 
@@ -218,8 +220,8 @@ Further JAR files can be put on the class path with
 
 .. testoutput::
 
-   ['structural', 'elk', 'km', 'hermit']
-   elk km
+   ['structural', 'elk', 'hermit', 'km']
+   elk hermit
 
 :class:`mowl.reasoning.SubsumptionOracle` answers the tasks above through subsumption
 between class expressions, using definitions that it adds and removes again, and gives the
@@ -237,6 +239,6 @@ logical status of a candidate axiom.
 
 .. testoutput::
 
-   km
+   hermit
    True False
    entailed undetermined

@@ -31,19 +31,20 @@ def _ontology(name, universal=False):
 
 
 def test_selection_by_expressivity():
-    assert [b.name for b in list_reasoners()] == ["structural", "elk", "km", "hermit"]
+    assert [b.name for b in list_reasoners()] == ["structural", "elk", "hermit", "km"]
     assert select_reasoner("taxonomy").name == "structural"
     assert select_reasoner("EL⊥").name == "elk"
     assert select_reasoner("ELH(∘)⊥ with ABox").name == "elk"
-    assert select_reasoner("ALC").name == "km"
-    assert select_reasoner("ELO").name == "km"           # ELK has no nominals
+    assert select_reasoner("ALC").name == "hermit"
+    assert select_reasoner("ELO").name == "hermit"       # ELK has no nominals
 
 
 def test_auto_picks_the_cheapest_complete_reasoner_and_warns_otherwise():
     _, el, *_ = _ontology("auto_el")
     assert create_reasoner(el)[1].name == "elk"
     _, alc, *_ = _ontology("auto_alc", universal=True)
-    assert create_reasoner(alc)[1].name == "km"
+    assert create_reasoner(alc)[1].name == "hermit"
+    assert create_reasoner(alc, "km")[1].name == "km"    # optional, by name
     with pytest.warns(UserWarning, match="inferences that depend on"):
         create_reasoner(alc, "elk")
 
@@ -87,11 +88,13 @@ def test_register_reasoner():
         register_reasoner("test-told", factory, "taxonomy")
 
 
-def test_km_is_packaged_and_preferred_to_hermit():
-    """mOWL packages the KM reasoner; it is cheaper than HermiT and covers OWL 2 DL."""
+def test_km_is_packaged_and_optional():
+    """mOWL packages the KM reasoner; it covers OWL 2 DL and is used only when asked for
+    by name (HermiT is the default beyond EL)."""
     from mowl.reasoning import get_backend
     km = get_backend("km")
     assert km.is_available()
     assert str(km.expressivity).startswith("SROIQ(D)")
     assert not km.instance_queries
-    assert select_reasoner("ALC").name == "km"
+    assert km.cost > get_backend("hermit").cost
+    assert select_reasoner("ALC").name == "hermit"

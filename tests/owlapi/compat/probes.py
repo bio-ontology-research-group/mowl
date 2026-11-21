@@ -330,7 +330,7 @@ def probe_subsumption_oracle(path):
     backend: the logical status of each query.
 
     On ``rich.ofn`` the backend is fixed to HermiT: the automatically chosen KM backend
-    does not reliably answer on this ontology (see ``README.md``, known limits)."""
+    needs minutes per change on this ontology (see ``README.md``, known limits)."""
     from mowl.owlapi import OWLAPIAdapter
     from mowl.reasoning import SubsumptionOracle
     ont = load(path)
@@ -431,8 +431,8 @@ SKIP = {
 }
 
 
-#: Cases whose reference behaviour is not stable enough to be a test: the golden file is
-#: kept as a record but not compared (see ``README.md``, known limits).
+#: Cases that take too long to be a test (KM needs minutes on ``rich.ofn``): the golden
+#: file is kept as a record but not compared (see ``README.md``, known limits).
 UNSTABLE = {
     ("rich", "reasoner_km"),
 }
