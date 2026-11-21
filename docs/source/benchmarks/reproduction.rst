@@ -35,8 +35,9 @@ Summary
    * - Box\ :sup:`2`\ EL
      - ``box2el-*``, ``transbox-*-prediction``
      - reproduced
-     - 1 seed. Largest gaps: GALEN prediction 0.29 / 0.35 and ANATOMY prediction
-       0.66 / 0.70 (Hits\@100).
+     - 1 seed, trained with the role inclusions and role chains, as in the paper.
+       Largest gaps: GALEN prediction 0.31 / 0.35 and ANATOMY prediction 0.66 / 0.70
+       (Hits\@100).
    * - TransBox
      - ``transbox-*-prediction``
      - reproduced
@@ -80,7 +81,8 @@ Summary
    * - EmEL++ (own benchmarks)
      - ``emelpp-*-prediction``
      - partly
-     - 1 seed; close but below on GO and GALEN. ANATOMY not finished.
+     - GO and GALEN (1 seed): close but below. ANATOMY (2 seeds): EmEL++ reproduced;
+       the ELEm baseline of that table is not (0.21 / 0.41).
    * - BoxLitE
      - ``boxlite-*``
      - not reproduced
@@ -112,14 +114,14 @@ Box\ :sup:`2`\ EL, TransBox and the baselines (Hits\@100, combined over normal f
      - ANATOMY
    * - Box\ :sup:`2`\ EL
      - ``box2el-*-prediction``
-     - 0.29 / 0.35
+     - 0.31 / 0.35
      - 0.59 / 0.59
      - 0.66 / 0.70
    * - Box\ :sup:`2`\ EL
      - ``box2el-*-inference``
-     - 0.23 / 0.24
-     - 0.48 / 0.49
-     - —
+     - 0.24 / 0.24
+     - 0.49 / 0.49
+     - 0.47 / 0.44
    * - ELEm (baseline code)
      - ``box2el-*-prediction``
      - 0.29 / 0.29
@@ -131,7 +133,13 @@ Box\ :sup:`2`\ EL, TransBox and the baselines (Hits\@100, combined over normal f
      - 0.36 / 0.35
      - 0.63 / 0.62
 
-Under the test design of the TransBox paper, Box\ :sup:`2`\ EL on GO gives 0.52 / 0.52
+The Box\ :sup:`2`\ EL rows are runs with the role inclusion and role chain losses of the
+paper (``load_role_axioms=True`` in the recipes). Without them, as mOWL trained
+Box\ :sup:`2`\ EL before, GALEN gives 0.29 (prediction) and 0.23 (inference) and GO
+inference 0.48; the other cells do not change at this precision. With one seed each,
+differences of 0.01 are not evidence of an effect.
+
+Under the test design of the TransBox paper, Box\ :sup:`2`\ EL on GO gives 0.51 / 0.52
 and ELBE on GO 0.23 / 0.22.
 
 OnT and HiT (Hits\@1, Hits\@10, Hits\@100)
@@ -280,7 +288,9 @@ Other methods
 ~~~~~~~~~~~~~
 
 * **ELK-Em** (Hits\@100): GO 0.69 / 0.71, ANATOMY 0.49 / 0.50, GALEN 0.31 / 0.35.
-* **EmEL++ on its own benchmarks** (Hits\@100, 1 seed): GO 0.22 / 0.24, GALEN 0.12 / 0.16.
+* **EmEL++ on its own benchmarks** (Hits\@100): GO 0.22 / 0.24 and GALEN 0.12 / 0.16
+  (1 seed); ANATOMY 0.40 / 0.39 (2 seeds; median rank 445 / 381). The ELEm baseline of
+  the ANATOMY table is not reproduced: 0.21 / 0.41, median rank about 15,500 / 640.
 * **BoxLitE** (MRR with the ECOS solver, family ontology): 0.66 / 0.72 for the first
   variant, down to 0.22 / 0.44 for the fourth.
 
@@ -322,9 +332,8 @@ can be reproduced. The full reasoning is on each catalogue card.
 Not run
 ~~~~~~~
 
-``box2el-yeast-ppi``, ``box2el-human-ppi``, ``dele-human-ppi``, ``dele-human-function``,
-``cate-yeast-ppi`` and ``emelpp-anatomy-prediction`` have recipes or published numbers but
-no finished run yet.
+``box2el-yeast-ppi``, ``box2el-human-ppi``, ``dele-human-ppi``, ``dele-human-function``
+and ``cate-yeast-ppi`` have recipes or published numbers but no finished run yet.
 
 What had to be made explicit
 ----------------------------
