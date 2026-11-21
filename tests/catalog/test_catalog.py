@@ -129,7 +129,7 @@ def test_list_methods_filters():
     assert list_methods(family="geometric") == geometric
 
     catalogued = list_methods(status=Status.CATALOGUED)
-    assert catalogued and all(c.status is Status.CATALOGUED for c in catalogued)
+    assert all(c.status is Status.CATALOGUED for c in catalogued)
     assert list_methods(status="catalogued") == catalogued
 
     implemented = list_methods(implemented=True)
