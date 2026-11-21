@@ -10,6 +10,7 @@ MASHKOVA2026 = Reference(
 
 REGIME = RegimeCard(
     key="faithfulness-hierarchy",
+    assumption="open world",
     task="axiom-ranking",
     target="logical status",
     name="Faithfulness hierarchy (entailed / contradictory / undetermined axioms)",

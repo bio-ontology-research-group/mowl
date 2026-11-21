@@ -5,6 +5,7 @@ from mowl.catalog.regimes._regime_refs import MASHKOVA2026
 
 REGIME = RegimeCard(
     key='kbc-code-training',
+    assumption="closed world over stated axioms",
     name='Faithfulness reference code training (kbc run_el.py)',
     kind=RegimeKind.TRAINING,
     summary=('How run_el.py of the faithfulness paper trains ELEmbeddings, EmEL++ and '

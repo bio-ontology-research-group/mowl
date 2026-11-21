@@ -5,6 +5,7 @@ from mowl.catalog.regimes._regime_refs import JACKERMEIER2024, YANG2025
 
 REGIME = RegimeCard(
     key='per-column-corruption',
+    assumption="closed world over stated axioms",
     name='Corruption of each side separately',
     kind=RegimeKind.TRAINING,
     summary=('Every positive gets one block of negatives per side: one with the left-hand side '

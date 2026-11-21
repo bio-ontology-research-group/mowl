@@ -30,6 +30,9 @@ _TAXONOMY_NOTE = (
 
 ORDER_EMBEDDINGS = MethodCard(
     key="order_embeddings",
+    assumption="closed world over stated axioms",
+    training=("pairwise-margin-ranking", "either-side-corruption", "transitive-closure-positives",),
+    evaluation=("hierarchy-threshold-f1", "common-filtered-ranking",),
     name="Order embeddings",
     family=Family.ORDER,
     region="reversed product order on the positive orthant (cone x + R^n_+)",
@@ -74,6 +77,9 @@ ORDER_EMBEDDINGS = MethodCard(
 
 HYPERBOLIC_CONES = MethodCard(
     key="hyperbolic_cones",
+    assumption="closed world over stated axioms",
+    training=("pairwise-margin-ranking", "transitive-closure-positives", "known-positive-filtering",),
+    evaluation=("hierarchy-threshold-f1", "common-filtered-ranking",),
     name="Hyperbolic entailment cones",
     family=Family.ORDER,
     region="cone (geodesically convex, in the Poincaré ball)",
@@ -91,8 +97,6 @@ HYPERBOLIC_CONES = MethodCard(
     expressivity="taxonomy",
     tasks=("subsumption",),
     axioms=("gci0",),
-    training=("known-positive-filtering",),
-    evaluation=("common-filtered-ranking",),
     guarantees=(
         Guarantee(
             K.EXPRESSIVITY,
@@ -127,6 +131,9 @@ HYPERBOLIC_CONES = MethodCard(
 
 SHADOW_CONES = MethodCard(
     key="shadow_cones",
+    assumption="closed world over stated axioms",
+    training=("logsumexp-contrastive", "softmax-energy-contrastive", "transitive-closure-positives", "known-positive-filtering",),
+    evaluation=("hierarchy-threshold-f1", "common-filtered-ranking",),
     name="Shadow cones",
     family=Family.ORDER,
     region="cone (umbral or penumbral shadow in hyperbolic space)",
@@ -144,8 +151,6 @@ SHADOW_CONES = MethodCard(
     tasks=("subsumption",),
     axioms=("gci0",),
     code_url="https://github.com/ydtydr/ShadowCones",
-    training=("known-positive-filtering", "softmax-energy-contrastive"),
-    evaluation=("common-filtered-ranking",),
     guarantees=(
         Guarantee(
             K.EXPRESSIVITY,
@@ -181,6 +186,9 @@ SHADOW_CONES = MethodCard(
 
 DISK_EMBEDDINGS = MethodCard(
     key="disk_embeddings",
+    assumption="closed world over stated axioms",
+    training=("pairwise-margin-ranking", "transitive-closure-positives", "known-positive-filtering",),
+    evaluation=("hierarchy-threshold-f1", "common-filtered-ranking",),
     name="Hyperbolic disk embeddings",
     family=Family.ORDER,
     region="disk (ball) in a quasi-metric space, e.g. hyperbolic",
@@ -198,8 +206,6 @@ DISK_EMBEDDINGS = MethodCard(
     expressivity="taxonomy",
     tasks=("subsumption",),
     axioms=("gci0",),
-    training=("known-positive-filtering",),
-    evaluation=("common-filtered-ranking",),
     guarantees=(
         Guarantee(
             K.EXPRESSIVITY,
@@ -231,6 +237,9 @@ DISK_EMBEDDINGS = MethodCard(
 
 BOX_LATTICE = MethodCard(
     key="box_lattice",
+    assumption="closed world over stated axioms",
+    training=("probabilistic-bce", "transitive-closure-positives",),
+    evaluation=("hierarchy-threshold-f1", "common-filtered-ranking",),
     name="Box lattice embeddings",
     family=Family.ORDER,
     region="box (probabilistic, with volume as probability)",
@@ -283,6 +292,9 @@ BOX_LATTICE = MethodCard(
 
 GUMBEL_BOX = MethodCard(
     key="gumbel_box",
+    assumption="closed world over stated axioms",
+    training=("probabilistic-bce", "transitive-closure-positives",),
+    evaluation=("hierarchy-threshold-f1", "common-filtered-ranking",),
     name="Gumbel box embeddings",
     family=Family.ORDER,
     region="box with Gumbel-distributed corners",

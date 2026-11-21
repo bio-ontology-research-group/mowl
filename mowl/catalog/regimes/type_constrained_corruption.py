@@ -5,6 +5,7 @@ from mowl.catalog.regimes._regime_refs import MASHKOVA2024NESY, MASHKOVA2024DELE
 
 REGIME = RegimeCard(
     key='type-constrained-corruption',
+    assumption="closed world over stated axioms",
     name='Type-constrained corruption',
     kind=RegimeKind.TRAINING,
     summary=('An entity is replaced only by an entity of the same type (for example a protein by '

@@ -70,6 +70,7 @@ REGIMES = (
     ),
     RegimeCard(
         key="box2el-code-training",
+        assumption="closed world over stated axioms",
         name="Training design of the Box2EL code",
         kind=RegimeKind.TRAINING,
         summary=(
@@ -108,6 +109,7 @@ REGIMES = (
     ),
     RegimeCard(
         key="transbox-code-training",
+        assumption="closed world over stated axioms",
         name="Training design of the TransBox code",
         kind=RegimeKind.TRAINING,
         summary=(
@@ -151,6 +153,7 @@ REGIMES = (
     ),
     RegimeCard(
         key="regd-code-training",
+        assumption="closed world over stated axioms",
         name="Training design of the RegD code",
         kind=RegimeKind.TRAINING,
         summary=(
@@ -221,6 +224,7 @@ REGIMES = (
     ),
     RegimeCard(
         key="transbox-normal-form-ranking",
+        assumption="closed world over stated axioms",
         task="subsumption-prediction",
         name="Per-normal-form subsumption ranking (TransBox variant)",
         kind=RegimeKind.EVALUATION,

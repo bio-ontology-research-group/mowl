@@ -357,6 +357,11 @@ of :class:`torch.utils.data.DataLoader`
 
     # ==================== Training Methods ====================
 
+    #: The generic loop of :meth:`train` consults every hook.
+    training_hooks = frozenset((
+        "training_datasets", "negatives", "filter_negatives", "loss", "optimizer",
+        "on_epoch_start", "on_epoch_end", "should_stop", "on_train_end", "additional_loss"))
+
     @property
     def training_regime(self):
         """The :class:`~mowl.training.TrainingRegime` used by :meth:`train`, or ``None`` \
@@ -388,7 +393,8 @@ positive form of the loss (``module(neg_data, gci_name)``) before being passed t
 ``loss``, instead of ``module(neg_data, gci_name, neg=True)``.
 
         Without a regime, :meth:`train` behaves exactly as before regimes existed. Models \
-that override :meth:`train` with a loop of their own may ignore the regime.
+that override :meth:`train` with a loop of their own declare the hooks that loop consults in \
+:attr:`training_hooks`; a regime that changes anything else is refused when assigned.
 
         :rtype: :class:`~mowl.training.TrainingRegime` or None
         """
@@ -397,10 +403,11 @@ that override :meth:`train` with a loop of their own may ignore the regime.
     @training_regime.setter
     def training_regime(self, regime):
         if regime is not None:
-            from mowl.training.regime import TrainingRegime
+            from mowl.training.regime import TrainingRegime, check_compatible
             if not isinstance(regime, TrainingRegime):
                 raise TypeError("training_regime must be a mowl.training.TrainingRegime "
                                 "or None.")
+            check_compatible(regime, self)
             regime.attach(self)
         self._training_regime = regime
 

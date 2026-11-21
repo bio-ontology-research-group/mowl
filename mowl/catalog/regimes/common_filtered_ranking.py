@@ -14,6 +14,7 @@ BORDES2013 = Reference(
 REGIMES = (
     RegimeCard(
         key="common-filtered-ranking",
+        assumption="closed world over stated axioms",
         task="subsumption-prediction",
         name="Filtered ranking of the joint mOWL benchmarks",
         kind=RegimeKind.EVALUATION,
@@ -48,6 +49,7 @@ REGIMES = (
     ),
     RegimeCard(
         key="pair-classifier-head",
+        assumption="closed world over stated axioms",
         name="Pair classifier on class vectors",
         kind=RegimeKind.EVALUATION,
         summary=(

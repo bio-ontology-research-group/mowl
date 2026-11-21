@@ -244,18 +244,19 @@ class CatE(Model):
 
         Assigning a regime calls its ``attach`` method with this model; the
         'cate-code-training' regime switches the model to the training design of the
-        CatE reference code. (CatE's own :meth:`train` loop does not consult the
-        regime's per-axiom-type hooks.)
+        CatE reference code. CatE's own :meth:`train` loop consults no regime hooks, so a
+        regime that changes negatives, losses or the optimiser is refused.
         """
         return self._training_regime
 
     @training_regime.setter
     def training_regime(self, regime):
         if regime is not None:
-            from mowl.training.regime import TrainingRegime
+            from mowl.training.regime import TrainingRegime, check_compatible
             if not isinstance(regime, TrainingRegime):
                 raise TypeError("training_regime must be a mowl.training.TrainingRegime "
                                 "or None.")
+            check_compatible(regime, self)
             regime.attach(self)
         self._training_regime = regime
 

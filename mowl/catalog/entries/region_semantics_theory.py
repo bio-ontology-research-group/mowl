@@ -11,6 +11,7 @@ from mowl.catalog.entries import _refs as R
 
 CONVEX_REGIONS = MethodCard(
     key="convex_regions",
+    assumption="open world",
     name="Convex geometric models of existential rules",
     family=Family.GEOMETRIC,
     region="convex region (relations: convex regions over concatenated vectors)",
@@ -94,6 +95,9 @@ CONVEX_REGIONS = MethodCard(
 
 FAITHEL = MethodCard(
     key="faithel",
+    assumption="closed world over stated axioms",
+    training=("mse-to-target",),
+    evaluation=("common-filtered-ranking",),
     name="Strongly faithful ELH embeddings (FaithEL)",
     family=Family.GEOMETRIC,
     region="union of intervals (non-convex, 1-D) / convex hull of one-hot vectors",
@@ -193,6 +197,7 @@ _AT_TEMPORAL = "; ".join((_AT + "test_temporal_during_is_the_conjunction_of_time
 
 ATTRIBUTED_DL = MethodCard(
     key="attributed_dl",
+    assumption="open world",
     name="Geometric models for (temporally) attributed DLs",
     family=Family.CONSTRUCTIVE,
     region="convex region (simplex face)",
@@ -295,6 +300,7 @@ ATTRIBUTED_DL = MethodCard(
 
 TEMPORAL_CONES = MethodCard(
     key="temporal_cones",
+    assumption="open world",
     name="Temporal al-cone models",
     family=Family.CONSTRUCTIVE,
     region="cone (axis-aligned, closed convex)",

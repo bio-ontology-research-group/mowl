@@ -5,6 +5,9 @@ from mowl.catalog.card import (Family, Guarantee, GuaranteeKind as K, MethodCard
 
 EIKE = MethodCard(
     key="eike",
+    assumption="closed world over stated axioms",
+    training=("pairwise-margin-ranking", "either-side-corruption",),
+    evaluation=("kg-filtered-link-prediction", "common-filtered-ranking",),
     expressivity="taxonomy with ABox",
     tasks=("subsumption", "instance-checking", "role-assertion"),
     name="EIKE",
@@ -67,6 +70,8 @@ EIKE = MethodCard(
 
 BOXSEL = MethodCard(
     key="boxsel",
+    assumption="closed world over stated axioms",
+    evaluation=("common-filtered-ranking",),
     expressivity="EL⊥ with ABox",
     tasks=("subsumption", "satisfiability", "disjointness", "instance-checking",
            "role-assertion"),
@@ -149,6 +154,8 @@ BOXSEL = MethodCard(
 
 DFALC = MethodCard(
     key="dfalc",
+    assumption="open world",
+    evaluation=("common-filtered-ranking",),
     expressivity="ALC with ABox",
     tasks=("subsumption", "instance-checking", "role-assertion"),
     name="Differentiable fuzzy ALC (DF-ALC)",

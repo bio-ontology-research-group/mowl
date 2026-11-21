@@ -37,7 +37,6 @@ _QUERY_FIELDS = dict(
     status=Status.LEARNABLE, origin=Origin.ADAPTATION,
     expressivity="EL with ABox",
     tasks=("subsumption", "instance-checking", "query-answering"),
-    evaluation=("query-answering",),
     axioms=("subclass_of", "equivalent_classes", "class_assertion",
             "object_property_assertion"))
 
@@ -46,6 +45,9 @@ _KG_ONLY = ("Defined for knowledge graphs, not for DL ontologies: there is no "
 
 BOXE = MethodCard(
     key="boxe",
+    assumption="closed world over stated axioms",
+    training=("logsigmoid-negative-sampling", "either-side-corruption",),
+    evaluation=("kg-filtered-link-prediction", "common-filtered-ranking",),
     name="BoxE",
     family=Family.GEOMETRIC,
     region="box",
@@ -107,6 +109,9 @@ BOXE = MethodCard(
 
 EXPRESSIVE = MethodCard(
     key="expressive",
+    assumption="closed world over stated axioms",
+    training=("logsigmoid-negative-sampling", "either-side-corruption",),
+    evaluation=("kg-filtered-link-prediction", "common-filtered-ranking",),
     name="ExpressivE",
     family=Family.GEOMETRIC,
     region="hyper-parallelogram (in the virtual triple space)",
@@ -162,6 +167,9 @@ EXPRESSIVE = MethodCard(
 
 RESHUFFLE = MethodCard(
     key="reshuffle",
+    assumption="closed world over stated axioms",
+    training=("pairwise-margin-ranking", "either-side-corruption",),
+    evaluation=("kg-filtered-link-prediction", "common-filtered-ranking",),
     name="RESHUFFLE",
     family=Family.GEOMETRIC,
     region="box after a coordinate reshuffle",
@@ -221,6 +229,9 @@ RESHUFFLE = MethodCard(
 
 QUERY2BOX = MethodCard(
     key="query2box",
+    assumption="closed world over stated axioms",
+    training=("logsigmoid-negative-sampling",),
+    evaluation=("query-answering", "common-filtered-ranking",),
     name="Query2Box",
     family=Family.GEOMETRIC,
     region="box",
@@ -257,6 +268,9 @@ QUERY2BOX = MethodCard(
 
 BETAE = MethodCard(
     key="betae",
+    assumption="closed world over stated axioms",
+    training=("logsigmoid-negative-sampling",),
+    evaluation=("query-answering", "common-filtered-ranking",),
     name="BetaE",
     family=Family.ALGEBRAIC,
     region="product of Beta distributions",
@@ -293,6 +307,9 @@ BETAE = MethodCard(
 
 CONE_QE = MethodCard(
     key="cone_qe",
+    assumption="closed world over stated axioms",
+    training=("logsigmoid-negative-sampling",),
+    evaluation=("query-answering", "common-filtered-ranking",),
     name="ConE (cone query embeddings)",
     family=Family.GEOMETRIC,
     region="cone (product of 2-D sector-cones)",
@@ -333,6 +350,9 @@ CONE_QE = MethodCard(
 
 ACONE = MethodCard(
     key="acone",
+    assumption="closed world over stated axioms",
+    training=("logsigmoid-negative-sampling",),
+    evaluation=("query-answering", "common-filtered-ranking",),
     name="AConE",
     family=Family.GEOMETRIC,
     region="cone in complex space (multicone)",
@@ -384,6 +404,9 @@ ACONE = MethodCard(
 
 CONCEPT2BOX = MethodCard(
     key="concept2box",
+    assumption="closed world over stated axioms",
+    training=("pairwise-margin-ranking", "either-side-corruption",),
+    evaluation=("kg-filtered-link-prediction", "common-filtered-ranking",),
     name="Concept2Box",
     family=Family.GEOMETRIC,
     region="box",

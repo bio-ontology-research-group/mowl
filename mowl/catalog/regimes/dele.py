@@ -27,6 +27,7 @@ _CLOSURE = ("deductive closure approximated by mowl.training.DeductiveClosure "
 REGIMES = (
     RegimeCard(
         key="dele-all-normal-form-negatives",
+        assumption="closed world over stated axioms",
         name="Negatives for all EL++ normal forms (DELE)",
         kind=RegimeKind.TRAINING,
         summary=(
@@ -72,6 +73,7 @@ REGIMES = (
     ),
     RegimeCard(
         key="dele-closure-filtered-negatives",
+        assumption="closed world over entailed axioms",
         name="Deductive-closure filtering of negatives (DELE)",
         kind=RegimeKind.TRAINING,
         summary=(
@@ -129,6 +131,7 @@ REGIMES = (
     ),
     RegimeCard(
         key="dele-evaluation",
+        assumption="closed world over entailed axioms",
         task="subsumption-prediction",
         name="Deductive-closure-aware ranking evaluation (DELE)",
         kind=RegimeKind.EVALUATION,

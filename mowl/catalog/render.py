@@ -67,6 +67,11 @@ def card_to_rst(card):
                         + (f" ({logic.note})" if logic.note else "")))
     if card.tasks:
         rows.append(("Inference tasks", ", ".join(card.tasks)))
+    if card.assumption:
+        rows.append(("World assumption of its own objective", card.assumption))
+    hooks = _training_hooks(card)
+    if hooks is not None:
+        rows.append(("Training regimes it takes", hooks))
     if card.implemented:
         rows.append(("Implementation", f":class:`{card.implementation}`"))
         if card.axioms:
@@ -175,6 +180,8 @@ def regime_to_rst(card):
         rows.append(("Why not implemented", card.not_implemented_reason))
     if card.task:
         rows.append(("Task", card.task + (f" ({card.target})" if card.target else "")))
+    if card.assumption:
+        rows.append(("World assumption", card.assumption))
     lines.append(".. list-table::\n   :widths: 25 75\n")
     for k, v in rows:
         lines.append(f"   * - {k}\n     - {_esc(v)}")
@@ -210,3 +217,26 @@ def regimes_to_rst():
         out.append(_title(title, "-"))
         out.extend(regime_to_rst(c) for c in cards)
     return "\n".join(out)
+
+
+def _training_hooks(card):
+    """What kind of training regime the method's training loop takes, from the
+    ``training_hooks`` its class declares; ``None`` if there is no class to ask."""
+    if not card.implemented or card.status.value != "learnable":
+        return None
+    try:
+        cls = card.load()
+    except Exception:  # optional dependency missing
+        return None
+    hooks = getattr(cls, "training_hooks", None)
+    if hooks is None:
+        return None
+    from mowl.training.regime import HOOKS, SCHEDULE_HOOKS
+    hooks = frozenset(hooks)
+    if hooks >= frozenset(HOOKS):
+        return "any (positives, negatives, loss, optimiser schedule, stopping)"
+    if not hooks:
+        return "none (the objective is the method's own)"
+    if hooks <= SCHEDULE_HOOKS:
+        return "optimiser, schedule and stopping only (the objective is the method's own)"
+    return ", ".join(sorted(hooks))

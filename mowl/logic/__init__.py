@@ -12,12 +12,13 @@ from mowl.logic.expressivity import (Construct, Expressivity, ExpressivityReport
                                      ABOX, axiom_constructs, ontology_expressivity,
                                      check_ontology)
 from mowl.logic.tasks import (Box, LogicalStatus, FaithfulnessCriterion, InferenceTask,
-                              CompletionTask, Target, TASKS, COMPLETION_TASKS, KGC, KBC,
+                              CompletionTask, Target, WorldAssumption,
+                              TASKS, COMPLETION_TASKS, KGC, KBC,
                               get_task, get_completion_task)
 
 __all__ = [
     "Construct", "Expressivity", "ExpressivityReport", "NAMED", "ABOX",
     "axiom_constructs", "ontology_expressivity", "check_ontology",
     "Box", "LogicalStatus", "FaithfulnessCriterion", "InferenceTask", "CompletionTask",
-    "Target", "TASKS", "COMPLETION_TASKS", "KGC", "KBC", "get_task", "get_completion_task",
+    "Target", "WorldAssumption", "TASKS", "COMPLETION_TASKS", "KGC", "KBC", "get_task", "get_completion_task",
 ]

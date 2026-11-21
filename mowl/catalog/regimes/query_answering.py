@@ -5,6 +5,7 @@ from mowl.catalog.regimes._regime_refs import REN2020, ZHANG2021CONE, HE2024ACON
 
 REGIME = RegimeCard(
     key='query-answering',
+    assumption="closed world over stated axioms",
     task="query-answering",
     target="inductive prediction",
     name='Complex query answering on incomplete KGs',

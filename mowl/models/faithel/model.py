@@ -65,6 +65,9 @@ class FaithEL(EmbeddingELModel):
     are still available.
     """
 
+    #: :meth:`train` is a loop of its own with a fixed objective; it takes no training regime.
+    training_hooks = frozenset()
+
     axiom_scoring = "method"
     scored_forms = ("gci0", "gci1", "gci2", "gci3", "class_assertion",
                     "object_property_assertion")

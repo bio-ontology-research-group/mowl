@@ -21,6 +21,8 @@ from mowl.nn.query.expression import (Vocabulary, class_expression_to_query, fro
                                       ids, signature, to_dnf)
 from mowl.nn.query.geometry import UnsupportedOperator
 
+from mowl.training.regime import SCHEDULE_HOOKS  # noqa: E402
+
 
 class QueryEmbeddingModel(Model):
     """Base class of :class:`~mowl.models.Query2Box`, :class:`~mowl.models.BetaE`,
@@ -60,6 +62,9 @@ class QueryEmbeddingModel(Model):
 
     axiom_scoring = "method"
     scored_forms = ("gci0", "gci2", "class_assertion")
+    #: The objective (sampled queries, negative-sampling loss) is the method's own; regimes
+    #: that set the optimiser, a schedule or a stopping rule can be attached.
+    training_hooks = SCHEDULE_HOOKS
     #: The :class:`~mowl.nn.query.geometry.QueryGeometry` subclass of the method.
     geometry_class = None
     default_gamma = 24.0
@@ -156,6 +161,10 @@ class QueryEmbeddingModel(Model):
             count += len(rows)
         return (pos_loss + neg_loss) / (2 * count)
 
+    def get_optimizer(self):
+        """The optimiser of :meth:`train` (Adam with ``learning_rate``)."""
+        return th.optim.Adam(self.module.parameters(), lr=self.learning_rate)
+
     def train(self, epochs=10, steps_per_epoch=10, **kwargs):
         """Train with Adam. One epoch is ``steps_per_epoch`` optimisation steps, each on
         ``batch_size`` freshly sampled queries. The mean loss per epoch is appended to
@@ -167,17 +176,32 @@ class QueryEmbeddingModel(Model):
         if not self.training_structures:
             raise ValueError("No training query can be sampled from the graph of this "
                              "ontology: it has no subclass, role or assertion edges.")
-        opt = th.optim.Adam(self.module.parameters(), lr=self.learning_rate)
+        regime = self.training_regime
+        opt = NotImplemented if regime is None else regime.optimizer()
+        if opt is NotImplemented:
+            opt = self.get_optimizer()
         self.module.train()
-        for _ in range(epochs):
+        for epoch in range(epochs):
+            if regime is not None:
+                regime.on_epoch_start(epoch, epochs)
             total = 0.0
             for _ in range(steps_per_epoch):
                 loss = self.loss(self._batch())
+                if regime is not None:
+                    extra = regime.additional_loss(epoch)
+                    if extra is not None:
+                        loss = loss + extra
                 opt.zero_grad()
                 loss.backward()
                 opt.step()
                 total += float(loss)
             self.loss_history.append(total / steps_per_epoch)
+            if regime is not None:
+                regime.on_epoch_end(epoch, {"total": self.loss_history[-1]})
+                if regime.should_stop(epoch):
+                    break
+        if regime is not None:
+            regime.on_train_end()
         self.module.eval()
         if abs(self.loss_history[-1] - math.log(2)) < 0.02 and epochs > 0:
             import warnings

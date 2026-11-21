@@ -5,6 +5,7 @@ from mowl.catalog.regimes._regime_refs import ZHANG2022
 
 REGIME = RegimeCard(
     key='sampled-negative-auc',
+    assumption="closed world over stated axioms",
     task="link-prediction",
     target="inductive prediction",
     name='Link classification AUC with sampled test negatives',

@@ -5,6 +5,7 @@ from mowl.catalog.regimes._regime_refs import ZHAPA2023, SINGH2026, MASHKOVA2024
 
 REGIME = RegimeCard(
     key='fixed-column-corruption',
+    assumption="closed world over stated axioms",
     name='Uniform corruption of a fixed column',
     kind=RegimeKind.TRAINING,
     summary=('Every negative replaces the entity in one fixed column of a training axiom (the '

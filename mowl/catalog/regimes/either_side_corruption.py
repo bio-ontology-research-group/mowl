@@ -6,6 +6,7 @@ from mowl.catalog.regimes._regime_refs import (
 
 REGIME = RegimeCard(
     key='either-side-corruption',
+    assumption="closed world over stated axioms",
     name='Uniform corruption of either side',
     kind=RegimeKind.TRAINING,
     summary=("Every negative corrupts one side of the axiom, chosen uniformly per negative: C' ⊑ "

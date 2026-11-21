@@ -8,6 +8,7 @@ from mowl.catalog.regimes._regime_refs import JACKERMEIER2024, KULMANOV2019, MON
 REGIMES = (
     RegimeCard(
         key="fixed-negatives",
+        assumption="closed world over stated axioms",
         name="Negatives drawn once before training",
         kind=RegimeKind.TRAINING,
         summary=(

@@ -24,6 +24,38 @@ method paper (like a particular negative sampling scheme).
 """
 
 
+#: The hooks of a :class:`TrainingRegime` a training loop can consult. A model lists the ones
+#: its loop consults in ``training_hooks``; a regime that overrides a hook the model does not
+#: consult is refused when it is assigned, instead of being ignored.
+HOOKS = ("training_datasets", "negatives", "filter_negatives", "loss", "optimizer",
+         "on_epoch_start", "on_epoch_end", "should_stop", "on_train_end", "additional_loss")
+
+#: Hooks that concern the optimiser and the course of training only, not the data, the
+#: negatives or the loss. A loop with an objective of its own can still consult these.
+SCHEDULE_HOOKS = frozenset({"optimizer", "on_epoch_start", "on_epoch_end", "should_stop",
+                            "on_train_end", "additional_loss"})
+
+
+def unsupported_hooks(regime, model):
+    """The hooks ``regime`` overrides that the training loop of ``model`` (an instance or a
+    class) does not consult; empty if the two can be combined."""
+    return frozenset(regime.overridden_hooks()) - frozenset(getattr(model, "training_hooks", ()))
+
+
+def check_compatible(regime, model):
+    """Raise :class:`TypeError` if ``regime`` overrides hooks the training loop of ``model``
+    does not consult."""
+    missing = unsupported_hooks(regime, model)
+    if missing:
+        name = type(model).__name__
+        supported = sorted(getattr(model, "training_hooks", ()))
+        raise TypeError(
+            f"{type(regime).__name__} cannot be used with {name}: it changes "
+            f"{sorted(missing)}, which the training loop of {name} does not consult "
+            f"(it consults {supported if supported else 'no regime hooks'}). "
+            f"The regime would be ignored.")
+
+
 class TrainingRegime:
     """Base class of training regimes.
 
@@ -36,6 +68,11 @@ class TrainingRegime:
 
     def __init__(self):
         self.model = None
+
+    def overridden_hooks(self):
+        """The :data:`HOOKS` this regime overrides (what it changes in a training loop)."""
+        return frozenset(h for h in HOOKS
+                         if getattr(type(self), h, None) is not getattr(TrainingRegime, h))
 
     def attach(self, model):
         """Bind the regime to ``model``. Called once, when the regime is assigned to the
@@ -142,6 +179,9 @@ class ComposedRegime(TrainingRegime):
                 raise TypeError("ComposedRegime takes TrainingRegime objects.")
         self.regimes = tuple(regimes)
         self.key = "+".join(r.key for r in regimes if r.key)
+
+    def overridden_hooks(self):
+        return frozenset().union(*(r.overridden_hooks() for r in self.regimes))
 
     def attach(self, model):
         super().attach(model)

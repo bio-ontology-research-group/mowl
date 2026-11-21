@@ -9,6 +9,7 @@ _TIES = ("Ties are broken by candidate position (argsort of argsort), as in the 
 REGIMES = (
     RegimeCard(
         key="box2el-normal-form-ranking",
+        assumption="closed world over stated axioms",
         task="subsumption-prediction",
         name="Per-normal-form subsumption ranking (Box2EL)",
         kind=RegimeKind.EVALUATION,
@@ -40,6 +41,7 @@ REGIMES = (
     ),
     RegimeCard(
         key="inferred-subsumption-ranking",
+        assumption="closed world over stated axioms",
         task="subsumption-prediction",
         target="deductive inference",
         name="Ranking of reasoner-inferred subsumptions (Box2EL)",
@@ -62,6 +64,7 @@ REGIMES = (
     ),
     RegimeCard(
         key="ppi-ranking",
+        assumption="closed world over stated axioms",
         task="link-prediction",
         target="inductive prediction",
         name="Protein-protein interaction ranking (Box2EL code)",

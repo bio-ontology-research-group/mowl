@@ -50,6 +50,31 @@ class Model():
     #: .check_expressivity_on_init = False`` to switch the check off.
     check_expressivity_on_init = True
 
+    #: The :data:`mowl.training.regime.HOOKS` the training loop of this model consults.
+    #: Empty: the model trains with an objective of its own and takes no training regime.
+    training_hooks = frozenset()
+
+    @property
+    def training_regime(self):
+        """The :class:`~mowl.training.TrainingRegime` used by :meth:`train`, or ``None``.
+
+        A regime can be assigned only if the training loop of the model consults every
+        hook the regime overrides (:attr:`training_hooks`); otherwise assigning it raises
+        :class:`TypeError`, so that a regime is never silently ignored.
+        """
+        return getattr(self, "_training_regime", None)
+
+    @training_regime.setter
+    def training_regime(self, regime):
+        if regime is not None:
+            from mowl.training.regime import TrainingRegime, check_compatible
+            if not isinstance(regime, TrainingRegime):
+                raise TypeError("training_regime must be a mowl.training.TrainingRegime "
+                                "or None.")
+            check_compatible(regime, self)
+            regime.attach(self)
+        self._training_regime = regime
+
     @property
     def card(self):
         """The catalogue card (:class:`mowl.catalog.MethodCard`) of this method, or

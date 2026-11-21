@@ -112,6 +112,17 @@ class Benchmark:
     extra_inference_tasks: tuple = None
     target: Target = None
 
+    @property
+    def assumption(self):
+        """The :class:`mowl.logic.WorldAssumption` of the benchmark's evaluation regime
+        (which candidates count as wrong), or ``None`` if the regime does not state one."""
+        if not self.evaluation_regime:
+            return None
+        from mowl.catalog import get_regime
+        from mowl.logic import WorldAssumption
+        value = get_regime(self.evaluation_regime).assumption
+        return WorldAssumption(value) if value else None
+
     def __post_init__(self):
         if not self.key or self.key != self.key.lower() or " " in self.key:
             raise ValueError(f"Benchmark key must be a lower-case identifier: {self.key!r}")

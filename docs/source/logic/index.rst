@@ -56,7 +56,7 @@ ontology, which can be less than the paper covers. The catalogue can be queried 
 
    EL⊥ with ABox
    ELH(∘)⊥ with ABox
-   ['alcone', 'alcone-exact', 'cate', 'falcon']
+   ['alcone', 'alcone-exact', 'cate', 'dfalc', 'falcon', 'graph_kge']
 
 Checking an ontology before embedding it
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -193,6 +193,112 @@ contradictory or undetermined. The faithfulness criteria of Mashkova and Hoehndo
 
 Method cards list the inference tasks a method gives a score for (``tasks``), and
 evaluation regime cards name the task they measure (``task``) and their target.
+
+Open and closed world
+---------------------
+
+OWL has open world semantics. An axiom that the ontology does not entail is not false: it
+is *undetermined* unless adding it makes the ontology inconsistent
+(:class:`~mowl.logic.LogicalStatus`). Training and evaluation of embeddings mostly need
+false examples, and take them from what is absent. That is a closed world assumption, and
+it is a property of the *regime* (where negatives come from, which candidates count as
+wrong, how a negated query atom is answered), not of the embedding method. mOWL records it
+as a :class:`~mowl.logic.WorldAssumption`:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 26 16 22 18
+
+   * - Assumption
+     - Contradictory
+     - Undetermined
+     - Entailed, not stated
+   * - ``OPEN`` (open world)
+     - false
+     - neither
+     - true
+   * - ``CLOSED_ENTAILED`` (closed world over entailed axioms)
+     - false
+     - false
+     - true
+   * - ``CLOSED_STATED`` (closed world over stated axioms)
+     - false
+     - false
+     - false
+
+* **Training.** Uniform corruption (``either-side-corruption`` and its relatives) is
+  ``CLOSED_STATED``: a corrupted axiom is a negative even when the ontology entails it.
+  ``dele-closure-filtered-negatives`` removes the entailed ones (``CLOSED_ENTAILED``).
+  ``contradiction-negatives`` uses provably false axioms (``OPEN``). Methods that train
+  without negatives, and the exact constructions, make no closed world assumption.
+* **Evaluation.** A ranking in which every candidate outside the known axioms counts as
+  wrong is ``CLOSED_STATED`` (the joint ``common-*`` benchmarks, the Box²EL rankings, link
+  prediction). ``dele-evaluation`` removes entailed candidates (``CLOSED_ENTAILED``). The
+  faithfulness hierarchy, the KB embedding properties and the exact model check compare
+  against entailment (``OPEN``).
+* **Query answering.** The task :data:`~mowl.logic.TASKS` ``"query-answering"`` asks for
+  certain answers: individuals ``a`` with ``O ⊨ q(a)``. The benchmarks of the query
+  embedding literature (``query-answering`` regime; Query2Box, BetaE, ConE, AConE) instead
+  rank the answers in a hidden complete graph, and a negated atom holds when the edge is
+  absent. A query with negation therefore has many answers under the closed world reading
+  and almost none under the open world one, and a model trained for the first is not a
+  model of the ontology in the second sense. Negation in those methods is complement in
+  the graph, not the ``¬`` of the description logic.
+
+The same completion task is a different problem under each assumption, as it is under each
+:class:`~mowl.logic.Target`. A regime card states its assumption, a benchmark takes it from
+its evaluation regime, and a method card states the assumption of the method's own
+objective (how it trains when no training regime is attached).
+
+.. testcode::
+
+   from mowl.benchmarks import get_benchmark, list_benchmarks
+   from mowl.catalog import get_method, get_regime
+   from mowl.logic import LogicalStatus, WorldAssumption
+
+   print(get_regime("either-side-corruption").assumption)
+   print(get_regime("dele-closure-filtered-negatives").assumption)
+   print(get_benchmark("common-go-subsumption-prediction").assumption.name)
+   print(get_method("query2box").assumption)
+   print(WorldAssumption.OPEN.is_false(LogicalStatus.UNDETERMINED),
+         WorldAssumption.CLOSED_ENTAILED.is_false(LogicalStatus.UNDETERMINED))
+   print(len(list_benchmarks(assumption=WorldAssumption.OPEN)) > 0)
+
+.. testoutput::
+
+   closed world over stated axioms
+   closed world over entailed axioms
+   CLOSED_STATED
+   closed world over stated axioms
+   False True
+   True
+
+Which training regimes a model takes
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+A model declares the hooks of :class:`~mowl.training.TrainingRegime` its training loop
+consults (``training_hooks``). Models on the generic EL loop consult all of them and take
+any regime. Models with an objective of their own (the ALC models, the PyKEEN-based models,
+FaithEL, CatE) consult none, and the query embedding models consult only the optimiser,
+schedule and stopping hooks. Assigning a regime that changes something the loop does not
+consult raises ``TypeError``; a regime is never silently ignored.
+
+.. testcode::
+
+   from mowl.models import DiskEmbeddings, FaithEL, Query2Box
+   from mowl.training import LinearDecay, PairwiseMarginRankingLoss, unsupported_hooks
+
+   print(sorted(unsupported_hooks(PairwiseMarginRankingLoss(), DiskEmbeddings)))
+   print(sorted(unsupported_hooks(PairwiseMarginRankingLoss(), Query2Box)))
+   print(sorted(unsupported_hooks(LinearDecay(), Query2Box)))
+   print(len(unsupported_hooks(LinearDecay(), FaithEL)) > 0)
+
+.. testoutput::
+
+   []
+   ['filter_negatives', 'loss']
+   []
+   True
 
 Reasoners
 ---------

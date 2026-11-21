@@ -6,6 +6,7 @@ from mowl.catalog.regimes._regime_refs import SINGH2026
 
 REGIME = RegimeCard(
     key='elkem-subsumption-ranking',
+    assumption="closed world over stated axioms",
     task="subsumption-prediction",
     target="deductive inference",
     name='Unfiltered subsumption ranking with averaged ties (ELK-Em)',

@@ -13,6 +13,7 @@ from mowl.catalog.regimes._regime_refs import HE2024HIT, YANG2025ONT
 REGIMES = (
     RegimeCard(
         key="hit-code-training",
+        assumption="closed world over stated axioms",
         name="Training design of the HiT code",
         kind=RegimeKind.TRAINING,
         summary=(
@@ -55,6 +56,7 @@ REGIMES = (
     ),
     RegimeCard(
         key="ont-code-training",
+        assumption="closed world over stated axioms",
         name="Training design of the OnT code",
         kind=RegimeKind.TRAINING,
         summary=(

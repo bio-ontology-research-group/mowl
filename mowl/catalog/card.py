@@ -200,6 +200,10 @@ class MethodCard:
     :param factory: Dotted path of a function ``f(dataset, **kwargs)`` that returns the
         configured model, for methods that are a configuration of a general class (a
         projector, a walker and Word2Vec). Used by the benchmark runner.
+    :param assumption: The :class:`mowl.logic.WorldAssumption` (its value) of the method's
+        own training objective, i.e. of how it trains when no training regime is attached:
+        where its negatives come from, or ``"open world"`` if it uses none or only refuted
+        ones. A training regime that provides negatives replaces it.
     :param notes: Free text (deviations from the paper, implementation remarks).
     """
 
@@ -233,11 +237,13 @@ class MethodCard:
     tasks: tuple = ()
     head_tasks: tuple = ()
     factory: str = ""
+    assumption: str = ""
     notes: str = ""
 
     def __post_init__(self):
         if not self.key or self.key != self.key.lower() or " " in self.key:
             raise ValueError(f"Card key must be a lower-case identifier, got {self.key!r}.")
+        _check_assumption(self.assumption, f"Card {self.key!r}")
         if not isinstance(self.family, Family):
             raise TypeError("family must be a mowl.catalog.Family.")
         if not isinstance(self.status, Status):
@@ -313,6 +319,13 @@ class MethodCard:
         return getattr(importlib.import_module(module_name), attr)
 
 
+def _check_assumption(value, owner):
+    from mowl.logic import WorldAssumption
+    if value and value not in {x.value for x in WorldAssumption}:
+        raise ValueError(f"{owner}: assumption must be one of "
+                         f"{sorted(x.value for x in WorldAssumption)}.")
+
+
 @dataclass(frozen=True)
 class RegimeCard:
     """Catalogue entry for a training or evaluation regime.
@@ -350,6 +363,12 @@ class RegimeCard:
     :param target: For an evaluation regime, which axioms count as correct: a value of
         :class:`mowl.logic.Target` (``"deductive inference"``, ``"inductive prediction"``
         or ``"logical status"``), or empty if the regime can be used with either.
+    :param assumption: What the regime takes an axiom to be that is neither stated nor
+        refuted: a value of :class:`mowl.logic.WorldAssumption` (``"open world"``,
+        ``"closed world over entailed axioms"``, ``"closed world over stated axioms"``).
+        For a training regime this is where its negatives come from; for an evaluation
+        regime, which candidates count as wrong. Empty for regimes that do not decide it
+        (losses, schedules, scoring rules, positives).
     :param notes: Free text.
     """
 
@@ -369,11 +388,13 @@ class RegimeCard:
     limitations: tuple = ()
     task: str = ""
     target: str = ""
+    assumption: str = ""
     notes: str = ""
 
     def __post_init__(self):
         if not self.key or self.key != self.key.lower() or " " in self.key:
             raise ValueError(f"Regime key must be a lower-case identifier: {self.key!r}")
+        _check_assumption(self.assumption, f"Regime {self.key!r}")
         if not isinstance(self.kind, RegimeKind):
             raise TypeError("kind must be a mowl.catalog.RegimeKind.")
         from mowl.logic import TASKS, COMPLETION_TASKS, Target

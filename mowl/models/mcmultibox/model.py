@@ -58,6 +58,9 @@ class VolumeMultiBoxEL(EmbeddingELModel):
     :param load_role_axioms: Train on role inclusions and role chains.
     """
 
+    #: :meth:`train` is a loop of its own with a fixed objective; it takes no training regime.
+    training_hooks = frozenset()
+
     #: Normal forms with a loss in the thesis.
     TRAINABLE_GCIS = ("gci0", "gci1", "gci2", "gci3", "role_inclusion", "role_chain")
 

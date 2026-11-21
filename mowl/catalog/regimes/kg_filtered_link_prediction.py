@@ -5,6 +5,7 @@ from mowl.catalog.regimes._regime_refs import LOURENCO2026, CHARPENAY2024, GARG2
 
 REGIME = RegimeCard(
     key='kg-filtered-link-prediction',
+    assumption="closed world over stated axioms",
     task="link-prediction",
     target="inductive prediction",
     name='Filtered link prediction on role or membership assertions',

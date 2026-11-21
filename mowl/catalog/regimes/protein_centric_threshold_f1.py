@@ -5,6 +5,7 @@ from mowl.catalog.regimes._regime_refs import SINGH2026
 
 REGIME = RegimeCard(
     key='protein-centric-threshold-f1',
+    assumption="closed world over stated axioms",
     task="type-prediction",
     target="inductive prediction",
     name='Protein-centric F1 at a validation threshold (CAFA)',

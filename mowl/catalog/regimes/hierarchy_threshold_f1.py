@@ -5,6 +5,7 @@ from mowl.catalog.regimes._regime_refs import HE2024HIT, DASGUPTA2020
 
 REGIME = RegimeCard(
     key='hierarchy-threshold-f1',
+    assumption="closed world over stated axioms",
     task="subsumption-prediction",
     name='Threshold classification of subsumptions with 1:10 negatives',
     kind=RegimeKind.EVALUATION,

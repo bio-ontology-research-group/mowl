@@ -163,7 +163,13 @@ TASKS = {t.key: t for t in (
                 "expression. The TBox acts in two ways: as constraints on the answers "
                 "(certain answers are those entailed by TBox and ABox together), and as a "
                 "source of classes to use in queries. Cyclic queries do not reduce to "
-                "subsumption tests."),
+                "subsumption tests."
+                " The task as defined here is open world: the answers are the certain answers, and "
+                "an individual answers a negated query ¬C only if the knowledge base entails that "
+                "it is not a C. The query answering benchmarks of the knowledge graph "
+                "literature are closed world (WorldAssumption.CLOSED_STATED): the answers are "
+                "those in a hidden complete graph and a negated atom holds when the edge is "
+                "absent, so a negated query has many answers there and almost none here."),
 )}
 
 
@@ -254,6 +260,54 @@ def get_completion_task(key):
         raise KeyError(f"Unknown completion task {key!r}. Known tasks: "
                        f"{sorted(COMPLETION_TASKS)}")
     return COMPLETION_TASKS[key]
+
+
+class WorldAssumption(enum.Enum):
+    """What a training or evaluation regime takes a candidate axiom to be when it is
+    neither stated nor refuted, in terms of :class:`LogicalStatus`.
+
+    OWL has open world semantics: an axiom that is not entailed is not thereby false
+    (it is :attr:`LogicalStatus.UNDETERMINED` unless it is contradictory). Most training
+    and evaluation regimes of the embedding literature are closed world: they need false
+    examples and take them from what is absent. The assumption is a property of the regime
+    (how negatives are obtained, which candidates count as wrong, how a negated query atom
+    is answered), not of the embedding method.
+
+    ===================  =============  ======================  ====================
+    Assumption           Contradictory  Undetermined            Entailed, not stated
+    ===================  =============  ======================  ====================
+    ``OPEN``             false          neither true nor false  true
+    ``CLOSED_ENTAILED``  false          false                   true
+    ``CLOSED_STATED``    false          false                   false
+    ===================  =============  ======================  ====================
+    """
+
+    #: Only contradictory axioms are false; undetermined axioms are not used as negatives
+    #: and are not counted as errors. Regimes that compare all three statuses, check
+    #: entailment or model-hood, or draw negatives from disjointness.
+    OPEN = "open world"
+    #: Every axiom that is not entailed is false (the closed world assumption over the
+    #: deductive closure). Regimes that remove entailed axioms from the negatives or from
+    #: the competing candidates.
+    CLOSED_ENTAILED = "closed world over entailed axioms"
+    #: Every axiom that is not stated in the data is false, entailed or not. Uniform
+    #: corruption negatives; rankings in which every candidate outside the known axioms
+    #: (training, validation, test) counts as wrong; query answering on a graph, where a
+    #: negated atom holds exactly when the edge is absent. Under inductive prediction
+    #: (:attr:`Target.UNDETERMINED`) the stated axioms include the held-out ones.
+    CLOSED_STATED = "closed world over stated axioms"
+
+    def is_false(self, status, stated=False):
+        """Whether a candidate axiom with :class:`LogicalStatus` ``status`` is taken to
+        be false under this assumption (``stated``: it is among the known axioms)."""
+        status = LogicalStatus(status)
+        if stated:
+            return False
+        if status is LogicalStatus.CONTRADICTORY:
+            return True
+        if status is LogicalStatus.UNDETERMINED:
+            return self is not WorldAssumption.OPEN
+        return self is WorldAssumption.CLOSED_STATED
 
 
 class Target(enum.Enum):

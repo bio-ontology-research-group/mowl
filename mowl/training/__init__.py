@@ -3,7 +3,8 @@ deductive-closure utility (:mod:`mowl.training.dele`, :mod:`mowl.training.closur
 the regimes of the literature (negatives, losses, positives, schedules, model selection,
 batching)."""
 
-from mowl.training.regime import TrainingRegime, ComposedRegime
+from mowl.training.regime import (TrainingRegime, ComposedRegime, HOOKS, SCHEDULE_HOOKS,
+                                  unsupported_hooks)
 from mowl.training.closure import DeductiveClosure, NORMAL_FORMS
 from mowl.training.dele import (AllNormalFormNegatives, ClosureFilteredNegatives,
                                 ClosurePositives, DELECodeLoss, DELECodeLosses,
@@ -38,6 +39,7 @@ from mowl.training.reference import (Box2ELCodeTraining, TransBoxCodeTraining,
 from mowl.training.cate import CateCodeTraining
 
 __all__ = [
+    "HOOKS", "SCHEDULE_HOOKS", "unsupported_hooks",
     "TrainingRegime", "ComposedRegime",
     "SlackMargin", "StrictMargin", "margin_semantics",
     "Box2ELCodeTraining", "TransBoxCodeTraining", "ELKEmCodeTraining",

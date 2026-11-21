@@ -5,6 +5,7 @@ from mowl.catalog.regimes._regime_refs import SINGH2026
 
 REGIME = RegimeCard(
     key='elkem-code-training',
+    assumption="closed world over stated axioms",
     name='ELK-Em code training',
     kind=RegimeKind.TRAINING,
     summary=(

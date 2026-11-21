@@ -71,6 +71,7 @@ def get_benchmark(key):
 
 
 def list_benchmarks(task=None, completion_task=None, inference_task=None, target=None,
+                    assumption=None,
                     method=None):
     """Return the benchmarks, optionally only those that match every given filter.
 
@@ -80,6 +81,8 @@ def list_benchmarks(task=None, completion_task=None, inference_task=None, target
         the benchmark scores, directly or in another form.
     :param inference_task: Key of an inference task (:data:`mowl.logic.TASKS`).
     :param target: A :class:`mowl.logic.Target` or its value.
+    :param assumption: A :class:`mowl.logic.WorldAssumption` or its value: keep the
+        benchmarks whose evaluation regime makes this assumption.
     :param method: Catalogue key of a method: only benchmarks whose inference tasks the
         method declares (:func:`supports`).
     """
@@ -103,6 +106,9 @@ def list_benchmarks(task=None, completion_task=None, inference_task=None, target
     if inference_task is not None and inference_task not in TASKS:
         raise ValueError(f"Unknown inference task {inference_task!r}.")
     target = Target(target) if target is not None else None
+    if assumption is not None:
+        from mowl.logic import WorldAssumption
+        assumption = WorldAssumption(assumption)
     out = []
     for b in _benchmarks().values():
         if group is not None and b.task is not group:
@@ -112,6 +118,8 @@ def list_benchmarks(task=None, completion_task=None, inference_task=None, target
         if inference_task is not None and not b.measures(inference_task):
             continue
         if target is not None and b.target is not target:
+            continue
+        if assumption is not None and b.assumption is not assumption:
             continue
         if method is not None and not supports(method, b):
             continue
