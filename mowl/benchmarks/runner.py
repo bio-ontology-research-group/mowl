@@ -242,19 +242,6 @@ class _UnsupportedFamily(ModelFamily):
 
 _FAMILIES = [
     ELFamily(),
-    _UnsupportedFamily(
-        "graph", "mowl.base_models.graph_model.GraphModel",
-        "The benchmark protocols score candidate axioms through an EL++ module "
-        "(model.module(rows, gci_name)); graph-projection models need a projection-"
-        "specific scorer, which the benchmark set does not provide yet."),
-    _UnsupportedFamily(
-        "syntactic", "mowl.base_models.syntactic_model.SyntacticModel",
-        "Syntactic (corpus) models produce word vectors, not axiom scores; the benchmark "
-        "protocols need an axiom scorer."),
-    _UnsupportedFamily(
-        "ALC", "mowl.base_models.alcmodel.EmbeddingALCModel",
-        "ALC models (e.g. FALCON) do not expose the per-normal-form EL++ scores the "
-        "protocols rank with."),
 ]
 
 
@@ -284,6 +271,11 @@ _FAMILIES.insert(0, _LazyFamily("mowl.benchmarks.protocols.ont.LanguageModelFami
 _FAMILIES.insert(0, _LazyFamily("mowl.benchmarks.protocols.boxlite.SolverModelFamily"))
 
 
+#: Every other model that declares how it scores axioms (ALC, quantum logic, graph and
+#: corpus models); tried after the families above.
+_FAMILIES.append(_LazyFamily("mowl.benchmarks.families.ScoredModelFamily"))
+
+
 def register_family(family, first=True):
     """Add a :class:`ModelFamily` handler (before the built-in ones by default)."""
     if first:
@@ -301,8 +293,10 @@ def family_for(cls):
         if fam.matches(cls):
             return fam
     raise UnsupportedModelError(
-        f"No benchmark runner support for {getattr(cls, '__name__', cls)!r}: it is not an "
-        f"EmbeddingELModel subclass. Register a ModelFamily or pass a model_factory.")
+        f"No benchmark runner support for {getattr(cls, '__name__', cls)!r}: it is neither "
+        f"an EmbeddingELModel subclass nor a Model that declares how it scores axioms "
+        f"(class attribute 'axiom_scoring', see mowl.evaluation.model_scoring). Register a "
+        f"ModelFamily or pass a model_factory.")
 
 
 # ---------------------------------------------------------------------------------------
@@ -530,9 +524,16 @@ def run_benchmark(benchmark, method=None, model_factory=None, model_kwargs=None,
         family = family_for(type(model))
     else:
         from mowl.catalog import get_method
-        cls = get_method(method).load()
-        family = family_for(cls)
-        model = family.build(cls, dataset, model_kwargs, device, model_filepath)
+        card = get_method(method)
+        if card.factory:
+            # A configuration of a general class (e.g. DL2Vec): the card names a factory.
+            from mowl.benchmarks.families import build_from_factory
+            model = build_from_factory(card, dataset, model_kwargs, device, model_filepath)
+            family = family_for(type(model))
+        else:
+            cls = card.load()
+            family = family_for(cls)
+            model = family.build(cls, dataset, model_kwargs, device, model_filepath)
 
     regime = resolve_training_regime(training_regime)
     if regime is not None:

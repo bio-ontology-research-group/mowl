@@ -135,6 +135,9 @@ class CatE(Model):
     :type device: str
     """
 
+    axiom_scoring = "module"
+    scored_forms = ("gci0", "gci2", "class_assertion")
+
     def __init__(self, dataset, embed_dim=200, margin=1.0, num_negs=4,
                  learning_rate=1e-4, batch_size=32768, p=2, weight_decay=1e-4,
                  cyclic_lr=True, negative_aggregation="per_negative", filter_negatives=True,

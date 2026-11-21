@@ -130,3 +130,11 @@ class ExactModelProtocol(RegimeProtocol):
     def build(self, **kwargs):
         from mowl.evaluation.exact_model import ExactModelRegime
         return ExactModelRegime(**kwargs)
+
+
+class CommonRankingProtocol(RegimeProtocol):
+    """:func:`mowl.evaluation.filtered_ranking.common_ranking`."""
+
+    def build(self, gci_name="gci0", relation=None, **kwargs):
+        from mowl.evaluation.filtered_ranking import common_ranking
+        return common_ranking(gci_name=gci_name, relation=relation, **kwargs)

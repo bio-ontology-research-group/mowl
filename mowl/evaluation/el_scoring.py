@@ -289,7 +289,12 @@ def resolve_scorer(model, scoring):
 
     :param scoring: ``"loss"``, ``"centre_distance"``, ``"centre_distance_zero_empty"``
         (see :func:`centre_distance_zero_empty_scores`), ``"auto"`` (centre distance if a
-        scorer is registered for the module, otherwise loss) or a callable
+        scorer is registered for the module; otherwise what the model declares with its
+        ``axiom_scoring`` attribute, see :mod:`mowl.evaluation.model_scoring`: the loss of
+        its module, its own axiom costs, or a classifier head on its vectors),
+        ``"model"`` (what the model declares, never the centre distance),
+        ``"pair_classifier"`` (a :class:`~mowl.evaluation.model_scoring.PairClassifierHead`
+        on the class vectors, for any model with ``class_embeddings``) or a callable
         ``f(model, gci_name, rows)``.
     :return: The function and the name of the scoring actually used (recorded in results).
     """
@@ -306,5 +311,15 @@ def resolve_scorer(model, scoring):
     if scoring == "auto":
         if has_centre_distance_scorer(model):
             return centre_distance_scores, "centre_distance"
-        return loss_scores, "loss"
+        if getattr(model, "axiom_scoring", None) in (None, "module") \
+                and getattr(model, "module", None) is not None:
+            return loss_scores, "loss"
+        from mowl.evaluation.model_scoring import resolve_model_scorer
+        return resolve_model_scorer(model)
+    if scoring == "model":
+        from mowl.evaluation.model_scoring import resolve_model_scorer
+        return resolve_model_scorer(model)
+    if scoring == "pair_classifier":
+        from mowl.evaluation.model_scoring import pair_classifier_scores
+        return pair_classifier_scores, "pair_classifier"
     raise ValueError(f"Unknown scoring {scoring!r}.")

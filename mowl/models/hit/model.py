@@ -85,6 +85,9 @@ class HiT(Model):
     #: Default margins of the method (subclasses change them).
     default_margins = (5.0, 0.1)
 
+    axiom_scoring = "method"
+    scored_forms = ("gci0",)
+
     def __init__(self, dataset, encoder="sentence-transformers/all-MiniLM-L12-v2",
                  verbaliser=None, labels=None, verbalisation_style="paper",
                  label_fallback="fragment", clustering_margin=None, centripetal_margin=None,
@@ -483,6 +486,47 @@ class HiT(Model):
             adapter.create_object_property(inv_r[int(r)]), adapter.create_class(inv_c[int(d)]))
             for r, d in zip(roles.tolist(), fillers.tolist())]
         return self._embed_cached(exprs)
+
+    @th.no_grad()
+    def axiom_costs(self, gci_name, rows, centri_weight=None):
+        """Cost of every candidate axiom in ``rows`` (model indices), lower is more
+        plausible: :math:`d_c(x, y) + \\lambda(\\lVert y\\rVert_c - \\lVert x\\rVert_c)`
+        for the embedding :math:`x` of the subsumed and :math:`y` of the subsuming
+        expression, the negative of the score of :meth:`score_candidates`. ``gci0`` rows
+        are ``[C, D]``; ``gci2`` rows ``[C, r, D]`` have :math:`y = \\exists r.D` and
+        ``gci3`` rows ``[r, C, D]`` have :math:`x = \\exists r.C` (models that verbalise
+        existential restrictions, i.e. OnT)."""
+        from mowl.nn.lm import hyperbolic as hb
+        if gci_name not in (self.scored_forms or ()):
+            from mowl.evaluation.model_scoring import UnsupportedAxiomForm
+            raise UnsupportedAxiomForm(
+                f"{type(self).__name__} has no score for {gci_name!r} axioms.")
+        lam = centri_weight if centri_weight is not None else (self.centri_weight or 0.0)
+        mat = self._class_matrix()
+        cpu = rows.cpu()
+
+        def existential(roles, fillers):
+            inv_c = getattr(self, "_inv_classes", None)
+            if inv_c is None:
+                inv_c = self._inv_classes = {v: k for k, v in self.class_index_dict.items()}
+            inv_r = {v: k for k, v in self.object_property_index_dict.items()}
+            pairs, inverse = th.unique(th.stack([roles, fillers], dim=1), dim=0,
+                                       return_inverse=True)
+            unique = self._existential_embeddings(pairs[:, 0], pairs[:, 1], inv_r, inv_c)
+            return unique[inverse.to(unique.device)]
+
+        if gci_name == "gci0":
+            sub, sup = mat[cpu[:, 0].to(mat.device)], mat[cpu[:, 1].to(mat.device)]
+        elif gci_name == "gci2":
+            sub, sup = mat[cpu[:, 0].to(mat.device)], existential(cpu[:, 1], cpu[:, 2])
+        else:
+            sub, sup = existential(cpu[:, 0], cpu[:, 1]), mat[cpu[:, 2].to(mat.device)]
+        dtype = self.score_dtype
+        sub, sup = sub.to(dtype), sup.to(dtype)
+        c = self.c
+        cost = hb.distance(sub, sup, c) + lam * (hb.hyperbolic_norm(sup, c)
+                                                 - hb.hyperbolic_norm(sub, c))
+        return cost.to(rows.device)
 
     def score_candidates(self, gci_name, rows, target_col, candidates, centri_weight=None,
                          chunk_size=4096):

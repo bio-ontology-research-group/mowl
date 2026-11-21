@@ -20,6 +20,13 @@ class Model():
     """
 
 
+    #: How the rank-based evaluation regimes obtain axiom scores from the model:
+    #: ``"module"``, ``"evaluation_model"``, ``"method"`` or ``"vectors"``; ``None`` if
+    #: the model has none (see :mod:`mowl.evaluation.model_scoring`).
+    axiom_scoring = None
+    #: The normal forms the model has a score for (``None``: not restricted).
+    scored_forms = None
+
     def __init__(self, dataset, model_filepath=None):
         if not isinstance(dataset, Dataset):
             raise TypeError("Parameter dataset must be a mOWL Dataset.")

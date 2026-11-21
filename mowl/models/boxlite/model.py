@@ -100,6 +100,9 @@ class BoxLitE(Model):
         one from ``dataset``.
     """
 
+    axiom_scoring = "method"
+    scored_forms = ("class_assertion",)
+
     def __init__(self, dataset, embed_dim=32, s_omega=1.0, epsilon=0.01, lambda1=0.0,
                  lambda2=0.0, lambda3=0.0, variant="paper", negatives=None, solver=None,
                  solver_options=None, model_filepath=None, kb=None):
@@ -253,6 +256,34 @@ class BoxLitE(Model):
         return self.embedding.role_scores(
             self._role(role), None if subject is None else self._individual(subject),
             None if obj is None else self._individual(obj))
+
+    def axiom_costs(self, gci_name, rows):
+        """Cost :math:`\\mathcal{L}_{concept}(A, a)` of every ``class_assertion`` row
+        ``[a, A]`` (indices of ``individual_index_dict`` and ``class_index_dict``), lower
+        is more plausible; infinite for a class or individual outside the training
+        signature."""
+        import torch as th
+        if gci_name != "class_assertion":
+            from mowl.evaluation.model_scoring import UnsupportedAxiomForm
+            raise UnsupportedAxiomForm(f"BoxLitE has no score for {gci_name!r} axioms.")
+        self._require_embedding()
+        concept_of = {i: iri for iri, i in self.class_index_dict.items()}
+        individual_of = {i: iri for iri, i in self.individual_index_dict.items()}
+        concepts = {iri: k for k, iri in enumerate(self.kb.concepts)}
+        individuals = {iri: k for k, iri in enumerate(self.kb.individuals)}
+        cpu = rows.cpu().numpy()
+        out = np.full(len(cpu), np.inf)
+        for c in np.unique(cpu[:, 1]):
+            basic = concepts.get(concept_of.get(int(c)))
+            if basic is None:
+                continue
+            where = np.flatnonzero(cpu[:, 1] == c)
+            known = [(w, individuals.get(individual_of.get(int(cpu[w, 0])))) for w in where]
+            known = [(w, a) for w, a in known if a is not None]
+            if known:
+                index = np.array([w for w, _ in known])
+                out[index] = self.embedding.concept_loss(basic, [a for _, a in known])
+        return th.as_tensor(out, dtype=th.float32, device=rows.device)
 
     def score(self, axiom):
         """Score of an OWL ``ClassAssertion`` (basic concept) or ``ObjectPropertyAssertion``.

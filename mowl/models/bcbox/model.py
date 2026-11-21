@@ -121,6 +121,9 @@ class BinaryCodeBox(GraphModel):
     :type device: str
     """
 
+    axiom_scoring = "evaluation_model"
+    scored_forms = ("gci0",)
+
     def __init__(self, dataset, embed_dim=32, variant="vbc", num_codes=2, code_dims=None,
                  intersection_temp=0.01, volume_temp=1.0, code_reg=0.0, code_init=0.0,
                  num_negs=32, self_adversarial=True, adversarial_temperature=1.0,

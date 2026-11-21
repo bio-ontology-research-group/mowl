@@ -99,6 +99,9 @@ class E2R(Model):
     :param seed: Seed of the Python random generator used for subsampling.
     """
 
+    axiom_scoring = "method"
+    scored_forms = ("gci0", "class_assertion")
+
     def __init__(self, dataset, embed_dim=100, learning_rate=0.01, batch_size=4096,
                  num_negatives=3, negative_weight=1.0, reg_orth=1.0, reg_sep=1.0,
                  sep_gap=None, range_negatives="shrunk", max_sibling_pairs=100000,
@@ -541,6 +544,21 @@ class E2R(Model):
             o = th.tensor([self._iid[b] for _, b in pairs], device=self.device)
             xpq = L.pair_vector(self.module.entity(s), self.module.entity(o), self.embed_dim)
             return self.module.membership_residual(z, xpq).cpu().numpy()
+
+    @th.no_grad()
+    def axiom_costs(self, gci_name, rows):
+        """Cost of every candidate axiom in ``rows`` (model indices), lower is more
+        plausible: the inclusion loss of eq. (5) for ``gci0`` rows ``[C, D]`` and the
+        residual length of Sec. 5 for ``class_assertion`` rows ``[a, C]``."""
+        rows = rows.to(self.device)
+        if gci_name == "gci0":
+            return L.inclusion_loss(self.module.concept(rows[:, 0]),
+                                    self.module.concept(rows[:, 1]))
+        if gci_name == "class_assertion":
+            return self.module.membership_residual(self.module.concept(rows[:, 1]),
+                                                   self.module.entity(rows[:, 0]))
+        from mowl.evaluation.model_scoring import UnsupportedAxiomForm
+        raise UnsupportedAxiomForm(f"E2R has no score for {gci_name!r} axioms.")
 
     def score_subsumption(self, sub, sup, binary=False):
         """Inclusion loss of eq. (5) for class expressions ``sub``, ``sup`` (``0`` iff

@@ -183,6 +183,13 @@ class FilteredRankingRegime(EvaluationRegime):
         return rows, dropped
 
     def evaluate(self, model, dataset):
+        declared = getattr(model, "scored_forms", None)
+        if declared is not None and self.gci_name not in declared \
+                and not callable(self.scoring):
+            from mowl.evaluation.model_scoring import UnsupportedAxiomForm
+            raise UnsupportedAxiomForm(
+                f"{type(model).__name__} has no score for {self.gci_name!r} axioms "
+                f"(it scores: {', '.join(declared)}).")
         scorer, scoring_name = resolve_scorer(model, self.scoring)
         onto = dataset.testing if self.split == "test" else dataset.validation
         width = len(COLUMNS[self.gci_name])
@@ -329,3 +336,22 @@ def cate_ppi_ranking(relation, **kwargs):
     reference ``src/evaluators.py``): both directions of every test interaction, ranked
     among the proteins; filtered MR, MRR, Hits@1/3/10/100, AUC."""
     return CatePPIRankingRegime(relation, **kwargs)
+
+
+def common_ranking(gci_name="gci0", relation=None, candidates="classes", target="tail",
+                   filter_by=("train", "valid", "test"), scoring="auto", **kwargs):
+    """The ranking of the joint mOWL benchmarks, the same for every model family.
+
+    For every test axiom :math:`C \\sqsubseteq D` (``gci0``) or
+    :math:`C \\sqsubseteq \\exists r.D` (``gci2``), the class :math:`D` is ranked among all
+    candidates (:math:`C` itself removed). Only filtered metrics are reported: the other
+    classes known to be correct for the query (training, validation and test axioms of
+    the same form) are removed. Tied candidates share the average rank, so a model that
+    gives every candidate the same score gets chance-level ranks. Scores come from
+    ``scoring="auto"``: what each model declares
+    (:mod:`mowl.evaluation.model_scoring`), recorded with the result.
+    """
+    return FilteredRankingRegime(
+        gci_name=gci_name, target=target, relation=relation, candidates=candidates,
+        filter_by=filter_by, ties="average", auc="mowl", hits=(1, 10, 100), raw=False,
+        scoring=scoring, exclude_head=True, key="common-filtered-ranking", **kwargs)

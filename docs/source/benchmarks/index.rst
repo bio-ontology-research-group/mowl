@@ -236,11 +236,150 @@ same training and evaluation regime).
    ...['axiom_satisfaction', 'empty_fraction', 'exact_model', 'exact_model_nonempty', 'helly_violation_rate', 'is_model', 'no_interior_fraction']
    []
 
-Models are built through a *family handler*: subclasses of
-:class:`~mowl.base_models.EmbeddingELModel` are supported; graph, syntactic and ALC models
-raise :class:`~mowl.benchmarks.runner.UnsupportedModelError` until a handler is
-registered with :func:`~mowl.benchmarks.runner.register_family`. Any model can also be
-passed as ``model_factory(dataset)``.
+Every model that declares how it scores axioms can be run: the normal-form
+:math:`\\mathcal{EL}^{++}` models, CatE, the ALC models, E2R, binary code boxes, knowledge
+graph embeddings of a projection and, through a scoring head, the Word2Vec-based methods
+(see :ref:`joint-benchmarks`). Any model can also be passed as ``model_factory(dataset)``,
+and a new kind of model is added with
+:func:`~mowl.benchmarks.runner.register_family`.
+
+.. _joint-benchmarks:
+
+Comparing all methods: the joint benchmarks
+-------------------------------------------
+
+The benchmarks named after a publication reproduce *its* evaluation: its candidates, its
+tie handling, its score. Numbers from two of them cannot be compared. The ``common-*``
+benchmarks use one evaluation regime (``common-filtered-ranking``) on the data most
+publications share, for every method that supports the task:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 34 22 18 26
+
+   * - Benchmark
+     - Ranked
+     - Target
+     - Data
+   * - ``common-{galen,go,anatomy}-subsumption-prediction``
+     - :math:`D` in :math:`C \\sqsubseteq D`
+     - inductive prediction
+     - held-out axioms, 80/10/10 split of the Box\ :sup:`2`\ EL release
+   * - ``common-{galen,go,anatomy}-existential-prediction``
+     - :math:`D` in :math:`C \\sqsubseteq \\exists r.D`
+     - inductive prediction
+     - the same split
+   * - ``common-{galen,go,anatomy}-subsumption-inference``
+     - :math:`D` in :math:`C \\sqsubseteq D`
+     - deductive inference
+     - entailed, not stated subsumptions of the Box\ :sup:`2`\ EL release
+   * - ``common-{yeast,human}-ppi``
+     - :math:`P_2` in :math:`P_1 \\sqsubseteq \\exists \\mathit{interacts}.P_2`
+     - inductive prediction
+     - protein-protein interactions (proteins as classes)
+
+For every test axiom the class is ranked among all classes of the ontology (among the
+proteins for the interaction benchmarks), the subclass itself removed, after removing the
+other classes known to be correct for the query (training, validation and test axioms).
+Tied candidates share the average rank, so a model that gives every candidate the same
+score gets chance-level ranks. Reported: filtered MRR, Hits@1/10/100, mean rank, median
+rank and AUC.
+
+What differs between model families is only where the score comes from. A model states
+it with its class attribute ``axiom_scoring`` (:mod:`mowl.evaluation.model_scoring`), and
+the result records it as ``scoring``:
+
+.. list-table::
+   :header-rows: 1
+   :widths: 22 40 38
+
+   * - ``axiom_scoring``
+     - Score of a candidate axiom
+     - Models
+   * - ``"module"``
+     - the loss of the model's module for the normal form (``centre_distance`` where
+       the Box\ :sup:`2`\ EL centre distance is defined for the module, otherwise
+       ``loss``)
+     - normal-form :math:`\\mathcal{EL}^{++}` models, CatE
+   * - ``"evaluation_model"``
+     - ``model.evaluation_model(rows, gci_name)``
+     - binary code boxes
+   * - ``"method"``
+     - ``model.axiom_costs(gci_name, rows)``
+     - FALCON, al-cone, E2R, knowledge graph embeddings of a projection, HiT, OnT,
+       BoxLitE
+   * - ``"vectors"``
+     - the logit of a classifier trained on pairs of class vectors
+       (:class:`~mowl.evaluation.model_scoring.PairClassifierHead`,
+       ``pair_classifier``)
+     - random walk and corpus models with Word2Vec (DL2Vec, OWL2Vec*, Onto2Vec,
+       OPA2Vec)
+
+Methods that give vectors only cannot rank :math:`C \\sqsubseteq D` against
+:math:`D \\sqsubseteq C` by a similarity. As in the publications of these methods, a
+classifier is trained on the vectors of the stated axioms of the training ontology; the
+method card lists the tasks reached this way as ``head_tasks``, and the result then
+measures the vectors together with the head.
+
+Which methods take part is decided by data: the inference tasks and the expressivity on
+the method card against those of the benchmark.
+
+.. testcode::
+
+   from mowl.benchmarks import get_benchmark, methods_for
+   from mowl.benchmarks.comparison import runnable_methods
+
+   bench = get_benchmark("common-go-existential-prediction")
+   print(bench.completion_tasks, bench.target.value, bench.evaluation_regime)
+
+   run, skipped = runnable_methods(bench)
+   print("box2el" in run, "cate" in run, "falcon" in run, "dl2vec" in run)
+   print(skipped["bcbox"])
+   print(skipped["canonical_model"])
+
+.. testoutput::
+
+   ('existential-prediction',) inductive prediction common-filtered-ranking
+   True True True True
+   construct ∃r.C (for existential-prediction)
+   an exact construction, not a trained model; it decides the candidates instead of ranking them
+
+:func:`~mowl.benchmarks.comparison.compare_methods` trains and ranks them one after the
+other and :func:`~mowl.benchmarks.comparison.methods_table` puts the results side by
+side. A run that fails is recorded with its error and does not stop the others; with
+``out_dir`` every result is written to a file and an interrupted comparison continues
+where it stopped.
+
+.. testcode::
+
+   from mowl.benchmarks.comparison import compare_methods, methods_table
+
+   def compare_on_go(device="cuda"):
+       """Hours on a GPU: every method, three seeds, one budget."""
+       outcome = compare_methods("common-go-subsumption-prediction", epochs=500,
+                                 seeds=(0, 1, 2), device=device, out_dir="results",
+                                 model_kwargs={"*": {"embed_dim": 200}})
+       print(methods_table(outcome.results))
+       print(outcome.skipped, outcome.failed)
+
+.. code-block:: bash
+
+   python -m mowl.benchmarks compare-methods common-go-subsumption-prediction --dry-run
+   python -m mowl.benchmarks compare-methods common-go-subsumption-prediction \\
+       --epochs 500 --seeds 0,1,2 --device cuda --param embed_dim=200 --out-dir results
+   python -m mowl.benchmarks table results/common-go-subsumption-prediction.*.json
+
+Three things to keep in mind when reading such a table:
+
+- The comparison is of ranks, not of scores, and of the methods *as configured*: one
+  budget of epochs and default arguments is not a tuned result for any of them. Tune on
+  the validation split, never on the test split, and report the number of seeds.
+- A held-out axiom of the prediction benchmarks may be entailed by the training axioms.
+  The inference benchmarks contain entailed axioms only.
+- Not covered yet: GroundedEL (it has no graded score for a subsumption between named
+  classes) and the exact constructions (they decide candidates instead of ranking
+  them). CatE ranks :math:`\\exists r.D` only for fillers that are elements of its lattice
+  (its ``existentials`` argument).
 
 Command line
 ------------

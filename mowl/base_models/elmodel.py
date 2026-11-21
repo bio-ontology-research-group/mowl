@@ -70,6 +70,8 @@ candidates, and the ``"classes"`` pool for negative sampling contains named clas
 entities of their own cannot be indexed and are skipped (see :class:`~mowl.datasets.el.ELDataset`).
     """
 
+    axiom_scoring = "module"
+
     #: Default per-GCI negative sampling configuration used by :meth:`get_negative_sampling_config`.
     #: Bot GCIs are intentionally excluded — subsumption by bottom has no meaningful negative.
     #: Each entry specifies the entity pool(s) to sample from (``"classes"`` or

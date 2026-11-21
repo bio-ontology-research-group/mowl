@@ -176,9 +176,14 @@ def test_unsupported_families():
     from mowl.base_models.syntactic_model import SyntacticModel
     with pytest.raises(UnsupportedModelError):
         family_for(int)
-    fam = family_for(SyntacticModel)
-    with pytest.raises(UnsupportedModelError, match="syntactic"):
-        fam.build(SyntacticModel, None, {}, "cpu", "x.pt")
+    # A model class that does not declare how it scores axioms has no family ...
+    with pytest.raises(UnsupportedModelError, match="axiom_scoring"):
+        family_for(SyntacticModel)
+    # ... and one that does is handled, whatever its base class.
+    from mowl.models import SyntacticPlusW2VModel
+    from mowl.models.falcon.model import FALCONModel
+    assert family_for(SyntacticPlusW2VModel).name == "scored"
+    assert family_for(FALCONModel).name == "scored"
 
 
 def test_factory_with_unsupported_model(dataset):

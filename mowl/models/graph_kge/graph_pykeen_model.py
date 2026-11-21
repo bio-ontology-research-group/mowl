@@ -23,6 +23,11 @@ class GraphPlusPyKEENModel(KGEModel):
     This is a wrapper class of :class:`pykeen.models.ERModel` that allows to use the PyKEEN models in the mOWL framework.
     """
     
+    axiom_scoring = "method"
+    scored_forms = ("gci0", "gci2")
+    #: Label of the edges the projectors give to ``C ⊑ D``.
+    SUBCLASS_RELATION = "http://subclassof"
+
     def __init__(self, *args, device="cpu", **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -115,6 +120,54 @@ class GraphPlusPyKEENModel(KGEModel):
         return self._evaluation_model
 
     
+    @th.no_grad()
+    def axiom_costs(self, gci_name, rows):
+        """Cost of every candidate axiom in ``rows`` (indices of the dataset's classes
+        and object properties), lower is more plausible: minus the score the knowledge
+        graph embedding gives to the edge the axiom is projected to. ``gci0`` rows
+        ``[C, D]`` are the edge ``C -subclassof-> D``; ``gci2`` rows ``[C, r, D]`` are
+        the edge ``C -r-> D``. An axiom whose role is not an edge label of the graph gets
+        an infinite cost. A class that occurs in no edge is a node with an untrained
+        vector, as everywhere in this model."""
+        if self._kge_method is None:
+            raise AttributeError(msg.MODEL_NOT_TRAINED_OR_LOADED)
+        if gci_name not in ("gci0", "gci2"):
+            from mowl.evaluation.model_scoring import UnsupportedAxiomForm
+            raise UnsupportedAxiomForm(
+                f"{type(self).__name__} has no score for {gci_name!r} axioms.")
+        maps = getattr(self, "_axiom_index_maps", None)
+        if maps is None:
+            nodes = self.triples_factory.entity_to_id
+            relations = self.triples_factory.relation_to_id
+            class_map = th.full((len(self.dataset.classes),), -1, dtype=th.long)
+            for iri, i in self.class_index_dict.items():
+                class_map[i] = nodes.get(iri, -1)
+            role_map = th.full((max(1, len(self.dataset.object_properties)),), -1,
+                               dtype=th.long)
+            for iri, i in self.object_property_index_dict.items():
+                role_map[i] = relations.get(iri, -1)
+            maps = self._axiom_index_maps = (class_map, role_map,
+                                             relations.get(self.SUBCLASS_RELATION, -1))
+        class_map, role_map, subclass = maps
+        cpu = rows.cpu()
+        head = class_map[cpu[:, 0]]
+        tail = class_map[cpu[:, -1]]
+        if gci_name == "gci0":
+            relation = th.full_like(head, subclass)
+        else:
+            relation = role_map[cpu[:, 1]]
+        known = (head >= 0) & (tail >= 0) & (relation >= 0)
+        out = th.full((len(cpu),), float("inf"))
+        if known.any():
+            triples = th.stack([head[known], relation[known], tail[known]], dim=1)
+            self._kge_method.eval()
+            scores = []
+            for s in range(0, len(triples), 2 ** 16):
+                scores.append(self._kge_method.score_hrt(
+                    triples[s:s + 2 ** 16].to(self.device)).reshape(-1).cpu())
+            out[known] = -th.cat(scores).float()
+        return out.to(rows.device)
+
     def set_kge_method(self, kge_method, *args, **kwargs):
         """
         Set the KGE method of the model.

@@ -497,6 +497,10 @@ class GroundedEL(EmbeddingELModel):
         gradient to :math:`\\delta_x`.
     """
 
+    # The module scores memberships of encoded individuals only; there is no graded score
+    # of a subsumption between named classes yet (evaluate_model decides them exactly).
+    scored_forms = ("class_assertion",)
+
     def __init__(
         self,
         dataset=None,

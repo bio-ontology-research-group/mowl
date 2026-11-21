@@ -9,6 +9,9 @@
     python -m mowl.benchmarks run BENCHMARK --method KEY --epochs N --seed S \\
         --device cuda --param embed_dim=200 --param learning_rate=0.001 --out result.json
     python -m mowl.benchmarks compare result.json [--method KEY] [--format FMT]
+    python -m mowl.benchmarks compare-methods BENCHMARK [--methods a,b] [--epochs N] \\
+        [--seeds 0,1,2] [--device cuda] [--out-dir DIR]
+    python -m mowl.benchmarks table result1.json result2.json ... [--format FMT]
 
 ``--param``, ``--dataset-param`` and ``--protocol-param`` take ``name=value``; the value is
 read as JSON when possible (numbers, ``true``/``false``, lists) and as a string
@@ -90,6 +93,29 @@ def _build_parser():
     p.add_argument("--out", default=None, help="write the result as JSON here")
     p.add_argument("--format", default="text", choices=("text", "markdown", "rst"))
 
+    p = sub.add_parser("compare-methods",
+                       help="run every method that supports a benchmark's tasks on it")
+    p.add_argument("benchmark")
+    p.add_argument("--methods", default=None,
+                   help="comma-separated catalogue keys (default: all that can be run)")
+    p.add_argument("--epochs", type=int, default=None)
+    p.add_argument("--seeds", default="0", help="comma-separated seeds")
+    p.add_argument("--device", default="cpu")
+    p.add_argument("--param", action="append", default=[], type=parse_assignment,
+                   help="model argument name=value for every method, or "
+                        "method.name=value for one method (repeatable)")
+    p.add_argument("--out-dir", default=None,
+                   help="write one JSON per run here; existing files are reused")
+    p.add_argument("--jvm-memory", default="8g")
+    p.add_argument("--dry-run", action="store_true",
+                   help="only list the methods that would be run and those skipped")
+    p.add_argument("--format", default="text", choices=("text", "markdown", "rst"))
+
+    p = sub.add_parser("table", help="tabulate saved results of one benchmark by method")
+    p.add_argument("results", nargs="+")
+    p.add_argument("--subset", default=None)
+    p.add_argument("--format", default="text", choices=("text", "markdown", "rst"))
+
     p = sub.add_parser("compare", help="compare a saved result with published results")
     p.add_argument("result")
     p.add_argument("--method", default=None)
@@ -145,6 +171,39 @@ def main(argv=None):
         if args.out:
             result.save(args.out)
         print(report.result_table(result, fmt=args.format), end="")
+    elif args.command == "compare-methods":
+        from mowl.benchmarks.comparison import (compare_methods, methods_table,
+                                                runnable_methods)
+        run, skipped = runnable_methods(args.benchmark)
+        methods = args.methods.split(",") if args.methods else run
+        if args.dry_run:
+            print("would run: " + ", ".join(m for m in methods if m not in skipped))
+            for method, reason in skipped.items():
+                if not args.methods or method in methods:
+                    print(f"skipped {method}: {reason}")
+            return 0
+        shared, per_method = {}, {}
+        for name, value in args.param:
+            if "." in name and name.split(".", 1)[0] in methods:
+                method, name = name.split(".", 1)
+                per_method.setdefault(method, {})[name] = value
+            else:
+                shared[name] = value
+        model_kwargs = {m: {**shared, **per_method.get(m, {})} for m in methods}
+        outcome = compare_methods(
+            args.benchmark, methods=methods, epochs=args.epochs,
+            seeds=[int(s) for s in args.seeds.split(",")], device=args.device,
+            model_kwargs=model_kwargs, out_dir=args.out_dir, jvm_memory=args.jvm_memory)
+        print(methods_table(outcome.results, fmt=args.format), end="")
+        for method, reason in outcome.skipped.items():
+            print(f"skipped {method}: {reason}")
+        for (method, seed), error in outcome.failed.items():
+            print(f"failed {method} (seed {seed}): {error}")
+    elif args.command == "table":
+        from mowl.benchmarks.comparison import methods_table
+        from mowl.benchmarks.runner import BenchmarkResult
+        results = [BenchmarkResult.load(path) for path in args.results]
+        print(methods_table(results, subset=args.subset, fmt=args.format), end="")
     elif args.command == "compare":
         from mowl.benchmarks.runner import BenchmarkResult, compare
         result = BenchmarkResult.load(args.result)

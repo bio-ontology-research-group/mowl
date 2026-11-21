@@ -193,6 +193,13 @@ class MethodCard:
     :param tasks: Keys of the inference tasks (:data:`mowl.logic.TASKS`) for which the
         method gives a score, e.g. ``("subsumption", "instance-checking")``. Empty for
         methods that only produce feature vectors.
+    :param head_tasks: Keys of the inference tasks the method can be applied to only
+        through a scoring head trained on its vectors
+        (:class:`mowl.evaluation.model_scoring.PairClassifierHead`): the method gives
+        vectors, the head gives the score.
+    :param factory: Dotted path of a function ``f(dataset, **kwargs)`` that returns the
+        configured model, for methods that are a configuration of a general class (a
+        projector, a walker and Word2Vec). Used by the benchmark runner.
     :param notes: Free text (deviations from the paper, implementation remarks).
     """
 
@@ -224,6 +231,8 @@ class MethodCard:
     related: tuple = ()
     expressivity: object = ""
     tasks: tuple = ()
+    head_tasks: tuple = ()
+    factory: str = ""
     notes: str = ""
 
     def __post_init__(self):
@@ -257,7 +266,7 @@ class MethodCard:
             if not isinstance(r, Reference):
                 raise TypeError("references must contain mowl.catalog.Reference objects.")
         from mowl.logic import TASKS
-        for task in self.tasks:
+        for task in tuple(self.tasks) + tuple(self.head_tasks):
             if task not in TASKS:
                 raise ValueError(f"Card {self.key!r} names the unknown inference task "
                                  f"{task!r}. Known tasks: {sorted(TASKS)}")

@@ -39,6 +39,9 @@ class EmbeddingALCModel(Model):
     :type learning_rate: float, optional
     """
 
+    axiom_scoring = "method"
+    scored_forms = ("gci0", "gci1", "gci2", "gci3")
+
     def __init__(self, dataset, embed_dim=50, batch_size=256, alpha=0.3, beta=0.3,
                  anon_e=4, learning_rate=0.001, model_filepath=None, device="cpu"):
         super().__init__(dataset, model_filepath=model_filepath)
@@ -111,6 +114,76 @@ class EmbeddingALCModel(Model):
     def individual_embeddings(self):
         """Returns a dictionary mapping individual names to their embeddings."""
         return self._embeddings_dict(self.module.e_embedding, self.individual_index_dict)
+
+    # -- axiom scores for the rank-based evaluation regimes ------------------------------
+    _PATTERN_NS = "http://mowl.borg/pattern#"
+
+    def _axiom_pattern(self, gci_name):
+        """The axiom pattern of a normal form, whose named classes and roles are filled
+        from the columns of a row in the order mOWL's normal-form datasets use."""
+        patterns = getattr(self, "_axiom_patterns", None)
+        if patterns is None:
+            patterns = self._axiom_patterns = {}
+        if gci_name not in patterns:
+            from mowl.owlapi import OWLAPIAdapter
+            adapter = OWLAPIAdapter()
+            a, b, c = (adapter.create_class(self._PATTERN_NS + n) for n in "ABC")
+            r = adapter.create_object_property(self._PATTERN_NS + "r")
+            some = adapter.create_object_some_values_from
+            if gci_name == "gci0":           # [C, D]: C ⊑ D
+                pair = (a, b)
+            elif gci_name == "gci1":         # [C, D, E]: C ⊓ D ⊑ E
+                pair = (adapter.create_object_intersection_of(a, b), c)
+            elif gci_name == "gci2":         # [C, r, D]: C ⊑ ∃r.D
+                pair = (a, some(r, b))
+            elif gci_name == "gci3":         # [r, C, D]: ∃r.C ⊑ D
+                pair = (some(r, a), b)
+            else:
+                from mowl.evaluation.model_scoring import UnsupportedAxiomForm
+                raise UnsupportedAxiomForm(
+                    f"{type(self).__name__} has no score for {gci_name!r} axioms.")
+            patterns[gci_name] = pair
+        return patterns[gci_name]
+
+    def _scoring_context(self):
+        """The entity context axioms are scored against: the named individuals and one
+        fixed sample of anonymous entities (drawn once, so that scores are reproducible)."""
+        context = getattr(self, "_axiom_scoring_context", None)
+        if context is None:
+            state = th.random.get_rng_state()
+            th.manual_seed(0)
+            try:
+                context = self._entity_context(self.sample_anonymous_entities())
+            finally:
+                th.random.set_rng_state(state)
+            self._axiom_scoring_context = context
+        return context
+
+    def _subsumption_costs(self, sub, sup, x, e_emb):
+        """Cost of ``sub ⊑ sup`` per row of ``x``: the measure of ``sub ⊓ ¬sup``, as in
+        the training loss of the module."""
+        module = self.module
+        c_fs, nxt = module.forward_fs(sub, x, e_emb)
+        d_fs, _ = module.forward_fs(sup, x, e_emb, cur_index=nxt)
+        return module.get_cc_loss(module._logical_and(c_fs, module._logical_not(d_fs)))
+
+    @th.no_grad()
+    def axiom_costs(self, gci_name, rows, max_cells=2 ** 26):
+        """Cost of every candidate axiom in ``rows`` (mOWL normal-form layout, model
+        indices): the loss the module assigns to the axiom, lower is more plausible.
+
+        :param max_cells: Bound on ``rows per chunk × entities × dimension``.
+        """
+        if self.module is None:
+            self.init_module()
+        sub, sup = self._axiom_pattern(gci_name)
+        e_emb = self._scoring_context()
+        width = 1 if e_emb is None else max(1, e_emb.shape[0] * e_emb.shape[1])
+        chunk = max(1, max_cells // width)
+        rows = rows.to(self.device)
+        out = [self._subsumption_costs(sub, sup, rows[s:s + chunk], e_emb)
+               for s in range(0, len(rows), chunk)]
+        return th.cat(out) if out else th.zeros(0, device=self.device)
 
     def _load_datasets(self):
         """This method will create different data attributes and finally the corresponding \

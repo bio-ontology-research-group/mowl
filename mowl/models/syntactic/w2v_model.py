@@ -22,6 +22,11 @@ class SyntacticPlusW2VModel(SyntacticModel):
     Model that combines corpus generation with Word2Vec training.
     """
     
+    # Word2Vec gives one vector per class; an asymmetric axiom score needs a scoring head
+    # (mowl.evaluation.model_scoring.PairClassifierHead).
+    axiom_scoring = "vectors"
+    scored_forms = ("gci0", "gci2")
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.w2v_model = None

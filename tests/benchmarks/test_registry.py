@@ -155,7 +155,7 @@ def test_elem_recipes_use_the_released_loss():
 
 #: Evaluation regimes that rank the missing class of any axiom form; their card names the
 #: general task, the benchmark the form it uses.
-GENERAL_REGIMES = {"cate-filtered-ranking", "dele-evaluation"}
+GENERAL_REGIMES = {"cate-filtered-ranking", "dele-evaluation", "common-filtered-ranking"}
 
 
 def test_every_benchmark_is_linked_to_tasks_and_a_regime_card():
@@ -210,5 +210,10 @@ def test_methods_and_benchmarks_are_matched_by_task_and_expressivity():
     assert all(m.implemented for m in methods_for("box2el-go-inference"))
     mine = {b.key for b in benchmarks_for("bcbox")}
     assert "box2el-go-inference" in mine and "box2el-yeast-ppi" not in mine
-    # Methods that only produce vectors declare no inference task.
-    assert missing_support("owl2vec_star", "box2el-go-inference")
+    # Methods that only produce vectors reach a task through a scoring head ...
+    from mowl.catalog import get_method
+    assert get_method("owl2vec_star").tasks == ()
+    assert get_method("owl2vec_star").head_tasks == ("subsumption",)
+    assert supports("owl2vec_star", "box2el-go-inference")
+    # ... and a method without any declared task matches no benchmark.
+    assert missing_support("gda_projection", "box2el-go-inference")

@@ -108,6 +108,15 @@ of :class:`mowl.base_models.EmbeddingELModel` consults the regime attached to
 ``model.training_regime`` and falls back to the model's own behaviour for every hook the
 regime does not implement.
 
+Every model says how the rank-based evaluation regimes obtain axiom scores from it, with
+the class attribute ``axiom_scoring`` (see :mod:`mowl.evaluation.model_scoring`):
+``"module"`` if ``module(rows, gci_name)`` is the cost of a candidate axiom (inherited by
+the :math:`\mathcal{EL}^{++}` models), ``"method"`` with an
+``axiom_costs(gci_name, rows)`` method otherwise, and ``"vectors"`` if the model gives
+class vectors only. ``scored_forms`` lists the normal forms it can score. With this the
+benchmark runner, every ranking regime and the joint ``common-*`` benchmarks
+(:ref:`joint-benchmarks`) work for the model without model-specific code.
+
 Optional dependencies (a language model, a conic solver) are imported inside the functions
 that need them and raise an :class:`ImportError` that names the package. They are listed in
 ``optional_dependencies`` of the card and are never added to ``install_requires``.

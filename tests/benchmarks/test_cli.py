@@ -33,7 +33,7 @@ def test_list_show_published(capsys):
     assert "box2el-go-inference" in out and "box2el-yeast-ppi" not in out
     main(["methods", "box2el-go-inference"])
     out = capsys.readouterr().out
-    assert "bcbox" in out and "owl2vec_star" not in out
+    assert "bcbox" in out and "gda_projection" not in out
     for fmt in ("text", "markdown", "rst"):
         main(["published", "box2el-galen-prediction", "--method", "box2el", "--format", fmt])
         assert "669" in capsys.readouterr().out

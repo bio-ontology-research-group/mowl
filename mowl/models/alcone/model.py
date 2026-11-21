@@ -166,6 +166,12 @@ class ALConeModel(EmbeddingALCModel):
         axioms, _ = self.alc_axioms(ontology)
         return ALConeChecker(self.discretise()).violations(axioms)
 
+    def _subsumption_costs(self, sub, sup, x, e_emb):
+        from mowl.nn.alc.alcone.losses import inclusion_loss
+        c, nxt = self.module.forward_fs(sub, x, e_emb)
+        d, _ = self.module.forward_fs(sup, x, e_emb, cur_index=nxt)
+        return inclusion_loss(c, d, 0.0)
+
     def score_subsumption(self, sub, sup):
         """Score of :math:`A \\sqsubseteq B` for class IRIs ``sub`` and ``sup``: minus the
         inclusion loss with margin 0 (``0`` iff the soft cones satisfy it)."""

@@ -125,7 +125,8 @@ def missing_support(method, benchmark):
     Compares data only: the ``tasks`` and the expressivity of the method card with the
     :attr:`~mowl.benchmarks.Benchmark.inference_tasks` of the benchmark and the constructs
     its candidates use (``needs`` of its completion tasks). Whether the benchmark's
-    protocol can obtain scores from the model is a property of the protocol.
+    protocol can obtain scores from the model is a property of the protocol. Tasks a
+    method reaches only through a scoring head on its vectors (``head_tasks``) count.
 
     :param method: A :class:`mowl.catalog.MethodCard` or its key.
     :param benchmark: A :class:`Benchmark` or its key.
@@ -136,10 +137,10 @@ def missing_support(method, benchmark):
     card = get_method(method) if isinstance(method, str) else method
     if isinstance(benchmark, str):
         benchmark = get_benchmark(benchmark)
-    if not card.tasks:
+    tasks = tuple(card.tasks) + tuple(card.head_tasks)
+    if not tasks:
         return ["the method card declares no inference task"]
-    out = [f"inference task {t!r}" for t in benchmark.inference_tasks
-           if t not in card.tasks]
+    out = [f"inference task {t!r}" for t in benchmark.inference_tasks if t not in tasks]
     try:
         expressivity = card.supported_expressivity
     except ValueError:

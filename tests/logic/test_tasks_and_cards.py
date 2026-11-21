@@ -20,7 +20,8 @@ def test_tasks_are_consistent():
 
 
 #: Implemented methods that are not defined on a description logic (see their ``logic``).
-NO_DL = {"gda_projection", "graph_kge"}
+#: graph_kge states what its widest projectors read (its default factory uses DL2Vec).
+NO_DL = {"gda_projection"}
 
 
 def test_every_implemented_method_states_its_expressivity():

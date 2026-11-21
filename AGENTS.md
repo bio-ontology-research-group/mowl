@@ -34,7 +34,20 @@ serve another method a shared regime, and state on its card:
 
 - `expressivity`: the logic the implementation supports, in description logic notation
   (`mowl.logic.Expressivity`); a test compares it with what the module implements;
-- `tasks`: the inference tasks it gives a score for (`mowl.logic.TASKS`).
+- `tasks`: the inference tasks it gives a score for (`mowl.logic.TASKS`); `head_tasks`
+  for tasks a vector-only method reaches through a scoring head; `factory` if the method
+  is a configuration of a general class.
+
+Every model also states how the rank-based regimes get axiom scores from it: the class
+attribute `axiom_scoring` (`"module"`, `"evaluation_model"`, `"method"` with
+`axiom_costs(gci_name, rows)`, or `"vectors"`) and `scored_forms`
+(`mowl/evaluation/model_scoring.py`). With that, the benchmark runner and every ranking
+regime work for the model without model-specific code, and it takes part in the joint
+`common-*` benchmarks. A test fails if a trainable method declares tasks but no scoring.
+
+Benchmarks state the same on their side (`completion_tasks`, `encodes`, `target`,
+`evaluation_regime`); `mowl.benchmarks.supports(method, benchmark)` matches the two. Do
+not add a benchmark without these, and do not hard-code which methods run on it.
 
 Evaluation regime cards state the `task` they measure and their `target` (entailed test
 axioms: deductive inference; held-out ones: inductive prediction). Logical ground truth
@@ -49,6 +62,8 @@ python -m mowl.benchmarks show <benchmark>          # dataset, evaluation regime
 python -m mowl.benchmarks published <benchmark>     # numbers printed in papers
 python -m mowl.benchmarks run <benchmark> --method <key> --recipe --seed 0 --out r.json
 python -m mowl.benchmarks compare r.json            # a result against the published ones
+python -m mowl.benchmarks methods <benchmark>       # methods whose tasks match
+python -m mowl.benchmarks compare-methods common-go-subsumption-prediction --dry-run
 ```
 
 ```python

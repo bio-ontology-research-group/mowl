@@ -62,6 +62,8 @@ class OnT(HiT):
 
     default_margins = (3.0, 0.5)
 
+    scored_forms = ("gci0", "gci2", "gci3")
+
     def __init__(self, dataset, encoder="sentence-transformers/all-MiniLM-L12-v2",
                  verbaliser=None, labels=None, verbalisation_style="paper",
                  label_fallback="fragment", clustering_margin=None, centripetal_margin=None,
