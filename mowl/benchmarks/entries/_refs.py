@@ -94,3 +94,15 @@ PAVLOVIC2023 = Reference(
     "Pavlović, A., Sallinger, E. (2023). ExpressivE: A Spatio-Functional Embedding For "
     "Knowledge Graph Completion. ICLR 2023.",
     "https://arxiv.org/abs/2206.04192")
+
+PAVLOVIC2025 = Reference(
+    "pavlovic2025",
+    "Pavlovic, A., Sallinger, E., Schockaert, S. (2025). Faithful Differentiable Reasoning "
+    "with Reshuffled Region-based Embeddings. In Proceedings of KR 2025, 489-499.",
+    "https://doi.org/10.24963/kr.2025/48")
+
+TERU2020 = Reference(
+    "teru2020",
+    "Teru, K. K., Denis, E. G., Hamilton, W. L. (2020). Inductive Relation Prediction by "
+    "Subgraph Reasoning. ICML 2020.",
+    "https://arxiv.org/abs/1911.06962")

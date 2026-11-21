@@ -89,3 +89,4 @@ VENDROV2016 = Reference(
     "Vendrov, I., Kiros, R., Fidler, S., Urtasun, R. (2016). Order-Embeddings of Images and "
     "Language. In Proceedings of ICLR 2016.",
     "https://arxiv.org/abs/1511.06361")
+from mowl.benchmarks.entries._refs import PAVLOVIC2025, TERU2020  # noqa: F401,E402

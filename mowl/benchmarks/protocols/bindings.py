@@ -154,3 +154,11 @@ class KGLinkPredictionProtocol(RegimeProtocol):
     def build(self, **kwargs):
         from mowl.evaluation.filtered_ranking import KGLinkPredictionRegime
         return KGLinkPredictionRegime(**kwargs)
+
+
+class InductiveLinkPredictionProtocol(RegimeProtocol):
+    """:class:`mowl.evaluation.inductive_ranking.InductiveSampledRankingRegime`."""
+
+    def build(self, **kwargs):
+        from mowl.evaluation.inductive_ranking import InductiveSampledRankingRegime
+        return InductiveSampledRankingRegime(**kwargs)

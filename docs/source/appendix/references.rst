@@ -86,3 +86,7 @@ References
 .. [zhang2021cone] Zhang, Z., Wang, J., Chen, J., Ji, S., & Wu, F. (2021). `ConE: Cone Embeddings for Multi-Hop Reasoning over Knowledge Graphs <https://arxiv.org/abs/2110.13715>`_. NeurIPS 2021.
 
 .. [he2024acone] He, Y., Hernandez, D., Nayyeri, M., Xiong, B., Zhu, Y., Kharlamov, E., & Staab, S. (2024). `Generating SROI⁻ Ontologies via Knowledge Graph Query Embedding Learning <https://arxiv.org/abs/2407.09212>`_. ArXiv, abs/2407.09212.
+
+.. [pavlovic2025] Pavlović, A., Sallinger, E., & Schockaert, S. (2025). `Faithful Differentiable Reasoning with Reshuffled Region-based Embeddings <https://doi.org/10.24963/kr.2025/48>`_. In: Proceedings of the 22nd International Conference on Principles of Knowledge Representation and Reasoning (KR 2025), 489-499. ArXiv, abs/2406.09529.
+
+.. [teru2020] Teru, K. K., Denis, E. G., & Hamilton, W. L. (2020). `Inductive Relation Prediction by Subgraph Reasoning <https://arxiv.org/abs/1911.06962>`_. In: Proceedings of the 37th International Conference on Machine Learning (ICML 2020).

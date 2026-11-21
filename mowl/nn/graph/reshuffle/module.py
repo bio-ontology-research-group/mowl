@@ -121,7 +121,12 @@ class _FixedFeatures:
 class Reshuffle(ERModel):
     """RESHUFFLE as a PyKEEN model, trained by ``GraphPlusPyKEENModel``.
 
-    :param triples_factory: The graph (without inverse triples).
+    :param triples_factory: The graph. With ``create_inverse_triples=True`` the model
+        works as the authors' code does: PyKEEN trains the inverse triples
+        :math:`(t, r^{-1}, h)` as positives, so the inverse matrices are relations of their
+        own (relation ``r`` of the factory is matrix ``2r``, its inverse ``2r + 1``), and a
+        head is predicted from the tail with the inverse matrix. Without, the inverse
+        matrices only carry messages and both sides are scored with the forward matrix.
     :param l: Number of coordinates (relation matrices are ``l x l``).
     :param k: Number of rows of an entity feature matrix.
     :param num_layers: Message passing layers.
@@ -154,7 +159,7 @@ class Reshuffle(ERModel):
             entity_representations_kwargs=dict(shape=(k, l), initializer=_FixedFeatures(features),
                                                trainable=False),
             relation_representations=Embedding(
-                max_id=2 * triples_factory.num_relations, shape=(l + 1, l)),
+                max_id=2 * triples_factory.real_num_relations, shape=(l + 1, l)),
             **kwargs)
         self.loop_raw = th.nn.Parameter(th.randn(l + 1, l) * 0.1)
         self.register_buffer("edge_index", th.stack(
@@ -166,9 +171,11 @@ class Reshuffle(ERModel):
         if getattr(self, "loop_raw", None) is not None:
             th.nn.init.normal_(self.loop_raw, std=0.1)
 
-    def encode(self, features=None, edge_index=None, edge_type=None):
-        """Entity matrices ``(n, k, l)`` after message passing, and the relation matrices.
-        Without arguments: the model's own features and graph."""
+    def encode(self, features=None, edge_index=None, edge_type=None, all_relations=False):
+        """Entity matrices ``(n, k, l)`` after message passing, and the relation matrices
+        (``all_relations``: the ``2R`` matrices, relation ``i`` at ``2i`` and its inverse at
+        ``2i + 1``; otherwise the ``R`` forward ones). Without arguments: the model's own
+        features and graph."""
         features = self.entity_representations[0]() if features is None else features
         edge_index = self.edge_index if edge_index is None else edge_index
         edge_type = self.edge_type if edge_type is None else edge_type
@@ -176,26 +183,34 @@ class Reshuffle(ERModel):
         loop = relation_matrices(self.loop_raw, self.row_function)
         x = propagate(features, rel, loop, edge_index, edge_type, self.num_layers,
                       self.aggregation)
-        return x, rel[0::2]
+        return x, (rel if all_relations else rel[0::2])
 
     def _get_representations(self, h, r, t, *, mode=None):
-        x, rel = self.encode()
+        x, rel = self.encode(all_relations=self.use_inverse_triples)
         return (x if h is None else x[h],
                 rel if r is None else rel[r],
                 x if t is None else x[t])
 
-    def score_on_graph(self, triples, graph_triples, num_entities, seed=0):
-        """Score ``triples`` (``(m, 3)`` ids) on another graph over the same relations.
+    def encode_graph(self, graph_triples, num_entities, seed=0, all_relations=False):
+        """Entity matrices ``(n, k, l)`` and relation matrices of another graph over the
+        same relations, with fresh random features (drawn with ``seed``): the inductive
+        setting of the paper, where the test entities are not seen in training.
 
-        The graph ``graph_triples`` (``(E, 3)`` ids, entities ``0 .. num_entities - 1``)
-        is encoded with fresh random features: this is the inductive setting of the paper,
-        where the test entities are not seen in training.
+        :param graph_triples: ``(E, 3)`` ids of the facts, entities ``0 .. num_entities - 1``.
         """
         generator = th.Generator().manual_seed(seed)
         features = random_features(num_entities, self.k, self.l, self.density, generator)
         features = features.to(self.edge_index.device)
         graph_triples = graph_triples.to(self.edge_index.device)
+        return self.encode(features, th.stack([graph_triples[:, 0], graph_triples[:, 2]]),
+                           graph_triples[:, 1], all_relations=all_relations)
+
+    def score_on_graph(self, triples, graph_triples, num_entities, seed=0):
+        """Score ``triples`` (``(m, 3)`` ids) on another graph over the same relations.
+
+        The graph ``graph_triples`` (``(E, 3)`` ids, entities ``0 .. num_entities - 1``)
+        is encoded with fresh random features (:meth:`encode_graph`).
+        """
+        x, rel = self.encode_graph(graph_triples, num_entities, seed)
         triples = triples.to(self.edge_index.device)
-        x, rel = self.encode(features, th.stack([graph_triples[:, 0], graph_triples[:, 2]]),
-                             graph_triples[:, 1])
         return reshuffle_interaction(x[triples[:, 0]], rel[triples[:, 1]], x[triples[:, 2]])

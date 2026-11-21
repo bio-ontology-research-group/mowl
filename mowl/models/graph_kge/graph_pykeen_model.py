@@ -27,6 +27,10 @@ class GraphPlusPyKEENModel(KGEModel):
     scored_forms = ("gci0", "gci2")
     #: Label of the edges the projectors give to ``C ⊑ D``.
     SUBCLASS_RELATION = "http://subclassof"
+    #: Whether the PyKEEN triples factory creates inverse triples (relation ``r`` is then
+    #: ``2r`` in the model, its inverse ``2r + 1``; PyKEEN trains the inverse triples and
+    #: predicts heads through them). A subclass sets it before calling the constructor.
+    create_inverse_triples = False
 
     def __init__(self, *args, device="cpu", **kwargs):
         super().__init__(*args, **kwargs)
@@ -52,7 +56,7 @@ class GraphPlusPyKEENModel(KGEModel):
         if self._triples_factory is not None:
             return self._triples_factory
 
-        self._triples_factory = Edge.as_pykeen(self.edges, entity_to_id = self.graph_node_to_id, relation_to_id = self.graph_relation_to_id, create_inverse_triples=False)
+        self._triples_factory = Edge.as_pykeen(self.edges, entity_to_id = self.graph_node_to_id, relation_to_id = self.graph_relation_to_id, create_inverse_triples=self.create_inverse_triples)
         self._graph_node_to_id = self._triples_factory.entity_to_id
         self._graph_relation_to_id = self._triples_factory.relation_to_id
         return self._triples_factory
@@ -157,6 +161,8 @@ class GraphPlusPyKEENModel(KGEModel):
             relation = th.full_like(head, subclass)
         else:
             relation = role_map[cpu[:, 1]]
+        if self.create_inverse_triples:
+            relation = th.where(relation >= 0, 2 * relation, relation)
         known = (head >= 0) & (tail >= 0) & (relation >= 0)
         out = th.full((len(cpu),), float("inf"))
         if known.any():
@@ -168,6 +174,11 @@ class GraphPlusPyKEENModel(KGEModel):
                     triples[s:s + 2 ** 16].to(self.device)).reshape(-1).cpu())
             out[known] = -th.cat(scores).float()
         return out.to(rows.device)
+
+    def _make_stopper(self):
+        """The PyKEEN stopper of :meth:`train` (``None``: train for all epochs). A subclass
+        that stops early on validation triples overrides this."""
+        return None
 
     def set_kge_method(self, kge_method, *args, **kwargs):
         """
@@ -219,7 +230,7 @@ class GraphPlusPyKEENModel(KGEModel):
                                           optimizer=optimizer, **loop_kwargs)
 
         _ = training_loop.train(triples_factory=self.triples_factory, num_epochs=epochs,
-                                batch_size=self.batch_size)
+                                batch_size=self.batch_size, stopper=self._make_stopper())
 
         th.save(self._kge_method, self.model_filepath)
 
@@ -236,7 +247,7 @@ class GraphPlusPyKEENModel(KGEModel):
         self.dataset.add_axioms(*axioms)
         self._load_edges()
         self._triples_factory = Edge.as_pykeen(self.edges, entity_to_id = self.graph_node_to_id,
-                                               relation_to_id = self.graph_relation_to_id, create_inverse_triples=False)
+                                               relation_to_id = self.graph_relation_to_id, create_inverse_triples=self.create_inverse_triples)
 
 
         new_class_embeds = []

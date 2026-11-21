@@ -491,3 +491,52 @@ The tables below are generated from the registry
 (:func:`mowl.benchmarks.report.published_to_rst`).
 
 .. include:: _published.rst
+
+Inductive link prediction
+-------------------------
+
+The twelve ``kg-inductive-*`` benchmarks are the inductive knowledge graph completion
+datasets of Teru et al. (ICML 2020), derived from FB15k-237, WN18RR and NELL-995 (versions
+``v1`` to ``v4``), with the protocol of RESHUFFLE [pavlovic2025]_: a model is trained on one
+graph and tested on a second graph that has other entities and the same relations.
+
+* The dataset (:class:`mowl.datasets.builtin.inductive_kg.InductiveKnowledgeGraphDataset`)
+  has the training graph as its ontology (a triple is the axiom ``h ⊑ ∃r.t``), the
+  validation triples of the training graph as its validation ontology, and, apart from
+  both, the facts of the test graph (``inference_graph``) and the triples to predict
+  (``test_triples``). Its ``testing`` ontology is ``None`` so that the test entities are
+  not classes of a model built on it.
+* **How a model receives the test graph.** The evaluation regime
+  (:class:`mowl.evaluation.inductive_ranking.InductiveSampledRankingRegime`, 50 sampled
+  corruptions of the head and 50 of the tail per test triple, Hits@10) calls
+  ``model.inductive_costs(graph, rows)``: ``graph`` is the ``inference_graph`` and ``rows``
+  are candidate triples as indices into it; the result is one cost per row, lower is more
+  plausible. Any model that computes entity representations from the facts about an entity
+  can implement it. A model with one vector per training entity cannot: the regime
+  raises :class:`~mowl.evaluation.inductive_ranking.UnsupportedInductiveModel`.
+* The published numbers (Hits@10, Table 2 and Table 3 of the paper) and the settings of the
+  authors' code are registered for the method ``reshuffle`` (three variants: ``reshuffle``,
+  ``no-loop``, ``square``).
+
+.. testcode::
+
+   from mowl.benchmarks import get_benchmark, get_recipe, published_results
+
+   b = get_benchmark("kg-inductive-nell995-v1")
+   print(b.evaluation_regime, b.metrics[0])
+   (main,) = [r for r in published_results(benchmark=b.key, method="reshuffle")
+              if r.settings["variant"] == "reshuffle"]
+   print(main.metrics, main.locator)
+   recipe = get_recipe(b.key, "reshuffle", "pavlovic2025", "reshuffle")
+   print(recipe.epochs, recipe.model_kwargs["num_layers"], recipe.model_kwargs["l"])
+
+.. testoutput::
+
+   inductive-sampled-ranking hits@10
+   {'hits@10': 0.638} Table 2 (RESHUFFLE row)
+   1000 3 20
+
+.. code-block:: bash
+
+   python -m mowl.benchmarks run kg-inductive-nell995-v1 --method reshuffle \
+       --recipe pavlovic2025:reshuffle --seed 0 --device cuda --out nell_v1_s0.json
