@@ -65,7 +65,14 @@ _DEFAULTS = {
     # language models: one pass over the training triplets
     "hit": {"model_kwargs": {}, "epochs": 1},
     "ont": {"model_kwargs": {}, "epochs": 1},
+    # order and box embeddings of the subclass taxonomy (gci0 only): full-batch generic loop
+    "order_embeddings": {"model_kwargs": {"embed_dim": 50}, "epochs": 1000},
+    "box_lattice": {"model_kwargs": {"embed_dim": 50}, "epochs": 1000},
+    "gumbel_box": {"model_kwargs": {"embed_dim": 50}, "epochs": 1000},
 }
+
+#: taxonomy methods: no score for C ⊑ ∃r.D, so no existential or PPI recipe
+_TAXONOMY_ONLY = ("order_embeddings", "box_lattice", "gumbel_box")
 
 
 def _build():
@@ -92,13 +99,13 @@ def _build():
             for method, settings in _DEFAULTS.items():
                 if method in done:
                     continue
-                if "existential" in benchmark and method in ("bcbox", "taxonomy_walks",
-                                                               "hit", "e2r"):
+                if "existential" in benchmark and method in (
+                        "bcbox", "taxonomy_walks", "hit", "e2r") + _TAXONOMY_ONLY:
                     continue
                 out.append(Recipe(benchmark=benchmark, method=method, source=MOWL_COMMON,
                                   locator="mowl.benchmarks.recipe_sets.common_defaults",
                                   notes=_NOTE, **settings))
-    ppi_skip = {"bcbox", "taxonomy_walks", "hit", "e2r"}
+    ppi_skip = {"bcbox", "taxonomy_walks", "hit", "e2r", *_TAXONOMY_ONLY}
     for organism in ("yeast", "human"):
         benchmark = f"common-{organism}-ppi"
         done = set()

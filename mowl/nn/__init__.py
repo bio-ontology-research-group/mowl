@@ -16,6 +16,9 @@ from .el.emelpp.module import EmELPPModule, EmELVarModule
 from .el.regd.module import RegDELBEModule, RegDELEmModule
 from .el.mcmultibox.module import VolumeMultiBoxELModule
 from .el.octagon.module import OctagonELModule
+from .el.order_embeddings.module import OrderEmbeddingsModule
+from .el.box_lattice.module import BoxLatticeModule
+from .el.gumbel_box.module import GumbelBoxModule
 from .graph.bcbox import BinaryCodeBoxModule
 from .graph.cate import CatEModule
 from .alc.alcone.module import ALConeModule
