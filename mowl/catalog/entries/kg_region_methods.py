@@ -1,9 +1,9 @@
-"""Region-based knowledge graph and query embeddings (BoxE, ExpressivE, RESHUFFLE and
-Concept2Box are implemented; the query embedding methods are catalogued only).
+"""Region-based knowledge graph and query embeddings (BoxE, ExpressivE, RESHUFFLE,
+Concept2Box, Query2Box, BetaE, ConE and AConE).
 
 These methods are defined for knowledge graphs (triples, rule patterns, logical queries
-over a KG), not for description logic ontologies. They are catalogued because their
-region shapes and guarantees are often compared with ontology embeddings.
+over a KG), not for description logic ontologies. Each card states how the method is
+connected to ontologies in mOWL and which axiom forms it supports.
 """
 
 from mowl.catalog.card import (Family, Guarantee, GuaranteeKind as K, MethodCard, Origin,
