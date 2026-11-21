@@ -2,8 +2,9 @@
 
 ::
 
-    python -m mowl.benchmarks list [--task TASK]
+    python -m mowl.benchmarks list [--task TASK] [--target TARGET] [--method KEY]
     python -m mowl.benchmarks show BENCHMARK
+    python -m mowl.benchmarks methods BENCHMARK
     python -m mowl.benchmarks published BENCHMARK [--method KEY] [--format FMT]
     python -m mowl.benchmarks run BENCHMARK --method KEY --epochs N --seed S \\
         --device cuda --param embed_dim=200 --param learning_rate=0.001 --out result.json
@@ -38,10 +39,23 @@ def _build_parser():
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("list", help="list benchmarks")
-    p.add_argument("--task", default=None)
+    p.add_argument("--task", default=None,
+                   help="a benchmark group (axiom_prediction, ...), a completion task "
+                        "(subsumption-prediction, link-prediction, ...) or an inference "
+                        "task (subsumption, instance-checking, ...)")
+    p.add_argument("--target", default=None,
+                   help="'deductive inference', 'inductive prediction' or "
+                        "'logical status'")
+    p.add_argument("--method", default=None,
+                   help="only benchmarks whose inference tasks this method declares")
 
     p = sub.add_parser("show", help="describe one benchmark")
     p.add_argument("benchmark")
+
+    p = sub.add_parser("methods", help="methods that support the tasks of a benchmark")
+    p.add_argument("benchmark")
+    p.add_argument("--all", action="store_true",
+                   help="include methods without an implementation in mOWL")
 
     p = sub.add_parser("published", help="published results of a benchmark")
     p.add_argument("benchmark")
@@ -89,14 +103,31 @@ def main(argv=None):
     from mowl.benchmarks.registry import get_benchmark, list_benchmarks
 
     if args.command == "list":
-        rows = [[b.key, b.task.value, b.name] for b in list_benchmarks(task=args.task)]
-        print(report.table(["key", "task", "name"], rows), end="")
+        rows = [[b.key, ", ".join(b.completion_tasks) or ", ".join(b.inference_tasks),
+                 b.target.value, b.name]
+                for b in list_benchmarks(task=args.task, target=args.target,
+                                         method=args.method)]
+        print(report.table(["key", "task", "target", "name"], rows), end="")
     elif args.command == "show":
         b = get_benchmark(args.benchmark)
-        print(f"{b.key}: {b.name}\ntask: {b.task.value}\ndataset: {b.dataset} "
+        encodes = f" (encodes: {', '.join(b.encodes)})" if b.encodes else ""
+        print(f"{b.key}: {b.name}\ngroup: {b.task.value}\n"
+              f"completion tasks: {', '.join(b.completion_tasks) or '-'}{encodes}\n"
+              f"inference tasks: {', '.join(b.inference_tasks)}\n"
+              f"target: {b.target.value}\n"
+              f"evaluation regime: {b.evaluation_regime}\ndataset: {b.dataset} "
               f"{b.dataset_kwargs}\nprotocol: {b.protocol} {b.protocol_kwargs}\n"
               f"subsets: {', '.join(b.subsets)}\nmetrics: {', '.join(b.metrics)}\n\n"
               f"{b.description}\n\nNotes: {b.notes}")
+    elif args.command == "methods":
+        from mowl.benchmarks.registry import methods_for
+        b = get_benchmark(args.benchmark)
+        rows = [[m.key, str(m.expressivity) if m.expressivity is not None else "",
+                 "yes" if m.implemented else "no", m.name]
+                for m in methods_for(b, implemented=not args.all)]
+        print(f"Methods that declare the inference tasks of {b.key} "
+              f"({', '.join(b.inference_tasks)}):")
+        print(report.table(["key", "expressivity", "in mOWL", "name"], rows), end="")
     elif args.command == "published":
         print(report.published_table(args.benchmark, fmt=args.format, method=args.method),
               end="")

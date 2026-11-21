@@ -22,6 +22,61 @@ numbers were transcribed from the PDFs and checked against the rendered pages.
 
 Listing benchmarks and published results needs neither the JVM nor any download.
 
+Benchmarks and tasks
+--------------------
+
+Every benchmark states what it measures in the terms of :doc:`/logic/index`:
+
+- ``completion_tasks``: the form of the ranked candidates
+  (:data:`mowl.logic.COMPLETION_TASKS`), as the data pose them. A benchmark that poses one
+  task in the form of another says so in ``encodes``: protein-protein interaction
+  prediction with proteins as classes ranks the filler of :math:`C \sqsubseteq \exists r.?`
+  (``existential-prediction``) and encodes ``link-prediction``.
+- ``inference_tasks``: the reasoning tasks that decide a candidate
+  (:data:`mowl.logic.TASKS`), derived from the completion tasks.
+- ``target``: whether the correct answers are entailed by the training ontology
+  (deductive inference), held out and not entailed (inductive prediction), or of all
+  three logical statuses (:class:`mowl.logic.Target`).
+- ``evaluation_regime``: the key of the regime card of the regime its protocol runs. A
+  test checks that the card and the benchmark agree on task and target.
+
+A method can be run on a benchmark when its card declares the inference tasks of the
+benchmark and its expressivity has the constructs of the candidates:
+
+.. testcode::
+
+   from mowl.benchmarks import (get_benchmark, list_benchmarks, methods_for,
+                                missing_support, supports)
+
+   ppi = get_benchmark("box2el-yeast-ppi")
+   print(ppi.completion_tasks, ppi.encodes, ppi.inference_tasks, ppi.target.value)
+
+   links = list_benchmarks(completion_task="link-prediction",
+                           target="inductive prediction")
+   print("boxlite-family-v1" in [b.key for b in links])
+
+   print(supports("bcbox", "box2el-go-inference"), supports("bcbox", ppi))
+   print(missing_support("bcbox", ppi))
+   print("box2el" in [m.key for m in methods_for(ppi)])
+   print("box2el-go-inference" in [b.key for b in list_benchmarks(method="bcbox")])
+
+.. testoutput::
+
+   ('existential-prediction',) ('link-prediction',) ('subsumption',) inductive prediction
+   True
+   True False
+   ['construct ∃r.C (for existential-prediction)']
+   True
+   True
+
+The same from the command line:
+
+.. code-block:: bash
+
+   python -m mowl.benchmarks list --task link-prediction --target "inductive prediction"
+   python -m mowl.benchmarks list --method bcbox
+   python -m mowl.benchmarks methods box2el-go-inference
+
 Evaluation protocols
 --------------------
 

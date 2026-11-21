@@ -40,6 +40,7 @@ BENCHMARKS = [
     Benchmark(
         key=f"boxlite-family-v{v}", name=f"BoxLitE Family F_v{v} link prediction",
         task=Task.LINK_PREDICTION,
+        evaluation_regime="kg-filtered-link-prediction",
         description=(
             f"Family subset F_v{v} (Table 1: {_SIZES[v][0]} train, {_SIZES[v][1]} "
             f"validation, {_SIZES[v][2]} test role assertions, {_SIZES[v][3]} "

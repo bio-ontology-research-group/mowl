@@ -186,6 +186,9 @@ class CompletionTask:
     :param setting: ``"knowledge graph completion"`` (ABox role assertions only) or
         ``"knowledge base completion"`` (axioms that may involve class expressions).
     :param summary: One or two sentences.
+    :param needs: Constructs that the form of the candidates uses (names of
+        :class:`mowl.logic.Construct`): a method can only score the candidates if its
+        expressivity has them.
     """
 
     key: str
@@ -194,6 +197,7 @@ class CompletionTask:
     inference_task: str
     setting: str
     summary: str = ""
+    needs: tuple = ()
 
 
 KGC = "knowledge graph completion"
@@ -204,11 +208,13 @@ COMPLETION_TASKS = {t.key: t for t in (
                    "role-assertion", KGC,
                    "Rank individuals as the missing end of a role assertion. This is all "
                    "of knowledge graph completion, and the ABox part of knowledge base "
-                   "completion (protein-protein interaction prediction)."),
+                   "completion (protein-protein interaction prediction).",
+                   needs=("ROLE_ASSERTION",)),
     CompletionTask("type-prediction", "Class membership prediction", "?(a) or C(?)",
                    "instance-checking", KBC,
                    "Rank classes for an individual, or individuals for a class "
-                   "expression (function prediction: C = ∃hasFunction.F)."),
+                   "expression (function prediction: C = ∃hasFunction.F).",
+                   needs=("CLASS_ASSERTION",)),
     CompletionTask("subsumption-prediction", "Subsumption prediction", "C ⊑ ?",
                    "subsumption", KBC,
                    "Rank concept names as the superclass of a class expression: C a "
@@ -217,10 +223,11 @@ COMPLETION_TASKS = {t.key: t for t in (
     CompletionTask("existential-prediction", "Existential restriction prediction",
                    "C ⊑ ∃r.?", "subsumption", KBC,
                    "Rank concept names as the filler of an existential restriction "
-                   "(normal form NF3)."),
+                   "(normal form NF3).", needs=("EXISTENTIAL",)),
     CompletionTask("disjointness-prediction", "Disjointness prediction", "C ⊓ ? ⊑ ⊥",
                    "disjointness", KBC,
-                   "Rank concept names as disjoint from C."),
+                   "Rank concept names as disjoint from C.",
+                   needs=("BOTTOM", "CONJUNCTION")),
     CompletionTask("one-hop-query-answering", "One-hop query answering", "r(a, ?) or C(?)",
                    "query-answering", KBC,
                    "Rank individuals as answers to a query with one atom. Without a TBox "

@@ -46,6 +46,7 @@ BENCHMARKS = [
     Benchmark(
         key=f"regd-{name}-inference", name=f"RegD inference F1 ({label})",
         task=Task.DEDUCTIVE_INFERENCE,
+        evaluation_regime="regd-sampled-f1",
         description=_INFERENCE_DESC,
         dataset="mowl.datasets.builtin.jackermeier2024_reference."
                 "Jackermeier2024InferencesDataset",
@@ -58,6 +59,7 @@ BENCHMARKS = [
     Benchmark(
         key=f"regd-{name}-prediction", name=f"RegD prediction F1 ({label})",
         task=Task.AXIOM_PREDICTION,
+        evaluation_regime="regd-sampled-f1",
         description=_PREDICTION_DESC,
         dataset=f"mowl.datasets.builtin.jackermeier2024.{cls}",
         protocol=_P, protocol_kwargs={"gci_name": "gci2", "reference_ontology": label},

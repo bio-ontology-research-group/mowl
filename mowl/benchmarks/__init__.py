@@ -18,9 +18,12 @@ Listing benchmarks and published results does not need the JVM.
 """
 
 from mowl.benchmarks.spec import Task, Benchmark, PublishedResult
-from mowl.benchmarks.registry import get_benchmark, list_benchmarks, published_results
+from mowl.benchmarks.registry import (get_benchmark, list_benchmarks, published_results,
+                                      supports, missing_support, methods_for,
+                                      benchmarks_for)
 from mowl.benchmarks.recipes import Recipe, get_recipe, list_recipes
 
 __all__ = ["Task", "Benchmark", "PublishedResult",
            "get_benchmark", "list_benchmarks", "published_results",
+           "supports", "missing_support", "methods_for", "benchmarks_for",
            "Recipe", "get_recipe", "list_recipes"]
