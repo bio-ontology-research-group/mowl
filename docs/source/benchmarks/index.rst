@@ -356,9 +356,8 @@ where it stopped.
 
    def compare_on_go(device="cuda"):
        """Hours on a GPU: every method, three seeds, one budget."""
-       outcome = compare_methods("common-go-subsumption-prediction", epochs=500,
-                                 seeds=(0, 1, 2), device=device, out_dir="results",
-                                 model_kwargs={"*": {"embed_dim": 200}})
+       outcome = compare_methods("common-go-subsumption-prediction", seeds=(0, 1, 2),
+                                 device=device, out_dir="results")
        print(methods_table(outcome.results))
        print(outcome.skipped, outcome.failed)
 
@@ -366,14 +365,24 @@ where it stopped.
 
    python -m mowl.benchmarks compare-methods common-go-subsumption-prediction --dry-run
    python -m mowl.benchmarks compare-methods common-go-subsumption-prediction \\
-       --epochs 500 --seeds 0,1,2 --device cuda --param embed_dim=200 --out-dir results
+       --seeds 0,1,2 --device cuda --out-dir results
+   python -m mowl.benchmarks run common-go-subsumption-prediction --method dl2vec \\
+       --recipe --seed 0 --device cuda --out dl2vec_s0.json
    python -m mowl.benchmarks table results/common-go-subsumption-prediction.*.json
+
+Every method has default settings on the joint benchmarks (recipes with the source
+``mowl-common``, :mod:`mowl.benchmarks.recipe_sets.common_defaults`), which
+``compare_methods`` uses unless ``epochs`` or model arguments are given: where a
+publication trained the method on the same data its settings are reused (Box\ :sup:`2`\ EL
+and its baselines, TransBox, ELK-Em), and every other method gets plain defaults with a
+training length that fits how it is trained (thousands of steps for the geometric models,
+a few passes for Word2Vec, one pass for the language models).
 
 Three things to keep in mind when reading such a table:
 
-- The comparison is of ranks, not of scores, and of the methods *as configured*: one
-  budget of epochs and default arguments is not a tuned result for any of them. Tune on
-  the validation split, never on the test split, and report the number of seeds.
+- The comparison is of ranks, not of scores, and of the methods *as configured*: the
+  default settings are not a tuned result for any of them. Tune on the validation split,
+  never on the test split, and report the number of seeds.
 - A held-out axiom of the prediction benchmarks may be entailed by the training axioms.
   The inference benchmarks contain entailed axioms only.
 - Not covered yet: GroundedEL (it has no graded score for a subsumption between named

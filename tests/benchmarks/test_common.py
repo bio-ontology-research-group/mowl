@@ -230,3 +230,21 @@ def test_graph_embedding_scores_the_projected_edge():
     # The taxonomy projection has no edge label for the role r: no score for C ⊑ ∃r.D.
     r = model.object_property_index_dict["http://mowl.borg/bench#r"]
     assert th.isinf(model.axiom_costs("gci2", th.tensor([[a, r, b]]))).all()
+
+
+def test_every_runnable_method_has_default_settings_on_the_joint_benchmarks():
+    from mowl.benchmarks import list_recipes
+    for b in list_benchmarks():
+        if not b.key.startswith("common-"):
+            continue
+        run, _ = runnable_methods(b)
+        for method in run:
+            found = list_recipes(b.key, method)
+            assert len(found) == 1, (b.key, method, len(found))
+            assert found[0].source.key == "mowl-common"
+    # Where a publication trained on the same data, its settings are reused.
+    (recipe,) = list_recipes("common-go-subsumption-prediction", "box2el")
+    (original,) = list_recipes("box2el-go-prediction", "box2el")
+    assert recipe.model_kwargs == original.model_kwargs
+    assert recipe.training_regime == original.training_regime
+    assert "jackermeier2024" in recipe.locator

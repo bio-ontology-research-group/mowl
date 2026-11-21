@@ -71,7 +71,7 @@ def runnable_methods(benchmark):
 
 def compare_methods(benchmark, methods=None, epochs=None, seeds=(0,), device="cpu",
                     model_kwargs=None, out_dir=None, dataset=None, stop_on_error=False,
-                    **run_kwargs):
+                    recipes=True, **run_kwargs):
     """Train and evaluate several methods on one benchmark.
 
     :param benchmark: A :class:`~mowl.benchmarks.Benchmark` or its key.
@@ -86,6 +86,10 @@ def compare_methods(benchmark, methods=None, epochs=None, seeds=(0,), device="cp
         being recomputed, so an interrupted comparison can be continued.
     :param dataset: An already loaded dataset shared by all runs.
     :param stop_on_error: Raise the first error instead of recording it.
+    :param recipes: Use the recipe of a method on the benchmark where there is exactly
+        one (model arguments, training regime, epochs); ``epochs`` and ``model_kwargs``
+        given here take precedence. The joint benchmarks have default recipes for every
+        method (:mod:`mowl.benchmarks.recipe_sets.common_defaults`).
     :param run_kwargs: Passed to :func:`mowl.benchmarks.runner.run_benchmark`.
     :rtype: :class:`Comparison`
     """
@@ -113,10 +117,16 @@ def compare_methods(benchmark, methods=None, epochs=None, seeds=(0,), device="cp
             if path and os.path.exists(path):
                 outcome.results.append(BenchmarkResult.load(path))
                 continue
+            recipe = None
+            if recipes and "recipe" not in run_kwargs:
+                from mowl.benchmarks.recipes import list_recipes
+                if len(list_recipes(benchmark.key, method)) == 1:
+                    recipe = True
             try:
                 result = run_benchmark(benchmark, method=method, model_kwargs=kwargs,
                                        epochs=epochs, seed=seed, device=device,
-                                       dataset=dataset, **run_kwargs)
+                                       dataset=dataset,
+                                       **{"recipe": recipe, **run_kwargs})
             except Exception as error:                              # noqa: BLE001
                 if stop_on_error:
                     raise

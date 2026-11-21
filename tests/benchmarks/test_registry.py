@@ -147,6 +147,10 @@ def test_elem_recipes_use_the_released_loss():
     recipes = [r for r in list_recipes() if r.method in ("elem", "regd_elem")]
     assert recipes
     for recipe in recipes:
+        if recipe.source.key == "mowl-common" and not recipe.locator.startswith("recipe of"):
+            # mOWL's own defaults reproduce no reference code: the corrected loss.
+            assert "gci1_radius_term" not in recipe.model_kwargs
+            continue
         assert recipe.model_kwargs.get("gci1_radius_term") is False, (
             recipe.benchmark, recipe.method)
 
