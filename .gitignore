@@ -50,3 +50,10 @@ tests/geometric/_scratch/
 docs/source/methods/catalogue.rst
 docs/source/methods/regimes.rst
 docs/source/benchmarks/_published.rst
+
+# files written by the documentation examples (make doctest)
+docs/test
+docs/filtered_walks
+docs/no_filtered_walks
+first_semantic_model
+first_syntactic_w2v_model
