@@ -52,6 +52,9 @@ _DEFAULTS = {
     "alcone": {"model_kwargs": {}, "epochs": 500},
     "e2r": {"model_kwargs": {"embed_dim": 100}, "epochs": 500},
     "bcbox": {"model_kwargs": {"embed_dim": 32}, "epochs": 500},
+    "dfalc": {"model_kwargs": {"anon_domain": 8}, "epochs": 200},
+    "eike": {"model_kwargs": {"embed_dim": 100}, "epochs": 500},
+    "boxsel": {"model_kwargs": {"embed_dim": 50}, "epochs": 500},
     # needs individuals; fails with that message on the TBox-only data
     "canonical_mixture": {"model_kwargs": {}, "epochs": 500},
     "grounded": {"model_kwargs": {}, "epochs": 500},
@@ -92,8 +95,8 @@ def _build():
             for method, settings in _DEFAULTS.items():
                 if method in done:
                     continue
-                if "existential" in benchmark and method in ("bcbox", "taxonomy_walks",
-                                                               "hit", "e2r"):
+                if "existential" in benchmark and method in (
+                        "bcbox", "taxonomy_walks", "hit", "e2r", "eike"):
                     continue
                 out.append(Recipe(benchmark=benchmark, method=method, source=MOWL_COMMON,
                                   locator="mowl.benchmarks.recipe_sets.common_defaults",

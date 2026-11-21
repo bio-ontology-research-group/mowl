@@ -66,6 +66,9 @@ EIKE = MethodCard(
 
 BOXSEL = MethodCard(
     key="boxsel",
+    expressivity="EL⊥ with ABox",
+    tasks=("subsumption", "satisfiability", "disjointness", "instance-checking",
+           "role-assertion"),
     name="BoxSEL (Statistical EL)",
     family=Family.GEOMETRIC,
     region="box",
@@ -73,19 +76,28 @@ BOXSEL = MethodCard(
         "Embeds Statistical EL TBoxes, whose conditional statements (D | C)[l, u] bound the "
         "proportion of C-instances that are D, as boxes in the style of BoxEL; conditional "
         "probabilities are read off as volume ratios."),
-    logic="Statistical EL (SEL)",
+    logic="Statistical EL (SEL): EL normal form plus conditionals (D | C)[l, u]",
     concepts="axis-parallel box",
-    roles="as in BoxEL, on which the method builds",
-    not_implemented_reason=(
-        "Statistical EL conditionals (D | C)[l, u] cannot be expressed in OWL and are not "
-        "part of mOWL's datasets; the method would need its own input format."),
+    roles="affine map (diagonal scaling and translation), as in BoxEL",
+    individuals="point (BoxEL), for the deterministic part",
+    status=Status.LEARNABLE,
+    origin=Origin.ADAPTATION,
+    implementation="mowl.models.boxsel.model.BoxSEL",
+    module="mowl.nn.el.boxsel.module.BoxSELModule",
+    axioms=("gci0", "gci1", "gci2", "gci3", "gci0_bot", "gci1_bot", "gci3_bot",
+            "class_assertion", "object_property_assertion"),
     guarantees=(
         Guarantee(
             K.SOUNDNESS,
-            "If the TBox loss is zero, the induced geometric interpretation satisfies the "
-            "SEL TBox.",
-            "zhu2024, Theorem 1",
-            condition="zero loss"),
+            "If the loss of a conditional (D | C)[l, u] is zero (exact volumes), the "
+            "geometric interpretation satisfies l·Vol(C) <= Vol(D ∩ C) <= u·Vol(C); with "
+            "the soundness of the BoxEL losses, a zero TBox loss gives a model of the SEL "
+            "TBox. mOWL checks the conditional part (Lemma 2); the BoxEL part is the "
+            "guarantee of the boxel card.",
+            "zhu2024, Lemma 2 and Theorem 1",
+            condition="zero loss, exact (not softplus) volumes",
+            verified_in_mowl="tests/models/test_boxsel_model.py::"
+                             "test_volume_ratio_and_conditional_loss_follow_equations_3_to_5"),
         Guarantee(
             K.SOUNDNESS,
             "If the loss is zero and T ⊨ (D | C)[l, u], the probability p computed from the "
@@ -94,18 +106,41 @@ BOXSEL = MethodCard(
             condition="zero loss"),
         Guarantee(
             K.EXPRESSIVITY,
-            "For concepts C, D with non-empty, non-full regions, p with Iw ⊨ (D | C)[p] is "
-            "computed in O((c + d)·n) time (c, d concept sizes, n dimension).",
+            "For concepts C, D, with non-empty, non-full regions, p with Iw ⊨ (D | C)[p] is "
+            "computed in O((c + d)·n) time (c, d concept sizes, n dimension). mOWL computes "
+            "it as an exact volume ratio, BoxSEL.probability.",
             "zhu2024, Theorem 2"),
     ),
     intersection_closed=True,
     helly="2 (axis-parallel boxes; eckhoff1988)",
+    related=("boxel",),
     references=(
         Reference("zhu2024",
                   "Zhu, Y., Potyka, N., Xiong, B., Tran, T.-K., Nayyeri, M., Kharlamov, E., "
                   "Staab, S. (2024). Approximating Probabilistic Inference in Statistical EL "
                   "with Knowledge Graph Embeddings. arXiv:2407.11821.",
                   "https://arxiv.org/abs/2407.11821"),),
+    notes=(
+        "ADAPTATION. Implemented: the BoxEL geometry and losses (reused from BoxEL, as in "
+        "Appendix D), the conditional losses of Eqs. 4, 5 and 7 with softplus volumes "
+        "(optional cooling of the sharpness, Appendix E.1), the location regulariser of "
+        "Eq. 9, probabilities as volume ratios, and the interval estimate over several "
+        "embeddings (BoxSEL.probability_interval, Section 8.3). Input: OWL cannot express "
+        "(D | C)[l, u], so the conditionals are a Python argument (Conditional tuples) "
+        "next to the OWL ontology with the deterministic axioms; there is no file format. "
+        "Premises and conclusions may be names, conjunctions and existentials, nested "
+        "(the paper's prototype supports (B|A), (B|A1⊓A2), (B|∃r.A), (∃r.B|A)); the "
+        "region of ∃r.C is the preimage of Box(C) under the role map, as in the "
+        "left-existential BoxEL loss. ⊤ is not allowed in conditionals (safe TBoxes, "
+        "Definition 2). Not implemented: the SEL normalisation SNF0 (introducing a name "
+        "for a complex concept in a conditional; define the name in the ontology and use "
+        "it), the YAGO3-derived Person/Country/Hybrid datasets and the PMP evaluation "
+        "protocol, the volume regulariser L_vol is implemented as printed (Eq. 10) but "
+        "off by default: as printed it is positive unless a box fills the whole cube, "
+        "which contradicts proportions below 1, so the formula in the PDF text may be "
+        "garbled. The conditional losses are averaged per pattern group (the paper sums "
+        "over axioms). The authors' code was not located and not checked; hyperparameters "
+        "(dimension, beta, learning rate) are the user's choice."),
 )
 
 DFALC = MethodCard(

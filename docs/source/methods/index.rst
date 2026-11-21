@@ -28,6 +28,7 @@ relevant published methods it does not implement, with the reason.
    alcone
    dfalc
    eike
+   boxsel
    e2r
    hit
    ont

@@ -21,4 +21,5 @@ from .graph.cate import CatEModule
 from .alc.alcone.module import ALConeModule
 from .alc.dfalc.module import DFALCModule
 from .el.eike.module import EIKEModule
+from .el.boxsel.module import BoxSELModule
 from .alc.e2r.module import E2RModule

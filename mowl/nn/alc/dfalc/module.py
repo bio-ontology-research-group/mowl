@@ -153,8 +153,8 @@ class DFALCModule(ALCModule):
             return self._inclusion(axiom.getSubClass(), axiom.getSuperClass(), x, e_emb)
         if isinstance(axiom, OWLEquivalentClassesAxiom):
             ces = axiom.getClassExpressionsAsList()
-            return (self._inclusion(ces[0], ces[1], x, e_emb)
-                    + self._inclusion_swapped(ces, x, e_emb))
+            forward = self._inclusion(ces[0], ces[1], x, e_emb)
+            return forward + self._inclusion_swapped(ces, x, e_emb)
         if isinstance(axiom, OWLDisjointClassesAxiom):
             ces = axiom.getClassExpressionsAsList()
             c, nxt = self.forward_fs(ces[0], x, e_emb)

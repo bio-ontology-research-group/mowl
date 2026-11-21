@@ -25,7 +25,8 @@ class EIKEModule(ELModule):
     Per-axiom scores (lower is better):
 
     * ``class_assertion`` (InstanceOf): :math:`f^{ex} + \\alpha f^{in}` with
-      :math:`f^{ex} = [\\sum_j ((i_j - c_j)/b_j)^2 - r_c^2]_+`, :math:`f^{in} = 1 - \\cos(Mi, c^{i})`.
+      :math:`f^{ex} = [\\sum_j ((i_j - c_j)/b_j)^2 - r_c^2]_+`,
+      :math:`f^{in} = 1 - \\cos(Mi, c^{i})`.
     * ``gci0`` (SubClassOf): :math:`f^{ex} + \\alpha f^{in}` with
       :math:`f^{ex} = [\\sum_p (c_{ip}/b_{ip} - c_{jp}/b_{jp})^2 + r_{c_i}^2 - r_{c_j}^2]_+`
       (as printed in the paper) and :math:`f^{in} = 1 - \\cos(c^i_i, c^i_j) +
