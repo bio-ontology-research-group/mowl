@@ -226,6 +226,12 @@ def _named():
                                    C.ROLE_HIERARCHY, C.DOMAIN_RANGE}, label="DL-Lite_H",
                                   note="Unqualified existentials ∃r and ∃r⁻ on both "
                                        "sides, concept and role inclusions, disjointness."),
+        "E2R fragment": Expressivity(
+            {C.TOP, C.BOTTOM, C.CONJUNCTION, C.DISJUNCTION, C.NEGATION, C.ROLE_HIERARCHY,
+             C.DOMAIN_RANGE}, label="E2R fragment",
+            note="Boolean combinations of concept names in definitions, concept and role "
+                 "inclusions, disjointness and role ranges; no existential or universal "
+                 "restrictions as concepts (the implemented part of Garg et al., 2019)."),
         "SROIQ": sroiq,
         "SROIQ(D)": sroiq | {C.DATATYPE},
         "OWL 2 DL": Expressivity((sroiq | {C.DATATYPE}).constructs, label="OWL 2 DL"),

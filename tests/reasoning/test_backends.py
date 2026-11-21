@@ -31,7 +31,7 @@ def _ontology(name, universal=False):
 
 
 def test_selection_by_expressivity():
-    assert [b.name for b in list_reasoners()][:3] == ["structural", "elk", "hermit"]
+    assert [b.name for b in list_reasoners()] == ["structural", "elk", "km", "hermit"]
     assert select_reasoner("taxonomy").name == "structural"
     assert select_reasoner("EL⊥").name == "elk"
     assert select_reasoner("ELH(∘)⊥ with ABox").name == "elk"
@@ -82,3 +82,16 @@ def test_register_reasoner():
     assert calls
     with pytest.raises(ValueError):
         register_reasoner("test-told", factory, "taxonomy")
+
+
+def test_km_is_registered_and_not_chosen_when_unavailable():
+    """KM is an optional backend: it is listed, and chosen automatically only when its JAR
+    (and a recent enough OWL API) is on the class path."""
+    from mowl.reasoning import get_backend
+    km = get_backend("km")
+    assert str(km.expressivity).startswith("SROIQ(D)")
+    if not km.is_available():
+        assert select_reasoner("ALC").name == "hermit"
+        _, ont, *_ = _ontology("km")
+        with pytest.raises((ImportError, RuntimeError)):
+            km.create(ont)

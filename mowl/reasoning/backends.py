@@ -36,6 +36,12 @@ class ReasonerBackend:
     factory: object
     cost: int = 1
     summary: str = ""
+    available: object = None
+
+    def is_available(self):
+        """Whether the reasoner can be created in this installation (optional reasoners
+        need their JAR on the class path)."""
+        return True if self.available is None else bool(self.available())
 
     def create(self, ontology):
         """Create an ``org.semanticweb.owlapi.reasoner.OWLReasoner`` for ``ontology``."""
@@ -63,7 +69,8 @@ def _structural(ontology):
 _BACKENDS = {}
 
 
-def register_reasoner(name, factory, expressivity, cost=5, summary="", replace=False):
+def register_reasoner(name, factory, expressivity, cost=5, summary="", replace=False,
+                      available=None):
     """Make a reasoner available under ``name``.
 
     :param factory: ``factory(ontology) -> OWLReasoner``. To register an OWL API
@@ -71,12 +78,15 @@ def register_reasoner(name, factory, expressivity, cost=5, summary="", replace=F
     :param expressivity: An :class:`~mowl.logic.Expressivity` or a name for
         :meth:`~mowl.logic.Expressivity.parse`: what the reasoner is complete for.
     :param cost: Relative cost used by :func:`select_reasoner` (ELK is 1, HermiT 10).
+    :param available: ``available() -> bool``; backends for which it returns ``False`` are
+        listed but never chosen automatically.
     """
     if name in _BACKENDS and not replace:
         raise ValueError(f"A reasoner named {name!r} is already registered.")
     if isinstance(expressivity, str):
         expressivity = Expressivity.parse(expressivity)
-    _BACKENDS[name] = ReasonerBackend(name, expressivity, factory, cost, summary)
+    _BACKENDS[name] = ReasonerBackend(name, expressivity, factory, cost, summary,
+                                      available)
     return _BACKENDS[name]
 
 
@@ -89,6 +99,55 @@ register_reasoner(
     Expressivity.parse("ELH(∘)⊥ with ABox") | {Construct.DOMAIN_RANGE}, cost=1,
     summary="ELK 0.4.3: consequence-based, polynomial, for EL with role hierarchies and "
             "chains, ⊥ and assertions; no nominals, inverses or datatypes.")
+KM_FACTORY = "org.bioontology.kobayashimarust.protege.KMReasonerFactory"
+
+
+def _km_owlapi_ok():
+    """KM's OWL API binding is built against OWL API 4.5.29 and uses a constructor of the
+    functional syntax renderer that older 4.5 releases do not have."""
+    import jpype
+    try:
+        renderer = jpype.JClass(
+            "org.semanticweb.owlapi.functional.renderer.FunctionalSyntaxObjectRenderer")
+        return any(len(c.getParameterTypes()) == 3
+                   and "OWLDocumentFormat" in str(c.getParameterTypes()[1].getName())
+                   for c in renderer.class_.getConstructors())
+    except Exception:
+        return False
+
+
+def _km_available():
+    import jpype
+    try:
+        jpype.JClass(KM_FACTORY)
+    except Exception:
+        return False
+    return _km_owlapi_ok()
+
+
+def _km(ontology):
+    import jpype
+    try:
+        factory = jpype.JClass(KM_FACTORY)()
+    except Exception as error:
+        raise ImportError(
+            "The Kobayashi-MaRust (KM) reasoner is not on the class path. Download "
+            "kobayashi-marust-protege5-<version>.jar from "
+            "https://github.com/bio-ontology-research-group/kobayashi-marust/releases and "
+            "start the JVM with mowl.init_jvm(memory, extra_classpath='<path to the jar>') "
+            "or set MOWL_EXTRA_CLASSPATH.") from error
+    if not _km_owlapi_ok():
+        raise RuntimeError(
+            "The Kobayashi-MaRust (KM) OWL API binding needs OWL API 4.5.29 or later; the "
+            "OWL API on the class path is older.")
+    return factory.createReasoner(ontology)
+
+
+register_reasoner(
+    "km", _km, Expressivity.parse("SROIQ(D)").with_abox(equality=True), cost=5,
+    available=_km_available,
+    summary="Kobayashi-MaRust: consequence-based reasoner for OWL 2 DL with verified "
+            "certificates; optional, needs its JAR on the class path.")
 register_reasoner(
     "hermit", _hermit, Expressivity.parse("SROIQ(D)").with_abox(equality=True), cost=10,
     summary="HermiT 1.3.8: hypertableau, sound and complete for OWL 2 DL.")
@@ -114,7 +173,7 @@ def select_reasoner(expressivity):
     if isinstance(expressivity, str):
         expressivity = Expressivity.parse(expressivity)
     for backend in list_reasoners():
-        if expressivity <= backend.expressivity:
+        if expressivity <= backend.expressivity and backend.is_available():
             return backend
     raise LookupError(f"No registered reasoner is complete for {expressivity}.")
 

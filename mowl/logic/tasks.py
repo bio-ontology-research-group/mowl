@@ -150,10 +150,20 @@ TASKS = {t.key: t for t in (
         needs=("NOMINAL", "EXISTENTIAL"), owlapi="getObjectPropertyValues(a, r)",
         summary="Tail queries (a, r, ?) of knowledge graph completion."),
     InferenceTask(
-        "query-answering", "Conjunctive query answering", Box.KB,
-        "all answers to a conjunctive query q over O", "a set of tuples",
-        summary="Tree-shaped queries can be rolled up into instance retrieval for a class "
-                "expression; cyclic queries do not reduce to subsumption tests."),
+        "query-answering", "Logical query answering", Box.KB,
+        "all individuals a with O ⊨ q(a), for a query q with one answer variable",
+        "a set of individuals",
+        as_subsumption="{a} ⊑ C_q for all individuals a, where C_q is the query rolled up "
+                       "into a class expression",
+        needs=("NOMINAL", "EXISTENTIAL", "CONJUNCTION"), owlapi="getInstances(C_q, false)",
+        summary="A one-hop query r(a, ?) is the class expression ∃r⁻.{a}; a multi-hop "
+                "path, an intersection or a union of such queries is the corresponding "
+                "nested class expression (∃s⁻.∃r⁻.{a}, C ⊓ D, C ⊔ D, with ¬ for negation). "
+                "Tree-shaped queries therefore are instance retrieval for a class "
+                "expression. The TBox acts in two ways: as constraints on the answers "
+                "(certain answers are those entailed by TBox and ABox together), and as a "
+                "source of classes to use in queries. Cyclic queries do not reduce to "
+                "subsumption tests."),
 )}
 
 
@@ -211,6 +221,19 @@ COMPLETION_TASKS = {t.key: t for t in (
     CompletionTask("disjointness-prediction", "Disjointness prediction", "C ⊓ ? ⊑ ⊥",
                    "disjointness", KBC,
                    "Rank concept names as disjoint from C."),
+    CompletionTask("one-hop-query-answering", "One-hop query answering", "r(a, ?) or C(?)",
+                   "query-answering", KBC,
+                   "Rank individuals as answers to a query with one atom. Without a TBox "
+                   "this is link prediction; with a TBox, answers that follow from the "
+                   "TBox are certain answers and the rest are predictions."),
+    CompletionTask("multi-hop-query-answering", "Multi-hop logical query answering",
+                   "q(?), q a path, intersection, union or negation of atoms",
+                   "query-answering", KBC,
+                   "Rank individuals as answers to a complex query (the query types 1p, "
+                   "2p, 3p, 2i, 3i, pi, ip, 2u, up and their negated forms of the query "
+                   "embedding literature). The query is a class expression over roles, "
+                   "nominals and TBox classes; the TBox constrains the answers and "
+                   "provides classes for the query."),
     CompletionTask("axiom-ranking", "Candidate axiom ranking", "any axiom α",
                    "subsumption", KBC,
                    "Rank arbitrary candidate axioms; the setting of the faithfulness "

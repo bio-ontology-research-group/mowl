@@ -110,8 +110,9 @@ _HELLY = (
 
 CARD = MethodCard(
     key="e2r",
-    expressivity="ALC with ABox",
-    tasks=("subsumption", "instance-checking", "role-assertion",),
+    expressivity="E2R fragment with ABox",
+    tasks=("subsumption", "disjointness", "role-subsumption", "instance-checking",
+           "role-assertion"),
     name="E2R (Embed2Reason)",
     family=Family.ALGEBRAIC,
     region="linear subspace (quantum logic)",

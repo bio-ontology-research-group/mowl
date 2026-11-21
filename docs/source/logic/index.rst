@@ -165,12 +165,21 @@ base completion.
      - ABox
      - O ⊨ r(a, b) ?
      - {a} ⊑ ∃r.{b}
+   * - Logical query answering (one-hop, multi-hop)
+     - KB
+     - all a with O ⊨ q(a)
+     - {a} ⊑ C_q, the query rolled up into a class expression
 
 Almost every task is a subsumption test between two class expressions. The class
 expressions can be obtained in two ways: *explicitly*, by adding a definition ``X ≡ C``
 before training or reasoning, which works for every method and reasoner; or *in the latent
 space*, by composing the region of ``C`` from the learned parts, which needs the method to
 have the corresponding operation (boxes can be intersected, balls cannot).
+
+Logical query answering, as studied for knowledge graphs (one-hop queries, multi-hop paths,
+intersections, unions, negation), fits the same scheme: a tree-shaped query with one answer
+variable is a class expression, and answering it is instance retrieval. The TBox then acts
+as constraints on the answers and provides classes that queries can use.
 
 Completion tasks rank candidate axioms. Knowledge graph completion ranks role assertions
 only (link prediction); knowledge base completion also ranks axioms with class expressions.
@@ -194,6 +203,11 @@ for OWL 2 DL). :func:`mowl.reasoning.create_reasoner` picks the cheapest backend
 complete for an ontology, and warns when a backend is asked to reason over constructs it
 does not cover. Other reasoners are added with :func:`mowl.reasoning.register_reasoner`.
 
+The Kobayashi-MaRust reasoner (``km``, OWL 2 DL with verified certificates) is registered
+as an optional backend: it is used when its JAR is on the class path
+(``mowl.init_jvm(memory, extra_classpath=...)`` or ``MOWL_EXTRA_CLASSPATH``) and the OWL
+API on the class path is 4.5.29 or later, and it is then preferred to HermiT.
+
 .. testcode::
 
    from mowl.reasoning import select_reasoner, list_reasoners
@@ -203,7 +217,7 @@ does not cover. Other reasoners are added with :func:`mowl.reasoning.register_re
 
 .. testoutput::
 
-   ['structural', 'elk', 'hermit']
+   ['structural', 'elk', 'km', 'hermit']
    elk hermit
 
 :class:`mowl.reasoning.SubsumptionOracle` answers the tasks above through subsumption

@@ -41,8 +41,9 @@ _T = "tests/models/test_boxlite_model.py::"
 
 CARD = MethodCard(
     key="boxlite",
-    expressivity="DL-Lite_H",
-    tasks=("subsumption", "role-subsumption", "disjointness",),
+    expressivity="DL-Lite_H with ABox",
+    tasks=("subsumption", "role-subsumption", "disjointness", "instance-checking",
+           "role-assertion"),
     name="BoxLitE",
     family=Family.GEOMETRIC,
     region="box (convex programme)",
