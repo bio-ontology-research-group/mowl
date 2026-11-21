@@ -11,15 +11,17 @@ REGIME = RegimeCard(
     kind=RegimeKind.EVALUATION,
     summary=('Every test subsumption is paired with 10 negatives (random, or hard siblings); a '
              'score threshold tuned on validation decides, and precision/recall/F1 are reported.'),
-    components=('test set', 'metrics'),
+    components=('test set', 'negatives', 'threshold', 'metrics'),
     applies_to='Any model with subsumption scores',
     references=(HE2024HIT, DASGUPTA2020),
     standalone=False,
     introduced_with=('hit',),
-    used_by=('gumbel_box',),
-    not_implemented_reason=("'regd-sampled-f1' implements the random-negative variant on the "
-                            "child side; HiT's parent-side and sibling (hard) test negatives and "
-                            'its transfer setting are not implemented.'),
+    used_by=('gumbel_box', 'order_embeddings', 'hyperbolic_cones', 'disk_embeddings',
+             'shadow_cones', 'box_lattice'),
+    implementation='mowl.evaluation.edge_classification.EdgeClassificationF1Regime',
+    limitations=("HiT's parent-side and sibling (hard) test negatives and its transfer setting "
+                 'are not implemented; negatives are the ones a dataset provides, or uniform '
+                 'corruptions of either side.',),
     notes=('HiT, Section 4 (Multi-hop Inference and Mixed-hop Prediction, Table 2; transfer, '
            'Table 3); Gumbel boxes, Section 5.3 (F1 with 1:10 negatives on WordNet). Compare '
            "'regd-sampled-f1' (RegD)."),

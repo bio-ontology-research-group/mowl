@@ -138,3 +138,11 @@ class CommonRankingProtocol(RegimeProtocol):
     def build(self, gci_name="gci0", relation=None, **kwargs):
         from mowl.evaluation.filtered_ranking import common_ranking
         return common_ranking(gci_name=gci_name, relation=relation, **kwargs)
+
+
+class EdgeClassificationProtocol(RegimeProtocol):
+    """:class:`mowl.evaluation.edge_classification.EdgeClassificationF1Regime`."""
+
+    def build(self, **kwargs):
+        from mowl.evaluation.edge_classification import EdgeClassificationF1Regime
+        return EdgeClassificationF1Regime(**kwargs)

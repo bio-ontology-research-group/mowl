@@ -52,3 +52,33 @@ LEEMHUIS2025 = Reference(
     "Leemhuis, M., Kutz, O. (2025). Understanding the Expressive Capabilities of Knowledge "
     "Base Embeddings under Box Semantics. In Proceedings of NeSy 2025, PMLR 284:303-321.",
     "https://proceedings.mlr.press/v284/leemhuis25a.html")
+
+VENDROV2016 = Reference(
+    "vendrov2016",
+    "Vendrov, I., Kiros, R., Fidler, S., Urtasun, R. (2016). Order-Embeddings of Images and "
+    "Language. ICLR 2016.",
+    "https://arxiv.org/abs/1511.06361")
+
+GANEA2018 = Reference(
+    "ganea2018",
+    "Ganea, O.-E., Bécigneul, G., Hofmann, T. (2018). Hyperbolic Entailment Cones for "
+    "Learning Hierarchical Embeddings. ICML 2018.",
+    "https://arxiv.org/abs/1804.01882")
+
+SUZUKI2019 = Reference(
+    "suzuki2019",
+    "Suzuki, R., Takahama, R., Onoda, S. (2019). Hyperbolic Disk Embeddings for Directed "
+    "Acyclic Graphs. ICML 2019.",
+    "https://arxiv.org/abs/1902.04335")
+
+YU2023SHADOW = Reference(
+    "yu2023shadow",
+    "Yu, T., Liu, T. J. B., Tseng, A., De Sa, C. (2024). Shadow Cones: A Generalized "
+    "Framework for Partial Order Embeddings. ICLR 2024.",
+    "https://arxiv.org/abs/2305.15215")
+
+DASGUPTA2020 = Reference(
+    "dasgupta2020",
+    "Dasgupta, S. S., Boratko, M., Zhang, D., Vilnis, L., Li, X. L., McCallum, A. (2020). "
+    "Improving Local Identifiability in Probabilistic Box Embeddings. NeurIPS 2020.",
+    "https://arxiv.org/abs/2010.04831")
