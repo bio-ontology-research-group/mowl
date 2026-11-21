@@ -63,7 +63,7 @@ class ScoredModelFamily(runner.ModelFamily):
 # ---------------------------------------------------------------------------------------
 
 def _walk_model(dataset, projector, embed_dim=100, num_walks=10, walk_length=20, alpha=0.1,
-                window=5, min_count=1, workers=1, seed=0, model_filepath=None, device="cpu",
+                window=5, min_count=1, workers=4, seed=0, model_filepath=None, device="cpu",
                 walker="deepwalk", p=1.0, q=1.0):
     from mowl.models import RandomWalkPlusW2VModel
     from mowl.walking import DeepWalk, Node2Vec
@@ -78,6 +78,7 @@ def _walk_model(dataset, projector, embed_dim=100, num_walks=10, walk_length=20,
                                   workers=workers, seed=seed))
     model.set_w2v_model(vector_size=embed_dim, window=window, min_count=min_count,
                         workers=workers, seed=seed, sg=1)
+    model.device = device      # for the scoring head; Word2Vec itself runs on the CPU
     return model
 
 
@@ -103,7 +104,7 @@ def taxonomy_walks(dataset, bidirectional_taxonomy=True, **kwargs):
 
 
 def _corpus_model(dataset, with_annotations, embed_dim=100, window=5, min_count=1,
-                  workers=1, seed=0, model_filepath=None, device="cpu"):
+                  workers=4, seed=0, model_filepath=None, device="cpu"):
     from mowl.models import SyntacticPlusW2VModel
     corpus = (model_filepath + ".corpus") if model_filepath else None
     model = SyntacticPlusW2VModel(dataset, model_filepath=model_filepath,
@@ -111,6 +112,7 @@ def _corpus_model(dataset, with_annotations, embed_dim=100, window=5, min_count=
     model.set_w2v_model(vector_size=embed_dim, window=window, min_count=min_count,
                         workers=workers, seed=seed, sg=1)
     model.generate_corpus(save=True, with_annotations=with_annotations)
+    model.device = device      # for the scoring head; Word2Vec itself runs on the CPU
     return model
 
 

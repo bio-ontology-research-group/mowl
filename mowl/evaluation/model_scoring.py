@@ -155,7 +155,9 @@ class PairClassifierHead:
                                missing, len(index))
             norm = np.linalg.norm(matrix, axis=1, keepdims=True)
             matrix = matrix / np.maximum(norm, 1e-12)
-            self._vectors = th.from_numpy(matrix)
+            # Training and scoring run on the model's device (ranking scores every
+            # class for every query).
+            self._vectors = th.from_numpy(matrix).to(getattr(model, "device", "cpu"))
         return self._vectors
 
     def _training_rows(self, model):
@@ -199,6 +201,8 @@ class PairClassifierHead:
         net = th.nn.Sequential(th.nn.Linear(4 * vectors.shape[1], self.hidden), th.nn.ReLU(),
                                th.nn.Linear(self.hidden, 1))
         th.random.set_rng_state(state)
+        device = vectors.device
+        net = net.to(device)
         optimizer = th.optim.Adam(net.parameters(), lr=self.learning_rate)
         num_classes = vectors.shape[0]
         losses = []
@@ -211,8 +215,9 @@ class PairClassifierHead:
                     sub = batch[:, 0].repeat(1 + self.negatives)
                     sup = th.cat([batch[:, 1], th.randint(
                         num_classes, (len(batch) * self.negatives,), generator=generator)])
-                    label = th.zeros(len(sub))
+                    label = th.zeros(len(sub), device=device)
                     label[:len(batch)] = 1.0
+                    sub, sup = sub.to(device), sup.to(device)
                     logit = net(self._features(vectors[sub], vectors[sup])).squeeze(1)
                     loss = th.nn.functional.binary_cross_entropy_with_logits(logit, label)
                     optimizer.zero_grad()
@@ -246,9 +251,9 @@ class PairClassifierHead:
                 part = cpu[mask]
                 scores = []
                 for start in range(0, len(part), 2 ** 18):
-                    chunk = part[start:start + 2 ** 18]
+                    chunk = part[start:start + 2 ** 18].to(vectors.device)
                     scores.append(net(self._features(vectors[chunk[:, columns[0]]],
-                                                     vectors[chunk[:, columns[1]]])))
+                                                     vectors[chunk[:, columns[1]]])).cpu())
                 out[mask] = -th.cat(scores).squeeze(1)
         return out.to(rows.device)
 
