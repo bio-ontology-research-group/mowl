@@ -72,3 +72,9 @@ References
 .. [mohapatra2021a] Mohapatra, B., Bhatia, S., Mutharaju, R., & Srinivasaraghavan, G. (2021). EmELvar: A NeuroSymbolic Reasoner for the EL++ Description Logic. SemREC'21 workshop at ISWC 2021.
 
 .. [duc2021] Le Duc, C. (2021). Category-theoretical semantics of the description logic ALC. Proceedings of the 34th International Workshop on Description Logics (DL 2021), CEUR-WS vol. 2954.
+
+.. [ganea2018] Ganea, O.-E., Bécigneul, G., & Hofmann, T. (2018). `Hyperbolic Entailment Cones for Learning Hierarchical Embeddings <https://arxiv.org/abs/1804.01882>`_. In: Proceedings of the 35th International Conference on Machine Learning (ICML 2018).
+
+.. [yu2023shadow] Yu, T., Liu, T. J. B., Tseng, A., & De Sa, C. (2024). `Shadow Cones: A Generalized Framework for Partial Order Embeddings <https://arxiv.org/abs/2305.15215>`_. In: The Twelfth International Conference on Learning Representations (ICLR 2024).
+
+.. [suzuki2019] Suzuki, R., Takahama, R., & Onoda, S. (2019). `Hyperbolic Disk Embeddings for Directed Acyclic Graphs <https://arxiv.org/abs/1902.04335>`_. In: Proceedings of the 36th International Conference on Machine Learning (ICML 2019).

@@ -55,6 +55,10 @@ _DEFAULTS = {
     "dfalc": {"model_kwargs": {"anon_domain": 8}, "epochs": 200},
     "eike": {"model_kwargs": {"embed_dim": 100}, "epochs": 500},
     "boxsel": {"model_kwargs": {"embed_dim": 50}, "epochs": 500},
+    # hierarchy embeddings of the subclass order: full-batch Riemannian SGD
+    "hyperbolic_cones": {"model_kwargs": {"embed_dim": 10}, "epochs": 1000},
+    "shadow_cones": {"model_kwargs": {"embed_dim": 10}, "epochs": 1000},
+    "disk_embeddings": {"model_kwargs": {"embed_dim": 10}, "epochs": 1000},
     # needs individuals; fails with that message on the TBox-only data
     "canonical_mixture": {"model_kwargs": {}, "epochs": 500},
     "grounded": {"model_kwargs": {}, "epochs": 500},

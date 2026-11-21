@@ -44,3 +44,6 @@ from mowl.models.boxe.model import BoxE
 from mowl.models.expressive.model import ExpressivE
 from mowl.models.reshuffle.model import Reshuffle
 from mowl.models.concept2box.model import Concept2Box
+from mowl.models.hyperbolic_cones.model import HyperbolicCones
+from mowl.models.shadow_cones.model import ShadowCones
+from mowl.models.disk_embeddings.model import DiskEmbeddings

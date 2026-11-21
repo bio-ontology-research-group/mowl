@@ -38,6 +38,9 @@ relevant published methods it does not implement, with the reason.
    temporal_cones
    attributed_dl
    kg_region
+   hyperbolic_cones
+   shadow_cones
+   disk_embeddings
 
 
 Representation, training and evaluation
