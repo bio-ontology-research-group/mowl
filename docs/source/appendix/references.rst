@@ -94,3 +94,7 @@ References
 .. [lv2018transc] Lv, X., Hou, L., Li, J., & Liu, Z. (2018). `Differentiating Concepts and Instances for Knowledge Graph Embedding <https://arxiv.org/abs/1811.04588>`_. EMNLP 2018.
 
 .. [hao2019joie] Hao, J., Chen, M., Yu, W., Sun, Y., & Wang, W. (2019). `Universal Representation Learning of Knowledge Bases by Jointly Embedding Instances and Ontological Concepts <https://doi.org/10.1145/3292500.3330838>`_. KDD 2019.
+
+.. [pavlovic2025] Pavlović, A., Sallinger, E., & Schockaert, S. (2025). `Faithful Differentiable Reasoning with Reshuffled Region-based Embeddings <https://doi.org/10.24963/kr.2025/48>`_. In: Proceedings of the 22nd International Conference on Principles of Knowledge Representation and Reasoning (KR 2025), 489-499. ArXiv, abs/2406.09529.
+
+.. [teru2020] Teru, K. K., Denis, E. G., & Hamilton, W. L. (2020). `Inductive Relation Prediction by Subgraph Reasoning <https://arxiv.org/abs/1911.06962>`_. In: Proceedings of the 37th International Conference on Machine Learning (ICML 2020).

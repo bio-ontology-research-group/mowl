@@ -179,3 +179,11 @@ class FilteredRankingProtocol(RegimeProtocol):
     def build(self, **kwargs):
         from mowl.evaluation.filtered_ranking import FilteredRankingRegime
         return FilteredRankingRegime(**kwargs)
+
+
+class InductiveLinkPredictionProtocol(RegimeProtocol):
+    """:class:`mowl.evaluation.inductive_ranking.InductiveSampledRankingRegime`."""
+
+    def build(self, **kwargs):
+        from mowl.evaluation.inductive_ranking import InductiveSampledRankingRegime
+        return InductiveSampledRankingRegime(**kwargs)

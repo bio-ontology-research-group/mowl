@@ -169,7 +169,8 @@ RESHUFFLE = MethodCard(
     key="reshuffle",
     assumption="closed world over stated axioms",
     training=("pairwise-margin-ranking", "either-side-corruption",),
-    evaluation=("kg-filtered-link-prediction", "common-filtered-ranking",),
+    evaluation=("kg-filtered-link-prediction", "inductive-sampled-ranking",
+                "common-filtered-ranking",),
     name="RESHUFFLE",
     family=Family.GEOMETRIC,
     region="box after a coordinate reshuffle",
@@ -215,9 +216,21 @@ RESHUFFLE = MethodCard(
         "dropped), max-aggregation message passing shared over the layers, score "
         "-||ReLU(x_h R_r - x_t)||_2, margin ranking loss with 100 negatives. Differences: "
         "the random features are drawn once per model, not at every forward pass; training "
-        "is transductive on the projected ontology graph (Reshuffle.score_on_graph encodes "
-        "another graph with fresh features for the inductive setting of the paper); "
-        "inverse relations are separate parameters used for message passing only. The "
+        "is on the projected ontology graph; by default inverse relations are separate "
+        "parameters used for message passing only; the authors' code (and the recipes) also "
+        "train the inverse triples as positives and predict heads through the inverse matrix "
+        "(PyKEEN create_inverse_triples=True), which is Reshuffle(inverse_triples=True). "
+        "Without it the head side of a link prediction is scored with the forward matrix, "
+        "which favours entities with small feature matrices and ranks heads far worse. Inductive link prediction, "
+        "the setting of the paper: Reshuffle.inductive_costs(graph, rows) scores triples "
+        "over a graph with unseen entities, encoding it with fresh random features, and is "
+        "what the evaluation regime inductive-sampled-ranking calls (benchmarks "
+        "kg-inductive-*, with the published Hits@10 of Tables 2 and 3 and the settings of "
+        "the authors' code as recipes). The authors stop training early on Hits@10 of the "
+        "validation triples (every 10 epochs, patience 10, relative delta 0.01, best weights "
+        "restored): Reshuffle(early_stopping={...}). Not reproduced exactly: the authors draw "
+        "the test negatives without a seed and new random features at every batch, mOWL "
+        "draws both once per evaluation seed. The "
         "propositions above are the paper's; tests/nn/test_reshuffle_module.py checks "
         "Propositions 1, 2 and 7 on a hand-built rule graph (Equation 7) for the "
         "matrices and the message passing of Equation 6, not for learned matrices. The "
