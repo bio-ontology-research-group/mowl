@@ -42,14 +42,17 @@ class FilteredRankingRegime(EvaluationRegime):
     with raw and filtered metrics.
 
     :param gci_name: Normal form of the test axioms (``"gci0"``, ``"gci2"``,
-        ``"class_assertion"``).
+        ``"class_assertion"``, ``"object_property_assertion"``).
     :param target: ``"tail"`` (rank :math:`D` in :math:`C \\sqsubseteq D` /
-        :math:`C \\sqsubseteq \\exists r.D`, or :math:`C` in :math:`C(a)`) or ``"head"``
-        (rank :math:`C`).
-    :param relation: For ``gci2``: only test axioms with this role IRI are queries.
+        :math:`C \\sqsubseteq \\exists r.D`, or :math:`C` in :math:`C(a)`, or :math:`b` in
+        :math:`r(a, b)`) or ``"head"`` (rank :math:`C`, or :math:`a`).
+    :param relation: For ``gci2`` and ``object_property_assertion``: only test axioms with
+        this role IRI are queries.
     :param candidates: ``"evaluation_classes"`` (the dataset's
         ``evaluation_classes``: tails for ``target="tail"``, heads otherwise),
-        ``"classes"`` (all classes of the dataset) or an iterable of IRIs.
+        ``"classes"`` (all classes of the dataset), ``"individuals"`` (all individuals of
+        the model, for ``object_property_assertion``), ``"dataset:<attribute>"`` (the class
+        IRIs in that attribute of the dataset) or an iterable of IRIs.
     :param filter_by: Which known positives are filtered for the filtered metrics, any of
         ``"train"`` (training axioms of the same normal form), ``"valid"``, ``"test"``
         (the other test axioms) and ``"closure"`` (the deductive closure, see
@@ -81,7 +84,7 @@ class FilteredRankingRegime(EvaluationRegime):
                  ties="ordinal", auc="mowl", hits=(1, 10, 100), micro=False, raw=True,
                  scoring="loss", split="test", key="", max_rows=2 ** 22,
                  strict_hits=False, queries=None, exclude_head=False):
-        if gci_name not in ("gci0", "gci2", "class_assertion"):
+        if gci_name not in ("gci0", "gci2", "class_assertion", "object_property_assertion"):
             raise ValueError(f"Unsupported normal form {gci_name!r}.")
         if target not in ("head", "tail"):
             raise ValueError("target must be 'head' or 'tail'.")
@@ -120,6 +123,8 @@ class FilteredRankingRegime(EvaluationRegime):
         return 0 if self.target_col != 0 else len(COLUMNS[self.gci_name]) - 1
 
     def candidate_iris(self, dataset):
+        if isinstance(self.candidates, str) and self.candidates.startswith("dataset:"):
+            return list(getattr(dataset, self.candidates.split(":", 1)[1]))
         if self.candidates == "classes":
             return list(dataset.classes.as_str)
         if self.candidates == "evaluation_classes":
@@ -128,7 +133,8 @@ class FilteredRankingRegime(EvaluationRegime):
         return list(self.candidates)
 
     def _restrict(self, model, rows):
-        if rows is None or self.relation is None or self.gci_name != "gci2":
+        if rows is None or self.relation is None \
+                or self.gci_name not in ("gci2", "object_property_assertion"):
             return rows
         rel = model.object_property_index_dict.get(self.relation)
         if rel is None:
@@ -200,7 +206,10 @@ class FilteredRankingRegime(EvaluationRegime):
         else:
             rows, dropped = self._explicit_rows(model, dataset)
             skipped = dropped
-        cands = candidate_indices(model, self.candidate_iris(dataset))
+        if self.candidates == "individuals":
+            cands = th.arange(len(model.individual_index_dict), dtype=th.long)
+        else:
+            cands = candidate_indices(model, self.candidate_iris(dataset))
         filters = None
         if self.filter_by:
             filters = build_filter(self._filter_rows(model, dataset), self.target_col)
@@ -378,6 +387,72 @@ class KGLinkPredictionRegime(EvaluationRegime):
         out["all"] = {m: both[m] for m in self.metrics}
         self.info = {"scoring": self.tail.info.get("scoring"), "num_candidates": n,
                      "queries": int(len(ranks) / 2), "directions": 2}
+        return out
+
+
+class AssertionLinkPredictionRegime(EvaluationRegime):
+    """Raw and filtered link prediction on role assertions :math:`r(a, b)` between
+    individuals, as in TransE, TransC and EIKE (Wang et al., 2024, Section 5.4): every test
+    assertion is ranked as the object of :math:`r(a, ?)` and, if ``"head"`` is among the
+    ``directions``, as the subject of :math:`r(?, b)`, among all individuals of the model;
+    the raw ranks are the ranks among all candidates, the filtered ranks are those after
+    the candidates known to be correct (training, validation and test assertions) are
+    removed. MRR, MR and Hits@k over all (assertion, direction) pairs. Tied candidates
+    share the average rank (the reference code orders ties by position).
+
+    Scores are what the model declares (:mod:`mowl.evaluation.model_scoring`), for the form
+    ``object_property_assertion``.
+
+    :param directions: ``("head", "tail")`` (default) or ``("tail",)``, the setting of the
+        Concept2Box paper (queries :math:`(h, r, ?t)`).
+    :param relation: Restrict the queries to one role IRI (default: all roles).
+    :param hits: Values of :math:`k` for Hits@\\ :math:`k`.
+    :param filter_by: Sets whose assertions are filtered, see :class:`FilteredRankingRegime`.
+    :param max_rows: Candidate axioms scored at a time.
+    """
+
+    key = "assertion-link-prediction"
+    FORM = "object_property_assertion"
+
+    def __init__(self, directions=("head", "tail"), relation=None, hits=(1, 3, 10),
+                 ties="average", filter_by=("train", "valid", "test"), scoring="auto",
+                 split="test", max_rows=2 ** 22, key=None):
+        directions = tuple(directions)
+        if not directions or set(directions) - {"head", "tail"}:
+            raise ValueError("directions must be a subset of ('head', 'tail').")
+        if key:
+            self.key = key
+        self.directions, self.hits = directions, tuple(hits)
+        self.parts = {d: FilteredRankingRegime(
+            gci_name=self.FORM, target=d, relation=relation, candidates="individuals",
+            filter_by=tuple(filter_by), ties=ties, hits=self.hits, raw=True, scoring=scoring,
+            split=split, max_rows=max_rows) for d in directions}
+        names = ["mrr", "mr"] + [f"hits@{k}" for k in self.hits]
+        self.metrics = tuple(names + [f"f_{n}" for n in names])
+        self.subsets = ("all",) + (directions if len(directions) > 1 else ())
+        self.info = {}
+
+    def prepare(self, dataset):
+        for part in self.parts.values():
+            part.prepare(dataset)
+        return dataset
+
+    def evaluate(self, model, dataset):
+        out, raw, filt = {}, [], []
+        for name, part in self.parts.items():
+            result = part.evaluate(model, dataset)["all"]
+            if len(self.directions) > 1:
+                out[name] = {m: result[m] for m in self.metrics}
+            raw.extend(part.last_ranks["raw"].tolist())
+            filt.extend(part.last_ranks["filtered"].tolist())
+        n = next(iter(self.parts.values())).info.get("num_candidates")
+        both = summarise_ranks(raw, n, hits=self.hits, auc="mowl")
+        both.update(summarise_ranks(filt, n, hits=self.hits, auc="mowl", prefix="f_"))
+        out["all"] = {m: both[m] for m in self.metrics}
+        first = next(iter(self.parts.values())).info
+        self.info = {"scoring": first.get("scoring"), "num_candidates": n,
+                     "queries": int(len(raw) / len(self.parts)),
+                     "directions": list(self.directions)}
         return out
 
 

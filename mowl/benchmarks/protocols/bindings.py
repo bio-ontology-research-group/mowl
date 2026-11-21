@@ -154,3 +154,28 @@ class KGLinkPredictionProtocol(RegimeProtocol):
     def build(self, **kwargs):
         from mowl.evaluation.filtered_ranking import KGLinkPredictionRegime
         return KGLinkPredictionRegime(**kwargs)
+
+
+class TripleClassificationProtocol(RegimeProtocol):
+    """:class:`mowl.evaluation.triple_classification.TripleClassificationRegime`."""
+
+    def build(self, **kwargs):
+        from mowl.evaluation.triple_classification import TripleClassificationRegime
+        return TripleClassificationRegime(**kwargs)
+
+
+class AssertionLinkPredictionProtocol(RegimeProtocol):
+    """:class:`mowl.evaluation.filtered_ranking.AssertionLinkPredictionRegime`."""
+
+    def build(self, **kwargs):
+        from mowl.evaluation.filtered_ranking import AssertionLinkPredictionRegime
+        return AssertionLinkPredictionRegime(**kwargs)
+
+
+class FilteredRankingProtocol(RegimeProtocol):
+    """:class:`mowl.evaluation.filtered_ranking.FilteredRankingRegime` with the arguments
+    of ``protocol_kwargs`` (raw and filtered metrics of one side of one axiom form)."""
+
+    def build(self, **kwargs):
+        from mowl.evaluation.filtered_ranking import FilteredRankingRegime
+        return FilteredRankingRegime(**kwargs)

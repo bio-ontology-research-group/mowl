@@ -204,7 +204,8 @@ training ontology.
     def eval_gci_name(self, value):
         valid_gci_names = ["gci0", "gci1", "gci2", "gci3"]
         if self._extended:
-            valid_gci_names.extend(["gci0_bot", "gci1_bot", "gci3_bot"])
+            valid_gci_names.extend(["gci0_bot", "gci1_bot", "gci3_bot", "class_assertion",
+                                    "object_property_assertion"])
         if value not in valid_gci_names:
             raise ValueError(f"eval_gci_name must be one of {valid_gci_names}, got '{value}'")
         self._eval_gci_name = value

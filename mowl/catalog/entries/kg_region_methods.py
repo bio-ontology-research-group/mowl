@@ -406,7 +406,9 @@ CONCEPT2BOX = MethodCard(
     key="concept2box",
     assumption="closed world over stated axioms",
     training=("pairwise-margin-ranking", "either-side-corruption",),
-    evaluation=("kg-filtered-link-prediction", "common-filtered-ranking",),
+    evaluation=("kg-filtered-link-prediction", "common-filtered-ranking",
+                "two-view-kg-completion", "concept-linking-ranking",
+                "assertion-link-prediction"),
     name="Concept2Box",
     family=Family.GEOMETRIC,
     region="box",
@@ -446,7 +448,12 @@ CONCEPT2BOX = MethodCard(
         "tested against the Bessel expression and a Monte Carlo estimate. The paper "
         "alternates updates of the three losses; mOWL sums them (Equation 11). Margins "
         "(0.3, 0.15) and learning rate (0.005) are the paper's; dimensions are smaller. "
-        "No reference code was consulted, and no published number is reproduced."),
+        "No reference code was consulted (none is public). Benchmarks: the DBpedia data of "
+        "JOIE (public; the paper's Recipe dataset is not) with kg completion in both views "
+        "and concept linking, published numbers and a recipe of the Appendix settings; the "
+        "split of the paper is not released and the public data are smaller than its "
+        "Table 1, so the numbers are indicative targets only. The relation isa of the "
+        "ontology view is a relation like the 19 others, as in the paper."),
     references=(
         Reference("huang2023",
                   "Huang, Z., Wang, D., Huang, B., Zhang, C., Shang, J., Liang, Y., Wang, Z., "

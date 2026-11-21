@@ -94,3 +94,29 @@ PAVLOVIC2023 = Reference(
     "Pavlović, A., Sallinger, E. (2023). ExpressivE: A Spatio-Functional Embedding For "
     "Knowledge Graph Completion. ICLR 2023.",
     "https://arxiv.org/abs/2206.04192")
+
+WANG2024EIKE = Reference(
+    "wang2024eike",
+    "Wang, K., Qi, G., Chen, J., Huang, Y., Wu, T. (2024). Embedding Ontologies via "
+    "Incorporating Extensional and Intensional Knowledge. arXiv:2402.01677 (IJCAI 2024 / Data "
+    "Intelligence).",
+    "https://arxiv.org/abs/2402.01677")
+
+HUANG2023 = Reference(
+    "huang2023",
+    "Huang, Z., Wang, D., Huang, B., Zhang, C., Shang, J., Liang, Y., Wang, Z., Li, X., "
+    "Faloutsos, C., Sun, Y., Wang, W. (2023). Concept2Box: Joint Geometric Embeddings for "
+    "Learning Two-View Knowledge Graphs. arXiv:2307.01933.",
+    "https://arxiv.org/abs/2307.01933")
+
+LV2018TRANSC = Reference(
+    "lv2018transc",
+    "Lv, X., Hou, L., Li, J., Liu, Z. (2018). Differentiating Concepts and Instances for "
+    "Knowledge Graph Embedding. EMNLP 2018.",
+    "https://arxiv.org/abs/1811.04588")
+
+HAO2019JOIE = Reference(
+    "hao2019joie",
+    "Hao, J., Chen, M., Yu, W., Sun, Y., Wang, W. (2019). Universal Representation Learning of "
+    "Knowledge Bases by Jointly Embedding Instances and Ontological Concepts. KDD 2019.",
+    "https://doi.org/10.1145/3292500.3330838")

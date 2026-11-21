@@ -159,7 +159,8 @@ def test_elem_recipes_use_the_released_loss():
 
 #: Evaluation regimes that rank the missing class of any axiom form; their card names the
 #: general task, the benchmark the form it uses.
-GENERAL_REGIMES = {"cate-filtered-ranking", "dele-evaluation", "common-filtered-ranking"}
+GENERAL_REGIMES = {"cate-filtered-ranking", "dele-evaluation", "common-filtered-ranking",
+                   "triple-classification-thresholds"}
 
 
 def test_every_benchmark_is_linked_to_tasks_and_a_regime_card():

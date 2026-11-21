@@ -491,3 +491,67 @@ The tables below are generated from the registry
 (:func:`mowl.benchmarks.report.published_to_rst`).
 
 .. include:: _published.rst
+
+Two-view benchmarks: EIKE and Concept2Box
+-----------------------------------------
+
+Both papers learn from data with a concept level and an instance level. In mOWL the data
+are ontologies with an ABox: instances are individuals, concepts are classes,
+``InstanceOf`` pairs are class assertions, ``SubClassOf`` pairs are subclass axioms and
+relational triples between instances are object property assertions.
+
+.. list-table::
+   :header-rows: 1
+
+   * - Benchmark
+     - Data
+     - Task (evaluation regime)
+   * - ``yago39k-instanceof-classification``, ``yago39k-subclassof-classification``,
+       ``yago39k-relational-classification``, ``m-yago39k-instanceof-classification``,
+       ``m-yago39k-subclassof-classification``
+     - YAGO39K and M-YAGO39K [lv2018transc]_, with the negatives of the release
+     - Triple classification with one threshold per relation (``triple-classification-thresholds``)
+   * - ``yago39k-link-prediction``
+     - YAGO39K
+     - Raw and filtered head and tail ranking of relational triples (``assertion-link-prediction``)
+   * - ``joie-dbpedia-instance-view-completion``, ``joie-dbpedia-ontology-view-completion``
+     - DBpedia of JOIE [hao2019joie]_ with a seeded random 80/10/10 split of the triples
+     - Tail prediction (``two-view-kg-completion``)
+   * - ``joie-dbpedia-concept-linking``
+     - The same, with the cross-view links split
+     - Ranking all concepts of an entity (``concept-linking-ranking``)
+
+Data that cannot be used: the third dataset of EIKE, DB99K-242, has no released splits or
+negatives (the DBpedia of the EIKE repository is another one), and the Recipe dataset of
+Concept2Box is built from Amazon.com listings and is not public. The public DBpedia
+release of JOIE is smaller than the statistics printed in the Concept2Box paper, and the
+paper's random split is not released: its numbers are indicative targets only.
+
+EIKE encodes the concept names with a pre-trained language model. mOWL takes the vectors as
+an optional input and neither imports nor downloads a model: encode the texts with any encoder, reduce
+them to the embedding dimension and pass them as ``intensional_vectors`` (a dictionary, or the
+path of a file written by ``EIKE.save_intensional_vectors``; a recipe run takes it with
+``--param intensional_vectors=<file>``). The paper used Sentence-BERT
+(``all-MiniLM-L6-v2``, 384 dimensions, frozen) and a trained linear map to 100 dimensions.
+
+.. testcode::
+
+   import numpy as np
+   from mowl.models.eike.model import EIKE
+
+   texts = {"http://example.org/Danish_male_actors": "Danish male actors",
+            "http://example.org/Footballer": "Footballer"}
+   encoder = lambda strings: np.array([[len(s), s.count("a"), 1.0] for s in strings])
+   vectors = EIKE.encode_class_texts(texts, encoder)       # the paper: a Sentence-BERT encoder
+   vectors = EIKE.pca_vectors(vectors, 2)                   # down to the embedding dimension
+   print({iri.rsplit("/", 1)[-1]: v.shape for iri, v in vectors.items()})
+
+.. testoutput::
+
+   {'Danish_male_actors': (2,), 'Footballer': (2,)}
+
+.. code-block:: bash
+
+   python -m mowl.benchmarks run yago39k-instanceof-classification --method eike \
+       --recipe wang2024eike:pre-eye --param intensional_vectors=minilm100.npz \
+       --seed 0 --device cuda --out yago_eike_pre_eye.json

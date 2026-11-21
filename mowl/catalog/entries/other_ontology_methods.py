@@ -7,7 +7,8 @@ EIKE = MethodCard(
     key="eike",
     assumption="closed world over stated axioms",
     training=("pairwise-margin-ranking", "either-side-corruption",),
-    evaluation=("kg-filtered-link-prediction", "common-filtered-ranking",),
+    evaluation=("kg-filtered-link-prediction", "common-filtered-ranking",
+                "triple-classification-thresholds", "assertion-link-prediction"),
     expressivity="taxonomy with ABox",
     tasks=("subsumption", "instance-checking", "role-assertion"),
     name="EIKE",
@@ -60,12 +61,21 @@ EIKE = MethodCard(
         "(head or tail corrupted, one of each per positive); the ranking loss pairs a "
         "positive with its own corruptions. Margins and alpha are model arguments; the "
         "paper's values are searched on the grid {0.1, 0.3, 0.4, 0.5, 1, 2} (margins) and "
-        "{0.1, 0.5, 1, 2} (alpha), dimension 100, SGD lr 0.001, 1000-2000 epochs; no "
-        "recipe or reproduction of its YAGO39K/DB99K numbers is provided (datasets not "
-        "in mOWL). The language model is an optional input: pass pre-computed vectors "
-        "(dict class IRI -> vector) as intensional_vectors; mOWL imports and downloads no "
-        "language model (EIKE.encode_class_texts accepts any encoder callable). The "
-        "authors' code is only in the paper's supplementary material and was not checked."),
+        "{0.1, 0.5, 1, 2} (alpha), dimension 100, SGD lr 0.001, 1000-2000 epochs; the best "
+        "configurations are in the Appendix of the authors' repository "
+        "(keyu-wang-2002/EIKE) and are the recipes of the benchmarks on YAGO39K and "
+        "M-YAGO39K (triple classification, link prediction, published numbers of Tables 2-4). "
+        "The authors' code trains differently (SGD, mixed mini-batches, per-step "
+        "normalisation, a hard-negative schedule), uses the L1 norm in the relational score "
+        "in most best configurations and a Bernoulli corruption: none of these is in mOWL. "
+        "The language model is an optional input: pass pre-computed vectors "
+        "(dict class IRI -> vector, or the path of a file written by "
+        "EIKE.save_intensional_vectors) as intensional_vectors; mOWL imports and downloads no "
+        "language model (EIKE.encode_class_texts accepts any encoder callable, "
+        "EIKE.pca_vectors reduces them to the embedding dimension). The paper's code used "
+        "all-MiniLM-L6-v2 (384 dimensions, frozen) and a trained linear map to 100 "
+        "dimensions. Its third dataset, DB99K-242, has no released splits or negatives and is "
+        "not in mOWL."),
 )
 
 BOXSEL = MethodCard(

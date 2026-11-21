@@ -22,6 +22,7 @@ COLUMNS = {
     "gci2": ("C", "r", "D"),
     "gci3": ("r", "C", "D"),
     "class_assertion": ("a", "C"),
+    "object_property_assertion": ("a", "r", "b"),
 }
 
 

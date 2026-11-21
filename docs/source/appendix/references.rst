@@ -86,3 +86,11 @@ References
 .. [zhang2021cone] Zhang, Z., Wang, J., Chen, J., Ji, S., & Wu, F. (2021). `ConE: Cone Embeddings for Multi-Hop Reasoning over Knowledge Graphs <https://arxiv.org/abs/2110.13715>`_. NeurIPS 2021.
 
 .. [he2024acone] He, Y., Hernandez, D., Nayyeri, M., Xiong, B., Zhu, Y., Kharlamov, E., & Staab, S. (2024). `Generating SROI⁻ Ontologies via Knowledge Graph Query Embedding Learning <https://arxiv.org/abs/2407.09212>`_. ArXiv, abs/2407.09212.
+
+.. [wang2024eike] Wang, K., Qi, G., Chen, J., Huang, Y., & Wu, T. (2024). `Embedding Ontologies via Incorporating Extensional and Intensional Knowledge <https://arxiv.org/abs/2402.01677>`_. IJCAI 2024 (arXiv:2402.01677).
+
+.. [huang2023] Huang, Z., Wang, D., Huang, B., Zhang, C., Shang, J., Liang, Y., Wang, Z., Li, X., Faloutsos, C., Sun, Y., & Wang, W. (2023). `Concept2Box: Joint Geometric Embeddings for Learning Two-View Knowledge Graphs <https://arxiv.org/abs/2307.01933>`_. arXiv:2307.01933.
+
+.. [lv2018transc] Lv, X., Hou, L., Li, J., & Liu, Z. (2018). `Differentiating Concepts and Instances for Knowledge Graph Embedding <https://arxiv.org/abs/1811.04588>`_. EMNLP 2018.
+
+.. [hao2019joie] Hao, J., Chen, M., Yu, W., Sun, Y., & Wang, W. (2019). `Universal Representation Learning of Knowledge Bases by Jointly Embedding Instances and Ontological Concepts <https://doi.org/10.1145/3292500.3330838>`_. KDD 2019.

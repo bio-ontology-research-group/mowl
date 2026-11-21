@@ -1,5 +1,6 @@
 """EIKE: extensional and intensional knowledge embedding (Wang et al., 2024)."""
 import re
+from urllib.parse import unquote
 
 import numpy as np
 import torch as th
@@ -11,7 +12,7 @@ from mowl.nn.el.eike.module import EIKEModule
 def name_to_text(iri):
     """The text the paper feeds to the language model for a concept without description: the
     name part of its IRI, underscores replaced by spaces, surrounding brackets stripped."""
-    name = re.split(r"[#/]", iri.strip("<>"))[-1]
+    name = unquote(re.split(r"[#/]", iri.strip("<>"))[-1])
     return name.replace("_", " ").strip("<> ")
 
 
@@ -35,7 +36,8 @@ class EIKE(EmbeddingELModel):
     :param instance_map: ``"eye"`` (EYE) or ``"matrix"`` (MAT) for the virtual instance
         embedding :math:`i^i = M i^e`.
     :param intensional_vectors: Optional dict class IRI -> vector (e.g. Sentence-BERT
-        encodings of the class names); classes missing from it keep a random vector (the
+        encodings of the class names), or the path of a file written by
+        :meth:`save_intensional_vectors`; classes missing from it keep a random vector (the
         paper's UNP variant for them). No language model is needed or downloaded by mOWL.
     :param freeze_intensional: Do not train the intensional concept vectors.
     :param neg_sampling_gcis: As in :class:`~mowl.base_models.EmbeddingELModel`.
@@ -49,6 +51,8 @@ class EIKE(EmbeddingELModel):
                  instance_map="eye", intensional_vectors=None, freeze_intensional=False,
                  learning_rate=0.001, batch_size=4096 * 8, model_filepath=None, device="cpu",
                  neg_sampling_gcis=None):
+        if isinstance(intensional_vectors, str):
+            intensional_vectors = self.load_intensional_vectors(intensional_vectors)
         if intensional_vectors:
             dims = {np.asarray(v).shape[-1] for v in intensional_vectors.values()}
             if dims != {embed_dim}:
@@ -85,6 +89,36 @@ class EIKE(EmbeddingELModel):
         iris = list(texts)
         vectors = np.asarray(encoder([texts[i] for i in iris]))
         return {i: v for i, v in zip(iris, vectors)}
+
+    @staticmethod
+    def pca_vectors(vectors, dim):
+        """Reduce vectors (dict IRI -> vector) to ``dim`` dimensions with a principal component
+        projection, for language-model vectors that are larger than ``embed_dim``. The
+        paper's code instead trains a linear map from the (frozen) language-model vectors to
+        the embedding space; mOWL's intensional vectors are the embedding itself."""
+        iris = list(vectors)
+        x = np.asarray([vectors[i] for i in iris], dtype="float64")
+        x = x - x.mean(axis=0)
+        _, _, vt = np.linalg.svd(x, full_matrices=False)
+        k = min(dim, vt.shape[0])
+        y = x @ vt[:k].T
+        if k < dim:
+            y = np.pad(y, ((0, 0), (0, dim - k)))
+        return {i: v.astype("float32") for i, v in zip(iris, y)}
+
+    @staticmethod
+    def save_intensional_vectors(path, vectors):
+        """Write a dict class IRI -> vector to ``path`` (an ``.npz`` file with the arrays
+        ``iris`` and ``vectors``), the form ``intensional_vectors=path`` reads."""
+        iris = list(vectors)
+        np.savez(path, iris=np.asarray(iris),
+                 vectors=np.asarray([vectors[i] for i in iris], dtype="float32"))
+
+    @staticmethod
+    def load_intensional_vectors(path):
+        """Read what :meth:`save_intensional_vectors` wrote."""
+        with np.load(path, allow_pickle=False) as data:
+            return {str(i): v for i, v in zip(data["iris"], data["vectors"])}
 
     def init_module(self):
         init = None
