@@ -27,6 +27,7 @@ relevant published methods it does not implement, with the reason.
    bcbox
    alcone
    dfalc
+   eike
    e2r
    hit
    ont
