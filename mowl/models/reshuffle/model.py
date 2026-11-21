@@ -43,12 +43,10 @@ class Reshuffle(RegionKGEModel):
         an entity or relation unknown to the training graph are dropped), filtered, all
         entities as candidates, Hits@10 over both sides.
     :param inverse_triples: Train as the authors' code does (the setting of all published
-        numbers): PyKEEN adds the inverse of every training triple as a positive, the
-        inverse matrices are relations of their own, and a head is predicted from the tail
-        with the inverse matrix (``create_inverse_triples=True``). Without (the default),
-        the inverse matrices only carry messages and heads are scored with the forward
-        matrix, which favours entities with small feature matrices on the head side:
-        use ``inverse_triples=True`` for link prediction on knowledge graphs.
+        results; the default): the inverse of every triple is an extra positive with its
+        own relation matrix, and a head is predicted with the inverse matrix
+        (``create_inverse_triples=True``). ``False`` trains on the forward triples only and
+        scores heads with the forward matrix, which predicts heads poorly.
     :param kge_kwargs: Further arguments of the PyKEEN model, e.g. ``aggregation``
         (``"max_self_noLoop"`` is RESHUFFLE without loop), ``row_function``
         (``"square"`` is RESHUFFLE2), ``density``.
@@ -58,7 +56,7 @@ class Reshuffle(RegionKGEModel):
 
     def __init__(self, dataset, l=25,  # noqa: E741
                  k=80, num_layers=4, learning_rate=5e-3,
-                 num_negs_per_pos=100, early_stopping=None, inverse_triples=False,
+                 num_negs_per_pos=100, early_stopping=None, inverse_triples=True,
                  kge_kwargs=None, **kwargs):
         self.create_inverse_triples = bool(inverse_triples)
         self.early_stopping = None if early_stopping is None else dict(early_stopping)
