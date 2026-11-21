@@ -55,6 +55,14 @@ from mowl.geometric.helly import (
     helly_check,
 )
 from mowl.geometric.init import ExactBoxInit
+from mowl.geometric.least_model import (
+    IntervalRealisation,
+    LeastModel,
+    check_model,
+    interval_realisation,
+    least_model,
+    least_model_from_model,
+)
 from mowl.geometric.intervals import IntervalUnionModel
 from mowl.geometric.normal_forms import (
     BOTTOM,
@@ -124,6 +132,8 @@ __all__ = [
     "InternalConsistencyError",
     "IntervalUnion",
     "IntervalUnionModel",
+    "IntervalRealisation",
+    "LeastModel",
     "MissingDependency",
     "ModelChecker",
     "NF1",
@@ -146,6 +156,7 @@ __all__ = [
     "boxes_as_tensors",
     "certificate_triangles",
     "checker",
+    "check_model",
     "class_points",
     "completion",
     "export",
@@ -153,11 +164,14 @@ __all__ = [
     "helly_check",
     "individual_of_name",
     "init",
+    "interval_realisation",
     "intervals",
     "is_nominal_name",
     "nominal_name",
     "normal_forms",
     "normalise",
+    "least_model",
+    "least_model_from_model",
     "polyhedral",
     "simplex_points",
     "to_bounding_boxes",
