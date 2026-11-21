@@ -317,12 +317,9 @@ def test_multiboxel_structural_survives_reload_and_narrow_tensor_raises(
         build_structural_tables(_DummyModel())
 
 
-_PIZZA_EL_DIR = Path(
-    os.environ.get(
-        "MOWL_PIZZA_EL_DIR",
-        "/home/leechuck/Public/software/faithful-dl-embedding/experiments/data/pizza-el",
-    )
-)
+# Optional: a directory with the Pizza-EL training ontology (``ontology.owl``), or the
+# ontology file itself. The test that needs it is skipped when the variable is not set.
+_PIZZA_EL_DIR = Path(os.environ.get("MOWL_PIZZA_EL_DIR", "pizza-el-not-configured"))
 _PIZZA_EL_ONT = (
     _PIZZA_EL_DIR if _PIZZA_EL_DIR.suffix == ".owl" else _PIZZA_EL_DIR / "ontology.owl"
 )

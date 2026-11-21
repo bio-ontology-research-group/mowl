@@ -472,7 +472,7 @@ def run_benchmark(benchmark, method=None, model_factory=None, model_kwargs=None,
     :param select_best: Reload the parameters with the best validation loss after
         training (EL models with a validation set).
     :param workdir: Directory for model checkpoints (default: a new directory under
-        ``$TMPDIR`` or ``~/tmp``).
+        the system temporary directory, which honours ``$TMPDIR``).
     :param jvm_memory: Heap size if the runner has to start the JVM.
     :param deterministic: Request deterministic PyTorch algorithms.
     :param recipe: Train as a publication did: ``True`` (the only recipe of the method on
@@ -518,7 +518,7 @@ def run_benchmark(benchmark, method=None, model_factory=None, model_kwargs=None,
     t_load = time.time()
 
     if workdir is None:
-        base = os.environ.get("TMPDIR") or os.path.expanduser("~/tmp")
+        base = tempfile.gettempdir()
         os.makedirs(base, exist_ok=True)
         workdir = tempfile.mkdtemp(prefix=f"mowl_bench_{benchmark.key}_", dir=base)
     os.makedirs(workdir, exist_ok=True)

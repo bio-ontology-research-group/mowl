@@ -123,8 +123,8 @@ For :math:`k \ge 3`, :math:`\mathcal{T}_k` has primitive classes
 chain of binary intersections using shared prefix definitions
 ``Aux_1_2``, ``Aux_1_2_3``, etc., so that binary normalisation produces a clean
 binary definition DAG for :class:`~mowl.nn.el.structural.DefinitionTable`.
-All ontology files and checkpoints are written under ``$TMPDIR`` (defaulting
-to ``~/tmp``).
+All ontology files and checkpoints are written under the system
+temporary directory (which honours ``$TMPDIR``).
 
 .. GENERATED FROM PYTHON SOURCE LINES 96-147
 
@@ -132,7 +132,7 @@ to ``~/tmp``).
 
 
     NS = "http://mowl.borg/geo#"
-    TMP_ROOT = os.environ.get("TMPDIR") or os.path.expanduser("~/tmp")
+    TMP_ROOT = tempfile.gettempdir()
     os.makedirs(TMP_ROOT, exist_ok=True)
     WORK_DIR = tempfile.mkdtemp(prefix="mowl_tk_tutorial_", dir=TMP_ROOT)
 

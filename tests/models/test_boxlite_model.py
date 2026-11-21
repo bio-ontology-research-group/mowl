@@ -50,7 +50,7 @@ def _kb(name):
 
 
 def _scratch():
-    base = os.environ.get("TMPDIR") or os.path.expanduser("~/tmp")
+    base = tempfile.gettempdir()
     os.makedirs(base, exist_ok=True)
     return tempfile.mkdtemp(prefix="mowl_boxlite_", dir=base)
 

@@ -3,6 +3,7 @@ zero-loss guarantee (Theorem 2), training and scoring end to end, unseen concept
 T3 Helly pattern and the benchmark runner."""
 
 import os
+import tempfile
 
 import numpy as np
 import pytest
@@ -71,7 +72,7 @@ def pets_dataset(validation=True):
 
 
 def scratch_file(name):
-    base = os.environ.get("TMPDIR") or os.path.expanduser("~/tmp")
+    base = tempfile.gettempdir()
     d = os.path.join(base, "mowl_cate_tests")
     os.makedirs(d, exist_ok=True)
     return os.path.join(d, name)

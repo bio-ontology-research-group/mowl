@@ -180,7 +180,7 @@ class TestClosure(TestCase):
         p, b, a = self._ids(cl, "P", "B", "A")
         mask = cl.contains("gci0", th.tensor([[p, b], [p, a]]))
         self.assertEqual(mask.tolist(), [True, False])
-        with tempfile.TemporaryDirectory(dir=os.path.expanduser("~/tmp")) as d:
+        with tempfile.TemporaryDirectory() as d:
             c1 = DeductiveClosure.from_ontology(self.ont_e, cache_dir=d)
             files = os.listdir(d)
             self.assertEqual(len(files), 1)

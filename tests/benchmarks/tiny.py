@@ -50,8 +50,8 @@ def _write(path, iri, lines):
 
 
 def scratch_dir():
-    """A fresh directory under $TMPDIR (or ~/tmp), never /tmp."""
-    base = os.environ.get("TMPDIR") or os.path.expanduser("~/tmp")
+    """A fresh directory under the system temporary directory (honours $TMPDIR)."""
+    base = tempfile.gettempdir()
     os.makedirs(base, exist_ok=True)
     return tempfile.mkdtemp(prefix="mowl_bench_test_", dir=base)
 

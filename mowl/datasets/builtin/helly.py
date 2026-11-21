@@ -67,7 +67,7 @@ def build_tk_ontology(k, adapter=None):
 class HellyTkDataset(PathDataset):
     """:math:`\\mathcal{T}_k` (see :func:`build_tk_ontology`) as a dataset with only a
     training ontology. The ontology is written in OWL functional syntax to ``directory``
-    (default: a new directory under ``$TMPDIR``, or ``~/tmp``).
+    (default: a new directory under the system temporary directory, which honours ``$TMPDIR``).
 
     :param k: Number of primitive classes, at least 3.
     :param directory: Where to write ``t<k>.owl``.
@@ -80,7 +80,7 @@ class HellyTkDataset(PathDataset):
         from mowl.owlapi import OWLAPIAdapter
         self.k = int(k)
         if directory is None:
-            base = os.environ.get("TMPDIR") or os.path.expanduser("~/tmp")
+            base = tempfile.gettempdir()
             os.makedirs(base, exist_ok=True)
             directory = tempfile.mkdtemp(prefix="mowl_helly_", dir=base)
         os.makedirs(directory, exist_ok=True)

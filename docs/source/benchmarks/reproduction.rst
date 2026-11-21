@@ -90,7 +90,7 @@ Summary
      - ``faithfulness-*``
      - partly
      - The paper does not print its hyperparameters; 1 seed.
-   * - VolumeMultiBoxEL, OctagonEL, BinaryCodeBox, ALConeModel, E2R
+   * - VolumeMultiBoxEL, OctagonEL, BinaryCodeBox, ALConeModel, E2R, EmEL(var)
      - none
      - no benchmark
      - The reason is recorded on each catalogue card.
@@ -283,6 +283,41 @@ Other methods
 * **EmEL++ on its own benchmarks** (Hits\@100, 1 seed): GO 0.22 / 0.24, GALEN 0.12 / 0.16.
 * **BoxLitE** (MRR with the ECOS solver, family ontology): 0.66 / 0.72 for the first
   variant, down to 0.22 / 0.44 for the fourth.
+
+Implemented, without a published benchmark
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+These methods are implemented and tested (loss semantics on hand-built cases and a small
+end-to-end run) and can be trained on any ontology, but no number of their publications
+can be reproduced. The full reasoning is on each catalogue card.
+
+.. list-table::
+   :header-rows: 1
+   :widths: 28 72
+
+   * - Method
+     - Why there is no benchmark
+   * - :class:`mowl.models.VolumeMultiBoxEL` (Aharoni, 2024)
+     - The ranking score is not fully specified (number of sampled points, which box,
+       aggregation), the test sub-sampling is not described, and the code is not
+       available.
+   * - :class:`mowl.models.OctagonEL` (Charpenay and Schockaert, 2024)
+     - The paper evaluates octagons as relation regions for knowledge-graph link
+       prediction; mOWL uses them as concept regions (an adaptation).
+   * - :class:`mowl.models.BinaryCodeBox` (Zhang et al., 2022)
+     - Every published number comes from a per-graph hyperparameter search whose
+       selected values are not published.
+   * - :class:`mowl.models.ALConeModel` and the exact al-cone construction (Özçep et
+       al., 2020; 2023)
+     - The papers are theoretical; learning and evaluation are left to future work. The
+       learner is mOWL's own.
+   * - :class:`mowl.models.E2R` (Garg et al., 2019)
+     - FB15K and WN18 are knowledge-graph benchmarks; the LUBM protocol and the training
+       settings are not specified, and no code was found.
+   * - :class:`mowl.models.EmELVar` (Mohapatra et al., 2021)
+     - With the loss as printed, the total loss is never lower than that of EmEL++, so
+       the reported improvement is not explained by the paper; the authors' code was not
+       available.
 
 Not run
 ~~~~~~~
