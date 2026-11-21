@@ -113,7 +113,7 @@ class OWL2VecStarProjector(
     
     if (include_literals) {
       for (owl_class <- ontology.getClassesInSignature(imports).asScala.toList){
-        val annotations = EntitySearcher.getAnnotations(owl_class, ontology).asScala.toList
+        val annotations = EntitySearcher.getAnnotations(owl_class, ontology).iterator.asScala.toList
         for (annotation <- annotations){
           annotationAxioms += ((annotation, owl_class))
         }
@@ -186,7 +186,7 @@ class OWL2VecStarProjector(
 	var ax = axiom.asInstanceOf[OWLEquivalentClassesAxiom].getClassExpressionsAsList.asScala
         assert(ontClass == ax.head)
         val rightSide = ax.tail
-	projectSubClassOrEquivAxiom(ontClass, new OWLObjectIntersectionOfImpl(rightSide.toSet.asJava), ontology)
+	projectSubClassOrEquivAxiom(ontClass, new OWLObjectIntersectionOfImpl(rightSide.toSet.toList.asJava), ontology)
       }
       case _ => Nil
     }
@@ -513,7 +513,7 @@ class OWL2VecStarProjector(
 
   def processAnnotationProperty(annotProperty: OWLAnnotationProperty, ontology: OWLOntology): List[Triple] = {
 
-    val annotations = EntitySearcher.getAnnotations(annotProperty, ontology).asScala.toList
+    val annotations = EntitySearcher.getAnnotations(annotProperty, ontology).iterator.asScala.toList
     val property = annotProperty.toStringID.toString
 
     property match {

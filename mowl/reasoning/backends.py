@@ -53,9 +53,13 @@ class ReasonerBackend:
 
 
 def _elk(ontology):
+    import java.lang
+    from mowl import ELK_LOG_PROPERTY
+    # ELK logs through SLF4J. init_jvm sets its level; this covers a JVM started
+    # elsewhere, as long as no ELK class has created its logger yet.
+    if java.lang.System.getProperty(ELK_LOG_PROPERTY) is None:
+        java.lang.System.setProperty(ELK_LOG_PROPERTY, "error")
     from org.semanticweb.elk.owlapi import ElkReasonerFactory
-    from org.apache.log4j import Logger, Level
-    Logger.getLogger("org.semanticweb.elk").setLevel(Level.ERROR)
     return ElkReasonerFactory().createReasoner(ontology)
 
 

@@ -3,6 +3,9 @@ import jpype.imports
 import os
 import platform
 
+#: System property of the SLF4J simple logger that sets the log level of ELK.
+ELK_LOG_PROPERTY = "org.slf4j.simpleLogger.log.org.semanticweb.elk"
+
 
 def init_jvm(memory, extra_classpath=None):
     """Start the JVM with the JAR files that mOWL packages on the class path.
@@ -38,5 +41,7 @@ and contains the JAR dependencies.")
         jpype.startJVM(
             jpype.getDefaultJVMPath(), "-ea",
             f"-Xmx{memory}",
+            # ELK reports every reasoning stage at INFO level; show its errors only.
+            f"-D{ELK_LOG_PROPERTY}=error",
             "-Djava.class.path=" + jars,
             convertStrings=False)
