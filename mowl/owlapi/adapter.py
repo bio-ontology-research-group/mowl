@@ -3,7 +3,16 @@ from org.semanticweb.owlapi.apibinding import OWLManager
 from org.semanticweb.owlapi.model import IRI
 
 import mowl.error as err
-from java.util import HashSet
+from java.util import ArrayList, HashSet
+
+
+def _operands(cexprs):
+    """A Java list of class expressions. OWL API 5 overloads the n-ary factory methods
+    for a collection and for an array, so a Python tuple would be ambiguous."""
+    operands = ArrayList()
+    for cexpr in cexprs:
+        operands.add(cexpr)
+    return operands
 
 
 class OWLAPIAdapter():
@@ -75,11 +84,11 @@ class OWLAPIAdapter():
 
     def create_equivalent_classes(self, *cexprs):
         """Creates OWLEquivalentClassesAxiom for a given list of class expressions"""
-        return self.data_factory.getOWLEquivalentClassesAxiom(cexprs)
+        return self.data_factory.getOWLEquivalentClassesAxiom(_operands(cexprs))
 
     def create_disjoint_classes(self, *cexprs):
         """Creates OWLDisjointClassesAxiom for a given list of class expressions"""
-        return self.data_factory.getOWLDisjointClassesAxiom(cexprs)
+        return self.data_factory.getOWLDisjointClassesAxiom(_operands(cexprs))
 
     def create_object_some_values_from(self, obj_prop, cexpr):
         """Creates OWLObjectSomeValuesFrom for a given object property and a class expression"""
@@ -91,11 +100,11 @@ class OWLAPIAdapter():
 
     def create_object_intersection_of(self, *cexprs):
         """Creates OWLObjectIntersectionOf for a given list of class expressions"""
-        return self.data_factory.getOWLObjectIntersectionOf(cexprs)
+        return self.data_factory.getOWLObjectIntersectionOf(_operands(cexprs))
 
     def create_object_union_of(self, *cexprs):
         """Creates OWLObjectUnionOf for a given list of class expressions"""
-        return self.data_factory.getOWLObjectUnionOf(cexprs)
+        return self.data_factory.getOWLObjectUnionOf(_operands(cexprs))
 
     def create_complement_of(self, cexpr):
         """Creates OWLObjectComplementOf for a given class expression"""

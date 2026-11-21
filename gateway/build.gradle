@@ -4,9 +4,10 @@
  *
  *   ./gradlew installLibs
  *
- * compiles gateway.jar and replaces the JAR files in ../mowl/lib with gateway.jar and the
- * runtime class path resolved from Maven Central. JAR files that do not come from Maven
- * Central (the KM reasoner, kobayashi-marust-*.jar) are kept.
+ * compiles gateway.jar and replaces the JAR files in ../mowl/lib with gateway.jar, the
+ * jcel OWL API binding recompiled for OWL API 5 (see below) and the runtime class path
+ * resolved from Maven Central. JAR files that do not come from Maven Central (the KM
+ * reasoner, kobayashi-marust-*.jar) are kept.
  */
 
 plugins {
@@ -46,6 +47,10 @@ configurations.all {
     }
 }
 
+configurations {
+    jcelSources { transitive = false }
+}
+
 dependencies {
     // OWL API 5, module by module
     implementation 'net.sourceforge.owlapi:owlapi-api:5.5.1'
@@ -60,8 +65,14 @@ dependencies {
     // Reasoners built for OWL API 5
     implementation 'io.github.liveontologies:elk-owlapi:0.6.0'
     implementation 'net.sourceforge.owlapi:org.semanticweb.hermit:1.4.5.519'
-    // EL normalisation (mowl.ontology.normalize)
-    implementation 'de.tu-dresden.inf.lat.jcel:jcel-owlapi:0.24.1'
+    // EL normalisation (mowl.ontology.normalize): jcel. Its OWL API binding, jcel-owlapi
+    // 0.24.1, is compiled against OWL API 4 and does not link with OWL API 5 (no newer
+    // release exists), so its released sources are compiled here (source set 'jcel').
+    implementation 'de.tu-dresden.inf.lat.jcel:jcel-core:0.24.1'
+    implementation 'de.tu-dresden.inf.lat.jcel:jcel-coreontology:0.24.1'
+    implementation 'de.tu-dresden.inf.lat.jcel:jcel-ontology:0.24.1'
+    implementation 'de.tu-dresden.inf.lat.jcel:jcel-reasoner:0.24.1'
+    jcelSources 'de.tu-dresden.inf.lat.jcel:jcel-owlapi:0.24.1:sources'
     // The KM reasoner (kobayashi-marust-protege5-*.jar, not on Maven Central) needs gson.
     runtimeOnly 'com.google.code.gson:gson:2.11.0'
 
@@ -87,6 +98,35 @@ tasks.withType(AbstractArchiveTask).configureEach {
     reproducibleFileOrder = true
 }
 
+// jcel-owlapi 0.24.1 (LGPL 3 or Apache 2.0, https://github.com/julianmendez/jcel), compiled
+// unchanged from its source JAR on Maven Central against OWL API 5.
+def jcelOwlapiJarName = 'jcel-owlapi5-0.24.1.jar'
+def jcelSourceDir = layout.buildDirectory.dir('jcel-owlapi-sources')
+
+tasks.register('unpackJcelSources', Sync) {
+    from { zipTree(configurations.jcelSources.singleFile) }
+    into jcelSourceDir
+}
+
+sourceSets {
+    jcel {
+        java.srcDir(tasks.named('unpackJcelSources').map { it.destinationDir })
+        compileClasspath += configurations.compileClasspath
+    }
+}
+
+tasks.named('compileJcelJava') {
+    dependsOn tasks.named('unpackJcelSources')
+    options.compilerArgs += ['-nowarn']
+}
+
+tasks.register('jcelJar', Jar) {
+    from sourceSets.jcel.output
+    from(jcelSourceDir) { include 'META-INF/maven/**' }
+    archiveFileName = jcelOwlapiJarName
+    destinationDirectory = layout.buildDirectory.dir('libs')
+}
+
 application {
     mainClass = 'Main'
     applicationDefaultJvmArgs = ["-Dlogging.level.root=INFO"]
@@ -97,7 +137,7 @@ def mowlLib = file("${rootDir}/../mowl/lib")
 tasks.register('installLibs') {
     group = 'distribution'
     description = 'Replaces the JAR files in ../mowl/lib with gateway.jar and its runtime class path.'
-    dependsOn tasks.named('jar')
+    dependsOn tasks.named('jar'), tasks.named('jcelJar')
     inputs.files(configurations.runtimeClasspath)
     doLast {
         def keep = { File f -> f.name.startsWith('kobayashi-marust') }
@@ -111,6 +151,10 @@ tasks.register('installLibs') {
             from tasks.named('jar').get().archiveFile
             into mowlLib
             rename { 'gateway.jar' }
+        }
+        copy {
+            from tasks.named('jcelJar').get().archiveFile
+            into mowlLib
         }
     }
 }

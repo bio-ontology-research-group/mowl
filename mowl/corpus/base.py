@@ -3,12 +3,19 @@ from org.semanticweb.owlapi.manchestersyntax.renderer import \
     ManchesterOWLSyntaxOWLObjectRendererImpl
 from org.semanticweb.owlapi.model import OWLLiteral, OWLOntology
 from org.semanticweb.owlapi.search import EntitySearcher
+from java.util.stream import Collectors
 from deprecated.sphinx import deprecated
 
 from jpype.types import JString
 
 from org.mowl import MOWLShortFormProvider
 import logging
+
+
+def _annotations(entity, ontology):
+    """The annotations of ``entity`` in ``ontology`` as a list (OWL API 5 returns a
+    stream)."""
+    return EntitySearcher.getAnnotations(entity, ontology).collect(Collectors.toList())
 
 
 def extract_and_save_axiom_corpus(ontology, out_file, mode="w"):
@@ -101,7 +108,7 @@ following the Manchester Syntax.
         for owl_class in ontology.getClassesInSignature():
             cls = str(owl_class)
 
-            annotations = EntitySearcher.getAnnotations(owl_class, ontology)
+            annotations = _annotations(owl_class, ontology)
             for annotation in annotations:
                 if isinstance(annotation.getValue(), OWLLiteral):
                     obj_property = str(annotation.getProperty()).replace("\n", " ")
@@ -112,7 +119,7 @@ following the Manchester Syntax.
         for owl_individual in ontology.getIndividualsInSignature():
             ind = str(owl_individual.toStringID())
 
-            annotations = EntitySearcher.getAnnotations(owl_individual, ontology)
+            annotations = _annotations(owl_individual, ontology)
             for annotation in annotations:
                 if isinstance(annotation.getValue(), OWLLiteral):
                     obj_property = str(annotation.getProperty()).replace("\n", " ")
@@ -141,7 +148,7 @@ this method returns a list instead saving into a file.
     for owl_class in ontology.getClassesInSignature():
         cls = str(owl_class.toStringID())
 
-        annotations = EntitySearcher.getAnnotations(owl_class, ontology)
+        annotations = _annotations(owl_class, ontology)
         for annotation in annotations:
             if isinstance(annotation.getValue(), OWLLiteral):
                 obj_property = str(annotation.getProperty()).replace("\n", " ")
@@ -153,7 +160,7 @@ this method returns a list instead saving into a file.
     for owl_individual in ontology.getIndividualsInSignature():
         ind = str(owl_individual.toStringID())
 
-        annotations = EntitySearcher.getAnnotations(owl_individual, ontology)
+        annotations = _annotations(owl_individual, ontology)
         for annotation in annotations:
             if isinstance(annotation.getValue(), OWLLiteral):
                 obj_property = str(annotation.getProperty()).replace("\n", " ")

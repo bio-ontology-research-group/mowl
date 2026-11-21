@@ -29,7 +29,6 @@ class OWL2VecStarProjector(
 ) extends AbstractProjector{
 
   
-  val searcher = new EntitySearcher()
   var subRoles = scala.collection.mutable.Map[String, List[String]]()
   var inverseRoles = scala.collection.mutable.Map[String, String]()
 
@@ -292,10 +291,12 @@ class OWL2VecStarProjector(
        
         val valueStr = value.isLiteral match {
           case true => {
-            val datatype = value.asLiteral.get.getDatatype
+            val literal = value.asLiteral.get
+            val datatype = literal.getDatatype
 
-            if (datatype.isString) value.asInstanceOf[OWLLiteralImplString].getLiteral
-            else if(datatype.isRDFPlainLiteral) value.asInstanceOf[OWLLiteralImplPlain].getLiteral
+            // Untyped literals: xsd:string, rdf:langString (OWL API 5) or
+            // rdf:PlainLiteral (OWL API 4)
+            if (datatype.isString || datatype.isRDFPlainLiteral || literal.hasLang) literal.getLiteral
             else {
               println("Warning: datatype not detected: ", datatype)
               stripValue(axiom.getValue.toString)
