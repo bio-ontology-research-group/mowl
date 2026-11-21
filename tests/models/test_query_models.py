@@ -184,3 +184,46 @@ def test_one_regime_ranks_the_query_models(cls):
         (result,) = outcome.results
         assert 0.0 < result.metrics["all"]["f_mrr"] <= 1.0
         assert result.protocol_info["scoring"] == "model"
+
+
+def test_sampled_training_queries_have_their_answer_among_the_exact_answers():
+    """Every training structure (multi-hop and negation included) is sampled, and the
+    positive is an answer of the sampled query on the graph."""
+    from mowl.models.query import sampling
+    from mowl.nn.query.expression import answers
+    ds, c, eats = _dataset()
+    m = BetaE(ds, embed_dim=4)
+    rng = np.random.default_rng(0)
+    assert set(m.training_structures) == set(sampling.structures(True))
+    for name, template in m.training_structures.items():
+        for _ in range(20):
+            sample = sampling.sample_query(template, m.graph, rng, m._pool)
+            assert sample is not None, name
+            query, found, answer = sample
+            assert answer in answers(query, m.graph, m.graph.universe), name
+            assert found == answers(query, m.graph, m.graph.universe), name
+
+
+def test_acone_fits_multi_step_queries_when_trained_long_enough():
+    """1p, 2p and 3p isa queries: with enough step size the ranking is perfect (the mean
+    rank of the 5 answers is 2.0); with 3e-3 and the same steps it is not yet."""
+    th.manual_seed(0)
+    ds, c, eats = _dataset()
+    m = AConE(ds, embed_dim=16, learning_rate=6e-3, batch_size=30, negatives=8, seed=0,
+              structures=("1p", "2p", "3p"))
+    m.train(epochs=100, steps_per_epoch=5)
+    assert _mean_rank_of_answers(m, c) <= 3.0
+
+
+def test_collapse_of_conE_is_reported():
+    """At learning rate 1e-2 the tanh of the ConE projection saturates, every query gets
+    the same cone and the loss is log 2; the model says so."""
+    th.manual_seed(0)
+    ds, c, eats = _dataset()
+    m = ConE(ds, embed_dim=16, learning_rate=1e-2, batch_size=30, negatives=8, seed=0,
+             structures=("1p",))
+    with pytest.warns(UserWarning, match="collapsed"):
+        m.train(epochs=60, steps_per_epoch=5)
+    assert abs(m.loss_history[-1] - np.log(2)) < 0.02
+    scores = m.score_query(("e", ("r",)), [(0, (1,)), (3, (1,))])
+    assert th.allclose(scores[0], scores[1], atol=1e-3)         # the same cone for all queries

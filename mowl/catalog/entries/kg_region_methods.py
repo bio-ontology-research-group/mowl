@@ -191,16 +191,14 @@ QUERY2BOX = MethodCard(
         "Query2Box has no negation: a class expression with ¬ or ∀ raises UnsupportedOperator. "
         "Geometry as in the reference code of the BetaE/Query2Box authors (KGReasoning, "
         "geo='box'): attention-averaged centers, min-offset with sigmoid gate, offsets activated "
-        "by relu (option softplus/none). "),
+        "by relu (option softplus/none). Not recorded as a guarantee because mOWL has no "
+        "test for it: Theorem 1 of ren2020q2b (with M conjunctive queries with disjoint "
+        "answers, answering every EPFO query by a distance threshold needs VC dimension "
+        "at least M, so unions are answered by DNF with the best branch, which mOWL does). "
+        "Paper and code agree on the distance (checked against the LaTeX source): "
+        "d_out + alpha * d_in with alpha = center_weight, d_in the distance of the centre "
+        "to the entity clamped into the box. "),
     **_QUERY_FIELDS,
-    guarantees=(
-        Guarantee(
-            K.LIMITATION,
-            "With M conjunctive queries with pairwise disjoint answers, modelling every "
-            "EPFO query by a distance threshold requires VC dimension at least M; hence "
-            "unions cannot be embedded directly in low dimension.",
-            "ren2020q2b, Theorem 1"),
-    ),
     intersection_closed=True,
     helly="2 (axis-parallel boxes; eckhoff1988)",
     references=(
@@ -317,10 +315,16 @@ ACONE = MethodCard(
     guarantees=(
         Guarantee(
             K.EXPRESSIVITY,
-            "∃R.(C ⊔ D) ≡ ∃R.C ⊔ ∃R.D holds in multicone embeddings for rotations with "
-            "γ = 1 and δ ≥ 0; composition, inversion and hierarchy properties of rotations "
-            "are given in Propositions 2-5 and Corollaries 6-7.",
-            "he2024acone, Propositions 2-5, Corollaries 6-7"),
+            "∃R.(C ⊔ D) ≡ ∃R.C ⊔ ∃R.D holds for rotations with γ = 1 and δ ≥ 0 "
+            "(Proposition 3), and R ⊑ S holds for rotations with the same θ if γ1 ≤ γ2 and "
+            "δ1 ≤ δ2 (Proposition 5). The other statements (Propositions 2 and 4, Corollaries "
+            "6-7: commutation, composition, transitivity) are not recorded: mOWL has no test "
+            "for them.",
+            "he2024acone, Propositions 3 and 5",
+            condition="for the aperture-additive rotation, any parameters (Prop. 5: δ1 ≤ δ2)",
+            verified_in_mowl="tests/nn/test_query_geometry.py::"
+                             "test_acone_proposition_5_role_inclusion_and_"
+                             "proposition_3_union_distribution"),
     ),
     references=(
         Reference("he2024acone",

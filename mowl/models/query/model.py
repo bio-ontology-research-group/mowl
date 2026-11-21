@@ -8,6 +8,8 @@ rank-based regimes and ``score_query`` for
 :class:`mowl.evaluation.LogicalQueryAnswering` are shared.
 """
 
+import math
+
 import numpy as np
 import torch as th
 import torch.nn.functional as F
@@ -177,6 +179,13 @@ class QueryEmbeddingModel(Model):
                 total += float(loss)
             self.loss_history.append(total / steps_per_epoch)
         self.module.eval()
+        if abs(self.loss_history[-1] - math.log(2)) < 0.02 and epochs > 0:
+            import warnings
+            warnings.warn(
+                f"{type(self).__name__}: the loss is log 2, i.e. every score is 0 and the "
+                f"model has collapsed (for ConE-type geometries the tanh of the projection "
+                f"output saturates: all queries get the same cone). Lower learning_rate.",
+                UserWarning, stacklevel=2)
         if self._model_filepath is not None:
             th.save(self.module.state_dict(), self._model_filepath)
 

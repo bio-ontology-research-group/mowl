@@ -238,3 +238,58 @@ def test_every_geometry_embeds_a_query_tree_in_batch():
         state = g.embed(sig, rows)
         logit = g.logit(state, th.tensor([[0, 1, 2], [3, 4, 5]]))
         assert logit.shape == (2, 3) and th.isfinite(logit).all()
+
+
+# -- properties the papers state, one test each -------------------------------------------
+
+def test_q2b_point_inside_the_box_has_zero_outside_distance_and_matches_the_paper_formula():
+    """Query2Box, Section 4.1: dist_outside is 0 inside the box; with alpha = 0 the distance
+    is dist_outside = ||max(v - q_max, 0) + max(q_min - v, 0)||_1 (written out here from
+    the paper, independently of the implementation)."""
+    th.manual_seed(0)
+    g = Query2BoxGeometry(N, R, D, gamma=4.0, center_weight=0.0)
+    centre, offset = th.randn(8, D), th.rand(8, D) + 0.1
+    with th.no_grad():
+        points = th.randn(8, 5, D) * 2
+        g.entity_embedding.zero_()
+        # entities 0..4 hold the points of query 0, and so on: use one query at a time
+    for q in range(8):
+        with th.no_grad():
+            g.entity_embedding[:5] = points[q]
+        d = g.distance((centre[q:q + 1], offset[q:q + 1]), th.arange(5).unsqueeze(0))[0]
+        q_max, q_min = centre[q] + offset[q], centre[q] - offset[q]
+        want = (th.clamp(points[q] - q_max, min=0) + th.clamp(q_min - points[q], min=0)).sum(-1)
+        assert th.allclose(d, want, atol=1e-5)
+        inside = ((points[q] >= q_min) & (points[q] <= q_max)).all(-1)
+        assert (d[inside] == 0).all()
+    # a point in the box: zero outside distance
+    with th.no_grad():
+        g.entity_embedding[0] = centre[0] + 0.5 * offset[0]
+    assert float(g.distance((centre[:1], offset[:1]), th.tensor([[0]]))) == 0.0
+
+
+def test_acone_proposition_5_role_inclusion_and_proposition_3_union_distribution():
+    """He et al. 2024. Prop. 5: R<theta, g1, d1> is included in S<theta, g2, d2> if g1 <= g2
+    and d1 <= d2 (here gamma = 1, aperture-additive): every entity in the cone after r is
+    in the cone after s. Prop. 3: projection distributes over a union (gamma = 1, d >= 0)."""
+    th.manual_seed(0)
+    g = AConEGeometry(200, R, D, gamma=4.0, center_weight=0.0)
+
+    def set_relation(rel, axis, aperture):
+        with th.no_grad():
+            g.axis_embedding[rel] = th.atanh(th.tensor(axis / pi)) * g.embedding_range
+            g.aperture_embedding[rel] = th.atanh(th.tensor(aperture / pi)) * g.embedding_range
+
+    set_relation(2, 0.7, 0.2)                       # R: delta1 = 0.2
+    set_relation(3, 0.7, 0.9)                       # S: delta2 = 0.9 >= delta1, same axis
+    cone = (th.rand(1, D) * 2 - 1, th.rand(1, D) * 0.5)
+    after_r = g.project(cone, th.tensor([2]))
+    after_s = g.project(cone, th.tensor([3]))
+    ids_ = th.arange(200).unsqueeze(0)
+    in_r = g.distance(after_r, ids_)[0] == 0
+    in_s = g.distance(after_s, ids_)[0] == 0
+    assert in_r.any()                                # not vacuous
+    assert (in_s | ~in_r).all()                      # in R-cone implies in S-cone
+    assert (g.distance(after_s, ids_)[0] <= g.distance(after_r, ids_)[0] + 1e-6).all()
+    # a strictly larger aperture does include more entities for this seed
+    assert int(in_s.sum()) >= int(in_r.sum())
