@@ -1,11 +1,12 @@
-"""Region-based semantics from the theory literature (catalogued only).
+"""Region-based semantics from the theory literature.
 
 These works give geometric semantics and constructions with proven guarantees but no
-learning procedure for ontologies. Where mOWL realises the construction, the card says
-which :mod:`mowl.geometric` class does.
+learning procedure for ontologies. Where mOWL realises the construction, the card is
+CONSTRUCTIVE and names the :mod:`mowl.geometric` class; the others stay catalogued.
 """
 
-from mowl.catalog.card import Family, Guarantee, GuaranteeKind as K, MethodCard, Reference
+from mowl.catalog.card import (Family, Guarantee, GuaranteeKind as K, MethodCard, Origin,
+                               Reference, Status)
 from mowl.catalog.entries import _refs as R
 
 CONVEX_REGIONS = MethodCard(
@@ -22,25 +23,39 @@ CONVEX_REGIONS = MethodCard(
     concepts="convex region in R^n",
     roles="convex region in R^(2n) over concatenated vectors",
     individuals="point",
-    not_implemented_reason=(
-        "The paper gives a construction from a finite model, not a learning method. mOWL "
-        "implements the EL++ instance of the construction as "
-        "mowl.geometric.polyhedral.ConvexPolyhedralModel (card 'convex_polyhedral'); "
-        "general quasi-chained rules of higher arity are outside mOWL's OWL-based data "
-        "model, and no trainable convex-region learner is implemented."),
+    expressivity="ELH(∘)⊥",
+    status=Status.CONSTRUCTIVE,
+    origin=Origin.REIMPLEMENTATION,
+    implementation="mowl.geometric.convex_regions.ConvexRegionModel",
+    related=("convex_polyhedral", "faithel"),
+    limitations=(
+        "Constructive only: the paper gives no learning procedure, and mOWL does not add one.",
+        "Implemented for concepts (unary) and roles (binary) with the normal forms of "
+        "mowl.geometric (NF1-NF4, NF6, NF7, bottom forms). Existential rules of higher "
+        "arity, and rules outside the quasi-chained fragment, are not represented.",
+        "The input is a finite model, which must be supplied (for instance the canonical "
+        "model); the construction does not search for one.",
+        "Coordinates are the standard simplex of R^(m-1), an affine image of the paper's "
+        "m unit vectors of R^m (the paper notes m - 1 suffices for datalog).",
+    ),
     guarantees=(
         Guarantee(
             K.COMPLETENESS,
             "For a quasi-chained ontology and a finite model M of a KB K, K has a convex "
             "geometric model η with φ(η) = M (m-dimensional, m = number of objects of M).",
-            "gutierrez2018, Proposition 3"),
+            "gutierrez2018, Proposition 3",
+            condition="by construction",
+            verified_in_mowl="tests/geometric/test_faithfulness.py::TestConvexRegionModel::"
+                             "test_phi_of_eta_is_m_for_arbitrary_finite_models"),
         Guarantee(
             K.SOUNDNESS,
             "For quasi-chained rules with the finite model property, a KB is satisfiable "
             "iff it has a convex geometric model; such methods are sound, complete, "
             "TBox/ABox-entailed and able to be strongly faithful (ELH).",
             "gutierrez2018, Corollary 1; bourgaux2024, Example 3 and Table 4 (column "
-            "'Convex')"),
+            "'Convex')",
+            verified_in_mowl="tests/geometric/test_faithfulness.py::TestConvexRegionModel::"
+                             "test_model_of_ontology_gives_convex_model_of_ontology"),
         Guarantee(
             K.LIMITATION,
             "For each n there is a datalog KB over n concept names whose convex geometric "
@@ -51,7 +66,10 @@ CONVEX_REGIONS = MethodCard(
             "Rules outside the quasi-chained fragment can make convex models impossible: "
             "R1(X, Y) ∧ R2(X, Y) → ⊥ with D = {R1(a1,a1), R1(a2,a2), R2(a1,a2), R2(a2,a1)} "
             "is satisfiable but has no convex geometric model (role disjointness).",
-            "gutierrez2018, Example 3; bourgaux2024, Example 2"),
+            "gutierrez2018, Example 3; bourgaux2024, Example 2",
+            verified_in_mowl="tests/geometric/test_faithfulness.py::TestConvexRegionModel::"
+                             "test_role_disjointness_example_has_no_convex_model_but_"
+                             "construction_fails_there"),
         Guarantee(
             K.LIMITATION,
             "With concepts as convex regions in R^d, ⊥ as ∅ and conjunction as "
@@ -66,6 +84,12 @@ CONVEX_REGIONS = MethodCard(
     intersection_closed=True,
     helly="d+1 (convex sets in R^d; Helly 1923, footnote 3 of gutierrez2018)",
     references=(R.GUTIERREZ2018, R.BOURGAUX2024),
+    notes=(
+        "mOWL applies the construction of Proposition 3 to an arbitrary finite "
+        "interpretation (mowl.geometric.convex_regions.FiniteInterpretation) and checks "
+        "φ(η) = M by convex-hull membership. Additionally tested, beyond the paper's "
+        "statement: η satisfies a normal-form axiom iff M does. The canonical-model "
+        "instance is the 'convex_polyhedral' card."),
 )
 
 FAITHEL = MethodCard(
@@ -83,13 +107,25 @@ FAITHEL = MethodCard(
     concepts="union of intervals (non-convex) or convex hull of element vectors (convex)",
     roles="union of regions in R^2 / convex hull of concatenated vectors",
     individuals="point",
-    not_implemented_reason=(
-        "The FaithEL training procedure is published in a RuleML+RR 2024 paper that we "
-        "could not obtain, and no code was located. The constructions themselves are in "
-        "mOWL: the 1-D non-convex one (Definition 12, Theorem 16) as "
-        "mowl.geometric.intervals.IntervalUnionModel (card 'interval_union') and the "
-        "convex one (Theorem 32) corresponds to "
-        "mowl.geometric.polyhedral.ConvexPolyhedralModel (card 'convex_polyhedral')."),
+    expressivity="ELH⊥",
+    tasks=("subsumption", "satisfiability", "disjointness",),
+    status=Status.CONSTRUCTIVE,
+    origin=Origin.REIMPLEMENTATION,
+    implementation="mowl.geometric.faithfulness.StronglyFaithfulModel",
+    related=("interval_union", "convex_polyhedral", "convex_regions"),
+    limitations=(
+        "Only the constructions of the TGDK article are implemented. The FaithEL learning "
+        "procedure (RuleML+RR 2024) is not: that paper could not be obtained and no code "
+        "was located, so nothing is trained and no FaithEL numbers are reproduced.",
+        "The non-convex construction is the 1-dimensional one (the article proves it for "
+        "every dimension m >= 1; mOWL builds m = 1).",
+        "Strong faithfulness is tested for TBox and RBox axioms of the forms A <= B, "
+        "A and B <= C, A <= exists r.B, exists r.A <= B and r <= s over the concept "
+        "names of the normalised ontology (with top on the left or as filler and bottom "
+        "as target). Strong IQ faithfulness (instance queries) is not tested here.",
+        "mOWL applies the constructions to normalised ELH with bottom; role chains and "
+        "nominals are outside the tested forms.",
+    ),
     guarantees=(
         Guarantee(
             K.STRONG_FAITHFULNESS,
@@ -97,14 +133,18 @@ FAITHEL = MethodCard(
             "(Definition 12) is a strongly IQ- and TBox-faithful model of a satisfiable "
             "ELH ontology, for every m ≥ 1.",
             "lacerda2024, Theorem 16 and Corollary 17",
-            condition="by construction"),
+            condition="by construction",
+            verified_in_mowl="tests/geometric/test_faithfulness.py::TestStrongFaithfulness::"
+                             "test_both_constructions_are_strongly_tbox_faithful"),
         Guarantee(
             K.STRONG_FAITHFULNESS,
             "The d-dimensional convex geometric interpretation of the canonical model "
             "(convex hull, Definition 29) is a strongly IQ- and TBox-faithful model of a "
             "normalised ELH ontology.",
             "lacerda2024, Theorems 28, 31 and 32",
-            condition="by construction"),
+            condition="by construction",
+            verified_in_mowl="tests/geometric/test_faithfulness.py::TestStrongFaithfulness::"
+                             "test_both_constructions_are_strongly_tbox_faithful"),
         Guarantee(
             K.LIMITATION,
             "ELH does not have the strong faithfulness property over convex 1-dimensional "
@@ -127,8 +167,14 @@ FAITHEL = MethodCard(
             "Knowledge Base Embeddings for EL. In Rules and Reasoning (RuleML+RR 2024), "
             "191-199."),
     ),
-    notes="The FaithEL paper itself was not read; only the TGDK article's constructions are "
-          "recorded.",
+    notes=(
+        "The FaithEL paper itself was not read; only the TGDK article's constructions are "
+        "implemented. Strong TBox faithfulness needs the canonical model of Definition 26, "
+        "which has an element for every conjunction of two names and every existential "
+        "restriction; mOWL's CanonicalModel (one element per name) is faithful on concept "
+        "names only, so StronglyFaithfulModel adds the missing elements as fresh names "
+        "(mowl.geometric.faithfulness.paper_canonical_ontology). The cards 'interval_union' "
+        "and 'convex_polyhedral' use the smaller model."),
 )
 
 ATTRIBUTED_DL = MethodCard(

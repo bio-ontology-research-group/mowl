@@ -41,6 +41,22 @@ Convex polyhedral model
    :show-inheritance:
 
 
+Convex model of a finite model
+------------------------------
+
+.. automodule:: mowl.geometric.convex_regions
+   :members:
+   :show-inheritance:
+
+
+Strong faithfulness
+-------------------
+
+.. automodule:: mowl.geometric.faithfulness
+   :members:
+   :show-inheritance:
+
+
 Interval-union model
 --------------------
 
