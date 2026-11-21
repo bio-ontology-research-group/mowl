@@ -35,7 +35,7 @@ def _build():
         out.append(Recipe(
             benchmark=f"transbox-{onto}-prediction", method="box2el", source=YANG2025,
             model_kwargs={"embed_dim": 200, "learning_rate": lr, "delta": delta,
-                          "reg_factor": reg},
+                          "reg_factor": reg, "load_role_axioms": True},
             training_regime="box2el-code-training", regime_kwargs=kwargs,
             epochs=epochs, validate_every=100,
             locator="configs.json of KRR-Oxford/BoxSquaredEL (not part of the TransBox "

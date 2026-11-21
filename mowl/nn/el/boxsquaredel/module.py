@@ -128,6 +128,18 @@ parameter ``all_negative_losses``) and extend :attr:`neg_capable_gcis` according
         return L.gci3_bot_loss(data, self.head_offset)
 
 
+    #: The module implements the role inclusion and role chain losses of the paper, so
+    #: :class:`~mowl.models.BoxSquaredEL` accepts ``load_role_axioms=True``.
+    role_axiom_capable = True
+
+    def role_inclusion_loss(self, data, neg=False):
+        return L.role_inclusion_loss(data, self.head_center, self.head_offset,
+                                     self.tail_center, self.tail_offset, self.gamma)
+
+    def role_chain_loss(self, data, neg=False):
+        return L.role_chain_loss(data, self.head_center, self.head_offset,
+                                 self.tail_center, self.tail_offset, self.gamma)
+
     def class_assertion_loss(self, data, neg=False):
         if self.ind_center is None:
             raise ValueError("The number of individuals must be specified to use this loss function.")

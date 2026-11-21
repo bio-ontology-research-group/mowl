@@ -73,8 +73,9 @@ def _build():
                 kwargs["lr_milestones"] = [milestone]
             out.append(Recipe(
                 benchmark=f"box2el-{onto}-{task}", method="box2el", source=JACKERMEIER2024,
+                # The code trains on role inclusions and chains whenever the data has any.
                 model_kwargs={"embed_dim": 200, "learning_rate": lr, "delta": delta,
-                              "reg_factor": reg},
+                              "reg_factor": reg, "load_role_axioms": True},
                 training_regime="box2el-code-training", regime_kwargs=kwargs,
                 epochs=epochs, validate_every=100, locator=_B2E_LOC, notes=_B2E_NOTE))
     for method, ontos in _BASELINES.items():

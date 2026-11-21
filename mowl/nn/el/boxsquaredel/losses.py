@@ -287,3 +287,33 @@ def gci3_loss_neg(data, class_center, class_offset, head_center, head_offset, bu
     min_dist = th.linalg.norm(th.relu(box_distance(bumped_head, (center_d, off_d)) + gamma),
                               dim=1)
     return (delta - min_dist).square()
+
+
+def _role_boxes(data, column, head_center, head_offset, tail_center, tail_offset):
+    index = data[:, column]
+    return ((head_center(index), th.abs(head_offset(index))),
+            (tail_center(index), th.abs(tail_offset(index))))
+
+
+def role_inclusion_loss(data, head_center, head_offset, tail_center, tail_offset, gamma):
+    """Loss of the role inclusion :math:`r \\sqsubseteq s` (Jackermeier et al., 2024,
+    Section 4.2): the head box of ``r`` is included in the head box of ``s`` and the tail
+    box of ``r`` in the tail box of ``s``; the mean of the two inclusion losses, as
+    ``BoxSquaredEL.role_inclusion_loss`` of the reference code."""
+    r_head, r_tail = _role_boxes(data, 0, head_center, head_offset, tail_center, tail_offset)
+    s_head, s_tail = _role_boxes(data, 1, head_center, head_offset, tail_center, tail_offset)
+    loss = (inclusion_score(r_head, s_head, gamma) + inclusion_score(r_tail, s_tail, gamma)) / 2
+    return loss.reshape(-1, 1)
+
+
+def role_chain_loss(data, head_center, head_offset, tail_center, tail_offset, gamma):
+    """Loss of the role chain :math:`r_1 \\circ r_2 \\sqsubseteq s` (Jackermeier et al.,
+    2024, Section 4.2): the head box of ``r1`` is included in the head box of ``s`` and the
+    tail box of ``r2`` in the tail box of ``s``; the mean of the two inclusion losses, as
+    ``BoxSquaredEL.role_chain_loss`` of the reference code."""
+    r1_head, _ = _role_boxes(data, 0, head_center, head_offset, tail_center, tail_offset)
+    _, r2_tail = _role_boxes(data, 1, head_center, head_offset, tail_center, tail_offset)
+    s_head, s_tail = _role_boxes(data, 2, head_center, head_offset, tail_center, tail_offset)
+    loss = (inclusion_score(r1_head, s_head, gamma) + inclusion_score(r2_tail, s_tail, gamma)) / 2
+    return loss.reshape(-1, 1)
+

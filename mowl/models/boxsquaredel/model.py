@@ -8,6 +8,10 @@ class BoxSquaredEL(EmbeddingELModel):
 
     Parameters
     ----------
+    load_role_axioms : bool, default False
+        Also train on the role inclusions :math:`r \\sqsubseteq s` and role chains
+        :math:`r_1 \\circ r_2 \\sqsubseteq s` of the ontology, with the losses of the paper
+        (Section 4.2). The reference code trains on them whenever the ontology has any.
     init_boxes : mowl.geometric.init.ExactBoxInit, optional
         Optional exact-model box initialisation applied in :meth:`init_module`.
         Rows are matched by IRI against :attr:`class_index_dict`; rows of the
@@ -33,14 +37,16 @@ class BoxSquaredEL(EmbeddingELModel):
                  device='cpu',
                  neg_sampling_gcis=None,
                  init_boxes=None,
-                 anchor_weight=0.0
+                 anchor_weight=0.0,
+                 load_role_axioms=False
                  ):
         if float(anchor_weight) < 0:
             raise ValueError(f"anchor_weight must be >= 0, got {anchor_weight!r}")
         super().__init__(dataset, embed_dim, batch_size, extended=True,
                          model_filepath=model_filepath, device=device,
                          learning_rate=learning_rate,
-                         neg_sampling_gcis=neg_sampling_gcis)
+                         neg_sampling_gcis=neg_sampling_gcis,
+                         load_role_axioms=load_role_axioms)
 
         self.margin = margin
         self.reg_norm = reg_norm

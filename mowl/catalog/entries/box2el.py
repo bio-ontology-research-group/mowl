@@ -5,7 +5,7 @@ from mowl.catalog.entries import _refs as R
 
 CARD = MethodCard(
     key="box2el",
-    expressivity="EL⊥ with ABox",
+    expressivity="ELH(∘)⊥ with ABox",
     tasks=("subsumption", "satisfiability", "disjointness", "instance-checking",
            "role-assertion"),
     name="Box²EL",
