@@ -32,6 +32,9 @@ relevant published methods it does not implement, with the reason.
    boxlite
    cate
    grounded
+   hyperbolic_cones
+   shadow_cones
+   disk_embeddings
 
 
 Representation, training and evaluation
