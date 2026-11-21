@@ -105,7 +105,7 @@ register_reasoner(
 register_reasoner(
     "elk", _elk,
     Expressivity.parse("ELH(∘)⊥ with ABox") | {Construct.DOMAIN_RANGE}, cost=1,
-    summary="ELK 0.4.3: consequence-based, polynomial, for EL with role hierarchies and "
+    summary="ELK 0.6.0: consequence-based, polynomial, for EL with role hierarchies and "
             "chains, ⊥ and assertions; no nominals, inverses or datatypes.")
 KM_FACTORY = "org.bioontology.kobayashimarust.protege.KMReasonerFactory"
 
@@ -158,7 +158,7 @@ register_reasoner(
             "Its OWL API binding classifies; instances are checked as {a} ⊑ C.")
 register_reasoner(
     "hermit", _hermit, Expressivity.parse("SROIQ(D)").with_abox(equality=True), cost=10,
-    summary="HermiT 1.3.8: hypertableau, sound and complete for OWL 2 DL.")
+    summary="HermiT 1.4.5: hypertableau, sound and complete for OWL 2 DL.")
 
 
 def list_reasoners():

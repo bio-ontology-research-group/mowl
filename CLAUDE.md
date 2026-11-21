@@ -22,6 +22,16 @@ pip install -e .
 
 Environments exist for Python 3.10, 3.11, 3.12, and 3.13.
 
+## Java libraries (`mowl/lib`)
+
+`mowl/lib` holds OWL API 5 (module JARs only), ELK, HermiT, jcel, mOWL's own `gateway.jar` and their dependencies. All of them except the KM reasoner (`kobayashi-marust-protege5-*.jar`, from its GitHub releases) are resolved from Maven Central by `gateway/build.gradle`. To change a version, edit `gateway/build.gradle` and rebuild (JDK 11+, Gradle comes with the wrapper):
+
+```bash
+cd gateway && ./gradlew --no-daemon clean installLibs   # or ./build_jars.sh
+```
+
+`installLibs` compiles `gateway.jar` (byte-identical for the same sources) and jcel's OWL API binding (`jcel-owlapi5-0.24.1.jar`, compiled from the released 0.24.1 sources because the binary is linked against OWL API 4), and replaces every JAR in `mowl/lib` except the KM JAR. Then run `pytest tests/owlapi`: it checks the library set and compares mOWL's behaviour with the golden files (`tests/owlapi/compat/README.md`).
+
 ## Running Tests
 
 ```bash
