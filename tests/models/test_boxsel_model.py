@@ -130,3 +130,20 @@ def test_declared_scoring_is_that_of_boxel():
     assert m.axiom_scoring == "module"
     rows = T([[m.class_index_dict[ADM], m.class_index_dict[APP]]])
     assert m.module(rows, "gci0").shape == (1,)
+
+
+def test_volume_regulariser_is_eq_10_of_the_paper():
+    """L_vol = sum_i [beta^n - Vol(C_i) - eps]_+: zero for a box that fills [0, beta]^n."""
+    m = BoxSEL(_dataset(), embed_dim=2, beta=2.0)
+    n_classes = m.module.min_embedding.weight.shape[0]
+    with th.no_grad():
+        m.module.delta_embedding.weight.fill_(float(np.log(2.0)))       # side 2 = beta
+    assert S.volume_loss(m.module.min_embedding, m.module.delta_embedding, 2.0).item() \
+        == pytest.approx(0.0, abs=1e-6)
+    with th.no_grad():
+        m.module.delta_embedding.weight.fill_(0.0)                      # side 1: Vol 1 < 4
+    assert S.volume_loss(m.module.min_embedding, m.module.delta_embedding, 2.0).item() \
+        == pytest.approx(3.0, abs=1e-5)
+    assert n_classes > 0
+    m.module.volume_weight = 1.0
+    assert m.module.regularization_loss().item() >= 3.0 - 1e-5

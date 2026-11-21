@@ -43,6 +43,54 @@ def rule_based_loss(c, d):
     return ((1 - d) * th.relu(c - d).detach()).mean(dim=-1)
 
 
+def _g(v, w):
+    """G(v, w) = ReLU(v - w), excluded from the gradient (paper, after Eq. 9)."""
+    return th.relu(v - w).detach()
+
+
+def rule_nf4(b, a, r, alpha):
+    """Eq. 10 for :math:`B \\sqsubseteq \\exists r.A` (``alpha`` is :math:`\\alpha'`), per row.
+    Product t-norm. ``b``, ``a``: ``(B, n)``; ``r``: ``(B, n, n)`` with ``r[:, s, a] = r(s, a)``.
+    First term: where :math:`A(s)` is below the threshold but some :math:`a` has
+    :math:`\\sum_a B(a) r(a, s)` above it, raise :math:`A(s)`. Second term (summed over
+    :math:`a`, read from the garbled index structure of the printed formula): raise
+    :math:`r(s, a)` when :math:`B(s) A(a)` exceeds it."""
+    pred = th.einsum("ba,bas->bs", b, r)
+    t1 = (1 - a) * _g(alpha, a) * _g(pred, alpha)
+    t2 = ((1 - r) * _g(b.unsqueeze(-1) * a.unsqueeze(1), r)).mean(dim=-1)
+    return (t1 + t2).mean(dim=-1)
+
+
+def rule_nf5(b, a, r, alpha):
+    """Eq. 11 for :math:`B \\sqsubseteq \\forall r.A`: the first term of NF4 with threshold
+    :math:`\\alpha`."""
+    pred = th.einsum("ba,bas->bs", b, r)
+    return ((1 - a) * _g(alpha, a) * _g(pred, alpha)).mean(dim=-1)
+
+
+def rule_nf6(a, b, r, alpha):
+    """Eq. 12 for :math:`\\exists r.A \\sqsubseteq B`: raise :math:`B(s)` where it is below the
+    threshold and :math:`\\sum_a A(a) r(s, a)` is above it."""
+    succ = th.einsum("ba,bsa->bs", a, r)
+    return ((1 - b) * _g(alpha, b) * _g(succ, alpha)).mean(dim=-1)
+
+
+def rule_nf7(a, b, r, alpha):
+    """Eq. 13 for :math:`\\forall r.A \\sqsubseteq B`: the NF6 term plus the NF4/NF5 term
+    raising :math:`A(s)` from :math:`\\sum_a B(a) r(a, s)`."""
+    succ = th.einsum("ba,bsa->bs", a, r)
+    pred = th.einsum("ba,bas->bs", b, r)
+    t = (1 - b) * _g(alpha, b) * _g(succ, alpha) + (1 - a) * _g(alpha, a) * _g(pred, alpha)
+    return t.mean(dim=-1)
+
+
+def _is_literal(e):
+    t = e.getClassExpressionType()
+    if t == ClassExpressionType.OBJECT_COMPLEMENT_OF:
+        return e.getOperand().getClassExpressionType() == ClassExpressionType.OWL_CLASS
+    return t == ClassExpressionType.OWL_CLASS
+
+
 class DFALCModule(ALCModule):
     """DF-ALC module: truth-value tables of concepts and roles over a finite domain.
 
@@ -53,11 +101,13 @@ class DFALCModule(ALCModule):
     :param bottom_index: Class index of ``owl:Nothing`` (constant ``0``).
     :param loss_type: ``"hierarchical"`` (Eq. 8, default) or ``"rule"``: Eq. 9 for
         inclusions without quantifiers, Eq. 8 for the others.
+    :param threshold: The threshold :math:`\\alpha = \\alpha'` of the rule-based losses of
+        normal forms 4-7 (paper: in :math:`[0.5, 1]`).
     :param init_std: Standard deviation of the logit initialisation.
     """
 
     def __init__(self, nclasses, nrelations, ndomain, top_index=None, bottom_index=None,
-                 loss_type="hierarchical", init_std=1.0):
+                 loss_type="hierarchical", init_std=1.0, threshold=0.8):
         super().__init__()
         if ndomain < 1:
             raise ValueError("The domain of a DF-ALC interpretation must not be empty.")
@@ -67,6 +117,7 @@ class DFALCModule(ALCModule):
         self.top_index = top_index
         self.bottom_index = bottom_index
         self.loss_type = loss_type
+        self.threshold = threshold
         self.c_embedding = th.nn.Embedding(nclasses, ndomain)
         self.r_embedding = th.nn.Embedding(max(nrelations, 1), ndomain * ndomain)
         for emb in (self.c_embedding, self.r_embedding):
@@ -136,7 +187,31 @@ class DFALCModule(ALCModule):
             return self._logical_not(val), nxt
         raise NotImplementedError(f"Class expression type {t} is not in ALC.")
 
+    def _rule_nf47(self, c_expr, d_expr, x, e_emb, start=0):
+        """Rule-based loss of normal forms 4-7 (Eqs. 10-13) if the inclusion has one of the
+        shapes ``L ⊑ ∃r.L``, ``L ⊑ ∀r.L``, ``∃r.L ⊑ L``, ``∀r.L ⊑ L`` (L a concept name or
+        its negation), else ``None``."""
+        some, every = _QUANTIFIERS
+        ct, dt = c_expr.getClassExpressionType(), d_expr.getClassExpressionType()
+        if _is_literal(c_expr) and dt in _QUANTIFIERS and _is_literal(d_expr.getFiller()):
+            b, nxt = self.forward_fs(c_expr, x, e_emb, start)
+            r = self.role_truth(x[:, nxt])
+            a, _ = self.forward_fs(d_expr.getFiller(), x, e_emb, nxt + 1)
+            f = rule_nf4 if dt == some else rule_nf5
+            return f(b, a, r, self.threshold)
+        if _is_literal(d_expr) and ct in _QUANTIFIERS and _is_literal(c_expr.getFiller()):
+            r = self.role_truth(x[:, start])
+            a, nxt = self.forward_fs(c_expr.getFiller(), x, e_emb, start + 1)
+            b, _ = self.forward_fs(d_expr, x, e_emb, nxt)
+            f = rule_nf6 if ct == some else rule_nf7
+            return f(a, b, r, self.threshold)
+        return None
+
     def _inclusion(self, c_expr, d_expr, x, e_emb, start=0):
+        if self.loss_type == "rule":
+            out = self._rule_nf47(c_expr, d_expr, x, e_emb, start)
+            if out is not None:
+                return out
         c, nxt = self.forward_fs(c_expr, x, e_emb, start)
         d, _ = self.forward_fs(d_expr, x, e_emb, nxt)
         if self.loss_type == "rule" and not (has_quantifier(c_expr) or has_quantifier(d_expr)):

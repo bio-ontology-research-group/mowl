@@ -30,8 +30,10 @@ class DFALCModel(EmbeddingALCModel):
 
     Differences to the paper (adaptations): axioms are not normalised, the hierarchical loss
     is applied to arbitrary :math:`\\mathcal{ALC}` inclusions (it only needs
-    :math:`C^I(a) \\le D^I(a)`); the rule-based losses of normal forms 4-7 (Eqs. 10-13) are not
-    implemented, those inclusions use the hierarchical loss; ABox assertions are fuzzy
+    :math:`C^I(a) \\le D^I(a)`); the rule-based losses of normal forms 4-7 are
+    implemented for the shapes ``L ⊑ ∃r.L``, ``L ⊑ ∀r.L``, ``∃r.L ⊑ L``, ``∀r.L ⊑ L``
+    (``loss_type="rule"``; ``threshold`` is :math:`\\alpha = \\alpha'`), other quantified
+    inclusions use the hierarchical loss; ABox assertions are fuzzy
     assertions with truth value 1 and the loss is the distance to 1.
 
     Differences to FALCON (:class:`~mowl.models.FALCONModel`): the domain is finite and
@@ -42,6 +44,7 @@ class DFALCModel(EmbeddingALCModel):
     :param anon_domain: Number of anonymous domain elements added after the individuals.
         Required (``> 0``) if the ontology has no individuals. Defaults to ``0``.
     :param loss_type: ``"hierarchical"`` (default) or ``"rule"``.
+    :param threshold: Threshold of the rule-based losses of normal forms 4-7 (default 0.8).
     :param alpha: Weight of the TBox loss. Defaults to ``0.4``.
     :param beta: Weight of the class assertion loss; role assertions get
         ``1 - alpha - beta``. Defaults to ``0.3``.
@@ -53,7 +56,8 @@ class DFALCModel(EmbeddingALCModel):
     scored_forms = ("gci0", "gci1", "gci2", "gci3")
 
     def __init__(self, dataset, anon_domain=0, loss_type="hierarchical", alpha=0.4, beta=0.3,
-                 learning_rate=0.05, batch_size=256, init_std=1.0, model_filepath=None,
+                 learning_rate=0.05, batch_size=256, init_std=1.0, threshold=0.8,
+                 model_filepath=None,
                  device="cpu"):
         n = len(dataset.individuals) + anon_domain
         if n < 1:
@@ -65,6 +69,7 @@ class DFALCModel(EmbeddingALCModel):
         self.anon_domain = anon_domain
         self.loss_type = loss_type
         self.init_std = init_std
+        self.threshold = threshold
         self.ndomain = n
         self.init_module()
 
@@ -73,7 +78,8 @@ class DFALCModel(EmbeddingALCModel):
         self.module = DFALCModule(
             len(self.dataset.classes), len(self.dataset.object_properties), self.ndomain,
             top_index=cid.get(_THING), bottom_index=cid.get(_NOTHING),
-            loss_type=self.loss_type, init_std=self.init_std).to(self.device)
+            loss_type=self.loss_type, init_std=self.init_std,
+            threshold=self.threshold).to(self.device)
 
     # The domain is explicit: no sampled entities.
     def sample_anonymous_entities(self):
