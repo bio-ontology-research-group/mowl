@@ -19,6 +19,7 @@ from __future__ import annotations
 from mowl.geometric import (
     boxes,
     checker,
+    convex_regions,
     export,
     helly,
     init,
@@ -32,6 +33,7 @@ from mowl.geometric.checker import (
     GeometricInterpretation,
     ModelChecker,
 )
+from mowl.geometric.convex_regions import ConvexRegionModel, FiniteInterpretation
 from mowl.geometric.errors import (
     BoxModelNotFound,
     GeometricError,
@@ -102,6 +104,10 @@ def __getattr__(name: str) -> object:
         import importlib
 
         return importlib.import_module("mowl.geometric.completion")
+    if name == "faithfulness":
+        import importlib
+
+        return importlib.import_module("mowl.geometric.faithfulness")
     if name in _COMPLETION_NAMES:
         from mowl.geometric import completion
 
@@ -120,10 +126,12 @@ __all__ = [
     "Completion",
     "CompletionResult",
     "ConvexPolyhedralModel",
+    "ConvexRegionModel",
     "DictInterpretation",
     "EMPTY_1D",
     "ExactBoxInit",
     "Face",
+    "FiniteInterpretation",
     "GeometricError",
     "GeometricInterpretation",
     "HellyCertificate",
@@ -159,6 +167,7 @@ __all__ = [
     "check_model",
     "class_points",
     "completion",
+    "convex_regions",
     "export",
     "helly",
     "helly_check",

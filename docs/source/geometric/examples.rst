@@ -904,3 +904,48 @@ compiled into ``n_defined == 3`` defined classes:
 
    3
    (9, 16, 2)
+
+
+Strongly faithful models and the convex model of a finite model
+---------------------------------------------------------------
+
+:class:`~mowl.geometric.faithfulness.StronglyFaithfulModel` builds the canonical model of
+Definition 26 of Lacerda, Ozaki & Guimarães (TGDK 2024), which has an element for every
+conjunction of two concept names and every existential restriction, and its geometric
+interpretation with unions of intervals in one dimension or with convex regions. The
+check compares, for every candidate axiom of the forms :math:`A \sqsubseteq B`,
+:math:`A \sqcap B \sqsubseteq C`, :math:`A \sqsubseteq \exists r.B`,
+:math:`\exists r.A \sqsubseteq B` and :math:`r \sqsubseteq s` over the signature, whether the
+geometric model satisfies it with whether the ontology entails it (decided by the
+completion on the ontology extended with fresh names). mOWL's plain
+:class:`~mowl.geometric.completion.CanonicalModel` has one element per name and is
+faithful on concept names only. :class:`~mowl.geometric.convex_regions.ConvexRegionModel`
+is the construction of Gutiérrez-Basulto & Schockaert (KR 2018, Proposition 3): it takes
+any finite interpretation, not an ontology.
+
+.. testcode::
+
+   import mowl
+   mowl.init_jvm("2g")
+   from mowl.geometric.convex_regions import ConvexRegionModel, FiniteInterpretation
+   from mowl.geometric.faithfulness import StronglyFaithfulModel
+   from mowl.geometric.normal_forms import NF1, NF3, NormalisedOntology
+
+   A, B, C, r = "http://x.org/A", "http://x.org/B", "http://x.org/C", "http://x.org/r"
+   no = NormalisedOntology(axioms=[NF1(A, B), NF3(B, r, C)],
+                           concept_names={A, B, C}, role_names={r}, dropped_axioms=0)
+
+   for regions in ("intervals", "convex"):
+       model = StronglyFaithfulModel(no, regions=regions)
+       report = model.check_strong_faithfulness()
+       print(regions, model.dimension > 0, report.is_strongly_faithful)
+
+   finite = FiniteInterpretation(2, {A: {0}, B: {0, 1}}, {r: {(0, 1)}})
+   eta = ConvexRegionModel(finite)
+   print(eta.dimension, eta.phi().same_as(finite), eta.satisfies(NF1(A, B)))
+
+.. testoutput::
+
+   intervals True True
+   convex True True
+   1 True True
