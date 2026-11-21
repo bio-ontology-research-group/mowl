@@ -54,6 +54,8 @@ _DEFAULTS = {
     "bcbox": {"model_kwargs": {"embed_dim": 32}, "epochs": 500},
     # needs individuals; fails with that message on the TBox-only data
     "canonical_mixture": {"model_kwargs": {}, "epochs": 500},
+    # fixed convex TBox, learned ABox; refuses ontologies whose canonical model is too big
+    "faithel": {"model_kwargs": {}, "epochs": 100},
     "grounded": {"model_kwargs": {}, "epochs": 500},
     "graph_kge": {"model_kwargs": {"embed_dim": 200}, "epochs": 100},
     # Word2Vec on walks or on a corpus, scored with the pair classifier head

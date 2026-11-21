@@ -117,6 +117,10 @@ constructed model ever fails verification, construction raises
      - Full normalised :math:`\mathcal{EL}^{++}`
      - Exact model (:math:`\eta \models \mathcal{O}`), non-degenerate, and strongly faithful on concept names (`Lacerda et al., TGDK 2024, Def. 12`; `Federico et al., JOWO 2026, Thm. 3`).
      - :math:`1` (classes in :math:`\mathbb{R}`, roles in :math:`\mathbb{R}^2`)
+   * - :class:`~mowl.geometric.faithfulness.StronglyFaithfulModel`
+     - Normalised :math:`\mathcal{ELH}_\bot`; the TBox forms :math:`A \sqsubseteq B`, :math:`A \sqcap B \sqsubseteq C`, :math:`A \sqsubseteq \exists r.B`, :math:`\exists r.A \sqsubseteq B`, :math:`r \sqsubseteq s`
+     - Built on the canonical model of Lacerda et al. (Def. 26, with elements for conjunctions and existentials): an axiom of these forms holds iff it is entailed (`Lacerda et al., TGDK 2024, Thms. 16, 28, 32`), tested with :func:`~mowl.geometric.faithfulness.check_strong_faithfulness`. The smaller :class:`~mowl.geometric.completion.CanonicalModel` used by the two classes above is faithful on concept names (and :math:`A \sqsubseteq \exists r.B`) only.
+     - :math:`1` (intervals) or :math:`n - 1` (convex), with :math:`n` the size of the Definition 26 model
    * - :func:`~mowl.geometric.helly.helly_check`
      - Propositional :math:`\mathcal{EL}_\bot` (exact for strong reading when ``complete=True``); sound necessary condition with roles
      - Every :class:`~mowl.geometric.helly.HellyCertificate` is a sound proof that no box model realises its three pairwise conjunctions simultaneously (`Eckhoff, 1988`; `Leemhuis & Kutz, NeSy 2025, Props. 4, 5`). Non-degenerate certificates exclude every non-degenerate box model; strong certificates exclude *conjunction-faithful* box models (every satisfiable conjunction of names non-empty), not box models that are merely strongly faithful on names. ``box_representable_* = True`` means "no Helly obstruction of this kind was found", not that a box model exists. Re-saturates per candidate set; intended for small to medium ontologies.

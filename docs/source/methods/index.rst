@@ -32,6 +32,7 @@ relevant published methods it does not implement, with the reason.
    boxlite
    cate
    grounded
+   faithel
 
 
 Representation, training and evaluation
