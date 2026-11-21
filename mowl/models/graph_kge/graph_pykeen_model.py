@@ -36,6 +36,7 @@ class GraphPlusPyKEENModel(KGEModel):
         self.optimizer = None
         self.lr = None
         self.batch_size = None
+        self.num_negs_per_pos = None
         self.epochs = None
         self.device = device
                         
@@ -211,8 +212,11 @@ class GraphPlusPyKEENModel(KGEModel):
         self._kge_method.train()
         optimizer = self.optimizer(params=self._kge_method.get_grad_params(), lr=self.lr)
 
+        loop_kwargs = {}
+        if self.num_negs_per_pos is not None:
+            loop_kwargs["negative_sampler_kwargs"] = dict(num_negs_per_pos=self.num_negs_per_pos)
         training_loop = SLCWATrainingLoop(model=self._kge_method, triples_factory=self.triples_factory,
-                                          optimizer=optimizer)
+                                          optimizer=optimizer, **loop_kwargs)
 
         _ = training_loop.train(triples_factory=self.triples_factory, num_epochs=epochs,
                                 batch_size=self.batch_size)

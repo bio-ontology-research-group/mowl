@@ -5,8 +5,10 @@ over a KG), not for description logic ontologies. They are catalogued because th
 region shapes and guarantees are often compared with ontology embeddings.
 """
 
-from mowl.catalog.card import Family, Guarantee, GuaranteeKind as K, MethodCard, Reference
+from mowl.catalog.card import (Family, Guarantee, GuaranteeKind as K, MethodCard, Origin,
+                               Reference, Status)
 from mowl.catalog.entries import _refs as R
+from mowl.logic import Construct, Expressivity
 
 _KG_ONLY = ("Defined for knowledge graphs, not for DL ontologies: there is no "
             "interpretation of TBox axioms (GCIs over complex concepts).")
@@ -25,10 +27,11 @@ BOXE = MethodCard(
     concepts="box (types as unary relations)",
     roles="one box per argument position",
     individuals="point with bump",
-    not_implemented_reason=(
-        _KG_ONLY + " BoxE is available in PyKEEN and can be trained on a projected "
-        "ontology graph with GraphPlusPyKEENModel (card 'graph_kge'), but then its "
-        "guarantees refer to the projected triples."),
+    status=Status.LEARNABLE,
+    origin=Origin.ADAPTATION,
+    expressivity="EL with ABox",
+    tasks=("subsumption",),
+    implementation="mowl.models.boxe.model.BoxE",
     guarantees=(
         Guarantee(
             K.EXPRESSIVITY,
@@ -54,6 +57,14 @@ BOXE = MethodCard(
     ),
     intersection_closed=True,
     helly="2 (axis-parallel boxes; eckhoff1988)",
+    related=("graph_kge",),
+    notes=(
+        "Not reimplemented: this is PyKEEN's BoxE (pykeen.models.BoxE) trained through "
+        "GraphPlusPyKEENModel with PyKEEN's negative sampling and self-adversarial loss. "
+        "Ontology link: the triples are the edges of a mowl.projection projector (default OWL2VecStarProjector: C subclassof D, C r D for C ⊑ ∃r.D, a type C for C(a), r(a, b)); axioms the projector does not read are ignored. Scores are available for C ⊑ D (gci0, the subclassof edge) and C ⊑ ∃r.D (gci2) only; class and role assertions are trained on but not scored. The paper's unary relations (types as boxes) become binary "
+        "type edges and classes are entities, so every guarantee above refers to the "
+        "projected triples, not to the description logic semantics. Higher-arity facts are "
+        "not used."),
     references=(
         Reference("boxe2020",
                   "Abboud, R., Ceylan, İ. İ., Lukasiewicz, T., Salvatori, T. (2020). BoxE: A "
@@ -76,7 +87,11 @@ EXPRESSIVE = MethodCard(
     concepts="not represented",
     roles="hyper-parallelogram in R^(2d)",
     individuals="point",
-    not_implemented_reason=_KG_ONLY + " ExpressivE is not part of PyKEEN 1.11.",
+    status=Status.LEARNABLE,
+    origin=Origin.ADAPTATION,
+    expressivity="EL with ABox",
+    tasks=("subsumption",),
+    implementation="mowl.models.expressive.model.ExpressivE",
     guarantees=(
         Guarantee(
             K.EXPRESSIVITY,
@@ -87,7 +102,9 @@ EXPRESSIVE = MethodCard(
             K.EXPRESSIVITY,
             "Captures symmetry, anti-symmetry, inversion, hierarchy, intersection, mutual "
             "exclusion and compositional definition patterns.",
-            "pavlovic2023, Theorems 5.2-5.4"),
+            "pavlovic2023, Theorems 5.2-5.4",
+            verified_in_mowl="tests/nn/test_expressive_module.py (symmetry, hierarchy, "
+                             "mutual exclusion on hand-built parallelograms)"),
         Guarantee(
             K.LIMITATION,
             "Sound but not complete for languages with mutual exclusion, hence not fully "
@@ -102,6 +119,14 @@ EXPRESSIVE = MethodCard(
                   "https://arxiv.org/abs/2206.04192"),
         R.BOURGAUX2024),
     code_url="https://github.com/aleksvap/expressive",
+    related=("graph_kge", "boxe"),
+    notes=(
+        "Reimplemented as a PyKEEN ERModel (mowl.nn.graph.expressive) after the authors' "
+        "code (tanh maps, minimal denominator Dmin, distance of Equation 3, self-adversarial "
+        "loss with margin 3 and temperature 2) and trained through GraphPlusPyKEENModel; "
+        "only the base model, not the ablations. Ontology link: the triples are the edges of a mowl.projection projector (default OWL2VecStarProjector: C subclassof D, C r D for C ⊑ ∃r.D, a type C for C(a), r(a, b)); axioms the projector does not read are ignored. Scores are available for C ⊑ D (gci0, the subclassof edge) and C ⊑ ∃r.D (gci2) only; class and role assertions are trained on but not scored. Composition "
+        "patterns hold for the projected triples; role chains of the ontology are not "
+        "read."),
 )
 
 RESHUFFLE = MethodCard(
@@ -118,7 +143,11 @@ RESHUFFLE = MethodCard(
     concepts="not represented",
     roles="region over reshuffled coordinates",
     individuals="vector (GNN output)",
-    not_implemented_reason=_KG_ONLY + " It targets closed path (Horn) rules over triples.",
+    status=Status.LEARNABLE,
+    origin=Origin.ADAPTATION,
+    expressivity="EL with ABox",
+    tasks=("subsumption",),
+    implementation="mowl.models.reshuffle.model.Reshuffle",
     guarantees=(
         Guarantee(
             K.SOUNDNESS,
@@ -139,6 +168,20 @@ RESHUFFLE = MethodCard(
                   "Proceedings of KR 2025, 489-499.",
                   "https://doi.org/10.24963/kr.2025/48"),),
     code_url="https://github.com/AleksVap/RESHUFFLE",
+    related=("graph_kge", "boxe", "expressive"),
+    notes=(
+        "Implemented from the authors' code (the paper text was not read): random binary "
+        "entity features, soft reshuffling relation matrices (column softmax, last row "
+        "dropped), max-aggregation message passing shared over the layers, score "
+        "-||ReLU(x_h R_r - x_t)||_2, margin ranking loss with 100 negatives. Differences: "
+        "the random features are drawn once per model, not at every forward pass; training "
+        "is transductive on the projected ontology graph (Reshuffle.score_on_graph encodes "
+        "another graph with fresh features for the inductive setting of the paper); "
+        "inverse relations are separate parameters used for message passing only. The "
+        "propositions above are the paper's and are not verified in mOWL; the test "
+        "tests/nn/test_reshuffle_module.py checks that the product of two relation "
+        "matrices is captured after two layers. Ontology link: the triples are the edges of a mowl.projection projector (default OWL2VecStarProjector: C subclassof D, C r D for C ⊑ ∃r.D, a type C for C(a), r(a, b)); axioms the projector does not read are ignored. Scores are available for C ⊑ D (gci0, the subclassof edge) and C ⊑ ∃r.D (gci2) only; class and role assertions are trained on but not scored. The GNN encodes the "
+        "whole graph at every step, which suits small and medium graphs."),
 )
 
 QUERY2BOX = MethodCard(
@@ -274,10 +317,33 @@ CONCEPT2BOX = MethodCard(
     concepts="box",
     roles="KGE relation embedding",
     individuals="point",
-    not_implemented_reason=(
-        _KG_ONLY + " The ontology view is a graph of concepts (e.g. DBpedia/YAGO types)."),
+    status=Status.LEARNABLE,
+    origin=Origin.ADAPTATION,
+    implementation="mowl.models.concept2box.model.Concept2Box",
+    module="mowl.nn.el.concept2box.module.Concept2BoxModule",
+    expressivity=Expressivity({Construct.TOP, Construct.EXISTENTIAL},
+                              label="EL without conjunction").with_abox(),
+    tasks=("subsumption", "instance-checking", "role-assertion"),
+    axioms=("gci0", "gci2", "class_assertion", "object_property_assertion"),
     intersection_closed=True,
     helly="2 (axis-parallel boxes; eckhoff1988)",
+    related=("transbox", "boxel"),
+    notes=(
+        "Ontology link: the two views of the paper are the TBox and the ABox. Ontology "
+        "view: C ⊑ D (gci0, the triple (D, subclass, C)) and C ⊑ ∃r.D (gci2, the triple "
+        "(C, r, D)) with the conditional probability of Gumbel boxes; instance view: role "
+        "assertions r(a, b) with a translational (TransE) score; cross-view links: class "
+        "assertions C(a) with the vector-to-box distance. Not used: conjunctions on the "
+        "left (gci1), existentials on the left (gci3), bottom, role axioms (a warning "
+        "names them). Adaptations: the BERT encoder of the concept and relation texts is "
+        "replaced by learned embeddings of the concept and the relation joined by the "
+        "two-layer MLP, with no text; the pairwise hinge losses of the instance and cross "
+        "views are split into a positive and a negative part so that the shared EL "
+        "training loop applies (negatives by corruption); the cross-view box is the box of "
+        "the concept in the context of a null relation. The expected volumes use the Gumbel "
+        "box closed forms (Dasgupta et al. 2020), written from memory of that paper, not "
+        "from its text. No reference code was consulted, and no published number is "
+        "reproduced."),
     references=(
         Reference("huang2023",
                   "Huang, Z., Wang, D., Huang, B., Zhang, C., Shang, J., Liang, Y., Wang, Z., "

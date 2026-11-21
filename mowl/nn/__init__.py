@@ -20,3 +20,4 @@ from .graph.bcbox import BinaryCodeBoxModule
 from .graph.cate import CatEModule
 from .alc.alcone.module import ALConeModule
 from .alc.e2r.module import E2RModule
+from .el.concept2box.module import Concept2BoxModule
