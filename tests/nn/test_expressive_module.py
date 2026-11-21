@@ -100,3 +100,28 @@ def test_a_captured_pair_scores_above_an_uncaptured_one():
     near = interaction(th.full((1, D), 0.1), r, th.full((1, D), 0.1))
     far = interaction(th.full((1, D), 0.8), r, th.full((1, D), -0.8))
     assert near.item() > far.item()
+
+
+def test_compositional_definition_pattern():
+    """r1(X, Y) & r2(Y, Z) <=> rd(X, Z) (Theorem 5.4): relations that are functions, as
+    zero-width parallelograms (slopes a, centres b with y = a x + b), compose like the
+    functions do. Parameters are used in their constrained form, without ``min_denom``."""
+    th.manual_seed(5)
+    eps = 1e-5
+
+    def function(a, b):
+        # y = a x + b: |t - c^t - s^h h| <= 0 with c^t = b, s^h = a, and the head
+        # inequality |h - c^h - s^t t| <= 0 with s^t = 1 / a, c^h = -b / a
+        return _rel(eps, eps, -b / a, b, a, 1 / a)
+
+    a1, b1, a2, b2 = 0.5, 0.1, -0.4, 0.2
+    r1, r2 = function(a1, b1), function(a2, b2)
+    rd = function(a2 * a1, a2 * b1 + b2)
+    for _ in range(100):
+        x = th.rand(1, D) * 0.6 - 0.3
+        y = a1 * x + b1
+        z = a2 * y + b2
+        assert bool(captured(x, y, *r1)) and bool(captured(y, z, *r2))
+        assert bool(captured(x, z, *rd))
+        # a different third entity is not in the relation
+        assert not bool(captured(x, z + 0.3, *rd))

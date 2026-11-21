@@ -54,8 +54,12 @@ with ``projector=``.
   ``min_denom`` and the distance of Equation 3. Only the base model is provided. The
   pattern theorems (symmetry, hierarchy, mutual exclusion) are checked on hand-built
   parallelograms in ``tests/nn/test_expressive_module.py``.
-* **RESHUFFLE** is written after the authors' code (:mod:`mowl.nn.graph.reshuffle`); the
-  paper text itself was not used. Differences: the random features are drawn once, the graph
+* **RESHUFFLE** is written after the authors' code and checked against the paper
+  (:mod:`mowl.nn.graph.reshuffle`); the paper's Propositions 1, 2 and 7 are tested on a
+  rule graph built by hand. The ablations are options (``aggregation="max_self_noLoop"`` is
+  RESHUFFLE without loop, ``row_function="square"`` is RESHUFFLE2). Differences: the paper
+  initialises the features with probability 0.5 of a 1, the code and our default use 0.3085
+  (``density``), the random features are drawn once, the graph
   is the projection (transductive), and
   :meth:`~mowl.nn.graph.reshuffle.Reshuffle.score_on_graph` encodes another graph with fresh
   features for the inductive setting.
@@ -127,8 +131,9 @@ existentials on the left, bottom and role axioms are not used, and the model say
 warning. Adaptations of the paper: the BERT encoder of the texts of concept and relation is
 replaced by learned embeddings joined by the same kind of MLP (no text); the pairwise hinge
 of the instance and cross views is split into a positive and a negative part so that the
-shared loop applies; the Gumbel box formulas were written from memory of Dasgupta et al.
-(2020), and no reference code was consulted.
+shared loop applies; the Gumbel box formulas were checked against Dasgupta et al. (2020) and tested against the
+Bessel expression and a Monte Carlo estimate; the three losses are summed (Equation 11) while
+the paper alternates them; no reference code was consulted.
 
 .. testcode::
 

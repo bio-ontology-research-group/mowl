@@ -22,6 +22,9 @@ class Reshuffle(RegionKGEModel):
     :param l: Number of coordinates.
     :param k: Rows of an entity feature matrix.
     :param num_layers: Message passing layers.
+    :param kge_kwargs: Further arguments of the PyKEEN model, e.g. ``aggregation``
+        (``"max_self_noLoop"`` is RESHUFFLE without loop), ``row_function``
+        (``"square"`` is RESHUFFLE2), ``density``.
     """
 
     KGE_CLASS = ReshuffleKGE

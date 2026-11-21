@@ -116,3 +116,22 @@ def test_the_methods_take_part_in_the_joint_ranking_benchmark(method, kwargs, sc
     (result,) = outcome.results
     assert 0.0 < result.metrics["all"]["f_mrr"] <= 1.0
     assert result.protocol_info["scoring"] == scoring
+
+
+def test_boxe_is_pykeens_model_trained_through_the_shared_path(dataset):
+    """The BoxE of mOWL is PyKEEN's, trained by GraphPlusPyKEENModel on the projection;
+    it scores C ⊑ D and C ⊑ ∃r.D with finite values."""
+    th.manual_seed(0)
+    model = BoxE(dataset, embed_dim=6, batch_size=64)
+    assert type(model.kge_method) is PyKEENBoxE
+    assert type(model).__mro__[1].__name__ == "RegionKGEModel"
+    assert isinstance(model, GraphPlusPyKEENModel)
+    model.train(epochs=3)
+    names = {n.rsplit("#", 1)[-1]: i for n, i in model.class_index_dict.items()}
+    role = {n.rsplit("#", 1)[-1]: i for n, i in model.object_property_index_dict.items()}
+    gci0 = th.tensor([[names["A"], names["B"]], [names["B"], names["C"]],
+                      [names["A"], names["E"]]])
+    gci2 = th.tensor([[names["A"], role["r"], names["D"]], [names["B"], role["r"], names["E"]]])
+    for form, rows in (("gci0", gci0), ("gci2", gci2)):
+        costs = model.axiom_costs(form, rows)
+        assert costs.shape == (len(rows),) and th.isfinite(costs).all()

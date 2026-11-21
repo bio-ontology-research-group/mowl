@@ -27,6 +27,8 @@ along paths of the graph).
 Differences from the authors' code (https://github.com/AleksVap/RESHUFFLE), which is
 written for inductive link prediction on ILP-teru datasets:
 
+* the paper's text initialises the features with probability 0.5 of a 1; the code (and
+  the default here) uses 0.3085; ``density`` selects;
 * the random features are drawn once per model (seeded) and kept, not redrawn at every
   forward pass;
 * the model works on the graph it is given (transductive); the authors' inductive setting
@@ -42,10 +44,16 @@ from pykeen.nn import Embedding
 from pykeen.nn.modules import Interaction
 
 
-def relation_matrices(raw):
+def relation_matrices(raw, row_function="softmax"):
     """Soft reshuffling matrices from raw ``(..., l + 1, l)`` parameters: softmax over the
-    rows of every column, then drop the last row. Shape ``(..., l, l)``."""
-    return th.softmax(raw, dim=-2)[..., :-1, :]
+    rows of every column, then drop the last row. Shape ``(..., l, l)``. With
+    ``row_function="square"`` the entries are squared instead (the RESHUFFLE2 ablation of
+    the paper, which allows arbitrary non-negative values)."""
+    if row_function == "softmax":
+        return th.softmax(raw, dim=-2)[..., :-1, :]
+    if row_function == "square":
+        return raw.square()[..., :-1, :]
+    raise ValueError("row_function must be 'softmax' or 'square'.")
 
 
 def random_features(num_entities, k, l,  # noqa: E741
@@ -118,7 +126,10 @@ class Reshuffle(ERModel):
     :param k: Number of rows of an entity feature matrix.
     :param num_layers: Message passing layers.
     :param aggregation: ``"max_self_and_selfLoop"`` or ``"max_self_noLoop"``.
-    :param density: Probability of a 1 in the random features.
+    :param density: Probability of a 1 in the random features. The authors' code draws
+        ``N(0, 1) > 0.5`` (0.3085, the default); the paper's text says 0.5.
+    :param row_function: ``"softmax"`` (RESHUFFLE) or ``"square"`` (the RESHUFFLE2
+        ablation of the paper).
     :param feature_seed: Seed of the random features.
     """
 
@@ -127,7 +138,8 @@ class Reshuffle(ERModel):
 
     def __init__(self, *, triples_factory, l=25, k=80, num_layers=4,
                  aggregation="max_self_and_selfLoop", density=0.3085, feature_seed=0,
-                 **kwargs):
+                 row_function="softmax", **kwargs):
+        self.row_function = row_function
         self.l, self.k, self.num_layers = l, k, num_layers
         self.aggregation = aggregation
         self.density = density
@@ -160,8 +172,8 @@ class Reshuffle(ERModel):
         features = self.entity_representations[0]() if features is None else features
         edge_index = self.edge_index if edge_index is None else edge_index
         edge_type = self.edge_type if edge_type is None else edge_type
-        rel = relation_matrices(self.relation_representations[0]())
-        loop = relation_matrices(self.loop_raw)
+        rel = relation_matrices(self.relation_representations[0](), self.row_function)
+        loop = relation_matrices(self.loop_raw, self.row_function)
         x = propagate(features, rel, loop, edge_index, edge_type, self.num_layers,
                       self.aggregation)
         return x, rel[0::2]

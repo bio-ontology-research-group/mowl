@@ -31,8 +31,8 @@ class Concept2BoxModule(ELModule):
     :param embed_dim: Dimension of boxes and entity vectors.
     :param beta: Gumbel scale :math:`\beta`.
     :param alpha: Weight :math:`\alpha` of the inside distance (``0 < alpha < 1``).
-    :param kge_margin: Margin :math:`\gamma^{KG}` of the instance view.
-    :param cross_margin: Margin :math:`\gamma^{Cross}` of the cross view.
+    :param kge_margin: Margin :math:`\gamma^{KG}` of the instance view (paper: 0.3).
+    :param cross_margin: Margin :math:`\gamma^{Cross}` of the cross view (paper: 0.15).
     :param hidden_dim: Hidden size of the MLP (default ``2 * embed_dim``).
     :param instance_weight: :math:`\lambda_1` of the overall loss.
     :param cross_weight: :math:`\lambda_2` of the overall loss.
@@ -43,7 +43,7 @@ class Concept2BoxModule(ELModule):
     role_axiom_capable = False
 
     def __init__(self, nb_classes, nb_rels, nb_inds=None, embed_dim=32, beta=1.0,
-                 alpha=0.5, kge_margin=1.0, cross_margin=0.1, hidden_dim=None,
+                 alpha=0.5, kge_margin=0.3, cross_margin=0.15, hidden_dim=None,
                  instance_weight=1.0, cross_weight=1.0):
         super().__init__()
         if not 0 < alpha < 1:

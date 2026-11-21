@@ -1,4 +1,5 @@
-"""Region-based knowledge graph and query embeddings (catalogued only).
+"""Region-based knowledge graph and query embeddings (BoxE, ExpressivE, RESHUFFLE and
+Concept2Box are implemented; the query embedding methods are catalogued only).
 
 These methods are defined for knowledge graphs (triples, rule patterns, logical queries
 over a KG), not for description logic ontologies. They are catalogued because their
@@ -170,7 +171,8 @@ RESHUFFLE = MethodCard(
     code_url="https://github.com/AleksVap/RESHUFFLE",
     related=("graph_kge", "boxe", "expressive"),
     notes=(
-        "Implemented from the authors' code (the paper text was not read): random binary "
+        "Implemented from the authors' code and checked against the paper (arXiv:2406.09529, "
+        "Sections 4-6 and 7): random binary "
         "entity features, soft reshuffling relation matrices (column softmax, last row "
         "dropped), max-aggregation message passing shared over the layers, score "
         "-||ReLU(x_h R_r - x_t)||_2, margin ranking loss with 100 negatives. Differences: "
@@ -178,9 +180,12 @@ RESHUFFLE = MethodCard(
         "is transductive on the projected ontology graph (Reshuffle.score_on_graph encodes "
         "another graph with fresh features for the inductive setting of the paper); "
         "inverse relations are separate parameters used for message passing only. The "
-        "propositions above are the paper's and are not verified in mOWL; the test "
-        "tests/nn/test_reshuffle_module.py checks that the product of two relation "
-        "matrices is captured after two layers. Ontology link: the triples are the edges of a mowl.projection projector (default OWL2VecStarProjector: C subclassof D, C r D for C ⊑ ∃r.D, a type C for C(a), r(a, b)); axioms the projector does not read are ignored. Scores are available for C ⊑ D (gci0, the subclassof edge) and C ⊑ ∃r.D (gci2) only; class and role assertions are trained on but not scored. The GNN encodes the "
+        "propositions above are the paper's; tests/nn/test_reshuffle_module.py checks "
+        "Propositions 1, 2 and 7 on a hand-built rule graph (Equation 7) for the "
+        "matrices and the message passing of Equation 6, not for learned matrices. The "
+        "paper's text initialises features with probability 0.5 of a 1, the code (the "
+        "default here) 0.3085 (argument density); RESHUFFLE_nL and RESHUFFLE2 of the paper "
+        "are aggregation='max_self_noLoop' and row_function='square'. Ontology link: the triples are the edges of a mowl.projection projector (default OWL2VecStarProjector: C subclassof D, C r D for C ⊑ ∃r.D, a type C for C(a), r(a, b)); axioms the projector does not read are ignored. Scores are available for C ⊑ D (gci0, the subclassof edge) and C ⊑ ∃r.D (gci2) only; class and role assertions are trained on but not scored. The GNN encodes the "
         "whole graph at every step, which suits small and medium graphs."),
 )
 
@@ -341,9 +346,12 @@ CONCEPT2BOX = MethodCard(
         "views are split into a positive and a negative part so that the shared EL "
         "training loop applies (negatives by corruption); the cross-view box is the box of "
         "the concept in the context of a null relation. The expected volumes use the Gumbel "
-        "box closed forms (Dasgupta et al. 2020), written from memory of that paper, not "
-        "from its text. No reference code was consulted, and no published number is "
-        "reproduced."),
+        "box closed forms were checked against Dasgupta et al. (2020, Lemma 1, Proposition 1 "
+        "and the softplus approximation) and Equations 1-3 of the Concept2Box paper, and "
+        "tested against the Bessel expression and a Monte Carlo estimate. The paper "
+        "alternates updates of the three losses; mOWL sums them (Equation 11). Margins "
+        "(0.3, 0.15) and learning rate (0.005) are the paper's; dimensions are smaller. "
+        "No reference code was consulted, and no published number is reproduced."),
     references=(
         Reference("huang2023",
                   "Huang, Z., Wang, D., Huang, B., Zhang, C., Shang, J., Liang, Y., Wang, Z., "

@@ -123,3 +123,49 @@ def test_training_reduces_the_loss_of_a_subsumption():
     assert m(data, "gci0").mean().item() < before / 2
     # the converse is not entailed: it keeps a high loss
     assert m(data[:, [1, 0]], "gci0").mean().item() > m(data, "gci0").mean().item()
+
+
+def test_gumbel_volume_matches_the_exact_bessel_expression():
+    """Dasgupta et al. (2020), Proposition 1: the expected side length is
+    2 beta K0(2 exp(-x / (2 beta))) with x = mu_M - mu_m; Equation 2 of Concept2Box (and
+    Appendix of Dasgupta et al.) approximates it by beta log(1 + exp(x / beta - 2 gamma)),
+    with an error below 0.0617 beta for x / beta in [-100, 100]."""
+    scipy_special = pytest.importorskip("scipy.special")
+    for beta in (0.1, 1.0, 2.5):
+        x = th.linspace(-20 * beta, 20 * beta, 81, dtype=th.float64)
+        exact = 2 * beta * th.from_numpy(
+            scipy_special.kv(0, (2 * th.exp(-x / (2 * beta))).numpy()))
+        approx = th.exp(L.gumbel_log_volume(th.zeros_like(x)[:, None], x[:, None], beta))
+        assert (approx - exact).abs().max().item() < 0.0617 * beta
+
+
+def test_gumbel_intersection_volume_against_monte_carlo():
+    """Lemma 1 of Dasgupta et al. (2020): the min corner of an intersection is
+    MaxGumbel(beta ln(e^(mu1/beta) + e^(mu2/beta))) and the max corner is
+    MinGumbel(-beta ln(e^(-mu1/beta) + e^(-mu2/beta))). The expected side of the
+    intersection of two sampled boxes is compared with the closed form."""
+    scipy_special = pytest.importorskip("scipy.special")
+    beta = 0.7
+    gen = th.Generator().manual_seed(0)
+    n = 400_000
+    gumbel = -th.log(-th.log(th.rand(n, generator=gen, dtype=th.float64)))   # standard Gumbel
+    gumbel2 = -th.log(-th.log(th.rand(n, generator=gen, dtype=th.float64)))
+    gumbel3 = -th.log(-th.log(th.rand(n, generator=gen, dtype=th.float64)))
+    gumbel4 = -th.log(-th.log(th.rand(n, generator=gen, dtype=th.float64)))
+    (lo1, hi1), (lo2, hi2) = (0.0, 2.0), (1.0, 4.0)
+    # corners: min corner ~ MaxGumbel(mu_m), max corner ~ MinGumbel(mu_M)
+    x1, x2 = lo1 + beta * gumbel, lo2 + beta * gumbel2
+    y1, y2 = hi1 - beta * gumbel3, hi2 - beta * gumbel4
+    sampled = th.relu(th.minimum(y1, y2) - th.maximum(x1, x2)).mean().item()
+    mu_lo = beta * th.logaddexp(th.tensor(lo1 / beta), th.tensor(lo2 / beta)).item()
+    mu_hi = -beta * th.logaddexp(th.tensor(-hi1 / beta), th.tensor(-hi2 / beta)).item()
+    arg = 2 * float(th.exp(th.tensor(-(mu_hi - mu_lo) / (2 * beta))))
+    exact = 2 * beta * scipy_special.kv(0, arg)
+    # the module's intersection and softplus volume
+    lo_t, hi_t = L.gumbel_intersection(th.tensor([lo1]), th.tensor([hi1]),
+                                       th.tensor([lo2]), th.tensor([hi2]), beta)
+    assert lo_t.item() == pytest.approx(mu_lo, abs=1e-5)
+    assert hi_t.item() == pytest.approx(mu_hi, abs=1e-5)
+    softplus = th.exp(L.gumbel_log_volume(lo_t, hi_t, beta)).item()
+    assert sampled == pytest.approx(exact, abs=0.02)
+    assert softplus == pytest.approx(sampled, abs=0.0617 * beta + 0.02)

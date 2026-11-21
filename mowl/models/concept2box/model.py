@@ -39,9 +39,9 @@ class Concept2Box(EmbeddingELModel):
     scored_forms = ("gci0", "gci2", "class_assertion", "object_property_assertion")
     SUPPORTED_GCIS = scored_forms
 
-    def __init__(self, dataset, embed_dim=32, beta=1.0, alpha=0.5, kge_margin=1.0,
-                 cross_margin=0.1, instance_weight=1.0, cross_weight=1.0,
-                 learning_rate=0.001, batch_size=4096, model_filepath=None, device="cpu",
+    def __init__(self, dataset, embed_dim=32, beta=1.0, alpha=0.5, kge_margin=0.3,
+                 cross_margin=0.15, instance_weight=1.0, cross_weight=1.0,
+                 learning_rate=0.005, batch_size=4096, model_filepath=None, device="cpu",
                  neg_sampling_gcis=None):
         super().__init__(dataset, embed_dim, batch_size, extended=True,
                          model_filepath=model_filepath, device=device,
