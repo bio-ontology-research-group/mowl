@@ -1,0 +1,18 @@
+{
+ "owlapi": "4.5.29",
+ "value": {
+  "role_chain": [
+   [
+    "http://mowl.borg/geo#r",
+    "http://mowl.borg/geo#s",
+    "http://mowl.borg/geo#t"
+   ]
+  ],
+  "role_inclusion": [
+   [
+    "http://mowl.borg/geo#r",
+    "http://mowl.borg/geo#s"
+   ]
+  ]
+ }
+}

@@ -1,0 +1,1067 @@
+{
+ "owlapi": "4.5.29",
+ "value": {
+  "edges": 734,
+  "named_edges": [
+   [
+    "http://mowl.borg/compat/rich#Adult",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Adult"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Adult",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Adult or not http://mowl.borg/compat/rich#Adult"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Adult and not http://mowl.borg/compat/rich#Adult",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Adult"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Adult and not http://mowl.borg/compat/rich#Adult",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Adult and not http://mowl.borg/compat/rich#Adult"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Adult or not http://mowl.borg/compat/rich#Adult",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Adult or not http://mowl.borg/compat/rich#Adult"
+   ],
+   [
+    "http://mowl.borg/compat/rich#BusyParent",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#BusyParent"
+   ],
+   [
+    "http://mowl.borg/compat/rich#BusyParent",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#BusyParent or not http://mowl.borg/compat/rich#BusyParent"
+   ],
+   [
+    "http://mowl.borg/compat/rich#BusyParent and not http://mowl.borg/compat/rich#BusyParent",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#BusyParent"
+   ],
+   [
+    "http://mowl.borg/compat/rich#BusyParent and not http://mowl.borg/compat/rich#BusyParent",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#BusyParent and not http://mowl.borg/compat/rich#BusyParent"
+   ],
+   [
+    "http://mowl.borg/compat/rich#BusyParent or not http://mowl.borg/compat/rich#BusyParent",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#BusyParent or not http://mowl.borg/compat/rich#BusyParent"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Cat",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Cat"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Cat",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Cat or not http://mowl.borg/compat/rich#Cat"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Cat and not http://mowl.borg/compat/rich#Cat",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Cat"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Cat and not http://mowl.borg/compat/rich#Cat",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Cat and not http://mowl.borg/compat/rich#Cat"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Cat or not http://mowl.borg/compat/rich#Cat",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Cat or not http://mowl.borg/compat/rich#Cat"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Childless",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Childless"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Childless",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Childless or not http://mowl.borg/compat/rich#Childless"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Childless",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Childless or not http://mowl.borg/compat/rich#Person and not http://mowl.borg/compat/rich#Parent"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Childless",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Person and not http://mowl.borg/compat/rich#Parent"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Childless and not http://mowl.borg/compat/rich#Childless",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Childless"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Childless and not http://mowl.borg/compat/rich#Childless",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Childless and not http://mowl.borg/compat/rich#Childless"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Childless or http://mowl.borg/compat/rich#Parent or not http://mowl.borg/compat/rich#Person",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Childless or http://mowl.borg/compat/rich#Parent or not http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Childless or not http://mowl.borg/compat/rich#Childless",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Childless or not http://mowl.borg/compat/rich#Childless"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Childless or not http://mowl.borg/compat/rich#Person and not http://mowl.borg/compat/rich#Parent",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Childless or not http://mowl.borg/compat/rich#Person and not http://mowl.borg/compat/rich#Parent"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Dog",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Dog"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Dog",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Dog or not http://mowl.borg/compat/rich#Dog"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Dog and not http://mowl.borg/compat/rich#Dog",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Dog"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Dog and not http://mowl.borg/compat/rich#Dog",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Dog and not http://mowl.borg/compat/rich#Dog"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Dog or not http://mowl.borg/compat/rich#Dog",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Dog or not http://mowl.borg/compat/rich#Dog"
+   ],
+   [
+    "http://mowl.borg/compat/rich#DogOnlyOwner",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#DogOnlyOwner"
+   ],
+   [
+    "http://mowl.borg/compat/rich#DogOnlyOwner",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#DogOnlyOwner or not http://mowl.borg/compat/rich#DogOnlyOwner"
+   ],
+   [
+    "http://mowl.borg/compat/rich#DogOnlyOwner",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#DogOnlyOwner or not http://mowl.borg/compat/rich#PetOwner and http://mowl.borg/compat/rich#hasPet only http://mowl.borg/compat/rich#Dog"
+   ],
+   [
+    "http://mowl.borg/compat/rich#DogOnlyOwner",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#PetOwner and http://mowl.borg/compat/rich#hasPet only http://mowl.borg/compat/rich#Dog"
+   ],
+   [
+    "http://mowl.borg/compat/rich#DogOnlyOwner and not http://mowl.borg/compat/rich#DogOnlyOwner",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#DogOnlyOwner"
+   ],
+   [
+    "http://mowl.borg/compat/rich#DogOnlyOwner and not http://mowl.borg/compat/rich#DogOnlyOwner",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#DogOnlyOwner and not http://mowl.borg/compat/rich#DogOnlyOwner"
+   ],
+   [
+    "http://mowl.borg/compat/rich#DogOnlyOwner or not http://mowl.borg/compat/rich#DogOnlyOwner",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#DogOnlyOwner or not http://mowl.borg/compat/rich#DogOnlyOwner"
+   ],
+   [
+    "http://mowl.borg/compat/rich#DogOnlyOwner or not http://mowl.borg/compat/rich#PetOwner and http://mowl.borg/compat/rich#hasPet only http://mowl.borg/compat/rich#Dog",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#DogOnlyOwner or not http://mowl.borg/compat/rich#PetOwner and http://mowl.borg/compat/rich#hasPet only http://mowl.borg/compat/rich#Dog"
+   ],
+   [
+    "http://mowl.borg/compat/rich#DogOnlyOwner or not http://mowl.borg/compat/rich#PetOwner or http://mowl.borg/compat/rich#hasPet some not http://mowl.borg/compat/rich#Dog",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#DogOnlyOwner or not http://mowl.borg/compat/rich#PetOwner or http://mowl.borg/compat/rich#hasPet some not http://mowl.borg/compat/rich#Dog"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Father",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Father"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Father",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Father or not http://mowl.borg/compat/rich#Father"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Father",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Father or not http://mowl.borg/compat/rich#Man and http://mowl.borg/compat/rich#Parent"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Father",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Man and http://mowl.borg/compat/rich#Parent"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Father and not http://mowl.borg/compat/rich#Father",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Father"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Father and not http://mowl.borg/compat/rich#Father",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Father and not http://mowl.borg/compat/rich#Father"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Father or not http://mowl.borg/compat/rich#Father",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Father or not http://mowl.borg/compat/rich#Father"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Father or not http://mowl.borg/compat/rich#Man and http://mowl.borg/compat/rich#Parent",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Father or not http://mowl.borg/compat/rich#Man and http://mowl.borg/compat/rich#Parent"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Father or not http://mowl.borg/compat/rich#Man or not http://mowl.borg/compat/rich#Parent",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Father or not http://mowl.borg/compat/rich#Man or not http://mowl.borg/compat/rich#Parent"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Man",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Man"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Man",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Man or http://mowl.borg/compat/rich#Woman"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Man",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Man or not http://mowl.borg/compat/rich#Man"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Man",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Man and http://mowl.borg/compat/rich#Parent",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Father"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Man and http://mowl.borg/compat/rich#Parent",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Man"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Man and http://mowl.borg/compat/rich#Parent",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Man and http://mowl.borg/compat/rich#Parent"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Man and http://mowl.borg/compat/rich#Parent",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Man and http://mowl.borg/compat/rich#Parent or not http://mowl.borg/compat/rich#Father"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Man and http://mowl.borg/compat/rich#Parent",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Parent"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Man and http://mowl.borg/compat/rich#Parent and not http://mowl.borg/compat/rich#Man and http://mowl.borg/compat/rich#Parent",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Man and http://mowl.borg/compat/rich#Parent and not http://mowl.borg/compat/rich#Man and http://mowl.borg/compat/rich#Parent"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Man and http://mowl.borg/compat/rich#Parent and not http://mowl.borg/compat/rich#Man or not http://mowl.borg/compat/rich#Parent",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Man and http://mowl.borg/compat/rich#Parent and not http://mowl.borg/compat/rich#Man or not http://mowl.borg/compat/rich#Parent"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Man and http://mowl.borg/compat/rich#Parent or not http://mowl.borg/compat/rich#Father",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Man and http://mowl.borg/compat/rich#Parent or not http://mowl.borg/compat/rich#Father"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Man and http://mowl.borg/compat/rich#Parent or not http://mowl.borg/compat/rich#Man and http://mowl.borg/compat/rich#Parent",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Man and http://mowl.borg/compat/rich#Parent or not http://mowl.borg/compat/rich#Man and http://mowl.borg/compat/rich#Parent"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Man and http://mowl.borg/compat/rich#Parent or not http://mowl.borg/compat/rich#Man or not http://mowl.borg/compat/rich#Parent",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Man and http://mowl.borg/compat/rich#Parent or not http://mowl.borg/compat/rich#Man or not http://mowl.borg/compat/rich#Parent"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Man and not http://mowl.borg/compat/rich#Man",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Man"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Man and not http://mowl.borg/compat/rich#Man",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Man and not http://mowl.borg/compat/rich#Man"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Man or http://mowl.borg/compat/rich#Woman",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Man or http://mowl.borg/compat/rich#Woman"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Man or http://mowl.borg/compat/rich#Woman",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Man or http://mowl.borg/compat/rich#Woman or not http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Man or http://mowl.borg/compat/rich#Woman or not http://mowl.borg/compat/rich#Person",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Man or http://mowl.borg/compat/rich#Woman or not http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Man or not http://mowl.borg/compat/rich#Man",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Man or not http://mowl.borg/compat/rich#Man"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Mother",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Mother"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Mother",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Mother or not http://mowl.borg/compat/rich#Mother"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Mother",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Mother or not http://mowl.borg/compat/rich#Parent and http://mowl.borg/compat/rich#Woman"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Mother",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Parent and http://mowl.borg/compat/rich#Woman"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Mother and not http://mowl.borg/compat/rich#Mother",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Mother"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Mother and not http://mowl.borg/compat/rich#Mother",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Mother and not http://mowl.borg/compat/rich#Mother"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Mother or not http://mowl.borg/compat/rich#Mother",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Mother or not http://mowl.borg/compat/rich#Mother"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Mother or not http://mowl.borg/compat/rich#Parent and http://mowl.borg/compat/rich#Woman",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Mother or not http://mowl.borg/compat/rich#Parent and http://mowl.borg/compat/rich#Woman"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Mother or not http://mowl.borg/compat/rich#Parent or not http://mowl.borg/compat/rich#Woman",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Mother or not http://mowl.borg/compat/rich#Parent or not http://mowl.borg/compat/rich#Woman"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Parent",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Parent"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Parent",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Parent or not http://mowl.borg/compat/rich#Parent"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Parent",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Parent or not http://mowl.borg/compat/rich#Person and http://mowl.borg/compat/rich#hasChild some http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Parent",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Person and http://mowl.borg/compat/rich#hasChild some http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Parent and http://mowl.borg/compat/rich#Woman",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Mother"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Parent and http://mowl.borg/compat/rich#Woman",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Parent"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Parent and http://mowl.borg/compat/rich#Woman",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Parent and http://mowl.borg/compat/rich#Woman"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Parent and http://mowl.borg/compat/rich#Woman",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Parent and http://mowl.borg/compat/rich#Woman or not http://mowl.borg/compat/rich#Mother"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Parent and http://mowl.borg/compat/rich#Woman",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Woman"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Parent and http://mowl.borg/compat/rich#Woman and not http://mowl.borg/compat/rich#Parent and http://mowl.borg/compat/rich#Woman",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Parent and http://mowl.borg/compat/rich#Woman and not http://mowl.borg/compat/rich#Parent and http://mowl.borg/compat/rich#Woman"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Parent and http://mowl.borg/compat/rich#Woman and not http://mowl.borg/compat/rich#Parent or not http://mowl.borg/compat/rich#Woman",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Parent and http://mowl.borg/compat/rich#Woman and not http://mowl.borg/compat/rich#Parent or not http://mowl.borg/compat/rich#Woman"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Parent and http://mowl.borg/compat/rich#Woman or not http://mowl.borg/compat/rich#Mother",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Parent and http://mowl.borg/compat/rich#Woman or not http://mowl.borg/compat/rich#Mother"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Parent and http://mowl.borg/compat/rich#Woman or not http://mowl.borg/compat/rich#Parent and http://mowl.borg/compat/rich#Woman",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Parent and http://mowl.borg/compat/rich#Woman or not http://mowl.borg/compat/rich#Parent and http://mowl.borg/compat/rich#Woman"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Parent and http://mowl.borg/compat/rich#Woman or not http://mowl.borg/compat/rich#Parent or not http://mowl.borg/compat/rich#Woman",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Parent and http://mowl.borg/compat/rich#Woman or not http://mowl.borg/compat/rich#Parent or not http://mowl.borg/compat/rich#Woman"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Parent and not http://mowl.borg/compat/rich#Parent",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Parent"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Parent and not http://mowl.borg/compat/rich#Parent",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Parent and not http://mowl.borg/compat/rich#Parent"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Parent or not http://mowl.borg/compat/rich#Parent",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Parent or not http://mowl.borg/compat/rich#Parent"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Parent or not http://mowl.borg/compat/rich#Person",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Parent or not http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Parent or not http://mowl.borg/compat/rich#Person and http://mowl.borg/compat/rich#hasChild some http://mowl.borg/compat/rich#Person",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Parent or not http://mowl.borg/compat/rich#Person and http://mowl.borg/compat/rich#hasChild some http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Parent or not http://mowl.borg/compat/rich#Person or http://mowl.borg/compat/rich#hasChild only not http://mowl.borg/compat/rich#Person",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Parent or not http://mowl.borg/compat/rich#Person or http://mowl.borg/compat/rich#hasChild only not http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Person",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Man or http://mowl.borg/compat/rich#Woman"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Person",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Person",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Person or not http://mowl.borg/compat/rich#Man"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Person",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Person or not http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Person",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Person or not http://mowl.borg/compat/rich#Woman"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Person and http://mowl.borg/compat/rich#hasChild some http://mowl.borg/compat/rich#Person",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Parent"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Person and http://mowl.borg/compat/rich#hasChild some http://mowl.borg/compat/rich#Person",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Person and http://mowl.borg/compat/rich#hasChild some http://mowl.borg/compat/rich#Person",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Person and http://mowl.borg/compat/rich#hasChild some http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Person and http://mowl.borg/compat/rich#hasChild some http://mowl.borg/compat/rich#Person",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Person and http://mowl.borg/compat/rich#hasChild some http://mowl.borg/compat/rich#Person or not http://mowl.borg/compat/rich#Parent"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Person and http://mowl.borg/compat/rich#hasChild some http://mowl.borg/compat/rich#Person",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#hasChild some http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Person and http://mowl.borg/compat/rich#hasChild some http://mowl.borg/compat/rich#Person and not http://mowl.borg/compat/rich#Person and http://mowl.borg/compat/rich#hasChild some http://mowl.borg/compat/rich#Person",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Person and http://mowl.borg/compat/rich#hasChild some http://mowl.borg/compat/rich#Person and not http://mowl.borg/compat/rich#Person and http://mowl.borg/compat/rich#hasChild some http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Person and http://mowl.borg/compat/rich#hasChild some http://mowl.borg/compat/rich#Person and not http://mowl.borg/compat/rich#Person or http://mowl.borg/compat/rich#hasChild only not http://mowl.borg/compat/rich#Person",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Person and http://mowl.borg/compat/rich#hasChild some http://mowl.borg/compat/rich#Person and not http://mowl.borg/compat/rich#Person or http://mowl.borg/compat/rich#hasChild only not http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Person and http://mowl.borg/compat/rich#hasChild some http://mowl.borg/compat/rich#Person or not http://mowl.borg/compat/rich#Parent",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Person and http://mowl.borg/compat/rich#hasChild some http://mowl.borg/compat/rich#Person or not http://mowl.borg/compat/rich#Parent"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Person and http://mowl.borg/compat/rich#hasChild some http://mowl.borg/compat/rich#Person or not http://mowl.borg/compat/rich#Person and http://mowl.borg/compat/rich#hasChild some http://mowl.borg/compat/rich#Person",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Person and http://mowl.borg/compat/rich#hasChild some http://mowl.borg/compat/rich#Person or not http://mowl.borg/compat/rich#Person and http://mowl.borg/compat/rich#hasChild some http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Person and http://mowl.borg/compat/rich#hasChild some http://mowl.borg/compat/rich#Person or not http://mowl.borg/compat/rich#Person or http://mowl.borg/compat/rich#hasChild only not http://mowl.borg/compat/rich#Person",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Person and http://mowl.borg/compat/rich#hasChild some http://mowl.borg/compat/rich#Person or not http://mowl.borg/compat/rich#Person or http://mowl.borg/compat/rich#hasChild only not http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Person and not http://mowl.borg/compat/rich#Parent",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Childless"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Person and not http://mowl.borg/compat/rich#Parent",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Person and not http://mowl.borg/compat/rich#Parent",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Person and not http://mowl.borg/compat/rich#Parent"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Person and not http://mowl.borg/compat/rich#Parent",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Person and not http://mowl.borg/compat/rich#Parent or not http://mowl.borg/compat/rich#Childless"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Person and not http://mowl.borg/compat/rich#Parent and http://mowl.borg/compat/rich#Parent or not http://mowl.borg/compat/rich#Person",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Person and not http://mowl.borg/compat/rich#Parent and http://mowl.borg/compat/rich#Parent or not http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Person and not http://mowl.borg/compat/rich#Parent and not http://mowl.borg/compat/rich#Person and not http://mowl.borg/compat/rich#Parent",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Person and not http://mowl.borg/compat/rich#Parent and not http://mowl.borg/compat/rich#Person and not http://mowl.borg/compat/rich#Parent"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Person and not http://mowl.borg/compat/rich#Parent or http://mowl.borg/compat/rich#Parent or not http://mowl.borg/compat/rich#Person",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Person and not http://mowl.borg/compat/rich#Parent or http://mowl.borg/compat/rich#Parent or not http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Person and not http://mowl.borg/compat/rich#Parent or not http://mowl.borg/compat/rich#Childless",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Person and not http://mowl.borg/compat/rich#Parent or not http://mowl.borg/compat/rich#Childless"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Person and not http://mowl.borg/compat/rich#Parent or not http://mowl.borg/compat/rich#Person and not http://mowl.borg/compat/rich#Parent",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Person and not http://mowl.borg/compat/rich#Parent or not http://mowl.borg/compat/rich#Person and not http://mowl.borg/compat/rich#Parent"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Person and not http://mowl.borg/compat/rich#Person",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Person and not http://mowl.borg/compat/rich#Person",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Person and not http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Person or not http://mowl.borg/compat/rich#Man",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Person or not http://mowl.borg/compat/rich#Man"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Person or not http://mowl.borg/compat/rich#Person",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Person or not http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Person or not http://mowl.borg/compat/rich#Woman",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Person or not http://mowl.borg/compat/rich#Woman"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Pet",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Pet"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Pet",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Pet or not http://mowl.borg/compat/rich#Pet"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Pet and not http://mowl.borg/compat/rich#Pet",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Pet"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Pet and not http://mowl.borg/compat/rich#Pet",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Pet and not http://mowl.borg/compat/rich#Pet"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Pet or not http://mowl.borg/compat/rich#Pet",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Pet or not http://mowl.borg/compat/rich#Pet"
+   ],
+   [
+    "http://mowl.borg/compat/rich#PetOwner",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#PetOwner"
+   ],
+   [
+    "http://mowl.borg/compat/rich#PetOwner",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#PetOwner or not http://mowl.borg/compat/rich#PetOwner"
+   ],
+   [
+    "http://mowl.borg/compat/rich#PetOwner",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#PetOwner or not http://mowl.borg/compat/rich#hasPet some http://mowl.borg/compat/rich#Pet"
+   ],
+   [
+    "http://mowl.borg/compat/rich#PetOwner",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#hasPet some http://mowl.borg/compat/rich#Pet"
+   ],
+   [
+    "http://mowl.borg/compat/rich#PetOwner and http://mowl.borg/compat/rich#hasPet only http://mowl.borg/compat/rich#Dog",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#DogOnlyOwner"
+   ],
+   [
+    "http://mowl.borg/compat/rich#PetOwner and http://mowl.borg/compat/rich#hasPet only http://mowl.borg/compat/rich#Dog",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#PetOwner"
+   ],
+   [
+    "http://mowl.borg/compat/rich#PetOwner and http://mowl.borg/compat/rich#hasPet only http://mowl.borg/compat/rich#Dog",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#PetOwner and http://mowl.borg/compat/rich#hasPet only http://mowl.borg/compat/rich#Dog"
+   ],
+   [
+    "http://mowl.borg/compat/rich#PetOwner and http://mowl.borg/compat/rich#hasPet only http://mowl.borg/compat/rich#Dog",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#PetOwner and http://mowl.borg/compat/rich#hasPet only http://mowl.borg/compat/rich#Dog or not http://mowl.borg/compat/rich#DogOnlyOwner"
+   ],
+   [
+    "http://mowl.borg/compat/rich#PetOwner and http://mowl.borg/compat/rich#hasPet only http://mowl.borg/compat/rich#Dog",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#hasPet only http://mowl.borg/compat/rich#Dog"
+   ],
+   [
+    "http://mowl.borg/compat/rich#PetOwner and http://mowl.borg/compat/rich#hasPet only http://mowl.borg/compat/rich#Dog and not http://mowl.borg/compat/rich#PetOwner and http://mowl.borg/compat/rich#hasPet only http://mowl.borg/compat/rich#Dog",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#PetOwner and http://mowl.borg/compat/rich#hasPet only http://mowl.borg/compat/rich#Dog and not http://mowl.borg/compat/rich#PetOwner and http://mowl.borg/compat/rich#hasPet only http://mowl.borg/compat/rich#Dog"
+   ],
+   [
+    "http://mowl.borg/compat/rich#PetOwner and http://mowl.borg/compat/rich#hasPet only http://mowl.borg/compat/rich#Dog and not http://mowl.borg/compat/rich#PetOwner or http://mowl.borg/compat/rich#hasPet some not http://mowl.borg/compat/rich#Dog",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#PetOwner and http://mowl.borg/compat/rich#hasPet only http://mowl.borg/compat/rich#Dog and not http://mowl.borg/compat/rich#PetOwner or http://mowl.borg/compat/rich#hasPet some not http://mowl.borg/compat/rich#Dog"
+   ],
+   [
+    "http://mowl.borg/compat/rich#PetOwner and http://mowl.borg/compat/rich#hasPet only http://mowl.borg/compat/rich#Dog or not http://mowl.borg/compat/rich#DogOnlyOwner",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#PetOwner and http://mowl.borg/compat/rich#hasPet only http://mowl.borg/compat/rich#Dog or not http://mowl.borg/compat/rich#DogOnlyOwner"
+   ],
+   [
+    "http://mowl.borg/compat/rich#PetOwner and http://mowl.borg/compat/rich#hasPet only http://mowl.borg/compat/rich#Dog or not http://mowl.borg/compat/rich#PetOwner and http://mowl.borg/compat/rich#hasPet only http://mowl.borg/compat/rich#Dog",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#PetOwner and http://mowl.borg/compat/rich#hasPet only http://mowl.borg/compat/rich#Dog or not http://mowl.borg/compat/rich#PetOwner and http://mowl.borg/compat/rich#hasPet only http://mowl.borg/compat/rich#Dog"
+   ],
+   [
+    "http://mowl.borg/compat/rich#PetOwner and http://mowl.borg/compat/rich#hasPet only http://mowl.borg/compat/rich#Dog or not http://mowl.borg/compat/rich#PetOwner or http://mowl.borg/compat/rich#hasPet some not http://mowl.borg/compat/rich#Dog",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#PetOwner and http://mowl.borg/compat/rich#hasPet only http://mowl.borg/compat/rich#Dog or not http://mowl.borg/compat/rich#PetOwner or http://mowl.borg/compat/rich#hasPet some not http://mowl.borg/compat/rich#Dog"
+   ],
+   [
+    "http://mowl.borg/compat/rich#PetOwner and not http://mowl.borg/compat/rich#PetOwner",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#PetOwner"
+   ],
+   [
+    "http://mowl.borg/compat/rich#PetOwner and not http://mowl.borg/compat/rich#PetOwner",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#PetOwner and not http://mowl.borg/compat/rich#PetOwner"
+   ],
+   [
+    "http://mowl.borg/compat/rich#PetOwner or http://mowl.borg/compat/rich#hasPet only not http://mowl.borg/compat/rich#Pet",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#PetOwner or http://mowl.borg/compat/rich#hasPet only not http://mowl.borg/compat/rich#Pet"
+   ],
+   [
+    "http://mowl.borg/compat/rich#PetOwner or not http://mowl.borg/compat/rich#PetOwner",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#PetOwner or not http://mowl.borg/compat/rich#PetOwner"
+   ],
+   [
+    "http://mowl.borg/compat/rich#PetOwner or not http://mowl.borg/compat/rich#hasPet some http://mowl.borg/compat/rich#Pet",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#PetOwner or not http://mowl.borg/compat/rich#hasPet some http://mowl.borg/compat/rich#Pet"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Weekday",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Weekday"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Weekday",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Weekday or not http://mowl.borg/compat/rich#Weekday"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Weekday and not http://mowl.borg/compat/rich#Weekday",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Weekday"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Weekday and not http://mowl.borg/compat/rich#Weekday",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Weekday and not http://mowl.borg/compat/rich#Weekday"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Weekday or not http://mowl.borg/compat/rich#Weekday",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Weekday or not http://mowl.borg/compat/rich#Weekday"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Woman",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Man or http://mowl.borg/compat/rich#Woman"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Woman",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Woman",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Woman"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Woman",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Woman or not http://mowl.borg/compat/rich#Woman"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Woman and not http://mowl.borg/compat/rich#Woman",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Woman"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Woman and not http://mowl.borg/compat/rich#Woman",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Woman and not http://mowl.borg/compat/rich#Woman"
+   ],
+   [
+    "http://mowl.borg/compat/rich#Woman or not http://mowl.borg/compat/rich#Woman",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Woman or not http://mowl.borg/compat/rich#Woman"
+   ],
+   [
+    "http://mowl.borg/compat/rich#anna",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Woman"
+   ],
+   [
+    "http://mowl.borg/compat/rich#anna",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#anna"
+   ],
+   [
+    "http://mowl.borg/compat/rich#anna",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#hasChild some http://mowl.borg/compat/rich#carl"
+   ],
+   [
+    "http://mowl.borg/compat/rich#anna",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#hasSpouse some http://mowl.borg/compat/rich#bob"
+   ],
+   [
+    "http://mowl.borg/compat/rich#anna",
+    "http://type",
+    "http://mowl.borg/compat/rich#Woman"
+   ],
+   [
+    "http://mowl.borg/compat/rich#bob",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Man"
+   ],
+   [
+    "http://mowl.borg/compat/rich#bob",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#bob"
+   ],
+   [
+    "http://mowl.borg/compat/rich#bob",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#hasChild some http://mowl.borg/compat/rich#carl"
+   ],
+   [
+    "http://mowl.borg/compat/rich#bob",
+    "http://type",
+    "http://mowl.borg/compat/rich#Man"
+   ],
+   [
+    "http://mowl.borg/compat/rich#carl",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#carl",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#carl"
+   ],
+   [
+    "http://mowl.borg/compat/rich#carl",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#hasPet some http://mowl.borg/compat/rich#rex"
+   ],
+   [
+    "http://mowl.borg/compat/rich#carl",
+    "http://type",
+    "http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#hasChild",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#hasChild"
+   ],
+   [
+    "http://mowl.borg/compat/rich#hasChild some http://mowl.borg/compat/rich#Person",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#hasChild some http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#hasChild some http://mowl.borg/compat/rich#carl",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#hasChild some http://mowl.borg/compat/rich#carl"
+   ],
+   [
+    "http://mowl.borg/compat/rich#hasChild_under_http://mowl.borg/compat/rich#hasChild some http://mowl.borg/compat/rich#Person",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#hasChild"
+   ],
+   [
+    "http://mowl.borg/compat/rich#hasChild_under_http://mowl.borg/compat/rich#hasChild some http://mowl.borg/compat/rich#Person",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#hasChild_under_http://mowl.borg/compat/rich#hasChild some http://mowl.borg/compat/rich#Person"
+   ],
+   [
+    "http://mowl.borg/compat/rich#hasPet",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#hasPet"
+   ],
+   [
+    "http://mowl.borg/compat/rich#hasPet only http://mowl.borg/compat/rich#Dog",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#hasPet only http://mowl.borg/compat/rich#Dog"
+   ],
+   [
+    "http://mowl.borg/compat/rich#hasPet only not http://mowl.borg/compat/rich#Pet",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#hasPet only not http://mowl.borg/compat/rich#Pet"
+   ],
+   [
+    "http://mowl.borg/compat/rich#hasPet some http://mowl.borg/compat/rich#Pet",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#PetOwner"
+   ],
+   [
+    "http://mowl.borg/compat/rich#hasPet some http://mowl.borg/compat/rich#Pet",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#hasPet some http://mowl.borg/compat/rich#Pet"
+   ],
+   [
+    "http://mowl.borg/compat/rich#hasPet some http://mowl.borg/compat/rich#Pet and http://mowl.borg/compat/rich#hasPet only not http://mowl.borg/compat/rich#Pet",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#hasPet some http://mowl.borg/compat/rich#Pet and http://mowl.borg/compat/rich#hasPet only not http://mowl.borg/compat/rich#Pet"
+   ],
+   [
+    "http://mowl.borg/compat/rich#hasPet some http://mowl.borg/compat/rich#Pet or http://mowl.borg/compat/rich#hasPet only not http://mowl.borg/compat/rich#Pet",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#hasPet some http://mowl.borg/compat/rich#Pet or http://mowl.borg/compat/rich#hasPet only not http://mowl.borg/compat/rich#Pet"
+   ],
+   [
+    "http://mowl.borg/compat/rich#hasPet some http://mowl.borg/compat/rich#rex",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#hasPet some http://mowl.borg/compat/rich#rex"
+   ],
+   [
+    "http://mowl.borg/compat/rich#hasPet some not http://mowl.borg/compat/rich#Dog",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#hasPet some not http://mowl.borg/compat/rich#Dog"
+   ],
+   [
+    "http://mowl.borg/compat/rich#hasPet some not http://mowl.borg/compat/rich#Dog and http://mowl.borg/compat/rich#hasPet only http://mowl.borg/compat/rich#Dog",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#hasPet some not http://mowl.borg/compat/rich#Dog and http://mowl.borg/compat/rich#hasPet only http://mowl.borg/compat/rich#Dog"
+   ],
+   [
+    "http://mowl.borg/compat/rich#hasPet some not http://mowl.borg/compat/rich#Dog or http://mowl.borg/compat/rich#hasPet only http://mowl.borg/compat/rich#Dog",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#hasPet some not http://mowl.borg/compat/rich#Dog or http://mowl.borg/compat/rich#hasPet only http://mowl.borg/compat/rich#Dog"
+   ],
+   [
+    "http://mowl.borg/compat/rich#hasPet_under_http://mowl.borg/compat/rich#hasPet some http://mowl.borg/compat/rich#Pet",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#hasPet"
+   ],
+   [
+    "http://mowl.borg/compat/rich#hasPet_under_http://mowl.borg/compat/rich#hasPet some http://mowl.borg/compat/rich#Pet",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#hasPet_under_http://mowl.borg/compat/rich#hasPet some http://mowl.borg/compat/rich#Pet"
+   ],
+   [
+    "http://mowl.borg/compat/rich#hasPet_under_http://mowl.borg/compat/rich#hasPet some not http://mowl.borg/compat/rich#Dog",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#hasPet"
+   ],
+   [
+    "http://mowl.borg/compat/rich#hasPet_under_http://mowl.borg/compat/rich#hasPet some not http://mowl.borg/compat/rich#Dog",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#hasPet_under_http://mowl.borg/compat/rich#hasPet some not http://mowl.borg/compat/rich#Dog"
+   ],
+   [
+    "http://mowl.borg/compat/rich#hasSpouse some http://mowl.borg/compat/rich#bob",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#hasSpouse some http://mowl.borg/compat/rich#bob"
+   ],
+   [
+    "http://mowl.borg/compat/rich#rex",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#Dog"
+   ],
+   [
+    "http://mowl.borg/compat/rich#rex",
+    "http://arrow",
+    "http://mowl.borg/compat/rich#rex"
+   ],
+   [
+    "http://mowl.borg/compat/rich#rex",
+    "http://type",
+    "http://mowl.borg/compat/rich#Dog"
+   ],
+   [
+    "http://purl.obolibrary.org/obo/GO_0000001",
+    "http://arrow",
+    "http://purl.obolibrary.org/obo/GO_0000001"
+   ],
+   [
+    "http://purl.obolibrary.org/obo/GO_0000001",
+    "http://arrow",
+    "http://purl.obolibrary.org/obo/GO_0000001 or not http://purl.obolibrary.org/obo/GO_0000001"
+   ],
+   [
+    "http://purl.obolibrary.org/obo/GO_0000001",
+    "http://arrow",
+    "http://purl.obolibrary.org/obo/GO_0000001 or not http://purl.obolibrary.org/obo/GO_0000002"
+   ],
+   [
+    "http://purl.obolibrary.org/obo/GO_0000001 and not http://purl.obolibrary.org/obo/GO_0000001",
+    "http://arrow",
+    "http://purl.obolibrary.org/obo/GO_0000001"
+   ],
+   [
+    "http://purl.obolibrary.org/obo/GO_0000001 and not http://purl.obolibrary.org/obo/GO_0000001",
+    "http://arrow",
+    "http://purl.obolibrary.org/obo/GO_0000001 and not http://purl.obolibrary.org/obo/GO_0000001"
+   ],
+   [
+    "http://purl.obolibrary.org/obo/GO_0000001 or not http://purl.obolibrary.org/obo/GO_0000001",
+    "http://arrow",
+    "http://purl.obolibrary.org/obo/GO_0000001 or not http://purl.obolibrary.org/obo/GO_0000001"
+   ],
+   [
+    "http://purl.obolibrary.org/obo/GO_0000001 or not http://purl.obolibrary.org/obo/GO_0000002",
+    "http://arrow",
+    "http://purl.obolibrary.org/obo/GO_0000001 or not http://purl.obolibrary.org/obo/GO_0000002"
+   ],
+   [
+    "http://purl.obolibrary.org/obo/GO_0000002",
+    "http://arrow",
+    "http://purl.obolibrary.org/obo/GO_0000001"
+   ],
+   [
+    "http://purl.obolibrary.org/obo/GO_0000002",
+    "http://arrow",
+    "http://purl.obolibrary.org/obo/GO_0000002"
+   ],
+   [
+    "http://purl.obolibrary.org/obo/GO_0000002",
+    "http://arrow",
+    "http://purl.obolibrary.org/obo/GO_0000002 or not http://purl.obolibrary.org/obo/GO_0000002"
+   ],
+   [
+    "http://purl.obolibrary.org/obo/GO_0000002 and not http://purl.obolibrary.org/obo/GO_0000002",
+    "http://arrow",
+    "http://purl.obolibrary.org/obo/GO_0000002"
+   ],
+   [
+    "http://purl.obolibrary.org/obo/GO_0000002 and not http://purl.obolibrary.org/obo/GO_0000002",
+    "http://arrow",
+    "http://purl.obolibrary.org/obo/GO_0000002 and not http://purl.obolibrary.org/obo/GO_0000002"
+   ],
+   [
+    "http://purl.obolibrary.org/obo/GO_0000002 or not http://purl.obolibrary.org/obo/GO_0000002",
+    "http://arrow",
+    "http://purl.obolibrary.org/obo/GO_0000002 or not http://purl.obolibrary.org/obo/GO_0000002"
+   ]
+  ],
+  "relations": [
+   "http://arrow",
+   "http://type"
+  ]
+ }
+}

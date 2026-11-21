@@ -1,0 +1,47 @@
+{
+ "owlapi": "4.5.29",
+ "value": [
+  [
+   "http://mowl.borg/compat/el#Animal",
+   "http://www.w3.org/2000/01/rdf-schema#label",
+   "animal",
+   "en",
+   "http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral"
+  ],
+  [
+   "http://mowl.borg/compat/el#Cow",
+   "http://www.w3.org/2000/01/rdf-schema#comment",
+   "A cow eats\ngrass.",
+   "",
+   "http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral"
+  ],
+  [
+   "http://mowl.borg/compat/el#Cow",
+   "http://www.w3.org/2000/01/rdf-schema#label",
+   "Kuh",
+   "de",
+   "http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral"
+  ],
+  [
+   "http://mowl.borg/compat/el#Cow",
+   "http://www.w3.org/2000/01/rdf-schema#label",
+   "cow",
+   "en",
+   "http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral"
+  ],
+  [
+   "http://mowl.borg/compat/el#Lion",
+   "http://www.w3.org/2000/01/rdf-schema#label",
+   "lion",
+   "",
+   "http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral"
+  ],
+  [
+   "http://mowl.borg/compat/el#eats",
+   "http://www.w3.org/2000/01/rdf-schema#label",
+   "eats",
+   "",
+   "http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral"
+  ]
+ ]
+}

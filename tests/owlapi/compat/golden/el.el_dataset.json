@@ -1,0 +1,46 @@
+{
+ "owlapi": "4.5.29",
+ "value": {
+  "classes": [
+   "http://mowl.borg/compat/el#Animal",
+   "http://mowl.borg/compat/el#Carnivore",
+   "http://mowl.borg/compat/el#Cow",
+   "http://mowl.borg/compat/el#Grass",
+   "http://mowl.borg/compat/el#Heart",
+   "http://mowl.borg/compat/el#Herbivore",
+   "http://mowl.borg/compat/el#Lion",
+   "http://mowl.borg/compat/el#MadCow",
+   "http://mowl.borg/compat/el#Organ",
+   "http://mowl.borg/compat/el#Plant",
+   "http://mowl.borg/compat/el#Unused",
+   "http://mowl.borg/compat/el#Ventricle",
+   "http://www.w3.org/2002/07/owl#Nothing",
+   "http://www.w3.org/2002/07/owl#Thing"
+  ],
+  "individuals": [
+   "http://mowl.borg/compat/el#daisy",
+   "http://mowl.borg/compat/el#lawn",
+   "http://mowl.borg/compat/el#leo"
+  ],
+  "object_properties": [
+   "http://mowl.borg/compat/el#eats",
+   "http://mowl.borg/compat/el#feedsOn",
+   "http://mowl.borg/compat/el#hasDirectPart",
+   "http://mowl.borg/compat/el#hasPart",
+   "http://mowl.borg/compat/el#partOf"
+  ],
+  "rows": {
+   "class_assertion": 3,
+   "gci0": 7,
+   "gci0_bot": 0,
+   "gci1": 1,
+   "gci1_bot": 5,
+   "gci2": 6,
+   "gci3": 6,
+   "gci3_bot": 0,
+   "object_property_assertion": 2,
+   "role_chain": 2,
+   "role_inclusion": 2
+  }
+ }
+}

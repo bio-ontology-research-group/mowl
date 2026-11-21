@@ -1,0 +1,25 @@
+{
+ "owlapi": "4.5.29",
+ "value": {
+  "functional": {
+   "axioms": true,
+   "entities": true
+  },
+  "manchester": {
+   "axioms": true,
+   "entities": true
+  },
+  "owlxml": {
+   "axioms": true,
+   "entities": true
+  },
+  "rdfxml": {
+   "axioms": true,
+   "entities": true
+  },
+  "turtle": {
+   "axioms": true,
+   "entities": true
+  }
+ }
+}

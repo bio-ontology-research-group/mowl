@@ -1,0 +1,27 @@
+{
+ "owlapi": "4.5.29",
+ "value": {
+  "classes": [
+   "http://mowl.borg/geo#A",
+   "http://mowl.borg/geo#B",
+   "http://mowl.borg/geo#C",
+   "http://mowl.borg/geo#X1",
+   "http://mowl.borg/geo#X2",
+   "http://mowl.borg/geo#X3",
+   "http://mowl.borg/geo#Z",
+   "http://www.w3.org/2002/07/owl#Nothing",
+   "http://www.w3.org/2002/07/owl#Thing"
+  ],
+  "individuals": [],
+  "object_properties": [],
+  "rows": {
+   "gci0": 6,
+   "gci0_bot": 0,
+   "gci1": 3,
+   "gci1_bot": 3,
+   "gci2": 0,
+   "gci3": 0,
+   "gci3_bot": 0
+  }
+ }
+}

@@ -1,0 +1,56 @@
+{
+ "owlapi": "4.5.29",
+ "value": {
+  "classes": [
+   "http://mowl.borg/compat/rich#Adult",
+   "http://mowl.borg/compat/rich#BusyParent",
+   "http://mowl.borg/compat/rich#Cat",
+   "http://mowl.borg/compat/rich#Childless",
+   "http://mowl.borg/compat/rich#Dog",
+   "http://mowl.borg/compat/rich#DogOnlyOwner",
+   "http://mowl.borg/compat/rich#Father",
+   "http://mowl.borg/compat/rich#Man",
+   "http://mowl.borg/compat/rich#Mother",
+   "http://mowl.borg/compat/rich#Parent",
+   "http://mowl.borg/compat/rich#Person",
+   "http://mowl.borg/compat/rich#Pet",
+   "http://mowl.borg/compat/rich#PetOwner",
+   "http://mowl.borg/compat/rich#Weekday",
+   "http://mowl.borg/compat/rich#Woman",
+   "http://purl.obolibrary.org/obo/GO_0000001",
+   "http://purl.obolibrary.org/obo/GO_0000002",
+   "http://www.w3.org/2002/07/owl#Nothing",
+   "http://www.w3.org/2002/07/owl#Thing"
+  ],
+  "individuals": [
+   "http://mowl.borg/compat/rich#anna",
+   "http://mowl.borg/compat/rich#bob",
+   "http://mowl.borg/compat/rich#carl",
+   "http://mowl.borg/compat/rich#monday",
+   "http://mowl.borg/compat/rich#rex",
+   "http://mowl.borg/compat/rich#tuesday"
+  ],
+  "object_properties": [
+   "http://mowl.borg/compat/rich#hasAncestor",
+   "http://mowl.borg/compat/rich#hasChild",
+   "http://mowl.borg/compat/rich#hasMother",
+   "http://mowl.borg/compat/rich#hasParent",
+   "http://mowl.borg/compat/rich#hasPet",
+   "http://mowl.borg/compat/rich#hasSpouse",
+   "http://mowl.borg/compat/rich#knows"
+  ],
+  "rows": {
+   "class_assertion": 4,
+   "gci0": 8,
+   "gci0_bot": 0,
+   "gci1": 3,
+   "gci1_bot": 1,
+   "gci2": 2,
+   "gci3": 3,
+   "gci3_bot": 0,
+   "object_property_assertion": 4,
+   "role_chain": 2,
+   "role_inclusion": 2
+  }
+ }
+}

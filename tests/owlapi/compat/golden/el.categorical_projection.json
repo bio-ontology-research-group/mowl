@@ -1,0 +1,837 @@
+{
+ "owlapi": "4.5.29",
+ "value": {
+  "edges": 659,
+  "named_edges": [
+   [
+    "http://mowl.borg/compat/el#Animal",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Animal"
+   ],
+   [
+    "http://mowl.borg/compat/el#Animal",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Animal or not http://mowl.borg/compat/el#Animal"
+   ],
+   [
+    "http://mowl.borg/compat/el#Animal",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Animal or not http://mowl.borg/compat/el#Carnivore"
+   ],
+   [
+    "http://mowl.borg/compat/el#Animal",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Animal or not http://mowl.borg/compat/el#Herbivore"
+   ],
+   [
+    "http://mowl.borg/compat/el#Animal",
+    "http://arrow",
+    "http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#Heart"
+   ],
+   [
+    "http://mowl.borg/compat/el#Animal and http://mowl.borg/compat/el#Plant",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Animal"
+   ],
+   [
+    "http://mowl.borg/compat/el#Animal and http://mowl.borg/compat/el#Plant",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Animal and http://mowl.borg/compat/el#Plant"
+   ],
+   [
+    "http://mowl.borg/compat/el#Animal and http://mowl.borg/compat/el#Plant",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Plant"
+   ],
+   [
+    "http://mowl.borg/compat/el#Animal and http://mowl.borg/compat/el#Plant and not http://mowl.borg/compat/el#Animal and http://mowl.borg/compat/el#Plant",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Animal and http://mowl.borg/compat/el#Plant and not http://mowl.borg/compat/el#Animal and http://mowl.borg/compat/el#Plant"
+   ],
+   [
+    "http://mowl.borg/compat/el#Animal and http://mowl.borg/compat/el#Plant and not http://mowl.borg/compat/el#Animal or not http://mowl.borg/compat/el#Plant",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Animal and http://mowl.borg/compat/el#Plant and not http://mowl.borg/compat/el#Animal or not http://mowl.borg/compat/el#Plant"
+   ],
+   [
+    "http://mowl.borg/compat/el#Animal and http://mowl.borg/compat/el#Plant or not http://mowl.borg/compat/el#Animal and http://mowl.borg/compat/el#Plant",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Animal and http://mowl.borg/compat/el#Plant or not http://mowl.borg/compat/el#Animal and http://mowl.borg/compat/el#Plant"
+   ],
+   [
+    "http://mowl.borg/compat/el#Animal and http://mowl.borg/compat/el#Plant or not http://mowl.borg/compat/el#Animal or not http://mowl.borg/compat/el#Plant",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Animal and http://mowl.borg/compat/el#Plant or not http://mowl.borg/compat/el#Animal or not http://mowl.borg/compat/el#Plant"
+   ],
+   [
+    "http://mowl.borg/compat/el#Animal and not http://mowl.borg/compat/el#Animal",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Animal"
+   ],
+   [
+    "http://mowl.borg/compat/el#Animal and not http://mowl.borg/compat/el#Animal",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Animal and not http://mowl.borg/compat/el#Animal"
+   ],
+   [
+    "http://mowl.borg/compat/el#Animal or not http://mowl.borg/compat/el#Animal",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Animal or not http://mowl.borg/compat/el#Animal"
+   ],
+   [
+    "http://mowl.borg/compat/el#Animal or not http://mowl.borg/compat/el#Carnivore",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Animal or not http://mowl.borg/compat/el#Carnivore"
+   ],
+   [
+    "http://mowl.borg/compat/el#Animal or not http://mowl.borg/compat/el#Herbivore",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Animal or not http://mowl.borg/compat/el#Herbivore"
+   ],
+   [
+    "http://mowl.borg/compat/el#Carnivore",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Animal"
+   ],
+   [
+    "http://mowl.borg/compat/el#Carnivore",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Carnivore"
+   ],
+   [
+    "http://mowl.borg/compat/el#Carnivore",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Carnivore or not http://mowl.borg/compat/el#Carnivore"
+   ],
+   [
+    "http://mowl.borg/compat/el#Carnivore",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Carnivore or not http://mowl.borg/compat/el#Lion"
+   ],
+   [
+    "http://mowl.borg/compat/el#Carnivore and not http://mowl.borg/compat/el#Carnivore",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Carnivore"
+   ],
+   [
+    "http://mowl.borg/compat/el#Carnivore and not http://mowl.borg/compat/el#Carnivore",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Carnivore and not http://mowl.borg/compat/el#Carnivore"
+   ],
+   [
+    "http://mowl.borg/compat/el#Carnivore or not http://mowl.borg/compat/el#Carnivore",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Carnivore or not http://mowl.borg/compat/el#Carnivore"
+   ],
+   [
+    "http://mowl.borg/compat/el#Carnivore or not http://mowl.borg/compat/el#Lion",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Carnivore or not http://mowl.borg/compat/el#Lion"
+   ],
+   [
+    "http://mowl.borg/compat/el#Cow",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Cow"
+   ],
+   [
+    "http://mowl.borg/compat/el#Cow",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Cow or not http://mowl.borg/compat/el#Cow"
+   ],
+   [
+    "http://mowl.borg/compat/el#Cow",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Herbivore"
+   ],
+   [
+    "http://mowl.borg/compat/el#Cow",
+    "http://arrow",
+    "http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Grass"
+   ],
+   [
+    "http://mowl.borg/compat/el#Cow and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Cow"
+   ],
+   [
+    "http://mowl.borg/compat/el#Cow and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Cow and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal"
+   ],
+   [
+    "http://mowl.borg/compat/el#Cow and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Cow and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal or not http://mowl.borg/compat/el#MadCow"
+   ],
+   [
+    "http://mowl.borg/compat/el#Cow and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal",
+    "http://arrow",
+    "http://mowl.borg/compat/el#MadCow"
+   ],
+   [
+    "http://mowl.borg/compat/el#Cow and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal",
+    "http://arrow",
+    "http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal"
+   ],
+   [
+    "http://mowl.borg/compat/el#Cow and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal and not http://mowl.borg/compat/el#Cow and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Cow and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal and not http://mowl.borg/compat/el#Cow and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal"
+   ],
+   [
+    "http://mowl.borg/compat/el#Cow and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal and not http://mowl.borg/compat/el#Cow or http://mowl.borg/compat/el#eats only not http://mowl.borg/compat/el#Animal",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Cow and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal and not http://mowl.borg/compat/el#Cow or http://mowl.borg/compat/el#eats only not http://mowl.borg/compat/el#Animal"
+   ],
+   [
+    "http://mowl.borg/compat/el#Cow and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal or not http://mowl.borg/compat/el#Cow and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Cow and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal or not http://mowl.borg/compat/el#Cow and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal"
+   ],
+   [
+    "http://mowl.borg/compat/el#Cow and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal or not http://mowl.borg/compat/el#Cow or http://mowl.borg/compat/el#eats only not http://mowl.borg/compat/el#Animal",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Cow and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal or not http://mowl.borg/compat/el#Cow or http://mowl.borg/compat/el#eats only not http://mowl.borg/compat/el#Animal"
+   ],
+   [
+    "http://mowl.borg/compat/el#Cow and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal or not http://mowl.borg/compat/el#MadCow",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Cow and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal or not http://mowl.borg/compat/el#MadCow"
+   ],
+   [
+    "http://mowl.borg/compat/el#Cow and not http://mowl.borg/compat/el#Cow",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Cow"
+   ],
+   [
+    "http://mowl.borg/compat/el#Cow and not http://mowl.borg/compat/el#Cow",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Cow and not http://mowl.borg/compat/el#Cow"
+   ],
+   [
+    "http://mowl.borg/compat/el#Cow or not http://mowl.borg/compat/el#Cow",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Cow or not http://mowl.borg/compat/el#Cow"
+   ],
+   [
+    "http://mowl.borg/compat/el#Grass",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Grass"
+   ],
+   [
+    "http://mowl.borg/compat/el#Grass",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Grass or not http://mowl.borg/compat/el#Grass"
+   ],
+   [
+    "http://mowl.borg/compat/el#Grass",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Plant"
+   ],
+   [
+    "http://mowl.borg/compat/el#Grass and not http://mowl.borg/compat/el#Grass",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Grass"
+   ],
+   [
+    "http://mowl.borg/compat/el#Grass and not http://mowl.borg/compat/el#Grass",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Grass and not http://mowl.borg/compat/el#Grass"
+   ],
+   [
+    "http://mowl.borg/compat/el#Grass or not http://mowl.borg/compat/el#Grass",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Grass or not http://mowl.borg/compat/el#Grass"
+   ],
+   [
+    "http://mowl.borg/compat/el#Heart",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Heart"
+   ],
+   [
+    "http://mowl.borg/compat/el#Heart",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Heart or not http://mowl.borg/compat/el#Heart"
+   ],
+   [
+    "http://mowl.borg/compat/el#Heart",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Organ"
+   ],
+   [
+    "http://mowl.borg/compat/el#Heart",
+    "http://arrow",
+    "http://mowl.borg/compat/el#hasDirectPart some http://mowl.borg/compat/el#Ventricle"
+   ],
+   [
+    "http://mowl.borg/compat/el#Heart and not http://mowl.borg/compat/el#Heart",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Heart"
+   ],
+   [
+    "http://mowl.borg/compat/el#Heart and not http://mowl.borg/compat/el#Heart",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Heart and not http://mowl.borg/compat/el#Heart"
+   ],
+   [
+    "http://mowl.borg/compat/el#Heart or not http://mowl.borg/compat/el#Heart",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Heart or not http://mowl.borg/compat/el#Heart"
+   ],
+   [
+    "http://mowl.borg/compat/el#Herbivore",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Animal"
+   ],
+   [
+    "http://mowl.borg/compat/el#Herbivore",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Herbivore"
+   ],
+   [
+    "http://mowl.borg/compat/el#Herbivore",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Herbivore or not http://mowl.borg/compat/el#Cow"
+   ],
+   [
+    "http://mowl.borg/compat/el#Herbivore",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Herbivore or not http://mowl.borg/compat/el#Herbivore"
+   ],
+   [
+    "http://mowl.borg/compat/el#Herbivore",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Herbivore or not http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Plant"
+   ],
+   [
+    "http://mowl.borg/compat/el#Herbivore and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Herbivore"
+   ],
+   [
+    "http://mowl.borg/compat/el#Herbivore and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Herbivore and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal"
+   ],
+   [
+    "http://mowl.borg/compat/el#Herbivore and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal",
+    "http://arrow",
+    "http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal"
+   ],
+   [
+    "http://mowl.borg/compat/el#Herbivore and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal and not http://mowl.borg/compat/el#Herbivore and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Herbivore and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal and not http://mowl.borg/compat/el#Herbivore and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal"
+   ],
+   [
+    "http://mowl.borg/compat/el#Herbivore and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal and not http://mowl.borg/compat/el#Herbivore or http://mowl.borg/compat/el#eats only not http://mowl.borg/compat/el#Animal",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Herbivore and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal and not http://mowl.borg/compat/el#Herbivore or http://mowl.borg/compat/el#eats only not http://mowl.borg/compat/el#Animal"
+   ],
+   [
+    "http://mowl.borg/compat/el#Herbivore and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal or not http://mowl.borg/compat/el#Herbivore and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Herbivore and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal or not http://mowl.borg/compat/el#Herbivore and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal"
+   ],
+   [
+    "http://mowl.borg/compat/el#Herbivore and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal or not http://mowl.borg/compat/el#Herbivore or http://mowl.borg/compat/el#eats only not http://mowl.borg/compat/el#Animal",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Herbivore and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal or not http://mowl.borg/compat/el#Herbivore or http://mowl.borg/compat/el#eats only not http://mowl.borg/compat/el#Animal"
+   ],
+   [
+    "http://mowl.borg/compat/el#Herbivore and not http://mowl.borg/compat/el#Herbivore",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Herbivore"
+   ],
+   [
+    "http://mowl.borg/compat/el#Herbivore and not http://mowl.borg/compat/el#Herbivore",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Herbivore and not http://mowl.borg/compat/el#Herbivore"
+   ],
+   [
+    "http://mowl.borg/compat/el#Herbivore or http://mowl.borg/compat/el#eats only not http://mowl.borg/compat/el#Plant",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Herbivore or http://mowl.borg/compat/el#eats only not http://mowl.borg/compat/el#Plant"
+   ],
+   [
+    "http://mowl.borg/compat/el#Herbivore or not http://mowl.borg/compat/el#Cow",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Herbivore or not http://mowl.borg/compat/el#Cow"
+   ],
+   [
+    "http://mowl.borg/compat/el#Herbivore or not http://mowl.borg/compat/el#Herbivore",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Herbivore or not http://mowl.borg/compat/el#Herbivore"
+   ],
+   [
+    "http://mowl.borg/compat/el#Herbivore or not http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Plant",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Herbivore or not http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Plant"
+   ],
+   [
+    "http://mowl.borg/compat/el#Lion",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Carnivore"
+   ],
+   [
+    "http://mowl.borg/compat/el#Lion",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Lion"
+   ],
+   [
+    "http://mowl.borg/compat/el#Lion",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Lion or not http://mowl.borg/compat/el#Lion"
+   ],
+   [
+    "http://mowl.borg/compat/el#Lion",
+    "http://arrow",
+    "http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Herbivore"
+   ],
+   [
+    "http://mowl.borg/compat/el#Lion and not http://mowl.borg/compat/el#Lion",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Lion"
+   ],
+   [
+    "http://mowl.borg/compat/el#Lion and not http://mowl.borg/compat/el#Lion",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Lion and not http://mowl.borg/compat/el#Lion"
+   ],
+   [
+    "http://mowl.borg/compat/el#Lion or not http://mowl.borg/compat/el#Lion",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Lion or not http://mowl.borg/compat/el#Lion"
+   ],
+   [
+    "http://mowl.borg/compat/el#MadCow",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Cow and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal"
+   ],
+   [
+    "http://mowl.borg/compat/el#MadCow",
+    "http://arrow",
+    "http://mowl.borg/compat/el#MadCow"
+   ],
+   [
+    "http://mowl.borg/compat/el#MadCow",
+    "http://arrow",
+    "http://mowl.borg/compat/el#MadCow or not http://mowl.borg/compat/el#Cow and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal"
+   ],
+   [
+    "http://mowl.borg/compat/el#MadCow",
+    "http://arrow",
+    "http://mowl.borg/compat/el#MadCow or not http://mowl.borg/compat/el#MadCow"
+   ],
+   [
+    "http://mowl.borg/compat/el#MadCow and not http://mowl.borg/compat/el#MadCow",
+    "http://arrow",
+    "http://mowl.borg/compat/el#MadCow"
+   ],
+   [
+    "http://mowl.borg/compat/el#MadCow and not http://mowl.borg/compat/el#MadCow",
+    "http://arrow",
+    "http://mowl.borg/compat/el#MadCow and not http://mowl.borg/compat/el#MadCow"
+   ],
+   [
+    "http://mowl.borg/compat/el#MadCow or not http://mowl.borg/compat/el#Cow and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal",
+    "http://arrow",
+    "http://mowl.borg/compat/el#MadCow or not http://mowl.borg/compat/el#Cow and http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal"
+   ],
+   [
+    "http://mowl.borg/compat/el#MadCow or not http://mowl.borg/compat/el#Cow or http://mowl.borg/compat/el#eats only not http://mowl.borg/compat/el#Animal",
+    "http://arrow",
+    "http://mowl.borg/compat/el#MadCow or not http://mowl.borg/compat/el#Cow or http://mowl.borg/compat/el#eats only not http://mowl.borg/compat/el#Animal"
+   ],
+   [
+    "http://mowl.borg/compat/el#MadCow or not http://mowl.borg/compat/el#MadCow",
+    "http://arrow",
+    "http://mowl.borg/compat/el#MadCow or not http://mowl.borg/compat/el#MadCow"
+   ],
+   [
+    "http://mowl.borg/compat/el#Organ",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Organ"
+   ],
+   [
+    "http://mowl.borg/compat/el#Organ",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Organ or not http://mowl.borg/compat/el#Heart"
+   ],
+   [
+    "http://mowl.borg/compat/el#Organ",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Organ or not http://mowl.borg/compat/el#Organ"
+   ],
+   [
+    "http://mowl.borg/compat/el#Organ and not http://mowl.borg/compat/el#Organ",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Organ"
+   ],
+   [
+    "http://mowl.borg/compat/el#Organ and not http://mowl.borg/compat/el#Organ",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Organ and not http://mowl.borg/compat/el#Organ"
+   ],
+   [
+    "http://mowl.borg/compat/el#Organ or not http://mowl.borg/compat/el#Heart",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Organ or not http://mowl.borg/compat/el#Heart"
+   ],
+   [
+    "http://mowl.borg/compat/el#Organ or not http://mowl.borg/compat/el#Organ",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Organ or not http://mowl.borg/compat/el#Organ"
+   ],
+   [
+    "http://mowl.borg/compat/el#Plant",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Plant"
+   ],
+   [
+    "http://mowl.borg/compat/el#Plant",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Plant or not http://mowl.borg/compat/el#Grass"
+   ],
+   [
+    "http://mowl.borg/compat/el#Plant",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Plant or not http://mowl.borg/compat/el#Plant"
+   ],
+   [
+    "http://mowl.borg/compat/el#Plant and not http://mowl.borg/compat/el#Plant",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Plant"
+   ],
+   [
+    "http://mowl.borg/compat/el#Plant and not http://mowl.borg/compat/el#Plant",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Plant and not http://mowl.borg/compat/el#Plant"
+   ],
+   [
+    "http://mowl.borg/compat/el#Plant or not http://mowl.borg/compat/el#Grass",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Plant or not http://mowl.borg/compat/el#Grass"
+   ],
+   [
+    "http://mowl.borg/compat/el#Plant or not http://mowl.borg/compat/el#Plant",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Plant or not http://mowl.borg/compat/el#Plant"
+   ],
+   [
+    "http://mowl.borg/compat/el#Unused",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Unused"
+   ],
+   [
+    "http://mowl.borg/compat/el#Unused",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Unused or not http://mowl.borg/compat/el#Unused"
+   ],
+   [
+    "http://mowl.borg/compat/el#Unused and not http://mowl.borg/compat/el#Unused",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Unused"
+   ],
+   [
+    "http://mowl.borg/compat/el#Unused and not http://mowl.borg/compat/el#Unused",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Unused and not http://mowl.borg/compat/el#Unused"
+   ],
+   [
+    "http://mowl.borg/compat/el#Unused or not http://mowl.borg/compat/el#Unused",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Unused or not http://mowl.borg/compat/el#Unused"
+   ],
+   [
+    "http://mowl.borg/compat/el#Ventricle",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Ventricle"
+   ],
+   [
+    "http://mowl.borg/compat/el#Ventricle",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Ventricle or not http://mowl.borg/compat/el#Ventricle"
+   ],
+   [
+    "http://mowl.borg/compat/el#Ventricle and not http://mowl.borg/compat/el#Ventricle",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Ventricle"
+   ],
+   [
+    "http://mowl.borg/compat/el#Ventricle and not http://mowl.borg/compat/el#Ventricle",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Ventricle and not http://mowl.borg/compat/el#Ventricle"
+   ],
+   [
+    "http://mowl.borg/compat/el#Ventricle or not http://mowl.borg/compat/el#Ventricle",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Ventricle or not http://mowl.borg/compat/el#Ventricle"
+   ],
+   [
+    "http://mowl.borg/compat/el#daisy",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Cow"
+   ],
+   [
+    "http://mowl.borg/compat/el#daisy",
+    "http://arrow",
+    "http://mowl.borg/compat/el#daisy"
+   ],
+   [
+    "http://mowl.borg/compat/el#daisy",
+    "http://arrow",
+    "http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#lawn"
+   ],
+   [
+    "http://mowl.borg/compat/el#daisy",
+    "http://type",
+    "http://mowl.borg/compat/el#Cow"
+   ],
+   [
+    "http://mowl.borg/compat/el#eats",
+    "http://arrow",
+    "http://mowl.borg/compat/el#eats"
+   ],
+   [
+    "http://mowl.borg/compat/el#eats only not http://mowl.borg/compat/el#Plant",
+    "http://arrow",
+    "http://mowl.borg/compat/el#eats only not http://mowl.borg/compat/el#Plant"
+   ],
+   [
+    "http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal",
+    "http://arrow",
+    "http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal"
+   ],
+   [
+    "http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Grass",
+    "http://arrow",
+    "http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Grass"
+   ],
+   [
+    "http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Herbivore",
+    "http://arrow",
+    "http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Herbivore"
+   ],
+   [
+    "http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Plant",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Herbivore"
+   ],
+   [
+    "http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Plant",
+    "http://arrow",
+    "http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Plant"
+   ],
+   [
+    "http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Plant and http://mowl.borg/compat/el#eats only not http://mowl.borg/compat/el#Plant",
+    "http://arrow",
+    "http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Plant and http://mowl.borg/compat/el#eats only not http://mowl.borg/compat/el#Plant"
+   ],
+   [
+    "http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Plant or http://mowl.borg/compat/el#eats only not http://mowl.borg/compat/el#Plant",
+    "http://arrow",
+    "http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Plant or http://mowl.borg/compat/el#eats only not http://mowl.borg/compat/el#Plant"
+   ],
+   [
+    "http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#lawn",
+    "http://arrow",
+    "http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#lawn"
+   ],
+   [
+    "http://mowl.borg/compat/el#eats_under_http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal",
+    "http://arrow",
+    "http://mowl.borg/compat/el#eats"
+   ],
+   [
+    "http://mowl.borg/compat/el#eats_under_http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal",
+    "http://arrow",
+    "http://mowl.borg/compat/el#eats_under_http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Animal"
+   ],
+   [
+    "http://mowl.borg/compat/el#eats_under_http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Grass",
+    "http://arrow",
+    "http://mowl.borg/compat/el#eats"
+   ],
+   [
+    "http://mowl.borg/compat/el#eats_under_http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Grass",
+    "http://arrow",
+    "http://mowl.borg/compat/el#eats_under_http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Grass"
+   ],
+   [
+    "http://mowl.borg/compat/el#eats_under_http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Herbivore",
+    "http://arrow",
+    "http://mowl.borg/compat/el#eats"
+   ],
+   [
+    "http://mowl.borg/compat/el#eats_under_http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Herbivore",
+    "http://arrow",
+    "http://mowl.borg/compat/el#eats_under_http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Herbivore"
+   ],
+   [
+    "http://mowl.borg/compat/el#eats_under_http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Plant",
+    "http://arrow",
+    "http://mowl.borg/compat/el#eats"
+   ],
+   [
+    "http://mowl.borg/compat/el#eats_under_http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Plant",
+    "http://arrow",
+    "http://mowl.borg/compat/el#eats_under_http://mowl.borg/compat/el#eats some http://mowl.borg/compat/el#Plant"
+   ],
+   [
+    "http://mowl.borg/compat/el#feedsOn some http://mowl.borg/compat/el#daisy",
+    "http://arrow",
+    "http://mowl.borg/compat/el#feedsOn some http://mowl.borg/compat/el#daisy"
+   ],
+   [
+    "http://mowl.borg/compat/el#hasDirectPart",
+    "http://arrow",
+    "http://mowl.borg/compat/el#hasDirectPart"
+   ],
+   [
+    "http://mowl.borg/compat/el#hasDirectPart some http://mowl.borg/compat/el#Ventricle",
+    "http://arrow",
+    "http://mowl.borg/compat/el#hasDirectPart some http://mowl.borg/compat/el#Ventricle"
+   ],
+   [
+    "http://mowl.borg/compat/el#hasDirectPart_under_http://mowl.borg/compat/el#hasDirectPart some http://mowl.borg/compat/el#Ventricle",
+    "http://arrow",
+    "http://mowl.borg/compat/el#hasDirectPart"
+   ],
+   [
+    "http://mowl.borg/compat/el#hasDirectPart_under_http://mowl.borg/compat/el#hasDirectPart some http://mowl.borg/compat/el#Ventricle",
+    "http://arrow",
+    "http://mowl.borg/compat/el#hasDirectPart_under_http://mowl.borg/compat/el#hasDirectPart some http://mowl.borg/compat/el#Ventricle"
+   ],
+   [
+    "http://mowl.borg/compat/el#hasPart",
+    "http://arrow",
+    "http://mowl.borg/compat/el#hasPart"
+   ],
+   [
+    "http://mowl.borg/compat/el#hasPart only http://mowl.borg/compat/el#hasPart only not http://mowl.borg/compat/el#Ventricle",
+    "http://arrow",
+    "http://mowl.borg/compat/el#hasPart only http://mowl.borg/compat/el#hasPart only not http://mowl.borg/compat/el#Ventricle"
+   ],
+   [
+    "http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#Heart",
+    "http://arrow",
+    "http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#Heart"
+   ],
+   [
+    "http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#Organ",
+    "http://arrow",
+    "http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#Organ"
+   ],
+   [
+    "http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#Organ or http://mowl.borg/compat/el#hasPart only http://mowl.borg/compat/el#hasPart only not http://mowl.borg/compat/el#Ventricle",
+    "http://arrow",
+    "http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#Organ or http://mowl.borg/compat/el#hasPart only http://mowl.borg/compat/el#hasPart only not http://mowl.borg/compat/el#Ventricle"
+   ],
+   [
+    "http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#Ventricle",
+    "http://arrow",
+    "http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#Ventricle"
+   ],
+   [
+    "http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#Ventricle",
+    "http://arrow",
+    "http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#Organ"
+   ],
+   [
+    "http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#Ventricle",
+    "http://arrow",
+    "http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#Ventricle"
+   ],
+   [
+    "http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#Ventricle and http://mowl.borg/compat/el#hasPart only http://mowl.borg/compat/el#hasPart only not http://mowl.borg/compat/el#Ventricle",
+    "http://arrow",
+    "http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#Ventricle and http://mowl.borg/compat/el#hasPart only http://mowl.borg/compat/el#hasPart only not http://mowl.borg/compat/el#Ventricle"
+   ],
+   [
+    "http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#Ventricle or http://mowl.borg/compat/el#hasPart only http://mowl.borg/compat/el#hasPart only not http://mowl.borg/compat/el#Ventricle",
+    "http://arrow",
+    "http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#Ventricle or http://mowl.borg/compat/el#hasPart only http://mowl.borg/compat/el#hasPart only not http://mowl.borg/compat/el#Ventricle"
+   ],
+   [
+    "http://mowl.borg/compat/el#hasPart_under_http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#Heart",
+    "http://arrow",
+    "http://mowl.borg/compat/el#hasPart"
+   ],
+   [
+    "http://mowl.borg/compat/el#hasPart_under_http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#Heart",
+    "http://arrow",
+    "http://mowl.borg/compat/el#hasPart_under_http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#Heart"
+   ],
+   [
+    "http://mowl.borg/compat/el#hasPart_under_http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#Organ",
+    "http://arrow",
+    "http://mowl.borg/compat/el#hasPart"
+   ],
+   [
+    "http://mowl.borg/compat/el#hasPart_under_http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#Organ",
+    "http://arrow",
+    "http://mowl.borg/compat/el#hasPart_under_http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#Organ"
+   ],
+   [
+    "http://mowl.borg/compat/el#hasPart_under_http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#Ventricle",
+    "http://arrow",
+    "http://mowl.borg/compat/el#hasPart"
+   ],
+   [
+    "http://mowl.borg/compat/el#hasPart_under_http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#Ventricle",
+    "http://arrow",
+    "http://mowl.borg/compat/el#hasPart_under_http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#Ventricle"
+   ],
+   [
+    "http://mowl.borg/compat/el#hasPart_under_http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#Ventricle",
+    "http://arrow",
+    "http://mowl.borg/compat/el#hasPart"
+   ],
+   [
+    "http://mowl.borg/compat/el#hasPart_under_http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#Ventricle",
+    "http://arrow",
+    "http://mowl.borg/compat/el#hasPart_under_http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#hasPart some http://mowl.borg/compat/el#Ventricle"
+   ],
+   [
+    "http://mowl.borg/compat/el#lawn",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Grass"
+   ],
+   [
+    "http://mowl.borg/compat/el#lawn",
+    "http://arrow",
+    "http://mowl.borg/compat/el#lawn"
+   ],
+   [
+    "http://mowl.borg/compat/el#lawn",
+    "http://type",
+    "http://mowl.borg/compat/el#Grass"
+   ],
+   [
+    "http://mowl.borg/compat/el#leo",
+    "http://arrow",
+    "http://mowl.borg/compat/el#Lion"
+   ],
+   [
+    "http://mowl.borg/compat/el#leo",
+    "http://arrow",
+    "http://mowl.borg/compat/el#feedsOn some http://mowl.borg/compat/el#daisy"
+   ],
+   [
+    "http://mowl.borg/compat/el#leo",
+    "http://arrow",
+    "http://mowl.borg/compat/el#leo"
+   ],
+   [
+    "http://mowl.borg/compat/el#leo",
+    "http://type",
+    "http://mowl.borg/compat/el#Lion"
+   ]
+  ],
+  "relations": [
+   "http://arrow",
+   "http://type"
+  ]
+ }
+}

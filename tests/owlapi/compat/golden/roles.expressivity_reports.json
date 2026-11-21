@@ -1,0 +1,141 @@
+{
+ "owlapi": "4.5.29",
+ "value": {
+  "alcone": {
+   "ok": false,
+   "summary": "2 of 8 logical axioms go beyond ALC with ABox (the ontology uses ELH(∘)⊥) and will be ignored or only partly used: 1 SubObjectPropertyOf, 1 SubPropertyChainOf. Constructs outside the supported logic: r ∘ s ⊑ t (1), r ⊑ s (1)."
+  },
+  "alcone-exact": {
+   "ok": false,
+   "summary": "2 of 8 logical axioms go beyond ALC (the ontology uses ELH(∘)⊥) and will be ignored or only partly used: 1 SubObjectPropertyOf, 1 SubPropertyChainOf. Constructs outside the supported logic: r ∘ s ⊑ t (1), r ⊑ s (1)."
+  },
+  "bcbox": {
+   "ok": false,
+   "summary": "8 of 8 logical axioms go beyond taxonomy (the ontology uses ELH(∘)⊥) and will be ignored or only partly used: 6 SubClassOf, 1 SubObjectPropertyOf, 1 SubPropertyChainOf. Constructs outside the supported logic: ⊥ (1), ⊓ (1), ∃r.C (5), r ∘ s ⊑ t (1), r ⊑ s (1)."
+  },
+  "box2el": {
+   "ok": true,
+   "summary": "All 8 logical axioms are within ELH(∘)⊥ with ABox (the ontology uses ELH(∘)⊥)."
+  },
+  "box_milp": {
+   "ok": false,
+   "summary": "7 of 8 logical axioms go beyond propositional EL⊥ (the ontology uses ELH(∘)⊥) and will be ignored or only partly used: 5 SubClassOf, 1 SubObjectPropertyOf, 1 SubPropertyChainOf. Constructs outside the supported logic: ∃r.C (5), r ∘ s ⊑ t (1), r ⊑ s (1)."
+  },
+  "boxel": {
+   "ok": false,
+   "summary": "2 of 8 logical axioms go beyond EL⊥ with ABox (the ontology uses ELH(∘)⊥) and will be ignored or only partly used: 1 SubObjectPropertyOf, 1 SubPropertyChainOf. Constructs outside the supported logic: r ∘ s ⊑ t (1), r ⊑ s (1)."
+  },
+  "boxlite": {
+   "ok": false,
+   "summary": "2 of 8 logical axioms go beyond DL-Lite_H with ABox (the ontology uses ELH(∘)⊥) and will be ignored or only partly used: 1 SubClassOf, 1 SubPropertyChainOf. Constructs outside the supported logic: ⊓ (1), r ∘ s ⊑ t (1)."
+  },
+  "canonical_mixture": {
+   "ok": true,
+   "summary": "All 8 logical axioms are within ELH(∘)⊥ with ABox (the ontology uses ELH(∘)⊥)."
+  },
+  "canonical_model": {
+   "ok": true,
+   "summary": "All 8 logical axioms are within ELH(∘)⊥ with ABox (the ontology uses ELH(∘)⊥)."
+  },
+  "cate": {
+   "ok": false,
+   "summary": "2 of 8 logical axioms go beyond ALC with ABox (the ontology uses ELH(∘)⊥) and will be ignored or only partly used: 1 SubObjectPropertyOf, 1 SubPropertyChainOf. Constructs outside the supported logic: r ∘ s ⊑ t (1), r ⊑ s (1)."
+  },
+  "convex_polyhedral": {
+   "ok": true,
+   "summary": "All 8 logical axioms are within ELH(∘)⊥ (the ontology uses ELH(∘)⊥)."
+  },
+  "dl2vec": {
+   "ok": true,
+   "summary": "All 8 logical axioms are within OWL 2 DL (the ontology uses ELH(∘)⊥)."
+  },
+  "e2r": {
+   "ok": false,
+   "summary": "6 of 8 logical axioms go beyond E2R fragment with ABox (the ontology uses ELH(∘)⊥) and will be ignored or only partly used: 5 SubClassOf, 1 SubPropertyChainOf. Constructs outside the supported logic: ∃r.C (5), r ∘ s ⊑ t (1)."
+  },
+  "elbe": {
+   "ok": false,
+   "summary": "2 of 8 logical axioms go beyond EL⊥ with ABox (the ontology uses ELH(∘)⊥) and will be ignored or only partly used: 1 SubObjectPropertyOf, 1 SubPropertyChainOf. Constructs outside the supported logic: r ∘ s ⊑ t (1), r ⊑ s (1)."
+  },
+  "elem": {
+   "ok": false,
+   "summary": "2 of 8 logical axioms go beyond EL⊥ with ABox (the ontology uses ELH(∘)⊥) and will be ignored or only partly used: 1 SubObjectPropertyOf, 1 SubPropertyChainOf. Constructs outside the supported logic: r ∘ s ⊑ t (1), r ⊑ s (1)."
+  },
+  "elkem": {
+   "ok": true,
+   "summary": "All 8 logical axioms are within ELH(∘)⊥ with ABox (the ontology uses ELH(∘)⊥)."
+  },
+  "emelpp": {
+   "ok": true,
+   "summary": "All 8 logical axioms are within ELH(∘)⊥ with ABox (the ontology uses ELH(∘)⊥)."
+  },
+  "emelvar": {
+   "ok": true,
+   "summary": "All 8 logical axioms are within ELH(∘)⊥ with ABox (the ontology uses ELH(∘)⊥)."
+  },
+  "falcon": {
+   "ok": false,
+   "summary": "2 of 8 logical axioms go beyond ALC with ABox (the ontology uses ELH(∘)⊥) and will be ignored or only partly used: 1 SubObjectPropertyOf, 1 SubPropertyChainOf. Constructs outside the supported logic: r ∘ s ⊑ t (1), r ⊑ s (1)."
+  },
+  "hit": {
+   "ok": false,
+   "summary": "8 of 8 logical axioms go beyond taxonomy (the ontology uses ELH(∘)⊥) and will be ignored or only partly used: 6 SubClassOf, 1 SubObjectPropertyOf, 1 SubPropertyChainOf. Constructs outside the supported logic: ⊥ (1), ⊓ (1), ∃r.C (5), r ∘ s ⊑ t (1), r ⊑ s (1)."
+  },
+  "interval_union": {
+   "ok": true,
+   "summary": "All 8 logical axioms are within ELH(∘)⊥ (the ontology uses ELH(∘)⊥)."
+  },
+  "mcmultibox": {
+   "ok": false,
+   "summary": "1 of 8 logical axioms go beyond ELH(∘) (the ontology uses ELH(∘)⊥) and will be ignored or only partly used: 1 SubClassOf. Constructs outside the supported logic: ⊥ (1)."
+  },
+  "multiboxel": {
+   "ok": false,
+   "summary": "2 of 8 logical axioms go beyond EL⊥ with ABox (the ontology uses ELH(∘)⊥) and will be ignored or only partly used: 1 SubObjectPropertyOf, 1 SubPropertyChainOf. Constructs outside the supported logic: r ∘ s ⊑ t (1), r ⊑ s (1)."
+  },
+  "multielbe": {
+   "ok": false,
+   "summary": "2 of 8 logical axioms go beyond EL⊥ with ABox (the ontology uses ELH(∘)⊥) and will be ignored or only partly used: 1 SubObjectPropertyOf, 1 SubPropertyChainOf. Constructs outside the supported logic: r ∘ s ⊑ t (1), r ⊑ s (1)."
+  },
+  "octagon": {
+   "ok": false,
+   "summary": "2 of 8 logical axioms go beyond EL⊥ with ABox (the ontology uses ELH(∘)⊥) and will be ignored or only partly used: 1 SubObjectPropertyOf, 1 SubPropertyChainOf. Constructs outside the supported logic: r ∘ s ⊑ t (1), r ⊑ s (1)."
+  },
+  "ont": {
+   "ok": false,
+   "summary": "3 of 8 logical axioms go beyond EL (the ontology uses ELH(∘)⊥) and will be ignored or only partly used: 1 SubClassOf, 1 SubObjectPropertyOf, 1 SubPropertyChainOf. Constructs outside the supported logic: ⊥ (1), r ∘ s ⊑ t (1), r ⊑ s (1)."
+  },
+  "onto2vec": {
+   "ok": true,
+   "summary": "All 8 logical axioms are within OWL 2 DL (the ontology uses ELH(∘)⊥)."
+  },
+  "opa2vec": {
+   "ok": true,
+   "summary": "All 8 logical axioms are within OWL 2 DL (the ontology uses ELH(∘)⊥)."
+  },
+  "owl2vec_star": {
+   "ok": true,
+   "summary": "All 8 logical axioms are within OWL 2 DL (the ontology uses ELH(∘)⊥)."
+  },
+  "prism": {
+   "ok": false,
+   "summary": "2 of 8 logical axioms go beyond EL⊥ with ABox (the ontology uses ELH(∘)⊥) and will be ignored or only partly used: 1 SubObjectPropertyOf, 1 SubPropertyChainOf. Constructs outside the supported logic: r ∘ s ⊑ t (1), r ⊑ s (1)."
+  },
+  "regd": {
+   "ok": false,
+   "summary": "2 of 8 logical axioms go beyond EL⊥ with ABox (the ontology uses ELH(∘)⊥) and will be ignored or only partly used: 1 SubObjectPropertyOf, 1 SubPropertyChainOf. Constructs outside the supported logic: r ∘ s ⊑ t (1), r ⊑ s (1)."
+  },
+  "regd_elem": {
+   "ok": false,
+   "summary": "2 of 8 logical axioms go beyond EL⊥ with ABox (the ontology uses ELH(∘)⊥) and will be ignored or only partly used: 1 SubObjectPropertyOf, 1 SubPropertyChainOf. Constructs outside the supported logic: r ∘ s ⊑ t (1), r ⊑ s (1)."
+  },
+  "taxonomy_walks": {
+   "ok": false,
+   "summary": "8 of 8 logical axioms go beyond taxonomy (the ontology uses ELH(∘)⊥) and will be ignored or only partly used: 6 SubClassOf, 1 SubObjectPropertyOf, 1 SubPropertyChainOf. Constructs outside the supported logic: ⊥ (1), ⊓ (1), ∃r.C (5), r ∘ s ⊑ t (1), r ⊑ s (1)."
+  },
+  "transbox": {
+   "ok": true,
+   "summary": "All 8 logical axioms are within ELH(∘)⊥ with ABox (the ontology uses ELH(∘)⊥)."
+  }
+ }
+}

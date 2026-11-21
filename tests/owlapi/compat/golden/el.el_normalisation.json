@@ -1,0 +1,153 @@
+{
+ "owlapi": "4.5.29",
+ "value": {
+  "auxiliary_classes": 4,
+  "class_assertion": {
+   "named": [
+    [
+     "http://mowl.borg/compat/el#Cow",
+     "http://mowl.borg/compat/el#daisy"
+    ],
+    [
+     "http://mowl.borg/compat/el#Grass",
+     "http://mowl.borg/compat/el#lawn"
+    ],
+    [
+     "http://mowl.borg/compat/el#Lion",
+     "http://mowl.borg/compat/el#leo"
+    ]
+   ],
+   "with_auxiliary": 0
+  },
+  "gci0": {
+   "named": [
+    [
+     "http://mowl.borg/compat/el#Carnivore",
+     "http://mowl.borg/compat/el#Animal"
+    ],
+    [
+     "http://mowl.borg/compat/el#Cow",
+     "http://mowl.borg/compat/el#Herbivore"
+    ],
+    [
+     "http://mowl.borg/compat/el#Grass",
+     "http://mowl.borg/compat/el#Plant"
+    ],
+    [
+     "http://mowl.borg/compat/el#Heart",
+     "http://mowl.borg/compat/el#Organ"
+    ],
+    [
+     "http://mowl.borg/compat/el#Herbivore",
+     "http://mowl.borg/compat/el#Animal"
+    ],
+    [
+     "http://mowl.borg/compat/el#Lion",
+     "http://mowl.borg/compat/el#Carnivore"
+    ],
+    [
+     "http://mowl.borg/compat/el#MadCow",
+     "http://mowl.borg/compat/el#Cow"
+    ]
+   ],
+   "with_auxiliary": 0
+  },
+  "gci0_bot": {
+   "named": [],
+   "with_auxiliary": 0
+  },
+  "gci1": {
+   "named": [],
+   "with_auxiliary": 1
+  },
+  "gci1_bot": {
+   "named": [
+    [
+     "http://mowl.borg/compat/el#Animal",
+     "http://mowl.borg/compat/el#Plant",
+     "http://www.w3.org/2002/07/owl#Nothing"
+    ],
+    [
+     "http://mowl.borg/compat/el#Grass",
+     "http://mowl.borg/compat/el#Heart",
+     "http://www.w3.org/2002/07/owl#Nothing"
+    ],
+    [
+     "http://mowl.borg/compat/el#Grass",
+     "http://mowl.borg/compat/el#Ventricle",
+     "http://www.w3.org/2002/07/owl#Nothing"
+    ],
+    [
+     "http://mowl.borg/compat/el#Heart",
+     "http://mowl.borg/compat/el#Ventricle",
+     "http://www.w3.org/2002/07/owl#Nothing"
+    ]
+   ],
+   "with_auxiliary": 1
+  },
+  "gci2": {
+   "named": [
+    [
+     "http://mowl.borg/compat/el#Animal",
+     "http://mowl.borg/compat/el#hasPart",
+     "http://mowl.borg/compat/el#Heart"
+    ],
+    [
+     "http://mowl.borg/compat/el#Cow",
+     "http://mowl.borg/compat/el#eats",
+     "http://mowl.borg/compat/el#Grass"
+    ],
+    [
+     "http://mowl.borg/compat/el#Heart",
+     "http://mowl.borg/compat/el#hasDirectPart",
+     "http://mowl.borg/compat/el#Ventricle"
+    ],
+    [
+     "http://mowl.borg/compat/el#Lion",
+     "http://mowl.borg/compat/el#eats",
+     "http://mowl.borg/compat/el#Herbivore"
+    ],
+    [
+     "http://mowl.borg/compat/el#MadCow",
+     "http://mowl.borg/compat/el#eats",
+     "http://mowl.borg/compat/el#Animal"
+    ]
+   ],
+   "with_auxiliary": 1
+  },
+  "gci3": {
+   "named": [
+    [
+     "http://mowl.borg/compat/el#eats",
+     "http://mowl.borg/compat/el#Plant",
+     "http://mowl.borg/compat/el#Herbivore"
+    ],
+    [
+     "http://mowl.borg/compat/el#eats",
+     "http://www.w3.org/2002/07/owl#Thing",
+     "http://mowl.borg/compat/el#Animal"
+    ]
+   ],
+   "with_auxiliary": 4
+  },
+  "gci3_bot": {
+   "named": [],
+   "with_auxiliary": 0
+  },
+  "object_property_assertion": {
+   "named": [
+    [
+     "http://mowl.borg/compat/el#daisy",
+     "http://mowl.borg/compat/el#eats",
+     "http://mowl.borg/compat/el#lawn"
+    ],
+    [
+     "http://mowl.borg/compat/el#leo",
+     "http://mowl.borg/compat/el#feedsOn",
+     "http://mowl.borg/compat/el#daisy"
+    ]
+   ],
+   "with_auxiliary": 0
+  }
+ }
+}

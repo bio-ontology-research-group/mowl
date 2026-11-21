@@ -1,0 +1,21 @@
+{
+ "owlapi": "4.5.29",
+ "value": {
+  "annotations": [],
+  "axioms": [
+   "Class: http://mowl.borg/geo#A",
+   "Class: http://mowl.borg/geo#B",
+   "Class: http://mowl.borg/geo#C",
+   "Class: http://mowl.borg/geo#X1",
+   "Class: http://mowl.borg/geo#X2",
+   "Class: http://mowl.borg/geo#X3",
+   "Class: http://mowl.borg/geo#Z",
+   "http://mowl.borg/geo#A EquivalentTo http://mowl.borg/geo#X1 and http://mowl.borg/geo#X2",
+   "http://mowl.borg/geo#A and http://mowl.borg/geo#B SubClassOf owl:Nothing",
+   "http://mowl.borg/geo#A and http://mowl.borg/geo#C SubClassOf owl:Nothing",
+   "http://mowl.borg/geo#B EquivalentTo http://mowl.borg/geo#X2 and http://mowl.borg/geo#X3",
+   "http://mowl.borg/geo#B and http://mowl.borg/geo#C SubClassOf owl:Nothing",
+   "http://mowl.borg/geo#C EquivalentTo http://mowl.borg/geo#X1 and http://mowl.borg/geo#X3"
+  ]
+ }
+}

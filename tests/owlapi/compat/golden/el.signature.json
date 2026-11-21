@@ -1,0 +1,41 @@
+{
+ "owlapi": "4.5.29",
+ "value": {
+  "annotation_properties": [
+   "http://www.w3.org/2000/01/rdf-schema#comment",
+   "http://www.w3.org/2000/01/rdf-schema#label"
+  ],
+  "classes": [
+   "http://mowl.borg/compat/el#Animal",
+   "http://mowl.borg/compat/el#Carnivore",
+   "http://mowl.borg/compat/el#Cow",
+   "http://mowl.borg/compat/el#Grass",
+   "http://mowl.borg/compat/el#Heart",
+   "http://mowl.borg/compat/el#Herbivore",
+   "http://mowl.borg/compat/el#Lion",
+   "http://mowl.borg/compat/el#MadCow",
+   "http://mowl.borg/compat/el#Organ",
+   "http://mowl.borg/compat/el#Plant",
+   "http://mowl.borg/compat/el#Unused",
+   "http://mowl.borg/compat/el#Ventricle",
+   "http://www.w3.org/2002/07/owl#Nothing"
+  ],
+  "data_properties": [],
+  "datatypes": [
+   "http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral"
+  ],
+  "individuals": [
+   "http://mowl.borg/compat/el#daisy",
+   "http://mowl.borg/compat/el#lawn",
+   "http://mowl.borg/compat/el#leo"
+  ],
+  "object_properties": [
+   "http://mowl.borg/compat/el#eats",
+   "http://mowl.borg/compat/el#feedsOn",
+   "http://mowl.borg/compat/el#hasDirectPart",
+   "http://mowl.borg/compat/el#hasPart",
+   "http://mowl.borg/compat/el#partOf"
+  ],
+  "ontology_iri": "http://mowl.borg/compat/el"
+ }
+}

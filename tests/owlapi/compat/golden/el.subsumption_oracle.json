@@ -1,0 +1,505 @@
+{
+ "owlapi": "4.5.29",
+ "value": [
+  [
+   "http://mowl.borg/compat/el#Animal",
+   "http://mowl.borg/compat/el#Carnivore",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/compat/el#Animal",
+   "some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Carnivore",
+   "CONTRADICTORY"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Animal and some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Carnivore",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/el#Animal",
+   "some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Carnivore",
+   "CONTRADICTORY"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Animal and some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Carnivore",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/el#Animal",
+   "http://mowl.borg/compat/el#Cow",
+   "CONTRADICTORY"
+  ],
+  [
+   "http://mowl.borg/compat/el#Animal",
+   "some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Cow",
+   "CONTRADICTORY"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Animal and some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Cow",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/el#Animal",
+   "some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Cow",
+   "CONTRADICTORY"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Animal and some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Cow",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/el#Animal",
+   "http://mowl.borg/compat/el#Grass",
+   "CONTRADICTORY"
+  ],
+  [
+   "http://mowl.borg/compat/el#Animal",
+   "some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Grass",
+   "CONTRADICTORY"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Animal and some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Grass",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/el#Animal",
+   "some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Grass",
+   "CONTRADICTORY"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Animal and some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Grass",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/el#Animal",
+   "http://mowl.borg/compat/el#Heart",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/compat/el#Animal",
+   "some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Heart",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Animal and some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Heart",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/el#Animal",
+   "some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Heart",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Animal and some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Heart",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/el#Carnivore",
+   "http://mowl.borg/compat/el#Animal",
+   "ENTAILED"
+  ],
+  [
+   "http://mowl.borg/compat/el#Carnivore",
+   "some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Animal",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Carnivore and some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Animal",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/el#Carnivore",
+   "some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Animal",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Carnivore and some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Animal",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/el#Carnivore",
+   "http://mowl.borg/compat/el#Cow",
+   "CONTRADICTORY"
+  ],
+  [
+   "http://mowl.borg/compat/el#Carnivore",
+   "some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Cow",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Carnivore and some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Cow",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/el#Carnivore",
+   "some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Cow",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Carnivore and some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Cow",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/el#Carnivore",
+   "http://mowl.borg/compat/el#Grass",
+   "CONTRADICTORY"
+  ],
+  [
+   "http://mowl.borg/compat/el#Carnivore",
+   "some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Grass",
+   "CONTRADICTORY"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Carnivore and some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Grass",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/el#Carnivore",
+   "some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Grass",
+   "CONTRADICTORY"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Carnivore and some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Grass",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/el#Carnivore",
+   "http://mowl.borg/compat/el#Heart",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/compat/el#Carnivore",
+   "some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Heart",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Carnivore and some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Heart",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/el#Carnivore",
+   "some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Heart",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Carnivore and some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Heart",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/el#Cow",
+   "http://mowl.borg/compat/el#Animal",
+   "ENTAILED"
+  ],
+  [
+   "http://mowl.borg/compat/el#Cow",
+   "some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Animal",
+   "CONTRADICTORY"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Cow and some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Animal",
+   "",
+   "False"
+  ],
+  [
+   "http://mowl.borg/compat/el#Cow",
+   "some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Animal",
+   "CONTRADICTORY"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Cow and some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Animal",
+   "",
+   "False"
+  ],
+  [
+   "http://mowl.borg/compat/el#Cow",
+   "http://mowl.borg/compat/el#Carnivore",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/compat/el#Cow",
+   "some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Carnivore",
+   "CONTRADICTORY"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Cow and some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Carnivore",
+   "",
+   "False"
+  ],
+  [
+   "http://mowl.borg/compat/el#Cow",
+   "some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Carnivore",
+   "CONTRADICTORY"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Cow and some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Carnivore",
+   "",
+   "False"
+  ],
+  [
+   "http://mowl.borg/compat/el#Cow",
+   "http://mowl.borg/compat/el#Grass",
+   "CONTRADICTORY"
+  ],
+  [
+   "http://mowl.borg/compat/el#Cow",
+   "some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Grass",
+   "ENTAILED"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Cow and some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Grass",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/el#Cow",
+   "some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Grass",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Cow and some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Grass",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/el#Cow",
+   "http://mowl.borg/compat/el#Heart",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/compat/el#Cow",
+   "some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Heart",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Cow and some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Heart",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/el#Cow",
+   "some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Heart",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Cow and some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Heart",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/el#Grass",
+   "http://mowl.borg/compat/el#Animal",
+   "CONTRADICTORY"
+  ],
+  [
+   "http://mowl.borg/compat/el#Grass",
+   "some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Animal",
+   "CONTRADICTORY"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Grass and some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Animal",
+   "",
+   "False"
+  ],
+  [
+   "http://mowl.borg/compat/el#Grass",
+   "some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Animal",
+   "CONTRADICTORY"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Grass and some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Animal",
+   "",
+   "False"
+  ],
+  [
+   "http://mowl.borg/compat/el#Grass",
+   "http://mowl.borg/compat/el#Carnivore",
+   "CONTRADICTORY"
+  ],
+  [
+   "http://mowl.borg/compat/el#Grass",
+   "some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Carnivore",
+   "CONTRADICTORY"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Grass and some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Carnivore",
+   "",
+   "False"
+  ],
+  [
+   "http://mowl.borg/compat/el#Grass",
+   "some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Carnivore",
+   "CONTRADICTORY"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Grass and some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Carnivore",
+   "",
+   "False"
+  ],
+  [
+   "http://mowl.borg/compat/el#Grass",
+   "http://mowl.borg/compat/el#Cow",
+   "CONTRADICTORY"
+  ],
+  [
+   "http://mowl.borg/compat/el#Grass",
+   "some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Cow",
+   "CONTRADICTORY"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Grass and some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Cow",
+   "",
+   "False"
+  ],
+  [
+   "http://mowl.borg/compat/el#Grass",
+   "some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Cow",
+   "CONTRADICTORY"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Grass and some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Cow",
+   "",
+   "False"
+  ],
+  [
+   "http://mowl.borg/compat/el#Grass",
+   "http://mowl.borg/compat/el#Heart",
+   "CONTRADICTORY"
+  ],
+  [
+   "http://mowl.borg/compat/el#Grass",
+   "some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Heart",
+   "CONTRADICTORY"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Grass and some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Heart",
+   "",
+   "False"
+  ],
+  [
+   "http://mowl.borg/compat/el#Grass",
+   "some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Heart",
+   "CONTRADICTORY"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Grass and some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Heart",
+   "",
+   "False"
+  ],
+  [
+   "http://mowl.borg/compat/el#Heart",
+   "http://mowl.borg/compat/el#Animal",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/compat/el#Heart",
+   "some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Animal",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Heart and some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Animal",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/el#Heart",
+   "some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Animal",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Heart and some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Animal",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/el#Heart",
+   "http://mowl.borg/compat/el#Carnivore",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/compat/el#Heart",
+   "some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Carnivore",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Heart and some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Carnivore",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/el#Heart",
+   "some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Carnivore",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Heart and some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Carnivore",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/el#Heart",
+   "http://mowl.borg/compat/el#Cow",
+   "UNDETERMINED"
+  ],
+  [
+   "http://mowl.borg/compat/el#Heart",
+   "some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Cow",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Heart and some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Cow",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/el#Heart",
+   "some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Cow",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Heart and some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Cow",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/el#Heart",
+   "http://mowl.borg/compat/el#Grass",
+   "CONTRADICTORY"
+  ],
+  [
+   "http://mowl.borg/compat/el#Heart",
+   "some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Grass",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Heart and some http://mowl.borg/compat/el#eats http://mowl.borg/compat/el#Grass",
+   "",
+   "True"
+  ],
+  [
+   "http://mowl.borg/compat/el#Heart",
+   "some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Grass",
+   "UNDETERMINED"
+  ],
+  [
+   "sat http://mowl.borg/compat/el#Heart and some http://mowl.borg/compat/el#feedsOn http://mowl.borg/compat/el#Grass",
+   "",
+   "True"
+  ]
+ ]
+}

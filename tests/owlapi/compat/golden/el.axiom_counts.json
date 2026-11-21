@@ -1,0 +1,20 @@
+{
+ "owlapi": "4.5.29",
+ "value": {
+  "by_type": {
+   "AnnotationAssertion": 6,
+   "ClassAssertion": 3,
+   "Declaration": 20,
+   "DisjointClasses": 1,
+   "EquivalentClasses": 1,
+   "ObjectPropertyAssertion": 2,
+   "ObjectPropertyDomain": 1,
+   "SubClassOf": 14,
+   "SubObjectPropertyOf": 2,
+   "SubPropertyChainOf": 1,
+   "TransitiveObjectProperty": 1
+  },
+  "logical": 26,
+  "total": 52
+ }
+}
