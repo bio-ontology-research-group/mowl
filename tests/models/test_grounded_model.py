@@ -164,7 +164,7 @@ def test_t3_random_init_three_seeds_at_least_two_exact(
 
 def test_box2el_counterexample_t1_elements_init_exact() -> None:
     """Box2EL counterexample T1 = {A <= exists r.B, exists r.C <= D, exists r.C <= E, D cap E <= bot} is exact under init='elements'."""
-    base_tmp = os.environ.get("TMPDIR") or os.path.expanduser("~/tmp")
+    base_tmp = tempfile.gettempdir()
     os.makedirs(base_tmp, exist_ok=True)
 
     with tempfile.TemporaryDirectory(dir=base_tmp, prefix="mowl_grounded_t1_") as workdir:
@@ -581,7 +581,7 @@ def _build_unsat_mix_dataset(workdir: str) -> PathDataset:
 
 def test_unsat_mix_fast_300_epochs_delta_q_exceeds_delta_a1() -> None:
     """Fast 300-epoch variant on unsat_mix (K=2, d=2) drives delta_Q above delta_{A1}."""
-    base_tmp = os.environ.get("TMPDIR") or os.path.expanduser("~/tmp")
+    base_tmp = tempfile.gettempdir()
     os.makedirs(base_tmp, exist_ok=True)
 
     with tempfile.TemporaryDirectory(dir=base_tmp, prefix="mowl_unsat_mix_fast_") as workdir:
@@ -609,7 +609,7 @@ def test_unsat_mix_fast_300_epochs_delta_q_exceeds_delta_a1() -> None:
 @pytest.mark.slow
 def test_unsat_mix_three_seeds_detects_unsatisfiable_class() -> None:
     """unsat_mix (K=2, d=2, 1500 epochs, 3 seeds) reaches dead_ok=True and exist=1.0 on >= 2/3 seeds."""
-    base_tmp = os.environ.get("TMPDIR") or os.path.expanduser("~/tmp")
+    base_tmp = tempfile.gettempdir()
     os.makedirs(base_tmp, exist_ok=True)
 
     with tempfile.TemporaryDirectory(dir=base_tmp, prefix="mowl_unsat_mix_3seeds_") as workdir:
@@ -1068,7 +1068,7 @@ def test_t3_k1_300_epochs_dead_from_bot_only_no_dead_elements(
 
 def test_unsat_mix_300_epochs_dead_from_bot_only_three_seeds() -> None:
     """Task 10 (ii): unsat_mix gets delta_Q > 0.5 within 300 epochs with dead_from_bot_only=True across 3 seeds."""
-    base_tmp = os.environ.get("TMPDIR") or os.path.expanduser("~/tmp")
+    base_tmp = tempfile.gettempdir()
     os.makedirs(base_tmp, exist_ok=True)
 
     with tempfile.TemporaryDirectory(dir=base_tmp, prefix="mowl_unsat_mix_t10_") as workdir:
@@ -1099,7 +1099,7 @@ def test_unsat_mix_300_epochs_dead_from_bot_only_three_seeds() -> None:
 
 def test_chain_a_sub_b_sub_bot_300_epochs_kills_x_a() -> None:
     """Task 10 (iii): chain {A <= B, B <= bot} gives delta_{x_A} > 0.5 within 300 epochs under dead_from_bot_only=True."""
-    base_tmp = os.environ.get("TMPDIR") or os.path.expanduser("~/tmp")
+    base_tmp = tempfile.gettempdir()
     os.makedirs(base_tmp, exist_ok=True)
 
     with tempfile.TemporaryDirectory(dir=base_tmp, prefix="mowl_chain_bot_t10_") as workdir:
@@ -1177,7 +1177,7 @@ def test_dead_from_bot_only_false_reproduces_legacy_loss_bit_for_bit() -> None:
         sample_role_region,
     )
 
-    base_tmp = os.environ.get("TMPDIR") or os.path.expanduser("~/tmp")
+    base_tmp = tempfile.gettempdir()
     os.makedirs(base_tmp, exist_ok=True)
 
     with tempfile.TemporaryDirectory(dir=base_tmp, prefix="mowl_ablation_loss_t10_") as workdir:
