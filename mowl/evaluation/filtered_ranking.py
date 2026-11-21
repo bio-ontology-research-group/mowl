@@ -331,6 +331,56 @@ class CatePPIRankingRegime(EvaluationRegime):
         return {"all": {m: out[m] for m in self.metrics}}
 
 
+class KGLinkPredictionRegime(EvaluationRegime):
+    """Filtered link prediction as in the knowledge graph completion literature
+    (Bordes et al., 2013), on axioms :math:`h \\sqsubseteq \\exists r.t`: every test axiom is
+    ranked twice, :math:`t` among all classes with :math:`h` and :math:`r` fixed and
+    :math:`h` among all classes with :math:`r` and :math:`t` fixed; the candidates known
+    to be correct (training, validation and test axioms) are removed; MR, MRR and
+    Hits@\\ :math:`k` over both directions. Tied candidates share the average rank (the
+    "realistic" rank of PyKEEN). Scores are what the model declares
+    (:mod:`mowl.evaluation.model_scoring`).
+
+    :param relation: Restrict the queries to one role IRI (default: all roles).
+    :param candidates: See :class:`FilteredRankingRegime` (default: all classes).
+    :param hits: Values of :math:`k`.
+    :param ties: ``"average"`` or ``"ordinal"``.
+    """
+
+    def __init__(self, relation=None, candidates="classes", hits=(1, 3, 10), ties="average",
+                 filter_by=("train", "valid", "test"), scoring="auto",
+                 key="kg-filtered-link-prediction", **kwargs):
+        self.hits, self.key = tuple(hits), key
+        common = dict(gci_name="gci2", relation=relation, candidates=candidates,
+                      filter_by=tuple(filter_by), ties=ties, auc="mowl", hits=self.hits,
+                      raw=False, scoring=scoring, key="", **kwargs)
+        self.tail = FilteredRankingRegime(target="tail", **common)
+        self.head = FilteredRankingRegime(target="head", **common)
+        self.metrics = tuple(f"f_{m}" for m in ("mrr", "mr",
+                                                 *[f"hits@{k}" for k in self.hits]))
+        self.subsets = ("all", "tail", "head")
+        self.info = {}
+
+    def prepare(self, dataset):
+        self.tail.prepare(dataset)
+        self.head.prepare(dataset)
+        return dataset
+
+    def evaluate(self, model, dataset):
+        out, ranks = {}, []
+        for name, part in (("tail", self.tail), ("head", self.head)):
+            result = part.evaluate(model, dataset)["all"]
+            out[name] = {m: result[m] for m in self.metrics}
+            filt = part.last_ranks["filtered"]
+            ranks.extend(filt.tolist() if filt is not None else [])
+        n = self.tail.info.get("num_candidates")
+        both = summarise_ranks(ranks, n, hits=self.hits, auc="mowl", prefix="f_")
+        out["all"] = {m: both[m] for m in self.metrics}
+        self.info = {"scoring": self.tail.info.get("scoring"), "num_candidates": n,
+                     "queries": int(len(ranks) / 2), "directions": 2}
+        return out
+
+
 def cate_ppi_ranking(relation, **kwargs):
     """The PPI evaluation of CatE (Zhapa-Camacho and Hoehndorf, Table 4, left, and the
     reference ``src/evaluators.py``): both directions of every test interaction, ranked

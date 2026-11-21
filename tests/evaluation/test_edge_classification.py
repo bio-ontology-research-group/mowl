@@ -136,3 +136,35 @@ def test_an_order_model_trains_and_is_classified(dataset):
     model.train(epochs=300, validate_every=1000)
     result = EdgeClassificationF1Regime().evaluate(model, dataset)["all"]
     assert set(result) == {"f1", "precision", "recall"} and result["f1"] > 0.0
+
+
+def test_kg_link_prediction_ranks_both_directions():
+    from mowl.evaluation.filtered_ranking import KGLinkPredictionRegime
+    from mowl.models import ELEmbeddings
+    from tests.benchmarks.tiny import tiny_dataset
+    data = tiny_dataset()
+    model = ELEmbeddings(data, embed_dim=8)
+    model.eval_gci_name = "gci2"
+    model.train(epochs=2)
+    regime = KGLinkPredictionRegime()
+    out = regime.evaluate(model, data)
+    assert set(out) == {"all", "tail", "head"} and regime.key == "kg-filtered-link-prediction"
+    assert set(out["all"]) == {"f_mrr", "f_mr", "f_hits@1", "f_hits@3", "f_hits@10"}
+    assert regime.info["directions"] == 2 and regime.info["queries"] >= 1
+    low, high = sorted((out["tail"]["f_mrr"], out["head"]["f_mrr"]))
+    assert low - 1e-9 <= out["all"]["f_mrr"] <= high + 1e-9
+
+
+def test_kg_benchmarks_and_published_numbers_are_registered():
+    b = get_benchmark("kg-fb15k237-link-prediction")
+    assert b.evaluation_regime == "kg-filtered-link-prediction" and b.measures("link-prediction")
+    boxe = {r.settings["negative_sampling"]: r.metrics["f_mrr"]
+            for r in published_results(benchmark=b.key, method="boxe")}
+    assert boxe == {"uniform": 0.318, "self-adversarial": 0.337}
+    (base,) = [r for r in published_results(benchmark="kg-wn18rr-link-prediction",
+                                            method="expressive")
+               if r.settings["variant"] == "base"]
+    assert base.metrics["f_hits@10"] == 0.597 and "f_mr" not in base.metrics
+    from mowl.datasets.builtin.kg import KnowledgeGraphDataset
+    with pytest.raises(ValueError):
+        KnowledgeGraphDataset("NotAGraph")

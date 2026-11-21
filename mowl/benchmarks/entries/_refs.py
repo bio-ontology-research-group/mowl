@@ -82,3 +82,15 @@ DASGUPTA2020 = Reference(
     "Dasgupta, S. S., Boratko, M., Zhang, D., Vilnis, L., Li, X. L., McCallum, A. (2020). "
     "Improving Local Identifiability in Probabilistic Box Embeddings. NeurIPS 2020.",
     "https://arxiv.org/abs/2010.04831")
+
+ABBOUD2020 = Reference(
+    "abboud2020",
+    "Abboud, R., Ceylan, I. I., Lukasiewicz, T., Salvatori, T. (2020). BoxE: A Box Embedding "
+    "Model for Knowledge Base Completion. NeurIPS 2020.",
+    "https://arxiv.org/abs/2007.06267")
+
+PAVLOVIC2023 = Reference(
+    "pavlovic2023",
+    "Pavlović, A., Sallinger, E. (2023). ExpressivE: A Spatio-Functional Embedding For "
+    "Knowledge Graph Completion. ICLR 2023.",
+    "https://arxiv.org/abs/2206.04192")

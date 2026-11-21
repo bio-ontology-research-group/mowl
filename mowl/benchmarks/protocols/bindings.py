@@ -146,3 +146,11 @@ class EdgeClassificationProtocol(RegimeProtocol):
     def build(self, **kwargs):
         from mowl.evaluation.edge_classification import EdgeClassificationF1Regime
         return EdgeClassificationF1Regime(**kwargs)
+
+
+class KGLinkPredictionProtocol(RegimeProtocol):
+    """:class:`mowl.evaluation.filtered_ranking.KGLinkPredictionRegime`."""
+
+    def build(self, **kwargs):
+        from mowl.evaluation.filtered_ranking import KGLinkPredictionRegime
+        return KGLinkPredictionRegime(**kwargs)
