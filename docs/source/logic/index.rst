@@ -198,15 +198,16 @@ Reasoners
 ---------
 
 Reasoners are backends chosen by expressivity (:mod:`mowl.reasoning`). mOWL packages ELK
-(polynomial, EL with role hierarchies and chains, ⊥ and assertions) and HermiT (complete
-for OWL 2 DL). :func:`mowl.reasoning.create_reasoner` picks the cheapest backend that is
+(polynomial, EL with role hierarchies and chains, ⊥ and assertions), HermiT (complete
+for OWL 2 DL) and KM. :func:`mowl.reasoning.create_reasoner` picks the cheapest backend that is
 complete for an ontology, and warns when a backend is asked to reason over constructs it
 does not cover. Other reasoners are added with :func:`mowl.reasoning.register_reasoner`.
 
-The Kobayashi-MaRust reasoner (``km``, OWL 2 DL with verified certificates) is registered
-as an optional backend: it is used when its JAR is on the class path
-(``mowl.init_jvm(memory, extra_classpath=...)`` or ``MOWL_EXTRA_CLASSPATH``) and the OWL
-API on the class path is 4.5.29 or later, and it is then preferred to HermiT.
+mOWL also packages the Kobayashi-MaRust reasoner (``km``), a classifier for OWL 2 DL with
+verified certificates, which is preferred to HermiT for ontologies beyond what ELK covers.
+Its OWL API binding classifies; instance checks are made as the subsumption ``{a} ⊑ C``.
+Further JAR files can be put on the class path with
+``mowl.init_jvm(memory, extra_classpath=...)`` or ``MOWL_EXTRA_CLASSPATH``.
 
 .. testcode::
 
@@ -218,7 +219,7 @@ API on the class path is 4.5.29 or later, and it is then preferred to HermiT.
 .. testoutput::
 
    ['structural', 'elk', 'km', 'hermit']
-   elk hermit
+   elk km
 
 :class:`mowl.reasoning.SubsumptionOracle` answers the tasks above through subsumption
 between class expressions, using definitions that it adds and removes again, and gives the
@@ -236,6 +237,6 @@ logical status of a candidate axiom.
 
 .. testoutput::
 
-   hermit
+   km
    True False
    entailed undetermined

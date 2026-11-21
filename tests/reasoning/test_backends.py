@@ -35,21 +35,24 @@ def test_selection_by_expressivity():
     assert select_reasoner("taxonomy").name == "structural"
     assert select_reasoner("EL⊥").name == "elk"
     assert select_reasoner("ELH(∘)⊥ with ABox").name == "elk"
-    assert select_reasoner("ALC").name == "hermit"
-    assert select_reasoner("ELO").name == "hermit"       # ELK has no nominals
+    assert select_reasoner("ALC").name == "km"
+    assert select_reasoner("ELO").name == "km"           # ELK has no nominals
 
 
 def test_auto_picks_the_cheapest_complete_reasoner_and_warns_otherwise():
     _, el, *_ = _ontology("auto_el")
     assert create_reasoner(el)[1].name == "elk"
     _, alc, *_ = _ontology("auto_alc", universal=True)
-    assert create_reasoner(alc)[1].name == "hermit"
+    assert create_reasoner(alc)[1].name == "km"
     with pytest.warns(UserWarning, match="inferences that depend on"):
         create_reasoner(alc, "elk")
 
 
-@pytest.mark.parametrize("backend", ["elk", "hermit"])
+@pytest.mark.parametrize("backend", ["elk", "hermit", "km"])
 def test_oracle_reduces_tasks_to_subsumption(backend):
+    from mowl.reasoning import get_backend
+    if not get_backend(backend).is_available():
+        pytest.skip(f"{backend} is not available")
     ad, ont, (a, b, c, d), r, ind = _ontology("oracle_" + backend)
     before = ont.getAxiomCount()
     oracle = SubsumptionOracle(ont, backend)
@@ -84,14 +87,11 @@ def test_register_reasoner():
         register_reasoner("test-told", factory, "taxonomy")
 
 
-def test_km_is_registered_and_not_chosen_when_unavailable():
-    """KM is an optional backend: it is listed, and chosen automatically only when its JAR
-    (and a recent enough OWL API) is on the class path."""
+def test_km_is_packaged_and_preferred_to_hermit():
+    """mOWL packages the KM reasoner; it is cheaper than HermiT and covers OWL 2 DL."""
     from mowl.reasoning import get_backend
     km = get_backend("km")
+    assert km.is_available()
     assert str(km.expressivity).startswith("SROIQ(D)")
-    if not km.is_available():
-        assert select_reasoner("ALC").name == "hermit"
-        _, ont, *_ = _ontology("km")
-        with pytest.raises((ImportError, RuntimeError)):
-            km.create(ont)
+    assert not km.instance_queries
+    assert select_reasoner("ALC").name == "km"

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 ### Added
+- Packaged the Kobayashi-MaRust (KM) reasoner 1.6.5 (`kobayashi-marust-protege5-1.6.5.jar`, with Gson 2.11.0) as the reasoner backend `km`, preferred to HermiT beyond the EL family. `mowl.init_jvm(memory, extra_classpath=...)` and `MOWL_EXTRA_CLASSPATH` add further JAR files.
+- `BoxSquaredEL(load_role_axioms=True)`: the role inclusion and role chain losses of the Box²EL paper, which mOWL's implementation lacked. One-hop and multi-hop logical query answering as inference and completion tasks.
 - `mowl.logic`: description logic expressivity in standard notation (`Expressivity`, `Construct`; `Expressivity.parse("ELH(∘)⊥ with ABox")`), the expressivity an ontology uses (`ontology_expressivity`) and the check of an ontology against what a method supports (`check_ontology`, `ExpressivityReport`). Every catalogued method states its `expressivity`; every model checks its training ontology when it is created and warns about axioms beyond it (`Model.check_expressivity`, `Model.expressivity_report`).
 - `mowl.logic.tasks`: the standard inference tasks (subsumption, classification, satisfiability, consistency, instance checking, realization, ...), their reduction to subsumption tests, the completion tasks of knowledge graph and knowledge base completion, and `LogicalStatus` / `FaithfulnessCriterion`. Method cards list the `tasks` they score, evaluation regime cards the `task` and `target` they measure; `list_methods(task=..., covers=...)`.
 - `mowl.reasoning`: reasoner backends chosen by expressivity (`create_reasoner`, `select_reasoner`, `register_reasoner`; ELK, HermiT and the structural reasoner are registered) and `SubsumptionOracle`, which answers inference tasks and the logical status of a candidate axiom through subsumption between class expressions.
@@ -90,6 +92,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added the `lm` (sentence-transformers) and `convex` (cvxpy) optional dependency groups.
 
 ### Changed
+- Changed the packaged OWL API from 4.5.22 to 4.5.29 (required by the KM reasoner).
 - Changed the default working directories of the benchmark runner and the Helly dataset to the system temporary directory (which honours `$TMPDIR`).
 - Changed `ELEmbeddings` / `ELEmModule` (and `RegDELEm`) to include, by default, the fourth term of the published loss of `C ⊓ D ⊑ E`, `max(0, min(r_C, r_D) - r_E - γ)`, which the authors' released code has commented out and mOWL lacked. Pass `gci1_radius_term=False` for the previous loss; the benchmark recipes do so wherever a publication used such code.
 - Changed `RemoteDataset` to cache datasets under `$XDG_CACHE_HOME/mowl/datasets` (falling back to `~/.cache/mowl/datasets`) instead of the current working directory. Datasets are now shared between working directories rather than re-downloaded per directory, and running the tests or an example no longer scatters dataset directories through the checkout. Existing downloads in a working directory are not picked up and will be fetched once into the cache [#150][i150].

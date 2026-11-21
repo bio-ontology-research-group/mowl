@@ -29,6 +29,9 @@ class ReasonerBackend:
     :param factory: ``factory(ontology) -> OWLReasoner``.
     :param cost: Relative cost; among complete backends the cheapest is chosen.
     :param summary: One sentence.
+    :param instance_queries: Whether the reasoner answers instance queries
+        (``getInstances``, ``getTypes``) through the OWL API. If not,
+        :class:`SubsumptionOracle` checks instances as the subsumption ``{a} ⊑ C``.
     """
 
     name: str
@@ -37,6 +40,7 @@ class ReasonerBackend:
     cost: int = 1
     summary: str = ""
     available: object = None
+    instance_queries: bool = True
 
     def is_available(self):
         """Whether the reasoner can be created in this installation (optional reasoners
@@ -70,7 +74,7 @@ _BACKENDS = {}
 
 
 def register_reasoner(name, factory, expressivity, cost=5, summary="", replace=False,
-                      available=None):
+                      available=None, instance_queries=True):
     """Make a reasoner available under ``name``.
 
     :param factory: ``factory(ontology) -> OWLReasoner``. To register an OWL API
@@ -86,7 +90,7 @@ def register_reasoner(name, factory, expressivity, cost=5, summary="", replace=F
     if isinstance(expressivity, str):
         expressivity = Expressivity.parse(expressivity)
     _BACKENDS[name] = ReasonerBackend(name, expressivity, factory, cost, summary,
-                                      available)
+                                      available, instance_queries)
     return _BACKENDS[name]
 
 
@@ -145,9 +149,9 @@ def _km(ontology):
 
 register_reasoner(
     "km", _km, Expressivity.parse("SROIQ(D)").with_abox(equality=True), cost=5,
-    available=_km_available,
-    summary="Kobayashi-MaRust: consequence-based reasoner for OWL 2 DL with verified "
-            "certificates; optional, needs its JAR on the class path.")
+    available=_km_available, instance_queries=False,
+    summary="Kobayashi-MaRust 1.6.5: classifier for OWL 2 DL with verified certificates. "
+            "Its OWL API binding classifies; instances are checked as {a} ⊑ C.")
 register_reasoner(
     "hermit", _hermit, Expressivity.parse("SROIQ(D)").with_abox(equality=True), cost=10,
     summary="HermiT 1.3.8: hypertableau, sound and complete for OWL 2 DL.")
@@ -271,7 +275,14 @@ class SubsumptionOracle:
             self._remove(added)
 
     def entails_instance(self, individual, expression):
-        """Whether ``expression(individual)`` is entailed (instance checking)."""
+        """Whether ``expression(individual)`` is entailed (instance checking). With a
+        backend that has no instance queries this is the subsumption ``{a} ⊑ C``."""
+        if not self.backend.instance_queries:
+            from java.util import HashSet
+            members = HashSet()
+            members.add(individual)
+            return self.entails_subsumption(self.factory.getOWLObjectOneOf(members),
+                                            expression)
         added = []
         try:
             x = self._name(expression, added)
