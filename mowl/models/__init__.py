@@ -37,3 +37,7 @@ from mowl.models.hit.model import HiT
 from mowl.models.ont.model import OnT
 from mowl.models.boxlite.model import BoxLitE
 from mowl.models.cate.model import CatE
+from mowl.models.query2box.model import Query2Box
+from mowl.models.betae.model import BetaE
+from mowl.models.cone_qe.model import ConE
+from mowl.models.acone.model import AConE

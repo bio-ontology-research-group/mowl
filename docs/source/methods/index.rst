@@ -32,6 +32,7 @@ relevant published methods it does not implement, with the reason.
    boxlite
    cate
    grounded
+   query_embeddings
 
 
 Representation, training and evaluation

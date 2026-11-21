@@ -68,3 +68,11 @@ References
 .. [mohapatra2021a] Mohapatra, B., Bhatia, S., Mutharaju, R., & Srinivasaraghavan, G. (2021). EmELvar: A NeuroSymbolic Reasoner for the EL++ Description Logic. SemREC'21 workshop at ISWC 2021.
 
 .. [duc2021] Le Duc, C. (2021). Category-theoretical semantics of the description logic ALC. Proceedings of the 34th International Workshop on Description Logics (DL 2021), CEUR-WS vol. 2954.
+
+.. [ren2020q2b] Ren, H., Hu, W., & Leskovec, J. (2020). `Query2box: Reasoning over Knowledge Graphs in Vector Space using Box Embeddings <https://arxiv.org/abs/2002.05969>`_. ICLR 2020.
+
+.. [ren2020betae] Ren, H., & Leskovec, J. (2020). `Beta Embeddings for Multi-Hop Logical Reasoning in Knowledge Graphs <https://arxiv.org/abs/2010.11465>`_. NeurIPS 2020.
+
+.. [zhang2021cone] Zhang, Z., Wang, J., Chen, J., Ji, S., & Wu, F. (2021). `ConE: Cone Embeddings for Multi-Hop Reasoning over Knowledge Graphs <https://arxiv.org/abs/2110.13715>`_. NeurIPS 2021.
+
+.. [he2024acone] He, Y., Hernandez, D., Nayyeri, M., Xiong, B., Zhu, Y., Kharlamov, E., & Staab, S. (2024). `Generating SROI⁻ Ontologies via Knowledge Graph Query Embedding Learning <https://arxiv.org/abs/2407.09212>`_. ArXiv, abs/2407.09212.

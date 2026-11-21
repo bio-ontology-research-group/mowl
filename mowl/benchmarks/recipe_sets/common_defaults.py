@@ -56,6 +56,11 @@ _DEFAULTS = {
     "canonical_mixture": {"model_kwargs": {}, "epochs": 500},
     "grounded": {"model_kwargs": {}, "epochs": 500},
     "graph_kge": {"model_kwargs": {"embed_dim": 200}, "epochs": 100},
+    # query embeddings: one epoch is 10 steps on freshly sampled queries
+    "query2box": {"model_kwargs": {"embed_dim": 100}, "epochs": 200},
+    "betae": {"model_kwargs": {"embed_dim": 100}, "epochs": 200},
+    "cone_qe": {"model_kwargs": {"embed_dim": 100}, "epochs": 200},
+    "acone": {"model_kwargs": {"embed_dim": 100}, "epochs": 200},
     # Word2Vec on walks or on a corpus, scored with the pair classifier head
     "dl2vec": {"model_kwargs": {"embed_dim": 100}, "epochs": 10},
     "owl2vec_star": {"model_kwargs": {"embed_dim": 100}, "epochs": 10},

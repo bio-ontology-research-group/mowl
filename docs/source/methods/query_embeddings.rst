@@ -1,0 +1,139 @@
+Query embeddings: Query2Box, BetaE, ConE, AConE
+===============================================
+
+Four methods answer logical queries over a knowledge graph by embedding the *query* into a
+region, and the answers as points in or near it: Query2Box [ren2020q2b]_ (boxes), BetaE
+[ren2020betae]_ (products of Beta distributions), ConE [zhang2021cone]_ (sector-cones)
+and AConE [he2024acone]_ (cones with relations as rotations). The catalogue keys are
+``query2box``, ``betae``, ``cone_qe`` and ``acone``; their guarantees, with sources, are on
+the cards in the :doc:`method catalogue <catalogue>`.
+
+Class expressions are queries
+-----------------------------
+
+A query is a tree of four operators over anchor entities, which is what an
+:math:`\mathcal{ALC}` class expression is (AConE, Section 4, makes the correspondence
+explicit):
+
+.. list-table::
+   :header-rows: 1
+
+   * - Class expression
+     - Query operator
+     - Query2Box
+     - BetaE
+     - ConE
+     - AConE
+   * - :math:`\exists r.C`
+     - projection
+     - translation of the box
+     - MLP
+     - MLP
+     - rotation
+   * - :math:`C \sqcap D`
+     - intersection
+     - attention, min offset
+     - attention
+     - attention, min aperture
+     - as ConE
+   * - :math:`C \sqcup D`
+     - union
+     - disjunctive normal form, best branch (all four)
+     -
+     -
+     -
+   * - :math:`\neg C`
+     - negation
+     - not defined
+     - inverts the parameters
+     - complement cone
+     - complement cone
+
+All four share one translation, :mod:`mowl.nn.query.expression`: a class expression (or a
+query in the nested-tuple format of the query datasets) becomes a tree
+(:class:`~mowl.nn.query.expression.Node`), unions are moved to the top
+(:func:`~mowl.nn.query.expression.to_dnf`), and queries of equal shape are embedded as one
+batch. A geometry (:mod:`mowl.nn.query.geometry`) only defines the operators. A model
+therefore answers any class expression built from named classes, nominals, ``∃``, ``⊓``,
+``⊔`` and (BetaE, ConE, AConE) ``¬`` and ``∀`` (as :math:`\neg\exists r.\neg C`).
+
+From an ontology to a graph (an adaptation)
+-------------------------------------------
+
+The methods were published for knowledge graphs. mOWL reads an ontology as one
+(:func:`mowl.models.query.graph.extract_graph`): the entities are the named classes and
+the individuals, and
+
+* ``A ⊑ B``, ``A ≡ B`` and ``a : B`` give the relation ``isa``;
+* ``A ⊑ ∃r.B`` (conjunctions on the right are split) and ``r(a, b)`` give the relation
+  ``r``;
+* every edge has an inverse, and ``isa`` is closed under transitivity (``hierarchy_closure``).
+
+Axioms with a complex left-hand side, ``⊥``, universal restrictions, unions, negations and
+role axioms are not read (they are counted in ``model.skipped_axioms``). Role edges are not
+propagated down the hierarchy. A named class in a query is *everything below it*, so the
+answers of ``A`` are its subclasses and instances, and ``A ⊑ B`` is "``A`` is an answer of
+``B``"; ``C ⊑ ∃r.D`` is "``C`` is an answer of ``∃r.D``". Answers are entities of the graph
+(closed world over them), not consequences of the ontology.
+
+Training samples queries of the structures 1p, 2p, 3p, 2i, 3i, ip, pi (and, with negation,
+2in, 3in, inp, pin, pni) from the graph and minimises the negative sampling loss of the
+reference codes. This loop is shared by the four methods
+(:class:`~mowl.models.query.model.QueryEmbeddingModel`). Default sizes are small.
+
+Tasks and evaluation
+--------------------
+
+* ``gci0``, ``gci2`` and ``class_assertion`` are scored for the rank-based regimes, so the
+  models take part in the joint ``common-*`` benchmarks;
+* ``score_query(structure, queries)`` lets
+  :class:`mowl.evaluation.LogicalQueryAnswering` rank the answers of logical queries (the
+  protocol of the three query embedding papers). ``model.triples`` is the training graph,
+  with the ids the queries use;
+* :meth:`~mowl.models.query.model.QueryEmbeddingModel.answer` ranks the entities for a
+  class expression.
+
+Differences from the papers: the graph (above), small default networks (the papers use
+hidden layers of 1600 units and dimension 400 to 800), a single optimiser and learning
+rate, no easy/hard answer split in training. ConE: the angle of the intersection is
+computed with ``atan2`` (the code clamps ``|x| < 1e-3``). AConE: only the aperture-additive
+rotation of the paper is implemented (the variant of the code that trains), not the
+aperture-multiplicative one or the multicone semantics of the union, and the extraction of
+SROI⁻ axioms from a learned model is not implemented.
+
+Example
+-------
+
+.. testcode::
+
+   import mowl
+   mowl.init_jvm("1g")
+   from java.util import HashSet
+   from mowl.datasets import Dataset
+   from mowl.models import ConE
+   from mowl.owlapi import OWLAPIAdapter
+
+   ad = OWLAPIAdapter()
+   ns = "http://example.org/query#"
+   onto = ad.create_ontology(ns + "o")
+   cls = {n: ad.create_class(ns + n) for n in ["Animal", "Mammal", "Dog", "Cat", "Meat"]}
+   eats = ad.create_object_property(ns + "eats")
+   axioms = HashSet()
+   for sub, sup in [("Mammal", "Animal"), ("Dog", "Mammal"), ("Cat", "Mammal")]:
+       axioms.add(ad.create_subclass_of(cls[sub], cls[sup]))
+   for sub in ["Dog", "Cat"]:
+       axioms.add(ad.create_subclass_of(
+           cls[sub], ad.create_object_some_values_from(eats, cls["Meat"])))
+   ad.owl_manager.addAxioms(onto, axioms)
+
+   model = ConE(Dataset(onto), embed_dim=8, batch_size=16, negatives=4)
+   model.train(epochs=2, steps_per_epoch=2)
+   # animals that eat meat: Animal ⊓ ∃eats.Meat (a class expression is a query)
+   query = ad.create_object_intersection_of(
+       cls["Animal"], ad.create_object_some_values_from(eats, cls["Meat"]))
+   top = model.answer(query, top_k=3)
+   print(len(top), model.skipped_axioms)
+
+.. testoutput::
+
+   3 0
