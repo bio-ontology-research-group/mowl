@@ -173,3 +173,11 @@ class MaskedABoxRevisionProtocol(RegimeProtocol):
     def build(self, **kwargs):
         from mowl.evaluation.abox_revision import MaskedABoxRevisionRegime
         return MaskedABoxRevisionRegime(**kwargs)
+
+
+class SELProbabilityProtocol(RegimeProtocol):
+    """:class:`mowl.evaluation.sel_probability.SELProbabilityRegime`."""
+
+    def build(self, **kwargs):
+        from mowl.evaluation.sel_probability import SELProbabilityRegime
+        return SELProbabilityRegime(**kwargs)

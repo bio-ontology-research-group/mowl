@@ -187,7 +187,10 @@ FAITHEL = MethodCard(
         "restriction; mOWL's CanonicalModel (one element per name) is faithful on concept "
         "names only, so StronglyFaithfulModel adds the missing elements as fresh names "
         "(mowl.geometric.faithfulness.paper_canonical_ontology). The cards 'interval_union' "
-        "and 'convex_polyhedral' use the smaller model."),
+        "and 'convex_polyhedral' use the smaller model. Benchmark: "
+        "'faithel-family-assertions' (the authors' family knowledge base, concept and role "
+        "assertion queries, recipe of their notebook); the numbers of the paper could not "
+        "be read and are not recorded."),
 )
 
 _AT = "tests/models/test_attributed_dl_model.py::"

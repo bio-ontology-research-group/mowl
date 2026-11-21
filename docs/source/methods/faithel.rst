@@ -62,6 +62,37 @@ Differences from the paper
 * The code hard-codes parts of the canonical model of its example ontology; mOWL computes it
   with the ELK-style completion for any ontology.
 
+Published results and what can be reproduced
+--------------------------------------------
+
+The RuleML+RR paper (9 pages, Springer) is behind a login and no preprint, institutional copy
+or listing with its text was found (arXiv has the companion theory article, which names an implementation
+as future work); which numbers it reports is therefore unknown, and none are recorded. What is
+public is the authors' code, which carries no licence. Its notebook trains on one knowledge
+base, ``family_ontology.owl`` (10 classes, 7 roles, 469 individuals from Wikidata), with the
+entailed class assertions and the role assertions split 70/30 at random, and reports hits at
+1, 3, 10, 100 and all for queries ``C(?)`` and ``r(a, ?)`` (a query is a hit if any of its test
+answers is among the first k).
+
+mOWL runs that experiment: the dataset
+:class:`~mowl.datasets.builtin.faithel_family.FaithELFamilyDataset` (downloaded at run time
+from the pinned commit of the authors' repository, not redistributed), the regime
+``assertion-query-hits``
+(:class:`~mowl.evaluation.assertion_queries.AssertionQueryHitsRegime`), the benchmark
+``faithel-family-assertions`` and the recipe of the notebook (learning rate 0.001, phi = gamma
+= 1, psi = 0.7, radius 0.6, 200 epochs, batch 512).
+
+.. code-block:: bash
+
+   python -m mowl.benchmarks run faithel-family-assertions --method faithel --recipe
+
+.. note::
+
+   Published results: not reproducible in mOWL because the paper could not be read, and the
+   code stores no outputs. The split of mOWL is NumPy's, not PyTorch's ``random_split``, and the
+   embedding dimension is that of mOWL's canonical model (99 here), not the notebook's
+   hard-coded 602.
+
 Example
 -------
 
