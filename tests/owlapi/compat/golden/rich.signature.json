@@ -1,5 +1,5 @@
 {
- "owlapi": "4.5.29",
+ "owlapi": "5.5.1",
  "value": {
   "annotation_properties": [
    "http://purl.obolibrary.org/obo/IAO_0000115",
@@ -32,7 +32,7 @@
    "http://mowl.borg/compat/rich#hasName"
   ],
   "datatypes": [
-   "http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral",
+   "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString",
    "http://www.w3.org/2001/XMLSchema#integer",
    "http://www.w3.org/2001/XMLSchema#string"
   ],

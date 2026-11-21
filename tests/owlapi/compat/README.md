@@ -44,7 +44,18 @@ fresh process runs them without Java linkage errors.
 
 ## Golden files changed since they were recorded
 
-None.
+Upgrade to OWL API 5.5.1, ELK 0.6.0, HermiT 1.4.5.519:
+
+- `el.signature`, `el.annotations`, `rich.signature`, `rich.annotations`: the datatype of
+  a literal. OWL API 4 reported `rdf:PlainLiteral` for every plain literal; OWL API 5
+  reports `xsd:string` for a literal without a language tag and `rdf:langString` for one
+  with a tag, as OWL 2 and RDF 1.1 define them. Text and language tags are unchanged. The
+  probes read the datatype from the OWL API, so the recorded value follows it.
+- `roles.subsumption_oracle`: two rows (`A ⊓ ∃r.E` and `A ⊓ ∃s.E` satisfiable?) changed
+  from `True` to `False`. The class `E` is unsatisfiable in `roles.owl` (ELK and HermiT
+  agree), so both expressions are unsatisfiable; the old value was wrong (ELK 0.4.3 after
+  an incremental change). The recorded file already had the same query with `B`, `C` and
+  `D` in place of `A` as unsatisfiable.
 
 ## Known limits of the reference behaviour
 

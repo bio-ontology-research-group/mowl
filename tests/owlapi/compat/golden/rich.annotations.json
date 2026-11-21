@@ -1,5 +1,5 @@
 {
- "owlapi": "4.5.29",
+ "owlapi": "5.5.1",
  "value": [
   [
    "http://mowl.borg/compat/rich#Dog",
@@ -13,35 +13,35 @@
    "http://purl.obolibrary.org/obo/IAO_0000115",
    "A person who has at least one child.",
    "",
-   "http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral"
+   "http://www.w3.org/2001/XMLSchema#string"
   ],
   [
    "http://mowl.borg/compat/rich#Parent",
    "http://www.w3.org/2000/01/rdf-schema#label",
    "parent",
    "",
-   "http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral"
+   "http://www.w3.org/2001/XMLSchema#string"
   ],
   [
    "http://mowl.borg/compat/rich#Person",
    "http://www.w3.org/2000/01/rdf-schema#label",
    "person",
    "en",
-   "http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral"
+   "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString"
   ],
   [
    "http://mowl.borg/compat/rich#anna",
    "http://www.w3.org/2000/01/rdf-schema#label",
    "Anna",
    "",
-   "http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral"
+   "http://www.w3.org/2001/XMLSchema#string"
   ],
   [
    "http://purl.obolibrary.org/obo/GO_0000001",
    "http://www.w3.org/2000/01/rdf-schema#label",
    "mitochondrion inheritance",
    "",
-   "http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral"
+   "http://www.w3.org/2001/XMLSchema#string"
   ],
   [
    "http://purl.obolibrary.org/obo/GO_0000002",

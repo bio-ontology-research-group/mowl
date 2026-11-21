@@ -1,5 +1,5 @@
 {
- "owlapi": "4.5.29",
+ "owlapi": "5.5.1",
  "value": {
   "annotation_properties": [
    "http://www.w3.org/2000/01/rdf-schema#comment",
@@ -22,7 +22,8 @@
   ],
   "data_properties": [],
   "datatypes": [
-   "http://www.w3.org/1999/02/22-rdf-syntax-ns#PlainLiteral"
+   "http://www.w3.org/1999/02/22-rdf-syntax-ns#langString",
+   "http://www.w3.org/2001/XMLSchema#string"
   ],
   "individuals": [
    "http://mowl.borg/compat/el#daisy",

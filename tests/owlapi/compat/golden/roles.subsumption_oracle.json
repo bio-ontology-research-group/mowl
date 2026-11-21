@@ -1,5 +1,5 @@
 {
- "owlapi": "4.5.29",
+ "owlapi": "5.5.1",
  "value": [
   [
    "http://mowl.borg/geo#A",
@@ -89,7 +89,7 @@
   [
    "sat http://mowl.borg/geo#A and some http://mowl.borg/geo#r http://mowl.borg/geo#E",
    "",
-   "True"
+   "False"
   ],
   [
    "http://mowl.borg/geo#A",
@@ -99,7 +99,7 @@
   [
    "sat http://mowl.borg/geo#A and some http://mowl.borg/geo#s http://mowl.borg/geo#E",
    "",
-   "True"
+   "False"
   ],
   [
    "http://mowl.borg/geo#B",
