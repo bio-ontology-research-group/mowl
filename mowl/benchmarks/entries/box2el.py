@@ -41,6 +41,7 @@ _PREDICTION = [
         completion_tasks=("subsumption-prediction", "existential-prediction"),
         description=_PREDICTION_DESCRIPTION,
         dataset=f"mowl.datasets.builtin.jackermeier2024.{cls}",
+        dataset_kwargs={"repaired": False},
         protocol=_P + "Box2ELPredictionProtocol",
         metrics=_RANK_METRICS,
         higher_is_better=_HIB,
@@ -77,6 +78,7 @@ _TRANSBOX_PREDICTION = [
         description=_PREDICTION_DESCRIPTION + (
             " Evaluation as re-implemented for TransBox (Yang et al. 2025, Appendix E)."),
         dataset=f"mowl.datasets.builtin.jackermeier2024.{cls}",
+        dataset_kwargs={"repaired": False},
         protocol=_P + "TransBoxPredictionProtocol",
         metrics=_RANK_METRICS,
         higher_is_better=_HIB,

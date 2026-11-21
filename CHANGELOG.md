@@ -101,6 +101,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Added the `lm` (sentence-transformers) and `convex` (cvxpy) optional dependency groups.
 
 ### Changed
+- `GALENJackermeier2024Dataset`, `GOJackermeier2024Dataset` and `AnatomyJackermeier2024Dataset` separate the normalisation helper classes of the reference release from the real classes whose IRIs they share (`repaired=True`, the default; `mowl.datasets.builtin.jackermeier2024_reference.separate_normalisation_helpers`). Axioms and split are unchanged; the training ontologies become satisfiable up to 19 (GO), 0 (GALEN) and 22 (Anatomy) classes, from 25,710 (GO) and 74,917 (Anatomy). `repaired=False` gives the release as it is, and the `box2el-*`, `transbox-*` and `regd-*` benchmarks select it so that published numbers stay comparable ([#178](https://github.com/bio-ontology-research-group/mowl/issues/178)).
 - The card of BoxLitE declares the tasks its implementation scores (instance checking and role assertions); it listed subsumption, role subsumption and disjointness, for which there is no graded score. The card of `graph_kge` states an expressivity and the subsumption task (the score of the projected edge).
 - `family_for` no longer has placeholder families for graph, syntactic and ALC models: a model class is supported if it is an `EmbeddingELModel` or declares `axiom_scoring`.
 - Changed the packaged OWL API from 4.5.22 to 4.5.29 (required by the KM reasoner).
@@ -109,6 +110,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Changed `RemoteDataset` to cache datasets under `$XDG_CACHE_HOME/mowl/datasets` (falling back to `~/.cache/mowl/datasets`) instead of the current working directory. Datasets are now shared between working directories rather than re-downloaded per directory, and running the tests or an example no longer scatters dataset directories through the checkout. Existing downloads in a working directory are not picked up and will be fetched once into the cache [#150][i150].
 - Changed the test suite to resolve dataset files through the cache instead of assuming pytest runs from the repository root.
 ### Fixed
+- ALC models (FALCON, al-cone) failed to train on a GPU: the training batches stayed on the CPU.
+- Ranking with a scorer that needs much memory per candidate (octagons on GO) ran out of GPU memory; `rank_queries` now halves the number of queries per pass and retries.
 - The regime card `elkem-subsumption-ranking` stated the target "inductive prediction"; its test axioms are entailed (deductive inference).
 - Fixed the EmEL++ ANATOMY dataset being unparsable: the released file contains role chains without roles, which are now dropped when the dataset is built.
 - Fixed the EL normaliser cache renaming relative IRIs when it was reloaded, which silently dropped the axioms that mention them (23,646 of the DELE yeast axioms). The cache is now written in functional syntax, atomically, and a stale cache is rebuilt.

@@ -62,6 +62,7 @@ BENCHMARKS = [
         evaluation_regime="regd-sampled-f1",
         description=_PREDICTION_DESC,
         dataset=f"mowl.datasets.builtin.jackermeier2024.{cls}",
+        dataset_kwargs={"repaired": False},
         protocol=_P, protocol_kwargs={"gci_name": "gci2", "reference_ontology": label},
         metrics=("f1",), higher_is_better={"f1": True},
         references=(YANG2025_REGD, JACKERMEIER2024), notes=_NOTES)

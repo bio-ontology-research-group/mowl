@@ -41,9 +41,9 @@ class ScoredModelFamily(runner.ModelFamily):
 
     def build(self, cls, dataset, model_kwargs, device, model_filepath):
         kwargs = dict(model_kwargs)
-        if "device" in inspect.signature(cls.__init__).parameters:
+        if _accepts(cls.__init__, "device"):
             kwargs.setdefault("device", device)
-        if "model_filepath" in inspect.signature(cls.__init__).parameters:
+        if _accepts(cls.__init__, "model_filepath"):
             kwargs.setdefault("model_filepath", model_filepath)
         return cls(dataset, **kwargs)
 

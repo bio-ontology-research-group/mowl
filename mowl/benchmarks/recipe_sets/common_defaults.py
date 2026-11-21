@@ -22,8 +22,10 @@ _ONTOLOGIES = ("galen", "go", "anatomy")
 
 #: joint benchmark pattern -> benchmarks whose recipes are reused, in order of preference
 _REUSE = {
-    "common-{o}-subsumption-prediction": ("box2el-{o}-prediction", "transbox-{o}-prediction"),
-    "common-{o}-existential-prediction": ("box2el-{o}-prediction", "transbox-{o}-prediction"),
+    "common-{o}-subsumption-prediction": ("box2el-{o}-prediction", "transbox-{o}-prediction",
+                                          "elkem-{o}-subsumption"),
+    "common-{o}-existential-prediction": ("box2el-{o}-prediction", "transbox-{o}-prediction",
+                                          "elkem-{o}-subsumption"),
     "common-{o}-subsumption-inference": ("box2el-{o}-inference", "elkem-{o}-subsumption"),
 }
 
@@ -40,8 +42,9 @@ _DEFAULTS = {
     "prism": dict(_EL, model_kwargs={"embed_dim": 200}),
     "multiboxel": dict(_EL, model_kwargs={"embed_dim": 50}),
     "multielbe": dict(_EL, model_kwargs={"embed_dim": 50}),
-    "mcmultibox": dict(_EL, model_kwargs={}),
-    "elkem": dict(_EL, model_kwargs={"embed_dim": 200, "load_role_axioms": True}),
+    # no loss for corrupted axioms: their own training loop
+    "mcmultibox": {"model_kwargs": {}, "epochs": 500},
+    "elkem": {"model_kwargs": {"embed_dim": 50, "load_role_axioms": True}, "epochs": 5000},
     "transbox": dict(_EL, model_kwargs={"embed_dim": 200, "load_role_axioms": True}),
     # other trained models: their own loop
     "cate": {"model_kwargs": {"embed_dim": 200}, "epochs": 2000, "validate_every": 100},
@@ -49,6 +52,7 @@ _DEFAULTS = {
     "alcone": {"model_kwargs": {}, "epochs": 500},
     "e2r": {"model_kwargs": {"embed_dim": 100}, "epochs": 500},
     "bcbox": {"model_kwargs": {"embed_dim": 32}, "epochs": 500},
+    # needs individuals; fails with that message on the TBox-only data
     "canonical_mixture": {"model_kwargs": {}, "epochs": 500},
     "grounded": {"model_kwargs": {}, "epochs": 500},
     "graph_kge": {"model_kwargs": {"embed_dim": 200}, "epochs": 100},

@@ -283,7 +283,8 @@ class EmbeddingALCModel(Model):
             if category is None:
                 continue
             for batch_data in dataloaders[axiom]:
-                losses[category].append(th.mean(self.module(axiom, batch_data[0], e_emb)))
+                batch = batch_data[0].to(self.device)
+                losses[category].append(th.mean(self.module(axiom, batch, e_emb)))
 
         weights = {TBOX: self.alpha, ABOX_EC: self.beta,
                    ABOX_EE: 1 - self.alpha - self.beta}

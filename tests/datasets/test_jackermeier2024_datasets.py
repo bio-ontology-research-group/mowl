@@ -116,3 +116,86 @@ def test_normalized_ontologies_can_skip_normalization():
     assert sorted(normalized) == sorted(from_scratch)
     for gci_name in from_scratch:
         assert len(normalized[gci_name]) == len(from_scratch[gci_name]), gci_name
+
+
+# --- issue 178: normalisation helpers share IRIs with real classes -----------------------
+
+def _ontology(lines):
+    import os
+    import tempfile
+    import java.io
+    from org.semanticweb.owlapi.apibinding import OWLManager
+    directory = tempfile.mkdtemp(prefix="mowl_helpers_", dir=tempfile.gettempdir())
+    path = os.path.join(directory, "o.ofn")
+    with open(path, "w") as f:
+        f.write("Prefix(:=<http://ex.org/>)\nPrefix(owl:=<http://www.w3.org/2002/07/owl#>)\n"
+                "Ontology(<http://ex.org/o>\n" + "\n".join(lines) + "\n)\n")
+    return OWLManager.createOWLOntologyManager().loadOntologyFromOntologyDocument(
+        java.io.File(path))
+
+
+def _unsatisfiable(ontology):
+    from org.semanticweb.elk.owlapi import ElkReasonerFactory
+    reasoner = ElkReasonerFactory().createReasoner(ontology)
+    try:
+        return {str(c.toStringID()) for c in
+                reasoner.getUnsatisfiableClasses().getEntitiesMinusBottom()}
+    finally:
+        reasoner.dispose()
+
+
+def test_helpers_are_separated_from_the_classes_whose_names_they_carry():
+    from mowl.datasets.builtin.jackermeier2024_reference import (
+        HELPER_PREFIX, find_normalisation_helpers, separate_normalisation_helpers)
+    # D ≡ B ⊓ ∃r.C was normalised with a helper that got the name of the real class X.
+    # X is also a real class: X ⊑ Y, and Y is disjoint from B. Read literally, the two
+    # helper axioms then say ∃r.C ⊑ X ⊑ Y, which makes E (⊑ B and ⊑ ∃r.C) unsatisfiable.
+    train = _ontology([
+        "SubClassOf(ObjectSomeValuesFrom(:r :C) :X)",
+        "SubClassOf(:X :Y)",
+        "SubClassOf(ObjectIntersectionOf(:B :Y) owl:Nothing)",
+        "SubClassOf(:E :B)",
+        "SubClassOf(:E ObjectSomeValuesFrom(:r :C))",
+        # a class used twice on the right of ∃r.C ⊑ . is a real class, not a helper
+        "SubClassOf(ObjectSomeValuesFrom(:r :C) :Real)",
+        "SubClassOf(ObjectSomeValuesFrom(:s :C) :Real)",
+        "SubClassOf(ObjectIntersectionOf(:B :Real) :F)",
+    ])
+    test = _ontology(["SubClassOf(ObjectIntersectionOf(:B :X) :D)"])   # other split
+    assert "http://ex.org/E" in _unsatisfiable(train)
+
+    helpers, _ = find_normalisation_helpers([train, None, test])
+    assert helpers == {"http://ex.org/X"}
+    before = (train.getAxiomCount(), test.getAxiomCount())
+    assert separate_normalisation_helpers([train, None, test]) == helpers
+    assert (train.getAxiomCount(), test.getAxiomCount()) == before
+    assert not _unsatisfiable(train)
+
+    def classes(ontology):
+        return {str(c.toStringID()) for c in ontology.getClassesInSignature()}
+    helper = HELPER_PREFIX + "http://ex.org/X"
+    assert helper in classes(train) and helper in classes(test)
+    assert "http://ex.org/X" in classes(train)          # the real class keeps X ⊑ Y
+    assert "http://ex.org/X" not in classes(test)
+    assert HELPER_PREFIX + "http://ex.org/Real" not in classes(train)
+    # Running it again changes nothing.
+    assert separate_normalisation_helpers([train, None, test]) == set()
+
+
+@pytest.mark.slow
+def test_repaired_galen_keeps_the_axioms_and_the_split():
+    from mowl.datasets import ELDataset
+    from mowl.datasets.builtin.jackermeier2024_reference import HELPER_PREFIX
+    release = GALENJackermeier2024Dataset(repaired=False)
+    repaired = GALENJackermeier2024Dataset()
+    assert repaired.repaired and "repaired" in repaired.ontology_path
+    for a, b in ((release.ontology, repaired.ontology),
+                 (release.validation, repaired.validation),
+                 (release.testing, repaired.testing)):
+        assert a.getLogicalAxiomCount() == b.getLogicalAxiomCount()
+        x = ELDataset(a, extended=True, load_normalized=True).get_gci_datasets()
+        y = ELDataset(b, extended=True, load_normalized=True).get_gci_datasets()
+        assert {k: len(v) for k, v in x.items()} == {k: len(v) for k, v in y.items()}
+    helpers = [c for c in repaired.classes.as_str if c.startswith(HELPER_PREFIX)]
+    assert len(helpers) > 10000
+    assert not any(c.startswith(HELPER_PREFIX) for c in release.classes.as_str)

@@ -120,12 +120,26 @@ def rank_queries(model, gci_name, rows, target_col, candidates, scorer, ties="or
     if module is not None:
         module.eval()
     with th.no_grad():
-        for start in range(0, len(rows), batch):
+        start = 0
+        while start < len(rows):
             b = rows[start:start + batch].to(device)
             n = len(b)
-            expanded = b.repeat_interleave(num_c, dim=0)
-            expanded[:, target_col] = cand_dev.repeat(n)
-            scores = scorer(model, gci_name, expanded).reshape(n, num_c).float()
+            try:
+                expanded = b.repeat_interleave(num_c, dim=0)
+                expanded[:, target_col] = cand_dev.repeat(n)
+                scores = scorer(model, gci_name, expanded).reshape(n, num_c).float()
+            except th.OutOfMemoryError:
+                # Some scorers need far more memory per candidate than others (and the
+                # device may be shared): retry with half the queries per pass.
+                if batch == 1:
+                    raise
+                del b
+                expanded = None
+                th.cuda.empty_cache()
+                batch = max(1, batch // 2)
+                logger.warning("Out of memory while ranking; %d queries per pass.", batch)
+                continue
+            start += n
             targets = th.tensor([position[int(t)] for t in b[:, target_col].tolist()],
                                 device=scores.device)
             for col in exclude_cols:
