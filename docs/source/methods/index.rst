@@ -31,6 +31,7 @@ relevant published methods it does not implement, with the reason.
    ont
    boxlite
    cate
+   grounded
 
 
 Representation, training and evaluation
