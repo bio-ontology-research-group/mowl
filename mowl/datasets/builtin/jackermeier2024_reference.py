@@ -96,16 +96,30 @@ def reference_class_order(ontology, iri_of_index=None, data_root=None, zip_path=
     return out
 
 
+def _complete(line):
+    """Whether a line of functional syntax is a complete axiom (balanced brackets). The
+    training file of the human PPI data in the release ends in the middle of an axiom."""
+    return line.count("(") == line.count(")") and line.count("<") == line.count(">")
+
+
 def _write_ontology(path, iri, axiom_lines):
+    """Write the axioms as an ontology in functional syntax; incomplete lines are dropped.
+    Returns the number of dropped lines."""
     tmp = f"{path}.{os.getpid()}.part"
+    dropped = 0
     with open(tmp, "w") as out:
         out.write(_HEADER.format(iri=iri))
         for line in axiom_lines:
             line = line.strip()
-            if line:
-                out.write(line + "\n")
+            if not line:
+                continue
+            if not _complete(line):
+                dropped += 1
+                continue
+            out.write(line + "\n")
         out.write(")\n")
     os.replace(tmp, path)
+    return dropped
 
 
 _EMPTY_CHAIN = re.compile(r"ObjectPropertyChain\(\s*\)")

@@ -70,9 +70,10 @@ def counts_of(el_datasets, gci_names):
 @pytest.mark.slow
 def test_jackermeier2024_counts(dataset_class, expected):
     """The normal forms of each split must round-trip through ELDataset with exactly the
-    counts of the reference benchmark."""
+    counts of the reference benchmark (the release as published, ``repaired=False``; the
+    default separates the normalisation helpers, which adds one class per helper)."""
     from mowl.datasets import ELDataset
-    dataset = dataset_class()
+    dataset = dataset_class(repaired=False)
 
     assert len(dataset.classes.as_dict) == expected["classes"]
     assert len(dataset.object_properties.as_dict) == expected["object_properties"]
@@ -199,3 +200,16 @@ def test_repaired_galen_keeps_the_axioms_and_the_split():
     helpers = [c for c in repaired.classes.as_str if c.startswith(HELPER_PREFIX)]
     assert len(helpers) > 10000
     assert not any(c.startswith(HELPER_PREFIX) for c in release.classes.as_str)
+
+
+def test_incomplete_axiom_lines_of_the_release_are_dropped(tmp_path):
+    """The human PPI training file of the release ends in the middle of an axiom."""
+    from mowl.datasets.builtin.jackermeier2024_reference import _write_ontology
+    from mowl.datasets.base import PathDataset
+    path = str(tmp_path / "ontology.owl")
+    lines = ["SubClassOf(<http://a> ObjectSomeValuesFrom(<http://interacts> <http://b>))\n",
+             "\n",
+             "SubClassOf(<http://b> ObjectSomeValuesFrom(<http://interacts> <h"]
+    assert _write_ontology(path, "http://example.org/t", lines) == 1
+    ontology = PathDataset(path).ontology
+    assert ontology.getAxiomCount() == 1
