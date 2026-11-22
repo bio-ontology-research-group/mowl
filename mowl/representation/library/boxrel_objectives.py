@@ -53,18 +53,30 @@ class TransBoxObjective(Objective):
         measure, :class:`MaskedBounds`.)
     :param enhanced: Train :math:`C \\sqsubseteq \\exists r.D` against the semantic
         enhancement :math:`\\exists r^{all}.D`.
+    :param reference_bottom_losses: With ``formulation="reference"``: ``"code"`` (default)
+        reads :math:`C \\sqsubseteq \\bot` and :math:`\\exists r.C \\sqsubseteq \\bot` as
+        the code reads :math:`C \\sqsubseteq D` with the bottom class as :math:`D`, including
+        the centre-norm term; ``"mowl"``: without that term, as mOWL did before.
+    :param strict_negatives: A negative loss of a form that has none is an error (default,
+        as in :class:`~mowl.nn.TransBoxModule`); ``False`` gives the positive loss.
     """
 
-    def __init__(self, margin=0.1, enhanced=True, formulation="mowl"):
+    def __init__(self, margin=0.1, enhanced=True, formulation="mowl",
+                 reference_bottom_losses="code", strict_negatives=True):
+        if reference_bottom_losses not in ("code", "mowl"):
+            raise ValueError("reference_bottom_losses must be 'code' or 'mowl'.")
         if formulation not in ("mowl", "reference"):
             raise ValueError("formulation must be 'mowl' or 'reference'.")
         reference = formulation == "reference"
         super().__init__(margin, slack=False, negatives=("gci2",), bottom="class",
                          gci1_bot="apart" if reference else None,
+                         strict_negatives=strict_negatives,
                          unit_norm=("gci0", "gci1", "gci2", "gci3", "gci1_bot")
-                         if reference else False)
+                         + (("gci0_bot", "gci3_bot") if reference_bottom_losses == "code"
+                            else ()) if reference else False)
         self.enhanced = bool(enhanced)
         self.formulation = formulation
+        self.reference_bottom_losses = reference_bottom_losses
 
     @property
     def reference(self):

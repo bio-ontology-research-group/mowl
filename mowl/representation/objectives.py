@@ -54,7 +54,10 @@ NORM_FORMS = ("gci0", "gci1", "gci2", "gci3", "gci1_bot", "class_assertion",
 _NORM_COLUMNS = {
     "gci0": (("c", 0), ("c", 1)), "gci1": (("c", 0), ("c", 1), ("c", 2)),
     "gci2": (("c", 0), ("c", 2)), "gci3": (("c", 1), ("c", 2)),
-    "gci1_bot": (("c", 0), ("c", 1)), "class_assertion": (("i", 0), ("c", 1)),
+    "gci1_bot": (("c", 0), ("c", 1)),
+    # read as the axiom with the bottom class (``bottom="class"``)
+    "gci0_bot": (("c", 0), ("c", 1)), "gci3_bot": (("c", 1), ("c", 2)),
+    "class_assertion": (("i", 0), ("c", 1)),
     "object_property_assertion": (("i", 0), ("i", 2))}
 _ROLE_COLUMNS = {"role_inclusion": (0, 1), "role_chain": (0, 1, 2)}
 _NEGATIVES = {"all": frozenset(FORMS), "gci2": frozenset({"gci2", "object_property_assertion"}),
@@ -84,6 +87,11 @@ class Objective:
         ``"gci2"`` (:math:`C \\sqsubseteq \\exists r.D` and role assertions: for the others
         ``neg=True`` returns the positive loss, as the original modules do), ``"gci0"``
         (hierarchy methods), ``"none"``, or a collection of form names.
+    :param strict_negatives: ``False`` (default): asking for the negative loss of a form that
+        has none (``neg=True`` outside ``negatives``) gives the positive loss, which is the
+        contract of :class:`~mowl.nn.ELModule` (``neg_capable_gcis`` says which forms differ)
+        and what the published losses of most modules do. ``True``: it is an error
+        (:class:`NotImplementedError`), as in :class:`~mowl.nn.TransBoxModule`.
     :param empty: ``"size"`` (default): the loss of :math:`C \\sqsubseteq \\bot` is the
         size of the region. ``"raw"``: the signed radius parameter, as in the ELEmbeddings
         code (unbounded below).
@@ -150,7 +158,7 @@ class Objective:
                  disjoint_margin=None, empty_margin=False, neg_margins=None,
                  negative_margin="same", squared=False, delta=2.0, weights=None,
                  ranking=None, unit_norm=False, tolerance_weight=1.0, gci0_shift=None,
-                 freeze_size_negatives=False, inside_margin=None):
+                 freeze_size_negatives=False, inside_margin=None, strict_negatives=False):
         _check(gci3, ("inclusion", "overlap"), "gci3")
         _check(gci2_negative, ("apart", "overlap", "linear", "delta", "outside", "shrunk",
                                "negative"), "gci2_negative")
@@ -197,6 +205,7 @@ class Objective:
         self.gci0_shift = gci0_shift
         self.freeze_size_negatives = bool(freeze_size_negatives)
         self.inside_margin = None if inside_margin is None else float(inside_margin)
+        self.strict_negatives = bool(strict_negatives)
 
     # -- the readings of publications -----------------------------------------------------
     @classmethod
@@ -277,6 +286,10 @@ class Objective:
             raise ValueError(f"Unknown axiom form {form!r}; known: {FORMS + ROLE_FORMS}.")
         if self.ranking is not None and neg and form in self.ranking:
             return self._form_cost(g, form, rows, False) - self.ranking[form]
+        if neg and self.strict_negatives and form not in self.neg_forms:
+            raise NotImplementedError(
+                f"There is no negative loss of {form!r} (only {sorted(self.neg_forms)}); "
+                f"use strict_negatives=False to get the positive loss instead.")
         cost = self._form_cost(g, form, rows, neg)
         return cost * self.weights[form] if form in self.weights else cost
 

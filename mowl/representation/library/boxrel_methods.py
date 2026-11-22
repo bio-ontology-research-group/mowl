@@ -49,13 +49,16 @@ def _joint_tables(size, dim):
 # ==========================================================================================
 @register_method("transbox")
 def transbox(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
-             enhanced=True, reg_factor=0.1, formulation="mowl", tables=None):
+             enhanced=True, reg_factor=0.1, formulation="mowl",
+             reference_bottom_losses="code", strict_negatives=True, tables=None):
     """TransBox (Yang et al. 2025): boxes, a box of translations per relation, bounds per
     coordinate and a point per individual.
 
     :param enhanced: Train :math:`C \\sqsubseteq \\exists r.D` against the semantic
         enhancement.
     :param formulation: ``"mowl"`` or ``"reference"`` (the authors' code), see
+        :class:`~mowl.representation.library.boxrel_objectives.TransBoxObjective`.
+    :param reference_bottom_losses, strict_negatives: Options of
         :class:`~mowl.representation.library.boxrel_objectives.TransBoxObjective`.
     :param tables: A :class:`~mowl.nn.TransBoxModule` to share parameters with.
     """
@@ -84,7 +87,8 @@ def transbox(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.
         regularizers = (NormPenalty("class_embed", target=1.0, weight=reg_factor),
                         ) + regularizers
     return ComposedGeometry(classes, relations, measure,
-                            TransBoxObjective(margin, enhanced, formulation),
+                            TransBoxObjective(margin, enhanced, formulation, reference_bottom_losses,
+                                              strict_negatives),
                             individuals=individuals, regularizers=regularizers)
 
 
@@ -92,13 +96,16 @@ def transbox(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.
 def _transbox(module):
     return transbox(None, None, embed_dim=module.embed_dim, margin=module.margin,
                     enhanced=module.use_enhancement, reg_factor=module.reg_factor,
-                    formulation=module.formulation, tables=module)
+                    formulation=module.formulation,
+                    reference_bottom_losses=module.reference_bottom_losses,
+                    strict_negatives=module.strict_negatives, tables=module)
 
 
 # ==========================================================================================
 @register_method("boxel")
 def boxel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0,
-          temperature=1.0, gci1_bot="volume product", signed=True, tables=None):
+          temperature=1.0, gci1_bot="volume product", scale="positive",
+          role_chain_composition="in_order", tables=None):
     """BoxEL (Xiong et al. 2022): boxes stored as lower corner and log-width, an affine map
     per relation, a smoothed volume ratio, and a penalty that keeps the boxes in the unit
     cube.
@@ -108,13 +115,17 @@ def boxel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0,
     :param temperature: :math:`\\beta` of the softplus volume.
     :param gci1_bot: ``"volume product"`` (the BoxEL code) or ``"apart"``, see
         :func:`~mowl.representation.library.boxrel_objectives.boxel_objective`.
-    :param signed: Map the corners of a box one by one, which gives inverted boxes for a
-        negative scale, as the BoxEL code does (``False``: the box is mirrored).
+    :param scale: How a role's scale factor is read, see :class:`Affine`: ``"positive"``
+        (default: :math:`|f|`, a role never inverts a box), ``"signed"`` (the corners are
+        mapped one by one, so a negative factor inverts the box, as the released BoxEL code
+        does) or ``"mirror"``. The three agree while every factor is positive.
+    :param role_chain_composition: ``"in_order"`` (default) or ``"as_released"``, see
+        :class:`Affine`.
     :param tables: A :class:`~mowl.nn.BoxELModule` to share parameters with.
     """
     return _boxel_geometry(ComposedGeometry, boxel_objective(margin, _product(gci1_bot)),
                            nb_classes, nb_relations, nb_individuals, embed_dim, temperature,
-                           signed, tables, (LocationPenalty(1.0),))
+                           (scale, role_chain_composition), tables, (LocationPenalty(1.0),))
 
 
 def _product(gci1_bot):
@@ -122,17 +133,19 @@ def _product(gci1_bot):
 
 
 def _boxel_geometry(geometry, objective, nb_classes, nb_relations, nb_individuals, embed_dim,
-                    temperature, signed, tables, regularizers):
+                    temperature, role_options, tables, regularizers):
     t = tables
+    scale, composition = role_options
     if t is not None:
         classes = MinDeltaBoxes(mins=t.min_embedding, deltas=t.delta_embedding)
         relations = Affine(vectors=t.relation_embedding, scales=t.scaling_embedding,
-                           signed=signed)
+                           scale=scale, role_chain_composition=composition)
         individuals = None if t.ind_embedding is None else MinDeltaBoxes(
             mins=t.ind_embedding, deltas=t.ind_delta_embedding)
     else:
         classes = MinDeltaBoxes(nb_classes, embed_dim)
-        relations = Affine(nb_relations, embed_dim, signed=signed)
+        relations = Affine(nb_relations, embed_dim, scale=scale,
+                           role_chain_composition=composition)
         individuals = MinDeltaBoxes(nb_individuals, embed_dim) if nb_individuals else None
     return geometry(classes, relations, VolumeRatio(temperature), objective,
                     individuals=individuals, regularizers=regularizers)
@@ -141,7 +154,14 @@ def _boxel_geometry(geometry, objective, nb_classes, nb_relations, nb_individual
 @register_adapter("BoxELModule")
 def _boxel(module):
     return _boxel_geometry(ComposedGeometry, boxel_objective(0.0), None, None, 0, None,
-                           module.temperature, True, module, (LocationPenalty(1.0),))
+                           module.temperature, _role_options(module), module,
+                           (LocationPenalty(1.0),))
+
+
+def _role_options(module):
+    """The options of :class:`Affine` that the module's attributes name."""
+    return ("positive" if module.positive_scale else "signed",
+            module.role_chain_composition)
 
 
 # ==========================================================================================
@@ -182,7 +202,8 @@ class ConditionalGeometry(ComposedGeometry):
 
 @register_method("boxsel")
 def boxsel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0,
-           temperature=1.0, gci1_bot="volume product", signed=True, beta=1.0,
+           temperature=1.0, gci1_bot="volume product", scale="positive",
+           role_chain_composition="in_order", beta=1.0,
            location_weight=1.0, volume_weight=0.0, tables=None):
     """BoxSEL (Zhu et al. 2024): BoxEL and the statement type of a conditional probability,
     with the two penalties :math:`L_{loc}` and :math:`L_{vol}`.
@@ -199,14 +220,15 @@ def boxsel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0,
     return _boxel_geometry(ConditionalGeometry,
                            BoxSELObjective(margin, gci1_bot=_product(gci1_bot)),
                            nb_classes, nb_relations, nb_individuals, embed_dim, temperature,
-                           signed, tables, tuple(regularizers))
+                           (scale, role_chain_composition), tables, tuple(regularizers))
 
 
 @register_adapter("BoxSELModule")
 def _boxsel(module):
     return boxsel(None, None, temperature=module.temperature, beta=module.beta,
                   location_weight=module.location_weight,
-                  volume_weight=module.volume_weight, tables=module)
+                  volume_weight=module.volume_weight, tables=module,
+                  **dict(zip(("scale", "role_chain_composition"), _role_options(module))))
 
 
 # ==========================================================================================

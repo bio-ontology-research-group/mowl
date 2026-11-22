@@ -122,14 +122,17 @@ def cate(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50, margin=1.0,
 @register_method("box_lattice")
 def box_lattice(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50, min_delta=0.01,
                 init_side=(0.3, 0.9), max_regularization=0.0, eps=1e-6,
-                freeze_delta_negatives=True, disjoint_weight=None, tables=None):
+                freeze_delta_negatives=True, disjoint_weight=None, zero_at_inclusion=True,
+                tables=None):
     """Box lattice embeddings (Vilnis et al. 2018): boxes in the unit cube, the negative log
     of the conditional probability :math:`P(D \\mid C)` as the cost of a pair, the cross
     entropy with target 0 for a corrupted pair, and the cube as a constraint
     (``geometry.project()`` after each step).
 
-    As published: the cost of an included pair is :math:`-\\log(1 + \\varepsilon)` rather than
-    0, and negative pairs do not update the box sizes (``freeze_delta_negatives``).
+    As published, negative pairs do not update the box sizes (``freeze_delta_negatives``).
+    The cost of an included pair is exactly 0 (``zero_at_inclusion=True``); ``False`` is the
+    guard of the earlier code, which gives :math:`-\\log(1 + \\varepsilon)`, a constant
+    that does not change a gradient.
 
     :param tables: A :class:`~mowl.nn.el.box_lattice.BoxLatticeModule` to share parameters
         with.
@@ -141,31 +144,43 @@ def box_lattice(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50, min_
         eps, disjoint_weight = tables.eps, tables.disjoint_weight
         freeze_delta_negatives = tables.freeze_delta_negatives
         max_regularization = tables.max_regularization
+        zero_at_inclusion = tables.zero_at_inclusion
     regularizers = (MaxCornerPenalty(max_regularization),) if max_regularization else ()
     return hierarchy_geometry(
-        classes, None, VolumeRatio(eps, disjoint_weight, zero_at_inclusion=False),
+        classes, None, VolumeRatio(eps, disjoint_weight, zero_at_inclusion=zero_at_inclusion),
         Objective.hierarchy(freeze_size_negatives=freeze_delta_negatives),
         regularizers=regularizers)
 
 
 @register_method("gumbel_box")
 def gumbel_box(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50, beta=0.01,
-               min_delta=1e-6, init_side=(0.3, 0.9), max_regularization=0.0, tables=None):
+               min_delta=1e-6, init_side=(0.3, 0.9), max_regularization=0.0,
+               log_guard="stable", tables=None):
     """Gumbel box embeddings (Dasgupta et al. 2020): the box lattice's class model with the
     smoothed volume ratio as the measure (Gumbel scale ``beta``, the softplus side length of
     Section 4.2).
 
+    :param log_guard: ``"stable"`` (default): the guards of the binary code boxes (``log
+        softplus(z)`` is ``z`` below -15, energy floor 1e-12); ``"epsilon"``: those of the
+        earlier code (``log(softplus + 1e-30)``, energy floor 1e-9), which give a constant
+        value and no gradient for collapsed sides.
     :param tables: A :class:`~mowl.nn.el.gumbel_box.GumbelBoxModule` to share parameters
         with.
     """
+    if log_guard not in ("stable", "epsilon"):
+        raise ValueError("log_guard must be 'stable' or 'epsilon'.")
     if tables is None:
         classes = UnitCubeBoxes(nb_classes, embed_dim, min_delta, init_side, soft=True)
     else:
         classes = UnitCubeBoxes(table=tables.class_embed, min_delta=tables.min_delta,
                                 soft=True)
         beta, max_regularization = tables.beta, tables.max_regularization
+        log_guard = tables.log_guard
     regularizers = (MaxCornerPenalty(max_regularization),) if max_regularization else ()
-    measure = SoftVolumeRatio(beta, beta, gumbel_shift=True, tail="floor", energy_floor=1e-9)
+    stable = log_guard == "stable"
+    measure = SoftVolumeRatio(beta, beta, gumbel_shift=True,
+                              tail="linear" if stable else "floor",
+                              energy_floor=1e-12 if stable else 1e-9)
     return hierarchy_geometry(classes, None, measure, Objective.hierarchy(),
                               regularizers=regularizers)
 
@@ -220,11 +235,15 @@ def hyperbolic_cones(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50,
 @register_method("shadow_cones")
 def shadow_cones(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50,
                  formulation="umbral-half-space", radius=0.05, horosphere_height=20.0,
-                 gamma3=1e-4, init_scale=0.01, tables=None):
+                 gamma3=1e-4, init_scale=0.01, margin=0.01, negative_form="hinge",
+                 tables=None):
     """Shadow cones (Yu et al. 2024): points of the Poincare half-space or ball, the signed
-    distance to the shadow cone of the parent as the cost. As published the cost is signed
-    (negative inside the cone) and a corrupted pair is scored with the same energy
-    (``signed=True``, ``negative_form="energy"``).
+    distance to the shadow cone of the parent as the cost. As published the cost of a stated
+    pair is signed (negative inside the cone, ``signed=True``). The cost of a corrupted pair is
+    the hinge :math:`\\max(0, \\gamma_1 - E)` of the energy (``negative_form="hinge"``,
+    :math:`\\gamma_1` = ``margin``): a loss that is zero where the corrupted pair does not
+    hold; ``"energy"`` is the raw energy, the quantity Eq. 1 of the paper is written on (the
+    loss of :class:`~mowl.models.ShadowCones` applies the hinge to it).
 
     :param tables: A :class:`~mowl.nn.order.ShadowConesModule` to share parameters with.
     """
@@ -232,6 +251,7 @@ def shadow_cones(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50,
         formulation, radius = tables.formulation, tables.radius
         horosphere_height, gamma3 = tables.horosphere_height, tables.gamma3
         manifold = tables.manifold
+        margin, negative_form = tables.margin, tables.negative
     elif formulation.endswith("half-space"):
         manifold = UpperHalfSpace()
     else:
@@ -242,8 +262,8 @@ def shadow_cones(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50,
     else:
         classes = PointClasses(manifold=manifold, table=tables.class_embed)
     measure = ShadowCone(formulation, radius, horosphere_height, gamma3, signed=True,
-                         negative_form="energy")
-    return hierarchy_geometry(classes, None, measure, Objective.hierarchy())
+                         negative_form=negative_form)
+    return hierarchy_geometry(classes, None, measure, Objective.hierarchy(margin))
 
 
 _DISK_SPACES = {"hyperbolic": Hyperboloid, "spherical": Sphere, "euclidean": Euclidean}

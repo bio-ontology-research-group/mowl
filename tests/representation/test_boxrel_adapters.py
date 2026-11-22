@@ -36,7 +36,14 @@ class Case:
         for form in forms or self.forms:
             for neg in negs:
                 data = rows(form)
-                expected = module(data, form, neg=neg).reshape(-1, 1)
+                try:
+                    expected = module(data, form, neg=neg).reshape(-1, 1)
+                except NotImplementedError:
+                    # a module that refuses a negative loss it does not have: so does the
+                    # geometry
+                    with self.assertRaises(NotImplementedError):
+                        geometry(data, form, neg=neg)
+                    continue
                 got = geometry(data, form, neg=neg)
                 self.assertEqual(got.shape, expected.shape, (form, neg))
                 self.assertTrue(th.allclose(got, expected, atol=atol, rtol=1e-5),
@@ -89,6 +96,30 @@ class TestTransBox(Case, TestCase):
                        {"reg_factor": 0.5}):
             self.assertSame(self.make(**kwargs))
 
+    def test_old_options(self):
+        # the earlier behaviour: a negative of a form without one is the positive loss, and
+        # the reference formulation's bottom forms are those of the mowl formulation
+        for kwargs in ({"strict_negatives": False},
+                       {"formulation": "reference", "reference_bottom_losses": "mowl"},
+                       {"formulation": "reference", "reference_bottom_losses": "mowl",
+                        "strict_negatives": False}):
+            module = self.make(**kwargs)
+            self.assertSame(module)
+            geometry = geometry_of(module)
+            self.assertEqual(geometry.objective.strict_negatives, module.strict_negatives)
+            self.assertEqual(geometry.objective.reference_bottom_losses,
+                             module.reference_bottom_losses)
+
+    def test_defaults_are_the_corrected_readings(self):
+        objective = geometry_of(self.make(formulation="reference")).objective
+        self.assertTrue(objective.strict_negatives)
+        self.assertEqual(objective.reference_bottom_losses, "code")
+        # the bottom forms of the code carry its centre-norm term, those of mowl do not
+        code = geometry_of(self.make(formulation="reference"))
+        old = geometry_of(self.make(formulation="reference", reference_bottom_losses="mowl"))
+        data = rows("gci0_bot")
+        self.assertFalse(th.allclose(code(data, "gci0_bot"), old(data, "gci0_bot")))
+
     def test_enhancement_clamped_differs_from_reference(self):
         # The reference code leaves o_r - o_D unclamped; with a filler wider than the
         # relation the two readings of C subsumed by exists r.D differ.
@@ -114,11 +145,29 @@ class TestBoxEL(Case, TestCase):
         self.assertSame(self.make(temperature=2.5), self.forms)
 
     def test_negative_scale(self):
-        # A factor below zero inverts the box in the module; the adapter does the same.
-        module = self.make()
-        with th.no_grad():
-            module.scaling_embedding.weight.mul_(-1)
-        self.assertSame(module, ("gci2", "gci3", "object_property_assertion"))
+        # A factor below zero: by default the module uses |s| (the box is never inverted);
+        # the adapter does the same. ``positive_scale=False`` is the signed scale of the
+        # released BoxEL code, which inverts the box; the adapter selects it.
+        for kwargs, scale in (({}, "positive"), ({"positive_scale": False}, "signed")):
+            module = self.make(**kwargs)
+            with th.no_grad():
+                module.scaling_embedding.weight.mul_(-1)
+            self.assertSame(module, ("gci2", "gci3", "object_property_assertion"))
+            self.assertEqual(geometry_of(module).relation_model.scale, scale)
+
+    def test_role_axioms_and_chain_composition(self):
+        for kwargs in ({}, {"positive_scale": False}, {"role_chain_composition": "as_released"},
+                       {"positive_scale": False, "role_chain_composition": "as_released"}):
+            module = self.make(**kwargs)
+            self.assertSame(module, ROLES, negs=(False,))
+            self.assertEqual(geometry_of(module).relation_model.role_chain_composition,
+                             module.role_chain_composition)
+
+    def test_builder_defaults_to_the_corrected_readings(self):
+        from mowl.representation import METHODS
+        relations = METHODS["boxel"](4, 2, embed_dim=3).relation_model
+        self.assertEqual((relations.scale, relations.role_chain_composition),
+                         ("positive", "in_order"))
 
 
 class TestBoxSEL(TestBoxEL):

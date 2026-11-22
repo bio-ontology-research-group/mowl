@@ -152,9 +152,21 @@ class TestBoxes(Same, TestCase):
     def test_box_lattice(self):
         for kwargs in ({}, {"init_side": (0.05, 0.2)}, {"eps": 1e-3},
                        {"freeze_delta_negatives": False}, {"disjoint_weight": 1.0},
-                       {"max_regularization": 0.05}):
+                       {"max_regularization": 0.05},
+                       # the earlier guard: -log(1 + eps) for an included pair
+                       {"zero_at_inclusion": False},
+                       {"zero_at_inclusion": False, "eps": 1e-3}):
             th.manual_seed(3)
-            self.check(BoxLatticeModule(N, 3, **kwargs), f"box_lattice {kwargs}")
+            module = BoxLatticeModule(N, 3, **kwargs)
+            self.check(module, f"box_lattice {kwargs}")
+            self.assertEqual(geometry_of(module).measure.zero_at_inclusion,
+                             module.zero_at_inclusion)
+
+    def test_box_lattice_default_is_exactly_zero_for_an_included_pair(self):
+        g = HM.box_lattice(N, embed_dim=3)
+        self.assertTrue(g.measure.zero_at_inclusion)
+        self.assertFalse(HM.box_lattice(N, embed_dim=3,
+                                        zero_at_inclusion=False).measure.zero_at_inclusion)
 
     def test_box_lattice_covers_disjoint_and_nested_pairs(self):
         th.manual_seed(3)
@@ -177,9 +189,13 @@ class TestBoxes(Same, TestCase):
         self.assertGreater(float(g.class_embed.weight.grad[:, 3:].abs().sum()), 0.0)
 
     def test_gumbel_box(self):
-        for kwargs in ({}, {"beta": 0.1}, {"beta": 0.002}, {"max_regularization": 0.02}):
+        for kwargs in ({}, {"beta": 0.1}, {"beta": 0.002}, {"max_regularization": 0.02},
+                       {"log_guard": "epsilon"}, {"log_guard": "epsilon", "beta": 0.002}):
             th.manual_seed(4)
-            self.check(GumbelBoxModule(N, 3, **kwargs), f"gumbel {kwargs}")
+            module = GumbelBoxModule(N, 3, **kwargs)
+            self.check(module, f"gumbel {kwargs}")
+            self.assertEqual(geometry_of(module).measure.tail,
+                             "linear" if module.log_guard == "stable" else "floor")
 
     def test_gumbel_is_the_box_lattice_with_another_measure(self):
         th.manual_seed(5)
@@ -258,13 +274,23 @@ class TestManifolds(Same, TestCase):
     def test_shadow_cones_all_formulations(self):
         for formulation in ("umbral-half-space", "penumbral-half-space", "umbral-ball",
                             "penumbral-ball"):
-            module = ShadowConesModule(N, 3, formulation=formulation, init_scale=0.1, seed=1)
-            g = geometry_of(module)
-            rows = pairs()
-            self.assertClose(g(rows, "gci0"), module(rows, "gci0"), formulation)
-            self.assertClose(g(rows, "gci0", neg=True), module(rows, "gci0", neg=True),
-                             formulation)
-            self.assertSharesParameters(g, module)
+            # the hinge (default) and the raw energy of the earlier module, with its own margin
+            for options in ({}, {"negative": "energy"}, {"margin": 0.3},
+                            {"margin": 0.3, "negative": "energy"}):
+                module = ShadowConesModule(N, 3, formulation=formulation, init_scale=0.1,
+                                           seed=1, **options)
+                g = geometry_of(module)
+                rows = pairs()
+                self.assertClose(g(rows, "gci0"), module(rows, "gci0"), formulation)
+                self.assertClose(g(rows, "gci0", neg=True), module(rows, "gci0", neg=True),
+                                 (formulation, options))
+                self.assertSharesParameters(g, module)
+                self.assertEqual(g.measure.negative_form, module.negative)
+
+    def test_shadow_cones_default_negative_is_not_negative(self):
+        g = HM.shadow_cones(N, embed_dim=3)
+        self.assertEqual(g.measure.negative_form, "hinge")
+        self.assertTrue(bool((g(pairs(), "gci0", neg=True) >= 0).all()))
 
     def test_disk_embeddings_all_spaces(self):
         for space in ("hyperbolic", "spherical", "euclidean"):

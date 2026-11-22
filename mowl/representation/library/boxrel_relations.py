@@ -157,33 +157,53 @@ class Affine(Relations):
     :param vectors: Table of the shifts :math:`t_r`; ``scales``: table of the factors
         :math:`f_r` (initialised around 1).
     :param eps: Added to the factors, which keeps the preimage defined.
-    :param signed: ``False`` (default): a negative factor mirrors the box, which stays a
-        box. ``True``: the corners are mapped one by one, so that a negative factor gives
-        an inverted box with negative width, as in the BoxEL code.
+    :param scale: How the raw factor is read. ``"positive"`` (default, what
+        :class:`~mowl.nn.BoxELModule` does with ``positive_scale=True``): :math:`|f| +
+        \\epsilon`, a role never inverts a box. ``"mirror"``: the signed factor, a negative one
+        mirrors the box (the exact image of the box under the map, which stays a box).
+        ``"signed"``: the corners are mapped one by one, so that a negative factor gives an
+        inverted box with negative width (the BoxEL code, ``positive_scale=False``). The three
+        agree while every factor is positive.
+    :param role_chain_composition: ``"in_order"`` (default) composes the two maps
+        (:math:`f_2 t_1 + t_2`); ``"as_released"`` is the expression mOWL had before
+        (:math:`f_1 t_1 + t_2`).
 
-    Role axioms: as a function a role is determined by its map, so :math:`r \\sqsubseteq s`
-    costs the distance of the shifts plus the distance of the factors, and
-    :math:`r_1 \\circ r_2 \\sqsubseteq s` the same for the composed map (first :math:`r_1`,
-    then :math:`r_2`); the measure and margin are not used.
+    Role axioms (as in :class:`~mowl.nn.BoxELModule`; the measure and margin are not used): a
+    role is determined by its map, so :math:`r \\sqsubseteq s` costs the distance of the shifts
+    plus the part of the factor of :math:`r` that exceeds the factor of :math:`s`
+    (``relu(f_r / f_s - 1)``, one-sided: the image of a box under :math:`r` must not be larger
+    than under :math:`s`), and :math:`r_1 \\circ r_2 \\sqsubseteq s` the same for the composed
+    map (first :math:`r_1`, then :math:`r_2`).
     """
 
     part = "affine map"
+    SCALES = ("positive", "mirror", "signed")
+    COMPOSITIONS = ("in_order", "as_released")
 
     def __init__(self, size=None, embed_dim=None, vectors=None, scales=None, eps=1e-8,
-                 signed=False):
+                 scale="positive", role_chain_composition="in_order"):
         super().__init__()
+        if scale not in self.SCALES:
+            raise ValueError(f"scale must be one of {self.SCALES}.")
+        if role_chain_composition not in self.COMPOSITIONS:
+            raise ValueError(f"role_chain_composition must be one of {self.COMPOSITIONS}.")
         self.vectors = vectors if vectors is not None else _uniform(
             size, embed_dim, -0.1, 0.1)
         self.scales = scales if scales is not None else _uniform(
             len(self.vectors.weight), self.vectors.embedding_dim, 0.9, 1.1)
         self.eps = eps
-        self.signed = bool(signed)
+        self.scale = scale
+        self.role_chain_composition = role_chain_composition
+
+    def _raw(self, ids):
+        s = self.scales(ids)
+        return s.abs() if self.scale == "positive" else s
 
     def factor(self, ids):
-        return self.scales(ids) + self.eps
+        return self._raw(ids) + self.eps
 
     def _spread(self, offset, factor):
-        return offset * (factor if self.signed else factor.abs())
+        return offset * (factor if self.scale == "signed" else factor.abs())
 
     def image(self, ids, region):
         f = self.factor(ids)
@@ -196,17 +216,22 @@ class Affine(Relations):
         return Box((region.centre - self.vectors(ids)) / f,
                    self._spread(region.offset, 1 / f))
 
-    def _distance(self, a, b):
-        return th.linalg.norm(a, dim=1, keepdim=True) + th.linalg.norm(b, dim=1, keepdim=True)
+    @staticmethod
+    def _cost(translation_gap, composed_scale, sup_scale):
+        return (th.linalg.norm(translation_gap, dim=1, keepdim=True)
+                + th.linalg.norm(th.relu(composed_scale / sup_scale - 1), dim=1,
+                                 keepdim=True))
 
     def role_inclusion(self, sub, sup, measure=None, margin=0.0):
-        return self._distance(self.vectors(sub) - self.vectors(sup),
-                              self.factor(sub) - self.factor(sup))
+        return self._cost(self.vectors(sub) - self.vectors(sup), self._raw(sub),
+                          self.factor(sup))
 
     def role_chain(self, first, second, sup, measure=None, margin=0.0):
-        f1, f2 = self.factor(first), self.factor(second)
-        shift = f2 * self.vectors(first) + self.vectors(second)
-        return self._distance(shift - self.vectors(sup), f1 * f2 - self.factor(sup))
+        scale = self._raw(second) if self.role_chain_composition == "in_order" \
+            else self._raw(first)
+        shift = scale * self.vectors(first) + self.vectors(second)
+        return self._cost(shift - self.vectors(sup), self._raw(first) * self._raw(second),
+                          self.factor(sup))
 
 
 @register_relation_model("affine map with range and error box")
