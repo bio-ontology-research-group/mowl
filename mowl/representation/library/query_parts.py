@@ -257,18 +257,35 @@ class ConeNetwork(_ConeRelations):
 
 
 class ConeRotation(_ConeRelations):
-    """AConE: a relation rotates a cone and widens or narrows it, by adding its angles to
-    the axis and the aperture (multiplication of unit complex numbers). Its inverse is the
-    rotation by the negated angles, so :math:`\\exists r.C` needs no second relation.
+    """AConE: a relation rotates a cone by the angle :math:`\\theta_r` per coordinate and
+    changes its aperture by :math:`\\delta_r`, by adding its angles to the axis and the
+    aperture (multiplication of unit complex numbers).
+
+    As a set of pairs of points (angles per coordinate): :math:`(x, y)` is in the relation
+    iff :math:`y` lies within :math:`|\\delta_r|` of :math:`x + \\theta_r` on the circle, in
+    every coordinate (:meth:`related`), a rotation with a tolerance. Its image of a sector is
+    the sector rotated by :math:`\\theta_r` and widened by :math:`|\\delta_r|`, its preimage
+    (the region of :math:`\\exists r.C`, no second relation needed) the sector rotated by
+    :math:`-\\theta_r` and also widened by :math:`|\\delta_r|`.
 
     :param aperture: ``"clip"`` (default): the aperture stays in ``[0, pi]``. ``"wrap"``: it
         is wrapped to ``(-pi, pi]`` as in the published AConE (negative apertures).
+    :param aperture_change: ``"tolerance"`` (default): image and preimage widen by
+        :math:`|\\delta_r|`, as above. ``"signed"``: the image adds :math:`\\delta_r` (it
+        narrows a cone where :math:`\\delta_r < 0`, as the published AConE projection does)
+        and the preimage subtracts it; no set of pairs of points has these as image and
+        preimage (the preimage of a cone is then *narrower* than the cone, also for
+        :math:`\\delta_r > 0`).
     """
 
     part = "rotation"
+    accepts = (SectorCone,)
 
     def __init__(self, size=None, embed_dim=None, tables=None, angle_range=0.1,
-                 inverse_of=None, aperture="clip"):
+                 inverse_of=None, aperture="clip", aperture_change="tolerance"):
+        if aperture_change not in ("tolerance", "signed"):
+            raise ValueError("aperture_change must be 'tolerance' or 'signed'.")
+        self.aperture_change = aperture_change
         if tables is not None:
             super().__init__(axes=tables.axis_embedding, apertures=tables.aperture_embedding,
                              angle_range=tables.embedding_range, inverse_of=inverse_of)
@@ -278,12 +295,30 @@ class ConeRotation(_ConeRelations):
             raise ValueError("aperture must be 'clip' or 'wrap'.")
         self.aperture = aperture
 
+    def _change(self, ids):
+        d_axis, d_aperture = self.angles(ids)
+        return d_axis, (d_aperture if self.aperture_change == "signed" else d_aperture.abs())
+
+    def related(self, ids, x, y):
+        """Whether :math:`y` lies within :math:`|\\delta_r|` of :math:`x + \\theta_r` in
+        every coordinate (``aperture_change="tolerance"``), ``(B, P)``."""
+        if self.aperture_change != "tolerance":
+            raise ConstructorUnavailable(
+                "With aperture_change='signed' the rotation is not a set of pairs of points.")
+        d_axis, d_aperture = self._change(ids)
+        turn = y.unsqueeze(0) - x.unsqueeze(0) - d_axis.unsqueeze(1)
+        gap = th.abs(th.atan2(th.sin(turn), th.cos(turn)))
+        return (gap <= d_aperture.unsqueeze(1) + 1e-6).all(dim=-1)
+
     def image(self, ids, region):
-        return region.rotate(*self.angles(ids), aperture=self.aperture)
+        d_axis, d_aperture = self._change(ids)
+        return region.rotate(d_axis, d_aperture, aperture=self.aperture)
 
     def _derived_preimage(self, ids, region):
-        d_axis, d_aperture = self.angles(ids)
-        return region.rotate(-d_axis, -d_aperture, aperture=self.aperture)
+        d_axis, d_aperture = self._change(ids)
+        if self.aperture_change == "signed":
+            d_aperture = -d_aperture
+        return region.rotate(-d_axis, d_aperture, aperture=self.aperture)
 
 
 register_relation_model("angle rotation")(ConeRotation)

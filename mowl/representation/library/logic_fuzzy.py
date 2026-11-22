@@ -41,12 +41,12 @@ from mowl.representation.measures import RegionMeasure
 from mowl.representation.methods import (register_class_model, register_measure,
                                          register_method, register_relation_model)
 from mowl.representation.objectives import Objective
-from mowl.representation.regions import Region
+from mowl.representation.regions import ConstructorUnavailable, Region
 from mowl.representation.relation_models import Relations
 from mowl.representation.vocabulary import ClassModel, Construction, RelationModel
 from mowl.representation.adapters import register_adapter
 
-__all__ = ["FuzzySet", "Family", "Product", "Goedel", "Lukasiewicz", "LogitGoedel",
+__all__ = ["FuzzySet", "LogitSet", "Family", "Product", "Goedel", "Lukasiewicz", "LogitGoedel",
            "FAMILIES", "get_family", "register_family", "TruthTableClasses",
            "HalfAxisClasses", "NetworkClasses", "DomainElements", "MembershipNetwork",
            "Domain", "TruthMatrix", "IncidenceMatrices", "PairNetworkRelations",
@@ -129,6 +129,13 @@ class FuzzySet(Region):
         return FuzzySet(self.family.or_(self.values, other.values), self.family)
 
 
+@dataclass(frozen=True)
+class LogitSet(FuzzySet):
+    """A fuzzy set given by logits (the half-axis cones of Al-cone): an element belongs to
+    the set iff its logit is positive. Its own region class, so that its default measure
+    (:class:`ConeMeasure`) is not the measure of degrees in ``[0, 1]``."""
+
+
 # =========================================================================================
 # the operator family
 # =========================================================================================
@@ -142,6 +149,9 @@ class Family:
 
     part = Construction.FUZZY.value
     name = ""
+    #: Whether the values are logits (real numbers, an element belongs iff its logit is
+    #: positive) rather than degrees in ``[0, 1]``.
+    logits = False
 
     def and_(self, x, y):
         raise NotImplementedError
@@ -224,6 +234,7 @@ class LogitGoedel(Family):
     """
 
     name = "godel (logits)"
+    logits = True
 
     def __init__(self, tau=0.0, source=None):
         self._tau = tau
@@ -344,7 +355,7 @@ class HalfAxisClasses(_FuzzyClasses, Classes):
         every loss that involves them. Default ``1.0``; the earlier mOWL module used ``1e4``.
     """
 
-    region = FuzzySet
+    region = LogitSet
     part = ClassModel.AXIS_CONE.value
     exact_conjunction = True
 
@@ -362,7 +373,7 @@ class HalfAxisClasses(_FuzzyClasses, Classes):
     def forward(self, ids):
         values = _constants(self.centres(ids), ids, self.top_index, self.bottom_index,
                             self.constant_logit, -self.constant_logit)
-        return FuzzySet(values, self.family)
+        return LogitSet(values, self.family)
 
 
 class MembershipNetwork(nn.Module):
@@ -471,6 +482,7 @@ class _FuzzyRelations(Relations):
     :math:`\\sup_a x(a) \\sqcap r(a, b)`, :meth:`preimage` the existential restriction."""
 
     part = RelationModel.FUZZY_RELATION.value
+    accepts = (FuzzySet,)
 
     def __init__(self, size=None, domain=None, vectors=None, init_std=1.0):
         super().__init__()
@@ -485,13 +497,22 @@ class _FuzzyRelations(Relations):
         """The tables of the relations ``ids``: ``(B, N, N)``, source first."""
         raise NotImplementedError
 
+    def _domain_of(self, region):
+        if not isinstance(region, FuzzySet) or region.values.shape[-1] != self.domain:
+            size = region.values.shape[-1] if isinstance(region, FuzzySet) else None
+            raise ConstructorUnavailable(
+                f"{type(self).__name__} relates the {self.domain} elements of its domain; "
+                f"the region is a {type(region).__name__} over {size} elements.")
+        return region.family
+
     def image(self, ids, region):
-        family = region.family
+        family = self._domain_of(region)
         return FuzzySet(family.sup(family.and_(self.matrix(ids), region.values.unsqueeze(-1)),
                                    -2), family)
 
     def preimage(self, ids, region):
-        return FuzzySet(region.family.exists(self.matrix(ids), region.values), region.family)
+        family = self._domain_of(region)
+        return FuzzySet(family.exists(self.matrix(ids), region.values), family)
 
 
 class TruthMatrix(_FuzzyRelations):
@@ -534,6 +555,7 @@ class PairNetworkRelations(Relations):
     """
 
     part = RelationModel.NETWORK.value
+    accepts = (FuzzySet,)
 
     def __init__(self, size=None, embed_dim=None, vectors=None, network=None, domain=None,
                  role_pairs="all"):
@@ -587,6 +609,15 @@ class PairNetworkRelations(Relations):
 
 class _FuzzyMeasure(RegionMeasure):
     accepts = (FuzzySet,)
+    #: Whether the measure compares logits (:class:`LogitGoedel`) rather than degrees.
+    logits = False
+
+    def refuses(self, region):
+        if region.family.logits != self.logits:
+            return (f"compares fuzzy sets of {'logits' if self.logits else 'degrees'}, "
+                    f"not of {'logits' if region.family.logits else 'degrees'} (family "
+                    f"{type(region.family).__name__}).")
+        return None
 
     def member(self, point, region, margin=0.0):
         """Cost of the individual ``point`` being in ``region``."""
@@ -702,6 +733,7 @@ class ConeMeasure(_FuzzyMeasure):
     """
 
     part = "fuzzy implication"
+    logits = True
 
     def __init__(self, empty_margin=0.1, tau=0.0, source=None):
         self.empty_margin = empty_margin
@@ -736,7 +768,7 @@ class ConeMeasure(_FuzzyMeasure):
 
 register_measure("mean violation", default_for=(FuzzySet,))(MeanViolation)
 register_measure("conflict")(ConflictMeasure)
-register_measure("half-axis hinge")(ConeMeasure)
+register_measure("half-axis hinge", default_for=(LogitSet,))(ConeMeasure)
 
 
 # =========================================================================================

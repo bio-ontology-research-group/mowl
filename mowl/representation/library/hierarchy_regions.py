@@ -21,7 +21,7 @@ import torch as th
 from mowl.nn.lm import hyperbolic as H
 from mowl.nn.order.manifolds import (Euclidean, Hyperboloid, PoincareBall, Sphere,
                                      UpperHalfSpace)
-from mowl.representation.regions import CornerBox, Region
+from mowl.representation.regions import ConstructorUnavailable, CornerBox, Region
 
 __all__ = ["CodedBox", "Point", "OrderCone", "ConePoint", "Disk", "CurvedBall",
            "depth", "MANIFOLDS"]
@@ -67,6 +67,17 @@ class ConePoint(Point):
 
     aperture: th.Tensor = None
 
+    def contains(self, points):
+        """Whether the points ``(P, n)`` of the Poincare ball lie in the entailment cones,
+        ``(B, P)``: the angle at the apex between the axis and the geodesic to the point is
+        at most the half-aperture (the cone contains its apex)."""
+        from mowl.nn.order import cones as C
+        x = self.centre.unsqueeze(1).expand(-1, points.shape[0], -1)
+        y = points.to(self.centre.dtype).unsqueeze(0).expand(len(self), -1, -1)
+        angle = C.axis_angle(x, y)
+        apex = th.linalg.norm(x - y, dim=-1) < 1e-6
+        return (angle <= self.aperture.unsqueeze(-1) + 1e-6) | apex
+
 
 @dataclass(frozen=True)
 class Disk(Point):
@@ -74,6 +85,16 @@ class Disk(Point):
     formal disk, Suzuki et al. 2019)."""
 
     radius: th.Tensor = None
+
+    def contains(self, points):
+        """Whether the points ``(P, n)`` lie within ``radius`` of the centre in the metric of
+        the manifold, ``(B, P)`` (a disk of negative radius, a generalised disk, contains no
+        point: its order is that of :class:`~.hierarchy_measures.Protrusion`, not of sets)."""
+        manifold = self.manifold
+        x = self.centre.unsqueeze(1).expand(-1, points.shape[0], -1)
+        y = points.to(self.centre.dtype).unsqueeze(0).expand(len(self), -1, -1)
+        distance = manifold.distance(x, y).reshape(len(self), -1)
+        return distance <= self.radius.reshape(-1, 1)
 
 
 # -- spaces ------------------------------------------------------------------------------
@@ -126,7 +147,8 @@ def depth(manifold, x):
         origin = th.zeros_like(x)
         origin[..., -1] = 1.0
         return manifold.distance(x, origin)
-    raise TypeError(f"{type(manifold).__name__} has no origin, so its points have no depth.")
+    raise ConstructorUnavailable(
+        f"{type(manifold).__name__} has no origin, so its points have no depth.")
 
 
 #: Manifolds by name (the geometries of Disk Embeddings and of the cones).

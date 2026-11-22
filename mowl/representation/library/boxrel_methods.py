@@ -80,7 +80,8 @@ def transbox(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.
         relations = TranslationBoxes(nb_relations, embed_dim, convention="x-y")
         individuals = _box_points(nb_individuals, embed_dim) if nb_individuals else None
     reference = formulation == "reference"
-    measure = MaskedBounds(separation="every", empty_weight=1.0 if reference else 0.5,
+    measure = MaskedBounds(separation="every", extent="norm", conjunction="nonempty",
+                           empty_weight=1.0 if reference else 0.5,
                            gci1="overlap" if reference else "inclusion")
     regularizers = (MaxNormPenalty("relation_model.offsets", max_norm=1.0, weight=reg_factor),)
     if not reference:
@@ -139,15 +140,17 @@ def _boxel_geometry(geometry, objective, nb_classes, nb_relations, nb_individual
     if t is not None:
         classes = MinDeltaBoxes(mins=t.min_embedding, deltas=t.delta_embedding)
         relations = Affine(vectors=t.relation_embedding, scales=t.scaling_embedding,
-                           scale=scale, role_chain_composition=composition)
+                           scale=scale, role_chain_composition=composition,
+                           role_scale="at_most")
         individuals = None if t.ind_embedding is None else MinDeltaBoxes(
             mins=t.ind_embedding, deltas=t.ind_delta_embedding)
     else:
         classes = MinDeltaBoxes(nb_classes, embed_dim)
         relations = Affine(nb_relations, embed_dim, scale=scale,
-                           role_chain_composition=composition)
+                           role_chain_composition=composition, role_scale="at_most")
         individuals = MinDeltaBoxes(nb_individuals, embed_dim) if nb_individuals else None
-    return geometry(classes, relations, VolumeShare(temperature), objective,
+    return geometry(classes, relations, VolumeShare(temperature, strict_margin="ignore"),
+                    objective,
                     individuals=individuals, regularizers=regularizers)
 
 
@@ -264,7 +267,9 @@ def elkem(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
         individuals = _box_points(nb_individuals, embed_dim) if nb_individuals else None
     objective = ELKEmObjective(margin, abox_threshold, gci2_overlap=not sound)
     regularizers = (SizeCapPenalty(weight=size_weight),) if size_weight else ()
-    return ComposedGeometry(classes, relations, AveragedBounds(), objective,
+    return ComposedGeometry(classes, relations,
+                            AveragedBounds(extent="norm", conjunction="nonempty",
+                                           empty_boxes="formula"), objective,
                             individuals=individuals, regularizers=regularizers)
 
 

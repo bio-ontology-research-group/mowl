@@ -27,6 +27,35 @@ class Relations(nn.Module):
     """
 
     part = ""
+    #: The region classes whose regions :meth:`image` and :meth:`preimage` map (``None``:
+    #: every region that can be translated or whatever the model needs; a model that maps
+    #: only some families says which, so that a combination that cannot read
+    #: :math:`\\exists r.C` raises :class:`ConstructorUnavailable` instead of failing inside
+    #: a formula).
+    accepts = None
+    #: Whether a relation is a function (every point has exactly one successor, given by
+    #: :meth:`successor`); the preimage of a region is then the set of points whose
+    #: successor lies in it.
+    functional = False
+
+    def check_region(self, region_class):
+        """Raise :class:`ConstructorUnavailable` if the regions of ``region_class`` are not
+        mapped by this relation model."""
+        if self.accepts is not None and not issubclass(region_class, self.accepts):
+            raise ConstructorUnavailable(
+                f"{type(self).__name__} maps {[c.__name__ for c in self.accepts]} regions, "
+                f"not {region_class.__name__}: this combination of parts cannot read "
+                f"exists r.C.")
+
+    def related(self, ids, x, y):
+        """``(B, P)`` boolean: whether the points ``x[p]`` and ``y[p]`` (``(P, d)`` each) are
+        a pair of the relation of row ``b`` of ``ids``. This is the meaning of the relation
+        model: :meth:`preimage` must be the set of points with a successor in the region,
+        :meth:`image` the set of successors of its points, and the role axioms must hold
+        for these pairs. A relation model that is not a set of pairs of points (a relation
+        between regions, a ranking score) has no such test."""
+        raise ConstructorUnavailable(
+            f"{type(self).__name__} does not say which pairs of points it relates.")
 
     def image(self, ids, region):
         """:math:`\\{y : (x, y) \\in r, x \\in \\text{region}\\}` for the relations
@@ -104,6 +133,7 @@ class Translation(Relations):
     """
 
     part = "translation"
+    functional = True
 
     def __init__(self, size=None, embed_dim=None, vectors=None, direction=None):
         super().__init__()
@@ -116,6 +146,17 @@ class Translation(Relations):
                 nn.init.uniform_(vectors.weight, a=-1, b=1)
                 vectors.weight /= th.linalg.norm(vectors.weight, dim=1, keepdim=True)
         self.vectors = vectors
+
+    def successor(self, ids, x):
+        """The successor :math:`x + v_r` of every point ``x`` (``(P, d)``) for every relation
+        of ``ids``: ``(B, P, d)``."""
+        return x.unsqueeze(0) + self.vectors(ids).unsqueeze(1)
+
+    def related(self, ids, x, y, tolerance=1e-5):
+        """:math:`y = x + v_r` (up to ``tolerance``, a translation relates sets of measure
+        zero)."""
+        gap = th.linalg.norm(y.unsqueeze(0) - self.successor(ids, x), dim=-1)
+        return gap <= tolerance
 
     def image(self, ids, region):
         return region.translate(self.vectors(ids))

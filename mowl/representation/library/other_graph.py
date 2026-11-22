@@ -272,8 +272,9 @@ class TripleScore(RegionMeasure):
         :func:`triple_geometry`.
     """
 
-    accepts = (Point, Ball, Box)
+    accepts = (Point, Ball, Box, Related)
     part = "triple score"
+    reading = "score"
     exact_intersection = False
 
     def __init__(self, relations=None):
@@ -296,6 +297,10 @@ class TripleScore(RegionMeasure):
                     "TripleScore needs a relation model for the subclass relation: build "
                     "the geometry with triple_geometry or the methods graph_kge/boxe/"
                     "expressive.")
+            if not hasattr(relations, "subclass"):
+                raise ConstructorUnavailable(
+                    f"{type(relations).__name__} has no subclass relation, so a triple score "
+                    f"cannot read an inclusion of classes.")
             ids = th.full((len(a),), relations.subclass, dtype=th.long,
                           device=a.centre.device)
         if hasattr(relations, "cost"):

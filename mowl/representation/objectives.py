@@ -321,6 +321,7 @@ class Objective:
             raise NotImplementedError(
                 f"There is no negative loss of {form!r} (only {sorted(self.neg_forms)}); "
                 f"use strict_negatives=False to get the positive loss instead.")
+        _check_relation_model(g, form)
         cost = self._form_cost(g, form, rows, neg)
         return cost * self.weights[form] if form in self.weights else cost
 
@@ -476,7 +477,10 @@ class Objective:
             return self.gci1(g, rows[:, :3], neg)
         c, d = g.classes(rows[:, 0]), g.classes(rows[:, 1])
         if self._neg(neg, "gci1_bot"):
-            cost = g.measure.intersection_nonempty(c, d, -self.margin, self.epsilon)
+            # the margin in the sense of the objective: strict (the intersection has to be
+            # non-empty with room), or a slack
+            margin = -self.margin if self.slack else self.margin
+            cost = g.measure.intersection_nonempty(c, d, margin, self.epsilon)
         elif self.gci1_bot_reading == "product":
             cost = g.measure.product_overlap(c, d)
         else:
@@ -522,6 +526,24 @@ class Objective:
         cost = relations.role_chain(rows[:, 0], rows[:, 1], rows[:, 2], g.measure,
                                     self._m_of(g)).reshape(-1, 1)
         return cost
+
+
+#: The forms whose regions go through the relation model, and the part whose regions it maps.
+_RELATION_FORMS = {"gci2": "class_model", "gci3": "class_model", "gci3_bot": "class_model",
+                   "object_property_assertion": "individual_model"}
+
+
+def _check_relation_model(g, form):
+    """Raise :class:`ConstructorUnavailable` if the relation model of ``g`` does not map the
+    regions of the class (individual) model that ``form`` gives it."""
+    part = _RELATION_FORMS.get(form)
+    relations = getattr(g, "relation_model", None)
+    if part is None or relations is None or not hasattr(relations, "check_region"):
+        return
+    model = getattr(g, part, None)
+    region = getattr(model, "region", None)
+    if isinstance(region, type):
+        relations.check_region(region)
 
 
 def _check(value, allowed, name):

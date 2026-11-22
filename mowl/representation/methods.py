@@ -133,6 +133,12 @@ def compose(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, classes="b
                             individuals=individual_model, regularizers=regularizers)
 
 
+def _elbe_bounds():
+    """The box measure of ELBE's losses: separated in every coordinate, the size of a box
+    is the norm of its half-widths, a conjunction must not be empty."""
+    return Bounds(separation="every", extent="norm", conjunction="nonempty")
+
+
 def _norm_penalty(reg_norm, individuals):
     from mowl.training.regularization import NormPenalty
     names = ("class_embed", "ind_embed") if individuals else ("class_embed",)
@@ -161,7 +167,9 @@ def elem(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1, r
         individuals = BallClasses(centres=t.ind_embed, radii=t.ind_rad)
     objective = Objective.elem(margin, all_negatives=all_negatives,
                                linear_negative=linear_negative, epsilon=epsilon, gci3=gci3)
-    return ComposedGeometry(classes, relations, CentreDistance(gci1_radius_term), objective,
+    return ComposedGeometry(classes, relations,
+                            CentreDistance(gci1_radius_term, conjunction="published"),
+                            objective,
                             individuals=individuals,
                             regularizers=_norm_penalty(reg_norm, individuals is not None))
 
@@ -186,7 +194,7 @@ def elbe(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
         individuals = BoxClasses(centres=t.ind_embed, offsets=t.ind_offset)
     objective = Objective.elbe(margin, all_negatives=all_negatives, epsilon=epsilon,
                                gci3=gci3)
-    return ComposedGeometry(classes, relations, Bounds(separation="every"), objective,
+    return ComposedGeometry(classes, relations, _elbe_bounds(), objective,
                             individuals=individuals)
 
 

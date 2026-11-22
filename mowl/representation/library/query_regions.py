@@ -87,10 +87,21 @@ class SectorCone(Region):
         new = th.clamp(new, 0.0, pi) if aperture == "clip" else wrap_angle(new)
         return SectorCone(wrap_angle(self.axis + d_axis), new)
 
+    def contains(self, points):
+        """Whether the points ``(P, d)`` (one angle per coordinate) lie in every sector,
+        ``(B, P)``: within ``|aperture|`` of the axis on the circle."""
+        turn = points.unsqueeze(0) - self.axis.unsqueeze(1)
+        gap = th.abs(th.atan2(th.sin(turn), th.cos(turn)))
+        return (gap <= th.abs(self.aperture).unsqueeze(1)).all(dim=-1)
+
     def complement(self, signed=False):
-        """The closure of the complement: the axis turned by ``pi``, the aperture
-        ``pi - |aperture|`` (default, in ``[0, pi]``). ``signed=True``: ``pi - aperture`` as
-        published (ConE), which exceeds ``pi`` for a negative aperture."""
+        """The closure of the complement *per coordinate*: the axis turned by ``pi``, the
+        aperture ``pi - |aperture|`` (default, in ``[0, pi]``). ``signed=True``: ``pi -
+        aperture`` as published (ConE), which exceeds ``pi`` for a negative aperture.
+
+        A cone is a product of sectors, and the product of the complements is not the
+        complement of the product (it misses the points that are outside in some
+        coordinates and inside in others): this negation is approximate, as ConE's."""
         axis = th.where(self.axis >= 0, self.axis - pi, self.axis + pi)
         return SectorCone(axis, pi - (self.aperture if signed else th.abs(self.aperture)))
 
@@ -121,6 +132,13 @@ class ConeClasses(Classes):
     region = SectorCone
     part = "sector cone"
     exact_conjunction = False
+
+    @property
+    def extra_parts(self):
+        """The complement is taken per coordinate (:meth:`SectorCone.complement`): the
+        product of the complements is a strict subset of the complement of the product, so
+        negation is approximate (it under-approximates :math:`\\neg C`)."""
+        return {"negation": "approximate"}
 
     def __init__(self, size=None, embed_dim=None, centres=None, apertures=None):
         super().__init__()
@@ -176,12 +194,16 @@ class ConeBounds(RegionMeasure):
         return th.relu(overlap.min(dim=1, keepdim=True).values)
 
     def empty(self, a, margin=0.0):
+        """Zero iff some sector has no aperture (the product then contains no sampled
+        point; the norm of the apertures, used before, was zero only if all had none)."""
         self.check(a)
-        return th.linalg.norm(a.aperture, dim=1, keepdim=True)
+        return th.relu(th.abs(a.aperture).amin(dim=1, keepdim=True) + margin)
 
     def nonempty(self, a, epsilon=0.0):
+        """Zero iff every sector has aperture at least ``epsilon`` (the norm, used before,
+        was zero also for a product with a sector of no aperture)."""
         self.check(a)
-        return th.relu(epsilon - th.linalg.norm(a.aperture, dim=1, keepdim=True))
+        return th.relu(epsilon - th.abs(a.aperture).amin(dim=1, keepdim=True))
 
 
 def beta_kl(a1, b1, a2, b2):
@@ -204,6 +226,7 @@ class BetaKL(RegionMeasure):
     accepts = (BetaRegion,)
     part = "divergence"
     exact_intersection = False
+    reading = "score"
 
     def inside(self, a, b, margin=0.0):
         self.check(a, b)

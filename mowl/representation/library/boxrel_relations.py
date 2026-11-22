@@ -75,6 +75,7 @@ class TranslationBoxes(Relations):
     """
 
     part = "box of translations"
+    accepts = (Box, Ball)
 
     def __init__(self, size=None, embed_dim=None, vectors=None, offsets=None,
                  activation="abs", convention="y-x", inverse_of=None, init_range=None,
@@ -103,6 +104,20 @@ class TranslationBoxes(Relations):
     def box(self, ids):
         """The box of translations of the relations ``ids``."""
         return Box(self.vectors(ids), self.activation(self.offsets(ids)))
+
+    def related(self, ids, x, y, region=Box):
+        """Whether :math:`y - x` (``convention="y-x"``; :math:`x - y` for ``"x-y"``) lies in
+        the box of translations, ``(B, P)``. In a geometry of balls (``region=Ball``) the
+        translations are the ball of radius :math:`\\lVert o_r \\rVert` around :math:`c_r`
+        (the smallest ball around the box), so that the preimage of a ball is the ball
+        grown by that radius, as :meth:`preimage` computes it. Without ``inverse_of``."""
+        box = self.box(ids)
+        shift = self.sign * (y - x)
+        if issubclass(region, Ball):
+            radius = th.linalg.norm(box.offset, dim=-1, keepdim=True)
+            gap = shift.unsqueeze(0) - box.centre.unsqueeze(1)
+            return th.linalg.norm(gap, dim=-1) <= radius + 1e-6
+        return Box(box.centre, box.offset).contains(shift)
 
     def _grow(self, region, width):
         if isinstance(region, Box):
@@ -135,13 +150,29 @@ class TranslationBoxes(Relations):
         offset = box.offset - region.offset
         return Box(region.centre - self.sign * box.centre, th.relu(offset) if clamp else offset)
 
+    def translations(self, ids, measure=None):
+        """The set of translations of the relations ``ids`` as a region the measure compares:
+        the box, or, for a measure of balls, the ball of radius :math:`\\lVert o_r \\rVert`
+        (what the relation is in a geometry of balls, see :meth:`related`)."""
+        box = self.box(ids)
+        accepts = getattr(measure, "accepts", ())
+        if accepts and not issubclass(Box, accepts) and issubclass(Ball, accepts):
+            radius = th.linalg.norm(box.offset, dim=-1, keepdim=True)
+            return Ball(box.centre, radius)
+        return box
+
     def role_inclusion(self, sub, sup, measure, margin=0.0):
-        return measure.inside(self.box(sub), self.box(sup), margin)
+        """The set of translations of ``sub`` lies in that of ``sup``."""
+        return measure.inside(self.translations(sub, measure),
+                              self.translations(sup, measure), margin)
 
     def role_chain(self, first, second, sup, measure, margin=0.0):
-        a, b = self.box(first), self.box(second)
-        return measure.inside(Box(a.centre + b.centre, a.offset + b.offset), self.box(sup),
-                              margin)
+        """The Minkowski sum of the two sets of translations (the translations of the
+        composition) lies in that of ``sup``."""
+        a, b = self.translations(first, measure), self.translations(second, measure)
+        both = Ball(a.centre + b.centre, a.radius + b.radius) if isinstance(a, Ball) \
+            else Box(a.centre + b.centre, a.offset + b.offset)
+        return measure.inside(both, self.translations(sup, measure), margin)
 
     def flat(self):
         """One flat vector per relation, for inspection."""
@@ -169,21 +200,33 @@ class Affine(Relations):
         (:math:`f_2 t_1 + t_2`); ``"as_released"`` is the expression mOWL had before
         (:math:`f_1 t_1 + t_2`).
 
-    Role axioms (as in :class:`~mowl.nn.BoxELModule`; the measure and margin are not used): a
-    role is determined by its map, so :math:`r \\sqsubseteq s` costs the distance of the shifts
-    plus the part of the factor of :math:`r` that exceeds the factor of :math:`s`
-    (``relu(f_r / f_s - 1)``, one-sided: the image of a box under :math:`r` must not be larger
-    than under :math:`s`), and :math:`r_1 \\circ r_2 \\sqsubseteq s` the same for the composed
-    map (first :math:`r_1`, then :math:`r_2`).
+    Role axioms (the measure and margin are not used): a role is a function, so
+    :math:`r \\sqsubseteq s` holds iff the two maps are equal, and
+    :math:`r_1 \\circ r_2 \\sqsubseteq s` iff the composed map (first :math:`r_1`, then
+    :math:`r_2`) equals the map of :math:`s`. The cost is the distance of the shifts plus a
+    term for the factors:
+
+    :param role_scale: ``"equal"`` (default): :math:`\\lVert f_r / f_s - 1 \\rVert`, zero iff
+        the factors are equal (the maps are those :meth:`image` uses, with ``eps``).
+        ``"at_most"``: :math:`\\lVert [f_r / f_s - 1]_+ \\rVert`, zero as soon as the factor of
+        :math:`r` does not exceed that of :math:`s` (the loss of the BoxEL code and of
+        :class:`~mowl.nn.BoxELModule`, with the raw factor of :math:`r`); a zero cost then
+        does not imply the inclusion (two different functions do not include each other).
     """
 
     part = "affine map"
     SCALES = ("positive", "mirror", "signed")
     COMPOSITIONS = ("in_order", "as_released")
 
+    functional = True
+    accepts = (Box,)
+
     def __init__(self, size=None, embed_dim=None, vectors=None, scales=None, eps=1e-8,
-                 scale="positive", role_chain_composition="in_order"):
+                 scale="positive", role_chain_composition="in_order", role_scale="equal"):
         super().__init__()
+        if role_scale not in ("equal", "at_most"):
+            raise ValueError("role_scale must be 'equal' or 'at_most'.")
+        self.role_scale = role_scale
         if scale not in self.SCALES:
             raise ValueError(f"scale must be one of {self.SCALES}.")
         if role_chain_composition not in self.COMPOSITIONS:
@@ -206,6 +249,14 @@ class Affine(Relations):
     def _spread(self, offset, factor):
         return offset * (factor if self.scale == "signed" else factor.abs())
 
+    def successor(self, ids, x):
+        """:math:`f_r \\odot x + t_r` of every point ``x`` (``(P, d)``), ``(B, P, d)``."""
+        return x.unsqueeze(0) * self.factor(ids).unsqueeze(1) + self.vectors(ids).unsqueeze(1)
+
+    def related(self, ids, x, y, tolerance=1e-5):
+        """:math:`y = f_r \\odot x + t_r` (up to ``tolerance``)."""
+        return th.linalg.norm(y.unsqueeze(0) - self.successor(ids, x), dim=-1) <= tolerance
+
     def image(self, ids, region):
         f = self.factor(ids)
         _boxes(region, self)
@@ -217,22 +268,26 @@ class Affine(Relations):
         return Box((region.centre - self.vectors(ids)) / f,
                    self._spread(region.offset, 1 / f))
 
-    @staticmethod
-    def _cost(translation_gap, composed_scale, sup_scale):
+    def _cost(self, translation_gap, composed_scale, sup_scale):
+        excess = composed_scale / sup_scale - 1
+        excess = th.relu(excess) if self.role_scale == "at_most" else excess
         return (th.linalg.norm(translation_gap, dim=1, keepdim=True)
-                + th.linalg.norm(th.relu(composed_scale / sup_scale - 1), dim=1,
-                                 keepdim=True))
+                + th.linalg.norm(excess, dim=1, keepdim=True))
+
+    def _role_factor(self, ids):
+        """The factor of a role in its axioms: that of the map (``"equal"``), or the raw
+        one of the BoxEL code (``"at_most"``)."""
+        return self.factor(ids) if self.role_scale == "equal" else self._raw(ids)
 
     def role_inclusion(self, sub, sup, measure=None, margin=0.0):
-        return self._cost(self.vectors(sub) - self.vectors(sup), self._raw(sub),
+        return self._cost(self.vectors(sub) - self.vectors(sup), self._role_factor(sub),
                           self.factor(sup))
 
     def role_chain(self, first, second, sup, measure=None, margin=0.0):
-        scale = self._raw(second) if self.role_chain_composition == "in_order" \
-            else self._raw(first)
+        f1, f2 = self._role_factor(first), self._role_factor(second)
+        scale = f2 if self.role_chain_composition == "in_order" else f1
         shift = scale * self.vectors(first) + self.vectors(second)
-        return self._cost(shift - self.vectors(sup), self._raw(first) * self._raw(second),
-                          self.factor(sup))
+        return self._cost(shift - self.vectors(sup), f1 * f2, self.factor(sup))
 
 
 @register_relation_model("affine map with range and error box")
@@ -253,6 +308,7 @@ class AffineBoxes(Relations):
     """
 
     part = "affine map with range and error box"
+    accepts = (Box,)
 
     def __init__(self, size=None, embed_dim=None, vectors=None, range_centres=None,
                  range_offsets=None, error_offsets=None, slopes=None, eps=1e-5, sound=True):
@@ -281,6 +337,13 @@ class AffineBoxes(Relations):
 
     def slope(self, ids):
         return th.abs(self.slopes(ids)) + self.eps
+
+    def related(self, ids, x, y):
+        """:math:`y \\in R_r` and :math:`x \\in T_r(y) \\oplus E_r`, ``(B, P)``."""
+        in_range = self.range(ids).contains(y)
+        mapped = y.unsqueeze(0) * self.slope(ids).unsqueeze(1) + self.vectors(ids).unsqueeze(1)
+        close = (th.abs(x.unsqueeze(0) - mapped) <= self.error(ids).unsqueeze(1) + 1e-6)
+        return in_range & close.all(dim=-1)
 
     def image_with_error(self, ids, region):
         """:math:`T_r(A) \\oplus E_r`, without restricting :math:`A` to the range."""
