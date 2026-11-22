@@ -80,6 +80,12 @@ class UnionOfBoxes(Region):
     def components(self):
         return self.centre.shape[1]
 
+    def contains(self, points):
+        """Whether the points ``(P, d)`` lie in some box of the union, ``(B, P)``."""
+        batch, k, d = self.centre.shape
+        boxes = Box(self.centre.reshape(-1, d), self.offset.reshape(-1, d))
+        return boxes.contains(points).reshape(batch, k, -1).any(dim=1)
+
     def is_empty(self):
         """Every box of the union is empty (negative half-width in some coordinate)."""
         return (self.offset < 0).any(dim=-1).all(dim=-1)
@@ -111,7 +117,8 @@ def _union(region):
     if isinstance(region, Box):
         return UnionOfBoxes(region.centre.unsqueeze(1), region.offset.unsqueeze(1),
                             getattr(region, "bump", None))
-    raise TypeError(f"Expected boxes or unions of boxes, got {type(region).__name__}.")
+    raise ConstructorUnavailable(
+        f"Expected boxes or unions of boxes, got {type(region).__name__}.")
 
 
 def _expand(a, b):
@@ -423,6 +430,10 @@ class HeadTailRelations(Relations):
     """
 
     part = "head and tail boxes"
+    #: Not a set of pairs of points: whether :math:`(x, y)` is related depends on the bumps
+    #: of the *classes* of :math:`x` and :math:`y`, so :meth:`related` is not defined; the
+    #: relation is read on regions (:meth:`subsumed`).
+    accepts = (Box, Ball, UnionOfBoxes)
 
     def __init__(self, size=None, embed_dim=None, shape="box", head_centres=None,
                  head_offsets=None, tail_centres=None, tail_offsets=None):
@@ -529,6 +540,7 @@ class PairUnions(Relations):
     """
 
     part = "region over pairs"
+    accepts = (Box, UnionOfBoxes)
 
     def __init__(self, size=None, embed_dim=None, components=5, bound=1.0, table=None,
                  generator=None):
@@ -565,6 +577,16 @@ class PairUnions(Relations):
         centre, offset = self._boxes(ids)
         d = self.embed_dim
         return UnionOfBoxes(centre[..., d:], offset[..., d:])
+
+    def related(self, ids, x, y):
+        """Whether the pair :math:`(x, y)` lies in the union of boxes of the relation,
+        ``(B, P)``. (:meth:`preimage` is the soft projection of the volume-based multibox,
+        an approximation of :math:`\\exists r.D` that only the sampled measure reads.)"""
+        centre, offset = self._boxes(ids)
+        pairs = th.cat([x, y], dim=-1)
+        batch, k, width = centre.shape
+        boxes = Box(centre.reshape(-1, width), offset.reshape(-1, width))
+        return boxes.contains(pairs).reshape(batch, k, -1).any(dim=1)
 
     def preimage(self, ids, region):
         centre, offset = self._boxes(ids)
@@ -682,6 +704,20 @@ class UnionMeasure(RegionMeasure):
         return each.reshape(batch, k).amin(dim=1, keepdim=True)
 
     def intersection_inside(self, a, b, c, margin=0.0):
+        """With a base measure that reads the conjunction exactly (``Bounds(conjunction=
+        "exact")``, the default): every intersection of a component of ``a`` with one of
+        ``b`` lies in some component of ``c`` (empty ones do: a sufficient condition for
+        :math:`A \\cap B \\subseteq C`). Otherwise the gated loss of MultiBoxEL and
+        MultiELBE described in the class."""
+        if getattr(self.base, "conjunction", None) == "exact":
+            a, b = _union(a), _union(b)
+            batch, ka, d = a.centre.shape
+            kb = b.centre.shape[1]
+            ca, oa, cb, ob = _expand(a, b)
+            both, _ = Box(ca, oa).intersect(Box(cb, ob), signed=True)
+            pairs = UnionOfBoxes(both.centre.reshape(batch, ka * kb, d),
+                                 both.offset.reshape(batch, ka * kb, d))
+            return self.inside(pairs, c, margin)
         a, b, c = _union(a), _union(b), _union(c)
         batch, ka, d = a.centre.shape
         kb, kc = b.centre.shape[1], c.centre.shape[1]
@@ -763,6 +799,14 @@ class SampledVolume(RegionMeasure, nn.Module):
         for p in (points or ()):
             self._add(p)
 
+    def refuses(self, region):
+        """Regions without a point-membership function cannot be sampled."""
+        try:
+            membership_sampler(region, self.temperature, self.aggregate)
+        except ConstructorUnavailable as error:
+            return str(error)
+        return None
+
     def _add(self, points):
         self.register_buffer(f"points_{points.shape[1]}", points, persistent=False)
         self._dims.append(points.shape[1])
@@ -802,16 +846,16 @@ class SampledVolume(RegionMeasure, nn.Module):
         return self.apart(MembershipIntersection((a, b)), c, margin)
 
     def intersection_nonempty(self, a, b, margin=0.0, epsilon=0.0):
-        raise NotImplementedError("SampledVolume has no measure of emptiness.")
+        raise ConstructorUnavailable("SampledVolume has no measure of emptiness.")
 
     def meets(self, a, b, margin=0.0):
-        raise NotImplementedError("SampledVolume does not define meets.")
+        raise ConstructorUnavailable("SampledVolume does not define meets.")
 
     def empty(self, a, margin=0.0):
-        raise NotImplementedError("SampledVolume does not define empty.")
+        raise ConstructorUnavailable("SampledVolume does not define empty.")
 
     def nonempty(self, a, epsilon=0.0):
-        raise NotImplementedError("SampledVolume does not define nonempty.")
+        raise ConstructorUnavailable("SampledVolume does not define nonempty.")
 
 
 register_measure("sampled volume")(SampledVolume)

@@ -26,7 +26,7 @@ import torch.nn.functional as F
 from mowl.nn.el.concept2box import losses as C2B
 from mowl.nn.el.octagon import geometry as G
 from mowl.nn.el.octagon import losses as OL
-from mowl.representation.measures import RegionMeasure
+from mowl.representation.measures import Bounds, RegionMeasure
 from mowl.representation.methods import register_measure
 from mowl.representation.regions import Box, ConstructorUnavailable
 from mowl.representation.library.shapes_regions import (
@@ -38,6 +38,11 @@ __all__ = ["OctagonBounds", "PrismBounds", "EllipsoidMeasure", "CosineOrder", "L
 
 def _col(x):
     return x.reshape(-1, 1)
+
+
+def _never_empty():
+    raise ConstructorUnavailable("A point is a region of one element and is never empty: "
+                                 "C ⊑ ⊥ cannot be read with point regions.")
 
 
 def _norm(x):
@@ -198,7 +203,7 @@ class EllipsoidMeasure(RegionMeasure):
         if not isinstance(a, Point):
             return self.inside(a, b, margin)
         if not isinstance(b, Ellipsoid):
-            raise TypeError("member compares a Point with an Ellipsoid.")
+            raise ConstructorUnavailable("member compares a Point with an Ellipsoid.")
         return th.relu(self._excess(a.centre, b) + margin)
 
     def inside(self, a, b, margin=0.0):
@@ -231,10 +236,14 @@ class EllipsoidMeasure(RegionMeasure):
         return th.relu(reach_a + reach_b - _norm(a.centre - b.centre) + margin)
 
     def empty(self, a, margin=0.0):
-        return th.zeros_like(a.centre[:, :1]) if isinstance(a, Point) else a.radius
+        if isinstance(a, Point):
+            _never_empty()
+        return a.radius + margin if margin else a.radius
 
     def nonempty(self, a, epsilon=0.0):
-        return th.relu(epsilon - self.empty(a))
+        if isinstance(a, Point):
+            return th.zeros_like(a.centre[:, :1])
+        return th.relu(epsilon - a.radius)
 
 
 class CosineOrder(RegionMeasure):
@@ -251,6 +260,7 @@ class CosineOrder(RegionMeasure):
     accepts = (Vector,)
     part = "similarity"
     exact_intersection = False
+    reading = "score"
 
     def __init__(self, norm_term="hinge"):
         if norm_term not in ("hinge", "signed", "none"):
@@ -393,6 +403,9 @@ class GumbelVolumeRatio(RegionMeasure):
         return th.relu(epsilon - self.empty(a))
 
 
+_BOX_SIZE = Bounds()
+
+
 class PointToRegion(RegionMeasure):
     r"""The distance of a point to a (soft) box (Concept2Box, Eq. 8 and 9): the :math:`L_1`
     distance to the box plus, for a point inside, :math:`\alpha` times its distance to the
@@ -436,7 +449,7 @@ class PointToRegion(RegionMeasure):
 
     def _score(self, a, b):
         if not isinstance(a, Point) or not isinstance(b, Box):
-            raise TypeError("PointToRegion compares a Point with a box.")
+            raise ConstructorUnavailable("PointToRegion compares a Point with a box.")
         d = self.distance(a, b)
         return th.sigmoid(d) - 0.5 if self.squash else d
 
@@ -453,10 +466,17 @@ class PointToRegion(RegionMeasure):
         return th.relu(margin - self._score(a, b))
 
     def empty(self, a, margin=0.0):
-        return th.zeros_like(a.centre[:, :1])
+        """A box is empty as :class:`~mowl.representation.Bounds` reads it; a point never
+        is (it used to cost zero for every region, so that every class could be
+        :math:`\\bot`)."""
+        if isinstance(a, Point):
+            _never_empty()
+        return _BOX_SIZE.empty(a, margin)
 
     def nonempty(self, a, epsilon=0.0):
-        return th.relu(epsilon - self.empty(a))
+        if isinstance(a, Point):
+            return th.zeros_like(a.centre[:, :1])
+        return _BOX_SIZE.nonempty(a, epsilon)
 
 
 class PointDistance(RegionMeasure):
@@ -485,10 +505,11 @@ class PointDistance(RegionMeasure):
         return th.relu(margin - _norm(a.centre - b.centre))
 
     def empty(self, a, margin=0.0):
-        return th.zeros_like(a.centre[:, :1])
+        """A point is a class of one element, never empty (it used to cost zero)."""
+        _never_empty()
 
     def nonempty(self, a, epsilon=0.0):
-        return th.relu(epsilon - self.empty(a))
+        return th.zeros_like(a.centre[:, :1])
 
 
 class ByRegion(RegionMeasure):
@@ -512,7 +533,8 @@ class ByRegion(RegionMeasure):
         for ca, cb, measure in self.rules:
             if isinstance(a, ca) and isinstance(b, cb):
                 return measure
-        raise TypeError(f"No rule for {type(a).__name__} against {type(b).__name__}.")
+        raise ConstructorUnavailable(
+            f"No rule for {type(a).__name__} against {type(b).__name__}.")
 
     def inside(self, a, b, margin=0.0):
         return self._measure(a, b).inside(a, b, margin)

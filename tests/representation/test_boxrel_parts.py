@@ -57,10 +57,13 @@ class TestMeasures(TestCase):
         self.assertAlmostEqual(float(m.apart(a, b)), 0.5, places=6)
 
     def test_slack_and_ignored_strict_margin(self):
-        m = VolumeShare(temperature=None)
+        # the strict margin is ignored with the option of BoxEL (the earlier default)
+        m = VolumeShare(temperature=None, strict_margin="ignore")
         a, b = box([0, 0], [1, 1]), box([0, 0], [0.5, 1])
         self.assertAlmostEqual(float(m.inside(a, b, -0.6)), 0.0, places=6)
         self.assertAlmostEqual(float(m.inside(b, a, 0.3)), 0.0, places=6)
+        # by default it asks for room: b touches the border of a
+        self.assertGreater(float(VolumeShare(temperature=None).inside(b, a, 0.3)), 0.0)
 
     def test_smoothed_approaches_exact(self):
         a, b = box([0, 0], [1, 1]), box([0.2, 0], [1.5, 1])

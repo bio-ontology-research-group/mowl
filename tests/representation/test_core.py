@@ -57,8 +57,10 @@ class TestRegions(TestCase):
     def test_signed_intersection(self):
         a = Box(th.zeros(1, 2), th.ones(1, 2))
         b = Box(th.tensor([[3.0, 0.0]]), th.ones(1, 2))      # apart in the first coordinate
-        plain, gap = a.intersect(b)
+        plain, gap = a.intersect(b, signed=False)      # the earlier default
         signed, gap_signed = a.intersect(b, signed=True)
+        default, _ = a.intersect(b)                     # exact: the empty box
+        self.assertTrue(th.equal(default.offset, signed.offset))
         self.assertTrue(th.allclose(gap, gap_signed) and float(gap) > 0)
         self.assertTrue((plain.offset >= 0).all())
         self.assertTrue(float(signed.offset[0, 0]) < 0)

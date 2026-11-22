@@ -230,7 +230,8 @@ def hyperbolic_cones(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50,
     else:
         classes = ConePoints(K=tables.K, table=tables.class_embed)
         margin = tables.margin
-    return hierarchy_geometry(classes, None, ConeAngle(), Objective.hierarchy(margin))
+    return hierarchy_geometry(classes, None, ConeAngle(apex="formula"),
+                              Objective.hierarchy(margin))
 
 
 @register_method("shadow_cones")

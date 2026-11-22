@@ -15,7 +15,7 @@ import torch as th
 from mowl.nn.el.octagon import geometry as G
 from mowl.nn.el.prism.losses import NORMALS, supports
 from mowl.nn.el.concept2box.losses import gumbel_intersection
-from mowl.representation.regions import Box, Region
+from mowl.representation.regions import Box, ConstructorUnavailable, Region
 
 __all__ = ["Point", "OctagonProduct", "Prism", "Ellipsoid", "Vector", "Linked", "SoftBox"]
 
@@ -34,6 +34,12 @@ class Point(Region):
 
     def translate(self, vector):
         return Point(self.centre + vector, self.bump)
+
+    def contains(self, points, tolerance=1e-5):
+        """Whether the points ``(P, d)`` are the point (up to ``tolerance``), ``(B, P)``: the
+        region of one element."""
+        diff = points.to(self.centre.dtype).unsqueeze(0) - self.centre.unsqueeze(1)
+        return th.linalg.norm(diff, dim=-1) <= tolerance
 
     def is_empty(self):
         """Never: a point is a region of no extent, not the empty one."""
@@ -61,6 +67,15 @@ class OctagonProduct(Region):
         """A product is empty iff one of its octagons is (the tightened bounds have a
         negative width: :func:`mowl.nn.el.octagon.geometry.product_emptiness_slack`)."""
         return G.product_emptiness_slack(self.bounds) < 0
+
+    def contains(self, points):
+        """Whether the points ``(P, d)`` lie in every octagon of the product (each on its
+        pair of coordinates), ``(B, P)``."""
+        pairs = points.to(self.bounds.dtype).reshape(points.shape[0], -1, 2)   # (P, F, 2)
+        directions = G.directions_like(pairs)                                  # (8, 2)
+        support = th.einsum("pfk,dk->pfd", pairs, directions)                  # (P, F, 8)
+        inside = support.unsqueeze(0) <= self.bounds.unsqueeze(1) + 1e-6      # (B, P, F, 8)
+        return inside.all(dim=-1).all(dim=-1)
 
     @classmethod
     def of_point(cls, centre):
@@ -112,6 +127,19 @@ class Prism(Region):
         its upper corner lies below its lower one."""
         return (self.supports.sum(dim=-1) < 0) | (self.offset < 0).any(dim=-1)
 
+    def contains(self, points):
+        """Whether the points ``(P, d)`` lie in the prisms, ``(B, P)``: the first two
+        coordinates in the triangle (:math:`n_k \\cdot x \\le h_k`), the others in the box
+        (a negative half-width is an empty box)."""
+        x = points.to(self.supports.dtype)
+        normals = NORMALS.to(device=x.device, dtype=x.dtype)
+        tri = ((x[:, :2] @ normals.T).unsqueeze(0) <= self.supports.unsqueeze(1) + 1e-6)
+        rest = x[:, 2:].unsqueeze(0)
+        low = (self.centre - self.offset).unsqueeze(1)
+        high = (self.centre + self.offset).unsqueeze(1)
+        box = (rest >= low) & (rest <= high)
+        return tri.all(dim=-1) & box.all(dim=-1)
+
     @classmethod
     def of_point(cls, point):
         """The point ``point`` (``(B, d)``) as a prism of no extent."""
@@ -146,6 +174,12 @@ class Ellipsoid(Region):
     centre: th.Tensor
     axes: th.Tensor
     radius: th.Tensor
+
+    def contains(self, points):
+        """Whether the points ``(P, d)`` lie in the ellipsoids, ``(B, P)``."""
+        x = points.to(self.centre.dtype).unsqueeze(0)
+        scaled = ((x - self.centre.unsqueeze(1)) / self.axes.unsqueeze(1)) ** 2
+        return scaled.sum(dim=-1) <= self.radius ** 2
 
     def translate(self, vector):
         return replace(self, centre=self.centre + vector)
@@ -195,6 +229,13 @@ class SoftBox(Box):
     beta: float = 1.0
     ids: Optional[th.Tensor] = None
 
+    def contains(self, points):
+        """A soft box is a distribution of boxes (its corners are Gumbel variables), compared
+        by expected volumes; it is not a set of points (the box of its parameters is only its
+        location)."""
+        raise ConstructorUnavailable("A soft box is a distribution of boxes, not a set of "
+                                     "points.")
+
     def translate(self, vector):
         return replace(self, centre=self.centre + vector, ids=None)
 
@@ -205,7 +246,11 @@ class SoftBox(Box):
     def grow(self, offset):
         return replace(self, offset=self.offset + offset, ids=None)
 
-    def intersect(self, other):
+    def intersect(self, other, signed=True):
+        """The Gumbel (soft) intersection, whose offsets are negative where the boxes are
+        apart; ``signed`` is accepted for the interface of :class:`Box` and changes
+        nothing (the soft intersection has no unsigned reading), and the gap is zero (a
+        soft box has a positive volume)."""
         lo, hi = gumbel_intersection(self.lower, self.upper, other.lower, other.upper,
                                      self.beta)
         return SoftBox((lo + hi) / 2, (hi - lo) / 2, self.beta), th.zeros_like(lo[:, :1])

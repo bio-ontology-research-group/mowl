@@ -37,7 +37,7 @@ from mowl.representation.methods import (register_measure, register_method,
                                          register_relation_model, DEFAULT_MEASURE)
 from mowl.representation.adapters import register_adapter
 from mowl.representation.objectives import Objective
-from mowl.representation.regions import Ball, Box
+from mowl.representation.regions import Ball, Box, ConstructorUnavailable
 from mowl.representation.relation_models import Translation
 
 __all__ = ["ToleranceTranslation", "BoundaryDepth", "RegDObjective",
@@ -74,6 +74,7 @@ class ToleranceTranslation(Translation):
     """
 
     part = "translation with tolerance"
+    functional = False
 
     def __init__(self, size=None, embed_dim=None, vectors=None, tolerances=None,
                  sigma_init=0.1, direction=None):
@@ -86,6 +87,18 @@ class ToleranceTranslation(Translation):
     def tolerance(self, ids):
         """:math:`\\sigma_r` of the relations ``ids``, ``(B, 1)``."""
         return th.abs(self.tolerances(ids))
+
+    def related(self, ids, x, y, region=Ball, tolerance=1e-5):
+        """Whether :math:`y` lies within :math:`\\sigma_r` of :math:`x + v_r`, ``(B, P)``.
+        The distance is that of the region family, so that the preimage of a region is a
+        region of the same family: the Euclidean distance in a geometry of balls (EmEL(var))
+        and the largest coordinate difference in a geometry of boxes (``region=Box``)."""
+        gap = y.unsqueeze(0) - self.successor(ids, x)
+        if issubclass(region, Box):
+            distance = th.abs(gap).amax(dim=-1)
+        else:
+            distance = th.linalg.norm(gap, dim=-1)
+        return distance <= self.tolerance(ids) + tolerance
 
     def image(self, ids, region):
         return super().image(ids, region).grow(self.tolerance(ids))
@@ -101,12 +114,21 @@ class ToleranceTranslation(Translation):
 # -- measure ----------------------------------------------------------------------------------
 
 
+def _default_measure(region_class):
+    """The default measure of a region class or of its nearest base class that has one."""
+    for cls in region_class.__mro__:
+        if cls in DEFAULT_MEASURE:
+            return DEFAULT_MEASURE[cls]()
+    raise ConstructorUnavailable(f"There is no measure for {region_class.__name__} regions.")
+
+
 @register_measure("boundary and depth")
 class BoundaryDepth(RegionMeasure):
     """The inclusion energy of RegD (Yang et al. 2025): boundary dissimilarity plus
     :math:`\\lambda` times depth dissimilarity, of the child inside the parent, for boxes and
     for balls. :meth:`inside` is :math:`\\max\\{E + \\text{margin}, \\gamma_1\\}`, zero (with
-    :math:`\\gamma_1 = 0`) iff the region lies inside the other. The raw, signed energy is
+    :math:`\\gamma_1 = 0` and the default ``depth_on_containment=False``) iff the region lies
+    inside the other; an empty box lies inside every region. The raw, signed energy is
     :meth:`energy`.
 
     RegD defines inclusion only. :meth:`outside` is its negative term (the child is not
@@ -118,8 +140,11 @@ class BoundaryDepth(RegionMeasure):
     :param p: Exponent of the depth dissimilarity; default 1 for boxes, 2 for balls.
     :param gamma1, gamma2: The margins of the paper's loss.
     :param eps: Lower bound of sizes (they are divided by).
-    :param depth_on_containment: ``False``: the depth term only where the child is not
-        inside, as in the authors' released code.
+    :param depth_on_containment: ``False`` (default): the depth term only where the child is
+        not inside, as in the authors' released code, so that a contained region costs
+        nothing. ``True``: everywhere, as in the paper's formula (the methods ``regd`` and
+        ``regd_elem`` select it by default): a region strictly inside another then still
+        has a positive cost, so a zero cost is not what "inside" means.
     :param host: Measure for the other relations.
     """
 
@@ -128,7 +153,7 @@ class BoundaryDepth(RegionMeasure):
     exact_intersection = False
 
     def __init__(self, lamda=1.0, p=None, gamma1=0.0, gamma2=0.0, eps=1e-4,
-                 depth_on_containment=True, host=None):
+                 depth_on_containment=False, host=None):
         if lamda < 0:
             raise ValueError("lamda must be non-negative.")
         if eps <= 0:
@@ -136,12 +161,15 @@ class BoundaryDepth(RegionMeasure):
         self.lamda, self.p, self.gamma1, self.gamma2, self.eps = lamda, p, gamma1, gamma2, eps
         self.depth_on_containment = depth_on_containment
         self.host = host
+        #: ``"empty"``: an empty box (negative half-width) lies inside everything; set to
+        #: ``"formula"`` by the methods of RegD, whose energy floors the sizes at ``eps``.
+        self.empty_boxes = "empty"
 
     def host_for(self, region_class):
         """The measure of the relations RegD does not define."""
         if self.host is not None:
             return self.host
-        return DEFAULT_MEASURE[region_class]()
+        return _default_measure(region_class)
 
     def regularise(self, region):
         """The region with its sizes at least ``eps``."""
@@ -151,6 +179,10 @@ class BoundaryDepth(RegionMeasure):
 
     def _args(self, parent, child):
         self.check(parent, child)
+        if isinstance(parent, Ball) != isinstance(child, Ball):
+            raise ConstructorUnavailable(
+                f"BoundaryDepth compares two balls or two boxes, not a "
+                f"{type(child).__name__} with a {type(parent).__name__}.")
         parent, child = self.regularise(parent), self.regularise(child)
         if isinstance(parent, Ball):
             return (parent.centre, parent.radius.squeeze(-1),
@@ -176,7 +208,11 @@ class BoundaryDepth(RegionMeasure):
         return f(*args).unsqueeze(-1)
 
     def inside(self, a, b, margin=0.0):
-        return th.clamp(self.energy(a, b) + margin, min=self.gamma1)
+        cost = th.clamp(self.energy(a, b) + margin, min=self.gamma1)
+        if isinstance(a, Box) and self.empty_boxes == "empty":
+            # the size floor eps would make an empty box a tiny one
+            cost = th.where(Bounds.is_empty(a), th.zeros_like(cost), cost)
+        return cost
 
     def outside(self, a, b, margin=0.0):
         """Zero iff ``a`` is not inside ``b`` (by :math:`\\gamma_2` + ``margin``)."""
@@ -198,7 +234,9 @@ class BoundaryDepth(RegionMeasure):
     def intersection_inside(self, a, b, c, margin=0.0):
         if isinstance(a, Ball):
             return self.host_for(Ball).intersection_inside(a, b, c, margin)
-        region, gap = self.regularise(a).intersect(self.regularise(b))
+        # the box between two boxes that are apart, plus the gap (a zero cost needs a
+        # non-empty intersection: sufficient for the axiom, as in RegD)
+        region, gap = self.regularise(a).intersect(self.regularise(b), signed=False)
         return self.inside(region, c, margin) + gap
 
     def intersection_apart(self, a, b, c, margin=0.0):
@@ -360,8 +398,9 @@ def _elpp(tolerant, nb_classes, nb_relations, nb_individuals, embed_dim, margin,
                           negatives="gci2", negative_margin="strict", unit_norm=True,
                           gci3_bot="filler", strict_negatives=False,
                           tolerance_weight=sigma_reg_weight, gci0_shift=gci0_shift)
-    return ComposedGeometry(classes, relations, CentreDistance(gci1_radius_term), objective,
-                            individuals=individuals)
+    return ComposedGeometry(classes, relations,
+                            CentreDistance(gci1_radius_term, conjunction="published"),
+                            objective, individuals=individuals)
 
 
 @register_method("emelpp")
@@ -396,8 +435,10 @@ def emelvar(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1
 
 
 def _regd_measure(host_measure, lamda, p, gamma1, gamma2, eps, depth_on_containment):
-    return BoundaryDepth(lamda, p, gamma1, gamma2, eps, depth_on_containment,
-                         host=host_measure)
+    measure = BoundaryDepth(lamda, p, gamma1, gamma2, eps, depth_on_containment,
+                            host=host_measure)
+    measure.empty_boxes = "formula"
+    return measure
 
 
 @register_method("regd")
@@ -421,7 +462,8 @@ def regd(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
     elif t is not None and getattr(t, "ind_embed", None) is not None:
         individuals = BoxClasses(centres=t.ind_embed, offsets=t.ind_offset)
     host = Objective.elbe(margin, all_negatives=all_negatives, epsilon=epsilon)
-    measure = _regd_measure(Bounds(separation="every"), lamda, p, gamma1, gamma2, eps,
+    measure = _regd_measure(Bounds(separation="every", extent="norm",
+                                   conjunction="nonempty"), lamda, p, gamma1, gamma2, eps,
                             depth_on_containment)
     return ComposedGeometry(classes, relations, measure, RegDObjective(host, flip_gci2=flip_gci2),
                             individuals=individuals)
@@ -457,8 +499,8 @@ def regd_elem(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0
         # bottom, which is the radius where the radius is |r|; with another radius form the
         # cost is the radius of the class (as RegD-ELEm does with every form)
         host.empty = "size"
-    measure = _regd_measure(CentreDistance(gci1_radius_term), lamda, p, gamma1, gamma2, eps,
-                            depth_on_containment)
+    measure = _regd_measure(CentreDistance(gci1_radius_term, conjunction="published"), lamda,
+                            p, gamma1, gamma2, eps, depth_on_containment)
     objective = RegDObjective(host, regd_forms=("gci0", "gci2", "gci3"),
                               flip_gci2=flip_gci2, consistent_radius=consistent_radius)
     return ComposedGeometry(classes, relations, measure, objective, individuals=individuals,

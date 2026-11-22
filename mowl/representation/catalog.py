@@ -238,13 +238,16 @@ REPRESENTATIONS = {
                     notes="The conjunction is a learned attention over the distributions, "
                           "not an intersection; the negation (inverting the parameters) is "
                           "exact."),
-    "cone_qe": _query(C.SECTOR_CONE, R.NETWORK, I.REGION, M.ANGLE, K.EXACT, S.ANGLES,
-                      composable=Y.PARTLY,
+    "cone_qe": _query(C.SECTOR_CONE, R.NETWORK, I.REGION, M.ANGLE, K.APPROXIMATE,
+                      S.ANGLES, composable=Y.PARTLY,
                       notes="The conjunction is a learned attention over the cones; the "
-                            "negation (the complement of every sector) is exact."),
-    "acone": _query(C.SECTOR_CONE, R.ROTATION, I.REGION, M.ANGLE, K.EXACT, S.ANGLES,
+                            "negation is the complement of every sector, which is not the "
+                            "complement of the cone (a product of sectors): it misses the "
+                            "points outside in some coordinates and inside in others."),
+    "acone": _query(C.SECTOR_CONE, R.ROTATION, I.REGION, M.ANGLE, K.APPROXIMATE, S.ANGLES,
                     notes="ConE with the relation model replaced. The conjunction is "
-                          "learned as in ConE; the negation is the complement."),
+                          "learned as in ConE; the negation is ConE's complement of every "
+                          "sector (approximate, see cone_qe)."),
     # ---- knowledge graph models on a graph projection ------------------------------------
     "graph_kge": Representation(
         view=V.GRAPH, space=S.EUCLIDEAN, classes=C.POINT,

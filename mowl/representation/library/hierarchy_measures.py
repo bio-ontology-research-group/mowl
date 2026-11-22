@@ -394,8 +394,22 @@ class ConeAngle(EnergyMeasure):
     part = "angle"
     floored = True
 
+    def __init__(self, signed=False, negative_form="hinge", apex="inside"):
+        super().__init__(signed, negative_form)
+        if apex not in ("inside", "formula"):
+            raise ValueError("apex must be 'inside' or 'formula'.")
+        #: ``"inside"`` (default): the apex of a cone lies in it, so :math:`C \\sqsubseteq C`
+        #: costs nothing. ``"formula"``: the published formula, whose angle is undefined at
+        #: the apex and is read as the clamped arccosine there (a positive cost; the method
+        #: ``hyperbolic_cones`` and its module).
+        self.apex = apex
+
     def raw(self, a, b):
-        return (C.axis_angle(b.centre, a.centre) - b.aperture).unsqueeze(-1)
+        angle = C.axis_angle(b.centre, a.centre)
+        if self.apex == "inside":
+            apex = th.linalg.norm(a.centre - b.centre, dim=-1) < 1e-7
+            angle = th.where(apex, th.zeros_like(angle), angle)
+        return (angle - b.aperture).unsqueeze(-1)
 
 
 class ShadowCone(EnergyMeasure):
@@ -424,8 +438,8 @@ class ShadowCone(EnergyMeasure):
     def raw(self, a, b):
         half_space = isinstance(a.manifold, UpperHalfSpace)
         if half_space != self.formulation.endswith("half-space"):
-            raise TypeError(f"The formulation {self.formulation!r} does not live on "
-                            f"{type(a.manifold).__name__}.")
+            raise ConstructorUnavailable(f"The formulation {self.formulation!r} does not "
+                                         f"live on {type(a.manifold).__name__}.")
         return C.shadow_cone_energy(b.centre, a.centre, self.formulation, self.radius,
                                     self.horosphere_height, self.gamma3).unsqueeze(-1)
 
@@ -465,6 +479,7 @@ class DistanceDepth(HierarchyMeasure):
 
     accepts = (Point,)
     part = "distance and depth"
+    reading = "score"
 
     def __init__(self, centri_weight=1.0):
         self.centri_weight = float(centri_weight)

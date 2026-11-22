@@ -29,8 +29,12 @@ class VolumeShare(Bounds):
     BoxEL (``temperature`` :math:`\\beta`) the cost of ``apart`` is never exactly zero and
     approaches the exact one as :math:`\\beta` grows.
 
-    A ratio of volumes cannot exceed one, so a positive (strict) margin has no meaning and
-    is ignored; a negative margin is a slack: ``inside`` is free once the ratio reaches
+    A ratio of volumes cannot exceed one, so it cannot express room to spare: with a positive
+    (strict) margin the cost of the boxes compared by their bounds with that margin is added
+    (``strict_margin="bounds"``, default), so that a zero cost means the relation holds with
+    room; ``strict_margin="ignore"`` ignores a positive margin (BoxEL and BoxSEL, which
+    publish no strict margin; a zero cost then does not mean what a strict margin
+    promises). A negative margin is a slack: ``inside`` is free once the ratio reaches
     :math:`1 - |\\gamma|`, and ``apart`` once it falls below :math:`|\\gamma|`. ``meets``,
     ``empty`` and ``nonempty`` are those of :class:`~mowl.representation.Bounds` (they are
     about extent, not volume). The intersection of two boxes in ``intersection_inside`` is
@@ -42,12 +46,16 @@ class VolumeShare(Bounds):
         :math:`\\max(0, \\text{width})`.
     :param floor, ceiling: The volumes are clipped to this range before their logarithm
         is taken (as in the BoxEL code).
+    :param strict_margin: ``"bounds"`` or ``"ignore"``, see above.
     """
 
     part = "smoothed volume ratio"
 
-    def __init__(self, temperature=1.0, floor=1e-10, ceiling=1e4):
+    def __init__(self, temperature=1.0, floor=1e-10, ceiling=1e4, strict_margin="bounds"):
         super().__init__()
+        if strict_margin not in ("bounds", "ignore"):
+            raise ValueError("strict_margin must be 'bounds' or 'ignore'.")
+        self.strict_margin = strict_margin
         self.temperature = temperature
         self.floor = floor
         self.ceiling = ceiling
@@ -83,11 +91,20 @@ class VolumeShare(Bounds):
     def _slack(margin):
         return max(-float(margin), 0.0)
 
+    def _room(self, relation, a, b, margin):
+        """With a strict margin (``strict_margin="bounds"``): the cost of the relation with
+        that much room, as :class:`~mowl.representation.Bounds` reads it."""
+        if margin > 0 and self.strict_margin == "bounds":
+            return getattr(Bounds, relation)(self, a, b, margin)
+        return 0.0
+
     def inside(self, a, b, margin=0.0):
-        return th.relu(1 - self.ratio(a, b) - self._slack(margin))
+        return th.relu(1 - self.ratio(a, b) - self._slack(margin)) \
+            + self._room("inside", a, b, margin)
 
     def apart(self, a, b, margin=0.0):
-        return th.relu(self.ratio(a, b) - self._slack(margin))
+        return th.relu(self.ratio(a, b) - self._slack(margin)) \
+            + self._room("apart", a, b, margin)
 
     def intersection_inside(self, a, b, c, margin=0.0):
         return self.inside(signed_intersection(a, b), c, margin)
@@ -124,7 +141,11 @@ class AveragedBounds(Bounds):
     taken as a norm, as in ELK-Em: :math:`\\frac1n\\lVert\\max(0, |c_A - c_B| + o_A -
     o_B + \\gamma)\\rVert_1`. A region with a negative half-width in some coordinate is
     *empty* (ELK-Em represents :math:`\\bot` this way) and lies inside everything: its
-    ``inside`` cost is zero."""
+    ``inside`` cost is zero. With the defaults of :class:`~mowl.representation.Bounds` it
+    also meets nothing, and ``empty`` is zero as soon as one half-width is not positive;
+    the ELK-Em method sets ``empty_boxes="formula"`` (``meets`` without the emptiness term)
+    and ``extent="norm"`` (``empty`` is the mean of the hinged half-widths, zero only when
+    every half-width is negative), as the module computes them."""
 
     part = "bounds per coordinate"
 
@@ -144,12 +165,18 @@ class AveragedBounds(Bounds):
 
     def meets(self, a, b, margin=0.0):
         self.check(a, b)
-        return self._mean(th.abs(a.centre - b.centre) - a.offset - b.offset + margin)
+        cost = self._mean(th.abs(a.centre - b.centre) - a.offset - b.offset + margin)
+        if self.empty_boxes == "formula":
+            return cost
+        return cost + self._mean(a.lower - a.upper) + self._mean(b.lower - b.upper)
 
     def empty(self, a, margin=0.0):
-        """Zero iff ``a`` is empty (negative half-width, with ``margin`` room)."""
+        """Zero iff ``a`` is empty (a half-width that is not positive, with ``margin``
+        room); ``extent="norm"``: zero iff every half-width is (ELK-Em)."""
         self.check(a)
-        return self._mean(a.offset + margin)
+        if self.extent == "norm":
+            return self._mean(a.offset + margin)
+        return super().empty(a, margin)
 
 
 @register_measure("masked bounds")
@@ -161,6 +188,8 @@ class MaskedBounds(Bounds):
     :param empty_weight: Factor of that penalty, the norm of the gaps
         (``intersection_inside`` adds it with factor 1 in :class:`Bounds`; mOWL's TransBox
         uses 0.5, the code of its authors 1).
+    :param bounds: ``extent`` and ``conjunction`` of :class:`~mowl.representation.Bounds`
+        (the latter for the forms other than :math:`C_1 \\sqcap C_2 \\sqsubseteq D`).
     :param gci1: ``"inclusion"`` (default): the intersection lies inside :math:`D`.
         ``"overlap"``: it only has to overlap :math:`D`, which is what the authors' code
         computes (it uses the signed half-width of the intersection).
@@ -168,8 +197,8 @@ class MaskedBounds(Bounds):
 
     part = "bounds per coordinate"
 
-    def __init__(self, separation="any", empty_weight=1.0, gci1="inclusion"):
-        super().__init__(separation)
+    def __init__(self, separation="any", empty_weight=1.0, gci1="inclusion", **bounds):
+        super().__init__(separation, **bounds)
         if gci1 not in ("inclusion", "overlap"):
             raise ValueError("gci1 must be 'inclusion' or 'overlap'.")
         self.empty_weight = float(empty_weight)

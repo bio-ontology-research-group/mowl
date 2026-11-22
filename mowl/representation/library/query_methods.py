@@ -303,7 +303,7 @@ def cone_qe(nb_classes=None, nb_relations=None, nb_individuals=0, embed_dim=32, 
         entities = ConePoints(table=tables.entity_embedding, angle_range=angle_range)
         rel = (ConeNetwork(tables=tables, inverse_of=role_inverse) if relations == "network"
                else ConeRotation(tables=tables, inverse_of=role_inverse,
-                                 aperture=aperture))
+                                 aperture=aperture, aperture_change="signed"))
         operator = ConeAttentionIntersection(tables=tables)
         distance = ConeDistance(center_weight, modulus=tables.modulus)
     else:
@@ -314,7 +314,8 @@ def cone_qe(nb_classes=None, nb_relations=None, nb_individuals=0, embed_dim=32, 
         rel = (ConeNetwork(n_rows, dim, hidden, layers, angle_range=angle_range,
                            inverse_of=role_inverse) if relations == "network"
                else ConeRotation(n_rows, dim, angle_range=angle_range,
-                                 inverse_of=role_inverse, aperture=aperture))
+                                 inverse_of=role_inverse, aperture=aperture,
+                                 aperture_change="signed"))
         operator = ConeAttentionIntersection(dim, dropout)
         distance = ConeDistance(center_weight, angle_range=angle_range)
     return ComposedQueryGeometry(entities, rel, operator, distance, ConeBounds(),
