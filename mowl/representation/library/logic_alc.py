@@ -191,6 +191,8 @@ class ExpressionGeometry(ComposedGeometry, ALCModule):
     #: Whether the geometry has anonymous elements that a training loop samples every epoch
     #: (and passes as ``e_emb``).
     samples_anonymous = False
+    #: The ALC methods have no axioms about relations (``r ⊑ s``, ``r ∘ t ⊑ s``).
+    role_axiom_capable = False
 
     def __init__(self, classes, relations, measure, objective=None, individuals=None,
                  regularizers=(), schedule=None, relaxation=None, domain=None, **kwargs):

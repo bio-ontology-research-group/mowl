@@ -224,6 +224,13 @@ REPRESENTATIONS = {
         conjunction=K.EXACT, existential=K.NONE, negation=K.EXACT, disjunction=K.EXACT,
         composable=Y.PARTLY,
         notes="Quantum logic: negation is the orthogonal complement, disjunction the span."),
+    "composed-alc": Representation(
+        view=V.CLASS_EXPRESSIONS, space=S.FINITE_DOMAIN, classes=(C.FUZZY_SET, C.AXIS_CONE),
+        relations=(R.NETWORK, R.FUZZY_RELATION), individuals=(I.DOMAIN_ELEMENT, I.REGION),
+        measure=M.FUZZY_IMPLICATION, conjunction=K.FUZZY, existential=K.FUZZY,
+        negation=K.FUZZY, disjunction=K.FUZZY,
+        operators=(F.PRODUCT, F.GOEDEL, F.LUKASIEWICZ, F.LOGIT_GOEDEL), composable=Y.YES,
+        notes="Whatever parts are chosen; the entry lists the parts that can be chosen."),
     # ---- query answering -----------------------------------------------------------------
     "query2box": _query(C.BOX, R.TRANSLATION_BOX, I.POINT,
                         (M.POINT_TO_REGION, M.BOUNDS), K.NONE, S.EUCLIDEAN,

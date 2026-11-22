@@ -286,6 +286,9 @@ PAIRS = [
 ]
 
 EXEMPT = {
+    "composed-alc": "ComposedALC is the generic combination of parts for ALC axioms itself (the "
+                    "named methods dfalc, falcon and alcone are compared); it has no direct "
+                    "implementation to be compared with.",
     "alcone-exact": "The exact al-cone construction (mowl.geometric.cones) builds a model of an "
                     "ontology by an algorithm and trains nothing; it is not an embedding method "
                     "with a class model, relation model, measure and objective, so there is "

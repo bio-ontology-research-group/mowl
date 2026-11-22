@@ -59,6 +59,8 @@ _DEFAULTS = {
     "e2r": {"model_kwargs": {"embed_dim": 100}, "epochs": 500},
     "bcbox": {"model_kwargs": {"embed_dim": 32}, "epochs": 500},
     "dfalc": {"model_kwargs": {"anon_domain": 8}, "epochs": 200},
+    # ALC axioms of any depth, trained as DF-ALC on a domain of 8 elements
+    "composed-alc": {"model_kwargs": {"method": "dfalc", "embed_dim": 8}, "epochs": 200},
     "eike": {"model_kwargs": {"embed_dim": 100}, "epochs": 500},
     "boxsel": {"model_kwargs": {"embed_dim": 50}, "epochs": 500},
     # hierarchy embeddings of the subclass order: full-batch Riemannian SGD

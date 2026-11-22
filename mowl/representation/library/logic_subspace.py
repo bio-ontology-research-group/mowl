@@ -500,6 +500,10 @@ class SubspaceGeometry(ComposedGeometry, ALCModule):
     normal forms are read as everywhere else (``forward(rows, "gci0")``).
     """
 
+    #: Role inclusion is an equation of E2R (``role_inclusion``), not an EL++ role axiom of the
+    #: normal forms (``role_inclusion`` and ``role_chain`` of ``ComposedGeometry``).
+    role_axiom_capable = False
+
     def __init__(self, classes, relations, measure, objective=None, individuals=None,
                  regularizers=(), **kwargs):
         ComposedGeometry.__init__(self, classes, relations, measure, objective,
