@@ -4,6 +4,8 @@ import torch as th
 
 from mowl.base_models.elmodel import EmbeddingELModel
 from mowl.nn.el.elkem.module import ELKEmModule
+from mowl.evaluation.region_access import concatenated_rows
+from mowl.evaluation.scoring_rules import exp_negative_score
 from mowl.training import elkem as T
 
 logger = logging.getLogger(__name__)
@@ -257,8 +259,6 @@ class ELKEm(EmbeddingELModel):
         pool = [i for i in self.named_class_index_dict.values() if i not in excluded]
         return th.tensor(pool, dtype=th.long, device=self.device)
 
-    _resample = staticmethod(T.resample)
-
     def generate_negatives(self, gci_name, gci_dataset):
         r"""Corrupted axioms for ``gci_name`` (the sampling of the regimes
         :class:`~mowl.training.elkem.PearsonContrastiveTerm` and
@@ -387,7 +387,7 @@ class ELKEm(EmbeddingELModel):
         with th.no_grad():
             loss = super().score(axiom)
         self.module.train(was_training)
-        return th.exp(-loss)
+        return exp_negative_score(loss)
 
     @property
     def class_embeddings(self):
@@ -395,7 +395,7 @@ class ELKEm(EmbeddingELModel):
         idx = th.arange(len(self.class_index_dict), device=self.device)
         with th.no_grad():
             lower, upper = self.module.class_box(idx)
-        boxes = th.cat([lower, upper], dim=1).cpu().numpy()
+        boxes = concatenated_rows([lower, upper])
         return dict(zip(self.class_index_dict.keys(), boxes))
 
     @property
@@ -403,7 +403,7 @@ class ELKEm(EmbeddingELModel):
         """Roles as ``{iri: concat(range_l, range_u, error_l, error_u, slope, shift)}``."""
         idx = th.arange(len(self.object_property_index_dict), device=self.device)
         with th.no_grad():
-            parts = th.cat(self.module.role(idx), dim=1).cpu().numpy()
+            parts = concatenated_rows(self.module.role(idx))
         return dict(zip(self.object_property_index_dict.keys(), parts))
 
     @property

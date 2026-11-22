@@ -52,6 +52,14 @@ def batch_probabilities(model, conditionals):
     return out
 
 
+def mean_interval_error(errors):
+    """Mean of per-conditional distances to their intervals (the paper's MAE for point
+    conditionals), ``0.0`` for an empty list. ``nan`` entries (premises without volume)
+    propagate."""
+    errors = list(errors)
+    return float(np.mean(errors)) if errors else 0.0
+
+
 def interval_metrics(truth, lower, upper):
     """SA, SE and AG of interval estimates ``[lower, upper]`` against the entailed
     intervals ``truth`` (array ``(q, 2)``). ``lower`` and ``upper`` have length ``q``."""
