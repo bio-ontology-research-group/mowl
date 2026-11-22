@@ -245,6 +245,10 @@ class Objective:
         return cls(margin, inside_margin=inside_margin, gci0_negative="negative",
                    freeze_size_negatives=freeze_size_negatives, **options)
 
+    #: The norm the unit-norm term of ``unit_norm`` pulls the centres towards (1; ELEmbeddings
+    #: has the target ``reg_norm`` of its regularisation).
+    unit_norm_target = 1.0
+
     # -- margins ----------------------------------------------------------------------------
     _margin_link = None
     _own_margin = 0.0
@@ -338,11 +342,11 @@ class Objective:
         if form in _ROLE_COLUMNS:
             vectors = g.relation_model.vectors
             return sum(th.abs(th.linalg.norm(vectors(rows[:, c]), dim=1, keepdim=True) - 1)
-                       for c in _ROLE_COLUMNS[form])
+                       for c in _ROLE_COLUMNS[form])  # (role vectors: always unit)
         regions = [(g.classes if kind == "c" else g.individuals)(rows[:, c])
                    for kind, c in _NORM_COLUMNS[form]]
-        return sum(th.abs(th.linalg.norm(r.centre, dim=1, keepdim=True) - 1)
-                   for r in regions)
+        return sum(th.abs(th.linalg.norm(r.centre, dim=1, keepdim=True)
+                          - self.unit_norm_target) for r in regions)
 
     def _with_norms(self, cost, g, form, rows):
         return cost + self._norms(g, form, rows) if form in self.unit_norm else cost

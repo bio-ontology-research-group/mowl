@@ -37,12 +37,14 @@ def _box_groups(module):
 JOINT_GROUPS = {
     "ELEmModule": _ball_groups,
     "ELBEModule": _box_groups,
+    "RegDELBEModule": _box_groups,   # a combination of parts, not a subclass of ELBEModule
 }
 
 #: Module class name -> role embeddings, normalised on their own.
 ROLE_EMBEDDINGS = {
     "ELEmModule": "rel_embed",
     "ELBEModule": "rel_embed",
+    "RegDELBEModule": "rel_embed",
 }
 
 

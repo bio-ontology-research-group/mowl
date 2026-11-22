@@ -178,7 +178,7 @@ def elem(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1, r
         vectors=t.rel_embed)
     individuals = None
     if t is None and nb_individuals:
-        individuals = BallClasses(nb_individuals, embed_dim)
+        individuals = BallClasses(nb_individuals, embed_dim, radii_init="uniform")
     elif t is not None and getattr(t, "ind_embed", None) is not None:
         individuals = BallClasses(centres=t.ind_embed, radii=t.ind_rad)
     objective = Objective.elem(margin, all_negatives=all_negatives,

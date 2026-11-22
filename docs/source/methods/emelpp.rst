@@ -75,6 +75,31 @@ how it is kept non-negative; mOWL starts at 0.1 and uses its absolute value.
    gains nothing as printed. The option ``sigma_reg_weight`` of :class:`EmELVar` scales that
    term. It is **not** part of the paper; the default (1) is the paper's loss.
 
+Made of parts
+-------------
+
+:class:`EmELPP` and :class:`EmELVar` (and :class:`~mowl.models.ELEmbeddings`) are combinations of
+the parts of :mod:`mowl.representation`: their module is a
+:class:`~mowl.representation.ComposedGeometry` that the methods ``emelpp`` and ``emelvar``
+build (a ball class model, a translation relation model, the centre-distance measure, an
+objective with the unit-norm terms in every axiom loss). EmEL(var) differs from EmEL++ by
+exactly one part, the relation model ``translation with tolerance``, so any of the parts can
+be swapped for another one (see :doc:`/representation/index`). The earlier, hand-written modules
+are kept in ``mowl.baselines`` as the reference of the tests.
+
+.. testcode::
+
+   from mowl.nn import EmELPPModule, EmELVarModule
+
+   for module in (EmELPPModule(3, 2, embed_dim=4), EmELVarModule(3, 2, embed_dim=4)):
+       parts = module.parts
+       print(parts["classes"], "|", parts["relations"], "|", parts["measure"])
+
+.. testoutput::
+
+   ball | translation | centre distance
+   ball | translation with tolerance | centre distance
+
 Example
 -------
 

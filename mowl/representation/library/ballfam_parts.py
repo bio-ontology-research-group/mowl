@@ -19,7 +19,7 @@ Methods: ``emelpp``, ``emelvar``, ``regd`` (boxes) and ``regd_elem`` (balls), re
 :func:`~mowl.representation.register_method` and, for the existing modules, as adapters.
 
 What is *not* a part: the contrastive training loss of RegD (it needs the sampled negatives
-of a positive pair together and lives in :mod:`mowl.models.regd`), and the shift vector of
+of a positive pair together and lives in :class:`mowl.models.RegDELBE`), and the shift vector of
 the EmEL++ Keras code (an optional learned translation of ``C`` in ``C subClassOf D``, set
 on the module by a training regime) is only read, through ``gci0_shift``.
 """
@@ -29,7 +29,7 @@ from dataclasses import replace
 import torch as th
 import torch.nn as nn
 
-from mowl.nn.el.regd import dissimilarity as D
+from mowl.representation.library import ballfam_energy as D
 from mowl.representation.class_models import BallClasses, BoxClasses
 from mowl.representation.geometry import ComposedGeometry
 from mowl.representation.measures import RegionMeasure, CentreDistance, Bounds
@@ -169,6 +169,9 @@ class BoundaryDepth(RegionMeasure):
         self.lamda, self.p, self.gamma1, self.gamma2, self.eps = lamda, p, gamma1, gamma2, eps
         self.depth_on_containment = depth_on_containment
         self.host = host
+        #: ``True``: :meth:`inside` returns the raw, signed energy (no margin clamp), to rank
+        #: axioms by it (the module's ``scoring()`` context sets it).
+        self.raw = False
         #: ``"empty"``: an empty box (negative half-width) lies inside everything; set to
         #: ``"formula"`` by the methods of RegD, whose energy floors the sizes at ``eps``.
         self.empty_boxes = "empty"
@@ -216,7 +219,9 @@ class BoundaryDepth(RegionMeasure):
         return f(*args).unsqueeze(-1)
 
     def inside(self, a, b, margin=0.0):
-        cost = th.clamp(self.energy(a, b) + margin, min=self.gamma1)
+        cost = self.energy(a, b) + margin
+        if not self.raw:
+            cost = th.clamp(cost, min=self.gamma1)
         if isinstance(a, Box) and self.empty_boxes == "empty":
             # the size floor eps would make an empty box a tiny one
             cost = th.where(Bounds.is_empty(a), th.zeros_like(cost), cost)
@@ -390,9 +395,13 @@ def _elpp(tolerant, nb_classes, nb_relations, nb_individuals, embed_dim, margin,
           sigma_reg_weight, gci0_shift, tables):
     t = tables
     if t is None:
+        # (the tables are drawn in the order of the earlier modules: classes, role vectors,
+        # individuals, then the tolerances)
         classes = BallClasses(nb_classes, embed_dim, radius=radius)
-        individuals = BallClasses(nb_individuals, embed_dim) if nb_individuals else None
-        vectors = tolerances = None
+        vectors = Translation(nb_relations, embed_dim).vectors
+        individuals = BallClasses(nb_individuals, embed_dim, radii_init="uniform") \
+            if nb_individuals else None
+        tolerances = None
     else:
         classes, individuals = _ball_tables(t, radius)
         vectors = t.rel_embed
@@ -498,7 +507,8 @@ def regd_elem(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0
     if t is None:
         classes = BallClasses(nb_classes, embed_dim, radius=radius)
         relations = Translation(nb_relations, embed_dim)
-        individuals = BallClasses(nb_individuals, embed_dim) if nb_individuals else None
+        individuals = BallClasses(nb_individuals, embed_dim, radii_init="uniform") \
+            if nb_individuals else None
     else:
         classes, individuals = _ball_tables(t, radius)
         relations = Translation(vectors=t.rel_embed)

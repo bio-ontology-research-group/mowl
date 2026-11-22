@@ -2,7 +2,6 @@ from .el.elmodule import ELModule
 # The part-built modules (ELBEModule, ...) are made of the parts of mowl.representation, which
 # in turn read the base classes of this package: each imports the other first.
 import mowl.representation  # noqa: F401  (must stay after ELModule, before the modules)
-from .el.elem.module import ELEmModule
 from .el.elbe.module import ELBEModule
 from .el.multielbe.module import MultiELBEModule
 from .el.boxel.module import BoxELModule
@@ -12,8 +11,6 @@ from .el.canonical_mixture.module import CanonicalMixtureModule
 from .el.transbox.module import TransBoxModule
 from .alc.module import ALCModule
 from .el.elkem.module import ELKEmModule
-from .el.emelpp.module import EmELPPModule, EmELVarModule
-from .el.regd.module import RegDELBEModule, RegDELEmModule
 from .el.mcmultibox.module import VolumeMultiBoxELModule
 from .el.order_embeddings.module import OrderEmbeddingsModule
 from .el.box_lattice.module import BoxLatticeModule
@@ -40,6 +37,11 @@ _PART_BUILT = {
     "OctagonELModule": "mowl.nn.el.octagon.module",
     "EIKEModule": "mowl.nn.el.eike.module",
     "Concept2BoxModule": "mowl.nn.el.concept2box.module",
+    "ELEmModule": "mowl.nn.el.elem.module",
+    "EmELPPModule": "mowl.nn.el.emelpp.module",
+    "EmELVarModule": "mowl.nn.el.emelpp.module",
+    "RegDELBEModule": "mowl.nn.el.regd.module",
+    "RegDELEmModule": "mowl.nn.el.regd.module",
 }
 
 

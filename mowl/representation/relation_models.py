@@ -115,6 +115,18 @@ class Relations(nn.Module):
         return self.vectors.num_embeddings
 
 
+def _direction_term(a, b, direction):
+    """:math:`|1 - \\cos(a, b)|` per row (``"row"``), or the term of the EmEL++ Keras code
+    (``"batch"``): every coordinate is normalised over the *batch* (``tf.nn.l2_normalize(x,
+    0)``) and all products are summed, giving one number per batch that is added to every
+    row."""
+    if direction == "batch":
+        total = (th.nn.functional.normalize(a, dim=0)
+                 * th.nn.functional.normalize(b, dim=0)).sum()
+        return th.abs(1 - total).expand(len(a), 1)
+    return th.abs(1 - th.nn.functional.cosine_similarity(a, b, dim=1).unsqueeze(1))
+
+
 class Translation(Relations):
     """A relation is one shift vector: :math:`(x, y) \\in r` iff :math:`y = x + v_r`
     (TransE; ELEmbeddings, ELBE and many others). A function: every point has exactly one
@@ -171,7 +183,6 @@ class Translation(Relations):
     def _role_cost(self, left, right, margin):
         cost = th.relu(th.linalg.norm(right - left, dim=1, keepdim=True) + min(margin, 0.0))
         if self.direction is not None:
-            from mowl.nn.el.emelpp.losses import _direction_term
             cost = cost + _direction_term(left, right, self.direction)
         return cost
 

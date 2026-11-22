@@ -234,7 +234,7 @@ def test_emelpp_code_objective_squares_row_sums(dataset):
 
 
 def test_emelpp_batch_direction_term():
-    from mowl.nn.el.emelpp import losses as EL
+    from mowl.baselines.nn.el.emelpp import losses as EL
     r = th.tensor([[1.0, 0.0], [0.0, 1.0]])
     s = th.tensor([[1.0, 0.0], [0.0, 1.0]])
     # Per row: identical vectors, cosine 1 -> 0. Batch axis: each coordinate column of r

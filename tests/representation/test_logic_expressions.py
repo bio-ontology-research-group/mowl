@@ -90,7 +90,7 @@ class TestBoxesAndBalls(TestCase):
         with self.assertRaises(ConstructorUnavailable) as caught:
             subsumption_cost(g, inter(A, B), C, *self.maps)
         self.assertIn("intersection", str(caught.exception))
-        self.assertIn("ComposedGeometry", str(caught.exception))
+        self.assertIn(type(g).__name__, str(caught.exception))
         self.assertIn("cannot be evaluated", str(caught.exception))
 
     def test_missing_constructors_are_named(self):
