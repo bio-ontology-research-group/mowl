@@ -1,8 +1,29 @@
+from contextlib import contextmanager
+
 import torch as th
 
 from mowl.base_models.elmodel import EmbeddingELModel
 from mowl.representation.library.ballfam_energy import contrastive_loss
 from mowl.nn.el.regd.module import RegDELBEModule, RegDELEmModule
+
+
+@contextmanager
+def _scoring(module):
+    """The module's raw-energy scoring context; a geometry that is not a RegD module (its
+    parts were swapped) gets the raw energy of its ``boundary and depth`` measure, if it has
+    one, and is scored as it is otherwise."""
+    if hasattr(module, "scoring"):
+        with module.scoring():
+            yield
+    elif hasattr(getattr(module, "measure", None), "raw"):
+        previous = module.measure.raw
+        module.measure.raw = True
+        try:
+            yield
+        finally:
+            module.measure.raw = previous
+    else:
+        yield
 
 
 class _EnergyView(th.nn.Module):
@@ -13,7 +34,7 @@ class _EnergyView(th.nn.Module):
         self.module = module
 
     def forward(self, data, gci_name, neg=False):
-        with self.module.scoring():
+        with _scoring(self.module):
             return self.module(data, gci_name, neg=neg)
 
 
@@ -45,20 +66,25 @@ class _RegDModel(EmbeddingELModel):
         """For ``gci0`` and ``gci2``, the contrastive loss of Section 3.3 (Eq. 10) with the
         ``num_neg`` negatives of each positive; for every other normal form, the host model's
         loss."""
-        if neg_scores is not None and self.module.last_gci_name in self.module.contrastive_gcis:
+        if neg_scores is not None and self._contrastive():
             n = pos_scores.shape[0]
             negatives = neg_scores.reshape(-1, n).t()
             return contrastive_loss(pos_scores.reshape(-1), negatives, self.gamma1)
         return super().compute_loss(pos_scores, neg_scores)
 
+    def _contrastive(self):
+        """Whether the last loss was of a form with the contrastive loss."""
+        forms = getattr(self.module, "contrastive_gcis", frozenset({"gci0", "gci2"}))
+        return getattr(self.module, "last_form", None) in forms
+
     def eval_method(self, data):
-        with self.module.scoring():
+        with _scoring(self.module):
             return super().eval_method(data)
 
     def score(self, axiom):
         """RegD energy of an axiom (lower: more likely entailed). It is negative when the
         child region lies inside the parent region and the depth term does not cancel that."""
-        with self.module.scoring():
+        with _scoring(self.module):
             return super().score(axiom)
 
 
@@ -163,7 +189,7 @@ class RegDELBE(_RegDModel):
     def compute_loss(self, pos_scores, neg_scores=None):
         """See :meth:`_RegDModel.compute_loss`. Other normal forms: ELBE's mean-squared-error
         loss (positives towards 0, negatives towards 1)."""
-        if neg_scores is not None and self.module.last_gci_name in self.module.contrastive_gcis:
+        if neg_scores is not None and self._contrastive():
             return super().compute_loss(pos_scores, neg_scores)
         pos_mean = th.mean(pos_scores)
         loss = th.square(pos_mean)

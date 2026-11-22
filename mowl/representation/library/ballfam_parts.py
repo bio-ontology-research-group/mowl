@@ -395,9 +395,13 @@ def _elpp(tolerant, nb_classes, nb_relations, nb_individuals, embed_dim, margin,
           sigma_reg_weight, gci0_shift, tables):
     t = tables
     if t is None:
+        # (the tables are drawn in the order of the earlier modules: classes, role vectors,
+        # individuals, then the tolerances)
         classes = BallClasses(nb_classes, embed_dim, radius=radius)
-        individuals = BallClasses(nb_individuals, embed_dim) if nb_individuals else None
-        vectors = tolerances = None
+        vectors = Translation(nb_relations, embed_dim).vectors
+        individuals = BallClasses(nb_individuals, embed_dim, radii_init="uniform") \
+            if nb_individuals else None
+        tolerances = None
     else:
         classes, individuals = _ball_tables(t, radius)
         vectors = t.rel_embed
@@ -503,7 +507,8 @@ def regd_elem(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0
     if t is None:
         classes = BallClasses(nb_classes, embed_dim, radius=radius)
         relations = Translation(nb_relations, embed_dim)
-        individuals = BallClasses(nb_individuals, embed_dim) if nb_individuals else None
+        individuals = BallClasses(nb_individuals, embed_dim, radii_init="uniform") \
+            if nb_individuals else None
     else:
         classes, individuals = _ball_tables(t, radius)
         relations = Translation(vectors=t.rel_embed)

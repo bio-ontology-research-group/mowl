@@ -96,6 +96,10 @@ class BallClasses(Classes):
     :param embed_dim: Dimension.
     :param centres, radii: Existing tables to use instead of new ones (the tables of
         another module, which then shares its parameters with this one).
+    :param radii_init: ``"unit"`` (default): the stored radii start at :math:`\\pm 1`
+        (uniform in :math:`[-1, 1]`, scaled to unit norm, as the centres); ``"uniform"``:
+        uniform in :math:`[-1, 1]` (the individuals of ELEmbeddings; the radius is
+        used through its absolute value, so none is negative).
     :param radius: How the radius is obtained from the stored parameter: ``"abs"``
         (default), ``"relu"`` (:math:`\\max(0, r)`, the EmEL++ Keras code) or ``"softplus"``
         (the training code of RegD's ``Elem``).
@@ -108,15 +112,24 @@ class BallClasses(Classes):
     part = "ball"
     exact_conjunction = False
 
-    def __init__(self, size=None, embed_dim=None, centres=None, radii=None, radius="abs"):
+    def __init__(self, size=None, embed_dim=None, centres=None, radii=None, radius="abs",
+                 radii_init="unit"):
         super().__init__()
+        if radii_init not in ("unit", "uniform"):
+            raise ValueError("radii_init must be 'unit' or 'uniform'.")
         if radius not in ("abs", "relu", "softplus"):
             raise ValueError("radius must be 'abs', 'relu' or 'softplus'.")
         self.radius_form = radius
         self.centres = centres if centres is not None else _unit_rows(
             nn.Embedding(size, embed_dim))
-        self.radii = radii if radii is not None else _unit_rows(
-            nn.Embedding(len(self), 1))
+        if radii is None:
+            radii = nn.Embedding(len(self), 1)
+            if radii_init == "unit":
+                _unit_rows(radii)
+            else:
+                with th.no_grad():
+                    nn.init.uniform_(radii.weight, a=-1, b=1)
+        self.radii = radii
 
     def forward(self, ids):
         raw = self.radii(ids)

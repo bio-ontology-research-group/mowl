@@ -193,6 +193,7 @@ def boxel_overlap_scores(module, gci_name, rows):
 CENTRE_DISTANCE_SCORERS = {
     "BoxSquaredELModule": _box2el_scores,
     "ELBEModule": _elbe_scores,
+    "RegDELBEModule": _elbe_scores,   # (a combination of parts, not a subclass of ELBEModule)
     "ELEmModule": _elem_scores,
     "TransBoxModule": _transbox_scores,
     "BoxELModule": boxel_overlap_scores,

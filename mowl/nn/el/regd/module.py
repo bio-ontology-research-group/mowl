@@ -118,6 +118,13 @@ class _RegDInterface:
         """The normal form of the last call of the module."""
         return getattr(self, "last_form", None)
 
+    def _region(self, index):
+        """Centre and size (at least ``eps``) of the regions of the classes ``index``."""
+        region = self.measure.regularise(self.classes(index))
+        if hasattr(region, "offset"):
+            return region.centre, region.offset
+        return region.centre, region.radius.squeeze(-1)
+
     def energy(self, parent_center, parent_size, child_center, child_size):
         """RegD energy of child regions inside parent regions, shape ``(n, 1)``."""
         return self._energy(parent_center, parent_size, child_center, child_size,
@@ -182,6 +189,16 @@ class RegDELBEModule(_RegDInterface, _PartBuiltModule):
         self._assemble(geometry, nb_ont_classes, nb_rels, nb_inds, embed_dim)
         self.class_offset = self.class_model.offsets
         self.ind_offset = getattr(self.individual_model, "offsets", None)
+
+    # ELBE's bottom losses were flat vectors before the losses became columns
+    # (``per_axiom_column = False`` gives that shape back)
+    def gci0_bot_loss(self, data, neg=False):
+        out = super().gci0_bot_loss(data, neg)
+        return out if self.per_axiom_column else out.reshape(-1)
+
+    def gci3_bot_loss(self, data, neg=False):
+        out = super().gci3_bot_loss(data, neg)
+        return out if self.per_axiom_column else out.reshape(-1)
 
 
 class RegDELEmModule(_RegDInterface, ELEmModule):

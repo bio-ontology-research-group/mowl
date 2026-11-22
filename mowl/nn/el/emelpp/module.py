@@ -64,6 +64,23 @@ class EmELPPModule(ELEmModule):
                                         gci0_shift=self._subclass_shift, **options)
         self._assemble(geometry, nb_ont_classes, nb_rels, nb_inds or 0, embed_dim, 1)
 
+    def _rad(self, idx):
+        """The non-negative radius of the classes ``idx`` (the class model's)."""
+        return self.class_model(idx).radius
+
+    def enable_all_negative_losses(self, epsilon=None):
+        """EmEL++ has one negative loss (Eq. 10: :math:`C \\not\\sqsubseteq \\exists R.D`), and
+        so there are no negative losses of the other normal forms to enable. (The earlier
+        module accepted the call and ignored it: the flag changed nothing.)"""
+        raise NotImplementedError(
+            "EmEL++ and EmEL(var) define the negative loss of C not-subclass-of "
+            "some R.D only (Eq. 10); the negative losses of DELE for the other normal forms "
+            "belong to ELEmbeddings (ELEmModule) and RegD.")
+
+    def _sigma(self, rel_idx):
+        """Variance of the roles; ``None`` for EmEL++."""
+        return None
+
     # -- options, as settings of the parts --------------------------------------------------
 
     @property
@@ -139,6 +156,9 @@ class EmELVarModule(EmELPPModule):
                     sigma_init=sigma_init, sigma_reg_weight=sigma_reg_weight)
         #: The tolerance table of the relation model (the learned :math:`\\sigma`).
         self.rel_sigma = self.relation_model.tolerances
+
+    def _sigma(self, rel_idx):
+        return self.relation_model.tolerance(rel_idx)
 
     @property
     def sigma_reg_weight(self):

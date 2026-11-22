@@ -185,7 +185,7 @@ def test_elem_with_another_measure(dataset):
 
 def test_elem_with_another_objective_option_and_regulariser(dataset):
     model = build("elem", dataset)
-    objective = Objective.elem(0.1, gci3="inclusion", negatives="all", strict_negatives=False)
+    objective = Objective.elem(0.1, gci3="inclusion", all_negatives=True)
     with_parts(model, objective=objective,
                regularizers=model.module.regularizers + (MaxNormPenalty("class_embed", 1.5),))
     assert len(model.module.regularizers) == 2
@@ -320,6 +320,12 @@ def _rows(form, n, r, i, size=20, seed=1):
     return th.stack([th.randint(0, h, (size,), generator=g) for h in highs], dim=1)
 
 
+def test_emelpp_has_no_dele_negatives_to_enable():
+    for cls in (EmELPPModule, EmELVarModule):
+        with pytest.raises(NotImplementedError):
+            cls(4, 2, embed_dim=3).enable_all_negative_losses()
+
+
 @pytest.mark.parametrize("key", MODELS)
 @pytest.mark.parametrize("negatives", [False, True])
 def test_every_form_equals_the_direct_module_with_individuals(key, negatives):
@@ -329,6 +335,8 @@ def test_every_form_equals_the_direct_module_with_individuals(key, negatives):
     old = _direct(key)(n, r, i, **kwargs)
     th.manual_seed(0)
     new = MODULES[key](n, r, i, **kwargs)
+    if negatives and key in ("emelpp", "emelvar"):
+        pytest.skip("EmEL++ has no DELE negatives to enable (see the test above)")
     if negatives:
         old.enable_all_negative_losses()
         new.enable_all_negative_losses()
@@ -347,7 +355,8 @@ def test_every_form_equals_the_direct_module_with_individuals(key, negatives):
             expected, got = old(rows, form, neg=neg), new(rows, form, neg=neg)
             assert expected.shape == got.shape, (key, form, neg)
             assert th.allclose(expected, got, atol=1e-5, rtol=1e-4), (key, form, neg)
-    assert th.allclose(old.regularization_loss(), new.regularization_loss(), atol=1e-6)
+    if hasattr(old, "regularization_loss"):
+        assert th.allclose(old.regularization_loss(), new.regularization_loss(), atol=1e-6)
 
 
 @pytest.mark.parametrize("key", MODELS)

@@ -67,6 +67,16 @@ class _PartBuiltModule(ComposedGeometry):
         if all_negative_losses:
             self.enable_all_negative_losses()
 
+    def role_inclusion_loss(self, gci, neg=False):
+        if not self.role_axiom_capable:  # the module has no loss for it (the stub says so)
+            return ELModule.role_inclusion_loss(self, gci, neg)
+        return super().role_inclusion_loss(gci, neg)
+
+    def role_chain_loss(self, gci, neg=False):
+        if not self.role_axiom_capable:
+            return ELModule.role_chain_loss(self, gci, neg)
+        return super().role_chain_loss(gci, neg)
+
     def individuals(self, ids):
         if self.individual_model is None:
             raise _NoIndividuals(
