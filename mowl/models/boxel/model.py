@@ -13,6 +13,8 @@ class BoxEL(EmbeddingELModel):
         that no role inverts a box; ``False`` is the signed scale of the original code.
     :param role_chain_composition: ``"in_order"`` (default) or ``"as_released"``, see
         :func:`mowl.nn.el.boxel.losses.role_chain_loss`.
+    :param load_role_axioms: Also train on the role inclusions and role chains of the \
+        ontology (the module implements their losses). Default ``False``.
     """
 
     def __init__(self,
@@ -29,12 +31,14 @@ class BoxEL(EmbeddingELModel):
                  device='cpu',
                  neg_sampling_gcis=None,
                  positive_scale=True,
-                 role_chain_composition="in_order"
+                 role_chain_composition="in_order",
+                 load_role_axioms=False
                  ):
         super().__init__(dataset, embed_dim, batch_size, extended=True,
                          model_filepath=model_filepath, device=device,
                          learning_rate=learning_rate,
-                         neg_sampling_gcis=neg_sampling_gcis)
+                         neg_sampling_gcis=neg_sampling_gcis,
+                         load_role_axioms=load_role_axioms)
 
         self.min_bounds = list(min_bounds)
         self.delta_bounds = list(delta_bounds)

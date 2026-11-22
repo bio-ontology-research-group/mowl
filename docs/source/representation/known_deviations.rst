@@ -41,6 +41,9 @@ BoxEL and BoxSEL
   ``scale="positive"``); ``positive_scale=False`` and ``scale="signed"`` give the released code.
   The chain loss of the released code composes the two maps in the wrong order;
   ``role_chain_composition="as_released"`` gives it, ``"in_order"`` is the default.
+* The constructors of ``BoxEL`` and ``BoxSEL`` take ``load_role_axioms`` (default ``False``) so
+  that the role inclusion and role chain losses of the module can be trained; before, the
+  argument did not exist although the module implements the losses.
 
 Box2EL, MultiBoxEL and Volume MultiBoxEL
 ----------------------------------------
@@ -148,8 +151,33 @@ Query answering
 * The negation of ConE and AConE is taken per coordinate and is not the true complement of the
   region. The catalogue marks it as approximate.
 
+FaithEL
+-------
+
+The negative term of the loss of the authors' code, :math:`-\psi\,\mathrm{mse}(x_a, x_{neg})`,
+has no lower bound: with ``neg_sampling=True`` the loss can go to :math:`-\infty` as the
+individuals drift apart. The paper text was not available, so the corrected form is mOWL's
+choice. The objective part ``AnchoredObjective`` defaults to the hinge
+:math:`\psi\,\max(0, m - \mathrm{mse}(x_a, x_{neg}))` (``negative_term="margin"``, margin
+``neg_margin=1.0``), which is bounded below by zero; ``negative_term="unbounded"`` gives the
+code's term. The class :class:`~mowl.models.FaithEL` selects ``"unbounded"`` (its default), so
+its numbers are those of the code; the registered method ``faithel`` of the parts is the
+bounded form.
+
 FALCON
 ------
+
+The rows of the ALC dataset for an assertion :math:`r(a, b)` are ``[b, r, a]`` (object, role,
+subject: ``ALCDataset.get_axiom_vector`` takes ``getObject()`` first). The direct code of FALCON
+takes the first column as the head of the role network, so it trains
+:math:`\mu(e_b + r, e_a)`: the opposite direction of the reading of :math:`\exists r.C`, which is
+:math:`\mu(e_x + r, e_y)` for a pair :math:`r(x, y)`. Evidence (a test, trained 300 epochs on
+eight assertions :math:`r(a_i, b_i)`): with the reading of the code the mean membership of
+:math:`(a_i, b_i)` is 0.06 and of :math:`(b_i, a_i)` is 0.69; with ``abox_head="subject"`` it is
+0.60 against 0.18. It was not checked against the authors' own repository, which is not part
+of this one. The objective part ``FuzzyObjective`` defaults to ``abox_head="subject"``; the
+named method ``falcon`` (and :class:`~mowl.models.FALCONModel`) selects ``"object"`` to
+reproduce the code.
 
 The loss :math:`-\log(1 - m + 10^{-10})` can be smaller than zero by at most :math:`10^{-10}`.
 This is the same in the original and is negligible. The part's default,
