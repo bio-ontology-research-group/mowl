@@ -38,6 +38,8 @@ class HierarchyClasses(Classes):
 
     size = 0
     _embed_dim = 0
+    #: There is no conjunction unless the regions are closed under it (boxes).
+    conjunction_part = "none"
 
     def __len__(self):
         return self.size
@@ -54,10 +56,6 @@ class HierarchyClasses(Classes):
 
     def all(self):
         return self(th.arange(len(self), device=self.device))
-
-    def param_groups(self):
-        """Parameter groups for :class:`~mowl.nn.order.manifolds.RiemannianSGD`."""
-        return [{"params": list(self.parameters()), "manifold": None}]
 
 
 # -- boxes in the unit cube --------------------------------------------------------------
@@ -80,6 +78,7 @@ class UnitCubeBoxes(HierarchyClasses):
     region = CornerBox
     part = "box"
     exact_conjunction = True
+    conjunction_part = None
 
     def __init__(self, size=None, embed_dim=None, min_delta=0.01, init_side=(0.3, 0.9),
                  table=None, soft=False):
@@ -138,6 +137,7 @@ class CodedBoxes(HierarchyClasses):
     region = CodedBox
     part = "soft box"
     exact_conjunction = True
+    conjunction_part = None
 
     def __init__(self, size=None, embed_dim=None, variant="vbc", num_codes=2, code_dims=None,
                  code_init=0.0, tables=None):

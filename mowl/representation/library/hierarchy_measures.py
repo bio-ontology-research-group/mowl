@@ -73,7 +73,7 @@ class HierarchyMeasure(_LogProbability, RegionMeasure):
     def apart(self, a, b, margin=0.0):
         self._unavailable("disjointness")
 
-    def empty(self, a):
+    def empty(self, a, margin=0.0):
         self._unavailable("empty region")
 
     def nonempty(self, a, epsilon=0.0):

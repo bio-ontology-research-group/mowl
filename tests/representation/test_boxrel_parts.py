@@ -6,13 +6,12 @@ import torch as th
 
 from mowl.models import ComposedEL
 from mowl.representation import (BallClasses, Bounds, BoxClasses, ConstructorUnavailable,
-                                 Objective, Translation, compose, METHODS, RELATION_MODELS,
-                                 CLASS_MODELS, MEASURES)
+                                 Objective, compose, METHODS, RELATION_MODELS,
+                                 CLASS_MODELS, MEASURES, ComposedGeometry, Relations)
 from mowl.representation.regions import Box
 from mowl.representation.library.boxrel_boxes import MinDeltaBoxes, signed_intersection
 from mowl.representation.library.boxrel_measures import (
     AveragedBounds, MaskedBounds, VolumeRatio)
-from mowl.representation.library.boxrel_objectives import RoleGeometry, RoleObjective
 from mowl.representation.library.boxrel_relations import (
     Affine, AffineBoxes, TranslationBoxes)
 from tests.datasetFactory import FamilyDataset
@@ -203,7 +202,12 @@ class TestRelations(TestCase):
 class TestObjectives(TestCase):
 
     def test_role_forms_need_a_relation_model_that_has_them(self):
-        g = RoleGeometry(BoxClasses(4, 2), Translation(2, 2), Bounds(), RoleObjective())
+        class NoRoles(Relations):  # a relation model without role axioms
+            def preimage(self, ids, region):
+                return region
+
+        g = ComposedGeometry(BoxClasses(4, 2), NoRoles(), Bounds(), Objective())
+        self.assertFalse(g.role_axiom_capable)
         with self.assertRaises(ConstructorUnavailable):
             g(th.tensor([[0, 1]]), "role_inclusion")
 
@@ -213,7 +217,7 @@ class TestObjectives(TestCase):
                 (MinDeltaBoxes(4, 3), TranslationBoxes(3, 3), VolumeRatio()),
                 (BoxClasses(4, 3), Affine(3, 3), Bounds()),
                 (BoxClasses(4, 3), AffineBoxes(3, 3), AveragedBounds())):
-            g = RoleGeometry(classes, relations, measure, RoleObjective(0.01))
+            g = ComposedGeometry(classes, relations, measure, Objective(0.01))
             for form, rows in (("role_inclusion", [[0, 1], [1, 2]]),
                                ("role_chain", [[0, 1, 2], [2, 2, 0]])):
                 cost = g(th.tensor(rows), form)
@@ -228,7 +232,7 @@ class TestObjectives(TestCase):
             with th.no_grad():
                 for p in relations.parameters():
                     p.add_(0.5 * th.randn_like(p))
-            g = RoleGeometry(BoxClasses(3, 4), relations, measure, RoleObjective(0.0))
+            g = ComposedGeometry(BoxClasses(3, 4), relations, measure, Objective(0.0))
             incl, chain = th.tensor([[0, 1]]), th.tensor([[0, 1, 2]])
             opt = th.optim.Adam(g.parameters(), lr=0.02)
             before = float(g(incl, "role_inclusion") + g(chain, "role_chain"))
@@ -241,8 +245,8 @@ class TestObjectives(TestCase):
 
     def test_bottom_as_class_and_image_reading_are_options(self):
         g_empty = compose(5, 2, embed_dim=3, classes="box", relations="affine map")
-        g_class = RoleGeometry(BoxClasses(5, 3), Affine(2, 3), Bounds(),
-                               RoleObjective(bottom="class", gci2_reading="image"))
+        g_class = ComposedGeometry(BoxClasses(5, 3), Affine(2, 3), Bounds(),
+                                   Objective(bottom="class", gci2_reading="image"))
         rows = th.tensor([[0, 1, 2]])
         self.assertEqual(g_class(rows, "gci3_bot").shape, (1, 1))
         self.assertEqual(g_class(rows, "gci2").shape, (1, 1))

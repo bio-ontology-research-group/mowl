@@ -464,6 +464,19 @@ class HeadTailRelations(Relations):
         second = _some(measure)(filler, self.image(ids, sub), margin)
         return (first + second) / 2
 
+    def role_inclusion(self, sub, sup, measure, margin=0.0):
+        """:math:`r \\sqsubseteq s`: head in head, tail in tail (the mean of the two)."""
+        head = measure.inside(self.head(sub), self.head(sup), margin)
+        tail = measure.inside(self.tail(sub), self.tail(sup), margin)
+        return (head + tail) / 2
+
+    def role_chain(self, first, second, sup, measure, margin=0.0):
+        """:math:`r_1 \\circ r_2 \\sqsubseteq s`: the head of :math:`r_1` in the head of
+        :math:`s` and the tail of :math:`r_2` in the tail of :math:`s`."""
+        head = measure.inside(self.head(first), self.head(sup), margin)
+        tail = measure.inside(self.tail(second), self.tail(sup), margin)
+        return (head + tail) / 2
+
     def subsumed_negative(self, measure, sub, ids, filler, margin, delta):
         """The negative loss of Box2EL: :math:`(\\delta - \\mu(C + b_D, H_r))^2 +
         (\\delta - \\mu(D + b_C, T_r))^2` with :math:`\\mu` the distance of the
@@ -540,6 +553,17 @@ class PairUnions(Relations):
     def preimage(self, ids, region):
         centre, offset = self._boxes(ids)
         return DomainProjection(centre, offset, region, self.bound)
+
+    def role_inclusion(self, sub, sup, measure, margin=0.0):
+        """:math:`r \\sqsubseteq s`: the region of pairs of :math:`r` inside that of
+        :math:`s`."""
+        return measure.inside(self.region(sub), self.region(sup))
+
+    def role_chain(self, first, second, sup, measure, margin=0.0):
+        """The simplified chain loss of the thesis (not fully semantic): the domain of
+        :math:`r_1` times the codomain of :math:`r_2` inside :math:`s`."""
+        both = ProductRegion(self.domain(first), self.codomain(second))
+        return measure.inside(both, self.region(sup))
 
 
 register_relation_model("head and tail boxes")(HeadTailRelations)
@@ -627,7 +651,7 @@ class UnionMeasure(RegionMeasure):
     def apart(self, a, b, margin=0.0):
         return self._pairs(self.base.apart, a, b, margin).mean(dim=(1, 2)).unsqueeze(1)
 
-    def empty(self, a):
+    def empty(self, a, margin=0.0):
         a = _union(a)
         batch, k, d = a.centre.shape
         each = self.base.empty(Box(a.centre.reshape(-1, d), a.offset.reshape(-1, d)))
@@ -750,6 +774,11 @@ class SampledVolume(RegionMeasure, nn.Module):
         num, den = self._ratio(MembershipIntersection((a, b)), a)
         return (num / (den + self.eps)).unsqueeze(1)
 
+    def intersect(self, a, b):
+        """The minimum of the memberships; the gap is zero (a sampled region has no
+        emptiness test)."""
+        return MembershipIntersection((a, b)), th.zeros(len(a), 1, device=_device(a))
+
     def intersection_inside(self, a, b, c, margin=0.0):
         return self.inside(MembershipIntersection((a, b)), c, margin)
 
@@ -762,7 +791,7 @@ class SampledVolume(RegionMeasure, nn.Module):
     def meets(self, a, b, margin=0.0):
         raise NotImplementedError("SampledVolume does not define meets.")
 
-    def empty(self, a):
+    def empty(self, a, margin=0.0):
         raise NotImplementedError("SampledVolume does not define empty.")
 
     def nonempty(self, a, epsilon=0.0):

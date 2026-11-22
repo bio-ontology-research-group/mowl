@@ -51,7 +51,7 @@ from mowl.representation.regions import Ball, Box, ConstructorUnavailable, Regio
 from mowl.representation.relation_models import Relations
 
 __all__ = ["Point", "PointClasses", "Related", "TripleScore", "BoxERelations",
-           "ExpressivERelations", "TripleGeometry", "PyKEENGeometry", "Entities",
+           "ExpressivERelations", "triple_geometry", "PyKEENGeometry", "Entities",
            "ExistsEntities", "PyKEENTable", "graph_kge", "boxe", "expressive"]
 
 
@@ -291,7 +291,7 @@ class TripleScore(RegionMeasure):
     the centre of the head.
 
     :param relations: The relation model that gives the ``subclass`` relation; set by
-        :class:`TripleGeometry`.
+        :func:`triple_geometry`.
     """
 
     accepts = (Point, Ball, Box)
@@ -316,7 +316,7 @@ class TripleScore(RegionMeasure):
             if relations is None:
                 raise ConstructorUnavailable(
                     "TripleScore needs a relation model for the subclass relation: build "
-                    "the geometry with TripleGeometry or the methods graph_kge/boxe/"
+                    "the geometry with triple_geometry or the methods graph_kge/boxe/"
                     "expressive.")
             ids = th.full((len(a),), relations.subclass, dtype=th.long,
                           device=a.centre.device)
@@ -334,7 +334,7 @@ class TripleScore(RegionMeasure):
     def meets(self, a, b, margin=0.0):
         raise ConstructorUnavailable("TripleScore does not define overlap.")
 
-    def empty(self, a):
+    def empty(self, a, margin=0.0):
         raise ConstructorUnavailable("TripleScore does not define emptiness.")
 
     nonempty = empty
@@ -348,31 +348,20 @@ class TripleScore(RegionMeasure):
 register_measure("triple score", default_for=(Point,))(TripleScore)
 
 
-class TripleGeometry(ComposedGeometry):
-    """A :class:`~mowl.representation.ComposedGeometry` of points and a triple score. The
-    forms it implements are the ones a projection turns into triples: ``gci0``, ``gci2``,
-    ``class_assertion`` and ``object_property_assertion``; the others raise
-    :class:`~mowl.representation.ConstructorUnavailable`."""
-
-    def __init__(self, classes, relations, measure, objective=None, individuals=None,
-                 regularizers=()):
-        super().__init__(classes, relations, measure, objective, individuals, regularizers)
-        if isinstance(measure, TripleScore):
-            measure.bind(relations)
-        self.neg_capable_gcis = frozenset({"gci0", "gci2", "object_property_assertion"}) \
-            if self.objective.negatives == "all" else frozenset(
-                {"gci2", "object_property_assertion"})
-        self.scored_forms = ("gci0", "gci2", "class_assertion", "object_property_assertion")
-
-    def member(self, individual_ids, region):
-        return self.inside(self.individuals(individual_ids), region)
-
-    @property
-    def parts(self):
-        out = super().parts
-        out["measure"] = "triple score"
-        out["conjunction"] = "none"
-        return out
+def triple_geometry(classes, relations, measure, objective=None, individuals=None,
+                    regularizers=()):
+    """The :class:`~mowl.representation.ComposedGeometry` of points and a triple score. The
+    forms it reads are the ones a projection turns into triples: ``gci0``, ``gci2``,
+    ``class_assertion`` and ``object_property_assertion`` (``supported_forms``); the others
+    raise :class:`~mowl.representation.ConstructorUnavailable`. The measure is bound to the
+    relation model by the geometry (the ``subclass`` relation)."""
+    objective = objective if objective is not None else Objective()
+    neg = {"gci0", "gci2", "object_property_assertion"} if objective.negatives == "all" \
+        else {"gci2", "object_property_assertion"}
+    return ComposedGeometry(
+        classes, relations, measure, objective, individuals, regularizers,
+        supported_forms=("gci0", "gci2", "class_assertion", "object_property_assertion"),
+        neg_capable_gcis=neg)
 
 
 _DEFAULT_RELATIONS = {"graph_kge": "translation", "boxe": "head and tail boxes",
@@ -399,8 +388,8 @@ def _build(key, nb_classes, nb_relations, nb_individuals, embed_dim, margin, cla
     individual_model = class_factory(nb_individuals, embed_dim) if nb_individuals else None
     if objective is None:
         objective = Objective(margin, negatives="gci2")
-    return TripleGeometry(class_model, relation_model, TripleScore(), objective,
-                          individuals=individual_model)
+    return triple_geometry(class_model, relation_model, TripleScore(), objective,
+                           individuals=individual_model)
 
 
 class _WithSubclass(Relations):
@@ -473,9 +462,9 @@ def boxe(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=1.0,
             tables=[PyKEENTable(r) for r in reps], subclass_id=subclass_id,
             tanh_map=tables.interaction.tanh_map, p=tables.interaction.p,
             power_norm=tables.interaction.power_norm)
-        return TripleGeometry(classes_model, relations_model, TripleScore(),
-                              objective or Objective(margin, negatives="gci2"),
-                              individuals=classes_model)
+        return triple_geometry(classes_model, relations_model, TripleScore(),
+                               objective or Objective(margin, negatives="gci2"),
+                               individuals=classes_model)
     return _build("boxe", nb_classes, nb_relations, nb_individuals, embed_dim, margin,
                   classes, "head and tail boxes", objective, None, relation_options)
 
@@ -492,9 +481,9 @@ def expressive(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=
         relations_model = ExpressivERelations(
             table=PyKEENTable(tables.relation_representations[0]), p=inter.p,
             tanh_map=inter.tanh_map, min_denom=inter.min_denom, subclass_id=subclass_id)
-        return TripleGeometry(classes_model, relations_model, TripleScore(),
-                              objective or Objective(margin, negatives="gci2"),
-                              individuals=classes_model)
+        return triple_geometry(classes_model, relations_model, TripleScore(),
+                               objective or Objective(margin, negatives="gci2"),
+                               individuals=classes_model)
     return _build("expressive", nb_classes, nb_relations, nb_individuals, embed_dim, margin,
                   classes, "region over pairs", objective, None, relation_options)
 
@@ -656,7 +645,7 @@ class PyKEENGeometry(Geometry):
                 "Reshuffle": "matrix"}.get(name, "model of PyKEEN")
 
     def as_parts(self):
-        """The same model as a :class:`TripleGeometry` of parts that share its tables
+        """The same model as a :func:`triple_geometry` of parts that share its tables
         (``BoxE`` and ``ExpressivE`` only), indexed by *graph* ids: classes are the nodes,
         relations the relation ids of the graph."""
         name = type(self.kge).__name__

@@ -10,7 +10,7 @@ from mowl.models import BoxE, ComposedEL, ExpressivE, Reshuffle  # noqa: E402
 from mowl.representation import (ComposedGeometry, ConstructorUnavailable,  # noqa: E402
                                  Objective, geometry_of)
 from mowl.representation.library.other_graph import (  # noqa: E402
-    BoxERelations, ExpressivERelations, PointClasses, PyKEENGeometry, TripleGeometry,
+    BoxERelations, ExpressivERelations, PointClasses, PyKEENGeometry,
     TripleScore)
 from tests.datasetFactory import FamilyDataset  # noqa: E402
 from tests.models.kg_region_data import abox_dataset  # noqa: E402
@@ -102,7 +102,7 @@ def test_the_parts_equal_the_pykeen_model(dataset, cls, kwargs):
     model = _trained(cls, kwargs, dataset)
     geometry = geometry_of(model)
     parts = geometry.as_parts()
-    assert isinstance(parts, TripleGeometry)
+    assert isinstance(parts, ComposedGeometry)
     triples = model.triples_factory.mapped_triples
     sub = geometry._subclass
     edges = triples[triples[:, 1] == sub]
@@ -134,7 +134,7 @@ def test_parts_combine_with_other_class_models_and_train(name, classes):
     th.manual_seed(0)
     model = ComposedEL(dataset, method=name, classes=classes, embed_dim=6, margin=1.0,
                        learning_rate=0.01)
-    assert isinstance(model.module, TripleGeometry)
+    assert isinstance(model.module, ComposedGeometry)
     datasets = model.training_datasets          # a triple score reads gci0 and gci2 only
     for form in [f for f in datasets if f not in model.module.scored_forms]:
         del datasets[form]

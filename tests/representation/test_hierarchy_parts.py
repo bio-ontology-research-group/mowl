@@ -23,7 +23,7 @@ from mowl.representation.library import hierarchy_methods as HM
 from mowl.representation.library.hierarchy_classes import (
     DiskClasses, PointClasses, UnitCubeBoxes)
 from mowl.representation.library.hierarchy_geometry import (
-    HierarchyGeometry, HierarchyObjective, TextGeometry)
+    hierarchy_geometry, TextGeometry)
 from mowl.representation.library.hierarchy_measures import (
     ConeAngle, Protrusion, ShadowCone, SoftVolumeRatio, VolumeRatio)
 from tests.datasetFactory import FamilyDataset
@@ -74,7 +74,7 @@ class TestOrderEmbeddings(Same, TestCase):
         self.assertClose(g(rows, "gci0"), module(rows, "gci0"))
         self.assertClose(g(rows, "gci0", neg=True), module(rows, "gci0", neg=True))
         self.assertSharesParameters(g, module)
-        self.assertIsInstance(g, HierarchyGeometry)
+        self.assertIsInstance(g, ComposedGeometry)
 
     def test_fresh_parts_have_the_same_scores(self):
         th.manual_seed(0)
@@ -138,7 +138,7 @@ class TestBoxes(Same, TestCase):
 
     def check(self, module, kind):
         g = geometry_of(module)
-        self.assertIsInstance(g, HierarchyGeometry)
+        self.assertIsInstance(g, ComposedGeometry)
         rows = pairs()
         for seed in range(3):
             rows = pairs(seed=seed)
@@ -185,8 +185,8 @@ class TestBoxes(Same, TestCase):
         th.manual_seed(5)
         lattice = BoxLatticeModule(N, 3)
         g = geometry_of(lattice)
-        soft = HierarchyGeometry(g.class_model, None, SoftVolumeRatio(0.01),
-                                 HierarchyObjective())
+        soft = hierarchy_geometry(g.class_model, None, SoftVolumeRatio(0.01),
+                                  Objective.hierarchy())
         gumbel = GumbelBoxModule(N, 3, beta=0.01, min_delta=lattice.min_delta)
         gumbel.class_embed.weight.data.copy_(lattice.class_embed.weight.data)
         rows = pairs()
@@ -404,7 +404,7 @@ class TestParts(TestCase):
     def test_protrusion_on_every_space_with_the_same_class_model(self):
         for manifold in (Euclidean(), Sphere()):
             classes = DiskClasses(N, 3, manifold, init_scale=0.3)
-            g = HierarchyGeometry(classes, None, Protrusion(), HierarchyObjective(0.1))
+            g = hierarchy_geometry(classes, None, Protrusion(), Objective.hierarchy(0.1))
             self.assertTrue(bool((g(pairs(), "gci0") >= 0).all()))
             first, last = train(g, 40)
             self.assertLess(last, first, type(manifold).__name__)
@@ -423,34 +423,33 @@ class TestParts(TestCase):
         for formulation, manifold in (("umbral-half-space", UpperHalfSpace()),
                                       ("penumbral-ball", PoincareBall(min_norm=0.1))):
             classes = PointClasses(N, 3, manifold, init_scale=0.2)
-            g = HierarchyGeometry(classes, None, ShadowCone(formulation, signed=True,
-                                                            negative_form="energy"),
-                                  HierarchyObjective())
+            g = hierarchy_geometry(classes, None, ShadowCone(
+                formulation, signed=True, negative_form="energy"), Objective.hierarchy())
             opt = RiemannianSGD(g.param_groups(), lr=0.02)
             first, last = train(g, 30, optimizer=opt)
             self.assertLess(last, first, formulation)
 
     def test_a_cone_measure_needs_a_matching_manifold(self):
         classes = PointClasses(N, 3, PoincareBall(min_norm=0.1))
-        g = HierarchyGeometry(classes, None, ShadowCone("umbral-half-space"),
-                              HierarchyObjective())
+        g = hierarchy_geometry(classes, None, ShadowCone("umbral-half-space"),
+                               Objective.hierarchy())
         with self.assertRaisesRegex(TypeError, "does not live on"):
             g(pairs(), "gci0")
         with self.assertRaisesRegex(TypeError, "compares"):
-            HierarchyGeometry(classes, None, ConeAngle(), HierarchyObjective())
+            hierarchy_geometry(classes, None, ConeAngle(), Objective.hierarchy())
 
     def test_measures_swap_on_the_box_lattice_class_model(self):
         for measure in (VolumeRatio(), SoftVolumeRatio(0.02), Bounds()):
             th.manual_seed(0)
-            g = HierarchyGeometry(UnitCubeBoxes(N, 3), None, measure,
-                                  HierarchyObjective(0.0 if not isinstance(measure, Bounds)
-                                                     else 0.05))
+            margin = 0.0 if not isinstance(measure, Bounds) else 0.05
+            g = hierarchy_geometry(UnitCubeBoxes(N, 3), None, measure,
+                                   Objective.hierarchy(margin))
             first, last = train(g, 150, lr=0.02)
             self.assertLess(last, first, type(measure).__name__)
 
     def test_volume_ratio_on_the_boxes_of_elbe(self):
         classes = BoxClasses(N, 3)
-        g = HierarchyGeometry(classes, None, VolumeRatio(), HierarchyObjective())
+        g = hierarchy_geometry(classes, None, VolumeRatio(), Objective.hierarchy())
         self.assertTrue(bool(th.isfinite(g(pairs(), "gci0")).all()))
         self.assertTrue(bool(th.isfinite(g(pairs(), "gci0", neg=True)).all()))
 

@@ -1,6 +1,6 @@
 """TransBox, BoxEL, BoxSEL and ELK-Em as combinations of parts, and their adapters.
 
-Every function builds the :class:`~mowl.representation.library.boxrel_objectives.RoleGeometry`
+Every function builds the :class:`~mowl.representation.ComposedGeometry`
 of a method, with new tables or (``tables=module``) with those of an existing module, which
 is how :func:`mowl.representation.geometry_of` describes the module.
 """
@@ -14,8 +14,9 @@ from mowl.representation.library.boxrel_boxes import (
     FixableBoxes, MinDeltaBoxes, Points, signed_intersection)
 from mowl.representation.library.boxrel_measures import (
     AveragedBounds, MaskedBounds, VolumeRatio)
+from mowl.representation.geometry import ComposedGeometry
 from mowl.representation.library.boxrel_objectives import (
-    BoxELObjective, BoxSELObjective, ELKEmObjective, RoleGeometry, TransBoxObjective)
+    BoxSELObjective, ELKEmObjective, TransBoxObjective, boxel_objective)
 from mowl.representation.library.boxrel_regularizers import (
     LocationPenalty, SizeCapPenalty, VolumePenalty)
 from mowl.representation.library.boxrel_relations import (
@@ -74,9 +75,9 @@ def transbox(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.
     if not reference:
         regularizers = (NormPenalty("class_embed", target=1.0, weight=reg_factor),
                         ) + regularizers
-    return RoleGeometry(classes, relations, measure,
-                        TransBoxObjective(margin, enhanced, formulation),
-                        individuals=individuals, regularizers=regularizers)
+    return ComposedGeometry(classes, relations, measure,
+                            TransBoxObjective(margin, enhanced, formulation),
+                            individuals=individuals, regularizers=regularizers)
 
 
 @register_adapter("TransBoxModule")
@@ -97,14 +98,19 @@ def boxel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0,
     :param margin: Slack of the inclusion (``0``: none, as published; a negative value is a
         slack, a positive one is ignored by a volume ratio).
     :param temperature: :math:`\\beta` of the softplus volume.
-    :param gci1_bot: see :class:`~mowl.representation.library.boxrel_objectives.BoxELObjective`.
+    :param gci1_bot: ``"volume product"`` (the BoxEL code) or ``"apart"``, see
+        :func:`~mowl.representation.library.boxrel_objectives.boxel_objective`.
     :param signed: Map the corners of a box one by one, which gives inverted boxes for a
         negative scale, as the BoxEL code does (``False``: the box is mirrored).
     :param tables: A :class:`~mowl.nn.BoxELModule` to share parameters with.
     """
-    return _boxel_geometry(RoleGeometry, BoxELObjective(margin, gci1_bot=gci1_bot),
+    return _boxel_geometry(ComposedGeometry, boxel_objective(margin, _product(gci1_bot)),
                            nb_classes, nb_relations, nb_individuals, embed_dim, temperature,
                            signed, tables, (LocationPenalty(1.0),))
+
+
+def _product(gci1_bot):
+    return "product" if gci1_bot == "volume product" else gci1_bot
 
 
 def _boxel_geometry(geometry, objective, nb_classes, nb_relations, nb_individuals, embed_dim,
@@ -126,12 +132,12 @@ def _boxel_geometry(geometry, objective, nb_classes, nb_relations, nb_individual
 
 @register_adapter("BoxELModule")
 def _boxel(module):
-    return _boxel_geometry(RoleGeometry, BoxELObjective(0.0), None, None, 0, None,
+    return _boxel_geometry(ComposedGeometry, boxel_objective(0.0), None, None, 0, None,
                            module.temperature, True, module, (LocationPenalty(1.0),))
 
 
 # ==========================================================================================
-class ConditionalGeometry(RoleGeometry):
+class ConditionalGeometry(ComposedGeometry):
     """A geometry that also reads *conditionals* :math:`(D \\mid C)[l, u]` (BoxSEL). The
     class expressions are nested tuples without names: ``("atom",)`` is a class,
     ``("and", e1, e2, ...)`` a conjunction and ``("some", e)`` an existential restriction,
@@ -182,7 +188,8 @@ def boxsel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0,
         regularizers.append(LocationPenalty(beta, weight=location_weight))
     if volume_weight:
         regularizers.append(VolumePenalty(beta, weight=volume_weight))
-    return _boxel_geometry(ConditionalGeometry, BoxSELObjective(margin, gci1_bot=gci1_bot),
+    return _boxel_geometry(ConditionalGeometry,
+                           BoxSELObjective(margin, gci1_bot=_product(gci1_bot)),
                            nb_classes, nb_relations, nb_individuals, embed_dim, temperature,
                            signed, tables, tuple(regularizers))
 
@@ -227,8 +234,8 @@ def elkem(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
         individuals = Points(nb_individuals, embed_dim) if nb_individuals else None
     objective = ELKEmObjective(margin, abox_threshold, gci2_overlap=not sound)
     regularizers = (SizeCapPenalty(weight=size_weight),) if size_weight else ()
-    return RoleGeometry(classes, relations, AveragedBounds(), objective,
-                        individuals=individuals, regularizers=regularizers)
+    return ComposedGeometry(classes, relations, AveragedBounds(), objective,
+                            individuals=individuals, regularizers=regularizers)
 
 
 @register_adapter("ELKEmModule")

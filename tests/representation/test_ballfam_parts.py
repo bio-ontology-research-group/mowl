@@ -8,10 +8,9 @@ from mowl.nn.el.emelpp.module import EmELPPModule, EmELVarModule
 from mowl.nn.el.regd.module import RegDELBEModule, RegDELEmModule
 from mowl.representation import (geometry_of, ComposedGeometry, METHODS, MEASURES,
                                  RELATION_MODELS, BoxClasses, BallClasses, Bounds,
-                                 Translation, ConstructorUnavailable)
+                                 Translation, ConstructorUnavailable, Objective, Relations)
 from mowl.representation.library.ballfam_parts import (
-    BoundaryDepth, ELPPObjective, RegDObjective, ToleranceTranslation, RoleAxiomTranslation,
-    ExtendedGeometry)
+    BoundaryDepth, RegDObjective, ToleranceTranslation)
 from tests.datasetFactory import FamilyDataset
 from tests.representation.test_adapters import _rows, GCIS, N, R, I, D
 
@@ -92,7 +91,7 @@ class TestEmELPP(TestCase):
     def test_from_new_tables(self):
         th.manual_seed(0)
         g = METHODS["emelpp"](N, R, I, embed_dim=D, margin=0.1)
-        self.assertIsInstance(g, ExtendedGeometry)
+        self.assertIsInstance(g, ComposedGeometry)
         for form in ALL:
             self.assertEqual(g(_rows(form), form).shape[1], 1)
         self.assertEqual(g.parts["relations"], "translation")
@@ -233,7 +232,7 @@ class TestPartsOutsideTheirPaper(TestCase):
 
     def test_tolerance_with_balls_and_boxes(self):
         for classes in ("ball", "box"):
-            objective = ELPPObjective(0.05, slack=True, tolerance_weight=0.5)
+            objective = Objective(0.05, slack=True, tolerance_weight=0.5)
             model = self._train(classes=classes, relations="translation with tolerance",
                                 objective=objective)
             self.assertEqual(model.module.parts["relations"], "translation with tolerance")
@@ -255,8 +254,8 @@ class TestPartsOutsideTheirPaper(TestCase):
     def test_role_axioms_of_a_relation_model(self):
         # role axioms with the tolerance model on boxes: loss decreases under training
         th.manual_seed(0)
-        g = ExtendedGeometry(BoxClasses(6, 4), ToleranceTranslation(4, 4), Bounds(),
-                             ELPPObjective(0.0))
+        g = ComposedGeometry(BoxClasses(6, 4), ToleranceTranslation(4, 4), Bounds(),
+                             Objective(0.0))
         rows = th.tensor([[0, 1, 2], [1, 1, 3]])
         opt = th.optim.Adam(g.parameters(), lr=0.05)
         before = float(g(rows, "role_chain").mean())
@@ -269,12 +268,17 @@ class TestPartsOutsideTheirPaper(TestCase):
         self.assertEqual(g(inc, "role_inclusion").shape, (1, 1))
 
     def test_plain_translation_has_no_role_axioms(self):
-        g = ComposedGeometry(BallClasses(4, 3), Translation(2, 3),
-                             MEASURES["centre distance"](), ELPPObjective())
+        class NoRoles(Relations):  # a relation model that does not define role axioms
+            def preimage(self, ids, region):
+                return region
+
+        g = ComposedGeometry(BallClasses(4, 3), NoRoles(), MEASURES["centre distance"](),
+                             Objective())
+        self.assertFalse(g.role_axiom_capable)
         with self.assertRaises(ConstructorUnavailable):
             g.cost("role_inclusion", th.tensor([[0, 1]]))
-        g = ExtendedGeometry(BallClasses(4, 3), RoleAxiomTranslation(2, 3, direction="row"),
-                             MEASURES["centre distance"](), ELPPObjective())
+        g = ComposedGeometry(BallClasses(4, 3), Translation(2, 3, direction="row"),
+                             MEASURES["centre distance"](), Objective())
         self.assertEqual(g.cost("role_inclusion", th.tensor([[0, 1]])).shape, (1, 1))
         self.assertTrue(g.role_axiom_capable)
 

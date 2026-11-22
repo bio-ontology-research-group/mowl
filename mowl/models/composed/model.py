@@ -1,6 +1,11 @@
 """A model put together from parts."""
 
+import inspect
+
+import torch as th
+
 from mowl.base_models.elmodel import EmbeddingELModel
+from mowl.nn.el.elmodule import ELModule
 from mowl.representation import methods as M
 from mowl.representation.objectives import Objective
 
@@ -39,6 +44,17 @@ class ComposedEL(EmbeddingELModel):
         ``Objective(margin)``.
     :param margin: Margin of the default objective, or of ``method``.
     :param regularizers: Penalties (:class:`mowl.training.Regularizer`) of the module.
+
+    The model trains on the axiom forms its geometry can read
+    (:attr:`~mowl.representation.ComposedGeometry.supported_forms`): the others are left
+    out of :attr:`training_datasets`, so a hierarchy method trains on the subclass axioms
+    only. The EL++ role axioms of the dataset are loaded when the geometry reads them (its
+    relation model defines ``role_inclusion`` and ``role_chain``). A form whose objective
+    has a ranking loss (``Objective(ranking={form: gamma})``) is trained with it
+    :math:`[\\mathrm{positive} - \\mathrm{negative}]_+`; after each optimisation step the
+    parameters are projected back onto their constraint set (``module.project()``, for
+    example the unit cube). Methods that are trained on queries and not on normal-form
+    axioms (``"acone"``, ``"query2box"``, ...) are refused with an error that says so.
     """
 
     def __init__(self, dataset, method=None, classes="box", relations="translation",
@@ -50,6 +66,13 @@ class ComposedEL(EmbeddingELModel):
                          learning_rate=learning_rate, neg_sampling_gcis=neg_sampling_gcis)
         if method is not None and method not in M.METHODS:
             raise ValueError(f"Unknown method {method!r}; available: {sorted(M.METHODS)}.")
+        if method is not None and M.METHOD_KINDS.get(method, "axioms") != "axioms":
+            raise TypeError(
+                f"The method {method!r} is trained on {M.METHOD_KINDS[method]}, not on "
+                f"normal-form axioms, so ComposedEL cannot train it. Methods that ComposedEL "
+                f"trains: "
+                f"{sorted(k for k in M.METHODS if M.METHOD_KINDS.get(k) == 'axioms')}; "
+                f"for {method!r} see mowl.models.query.")
         if method is None and method_options:
             raise TypeError(f"Unexpected arguments {sorted(method_options)}.")
         self.method = method
@@ -64,8 +87,11 @@ class ComposedEL(EmbeddingELModel):
         sizes = (len(self.class_index_dict), len(self.object_property_index_dict),
                  len(self.individual_index_dict))
         if self.method is not None:
-            module = M.METHODS[self.method](*sizes, embed_dim=self.embed_dim,
-                                            margin=self.margin, **self.method_options)
+            build = M.METHODS[self.method]
+            options = dict(self.method_options)
+            if "margin" in inspect.signature(build).parameters:
+                options["margin"] = self.margin
+            module = build(*sizes, embed_dim=self.embed_dim, **options)
             if self.regularizers:
                 module.regularizers = module.regularizers + self.regularizers
         else:
@@ -74,7 +100,46 @@ class ComposedEL(EmbeddingELModel):
             module = M.compose(*sizes, embed_dim=self.embed_dim, classes=self.classes,
                                relations=self.relations, measure=self.measure,
                                objective=objective, regularizers=self.regularizers)
+        if not isinstance(module, ELModule):
+            raise TypeError(
+                f"The geometry of {self.method!r} ({type(module).__name__}) is not an "
+                f"ELModule: it is not trained on normal-form axioms, so ComposedEL cannot "
+                f"train it.")
         self.module = module.to(self.device)
+        # EL++ role axioms: loaded when the geometry reads them
+        self.load_role_axioms = bool(getattr(module, "role_axiom_capable", False))
+
+    @property
+    def training_datasets(self):
+        """The training datasets of the forms the geometry can read."""
+        datasets = super().training_datasets
+        supported = getattr(self.module, "supported_forms", None)
+        if supported is None:
+            return datasets
+        return {form: data for form, data in datasets.items() if form in supported}
+
+    def compute_loss(self, pos_scores, neg_scores=None):
+        """The mean of the positive and the negative losses; for a form with a ranking loss
+        (``Objective.ranking``) :math:`[\\mathrm{pos} - \\mathrm{neg}]_+`, each positive
+        against each of its corrupted axioms."""
+        ranking = getattr(getattr(self.module, "objective", None), "ranking", None)
+        form = getattr(self.module, "last_form", None)
+        if ranking and neg_scores is not None and form in ranking:
+            pos = pos_scores.reshape(-1)
+            neg = neg_scores.reshape(-1)
+            if neg.numel() % pos.numel():
+                raise ValueError("The ranking loss needs a whole number of negatives per "
+                                 "positive.")
+            neg = neg.reshape(-1, pos.numel())
+            return th.relu(pos.unsqueeze(0) - neg).mean()
+        return super().compute_loss(pos_scores, neg_scores)
+
+    def after_optimizer_step(self):
+        super().after_optimizer_step()
+        project = getattr(self.module, "project", None)
+        if project is not None:
+            with th.no_grad():
+                project()
 
     @property
     def as_geometry(self):

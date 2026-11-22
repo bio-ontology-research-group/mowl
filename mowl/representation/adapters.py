@@ -13,16 +13,19 @@ from mowl.representation.geometry import Geometry
 
 __all__ = ["geometry_of", "register_adapter", "ADAPTERS"]
 
-#: Module class name -> function from a module to its :class:`Geometry`.
+#: Class name -> function from a module (or model) to its :class:`Geometry`.
 ADAPTERS = {}
 
 
-def register_adapter(*module_class_names):
-    """Decorator: use the function as the adapter of the module classes with these names.
-    The function takes the module; if it has a parameter ``model``, it also gets the model
-    the module belongs to (``None`` when only a module was given)."""
+def register_adapter(*class_names):
+    """Decorator: use the function as the adapter of the classes with these names: module
+    classes, or, for models that have no usable ``.module`` (the models of FaithEL, of the
+    knowledge-graph and word2vec families, BoxLitE), model classes. The function takes the
+    module (the model itself where the adapter is registered under a model class); if it has
+    a parameter ``model``, it also gets the model the module belongs to (``None`` when only
+    a module was given)."""
     def decorate(function):
-        for name in module_class_names:
+        for name in class_names:
             ADAPTERS[name] = function
         return function
     return decorate
@@ -35,19 +38,30 @@ def geometry_of(model):
     """
     if isinstance(model, Geometry):
         return model
+    # The model's own class first (also its base classes): a model without a usable
+    # ``.module`` is described by its class. Only then the module.
+    for cls in type(model).__mro__:
+        adapter = ADAPTERS.get(cls.__name__)
+        if adapter is not None:
+            return _call(adapter, model, model)
     module = getattr(model, "module", model)
     if isinstance(module, Geometry):
         return module
-    adapter = ADAPTERS.get(type(module).__name__)
-    if adapter is None:
-        raise NotImplementedError(
-            f"{type(module).__name__} does not expose a geometry yet. Modules that do: "
-            f"{sorted(ADAPTERS)}.")
+    for cls in type(module).__mro__:
+        adapter = ADAPTERS.get(cls.__name__)
+        if adapter is not None:
+            return _call(adapter, module, model)
+    raise NotImplementedError(
+        f"{type(model).__name__} does not expose a geometry yet. Classes that do: "
+        f"{sorted(ADAPTERS)}.")
+
+
+def _call(adapter, obj, model):
     # An adapter may take the model as well (texts, sizes and options that live there).
     parameters = list(inspect.signature(adapter).parameters)
     if "model" in parameters[1:]:
-        return adapter(module, model=model if model is not module else None)
-    return adapter(module)
+        return adapter(obj, model=model if model is not obj else None)
+    return adapter(obj)
 
 
 @register_adapter("ELEmModule")

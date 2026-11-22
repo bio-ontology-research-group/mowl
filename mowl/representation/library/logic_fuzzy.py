@@ -15,10 +15,12 @@ operator family    Goedel              product (or others)      Goedel on logits
 measure            mean violation      conflict (``-log``)      either-or hinge
 =================  ==================  =======================  ==========================
 
-Each cell is a small class below. They are combined by :class:`FuzzyGeometry`; the three
-methods are the functions :func:`dfalc`, :func:`falcon` and :func:`alcone` (registered in
-:data:`mowl.representation.METHODS`), and :func:`~mowl.representation.geometry_of` builds
-them over the tables of the existing modules. The operator family is a part of its own
+Each cell is a small class below. They are combined by
+:class:`~mowl.representation.ComposedGeometry` (the region family gives it negation and
+disjunction); the three methods are the functions :func:`dfalc`, :func:`falcon` and
+:func:`alcone` (registered in :data:`mowl.representation.METHODS`), and
+:func:`~mowl.representation.geometry_of` builds them over the tables of the existing
+modules. The operator family is a part of its own
 (:data:`FAMILIES`): every method can be built with every family, and the class models,
 relation models and measures can be exchanged (see the tests).
 
@@ -49,7 +51,7 @@ __all__ = ["FuzzySet", "Family", "Product", "Goedel", "Lukasiewicz", "LogitGoede
            "HalfAxisClasses", "NetworkClasses", "DomainElements", "MembershipNetwork",
            "Domain", "TruthMatrix", "IncidenceMatrices", "PairNetworkRelations",
            "MeanViolation", "ConflictMeasure", "ConeMeasure", "FuzzyObjective",
-           "FuzzyGeometry", "dfalc", "falcon", "alcone"]
+           "dfalc", "falcon", "alcone"]
 
 #: Logit of the constants owl:Thing and owl:Nothing of the Al-cone module.
 CONSTANT_LOGIT = 1e4
@@ -119,6 +121,12 @@ class FuzzySet(Region):
         # the same kind, so the gap is zero.
         out = FuzzySet(self.family.and_(self.values, other.values), self.family)
         return out, th.zeros(out.values.shape[0], 1, device=out.values.device)
+
+    def complement(self):
+        return FuzzySet(self.family.not_(self.values), self.family)
+
+    def union(self, other):
+        return FuzzySet(self.family.or_(self.values, other.values), self.family)
 
 
 # =========================================================================================
@@ -282,7 +290,19 @@ def _constants(values, ids, top_index, bottom_index, top, bottom):
     return values
 
 
-class TruthTableClasses(Classes):
+class _FuzzyClasses:
+    """Class models whose regions are fuzzy sets: the operators of the family do conjunction,
+    disjunction and negation."""
+
+    conjunction_part = "fuzzy operator"
+
+    @property
+    def extra_parts(self):
+        return {"negation": "fuzzy operator", "disjunction": "fuzzy operator",
+                "family": type(self.family).__name__}
+
+
+class TruthTableClasses(_FuzzyClasses, Classes):
     """A class is a vector of truth values over a finite domain, ``sigmoid(logit)`` per
     element (DF-ALC). ``owl:Thing`` and ``owl:Nothing`` are the constants ``1`` and ``0``.
 
@@ -312,7 +332,7 @@ class TruthTableClasses(Classes):
         return FuzzySet(values, self.family)
 
 
-class HalfAxisClasses(Classes):
+class HalfAxisClasses(_FuzzyClasses, Classes):
     """A class is a set of half-axes of :math:`\\mathbb{R}^n` (an axis-aligned cone), given
     by one logit per half-axis; ``> 0`` means the half-axis belongs to the cone (Al-cone).
     ``owl:Thing`` and ``owl:Nothing`` are the constants :math:`\\pm 10^4`. Also used for the
@@ -379,7 +399,7 @@ class Domain(nn.Module):
         return self.table.num_embeddings + (0 if self.extra is None else len(self.extra))
 
 
-class NetworkClasses(Classes):
+class NetworkClasses(_FuzzyClasses, Classes):
     """A class is a vector; its fuzzy set is the degree the network gives to the pair of
     the class vector and each element of the domain (FALCON).
 
@@ -414,7 +434,7 @@ class NetworkClasses(Classes):
         return FuzzySet(values, self.family)
 
 
-class DomainElements(Classes):
+class DomainElements(_FuzzyClasses, Classes):
     """Individuals that are the elements of the domain: the crisp set of element ``i``
     (a one-hot vector). The table is fixed.
 
@@ -598,7 +618,7 @@ class MeanViolation(_FuzzyMeasure):
         self.check(a, b)
         return th.relu(a.family.and_(a.values, b.values) + margin).mean(dim=-1, keepdim=True)
 
-    def empty(self, a):
+    def empty(self, a, margin=0.0):
         self.check(a)
         return a.values.mean(dim=-1, keepdim=True)
 
@@ -658,7 +678,7 @@ class ConflictMeasure(_FuzzyMeasure):
         self._no_margin(margin)
         return self._conflict(a.family.and_(a.values, b.values))
 
-    def empty(self, a):
+    def empty(self, a, margin=0.0):
         self.check(a)
         return self._conflict(a.values)
 
@@ -696,7 +716,7 @@ class ConeMeasure(_FuzzyMeasure):
         return (th.relu(margin + a.values) * th.relu(margin + b.values)).mean(
             dim=-1, keepdim=True)
 
-    def empty(self, a):
+    def empty(self, a, margin=0.0):
         self.check(a)
         return th.relu(self.empty_margin + a.values).mean(dim=-1, keepdim=True)
 
@@ -790,7 +810,7 @@ class FuzzyObjective(Objective):
     # -- assertions ---------------------------------------------------------------------
     def class_assertion(self, g, rows, neg=False):
         a, c = g.individuals(rows[:, 0]), g.classes(rows[:, 1])
-        if self._neg(neg):
+        if self._neg(neg, "class_assertion"):
             return g.measure.apart(a, c, self.margin)
         cost = g.measure.member(a, c, self.m)
         if self.validity:
@@ -803,35 +823,12 @@ class FuzzyObjective(Objective):
             subject, target = b, g.relation_model.image(rows[:, 1], a)
         else:
             subject, target = a, g.exists(rows[:, 1], b)
-        if self._neg(neg):
+        if self._neg(neg, "object_property_assertion"):
             return g.measure.apart(subject, target, self.margin)
         cost = g.measure.member(subject, target, self.m) + self.gci2_offset
         if self.validity:
             cost = cost + g.measure.validity(a, self.m) + g.measure.validity(b, self.m)
         return cost
-
-
-class FuzzyGeometry(ComposedGeometry):
-    """A :class:`~mowl.representation.ComposedGeometry` for fuzzy regions: it also has
-    negation and disjunction (the family of the regions), and the membership of an
-    individual is the cost its measure gives."""
-
-    def negation(self, a):
-        return FuzzySet(a.family.not_(a.values), a.family)
-
-    def disjunction(self, a, b):
-        return FuzzySet(a.family.or_(a.values, b.values), a.family)
-
-    def member(self, individual_ids, region):
-        return self.measure.member(self.individuals(individual_ids), region,
-                                   self.objective.m)
-
-    @property
-    def parts(self):
-        out = super().parts
-        out["conjunction"] = out["negation"] = out["disjunction"] = "fuzzy operator"
-        out["family"] = type(self.class_model.family).__name__
-        return out
 
 
 # =========================================================================================
@@ -891,8 +888,8 @@ def dfalc(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0,
                                     bottom_index=bottom_index, init_std=init_std)
         relations = TruthMatrix(max(nb_relations, 1), n, init_std=init_std)
     individuals = DomainElements(n, n, family=family)
-    return FuzzyGeometry(classes, relations, MeanViolation(),
-                         FuzzyObjective.dfalc(loss_type, threshold), individuals=individuals)
+    return ComposedGeometry(classes, relations, MeanViolation(),
+                            FuzzyObjective.dfalc(loss_type, threshold), individuals=individuals)
 
 
 @register_method("falcon")
@@ -936,8 +933,8 @@ def falcon(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0,
         measure = ConflictMeasure(max_measure, stabiliser)
     individuals = DomainElements(table.num_embeddings if tables is None
                                  else tables.e_embedding.num_embeddings, n, family=t_norm)
-    geometry = FuzzyGeometry(classes, relations, measure, FuzzyObjective.falcon(),
-                             individuals=individuals)
+    geometry = ComposedGeometry(classes, relations, measure, FuzzyObjective.falcon(),
+                                individuals=individuals)
     geometry.domain = domain
     geometry.network = network
     return geometry
@@ -974,8 +971,8 @@ def alcone(nb_classes, nb_relations, nb_individuals=0, embed_dim=8, margin=0.1,
         relations = IncidenceMatrices(max(nb_relations, 1), embed_dim)
         individuals = HalfAxisClasses(max(nb_individuals, 1), embed_dim, family=fam)
         measure = ConeMeasure(tau=temperature)
-    return FuzzyGeometry(classes, relations, measure, FuzzyObjective.alcone(margin),
-                         individuals=individuals)
+    return ComposedGeometry(classes, relations, measure, FuzzyObjective.alcone(margin),
+                            individuals=individuals)
 
 
 @register_adapter("DFALCModule")

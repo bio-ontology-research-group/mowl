@@ -17,17 +17,19 @@ the adapters of :func:`mowl.representation.geometry_of` are these functions call
 
 import torch as th
 
+from mowl.representation.geometry import ComposedGeometry
 from mowl.representation.library.multibox_objective import (
-    ComponentSpread, DiversityPenalty, MultiBoxGeometry, MultiBoxObjective, bump_penalty)
+    ComponentSpread, DiversityPenalty, bump_penalty)
+from mowl.representation.objectives import Objective
 from mowl.representation.library.multibox_parts import (
     BumpedBoxClasses, HeadTailRelations, PackedUnionClasses, PairUnions, SampledVolume,
-    UnionClasses, UnionMeasure, MembershipIntersection, _packed_init)
+    UnionClasses, UnionMeasure, _packed_init)
 from mowl.representation.measures import Bounds
 from mowl.representation.adapters import register_adapter
 from mowl.representation.methods import register_method
 from mowl.representation.relation_models import Translation
 
-__all__ = ["box2el", "multiboxel", "multielbe", "mcmultibox", "VolumeGeometry"]
+__all__ = ["box2el", "multiboxel", "multielbe", "mcmultibox"]
 
 
 def _head_tail(nb_relations, embed_dim, t):
@@ -67,11 +69,11 @@ def box2el(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0,
         if t.ind_center is not None:
             individuals = BumpedBoxClasses(centres=t.ind_center, offsets=t.ind_offset,
                                            bumps=t.bump_individuals)
-    objective = MultiBoxObjective(
+    objective = Objective(
         margin, slack=True, epsilon=epsilon, gci3="inclusion", gci2_negative="delta",
         negatives="all" if all_negatives else "gci2", squared=True, delta=delta,
         gci3_bot_negative="filler")
-    return MultiBoxGeometry(classes, _head_tail(nb_relations, embed_dim, t),
+    return ComposedGeometry(classes, _head_tail(nb_relations, embed_dim, t),
                             Bounds(separation="every"), objective, individuals=individuals,
                             regularizers=(bump_penalty(reg_factor),))
 
@@ -135,13 +137,13 @@ def multiboxel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=
          "bump_individuals"), bump=True)
     if t is not None:
         tau = t.tau
-    objective = MultiBoxObjective(
+    objective = Objective(
         margin, slack=True, epsilon=epsilon, gci3="inclusion", gci2_negative="delta",
         negatives="gci2", squared=True, delta=delta, gci3_bot_negative="filler")
     measure = UnionMeasure(Bounds(separation="every"), component_aggregation, tau)
     regularizers = [bump_penalty(reg_factor)] + _union_regularizers(component_reg,
                                                                     diversity_reg)
-    return MultiBoxGeometry(classes, _head_tail(nb_relations, embed_dim, t), measure,
+    return ComposedGeometry(classes, _head_tail(nb_relations, embed_dim, t), measure,
                             objective, individuals=individuals, regularizers=regularizers)
 
 
@@ -174,45 +176,11 @@ def multielbe(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0
         vectors=t.rel_embed)
     if t is not None:
         tau = t.tau
-    objective = MultiBoxObjective(margin, slack=False, epsilon=epsilon, gci3=gci3,
-                                  gci2_negative="overlap", negatives="gci2")
+    objective = Objective(margin, slack=False, epsilon=epsilon, gci3=gci3,
+                          gci2_negative="overlap", negatives="gci2")
     measure = UnionMeasure(Bounds(separation="every"), component_aggregation, tau)
-    return MultiBoxGeometry(classes, relations, measure, objective, individuals=individuals,
+    return ComposedGeometry(classes, relations, measure, objective, individuals=individuals,
                             regularizers=_union_regularizers(component_reg, diversity_reg))
-
-
-class VolumeGeometry(MultiBoxGeometry):
-    """The geometry of the volume-based multibox: conjunction is the minimum of the
-    memberships, roles are regions of pairs, and the role axioms are volume ratios of them.
-    Its parameters are single tensors, not embedding tables."""
-
-    def conjunction(self, a, b):
-        return MembershipIntersection((a, b)), th.zeros(len(a), 1, device=self.device)
-
-    @property
-    def device(self):
-        return self.class_model.centres.device
-
-    @property
-    def role_axiom_capable(self):
-        return True
-
-    def regularization_loss(self):
-        return th.zeros((), device=self.device)
-
-
-class _VolumeObjective(MultiBoxObjective):
-    def role_inclusion(self, g, rows):
-        rel = g.relation_model
-        return g.measure.inside(rel.region(rows[:, 0]), rel.region(rows[:, 1]))
-
-    def role_chain(self, g, rows):
-        """The simplified chain loss of the thesis (not fully semantic): the domain of
-        :math:`r_1` times the codomain of :math:`r_2` inside :math:`s`."""
-        from mowl.representation.library.multibox_parts import ProductRegion
-        rel = g.relation_model
-        both = ProductRegion(rel.domain(rows[:, 0]), rel.codomain(rows[:, 1]))
-        return g.measure.inside(both, rel.region(rows[:, 2]))
 
 
 @register_method("mcmultibox")
@@ -265,9 +233,8 @@ def mcmultibox(nb_classes, nb_relations, nb_individuals=0, embed_dim=5, margin=0
                   V.sobol_points(num_points, 2 * embed_dim, bound, seed + 1)]
         measure = SampledVolume(points, bound=bound, temperature=temperature,
                                 aggregate=aggregate, chunk_size=point_chunk_size)
-    geometry = VolumeGeometry(classes, relations, measure,
-                              _VolumeObjective(negatives="gci2"), individuals=individuals)
-    geometry.neg_capable_gcis = frozenset()
+    geometry = ComposedGeometry(classes, relations, measure, Objective(negatives="gci2"),
+                                individuals=individuals, neg_capable_gcis=frozenset())
     geometry.margin_semantics = None
     return geometry
 

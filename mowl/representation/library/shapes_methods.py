@@ -100,10 +100,9 @@ def octagon(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0
         disjoint_margin=disjoint_margin, neg_margins={"gci2": neg_margin},
         assertion="distance")
     regularizers = (MinWidthPenalty(min_width),) if min_width and min_width > 0 else ()
-    g = ComposedGeometry(classes, relations, OctagonBounds(), objective,
-                         individuals=individuals, regularizers=regularizers)
-    g.neg_capable_gcis = frozenset({"gci2"})
-    return g
+    return ComposedGeometry(classes, relations, OctagonBounds(), objective,
+                            individuals=individuals, regularizers=regularizers,
+                            neg_capable_gcis={"gci2"})
 
 
 @register_adapter("OctagonELModule")
@@ -157,10 +156,9 @@ def prism(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1, 
         individuals = Points(family="prism", centres=t.ind_embed)
     objective = ShapeObjective(margin, gci3="overlap", gci2_negative="shrunk",
                                negatives="gci2", empty_margin=True)
-    g = ComposedGeometry(classes, relations, PrismBounds(empty="triangle"), objective,
-                         individuals=individuals)
-    g.neg_capable_gcis = frozenset({"gci2", "object_property_assertion"})
-    return g
+    return ComposedGeometry(classes, relations, PrismBounds(empty="triangle"), objective,
+                            individuals=individuals,
+                            neg_capable_gcis={"gci2", "object_property_assertion"})
 
 
 @register_adapter("PrismModule")
@@ -233,9 +231,9 @@ def eike(nb_classes, nb_relations, nb_individuals=0, embed_dim=100, margin=0.0, 
         0.0, negatives="gci2",
         ranking={"gci0": gamma_sub, "class_assertion": gamma_ins,
                  "object_property_assertion": gamma_rel})
-    g = ComposedGeometry(classes, relations, measure, objective, individuals=individuals)
-    g.neg_capable_gcis = frozenset({"gci0", "class_assertion", "object_property_assertion"})
-    return g
+    return ComposedGeometry(classes, relations, measure, objective, individuals=individuals,
+                            neg_capable_gcis={"gci0", "class_assertion",
+                                              "object_property_assertion"})
 
 
 @register_adapter("EIKEModule")
@@ -291,10 +289,9 @@ def concept2box(nb_classes, nb_relations, nb_individuals=0, embed_dim=32, margin
                      "object_property_assertion": kge_margin},
         weights={"class_assertion": cross_weight,
                  "object_property_assertion": instance_weight})
-    g = ComposedGeometry(classes, relations, measure, objective, individuals=points)
-    g.neg_capable_gcis = frozenset({"gci0", "gci2", "class_assertion",
-                                    "object_property_assertion"})
-    return g
+    return ComposedGeometry(classes, relations, measure, objective, individuals=points,
+                            neg_capable_gcis={"gci0", "gci2", "class_assertion",
+                                              "object_property_assertion"})
 
 
 @register_adapter("Concept2BoxModule")

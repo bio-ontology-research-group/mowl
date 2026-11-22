@@ -33,7 +33,8 @@ from mowl.representation.library.hierarchy_classes import (
     CodedBoxes, ConePoints, DiskClasses, OrderPoints, PointClasses, TextPoints,
     UnitCubeBoxes)
 from mowl.representation.library.hierarchy_geometry import (
-    HierarchyGeometry, HierarchyObjective, LatticeGeometry, TextGeometry)
+    LatticeGeometry, TextGeometry, hierarchy_geometry)
+from mowl.representation.objectives import Objective
 from mowl.representation.library.hierarchy_measures import (
     ConeAngle, DistanceDepth, OrderViolation, Protrusion, ShadowCone, SoftVolumeRatio,
     VolumeRatio)
@@ -87,8 +88,8 @@ def order_embeddings(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50,
     """
     classes = OrderPoints(nb_classes, embed_dim, True, "uniform", init_scale) if tables is None \
         else OrderPoints(table=tables.class_embed, nonnegative=True)
-    return HierarchyGeometry(classes, None, OrderViolation("reversed", 2),
-                             HierarchyObjective(margin))
+    return hierarchy_geometry(classes, None, OrderViolation("reversed", 2),
+                              Objective.hierarchy(margin))
 
 
 @register_method("cate")
@@ -113,7 +114,7 @@ def cate(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50, margin=1.0,
         classes = OrderPoints(table=tables.node_embedding, nonnegative=False)
         existentials = tables.existential_ids
         p = tables.p
-    return LatticeGeometry(classes, OrderViolation("product", p), HierarchyObjective(margin),
+    return LatticeGeometry(classes, OrderViolation("product", p), Objective.hierarchy(margin),
                            existentials=existentials, conjunctions=conjunctions)
 
 
@@ -141,9 +142,9 @@ def box_lattice(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50, min_
         freeze_delta_negatives = tables.freeze_delta_negatives
         max_regularization = tables.max_regularization
     regularizers = (MaxCornerPenalty(max_regularization),) if max_regularization else ()
-    return HierarchyGeometry(
+    return hierarchy_geometry(
         classes, None, VolumeRatio(eps, disjoint_weight, zero_at_inclusion=False),
-        HierarchyObjective(freeze_size_negatives=freeze_delta_negatives),
+        Objective.hierarchy(freeze_size_negatives=freeze_delta_negatives),
         regularizers=regularizers)
 
 
@@ -165,8 +166,8 @@ def gumbel_box(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50, beta=
         beta, max_regularization = tables.beta, tables.max_regularization
     regularizers = (MaxCornerPenalty(max_regularization),) if max_regularization else ()
     measure = SoftVolumeRatio(beta, beta, gumbel_shift=True, tail="floor", energy_floor=1e-9)
-    return HierarchyGeometry(classes, None, measure, HierarchyObjective(),
-                             regularizers=regularizers)
+    return hierarchy_geometry(classes, None, measure, Objective.hierarchy(),
+                              regularizers=regularizers)
 
 
 @register_method("bcbox")
@@ -194,8 +195,8 @@ def bcbox(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50, variant="v
     measure = SoftVolumeRatio(intersection_temp, volume_temp, gumbel_shift=False,
                               tail="linear", energy_floor=1e-12, dtype=None)
     regularizers = (CodePenalty(code_weight),) if code_weight else ()
-    return HierarchyGeometry(classes, None, measure, HierarchyObjective(),
-                             regularizers=regularizers)
+    return hierarchy_geometry(classes, None, measure, Objective.hierarchy(),
+                              regularizers=regularizers)
 
 
 # -- points on manifolds ----------------------------------------------------------------
@@ -213,7 +214,7 @@ def hyperbolic_cones(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50,
     else:
         classes = ConePoints(K=tables.K, table=tables.class_embed)
         margin = tables.margin
-    return HierarchyGeometry(classes, None, ConeAngle(), HierarchyObjective(margin))
+    return hierarchy_geometry(classes, None, ConeAngle(), Objective.hierarchy(margin))
 
 
 @register_method("shadow_cones")
@@ -242,7 +243,7 @@ def shadow_cones(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50,
         classes = PointClasses(manifold=manifold, table=tables.class_embed)
     measure = ShadowCone(formulation, radius, horosphere_height, gamma3, signed=True,
                          negative_form="energy")
-    return HierarchyGeometry(classes, None, measure, HierarchyObjective())
+    return hierarchy_geometry(classes, None, measure, Objective.hierarchy())
 
 
 _DISK_SPACES = {"hyperbolic": Hyperboloid, "spherical": Sphere, "euclidean": Euclidean}
@@ -263,8 +264,8 @@ def disk_embeddings(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50,
         classes = DiskClasses(manifold=tables.manifold, table=tables.class_embed,
                               radii=tables.radius_embed)
         margin = tables.margin
-    return HierarchyGeometry(classes, None, Protrusion(signed=True),
-                             HierarchyObjective(margin))
+    return hierarchy_geometry(classes, None, Protrusion(signed=True),
+                              Objective.hierarchy(margin))
 
 
 # -- language models --------------------------------------------------------------------
@@ -292,7 +293,7 @@ def hit(nb_classes=None, nb_relations=0, nb_individuals=0, embed_dim=None, margi
         clustering_weight, centripetal_weight = tables.clustering_weight, \
             tables.centripetal_weight
     classes = TextPoints(encoder, texts, curvature=curvature)
-    return TextGeometry(classes, None, DistanceDepth(centri_weight), HierarchyObjective(),
+    return TextGeometry(classes, None, DistanceDepth(centri_weight), Objective.hierarchy(),
                         clustering_margin, centripetal_margin, clustering_weight,
                         centripetal_weight)
 
@@ -323,7 +324,7 @@ def ont(nb_classes=None, nb_relations=0, nb_individuals=0, embed_dim=None, margi
     classes = TextPoints(encoder, texts, curvature=curvature)
     relations = None if role_model is None else TextRotation(
         role_model, encoder, classes.manifold.c, role_texts)
-    return TextGeometry(classes, relations, DistanceDepth(centri_weight), HierarchyObjective(),
+    return TextGeometry(classes, relations, DistanceDepth(centri_weight), Objective.hierarchy(),
                         clustering_margin, centripetal_margin, clustering_weight,
                         centripetal_weight)
 

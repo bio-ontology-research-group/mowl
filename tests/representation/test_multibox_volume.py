@@ -8,7 +8,7 @@ from mowl.nn import VolumeMultiBoxELModule
 from mowl.representation import (
     Ball, Box, BallClasses, BoxClasses, ConstructorUnavailable, ComposedGeometry, Objective,
     Translation, geometry_of, METHODS)
-from mowl.representation.library.multibox_methods import VolumeGeometry, mcmultibox
+from mowl.representation.library.multibox_methods import mcmultibox
 from mowl.representation.library.multibox_parts import (
     DomainProjection, MembershipIntersection, PackedUnionClasses, PairUnions, SampledVolume,
     UnionClasses, UnionOfBoxes, membership_sampler)
@@ -43,7 +43,7 @@ class TestVolumeGeometry(TestCase):
     def test_losses_equal_the_module(self):
         module = _module()
         geometry = geometry_of(module)
-        self.assertIsInstance(geometry, VolumeGeometry)
+        self.assertIsInstance(geometry, ComposedGeometry)
         for form in FORMS:
             rows = _rows_for(form)
             expected = module(rows, form).reshape(-1, 1)
@@ -182,11 +182,10 @@ class TestSampledVolume(TestCase):
 
     def test_with_union_classes_and_head_tail_relations(self):
         th.manual_seed(0)
-        from mowl.representation.library.multibox_objective import MultiBoxObjective
         model = ComposedEL(self.dataset, classes="union of boxes",
                            relations="head and tail boxes",
                            measure=SampledVolume(num_points=300, chunk_size=128),
-                           objective=MultiBoxObjective(0.0), embed_dim=4)
+                           objective=Objective(0.0), embed_dim=4)
         data = {f: d[:] for f, d in model.training_datasets.items()
                 if len(d) and f in ("gci0", "gci1", "gci2", "gci3")}
         before = sum(float(model.module(r, f).mean()) for f, r in data.items())

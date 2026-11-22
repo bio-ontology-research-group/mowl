@@ -4,6 +4,10 @@ A measure turns a relation between regions into a cost per row (``(B, 1)``, neve
 negative, lower is better): :meth:`~RegionMeasure.inside` (:math:`A \\subseteq B`),
 :meth:`~RegionMeasure.meets` (:math:`A \\cap B \\neq \\emptyset`), :meth:`~RegionMeasure.apart`
 (:math:`A \\cap B = \\emptyset`), :meth:`~RegionMeasure.empty` and :meth:`~RegionMeasure.nonempty`.
+Three more are read by the objectives where a method needs them: :meth:`~RegionMeasure.member`
+(an individual lies in a class), :meth:`~RegionMeasure.outside` (a region sticks out of
+another) and :meth:`~RegionMeasure.negative` (the cost of a pair that should *not* be
+included, which is where the measures of the hierarchy methods differ most).
 
 Every relation takes a ``margin``. A positive margin is *strict*: the relation has to hold
 with that much room, and a zero cost implies the relation. A negative margin is a *slack*:
@@ -14,7 +18,7 @@ means by its :math:`\\gamma` differs (ELEmbeddings: slack; ELBE: strict), see
 
 import torch as th
 
-from mowl.representation.regions import Ball, Box
+from mowl.representation.regions import Ball, Box, ConstructorUnavailable
 
 __all__ = ["RegionMeasure", "CentreDistance", "Bounds"]
 
@@ -48,13 +52,48 @@ class RegionMeasure:
         """Zero iff ``a`` and ``b`` are disjoint (at least ``margin`` apart)."""
         raise NotImplementedError
 
-    def empty(self, a):
-        """Zero iff ``a`` is empty (has no extent)."""
+    def meets_all(self, a, b, margin=0.0):
+        """``meets`` for the negative reading "overlap": every part of a region made of
+        several parts counts (a union of boxes). Default: ``meets``."""
+        return self.meets(a, b, margin)
+
+    def empty(self, a, margin=0.0):
+        """Zero iff ``a`` is empty (has no extent, with ``margin`` room)."""
         raise NotImplementedError
 
     def nonempty(self, a, epsilon=0.0):
         """Zero iff ``a`` has extent at least ``epsilon``."""
         raise NotImplementedError
+
+    def member(self, a, b, margin=0.0):
+        """Zero iff the individual ``a`` is a member of ``b``. Default: ``inside``; a
+        measure overrides it where an individual is compared differently from a class
+        (a point against a region)."""
+        return self.inside(a, b, margin)
+
+    def outside(self, a, b, margin=0.0):
+        """Zero iff ``a`` is *not* inside ``b``, by at least ``margin`` (non-inclusion; the
+        negative term of RegD). Not every measure has it."""
+        raise ConstructorUnavailable(f"{type(self).__name__} has no non-inclusion.")
+
+    def negative(self, a, b, margin=0.0):
+        """The cost of a pair ``a``, ``b`` that should *not* be included. Default:
+        ``apart`` (the semantic reading, which DELE uses); measures of methods that read a
+        negative pair differently (a log-probability, a hinge on the energy, a
+        non-inclusion) override it."""
+        return self.apart(a, b, margin)
+
+    def intersect(self, a, b):
+        """``(region, gap)`` of the conjunction of the regions ``a`` and ``b`` under this
+        measure. Default: the regions intersect themselves (families closed under
+        intersection); a measure on membership functions forms the minimum instead."""
+        return a.intersect(b)
+
+    def bind(self, relations):
+        """Called with the relation model by a geometry that is built from this measure,
+        for measures whose cost reads the relation model (a triple score). Default: nothing
+        to bind. Returns the measure."""
+        return self
 
     # -- relations of an intersection: exact where the regions are closed under it --------
     #: Whether the three methods below compute the intersection exactly.
@@ -129,9 +168,9 @@ class CentreDistance(RegionMeasure):
         self.check(a, b)
         return th.relu(a.radius + b.radius - self._distance(a, b) + margin)
 
-    def empty(self, a):
+    def empty(self, a, margin=0.0):
         self.check(a)
-        return a.radius
+        return a.radius + margin if margin else a.radius
 
     def nonempty(self, a, epsilon=0.0):
         self.check(a)
@@ -177,9 +216,9 @@ class Bounds(RegionMeasure):
             return self._norm(overlap)
         return th.relu(overlap.min(dim=1, keepdim=True).values)
 
-    def empty(self, a):
+    def empty(self, a, margin=0.0):
         self.check(a)
-        return th.linalg.norm(a.offset, dim=1, keepdim=True)
+        return th.linalg.norm(a.offset + margin if margin else a.offset, dim=1, keepdim=True)
 
     def nonempty(self, a, epsilon=0.0):
         self.check(a)

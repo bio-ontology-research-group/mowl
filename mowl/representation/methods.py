@@ -14,7 +14,8 @@ from mowl.representation.objectives import Objective
 from mowl.representation.regions import Ball, Box
 from mowl.representation.relation_models import Translation
 
-__all__ = ["METHODS", "CLASS_MODELS", "RELATION_MODELS", "MEASURES", "DEFAULT_MEASURE",
+__all__ = ["METHODS", "METHOD_KINDS", "CLASS_MODELS", "RELATION_MODELS", "MEASURES",
+           "DEFAULT_MEASURE",
            "compose", "elem", "elbe", "register_class_model", "register_relation_model",
            "register_measure", "register_method"]
 
@@ -28,6 +29,9 @@ MEASURES = {"centre distance": CentreDistance, "bounds per coordinate": Bounds}
 DEFAULT_MEASURE = {Ball: CentreDistance, Box: Bounds}
 #: Catalogue key -> function building the method from parts.
 METHODS = {}
+#: Catalogue key -> what the method is trained on: ``"axioms"`` (normal-form axioms, what
+#: :class:`~mowl.models.ComposedEL` trains) or ``"queries"`` (query answering).
+METHOD_KINDS = {}
 
 
 def _unique(registry, name, value):
@@ -68,13 +72,24 @@ def register_measure(name, default_for=()):
     return decorate
 
 
-def register_method(key):
+def register_method(key, trained_on="axioms"):
     """Decorator: register a function that builds the method with catalogue key ``key``
     from parts. Signature: ``(nb_classes, nb_relations, nb_individuals=0, embed_dim=50,
-    ..., tables=None) -> Geometry``."""
+    ..., tables=None) -> Geometry``.
+
+    :param trained_on: ``"axioms"`` (default): the geometry is an
+        :class:`~mowl.nn.ELModule` that
+        :class:`~mowl.models.ComposedEL` trains on the normal-form axioms (a geometry that
+        reads only some forms says which: ``supported_forms``). ``"queries"``: the method is
+        trained on query structures (:mod:`mowl.models.query`) and ``ComposedEL`` refuses it.
+    """
+    if trained_on not in ("axioms", "queries"):
+        raise ValueError("trained_on must be 'axioms' or 'queries'.")
+
     def decorate(function):
         _unique(METHODS, key, function)
         METHODS[key] = function
+        METHOD_KINDS[key] = trained_on
         return function
     return decorate
 
@@ -176,3 +191,4 @@ def elbe(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
 
 
 METHODS.update({"elem": elem, "elbe": elbe})
+METHOD_KINDS.update({"elem": "axioms", "elbe": "axioms"})

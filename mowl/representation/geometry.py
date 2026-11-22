@@ -14,7 +14,7 @@ class model, a relation model, a measure and an objective. It is also an
 import torch as th
 
 from mowl.nn.el.elmodule import ELModule
-from mowl.representation.objectives import Objective, FORMS
+from mowl.representation.objectives import Objective, FORMS, ROLE_FORMS
 from mowl.representation.regions import ConstructorUnavailable
 
 __all__ = ["Geometry", "ComposedGeometry"]
@@ -99,10 +99,21 @@ class ComposedGeometry(ELModule, Geometry):
         ``None``.
     :param regularizers: Penalties (:class:`mowl.training.Regularizer`) summed by
         :meth:`regularization_loss`.
+    :param supported_forms: The axiom forms this geometry can read (and so be trained on):
+        a collection of names of :data:`~mowl.representation.objectives.FORMS` and
+        :data:`~mowl.representation.objectives.ROLE_FORMS`. Default: the concept and
+        assertion forms, and the role forms if the relation model defines them.
+    :param neg_capable_gcis: The forms that have a negative loss of their own (default:
+        those of the objective, see its ``negatives``).
+
+    The measure is told about the relation model (:meth:`RegionMeasure.bind
+    <mowl.representation.measures.RegionMeasure.bind>`), for measures whose cost reads it
+    (the triple score). The class model's ``part`` describes the construction of compound
+    classes (:attr:`parts`).
     """
 
     def __init__(self, classes, relations, measure, objective=None, individuals=None,
-                 regularizers=()):
+                 regularizers=(), supported_forms=None, neg_capable_gcis=None):
         ELModule.__init__(self)
         self.class_model = classes
         self.relation_model = relations
@@ -117,16 +128,29 @@ class ComposedGeometry(ELModule, Geometry):
                 f"{type(classes).__name__} gives {classes.region.__name__} regions.")
         if individuals is not None and not issubclass(individuals.region, measure.accepts):
             raise TypeError("The individual model must give regions the measure compares.")
-        # Names other code expects of an EL module.
-        self.class_embed = classes.centres
+        if relations is not None:
+            measure.bind(relations)
+        # Names other code expects of an EL module (class models without a table, such as
+        # text encoders, have none).
+        self.class_embed = getattr(classes, "centres", None)
         self.rel_embed = getattr(relations, "vectors", None)
-        self.ind_embed = individuals.centres if individuals is not None else None
-        self.neg_capable_gcis = frozenset(FORMS) if self.objective.negatives == "all" \
-            else frozenset({"gci2", "object_property_assertion"})
+        self.ind_embed = getattr(individuals, "centres", None)
+        if supported_forms is None:
+            supported_forms = FORMS + (ROLE_FORMS if self.role_axiom_capable else ())
+        unknown = set(supported_forms) - set(FORMS + ROLE_FORMS)
+        if unknown:
+            raise ValueError(f"Unknown axiom forms {sorted(unknown)}.")
+        self.supported_forms = frozenset(supported_forms)
+        self.neg_capable_gcis = frozenset(
+            self.objective.neg_forms if neg_capable_gcis is None else neg_capable_gcis)
         self.margin_semantics = "slack" if self.objective.slack else "strict"
 
     # -- Geometry -----------------------------------------------------------------------
-    def classes(self, ids):
+    def classes(self, ids, frozen=False):
+        """The regions of ``ids``; ``frozen`` detaches their sizes (the class model must
+        accept ``detach_size``; see ``freeze_negatives`` of the objective)."""
+        if frozen:
+            return self.class_model(ids, detach_size=True)
         return self.class_model(ids)
 
     def individuals(self, ids):
@@ -140,13 +164,23 @@ class ComposedGeometry(ELModule, Geometry):
         return self.relation_model.preimage(relation_ids, region)
 
     def conjunction(self, a, b):
-        return a.intersect(b)
+        return self.measure.intersect(a, b)
+
+    def negation(self, a):
+        return a.complement()
+
+    def disjunction(self, a, b):
+        return a.union(b)
 
     def inside(self, a, b):
         return self.measure.inside(a, b, self.objective.m)
 
     def apart(self, a, b):
         return self.measure.apart(a, b, self.objective.margin)
+
+    def member(self, individual_ids, region):
+        return self.measure.member(self.individuals(individual_ids), region,
+                                   self.objective.m)
 
     @property
     def num_classes(self):
@@ -157,13 +191,27 @@ class ComposedGeometry(ELModule, Geometry):
         return 0 if self.individual_model is None else len(self.individual_model)
 
     @property
+    def role_axiom_capable(self):
+        """Whether the relation model defines the role axioms (and so the geometry reads
+        ``role_inclusion`` and ``role_chain``)."""
+        return self.relation_model is not None and self.relation_model.reads_role_axioms
+
+    @property
+    def scored_forms(self):
+        """The forms of this geometry that are scored (those it can read, in order)."""
+        return tuple(f for f in FORMS + ROLE_FORMS if f in self.supported_forms)
+
+    @property
     def parts(self):
-        return {"classes": self.class_model.part,
-                "relations": "none" if self.relation_model is None
-                else self.relation_model.part,
-                "individuals": "none" if self.individual_model is None else "region",
-                "measure": self.measure.part,
-                "conjunction": "exact" if self.measure.exact_intersection else "approximate"}
+        conjunction = self.class_model.conjunction_kind
+        parts = {"classes": self.class_model.part,
+                 "relations": "none" if self.relation_model is None
+                 else self.relation_model.part,
+                 "individuals": "none" if self.individual_model is None else "region",
+                 "measure": self.measure.part,
+                 "conjunction": conjunction}
+        parts.update(self.class_model.extra_parts)
+        return parts
 
     # -- ELModule -----------------------------------------------------------------------
     @property
@@ -176,26 +224,63 @@ class ComposedGeometry(ELModule, Geometry):
 
     def cost(self, form, rows, neg=False):
         """Loss of the axioms ``rows`` of form ``form``."""
+        self.last_form = form
         return self.objective.cost(self, form, rows, neg)
 
+    def forward(self, gci, gci_name, neg=False):
+        # remembered for losses that depend on the form (ComposedEL.compute_loss)
+        self.last_form = gci_name
+        return super().forward(gci, gci_name, neg)
+
     def get_loss_function(self, gci_name):
-        if gci_name in FORMS:
+        if gci_name in FORMS or gci_name in ROLE_FORMS:
             return lambda rows, neg=False: self.cost(gci_name, rows, neg)
         return super().get_loss_function(gci_name)
 
+    @property
+    def device(self):
+        """The device of the parameters (or buffers); ``cpu`` for a geometry without any."""
+        for tensor in list(self.parameters()) + list(self.buffers()):
+            return tensor.device
+        return th.device("cpu")
+
     def regularization_loss(self):
-        total = th.zeros((), device=self.class_embed.weight.device)
+        total = th.zeros((), device=self.device)
         for regularizer in self.regularizers:
             term = regularizer.penalty(self)
             if term is not None:
                 total = total + term
         return total
 
+    # -- training -----------------------------------------------------------------------
+    def project(self):
+        """Project the parameters of the class model and the relation model back onto their
+        constraint set (the unit cube) where they have one; a training loop calls it after
+        each step (a no-op otherwise)."""
+        for part in (self.class_model, self.relation_model, self.individual_model):
+            project = getattr(part, "project", None)
+            # (a part may own a *module* called project, which is not this hook)
+            if callable(project) and not isinstance(project, th.nn.Module):
+                project()
 
-for _form in FORMS:
-    def _loss(self, rows, neg=False, _form=_form):
-        return self.cost(_form, rows, neg)
-    _loss.__name__ = f"{_form}_loss"
-    _loss.__doc__ = f"Loss of the ``{_form}`` axioms ``rows`` (see the objective)."
-    setattr(ComposedGeometry, f"{_form}_loss", _loss)
-del _form, _loss
+    def param_groups(self):
+        """Parameter groups for :class:`~mowl.nn.order.manifolds.RiemannianSGD`: those of
+        the class model, with the manifold of every table that lives on one, and the rest."""
+        groups = list(self.class_model.param_groups())
+        seen = {id(p) for g in groups for p in g["params"]}
+        rest = [p for p in self.parameters() if id(p) not in seen]
+        if rest:
+            groups.append({"params": rest, "manifold": None})
+        return groups
+
+
+def _make_losses():
+    for form in FORMS + ROLE_FORMS:
+        def loss(self, rows, neg=False, _form=form):
+            return self.cost(_form, rows, neg)
+        loss.__name__ = f"{form}_loss"
+        loss.__doc__ = f"Loss of the ``{form}`` axioms ``rows`` (see the objective)."
+        setattr(ComposedGeometry, f"{form}_loss", loss)
+
+
+_make_losses()

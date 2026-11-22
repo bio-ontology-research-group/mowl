@@ -13,7 +13,7 @@ from mowl.representation import (
     Objective, Translation, compose, geometry_of, METHODS)
 from mowl.representation.library.multibox_methods import box2el, multiboxel, multielbe
 from mowl.representation.library.multibox_objective import (
-    ComponentSpread, MultiBoxGeometry, MultiBoxObjective, bump_penalty)
+    ComponentSpread, bump_penalty)
 from mowl.representation.library.multibox_parts import (
     BumpedBox, HeadTailRelations, UnionClasses, UnionMeasure, UnionOfBoxes)
 from tests.datasetFactory import FamilyDataset
@@ -322,25 +322,25 @@ class TestPartsOutsideTheirPapers(TestCase):
 
     def test_head_tail_relations_with_plain_boxes_and_a_semantic_objective(self):
         model = self._trains(classes="box", relations="head and tail boxes",
-                             objective=MultiBoxObjective(0.02))
+                             objective=Objective(0.02))
         self.assertEqual(model.module.parts["relations"], "head and tail boxes")
 
     def test_head_tail_relations_with_bumped_boxes(self):
         model = self._trains(classes="box with bump", relations="head and tail boxes",
-                             objective=MultiBoxObjective(0.02),
+                             objective=Objective(0.02),
                              regularizers=(bump_penalty(0.1),))
         self.assertIsInstance(model.module.classes(th.arange(2)), BumpedBox)
 
     def test_head_tail_relations_with_balls(self):
         model = self._trains(classes="ball",
                              relations=lambda n, d: HeadTailRelations(n, d, shape="ball"),
-                             objective=MultiBoxObjective(0.02))
+                             objective=Objective(0.02))
         region = model.module.exists(th.tensor([0]), model.module.classes(th.tensor([0])))
         self.assertIsInstance(region, Ball)
 
     def test_head_tail_relations_with_unions(self):
         self._trains(classes="union of boxes", relations="head and tail boxes",
-                     objective=MultiBoxObjective(0.02))
+                     objective=Objective(0.02))
 
     def test_union_classes_with_translations_and_the_default_objective(self):
         model = self._trains(classes="union of boxes", relations="translation",
@@ -350,17 +350,16 @@ class TestPartsOutsideTheirPapers(TestCase):
     def test_union_classes_with_elbe_objective_and_soft_minimum(self):
         measure = UnionMeasure(Bounds("every"), "soft", 0.5)
         self._trains(classes="union of boxes", relations="translation", measure=measure,
-                     objective=MultiBoxObjective(0.02, gci3="overlap",
-                                                 gci2_negative="overlap",
-                                                 negatives="gci2"),
+                     objective=Objective(0.02, gci3="overlap", gci2_negative="overlap",
+                                         negatives="gci2"),
                      regularizers=(ComponentSpread(0.1),))
 
     def test_union_measure_on_boxes_equals_the_box_measure(self):
         # a box is a union of one: the lifted measure is the base measure
         g = compose(N, R, embed_dim=D, classes="box", relations="head and tail boxes",
-                    measure="union of bounds", objective=MultiBoxObjective(0.03))
+                    measure="union of bounds", objective=Objective(0.03))
         h = compose(N, R, embed_dim=D, classes="box", relations="head and tail boxes",
-                    objective=MultiBoxObjective(0.03))
+                    objective=Objective(0.03))
         h.load_state_dict(g.state_dict())
         for form in ("gci0", "gci1", "gci2", "gci3"):
             self.assertTrue(th.allclose(g(_rows(form), form), h(_rows(form), form),
@@ -372,7 +371,7 @@ class TestPartsOutsideTheirPapers(TestCase):
         model = ComposedEL(self.dataset, method="multiboxel", embed_dim=6, margin=0.0,
                            n_components=2)
         model.train(epochs=2)
-        self.assertIsInstance(model.module, MultiBoxGeometry)
+        self.assertIsInstance(model.module, ComposedGeometry)
         model = ComposedEL(self.dataset, method="box2el", embed_dim=6)
         model.train(epochs=2)
         model = ComposedEL(self.dataset, method="multielbe", embed_dim=6, margin=0.05,

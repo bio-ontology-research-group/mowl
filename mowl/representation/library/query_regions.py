@@ -169,7 +169,7 @@ class ConeBounds(RegionMeasure):
                    - _arc_distance(a.axis, b.axis) + margin)
         return th.relu(overlap.min(dim=1, keepdim=True).values)
 
-    def empty(self, a):
+    def empty(self, a, margin=0.0):
         self.check(a)
         return th.linalg.norm(a.aperture, dim=1, keepdim=True)
 

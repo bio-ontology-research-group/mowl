@@ -24,11 +24,33 @@ class Classes(nn.Module):
     :cvar region: The region class :meth:`forward` returns.
     :cvar part: The vocabulary entry (:class:`mowl.representation.ClassModel` value).
     :cvar exact_conjunction: Whether the regions are closed under intersection.
+    :cvar conjunction_part: How the region of a conjunction is obtained, where the default
+        (``"exact"`` or ``"approximate"``, from ``exact_conjunction``) does not say it
+        (:class:`mowl.representation.Construction` value, for example ``"fuzzy operator"``).
     """
 
     region = None
     part = ""
     exact_conjunction = False
+    conjunction_part = None
+
+    @property
+    def conjunction_kind(self):
+        """``"exact"``, ``"approximate"`` or the construction the class model names."""
+        if self.conjunction_part is not None:
+            return self.conjunction_part
+        return "exact" if self.exact_conjunction else "approximate"
+
+    @property
+    def extra_parts(self):
+        """Parts of the geometry that only this class model can name (``{"negation": ...,
+        "disjunction": ..., "family": ...}`` for fuzzy sets); added to
+        :attr:`ComposedGeometry.parts <mowl.representation.ComposedGeometry.parts>`."""
+        return {}
+
+    def param_groups(self):
+        """Parameter groups for an optimiser with manifolds (one group, no manifold)."""
+        return [{"params": list(self.parameters()), "manifold": None}]
 
     def forward(self, ids):
         """The regions of the classes ``ids`` (``LongTensor (B,)``)."""
@@ -54,14 +76,20 @@ class BallClasses(Classes):
     :param embed_dim: Dimension.
     :param centres, radii: Existing tables to use instead of new ones (the tables of
         another module, which then shares its parameters with this one).
+    :param radius: How the radius is obtained from the stored parameter: ``"abs"``
+        (default), ``"relu"`` (:math:`\\max(0, r)`, the EmEL++ Keras code) or ``"softplus"``
+        (the training code of RegD's ``Elem``).
     """
 
     region = Ball
     part = "ball"
     exact_conjunction = False
 
-    def __init__(self, size=None, embed_dim=None, centres=None, radii=None):
+    def __init__(self, size=None, embed_dim=None, centres=None, radii=None, radius="abs"):
         super().__init__()
+        if radius not in ("abs", "relu", "softplus"):
+            raise ValueError("radius must be 'abs', 'relu' or 'softplus'.")
+        self.radius_form = radius
         self.centres = centres if centres is not None else _unit_rows(
             nn.Embedding(size, embed_dim))
         self.radii = radii if radii is not None else _unit_rows(
@@ -69,7 +97,9 @@ class BallClasses(Classes):
 
     def forward(self, ids):
         raw = self.radii(ids)
-        return Ball(self.centres(ids), th.abs(raw), raw)
+        radius = {"abs": th.abs, "relu": th.relu,
+                  "softplus": nn.functional.softplus}[self.radius_form](raw)
+        return Ball(self.centres(ids), radius, raw)
 
 
 class BoxClasses(Classes):

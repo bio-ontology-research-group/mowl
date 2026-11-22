@@ -263,7 +263,7 @@ def betae(nb_classes=None, nb_relations=None, nb_individuals=0, embed_dim=32, ga
                                  num_classes=num_classes, extension=extension)
 
 
-@register_method("cone_qe")
+@register_method("cone_qe", trained_on="queries")
 def cone_qe(nb_classes=None, nb_relations=None, nb_individuals=0, embed_dim=32, gamma=20.0,
             center_weight=0.02, hidden=128, layers=1, dropout=0.0, relations="network",
             tables=None, num_classes=None, extension=True):
@@ -305,7 +305,7 @@ def cone_qe(nb_classes=None, nb_relations=None, nb_individuals=0, embed_dim=32, 
                                  num_classes=num_classes, extension=extension)
 
 
-@register_method("acone")
+@register_method("acone", trained_on="queries")
 def acone(nb_classes=None, nb_relations=None, nb_individuals=0, embed_dim=32, gamma=20.0,
           center_weight=0.02, dropout=0.0, tables=None, num_classes=None, extension=True):
     """AConE (He et al. 2024): ConE with the rotation as relation model, nothing else
@@ -315,8 +315,8 @@ def acone(nb_classes=None, nb_relations=None, nb_individuals=0, embed_dim=32, ga
                    num_classes=num_classes, extension=extension)
 
 
-register_method("query2box")(query2box)
-register_method("betae")(betae)
+register_method("query2box", trained_on="queries")(query2box)
+register_method("betae", trained_on="queries")(betae)
 
 
 # ---------------------------------------------------------------------------------------

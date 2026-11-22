@@ -370,11 +370,15 @@ class TestPartsAcrossMethods(TestCase):
         self.assertIsInstance(model.module.measure, F.ConflictMeasure)
         self.assertLessEqual(*_train(model, 80), 0)
 
-    def test_a_composed_fuzzy_geometry_has_no_negation_in_the_core(self):
-        # ComposedGeometry has no negation; FuzzyGeometry adds it (see the report).
+    def test_a_composed_fuzzy_geometry_has_negation_and_disjunction(self):
+        # the region family gives a composed geometry negation and disjunction
         g = METHODS["dfalc"](4, 1, 1, embed_dim=3)
-        self.assertIsInstance(g, F.FuzzyGeometry)
+        self.assertIsInstance(g, ComposedGeometry)
         self.assertEqual(g.parts["classes"], "fuzzy set")
+        a, b = g.classes(th.tensor([0, 1])), g.classes(th.tensor([2, 3]))
+        self.assertTrue(th.allclose(g.negation(a).values, 1 - a.values))
+        self.assertTrue(th.allclose(g.disjunction(a, b).values,
+                                    th.maximum(a.values, b.values)))
 
 
 def _train(model, epochs):
