@@ -303,4 +303,10 @@ PAIRS = [
     _graph_pair("graph_kge/distmult", _owl2vec, "DistMult"),
     _graph_pair("gda_projection", _gda, "TransE"),
 ]
-EXEMPT = {}
+EXEMPT = {
+    "composed_graph_kge": "GraphKGEModel is the generic combination of parts for knowledge "
+                          "graph embeddings of a projection; it has no direct implementation "
+                          "to be compared with (its named combinations graph_kge, "
+                          "gda_projection, boxe, expressive and reshuffle are compared "
+                          "above).",
+}

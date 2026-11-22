@@ -276,3 +276,38 @@ def test_seed_generators_make_the_global_draws_repeat_and_the_device_is_a_device
     b = (th.rand(2), th.randint(0, 100, (1,)))
     assert th.equal(a[0], b[0]) and th.equal(a[1], b[1])
     assert isinstance(default_device(), th.device)
+
+
+# -- the knowledge graph model as seen by PyKEEN-style callers ----------------------------------
+def test_the_scorer_of_a_graph_model_reads_scores_tables_and_modes_from_the_geometry():
+    from mowl.datasets.builtin import FamilyDataset
+    from mowl.models import GraphKGEModel
+    th.manual_seed(0)
+    model = GraphKGEModel(FamilyDataset(), method="boxe", embed_dim=4)
+    kge, module = model.kge_method, model.module
+    triples = model.training_triples()[:5]
+    expected = -module.triple_cost(triples[:, 0], triples[:, 1], triples[:, 2])
+    assert th.equal(kge.score_hrt(triples), expected)
+    assert list(kge.parameters()) == list(module.parameters())
+    assert kge.interaction is module.measure
+    # BoxE: entities have a base and a bump table, relations six
+    assert len(kge.entity_representations) == 2 and len(kge.relation_representations) == 6
+    ids = th.tensor([0, 1])
+    assert th.equal(kge.entity_representations[0](indices=ids), module.class_model.centres(ids))
+    assert kge.entity_representations[0]().shape == module.class_model.centres.weight.shape
+    assert kge.eval() is kge and not module.training
+    assert kge.train() is kge and module.training
+    kge.zero_grad()
+    transe = GraphKGEModel(FamilyDataset(), method="graph_kge", embed_dim=4).kge_method
+    assert len(transe.entity_representations) == 1 and len(transe.relation_representations) == 1
+
+
+def test_best_f1_finds_the_threshold_and_keeps_its_old_import_path():
+    from mowl.evaluation.reconstruction import best_f1
+    from mowl.models.bcbox.common import best_f1 as old
+    assert old is best_f1
+    energies = th.tensor([0.1, 0.2, 0.9, 1.0, float("inf")])
+    truth = th.tensor([True, True, False, False, True])
+    f1, threshold = best_f1(energies, truth)
+    assert f1 == pytest.approx(0.8) and 0.2 < threshold < 0.9
+    assert best_f1(energies, th.zeros(5, dtype=th.bool))[0] == 0.0

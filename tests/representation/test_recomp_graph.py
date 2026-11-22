@@ -24,6 +24,7 @@ from mowl.representation.library.other_graph import (  # noqa: E402
     BoxERelations, ExpressivERelations, GraphEncodedPoints, MarginRanking, PointClasses,
     PyKEENGeometry, ReshuffleRelations, SelfAdversarial, TripleGeometry, TripleScore,
     UniformCorruption)
+from mowl.representation.library.shapes_classes import Points  # noqa: E402
 from mowl.training.regime import TrainingRegime  # noqa: E402
 from mowl.training.regularization import NormPenalty  # noqa: E402
 from tests.models.kg_region_data import abox_dataset  # noqa: E402
@@ -68,12 +69,12 @@ def _train_and_score(model, role_edges=True, epochs=1):
      {"classes": "point", "relations": "head and tail boxes", "measure": "triple score",
       "objective": "self-adversarial negative sampling",
       "negative sampler": "uniform corruption", "projection": "owl2vec_star"},
-     (PointClasses, BoxERelations, SelfAdversarial)),
+     (Points, BoxERelations, SelfAdversarial)),
     (ExpressivE, EXPRESSIVE,
      {"classes": "point", "relations": "region over pairs", "measure": "triple score",
       "objective": "self-adversarial negative sampling",
       "negative sampler": "uniform corruption", "projection": "owl2vec_star"},
-     (PointClasses, ExpressivERelations, SelfAdversarial)),
+     (Points, ExpressivERelations, SelfAdversarial)),
     (Reshuffle, RESHUFFLE,
      {"classes": "point", "relations": "matrix", "measure": "triple score",
       "objective": "margin ranking", "negative sampler": "uniform corruption",
@@ -231,7 +232,7 @@ def test_a_regime_that_the_loop_does_not_consult_is_refused(dataset):
 
 
 def test_reshuffle_early_stopping_is_an_evaluation_regime_on_validation_hits(dataset):
-    from mowl.models.graph_kge.triple_model import HitsEarlyStopping
+    from mowl.training.triples import HitsEarlyStopping
     model = Reshuffle(dataset, early_stopping=dict(frequency=1, patience=1,
                                                    relative_delta=0.0), **RESHUFFLE)
     assert isinstance(model.training_regime, HitsEarlyStopping)
@@ -239,11 +240,10 @@ def test_reshuffle_early_stopping_is_an_evaluation_regime_on_validation_hits(dat
     with pytest.raises(ValueError, match="validation"):
         model.train(epochs=2)
     regime = HitsEarlyStopping(frequency=1, patience=1, relative_delta=0.0)
-    regime.attach(model)
+    model.training_regime = regime     # attaching forgets the validation triples
     regime._val = model.triples_factory.mapped_triples[:3]
     hits = regime.hits_at_k()
     assert 0.0 <= hits <= 1.0
-    model.training_regime = regime
     model.train(epochs=3)
     assert 1 <= len(regime.history) <= 3
 
@@ -367,6 +367,9 @@ def test_reshuffle_scores_triples_over_a_graph_the_model_was_not_trained_on(data
 
 
 # -- the parts on their own ------------------------------------------------------------------
+_PYKEEN_SIDE = {"h": "head", "r": "relation", "t": "tail"}
+
+
 def test_uniform_corruption_draws_what_pykeens_basic_sampler_draws():
     from pykeen.sampling import BasicNegativeSampler
     triples = th.tensor([[0, 0, 1], [1, 1, 2], [2, 0, 3], [3, 1, 0], [4, 0, 2]])
@@ -376,7 +379,7 @@ def test_uniform_corruption_draws_what_pykeens_basic_sampler_draws():
         th.manual_seed(5)
         theirs = BasicNegativeSampler(
             mapped_triples=triples, num_entities=6, num_relations=3, num_negs_per_pos=k,
-            corruption_scheme=sides).sample(triples)[0]
+            corruption_scheme=[_PYKEEN_SIDE[side] for side in sides]).sample(triples)[0]
         assert th.equal(ours, theirs), (k, sides)
         # never the triple it came from
         assert (ours != triples.unsqueeze(1)).any(dim=-1).all()
@@ -440,8 +443,9 @@ def test_the_catalogue_card_and_the_parts_agree(dataset, key, cls, kwargs):
     relations = relations if isinstance(relations, (tuple, list)) else (relations,)
     assert module.parts["relations"] in [str(r.value if hasattr(r, "value") else r)
                                          for r in relations]
-    assert module.parts["measure"] == str(getattr(representation.measure, "value",
-                                                  representation.measure))
+    measures = representation.measure
+    measures = measures if isinstance(measures, (tuple, list)) else (measures,)
+    assert module.parts["measure"] in [str(getattr(m, "value", m)) for m in measures]
     # the implementation the card names is the class built from the parts
     module_name, _, name = card.implementation.rpartition(".")
     import importlib
