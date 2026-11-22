@@ -1,20 +1,9 @@
 r"""Embed2Reason (E2R): quantum-logic subspace embeddings (Garg et al., NeurIPS 2019)."""
-from functools import partial
-
-import torch as th
-
-from mowl.models.e2r.common import E2RBase, _THING, _NOTHING  # noqa: F401
+from mowl.models.composed.subspace import ComposedSubspace, _THING, _NOTHING  # noqa: F401
 from mowl.nn.alc.e2r.module import E2RModule
-from mowl.representation.library import logic_subspace_algebra
-from mowl.representation.library.logic_subspace import Orthogonality, Separation, SubspaceStructure
-from mowl.training.batching import PerNormalFormMiniBatches
-from mowl.training.graph import EdgeCorruption, KnownRowMask
-from mowl.training.loop import RegimeTrained, Rows
-from mowl.training.losses import SumLoss
-from mowl.training.regularization import IntervalProjection, Regularization
 
 
-class E2R(RegimeTrained, E2RBase):
+class E2R(ComposedSubspace):
     r"""Embed2Reason [garg2019]_: concepts and relations as axis-parallel linear subspaces,
     entities as vectors, the logic is quantum logic (Sec. 3).
 
@@ -94,61 +83,23 @@ class E2R(RegimeTrained, E2RBase):
     :param seed: Seed of the Python random generator used for subsampling.
     """
 
-    _algebra = logic_subspace_algebra
+    def __init__(self, dataset, embed_dim=100, learning_rate=0.01, batch_size=4096,
+                 num_negatives=3, negative_weight=1.0, reg_orth=1.0, reg_sep=1.0,
+                 sep_gap=None, range_negatives="shrunk", max_sibling_pairs=100000,
+                 role_unit_length=True, model_filepath=None, device="cpu", seed=0):
+        super().__init__(
+            dataset, method="e2r", embed_dim=embed_dim, learning_rate=learning_rate,
+            batch_size=batch_size, num_negatives=num_negatives,
+            negative_weight=negative_weight, reg_orth=reg_orth, reg_sep=reg_sep,
+            sep_gap=sep_gap, range_negatives=range_negatives,
+            max_sibling_pairs=max_sibling_pairs, role_unit_length=role_unit_length,
+            model_filepath=model_filepath, device=device, seed=seed)
 
     def init_module(self):
-        self.module = E2RModule(
+        """The method ``"e2r"`` as :class:`~mowl.nn.E2RModule` (its parts are those of
+        :func:`~mowl.representation.library.logic_subspace.e2r`), with the regularisers of
+        eqs. (1)-(3), (11) and (12)."""
+        self._attach_regularizers(E2RModule(
             len(self._iid), len(self._cid), len(self._rid), dim=self.embed_dim,
             top_index=self._cid.get(_THING), bottom_index=self._cid.get(_NOTHING),
-            role_unit_length=self.role_unit_length).to(self.device)
-        # the terms of the objective that are not axioms: structure of the indicators (eqs.
-        # (1)-(3)), siblings orthogonal (eq. (11)), separation of a class from its parents
-        # (eq. (12)); the pairs are read from the told hierarchy
-        self.structure = SubspaceStructure()
-        self.orthogonality = Orthogonality(self.reg_orth, self.sibling_pairs,
-                                           self.role_sibling_pairs)
-        self.separation = Separation(self.reg_sep, self.sep_gap, self.separation_pairs,
-                                     self.role_separation_pairs)
-        self.module.regularizers = (self.structure, self.orthogonality, self.separation)
-
-    # -- training -----------------------------------------------------------------------
-    @property
-    def default_regimes(self):
-        """The regimes that make the training of E2R (Sec. 4 and 5 of the paper): a random
-        batch per axiom kind and step (:class:`~mowl.training.PerNormalFormMiniBatches`,
-        an epoch has :math:`\\max_k \\lceil N_k / \\text{batch size} \\rceil` steps),
-        ``num_negatives`` corruptions of every assertion that replace an individual
-        (:class:`~mowl.training.EdgeCorruption`) minus the known assertions
-        (:class:`~mowl.training.KnownRowMask` with ``drop``), the sum of the axiom losses and
-        ``negative_weight`` times the negated-membership losses (:class:`~mowl.training.SumLoss`),
-        and the projection of the indicators into :math:`[0, 1]`
-        (:class:`~mowl.training.Regularization` of an
-        :class:`~mowl.training.IntervalProjection`). The regularisers of eqs. (1)-(3), (11) and
-        (12) are those of the module (``module.regularizers``)."""
-        assertions = ("class_assertion", "role_assertion")
-        parts = [partial(PerNormalFormMiniBatches, self.batch_size, "replacement")]
-        n_ind = len(self._iid)
-        if min(self.num_negatives, self.negative_weight, n_ind - 1) > 0:
-            parts += [
-                partial(EdgeCorruption, self.num_negatives, (0,), n_ind, ("class_assertion",),
-                        "block"),
-                partial(EdgeCorruption, self.num_negatives, (0, 2), n_ind, ("role_assertion",),
-                        "block", False),
-                partial(KnownRowMask, assertions, False, True)]
-        parts.append(partial(SumLoss, self.negative_weight))
-        parts.append(partial(Regularization, IntervalProjection(
-            ("class_model.centres", "relation_model.vectors"), 0.0, 1.0)))
-        return tuple(parts)
-
-    @property
-    def training_datasets(self):
-        """One dataset per axiom kind and arity of the training rows (``training_rows``)."""
-        return {key: Rows(rows) for key, rows in self.training_rows.items()}
-
-    def score_rows(self, form, rows, neg=False):
-        return self.module(self._kind(form), rows, neg=neg)
-
-    def compute_loss(self, full=True):
-        """The E2R objective (eq. (10) with regularisers and negatives) on all rows as
-        training computes it; without negatives when ``num_negatives`` is 0."""
-        return self.batch_loss(self.training_datasets, negatives=self.num_negatives > 0)
+            role_unit_length=self.role_unit_length))

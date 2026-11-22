@@ -164,7 +164,8 @@ class ComposedALC(EmbeddingALCModel):
             raise TypeError(
                 f"The geometry of {self.method!r} ({type(module).__name__}) does not read ALC "
                 f"axioms (it is not an ExpressionGeometry): ComposedALC cannot train it. "
-                f"Methods it trains: dfalc, falcon, alcone.")
+                f"Methods it trains: dfalc, falcon, alcone; subspace logic ('e2r') is "
+                f"trained by mowl.models.ComposedSubspace.")
         if self.schedule is not None and hasattr(module, "schedule"):
             module.schedule = self.schedule
         self.module = module.to(self.device)

@@ -14,7 +14,7 @@ from mowl.representation.swap import NO_PART, build_method, swap
 #: Where the methods that are not trained on axioms are trained.
 _TRAINERS = {"queries": "mowl.models.query",
              "sequences": "mowl.models.ComposedSequenceModel",
-             "expressions": "mowl.models.ComposedALC",
+             "expressions": "mowl.models.ComposedALC (mowl.models.ComposedSubspace for 'e2r')",
              "construction": "mowl.models.constructed.ConstructedModel"}
 
 

@@ -65,3 +65,8 @@ class DiskEmbeddings(OrderEmbeddingModel):
         ``positive_floor``."""
         from mowl.training.losses import SumLoss
         return SumLoss(positive_floor=True)
+
+    def compute_loss(self, pos_scores, neg_scores=None):
+        """The loss of Eq. 10 and 11 on scores of positives and negatives: what the default
+        regime (:meth:`_default_loss`) combines them to."""
+        return self._default_loss().combine("gci0", pos_scores, neg_scores)
