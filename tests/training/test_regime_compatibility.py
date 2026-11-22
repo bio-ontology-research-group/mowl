@@ -28,13 +28,24 @@ def test_the_generic_el_loop_takes_every_regime():
         assert not unsupported_hooks(PairwiseMarginRankingLoss(), cls)
 
 
-@pytest.mark.parametrize("name", ["FALCONModel", "BoxE", "DFALCModel"])
+@pytest.mark.parametrize("name", ["FALCONModel", "DFALCModel"])
 def test_models_with_their_own_objective_refuse_loss_and_negative_regimes(name):
     import mowl.models as models
     cls = getattr(models, name)
     assert frozenset(cls.training_hooks) == frozenset()
     assert unsupported_hooks(PairwiseMarginRankingLoss(), cls) >= {"loss"}
     assert unsupported_hooks(LinearDecay(), cls)
+
+
+@pytest.mark.parametrize("name", ["BoxE", "ExpressivE", "Reshuffle"])
+def test_triple_models_take_loss_negative_and_optimizer_regimes(name):
+    """The knowledge graph models train through the triple regimes of
+    :mod:`mowl.training.triples`, so a loss, a negative sampler or an optimiser set-up
+    assigned to them is consulted."""
+    import mowl.models as models
+    cls = getattr(models, name)
+    assert {"loss", "negatives", "filter_negatives", "optimizer"} <= frozenset(cls.training_hooks)
+    assert "loss" not in unsupported_hooks(PairwiseMarginRankingLoss(), cls)
 
 
 @pytest.mark.parametrize("name", ["E2R", "FaithEL", "CatE", "BinaryCodeBox", "HiT", "OnT"])
