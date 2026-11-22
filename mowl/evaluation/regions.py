@@ -37,7 +37,7 @@ Families and what is decided exactly:
   three or more balls inside a ball is not decided (:class:`UndecidedInclusion`); it does
   not occur in the binary normal forms.
 * :class:`PrismRegion` -- triangle :math:`\\times` box with the fixed triangle normals of
-  :mod:`mowl.nn.el.prism.losses`. Every support vector :math:`h` with
+  :mod:`mowl.representation.library.shapes_prism_math`. Every support vector :math:`h` with
   :math:`\\sum_k h_k \\ge 0` is the support function of its (equilateral) triangle, so
   prisms are closed under intersection (minimum of supports, intersection of boxes) and
   :math:`P_1 \\subseteq P_2` iff :math:`P_1 = \\emptyset` or
@@ -561,18 +561,19 @@ class BallIntersection(Region):
 # --------------------------------------------------------------------------------------
 
 def _prism_normals():
-    from mowl.nn.el.prism.losses import NORMALS
+    from mowl.representation.library.shapes_prism_math import NORMALS
     return NORMALS.double().numpy()
 
 
 class PrismRegion(Region):
     """Prism :math:`T(h) \\times [lo, hi]` with
     :math:`T(h) = \\{p \\in \\mathbb{R}^2 : n_k \\cdot p \\le h_k\\}` for the three fixed
-    unit normals of :data:`mowl.nn.el.prism.losses.NORMALS` (which sum to zero). The
+    unit normals of :data:`mowl.representation.library.shapes_prism_math.NORMALS` (they sum to
+    zero). The
     triangle is non-empty iff :math:`\\sum_k h_k \\ge 0`; it is then equilateral with
     inradius :math:`\\sum_k h_k / 3` and :math:`h` is its support function, so
     containment is :math:`h_1 \\le h_2` (Federico, Leemhuis and Kutz, DL 2026,
-    Proposition 5, as implemented in :mod:`mowl.nn.el.prism.losses`)."""
+    Proposition 5, as implemented in :mod:`mowl.representation.library.shapes_prism_math`)."""
 
     family = "prism"
 

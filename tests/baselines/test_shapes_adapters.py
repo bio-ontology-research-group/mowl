@@ -4,10 +4,10 @@ from unittest import TestCase
 
 import torch as th
 
-from mowl.nn.el.concept2box.module import Concept2BoxModule
-from mowl.nn.el.eike.module import EIKEModule
-from mowl.nn.el.octagon.module import OctagonELModule
-from mowl.nn.el.prism.module import PrismModule
+from mowl.baselines.nn.el.concept2box.module import Concept2BoxModule
+from mowl.baselines.nn.el.eike.module import EIKEModule
+from mowl.baselines.nn.el.octagon.module import OctagonELModule
+from mowl.baselines.nn.el.prism.module import PrismModule
 from mowl.representation import ComposedGeometry, METHODS, geometry_of
 from tests.representation.test_adapters import _rows, GCIS, N, R, I
 
@@ -64,9 +64,7 @@ class TestOctagon(TestCase):
 
     def test_rebuilt_from_parts_with_copied_parameters(self):
         module = self.make()
-        # the builder reads a negative of a form without one as the positive loss (its
-        # strict_negatives=False); so does the module with the same option
-        module.strict_negatives = False
+        # a negative of a form without one is an error in both (``strict_negatives``)
         geometry = METHODS["octagon"](N, R, I, embed_dim=D, margin=0.07)
         cm = geometry.class_model
         _copy([cm.centres.weight, cm.radii.weight, geometry.relation_model.vectors.weight,
@@ -125,9 +123,7 @@ class TestPrism(TestCase):
 
     def test_rebuilt_from_parts_with_copied_parameters(self):
         module = self.make()
-        # the builder reads a negative of a form without one as the positive loss (its
-        # strict_negatives=False); so does the module with the same option
-        module.strict_negatives = False
+        # a negative of a form without one is an error in both (``strict_negatives``)
         geometry = METHODS["prism"](N, R, I, embed_dim=D + 1, margin=0.07)
         cm = geometry.class_model
         _copy([cm.centres.weight, cm.inradii.weight, cm.box_centres.weight,

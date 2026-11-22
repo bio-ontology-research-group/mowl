@@ -2,12 +2,12 @@ r"""Concept2Box on an ontology viewed as a two-view knowledge graph."""
 import logging
 
 from mowl.base_models.elmodel import EmbeddingELModel
-from mowl.nn.el.concept2box.module import Concept2BoxModule
+from mowl.models.composed.model import ComposedEL
 
 logger = logging.getLogger(__name__)
 
 
-class Concept2Box(EmbeddingELModel):
+class Concept2Box(ComposedEL):
     r"""Concept2Box [huang2023]_: concepts are Gumbel boxes, entities are points.
 
     The paper learns from two knowledge graphs, a concept graph (ontology view) and an
@@ -18,8 +18,14 @@ class Concept2Box(EmbeddingELModel):
     * instance view: role assertions ``r(a, b)``;
     * cross-view links: class assertions ``C(a)``.
 
-    The three losses are those of the paper, summed (Equation 11). The generic training
-    loop of :class:`~mowl.base_models.EmbeddingELModel` is used, with PyKEEN-free negative
+    The three losses are those of the paper, summed (Equation 11). The model is the
+    combination of parts called ``"concept2box"``
+    (:func:`~mowl.representation.library.shapes_methods.concept2box`): Gumbel boxes in the
+    context of a relation, translations of points, the volume ratio, the point-to-box
+    distance and the point distance as measures. It is a :class:`~mowl.models.ComposedEL`, so
+    any part can be swapped; the hand-written loss module of the earlier implementation is
+    :class:`mowl.baselines.models.concept2box.model.Concept2Box`. The generic training loop
+    of :class:`~mowl.base_models.EmbeddingELModel` is used, with PyKEEN-free negative
     sampling by corrupting the right-hand class or individual. Only these four forms are
     trained: ``gci1``, ``gci3``, the bottom forms and role axioms are not used (a warning
     names the ones the ontology contains). See :class:`~mowl.nn.Concept2BoxModule` for the
@@ -47,33 +53,28 @@ class Concept2Box(EmbeddingELModel):
                  cross_margin=0.15, instance_weight=1.0, cross_weight=1.0,
                  learning_rate=0.005, batch_size=4096, model_filepath=None, device="cpu",
                  neg_sampling_gcis=None, gci2_reading="axiom"):
-        super().__init__(dataset, embed_dim, batch_size, extended=True,
-                         model_filepath=model_filepath, device=device,
-                         learning_rate=learning_rate, neg_sampling_gcis=neg_sampling_gcis)
-        self.beta, self.alpha = beta, alpha
-        self.kge_margin, self.cross_margin = kge_margin, cross_margin
-        self.instance_weight, self.cross_weight = instance_weight, cross_weight
-        self.gci2_reading = gci2_reading
         self._warned = False
-        self.init_module()
+        super().__init__(dataset, method="concept2box", embed_dim=embed_dim,
+                         batch_size=batch_size, model_filepath=model_filepath, device=device,
+                         learning_rate=learning_rate, neg_sampling_gcis=neg_sampling_gcis,
+                         beta=beta, alpha=alpha, kge_margin=kge_margin,
+                         cross_margin=cross_margin, instance_weight=instance_weight,
+                         cross_weight=cross_weight, gci2_reading=gci2_reading)
 
-    def init_module(self):
-        self.module = Concept2BoxModule(
-            len(self.class_index_dict),
-            len(self.object_property_index_dict),
-            nb_inds=len(self.individual_index_dict) or None,
-            embed_dim=self.embed_dim, beta=self.beta, alpha=self.alpha,
-            kge_margin=self.kge_margin, cross_margin=self.cross_margin,
-            instance_weight=self.instance_weight, cross_weight=self.cross_weight,
-            gci2_reading=self.gci2_reading,
-        ).to(self.device)
+    beta = property(lambda self: self.method_options["beta"])
+    alpha = property(lambda self: self.method_options["alpha"])
+    kge_margin = property(lambda self: self.method_options["kge_margin"])
+    cross_margin = property(lambda self: self.method_options["cross_margin"])
+    instance_weight = property(lambda self: self.method_options["instance_weight"])
+    cross_weight = property(lambda self: self.method_options["cross_weight"])
+    gci2_reading = property(lambda self: self.method_options["gci2_reading"])
 
     @property
     def training_datasets(self):
-        datasets = super().training_datasets
-        usable = {k: v for k, v in datasets.items() if k in self.SUPPORTED_GCIS}
+        usable = super().training_datasets
+        datasets = EmbeddingELModel.training_datasets.fget(self)
         skipped = sorted(k for k, v in datasets.items()
-                         if k not in self.SUPPORTED_GCIS and len(v) > 0)
+                         if k not in usable and len(v) > 0)
         if skipped and not self._warned:
             logger.warning("Concept2Box does not use the axiom forms %s.", skipped)
             self._warned = True

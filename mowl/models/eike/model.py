@@ -5,8 +5,7 @@ from urllib.parse import unquote
 import numpy as np
 import torch as th
 
-from mowl.base_models.elmodel import EmbeddingELModel
-from mowl.nn.el.eike.module import EIKEModule
+from mowl.models.composed.model import ComposedEL
 
 
 def name_to_text(iri):
@@ -16,7 +15,7 @@ def name_to_text(iri):
     return name.replace("_", " ").strip("<> ")
 
 
-class EIKE(EmbeddingELModel):
+class EIKE(ComposedEL):
     """EIKE [wang2024eike]_: concepts and instances in an extensional and an intensional space.
 
     Extensional space: concepts are ellipsoids, instances points, relations vectors.
@@ -26,6 +25,14 @@ class EIKE(EmbeddingELModel):
     paper: SubClassOf (``gci0`` of the normalised ontology), InstanceOf (class assertions)
     and relational triples (object property assertions). Axioms of the other normal forms
     (``gci1``, ``gci2``, ``gci3``, bottom forms, role axioms) are not used.
+
+    The model is the combination of parts called ``"eike"``
+    (:func:`~mowl.representation.library.shapes_methods.eike`): linked ellipsoids and vectors
+    as classes, translations, points and mapped vectors for individuals, the ellipsoid measure
+    linked to the cosine order, the margin ranking loss and the corruption of head or tail as
+    negatives. It is a :class:`~mowl.models.ComposedEL`, so any part can be swapped. The
+    hand-written loss module of the earlier implementation is
+    :class:`mowl.baselines.models.eike.model.EIKE`.
 
     :param dataset: mOWL dataset.
     :param embed_dim: Dimension of both spaces (the paper uses 100). Must equal the
@@ -58,15 +65,17 @@ class EIKE(EmbeddingELModel):
             if dims != {embed_dim}:
                 raise ValueError(f"intensional_vectors have dimension(s) {sorted(dims)} but "
                                  f"embed_dim is {embed_dim}.")
-        super().__init__(dataset, embed_dim, batch_size, extended=True,
-                         model_filepath=model_filepath, device=device,
-                         learning_rate=learning_rate, neg_sampling_gcis=neg_sampling_gcis)
-        self.alpha = alpha
-        self.margins = tuple(margins)
-        self.instance_map = instance_map
         self.intensional_vectors = intensional_vectors
-        self.freeze_intensional = freeze_intensional
-        self.init_module()
+        super().__init__(dataset, method="eike", embed_dim=embed_dim, batch_size=batch_size,
+                         model_filepath=model_filepath, device=device,
+                         learning_rate=learning_rate, neg_sampling_gcis=neg_sampling_gcis,
+                         alpha=alpha, margins=tuple(margins), instance_map=instance_map,
+                         freeze_intensional=freeze_intensional)
+
+    freeze_intensional = property(lambda self: self.method_options["freeze_intensional"])
+    alpha = property(lambda self: self.method_options["alpha"])
+    margins = property(lambda self: self.method_options["margins"])
+    instance_map = property(lambda self: self.method_options["instance_map"])
 
     # -- optional language-model input ---------------------------------------------------
     def class_texts(self, descriptions=None):
@@ -127,21 +136,13 @@ class EIKE(EmbeddingELModel):
             for iri, vec in self.intensional_vectors.items():
                 if iri in self.class_index_dict:
                     init[self.class_index_dict[iri]] = np.asarray(vec, dtype="float32")
-        self.module = EIKEModule(
-            len(self.class_index_dict), len(self.object_property_index_dict),
-            len(self.individual_index_dict), embed_dim=self.embed_dim, alpha=self.alpha,
-            margins=self.margins, instance_map=self.instance_map, intensional_init=init,
-            freeze_intensional=self.freeze_intensional).to(self.device)
-
-    # -- training ------------------------------------------------------------------------
-    @property
-    def training_datasets(self):
-        """The training datasets EIKE uses: SubClassOf, InstanceOf and relational triples."""
-        return {k: v for k, v in super().training_datasets.items() if k in self._EIKE_FORMS}
+        self.method_options["intensional_init"] = init
+        super().init_module()
 
     def get_negative_sampling_config(self):
         """Bordes-style negatives (the paper): corrupt head or tail, one negative of each
-        kind per positive."""
+        kind per positive (the regime :class:`~mowl.training.PerColumnCorruption` of the
+        method does the sampling; this is its configuration)."""
         cfg = {
             "gci0": {"index_pool": "classes", "corrupt_column": [0, 1]},
             "class_assertion": {"index_pool": ["individuals", "classes"],
@@ -154,11 +155,11 @@ class EIKE(EmbeddingELModel):
         return cfg
 
     def compute_loss(self, pos_scores, neg_scores=None):
-        """The ranking loss :math:`[\\gamma + f(\\delta) - f(\\delta')]_+` of Section 4.3, where
-        :math:`\\delta'` is a corruption of :math:`\\delta` (Bordes et al., as the paper
-        prescribes): each positive is paired with its own negatives, the blocks of
-        ``neg_scores`` follow the corrupted columns. The module returns negative scores
-        already reduced by the margin of their axiom type. Averaged over pairs."""
+        """The ranking loss :math:`[\\gamma + f(\\delta) - f(\\delta')]_+` of Section 4.3,
+        where :math:`\\delta'` is a corruption of :math:`\\delta`: each positive is paired
+        with its own negatives, the blocks of ``neg_scores`` follow the corrupted columns. The
+        module returns negative scores already reduced by the margin of their axiom type.
+        Averaged over pairs."""
         if neg_scores is None:
             return th.mean(pos_scores)
         k = neg_scores.numel() // pos_scores.numel()

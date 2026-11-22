@@ -370,14 +370,14 @@ class TestCombinations(TestCase):
                           without=("gci1", "gci2", "gci3", "gci1_bot", "gci0_bot", "gci3_bot"))
 
     def test_the_methods_through_composed_el(self):
-        for key in ("octagon", "prism", "concept2box"):
+        for key in ("octagon", "prism", "concept2box", "eike"):
             model = ComposedEL(self.dataset, method=key, embed_dim=8)
             self.assertIsInstance(model.module, ComposedGeometry)
             model.train(epochs=2)
-        # EIKE has no conjunction: ComposedEL trains every form it finds and says so.
+        # EIKE reads the subsumptions and the assertions only: the other forms of the ontology
+        # are left out of its training data (it has no conjunction).
         model = ComposedEL(self.dataset, method="eike", embed_dim=8)
-        with self.assertRaises(ConstructorUnavailable):
-            model.train(epochs=1)
+        self.assertEqual(set(model.training_datasets) - {"gci0"}, set())
 
     def test_abox_losses_decrease_with_point_individuals(self):
         # The family dataset has no assertions: train the individual forms directly.

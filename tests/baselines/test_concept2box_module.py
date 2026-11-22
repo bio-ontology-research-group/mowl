@@ -5,8 +5,8 @@ import torch as th
 import mowl
 mowl.init_jvm("1g")
 import mowl.datasets  # noqa: F401,E402
-import mowl.nn.el.concept2box.losses as L  # noqa: E402
-from mowl.nn.el.concept2box.module import Concept2BoxModule  # noqa: E402
+import mowl.baselines.nn.el.concept2box.losses as L  # noqa: E402
+from mowl.baselines.nn.el.concept2box.module import Concept2BoxModule  # noqa: E402
 
 SHARP = 1e-3     # beta -> 0: Gumbel boxes become hard boxes
 

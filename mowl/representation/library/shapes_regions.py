@@ -13,8 +13,8 @@ from typing import Any, Optional
 import torch as th
 
 from mowl.nn.el.octagon import geometry as G
-from mowl.nn.el.prism.losses import NORMALS, supports
-from mowl.nn.el.concept2box.losses import gumbel_intersection
+from mowl.representation.library.shapes_prism_math import NORMALS, supports
+from mowl.representation.library.shapes_gumbel_math import gumbel_intersection
 from mowl.representation.regions import Box, ConstructorUnavailable, Region
 
 __all__ = ["Point", "OctagonProduct", "Prism", "Ellipsoid", "Vector", "Linked", "SoftBox"]

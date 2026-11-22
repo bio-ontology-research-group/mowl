@@ -167,7 +167,7 @@ constructed model ever fails verification, construction raises
      - :math:`|\text{elements}| \times d` point table ``elem_embed``
    * - Structural objective (:mod:`mowl.nn.el.structural`)
      - :class:`~mowl.models.MultiBoxEL` and :class:`~mowl.models.PrismEL` (``objective="structural"``)
-     - Materialises regions with signed half-widths (:class:`~mowl.nn.el.structural.Regions` and :class:`~mowl.nn.el.prism.losses.PrismRegions`), compiles acyclic conjunction definitions :math:`A \equiv X \sqcap Y` (:class:`~mowl.nn.el.structural.DefinitionTable`), and supervises satisfiable classes and conjunction pairs via signed non-emptiness (:class:`~mowl.nn.el.structural.ExistenceTargets`, :func:`~mowl.nn.el.structural.existence_loss`) and single-coordinate separation in ``gci1_bot``. At margin :math:`0` with ``structural_definitions=True``, zero sum of the structural box losses and the existence term implies that the materialised regions form a geometric model of the box normal forms with every satisfiable class and listed conjunction non-empty; the converse holds when every active non-empty source slot (in ``gci0``) or pair slot (in ``gci1``) is covered by a single active target slot (see the Non-guarantees below; role normal forms inherit Box²EL/PrismEL guarantees, and an all-empty target makes a role score vacuously :math:`0`).
+     - Materialises regions with signed half-widths (:class:`~mowl.nn.el.structural.Regions` and :class:`~mowl.baselines.nn.el.prism.losses.PrismRegions`), compiles acyclic conjunction definitions :math:`A \equiv X \sqcap Y` (:class:`~mowl.nn.el.structural.DefinitionTable`), and supervises satisfiable classes and conjunction pairs via signed non-emptiness (:class:`~mowl.nn.el.structural.ExistenceTargets`, :func:`~mowl.nn.el.structural.existence_loss`) and single-coordinate separation in ``gci1_bot``. At margin :math:`0` with ``structural_definitions=True``, zero sum of the structural box losses and the existence term implies that the materialised regions form a geometric model of the box normal forms with every satisfiable class and listed conjunction non-empty; the converse holds when every active non-empty source slot (in ``gci0``) or pair slot (in ``gci1``) is covered by a single active target slot (see the Non-guarantees below; role normal forms inherit Box²EL/PrismEL guarantees, and an all-empty target makes a role score vacuously :math:`0`).
      - :math:`K = \text{max\_components}` slots in :math:`\mathbb{R}^d` (:class:`~mowl.models.MultiBoxEL`, default :math:`k^2`) or single prisms in :math:`\mathbb{R}^2 \times \mathbb{R}^{d-2}` (:class:`~mowl.models.PrismEL`)
 
 
@@ -433,7 +433,7 @@ pairwise-intersecting spanning boxes always share a point by Helly's theorem).
 
 The opt-in ``objective="structural"`` mode (implemented in
 :mod:`mowl.nn.el.structural`, :mod:`mowl.nn.el.multiboxel`, and
-:mod:`mowl.nn.el.prism`) addresses all three defects for
+:mod:`mowl.baselines.nn.el.prism`) addresses all three defects for
 :class:`~mowl.models.MultiBoxEL` and :class:`~mowl.models.PrismEL`. The
 guarantee concerns the zero set of the loss, not convergence of the optimiser;
 as measured on the :math:`T_3` fixture in the slow tests (empirical measurements,
@@ -739,16 +739,16 @@ measured seeds (``strict_loss == 0``, minimum target class and pair
 5. **Prisms (:class:`~mowl.models.PrismEL`, :class:`~mowl.nn.PrismModule`):**
    Under ``PrismEL(..., margin=0.1, objective="structural", max_depth=8, structural_definitions=True, existence_weight=1.0, size_reg=1e-3, canonical_model=None)``,
    each class is materialised as a single prism
-   :class:`~mowl.nn.el.prism.losses.PrismRegions` ``(h, cen, w)`` with support
+   :class:`~mowl.baselines.nn.el.prism.losses.PrismRegions` ``(h, cen, w)`` with support
    vector :math:`h \in \mathbb{R}^3`, box centre :math:`\text{cen} \in \mathbb{R}^{d-2}`,
    and signed box half-width :math:`w \in \mathbb{R}^{d-2}`. Non-emptiness is
-   measured by :func:`~mowl.nn.el.prism.losses.prism_nonempty_measure`:
+   measured by :func:`~mowl.baselines.nn.el.prism.losses.prism_nonempty_measure`:
    :math:`\text{ne}(P) = \min(\sum_{k=1}^3 h_k,\; \min_m 2 w_m)` (strictly
    positive iff non-empty; :math:`\sum_{k=1}^3 h_k = 3|\rho| \ge 0` for
    primitive prisms). Definitions are evaluated recursively with
-   :func:`~mowl.nn.el.prism.losses.prism_regions_intersection`
+   :func:`~mowl.baselines.nn.el.prism.losses.prism_regions_intersection`
    (:math:`h = \min(h_X, h_Y)` and signed box half-widths from
-   :func:`~mowl.nn.el.prism.losses.prism_intersection`); because intersecting
+   :func:`~mowl.baselines.nn.el.prism.losses.prism_intersection`); because intersecting
    two prisms yields a single prism, there is no slot blow-up (:math:`k = 1`)
    and acceptance only requires acyclicity and :math:`\text{level} \le \text{max\_depth}`.
 
@@ -758,16 +758,16 @@ measured seeds (``strict_loss == 0``, minimum target class and pair
 
       * - Normal form
         - Structural prism loss (per row)
-      * - :math:`C \sqsubseteq D` (``gci0``, :func:`~mowl.nn.el.prism.losses.gci0_structural`)
+      * - :math:`C \sqsubseteq D` (``gci0``, :func:`~mowl.baselines.nn.el.prism.losses.gci0_structural`)
         - :math:`[\text{ne}(C) > 0]^{\text{det}} \bigl(\|\operatorname{relu}(h_C - h_D + m)\|_2^2 + \|\operatorname{relu}(|\text{cen}_C - \text{cen}_D| + w_C - w_D + m)\|_2^2\bigr)` on signed widths :math:`w_C, w_D` (equivalent to :math:`\text{prism\_inclusion\_score}(C, D, m)^2` for non-negative widths; masked rows ``0``)
-      * - :math:`C \sqsubseteq \bot` (``gci0_bot``, :func:`~mowl.nn.el.prism.losses.gci0_bot_structural`)
+      * - :math:`C \sqsubseteq \bot` (``gci0_bot``, :func:`~mowl.baselines.nn.el.prism.losses.gci0_bot_structural`)
         - :math:`\operatorname{relu}(\text{ne}(C))^2`
-      * - :math:`C \sqcap D \sqsubseteq E` (``gci1``, :func:`~mowl.nn.el.prism.losses.gci1_structural`)
+      * - :math:`C \sqcap D \sqsubseteq E` (``gci1``, :func:`~mowl.baselines.nn.el.prism.losses.gci1_structural`)
         - :math:`[\text{ne}(I) > 0]^{\text{det}} \bigl(\|\operatorname{relu}(h_I - h_E + m)\|_2^2 + \|\operatorname{relu}(|\text{cen}_I - \text{cen}_E| + w_I - w_E + m)\|_2^2\bigr)` with :math:`I = C \cap D` on signed widths :math:`w_I, w_E` (equivalent to :math:`\text{prism\_inclusion\_score}(C \cap D, E, m)^2` for non-negative widths), masked rows ``0``, and **no** emptiness penalties on :math:`C \cap D` (the existence term owns them)
-      * - :math:`C \sqcap D \sqsubseteq \bot` (``gci1_bot``, :func:`~mowl.nn.el.prism.losses.gci1_bot_structural`)
+      * - :math:`C \sqcap D \sqsubseteq \bot` (``gci1_bot``, :func:`~mowl.baselines.nn.el.prism.losses.gci1_bot_structural`)
         - :math:`\operatorname{relu}(\text{ne}(C \cap D) + m)^2`
       * - ``gci2``, ``gci3``, ``gci3_bot``, and assertions
-        - Existing prism scores (:func:`~mowl.nn.el.prism.losses.gci2_score_prisms`, :func:`~mowl.nn.el.prism.losses.gci2_score_neg_prisms`, :func:`~mowl.nn.el.prism.losses.gci3_score_prisms`, :func:`~mowl.nn.el.prism.losses.gci3_bot_score_prisms`, :func:`~mowl.nn.el.prism.losses.class_assertion_score_prisms`, :func:`~mowl.nn.el.prism.losses.object_property_assertion_loss`) on materialised prisms with ``|w|`` (unsquared norms/hinges)
+        - Existing prism scores (:func:`~mowl.baselines.nn.el.prism.losses.gci2_score_prisms`, :func:`~mowl.baselines.nn.el.prism.losses.gci2_score_neg_prisms`, :func:`~mowl.baselines.nn.el.prism.losses.gci3_score_prisms`, :func:`~mowl.baselines.nn.el.prism.losses.gci3_bot_score_prisms`, :func:`~mowl.baselines.nn.el.prism.losses.class_assertion_score_prisms`, :func:`~mowl.baselines.nn.el.prism.losses.object_property_assertion_loss`) on materialised prisms with ``|w|`` (unsquared norms/hinges)
 
    The existence term uses :math:`\text{NE}(C) = \text{ne}(C)` and
    :math:`\text{NE}(C \sqcap D) = \text{ne}(C \cap D)`, and the size term
@@ -786,7 +786,7 @@ measured seeds (``strict_loss == 0``, minimum target class and pair
      only in its box part (:math:`w_m < 0` in some coordinate while
      :math:`\sum_k h_k > 0`) becomes a phantom non-empty box of half-width
      :math:`|w_m| > 0` in ``gci2``, ``gci3``, and ``class_assertion``. In
-     addition, :func:`~mowl.nn.el.prism.losses.gci3_bot_score_prisms`
+     addition, :func:`~mowl.baselines.nn.el.prism.losses.gci3_bot_score_prisms`
      (:math:`\operatorname{relu}(\sum_k h_{C,k} + m)`) shrinks :math:`C` itself,
      which conflicts with the existence term whenever :math:`C` is satisfiable.
 
@@ -806,7 +806,7 @@ measured seeds (``strict_loss == 0``, minimum target class and pair
      and :meth:`MultiBoxELModule.all_class_regions() <mowl.nn.MultiBoxELModule.all_class_regions>`
      (detached on CPU);
      :meth:`PrismModule.class_regions(idx) <mowl.nn.PrismModule.class_regions>`
-     :math:`\to` :class:`~mowl.nn.el.prism.losses.PrismRegions` ``(h (B, 3), cen (B, d - 2), w (B, d - 2))``
+     :math:`\to` :class:`~mowl.baselines.nn.el.prism.losses.PrismRegions` ``(h (B, 3), cen (B, d - 2), w (B, d - 2))``
      and :meth:`PrismModule.all_class_regions() <mowl.nn.PrismModule.all_class_regions>`
      (detached on CPU); ``module.definition_table``
      (:class:`~mowl.nn.el.structural.DefinitionTable`),

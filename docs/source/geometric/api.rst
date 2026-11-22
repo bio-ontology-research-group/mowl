@@ -148,11 +148,11 @@ MultiELBE model
 Prism neural module and losses
 ------------------------------
 
-.. automodule:: mowl.nn.el.prism.module
+.. automodule:: mowl.baselines.nn.el.prism.module
    :members:
    :show-inheritance:
 
-.. automodule:: mowl.nn.el.prism.losses
+.. automodule:: mowl.baselines.nn.el.prism.losses
    :members:
    :show-inheritance:
 
@@ -163,6 +163,12 @@ PrismEL model
 .. automodule:: mowl.models.prism.model
    :members:
    :show-inheritance:
+
+The neural module that :class:`~mowl.models.PrismEL` trains is
+:class:`~mowl.nn.PrismModule`, the geometry of the method ``prism`` built from parts
+(:func:`~mowl.representation.library.shapes_methods.prism`). The page above and the module
+and losses of the previous section describe the earlier, hand-written implementation, which is
+kept for comparison in :mod:`mowl.baselines`.
 
 
 Canonical membership structure

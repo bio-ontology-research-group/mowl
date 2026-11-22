@@ -39,6 +39,12 @@ GEOMETRY = {
 GCI1_PROBE = {"RegDELEmModule"}
 ASSERTION_PROBE = {"RegDELBEModule": ("ind_embed", "ind_offset")}
 
+# Modules built from parts whose method has no inclusion margin: the margin of the objective is
+# fixed at 0 by the method, the margins of the method are its own arguments (EIKE: ``margins``,
+# the margins of its ranking losses; Concept2Box: ``kge_margin`` and ``cross_margin``, the
+# margins of its negative losses).
+OWN_MARGINS = {"EIKEModule", "Concept2BoxModule"}
+
 CLASSES = {c.__name__: c for c in all_el_module_classes()}
 
 
@@ -91,7 +97,7 @@ def test_the_survey_covers_every_module_with_an_inclusion_margin():
                 declared.add(n)
         except NotImplementedError:  # an abstract base
             pass
-    assert declared <= set(GEOMETRY), declared - set(GEOMETRY)
+    assert declared <= set(GEOMETRY) | OWN_MARGINS, declared - set(GEOMETRY)
 
 
 # The margin of these modules is a margin of the negative loss or of a ranking, and does not
@@ -118,7 +124,7 @@ def test_every_module_with_a_margin_is_accounted_for():
         except NotImplementedError:
             continue
         if isinstance(getattr(module, "margin", None), (int, float)):
-            assert name in GEOMETRY or name in NEGATIVE_ONLY, name
+            assert name in GEOMETRY or name in NEGATIVE_ONLY or name in OWN_MARGINS, name
 
 
 def test_multiboxel_names_the_margin_of_its_objective():

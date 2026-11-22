@@ -1,7 +1,7 @@
 import torch as th
 
-from mowl.nn.el.prism import losses as L
-from mowl.nn.el.prism.module import PrismModule
+from mowl.baselines.nn.el.prism import losses as L
+from mowl.baselines.nn.el.prism.module import PrismModule
 
 NEG_ROW = th.tensor([[0, 0, 1]])
 

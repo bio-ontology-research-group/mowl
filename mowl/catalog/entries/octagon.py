@@ -91,7 +91,7 @@ CARD = MethodCard(
             "1..4), X1 and X2 and X3 and X4 below bottom} has no octagon-product model with "
             "non-empty concept names.",
             f"{_OURS}, Section 'Helly analysis'; Helly (1923)",
-            verified_in_mowl="tests/nn/test_octagon_module.py::"
+            verified_in_mowl="tests/baselines/test_octagon_module.py::"
                              "test_t4_definitions_force_a_common_point"),
         Guarantee(
             K.EXPRESSIVITY,
@@ -100,7 +100,7 @@ CARD = MethodCard(
             "d = 2 with zero loss.",
             _OURS,
             condition="by construction",
-            verified_in_mowl="tests/nn/test_octagon_module.py::"
+            verified_in_mowl="tests/baselines/test_octagon_module.py::"
                              "test_t3_exact_configuration_is_a_model_by_sampling"),
         Guarantee(
             K.EXPRESSIVITY,
@@ -116,7 +116,7 @@ CARD = MethodCard(
             "and individuals as points is a model of these normal forms.",
             _OURS,
             condition="zero loss",
-            verified_in_mowl="tests/nn/test_octagon_module.py::"
+            verified_in_mowl="tests/baselines/test_octagon_module.py::"
                              "test_t3_exact_configuration_is_a_model_by_sampling"),
     ),
     limitations=(
@@ -172,7 +172,7 @@ CARD = MethodCard(
         "regions; roles as translations (as in ELBE and the prism model); the "
         "parametrisation (centre plus non-negative radii, non-empty by construction); all "
         "losses, which are exact (zero iff the geometric condition, see "
-        "mowl.nn.el.octagon.losses), including gci3 as the exact inclusion C - t_R in D "
+        "mowl.representation.library.shapes_octagon_math), including gci3 as the exact inclusion C - t_R in D "
         "instead of ELBE's overlap; negative sampling for gci2 with an exact non-inclusion "
         "loss; the Helly analysis (Helly number 3 for products of planar convex sets, the "
         "T3 model in d = 2 and the T4 non-representability). The paper's learning "

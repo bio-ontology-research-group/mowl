@@ -1,7 +1,8 @@
 Octagon embeddings (OctagonEL)
 ==============================
 
-:class:`OctagonEL <mowl.models.octagon.model.OctagonEL>` represents every concept as a
+:class:`OctagonEL <mowl.models.octagon.model.OctagonEL>` (the combination of parts called
+``octagon``: :doc:`/representation/combine`) represents every concept as a
 product of axis-aligned 2-D octagons. The octagons come from Charpenay & Schockaert,
 *Capturing Knowledge Graphs and Rules with Octagon Embeddings* (IJCAI 2024,
 `arXiv:2401.16270 <https://arxiv.org/abs/2401.16270>`_), where they are **relation**

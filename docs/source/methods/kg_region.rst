@@ -125,7 +125,11 @@ entities as points. An ontology gives the three parts directly.
      - class assertions :math:`C(a)`
      - vector-to-box distance (Equations 8 and 9), margin on corruptions
 
-:class:`~mowl.models.concept2box.model.Concept2Box` uses the generic EL training loop and
+:class:`~mowl.models.concept2box.model.Concept2Box` is the combination of parts called
+``concept2box`` (Gumbel boxes in the context of a relation, translations of points, a volume
+ratio, a point-to-box distance and a point distance as measures; see
+:doc:`/representation/combine`); the loss module written by hand is kept in
+:mod:`mowl.baselines`. It uses the generic EL training loop and
 negative sampling of :class:`~mowl.base_models.EmbeddingELModel`. Conjunctions and
 existentials on the left, bottom and role axioms are not used, and the model says so in a
 warning. Adaptations of the paper: the BERT encoder of the texts of concept and relation is
