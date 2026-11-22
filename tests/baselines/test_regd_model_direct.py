@@ -131,6 +131,20 @@ class TestRegDOptions(TestCase):
         with self.assertRaises(ValueError):
             RegDELEm(FamilyDataset(), num_neg=0)
 
+    def test_zero_lamda_and_code_variant_train_fast(self):
+        """The fast part of the slow test below, which runs in CI: two epochs of each
+        variant, every parameter finite and the parameters moved."""
+        for kwargs in ({"lamda": 0.0}, {"depth_on_containment": False}):
+            for cls in (RegDELBE, RegDELEm):
+                th.manual_seed(0)
+                model = cls(FamilyDataset(), embed_dim=5, learning_rate=0.01, **kwargs)
+                before = [p.detach().clone() for p in model.module.parameters()]
+                model.train(epochs=2)
+                after = list(model.module.parameters())
+                for parameter in after:
+                    self.assertTrue(th.isfinite(parameter).all())
+                self.assertTrue(any(not th.equal(b, a) for b, a in zip(before, after)))
+
     @pytest.mark.slow
     def test_zero_lamda_and_code_variant_train(self):
         for kwargs in ({"lamda": 0.0}, {"depth_on_containment": False}):
