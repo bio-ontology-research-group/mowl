@@ -42,6 +42,29 @@ def test_the_method_users_get_is_built_from_parts(pair):
     assert "mowl.baselines" not in type(new.module).__module__
     for part in vars(new.module).values():
         assert "mowl.baselines" not in type(part).__module__, type(part)
+    # The parts are named and there is more than one.
+    parts = new.module.parts
+    parts = parts() if callable(parts) else parts
+    assert isinstance(parts, dict) and len(parts) >= 2, parts
+    # Every object the module is made of is a general library class, not code
+    # from a per-method model file.
+    general = ("mowl.representation", "mowl.training", "mowl.evaluation",
+               "mowl.projection", "mowl.walking", "mowl.corpus", "mowl.reasoning",
+               "mowl.datasets", "mowl.owlapi", "mowl.ontology", "mowl.utils")
+    members = list(vars(new.module).values())
+    if hasattr(new.module, "modules"):
+        members += [m for m in new.module.modules() if m is not new.module]
+    for member in members:
+        where = type(member).__module__
+        if where.startswith("mowl."):
+            assert where.startswith(general), (type(member).__name__, where)
+    # The module is a general class, or a named combination that adds no
+    # computation of its own.
+    cls = type(new.module)
+    if not cls.__module__.startswith("mowl.representation"):
+        own = sorted(k for k, v in vars(cls).items()
+                     if callable(v) and not k.startswith("__"))
+        assert not own, (cls.__module__, cls.__name__, own)
 
 
 @pytest.mark.parametrize("pair", PAIRS, ids=IDS)
