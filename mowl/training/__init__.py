@@ -51,6 +51,7 @@ from mowl.training.regularization import (Regularization, Regularizer, NormPenal
                                           BallProjection, IntervalProjection, ModuleProjection,
                                           embedding_tables)
 from mowl.training.alternating import AlternatingMinibatches, FullBatch, FormSelection
+from mowl.training.text import LinearWarmupDecay, SampledLogicalLosses
 
 __all__ = [
     "HOOKS", "SCHEDULE_HOOKS", "unsupported_hooks",
@@ -88,4 +89,5 @@ __all__ = [
     "EpochBatches", "EdgeCorruption", "KnownRowMask", "SelfAdversarialBCE", "GroupedMarginLoss",
     "HeadRestrictedHinge", "ValidationPatience", "RegimeTrained", "Rows",
     "ModuleProjection", "AlternatingMinibatches", "FullBatch", "FormSelection",
+    "LinearWarmupDecay", "SampledLogicalLosses",
 ]
