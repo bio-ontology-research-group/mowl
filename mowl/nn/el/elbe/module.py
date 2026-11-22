@@ -52,6 +52,7 @@ centre and offset of a class form one row of :math:`U(-1, 1)^{2n}` scaled to uni
     #: ``ComposedEL(dataset, classes="box", relations="translation")`` trains on them): the
     #: module is the published method, as the released one was.
     role_axiom_capable = False
+    neg_capable_gcis = frozenset({"gci2", "object_property_assertion"})
 
     def __init__(self, nb_ont_classes, nb_rels, nb_inds=None, embed_dim=50, margin=0.1,
                  all_negative_losses=False, epsilon=0.01, gci3_form="overlap",

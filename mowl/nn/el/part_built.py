@@ -49,6 +49,14 @@ class _PartBuiltModule(ComposedGeometry):
             regularizers=built.regularizers, supported_forms=built.supported_forms,
             neg_capable_gcis=built.neg_capable_gcis)
         self.strict_negatives = True
+        # A class that declares its negative losses (``neg_capable_gcis`` on the class, as
+        # the released modules do and a subclass may change) decides, not the objective.
+        for cls in type(self).__mro__:
+            if cls is ComposedGeometry:
+                break
+            if "neg_capable_gcis" in vars(cls):
+                del self.neg_capable_gcis
+                break
         self._register_load_state_dict_pre_hook(_rename_earlier_parameters, with_module=True)
 
     def get_loss_function(self, gci_name):

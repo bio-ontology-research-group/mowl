@@ -35,6 +35,11 @@ class BoxELModule(_PartBuiltModule):
     #: :class:`~mowl.training.Box2ELBaselineLosses`.
     regulariser = "global"
 
+    neg_capable_gcis = frozenset({"gci2", "object_property_assertion"})
+    role_axiom_capable = True
+    #: BoxEL has no margin of inclusion: a ratio of volumes cannot express room to spare.
+    margin_semantics = None
+
     #: With ``per_axiom_column = False`` every loss but the two role axioms is ``(B,)``, as the
     #: hand-written module returned them.
     flat_forms = frozenset({"gci0", "gci1", "gci2", "gci3", "gci0_bot", "gci1_bot", "gci3_bot",
@@ -61,6 +66,7 @@ class BoxELModule(_PartBuiltModule):
                          relation_bounds=tuple(relation_bounds),
                          scaling_bounds=tuple(scaling_bounds), **options)
         super().__init__(built)
+        self.margin_semantics = None
         self.nb_ont_classes = nb_ont_classes
         self.nb_rels = nb_rels
         self.nb_inds = nb_inds
@@ -68,6 +74,11 @@ class BoxELModule(_PartBuiltModule):
         self._pending_regulariser = 0
 
     # -- the names of the earlier module -----------------------------------------------------
+    @property
+    def margin(self):
+        raise AttributeError("BoxELModule has no margin: the volume ratio of BoxEL cannot "
+                             "express room to spare (the objective's margin is 0).")
+
     @property
     def min_embedding(self):
         return self.class_model.mins
