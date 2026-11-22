@@ -23,7 +23,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 
-from mowl.nn.query.geometry import _clamp_positive
+from mowl.nn.query.base import _clamp_positive
 from mowl.representation.library.query_regions import (
     BetaRegion, SectorCone, as_state, beta_kl, from_state, to_aperture, to_axis,
     wrap_angle)
@@ -33,7 +33,7 @@ from mowl.representation.relation_models import Relations
 
 __all__ = ["PointBoxes", "BetaPoints", "ConePoints", "BetaNetwork",
            "ConeNetwork", "ConeRotation", "BoxAttentionIntersection",
-           "BoxExactIntersection", "BetaAttentionIntersection", "ConeAttentionIntersection",
+           "BoxExactIntersection", "BetaAttentionIntersection", "BetaMeanIntersection", "ConeAttentionIntersection",
            "BetaInversion", "ConeComplement", "BoxDistance", "BetaDistance", "ConeDistance",
            "embedding"]
 
@@ -167,6 +167,7 @@ class BetaNetwork(_QueryRelations):
     function of the distribution and the relation embedding (BetaE)."""
 
     part = "neural network"
+    accepts = (BetaRegion,)
 
     def __init__(self, size=None, embed_dim=None, hidden=128, layers=1, tables=None,
                  inverse_of=None, init_range=0.1):
@@ -229,6 +230,7 @@ class ConeNetwork(_ConeRelations):
     angles."""
 
     part = "neural network"
+    accepts = (SectorCone,)
 
     def __init__(self, size=None, embed_dim=None, hidden=128, layers=1, tables=None,
                  angle_range=0.1, inverse_of=None):
@@ -333,6 +335,8 @@ register_relation_model("angle rotation")(ConeRotation)
 class _Intersection(nn.Module):
     #: Whether the result is the set intersection of the regions.
     exact = False
+    #: The region class the operator reads (``None``: any).
+    region = None
 
     def gap(self, regions):
         """Cost ``(B, 1)`` that is zero iff the intersection is not empty; a learned
@@ -344,6 +348,8 @@ class BoxAttentionIntersection(_Intersection):
     """Query2Box: the centre is an attention-weighted average of the centres (weights from
     a one-layer network), the offset the minimum of the offsets times a sigmoid gate
     (DeepSets). Not the set intersection."""
+
+    region = Box
 
     def __init__(self, dim=None, tables=None):
         super().__init__()
@@ -371,6 +377,7 @@ class BoxExactIntersection(_Intersection):
     (the box degenerates to a point there) and :meth:`gap` is positive. No parameters."""
 
     exact = True
+    region = Box
 
     def forward(self, regions):
         lower = th.stack([r.lower for r in regions]).max(0)[0]
@@ -385,6 +392,8 @@ class BoxExactIntersection(_Intersection):
 
 class BetaAttentionIntersection(_Intersection):
     """BetaE: the attention-weighted average of the parameters."""
+
+    region = BetaRegion
 
     def __init__(self, dim=None, tables=None):
         super().__init__()
@@ -404,10 +413,25 @@ class BetaAttentionIntersection(_Intersection):
         return BetaRegion((attention * alpha).sum(0), (attention * beta).sum(0))
 
 
+class BetaMeanIntersection(_Intersection):
+    """The plain average of the parameters of the distributions: BetaE's intersection with
+    equal attention weights and no parameters (an ablation of BetaE's attention network).
+    Not the set intersection."""
+
+    region = BetaRegion
+
+    def forward(self, regions):
+        alpha = th.stack([r.alpha for r in regions])
+        beta = th.stack([r.beta for r in regions])
+        return BetaRegion(alpha.mean(0), beta.mean(0))
+
+
 class ConeAttentionIntersection(_Intersection):
     """ConE: the axis is the angle of the attention-weighted average of the unit vectors
     of the axes (SemanticAverage), the aperture the minimum of the apertures times a gate
     (CardMin)."""
+
+    region = SectorCone
 
     def __init__(self, dim=None, dropout=0.0, tables=None):
         super().__init__()
@@ -447,6 +471,7 @@ class BetaInversion(nn.Module):
     """
 
     exact = True
+    region = BetaRegion
 
     def forward(self, region):
         return region.invert()
@@ -458,6 +483,7 @@ class ConeComplement(nn.Module):
     not the complement of the product of sectors: ``exact = False`` (``approximate``)."""
 
     exact = False
+    region = SectorCone
 
     def __init__(self, signed=False):
         super().__init__()
@@ -477,23 +503,38 @@ class BoxDistance(nn.Module):
     parts)."""
 
     part = "point-to-region distance"
+    region = Box
 
-    def __init__(self, center_weight=0.02):
+    def __init__(self, center_weight=0.02, norm=1):
         super().__init__()
+        if norm not in (1, 2):
+            raise ValueError("norm must be 1 (Query2Box) or 2.")
         self.cen = center_weight
+        self.norm = norm
 
     def forward(self, query, entity):
         delta = (entity.centre - query.centre).abs()
-        return F.relu(delta - query.offset).sum(-1) + self.cen * th.min(
-            delta, query.offset).sum(-1)
+        outside, inside = F.relu(delta - query.offset), th.min(delta, query.offset)
+        if self.norm == 1:
+            return outside.sum(-1) + self.cen * inside.sum(-1)
+        return th.sqrt((outside ** 2).sum(-1) + 1e-12) + self.cen * th.sqrt(
+            (inside ** 2).sum(-1) + 1e-12)
 
 
 class BetaDistance(nn.Module):
-    """BetaE: ``KL(entity || query)`` summed over the coordinates."""
+    """BetaE: ``KL(entity || query)`` summed over the coordinates; ``reverse=True``:
+    ``KL(query || entity)``."""
 
     part = "divergence"
+    region = BetaRegion
+
+    def __init__(self, reverse=False):
+        super().__init__()
+        self.reverse = bool(reverse)
 
     def forward(self, query, entity):
+        if self.reverse:
+            return beta_kl(query.alpha, query.beta, entity.alpha, entity.beta).sum(-1)
         return beta_kl(entity.alpha, entity.beta, query.alpha, query.beta).sum(-1)
 
 
@@ -503,6 +544,7 @@ class ConeDistance(nn.Module):
     modulus."""
 
     part = "angle"
+    region = SectorCone
 
     def __init__(self, center_weight=0.02, modulus=None, angle_range=0.1):
         super().__init__()

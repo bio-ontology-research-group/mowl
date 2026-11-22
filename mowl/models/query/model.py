@@ -1,32 +1,43 @@
-"""Query embedding models (Query2Box, BetaE, ConE, AConE) on ontologies.
+"""Query embedding models (Query2Box, BetaE, ConE, AConE) on ontologies, from parts.
 
-One model class for the four methods: they differ in the geometry of the operators
-(:mod:`mowl.nn.query.geometry`), which a subclass names in ``geometry_class``. The graph
-they are trained on, the sampling of training queries, the loss, the class expression to
-query translation (:mod:`mowl.nn.query.expression`), the scoring of axioms for the
-rank-based regimes and ``score_query`` for
-:class:`mowl.evaluation.LogicalQueryAnswering` are shared.
+One model class for the four methods and for every other combination of their parts. A
+method is a named combination (:func:`mowl.representation.library.query_methods.query2box`
+and its siblings, registered in :data:`mowl.representation.METHODS` with
+``trained_on="queries"``): which entity model, relation model, intersection operator,
+negation operator and distance make up the geometry (``model.module``, a
+:class:`~mowl.representation.library.query_methods.ComposedQueryGeometry`). The model adds
+the other parts of a training and evaluation regime: the objective
+(:class:`~mowl.representation.library.query_objective.QueryObjective`), the query sampler
+(:mod:`mowl.models.query.sampler`), the training regime hooks
+(:mod:`mowl.training.regime`) and the evaluation regimes (:class:`mowl.evaluation.LogicalQueryAnswering`
+through :meth:`QueryEmbeddingModel.score_query`, and the rank-based regimes through
+:meth:`QueryEmbeddingModel.axiom_costs`). The class expression to query translation is
+:mod:`mowl.nn.query.expression`.
 """
 
 import math
 
 import numpy as np
 import torch as th
-import torch.nn.functional as F
 
 from mowl.base_models.model import Model
 from mowl.models.query import sampling
 from mowl.models.query.graph import ISA_INV, extract_graph, role_relation
+from mowl.models.query.sampler import ReleasedQueries, SampledQueries
+from mowl.nn.query.base import UnsupportedOperator
 from mowl.nn.query.expression import (Vocabulary, class_expression_to_query, from_nested,
                                       ids, signature, to_dnf)
-from mowl.nn.query.geometry import UnsupportedOperator
+from mowl.representation.library.query_objective import QueryObjective
+from mowl.representation.methods import METHODS
 
 from mowl.training.regime import SCHEDULE_HOOKS  # noqa: E402
 
 
 class QueryEmbeddingModel(Model):
-    """Base class of :class:`~mowl.models.Query2Box`, :class:`~mowl.models.BetaE`,
-    :class:`~mowl.models.ConE` and :class:`~mowl.models.AConE`.
+    """A query embedding model of an ontology: :class:`~mowl.models.Query2Box`,
+    :class:`~mowl.models.BetaE`, :class:`~mowl.models.ConE` and :class:`~mowl.models.AConE`
+    are this class with a method named, and any other combination of parts is this class
+    with the parts named.
 
     **The ontology as a graph.** Entities are the named classes and the named individuals;
     edges are ``A ⊑ B`` and ``a : B`` (relation ``isa``), ``A ⊑ ∃r.B`` and ``r(a, b)``
@@ -38,25 +49,22 @@ class QueryEmbeddingModel(Model):
     operators. Its answers are the entities that fall under it; named classes can be
     answers, so ``A ⊑ B`` is "``A`` is an answer of ``B``".
 
-    **Training** minimises ``-log σ(logit(answer)) - mean log σ(-logit(negative))`` (all
-    four reference codes) with uniformly drawn negative entities. Where the queries come
-    from is the ``queries`` argument (a training regime in the sense of mOWL: the model does
-    not depend on it):
+    **Training** minimises the negative sampling loss of
+    :class:`~mowl.representation.library.query_objective.QueryObjective`
+    (``-log σ(logit(answer)) - mean log σ(-logit(negative))``, all four reference codes) with
+    uniformly drawn negative entities. Where the queries come from is the ``queries``
+    argument (the query sampler, a training regime in the sense of mOWL: the model does not
+    depend on it):
 
     * ``"sampled"`` (default): queries of the structures 1p, 2p, 3p, 2i, 3i, ip, pi (and the
       negation structures 2in, 3in, inp, pin, pni for geometries with negation) are sampled
-      from the graph, backwards from a random answer, in every step.
+      from the graph, backwards from a random answer, in every step
+      (:class:`~mowl.models.query.sampler.SampledQueries`).
     * ``"released"``: the training queries of a released query dataset (the dataset must
       have ``training_queries(entity_id, relation_id, names)``, e.g.
       :class:`~mowl.datasets.builtin.query_sets.QueryAnsweringDataset`), as in the four
-      papers. Every update draws ``batch_size`` queries uniformly from the pool of
-      the path structures (1p, 2p, 3p) or of the other structures, so structures
-      are drawn in proportion to their number in the release; the positive is a random
-      answer on the training graph, the negatives are uniform non-answers, and every query
-      is weighted by ``1/sqrt(number of answers)``. One step is an update on a batch of path
-      queries, then one on a batch of the other queries, then again one of path queries
-      (a single update if there are no other queries), the loop of the reference code
-      (KGReasoning ``main.py``, which ConE and AConE copy).
+      papers (:class:`~mowl.models.query.sampler.ReleasedQueries`: batches, weights and the
+      order of updates of the reference code).
 
     :param dataset: mOWL dataset (the training ontology is read).
     :param embed_dim: Embedding dimension.
@@ -76,7 +84,16 @@ class QueryEmbeddingModel(Model):
         given there. The papers count steps (300,000 to 450,000): epochs times this.
     :param batch_per_structure: With ``queries="sampled"``: ``batch_size`` queries of every
         structure per step (Query2Box, Appendix) instead of ``batch_size`` in total.
-    :param geometry_kwargs: Extra arguments of the geometry.
+    :param method: The combination of parts: a key of :data:`mowl.representation.METHODS`
+        trained on queries (``"query2box"``, ``"betae"``, ``"cone_qe"``, ``"acone"``) or a
+        function with the signature of those builders. The named classes set it.
+    :param objective: A :class:`~mowl.representation.library.query_objective.QueryObjective`
+        (default: the negative sampling loss of the papers).
+    :param geometry_kwargs: Arguments of the builder of the method, which are the parts and
+        their options: ``intersection``, ``distance``, ``negation``, ``center_weight``,
+        ``activation``, ``hidden`` and so on (see the builders in
+        :mod:`mowl.representation.library.query_methods`). An argument that the method has
+        no part for raises ``TypeError``.
     """
 
     axiom_scoring = "method"
@@ -84,15 +101,24 @@ class QueryEmbeddingModel(Model):
     #: The objective (sampled queries, negative-sampling loss) is the method's own; regimes
     #: that set the optimiser, a schedule or a stopping rule can be attached.
     training_hooks = SCHEDULE_HOOKS
-    #: The :class:`~mowl.nn.query.geometry.QueryGeometry` subclass of the method.
-    geometry_class = None
+    #: The key of the named combination (a :data:`mowl.representation.METHODS` entry).
+    method = None
     default_gamma = 24.0
+    #: Options of the builder that this named method sets to its published or earlier
+    #: reading when the caller does not choose.
+    geometry_defaults = {}
 
     def __init__(self, dataset, embed_dim=32, gamma=None, learning_rate=1e-3, batch_size=64,
                  negatives=16, structures=None, hierarchy_closure=True, extension=True,
                  seed=0, queries="sampled", steps_per_epoch=10, batch_per_structure=False,
-                 model_filepath=None, device="cpu", **geometry_kwargs):
+                 model_filepath=None, device="cpu", method=None, objective=None,
+                 **geometry_kwargs):
         super().__init__(dataset, model_filepath=model_filepath)
+        method = self.method if method is None else method
+        if method is None:
+            raise ValueError("Name the combination: method='query2box', 'betae', 'cone_qe', "
+                             "'acone' or a builder function.")
+        builder = self._builder(method)
         self.embed_dim = embed_dim
         self.gamma = self.default_gamma if gamma is None else gamma
         self.learning_rate = learning_rate
@@ -105,6 +131,7 @@ class QueryEmbeddingModel(Model):
         self.steps_per_epoch = int(steps_per_epoch)
         self.batch_per_structure = bool(batch_per_structure)
         self.device = device
+        self.objective = QueryObjective() if objective is None else objective
         self.rng = np.random.default_rng(seed)
         self._class_ids = dict(super().class_index_dict)
         self._individual_ids = dict(super().individual_index_dict)
@@ -118,23 +145,61 @@ class QueryEmbeddingModel(Model):
             self.entity_names[i] = iri
         for iri, i in self._individual_ids.items():
             self.entity_names[self.num_classes + i] = iri
-        self.module = self.geometry_class(
-            self.graph.num_entities, self.graph.num_relations, embed_dim, self.gamma,
-            **geometry_kwargs).to(device)
+        options = {**self.geometry_defaults, **geometry_kwargs}
+        self.module = builder(
+            self.num_classes, len(self._role_ids), len(self._individual_ids), embed_dim,
+            self.gamma, num_classes=self.num_classes, extension=extension,
+            **options).to(device)
         self.vocabulary = Vocabulary(
             class_id=self._class_entity, individual_id=self._individual_entity,
             relation_id=self._relation, isa_inverse=ISA_INV, extension=extension)
         templates = sampling.structures(self.module.supports_negation, structures)
         self.loss_history = []
         if queries == "released":
-            self._load_released(dataset, templates, structures)
-            self._pool, self.training_structures = [], {}
-            return
-        pool = self.graph.entities_with_incoming()
-        self._pool = pool
-        self.training_structures = (sampling.usable_structures(templates, self.graph,
-                                                               self.rng, pool)
-                                    if pool else {})
+            self.sampler = ReleasedQueries(
+                dataset, self.graph, templates, self.rng, self.entity_id, self.relation_id,
+                structures=structures, batch_size=batch_size, negatives=negatives,
+                device=device)
+        else:
+            self.sampler = SampledQueries(
+                self.graph, templates, self.rng, batch_size=batch_size, negatives=negatives,
+                batch_per_structure=self.batch_per_structure, device=device)
+
+    @staticmethod
+    def _builder(method):
+        if callable(method):
+            return method
+        if method not in METHODS:
+            raise ValueError(f"Unknown method {method!r}.")
+        from mowl.representation.methods import METHOD_KINDS
+        if METHOD_KINDS.get(method) != "queries":
+            raise ValueError(f"{method!r} is trained on axioms, not on queries; use "
+                             f"ComposedEL for it.")
+        return METHODS[method]
+
+    @property
+    def parts(self):
+        """The combination: ``{"method": key, **module.parts}`` and the other parts of the
+        regime."""
+        return {"method": self.method, **self.module.parts,
+                "objective": f"{self.objective.kind} negative sampling",
+                "sampler": type(self.sampler).__name__}
+
+    # -- the query sampler ---------------------------------------------------------------
+    @property
+    def training_structures(self):
+        """``{name: template}`` of the structures trained (sampled queries; empty for the
+        released ones)."""
+        return self.sampler.structures
+
+    @property
+    def _pool(self):
+        return self.sampler.pool
+
+    @property
+    def released(self):
+        """The released training queries by structure (``queries="released"``)."""
+        return self.sampler.queries
 
     # -- ids ----------------------------------------------------------------------------
     def entity_id(self, iri):
@@ -162,129 +227,12 @@ class QueryEmbeddingModel(Model):
         return self.graph.triples
 
     # -- training -----------------------------------------------------------------------
-    def _batch(self):
-        names = list(self.training_structures)
-        per = (self.batch_size if self.batch_per_structure
-               else max(1, self.batch_size // len(names)))
-        groups = {}
-        for name in names:
-            template = self.training_structures[name]
-            rows, pos, negs = [], [], []
-            for _ in range(per):
-                sample = sampling.sample_query(template, self.graph, self.rng, self._pool)
-                if sample is None:
-                    continue
-                query, found, answer = sample
-                rows.append(ids(query))
-                pos.append(answer)
-                negs.append(sampling.negative_entities(
-                    found, self.negatives, self.graph.num_entities, self.rng))
-            if rows:
-                dev = self.device
-                groups[name] = (signature(template),
-                                th.tensor(rows, dtype=th.long, device=dev),
-                                th.tensor(pos, dtype=th.long, device=dev).unsqueeze(1),
-                                th.tensor(np.array(negs), dtype=th.long, device=dev))
-        return groups
-
-    def _load_released(self, dataset, templates, structures):
-        """The released training queries, grouped as path and other structures."""
-        if not hasattr(dataset, "training_queries"):
-            raise ValueError("queries='released' needs a dataset with training_queries(), "
-                             "e.g. mowl.datasets.builtin.query_sets.QueryAnsweringDataset.")
-        pool = dataset.training_queries(self.entity_id, self.relation_id)
-        names = [n for n in pool if n in templates]
-        if structures is not None:
-            names = [n for n in names if n in structures]
-        if not names:
-            raise ValueError(f"None of the released training structures {sorted(pool)} can "
-                             f"be trained by this geometry (it trains {sorted(templates)}).")
-        self.released = {n: pool[n] for n in names}
-        self.released_templates = {n: templates[n] for n in names}
-        self._released_columns = {}
-        from mowl.datasets.builtin.query_sets import _kinds
-        for n, q in self.released.items():
-            kinds = _kinds(q.structure)
-            self._released_columns[n] = [i for i, k in enumerate(kinds) if k in ("e", "r")]
-        path = [n for n in names if n in ("1p", "2p", "3p")]
-        other = [n for n in names if n not in path]
-        self._released_groups = {"path": path, "other": other}
-
-    def _released_samples(self, q, local):
-        """Positives, negatives and weights for the queries ``local`` of a
-        :class:`~mowl.datasets.builtin.query_sets.ReleasedTrainingQueries` (vectorised): a
-        uniformly drawn answer, ``negatives`` uniform entities that are not answers (the
-        ones that are redrawn up to three times), and ``1/sqrt(number of answers)``."""
-        n_entities = self.graph.num_entities
-        counts = q.offsets[local + 1] - q.offsets[local]
-        starts = q.offsets[local]
-        pick = starts + (self.rng.random(len(local)) * counts).astype(np.int64)
-        positives = q.answers[pick]
-        total = int(counts.sum())
-        owner = np.repeat(np.arange(len(local)), counts)
-        within = np.arange(total) - np.repeat(np.cumsum(counts) - counts, counts)
-        keys = owner * n_entities + q.answers[np.repeat(starts, counts) + within]
-        is_answer = np.zeros(len(local) * n_entities, dtype=bool)
-        is_answer[keys] = True
-        rows = np.arange(len(local))[:, None]
-        negatives = self.rng.integers(n_entities, size=(len(local), self.negatives))
-        for _ in range(3):
-            bad = is_answer[rows * n_entities + negatives]
-            if not bad.any():
-                break
-            negatives[bad] = self.rng.integers(n_entities, size=int(bad.sum()))
-        return positives, negatives, 1.0 / np.sqrt(counts)
-
-    def _released_batch(self, group):
-        """``batch_size`` training queries drawn uniformly from the structures of a group
-        (``"path"`` or ``"other"``), as ``{name: (signature, rows, positives, negatives,
-        weights)}``."""
-        names = self._released_groups[group]
-        sizes = np.array([len(self.released[n]) for n in names])
-        draw = self.rng.integers(int(sizes.sum()), size=self.batch_size)
-        bounds = np.concatenate([[0], np.cumsum(sizes)])
-        which = np.searchsorted(bounds, draw, side="right") - 1
-        out = {}
-        dev = self.device
-        for j, name in enumerate(names):
-            local = draw[which == j] - bounds[j]
-            if len(local) == 0:
-                continue
-            q = self.released[name]
-            rows = q.rows[local][:, self._released_columns[name]]
-            pos, negs, weights = self._released_samples(q, local)
-            out[name] = (signature(self.released_templates[name]),
-                         th.tensor(rows, dtype=th.long, device=dev),
-                         th.tensor(pos, dtype=th.long, device=dev).unsqueeze(1),
-                         th.tensor(negs, dtype=th.long, device=dev),
-                         th.tensor(weights, dtype=th.float, device=dev))
-        return out
-
-    def released_loss(self, groups):
-        """The negative sampling loss of a batch from :meth:`_released_batch`, each query
-        weighted by ``1/sqrt(number of answers)`` and the weights normalised over the batch
-        (as in the reference code)."""
-        pos_loss, neg_loss, total = 0.0, 0.0, 0.0
-        for sig, rows, pos, neg, w in groups.values():
-            state = self.module.embed(sig, rows)
-            p = self.module.logit(state, pos).squeeze(1)
-            n = self.module.logit(state, neg)
-            pos_loss = pos_loss - (w * F.logsigmoid(p)).sum()
-            neg_loss = neg_loss - (w * F.logsigmoid(-n).mean(dim=1)).sum()
-            total = total + w.sum()
-        return (pos_loss / total + neg_loss / total) / 2
-
     def loss(self, groups):
-        """The negative sampling loss of a batch from :meth:`_batch`."""
-        pos_loss, neg_loss, count = 0.0, 0.0, 0
-        for sig, rows, pos, neg in groups.values():
-            state = self.module.embed(sig, rows)
-            p = self.module.logit(state, pos)
-            n = self.module.logit(state, neg)
-            pos_loss = pos_loss - F.logsigmoid(p).sum()
-            neg_loss = neg_loss - F.logsigmoid(-n).mean(dim=1).sum()
-            count += len(rows)
-        return (pos_loss + neg_loss) / (2 * count)
+        """The objective on a batch of the sampler (``{name: (signature, rows, positives,
+        negatives[, weights])}``)."""
+        return self.objective(self.module, groups)
+
+    released_loss = loss
 
     def get_optimizer(self):
         """The optimiser of :meth:`train` (Adam with ``learning_rate``)."""
@@ -300,10 +248,7 @@ class QueryEmbeddingModel(Model):
             ontology without subclass or role axioms).
         """
         steps_per_epoch = self.steps_per_epoch if steps_per_epoch is None else steps_per_epoch
-        released = self.query_source == "released"
-        if not released and not self.training_structures:
-            raise ValueError("No training query can be sampled from the graph of this "
-                             "ontology: it has no subclass, role or assertion edges.")
+        self.sampler.check()
         regime = self.training_regime
         opt = NotImplemented if regime is None else regime.optimizer()
         if opt is NotImplemented:
@@ -314,16 +259,8 @@ class QueryEmbeddingModel(Model):
                 regime.on_epoch_start(epoch, epochs)
             total, updates = 0.0, 0
             for _ in range(steps_per_epoch):
-                if released:
-                    pattern = (["path", "other", "path"] if self._released_groups["other"]
-                               and self._released_groups["path"]
-                               else [g for g in ("path", "other") if self._released_groups[g]])
-                    batches = [(g, self._released_batch(g)) for g in pattern]
-                else:
-                    batches = [(None, None)]
-                for group, batch in batches:
-                    loss = (self.released_loss(batch) if released
-                            else self.loss(self._batch()))
+                for batch in self.sampler.updates():
+                    loss = self.loss(batch)
                     if regime is not None:
                         extra = regime.additional_loss(epoch)
                         if extra is not None:
