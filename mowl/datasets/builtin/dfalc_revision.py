@@ -1,6 +1,7 @@
 """The seven ontologies of the masked ABox revision experiment of DF-ALC."""
 
 import os
+import shutil
 import urllib.request
 
 from mowl.datasets.base import PathDataset, default_data_root
@@ -56,6 +57,10 @@ class DFALCRevisionDataset(PathDataset):
         if not os.path.exists(path):
             os.makedirs(self.directory, exist_ok=True)
             partial = f"{path}.{os.getpid()}.part"
-            urllib.request.urlretrieve((base_url or BASE_URL) + filename, partial)
+            # The host refuses the default urllib client name (HTTP 403).
+            request = urllib.request.Request(
+                (base_url or BASE_URL) + filename, headers={"User-Agent": "mowl"})
+            with urllib.request.urlopen(request) as response, open(partial, "wb") as out:
+                shutil.copyfileobj(response, out)
             os.replace(partial, path)
         super().__init__(path)
