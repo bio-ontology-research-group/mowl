@@ -1,6 +1,6 @@
 import mowl.baselines.nn.el.transbox.losses as L
 import mowl.baselines.nn.el.transbox.code_losses as CL
-from mowl.nn.el.elmodule import ELModule
+from mowl.baselines.nn.el.elmodule import ELModule
 import torch as th
 import torch.nn as nn
 

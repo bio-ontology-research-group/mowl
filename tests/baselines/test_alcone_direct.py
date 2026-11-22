@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 import torch as th
 
-from mowl.geometric.cones import (ALCone, ALConeChecker, ALConeInterpretation, And,
+from mowl.baselines.geometric.core.cones import (ALCone, ALConeChecker, ALConeInterpretation, And,
                                   Atomic, BOTTOM_CONCEPT, ConceptAssertion, Exists, Forall,
                                   GCI, Not, Or, RoleAssertion, TOP_CONCEPT)
 from mowl.baselines.nn.alc.alcone import losses as L

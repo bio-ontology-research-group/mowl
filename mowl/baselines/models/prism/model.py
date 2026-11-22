@@ -7,7 +7,7 @@ import torch as th
 
 from mowl.base_models.elmodel import EmbeddingELModel
 from mowl.baselines.nn.el.prism.module import PrismModule
-from mowl.nn.el.structural import (
+from mowl.baselines.nn.el.structural import (
     DefinitionTable,
     ExistenceTargets,
     build_structural_tables,
@@ -29,7 +29,7 @@ class PrismEL(EmbeddingELModel):
       (``2`` for ``tri_center``, ``1`` for ``tri_inradius``, ``d - 2`` for
       ``box_center``, and ``d - 2`` for ``box_offset``).
     - **Exact initialisation and anchor hook:** When ``init_boxes`` is provided,
-      :meth:`init_module` applies :meth:`~mowl.geometric.init.ExactBoxInit.apply_to_module`
+      :meth:`init_module` applies :meth:`~mowl.baselines.geometric.core.init.ExactBoxInit.apply_to_module`
       after module construction; the initialised prism of each class contains its
       initialisation box (the equilateral triangle in coordinates ``0..1`` with
       centre ``c[:2]`` and inradius :math:`\\max(o_0, o_1) \\sqrt{3}`, which
@@ -58,7 +58,7 @@ class PrismEL(EmbeddingELModel):
         The ambient embedding dimension :math:`d \\ge 3`.
     margin : float, default 0.1
         Inclusion margin (positive margin tightens constraints following ELBE).
-    init_boxes : mowl.geometric.init.ExactBoxInit, optional
+    init_boxes : mowl.baselines.geometric.core.init.ExactBoxInit, optional
         Optional exact-model box initialisation applied in :meth:`init_module`.
         Rows are matched by IRI against :attr:`class_index_dict`; rows of the
         auxiliary classes introduced by normalisation keep their random
@@ -91,13 +91,13 @@ class PrismEL(EmbeddingELModel):
         enabled for ``gci2`` and ``object_property_assertion``.
     max_depth : int, default 8
         Maximum definition level :math:`\\text{max\\_level}` passed to
-        :meth:`~mowl.nn.el.structural.DefinitionTable.from_normal_forms` under
+        :meth:`~mowl.baselines.nn.el.structural.DefinitionTable.from_normal_forms` under
         ``objective="structural"``.
     structural_definitions : bool, default True
         Whether ``objective="structural"`` compiles acyclic binary conjunction
         definitions :math:`A \\equiv X \\sqcap Y` (including through role
         auxiliaries :math:`A \\sqsubseteq \\exists r.C \\sqsubseteq \\text{Aux}`)
-        via :class:`~mowl.nn.el.structural.DefinitionTable`.
+        via :class:`~mowl.baselines.nn.el.structural.DefinitionTable`.
     existence_weight : float, default 1.0
         Non-negative weight multiplying :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.existence_loss`
         in :meth:`~mowl.nn.PrismModule.structural_extra_loss` under
@@ -110,10 +110,10 @@ class PrismEL(EmbeddingELModel):
         See :class:`~mowl.nn.PrismModule`.
     empty_box_reading : {"signed", "absolute"}, default "signed"
         See :class:`~mowl.nn.PrismModule`.
-    canonical_model : mowl.geometric.completion.CanonicalModel, optional, default None
-        Optional pre-computed :class:`~mowl.geometric.completion.CanonicalModel`
+    canonical_model : mowl.baselines.geometric.core.completion.CanonicalModel, optional, default None
+        Optional pre-computed :class:`~mowl.baselines.geometric.core.completion.CanonicalModel`
         used to determine semantic satisfiability in
-        :meth:`~mowl.nn.el.structural.ExistenceTargets.from_normal_forms` under
+        :meth:`~mowl.baselines.nn.el.structural.ExistenceTargets.from_normal_forms` under
         ``objective="structural"``.
     """
 
@@ -208,10 +208,10 @@ class PrismEL(EmbeddingELModel):
 
         Guarantees:
 
-        - When ``objective="structural"``, compiles a :class:`~mowl.nn.el.structural.DefinitionTable`
+        - When ``objective="structural"``, compiles a :class:`~mowl.baselines.nn.el.structural.DefinitionTable`
           (with ``k=1``, ``max_components=2**30``, ``enabled=self.structural_definitions``,
-          ``max_level=self.max_depth``) and :class:`~mowl.nn.el.structural.ExistenceTargets`
-          via :func:`~mowl.nn.el.structural.build_structural_tables`, caches them on
+          ``max_level=self.max_depth``) and :class:`~mowl.baselines.nn.el.structural.ExistenceTargets`
+          via :func:`~mowl.baselines.nn.el.structural.build_structural_tables`, caches them on
           the model so :meth:`init_module`, :meth:`load_best_model`, and
           :meth:`from_pretrained` preserve them, and installs them on :attr:`module`
           via :meth:`~mowl.nn.PrismModule.set_structural_tables` before delegating

@@ -20,9 +20,9 @@ import mowl.datasets  # noqa: E402,F401
 
 from org.semanticweb.owlapi.model import OWLOntology
 
-from mowl.geometric.completion import CanonicalModel
-from mowl.geometric.membership import MembershipStructure
-from mowl.geometric.normal_forms import BOTTOM
+from mowl.baselines.geometric.core.completion import CanonicalModel
+from mowl.baselines.geometric.core.membership import MembershipStructure
+from mowl.baselines.geometric.core.normal_forms import BOTTOM
 from mowl.baselines.nn.el.canonical_mixture import CanonicalMixtureModule
 from mowl.owlapi import OWLAPIAdapter
 from tests.geometric.helpers import IND, NS, _dicts_for_abox_kb

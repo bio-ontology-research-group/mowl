@@ -6,7 +6,7 @@ multibox construction of Federico, Leemhuis & Kutz (JOWO 2026, Theorem 3).
 
 Construction:
 
-- Given a :class:`~mowl.geometric.completion.CanonicalModel` with domain
+- Given a :class:`~mowl.baselines.geometric.core.completion.CanonicalModel` with domain
   :math:`\\Delta = \\{d_0, \\dots, d_{m-1}\\}` (indexed :math:`0 \\le i < m`),
   each canonical element at position :math:`i` maps to the closed interval
   :math:`I(i) = [i + 1 - 0.25,\\; i + 1 + 0.25] = [(i+1) - \\tfrac{1}{4},\\; (i+1) + \\tfrac{1}{4}]`.
@@ -21,20 +21,20 @@ Construction:
 Guarantees:
 
 - **Exact model of the normalised ontology**: satisfies every normalised axiom
-  (:class:`~mowl.geometric.normal_forms.NF1`–:class:`~mowl.geometric.normal_forms.NF4`,
-  :class:`~mowl.geometric.normal_forms.NF6`,
-  :class:`~mowl.geometric.normal_forms.NF7`, and :math:`\\bot` forms) of
+  (:class:`~mowl.baselines.geometric.core.normal_forms.NF1`–:class:`~mowl.baselines.geometric.core.normal_forms.NF4`,
+  :class:`~mowl.baselines.geometric.core.normal_forms.NF6`,
+  :class:`~mowl.baselines.geometric.core.normal_forms.NF7`, and :math:`\\bot` forms) of
   ``cm.axioms``, verified on construction by
-  :class:`~mowl.geometric.checker.ModelChecker`. Raises
-  :class:`~mowl.geometric.errors.InternalConsistencyError` listing any violated
+  :class:`~mowl.baselines.geometric.core.checker.ModelChecker`. Raises
+  :class:`~mowl.baselines.geometric.core.errors.InternalConsistencyError` listing any violated
   axioms if verification fails.
 - **Non-degenerate**: :math:`\\eta(A) \\neq \\emptyset` for every satisfiable
   concept name :math:`A` in ``cm.names``.
 - **Strongly faithful on names**: for all concept names :math:`A, B` in
   ``cm.names``,
   :math:`\\eta(A) \\subseteq \\eta(B) \\iff \\mathcal{O} \\models A \\sqsubseteq B`.
-- :class:`~mowl.geometric.errors.InconsistentOntology` propagates from
-  :class:`~mowl.geometric.completion.CanonicalModel` when the ontology is
+- :class:`~mowl.baselines.geometric.core.errors.InconsistentOntology` propagates from
+  :class:`~mowl.baselines.geometric.core.completion.CanonicalModel` when the ontology is
   inconsistent.
 
 References:
@@ -53,15 +53,15 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Tuple
 
-from mowl.geometric.checker import GeometricInterpretation, ModelChecker
-from mowl.geometric.errors import InternalConsistencyError
-from mowl.geometric.normal_forms import BOTTOM, TOP, Axiom
-from mowl.geometric.regions import EMPTY_1D, IntervalUnion, RectUnion
+from mowl.baselines.geometric.core.checker import GeometricInterpretation, ModelChecker
+from mowl.baselines.geometric.core.errors import InternalConsistencyError
+from mowl.baselines.geometric.core.normal_forms import BOTTOM, TOP, Axiom
+from mowl.baselines.geometric.core.regions import EMPTY_1D, IntervalUnion, RectUnion
 
 if TYPE_CHECKING:  # pragma: no cover
     from org.semanticweb.owlapi.model import OWLOntology
     from mowl.datasets import Dataset
-    from mowl.geometric.completion import CanonicalModel
+    from mowl.baselines.geometric.core.completion import CanonicalModel
 
 _HALF_WIDTH: float = 0.25
 
@@ -75,7 +75,7 @@ class IntervalUnionModel(GeometricInterpretation):
     Guarantees:
 
     - Exact model of the normalised ontology (``cm.axioms``), verified on
-      construction via :class:`~mowl.geometric.checker.ModelChecker`.
+      construction via :class:`~mowl.baselines.geometric.core.checker.ModelChecker`.
     - Non-degenerate on all satisfiable concept names in ``cm.names``.
     - Strongly faithful on concept names in ``cm.names``.
     """
@@ -134,20 +134,20 @@ class IntervalUnionModel(GeometricInterpretation):
 
     @classmethod
     def from_canonical_model(cls, cm: CanonicalModel) -> IntervalUnionModel:
-        """Build an :class:`IntervalUnionModel` from an existing :class:`~mowl.geometric.completion.CanonicalModel`."""
+        """Build an :class:`IntervalUnionModel` from an existing :class:`~mowl.baselines.geometric.core.completion.CanonicalModel`."""
         return cls(cm)
 
     @classmethod
     def from_dataset(cls, dataset: Dataset) -> IntervalUnionModel:
         """Normalise a mOWL :class:`~mowl.datasets.Dataset`, saturate its canonical model, and build an :class:`IntervalUnionModel`."""
-        from mowl.geometric.completion import CanonicalModel
+        from mowl.baselines.geometric.core.completion import CanonicalModel
 
         return cls(CanonicalModel.from_dataset(dataset))
 
     @classmethod
     def from_ontology(cls, ontology: OWLOntology) -> IntervalUnionModel:
         """Normalise an OWLAPI ``OWLOntology``, saturate its canonical model, and build an :class:`IntervalUnionModel`."""
-        from mowl.geometric.completion import CanonicalModel
+        from mowl.baselines.geometric.core.completion import CanonicalModel
 
         return cls(CanonicalModel.from_ontology(ontology))
 
@@ -163,12 +163,12 @@ class IntervalUnionModel(GeometricInterpretation):
 
     @property
     def class_regions(self) -> Dict[str, IntervalUnion]:
-        """Return a copy of the mapping from known concept names to :class:`~mowl.geometric.regions.IntervalUnion` regions."""
+        """Return a copy of the mapping from known concept names to :class:`~mowl.baselines.geometric.core.regions.IntervalUnion` regions."""
         return dict(self._class_regions)
 
     @property
     def role_regions(self) -> Dict[str, RectUnion]:
-        """Return a copy of the mapping from known role names to :class:`~mowl.geometric.regions.RectUnion` regions."""
+        """Return a copy of the mapping from known role names to :class:`~mowl.baselines.geometric.core.regions.RectUnion` regions."""
         return dict(self._role_regions)
 
     def element_interval(self, i: int) -> Tuple[float, float]:
@@ -182,7 +182,7 @@ class IntervalUnionModel(GeometricInterpretation):
         return self._element_intervals[i]
 
     def class_region(self, name: str) -> IntervalUnion:
-        """Return :math:`\\eta(\\text{name})`, or :data:`~mowl.geometric.regions.EMPTY_1D` for ``BOTTOM`` and unknown names."""
+        """Return :math:`\\eta(\\text{name})`, or :data:`~mowl.baselines.geometric.core.regions.EMPTY_1D` for ``BOTTOM`` and unknown names."""
         if name == BOTTOM:
             return EMPTY_1D
         if name == TOP:
@@ -190,7 +190,7 @@ class IntervalUnionModel(GeometricInterpretation):
         return self._class_regions.get(name, EMPTY_1D)
 
     def role_region(self, role: str) -> RectUnion:
-        """Return :math:`\\eta(\\text{role})`, or an empty :class:`~mowl.geometric.regions.RectUnion` for unknown roles."""
+        """Return :math:`\\eta(\\text{role})`, or an empty :class:`~mowl.baselines.geometric.core.regions.RectUnion` for unknown roles."""
         return self._role_regions.get(role, RectUnion([]))
 
     def class_intervals(self, name: str) -> List[Tuple[float, float]]:
@@ -198,7 +198,7 @@ class IntervalUnionModel(GeometricInterpretation):
         return list(self.class_region(name).intervals)
 
     def check(self) -> ModelChecker:
-        """Return the cached :class:`~mowl.geometric.checker.ModelChecker` bound to this interpretation."""
+        """Return the cached :class:`~mowl.baselines.geometric.core.checker.ModelChecker` bound to this interpretation."""
         if self._checker is None:
             self._checker = ModelChecker(self)
         return self._checker

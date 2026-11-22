@@ -7,7 +7,7 @@ import numpy as np
 import torch as th
 import torch.nn as nn
 
-from mowl.nn import ELModule
+from mowl.baselines.nn.el.elmodule import ELModule
 import mowl.baselines.nn.el.boxsquaredel.losses as B2L
 from mowl.baselines.nn.el.boxsquaredel.module import BoxSquaredELModule
 from mowl.baselines.nn.el.multibox_utils import effective_components as _effective_components
@@ -39,7 +39,7 @@ from mowl.baselines.nn.el.multiboxel.structural_losses import (
     region_size,
     witness_loss,
 )
-from mowl.nn.el.structural import (
+from mowl.baselines.nn.el.structural import (
     DefinitionTable,
     ExistenceTargets,
     WitnessTargets,
@@ -176,7 +176,7 @@ class MultiBoxELModule(ELModule):
     structural_definitions : bool, default True
         Whether ``objective="structural"`` compiles acyclic conjunction
         definitions :math:`A \\equiv X \\sqcap Y` via
-        :class:`~mowl.nn.el.structural.DefinitionTable`.
+        :class:`~mowl.baselines.nn.el.structural.DefinitionTable`.
     existence_weight : float, default 1.0
         Non-negative weight on :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.existence_loss` in
         :meth:`structural_extra_loss`.
@@ -657,7 +657,7 @@ class MultiBoxELModule(ELModule):
         targets: ExistenceTargets,
         top_idx: Optional[int] = None,
     ) -> None:
-        """Attach :class:`~mowl.nn.el.structural.DefinitionTable` and :class:`~mowl.nn.el.structural.ExistenceTargets`.
+        """Attach :class:`~mowl.baselines.nn.el.structural.DefinitionTable` and :class:`~mowl.baselines.nn.el.structural.ExistenceTargets`.
 
         Guarantees:
 
@@ -725,7 +725,7 @@ class MultiBoxELModule(ELModule):
             return self.witness_embed.weight.detach().cpu().clone()
 
     def class_regions(self, idx: th.Tensor) -> Regions:
-        """Materialise :class:`~mowl.nn.el.structural.Regions` with ``K = max_components`` slots for class indices ``idx``.
+        """Materialise :class:`~mowl.baselines.nn.el.structural.Regions` with ``K = max_components`` slots for class indices ``idx``.
 
         Primitive classes occupy slots ``0 .. k - 1`` with ``w = |offset| >= 0``
         (active) and pad slots ``k .. K - 1`` with ``cen = 0, w = -1``
@@ -735,7 +735,7 @@ class MultiBoxELModule(ELModule):
 
         Guarantees:
 
-        - Returns :class:`~mowl.nn.el.structural.Regions` of shapes
+        - Returns :class:`~mowl.baselines.nn.el.structural.Regions` of shapes
           ``(B, K, d)`` for ``cen`` and ``w`` and ``(B, K)`` for ``active``.
         - Inactive slots always have ``cen = 0`` and ``w = -1``.
 
@@ -815,11 +815,11 @@ class MultiBoxELModule(ELModule):
         return Regions(cen=cen, w=w, active=active)
 
     def all_class_regions(self) -> Regions:
-        """Return materialised :class:`~mowl.nn.el.structural.Regions` for all classes on CPU without gradients.
+        """Return materialised :class:`~mowl.baselines.nn.el.structural.Regions` for all classes on CPU without gradients.
 
         Guarantees:
 
-        - Returns :class:`~mowl.nn.el.structural.Regions` of shape
+        - Returns :class:`~mowl.baselines.nn.el.structural.Regions` of shape
           ``(nb_ont_classes, max_components, embed_dim)`` on CPU with
           ``requires_grad == False``.
 
@@ -952,7 +952,7 @@ class MultiBoxELModule(ELModule):
              component :math:`c` across accepted defined classes :math:`A'` with
              :math:`\\text{NE}(A') \\ge \\text{margin}` whose best slot
              (:math:`\\arg\\max \\text{ne}`) uses component :math:`c` of :math:`X`
-             via :func:`~mowl.nn.el.structural.slot_components`.
+             via :func:`~mowl.baselines.nn.el.structural.slot_components`.
           3. Processes dead defined classes in ``rng.permutation`` order, at most
              ``self.reseed_batch`` per call: for each primitive leaf :math:`X`
              of :math:`A`'s definition tree (deduplicated), if some active

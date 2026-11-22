@@ -10,11 +10,11 @@ from typing import Optional
 import torch as th
 from tqdm import trange
 
-import mowl.geometric.completion as completion_mod
-import mowl.geometric.membership as membership_mod
+import mowl.baselines.geometric.core.completion as completion_mod
+import mowl.baselines.geometric.core.membership as membership_mod
 from mowl.base_models.elmodel import EmbeddingELModel
-from mowl.geometric.completion import CanonicalModel
-from mowl.geometric.membership import MEMBERSHIP_CODE_TAG, MembershipStructure
+from mowl.baselines.geometric.core.completion import CanonicalModel
+from mowl.baselines.geometric.core.membership import MEMBERSHIP_CODE_TAG, MembershipStructure
 from mowl.baselines.nn.el.canonical_mixture import (
     MAX_SUPPORT_ENTRIES,
     CanonicalMixtureModule,
@@ -26,12 +26,12 @@ logger = logging.getLogger(__name__)
 class CanonicalMixture(EmbeddingELModel):
     """Canonical-element mixture model for ABox completion under an :math:`\\mathcal{EL}` TBox.
 
-    Builds the :class:`~mowl.geometric.completion.CanonicalModel` and
-    :class:`~mowl.geometric.membership.MembershipStructure` of the training
+    Builds the :class:`~mowl.baselines.geometric.core.completion.CanonicalModel` and
+    :class:`~mowl.baselines.geometric.core.membership.MembershipStructure` of the training
     ontology (caching the :class:`MembershipStructure` next to
     ``dataset.ontology_path`` when available, keyed by the ontology SHA-256,
-    index maps, and the source hashes of ``mowl/geometric/completion.py`` and
-    ``mowl/geometric/membership.py``) and trains a
+    index maps, and the source hashes of ``mowl/baselines/geometric/core/completion.py`` and
+    ``mowl/baselines/geometric/core/membership.py``) and trains a
     :class:`~mowl.nn.el.canonical_mixture.CanonicalMixtureModule` with mini-batches
     of individuals.
 
@@ -133,7 +133,7 @@ class CanonicalMixture(EmbeddingELModel):
         with open(ontology_path, "rb") as f:
             while chunk := f.read(65536):
                 hasher.update(chunk)
-        # Hash the source of mowl/geometric/completion.py and mowl/geometric/membership.py
+        # Hash the source of mowl/baselines/geometric/core/completion.py and mowl/baselines/geometric/core/membership.py
         for mod in (completion_mod, membership_mod):
             mod_file = getattr(mod, "__file__", None)
             if mod_file and os.path.exists(mod_file):

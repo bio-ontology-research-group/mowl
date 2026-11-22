@@ -3,7 +3,7 @@
 One model class for the four methods: they differ in the geometry of the operators
 (:mod:`mowl.nn.query.geometry`), which a subclass names in ``geometry_class``. The graph
 they are trained on, the sampling of training queries, the loss, the class expression to
-query translation (:mod:`mowl.nn.query.expression`), the scoring of axioms for the
+query translation (:mod:`mowl.baselines.models.query.expression`), the scoring of axioms for the
 rank-based regimes and ``score_query`` for
 :class:`mowl.evaluation.LogicalQueryAnswering` are shared.
 """
@@ -15,13 +15,13 @@ import torch as th
 import torch.nn.functional as F
 
 from mowl.base_models.model import Model
-from mowl.models.query import sampling
-from mowl.models.query.graph import ISA_INV, extract_graph, role_relation
-from mowl.nn.query.expression import (Vocabulary, class_expression_to_query, from_nested,
+from mowl.baselines.models.query import sampling
+from mowl.baselines.models.query.graph import ISA_INV, extract_graph, role_relation
+from mowl.baselines.models.query.expression import (Vocabulary, class_expression_to_query, from_nested,
                                       ids, signature, to_dnf)
 from mowl.baselines.nn.query.base import UnsupportedOperator
 
-from mowl.training.regime import SCHEDULE_HOOKS  # noqa: E402
+from mowl.baselines.training.regime import SCHEDULE_HOOKS  # noqa: E402
 
 
 class QueryEmbeddingModel(Model):
@@ -353,7 +353,7 @@ class QueryEmbeddingModel(Model):
 
     # -- queries ------------------------------------------------------------------------
     def query(self, class_expression):
-        """The query (:class:`~mowl.nn.query.expression.Node`) of an OWL API class
+        """The query (:class:`~mowl.baselines.models.query.expression.Node`) of an OWL API class
         expression."""
         return class_expression_to_query(class_expression, self.vocabulary)
 
@@ -385,7 +385,7 @@ class QueryEmbeddingModel(Model):
         """Scores of a batch of queries of one structure against all entities (higher:
         better), the interface of :class:`mowl.evaluation.LogicalQueryAnswering`.
 
-        :param structure: Nested-tuple structure (:func:`mowl.nn.query.expression.from_nested`).
+        :param structure: Nested-tuple structure (:func:`mowl.baselines.models.query.expression.from_nested`).
         :param queries: Instances of ``structure`` with entity and relation ids of this
             model (:attr:`triples`, :attr:`entity_names`).
         :return: ``(len(queries), num_entities)`` tensor.
@@ -408,7 +408,7 @@ class QueryEmbeddingModel(Model):
                                                                       best.indices)]
 
     def _require_operators(self, nodes):
-        from mowl.nn.query.expression import contains_negation
+        from mowl.baselines.models.query.expression import contains_negation
         if not self.module.supports_negation and any(contains_negation(n) for n in nodes):
             raise UnsupportedOperator(
                 f"{type(self.module).__name__} has no negation operator: the query "
@@ -423,7 +423,7 @@ class QueryEmbeddingModel(Model):
         """``(signature, id_matrix, subjects)`` of candidate axioms, built column-wise on
         the rows' device: every axiom of one form is a query of the same shape (a named
         class, or ``∃r.D``), so no per-row query object is needed."""
-        from mowl.nn.query.expression import anchor, project
+        from mowl.baselines.models.query.expression import anchor, project
         rows = rows.long()
         if gci_name == "class_assertion":
             subjects, classes = rows[:, 0] + self.num_classes, rows[:, 1]
@@ -475,7 +475,7 @@ class QueryEmbeddingModel(Model):
         if gci_name not in self.scored_forms:
             raise UnsupportedAxiomForm(f"{type(self).__name__} has no score for "
                                        f"{gci_name!r} axioms.")
-        from mowl.nn.query.expression import project
+        from mowl.baselines.models.query.expression import project
         rows = rows.to("cpu").long()
         nodes, subjects = [], []
         for row in rows.tolist():
@@ -496,7 +496,7 @@ class QueryEmbeddingModel(Model):
         return -self._logits(nodes, ent)[:, 0]
 
     def _concept(self, class_id):
-        from mowl.nn.query.expression import anchor, project
+        from mowl.baselines.models.query.expression import anchor, project
         node = anchor(class_id)
         return project(ISA_INV, node) if self.extension else node
 

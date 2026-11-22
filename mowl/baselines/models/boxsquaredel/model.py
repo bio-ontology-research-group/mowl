@@ -12,7 +12,7 @@ class BoxSquaredEL(EmbeddingELModel):
         Also train on the role inclusions :math:`r \\sqsubseteq s` and role chains
         :math:`r_1 \\circ r_2 \\sqsubseteq s` of the ontology, with the losses of the paper
         (Section 4.2). The reference code trains on them whenever the ontology has any.
-    init_boxes : mowl.geometric.init.ExactBoxInit, optional
+    init_boxes : mowl.baselines.geometric.core.init.ExactBoxInit, optional
         Optional exact-model box initialisation applied in :meth:`init_module`.
         Rows are matched by IRI against :attr:`class_index_dict`; rows of the
         auxiliary classes introduced by normalisation keep their random

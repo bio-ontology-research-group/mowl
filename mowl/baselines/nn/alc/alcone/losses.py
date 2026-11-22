@@ -9,7 +9,7 @@ evaluation are outside the scope of this paper"). The relaxation below is **ours
 Parametrisation
 ---------------
 An al-cone of :math:`\mathbb{R}^n` is a subset of the :math:`2n` half-axes (JAIR
-Prop. 1; see :mod:`mowl.geometric.cones`). Every concept name gets a real *logit* per
+Prop. 1; see :mod:`mowl.baselines.geometric.core.cones`). Every concept name gets a real *logit* per
 half-axis; the discretised cone contains half-axis :math:`h` iff its logit is
 :math:`> 0`. Per coordinate the two logits select one of the four factors
 :math:`\{0\}, \mathbb{R}^+, \mathbb{R}^-, \mathbb{R}`. A role gets a logit per entry of its

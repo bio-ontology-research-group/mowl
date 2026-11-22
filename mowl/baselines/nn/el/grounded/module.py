@@ -13,7 +13,7 @@ Implements §2 and §5 of the GroundedEL design:
    axis-aligned boxes with centres :math:`c_{A,k} \\in \\mathbb{R}^d`, half-widths
    :math:`w_{A,k} = \\operatorname{softplus}(\\tilde{w}_{A,k}) \\ge 0`, and an
    active mask ``class_active``. Signed depth reuses
-   :func:`~mowl.nn.el.structural.inside_measure` semantics under ``agg="max"``
+   :func:`~mowl.baselines.nn.el.structural.inside_measure` semantics under ``agg="max"``
    or smooth ``logsumexp`` under ``agg="lse"``.
 3. **Product-of-box roles:** Each role :math:`r` has
    :math:`K_r = \\text{n\\_role\\_components}` head/tail box pairs
@@ -53,8 +53,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 
-from mowl.nn.el.structural import Regions
-from mowl.representation.geometry import Geometry
+from mowl.baselines.nn.el.structural import Regions
 
 
 # The depth in a union of boxes of the direct implementation (its own copy; the parts
@@ -233,7 +232,7 @@ def _validate_inverse_of(
 
 
 class _ExistsRegions(Regions):
-    """Materialised existential :class:`~mowl.nn.el.structural.Regions` carrying an ``is_top`` marker."""
+    """Materialised existential :class:`~mowl.baselines.nn.el.structural.Regions` carrying an ``is_top`` marker."""
 
     is_top: bool
     is_top_mask: th.Tensor
@@ -256,41 +255,8 @@ class _ExistsRegions(Regions):
         return obj
 
 
-class _PartView:
-    """A part of the grounded geometry as an object: its vocabulary value (``part``), its
-    size and the call that gives the regions of rows. The part shares the tables of the
-    module it is a view of; it owns none."""
-
-    def __init__(self, module, part, classes_of, size):
-        self.module, self.part, self._regions, self._size = module, part, classes_of, size
-
-    def __call__(self, ids):
-        if self._regions is None:
-            raise TypeError("A measure is not called: use inside, apart or member.")
-        return self._regions(self.module, ids)
-
-    def __len__(self):
-        return self._size(self.module)
-
-    def inside(self, a, b):
-        return self.module.inside(a, b)
-
-    def apart(self, a, b):
-        return self.module.apart(a, b)
-
-    def member(self, individual_ids, region):
-        return self.module.member(individual_ids, region)
-
-
-class GroundedELModule(nn.Module, Geometry):
+class GroundedELModule(nn.Module):
     """Element-grounded multi-box and product-role neural module for :math:`\\mathcal{EL}^{++}`.
-
-    The module is a :class:`~mowl.representation.Geometry` (the interface of
-    :mod:`mowl.representation`): the class model is a union of boxes per class, the relation
-    model a region over pairs (``role_mode="product"``) or boxes of translations, the
-    individual model the position of the element, and the measure the bounds of the boxes.
-    These share the positions of the elements, so they are views of the module (``classes``,
-    ``individuals``, ``exists``, ``inside``, ``apart``, ``member``, ``parts``).
 
     Guarantees:
 
@@ -336,7 +302,7 @@ class GroundedELModule(nn.Module, Geometry):
         membership.
     agg : {"max", "lse"}, default "max"
         Component aggregation mode over active components: ``"max"`` uses hard
-        maximum (:func:`~mowl.nn.el.structural.inside_measure`); ``"lse"`` uses
+        maximum (:func:`~mowl.baselines.nn.el.structural.inside_measure`); ``"lse"`` uses
         ``agg_tau * logsumexp(depth / agg_tau)``.
     agg_tau : float, default 0.1
         Temperature :math:`\\tau_{\\text{agg}} > 0` for ``agg="lse"``.
@@ -731,7 +697,7 @@ class GroundedELModule(nn.Module, Geometry):
         self,
         class_ids: Optional[Union[int, Sequence[int], th.Tensor]] = None,
     ) -> Regions:
-        """Materialise :class:`~mowl.nn.el.structural.Regions` for ``class_ids``.
+        """Materialise :class:`~mowl.baselines.nn.el.structural.Regions` for ``class_ids``.
 
         Half-widths are :math:`w = \\operatorname{softplus}(\\tilde{w})` on active
         components and ``0.0`` on inactive components; a component is active iff
@@ -739,7 +705,7 @@ class GroundedELModule(nn.Module, Geometry):
 
         Guarantees:
 
-        - Returns :class:`~mowl.nn.el.structural.Regions` with shapes
+        - Returns :class:`~mowl.baselines.nn.el.structural.Regions` with shapes
           ``(B, n_components, embed_dim)`` for ``cen`` and ``w`` and
           ``(B, n_components)`` for ``active``.
         - Inactive components have ``w == 0.0`` and ``active == False``.
@@ -781,14 +747,14 @@ class GroundedELModule(nn.Module, Geometry):
         self,
         rel_ids: Optional[Union[int, Sequence[int], th.Tensor]] = None,
     ) -> Regions:
-        """Materialise translation :class:`~mowl.nn.el.structural.Regions` for ``rel_ids`` in ``"translation"`` mode.
+        """Materialise translation :class:`~mowl.baselines.nn.el.structural.Regions` for ``rel_ids`` in ``"translation"`` mode.
 
         Roles whose ``inverse_of`` partner has a strictly lower index own no
         parameters of their own and are derived as ``(-c_partner, w_partner)``.
 
         Guarantees:
 
-        - Returns :class:`~mowl.nn.el.structural.Regions` with shapes
+        - Returns :class:`~mowl.baselines.nn.el.structural.Regions` with shapes
           ``(B, n_role_components, embed_dim)`` for ``cen`` and ``w`` and
           ``(B, n_role_components)`` for ``active``.
         - Inactive role components have ``w == 0.0`` and ``active == False``.
@@ -847,12 +813,12 @@ class GroundedELModule(nn.Module, Geometry):
         self,
         rel_ids: Optional[Union[int, Sequence[int], th.Tensor]] = None,
     ) -> Union[Tuple[Regions, Regions], Regions]:
-        """Materialise role :class:`~mowl.nn.el.structural.Regions` for ``rel_ids``.
+        """Materialise role :class:`~mowl.baselines.nn.el.structural.Regions` for ``rel_ids``.
 
         In ``"product"`` mode returns ``(head_regions, tail_regions)`` (with roles
         whose ``inverse_of`` partner has a lower index derived by swapping
         ``(T_partner, H_partner)``). In ``"translation"`` mode delegates to
-        :meth:`translation_regions` and returns a single :class:`~mowl.nn.el.structural.Regions`
+        :meth:`translation_regions` and returns a single :class:`~mowl.baselines.nn.el.structural.Regions`
         (with lower-indexed partners negated as ``(-c_partner, w_partner)``).
 
         Guarantees:
@@ -860,7 +826,7 @@ class GroundedELModule(nn.Module, Geometry):
         - In ``"product"`` mode, returns ``(head_regions, tail_regions)`` each of
           shape ``(B, n_role_components, embed_dim)`` with a shared ``active``
           mask of shape ``(B, n_role_components)``.
-        - In ``"translation"`` mode, returns a single :class:`~mowl.nn.el.structural.Regions`
+        - In ``"translation"`` mode, returns a single :class:`~mowl.baselines.nn.el.structural.Regions`
           of shape ``(B, n_role_components, embed_dim)``.
         - Inactive role components have ``w == 0.0`` and ``active == False``.
 
@@ -1004,7 +970,7 @@ class GroundedELModule(nn.Module, Geometry):
     ) -> th.Tensor:
         """Compute signed box depth :math:`\\operatorname{dep}(z, A)` of ``points`` in ``class_ids``.
 
-        Reuses :func:`~mowl.nn.el.structural.inside_measure` when ``agg == "max"``
+        Reuses :func:`~mowl.baselines.nn.el.structural.inside_measure` when ``agg == "max"``
         (or ``crisp=True``) and uses ``agg_tau * logsumexp(depth / agg_tau)`` over
         active components when ``agg == "lse"`` and ``crisp=False``.
 
@@ -1389,15 +1355,15 @@ class GroundedELModule(nn.Module, Geometry):
 
         Component ``(j, k)`` has centre :math:`c_{B,j} - c_{r,k}`, half-width
         :math:`w_{B,j} + w_{r,k}`, and active flag ``active_B[j] & active_r[k]``.
-        When all ``class_ids == top_id``, returns a 1-component :class:`~mowl.nn.el.structural.Regions`
+        When all ``class_ids == top_id``, returns a 1-component :class:`~mowl.baselines.nn.el.structural.Regions`
         with half-width ``1e6`` and ``is_top=True``.
 
         Guarantees:
 
-        - For ordinary classes, returns :class:`~mowl.nn.el.structural.Regions` of
+        - For ordinary classes, returns :class:`~mowl.baselines.nn.el.structural.Regions` of
           shape ``(B, n_components * n_role_components, embed_dim)`` whose union of
           active boxes equals :math:`\\{z \\in \\mathbb{R}^d : \\exists v \\in V_r,\\, z + v \\in \\mathcal{B}(B)\\}`.
-        - When ``class_ids == top_id``, returns a :class:`~mowl.nn.el.structural.Regions`
+        - When ``class_ids == top_id``, returns a :class:`~mowl.baselines.nn.el.structural.Regions`
           with ``is_top == True``, 1 component, and half-width ``1e6``.
         - Raises :class:`ValueError` if ``role_mode != "translation"``.
 
@@ -1428,15 +1394,15 @@ class GroundedELModule(nn.Module, Geometry):
 
         Component ``(j, k)`` has centre :math:`c_{B,j} + c_{r,k}`, half-width
         :math:`w_{B,j} + w_{r,k}`, and active flag ``active_B[j] & active_r[k]``.
-        When all ``class_ids == top_id``, returns a 1-component :class:`~mowl.nn.el.structural.Regions`
+        When all ``class_ids == top_id``, returns a 1-component :class:`~mowl.baselines.nn.el.structural.Regions`
         with half-width ``1e6`` and ``is_top=True``.
 
         Guarantees:
 
-        - For ordinary classes, returns :class:`~mowl.nn.el.structural.Regions` of
+        - For ordinary classes, returns :class:`~mowl.baselines.nn.el.structural.Regions` of
           shape ``(B, n_components * n_role_components, embed_dim)`` whose union of
           active boxes equals :math:`\\{z \\in \\mathbb{R}^d : \\exists v \\in V_r,\\, z - v \\in \\mathcal{B}(B)\\}`.
-        - When ``class_ids == top_id``, returns a :class:`~mowl.nn.el.structural.Regions`
+        - When ``class_ids == top_id``, returns a :class:`~mowl.baselines.nn.el.structural.Regions`
           with ``is_top == True``, 1 component, and half-width ``1e6``.
         - Raises :class:`ValueError` if ``role_mode != "translation"``.
 
@@ -1943,130 +1909,6 @@ class GroundedELModule(nn.Module, Geometry):
                         self.role_tail_centers[r_idx, k_idx].copy_(pos_dev[y_i])
                         self.role_tail_raw_widths[r_idx, k_idx].fill_(raw_delta)
                         self.role_active[r_idx, k_idx] = True
-
-    # -- the common interface (mowl.representation.Geometry) ----------------------------------
-    # The class model (a union of boxes per class), the relation model (a region over pairs, or
-    # boxes of translations) and the individual model (the position of the element) share the
-    # positions of the elements, so they are views of this module, not tables of their own.
-    def classes(self, ids):
-        """The regions of the named classes ``ids``: a union of boxes each, some of them
-        inactive (:class:`~mowl.representation.library.other_regions.MaskedUnionOfBoxes`)."""
-        from mowl.representation.library.other_regions import MaskedUnionOfBoxes
-        return MaskedUnionOfBoxes.of(self.class_regions(ids), ids)
-
-    def individuals(self, ids):
-        """The points of the individuals ``ids`` (elements ``nb_classes + ids``)."""
-        from mowl.representation.library.shapes_regions import Point
-        return Point(self.positions(self.nb_classes + ids))
-
-    def exists(self, relation_ids, region):
-        """The region of :math:`\\exists r.C` (``role_mode="translation"``, named filler):
-        the module's :meth:`exists_box`."""
-        from mowl.representation.library.other_regions import MaskedUnionOfBoxes
-        from mowl.representation.regions import ConstructorUnavailable
-        if self.role_mode != "translation":
-            raise ConstructorUnavailable(
-                "Only role_mode='translation' has a region for exists r.C; in 'product' "
-                "mode a role is a set of pairs of boxes (see GroundedELModule.role_depth).")
-        if region.ids is None:
-            raise ConstructorUnavailable("The filler of exists must be a named class.")
-        return MaskedUnionOfBoxes.of(self.exists_box(relation_ids, region.ids))
-
-    def conjunction(self, a, b):
-        """``(region, gap)`` of :math:`C \\sqcap D`: exact (all pairs of boxes)."""
-        return a.intersect(b)
-
-    def disjunction(self, a, b):
-        """:math:`C \\sqcup D`: the boxes of both."""
-        from mowl.representation.library.other_regions import MaskedUnionOfBoxes
-        return MaskedUnionOfBoxes(th.cat([a.cen, b.cen], 1), th.cat([a.w, b.w], 1),
-                                  th.cat([a.active, b.active], 1))
-
-    def inside(self, a, b):
-        """Zero if every active box of ``a`` lies in one active box of ``b`` (sufficient
-        for inclusion, not necessary), otherwise the smallest total violation over the
-        choices of box; ``a`` may also be an individual (a point): then the hinge of the
-        negative depth."""
-        from mowl.representation.library.shapes_regions import Point
-        from mowl.representation.library.other_regions import _BIG
-        if isinstance(a, Point):
-            return th.relu(-self._region_depth(a.centre, b)).reshape(-1, 1)
-        viol = th.linalg.norm(th.relu(
-            (a.cen[:, :, None] - b.cen[:, None]).abs() + a.w[:, :, None] - b.w[:, None]),
-            dim=-1)
-        viol = th.where(b.active[:, None], viol, th.full_like(viol, _BIG)).amin(dim=2)
-        return th.where(a.active, viol, th.zeros_like(viol)).sum(dim=1, keepdim=True)
-
-    def apart(self, a, b):
-        """Exact: zero iff no active box of ``a`` meets one of ``b`` (the smallest overlap
-        over the coordinates, summed over the pairs of boxes)."""
-        overlap = (a.w[:, :, None] + b.w[:, None] - (a.cen[:, :, None] - b.cen[:, None]).abs()
-                   ).amin(dim=-1)
-        both = a.active[:, :, None] & b.active[:, None]
-        return th.where(both, th.relu(overlap), th.zeros_like(overlap)).sum(
-            dim=(1, 2)).reshape(-1, 1)
-
-    def _region_depth(self, points, region):
-        if region.ids is not None:
-            return self.depth(points, region.ids, crisp=True)
-        return inside_measure(points, region.structural)
-
-    def member(self, individual_ids, region):
-        """The score of a class assertion: minus the signed depth of the individual in the
-        region (negative inside, zero on the boundary)."""
-        points = self.positions(self.nb_classes + individual_ids)
-        return -self._region_depth(points, region).reshape(-1, 1)
-
-    def soft_membership(self, individual_ids, region):
-        """``sigmoid(depth / tau)`` (:meth:`membership`), for named classes."""
-        from mowl.representation.regions import ConstructorUnavailable
-        if region.ids is None:
-            raise ConstructorUnavailable("Soft membership is defined for named classes.")
-        points = self.positions(self.nb_classes + individual_ids)
-        return self.membership(points, region.ids).reshape(-1, 1)
-
-    @property
-    def num_classes(self):
-        return self.nb_classes
-
-    @property
-    def num_individuals(self):
-        return self.nb_elements - self.nb_classes
-
-    # The parts, as views of the module (they share its tables, see the note above).
-    @property
-    def class_model(self):
-        """The class model: a union of boxes per class (a view of this module)."""
-        return _PartView(self, "union of boxes", classes_of=lambda m, ids: m.classes(ids),
-                         size=lambda m: m.nb_classes)
-
-    @property
-    def relation_model(self):
-        """The relation model: a region over pairs (``role_mode="product"``) or boxes of
-        translations (a view of this module)."""
-        part = "region over pairs" if self.role_mode == "product" else "box of translations"
-        return _PartView(
-            self, part, size=lambda m: m.nb_rels,
-            classes_of=lambda m, ids: (m.translation_regions(ids) if m.role_mode == "translation"
-                                       else m.role_regions(ids)))
-
-    @property
-    def individual_model(self):
-        """The individual model: the position of the element (a view of this module)."""
-        return _PartView(self, "canonical element", classes_of=lambda m, ids: m.individuals(ids),
-                         size=lambda m: m.nb_elements - m.nb_classes)
-
-    @property
-    def measure(self):
-        """The measure: bounds per coordinate (a view of this module): ``inside``, ``apart``
-        and ``member`` are those of the module."""
-        return _PartView(self, "bounds per coordinate", classes_of=None, size=None)
-
-    @property
-    def parts(self):
-        return {"classes": self.class_model.part, "relations": self.relation_model.part,
-                "individuals": self.individual_model.part, "measure": self.measure.part,
-                "conjunction": "exact"}
 
     def forward(
         self,

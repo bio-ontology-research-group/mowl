@@ -45,7 +45,7 @@ from typing import Callable, NamedTuple, Optional, Sequence, Tuple, Union
 import torch as th
 
 from mowl.baselines.nn.el.grounded.module import GroundedELModule
-from mowl.nn.el.structural import Regions
+from mowl.baselines.nn.el.structural import Regions
 
 #: What the samplers read of a geometry. They are general machinery over this interface (a
 #: finite domain of elements with positions, classes and relations as unions of boxes): the

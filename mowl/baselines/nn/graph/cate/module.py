@@ -80,7 +80,7 @@ class CatEModule(nn.Module):
         if gci_name == "gci2":
             ex = self.existential_ids(rows[:, 1], rows[:, 2])
             if (ex < 0).any():
-                from mowl.projection.categorical.lattice import UnseenConceptError
+                from mowl.baselines.models.cate.categorical.lattice import UnseenConceptError
                 bad = rows[ex < 0][0].tolist()
                 raise UnseenConceptError(
                     f"The existential restriction of row {bad} (role index {bad[1]}, "

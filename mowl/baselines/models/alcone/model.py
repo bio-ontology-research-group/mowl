@@ -19,7 +19,7 @@ class ALConeModel(EmbeddingALCModel):
     concepts are evaluated with Gödel operators, and each axiom has a margin loss that is
     zero only if the discretised interpretation (:meth:`discretise`) satisfies it (see
     :mod:`mowl.baselines.nn.alc.alcone.losses`). The discretised result can be verified exactly
-    with :class:`~mowl.geometric.cones.ALConeChecker` (:meth:`violations`).
+    with :class:`~mowl.baselines.geometric.core.cones.ALConeChecker` (:meth:`violations`).
 
     Differences to FALCON (:class:`~mowl.models.FALCONModel`), which shares the training
     loop: no anonymous entities and no negative sampling are used (the half-axes act as
@@ -145,7 +145,7 @@ class ALConeModel(EmbeddingALCModel):
 
     # -- exact view ----------------------------------------------------------
     def discretise(self):
-        """Return the discretised :class:`~mowl.geometric.cones.ALConeInterpretation`
+        """Return the discretised :class:`~mowl.baselines.geometric.core.cones.ALConeInterpretation`
         with class, role and individual IRIs as names."""
         def names(index_dict):
             out = [None] * len(index_dict)
@@ -158,15 +158,15 @@ class ALConeModel(EmbeddingALCModel):
 
     def alc_axioms(self, ontology=None):
         """The :math:`\\mathcal{ALC}` axioms of ``ontology`` (default: the training
-        ontology) in the syntax of :mod:`mowl.geometric.cones`, and the skipped axioms."""
-        from mowl.geometric.cones import axioms_from_owl
+        ontology) in the syntax of :mod:`mowl.baselines.geometric.core.cones`, and the skipped axioms."""
+        from mowl.baselines.geometric.core.cones import axioms_from_owl
         return axioms_from_owl(self.dataset.ontology if ontology is None else ontology)
 
     def violations(self, ontology=None):
         """Axioms of ``ontology`` (default: training ontology) that the discretised
         interpretation violates, decided by the exact
-        :class:`~mowl.geometric.cones.ALConeChecker`."""
-        from mowl.geometric.cones import ALConeChecker
+        :class:`~mowl.baselines.geometric.core.cones.ALConeChecker`."""
+        from mowl.baselines.geometric.core.cones import ALConeChecker
         axioms, _ = self.alc_axioms(ontology)
         return ALConeChecker(self.discretise()).violations(axioms)
 

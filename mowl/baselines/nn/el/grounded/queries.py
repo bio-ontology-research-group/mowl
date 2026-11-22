@@ -62,7 +62,7 @@ import torch as th
 
 from mowl.baselines.nn.el.grounded.module import GroundedELModule
 from mowl.baselines.nn.el.grounded.sampling import is_grounded_geometry
-from mowl.nn.el.structural import Regions
+from mowl.baselines.nn.el.structural import Regions
 
 __all__ = [
     "MultiBox",
