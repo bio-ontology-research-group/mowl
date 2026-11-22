@@ -164,7 +164,8 @@ class ComposedQueryGeometry(QueryGeometry, Geometry):
                 "measure": self.measure.part,
                 "conjunction": "exact" if self.intersection.exact else "approximate",
                 "negation": "none" if self.negation_part is None
-                else type(self.negation_part).__name__}
+                else ("exact" if getattr(self.negation_part, "exact", False)
+                      else "approximate")}
 
 
 class QueryClasses(Classes):

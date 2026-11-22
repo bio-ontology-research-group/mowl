@@ -74,6 +74,8 @@ class UnitCubeBoxes(HierarchyClasses):
     :param table: An existing table (``(size, 2 d)``) to use instead of a new one.
     :param soft: Only the label (:attr:`part`): ``"soft box"`` for the models that read the
         corners as locations of Gumbel variables. The class model is the same.
+
+    Part (vocabulary value): ``box``. Used by: ``box_lattice``, ``gumbel_box``.
     """
 
     region = CornerBox
@@ -237,6 +239,8 @@ class PointClasses(HierarchyClasses):
     :param init_scale, init_max_norm: See :func:`init_points`.
     :param table: An existing table to use instead of a new one.
     :param seed: Seed of the initialisation (new tables only).
+
+    Part (vocabulary value): ``point``. Used by: ``shadow_cones``.
     """
 
     region = Point
@@ -270,6 +274,8 @@ class ConePoints(PointClasses):
     origin, where the cone is not defined.
 
     :param K: The constant :math:`K` of the cone (0.1 in the paper).
+
+    Part (vocabulary value): ``geodesic cone``. Used by: ``hyperbolic_cones``.
     """
 
     region = ConePoint
@@ -294,6 +300,8 @@ class DiskClasses(PointClasses):
     ``radii``, initialised to 0). Default manifold: the hyperboloid.
 
     :param radii: An existing table of radii to use instead of a new one.
+
+    Part (vocabulary value): ``disk``. Used by: ``disk_embeddings``.
     """
 
     region = Disk
@@ -326,6 +334,8 @@ class OrderPoints(HierarchyClasses):
         free vectors (CatE).
     :param init: ``"uniform"`` (in ``[0, init_scale]``) or ``"xavier"``.
     :param table: An existing table to use instead of a new one.
+
+    Part (vocabulary value): ``order cone``. Used by: ``cate``, ``order_embeddings``.
     """
 
     region = OrderCone
@@ -391,26 +401,8 @@ class TextPoints(HierarchyClasses):
 
 
 # -- registration ------------------------------------------------------------------------
-@register_class_model("unit box")
-def _unit_box(size, embed_dim):
-    return UnitCubeBoxes(size, embed_dim)
-
-
-@register_class_model("order cone")
-def _order_cone(size, embed_dim):
-    return OrderPoints(size, embed_dim)
-
-
-@register_class_model("manifold point")
-def _point(size, embed_dim):
-    return PointClasses(size, embed_dim)
-
-
-@register_class_model("geodesic cone")
-def _geodesic_cone(size, embed_dim):
-    return ConePoints(size, embed_dim)
-
-
-@register_class_model("disk")
-def _disk(size, embed_dim):
-    return DiskClasses(size, embed_dim)
+register_class_model("unit box")(UnitCubeBoxes)
+register_class_model("order cone")(OrderPoints)
+register_class_model("manifold point")(PointClasses)
+register_class_model("geodesic cone")(ConePoints)
+register_class_model("disk")(DiskClasses)

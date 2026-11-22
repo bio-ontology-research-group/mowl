@@ -137,6 +137,8 @@ class OrderViolation(EnergyMeasure):
     :param p: Order of the norm. For :math:`p = 2` the square root is taken of the sum plus
         :math:`10^{-24}`, which keeps its gradient finite at 0 (and changes the value by at
         most :math:`10^{-12}`).
+
+    Part (vocabulary value): ``order violation``. Used by: ``cate``, ``order_embeddings``.
     """
 
     accepts = (OrderCone,)
@@ -388,7 +390,10 @@ class ConeAngle(EnergyMeasure):
     r"""The angle of a point against the aperture of a geodesic cone (Ganea et al. 2018,
     Eq. 33): :math:`\max(0, \Xi(b, a) - \psi(b))` with :math:`\Xi` the angle between the
     axis of the cone of the parent :math:`b` and the geodesic to the child :math:`a`; zero
-    iff :math:`a` lies in the cone of :math:`b`. Poincare ball only."""
+    iff :math:`a` lies in the cone of :math:`b`. Poincare ball only.
+
+    Part (vocabulary value): ``angle``. Used by: ``hyperbolic_cones``.
+    """
 
     accepts = (ConePoint,)
     part = "angle"
@@ -420,6 +425,8 @@ class ShadowCone(EnergyMeasure):
         or ``"umbral-half-space"``; the half-space ones need points of an
         :class:`~mowl.nn.order.manifolds.UpperHalfSpace`, the others of a Poincare ball.
     :param radius, horosphere_height, gamma3: See :func:`mowl.nn.order.cones.shadow_cone_energy`.
+
+    Part (vocabulary value): ``angle``. Used by: ``shadow_cones``.
     """
 
     accepts = (Point,)
@@ -451,7 +458,10 @@ class Protrusion(EnergyMeasure):
     on, so the same measure serves every space (and, on the Euclidean one, balls: with
     non-negative radii it is the measure of
     :class:`~mowl.representation.CentreDistance`). Balls of the Euclidean class models
-    (:class:`~mowl.representation.Ball`) are disks on the Euclidean space."""
+    (:class:`~mowl.representation.Ball`) are disks on the Euclidean space.
+
+    Part (vocabulary value): ``protrusion``. Used by: ``disk_embeddings``.
+    """
 
     accepts = (Disk, Ball)
     part = "protrusion"
@@ -475,6 +485,8 @@ class DistanceDepth(HierarchyMeasure):
 
     :param centri_weight: :math:`\\lambda` (``centri_weight`` of HiT; 0 uses the distance
         only).
+
+    Part (vocabulary value): ``distance and depth``. Used by: ``hit``, ``ont``.
     """
 
     accepts = (Point,)

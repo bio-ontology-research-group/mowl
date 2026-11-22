@@ -150,3 +150,91 @@ class TestGeometryAgreesWithCatalogue(TestCase):
             self.assertIsNotNone(get_family(family.value))
         rows = dict(REPRESENTATIONS["falcon"].rows())
         self.assertIn("product", rows["Fuzzy operators"])
+
+
+#: Methods whose catalogue entry names a constructor that the geometry does not have, as
+#: ``(key, field): reason``.
+CONSTRUCTOR_NOT_IN_GEOMETRY = {
+    ("cate", "negation"): "CatE has its own embedding of negation; the order geometry has none",
+    ("cate", "disjunction"): "CatE has its own embedding of disjunction; the order geometry "
+                             "has none",
+}
+
+
+class TestConstructorsAgree(TestCase):
+    """Negation, disjunction and the operator family of the catalogue are what the geometry
+    builds."""
+
+    def test_negation_and_disjunction(self):
+        from mowl.representation import METHODS
+        problems = []
+        for key in sorted(set(METHODS) - NEEDS_ENCODER):
+            parts, rep = _build(key).parts, REPRESENTATIONS[key]
+            for field in ("negation", "disjunction"):
+                if (key, field) in CONSTRUCTOR_NOT_IN_GEOMETRY:
+                    continue
+                built = parts.get(field, "none")
+                card = getattr(rep, field).value
+                if built != card:
+                    problems.append((key, field, built, card))
+        self.assertEqual(problems, [])
+
+    def test_operator_family(self):
+        from mowl.representation import METHODS
+        from mowl.representation.library.logic_fuzzy import get_family
+        registered = {"goedel": "godel", "goedel on logits": "godel (logits)",
+                      "product": "product", "lukasiewicz": "lukasiewicz"}
+        problems = []
+        for key in sorted(set(METHODS) - NEEDS_ENCODER):
+            parts = _build(key).parts
+            operators = REPRESENTATIONS[key].operators
+            if "family" not in parts:
+                if operators:
+                    problems.append((key, "card names operators, the geometry has none"))
+                continue
+            # the first operator family of the entry is the one the method was published with
+            if type(get_family(registered[operators[0].value])).__name__ != parts["family"]:
+                problems.append((key, parts["family"], operators[0].value))
+        self.assertEqual(problems, [])
+
+
+class TestRegisteredPartsStateThemselves(TestCase):
+    """Every registered class model, relation model and measure has a docstring whose first
+    sentence says what it means, a ``part`` that is a vocabulary value, and says which methods
+    use it."""
+
+    def test_docstring_part_and_users(self):
+        from mowl.representation import CLASS_MODELS, RELATION_MODELS, MEASURES
+        values = {"class model": {v.value for v in ClassModel},
+                  "relation model": {v.value for v in RelationModel},
+                  "measure": {v.value for v in Measure}}
+        problems = []
+        for kind, registry in (("class model", CLASS_MODELS),
+                               ("relation model", RELATION_MODELS),
+                               ("measure", MEASURES)):
+            for name, factory in sorted(registry.items()):
+                doc = (factory.__doc__ or "").strip()
+                if not doc:
+                    problems.append((kind, name, "no docstring"))
+                elif "Used by" not in doc:
+                    problems.append((kind, name, "does not say which methods use it"))
+                if getattr(factory, "part", None) not in values[kind]:
+                    problems.append((kind, name, f"part {getattr(factory, 'part', None)!r} "
+                                                 f"is not a vocabulary value"))
+        self.assertEqual(problems, [])
+
+    def test_the_methods_named_as_users_exist(self):
+        import re
+        from mowl.representation import CLASS_MODELS, RELATION_MODELS, MEASURES, METHODS
+        missing = []
+        for registry in (CLASS_MODELS, RELATION_MODELS, MEASURES):
+            for name, factory in registry.items():
+                doc = factory.__doc__ or ""
+                if "Used by" not in doc:
+                    continue
+                users = re.split(r"\.(?:\s|$)", doc.split("Used by", 1)[1], maxsplit=1)[0]
+                users = users.split("(")[0]
+                for key in re.findall(r"``([a-z_0-9]+)``", users):
+                    if key not in METHODS:
+                        missing.append((name, key))
+        self.assertEqual(missing, [])

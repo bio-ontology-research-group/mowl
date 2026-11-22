@@ -84,6 +84,26 @@ class StructuralGeometry(ComposedGeometry):
 
     # -- tables ---------------------------------------------------------------------------
     @property
+    def wants_structural_tables(self):
+        """Whether the geometry has no definition table and no existence targets yet: a
+        model that hosts it (:class:`~mowl.models.ComposedEL`) builds them from its
+        dataset (:func:`~mowl.nn.el.structural.build_structural_tables`, with
+        :attr:`structural_table_options`) and calls :meth:`set_structural_tables`."""
+        return self.definition_table is None and self.existence_targets is None
+
+    @property
+    def structural_table_options(self):
+        """The arguments of :func:`~mowl.nn.el.structural.build_structural_tables` that the
+        geometry decides: ``k`` (components per class), ``max_components`` (slots) and
+        ``enabled`` (the definitions of the objective). Prisms (one box, one triangle) have
+        ``k = 1`` and no bound on the slots."""
+        base = self._slot_classes
+        components = int(getattr(base, "components", 1))
+        slots = getattr(base, "max_components", 2 ** 30)
+        return {"k": components, "max_components": int(slots),
+                "enabled": bool(getattr(self.objective, "definitions", True))}
+
+    @property
     def _slot_classes(self):
         classes = self.class_model
         return classes.base if isinstance(classes, DefinedClasses) else classes
@@ -170,10 +190,17 @@ class StructuralGeometry(ComposedGeometry):
         self.last_reseed_count = moves
         return moves
 
-    def reseed_components(self, epoch=0):
+    @property
+    def reseed_components(self):
         """The hook of :class:`~mowl.training.structure.IdleComponentReseeding` (the
-        regime): re-seed with a generator seeded by ``epoch``."""
-        return self.reseed(np.random.default_rng(int(epoch)))
+        regime): ``hook(epoch)`` re-seeds with a generator seeded by ``epoch`` and returns the
+        number of moves. Only geometries of slots of boxes have it (the relocation rule is
+        about unions of boxes; a prism does not)."""
+        if not isinstance(self._slot_classes, SlotClasses):
+            raise AttributeError(
+                f"{type(self._slot_classes).__name__} classes have no components to "
+                f"re-seed: only slots of boxes do.")
+        return lambda epoch=0: self.reseed(np.random.default_rng(int(epoch)))
 
 
 # ------------------------------------------------------------------------------------

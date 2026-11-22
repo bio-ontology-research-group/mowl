@@ -145,6 +145,17 @@ class ComposedGeometry(ELModule, Geometry):
             self.objective.neg_forms if neg_capable_gcis is None else neg_capable_gcis)
         self.margin_semantics = "slack" if self.objective.slack else "strict"
 
+    @property
+    def strict_negatives(self):
+        """The ``strict_negatives`` of the objective (the one rule of every EL module: a
+        negative loss of a form without one is an error): the geometry's per-axiom losses
+        and the objective cannot disagree."""
+        return self.objective.strict_negatives
+
+    @strict_negatives.setter
+    def strict_negatives(self, value):
+        self.objective.strict_negatives = bool(value)
+
     # -- Geometry -----------------------------------------------------------------------
     def classes(self, ids, frozen=False):
         """The regions of ``ids``; ``frozen`` detaches their sizes (the class model must

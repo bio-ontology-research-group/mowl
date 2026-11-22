@@ -68,6 +68,8 @@ class OctagonBounds(RegionMeasure):
     * ``apart``: the smallest width of the intersection is at most :math:`-m`.
     * ``meets``: the intersection has width at least :math:`m` on every axis.
     * ``empty``: the smallest width, zero iff the interior is empty.
+
+    Part (vocabulary value): ``bounds per coordinate``. Used by: ``octagon``.
     """
 
     accepts = (OctagonProduct,)
@@ -99,43 +101,80 @@ class OctagonBounds(RegionMeasure):
 class PrismBounds(RegionMeasure):
     r"""Prisms compared by their bounds: the three support values of the triangle and the
     box coordinates, as the norm of the violations of :math:`h_A \le h_B` and of the box
-    inclusion.
+    inclusion. A prism is *empty* when its triangle is (the three supports sum to less than
+    zero) or its box is (a negative half-width in some coordinate: the exact intersection of
+    two prisms whose boxes are apart, the signed intersection of
+    :class:`~mowl.representation.library.structural_regions.DefinedClasses`); an empty prism
+    lies inside every prism, meets none and is apart from all, and no non-empty prism lies
+    inside it. Zero cost exactly where the relation holds (for ``conjunction="exact"``).
 
     * ``apart``: the triangles are disjoint or the boxes are separated in some coordinate.
     * ``meets``: the triangle part of the intersection has positive support sum and the
       boxes overlap in every coordinate.
-    * ``empty``: ``"whole"`` (default) the norm of the triangle's support sum and the box
-      half-widths; ``"triangle"`` only the support sum, as the prism module has it
-      (the cost of a class that cannot reach zero with a positive margin, and it ignores
-      the box).
+    * ``empty``: ``"any"`` (default) the triangle or the box is empty; ``"whole"`` both
+      are (the norm of the triangle's support sum and the box half-widths: sound, but a
+      class with an empty triangle and a fat box cannot reach zero); ``"triangle"`` only the
+      support sum, as the prism module has it (the cost of a class that cannot reach zero
+      with a positive margin, and it ignores the box).
+    * ``conjunction``: ``"exact"`` (default) :math:`A \sqcap B \sqsubseteq C` holds where the
+      exact intersection (signed half-widths) lies in :math:`C`, an empty one included;
+      ``"nonempty"`` the published loss, which also needs :math:`A \sqcap B` to be non-empty
+      (the intersection with the absolute half-widths and its gap), as the prism module has it.
+    * ``empty_prisms``: ``"empty"`` (default) an empty prism is the empty set, as above;
+      ``"formula"`` the formulas are applied to the supports and half-widths as they are (the
+      prism module: an empty class is then a prism that lies in some, and meets some, prisms).
     * ``meets_shrunk``: the negative reading of the published loss, see its docstring.
 
-    The half-widths of the box part are read as they are: a *negative* half-width is a box that
-    is empty in that coordinate (the signed intersection of
-    :class:`~mowl.representation.library.structural_regions.DefinedClasses`), and the costs
-    treat it as such (an empty region is not included in a smaller one, does not meet, is
-    apart from everything). The regions of the class models have non-negative half-widths,
-    for which nothing changes.
+    Used by: ``prism`` (``empty="triangle"``, ``conjunction="nonempty"``,
+    ``empty_prisms="formula"``).
 
-    :param empty: ``"whole"`` or ``"triangle"``.
+    :param empty: ``"any"``, ``"whole"`` or ``"triangle"``.
+    :param conjunction: ``"exact"`` or ``"nonempty"``.
+    :param empty_prisms: ``"empty"`` or ``"formula"``.
     """
 
     accepts = (Prism,)
     part = "bounds per coordinate"
 
-    def __init__(self, empty="whole"):
-        if empty not in ("whole", "triangle"):
-            raise ValueError("empty must be 'whole' or 'triangle'.")
+    def __init__(self, empty="any", conjunction="exact", empty_prisms="empty"):
+        if empty not in ("any", "whole", "triangle"):
+            raise ValueError("empty must be 'any', 'whole' or 'triangle'.")
+        if conjunction not in ("exact", "nonempty"):
+            raise ValueError("conjunction must be 'exact' or 'nonempty'.")
+        if empty_prisms not in ("empty", "formula"):
+            raise ValueError("empty_prisms must be 'empty' or 'formula'.")
         self.empty_form = empty
+        self.conjunction = conjunction
+        self.empty_prisms = empty_prisms
+
+    @property
+    def exact_intersection(self):
+        return self.conjunction == "exact"
+
+    @staticmethod
+    def is_empty(a):
+        """``(B, 1)`` boolean: the prism has no point (:meth:`Prism.is_empty`)."""
+        return a.is_empty().reshape(-1, 1)
+
+    def _empty(self, a):
+        """:meth:`is_empty`, or never with ``empty_prisms="formula"``."""
+        if self.empty_prisms == "formula":
+            return th.zeros(len(a.supports), 1, dtype=th.bool, device=a.supports.device)
+        return self.is_empty(a)
 
     def inside(self, a, b, margin=0.0):
         tri = th.relu(a.supports - b.supports + margin)
         gap = th.abs(a.centre - b.centre) + a.offset - b.offset
-        return _norm(th.cat([tri, th.relu(gap + margin)], dim=-1))
+        cost = _norm(th.cat([tri, th.relu(gap + margin)], dim=-1))
+        return th.where(self._empty(a), th.zeros_like(cost), cost)
 
     def meets(self, a, b, margin=0.0):
         tri = th.relu(-th.minimum(a.supports, b.supports).sum(dim=-1, keepdim=True) + margin)
-        return _norm(th.cat([tri, self._box_meets(a, b, margin)], dim=-1))
+        parts = [tri, self._box_meets(a, b, margin)]
+        if self.empty_prisms == "empty":
+            # an empty box meets nothing (zero for boxes that are not empty)
+            parts += [th.relu(-a.offset), th.relu(-b.offset)]
+        return _norm(th.cat(parts, dim=-1))
 
     @staticmethod
     def _box_meets(a, b, margin):
@@ -157,17 +196,46 @@ class PrismBounds(RegionMeasure):
         tri = th.relu(th.minimum(a.supports, b.supports).sum(dim=-1) + margin)
         overlap = a.offset + b.offset - th.abs(a.centre - b.centre)
         box = th.relu(overlap + margin).amin(dim=-1)
-        return _col(th.minimum(tri, box))
+        cost = _col(th.minimum(tri, box))
+        return th.where(self._empty(a) | self._empty(b), th.zeros_like(cost), cost)
 
     def empty(self, a, margin=0.0):
         tri = th.relu(a.supports.sum(dim=-1, keepdim=True) + margin)
         if self.empty_form == "triangle":
             return tri
+        if self.empty_form == "any":
+            box = th.relu(a.offset + margin).amin(dim=-1, keepdim=True)
+            return th.minimum(tri, box)
         return _norm(th.cat([tri, th.relu(a.offset)], dim=-1))
 
     def nonempty(self, a, epsilon=0.0):
         size = th.minimum(a.supports.sum(dim=-1), 2.0 * a.offset.amin(dim=-1))
         return _col(th.relu(epsilon - size))
+
+    # -- conjunctions -----------------------------------------------------------------------
+    def intersect(self, a, b):
+        """The exact intersection (signed half-widths: an empty prism where they are apart)
+        and its gap."""
+        return a.intersect(b, signed=True)
+
+    def intersection_inside(self, a, b, c, margin=0.0):
+        """Zero iff :math:`A \\cap B \\subseteq C` (``conjunction="exact"``), or iff it is
+        in addition not empty (``"nonempty"``, the published loss)."""
+        if self.conjunction == "exact":
+            region, _ = a.intersect(b, signed=True)
+            return self.inside(region, c, margin)
+        region, gap = a.intersect(b, signed=False)
+        return self.inside(region, c, margin) + gap
+
+    def intersection_apart(self, a, b, c, margin=0.0):
+        """Zero iff :math:`A \\cap B` is not empty and disjoint from :math:`C`."""
+        region, gap = a.intersect(b, signed=False)
+        return self.apart(region, c, margin) + gap
+
+    def intersection_nonempty(self, a, b, margin=0.0, epsilon=0.0):
+        """Zero iff :math:`A \\cap B` has extent at least ``epsilon``."""
+        region, _ = a.intersect(b, signed=self.conjunction == "exact")
+        return self.nonempty(region, epsilon)
 
 
 # -- ellipsoids and vectors --------------------------------------------------------------------
@@ -189,6 +257,8 @@ class EllipsoidMeasure(RegionMeasure):
       (a sufficient condition), the point lies outside, or the points differ by ``margin``.
 
     There is no conjunction (the intersection of ellipsoids is not an ellipsoid).
+
+    Part (vocabulary value): ``centre distance``. Used by: ``eike`` (first space).
     """
 
     accepts = (Ellipsoid, Point)
@@ -262,6 +332,8 @@ class CosineOrder(RegionMeasure):
     :param norm_term: ``"hinge"`` (default): :math:`[\lVert a\rVert - \lVert b\rVert]_+`,
         the cost stays non-negative; ``"signed"``: :math:`\lVert a\rVert - \lVert b\rVert`
         as in the EIKE code (can be negative, so the whole cost can); ``"none"``.
+
+    Part (vocabulary value): ``similarity``. Used by: ``eike`` (second space).
     """
 
     accepts = (Vector,)
@@ -429,6 +501,9 @@ class PointToRegion(RegionMeasure):
     :param beta: Gumbel scale of the volume in that weight, when the box has none.
     :param weighted: Whether the weight depends on the volume of the box (Eq. 9).
     :param squash: Whether to squash the distance as the paper's cross-view loss does.
+
+    Part (vocabulary value): ``point-to-region distance``. Used by: ``concept2box`` (point
+    against box).
     """
 
     accepts = (Point, Box)
@@ -491,6 +566,9 @@ class PointDistance(RegionMeasure):
     costs :math:`[m - \lVert a - b \rVert]_+`.
 
     :param power: ``1`` (default) or ``2``.
+
+    Part (vocabulary value): ``centre distance``. Used by: ``concept2box`` (point against
+    point).
     """
 
     accepts = (Point,)

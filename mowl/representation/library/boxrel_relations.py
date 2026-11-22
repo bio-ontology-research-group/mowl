@@ -72,6 +72,8 @@ class TranslationBoxes(Relations):
         is cut at zero, so that every region is a box. ``False``: the plain sum, which with
         ``activation="none"`` can be negative (the reference code of Query2Box). The other
         activations never give a negative width, and for them the option changes nothing.
+
+    Part (vocabulary value): ``box of translations``. Used by: ``transbox``.
     """
 
     part = "box of translations"
@@ -212,6 +214,8 @@ class Affine(Relations):
         :math:`r` does not exceed that of :math:`s` (the loss of the BoxEL code and of
         :class:`~mowl.nn.BoxELModule`, with the raw factor of :math:`r`); a zero cost then
         does not imply the inclusion (two different functions do not include each other).
+
+    Part (vocabulary value): ``affine map``. Used by: ``boxel``, ``boxsel``.
     """
 
     part = "affine map"
@@ -305,6 +309,8 @@ class AffineBoxes(Relations):
         :math:`\\exists r.C` stays empty. ``False``: the error box is added anyway, which is
         what interval arithmetic does in the authors' code and can make an empty
         restriction non-empty.
+
+    Part (vocabulary value): ``affine map with range and error box``. Used by: ``elkem``.
     """
 
     part = "affine map with range and error box"

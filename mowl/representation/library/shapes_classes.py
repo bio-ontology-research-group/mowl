@@ -78,6 +78,9 @@ class Points(Classes):
     :param init, scale: Initialisation of a new table (see :func:`table`).
     :param bump: Whether a point of the family ``"point"`` has a bump vector as well (BoxE,
         a knowledge graph entity); ``bumps`` is an existing table for it.
+
+    Part (vocabulary value): ``point``. Used by: ``boxe``, ``concept2box``, ``elkem``,
+    ``expressive``, ``graph_kge``, ``octagon``, ``prism``, ``transbox``.
     """
 
     part = "point"
@@ -115,6 +118,8 @@ class OctagonClasses(Classes):
     :param embed_dim: Even dimension.
     :param centres, radii: Existing tables (``(n, d)`` and ``(n, 4 d)``).
     :param init_radius: Radii are initialised uniformly in ``[0, init_radius]``.
+
+    Part (vocabulary value): ``octagon product``. Used by: ``octagon``.
     """
 
     region = OctagonProduct
@@ -153,6 +158,9 @@ class PrismClasses(Classes):
     :param resolver: A function from class ids to ``(supports, box centres, box
         half-widths)`` that replaces the tables (the prism module computes the regions of
         defined classes as intersections).
+
+    Part (vocabulary value): ``triangle x box``. Used by: ``prism``,
+    ``prism(reading=structural)``.
     """
 
     region = Prism
@@ -197,6 +205,9 @@ class EllipsoidClasses(Classes):
     Wang et al. 2024). Axes and scale are stored as the inverse of the softplus.
 
     :param centres, axes_raw, radius_raw: Existing tables.
+
+    Part (vocabulary value): ``ellipsoid``. Used by: ``eike`` (the first space of its linked
+    classes).
     """
 
     region = Ellipsoid
@@ -318,6 +329,9 @@ class SoftBoxClasses(Classes):
     :param offset: ``"abs"`` (default) or ``"softplus"``: how the stored offset is made
         non-negative.
     :param centres, offsets: Existing tables.
+
+    Part (vocabulary value): ``soft box``. Used by: no method by default (``concept2box`` uses
+    its contextual version).
     """
 
     region = SoftBox

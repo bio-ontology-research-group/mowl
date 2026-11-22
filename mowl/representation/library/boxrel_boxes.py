@@ -50,6 +50,8 @@ class MinDeltaBoxes(Classes):
 
     :param mins, deltas: Existing tables to use instead of new ones.
     :param min_bounds, delta_bounds: Ranges of the uniform initialisation.
+
+    Part (vocabulary value): ``box``. Used by: ``boxel``, ``boxsel``.
     """
 
     region = Box
@@ -84,6 +86,8 @@ class FixableBoxes(Classes):
         with the module that owns them, if any).
     :param epsilon: Lower bound of the half-widths of trained boxes.
     :param big: :math:`B`.
+
+    Part (vocabulary value): ``box``. Used by: ``elkem``.
     """
 
     region = Box

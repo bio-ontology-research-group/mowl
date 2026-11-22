@@ -46,7 +46,22 @@ class TestStructuralPrism(TestCase):
         nonzero = 0
         for form, rows in ROWS.items():
             for neg in (False, True):
-                old = getattr(module, form + "_loss")(rows, neg=neg).reshape(-1, 1)
+                try:
+                    old = getattr(module, form + "_loss")(rows, neg=neg).reshape(-1, 1)
+                except NotImplementedError:
+                    # a module refuses a negative loss it does not have: so does the geometry
+                    with self.assertRaises(NotImplementedError):
+                        getattr(geometry, form + "_loss")(rows, neg=neg)
+                    # and both agree on the earlier reading (the positive loss)
+                    module.strict_negatives = geometry.strict_negatives = False
+                    try:
+                        old = getattr(module, form + "_loss")(rows, neg=neg).reshape(-1, 1)
+                        new = getattr(geometry, form + "_loss")(rows, neg=neg)
+                    finally:
+                        module.strict_negatives = geometry.strict_negatives = True
+                    self.assertTrue(th.allclose(old, new, atol=1e-6), (form, neg, old, new))
+                    nonzero += float(old.abs().sum() > 0)
+                    continue
                 new = getattr(geometry, form + "_loss")(rows, neg=neg)
                 self.assertEqual(new.shape, old.shape)
                 self.assertTrue(th.allclose(old, new, atol=1e-6), (form, neg, old, new))

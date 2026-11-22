@@ -57,6 +57,9 @@ class SoftMembership(RegionMeasure):
 
     :param beta: Temperature :math:`\\beta` of the sigmoid.
     :param eps: The membership is clamped to ``[eps, 1 - eps]`` in the logarithm.
+
+    Part (vocabulary value): ``sampled volume``. Used by: ``multiboxel`` and ``multielbe`` with
+    the point readings (``reading="point"``, ``"mixed"``, ``"hybrid"``).
     """
 
     accepts = (UnionOfBoxes, Box, Ball)

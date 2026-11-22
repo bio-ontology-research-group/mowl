@@ -198,7 +198,7 @@ def multiboxel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=
             squared=("gci3", "gci3_bot"), gci3_bot_negative="filler")
         geometry = StructuralGeometry(
             classes, _head_tail(nb_relations, embed_dim, t),
-            SlotMeasure(_BOUNDS()), objective, individuals=individuals,
+            SlotMeasure(_BOUNDS(), reading="structural"), objective, individuals=individuals,
             base_regularizers=regularizers, existence_weight=existence_weight,
             size_reg=size_reg, witness_weight=witness_weight)
         if t is not None:
@@ -225,7 +225,7 @@ def multiboxel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=
                         else t.ind_halfwidth, volume_reg if t is None else t.volume_reg,
                         supervision)
         objective = PointReading(terms, reading, margin, **options)
-    measure = UnionMeasure(_BOUNDS(), component_aggregation, tau)
+    measure = UnionMeasure(_BOUNDS(), component_aggregation, tau, meets_reading="every")
     geometry = ComposedGeometry(classes, _head_tail(nb_relations, embed_dim, t), measure,
                                 objective, individuals=individuals, regularizers=regularizers)
     if terms is not None:
@@ -280,7 +280,7 @@ def multielbe(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0
                         else t.ind_halfwidth, volume_reg if t is None else t.volume_reg,
                         supervision)
         objective = PointReading(terms, reading, margin, **options)
-    measure = UnionMeasure(_BOUNDS(), component_aggregation, tau)
+    measure = UnionMeasure(_BOUNDS(), component_aggregation, tau, meets_reading="every")
     geometry = ComposedGeometry(classes, relations, measure, objective,
                                 individuals=individuals,
                                 regularizers=_union_regularizers(component_reg,

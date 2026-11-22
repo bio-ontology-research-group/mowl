@@ -145,7 +145,10 @@ class AveragedBounds(Bounds):
     also meets nothing, and ``empty`` is zero as soon as one half-width is not positive;
     the ELK-Em method sets ``empty_boxes="formula"`` (``meets`` without the emptiness term)
     and ``extent="norm"`` (``empty`` is the mean of the hinged half-widths, zero only when
-    every half-width is negative), as the module computes them."""
+    every half-width is negative), as the module computes them.
+
+    Part (vocabulary value): ``bounds per coordinate``. Used by: ``elkem``.
+    """
 
     part = "bounds per coordinate"
 
@@ -193,6 +196,8 @@ class MaskedBounds(Bounds):
     :param gci1: ``"inclusion"`` (default): the intersection lies inside :math:`D`.
         ``"overlap"``: it only has to overlap :math:`D`, which is what the authors' code
         computes (it uses the signed half-width of the intersection).
+
+    Part (vocabulary value): ``bounds per coordinate``. Used by: ``transbox``.
     """
 
     part = "bounds per coordinate"

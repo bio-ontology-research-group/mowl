@@ -108,6 +108,37 @@ class ComposedEL(EmbeddingELModel):
         self.module = module.to(self.device)
         # EL++ role axioms: loaded when the geometry reads them
         self.load_role_axioms = bool(getattr(module, "role_axiom_capable", False))
+        self._attach_structural_tables()
+
+    def _attach_structural_tables(self):
+        """A geometry that reads the structure of the ontology (definitions of classes,
+        classes that must not be empty: the structural reading of MultiBoxEL and of the
+        prism, ``geometry.wants_structural_tables``) gets its tables from the dataset of the
+        model, once the module exists; they are kept, so that a module that is built again
+        (:meth:`init_module`) gets them too."""
+        module = self.module
+        if not getattr(module, "wants_structural_tables", False):
+            self._structural_tables = None
+            return
+        tables = getattr(self, "_structural_tables", None)
+        if tables is None:
+            from mowl.nn.el.structural import build_structural_tables
+            tables = build_structural_tables(self, **module.structural_table_options)
+            self._structural_tables = tables
+        table, targets, top_idx = tables
+        module.set_structural_tables(table, targets, top_idx)
+
+    @property
+    def reseed_components(self):
+        """The hook of the regime :class:`~mowl.training.structure.IdleComponentReseeding`:
+        the geometry's own ``reseed_components(epoch)`` (relocating components that cover
+        nothing: a structural union of boxes has it). A model whose geometry has none does
+        not have the attribute, and the regime says so."""
+        hook = getattr(self.module, "reseed_components", None)
+        if hook is None:
+            raise AttributeError(
+                f"The geometry {type(self.module).__name__} has no 'reseed_components'.")
+        return hook
 
     @property
     def training_datasets(self):

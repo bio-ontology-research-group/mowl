@@ -71,6 +71,8 @@ class ToleranceTranslation(Translation):
     :param tolerances: An existing table ``(size, 1)`` to use instead of a new one (stored
         signed, used through its absolute value).
     :param sigma_init: Initial tolerance of a new table.
+
+    Part (vocabulary value): ``translation with tolerance``. Used by: ``emelvar``.
     """
 
     part = "translation with tolerance"
@@ -146,6 +148,8 @@ class BoundaryDepth(RegionMeasure):
         ``regd_elem`` select it by default): a region strictly inside another then still
         has a positive cost, so a zero cost is not what "inside" means.
     :param host: Measure for the other relations.
+
+    Part (vocabulary value): ``boundary and depth``. Used by: ``regd``, ``regd_elem``.
     """
 
     accepts = (Ball, Box)

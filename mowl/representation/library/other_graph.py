@@ -222,6 +222,8 @@ class ExpressivERelations(_PairRelations):
 
     :param table: An existing table of raw relation vectors (``6 d`` wide).
     :param p, tanh_map, min_denom: As in the interaction.
+
+    Part (vocabulary value): ``region over pairs``. Used by: ``expressive``.
     """
 
     part = "region over pairs"
@@ -270,6 +272,8 @@ class TripleScore(RegionMeasure):
 
     :param relations: The relation model that gives the ``subclass`` relation; set by
         :func:`triple_geometry`.
+
+    Part (vocabulary value): ``triple score``. Used by: ``boxe``, ``expressive``, ``graph_kge``.
     """
 
     accepts = (Point, Ball, Box, Related)
