@@ -106,7 +106,7 @@ def test_module_losses_have_one_value_per_row_and_are_nonnegative():
                        (opa, "object_property_assertion")):
         for neg in (False, True):
             out = m(data, name, neg=neg)
-            assert out.shape == (2,) and th.isfinite(out).all() and (out >= 0).all()
+            assert out.shape == (2, 1) and th.isfinite(out).all() and (out >= 0).all()
 
 
 def test_training_reduces_the_loss_of_a_subsumption():

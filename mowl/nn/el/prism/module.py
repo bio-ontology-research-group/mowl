@@ -36,8 +36,8 @@ class PrismModule(ELModule):
     - Raises :class:`ValueError` if ``embed_dim < 3``.
     - :meth:`prism_params` returns ``(h, box_center, |box_offset|)`` of shapes
       ``(B, 3)``, ``(B, d - 2)``, ``(B, d - 2)`` with non-negative ``box_offset``.
-    - Every GCI loss returns a 1-D tensor of shape ``(B,)`` (MultiBoxEL and Box\\ :sup:`2`\\ EL
-      now return ``(B, 1)``).
+    - Every GCI loss returns a column of shape ``(B, 1)`` like every
+      :class:`~mowl.nn.ELModule` (``per_axiom_column = False`` gives the flat ``(B,)``).
     - :meth:`gci1_bot_loss` aggregates box coordinates with ``min`` (semantically
       disjointness-if-any-separates; ELBE uses the Euclidean norm).
 

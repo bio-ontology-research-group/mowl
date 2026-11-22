@@ -1,8 +1,10 @@
 import torch as th
 import torch.nn as nn
 
+from mowl.nn.el.per_axiom_column import PerAxiomColumn
 
-class ELModule(nn.Module):
+
+class ELModule(PerAxiomColumn, nn.Module):
     """Subclass of :class:`torch.nn.Module` for :math:`\mathcal{EL}` models.
 
     This class provides \
@@ -10,6 +12,10 @@ class ELModule(nn.Module):
     :math:`\mathcal{EL}` language. In case a negative version of one of the loss function exist, \
     it must be placed inside the original loss function and be accesed through the ``neg`` \
     parameter. More information of this can be found at :doc:`/embedding_el/index`
+
+    Every per-axiom loss of every subclass is a column of shape ``(B, 1)``, never a flat
+    ``(B,)`` vector (:class:`~mowl.nn.el.per_axiom_column.PerAxiomColumn`; set the attribute
+    ``per_axiom_column = False`` to get the shape the formula produced).
 
     Subclasses should override :attr:`neg_capable_gcis` to declare which GCI loss functions
     genuinely implement a different code path when ``neg=True``.
@@ -170,7 +176,7 @@ class ELModule(nn.Module):
         :type neg: bool, optional.
         """
 
-        return NotImplementedError()
+        raise NotImplementedError()
 
     def role_inclusion_loss(self, gci, neg=False):
         """Loss function for role inclusion: :math:`R \sqsubseteq S`.

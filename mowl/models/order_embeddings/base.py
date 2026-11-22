@@ -110,7 +110,8 @@ class TaxonomyEmbeddingModel(EmbeddingELModel):
         t = th.tensor([idx.get(a, a) for a in sup], dtype=th.long, device=self.device)
         with th.no_grad():
             self.module.eval()
-            return self.module(th.stack([s, t], dim=1), "gci0").cpu().numpy()
+            out = self.module(th.stack([s, t], dim=1), "gci0")
+            return out.reshape(len(sub)).cpu().numpy()  # one cost per axiom, not a column
 
     def descendant_fractions(self):
         """For each named class the number of its descendants (itself included) in the

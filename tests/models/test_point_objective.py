@@ -188,7 +188,7 @@ def test_point_mode_class_assertion_score_is_neg_log_m() -> None:
             cen, off = mod.class_boxes(data[:, 1])
             m = union_membership(soft_box_membership(x, cen, off, beta=0.1))
             expected = -torch.log(m.clamp(min=1e-12))
-            assert score_fwd.shape == ((4, 1) if mod_cls is MultiBoxELModule else (4,))
+            assert score_fwd.shape == (4, 1)
             assert torch.allclose(score_fwd.reshape(-1), expected, atol=1e-6)
 
 

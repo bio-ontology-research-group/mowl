@@ -182,4 +182,4 @@ def test_nf2_pairwise_option():
     expected = ((p[:, None] + q[None, :]) ** 2).mean()
     assert float(regime.loss("gci1", m(rows, "gci1"), None)) == pytest.approx(
         float(expected))
-    assert th.allclose(m(rows, "gci1"), p + q)
+    assert th.allclose(m(rows, "gci1").reshape(-1), p + q)

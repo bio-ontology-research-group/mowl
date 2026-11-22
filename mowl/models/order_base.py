@@ -111,4 +111,4 @@ class OrderEmbeddingModel(EmbeddingELModel):
                          device=self.device)
         with th.no_grad():
             self.module.eval()
-            return self.module(rows, "gci0")
+            return self.module(rows, "gci0").reshape(len(rows))  # one energy per axiom

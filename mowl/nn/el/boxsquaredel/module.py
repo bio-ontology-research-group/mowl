@@ -1,11 +1,10 @@
 import mowl.nn.el.boxsquaredel.losses as L
 from mowl.nn import ELModule
-from mowl.nn.el.per_axiom_column import PerAxiomColumn
 import torch as th
 import torch.nn as nn
 
 
-class BoxSquaredELModule(PerAxiomColumn, ELModule):
+class BoxSquaredELModule(ELModule):
     """
     Implementation of Box :math:`^2` EL from [jackermeier2023]_.
 

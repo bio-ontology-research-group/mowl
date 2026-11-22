@@ -20,25 +20,25 @@ def test_reference_bottom_forms_follow_the_code_by_default():
     expected0 = CL.gci0_loss(D2, m.class_center, m.class_offset, m.margin)
     expected3 = CL.gci3_loss(D3, m.class_center, m.class_offset, m.relation_center,
                              m.relation_offset, m.margin)
-    assert th.allclose(m(D2, "gci0_bot"), expected0)
-    assert th.allclose(m(D3, "gci3_bot"), expected3)
+    assert th.allclose(m(D2, "gci0_bot").reshape(-1), expected0)
+    assert th.allclose(m(D3, "gci3_bot").reshape(-1), expected3)
     # the code's loss carries the centre-norm terms, the mowl formula does not
-    assert not th.allclose(m(D2, "gci0_bot"),
+    assert not th.allclose(m(D2, "gci0_bot").reshape(-1),
                            L.gci0_loss(D2, m.class_center, m.class_offset, m.margin))
 
 
 def test_reference_bottom_forms_old_option_gives_the_mowl_formulas():
     m = _module(formulation="reference", reference_bottom_losses="mowl")
-    assert th.allclose(m(D2, "gci0_bot"),
+    assert th.allclose(m(D2, "gci0_bot").reshape(-1),
                        L.gci0_loss(D2, m.class_center, m.class_offset, m.margin))
-    assert th.allclose(m(D3, "gci3_bot"),
+    assert th.allclose(m(D3, "gci3_bot").reshape(-1),
                        L.gci3_loss(D3, m.class_center, m.class_offset, m.relation_center,
                                    m.relation_offset, m.margin))
 
 
 def test_mowl_formulation_bottom_forms_unchanged():
     m = _module()
-    assert th.allclose(m(D2, "gci0_bot"),
+    assert th.allclose(m(D2, "gci0_bot").reshape(-1),
                        L.gci0_loss(D2, m.class_center, m.class_offset, m.margin))
 
 
@@ -65,4 +65,4 @@ def test_strict_negatives_off_returns_the_positive_loss():
 def test_gci2_negative_still_works():
     m = _module()
     data = th.tensor([[0, 1, 2]])
-    assert m(data, "gci2", neg=True).shape == (1,)
+    assert m(data, "gci2", neg=True).shape == (1, 1)

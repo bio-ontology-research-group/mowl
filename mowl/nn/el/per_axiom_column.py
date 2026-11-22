@@ -22,14 +22,14 @@ def _as_column(method):
 
 
 class PerAxiomColumn:
-    """Mixin for :class:`~mowl.nn.ELModule` subclasses: every per-axiom loss method defined
-    on the class returns a column ``(B, 1)`` like the losses of
-    :class:`~mowl.nn.ELBEModule`, never a flat ``(B,)`` vector.
+    """Mixin of :class:`~mowl.nn.ELModule` (so of every subclass): every per-axiom loss method
+    defined on a subclass returns a column ``(B, 1)``, never a flat ``(B,)`` vector.
 
     Set the attribute ``per_axiom_column`` to ``False`` (on the instance or the class) to get
     the earlier shapes back, where each loss returned what its formula produced: ``(B,)``
-    for the Box\\ :sup:`2`\\ EL and MultiBoxEL losses, a mix of ``(B,)`` and ``(B, 1)`` for
-    MultiELBE. Losses that are not one value per row (more than one axis) are unchanged.
+    for most modules, a mix of ``(B,)`` and ``(B, 1)`` for ELBE, MultiELBE and RegD-ELBE
+    (``gci0_bot`` and ``gci3_bot`` were ``(B,)``). Losses that are not one value per
+    row (more than one axis) are unchanged.
     The mean, the sum and any ``reshape(n, -1)`` of a loss are the same in both shapes;
     only code that adds a loss to a flat ``(B,)`` vector sees a difference (it broadcasts to
     ``(B, B)``).

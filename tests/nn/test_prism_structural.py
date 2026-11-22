@@ -435,12 +435,12 @@ def test_role_and_assertion_prisms_delegation() -> None:
 
     assert th.allclose(
         PL.gci2_score_prisms(rc_gci2, rd_gci2, rel_gci2, mod.margin),
-        mod.gci2_loss(gci2_batch, neg=False),
+        mod.gci2_loss(gci2_batch, neg=False).reshape(-1),
         atol=1e-6,
     )
     assert th.allclose(
         PL.gci2_score_neg_prisms(rc_gci2, rd_gci2, rel_gci2, mod.margin),
-        mod.gci2_loss(gci2_batch, neg=True),
+        mod.gci2_loss(gci2_batch, neg=True).reshape(-1),
         atol=1e-6,
     )
 
@@ -449,12 +449,12 @@ def test_role_and_assertion_prisms_delegation() -> None:
     rel_gci3 = mod.rel_embed(gci3_batch[:, 0])
     assert th.allclose(
         PL.gci3_score_prisms(rc_gci3, rd_gci3, rel_gci3, mod.margin),
-        mod.gci3_loss(gci3_batch, neg=False),
+        mod.gci3_loss(gci3_batch, neg=False).reshape(-1),
         atol=1e-6,
     )
     assert th.allclose(
         PL.gci3_bot_score_prisms(rc_gci3, mod.margin),
-        mod.gci3_bot_loss(gci3_batch, neg=False),
+        mod.gci3_bot_loss(gci3_batch, neg=False).reshape(-1),
         atol=1e-6,
     )
 
@@ -462,7 +462,7 @@ def test_role_and_assertion_prisms_delegation() -> None:
     rc_ca = mod.class_regions(ca_batch[:, 1])
     assert th.allclose(
         PL.class_assertion_score_prisms(ind_pts, rc_ca, mod.margin),
-        mod.class_assertion_loss(ca_batch, neg=False),
+        mod.class_assertion_loss(ca_batch, neg=False).reshape(-1),
         atol=1e-6,
     )
 
