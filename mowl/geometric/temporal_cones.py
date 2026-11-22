@@ -89,7 +89,6 @@ from mowl.geometric.cones import (
     Not,
     Or,
     TOP_CONCEPT,
-    halfaxis_vector,  # noqa: F401  (re-exported)
 )
 
 __all__ = [

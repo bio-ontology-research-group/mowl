@@ -62,7 +62,6 @@ from typing import Dict, FrozenSet, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
-from mowl.geometric.completion import CanonicalModel  # noqa: F401
 from mowl.geometric.errors import UnsupportedAxiom
 from mowl.geometric.normal_forms import (
     BOTTOM,
@@ -73,7 +72,6 @@ from mowl.geometric.normal_forms import (
     NF6,
     TOP,
     Axiom,
-    NormalisedOntology,  # noqa: F401
     nominal_name,
 )
 from mowl.geometric.polyhedral import ConvexPolyhedralModel
