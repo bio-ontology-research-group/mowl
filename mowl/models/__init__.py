@@ -4,6 +4,7 @@ from mowl.models.elembeddings.examples.model_gda import ELEmGDA
 
 from mowl.models.elbe.model import ELBE
 from mowl.models.composed.model import ComposedEL
+from mowl.models.constructed.model import ConstructedModel
 from mowl.models.multielbe.model import MultiELBE
 from mowl.models.elbe.examples.model_ppi import ELBEPPI
 from mowl.models.elbe.examples.model_gda import ELBEGDA

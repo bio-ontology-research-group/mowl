@@ -1,5 +1,10 @@
 """The exact constructions of mowl.geometric answer the questions of the common interface
-(costs 0.0 where a relation holds, 1.0 where it does not)."""
+(costs 0.0 where a relation holds, 1.0 where it does not).
+
+Their geometry is the combination of a source and a reading
+(:class:`~mowl.representation.construction.ConstructionGeometry`); the attributed test at
+the end also exercises the earlier geometry of backends (``other_constructed``), which
+FaithEL still uses."""
 import itertools
 import os
 
@@ -23,6 +28,7 @@ from mowl.geometric.polyhedral import ConvexPolyhedralModel  # noqa: E402
 from mowl.geometric.temporal_cones import (  # noqa: E402
     TemporalALConeInterpretation, TemporalOntology)
 from mowl.representation import ConstructorUnavailable, geometry_of  # noqa: E402
+from mowl.representation.construction import ConstructionGeometry  # noqa: E402
 from mowl.representation.library.other_constructed import ConstructedGeometry  # noqa: E402
 from tests.models.kg_region_data import NS, abox_dataset  # noqa: E402
 
@@ -61,16 +67,20 @@ def _inclusion(g):
 ], ids=["canonical_model", "convex_polyhedral", "interval_union"])
 def test_strongly_faithful_constructions_give_entailment(cm, build):
     g = geometry_of(build(cm))
-    assert isinstance(g, ConstructedGeometry)
+    assert isinstance(g, ConstructionGeometry)
     cost = _inclusion(g)
     assert cost.shape == (g.num_classes ** 2, 1)
     assert th.equal(cost, _entailed(cm, g._names))
     assert set(cost.unique().tolist()) == {0.0, 1.0}
 
 
-def test_existential_and_conjunction_and_individuals(cm):
-    for model in (cm, ConvexPolyhedralModel.from_canonical_model(cm),
-                  IntervalUnionModel.from_canonical_model(cm)):
+@pytest.mark.parametrize("build, negation", [
+    (lambda cm: cm, True),
+    (lambda cm: ConvexPolyhedralModel.from_canonical_model(cm), False),
+    (lambda cm: IntervalUnionModel.from_canonical_model(cm), True),
+], ids=["canonical_model", "convex_polyhedral", "interval_union"])
+def test_existential_and_conjunction_and_individuals(cm, build, negation):
+    for model in (build(cm),):
         g = geometry_of(model)
         c = {n.rsplit("#", 1)[-1]: i for i, n in enumerate(g._names)}
         r = g._roles.index(NS + "r")
@@ -95,8 +105,16 @@ def test_existential_and_conjunction_and_individuals(cm):
         # disjointness *in the model* (A and E share no element), which is not entailment
         assert g.apart(g.classes(one("A")), g.classes(one("E"))).item() == 0.0
         assert g.apart(g.classes(one("A")), g.classes(one("B"))).item() == 1.0
-        with pytest.raises(ConstructorUnavailable):
-            g.inside(g.negation(g.classes(one("A"))), g.classes(one("B")))
+        if negation:
+            # element sets and unions of intervals are closed under complement (within the
+            # domain of the canonical model): not A is not inside B
+            not_a = g.negation(g.classes(one("A")))
+            assert g.inside(not_a, g.classes(one("B"))).item() == 1.0
+            assert g.apart(not_a, g.classes(one("A"))).item() == 0.0
+        else:
+            # faces of a simplex are not closed under complement
+            with pytest.raises(ConstructorUnavailable):
+                g.inside(g.negation(g.classes(one("A"))), g.classes(one("B")))
 
 
 def test_convex_regions_and_box_models():
@@ -168,7 +186,7 @@ def test_temporal_cones_have_next_and_until():
     ids = th.tensor([0])
     assert g.member(ids, a).item() == 0.0
     assert g.member(ids, b).item() == 1.0
-    g.backend.time = 1                         # the next time point
+    g.time = 1                                 # the next time point
     assert g.member(ids, b).item() == 0.0
     with pytest.raises(ConstructorUnavailable):
         g.exists(th.tensor([0]), a)
@@ -189,6 +207,6 @@ def test_attributed_dl_regions_of_a_concept_under_a_specifier():
     ind = {n: i for i, n in enumerate(g._individuals)}
     assert g.member(th.tensor([ind["a"]]), one(2)).item() == 0.0
     assert g.member(th.tensor([ind["b"]]), one(2)).item() == 1.0
-    assert isinstance(geometry_of(model), ConstructedGeometry)
+    assert isinstance(geometry_of(model), ConstructionGeometry)
     assert th.is_tensor(g.inside(one(0), one(0)))
     assert ConceptInc is not None

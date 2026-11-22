@@ -672,10 +672,12 @@ class ExactMeasure(RegionMeasure):
     def _contains(self, region, points):
         """``(B,)``: the point of individual ``b`` lies in region ``b`` (the family's own
         point-membership test, at time 0 or at :attr:`time`)."""
+        known = ~th.isnan(points.centre).any(-1)          # an individual of no cell
         if isinstance(region, CellRegion):
-            return region.contains_rows(points.centre, 0 if self.time is None else self.time)
+            time = 0 if self.time is None else self.time
+            return region.contains_rows(th.nan_to_num(points.centre), time) & known
         if isinstance(region, Box):
-            return _contains_rows(region, points.centre)
+            return _contains_rows(region, th.nan_to_num(points.centre)) & known
         raise ConstructorUnavailable(f"{type(region).__name__} has no membership test.")
 
     # -- as costs ------------------------------------------------------------------------------
@@ -795,6 +797,13 @@ class ConstructionGeometry(ComposedGeometry):
     @property
     def _individuals(self):
         return self.individual_names
+
+    def link_margin(self, owner):
+        """A constructed geometry has no margin of its own to share (the measure is exact);
+        linking it to itself (a model whose ``module`` is this geometry) is a no-op."""
+        if owner is self:
+            return self
+        return super().link_margin(owner)
 
     @property
     def guarantees(self):

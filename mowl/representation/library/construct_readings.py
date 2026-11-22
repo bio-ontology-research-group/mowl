@@ -144,12 +144,20 @@ class CellReading(Reading):
             masks, centres = [], []
             for a in individuals:
                 if a not in model.individuals:
-                    raise ValueError(f"The individual {a!r} is not an individual of the "
-                                     f"constructed model.")
+                    # an individual the construction does not know: in no region
+                    masks.append(th.zeros(n, dtype=th.bool))
+                    centres.append(None)
+                    continue
                 cells = {cell[x] for x in model.element_set(a)}
                 masks.append(self._mask([x for x in range(model.size)
                                          if cell[x] in cells], cell, n))
                 centres.append(universe.point(cells))
+            known = [c for c in centres if c is not None]
+            if not known:
+                known = [universe.point({0})] if self.region is not IntervalUnions \
+                    else [th.zeros(1, dtype=th.float64)]
+            centres = [th.full_like(known[0], float("nan")) if c is None else c
+                       for c in centres]
             mask = th.stack(masks).unsqueeze(1).expand(-1, T, -1)
             points = Points(th.stack(centres), mask)
         return ReadModel(classes, relations, points, universe, empty, list(names),
