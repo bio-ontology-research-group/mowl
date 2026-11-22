@@ -8,8 +8,11 @@ import torch as th
 import mowl
 mowl.init_jvm("1g")
 
-from mowl.models import CanonicalMixture, FaithEL  # noqa: E402
-from mowl.models.boxlite.embedding import BoxLitEEmbedding  # noqa: E402
+from mowl.models import CanonicalMixture  # noqa: E402
+# the adapters below describe the direct implementations (the combinations of parts are their
+# own geometry: tests/representation/test_recomp_solved.py)
+from mowl.baselines.models.boxlite.embedding import BoxLitEEmbedding  # noqa: E402
+from mowl.baselines.models.faithel.model import FaithEL  # noqa: E402
 from mowl.nn.el.grounded import GroundedELModule  # noqa: E402
 from mowl.representation import ConstructorUnavailable, geometry_of  # noqa: E402
 from mowl.representation.library.other_regions import (  # noqa: E402

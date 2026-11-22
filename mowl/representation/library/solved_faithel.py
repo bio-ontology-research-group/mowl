@@ -550,9 +550,11 @@ def faithel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, radius=0.6
     if relations is None:
         relations = AnchoredPairs(role_centroids, radius)
     if individuals is None:
-        individuals = Points(nb_individuals, d, family="point")
+        # the initialisation (and the random numbers it draws) of the authors' code
+        table = nn.Embedding(nb_individuals, d)
         with th.no_grad():
-            individuals.centres.weight.normal_(mean=0.5, std=0.7)
+            table.weight.normal_(mean=0.5, std=0.7)
+        individuals = Points(family="point", centres=table)
     return FaithELGeometry(
         classes, relations, individuals,
         measure if measure is not None else AnchorDistance(centroid_score),

@@ -367,7 +367,14 @@ class _FaithBackend(NormalFormBackend):
         return super().subsumed(a, b)
 
 
-register_adapter("FaithEL")(FaithELGeometry)
+@register_adapter("FaithEL")
+def _faithel(model):
+    """The geometry of a FaithEL: its own module where the model is built from parts, the
+    adapter geometry (reading the tables of the direct implementation) otherwise."""
+    module = getattr(model, "module", None)
+    if isinstance(module, Geometry):
+        return module
+    return FaithELGeometry(model)
 
 
 # -- boxlite ---------------------------------------------------------------------------------

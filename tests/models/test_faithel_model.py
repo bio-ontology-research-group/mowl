@@ -77,7 +77,7 @@ def test_training_decreases_loss_and_separates_true_assertions(model):
 def test_tbox_only_dataset_scores_the_tbox_and_big_ontologies_are_refused():
     from tests.datasetFactory import FamilyDataset
     m = FaithEL(FamilyDataset())
-    assert m.module.individuals.num_embeddings == 0
+    assert m.module.individual_model.centres.num_embeddings == 0
     m.train(1)
     with pytest.raises(ValueError, match="max_elements"):
         FaithEL(FamilyDataset(), max_elements=3)
