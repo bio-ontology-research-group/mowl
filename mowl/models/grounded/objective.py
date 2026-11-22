@@ -150,9 +150,8 @@ class GroundedConstraints:
         return self.element_sampler.rows(data, gen, self.device)
 
     def _sample_corrupted_opa(self, opa_data, gen):
-        rows = self.element_sampler.corrupted(opa_data.to(self.device), self.nb_inds, gen,
-                                              self.neg_k)
-        return self.nb_classes + rows[:, 0], self.nb_classes + rows[:, 2], rows[:, 1]
+        return self.element_sampler.corrupted_elements(opa_data.to(self.device), self.nb_inds,
+                                                       gen, self.neg_k, self.nb_classes)
 
     def _batch_candidate_elements(self, batch_elems, gen):
         return self.element_sampler.batch(batch_elems, self.nb_elements, gen)

@@ -144,10 +144,13 @@ class ComposedEL(EmbeddingELModel):
                 module = swap(module, "compose", sizes, self.embed_dim,
                               individuals=self.individuals)
         if not isinstance(module, ELModule):
-            raise TypeError(
+            from mowl.representation.regions import ConstructorUnavailable
+            trainer = getattr(module, "trained_by", None)
+            raise ConstructorUnavailable(
                 f"The geometry of {self.method!r} ({type(module).__name__}) is not an "
                 f"ELModule: it is not trained on normal-form axioms, so ComposedEL cannot "
-                f"train it.")
+                f"train it." + (f" Train it, and swap its parts, with {trainer}."
+                                if trainer else ""))
         self.module = module.to(self.device)
         # EL++ role axioms: loaded when the geometry reads them
         self.load_role_axioms = bool(getattr(module, "role_axiom_capable", False))

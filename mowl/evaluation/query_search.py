@@ -42,7 +42,7 @@ import torch as th
 
 __all__ = ["EMPTY", "TOP", "Anchored", "Chain", "Join", "read_batch", "HopPlan", "Anchors",
            "read_anchors", "max_min", "top_witnesses", "sparsify", "compose_all",
-           "RegionCompiler", "MaxMinBeam", "WitnessChain", "as_target_table"]
+           "RegionCompiler", "MaxMinBeam", "WitnessChain", "as_target_table", "index_vector"]
 
 #: Score of an element that is not an answer (the depth in an empty region).
 EMPTY: float = -1e6
@@ -267,7 +267,8 @@ def sparsify(scores, k):
 
 def compose_all(family, degree, best, valid, budget=1 << 26):
     """:func:`max_min` against every element of the family, in chunks of elements:
-    ``degree(targets)`` gives ``(B, M, K)`` for a ``(B, M)`` table of element ids."""
+    ``degree(targets)`` gives ``(B, M, K)`` for a ``(1, M)`` row of element ids shared by
+    the ``B`` queries."""
     bsz, n = best.shape[0], family.n_elements
     if bsz == 0 or n == 0:
         return th.empty((bsz, n), dtype=family.dtype, device=family.device)
@@ -276,7 +277,8 @@ def compose_all(family, degree, best, valid, budget=1 << 26):
     out = []
     for start in range(0, n, step):
         ids = th.arange(start, min(n, start + step), device=family.device)
-        out.append(max_min(best, valid, degree(ids.unsqueeze(0).expand(bsz, -1))))
+        # one row of targets shared by every query (the family broadcasts it)
+        out.append(max_min(best, valid, degree(ids.unsqueeze(0))))
     return out[0] if len(out) == 1 else th.cat(out, dim=1)
 
 
@@ -410,9 +412,28 @@ class MaxMinBeam:
             compute, lambda rows, new, cur: th.where(rows.unsqueeze(1), new, cur),
             lambda new, rows: th.where(rows.unsqueeze(1), new, th.full_like(new, EMPTY)))
 
+    def hop_top(self, family, scores, relations, first, anchors):
+        """The ``k`` best elements after a hop (:func:`top_witnesses` of :meth:`hop`), through
+        the family's ``role_hop_top`` when it has one and the hop follows roles only."""
+        plan = HopPlan(relations, family.device, self.opt.isa, self.opt.isa_inv, first, anchors)
+        quick = getattr(family, "role_hop_top", None)
+        if plan.only == "role" and quick is not None:
+            ids, best, valid = top_witnesses(scores, self.k)
+            found = quick(ids, best, valid, plan.role_ids, self.k)
+            if found is not None:
+                top, value = found
+                ok = value > EMPTY
+                used = max(1, int(ok.any(dim=0).sum()))
+                return top[:, :used], value[:, :used], ok[:, :used]
+        return top_witnesses(self.hop(family, scores, relations, first, anchors), self.k)
+
     def along(self, family, scores, role_ids):
         """A role hop: max-min of the best witnesses with ``family.role_degree``."""
         ids, best, valid = top_witnesses(scores, self.k)
+        quick = getattr(family, "role_hop_all", None)
+        out = quick(ids, best, valid, role_ids) if quick is not None else None
+        if out is not None:
+            return out
         return compose_all(family, lambda x: family.role_degree(ids, role_ids, x), best, valid)
 
     def to_classes(self, family, scores):
@@ -492,9 +513,12 @@ class WitnessChain:
             chosen = []
             for i, hop in enumerate(node.hops[:-1]):
                 first = i == 0
-                dense = self.beam.hop(search, dense if first else sparsify(dense, self.k), hop,
-                                      first, anchors if first else None)
-                chosen.append(top_witnesses(dense, self.k))
+                if not first:   # the next hop starts from the witnesses only
+                    ids, best, ok = chosen[-1]
+                    dense = th.full_like(dense, EMPTY).scatter(
+                        1, ids, th.where(ok, best, th.full_like(best, EMPTY)))
+                chosen.append(self.beam.hop_top(search, dense, hop, first,
+                                                anchors if first else None))
         ids, _, valid = chosen[0]
         best = self.first(family, elements, node.hops[0], ids, anchors, tau)
         return self._follow(family, node.hops[1:], chosen[1:], ids, best, valid, targets, tau)
@@ -554,6 +578,28 @@ class WitnessChain:
             return max_min(best, valid, family.role_degree(ids, plan.role_ids, targets, tau=tau))
         return plan.combine(compute, lambda rows, new, cur: th.where(rows.unsqueeze(1), new, cur),
                             lambda new, rows: new)
+
+
+def index_vector(ids, device, name):
+    """``ids`` (an int, a sequence, an array or a tensor of integers) as a 1-D index tensor on
+    ``device`` (no range check)."""
+    if isinstance(ids, th.Tensor):
+        if ids.dtype == th.bool or ids.is_floating_point() or ids.is_complex():
+            raise ValueError(f"{name} must contain integer indices, got dtype={ids.dtype}")
+        out = ids.to(device=device, dtype=th.long)
+    elif isinstance(ids, (int, np.integer)) and not isinstance(ids, (bool, np.bool_)):
+        out = th.tensor([int(ids)], dtype=th.long, device=device)
+    elif isinstance(ids, (list, tuple, np.ndarray)):
+        arr = np.asarray(ids)
+        if arr.size and arr.dtype.kind not in "iu":
+            raise ValueError(f"{name} must contain integer indices, got dtype={arr.dtype}")
+        out = th.as_tensor(arr.astype(np.int64), device=device)
+    else:
+        raise TypeError(f"{name} must be an int, Sequence[int], or Tensor, got "
+                        f"{type(ids).__name__}")
+    if out.ndim > 1:
+        raise ValueError(f"{name} must be 1-D (or scalar), got shape {tuple(out.shape)}")
+    return out.reshape(-1)
 
 
 def as_target_table(ids, bsz, n, device, name, allow_empty=False) -> Tuple[th.Tensor, bool]:

@@ -153,10 +153,7 @@ def component_extremes(lower, upper, valid=None) -> th.Tensor:
         raise ValueError(
             f"lower and upper must be 2-D tensors of identical shape, got "
             f"{tuple(lower.shape)} and {tuple(upper.shape)}")
-    ends = box_corners(lower, upper)
-    if valid is not None:
-        ends = th.where(valid.view(-1, 1, 1), ends, th.zeros_like(ends))
-    return ends
+    return box_corners(lower, upper, valid=valid)
 
 
 def sample_active_component(regions, generator, n_adv=2, hinge_fn: Hinge = None,

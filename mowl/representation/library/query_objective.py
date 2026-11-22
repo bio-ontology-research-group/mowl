@@ -8,9 +8,10 @@ knows nothing about boxes, distributions or cones, so every query method (and ev
 combination of their parts) can use any of its options.
 """
 
+import torch as th
 import torch.nn.functional as F
 
-__all__ = ["QueryObjective"]
+__all__ = ["QueryObjective", "AnswerMarginLoss"]
 
 
 class QueryObjective:
@@ -76,3 +77,38 @@ class QueryObjective:
             pos_loss = pos_loss + positive.sum()
             neg_loss = neg_loss + negative.sum()
         return (pos_loss / total + neg_loss / total) / 2
+
+
+class AnswerMarginLoss:
+    """Margin loss of the scores of answers and of non-answers of queries (scores positive
+    inside the answer region):
+
+    .. math:: \\operatorname{mean}[m - s^+]_+ + \\operatorname{mean}[m + s^-]_+ ,
+
+    the second term only when non-answers are given. Used by GroundedEL's witness-chain
+    queries (:func:`mowl.nn.el.grounded.queries.query_witness_loss`); any scorer of targets
+    can use it.
+
+    :param margin: The margin :math:`m`.
+    """
+
+    def __init__(self, margin=0.0):
+        self.margin = float(margin)
+
+    @staticmethod
+    def targets(answers, negatives=None):
+        """The targets to score: the answers, then the non-answers (``(B, M+)``, ``(B, M-)``)."""
+        if negatives is None or negatives.shape[1] == 0:
+            return answers
+        return th.cat([answers, negatives], dim=1)
+
+    def __call__(self, scores, n_answers, with_negatives, reference):
+        """The loss of ``scores`` of :meth:`targets` (the first ``n_answers`` columns are
+        answers). ``reference`` (a parameter) gives a zero loss with a gradient path when
+        there are no queries."""
+        if scores.shape[0] == 0:
+            return reference.sum() * 0.0
+        loss = F.relu(self.margin - scores[:, :n_answers]).mean()
+        if with_negatives and scores.shape[1] > n_answers:
+            loss = loss + F.relu(self.margin + scores[:, n_answers:]).mean()
+        return loss

@@ -59,12 +59,13 @@ import numpy as np
 import torch as th
 
 from mowl.evaluation.query_search import (MaxMinBeam, RegionCompiler, WitnessChain,
-                                          as_target_table, read_batch)
+                                          as_target_table, index_vector, read_batch)
 from mowl.nn.el.grounded.module import GroundedELModule
 from mowl.nn.el.grounded.sampling import is_grounded_geometry
 from mowl.nn.el.structural import Regions
 from mowl.representation.library.box_union_algebra import BoundedBoxUnions
 from mowl.representation.library.element_box_family import ElementBoxFamily
+from mowl.representation.library.query_objective import AnswerMarginLoss
 
 __all__ = [
     "MultiBox",
@@ -148,23 +149,7 @@ def _finite(name, value):
 
 def _vector(ids, device, name):
     """``ids`` as a 1-D index tensor (no range check)."""
-    if isinstance(ids, th.Tensor):
-        if ids.dtype == th.bool or ids.is_floating_point() or ids.is_complex():
-            raise ValueError(f"{name} must contain integer indices, got dtype={ids.dtype}")
-        out = ids.to(device=device, dtype=th.long)
-    elif isinstance(ids, (int, np.integer)) and not isinstance(ids, (bool, np.bool_)):
-        out = th.tensor([int(ids)], dtype=th.long, device=device)
-    elif isinstance(ids, (list, tuple, np.ndarray)):
-        arr = np.asarray(ids)
-        if arr.size and (arr.dtype == np.bool_ or not np.issubdtype(arr.dtype, np.integer)):
-            raise ValueError(f"{name} must contain integer indices, got dtype={arr.dtype}")
-        out = th.as_tensor(arr.astype(np.int64), device=device)
-    else:
-        raise TypeError(f"{name} must be an int, Sequence[int], or Tensor, got "
-                        f"{type(ids).__name__}")
-    if out.ndim > 1:
-        raise ValueError(f"{name} must be 1-D (or scalar), got shape {tuple(out.shape)}")
-    return out.reshape(-1)
+    return index_vector(ids, device, name)
 
 
 def _boxes_of(region, name, dim=None):
@@ -254,22 +239,16 @@ def _witness(module, chain, structure, queries, targets, one):
 
 
 def _hinge_loss(scores, n_pos, pos_one, neg, neg_one, margin, return_scores, module):
-    """:math:`[m - s^+]_+` averaged, plus :math:`[m + s^-]_+` averaged for negatives."""
-    if scores.shape[0] == 0:
-        loss = module.elem_pos.weight.sum() * 0.0
-    else:
-        loss = th.relu(margin - scores[:, :n_pos]).mean()
-    neg_scores = None
-    if neg is not None:
-        neg_scores = scores[:, n_pos:]
-        if neg.shape[1] > 0 and scores.shape[0] > 0:
-            loss = loss + th.relu(margin + neg_scores).mean()
-        neg_scores = neg_scores.squeeze(1) if neg_one and neg.shape[1] > 0 else neg_scores
+    """:class:`~mowl.representation.library.query_objective.AnswerMarginLoss` of the scores,
+    and the scores of answers and non-answers in the shape they were given."""
+    loss = AnswerMarginLoss(margin)(scores, n_pos, neg is not None, module.elem_pos.weight)
     if not return_scores:
         return loss
-    pos_scores = scores[:, :n_pos]
+    pos_scores, neg_scores = scores[:, :n_pos], None
+    if neg is not None:
+        neg_scores = scores[:, n_pos:]
+        neg_scores = neg_scores.squeeze(1) if neg_one and neg.shape[1] > 0 else neg_scores
     return loss, pos_scores.squeeze(1) if pos_one else pos_scores, neg_scores
-
 
 def anchor(
     module: GroundedELModule,
@@ -1097,7 +1076,7 @@ def query_witness_loss(
     pos, pos_one = as_target_table(answers, bsz, n, device, "answers")
     neg, neg_one = (None, False) if negatives is None else \
         as_target_table(negatives, bsz, n, device, "negatives", allow_empty=True)
-    both = pos if neg is None else th.cat([pos, neg], dim=1)
+    both = AnswerMarginLoss.targets(pos, neg)
     scores = _witness(module, chain, structure, queries, both, False)
     return _hinge_loss(scores, pos.shape[1], pos_one, neg, neg_one, margin, return_scores,
                        module)

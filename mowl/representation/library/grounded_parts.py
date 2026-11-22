@@ -305,6 +305,20 @@ class ElementDomain(nn.Module):
                 th.tensor(inv_softplus(0.1), dtype=w.dtype, device=w.device))
         return self.raw_tau_s
 
+    @staticmethod
+    def domain_size(nb_classes, nb_individuals):
+        """Elements of a domain with one witness per class and one element per individual."""
+        return nb_classes + nb_individuals
+
+    @property
+    def nb_individuals(self):
+        """The elements after the class witnesses."""
+        return self.nb_elements - self.nb_classes
+
+    def individual(self, ids):
+        """The elements of the individuals ``ids`` (they follow the class witnesses)."""
+        return self.nb_classes + ids
+
     @property
     def tau_s(self):
         """The positive score temperature :math:`\\max(\\operatorname{softplus}(\\text{raw}),
