@@ -368,7 +368,7 @@ class ComposedGeometry(ELModule, Geometry):
                 project()
 
     def param_groups(self):
-        """Parameter groups for :class:`~mowl.nn.order.manifolds.RiemannianSGD`: those of
+        """Parameter groups for :class:`~mowl.representation.library.manifolds.RiemannianSGD`: those of
         the class model, with the manifold of every table that lives on one, and the rest."""
         groups = list(self.class_model.param_groups())
         seen = {id(p) for g in groups for p in g["params"]}

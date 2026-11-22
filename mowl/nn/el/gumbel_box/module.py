@@ -1,6 +1,5 @@
 r"""Gumbel box embeddings (Dasgupta et al., NeurIPS 2020) over the class taxonomy, built from
 parts."""
-import torch as th
 
 from mowl.representation.geometry import ComposedGeometry
 from mowl.representation.library.hierarchy_methods import gumbel_box
@@ -68,11 +67,3 @@ class GumbelBoxModule(FlatLossOption, ComposedGeometry):
         a = self.class_model(sub, detach_size=detach_delta)
         b = self.class_model(sup, detach_size=detach_delta)
         return -self.measure.energy(a, b).reshape(-1)
-
-    def positive_loss(self, sub, sup):
-        """Cost of ``sub ⊑ sup``, ``(B,)``."""
-        return self.inside(self.classes(sub), self.classes(sup)).reshape(-1)
-
-    def negative_loss(self, sub, sup):
-        """Cost of a pair that is *not* ordered, ``(B,)``."""
-        return self.cost("gci0", th.stack([sub, sup], dim=1), True).reshape(-1)

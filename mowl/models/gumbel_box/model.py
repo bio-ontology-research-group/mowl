@@ -1,5 +1,5 @@
 r"""Gumbel box embeddings of the class taxonomy."""
-from mowl.models.order_parts_a import TaxonomyEmbeddingModel
+from mowl.models.taxonomy_base import TaxonomyEmbeddingModel
 from mowl.nn.el.gumbel_box.module import GumbelBoxModule
 
 

@@ -1,6 +1,6 @@
 import torch as th
 
-from mowl.models.order_base import OrderEmbeddingModel
+from mowl.baselines.models.order_base import OrderEmbeddingModel
 from mowl.baselines.nn.order.module import ShadowConesModule
 
 
@@ -23,7 +23,7 @@ class ShadowCones(OrderEmbeddingModel):
         -\log \frac{\exp(-\max(E^+, \gamma_2))}{\sum_{k}\exp(\max(\gamma_1 - E^-_k, 0))}.
 
     Only subclass axioms between named classes (``gci0``) are used; see
-    :class:`~mowl.models.order_base.OrderEmbeddingModel`.
+    :class:`~mowl.baselines.models.order_base.OrderEmbeddingModel`.
 
     .. note::
         Adaptations and deviations. Curvature is fixed at :math:`-1` (the paper's

@@ -24,7 +24,7 @@ class HyperbolicCones(OrderEmbeddingModel):
     existential restrictions and roles are not represented and are ignored, and
     disjointness cannot be expressed by cones. Optimisation is Riemannian SGD with the
     exponential map of the Poincare ball and a projection that keeps points outside the
-    :math:`\epsilon`-ball around the origin (:class:`~mowl.nn.order.manifolds.RiemannianSGD`).
+    :math:`\epsilon`-ball around the origin (:class:`~mowl.representation.library.manifolds.RiemannianSGD`).
 
     .. note::
         Adaptations. The paper initialises with 100 epochs of Poincare embeddings

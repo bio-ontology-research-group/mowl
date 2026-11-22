@@ -1,5 +1,3 @@
-import torch as th
-
 from mowl.models.order_base import OrderEmbeddingModel
 from mowl.nn.order.module import DiskEmbeddingsModule
 
@@ -58,9 +56,12 @@ class DiskEmbeddings(OrderEmbeddingModel):
         self.module = DiskEmbeddingsModule(
             len(self.class_index_dict), self.embed_dim, geometry=self.geometry,
             margin=self.margin, init_scale=self.init_scale, seed=self.seed).to(self.device)
+        self.module.default_regimes = (self._default_loss,)
+        self._attach_default_regimes()
 
-    def compute_loss(self, pos_scores, neg_scores=None):
-        loss = th.relu(pos_scores).mean()
-        if neg_scores is not None:
-            loss = loss + th.mean(neg_scores)
-        return loss
+    def _default_loss(self):
+        """Eq. 10 and 11 of the paper: the hinge of the protrusion of each positive plus the
+        mean cost of the negatives, the regime :class:`~mowl.training.SumLoss` with
+        ``positive_floor``."""
+        from mowl.training.losses import SumLoss
+        return SumLoss(positive_floor=True)

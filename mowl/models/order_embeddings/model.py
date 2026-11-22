@@ -1,5 +1,5 @@
 r"""Order embeddings of the class taxonomy."""
-from mowl.models.order_parts_a import TaxonomyEmbeddingModel
+from mowl.models.taxonomy_base import TaxonomyEmbeddingModel
 from mowl.nn.el.order_embeddings.module import OrderEmbeddingsModule
 
 
@@ -19,7 +19,7 @@ class OrderEmbeddings(TaxonomyEmbeddingModel):
 
     **Supported.** Axioms :math:`C \sqsubseteq D` between named classes (training and
     scoring: subsumption prediction/inference). Nothing else in the ontology is used
-    (:class:`~mowl.models.order_parts_a.TaxonomyEmbeddingModel`). This is an
+    (:class:`~mowl.models.taxonomy_base.TaxonomyEmbeddingModel`). This is an
     **adaptation**: the paper embeds hypernymy, entailment and image-caption order; mOWL
     takes the subclass axioms of the ontology as the order pairs. A zero loss on the
     training pairs implies that the embedding preserves the *transitive closure* of the

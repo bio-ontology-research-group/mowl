@@ -1,6 +1,6 @@
 import torch as th
 
-from mowl.models.order_base import OrderEmbeddingModel
+from mowl.baselines.models.order_base import OrderEmbeddingModel
 from mowl.baselines.nn.order.module import DiskEmbeddingsModule
 
 
@@ -18,7 +18,7 @@ class DiskEmbeddings(OrderEmbeddingModel):
     SGD, with the exponential map of the Lorentz model for hyperbolic centres.
 
     Only subclass axioms between named classes (``gci0``) are used; see
-    :class:`~mowl.models.order_base.OrderEmbeddingModel`.
+    :class:`~mowl.baselines.models.order_base.OrderEmbeddingModel`.
 
     .. note::
         Adaptations. Ranking by the signed protrusion :math:`l` (not its positive part)

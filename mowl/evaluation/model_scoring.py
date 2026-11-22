@@ -38,7 +38,7 @@ import torch as th
 logger = logging.getLogger(__name__)
 
 __all__ = ["UnsupportedAxiomForm", "UnsupportedScoring", "axiom_scoring_of",
-           "module_scores", "evaluation_model_scores", "method_scores", "PairClassifierHead",
+           "module_scores", "pair_costs", "evaluation_model_scores", "method_scores", "PairClassifierHead",
            "pair_classifier_scores", "resolve_model_scorer", "scorable_forms"]
 
 
@@ -73,6 +73,18 @@ def _per_row(out, n):
 def module_scores(model, gci_name, rows):
     """``model.module(rows, gci_name)``, one cost per row."""
     return _per_row(model.module(rows, gci_name), len(rows))
+
+
+def pair_costs(model, sub, sup, gci_name="gci0"):
+    """The cost (lower: more plausible) the module of ``model`` gives to the axioms
+    ``sub[i] ⊑ sup[i]``, one per pair, without gradient and in evaluation mode. ``sub`` and
+    ``sup`` are class IRIs or class indices. A ``(n,)`` tensor."""
+    index = model.class_index_dict
+    first = th.tensor([index.get(a, a) for a in sub], dtype=th.long, device=model.device)
+    second = th.tensor([index.get(a, a) for a in sup], dtype=th.long, device=model.device)
+    with th.no_grad():
+        model.module.eval()
+        return model.module(th.stack([first, second], dim=1), gci_name).reshape(len(sub))
 
 
 def evaluation_model_scores(model, gci_name, rows):

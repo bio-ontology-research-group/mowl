@@ -1,7 +1,7 @@
 r"""Box lattice embeddings of the class taxonomy."""
 import torch as th
 
-from mowl.models.order_parts_a import TaxonomyEmbeddingModel
+from mowl.baselines.models.taxonomy_base import TaxonomyEmbeddingModel
 from mowl.baselines.nn.el.box_lattice.module import BoxLatticeModule
 
 

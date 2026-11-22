@@ -14,8 +14,6 @@ function. The direct, hand-written loss modules they were once are the reference
 
 import contextlib
 
-import torch as th
-
 from mowl.representation.library import cone_regions as C
 from mowl.representation.geometry import ComposedGeometry
 from mowl.representation.library import hierarchy_methods as HM
@@ -83,9 +81,7 @@ class OrderModule(ComposedGeometry):
         return self.measure.inside(self.classes(child), self.classes(parent), 0.0).reshape(-1)
 
     def negative_loss(self, energy):
-        if self.measure.negative_form == "energy":
-            return energy
-        return th.relu(self.margin - energy)
+        return self.measure.negative_of(energy, self.margin)
 
 
 class HyperbolicConesModule(OrderModule):

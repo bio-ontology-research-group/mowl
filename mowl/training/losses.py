@@ -124,17 +124,23 @@ class SumLoss(_ScoreLoss):
     (``neg_weight=0.05``). Attach it to ELBE to replace ELBE's MSE loss by the plain sum.
     Negatives are scored by the module's negative loss. ``pos_weight`` weights the mean
     positive loss (ELK-Em weights its assertion losses, ``abox_pos_weight``).
+    ``positive_floor=True`` takes the hinge :math:`\\max(0, s^+)` of every positive score
+    first, for modules whose score of a stated axiom is a signed energy (disk embeddings,
+    Eq. 10 and 11).
     """
 
     key = "loss-sum"
     needs_positive_form = False
 
-    def __init__(self, neg_weight=1.0, normal_forms=None, pos_weight=1.0):
+    def __init__(self, neg_weight=1.0, normal_forms=None, pos_weight=1.0, positive_floor=False):
         super().__init__(normal_forms=normal_forms, neg_scores="module")
         self.neg_weight = float(neg_weight)
         self.pos_weight = float(pos_weight)
+        self.positive_floor = bool(positive_floor)
 
     def combine(self, gci_name, pos, neg):
+        if self.positive_floor:
+            pos = th.relu(pos)
         loss = pos.mean() if self.pos_weight == 1.0 else self.pos_weight * pos.mean()
         if neg is not None:
             loss = loss + self.neg_weight * neg.mean()

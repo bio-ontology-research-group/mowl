@@ -9,6 +9,8 @@ step. The classes themselves live next to the earlier modules (``mowl.nn.el.<met
 ``mowl.nn.graph.<method>``), with the constructor arguments those had.
 """
 
+import torch as th
+
 from mowl.representation.geometry import ComposedGeometry
 from mowl.representation.library.hierarchy_geometry import LatticeGeometry
 
@@ -63,3 +65,11 @@ class FlatLossOption:
         if not self.per_axiom_column and out.dim() == 2 and out.shape[-1] == 1:
             return out.squeeze(-1)
         return out
+
+    def positive_loss(self, sub, sup):
+        """Cost of ``sub ⊑ sup`` for index tensors, ``(B,)``."""
+        return self.inside(self.classes(sub), self.classes(sup)).reshape(-1)
+
+    def negative_loss(self, sub, sup):
+        """Cost of a pair that is *not* ordered, for index tensors, ``(B,)``."""
+        return self.cost("gci0", th.stack([sub, sup], dim=1), True).reshape(-1)

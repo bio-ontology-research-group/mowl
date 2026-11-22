@@ -1,5 +1,4 @@
 r"""Order embeddings (Vendrov et al., ICLR 2016) over the class taxonomy, built from parts."""
-import torch as th
 
 from mowl.representation.geometry import ComposedGeometry
 from mowl.representation.library.hierarchy_methods import order_embeddings
@@ -44,12 +43,3 @@ class OrderEmbeddingsModule(FlatLossOption, ComposedGeometry):
     def vectors(self, idx):
         """The non-negative vectors of the classes ``idx``."""
         return self.classes(idx).centre
-
-    def positive_loss(self, sub, sup):
-        """Cost of ``sub ⊑ sup``, ``(B,)``."""
-        return self.inside(self.classes(sub), self.classes(sup)).reshape(-1)
-
-    def negative_loss(self, sub, sup):
-        """Cost of a pair that is *not* ordered (the hinge), ``(B,)``."""
-        return self.cost("gci0", th.stack([sub, sup], dim=1), True).reshape(-1)
-

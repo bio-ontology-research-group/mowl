@@ -100,11 +100,3 @@ class BoxLatticeModule(FlatLossOption, ComposedGeometry):
         a = self.class_model(sub, detach_size=detach_delta)
         b = self.class_model(sup, detach_size=detach_delta)
         return self.measure.conditional(a, b)[0].reshape(-1)
-
-    def positive_loss(self, sub, sup):
-        """Cost of ``sub ⊑ sup``, ``(B,)``."""
-        return self.inside(self.classes(sub), self.classes(sup)).reshape(-1)
-
-    def negative_loss(self, sub, sup):
-        """Cost of a pair that is *not* ordered, ``(B,)``."""
-        return self.cost("gci0", th.stack([sub, sup], dim=1), True).reshape(-1)

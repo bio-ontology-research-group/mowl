@@ -1,11 +1,12 @@
 """Shared model code of the hierarchy-embedding methods (hyperbolic cones, shadow cones,
 disk embeddings): they embed the told subclass order between *named* classes."""
 
-import numpy as np
 import torch as th
 
 from mowl.base_models.elmodel import EmbeddingELModel
-from mowl.nn.order.manifolds import RiemannianSGD
+from mowl.evaluation.model_scoring import pair_costs
+from mowl.representation.library.manifolds import RiemannianSGD
+from mowl.training.taxonomy import named_pair_rows, pair_codes, redraw_known_pairs
 
 _THING = "http://www.w3.org/2002/07/owl#Thing"
 _NOTHING = "http://www.w3.org/2002/07/owl#Nothing"
@@ -66,13 +67,11 @@ class OrderEmbeddingModel(EmbeddingELModel):
             base = EmbeddingELModel.training_datasets.fget(self)
             data = base["gci0"][:] if "gci0" in base else th.zeros((0, 2), dtype=th.long)
             n_named = len(self.named_class_index_dict)
-            keep = (data < n_named).all(dim=1) & (data[:, 0] != data[:, 1])
-            nothing = self.class_index_dict.get(_NOTHING)
-            if nothing is not None:
-                keep &= data[:, 0] != nothing
-            data = th.unique(data[keep], dim=0)
-            self._order_datasets = {"gci0": _PairDataset(data.to(self.device))}
-            self._known_codes = th.unique(data[:, 0] * n_named + data[:, 1])
+            data = named_pair_rows(data, n_named, distinct=True,
+                                   exclude_first=self.class_index_dict.get(_NOTHING),
+                                   device=self.device)
+            self._order_datasets = {"gci0": _PairDataset(data)}
+            self._known_codes = pair_codes(data, n_named)
             self._known_pairs = set(self._known_codes.tolist())
         return self._order_datasets
 
@@ -80,25 +79,13 @@ class OrderEmbeddingModel(EmbeddingELModel):
         neg = super().generate_negatives(gci_name, gci_dataset)
         if neg is None or len(neg) == 0:
             return neg
-        n = len(gci_dataset)
-        n_named = len(self.named_class_index_dict)
-        ids = np.array(list(self.named_class_index_dict.values()))
-        columns = th.tensor(self.get_negative_sampling_config()[gci_name]["corrupt_column"],
-                            dtype=th.long, device=neg.device)
-        column_of_row = columns.repeat_interleave(n)
-        known = self._known_codes.to(neg.device)
         # Vectorised: one pass over all negatives costs a few tensor operations, whatever
         # their number (a Python loop over rows made an epoch of 800 000 negatives take
         # thousands of seconds on a GPU, one device synchronisation per row).
-        for _ in range(max_resample):
-            codes = neg[:, 0] * n_named + neg[:, 1]
-            bad = th.nonzero(th.isin(codes, known) | (neg[:, 0] == neg[:, 1])).flatten()
-            if len(bad) == 0:
-                break
-            fresh = th.as_tensor(np.random.choice(ids, size=len(bad)), dtype=neg.dtype,
-                                 device=neg.device)
-            neg[bad, column_of_row[bad]] = fresh
-        return neg
+        return redraw_known_pairs(
+            neg, len(gci_dataset), self.get_negative_sampling_config()[gci_name]["corrupt_column"],
+            self._known_codes, len(self.named_class_index_dict),
+            list(self.named_class_index_dict.values()), max_resample)
 
     # -- training ------------------------------------------------------------------------
     def get_optimizer(self):
@@ -112,9 +99,4 @@ class OrderEmbeddingModel(EmbeddingELModel):
     def energies(self, child_iris, parent_iris):
         """Energy (lower: more plausible) of the axioms ``child ⊑ parent`` given as lists
         of class IRIs."""
-        cid = self.class_index_dict
-        rows = th.tensor([[cid[c], cid[p]] for c, p in zip(child_iris, parent_iris)],
-                         device=self.device)
-        with th.no_grad():
-            self.module.eval()
-            return self.module(rows, "gci0").reshape(len(rows))  # one energy per axiom
+        return pair_costs(self, child_iris, parent_iris)

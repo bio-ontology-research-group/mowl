@@ -26,7 +26,7 @@ method                 class model         measure           space
 import torch as th
 
 from mowl.representation.library import cone_regions as C
-from mowl.nn.order.manifolds import (Euclidean, Hyperboloid, PoincareBall, Sphere,
+from mowl.representation.library.manifolds import (Euclidean, Hyperboloid, PoincareBall, Sphere,
                                      UpperHalfSpace)
 from mowl.representation.adapters import register_adapter
 from mowl.representation.library.hierarchy_classes import (

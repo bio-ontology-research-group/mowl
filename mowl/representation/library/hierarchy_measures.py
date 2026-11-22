@@ -29,7 +29,7 @@ import math
 import torch as th
 import torch.nn.functional as F
 
-from mowl.nn.order.manifolds import Euclidean, UpperHalfSpace
+from mowl.representation.library.manifolds import Euclidean, UpperHalfSpace
 from mowl.representation.measures import Bounds, RegionMeasure
 from mowl.representation.methods import DEFAULT_MEASURE, register_measure
 from mowl.representation.regions import Ball, Box, ConstructorUnavailable, CornerBox
@@ -120,9 +120,13 @@ class EnergyMeasure(HierarchyMeasure):
             return self.raw(a, b)
         return th.relu(self.raw(a, b) + margin)
 
+    def negative_of(self, energy, margin=0.0):
+        """The cost of a pair that is not ordered, from its ``energy``: the hinge
+        :math:`\\max(0, \\gamma - e)`, or the energy itself for ``negative_form="energy"``."""
+        return energy if self.negative_form == "energy" else th.relu(margin - energy)
+
     def negative(self, a, b, margin=0.0):
-        e = self.energy(a, b)
-        return e if self.negative_form == "energy" else th.relu(margin - e)
+        return self.negative_of(self.energy(a, b), margin)
 
 
 # -- order violation ----------------------------------------------------------------------
@@ -433,7 +437,7 @@ class ShadowCone(EnergyMeasure):
 
     :param formulation: ``"penumbral-ball"``, ``"penumbral-half-space"``, ``"umbral-ball"``
         or ``"umbral-half-space"``; the half-space ones need points of an
-        :class:`~mowl.nn.order.manifolds.UpperHalfSpace`, the others of a Poincare ball.
+        :class:`~mowl.representation.library.manifolds.UpperHalfSpace`, the others of a Poincare ball.
     :param radius, horosphere_height, gamma3: See
         :class:`~mowl.representation.library.cone_regions.Shadow`.
 

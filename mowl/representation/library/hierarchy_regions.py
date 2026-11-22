@@ -7,10 +7,10 @@ region: it is a constraint of the class model (:class:`~.hierarchy_classes.UnitC
 
 *Points on a manifold.* :class:`Point` and its refinements :class:`OrderCone`,
 :class:`ConePoint` and :class:`Disk` carry the manifold they live on, so that a measure
-needs nothing but the regions. The manifolds are those of :mod:`mowl.nn.order.manifolds`
+needs nothing but the regions. The manifolds are those of :mod:`mowl.representation.library.manifolds`
 (the library of the cones, shadow cones and disks); :class:`CurvedBall` adds the curvature
 parameter that HiT needs, see its docstring for what merging the two hyperbolic libraries
-(:mod:`mowl.nn.order.manifolds` and :mod:`mowl.nn.lm.hyperbolic`) would take.
+(:mod:`mowl.representation.library.manifolds` and :mod:`mowl.nn.lm.hyperbolic`) would take.
 """
 
 import math
@@ -19,7 +19,7 @@ from dataclasses import dataclass
 import torch as th
 
 from mowl.nn.lm import hyperbolic as H
-from mowl.nn.order.manifolds import (Euclidean, Hyperboloid, PoincareBall, Sphere,
+from mowl.representation.library.manifolds import (Euclidean, Hyperboloid, PoincareBall, Sphere,
                                      UpperHalfSpace)
 from mowl.representation.regions import ConstructorUnavailable, CornerBox, Region
 
@@ -44,7 +44,7 @@ class Point(Region):
     """A point of a manifold.
 
     :param centre: ``(B, n)`` coordinates in the model of the manifold.
-    :param manifold: The manifold (:mod:`mowl.nn.order.manifolds`).
+    :param manifold: The manifold (:mod:`mowl.representation.library.manifolds`).
     :param ids: The row ids the region was looked up with, where it has any: a geometry that
         offers :math:`\\exists r.C` by lookup (CatE) needs the id of the filler.
     """
@@ -102,13 +102,13 @@ class CurvedBall(PoincareBall):
     """The Poincare ball of curvature :math:`-c` (radius :math:`1/\\sqrt{c}`), using the
     functions of :mod:`mowl.nn.lm.hyperbolic` (HiT, OnT).
 
-    **What a merge of the two hyperbolic libraries would take.** ``mowl.nn.order.manifolds``
+    **What a merge of the two hyperbolic libraries would take.** ``mowl.representation.library.manifolds``
     is already written on top of ``mowl.nn.lm.hyperbolic`` (it calls ``expmap`` and
     ``distance`` with :math:`c = 1`), so they differ in two things only: the manifolds have
     no curvature parameter and no ``norm`` (the depth of a point, :math:`d(x, 0)`). Merging
-    means: (1) give :class:`~mowl.nn.order.manifolds.PoincareBall` a ``c`` and use it in
+    means: (1) give :class:`~mowl.representation.library.manifolds.PoincareBall` a ``c`` and use it in
     ``distance``, ``retract``, ``rgrad`` and ``max_norm``; (2) add ``norm`` to
-    :class:`~mowl.nn.order.manifolds.Manifold` (distance to the origin; the origin of the
+    :class:`~mowl.representation.library.manifolds.Manifold` (distance to the origin; the origin of the
     half-space is :math:`(0, \\dots, 0, 1)`, that of the hyperboloid :math:`e_0`);
     (3) keep ``mowl.nn.lm.hyperbolic`` as the single home of the formulas. This class is that
     change made in a subclass.

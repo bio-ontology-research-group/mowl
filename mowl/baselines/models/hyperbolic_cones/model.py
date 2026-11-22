@@ -1,4 +1,4 @@
-from mowl.models.order_base import OrderEmbeddingModel
+from mowl.baselines.models.order_base import OrderEmbeddingModel
 from mowl.baselines.nn.order.module import HyperbolicConesModule
 
 

@@ -21,7 +21,7 @@ import torch as th
 import torch.nn as nn
 
 from mowl.representation.library import cone_regions as C
-from mowl.nn.order.manifolds import (Euclidean, Hyperboloid, PoincareBall, Sphere,
+from mowl.representation.library.manifolds import (Euclidean, Hyperboloid, PoincareBall, Sphere,
                                      UpperHalfSpace)
 from mowl.representation.class_models import Classes
 from mowl.representation.library.hierarchy_regions import (
@@ -242,7 +242,7 @@ class PointClasses(HierarchyClasses):
     """A class is a point of a manifold (a table ``centres``; the coordinates are those of
     the model of the manifold, so a point of the hyperboloid has ``embed_dim + 1``).
 
-    :param manifold: A manifold of :mod:`mowl.nn.order.manifolds` (default: the Poincare
+    :param manifold: A manifold of :mod:`mowl.representation.library.manifolds` (default: the Poincare
         ball).
     :param init_scale, init_max_norm, init: See :func:`init_points`.
     :param table: An existing table to use instead of a new one.
