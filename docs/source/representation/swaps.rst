@@ -573,7 +573,7 @@ Axiom methods (ComposedEL, ComposedALC)
      - works
      - works
    * - ``shadow_cones``
-     - unavailable
+     - works
      - works
      - 
      - works
@@ -705,7 +705,7 @@ Expression methods
      - objective_options
      - regularizers
    * - ``e2r``
-     - unavailable
+     - works
      - unavailable
      - unavailable
      - unavailable
@@ -738,8 +738,8 @@ Reasons
 * ``expressive``, objective, unavailable: a model of triples is trained with a TripleLoss (loss= of GraphKGEModel), no cost of its geometry reads an Objective: replacing it would change nothing
 * ``expressive``, objective_options, unavailable: a model of triples is trained with a TripleLoss (loss= of GraphKGEModel), no cost of its geometry reads an Objective: replacing it would change nothing
 * ``faithel``, not supported: its TBox is constructed by a reasoner from the ontology and its classes are anchored to it; ComposedEL builds from sizes. Train it with FaithEL.
-* ``falcon``, classes, unavailable: the measure reads parts of its own region kind (fuzzy sets of a domain), which no other entry of the registry provides; every other class model is refused with the two sides named
-* ``falcon``, relations, unavailable: its relations are networks over pairs of fuzzy sets; geometric relation models map geometric regions and refuse fuzzy sets
+* ``falcon``, classes, unavailable: FALCON evaluates class expressions on an open domain of element vectors (Domain, completed by sampled anonymous elements): only its own network class model evaluates on that domain; every other class model is refused with the reason (build time)
+* ``falcon``, relations, unavailable: FALCON's relations are networks over pairs of element vectors of the domain and its sampled ABox objective needs a relation model: every geometric relation model, and none, is refused (build time)
 * ``gda_projection``, objective, unavailable: a model of triples is trained with a TripleLoss (loss= of GraphKGEModel), no cost of its geometry reads an Objective: replacing it would change nothing
 * ``gda_projection``, objective_options, unavailable: a model of triples is trained with a TripleLoss (loss= of GraphKGEModel), no cost of its geometry reads an Objective: replacing it would change nothing
 * ``graph_kge``, objective, unavailable: a model of triples is trained with a TripleLoss (loss= of GraphKGEModel), no cost of its geometry reads an Objective: replacing it would change nothing
@@ -747,7 +747,6 @@ Reasons
 * ``grounded``, not supported: GroundedELModule is a grounded program over a shared element domain, not an ELModule: ComposedEL refuses it; train it with GroundedEL.
 * ``reshuffle``, not supported: it is defined on a graph (its entities are encoded by message passing over the edges): ComposedEL has no edges to give it. Swap its parts through GraphKGEModel.
 * ``reshuffle``, not supported: reshuffle encodes its entities with a graph network that uses the matrices of its own relations
-* ``shadow_cones``, classes, unavailable: the cone measure compares the Point region of the hierarchy family (hierarchy_regions.Point), the registered 'point' class model gives another class of the same name (shapes_regions.Point): a duplicated region class, not a mathematical obstruction (reported, not fixed here)
 * ``attributed_dl``, source, unavailable: the data of the method is an attributed ontology, which no other source reads (each source reads one kind of data and refuses another with the two sides named)
 * ``box_milp``, source, unavailable: the only reading of a box model is 'boxes'; a finite model cannot in general be read as single boxes (boxes have the Helly property), so every other source is refused with both sides named
 * ``box_milp``, reading, unavailable: a box model is a set of boxes, it has no domain elements for the cell readings to place: only the 'boxes' reading reads it
@@ -759,7 +758,6 @@ Reasons
 * ``opa2vec``, not supported: one reading is registered (the vector of the entity's token): it is the method's own
 * ``owl2vec_star``, not supported: one reading is registered (the vector of the entity's token): it is the method's own
 * ``taxonomy_walks``, not supported: one reading is registered (the vector of the entity's token): it is the method's own
-* ``e2r``, classes, unavailable: the residual measure compares Subspace regions and the registry has no class model of subspaces (E2R's own SubspaceClasses is built by the method, not registered under a name): every registered class model is refused with both sides named
-* ``e2r``, relations, unavailable: E2R's relations map pairs of vectors (a relation is a vector of the pair space, dimension 2d); every registered relation model works in the dimension of one class region and does not evaluate against the pair equations (refused when the model is built)
+* ``e2r``, relations, unavailable: E2R's relations map pairs of vectors (a relation is a vector of the pair space, dimension 2d); the registered 'subspace' relation model is the method's own, and every other registered relation model works in the dimension of one class region and does not evaluate against the pair equations (refused 
 * ``e2r``, measure, unavailable: the measure of E2R is the residual of a point against a subspace; every other measure compares another region kind or has no residual (refused when the model is built)
 * ``e2r``, objective, unavailable: the losses of E2R are the equations of its axiom kinds (SubspaceObjective.kind_cost): a general Objective has none, and a SubspaceObjective is the method's own
