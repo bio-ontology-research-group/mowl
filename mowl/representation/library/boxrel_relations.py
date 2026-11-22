@@ -68,13 +68,19 @@ class TranslationBoxes(Relations):
         (Query2Box). Without it the inverse is the box shifted the other way.
     :param init_range: ``None`` (default): rows of norm one; a number: centres uniform in
         ``[-r, r]`` and widths in ``[0, r]`` (Query2Box).
+    :param clamp_extent: ``True`` (default): the half-width of a box that is shifted and widened
+        is cut at zero, so that every region is a box. ``False``: the plain sum, which with
+        ``activation="none"`` can be negative (the reference code of Query2Box). The other
+        activations never give a negative width, and for them the option changes nothing.
     """
 
     part = "box of translations"
 
     def __init__(self, size=None, embed_dim=None, vectors=None, offsets=None,
-                 activation="abs", convention="y-x", inverse_of=None, init_range=None):
+                 activation="abs", convention="y-x", inverse_of=None, init_range=None,
+                 clamp_extent=True):
         super().__init__()
+        self.clamp_extent = bool(clamp_extent)
         if activation not in _ACTIVATIONS:
             raise ValueError(f"activation must be one of {sorted(_ACTIVATIONS)}.")
         if convention not in ("y-x", "x-y"):
@@ -98,10 +104,10 @@ class TranslationBoxes(Relations):
         """The box of translations of the relations ``ids``."""
         return Box(self.vectors(ids), self.activation(self.offsets(ids)))
 
-    @staticmethod
-    def _grow(region, width):
+    def _grow(self, region, width):
         if isinstance(region, Box):
-            return region.grow(width)
+            grown = region.grow(width)
+            return Box(grown.centre, th.relu(grown.offset)) if self.clamp_extent else grown
         if isinstance(region, Ball):
             return region.grow(th.linalg.norm(width, dim=-1, keepdim=True))
         raise ConstructorUnavailable(

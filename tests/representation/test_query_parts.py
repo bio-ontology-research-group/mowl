@@ -141,7 +141,8 @@ class TestSwappableParts(TestCase):
         cone = ConEGeometry(E, R, D, hidden=16)
         aconeg = AConEGeometry(E, R, D)
         aconeg.load_state_dict(cone.state_dict(), strict=False)    # all but the network
-        rebuilt = cone_qe(tables=cone, relations="rotation")
+        # the aperture of AConE's code is wrapped; ConE's tables say how the complement reads
+        rebuilt = cone_qe(tables=cone, relations="rotation", aperture="wrap")
         self.assertEqual(rebuilt.parts["relations"], "rotation")
         generator = th.Generator().manual_seed(4)
         for name, sig in {**SIGNATURES, **NEGATIVE}.items():
@@ -153,6 +154,48 @@ class TestSwappableParts(TestCase):
                     self.assertTrue(th.allclose(x, y, atol=1e-6), name)
                 self.assertTrue(th.allclose(aconeg.logit(a, cand), rebuilt.logit(b, cand),
                                             atol=1e-5), name)
+
+    def test_options_of_the_modules_are_those_of_the_adapters(self):
+        th.manual_seed(6)
+        for kwargs in ({}, {"aperture": "clip"}, {"signed_negation": True},
+                       {"aperture": "clip", "signed_negation": True}):
+            module = AConEGeometry(E, R, D, **kwargs)
+            geometry = geometry_of(module)
+            self.assertEqual(geometry.relations.aperture, module.aperture_mode)
+            self.assertEqual(geometry.negation_part.signed, module.signed_negation)
+            generator = th.Generator().manual_seed(8)
+            for name, sig in {**SIGNATURES, **NEGATIVE}.items():
+                matrix = _ids(sig, 4, generator)
+                with th.no_grad():
+                    for x, y in zip(module.embed(sig, matrix), geometry.embed(sig, matrix)):
+                        self.assertTrue(th.allclose(x, y, atol=1e-6), (kwargs, name))
+        for kwargs in ({}, {"signed_negation": True}):
+            module = ConEGeometry(E, R, D, hidden=16, **kwargs)
+            self.assertEqual(geometry_of(module).negation_part.signed, module.signed_negation)
+        for kwargs in ({}, {"clamp_extent": True}):
+            module = Query2BoxGeometry(E, R, D, activation="none", **kwargs)
+            geometry = geometry_of(module)
+            self.assertEqual(geometry.relations.clamp_extent, module.clamp_extent)
+            generator = th.Generator().manual_seed(9)
+            for name, sig in SIGNATURES.items():
+                matrix = _ids(sig, 4, generator)
+                with th.no_grad():
+                    for x, y in zip(module.embed(sig, matrix), geometry.embed(sig, matrix)):
+                        self.assertTrue(th.allclose(x, y, atol=1e-6), (kwargs, name))
+
+    def test_builders_use_the_corrected_readings_except_the_authors_own(self):
+        # ConE and the rotation as a part: the complement never exceeds pi, apertures stay
+        # in [0, pi]; the AConE builder keeps the authors' code, Query2Box its reference code
+        one = cone_qe(5, 2, 3, embed_dim=4, relations="rotation")
+        self.assertEqual((one.relations.aperture, one.negation_part.signed),
+                         ("clip", False))
+        self.assertFalse(cone_qe(5, 2, 3, embed_dim=4).negation_part.signed)
+        two = acone(5, 2, 3, embed_dim=4)
+        self.assertEqual((two.relations.aperture, two.negation_part.signed),
+                         ("wrap", True))
+        self.assertFalse(query2box(5, 2, 3, embed_dim=4).relations.clamp_extent)
+        from mowl.representation.library.boxrel_relations import TranslationBoxes
+        self.assertTrue(TranslationBoxes(2, 3).clamp_extent)
 
     def test_acone_function_equals_cone_with_rotation(self):
         th.manual_seed(5)

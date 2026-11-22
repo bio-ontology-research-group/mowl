@@ -197,8 +197,8 @@ def _sizes(nb_classes, nb_relations, nb_individuals):
 
 
 def query2box(nb_classes=None, nb_relations=None, nb_individuals=0, embed_dim=32, gamma=24.0,
-              center_weight=0.02, activation="relu", intersection="attention", tables=None,
-              num_classes=None, extension=True):
+              center_weight=0.02, activation="relu", intersection="attention",
+              clamp_extent=False, tables=None, num_classes=None, extension=True):
     """Query2Box (Ren et al. 2020): point entities, boxes of translations, a learned
     intersection, no negation, the out-of-box plus in-box distance.
 
@@ -206,18 +206,23 @@ def query2box(nb_classes=None, nb_relations=None, nb_individuals=0, embed_dim=32
         with its inverse).
     :param intersection: ``"attention"`` (the paper) or ``"exact"``: the set intersection
         of the boxes, which has no parameters.
+    :param clamp_extent: ``False`` (default, as in the reference code): the half-width of a
+        projected box is the plain sum of the half-widths, which with ``activation="none"`` can
+        be negative. ``True``: clamped at 0 (the option of the part; the activations ``relu``
+        and ``softplus`` never give a negative one, and for them the two agree).
     :param tables: A :class:`~mowl.nn.query.geometry.Query2BoxGeometry` to share parameters
-        with (``activation`` and ``center_weight`` are then read from it).
+        with (``activation``, ``clamp_extent`` and ``center_weight`` are then read from it).
     """
     if tables is not None:
         for name, function in _ACTIVATIONS.items():
             if tables.activation is function:
                 activation = name
+        clamp_extent = tables.clamp_extent
         center_weight, dim, gamma = tables.cen, tables.dim, float(tables.gamma)
         entities = PointBoxes(table=tables.entity_embedding)
         relations = TranslationBoxes(vectors=tables.relation_embedding,
                                      offsets=tables.offset_embedding, activation=activation,
-                                     inverse_of=role_inverse)
+                                     inverse_of=role_inverse, clamp_extent=clamp_extent)
         attention = BoxAttentionIntersection(tables=tables)
     else:
         dim = embed_dim
@@ -225,7 +230,8 @@ def query2box(nb_classes=None, nb_relations=None, nb_individuals=0, embed_dim=32
         r = (gamma + 2.0) / dim
         entities = PointBoxes(n_entities, dim, init_range=r)
         relations = TranslationBoxes(n_rows, dim, activation=activation,
-                                     inverse_of=role_inverse, init_range=r)
+                                     inverse_of=role_inverse, init_range=r,
+                                     clamp_extent=clamp_extent)
         attention = BoxAttentionIntersection(dim)
     if intersection == "attention":
         operator = attention
@@ -267,12 +273,19 @@ def betae(nb_classes=None, nb_relations=None, nb_individuals=0, embed_dim=32, ga
 @register_method("cone_qe", trained_on="queries")
 def cone_qe(nb_classes=None, nb_relations=None, nb_individuals=0, embed_dim=32, gamma=20.0,
             center_weight=0.02, hidden=128, layers=1, dropout=0.0, relations="network",
-            tables=None, num_classes=None, extension=True):
+            signed_negation=False, aperture="clip", tables=None, num_classes=None,
+            extension=True):
     """ConE (Zhang et al. 2021): sector cones, a network relation model, the
     SemanticAverage / CardMin intersection, the complement and the angular distance.
 
     :param relations: ``"network"`` (ConE) or ``"rotation"`` (the relation model of AConE;
-        :func:`acone` is this call).
+        :func:`acone` is this call with the authors' readings below).
+    :param signed_negation: ``False`` (default): the complement of an aperture :math:`a` is
+        :math:`\\pi - |a|`, which never exceeds :math:`\\pi`; ``True``: :math:`\\pi - a`,
+        which does for a negative aperture (AConE's code).
+    :param aperture: With ``relations="rotation"``: ``"clip"`` (default) keeps the aperture
+        in :math:`[0, \\pi]`; ``"wrap"`` wraps it to :math:`(-\\pi, \\pi]`, which gives
+        negative apertures (AConE's code).
     :param tables: A :class:`~mowl.nn.query.geometry.ConEGeometry` (or, with
         ``relations="rotation"``, an :class:`~mowl.nn.query.geometry.AConEGeometry`) to
         share parameters with.
@@ -284,11 +297,13 @@ def cone_qe(nb_classes=None, nb_relations=None, nb_individuals=0, embed_dim=32, 
             raise ValueError("These tables have no projection network; use "
                              "relations='rotation'.")
         dim, gamma, center_weight = tables.dim, float(tables.gamma), tables.cen
+        signed_negation = tables.signed_negation
+        aperture = getattr(tables, "aperture_mode", aperture)
         angle_range = tables.embedding_range
         entities = ConePoints(table=tables.entity_embedding, angle_range=angle_range)
         rel = (ConeNetwork(tables=tables, inverse_of=role_inverse) if relations == "network"
                else ConeRotation(tables=tables, inverse_of=role_inverse,
-                                 aperture="wrap"))
+                                 aperture=aperture))
         operator = ConeAttentionIntersection(tables=tables)
         distance = ConeDistance(center_weight, modulus=tables.modulus)
     else:
@@ -299,22 +314,29 @@ def cone_qe(nb_classes=None, nb_relations=None, nb_individuals=0, embed_dim=32, 
         rel = (ConeNetwork(n_rows, dim, hidden, layers, angle_range=angle_range,
                            inverse_of=role_inverse) if relations == "network"
                else ConeRotation(n_rows, dim, angle_range=angle_range,
-                                 inverse_of=role_inverse, aperture="wrap"))
+                                 inverse_of=role_inverse, aperture=aperture))
         operator = ConeAttentionIntersection(dim, dropout)
         distance = ConeDistance(center_weight, angle_range=angle_range)
     return ComposedQueryGeometry(entities, rel, operator, distance, ConeBounds(),
-                                 negation=ConeComplement(signed=True), dim=dim, gamma=gamma,
+                                 negation=ConeComplement(signed=signed_negation), dim=dim,
+                                 gamma=gamma,
                                  num_classes=num_classes, extension=extension)
 
 
 @register_method("acone", trained_on="queries")
 def acone(nb_classes=None, nb_relations=None, nb_individuals=0, embed_dim=32, gamma=20.0,
-          center_weight=0.02, dropout=0.0, tables=None, num_classes=None, extension=True):
-    """AConE (He et al. 2024): ConE with the rotation as relation model, nothing else
-    changed (:func:`cone_qe` with ``relations="rotation"``)."""
+          center_weight=0.02, dropout=0.0, signed_negation=True, aperture="wrap", tables=None,
+          num_classes=None, extension=True):
+    """AConE (He et al. 2024): ConE with the rotation as relation model (:func:`cone_qe` with
+    ``relations="rotation"``) and the authors' two readings, which are their code's and not
+    ConE's: the aperture is wrapped to :math:`(-\\pi, \\pi]` (``aperture="wrap"``) and the
+    complement is :math:`\\pi - a` (``signed_negation=True``); ``aperture="clip"`` and
+    ``signed_negation=False`` give the apertures in :math:`[0, \\pi]` that
+    :func:`cone_qe` has by default."""
     return cone_qe(nb_classes, nb_relations, nb_individuals, embed_dim, gamma, center_weight,
-                   dropout=dropout, relations="rotation", tables=tables,
-                   num_classes=num_classes, extension=extension)
+                   dropout=dropout, relations="rotation", signed_negation=signed_negation,
+                   aperture=aperture, tables=tables, num_classes=num_classes,
+                   extension=extension)
 
 
 register_method("query2box", trained_on="queries")(query2box)
