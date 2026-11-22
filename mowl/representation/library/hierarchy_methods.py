@@ -218,7 +218,8 @@ def bcbox(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50, variant="v
 # -- points on manifolds ----------------------------------------------------------------
 @register_method("hyperbolic_cones")
 def hyperbolic_cones(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50, K=0.1,
-                     margin=0.01, init_max_norm=0.5, tables=None, seed=None):
+                     margin=0.01, init_max_norm=0.5, tables=None, seed=None, measure=None,
+                     objective=None, regularizers=()):
     """Hyperbolic entailment cones (Ganea et al. 2018): a point of the Poincare ball with the
     cone of half-aperture :math:`\\psi(x)` at it, the angle against the aperture as the cost,
     a hinge of margin ``margin`` for a pair that is not ordered.
@@ -226,21 +227,27 @@ def hyperbolic_cones(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50,
     :param tables: A module with ``K``, ``margin`` and ``class_embed`` (the direct module of
         :mod:`mowl.baselines.nn.order`) to share parameters with.
     :param seed: Seed of the initialisation of the points (new tables only).
+    :param measure, objective, regularizers: Swap a part: another measure of points of the
+        ball (default: the angle with the apex as the published formula reads it), another
+        objective (default: the hierarchy objective of margin ``margin``), penalties added
+        to the loss.
     """
     if tables is None:
         classes = ConePoints(nb_classes, embed_dim, K, init_max_norm, seed=seed)
     else:
         classes = ConePoints(K=tables.K, table=tables.class_embed)
         margin = tables.margin
-    return hierarchy_geometry(classes, None, ConeAngle(apex="formula"),
-                              Objective.hierarchy(margin))
+    return hierarchy_geometry(classes, None,
+                              measure if measure is not None else ConeAngle(apex="formula"),
+                              objective if objective is not None else Objective.hierarchy(margin),
+                              regularizers=regularizers)
 
 
 @register_method("shadow_cones")
 def shadow_cones(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50,
                  formulation="umbral-half-space", radius=0.05, horosphere_height=20.0,
                  gamma3=1e-4, init_scale=0.01, margin=0.01, negative_form="hinge",
-                 tables=None, seed=None):
+                 tables=None, seed=None, measure=None, objective=None, regularizers=()):
     """Shadow cones (Yu et al. 2024): points of the Poincare half-space or ball, the signed
     distance to the shadow cone of the parent as the cost. As published the cost of a stated
     pair is signed (negative inside the cone, ``signed=True``). The cost of a corrupted pair is
@@ -252,6 +259,10 @@ def shadow_cones(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50,
     :param tables: A module with the options of shadow cones and ``class_embed`` (the direct
         module of :mod:`mowl.baselines.nn.order`) to share parameters with.
     :param seed: Seed of the initialisation of the points (new tables only).
+    :param measure, objective, regularizers: Swap a part: another measure of points of the
+        manifold (default: the signed shadow-cone distance of ``formulation``), another
+        objective (default: the hierarchy objective of margin ``margin``), penalties added
+        to the loss.
     """
     if tables is None and embed_dim < 2:
         raise ValueError("Shadow cones need embed_dim >= 2.")
@@ -270,9 +281,12 @@ def shadow_cones(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50,
                                init="uniform")
     else:
         classes = PointClasses(manifold=manifold, table=tables.class_embed)
-    measure = ShadowCone(formulation, radius, horosphere_height, gamma3, signed=True,
-                         negative_form=negative_form)
-    return hierarchy_geometry(classes, None, measure, Objective.hierarchy(margin))
+    if measure is None:
+        measure = ShadowCone(formulation, radius, horosphere_height, gamma3, signed=True,
+                             negative_form=negative_form)
+    return hierarchy_geometry(classes, None, measure,
+                              objective if objective is not None else Objective.hierarchy(margin),
+                              regularizers=regularizers)
 
 
 _DISK_SPACES = {"hyperbolic": Hyperboloid, "spherical": Sphere, "euclidean": Euclidean}
@@ -281,7 +295,7 @@ _DISK_SPACES = {"hyperbolic": Hyperboloid, "spherical": Sphere, "euclidean": Euc
 @register_method("disk_embeddings")
 def disk_embeddings(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50,
                     geometry="hyperbolic", margin=0.01, init_scale=0.1, tables=None,
-                    seed=None):
+                    seed=None, measure=None, objective=None, regularizers=()):
     """Disk embeddings (Suzuki et al. 2019): a point of a hyperbolic, spherical or Euclidean
     space with a real radius, the protrusion of the child out of the parent as the cost (signed,
     as published), a hinge of margin ``margin`` for a pair that is not ordered.
@@ -289,6 +303,9 @@ def disk_embeddings(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50,
     :param tables: A module with ``manifold``, ``margin``, ``class_embed`` and ``radius_embed``
         (the direct module of :mod:`mowl.baselines.nn.order`) to share parameters with.
     :param seed: Seed of the initialisation of the points (new tables only).
+    :param measure, objective, regularizers: Swap a part: another measure of disks (default:
+        the signed protrusion), another objective (default: the hierarchy objective of margin
+        ``margin``), penalties added to the loss.
     """
     if tables is None:
         if geometry not in _DISK_SPACES:
@@ -299,15 +316,18 @@ def disk_embeddings(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50,
         classes = DiskClasses(manifold=tables.manifold, table=tables.class_embed,
                               radii=tables.radius_embed)
         margin = tables.margin
-    return hierarchy_geometry(classes, None, Protrusion(signed=True),
-                              Objective.hierarchy(margin))
+    return hierarchy_geometry(classes, None,
+                              measure if measure is not None else Protrusion(signed=True),
+                              objective if objective is not None else Objective.hierarchy(margin),
+                              regularizers=regularizers)
 
 
 # -- language models --------------------------------------------------------------------
 @register_method("hit")
 def hit(nb_classes=None, nb_relations=0, nb_individuals=0, embed_dim=None, margin=0.0, *,
         encoder=None, texts=None, curvature=None, centri_weight=1.0, clustering_margin=5.0,
-        centripetal_margin=0.1, clustering_weight=1.0, centripetal_weight=1.0, tables=None):
+        centripetal_margin=0.1, clustering_weight=1.0, centripetal_weight=1.0, tables=None,
+        measure=None, objective=None, regularizers=()):
     """HiT (He et al. 2024): the point of a class is what a text encoder computes from its
     verbalisation, read in the Poincare ball of curvature :math:`1/d`; the cost of a pair is
     :math:`d(C, D) + \\lambda(\\lVert D \\rVert - \\lVert C \\rVert)`. The training loss is the
@@ -318,8 +338,12 @@ def hit(nb_classes=None, nb_relations=0, nb_individuals=0, embed_dim=None, margi
     :param texts: The verbalisation of every class id (optional; without it classes are given
         as lists of strings).
     :param centri_weight: :math:`\\lambda` (HiT selects it on validation data).
-    :param tables: A :class:`~mowl.nn.lm.HiTModule` whose encoder, curvature, margins and
-        weights are used.
+    :param tables: A module with ``encoder``, ``c``, the margins and the weights (the direct
+        module of :mod:`mowl.baselines.nn.lm`) whose encoder, curvature, margins and weights are
+        used.
+    :param measure, objective, regularizers: Swap a part: another measure of points of the
+        ball (default: distance and depth with weight ``centri_weight``), another objective,
+        penalties added to the loss. The encoder is a part as well: pass another one.
     """
     if tables is not None:
         encoder, curvature = tables.encoder, tables.c
@@ -328,16 +352,19 @@ def hit(nb_classes=None, nb_relations=0, nb_individuals=0, embed_dim=None, margi
         clustering_weight, centripetal_weight = tables.clustering_weight, \
             tables.centripetal_weight
     classes = TextPoints(encoder, texts, curvature=curvature)
-    return TextGeometry(classes, None, DistanceDepth(centri_weight), Objective.hierarchy(),
+    return TextGeometry(classes, None,
+                        measure if measure is not None else DistanceDepth(centri_weight),
+                        objective if objective is not None else Objective.hierarchy(),
                         clustering_margin, centripetal_margin, clustering_weight,
-                        centripetal_weight)
+                        centripetal_weight, regularizers=regularizers)
 
 
 @register_method("ont")
 def ont(nb_classes=None, nb_relations=0, nb_individuals=0, embed_dim=None, margin=0.0, *,
         encoder=None, texts=None, role_texts=None, role_model=None, curvature=None,
         centri_weight=1.0, clustering_margin=3.0, centripetal_margin=0.5,
-        clustering_weight=1.0, centripetal_weight=1.0, tables=None):
+        clustering_weight=1.0, centripetal_weight=1.0, tables=None, measure=None,
+        objective=None, regularizers=()):
     """OnT (Yang et al. 2025): HiT with a relation model: the region of :math:`\\exists r.D` is
     :math:`f_r(x_D)`, a rotation of the point of :math:`D` whose angles are a linear function
     of the encoding of the name of :math:`r` (:class:`~.hierarchy_relations.TextRotation`).
@@ -347,7 +374,10 @@ def ont(nb_classes=None, nb_relations=0, nb_individuals=0, embed_dim=None, margi
 
     :param role_model: A :class:`~mowl.nn.lm.ont.RoleTransformation`; ``None`` builds the
         ablation OnT(w/o r), a geometry without relations.
-    :param tables: A :class:`~mowl.nn.lm.OnTModule` to share parameters with.
+    :param tables: A module with ``encoder``, ``c``, ``role_model``, ``use_roles``, the margins
+        and the weights (the direct module of :mod:`mowl.baselines.nn.lm`) to share parameters
+        with.
+    :param measure, objective, regularizers: Swap a part, as in :func:`hit`.
     """
     if tables is not None:
         encoder, curvature = tables.encoder, tables.c
@@ -359,9 +389,11 @@ def ont(nb_classes=None, nb_relations=0, nb_individuals=0, embed_dim=None, margi
     classes = TextPoints(encoder, texts, curvature=curvature)
     relations = None if role_model is None else TextRotation(
         role_model, encoder, classes.manifold.c, role_texts)
-    return TextGeometry(classes, relations, DistanceDepth(centri_weight), Objective.hierarchy(),
+    return TextGeometry(classes, relations,
+                        measure if measure is not None else DistanceDepth(centri_weight),
+                        objective if objective is not None else Objective.hierarchy(),
                         clustering_margin, centripetal_margin, clustering_weight,
-                        centripetal_weight)
+                        centripetal_weight, regularizers=regularizers)
 
 
 # -- adapters: geometry_of(module) -------------------------------------------------------

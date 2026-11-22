@@ -141,6 +141,14 @@ class TextGeometry(ComposedGeometry):
         self.clustering_weight = clustering_weight
         self.centripetal_weight = centripetal_weight
 
+    @property
+    def parts(self):
+        parts = super().parts
+        if self.relation_model is not None:
+            # OnT trains the embeddings of compound classes (Eq. 6 and 7); HiT has none
+            parts["conjunction"] = "own embedding"
+        return parts
+
     def compound(self, texts):
         """The regions of compound classes, from their verbalisations."""
         return self.class_model(list(texts))
