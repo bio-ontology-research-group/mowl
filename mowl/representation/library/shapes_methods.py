@@ -31,6 +31,7 @@ from mowl.representation.methods import register_method
 from mowl.representation.objectives import FORMS
 from mowl.representation.relation_models import Translation
 from mowl.training.negatives import PerColumnCorruption
+from mowl.training.losses import PairwiseMarginRankingLoss
 from mowl.training.regularization import Regularizer
 from mowl.representation.library.shapes_classes import (
     Points, OctagonClasses, PrismClasses, EllipsoidClasses, VectorClasses, MappedVectors,
@@ -450,9 +451,13 @@ def eike(nb_classes, nb_relations, nb_individuals=0, embed_dim=100, margin=0.0, 
                          ComposedGeometry.__init__, classes, relations, measure, objective,
                          individuals=individuals, supported_forms=forms,
                          neg_capable_gcis=forms)
-    # the paper's negatives: head or tail corrupted, one negative of each kind per positive
-    geometry.default_regimes = (partial(PerColumnCorruption, columns={
-        "gci0": (0, 1), "class_assertion": (0, 1), "object_property_assertion": (0, 2)}),)
+    # the paper's negatives (head or tail corrupted, one negative of each kind per positive)
+    # and its loss: [f(delta) - f(delta')]_+ with the margin already in the module's
+    # negative scores, averaged over the pairs
+    geometry.default_regimes = (
+        partial(PerColumnCorruption, columns={
+            "gci0": (0, 1), "class_assertion": (0, 1), "object_property_assertion": (0, 2)}),
+        partial(PairwiseMarginRankingLoss, margin=0.0, neg_scores="module"))
     return geometry
 
 
