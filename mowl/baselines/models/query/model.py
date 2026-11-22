@@ -19,7 +19,7 @@ from mowl.models.query import sampling
 from mowl.models.query.graph import ISA_INV, extract_graph, role_relation
 from mowl.nn.query.expression import (Vocabulary, class_expression_to_query, from_nested,
                                       ids, signature, to_dnf)
-from mowl.nn.query.base import UnsupportedOperator
+from mowl.baselines.nn.query.base import UnsupportedOperator
 
 from mowl.training.regime import SCHEDULE_HOOKS  # noqa: E402
 

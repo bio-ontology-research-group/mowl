@@ -5,7 +5,7 @@ import numpy as np
 import torch as th
 
 from mowl.base_models.elmodel import EmbeddingELModel
-from mowl.representation.library.manifolds import RiemannianSGD
+from mowl.baselines.nn.order.manifolds import RiemannianSGD
 
 _THING = "http://www.w3.org/2002/07/owl#Thing"
 _NOTHING = "http://www.w3.org/2002/07/owl#Nothing"

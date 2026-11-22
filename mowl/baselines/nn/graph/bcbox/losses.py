@@ -14,8 +14,8 @@ import math
 
 import torch as th
 
-from mowl.nn.numerics import log_scaled_softplus
-from mowl.nn.numerics import neg_log1mexp as _neg_log1mexp
+from mowl.baselines.nn.numerics import log_scaled_softplus
+from mowl.baselines.nn.numerics import neg_log1mexp as _neg_log1mexp
 
 
 def lse(a, b, t):

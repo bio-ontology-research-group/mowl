@@ -1,14 +1,13 @@
 """The direct implementation of OnT: its own loss assembly on top of the loop of the direct
 HiT. Kept for the comparison in ``tests/baselines``; the verbalised axioms, the triplets and
-the scoring are shared (:mod:`mowl.models.ont.common`)."""
+the scoring are in the frozen base class (:mod:`mowl.baselines.models.ont.base`)."""
 
 import logging
 
 import torch as th
 
 from mowl.baselines.models.hit.model import HiT, DEFAULT_CENTRI_GRID  # noqa: F401
-from mowl.models.ont.common import OnTBase
-from mowl.representation.library.hierarchy_regions import Point
+from mowl.baselines.models.ont.base import OnTBase
 
 logger = logging.getLogger(__name__)
 

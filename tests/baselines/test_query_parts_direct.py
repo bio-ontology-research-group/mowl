@@ -6,7 +6,8 @@ from unittest import TestCase
 import torch as th
 
 from mowl.baselines.nn.query.geometry import (Query2BoxGeometry, BetaEGeometry, ConEGeometry,
-                                              AConEGeometry, UnsupportedOperator)
+                                              AConEGeometry)
+from mowl.nn.query.base import UnsupportedOperator  # the library geometries raise this one
 from mowl.representation import (geometry_of, Geometry, Box, ConstructorUnavailable, METHODS,
                                  CLASS_MODELS, RELATION_MODELS, MEASURES)
 from mowl.representation.library.query_methods import (

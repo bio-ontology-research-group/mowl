@@ -10,7 +10,7 @@ import torch.nn as nn
 from mowl.nn import ELModule
 import mowl.baselines.nn.el.boxsquaredel.losses as B2L
 from mowl.baselines.nn.el.boxsquaredel.module import BoxSquaredELModule
-from mowl.nn.el.multibox_utils import effective_components as _effective_components
+from mowl.baselines.nn.el.multibox_utils import effective_components as _effective_components
 import mowl.baselines.nn.el.multiboxel.losses as L
 from mowl.baselines.nn.el.multiboxel.pointloss import (
     _VALID_OBJECTIVES,

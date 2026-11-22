@@ -1,13 +1,13 @@
 """The direct implementation of HiT: its own loss, AdamW loop and validation in the model class.
 Kept for the comparison in ``tests/baselines``; the taxonomy, the verbalisation, the training
-triplets and the scoring are shared (:mod:`mowl.models.hit.common`)."""
+triplets and the scoring are shared (:mod:`mowl.baselines.models.hit.base`)."""
 
 import logging
 import math
 
 import torch as th
 
-from mowl.models.hit.common import DEFAULT_CENTRI_GRID, HiTBase  # noqa: F401
+from mowl.baselines.models.hit.base import DEFAULT_CENTRI_GRID, HiTBase  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
@@ -30,13 +30,13 @@ class HiT(HiTBase):
         return self.module.embed(texts)
 
     def _cost(self, sub, sup, lam):
-        from mowl.nn.lm import hyperbolic as hb
+        from mowl.baselines.nn.lm import hyperbolic as hb
         c = self.c
         return hb.distance(sub, sup, c) + lam * (hb.hyperbolic_norm(sup, c)
                                                  - hb.hyperbolic_norm(sub, c))
 
     def _ranking_scores(self, query, candidates, candidates_are_children, lam):
-        from mowl.nn.lm import hyperbolic as hb
+        from mowl.baselines.nn.lm import hyperbolic as hb
         c, dtype = self.c, self.score_dtype
         q_norm = hb.hyperbolic_norm(query.to(dtype), c).unsqueeze(1)
         dist = hb.pairwise_distance(query, candidates, c, dtype=dtype)

@@ -24,7 +24,7 @@ import math
 
 import torch as th
 
-from mowl.nn.lm import hyperbolic as H
+from mowl.baselines.nn.lm import hyperbolic as H
 
 _ACOS_CLAMP = 1e-6
 
