@@ -131,5 +131,5 @@ def test_multiboxel_names_the_margin_of_its_objective():
     from mowl.nn.el.multiboxel.module import MultiBoxELModule
     axiom = make(MultiBoxELModule)
     assert (axiom.margin_semantics, axiom.margin_attribute) == ("slack", "gamma")
-    assert MultiBoxELModule.margin_semantics.fget(
-        type("S", (), {"objective": "structural"})()) == "strict"
+    structural = MultiBoxELModule(4, 1, embed_dim=3, objective="structural")
+    assert (structural.margin_semantics, structural.margin_attribute) == ("strict", "margin")

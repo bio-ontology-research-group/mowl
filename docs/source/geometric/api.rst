@@ -108,11 +108,15 @@ Shared multi-box utilities
 MultiBoxEL neural module and losses
 -----------------------------------
 
+The module is the combination of parts that MultiBoxEL is
+(:func:`~mowl.representation.library.multibox_methods.multiboxel`). The loss functions below are
+those of the direct implementation (:mod:`mowl.baselines`), which the combination is tested against.
+
 .. automodule:: mowl.nn.el.multiboxel.module
    :members:
    :show-inheritance:
 
-.. automodule:: mowl.nn.el.multiboxel.losses
+.. automodule:: mowl.baselines.nn.el.multiboxel.losses
    :members:
    :show-inheritance:
 
@@ -128,11 +132,15 @@ MultiBoxEL model
 MultiELBE neural module and losses
 ----------------------------------
 
+The module is the combination of parts that MultiELBE is
+(:func:`~mowl.representation.library.multibox_methods.multielbe`). The loss functions below are
+those of the direct implementation (:mod:`mowl.baselines`).
+
 .. automodule:: mowl.nn.el.multielbe.module
    :members:
    :show-inheritance:
 
-.. automodule:: mowl.nn.el.multielbe.losses
+.. automodule:: mowl.baselines.nn.el.multielbe.losses
    :members:
    :show-inheritance:
 

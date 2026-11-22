@@ -1,18 +1,39 @@
-import mowl.nn.el.boxsquaredel.losses as L
-from mowl.nn import ELModule
 import torch as th
 import torch.nn as nn
 
+from mowl.representation.geometry import ComposedGeometry
+from mowl.representation.library.multibox_methods import box2el
+from mowl.representation.library.multibox_modules import ReleasedTables, released_names
+from mowl.representation.objectives import FORMS
+from mowl.training.regularization import NormPenalty
 
-class BoxSquaredELModule(ELModule):
+
+@released_names(
+    class_center="class_model.centres", class_offset="class_model.offsets",
+    bump_classes="class_model.bumps",
+    head_center="relation_model.head_centres", head_offset="relation_model.head_offsets",
+    tail_center="relation_model.tail_centres", tail_offset="relation_model.tail_offsets",
+    ind_center="individual_model.centres", ind_offset="individual_model.offsets",
+    bump_individuals="individual_model.bumps")
+class BoxSquaredELModule(ReleasedTables, ComposedGeometry):
     """
     Implementation of Box :math:`^2` EL from [jackermeier2023]_.
+
+    The module is the combination of parts that Box2EL is
+    (:func:`~mowl.representation.library.multibox_methods.box2el`): boxes with a bump vector
+    (:class:`~mowl.representation.library.multibox_parts.BumpedBoxClasses`), relations as a
+    head box and a tail box
+    (:class:`~mowl.representation.library.multibox_parts.HeadTailRelations`), the box measure
+    :class:`~mowl.representation.Bounds`, the objective of Box2EL (squared positive losses,
+    the :math:`(\\delta - \\mu)^2` negatives, a slack margin) and the norm penalty on the bump
+    vectors. It is a :class:`~mowl.representation.ComposedGeometry`; the tables of the parts
+    keep the names they had (``class_center``, ``head_offset``, ``bump_classes``, ...) and
+    models saved under those names load.
 
     :param all_negative_losses: If ``True``, the module also implements the negative losses \
 that DELE [mashkova2024dele]_ defines for the normal forms other than GCI2 (``gci0``, ``gci1``, \
 ``gci3``, ``gci0_bot``, ``gci1_bot``, ``gci3_bot``), and :attr:`neg_capable_gcis` lists them. \
-Defaults to ``False``, which leaves the module exactly as before. See also \
-:meth:`enable_all_negative_losses`.
+Defaults to ``False``. See also :meth:`enable_all_negative_losses`.
     :type all_negative_losses: bool, optional
     :param epsilon: The :math:`\\varepsilon` of the DELE negative losses for bottom normal \
 forms (minimal radius / offset norm of a satisfiable class). Defaults to ``0.01``.
@@ -26,11 +47,78 @@ forms (minimal radius / offset norm of a satisfiable class). Defaults to ``0.01`
     :math:`C`. Both are kept as published; they do not describe the same constraint.
     """
 
-    neg_capable_gcis = frozenset({"gci2", "object_property_assertion"})
-
     #: Normal forms that get a negative loss with ``all_negative_losses=True``.
     DELE_NEG_GCIS = frozenset({"gci0", "gci1", "gci2", "gci3",
                                "gci0_bot", "gci1_bot", "gci3_bot"})
+
+    margin_attribute = "gamma"
+
+    #: The order in which the tables were initialised (a seeded module has its numbers).
+    released_order = (
+        "class_model.centres", "class_model.offsets", "relation_model.head_centres",
+        "relation_model.head_offsets", "relation_model.tail_centres",
+        "relation_model.tail_offsets", "class_model.bumps", "individual_model.bumps",
+        "individual_model.centres", "individual_model.offsets")
+    #: ``per_axiom_column = False``: the flat ``(B,)`` of the formulas, but for the role forms.
+    flat_forms = FORMS
+
+    def __init__(self, nb_ont_classes, nb_rels, nb_inds=None, embed_dim=50, gamma=0, delta=2,
+                 reg_factor=0.05, all_negative_losses=False, epsilon=0.01):
+        rng_state = th.get_rng_state()
+        box2el(nb_ont_classes, nb_rels, nb_inds or 0, embed_dim=embed_dim, margin=gamma,
+               delta=delta, reg_factor=reg_factor, all_negatives=all_negative_losses,
+               epsilon=epsilon, into=self)
+        self.initialise_in_released_order(rng_state)
+        self.nb_ont_classes = nb_ont_classes
+        self.nb_rels = nb_rels
+        self.nb_inds = nb_inds
+        self.embed_dim = embed_dim
+        self.strict_negatives = True
+
+    # -- the numbers of the method, which are those of the parts -------------------------
+    @property
+    def gamma(self):
+        """The margin :math:`\\gamma` (the margin of the objective)."""
+        return self.objective.margin
+
+    @gamma.setter
+    def gamma(self, value):
+        self.objective.margin = float(value)
+
+    @property
+    def delta(self):
+        """The :math:`\\delta` of the negative loss (of the objective)."""
+        return self.objective.delta
+
+    @delta.setter
+    def delta(self, value):
+        self.objective.delta = float(value)
+
+    @property
+    def epsilon(self):
+        """The :math:`\\varepsilon` of the DELE negative losses for bottom forms."""
+        return self.objective.epsilon
+
+    @epsilon.setter
+    def epsilon(self, value):
+        self.objective.epsilon = float(value)
+
+    @property
+    def reg_factor(self):
+        """The weight of the norm penalty on the bump vectors."""
+        return self._bump_penalty().weight
+
+    @reg_factor.setter
+    def reg_factor(self, value):
+        self._bump_penalty().weight = value
+
+    def _bump_penalty(self):
+        return next(r for r in self.regularizers if isinstance(r, NormPenalty))
+
+    @property
+    def all_negative_losses(self):
+        """Whether the DELE negative losses of all normal forms are on."""
+        return self.DELE_NEG_GCIS <= self.neg_capable_gcis
 
     def enable_all_negative_losses(self, epsilon=None):
         """Switch on the DELE negative losses of all normal forms (see the class \
@@ -41,124 +129,24 @@ parameter ``all_negative_losses``) and extend :attr:`neg_capable_gcis` according
         """
         if epsilon is not None:
             self.epsilon = float(epsilon)
-        self.all_negative_losses = True
-        self.neg_capable_gcis = frozenset(type(self).neg_capable_gcis | self.DELE_NEG_GCIS)
+        forms = frozenset(self.DELE_NEG_GCIS | {"object_property_assertion"})
+        self.objective.neg_forms = forms
+        self.objective.negatives = "forms"
+        self.neg_capable_gcis = forms
 
     def _dele_neg(self, neg):
         return neg and self.all_negative_losses
-    
-    margin_semantics = "slack"
-    margin_attribute = "gamma"
 
-    def __init__(self, nb_ont_classes, nb_rels, nb_inds=None, embed_dim=50, gamma=0, delta=2,
-                 reg_factor=0.05, all_negative_losses=False, epsilon=0.01):
-        super().__init__()
-        self.nb_ont_classes = nb_ont_classes
-        self.nb_rels = nb_rels
-        self.nb_inds = nb_inds
-
-        self.embed_dim = embed_dim
-
-        self.class_center = self.init_embeddings(nb_ont_classes, embed_dim)
-        self.class_offset = self.init_embeddings(nb_ont_classes, embed_dim)
-
-        self.head_center = self.init_embeddings(nb_rels, embed_dim)
-        self.head_offset = self.init_embeddings(nb_rels, embed_dim)
-        self.tail_center = self.init_embeddings(nb_rels, embed_dim)
-        self.tail_offset = self.init_embeddings(nb_rels, embed_dim)
-
-        self.bump_classes = self.init_embeddings(nb_ont_classes, embed_dim)
-
-        if self.nb_inds is not None and self.nb_inds > 0:
-            self.bump_individuals = self.init_embeddings(nb_inds, embed_dim)
-            self.ind_center = self.init_embeddings(nb_inds, embed_dim)
-            self.ind_offset = self.init_embeddings(nb_inds, embed_dim)
-            
-        else:
-            self.bump_individuals = None
-            self.ind_center = None
-            self.ind_offset = None
-            
-        self.gamma = gamma
-        self.delta = delta
-        self.reg_factor = reg_factor
-
-        self.epsilon = float(epsilon)
-        self.all_negative_losses = False
-        if all_negative_losses:
-            self.enable_all_negative_losses()
+    def get_loss_function(self, gci_name):
+        # a loss installed on the instance (a training regime that switches the losses to
+        # those of a reference code, mowl.training.DELECodeLosses) is the one that is called
+        patched = self.__dict__.get(f"{gci_name}_loss")
+        if patched is not None:
+            return patched
+        return super().get_loss_function(gci_name)
 
     def init_embeddings(self, num_entities, embed_dim, min=-1, max=1):
         embeddings = nn.Embedding(num_entities, embed_dim)
         nn.init.uniform_(embeddings.weight, a=min, b=max)
         embeddings.weight.data /= th.linalg.norm(embeddings.weight.data, axis=1).reshape(-1, 1)
         return embeddings
-        
-    def gci0_loss(self, data, neg=False):
-        if self._dele_neg(neg):
-            return L.gci0_loss_neg(data, self.class_center, self.class_offset, self.gamma)
-        return L.gci0_loss(data, self.class_center, self.class_offset, self.gamma, neg=neg)
-
-    def gci0_bot_loss(self, data, neg=False):
-        if self._dele_neg(neg):
-            return L.gci0_bot_loss_neg(data, self.class_offset, self.epsilon)
-        return L.gci0_bot_loss(data, self.class_offset)
-    
-    def gci1_loss(self, data, neg=False):
-        if self._dele_neg(neg):
-            return L.gci1_loss_neg(data, self.class_center, self.class_offset, self.gamma)
-        return L.gci1_loss(data, self.class_center, self.class_offset, self.gamma, neg=neg)
-
-    def gci1_bot_loss(self, data, neg=False):
-        if self._dele_neg(neg):
-            return L.gci1_bot_loss_neg(data, self.class_center, self.class_offset,
-                                       self.epsilon)
-        return L.gci1_bot_loss(data, self.class_center, self.class_offset, self.gamma, neg=neg)
-
-    def gci2_loss(self, data, neg=False):
-        return L.gci2_loss(data, self.class_center, self.class_offset, self.head_center,
-                            self.head_offset, self.tail_center, self.tail_offset, self.bump_classes,
-                           self.gamma, self.delta, neg=neg)
-
-    def gci3_loss(self, data, neg=False):
-        if self._dele_neg(neg):
-            return L.gci3_loss_neg(data, self.class_center, self.class_offset,
-                                   self.head_center, self.head_offset, self.bump_classes,
-                                   self.gamma, self.delta)
-        return L.gci3_loss(data, self.class_center, self.class_offset, self.head_center,
-                            self.head_offset, self.tail_center, self.tail_offset, self.bump_classes,
-                            self.gamma, neg=neg)
-
-    def gci3_bot_loss(self, data, neg=False):
-        if self._dele_neg(neg):
-            return L.gci3_bot_loss_neg(data, self.class_offset, self.epsilon)
-        return L.gci3_bot_loss(data, self.head_offset)
-
-
-    #: The module implements the role inclusion and role chain losses of the paper, so
-    #: :class:`~mowl.models.BoxSquaredEL` accepts ``load_role_axioms=True``.
-    role_axiom_capable = True
-
-    def role_inclusion_loss(self, data, neg=False):
-        return L.role_inclusion_loss(data, self.head_center, self.head_offset,
-                                     self.tail_center, self.tail_offset, self.gamma)
-
-    def role_chain_loss(self, data, neg=False):
-        return L.role_chain_loss(data, self.head_center, self.head_offset,
-                                 self.tail_center, self.tail_offset, self.gamma)
-
-    def class_assertion_loss(self, data, neg=False):
-        if self.ind_center is None:
-            raise ValueError("The number of individuals must be specified to use this loss function.")
-        return L.class_assertion_loss(data, self.ind_center, self.ind_offset, self.class_center, self.class_offset, self.gamma, neg=neg)
-
-    def object_property_assertion_loss(self, data, neg=False):
-        if self.ind_center is None:
-            raise ValueError("The number of individuals must be specified to use this loss function.")
-        return L.object_property_assertion_loss(data, self.ind_center, self.ind_offset, self.head_center, self.head_offset, self.tail_center, self.tail_offset, self.bump_individuals, self.gamma, self.delta, neg=neg)
-
-    def regularization_loss(self):
-        loss = L.reg_loss(self.bump_classes, self.reg_factor)
-        if self.bump_individuals is not None:
-            loss += L.reg_loss(self.bump_individuals, self.reg_factor)
-        return loss

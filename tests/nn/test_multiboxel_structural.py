@@ -15,7 +15,7 @@ from mowl.geometric.completion import CanonicalModel
 from mowl.geometric.normal_forms import BOTTOM, TOP
 from mowl.models import MultiBoxEL
 from mowl.nn import MultiBoxELModule
-import mowl.nn.el.multiboxel.losses as L
+import mowl.baselines.nn.el.multiboxel.losses as L
 from mowl.nn.el.structural import (
     DefinitionTable,
     ExistenceTargets,

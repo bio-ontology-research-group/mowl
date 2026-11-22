@@ -14,7 +14,7 @@ Guarantees:
   ``gci1_bot_loss``, ``gci2_loss`` positive and negative, ``gci3_loss``,
   ``gci3_bot_loss``, ``class_assertion_loss``, ``object_property_assertion_loss``)
   reduces algebraically and numerically (to floating-point tolerance ``1e-6``)
-  to the corresponding function in :mod:`mowl.nn.el.boxsquaredel.losses`,
+  to the corresponding function in :mod:`mowl.baselines.nn.el.boxsquaredel.losses`,
   including on ``gci1`` batches whose pairwise intersections are empty.
 - **Zero-loss characterisation at margin 0:** At ``gamma = 0``:
 
@@ -62,7 +62,7 @@ from typing import Optional, Tuple, Union
 
 import torch as th
 
-import mowl.nn.el.boxsquaredel.losses as B2L
+import mowl.baselines.nn.el.boxsquaredel.losses as B2L
 from mowl.nn.el.softagg import _validate_tau, soft_gci1_terms, softmin
 
 
@@ -140,7 +140,7 @@ def multi_inclusion(
     Guarantees:
 
     - For ``ka = kb = 1``, ``multi_inclusion(cen_a, off_a, cen_b, off_b, gamma)[:, 0, 0]``
-      equals :func:`mowl.nn.el.boxsquaredel.losses.inclusion_score` on the squeezed boxes.
+      equals :func:`mowl.baselines.nn.el.boxsquaredel.losses.inclusion_score` on the squeezed boxes.
     - At ``gamma = 0``, entry ``(b, i, j)`` is ``0`` if and only if box ``A_{b,i}``
       is contained in box ``B_{b,j}``.
 
@@ -188,7 +188,7 @@ def multi_intersection(
     - Entry ``(b, i, j)`` has non-empty intersection if and only if
       ``(lower[b, i, j] <= upper[b, i, j]).all()``.
     - For ``ka = kb = 1``, matches the ``(lower, upper)`` corners of
-      :func:`mowl.nn.el.boxsquaredel.losses.box_intersection`.
+      :func:`mowl.baselines.nn.el.boxsquaredel.losses.box_intersection`.
 
     Non-guarantees:
 
@@ -235,7 +235,7 @@ def gci0_score(
 
     Guarantees:
 
-    - Reduces to :func:`mowl.nn.el.boxsquaredel.losses.gci0_score` when ``k = 1``.
+    - Reduces to :func:`mowl.baselines.nn.el.boxsquaredel.losses.gci0_score` when ``k = 1``.
     - Converges from ``aggregation="soft"`` to ``aggregation="hard"`` as ``tau -> 0+``.
 
     Non-guarantees:
@@ -292,7 +292,7 @@ def gci0_loss(
 
     Guarantees:
 
-    - Matches :func:`mowl.nn.el.boxsquaredel.losses.gci0_loss` at ``k = 1``.
+    - Matches :func:`mowl.baselines.nn.el.boxsquaredel.losses.gci0_loss` at ``k = 1``.
     - At ``gamma = 0`` and ``aggregation="hard"``, equals ``0`` iff every
       component :math:`C_i` is contained in some component :math:`D_j`.
 
@@ -322,7 +322,7 @@ def gci0_bot_score(
 
     Guarantees:
 
-    - Reduces to :func:`mowl.nn.el.boxsquaredel.losses.gci0_bot_score` at ``k = 1``.
+    - Reduces to :func:`mowl.baselines.nn.el.boxsquaredel.losses.gci0_bot_score` at ``k = 1``.
 
     Non-guarantees:
 
@@ -349,7 +349,7 @@ def gci0_bot_loss(
 
     Guarantees:
 
-    - Matches :func:`mowl.nn.el.boxsquaredel.losses.gci0_bot_loss` at ``k = 1``.
+    - Matches :func:`mowl.baselines.nn.el.boxsquaredel.losses.gci0_bot_loss` at ``k = 1``.
 
     Non-guarantees:
 
@@ -395,7 +395,7 @@ def gci1_score(
 
     - At ``k = 1``, the single pair ``(0, 0)`` is always the designated pair
       (:math:`g_{00} = 1`), so this score matches
-      :func:`mowl.nn.el.boxsquaredel.losses.gci1_score` on both empty and
+      :func:`mowl.baselines.nn.el.boxsquaredel.losses.gci1_score` on both empty and
       non-empty intersections under both ``"hard"`` and ``"soft"``.
     - When at least one pair :math:`(C_i, D_j)` intersects non-emptily, any
       other pair that is strictly disjoint (:math:`\\text{lo}_{ij} > \\text{up}_{ij}`
@@ -468,7 +468,7 @@ def gci1_loss(
 
     Guarantees:
 
-    - Matches :func:`mowl.nn.el.boxsquaredel.losses.gci1_loss` at ``k = 1`` on
+    - Matches :func:`mowl.baselines.nn.el.boxsquaredel.losses.gci1_loss` at ``k = 1`` on
       both empty and non-empty intersections.
 
     Non-guarantees:
@@ -499,7 +499,7 @@ def gci1_bot_score(
 
     Guarantees:
 
-    - Matches :func:`mowl.nn.el.boxsquaredel.losses.gci1_bot_score` at ``k = 1``.
+    - Matches :func:`mowl.baselines.nn.el.boxsquaredel.losses.gci1_bot_score` at ``k = 1``.
     - At ``gamma = 0``, equals ``0`` if and only if every component pair
       :math:`(C_i, D_j)` satisfies :math:`\\text{dist}(C_i, D_j) \\ge 0` (separated
       or touching) in *every* coordinate (inherited from Box²EL); thus zero
@@ -541,7 +541,7 @@ def gci1_bot_loss(
 
     Guarantees:
 
-    - Matches :func:`mowl.nn.el.boxsquaredel.losses.gci1_bot_loss` at ``k = 1``.
+    - Matches :func:`mowl.baselines.nn.el.boxsquaredel.losses.gci1_bot_loss` at ``k = 1``.
 
     Non-guarantees:
 
@@ -580,7 +580,7 @@ def gci2_score(
 
     Guarantees:
 
-    - Matches :func:`mowl.nn.el.boxsquaredel.losses.gci2_score` at ``k = 1``.
+    - Matches :func:`mowl.baselines.nn.el.boxsquaredel.losses.gci2_score` at ``k = 1``.
     - When ``active_c`` or ``active_d`` is provided under ``aggregation="hard"``,
       inactive source slots are excluded from the mean (with denominator clamped
       to ``>= 1``) and inactive target slots are excluded from the minimum.
@@ -673,7 +673,7 @@ def gci2_score_neg(
 
     Guarantees:
 
-    - Matches :func:`mowl.nn.el.boxsquaredel.losses.gci2_score_neg` at ``k = 1``
+    - Matches :func:`mowl.baselines.nn.el.boxsquaredel.losses.gci2_score_neg` at ``k = 1``
       when ``active_c`` and ``active_d`` are ``None`` (or all ``True``).
     - At :math:`k \\ge 2`, equals ``0`` on unmasked components if and only if every
       active component pair :math:`(C_i, D_j)` is separated at target distance
@@ -753,7 +753,7 @@ def gci2_loss(
 
     Guarantees:
 
-    - Matches :func:`mowl.nn.el.boxsquaredel.losses.gci2_loss` at ``k = 1`` for
+    - Matches :func:`mowl.baselines.nn.el.boxsquaredel.losses.gci2_loss` at ``k = 1`` for
       both ``neg=False`` and ``neg=True``.
 
     Non-guarantees:
@@ -858,7 +858,7 @@ def gci3_score(
 
     Guarantees:
 
-    - Matches :func:`mowl.nn.el.boxsquaredel.losses.gci3_score` at ``k = 1``.
+    - Matches :func:`mowl.baselines.nn.el.boxsquaredel.losses.gci3_score` at ``k = 1``.
 
     Non-guarantees:
 
@@ -909,7 +909,7 @@ def gci3_loss(
 
     Guarantees:
 
-    - Matches :func:`mowl.nn.el.boxsquaredel.losses.gci3_loss` at ``k = 1``.
+    - Matches :func:`mowl.baselines.nn.el.boxsquaredel.losses.gci3_loss` at ``k = 1``.
 
     Non-guarantees:
 
@@ -961,7 +961,7 @@ def gci3_bot_score(
 
     Guarantees:
 
-    - Identical to :func:`mowl.nn.el.boxsquaredel.losses.gci3_bot_score`.
+    - Identical to :func:`mowl.baselines.nn.el.boxsquaredel.losses.gci3_bot_score`.
 
     Non-guarantees:
 
@@ -985,7 +985,7 @@ def gci3_bot_loss(
 
     Guarantees:
 
-    - Identical to :func:`mowl.nn.el.boxsquaredel.losses.gci3_bot_loss`.
+    - Identical to :func:`mowl.baselines.nn.el.boxsquaredel.losses.gci3_bot_loss`.
 
     Non-guarantees:
 
@@ -1054,7 +1054,7 @@ def class_assertion_loss(
 
     Guarantees:
 
-    - Matches :func:`mowl.nn.el.boxsquaredel.losses.class_assertion_loss` at ``k = 1``.
+    - Matches :func:`mowl.baselines.nn.el.boxsquaredel.losses.class_assertion_loss` at ``k = 1``.
 
     Non-guarantees:
 
@@ -1102,7 +1102,7 @@ def object_property_assertion_loss(
 
     Guarantees:
 
-    - Identical to :func:`mowl.nn.el.boxsquaredel.losses.object_property_assertion_loss`
+    - Identical to :func:`mowl.baselines.nn.el.boxsquaredel.losses.object_property_assertion_loss`
       for both ``neg=False`` and ``neg=True`` and under both ``aggregation="hard"``
       and ``aggregation="soft"`` (individuals and roles have a single component).
 

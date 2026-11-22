@@ -501,26 +501,76 @@ def _box2el_positive(score_fn, original):
     return loss
 
 
+class _Box2ELScores:
+    """The unsquared scores of the reference module of Box\\ :sup:`2`\\ EL
+    (``model/BoxSquaredEL.py``), reference code by definition like the functions around it:
+    they read the tables of the module by name (``class_center``, ``head_center``, ...)."""
+
+    @staticmethod
+    def box_distance(box_a, box_b):
+        (center_a, offset_a), (center_b, offset_b) = box_a, box_b
+        return th.abs(center_a - center_b) - offset_a - offset_b
+
+    @classmethod
+    def inclusion_score(cls, box_a, box_b, gamma):
+        dist = cls.box_distance(box_a, box_b)
+        return th.linalg.norm(th.relu(dist + 2 * box_a[1] - gamma), dim=1)
+
+    @staticmethod
+    def box_intersection(box_a, box_b):
+        (center_a, offset_a), (center_b, offset_b) = box_a, box_b
+        lower = th.maximum(center_a - offset_a, center_b - offset_b)
+        upper = th.minimum(center_a + offset_a, center_b + offset_b)
+        return ((lower + upper) / 2, th.abs(upper - lower) / 2), lower, upper
+
+    @classmethod
+    def gci0_score(cls, data, class_center, class_offset, gamma):
+        box_c = (class_center(data[:, 0]), th.abs(class_offset(data[:, 0])))
+        box_d = (class_center(data[:, 1]), th.abs(class_offset(data[:, 1])))
+        return cls.inclusion_score(box_c, box_d, gamma)
+
+    @classmethod
+    def gci1_score(cls, data, class_center, class_offset, gamma):
+        boxes = [(class_center(data[:, i]), th.abs(class_offset(data[:, i])))
+                 for i in range(3)]
+        intersection, lower, upper = cls.box_intersection(boxes[0], boxes[1])
+        return cls.inclusion_score(intersection, boxes[2], gamma) \
+            + th.linalg.norm(th.relu(lower - upper), dim=1)
+
+    @classmethod
+    def gci1_bot_score(cls, data, class_center, class_offset, gamma):
+        box_c = (class_center(data[:, 0]), th.abs(class_offset(data[:, 0])))
+        box_d = (class_center(data[:, 1]), th.abs(class_offset(data[:, 1])))
+        return th.linalg.norm(th.relu(-cls.box_distance(box_c, box_d) - gamma), dim=1)
+
+    @classmethod
+    def gci3_score(cls, data, class_center, class_offset, head_center, head_offset, bump,
+                   gamma):
+        box_d = (class_center(data[:, 2]), th.abs(class_offset(data[:, 2])))
+        bumped_head = (head_center(data[:, 0]) - bump(data[:, 1]),
+                       th.abs(head_offset(data[:, 0])))
+        return cls.inclusion_score(bumped_head, box_d, gamma)
+
+
 def _b2_gci0(module, data):
-    import mowl.nn.el.boxsquaredel.losses as L
-    return L.gci0_score(data, module.class_center, module.class_offset, module.gamma)
+    return _Box2ELScores.gci0_score(data, module.class_center, module.class_offset,
+                                    module.gamma)
 
 
 def _b2_gci1(module, data):
-    import mowl.nn.el.boxsquaredel.losses as L
-    return L.gci1_score(data, module.class_center, module.class_offset, module.gamma)
+    return _Box2ELScores.gci1_score(data, module.class_center, module.class_offset,
+                                    module.gamma)
 
 
 def _b2_gci1_bot(module, data):
-    import mowl.nn.el.boxsquaredel.losses as L
-    return L.gci1_bot_score(data, module.class_center, module.class_offset, module.gamma)
+    return _Box2ELScores.gci1_bot_score(data, module.class_center, module.class_offset,
+                                        module.gamma)
 
 
 def _b2_gci3(module, data):
-    import mowl.nn.el.boxsquaredel.losses as L
-    return L.gci3_score(data, module.class_center, module.class_offset, module.head_center,
-                        module.head_offset, module.tail_center, module.tail_offset,
-                        module.bump_classes, module.gamma)
+    return _Box2ELScores.gci3_score(data, module.class_center, module.class_offset,
+                                    module.head_center, module.head_offset,
+                                    module.bump_classes, module.gamma)
 
 
 def _b2_gci0_bot(module, data):

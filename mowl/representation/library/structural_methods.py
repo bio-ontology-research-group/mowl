@@ -17,9 +17,9 @@ What is **not** a part: *re-seeding* during training (moving components that cov
 to where they are needed) changes the structure of the model between optimisation steps; it
 is a training regime (:class:`mowl.training.structure.IdleComponentReseeding`). The geometry
 offers the hook the regime calls (:meth:`StructuralGeometry.reseed_components`); the
-relocation rule is the module's :meth:`~mowl.nn.MultiBoxELModule.reseed`, applied to the
-tables of the geometry (shared with the module, or through a module shell over them): it is
-about the layout of the tables of unions of boxes, not about an axiom.
+relocation rule is :func:`~mowl.representation.library.structural_reseed.reseed_components`,
+applied to the tables of the geometry: it is about the layout of the tables of unions of
+boxes, not about an axiom.
 """
 
 import numpy as np
@@ -171,35 +171,11 @@ class StructuralGeometry(ComposedGeometry):
                                     base.offsets.weight.view(shape), eps=eps)
 
     # -- re-seeding: a regime ---------------------------------------------------------------
-    def _shell(self):
-        """A :class:`~mowl.nn.MultiBoxELModule` over the tables of this geometry (no
-        parameters of its own: they are the tables), through which the relocation rule of
-        the module runs."""
-        from mowl.nn import MultiBoxELModule
-        base = self._slot_classes
-        shell = MultiBoxELModule(0, 0, embed_dim=base.embed_dim, n_components=base.components,
-                                 objective="structural", max_components=base.max_components,
-                                 witness_weight=self.witness_weight,
-                                 reseed_mode=self.reseed_options["mode"],
-                                 reseed_size=self.reseed_options["size"],
-                                 reseed_batch=self.reseed_options["batch"],
-                                 margin=self.objective.margin)
-        shell.nb_ont_classes = len(base)
-        shell.class_center, shell.class_offset = base.centres, base.offsets
-        shell.bump_classes = base.bumps
-        if self.definition_table is not None or self.existence_targets is not None:
-            shell.witness_embed = self.witness_embed
-            shell.set_structural_tables(self.definition_table, self.existence_targets,
-                                        self.top_idx)
-            shell.witness_embed = self.witness_embed
-        return shell
-
     def reseed(self, rng):
         """Relocate dead or idle components (see the class docstring); returns the number of
         moves."""
-        moves = self._shell().reseed(rng)
-        self.last_reseed_count = moves
-        return moves
+        from mowl.representation.library.structural_reseed import reseed_components
+        return reseed_components(self, rng)
 
     @property
     def reseed_components(self):

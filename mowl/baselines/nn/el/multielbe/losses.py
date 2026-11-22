@@ -70,7 +70,7 @@ from typing import Any, Callable, Optional
 import torch as th
 
 import mowl.nn.el.elbe.losses as EL
-from mowl.nn.el.multiboxel.losses import (
+from mowl.baselines.nn.el.multiboxel.losses import (
     _resolve_n_components,
     _unpack_boxes,
     _validate_aggregation,
@@ -337,7 +337,7 @@ def gci1_loss(
 ) -> th.Tensor:
     """Gated ELBE GCI1 loss for :math:`C \\sqcap D \\sqsubseteq E`.
 
-    Uses the same pairwise intersection gating rule as :mod:`mowl.nn.el.multiboxel.losses`:
+    Uses the same pairwise intersection gating rule as :mod:`mowl.baselines.nn.el.multiboxel.losses`:
 
     - Under ``aggregation="hard"``:
       :math:`(i^*, j^*) = \\arg\\min_{i,j} \\text{empt}(C_i, D_j)` (chosen on detached
