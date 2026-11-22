@@ -42,6 +42,12 @@ SEMANTICS = {
     "geodesic cone": "entailment cones of the Poincare ball",
     "disk": "disks (balls of a manifold, of signed radius)",
     "manifold point": "points of a manifold, compared by a ranking score",
+    "half-space point": "points of the Poincare half-space, compared by a ranking score",
+    "euclidean manifold point": "points of Euclidean space with the manifold structure of "
+                                "the hierarchy family, compared by a ranking score",
+    "subspace": "axis-parallel subspaces of R^2d given by relaxed 0/1 indicators (quantum "
+                "logic: meet, span, orthogonal complement)",
+    "binary subspace": "axis-parallel subspaces of R^2d, indicators started at 0/1",
     "order cone": "elements of an ordered vector space (the corner cone above or below)",
     "fuzzy set": "fuzzy sets over a finite domain (Goedel operators)",
     "fuzzy set (product)": "fuzzy sets over a finite domain (product operators)",
@@ -49,7 +55,8 @@ SEMANTICS = {
     "half-axis cone": "sets of half-axes given by logits (an element belongs iff its logit "
                       "is positive)",
 }
-NOT_POINT_SETS = {"manifold point", "order cone", "fuzzy set", "fuzzy set (product)",
+NOT_POINT_SETS = {"manifold point", "half-space point", "euclidean manifold point",
+                  "subspace", "binary subspace", "order cone", "fuzzy set", "fuzzy set (product)",
                   "fuzzy set (lukasiewicz)", "half-axis cone", "soft box"}
 
 

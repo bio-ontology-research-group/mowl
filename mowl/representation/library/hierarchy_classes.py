@@ -431,18 +431,30 @@ register_class_model("geodesic cone")(ConePoints)
 
 
 @register_class_model("half-space point")
-def half_space_points(size, embed_dim):
+class HalfSpacePoints(PointClasses):
     """Points of the Poincare half-space (:class:`PointClasses` on an
     :class:`~mowl.representation.library.manifolds.UpperHalfSpace`): the manifold the umbral
-    shadow cones are defined on, where ``"manifold point"`` is the Poincare ball."""
-    return PointClasses(size, embed_dim, manifold=UpperHalfSpace())
+    shadow cones are defined on, where ``"manifold point"`` is the Poincare ball.
+
+    Part (vocabulary value): ``point``. Used by: ``shadow_cones`` (as a swap).
+    """
+
+    def __init__(self, size=None, embed_dim=None, manifold=None, **options):
+        super().__init__(size, embed_dim, manifold if manifold is not None
+                         else UpperHalfSpace(), **options)
 
 
 @register_class_model("euclidean manifold point")
-def euclidean_manifold_points(size, embed_dim):
+class EuclideanManifoldPoints(PointClasses):
     """Points of Euclidean space with the manifold structure of the hierarchy family
     (:class:`ManifoldPoint`), which the order and cone measures compare; the plain
-    ``"point"`` is :class:`~mowl.representation.library.shapes_regions.Point`, a point
-    with an optional bump."""
-    return PointClasses(size, embed_dim, manifold=Euclidean())
+    ``"point"`` is :class:`~mowl.representation.library.shapes_regions.Point`, a point with an
+    optional bump.
+
+    Part (vocabulary value): ``point``. Used by: ``shadow_cones`` (as a swap).
+    """
+
+    def __init__(self, size=None, embed_dim=None, manifold=None, **options):
+        super().__init__(size, embed_dim, manifold if manifold is not None
+                         else Euclidean(), **options)
 register_class_model("disk")(DiskClasses)

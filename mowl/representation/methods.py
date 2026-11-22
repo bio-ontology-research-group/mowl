@@ -11,7 +11,7 @@ from mowl.representation.class_models import BallClasses, BoxClasses
 from mowl.representation.geometry import ComposedGeometry
 from mowl.representation.measures import CentreDistance, Bounds
 from mowl.representation.objectives import Objective
-from mowl.representation.regions import Ball, Box
+from mowl.representation.regions import Ball, Box, ConstructorUnavailable
 from mowl.representation.relation_models import Translation
 
 __all__ = ["METHODS", "METHOD_KINDS", "CLASS_MODELS", "RELATION_MODELS", "MEASURES",
@@ -140,6 +140,10 @@ def compose(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, classes="b
         relation_model = _part(relations, RELATION_MODELS, "relation model")(
             nb_relations, embed_dim)
     if measure is None:
+        if class_model.region not in DEFAULT_MEASURE:
+            raise ConstructorUnavailable(
+                f"There is no default measure for {class_model.region.__name__} regions "
+                f"(the class model {type(class_model).__name__}): name one with measure=.")
         measure = DEFAULT_MEASURE[class_model.region]()
     elif isinstance(measure, str):
         measure = _part(measure, MEASURES, "measure")()

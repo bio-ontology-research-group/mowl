@@ -26,7 +26,7 @@ method                 class model         measure           space
 import torch as th
 
 from mowl.representation.library import cone_regions as C
-from mowl.representation.library.manifolds import (Euclidean, Hyperboloid, PoincareBall, Sphere,
+from mowl.representation.library.manifolds import (library_manifold, Euclidean, Hyperboloid, PoincareBall, Sphere,
                                      UpperHalfSpace)
 from mowl.representation.adapters import register_adapter
 from mowl.representation.library.hierarchy_classes import (
@@ -329,7 +329,7 @@ def shadow_cones(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50,
     if tables is not None:
         formulation, radius = tables.formulation, tables.radius
         horosphere_height, gamma3 = tables.horosphere_height, tables.gamma3
-        manifold = tables.manifold
+        manifold = library_manifold(tables.manifold)
         margin, negative_form = tables.margin, tables.negative
     elif formulation.endswith("half-space"):
         manifold = UpperHalfSpace()
@@ -380,7 +380,7 @@ def disk_embeddings(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50,
         classes = DiskClasses(nb_classes, embed_dim, _DISK_SPACES[geometry](), init_scale,
                               seed=seed)
     else:
-        classes = DiskClasses(manifold=tables.manifold, table=tables.class_embed,
+        classes = DiskClasses(manifold=library_manifold(tables.manifold), table=tables.class_embed,
                               radii=tables.radius_embed)
         margin = tables.margin
     return hierarchy_geometry(classes, None,

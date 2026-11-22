@@ -320,7 +320,7 @@ class BinarySubspaceClasses(SubspaceClasses):
     already a subspace of the lattice that the structure term :math:`\\Omega` (eq. (3))
     pushes the relaxed ones towards.
 
-    Part (vocabulary value): ``subspace``.
+    Part (vocabulary value): ``subspace``. Used by: ``e2r`` (as a swap).
     """
 
     def __init__(self, size=None, dim=None, centres=None, top_index=None, bottom_index=None):

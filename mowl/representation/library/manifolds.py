@@ -206,3 +206,18 @@ class RiemannianSGD(th.optim.Optimizer):
                 else:
                     p.copy_(manifold.retract(p, -lr * manifold.rgrad(p, g)))
         return loss
+
+
+def library_manifold(manifold):
+    """The manifold as an object of this module. A direct implementation keeps its own copy of
+    the manifolds (``mowl.baselines``, which the library does not import); a geometry that
+    shares the tables of such a module takes the same manifold, as this module's class with
+    the same name and attributes, so that ``isinstance`` checks of the measures hold."""
+    if manifold is None or type(manifold).__module__ == __name__:
+        return manifold
+    cls = globals().get(type(manifold).__name__)
+    if not (isinstance(cls, type) and issubclass(cls, Manifold)):
+        return manifold
+    copy = cls.__new__(cls)
+    copy.__dict__.update(vars(manifold))
+    return copy

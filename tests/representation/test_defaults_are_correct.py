@@ -200,6 +200,10 @@ NEUTRAL = {
     "class:geodesic cone": {"K", "manifold"},   # K = 0.1 is the paper's hyper-parameter
     "class:half-axis cone": {"logits", "family", "top_index", "bottom_index"},
     "class:manifold point": {"manifold"},
+    "class:half-space point": {"manifold"}, "class:euclidean manifold point": {"manifold"},
+    "relation:subspace": {"vectors"},
+    "class:subspace": {"top_index", "bottom_index"},
+    "class:binary subspace": {"top_index", "bottom_index"},
     "class:octagon product": set(),
     "class:order cone": {"nonnegative"},        # a convention: order embeddings vs CatE
     "class:point": {"family", "scale", "bump"},
