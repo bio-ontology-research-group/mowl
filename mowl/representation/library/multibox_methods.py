@@ -234,7 +234,8 @@ def mcmultibox(nb_classes, nb_relations, nb_individuals=0, embed_dim=5, margin=0
                   V.sobol_points(num_points, 2 * embed_dim, bound, seed + 1)]
         measure = SampledVolume(points, bound=bound, temperature=temperature,
                                 aggregate=aggregate, chunk_size=point_chunk_size)
-    geometry = ComposedGeometry(classes, relations, measure, Objective(negatives="gci2", strict_negatives=False),
+    objective = Objective(negatives="gci2", strict_negatives=False)
+    geometry = ComposedGeometry(classes, relations, measure, objective,
                                 individuals=individuals, neg_capable_gcis=frozenset())
     geometry.margin_semantics = None
     return geometry
