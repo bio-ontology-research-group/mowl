@@ -63,12 +63,12 @@ def test_conditionals_are_compiled_with_and_exists_and_top_is_refused():
         assert 0.0 <= p <= 1.0
     with pytest.raises(ValueError):
         BoxSEL(_dataset(), embed_dim=3, conditionals=[(DEPT, "http://www.w3.org/2002/07/owl#Thing", 0.5)]
-               ).additional_training_loss(0)
+               ).training_regime.additional_loss(0)
     with pytest.raises(ValueError):
         BoxSEL(_dataset(), embed_dim=3, conditionals=[(DEPT, APP, 0.7, 0.2)])
     with pytest.raises(KeyError):
         BoxSEL(_dataset(), embed_dim=3, conditionals=[(DEPT, NS + "Nope", 0.5)]
-               ).additional_training_loss(0)
+               ).training_regime.additional_loss(0)
 
 
 def test_existential_region_is_the_preimage_of_the_filler_box():
