@@ -7,21 +7,14 @@ import numpy as np
 
 from mowl.base_models.model import Model
 from mowl.datasets.dllite import DLLiteKB, extract_dllite, _translate, _Skip, _Trivial
-from mowl.models.boxlite.checker import check_model
-from mowl.models.boxlite.embedding import BoxLitEEmbedding
-from mowl.models.boxlite.program import BoxLitEProgram, VARIANTS
+from mowl.representation.library.solved_boxlite import (
+    BoxLitEEmbedding, BoxLitEProgram, VARIANTS, boxlite as _boxlite_geometry,
+    kb_faithful_dimension, tbox_faithful_dimension)
+from mowl.representation.library.solved_boxlite_check import check_model
+from mowl.representation.library.solved_solver import GradientFit, Solver, SolverFit
 
-
-def kb_faithful_dimension(kb):
-    """:math:`d_{min} = |N_C| + |N_R|(2 + |N_I| + 2|N_R|)` of Corollary 2: in this
-    dimension every satisfiable KB has a weakly KB-faithful BoxLitE model."""
-    nc, nr, ni = len(kb.concepts), len(kb.roles), len(kb.individuals)
-    return max(nc + nr * (2 + ni + 2 * nr), kb.n_basic, 1)
-
-
-def tbox_faithful_dimension(kb):
-    """:math:`d_{min} = |N_C| + 3|N_R|` of Corollary 1 (empty ABox)."""
-    return max(len(kb.concepts) + 3 * len(kb.roles), kb.n_basic, 1)
+__all__ = ["BoxLitE", "SatisfiabilityResult", "kb_faithful_dimension",
+           "tbox_faithful_dimension"]
 
 
 @dataclass
@@ -31,8 +24,8 @@ class SatisfiabilityResult:
     :param satisfiable: ``True`` or ``False``; ``None`` if the solver failed.
     :param optimum: Optimal value of programme (8) with :math:`\\lambda = 0`.
     :param dim: Dimension used (Corollary 2).
-    :param result: The :class:`~mowl.models.boxlite.program.ProgramResult`.
-    :param check: :class:`~mowl.models.boxlite.checker.ModelCheck` of the solution (a
+    :param result: The :class:`~mowl.representation.library.solved_boxlite.BoxLitEProgramResult`.
+    :param check: :class:`~mowl.representation.library.solved_boxlite_check.ModelCheck` of the solution (a
         certificate when satisfiable).
     """
 
@@ -56,7 +49,7 @@ class BoxLitE(Model):
     encode the TBox, box consistency and the box widths, and whose objective contains the
     ABox losses, a negative-concept regulariser (weight :math:`\\lambda_1`) and box-width
     regularisers (:math:`\\lambda_2, \\lambda_3`), see
-    :class:`~mowl.models.boxlite.program.BoxLitEProgram`. There is no gradient descent:
+    :class:`~mowl.representation.library.solved_boxlite.BoxLitEProgram`. There is no gradient descent:
     :meth:`train` calls a conic solver through CVXPY (optional dependency ``cvxpy``).
 
     The paper's experiments use MOSEK (``solver="MOSEK"``, needs a licence); mOWL defaults
@@ -72,7 +65,7 @@ class BoxLitE(Model):
       code (``AleksVap/BoxLitE``, commit 7d53063), which differ in where
       :math:`\\epsilon` enters, in how the signed distances of several assertions are
       aggregated, in the width regulariser and in the negatives (see
-      :mod:`mowl.models.boxlite.program`).
+      :mod:`mowl.representation.library.solved_boxlite`).
     * The paper assumes TBoxes in "named form" (one side a concept name) only to simplify
       the presentation; the constraints of Section 5.1 do not need it, and inclusions such
       as :math:`\\exists R \\sqsubseteq \\exists S` are accepted.
@@ -147,6 +140,12 @@ class BoxLitE(Model):
         self._program = None
         self.embedding = None
         self.result = None
+        #: The geometry (a :class:`~mowl.representation.Geometry`): the parts of the method
+        #: (class model, relation model, individual model, measure, objective); a solution
+        #: is loaded into their tables.
+        self.module = _boxlite_geometry(len(kb.concepts), len(kb.roles), len(kb.individuals),
+                                        embed_dim=self.embed_dim, s_omega=self.s_omega,
+                                        epsilon=self.epsilon, variant=variant)
 
     # ----------------------------------------------------------------------------------
     # Solving
@@ -154,39 +153,60 @@ class BoxLitE(Model):
 
     @property
     def program(self):
-        """The compiled :class:`~mowl.models.boxlite.program.BoxLitEProgram` (built on
+        """The compiled :class:`~mowl.representation.library.solved_boxlite.BoxLitEProgram` (built on
         first use)."""
         if self._program is None:
             self._program = BoxLitEProgram(self.kb, self.embed_dim, self.s_omega,
                                            self.epsilon, self.variant, self.negatives)
         return self._program
 
-    def train(self, lambdas=None, solver=None, verbose=False, **solver_options):
-        """Solve the convex programme.
+    def train(self, lambdas=None, solver=None, verbose=False, regime=None, **solver_options):
+        """Fit the parts: solve the convex programme, or (``regime``) train them.
 
         :param lambdas: :math:`(\\lambda_1, \\lambda_2, \\lambda_3)`; default: the
             constructor's values. Re-solving with other values reuses the programme.
-        :param solver: Overrides the constructor's solver.
-        :return: :class:`~mowl.models.boxlite.program.ProgramResult`. On success the
-            embedding is stored in ``self.embedding``.
+        :param solver: Overrides the constructor's solver: a CVXPY solver name or a
+            :class:`~mowl.representation.library.solved_solver.Solver` (for example
+            :class:`~mowl.representation.library.solved_solver.ScipySolver`).
+        :param regime: ``None`` (default): the solver fits the parts
+            (:class:`~mowl.representation.library.solved_solver.SolverFit`). A
+            :class:`~mowl.representation.library.solved_solver.GradientFit`: the same
+            program is minimised by gradient descent with the constraints as a penalty
+            (approximate; needs no solver).
+        :return: :class:`~mowl.representation.library.solved_boxlite.BoxLitEProgramResult`.
+            On success the embedding is stored in ``self.embedding`` and loaded into the
+            tables of ``self.module``.
         :raises RuntimeError: If the solver does not return an optimal solution.
         """
         lambdas = self.lambdas if lambdas is None else tuple(float(x) for x in lambdas)
+        weights = dict(zip(("lambda1", "lambda2", "lambda3"), lambdas))
+        if isinstance(regime, GradientFit):
+            from mowl.representation.library.solved_boxlite import BoxLitEProgramResult
+            result = BoxLitEProgramResult.of(
+                regime.fit(self.program, self.module.table_values(), weights), lambdas,
+                self.program)
+            self.result = result
+            self.lambdas = lambdas
+            self.embedding = self.module.snapshot()
+            return result
+        if regime is not None and not isinstance(regime, SolverFit):
+            raise TypeError("regime must be a SolverFit or a GradientFit.")
         options = {**self.solver_options, **solver_options}
-        result = self.program.solve(lambdas, solver=solver or self.solver, verbose=verbose,
-                                    **options)
+        solver = solver or (regime.solver if regime is not None else None) or self.solver
+        result = self.program.solve(lambdas, solver=solver, verbose=verbose, **options)
         self.result = result
         if not result.solved:
             raise RuntimeError(f"BoxLitE: the solver returned status {result.status!r} "
                                f"({result.info.get('error', '')}).")
         self.lambdas = lambdas
+        self.module.load_values(result.values)
         self.embedding = result.embedding
         return result
 
     def check_model(self, kb=None, tol=1e-6):
         """Check, independently of the loss, that the embedding is a box-consistent model
         of ``kb`` (default: the training KB). See
-        :func:`mowl.models.boxlite.checker.check_model`."""
+        :func:`mowl.representation.library.solved_boxlite_check.check_model`."""
         self._require_embedding()
         return check_model(self.embedding, self.kb if kb is None else kb, tol=tol)
 
@@ -318,6 +338,7 @@ class BoxLitE(Model):
         return path
 
     def load(self, path=None):
-        """Read an embedding written by :meth:`save`."""
+        """Read an embedding written by :meth:`save` (and load it into the parts)."""
         self.embedding = BoxLitEEmbedding.load(path or self.model_filepath)
+        self.module.load_values(self.embedding.tables())
         return self.embedding

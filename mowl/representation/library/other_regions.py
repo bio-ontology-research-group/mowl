@@ -449,7 +449,7 @@ class BoxLitEGeometry(Geometry):
             out = [float(self.embedding.role_loss(int(rr), [a], [o])[0])
                    for rr, a, o in zip(r, ids, obj)]
             return th.tensor(out, dtype=th.float32).reshape(-1, 1)
-        from mowl.models.boxlite.embedding import box_distance
+        from mowl.representation.library.solved_boxlite import box_distance
         lower, upper = region.lower.numpy(), region.upper.numpy()
         x = self.embedding.pos[ids]
         return th.as_tensor(box_distance(lower, upper, x, 0.0), dtype=th.float32
@@ -483,6 +483,9 @@ class _Individuals(Region):
 
 
 def _boxlite(model):
+    module = getattr(model, "module", None)
+    if isinstance(module, Geometry):          # the model is built from parts: its own geometry
+        return module
     embedding = getattr(model, "embedding", model)
     if embedding is None:
         raise RuntimeError("BoxLitE has no embedding yet; call train() first.")
