@@ -138,18 +138,6 @@ def check_alc(model):
     assert finite(model.axiom_costs("gci0", th.cartesian_prod(th.arange(n), th.arange(n))))
 
 
-#: The ALC methods are fixed by r6-alc (ALC objective and loop). Until that is merged a
-#: replacement that is accepted at build and then fails in training is an expected failure,
-#: with this reason; REMOVE this and ``alc_expected_failure`` AT MERGE of r6-alc.
-R6_ALC_REASON = ("r6-alc: ComposedALC does not validate falcon/dfalc/alcone swaps at build "
-                 "time; remove this expected failure when r6-alc is merged")
-
-
-def alc_expected_failure(error):
-    """Mark the test as an expected failure waiting for r6-alc (see ``R6_ALC_REASON``)."""
-    pytest.xfail(f"{R6_ALC_REASON}: {type(error).__name__}: {error}")
-
-
 # -------------------------------------------------------------------------------------------
 # what a swap must do: change the loss, or the parameters that receive gradient
 # -------------------------------------------------------------------------------------------
@@ -172,7 +160,7 @@ def loss_and_touched(model):
     """``({form: costs}, {names of the parameters the loss depends on})`` before training."""
     module = model.module
     costs, total = {}, 0.0
-    if not hasattr(model, "training_datasets"):       # ComposedALC: the costs of gci0 pairs
+    if isinstance(model, ComposedALC):       # the costs of gci0 pairs
         n = len(model.class_index_dict)
         costs["gci0"] = model.axiom_costs("gci0", th.cartesian_prod(th.arange(n),
                                                                   th.arange(n))).detach()
@@ -197,9 +185,23 @@ def loss_and_touched(model):
     return costs, touched
 
 
+def _alc_trained(model):
+    model.train(epochs=2)
+    n = len(model.class_index_dict)
+    return model.axiom_costs("gci0", th.cartesian_prod(th.arange(n), th.arange(n))).detach()
+
+
 def has_effect(base, model, kind):
     """Whether ``model`` (a swap of ``kind`` of ``base``) has other losses, or other
     parameters that receive gradient."""
+    if isinstance(model, ComposedALC) and kind in ("objective", "objective_options",
+                                                    "regularizers"):
+        # the axiom scores do not show them: the trained models do (training is seeded)
+        if kind == "regularizers" and float(model.module.regularization_loss()) != float(
+                base.module.regularization_loss()):
+            return True
+        a, b = _alc_trained(base), _alc_trained(model)
+        return a.shape != b.shape or not th.equal(a, b)
     _align(base, model, kind)
     base_costs, base_touched = loss_and_touched(base)
     costs, touched = loss_and_touched(model)
@@ -214,7 +216,7 @@ def observable(model, kind):
     if kind == "regularizers":
         return any(True for _ in model.module.class_model.parameters())
     if kind == "individuals":
-        return hasattr(model, "training_datasets") and any(form in model.training_datasets and len(model.training_datasets[form])
+        return not isinstance(model, ComposedALC) and any(form in model.training_datasets and len(model.training_datasets[form])
                    for form in ("class_assertion", "object_property_assertion"))
     return True
 
@@ -302,6 +304,11 @@ CONDITIONAL_OPTIONS = {
     "consistent_radius": "read only by forms with an absolute radius reading (radius='softplus')",
     "strict_negatives": "only chooses between an error and the positive loss when a negative "
                         "loss of a form that has none is asked for; training asks for none",
+    "threshold": "the threshold of the cost of the existential and universal patterns of "
+                 "ALC (Eqs. 10-13); the normal-form forms of ComposedEL have none",
+    "validity": "added to the cost of assertions of individuals; the toy data has none",
+    "num_negs": "the corrupted assertions per assertion of the sampled ABox objective; the "
+                "toy data has no assertions",
     "epsilon": "the margin of the boxes of the solver programme; read when the programme is "
                "solved, not by the loss of a form",
 }
@@ -365,7 +372,16 @@ for _key in ("boxe", "expressive", "graph_kge", "gda_projection"):
             "a model of triples is trained with a TripleLoss (loss= of GraphKGEModel), no cost "
             "of its geometry reads an Objective: replacing it would change nothing")
 #: The same for the ALC methods through ComposedALC (the candidates of ``limit``).
-REFUSES_EVERY_ALC = {}
+REFUSES_EVERY_ALC = {
+    ("falcon", "classes"): "FALCON evaluates class expressions on an open domain of element "
+                           "vectors (Domain, completed by sampled anonymous elements): only "
+                           "its own network class model evaluates on that domain; every "
+                           "other class model is refused with the reason (build time)",
+    ("falcon", "relations"): "FALCON's relations are networks over pairs of element vectors "
+                             "of the domain and its sampled ABox objective needs a relation "
+                             "model: every geometric relation model, and none, is refused "
+                             "(build time)",
+}
 
 
 def run(build, check, key, kind, limit=None, on_late_error=None, refuses=None):
@@ -451,7 +467,7 @@ EL_KINDS = ["classes", "relations", "measure", "objective", "objective_options",
 @pytest.mark.parametrize("key", AXIOM_KEYS)
 def test_every_axiom_method_takes_a_replacement_of_every_part_by_name(key, kind):
     status, _ = run(axioms_model, check_axioms, key, kind,
-                    on_late_error=alc_expected_failure if key in ALC_KEYS else None)
+                    on_late_error=None)
     assert status in (WORKS, UNAVAILABLE)
 
 
@@ -466,15 +482,14 @@ def test_individuals_of_every_axiom_method(key):
 @pytest.mark.parametrize("kind", EL_KINDS)
 @pytest.mark.parametrize("key", ALC_KEYS)
 def test_every_alc_method_takes_a_replacement_of_every_part_by_name(key, kind):
-    status, _ = run(alc_model, check_alc, key, kind, on_late_error=alc_expected_failure,
-                    refuses=REFUSES_EVERY_ALC)
+    status, _ = run(alc_model, check_alc, key, kind, refuses=REFUSES_EVERY_ALC)
     assert status in (WORKS, UNAVAILABLE)
 
 
 @pytest.mark.parametrize("key", sorted(UNSUPPORTED_BY_GENERAL_MODEL))
 def test_a_method_no_general_model_trains_says_so(key):
     """The refusal is at build time, in the library's own words, not in training."""
-    with pytest.raises((TypeError, ConstructorUnavailable)) as error:
+    with pytest.raises(ConstructorUnavailable) as error:
         if key == "e2r":
             ComposedALC(data("e2r"), method=key, embed_dim=D)
         else:
@@ -599,7 +614,7 @@ def test_an_argument_the_method_cannot_take_is_a_type_error_that_names_the_accep
 
 def test_a_method_that_is_not_a_composed_geometry_names_the_parts_it_takes():
     from mowl.representation.swap import build_method
-    with pytest.raises(TypeError, match="replaceable"):
+    with pytest.raises(ConstructorUnavailable, match="replaceable"):
         build_method("grounded", 5, 2, 0, 4, classes="box")
 
 

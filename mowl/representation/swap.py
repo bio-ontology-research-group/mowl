@@ -159,7 +159,7 @@ def build_method(key, nb_classes, nb_relations, nb_individuals=0, embed_dim=50,
     if not rest:
         return geometry
     if not isinstance(geometry, ComposedGeometry):
-        raise TypeError(
+        raise ConstructorUnavailable(
             f"The method {key!r} builds a {type(geometry).__name__}, which is not put "
             f"together from replaceable class, relation and measure parts; it does not take "
             f"{sorted(rest)}. Its own options: "

@@ -180,7 +180,7 @@ class ComposedALC(EmbeddingALCModel):
     def init_module(self):
         module = self._build()
         if not isinstance(module, ExpressionGeometry):
-            raise TypeError(
+            raise ConstructorUnavailable(
                 f"The geometry of {self.method!r} ({type(module).__name__}) does not read ALC "
                 f"axioms (it is not an ExpressionGeometry): ComposedALC cannot train it. "
                 f"Methods it trains: dfalc, falcon, alcone; subspace logic ('e2r') is "
@@ -301,6 +301,12 @@ class ComposedALC(EmbeddingALCModel):
                               ("individuals", self.individuals), ("measure", self.measure),
                               ("objective", self.objective)) if v is not None}
         name = repr(self.method) if self.method is not None else "The combination"
+        objective = getattr(self.module, "objective", None)
+        if "objective" in given and not hasattr(objective, "axiom_cost"):
+            raise ConstructorUnavailable(
+                f"{name} cannot take an objective that is not an ALC objective: the loss of "
+                f"{type(self.module).__name__} is the cost of an axiom pattern "
+                f"(objective.axiom_cost), which {type(objective).__name__} does not have.")
         # the regimes of the geometry (its schedule) are attached now: one that cannot be
         # used with the geometry raises TypeError here, not in the first epoch
         self.training_regime
