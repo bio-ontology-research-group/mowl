@@ -185,6 +185,9 @@ general parts that other geometries of elements and unions of boxes can use:
   report (``exact_regime=`` replaces it);
 * ``train`` is the loop :class:`~mowl.training.sampled_objective.SampledObjectiveTraining`
   of any model whose step is one sampled objective.
+* the set operations of the query compiler below (constants, projection along a role,
+  intersection, union, depth) are
+  :class:`~mowl.representation.library.box_union_algebra.BoundedBoxUnions`.
 
 .. testcode::
 

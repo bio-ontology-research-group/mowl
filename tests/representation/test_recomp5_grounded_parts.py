@@ -311,3 +311,49 @@ def test_grounded_el_initialises_and_reseeds_through_the_parts():
         m.class_active.zero_()
     assert model.reseed_idle(prune_unused=False) >= 3
     assert float(m.depth(m.positions()[:1], th.tensor([0]), crisp=True)) > 0
+
+
+# -- the set algebra of unions of boxes ---------------------------------------------------
+def test_bounded_box_unions_algebra():
+    from mowl.representation.library.box_union_algebra import (EMPTY_DEPTH, Boxes,
+                                                               BoundedBoxUnions)
+    alg = BoundedBoxUnions(max_boxes=3)
+    a = Boxes(th.tensor([[[0., 0.], [5., 5.]]]), th.ones(1, 2, 2), th.ones(1, 2, dtype=th.bool))
+    b = Boxes(th.tensor([[[0.5, 0.5]]]), th.ones(1, 1, 2), th.ones(1, 1, dtype=th.bool))
+    inter = alg.intersect(a, b)
+    assert inter.active.tolist() == [[True, False]]
+    assert th.allclose(inter.cen[0, 0], th.tensor([0.25, 0.25]))
+    assert th.allclose(inter.w[0, 0], th.tensor([0.75, 0.75]))
+    shifted = alg.minkowski(a, th.tensor([[[1., 0.]]]), th.zeros(1, 1, 2),
+                            th.ones(1, 1, dtype=th.bool))
+    assert th.allclose(shifted.cen, a.cen + th.tensor([1., 0.]))
+    both = alg.union(a, b)
+    assert both.cen.shape == (1, 3, 2)
+    capped = BoundedBoxUnions(max_boxes=1).union(a, Boxes(th.zeros(1, 1, 2), 3 * th.ones(1, 1, 2),
+                                                          th.ones(1, 1, dtype=th.bool)))
+    assert capped.cen.shape == (1, 1, 2) and float(capped.w[0, 0, 0]) == 3.0
+    p = th.tensor([[0., 0.], [9., 9.]]).unsqueeze(0).unsqueeze(2)
+    d = alg.depth(p, a)
+    assert float(d[0, 0]) == 1.0 and float(d[0, 1]) < 0
+    assert float(alg.depth(p, alg.empty(1, 2, a.cen))[0, 0]) == EMPTY_DEPTH
+    assert float(alg.overlap_depth(a, b)) > 0
+    pts = alg.points(th.tensor([[1., 2.]]))
+    assert pts.w.abs().sum() == 0 and pts.active.all()
+
+
+def test_bounded_box_unions_on_the_regions_of_a_class_model():
+    """Another combination: the algebra on the boxes of a BoxUnionClasses (named classes),
+    with MaskedUnionOfBoxes-shaped results: the intersection of two classes is where a point
+    is in both."""
+    from mowl.representation.library.box_union_algebra import BoundedBoxUnions
+    th.manual_seed(0)
+    g = _Parts(2, 2, 0, 2, 3)
+    regions = g.class_regions()
+    alg = BoundedBoxUnions(max_boxes=9, box_type=Regions)
+    a = Regions(cen=regions.cen[:1], w=regions.w[:1], active=regions.active[:1])
+    b = Regions(cen=regions.cen[1:], w=regions.w[1:], active=regions.active[1:])
+    pts = th.rand(200, 2) - 0.5
+    both = alg.depth(pts.unsqueeze(0).unsqueeze(2), alg.intersect(a, b))[0] > 0
+    in_a = g.depth(pts, th.zeros(200, dtype=th.long), crisp=True) > 0
+    in_b = g.depth(pts, th.ones(200, dtype=th.long), crisp=True) > 0
+    assert th.equal(both, in_a & in_b)
