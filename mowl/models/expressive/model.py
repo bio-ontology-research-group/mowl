@@ -1,32 +1,44 @@
 r"""ExpressivE on a projected ontology."""
-from mowl.models.graph_kge.region_kge import RegionKGEModel
-from mowl.nn.graph.expressive import ExpressivE as ExpressivEKGE
+from mowl.models.graph_kge.triple_model import GraphKGEModel
 
 
-class ExpressivE(RegionKGEModel):
+class ExpressivE(GraphKGEModel):
     r"""ExpressivE [pavlovic2023]_ trained on the triples of a projection of the ontology.
 
-    Entity pairs are points of the virtual triple space :math:`\mathbb{R}^{2d}` and every
-    relation is a hyper-parallelogram there (see :mod:`mowl.nn.graph.expressive`). The
-    geometry, the distance and the constraints are those of the authors' code; training
-    and projection are the shared ones of
-    :class:`~mowl.models.graph_kge.region_kge.RegionKGEModel`.
+    The named combination ``expressive`` of
+    :func:`mowl.representation.library.other_graph.expressive`: **entities** are points, a
+    **relation** is a hyper-parallelogram in the space of entity pairs
+    :math:`\mathbb{R}^{2d}` (slopes, centres and widths for the head and the tail position),
+    the **interaction** is the distance of Equation 3 of the paper with the constraints of the
+    authors' code (:mod:`mowl.nn.graph.kge_interactions`), the **objective** the
+    self-adversarial negative sampling loss (margin 3, temperature 2), the **sampler** the
+    uniform corruption of heads and tails, the **projection** the
+    :class:`~mowl.projection.OWL2VecStarProjector`. ``model.module.parts`` names them and
+    every one can be swapped (see :class:`~mowl.models.GraphKGEModel`).
 
     Ontology link (an adaptation: ExpressivE is a knowledge graph method). As for
-    :class:`~mowl.models.boxe.BoxE`, the triples are those of a projection of the ontology
+    :class:`~mowl.models.BoxE`, the triples are those of a projection of the ontology
     (``subclassof``, existential, type and role assertion edges). Composition patterns of
     the paper hold for the projected triples only; an ontology's role chains are not read.
-    Scores exist for ``gci0`` and ``gci2``.
+    Scores exist for ``gci0``, ``gci2`` and the assertion forms.
 
     :param min_denom: ``Dmin`` of the paper, lower bound of :math:`|1 - s^h s^t|`.
     :param p: Norm of the score.
     :param tanh_map: Map entities, centres and widths into ``[-1, 1]``.
     """
 
-    KGE_CLASS = ExpressivEKGE
+    METHOD = "expressive"
 
     def __init__(self, dataset, embed_dim=50, min_denom=0.5, p=2, tanh_map=True,
-                 kge_kwargs=None, **kwargs):
-        kge_kwargs = dict(kge_kwargs or {})
-        kge_kwargs.update(min_denom=min_denom, p=p, tanh_map=tanh_map)
-        super().__init__(dataset, embed_dim=embed_dim, kge_kwargs=kge_kwargs, **kwargs)
+                 kge_kwargs=None, projector=None, learning_rate=1e-3, batch_size=1024,
+                 num_negs_per_pos=None, seed=0, model_filepath=None, device="cpu", **parts):
+        options = dict(kge_kwargs or {})
+        unknown = set(options) - {"min_denom", "p", "tanh_map"}
+        if unknown:
+            raise TypeError(f"Unknown ExpressivE options {sorted(unknown)}.")
+        options.update(min_denom=min_denom, p=p, tanh_map=tanh_map)
+        options.update(parts)
+        super().__init__(dataset, embed_dim=embed_dim, projector=projector,
+                         learning_rate=learning_rate, batch_size=batch_size,
+                         num_negs_per_pos=num_negs_per_pos, seed=seed,
+                         model_filepath=model_filepath, device=device, **options)

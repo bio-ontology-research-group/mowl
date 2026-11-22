@@ -41,70 +41,9 @@ import torch as th
 from pykeen.losses import MarginRankingLoss
 from pykeen.models import ERModel
 from pykeen.nn import Embedding
-from pykeen.nn.modules import Interaction
-
-
-def relation_matrices(raw, row_function="softmax"):
-    """Soft reshuffling matrices from raw ``(..., l + 1, l)`` parameters: softmax over the
-    rows of every column, then drop the last row. Shape ``(..., l, l)``. With
-    ``row_function="square"`` the entries are squared instead (the RESHUFFLE2 ablation of
-    the paper, which allows arbitrary non-negative values)."""
-    if row_function == "softmax":
-        return th.softmax(raw, dim=-2)[..., :-1, :]
-    if row_function == "square":
-        return raw.square()[..., :-1, :]
-    raise ValueError("row_function must be 'softmax' or 'square'.")
-
-
-def random_features(num_entities, k, l,  # noqa: E741
-                    density=0.3085, generator=None):
-    """Random binary features of shape ``(n, k, l)``. The default density is the
-    probability that a standard normal exceeds 0.5, which is how the authors' code draws
-    them."""
-    return (th.rand(num_entities, k, l, generator=generator) < density).float()
-
-
-def propagate(x, rel, loop, edge_index, edge_type, num_layers, aggregation="max_self_and_selfLoop"):
-    """Run ``num_layers`` message passing layers.
-
-    :param x: Features ``(n, k, l)``.
-    :param rel: Relation matrices ``(2R, l, l)``; relation ``i`` is ``rel[2i]`` and its
-        inverse ``rel[2i + 1]``.
-    :param loop: The loop matrix ``(l, l)``.
-    :param edge_index: ``(2, E)`` source and target of every triple.
-    :param edge_type: ``(E,)`` relation index of every triple (0 .. R-1).
-    """
-    if aggregation not in ("max_self_and_selfLoop", "max_self_noLoop"):
-        raise ValueError("aggregation must be 'max_self_and_selfLoop' or 'max_self_noLoop'.")
-    src, dst = edge_index
-    for _ in range(num_layers):
-        def message(source, target, matrices):
-            m = th.bmm(x[source], matrices)
-            index = target.view(-1, 1, 1).expand_as(m)
-            return th.zeros_like(x).scatter_reduce(0, index, m, reduce="amax")
-
-        new = th.maximum(x, th.maximum(
-            message(src, dst, rel[2 * edge_type]),
-            message(dst, src, rel[2 * edge_type + 1])))
-        if aggregation == "max_self_and_selfLoop":
-            new = th.maximum(new, x @ loop)
-        x = new
-    return x
-
-
-def reshuffle_interaction(h, r, t):
-    """:math:`-\\lVert \\mathrm{ReLU}(h R - t) \\rVert_2` over the ``k x l`` entries."""
-    return -th.norm(th.relu(h @ r - t), dim=(-2, -1), p=2)
-
-
-class ReshuffleInteraction(Interaction):
-    """The scoring function of RESHUFFLE. Relations arrive as softmaxed matrices."""
-
-    entity_shape = ("kl",)
-    relation_shape = ("dl",)
-
-    def forward(self, h, r, t):
-        return reshuffle_interaction(h, r, t)
+from mowl.nn.graph.kge_interactions import (  # noqa: F401
+    ReshuffleInteraction, propagate, random_features, relation_matrices,
+    reshuffle_interaction)
 
 
 class _FixedFeatures:
