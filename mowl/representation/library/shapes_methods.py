@@ -17,6 +17,8 @@ published method sets (and a good default does not) are explicit arguments.
 """
 
 from collections import namedtuple
+import functools
+import inspect
 from functools import partial
 
 import torch as th
@@ -78,6 +80,125 @@ def _instance(cls, into, base_init, *parts, **options):
     return target
 
 
+
+# -- the random numbers of the modules ------------------------------------------------------------
+#
+# The modules of these methods have always drawn their initial values in a fixed order. The parts
+# draw theirs in the order they are built, which gives other numbers for the same seed. The
+# builders draw once more in the order of the earlier modules, so that a seed gives the same
+# model as before (the golden values of ``tests/nn`` depend on it); the numbers have the
+# same distribution either way.
+
+def _fresh(rows, width, fill):
+    """The table of a direct module: an ``nn.Embedding`` (which draws its own values first),
+    filled by ``fill``."""
+    table_ = nn.Embedding(rows, width)
+    with th.no_grad():
+        fill(table_.weight)
+    return table_.weight.detach()
+
+
+def _unit(weight):
+    nn.init.uniform_(weight, a=-1.0, b=1.0)
+    if len(weight):
+        weight.div_(th.linalg.norm(weight, dim=1, keepdim=True).clamp_min(1e-12))
+
+
+def _put(target, values):
+    """Overwrite the rows of the table ``target`` with ``values`` (as many as both have)."""
+    n = min(target.num_embeddings, len(values))
+    with th.no_grad():
+        target.weight[:n].copy_(values[:n])
+
+
+def _in_the_order_of_the_modules(redraw):
+    """Decorator of a builder: draw the initial values of new tables again, in the order of the
+    direct module, with ``redraw(geometry, options)``."""
+    def decorate(build):
+        signature = inspect.signature(build)
+
+        @functools.wraps(build)
+        def wrapper(*args, **kwargs):
+            bound = signature.bind(*args, **kwargs)
+            bound.apply_defaults()
+            state = th.get_rng_state()
+            geometry = build(*args, **kwargs)
+            if bound.arguments.get("tables") is None:
+                th.set_rng_state(state)
+                redraw(geometry, bound.arguments)
+            return geometry
+        return wrapper
+    return decorate
+
+
+def _redraw_octagon(g, a):
+    n, d, r = len(g.class_model), g.class_model.embed_dim, a["nb_relations"]
+    _put(g.class_model.centres, _fresh(n, d, lambda w: nn.init.uniform_(w, a=-1.0, b=1.0)))
+    _put(g.class_model.radii, _fresh(n, 4 * d, lambda w: nn.init.uniform_(
+        w, a=0.0, b=a["init_radius"])))
+    _put(g.relation_model.vectors, _fresh(max(r, 1), d, lambda w: nn.init.uniform_(
+        w, a=-0.1, b=0.1)))
+    if g.individual_model is not None:
+        _put(g.individual_model.centres, _fresh(
+            len(g.individual_model), d, lambda w: nn.init.uniform_(w, a=-1.0, b=1.0)))
+
+
+def _redraw_prism(g, a):
+    base = getattr(g, "_slot_classes", g.class_model)
+    n, d, r = len(base), a["embed_dim"], a["nb_relations"]
+    _put(base.centres, _fresh(n, 2, _unit))
+    _put(base.inradii, _fresh(n, 1, lambda w: nn.init.uniform_(w, a=0.1, b=1.0)))
+    _put(base.box_centres, _fresh(n, d - 2, _unit))
+    _put(base.box_offsets, _fresh(n, d - 2, _unit))
+    _put(g.relation_model.vectors, _fresh(r, d, _unit))
+    if g.individual_model is not None:
+        _put(g.individual_model.centres, _fresh(len(g.individual_model), d, _unit))
+
+
+def _redraw_eike(g, a):
+    n, d, r = len(g.class_model.first), a["embed_dim"], a["nb_relations"]
+    first, second = g.class_model.first, g.class_model.second
+
+    def uniform(w):
+        nn.init.uniform_(w, a=-0.5, b=0.5)
+    _put(first.centres, _fresh(n, d, uniform))
+    _fresh(n, d, lambda w: None)                    # the two constant tables draw as well
+    _fresh(n, 1, lambda w: None)
+    _put(g.individual_model.first.centres, _fresh(
+        len(g.individual_model.first), d, uniform))
+    _put(g.relation_model.vectors, _fresh(max(r, 1), d, uniform))
+    _put(second.centres, _fresh(n, d, uniform))
+    init = a["intensional_init"]
+    if init is not None:
+        import numpy as np
+        init = th.as_tensor(np.asarray(init, dtype="float32"))
+        keep = ~th.isnan(init).any(dim=1)
+        with th.no_grad():
+            second.centres.weight[keep] = init[keep]
+    if a["instance_map"] == "matrix":
+        with th.no_grad():
+            g.individual_model.second.matrix.copy_(th.eye(d) + 0.01 * th.randn(d, d))
+
+
+def _redraw_concept2box(g, a):
+    n, d, r = len(g.class_model), a["embed_dim"], a["nb_relations"]
+    hidden = a["hidden_dim"] or 2 * d
+    centres = nn.Embedding(n, d)
+    contexts = nn.Embedding(r + 2, d)
+    network = nn.Sequential(nn.Linear(2 * d, hidden), nn.ReLU(), nn.Linear(hidden, 2 * d))
+    translations = nn.Embedding(max(r, 1), d)
+    points = nn.Embedding(a["nb_individuals"], d) if a["nb_individuals"] else None
+    for e in (centres, contexts, translations, points):
+        if e is not None:
+            nn.init.normal_(e.weight, std=0.5)
+    _put(g.class_model.centres, centres.weight.detach())
+    _put(g.class_model.contexts, contexts.weight.detach())
+    g.class_model.project.load_state_dict(network.state_dict())
+    _put(g.relation_model.vectors, translations.weight.detach())
+    if points is not None:
+        _put(g.individual_model.centres, points.weight.detach())
+
+
 def _translations(t, nb_relations, embed_dim, init, scale):
     if t is not None:
         return Translation(vectors=t.rel_embed)
@@ -87,6 +208,7 @@ def _translations(t, nb_relations, embed_dim, init, scale):
 # -- octagon ----------------------------------------------------------------------------------
 
 @register_method("octagon")
+@_in_the_order_of_the_modules(_redraw_octagon)
 def octagon(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0,
             disjoint_margin=None, neg_margin=0.1, init_radius=0.5, min_width=0.0,
             tables=None, _into=None):
@@ -117,7 +239,7 @@ def octagon(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0
     objective = ShapeObjective(
         margin, gci3="inclusion", gci2_negative="outside", negatives=("gci2",),
         disjoint_margin=disjoint_margin, neg_margins={"gci2": neg_margin},
-        assertion="distance", strict_negatives=False)
+        assertion="distance")
     regularizers = (MinWidthPenalty(min_width),) if min_width and min_width > 0 else ()
     return _instance(OctagonELModule if t is None else ComposedGeometry, _into,
                      ComposedGeometry.__init__, classes, relations, OctagonBounds(), objective,
@@ -136,6 +258,7 @@ def _octagon(module):
 # -- prism ------------------------------------------------------------------------------------
 
 @register_method("prism")
+@_in_the_order_of_the_modules(_redraw_prism)
 def prism(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
           gci2_negative_triangle="overlap", reading="axiom", existence_weight=1.0,
           size_reg=1e-3, empty_box_reading="signed", size_reg_without_tables=False,
@@ -180,6 +303,11 @@ def prism(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
     :param tables: A module with ``tri_center``, ``tri_inradius``, ``box_center``,
         ``box_offset``, ``rel_embed`` (and ``ind_embed``) to share parameters with.
     """
+    if isinstance(max_depth, bool) or not isinstance(max_depth, int) or max_depth < 0:
+        raise ValueError(f"max_depth must be an int >= 0, got {max_depth!r}")
+    if not isinstance(structural_definitions, bool):
+        raise ValueError(
+            f"structural_definitions must be a bool, got {structural_definitions!r}")
     if gci2_negative_triangle not in ("overlap", "inradius"):
         raise ValueError("gci2_negative_triangle must be 'overlap' or 'inradius'.")
     if reading not in ("axiom", "structural"):
@@ -208,7 +336,7 @@ def prism(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
     options = dict(
         gci3="overlap",
         gci2_negative="overlap" if gci2_negative_triangle == "overlap" else "shrunk",
-        negatives="gci2", empty_margin=True, strict_negatives=False)
+        negatives="gci2", empty_margin=True)
     if reading == "structural":
         from mowl.representation.library.structural_reading import StructuralReading
         geometry = _instance(
@@ -253,6 +381,7 @@ def _prism(module):
 # -- eike -------------------------------------------------------------------------------------
 
 @register_method("eike")
+@_in_the_order_of_the_modules(_redraw_eike)
 def eike(nb_classes, nb_relations, nb_individuals=0, embed_dim=100, margin=0.0, alpha=1.0,
          margins=(1.0, 1.0, 1.0), instance_map="eye", intensional_init=None,
          freeze_intensional=False, containment="published", norm_term="signed",
@@ -313,7 +442,7 @@ def eike(nb_classes, nb_relations, nb_individuals=0, embed_dim=100, margin=0.0, 
         points.centres, matrix, owner=None if t is None else (t, "M")))
     measure = LinkedMeasure(EllipsoidMeasure(containment), CosineOrder(norm_term), alpha)
     objective = ShapeObjective(
-        0.0, negatives="gci2", strict_negatives=False,
+        0.0, negatives="gci2",
         ranking={"gci0": gamma_sub, "class_assertion": gamma_ins,
                  "object_property_assertion": gamma_rel})
     forms = ("gci0", "class_assertion", "object_property_assertion")
@@ -335,6 +464,7 @@ def _eike(module):
 # -- concept2box --------------------------------------------------------------------------------
 
 @register_method("concept2box")
+@_in_the_order_of_the_modules(_redraw_concept2box)
 def concept2box(nb_classes, nb_relations, nb_individuals=0, embed_dim=32, margin=0.0,
                 beta=1.0, alpha=0.5, kge_margin=0.3, cross_margin=0.15, hidden_dim=None,
                 instance_weight=1.0, cross_weight=1.0, gci2_reading="axiom", tables=None,
@@ -404,7 +534,22 @@ def _concept2box(module):
 # constructor arguments the modules have always had. The earlier hand-written loss modules are
 # in ``mowl.baselines.nn.el``.
 
-class OctagonELModule(ComposedGeometry):
+class _ReadsItsForms:
+    """The modules of the four methods read the forms of their method only: another form is
+    :class:`NotImplementedError`, as in every :class:`~mowl.nn.ELModule`; with
+    ``per_axiom_column = False`` a cost is the flat ``(B,)`` vector of the earlier modules."""
+
+    def cost(self, form, rows, neg=False):
+        if form not in self.supported_forms:
+            raise NotImplementedError(
+                f"{type(self).__name__} does not read {form!r} axioms.")
+        out = super().cost(form, rows, neg)
+        if not self.per_axiom_column and out.ndim == 2 and out.shape[1] == 1:
+            out = out.reshape(-1)
+        return out
+
+
+class OctagonELModule(_ReadsItsForms, ComposedGeometry):
     r"""The octagon method (:func:`octagon`) as a module: classes are products of 2-D octagons
     (``class_embed``: centre, ``class_radius``: eight radii per pair of coordinates),
     relations translations (``rel_embed``), individuals points (``ind_embed``); inclusion,
@@ -481,7 +626,7 @@ class OctagonELModule(ComposedGeometry):
             return self.class_model(ids).bounds.detach()
 
 
-class PrismModule(ComposedGeometry):
+class PrismModule(_ReadsItsForms, ComposedGeometry):
     r"""The prism method (:func:`prism`, ``objective="axiom"``) as a module: classes are
     triangle :math:`\times` box (``tri_center``, ``tri_inradius``, ``box_center``,
     ``box_offset``: :math:`2d - 1` numbers per class), relations translations
@@ -507,13 +652,6 @@ class PrismModule(ComposedGeometry):
                  objective="axiom", max_depth=8, structural_definitions=True,
                  existence_weight=1.0, size_reg=1e-3, gci2_negative_triangle="overlap",
                  empty_box_reading="signed", size_reg_without_tables=False):
-        if objective not in ("axiom", "structural"):
-            raise ValueError(f"objective must be 'axiom' or 'structural', got {objective!r}.")
-        if isinstance(max_depth, bool) or not isinstance(max_depth, int) or max_depth < 0:
-            raise ValueError(f"max_depth must be an int >= 0, got {max_depth!r}")
-        if not isinstance(structural_definitions, bool):
-            raise ValueError(
-                f"structural_definitions must be a bool, got {structural_definitions!r}")
         prism(nb_ont_classes, nb_rels, nb_inds or 0, embed_dim=embed_dim, margin=margin,
               gci2_negative_triangle=gci2_negative_triangle, reading=objective,
               existence_weight=existence_weight, size_reg=size_reg,
@@ -589,7 +727,7 @@ class StructuralPrismModule(PrismModule, StructuralGeometry):
         return dict(super().structural_table_options, max_level=self.max_depth)
 
 
-class EIKEModule(ComposedGeometry):
+class EIKEModule(_ReadsItsForms, ComposedGeometry):
     r"""EIKE (:func:`eike`) as a module: every name has an ellipsoid (``class_center``,
     ``class_axes_raw``, ``class_radius_raw``) and an intensional vector
     (``class_intensional``), individuals are points (``ind_embed``) and the vectors
@@ -661,7 +799,7 @@ class EIKEModule(ComposedGeometry):
         return self.objective.ranking["object_property_assertion"]
 
 
-class Concept2BoxModule(ComposedGeometry):
+class Concept2BoxModule(_ReadsItsForms, ComposedGeometry):
     r"""Concept2Box (:func:`concept2box`) as a module: classes are Gumbel boxes in the context
     of a relation (``class_embed``, ``ontology_rel_embed``, ``box_network``), individuals points
     (``ind_embed``), relations translations of individuals (``rel_embed``).

@@ -82,7 +82,9 @@ def all_el_module_classes():
             yield from subs(s)
     out = {}
     for c in subs(ELModule):
-        if c.__module__.startswith("mowl.nn.") and not c.__name__.startswith("_"):
+        # (modules built from parts live with the parts and are exported by mowl.nn)
+        exported = getattr(mowl.nn, c.__name__, None) is c
+        if (c.__module__.startswith("mowl.nn.") or exported) and not c.__name__.startswith("_"):
             out[c.__name__] = c
     return [out[k] for k in sorted(out)]
 
