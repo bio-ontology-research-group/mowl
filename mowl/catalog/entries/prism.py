@@ -60,7 +60,7 @@ CARD = MethodCard(
             "normal forms with every satisfiable class and listed conjunction non-empty.",
             "mOWL (original): docs/source/geometric/index.rst, 'Structural objective'",
             condition="zero structural loss, margin 0",
-            verified_in_mowl="tests/nn/test_prism_structural.py::"
+            verified_in_mowl="tests/baselines/test_prism_structural_losses.py::"
                              "test_prism_structural_zero_at_exact_t3"),
     ),
     limitations=(

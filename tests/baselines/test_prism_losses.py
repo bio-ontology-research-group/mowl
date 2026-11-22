@@ -7,8 +7,9 @@ from typing import Tuple
 import pytest
 import torch
 
-from mowl.nn import ELBEModule, PrismModule
-import mowl.nn.el.prism.losses as PL
+from mowl.nn import ELBEModule
+from mowl.baselines.nn.el.prism.module import PrismModule
+import mowl.baselines.nn.el.prism.losses as PL
 
 
 def _supports_to_center_inradius(h: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:

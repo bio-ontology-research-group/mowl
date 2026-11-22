@@ -242,7 +242,7 @@ def _prism_vertices(p):
 
 
 def _random_prism(rng, d=4):
-    from mowl.nn.el.prism.losses import NORMALS
+    from mowl.representation.library.shapes_prism_math import NORMALS
     c, r = rng.uniform(-1, 1, 2), rng.uniform(0, 1)
     h = NORMALS.double().numpy() @ c + r
     bc, bo = rng.uniform(-1, 1, d - 2), rng.uniform(0, 1, d - 2)
@@ -477,7 +477,7 @@ def _mcmultibox(broken=False):
 def _prism(broken=False):
     """Triangle part: X_i has support -0.4 on normal i and 1 on the others; pairwise
     intersections have support sum 0.2 > 0, the triple one -1.2 < 0. Box part [0, 1]."""
-    from mowl.nn.el.prism.losses import NORMALS
+    from mowl.representation.library.shapes_prism_math import NORMALS
     from mowl.nn.el.prism.module import PrismModule
     xs = [np.array([1.0, 1.0, 1.0]) for _ in range(3)]
     for i in range(3):

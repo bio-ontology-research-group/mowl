@@ -3,6 +3,7 @@ import re
 from urllib.parse import unquote
 
 import numpy as np
+import torch as th
 
 from mowl.models.composed.model import ComposedEL
 
@@ -128,7 +129,6 @@ class EIKE(ComposedEL):
         with np.load(path, allow_pickle=False) as data:
             return {str(i): v for i, v in zip(data["iris"], data["vectors"])}
 
-
     def init_module(self):
         init = None
         if self.intensional_vectors:
@@ -138,3 +138,29 @@ class EIKE(ComposedEL):
                     init[self.class_index_dict[iri]] = np.asarray(vec, dtype="float32")
         self.method_options["intensional_init"] = init
         super().init_module()
+
+    def get_negative_sampling_config(self):
+        """Bordes-style negatives (the paper): corrupt head or tail, one negative of each
+        kind per positive (the regime :class:`~mowl.training.PerColumnCorruption` of the
+        method does the sampling; this is its configuration)."""
+        cfg = {
+            "gci0": {"index_pool": "classes", "corrupt_column": [0, 1]},
+            "class_assertion": {"index_pool": ["individuals", "classes"],
+                                "corrupt_column": [0, 1]},
+            "object_property_assertion": {"index_pool": "individuals",
+                                          "corrupt_column": [0, 2]},
+        }
+        if self.neg_sampling_gcis is not None:
+            cfg = {k: v for k, v in cfg.items() if k in self.neg_sampling_gcis}
+        return cfg
+
+    def compute_loss(self, pos_scores, neg_scores=None):
+        """The ranking loss :math:`[\\gamma + f(\\delta) - f(\\delta')]_+` of Section 4.3,
+        where :math:`\\delta'` is a corruption of :math:`\\delta`: each positive is paired
+        with its own negatives, the blocks of ``neg_scores`` follow the corrupted columns. The
+        module returns negative scores already reduced by the margin of their axiom type.
+        Averaged over pairs."""
+        if neg_scores is None:
+            return th.mean(pos_scores)
+        k = neg_scores.numel() // pos_scores.numel()
+        return th.relu(pos_scores.view(1, -1) - neg_scores.view(k, -1)).mean()

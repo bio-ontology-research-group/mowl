@@ -9,7 +9,7 @@ import mowl
 mowl.init_jvm("2g")
 import mowl.datasets  # noqa: F401,E402  (import order: avoids a circular import in mowl.nn)
 from mowl.nn.el.octagon import geometry as G  # noqa: E402
-from mowl.nn.el.octagon.module import OctagonELModule  # noqa: E402
+from mowl.baselines.nn.el.octagon.module import OctagonELModule  # noqa: E402
 from mowl.nn.el.elbe.module import ELBEModule  # noqa: E402
 
 pytestmark = pytest.mark.filterwarnings("ignore:Converting a tensor with requires_grad")

@@ -16,6 +16,7 @@ Each function builds the geometry with new tables, or with the tables of an exis
 published method sets (and a good default does not) are explicit arguments.
 """
 
+from collections import namedtuple
 from functools import partial
 
 import torch as th
@@ -457,6 +458,22 @@ class OctagonELModule(ComposedGeometry):
         """Octagon bounds of the classes ``idx``, shape ``(B, P, 8)``."""
         return self.class_model(idx).bounds
 
+    def set_class_bounds(self, idx, h):
+        """Overwrite the parameters of class ``idx`` so that its bounds are ``h``: the witness
+        point of each (non-empty) factor as centre and the radii :math:`h_k - n_k \\cdot c
+        \\ge 0`. For tests and exact initialisation.
+
+        :param h: Bounds, shape ``(P, 8)``; every factor must be non-empty.
+        """
+        h = h.to(self.class_embed.weight)
+        if bool((G.emptiness_slack(h) < -1e-9).any()):
+            raise ValueError("Every factor must be non-empty.")
+        centre = G.witness_point(G.tighten(h))
+        radius = h - centre @ G.directions_like(h).T
+        with th.no_grad():
+            self.class_embed.weight[idx] = centre.reshape(-1)
+            self.class_radius.weight[idx] = th.clamp_min(radius, 0.0).reshape(-1)
+
     def all_class_bounds(self):
         """Bounds of all classes, detached, shape ``(nb_ont_classes, P, 8)``."""
         with th.no_grad():
@@ -525,6 +542,11 @@ class PrismModule(ComposedGeometry):
         return self.class_model.embed_dim
 
 
+#: Support values ``h`` of the triangle, centres ``cen`` and signed half-widths ``w`` of the box
+#: of prisms (the form the structural tests of the prism method read).
+PrismRegions = namedtuple("PrismRegions", ["h", "cen", "w"])
+
+
 class StructuralPrismModule(PrismModule, StructuralGeometry):
     """:class:`PrismModule` with ``objective="structural"``: a
     :class:`~mowl.representation.library.structural_methods.StructuralGeometry`."""
@@ -544,6 +566,21 @@ class StructuralPrismModule(PrismModule, StructuralGeometry):
     @property
     def box_offset(self):
         return self._slot_classes.box_offsets
+
+    def class_regions(self, idx):
+        """The prisms of the classes ``idx`` (defined classes are intersections, with signed
+        half-widths) as ``(h, cen, w)``."""
+        prism_ = self.class_model(idx)
+        return PrismRegions(prism_.supports, prism_.centre, prism_.offset)
+
+    def all_class_regions(self):
+        """The prisms of all classes, detached."""
+        with th.no_grad():
+            return self.class_regions(th.arange(len(self.class_model), device=self.device))
+
+    def structural_extra_loss(self):
+        """The existence and size penalties (the regularisation of the structural reading)."""
+        return self.regularization_loss()
 
     @property
     def structural_table_options(self):

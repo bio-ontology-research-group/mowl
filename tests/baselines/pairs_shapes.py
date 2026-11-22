@@ -115,7 +115,12 @@ def _in_order(model):
     return model
 
 
-def _pair(method, variant=None, **options):
+def _abox():
+    from tests.models.kg_region_data import abox_dataset
+    return abox_dataset()
+
+
+def _pair(method, variant=None, dataset=None, **options):
     name, baseline = CLASSES[method]
 
     def new(dataset):
@@ -135,7 +140,8 @@ def _pair(method, variant=None, **options):
     atol = 1e-4 if network else 1e-5
     return Pair(key=method if variant is None else f"{method}/{variant}", new=new, old=old,
                 copy=_copy(TABLES[method], network), scores=_scores,
-                parameters=_parameters(TABLES[method], network), atol=atol)
+                parameters=_parameters(TABLES[method], network), atol=atol,
+                **({} if dataset is None else {"dataset": dataset}))
 
 
 PAIRS = [
@@ -149,6 +155,13 @@ PAIRS = [
           margins=(0.5, 0.3, 1.0)),
     _pair("concept2box", learning_rate=0.01),
     _pair("concept2box", "triple", learning_rate=0.01, gci2_reading="triple"),
+    # with individuals: class assertions and role assertions
+    _pair("octagon", "abox", _abox, learning_rate=0.01),
+    _pair("prism", "abox", _abox, learning_rate=0.01),
+    _pair("prism", "structural-abox", _abox, learning_rate=0.01, objective="structural"),
+    _pair("eike", "abox", _abox, learning_rate=0.01),
+    _pair("eike", "matrix-abox", _abox, learning_rate=0.01, instance_map="matrix"),
+    _pair("concept2box", "abox", _abox, learning_rate=0.01),
 ]
 
 EXEMPT = {}

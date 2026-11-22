@@ -568,7 +568,8 @@ def _prism_normals():
 class PrismRegion(Region):
     """Prism :math:`T(h) \\times [lo, hi]` with
     :math:`T(h) = \\{p \\in \\mathbb{R}^2 : n_k \\cdot p \\le h_k\\}` for the three fixed
-    unit normals of :data:`mowl.representation.library.shapes_prism_math.NORMALS` (which sum to zero). The
+    unit normals of :data:`mowl.representation.library.shapes_prism_math.NORMALS` (they sum to
+    zero). The
     triangle is non-empty iff :math:`\\sum_k h_k \\ge 0`; it is then equilateral with
     inradius :math:`\\sum_k h_k / 3` and :math:`h` is its support function, so
     containment is :math:`h_1 \\le h_2` (Federico, Leemhuis and Kutz, DL 2026,

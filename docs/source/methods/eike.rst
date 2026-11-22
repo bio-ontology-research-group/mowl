@@ -17,7 +17,11 @@ What mOWL implements
 --------------------
 
 :class:`~mowl.models.eike.model.EIKE` (catalogue key ``eike``) with the module
-:class:`~mowl.nn.el.eike.module.EIKEModule`. It uses the EL training loop
+:class:`~mowl.nn.el.eike.module.EIKEModule`, which is the combination of parts called ``eike``
+(ellipsoids and vectors as linked classes, translations, the ellipsoid measure linked to the
+cosine order, the margin ranking loss and head-or-tail corruption as negatives; see
+:doc:`/representation/combine`). The loss module written by hand is kept in
+:mod:`mowl.baselines`. It uses the EL training loop
 (:class:`~mowl.base_models.EmbeddingELModel`) with the three triple kinds of the paper taken
 from the ontology:
 

@@ -7,8 +7,8 @@ from typing import Tuple
 import pytest
 import torch as th
 
-from mowl.nn import PrismModule
-import mowl.nn.el.prism.losses as PL
+from mowl.baselines.nn.el.prism.module import PrismModule
+import mowl.baselines.nn.el.prism.losses as PL
 from mowl.nn.el.structural import DefinitionTable, ExistenceTargets
 
 

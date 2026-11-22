@@ -4,10 +4,10 @@ from unittest import TestCase
 
 import torch as th
 
-from mowl.nn.el.concept2box.module import Concept2BoxModule
-from mowl.nn.el.eike.module import EIKEModule
-from mowl.nn.el.octagon.module import OctagonELModule
-from mowl.nn.el.prism.module import PrismModule
+from mowl.baselines.nn.el.concept2box.module import Concept2BoxModule
+from mowl.baselines.nn.el.eike.module import EIKEModule
+from mowl.baselines.nn.el.octagon.module import OctagonELModule
+from mowl.baselines.nn.el.prism.module import PrismModule
 from mowl.representation import ComposedGeometry, METHODS, geometry_of
 from tests.representation.test_adapters import _rows, GCIS, N, R, I
 

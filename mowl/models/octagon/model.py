@@ -13,17 +13,25 @@ class OctagonEL(ComposedEL):
     pairs of :math:`\mathbb{R}^d` (``embed_dim`` must be even). The octagon geometry
     (normalisation, emptiness, intersection) is the paper's; the concept/role design and
     the losses are ours. See :class:`~mowl.nn.OctagonELModule` for the
-    parts and the loss of each normal form and :doc:`/methods/octagon` for the Helly analysis: products
+    parts, and :doc:`/methods/octagon` for the Helly analysis: products
     of 2-D octagons have Helly number exactly 3, so unlike boxes they can model
     :math:`T_3` (three pairwise intersecting concepts without a common point) in
     :math:`d = 2`, but no family of four concepts with all triples intersecting can have an
     empty common intersection.
 
+    The model is the combination of parts called ``"octagon"``
+    (:func:`~mowl.representation.library.shapes_methods.octagon`): products of octagons as
+    classes, translations as relations, individuals as points and the exact octagon tests
+    (:class:`~mowl.representation.library.shapes_measures.OctagonBounds`) as measure. It is a
+    :class:`~mowl.models.ComposedEL`, so any of the parts can be swapped
+    (``ComposedEL(dataset, method="octagon", ...)``) and any training or evaluation regime can
+    be attached. The hand-written loss module of the earlier implementation is
+    :class:`mowl.baselines.models.octagon.model.OctagonEL`.
+
     Training uses the generic loop of :class:`~mowl.base_models.EmbeddingELModel` with the
     default :meth:`compute_loss` (mean positive loss plus mean negative loss). Negative
-    sampling is used for ``gci2`` only, with the exact non-inclusion loss
-    :func:`~mowl.baselines.nn.el.octagon.losses.non_inclusion_loss`. Role axioms
-    (``load_role_axioms=True``) are not supported.
+    sampling is used for ``gci2`` only, with the exact non-inclusion test of the measure.
+    Role axioms are not supported.
 
     :param dataset: mOWL dataset.
     :param embed_dim: Even embedding dimension. Defaults to ``50``.
@@ -33,7 +41,7 @@ class OctagonEL(ComposedEL):
     :param neg_margin: Margin of the negative ``gci2`` loss. Defaults to ``0.1``.
     :param init_radius: Radii are initialised uniformly in ``[0, init_radius]``.
     :param min_width: Width floor regulariser of the module (see
-        :class:`~mowl.baselines.nn.el.octagon.module.OctagonELModule`). Defaults to ``0.0``.
+        :class:`~mowl.representation.library.shapes_methods.MinWidthPenalty`). Defaults to ``0.0``.
     :param learning_rate: Adam learning rate. Defaults to ``0.001``.
     :param lr_decay: Exponential learning-rate decay per epoch (the learning rate of epoch
         ``e`` is ``learning_rate * lr_decay ** e``; the regime

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from mowl.models.composed.model import ComposedEL
 from mowl.nn.el.structural import build_structural_tables
+from mowl.representation.library.shapes_training import SquaredMeanLoss
 
 
 class PrismEL(ComposedEL):
@@ -249,3 +250,16 @@ class PrismEL(ComposedEL):
         if self.init_boxes is not None and self.anchor_weight > 0:
             loss = loss + self.anchor_weight * self.init_boxes.anchor_loss(self.module)
         return loss
+
+    def compute_loss(self, pos_scores, neg_scores=None):
+        """The loss of one batch of one axiom form, that of the regime
+        :class:`~mowl.representation.library.shapes_training.SquaredMeanLoss` of the method.
+
+        Under ``objective="axiom"``: ``MSE(pos.mean(), 0)`` as ELBE does. Under
+        ``objective="structural"``: ``pos.mean()`` (the box scores are squared hinges
+        already, the role and assertion scores enter linearly). In both, if ``neg_scores`` is
+        given, ``MSE(neg.mean(), 1)`` is added.
+        """
+        loss = SquaredMeanLoss(0.0, 1.0, self.objective != "structural")
+        return loss.combine(None, pos_scores.reshape(-1),
+                            None if neg_scores is None else neg_scores.reshape(-1))
