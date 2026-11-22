@@ -79,6 +79,11 @@ class MaskedUnionOfBoxes(Region):
         from mowl.nn.el.structural import Regions
         return Regions(cen=self.cen, w=self.w, active=self.active)
 
+    def union(self, other):
+        """Exact: the boxes of both (``K1 + K2`` per row)."""
+        return MaskedUnionOfBoxes(th.cat([self.cen, other.cen], 1), th.cat([self.w, other.w], 1),
+                                  th.cat([self.active, other.active], 1))
+
     def intersect(self, other):
         """Exact: the union of the intersections of all pairs of boxes."""
         lo = th.maximum((self.cen - self.w)[:, :, None], (other.cen - other.w)[:, None])

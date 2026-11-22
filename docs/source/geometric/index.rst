@@ -74,7 +74,7 @@ five-part progression:
    :class:`~mowl.models.MultiBoxEL` and :class:`~mowl.models.MultiELBE`, prism
    embeddings :class:`~mowl.models.PrismEL`, and the faithful-by-construction
    canonical-element mixture model :class:`~mowl.models.CanonicalMixture`
-   (backed by :class:`~mowl.geometric.membership.MembershipStructure`).
+   (backed by :class:`~mowl.representation.library.membership_structure.MembershipStructure`).
 5. **Training objectives for multi-box and prism models:** soft component
    aggregation and log-space volume-overlap diversity regularisation in
    :class:`~mowl.representation.library.multibox_parts.UnionMeasure` (``aggregation="soft"``), canonical-element point
@@ -155,7 +155,7 @@ constructed model ever fails verification, construction raises
      - :math:`2d - 1` scalar parameters per class in :math:`\mathbb{R}^d` (:math:`d \ge 3`)
    * - :class:`~mowl.models.CanonicalMixture` / :class:`~mowl.nn.CanonicalMixtureModule`
      - Normalised :math:`\mathcal{EL}^{++}` knowledge bases with individuals (ABox completion)
-     - Represents each individual :math:`a` as a masked softmax distribution :math:`p_a` over its admissible canonical support :math:`S_a \subseteq S` from :class:`~mowl.geometric.membership.MembershipStructure`. Guarantees hierarchy violation rate ``0``, exact score ``0.0`` on all training-entailed class assertions, and ``+inf`` score on all contradicted class assertions for all parameter values.
+     - Represents each individual :math:`a` as a masked softmax distribution :math:`p_a` over its admissible canonical support :math:`S_a \subseteq S` from :class:`~mowl.representation.library.membership_structure.MembershipStructure`. Guarantees hierarchy violation rate ``0``, exact score ``0.0`` on all training-entailed class assertions, and ``+inf`` score on all contradicted class assertions for all parameter values.
      - Low-rank factorisation :math:`r = \text{rank}` over :math:`|S|` canonical elements
    * - Soft component aggregation (:class:`~mowl.representation.library.multibox_parts.UnionMeasure` (``aggregation="soft"``))
      - :class:`~mowl.models.MultiBoxEL` and :class:`~mowl.models.MultiELBE` (``component_aggregation="soft"``)

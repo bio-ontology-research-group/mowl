@@ -6,10 +6,11 @@ from __future__ import annotations
 import copy
 from typing import Any, Dict
 import torch as th
-from mowl.nn.el.grounded import crisp_membership, sample_class_region
+from mowl.nn.el.grounded import crisp_membership
 from mowl.nn.el.grounded.module import _validate_int_ge
 from mowl.nn.el.structural import Regions
-from mowl.representation.library.grounded_evaluation import CrispViolations, all_box_corners
+from mowl.representation.library.grounded_evaluation import (CrispViolations, ExactDomainCheck,
+                                                             all_box_corners)
 from mowl.representation.library.grounded_logic import validate_nonneg_weight as _validate_nonneg_weight
 from mowl.owlapi.defaults import BOT as BOTTOM, TOP
 from mowl.models.grounded.common import _ToleranceCountDict, _short_iri_map
@@ -21,6 +22,8 @@ class GroundedEvaluation:
 
     #: The evaluation regime of the crisp report (a part; ``None``: ``CrispViolations``).
     crisp_regime = None
+    #: The evaluation regime of the exact-model check (a part; ``None``: ``ExactDomainCheck``).
+    exact_regime = None
 
     def _box_corner_samples(self, cen, w, active, gen, max_corners_per_box=32):
         """The corners (just inside) of the active non-empty boxes ``(1, K, d)``."""
@@ -99,216 +102,18 @@ class GroundedEvaluation:
             §7 evaluation metrics dictionary.
         """
         base = self.crisp_report(n_eval=n_eval, tol=tol)
-        elem_viol = base["elem_viol"]
-        region_viol = base["region_viol"]
-        n_empty_classes = int(base["n_empty_classes"])
-        n_dead_elements = int(base["n_dead_elements"])
-        td = self.training_datasets
-        total_region_axioms = sum(
-            len(td[k])
-            for k in (
-                "gci0",
-                "gci0_bot",
-                "gci1",
-                "gci1_bot",
-                "gci2",
-                "gci3",
-                "gci3_bot",
-                "role_inclusion",
-                "role_chain",
-            )
-            if k in td and len(td[k]) > 0
-        )
-        region_viol_tol1e4 = (
-            float(base["n_axioms_violated_by_depth"]["1e-4"] / total_region_axioms)
-            if total_region_axioms > 0
-            else 0.0
-        )
-
-        mod = self.module
-        device = self.device
-        gen = th.Generator(device="cpu")
-        gen.manual_seed(self.seed + 2026)
-
-        with th.no_grad():
-            pos_all = mod.positions()
-            dead_cls = (mod.dead()[: self.nb_classes] > 0.5).cpu()
-            if self.bot_id is not None:
-                dead_cls[self.bot_id] = True
-
-            self_inside = th.zeros((self.nb_classes,), dtype=th.bool)
-            for c_start in range(0, self.nb_classes, 8192):
-                c_end = min(c_start + 8192, self.nb_classes)
-                c_ids = th.arange(c_start, c_end, dtype=th.long, device=device)
-                dep_c = mod.depth(pos_all[c_ids], c_ids, crisp=True).cpu()
-                self_inside[c_start:c_end] = (dep_c > 0.0) & (~dead_cls[c_start:c_end])
-
-            if not use_reasoner:
-                live_cls = ~dead_cls
-                exist_val = (
-                    float(self_inside[live_cls].to(th.float32).mean().item())
-                    if bool(live_cls.any().item())
-                    else 1.0
-                )
-                dead_ok = True
-                exact = bool(
-                    elem_viol == 0.0
-                    and region_viol == 0.0
-                    and exist_val == 1.0
-                    and dead_ok
-                )
-                exact_tol1e4 = bool(
-                    elem_viol == 0.0
-                    and region_viol_tol1e4 == 0.0
-                    and exist_val == 1.0
-                    and dead_ok
-                )
-                return {
-                    "elem_viol": elem_viol,
-                    "region_viol": region_viol,
-                    "region_viol_tol1e-4": region_viol_tol1e4,
-                    "exist": exist_val,
-                    "dead_ok": dead_ok,
-                    "n_empty_classes": n_empty_classes,
-                    "n_dead_elements": n_dead_elements,
-                    "n_false_dead": None,
-                    "faithful_named_precision": None,
-                    "faithful_named_recall": None,
-                    "faithful_named": (None, None),
-                    "exact": exact,
-                    "exact_tol1e-4": exact_tol1e4,
-                }
-
+        reasoner = None
+        if use_reasoner:
             if self.dataset is None or getattr(self.dataset, "ontology", None) is None:
                 raise ValueError(
-                    "use_reasoner=True requires an OWL dataset; pass use_reasoner=False for table-constructed GroundedEL models"
-                )
-
+                    "use_reasoner=True requires an OWL dataset; pass use_reasoner=False for "
+                    "table-constructed GroundedEL models")
             from mowl.geometric.completion import CanonicalModel
-
-            cm = CanonicalModel.from_ontology(self.dataset.ontology)
-
-            sat_mask = th.zeros((self.nb_classes,), dtype=th.bool)
-            for c_iri, c_idx in self.class_index_dict.items():
-                if c_iri == BOTTOM:
-                    sat_mask[c_idx] = False
-                elif c_iri == TOP:
-                    sat_mask[c_idx] = bool(cm.is_satisfiable(TOP))
-                else:
-                    sat_mask[c_idx] = bool(cm.is_satisfiable(c_iri))
-
-            unsat_mask = ~sat_mask
-            dead_ok = bool(th.equal(dead_cls, unsat_mask))
-            n_false_dead = int((dead_cls & sat_mask).sum().item())
-
-            if bool(sat_mask.any().item()):
-                exist_val = float(
-                    self_inside[sat_mask].to(dtype=th.float32).mean().item()
-                )
-            else:
-                exist_val = 1.0
-
-            # Named class region inclusion faithfulness (M2)
-            named_items = [
-                (iri, idx)
-                for iri, idx in self.named_class_index_dict.items()
-                if iri not in (TOP, BOTTOM) and bool(sat_mask[idx].item())
-            ]
-            if len(named_items) > 128:
-                named_items = named_items[:128]
-
-            n_named = len(named_items)
-            if n_named >= 2:
-                n_pts_per_cls = max(16, min(256, n_eval // max(n_named, 1)))
-                all_regs = mod.class_regions()
-                cls_points: Dict[int, th.Tensor] = {}
-                for _, c_idx in named_items:
-                    s_reg = sample_class_region(
-                        mod, c_idx, generator=gen, n_samples=n_pts_per_cls
-                    )
-                    corners = self._box_corner_samples(
-                        all_regs.cen[c_idx : c_idx + 1],
-                        all_regs.w[c_idx : c_idx + 1],
-                        all_regs.active[c_idx : c_idx + 1],
-                        gen,
-                    )
-                    pts_parts = [pos_all[c_idx : c_idx + 1]]
-                    if bool(s_reg.valid.any().item()):
-                        pts_parts.append(s_reg.points[s_reg.valid])
-                    if corners.numel() > 0:
-                        pts_parts.append(corners)
-                    cand_pts = th.cat(pts_parts, dim=0)
-                    in_c = mod.depth(cand_pts, c_idx, crisp=True) > 0.0
-                    cls_points[c_idx] = cand_pts[in_c]
-
-                tp = 0
-                fp = 0
-                tn = 0
-                fn = 0
-                for a_iri, a_idx in named_items:
-                    pts_a = cls_points[a_idx]
-                    for b_iri, b_idx in named_items:
-                        if a_idx == b_idx:
-                            continue
-                        gt_entailed = bool(
-                            cm.extension(a_iri).issubset(cm.extension(b_iri))
-                        )
-                        if pts_a.shape[0] == 0:
-                            pred_inc = True
-                        else:
-                            pred_inc = bool(
-                                (mod.depth(pts_a, b_idx, crisp=True) > 0.0)
-                                .all()
-                                .item()
-                            )
-                        if gt_entailed and pred_inc:
-                            tp += 1
-                        elif not gt_entailed and pred_inc:
-                            fp += 1
-                        elif not gt_entailed and not pred_inc:
-                            tn += 1
-                        else:
-                            fn += 1
-
-                # Precision/recall of non-entailed pairs being separated & entailed pairs included
-                precision = (
-                    float(tn / (tn + fn))
-                    if (tn + fn) > 0
-                    else (1.0 if fp == 0 else 0.0)
-                )
-                recall = (
-                    float(tn / (tn + fp))
-                    if (tn + fp) > 0
-                    else (1.0 if fn == 0 else 0.0)
-                )
-            else:
-                precision = 1.0
-                recall = 1.0
-
-            exact = bool(
-                elem_viol == 0.0
-                and region_viol == 0.0
-                and exist_val == 1.0
-                and dead_ok
-            )
-            exact_tol1e4 = bool(
-                elem_viol == 0.0
-                and region_viol_tol1e4 == 0.0
-                and exist_val == 1.0
-                and dead_ok
-            )
-            return {
-                "elem_viol": elem_viol,
-                "region_viol": region_viol,
-                "region_viol_tol1e-4": region_viol_tol1e4,
-                "exist": exist_val,
-                "dead_ok": dead_ok,
-                "n_empty_classes": n_empty_classes,
-                "n_dead_elements": n_dead_elements,
-                "n_false_dead": n_false_dead,
-                "faithful_named_precision": precision,
-                "faithful_named_recall": recall,
-                "faithful_named": (precision, recall),
-                "exact": exact,
-                "exact_tol1e-4": exact_tol1e4,
-            }
+            reasoner = CanonicalModel.from_ontology(self.dataset.ontology)
+        gen = th.Generator(device="cpu")
+        gen.manual_seed(self.seed + 2026)
+        regime = self.exact_regime if self.exact_regime is not None else ExactDomainCheck()
+        return regime.report(self.module, base, self.training_datasets, gen, n_eval=n_eval,
+                             bot_id=self.bot_id, reasoner=reasoner,
+                             class_index=self.class_index_dict,
+                             named_index=self.named_class_index_dict, top=TOP, bottom=BOTTOM)

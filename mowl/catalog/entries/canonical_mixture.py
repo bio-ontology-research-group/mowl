@@ -64,7 +64,7 @@ CARD = MethodCard(
         "Developed in mOWL; there is no publication yet. Family: classified as "
         "constructive because the interpretation of every concept and role is the "
         "constructed canonical model (mowl.geometric.completion.CanonicalModel via "
-        "mowl.geometric.membership.MembershipStructure) and the guarantees follow from "
+        "mowl.representation.library.membership_structure.MembershipStructure) and the guarantees follow from "
         "that construction, not from training. Only the placement of individuals inside "
         "the canonical model is learned, which is why its status is learnable. It is not a "
         "region embedding (no Euclidean regions) and not a fuzzy method (no fuzzy "

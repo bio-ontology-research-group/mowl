@@ -8,9 +8,9 @@ from pathlib import Path
 from typing import Optional
 
 import mowl.geometric.completion as completion_mod
-import mowl.geometric.membership as membership_mod
+import mowl.representation.library.membership_structure as membership_mod
 from mowl.base_models.elmodel import EmbeddingELModel
-from mowl.geometric.membership import MEMBERSHIP_CODE_TAG, MembershipStructure
+from mowl.representation.library.membership_structure import MEMBERSHIP_CODE_TAG, MembershipStructure
 from mowl.nn.el.canonical_mixture import CanonicalMixtureModule
 from mowl.representation.construction import READINGS, SOURCES
 from mowl.representation.library.mixture_training import IndividualBatches
@@ -27,10 +27,10 @@ class CanonicalMixture(EmbeddingELModel):
     (:mod:`mowl.representation.library.mixture_methods`): the canonical model of the
     training ontology is *constructed* (the source ``"canonical completion"`` of
     :mod:`mowl.representation.construction`) and read sparsely as sets of elements (the
-    reading ``"membership"``, a :class:`~mowl.geometric.membership.MembershipStructure`,
+    reading ``"membership"``, a :class:`~mowl.representation.library.membership_structure.MembershipStructure`,
     cached next to ``dataset.ontology_path`` when available, keyed by the ontology SHA-256,
     the index maps and the source hashes of ``mowl/geometric/completion.py`` and
-    ``mowl/geometric/membership.py``); only the individuals are learned, as distributions
+    ``mowl/representation/library/membership_structure.py``); only the individuals are learned, as distributions
     over the elements (:class:`~mowl.nn.el.canonical_mixture.CanonicalMixtureModule`). The
     training regime (``self.training``, default
     :class:`~mowl.representation.library.mixture_training.IndividualBatches`) goes over
@@ -151,7 +151,7 @@ class CanonicalMixture(EmbeddingELModel):
         with open(ontology_path, "rb") as f:
             while chunk := f.read(65536):
                 hasher.update(chunk)
-        # Hash the source of mowl/geometric/completion.py and mowl/geometric/membership.py
+        # Hash the source of mowl/geometric/completion.py and mowl/representation/library/membership_structure.py
         for mod in (completion_mod, membership_mod):
             mod_file = getattr(mod, "__file__", None)
             if mod_file and os.path.exists(mod_file):

@@ -305,6 +305,28 @@ class ElementDomain(nn.Module):
                 th.tensor(inv_softplus(0.1), dtype=w.dtype, device=w.device))
         return self.raw_tau_s
 
+    @property
+    def tau_s(self):
+        """The positive score temperature :math:`\\max(\\operatorname{softplus}(\\text{raw}),
+        10^{-3})` of an inductive encoder (:meth:`ensure_tau_s`)."""
+        return th.clamp(F.softplus(self.ensure_tau_s()), min=1e-3)
+
+    def place(self, positions, dead, dead_value=1.0, live_value=0.0):
+        """Set the positions ``(nb_elements, d)`` and write ``dead_value`` (``live_value``)
+        as the deadness of the elements where ``dead`` is true (false); under ``no_grad``."""
+        with th.no_grad():
+            self.elem_pos.weight.copy_(positions)
+            self.dead_logits.copy_(th.where(dead, th.full_like(self.dead_logits, dead_value),
+                                            th.full_like(self.dead_logits, live_value)))
+
+    def clamp_dead(self, fixed_dead=None, dead_value=1.0):
+        """Project the deadness onto :math:`[0, 1]` (after an optimiser step) and keep the
+        elements ``fixed_dead`` (an index or ``None``) at ``dead_value``."""
+        with th.no_grad():
+            self.dead_logits.clamp_(0.0, 1.0)
+            if fixed_dead is not None:
+                self.dead_logits[fixed_dead] = dead_value
+
     def positions(self, element_ids=None):
         """Positions :math:`p_x` of ``element_ids`` (all elements if ``None``), computed by the
         encoder from the features where features are attached."""
@@ -600,6 +622,29 @@ class BoxUnionClasses(Classes):
         idx = class_ids
         return dep, self._constants(m, idx, None, None, th.ones_like, th.zeros_like)
 
+    def place_point_boxes(self, member, positions, raw_width):
+        """Make component :math:`k` of class :math:`c` the box of raw half-width ``raw_width``
+        around ``positions[k]`` where ``member[c, k]`` (``(nb_classes, N)``, ``N`` at most the
+        number of components); every other component inactive with width zero. Used by
+        :class:`~mowl.representation.library.finite_model_placement.FiniteModelPlacement`."""
+        n = int(positions.shape[0])
+        with th.no_grad():
+            self.centers.zero_()
+            self.raw_widths.fill_(INACTIVE_RAW_WIDTH)
+            self.active.zero_()
+            grid = positions.unsqueeze(0).expand(self.nb_classes, n, positions.shape[-1])
+            keep = member.unsqueeze(-1)
+            self.centers[:, :n, :] = th.where(keep, grid, th.zeros_like(grid))
+            self.raw_widths[:, :n, :] = th.where(keep, th.full_like(grid, raw_width),
+                                                 th.full_like(grid, INACTIVE_RAW_WIDTH))
+            self.active[:, :n] = member
+
+    def silence(self, class_id):
+        """Deactivate every component of ``class_id`` (width zero): a class with no point."""
+        with th.no_grad():
+            self.active[class_id, :] = False
+            self.raw_widths[class_id, :] = INACTIVE_RAW_WIDTH
+
     def expand(self, new_k):
         """Append inactive zero-width boxes up to ``new_k`` per class (every depth and
         membership stays bitwise the same)."""
@@ -721,6 +766,31 @@ class _BoxRelations(Relations):
             return rho, None
         return rho, self.measure.aggregate(slot_depth, act_flat, crisp=True)
 
+    def place_edges(self, edges, positions, raw_width):
+        """Make component :math:`k` of relation :math:`r` the box (raw half-width
+        ``raw_width``) of the :math:`k`-th pair of ``edges[r]`` (:meth:`edge_box`); every
+        other component inactive with width zero. A relation derived from its inverse
+        partner is skipped (the partner holds its edges)."""
+        with th.no_grad():
+            self.active.zero_()
+            for name in self.TABLES:
+                table = getattr(self, name)
+                if name.endswith("raw_widths"):
+                    table.fill_(INACTIVE_RAW_WIDTH)
+                else:
+                    table.zero_()
+            for r, pairs in enumerate(edges):
+                partner = int(self.inverse_of[r].item())
+                if 0 <= partner < r:
+                    continue
+                for k, (x, y) in enumerate(pairs):
+                    for name, value in self.edge_box(positions[x], positions[y]).items():
+                        getattr(self, name)[r, k].copy_(value)
+                    for name in self.TABLES:
+                        if name.endswith("raw_widths"):
+                            getattr(self, name)[r, k].fill_(raw_width)
+                    self.active[r, k] = True
+
     def _expand_tables(self, names, new_k):
         if new_k <= self.n_components:
             return
@@ -823,6 +893,12 @@ class ProductBoxRelations(_BoxRelations):
         slot = th.minimum(h_dep.unsqueeze(2), t_dep.unsqueeze(1)).reshape(bsz * sx * sy, -1)
         return slot, h_reg.active
 
+    @staticmethod
+    def edge_box(x, y):
+        """The centres of the component that holds the pair ``(x, y)``: head at ``x``, tail
+        at ``y``."""
+        return {"head_centers": x, "tail_centers": y}
+
     def preimage(self, ids, region):
         raise ConstructorUnavailable(
             "Only role_mode='translation' has a region for exists r.C; in 'product' "
@@ -858,6 +934,12 @@ class TranslationBoxRelations(_BoxRelations):
             nn.init.uniform_(self.centers, a=-0.5, b=0.5)
             nn.init.constant_(self.raw_widths, inv_softplus(0.2))
         self._finish()
+
+    @staticmethod
+    def edge_box(x, y):
+        """The centre of the component that holds the pair ``(x, y)``: the translation
+        :math:`y - x`."""
+        return {"centers": y - x}
 
     def regions(self, rel_ids=None):
         """The boxes of translations of ``rel_ids``."""

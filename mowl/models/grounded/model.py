@@ -41,26 +41,27 @@ from __future__ import annotations
 
 import logging
 import math
-import os
 import random
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, Union
-import numpy as np
 import torch as th
 import torch.nn as nn
-import torch.nn.functional as F
 from mowl.base_models.elmodel import EmbeddingELModel
 from mowl.nn.el.grounded import GroundedELModule
 from mowl.nn.el.grounded.module import (
     _DEAD_LOGIT,
-    _INACTIVE_RAW_WIDTH,
-    _inv_softplus,
     _validate_int_ge,
     _validate_positive_float,
 )
 from mowl.representation.library.grounded_logic import (validate_margin as _validate_margin,
                                                         validate_nonneg_weight as _validate_nonneg_weight)
 from mowl.nn.el.structural import Regions
-from mowl.representation.library.grounded_parts import UnionDepth
+from mowl.datasets.rows import sort_rows
+from mowl.representation.library.finite_model_placement import (close_labels, edge_triples,
+                                                                 interpretation_labels,
+                                                                 syntactic_edges)
+from mowl.representation.library.inductive_membership import (MembershipCrossEntropy,
+                                                              SoftClassScores)
+from mowl.representation.library.union_reseeding import OwnPointReseeding, slot_point_counts
 from mowl.owlapi.defaults import BOT as BOTTOM, TOP
 from mowl.models.grounded.common import _resolve_inverse_of, _validate_index_dict, _coerce_gci_table
 from mowl.models.grounded.evaluation import GroundedEvaluation
@@ -238,6 +239,9 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
         evaluation regime of :meth:`crisp_report`
         (:class:`~mowl.representation.library.grounded_evaluation.CrispViolations`): a part
         or a name. By default they are built from the options above at every step.
+    exact_regime : optional
+        Replace the evaluation regime of :meth:`evaluate_model`
+        (:class:`~mowl.representation.library.grounded_evaluation.ExactDomainCheck`).
     """
 
     scored_forms = ("class_assertion",)
@@ -315,6 +319,7 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
         element_sampler: Any = None,
         region_sampler: Any = None,
         crisp_regime: Any = None,
+        exact_regime: Any = None,
     ) -> None:
         _validate_int_ge("embed_dim", embed_dim, 1)
         _validate_int_ge("n_components", n_components, 1)
@@ -578,7 +583,8 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
         for name, kind, part in (("objective", "objective", objective),
                                  ("element_sampler", "element sampler", element_sampler),
                                  ("region_sampler", "region sampler", region_sampler),
-                                 ("crisp_regime", "evaluation", crisp_regime)):
+                                 ("crisp_regime", "evaluation", crisp_regime),
+                                 ("exact_regime", "evaluation", exact_regime)):
             if isinstance(part, str):
                 part = GROUNDED_PARTS[kind][part]()
             if part is not None:
@@ -780,11 +786,10 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
         ).to(self.device)
         self.role_mode = self.module.role_mode
 
-        with th.no_grad():
-            if self.bot_id is not None:
-                self.module.dead_logits[self.bot_id] = _DEAD_LOGIT
-                self.module.class_active[self.bot_id, :] = False
-                self.module.class_raw_widths[self.bot_id, :] = _INACTIVE_RAW_WIDTH
+        if self.bot_id is not None:
+            # bottom has no element and no box
+            self.module.elements.clamp_dead(self.bot_id, _DEAD_LOGIT)
+            self.module.class_model.silence(self.bot_id)
 
         if self.init == "elements":
             labels_t, edges_list = self._resolve_init_labels_and_edges()
@@ -805,13 +810,7 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
         super()._load_datasets()
         if not was_loaded and self._training_datasets is not None:
             for ds_obj in self._training_datasets.values():
-                t = getattr(ds_obj, "data", None)
-                if isinstance(t, th.Tensor) and t.ndim == 2 and t.shape[0] > 1:
-                    order = th.arange(t.shape[0], dtype=th.long, device=t.device)
-                    for col in range(t.shape[1] - 1, -1, -1):
-                        perm = th.argsort(t[order, col], stable=True)
-                        order = order[perm]
-                    t.copy_(t[order])
+                sort_rows(getattr(ds_obj, "data", None))
 
     def _resolve_init_labels_and_edges(
         self,
@@ -827,146 +826,18 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
                 raw_edges = raw_labels["edges"]
             raw_labels = raw_labels["labels"]
 
-        if isinstance(raw_labels, (th.Tensor, np.ndarray)):
-            labels_t = th.as_tensor(raw_labels, dtype=th.bool, device=self.device).clone()
-            if labels_t.shape != (self.nb_elements, self.nb_classes):
-                raise ValueError(
-                    f"init_labels tensor must have shape ({self.nb_elements}, {self.nb_classes}), "
-                    f"got {tuple(labels_t.shape)}"
-                )
-        elif isinstance(raw_labels, Mapping):
-            # Support IRI-keyed or index-keyed dictionary mapping class -> elements or element -> classes
-            labels_t = th.zeros(
-                (self.nb_elements, self.nb_classes), dtype=th.bool, device=self.device
-            )
-            elem_iri_to_idx: Dict[str, int] = dict(self.class_index_dict)
-            for ind_iri, ind_idx in self.individual_index_dict.items():
-                elem_iri_to_idx[ind_iri] = self.nb_classes + int(ind_idx)
-
-            for k_key, vals in raw_labels.items():
-                if isinstance(k_key, str) and k_key in self.class_index_dict:
-                    c_idx = self.class_index_dict[k_key]
-                    for v in vals:
-                        e_idx = elem_iri_to_idx[v] if isinstance(v, str) else int(v)
-                        labels_t[e_idx, c_idx] = True
-                else:
-                    e_idx = elem_iri_to_idx[k_key] if isinstance(k_key, str) else int(k_key)
-                    for v in vals:
-                        c_idx = self.class_index_dict[v] if isinstance(v, str) else int(v)
-                        labels_t[e_idx, c_idx] = True
-        else:
-            raise TypeError(
-                f"Unsupported init_labels type {type(raw_labels).__name__}; expected Tensor, ndarray, tuple, or Mapping"
-            )
-
-        if self.bot_id is not None:
-            labels_t[:, self.bot_id] = False
-            labels_t[self.bot_id, :] = False
-        if self.top_id is not None:
-            # Ensure live elements belong to TOP, and x_TOP belongs to TOP when consistent
-            live_mask = th.zeros((self.nb_elements,), dtype=th.bool, device=self.device)
-            cls_arange = th.arange(self.nb_classes, device=self.device)
-            live_mask[: self.nb_classes] = labels_t[cls_arange, cls_arange]
-            if self.nb_inds > 0:
-                live_mask[self.nb_classes :] = labels_t[self.nb_classes :].any(dim=1)
-            if bool(live_mask.any().item()) and not bool(labels_t[self.top_id, self.top_id].item()):
-                labels_t[self.top_id, self.top_id] = True
-                live_mask[self.top_id] = True
-            labels_t[live_mask, self.top_id] = True
-
+        elements = dict(self.class_index_dict)
+        for ind_iri, ind_idx in self.individual_index_dict.items():
+            elements[ind_iri] = self.nb_classes + int(ind_idx)
+        labels = close_labels(
+            interpretation_labels(raw_labels, self.nb_elements, self.class_index_dict, elements,
+                                  device=self.device),
+            self.nb_classes, top_id=self.top_id, bot_id=self.bot_id)
         if raw_edges is not None:
-            edges_list: List[Tuple[int, int, int]] = []
-            if isinstance(raw_edges, Mapping):
-                for r_key, pairs in raw_edges.items():
-                    r_idx = (
-                        self.object_property_index_dict[r_key]
-                        if isinstance(r_key, str)
-                        else int(r_key)
-                    )
-                    for u, v in pairs:
-                        edges_list.append((int(u), int(v), int(r_idx)))
-            elif isinstance(raw_edges, (th.Tensor, np.ndarray)):
-                arr = th.as_tensor(raw_edges, dtype=th.long).cpu()
-                if arr.numel() > 0:
-                    for row in arr.tolist():
-                        edges_list.append((int(row[0]), int(row[1]), int(row[2])))
-            else:
-                for u, v, r in raw_edges:
-                    r_idx = (
-                        self.object_property_index_dict[r]
-                        if isinstance(r, str)
-                        else int(r)
-                    )
-                    edges_list.append((int(u), int(v), int(r_idx)))
-            return labels_t, edges_list
-
-        # Derive syntactic edges from labels_t and normalised training datasets (CR3, CR5, CR6, ABox)
-        edges_set = set()
-        td = self.training_datasets
-        cls_arange = th.arange(self.nb_classes, device=self.device)
-        live_elem = th.zeros((self.nb_elements,), dtype=th.bool, device=self.device)
-        live_elem[: self.nb_classes] = labels_t[cls_arange, cls_arange]
-        if self.nb_inds > 0:
-            live_elem[self.nb_classes :] = labels_t[self.nb_classes :].any(dim=1)
-
-        if "object_property_assertion" in td and len(td["object_property_assertion"]) > 0:
-            for row in td["object_property_assertion"][:].detach().cpu().tolist():
-                ind_a, r_id, ind_b = int(row[0]), int(row[1]), int(row[2])
-                edges_set.add((self.nb_classes + ind_a, self.nb_classes + ind_b, r_id))
-
-        if "gci2" in td and len(td["gci2"]) > 0:
-            for row in td["gci2"][:].detach().cpu().tolist():
-                a_id, r_id, b_id = int(row[0]), int(row[1]), int(row[2])
-                if not bool(live_elem[b_id].item()):
-                    continue
-                xs = th.nonzero(labels_t[:, a_id] & live_elem, as_tuple=False).view(-1).cpu().tolist()
-                for x_id in xs:
-                    edges_set.add((int(x_id), b_id, r_id))
-
-        r_inc: List[Tuple[int, int]] = []
-        if "role_inclusion" in td and len(td["role_inclusion"]) > 0:
-            r_inc = [
-                (int(row[0]), int(row[1]))
-                for row in td["role_inclusion"][:].detach().cpu().tolist()
-            ]
-        r_chain: List[Tuple[int, int, int]] = []
-        if "role_chain" in td and len(td["role_chain"]) > 0:
-            r_chain = [
-                (int(row[0]), int(row[1]), int(row[2]))
-                for row in td["role_chain"][:].detach().cpu().tolist()
-            ]
-
-        if r_inc or r_chain or self.inverse_of is not None:
-            changed = True
-            while changed:
-                changed = False
-                current = list(edges_set)
-                for u, v, r_sub in current:
-                    if (
-                        self.inverse_of is not None
-                        and 0 <= r_sub < len(self.inverse_of)
-                        and self.inverse_of[r_sub] >= 0
-                    ):
-                        inv_id = int(self.inverse_of[r_sub])
-                        if (v, u, inv_id) not in edges_set:
-                            edges_set.add((v, u, inv_id))
-                            changed = True
-                    for sub_id, sup_id in r_inc:
-                        if r_sub == sub_id and (u, v, sup_id) not in edges_set:
-                            edges_set.add((u, v, sup_id))
-                            changed = True
-                if r_chain:
-                    by_role: Dict[int, List[Tuple[int, int]]] = {}
-                    for u, v, r_id in edges_set:
-                        by_role.setdefault(r_id, []).append((u, v))
-                    for r1, r2, sup_id in r_chain:
-                        for u, mid1 in by_role.get(r1, ()):
-                            for mid2, w_el in by_role.get(r2, ()):
-                                if mid1 == mid2 and (u, w_el, sup_id) not in edges_set:
-                                    edges_set.add((u, w_el, sup_id))
-                                    changed = True
-
-        return labels_t, sorted(edges_set)
+            return labels, edge_triples(raw_edges, self.object_property_index_dict)
+        # edges derived syntactically from the labels and the normalised axioms
+        return labels, syntactic_edges(labels, self.training_datasets, self.nb_classes,
+                                       inverse_of=self.inverse_of)
 
     def _ensure_static_id_tensors(self) -> None:
         """Lazily build cached class and element index tensors on ``self.device``."""
@@ -1108,10 +979,12 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
 
     def clamp_dead_logits(self) -> None:
         """Clamp ``self.module.dead_logits`` to ``[0, 1]`` and keep ``dead_logits[bot_id] == +100.0``."""
-        with th.no_grad():
-            self.module.dead_logits.clamp_(0.0, 1.0)
-            if self.bot_id is not None:
-                self.module.dead_logits[self.bot_id] = _DEAD_LOGIT
+        self.module.elements.clamp_dead(self.bot_id, _DEAD_LOGIT)
+
+    def project_parameters(self) -> None:
+        """The projection after an optimiser step (:class:`~mowl.training.sampled_objective.SampledObjectiveTraining`):
+        :meth:`clamp_dead_logits`."""
+        self.clamp_dead_logits()
 
     def dual_update(self, mean_losses: Mapping[str, float]) -> Dict[str, float]:
         """One dual-ascent step: w_t <- min(dual_max, w_t + dual_rho * max(0, mean_losses[t] - dual_target)) for
@@ -1215,34 +1088,7 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
         max_elements: int = 8_388_608,
     ) -> th.Tensor:
         """Compute ``sigmoid(depth(pos, term_ids, crisp=True) / tau_s)`` in term chunks bounded by ``max_elements``."""
-        mod = self.module
-        bsz = int(pos.shape[0])
-        n_terms = int(term_ids.numel())
-        tau_s = mod.tau_s.to(dtype=pos.dtype)
-        if bsz == 0 or n_terms == 0:
-            return th.empty((bsz, n_terms), dtype=pos.dtype, device=pos.device)
-
-        elems_per_term = max(1, bsz * max(1, mod.n_components) * max(1, self.embed_dim))
-        term_chunk = max(1, int(max_elements) // elems_per_term)
-
-        chunks: List[th.Tensor] = []
-        for t_start in range(0, n_terms, term_chunk):
-            t_end = min(t_start + term_chunk, n_terms)
-            c_sub = term_ids[t_start:t_end]
-            c_len = int(c_sub.numel())
-            pos_exp = (
-                pos.unsqueeze(1)
-                .expand(bsz, c_len, self.embed_dim)
-                .reshape(bsz * c_len, self.embed_dim)
-            )
-            c_exp = c_sub.unsqueeze(0).expand(bsz, c_len).reshape(bsz * c_len)
-            dep_sub = mod.depth(pos_exp, c_exp, crisp=True).view(bsz, c_len)
-            s_sub = mod.measure.soft(dep_sub, tau_s)
-            chunks.append(s_sub)
-
-        if len(chunks) == 1:
-            return chunks[0]
-        return th.cat(chunks, dim=1)
+        return SoftClassScores(max_elements)(self.module, pos, term_ids, self.module.tau_s)
 
     def compute_data_loss(
         self,
@@ -1322,9 +1168,8 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
                 f"label_matrix must have shape ({bsz}, {n_terms}), got {tuple(label_matrix.shape)}"
             )
         targets = label_matrix.to(device=self.device, dtype=pos.dtype)
-        scores = self._chunked_term_scores(pos, term_ids, max_elements=max_elements)
-        bce = F.binary_cross_entropy(scores, targets, reduction="mean")
-        return bce, scores
+        return MembershipCrossEntropy(SoftClassScores(max_elements))(
+            self.module, pos, term_ids, targets, self.module.tau_s)
 
     @th.no_grad()
     def score(
@@ -1377,28 +1222,6 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
             )
         return self._chunked_term_scores(pos, term_ids, max_elements=max_elements)
 
-    @staticmethod
-    def _class_slot_live_counts_chunked(
-        cen_c: th.Tensor,
-        w_c: th.Tensor,
-        act_c: th.Tensor,
-        live_pos: th.Tensor,
-        chunk_size: int = 8192,
-    ) -> th.Tensor:
-        """Compute number of live elements crisp-inside each of ``K`` components of a single class in chunks of 8192 elements."""
-        k_slots = int(cen_c.shape[0])
-        counts = th.zeros((k_slots,), dtype=th.long, device=cen_c.device)
-        n_live = int(live_pos.shape[0])
-        if n_live == 0 or not bool(act_c.any().item()):
-            return counts
-        for start in range(0, n_live, chunk_size):
-            end = min(start + chunk_size, n_live)
-            p_chunk = live_pos[start:end]  # (C_len, d), C_len <= 8192
-            c_dep = UnionDepth.box_depth(p_chunk, cen_c.unsqueeze(0), w_c.unsqueeze(0))  # (C_len, K)
-            inside = (c_dep > 0.0) & act_c.unsqueeze(0)
-            counts += inside.sum(dim=0)
-        return counts
-
     def _compute_slot_live_counts(
         self,
         regions: Regions,
@@ -1406,89 +1229,9 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
         query_slot_mask: th.Tensor,
         chunk_size: int = 8192,
     ) -> th.Tensor:
-        """Compute exact count of live elements crisp-inside each queried ``(c_id, k)`` slot using 8192-element chunks."""
-        device = regions.cen.device
-        k_slots = int(regions.cen.shape[1])
-        counts = th.zeros((self.nb_classes, k_slots), dtype=th.long, device=device)
-        n_live = int(live_pos.shape[0])
-        if n_live == 0 or not bool(query_slot_mask.any().item()):
-            return counts
-
-        if self.nb_classes <= 2048 or n_live <= 2048:
-            query_classes = (
-                th.nonzero(query_slot_mask.any(dim=1), as_tuple=False).view(-1).tolist()
-            )
-            for c_id in query_classes:
-                counts[c_id] = self._class_slot_live_counts_chunked(
-                    regions.cen[c_id],
-                    regions.w[c_id],
-                    regions.active[c_id] & query_slot_mask[c_id],
-                    live_pos,
-                    chunk_size=chunk_size,
-                )
-            return counts
-
-        # Lossless 4^D_BINS spatial-bin prefilter + exact per-box depth in <= 8192-element chunks
-        d_bins = min(self.embed_dim, 5)
-        n_bins = 4**d_bins
-        p_min = live_pos[:, :d_bins].amin(dim=0)
-        p_max = live_pos[:, :d_bins].amax(dim=0)
-        scale = 3.999 / (p_max - p_min + 1e-6)
-        elem_bins = th.clamp(
-            ((live_pos[:, :d_bins] - p_min) * scale).to(th.long), 0, 3
-        )
-        mult = (
-            4 ** th.arange(d_bins, dtype=th.long, device=device)
-        ).unsqueeze(0)
-        elem_hash = (elem_bins * mult).sum(dim=1)
-        order = th.argsort(elem_hash)
-        sorted_pos = live_pos[order]
-        counts_bin = th.bincount(elem_hash, minlength=n_bins)
-        offsets = th.zeros((n_bins + 1,), dtype=th.long, device=device)
-        offsets[1:] = th.cumsum(counts_bin, dim=0)
-
-        q_flat_ids = th.nonzero(query_slot_mask.reshape(-1), as_tuple=False).view(-1)
-        cen_q = regions.cen.reshape(-1, self.embed_dim)[q_flat_ids]
-        w_q = regions.w.reshape(-1, self.embed_dim)[q_flat_ids]
-        lo_b = th.clamp(
-            ((cen_q[:, :d_bins] - w_q[:, :d_bins] - 1e-6 - p_min) * scale).to(th.long),
-            0,
-            3,
-        )
-        hi_b = th.clamp(
-            ((cen_q[:, :d_bins] + w_q[:, :d_bins] + 1e-6 - p_min) * scale).to(th.long),
-            0,
-            3,
-        )
-        q_counts = th.zeros((q_flat_ids.numel(),), dtype=th.long, device=device)
-
-        for h in range(n_bins):
-            s_i = int(offsets[h].item())
-            e_i = int(offsets[h + 1].item())
-            if s_i == e_i:
-                continue
-            rem = h
-            mask = th.ones((q_flat_ids.numel(),), dtype=th.bool, device=device)
-            for m_i in range(d_bins):
-                b_m = rem & 3
-                rem >>= 2
-                mask &= (lo_b[:, m_i] <= b_m) & (hi_b[:, m_i] >= b_m)
-            b_ids = th.nonzero(mask, as_tuple=False).view(-1)
-            if b_ids.numel() == 0:
-                continue
-            for e_s in range(s_i, e_i, chunk_size):
-                e_e = min(e_s + chunk_size, e_i)
-                p_chunk = sorted_pos[e_s:e_e]  # (<= 8192, d)
-                for b_s in range(0, b_ids.numel(), 256):
-                    b_e = min(b_s + 256, b_ids.numel())
-                    b_sub = b_ids[b_s:b_e]
-                    c_sub = cen_q[b_sub]
-                    w_sub = w_q[b_sub]
-                    dep = UnionDepth.box_depth(p_chunk, c_sub, w_sub).t()  # (b, P)
-                    q_counts[b_sub] += (dep > 0.0).sum(dim=1)
-
-        counts.view(-1)[q_flat_ids] = q_counts
-        return counts
+        """Exact count of live elements crisp-inside each queried ``(c_id, k)`` slot
+        (:func:`~mowl.representation.library.union_reseeding.slot_point_counts`)."""
+        return slot_point_counts(regions, live_pos, query_slot_mask, chunk_size=chunk_size)
 
     def reseed_idle(
         self,
@@ -1541,190 +1284,14 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
         int
             Number of modified component slots.
         """
-        reseed_size_f = _validate_positive_float("reseed_size", reseed_size)
-        raw_w_target = _inv_softplus(reseed_size_f)
-        mod = self.module
-        device = self.device
-        k_slots = mod.n_components
-        moves = 0
-
-        with th.no_grad():
-            pos_all = mod.positions()  # (nb_elements, d)
-            dead_c = mod.dead() > 0.5
-            if self.bot_id is not None:
-                dead_c[self.bot_id] = True
-            live_mask = ~dead_c
-            live_pos = pos_all[live_mask]  # (L, d)
-
-            regions = mod.class_regions()  # (nb_classes, K, d)
-            cen = regions.cen
-            w = regions.w
-            act = regions.active  # (nb_classes, K)
-
-            # Check whether each class's own element x_A is crisp-inside each slot of A
-            cls_pos = pos_all[: self.nb_classes]  # (nb_classes, d)
-            own_dep = mod.measure.box_depth(cls_pos, cen, w)  # (nb_classes, K)
-            own_in_slot = (
-                (own_dep > 0.0) & act & live_mask[: self.nb_classes].unsqueeze(1)
-            )  # (nb_classes, K)
-            own_inside_cls = own_in_slot.any(dim=1)  # (nb_classes,)
-
-            live_cls_mask = live_mask[: self.nb_classes].clone()
-            if self.top_id is not None:
-                live_cls_mask[self.top_id] = False
-            if self.bot_id is not None:
-                live_cls_mask[self.bot_id] = False
-
-            need_own_mask = live_cls_mask & (~own_inside_cls)
-
-            # Determine which active slots need exact live-element counts:
-            # - classes in need_own_mask that have all K slots active (to choose fewest-element slot)
-            # - classes in ABox class_assertion that may need re-seeding
-            # - active slots not already containing x_A when prune_unused=True
-            need_tiebreak_cls = need_own_mask & act.all(dim=1) & (k_slots > 1)
-            query_slot_mask = need_tiebreak_cls.unsqueeze(1) & act
-
-            ca_el_a = th.empty((0,), dtype=th.long, device=device)
-            ca_c_id = th.empty((0,), dtype=th.long, device=device)
-            if self.nb_inds > 0:
-                td = self.training_datasets
-                if "class_assertion" in td and len(td["class_assertion"]) > 0:
-                    ca_rows = td["class_assertion"][:].to(device=device, dtype=th.long)
-                    ca_el_a_all = self.nb_classes + ca_rows[:, 0]
-                    ca_c_id_all = ca_rows[:, 1]
-                    ca_valid = live_mask[ca_el_a_all]
-                    if self.top_id is not None:
-                        ca_valid = ca_valid & (ca_c_id_all != self.top_id)
-                    if self.bot_id is not None:
-                        ca_valid = ca_valid & (ca_c_id_all != self.bot_id)
-                    ca_el_a = ca_el_a_all[ca_valid]
-                    ca_c_id = ca_c_id_all[ca_valid]
-                    if ca_c_id.numel() > 0 and k_slots > 1:
-                        ca_dep_pre = mod.depth(pos_all[ca_el_a], ca_c_id, crisp=True)
-                        ca_cand_c = ca_c_id[(ca_dep_pre <= 0.0) | need_own_mask[ca_c_id]]
-                        if ca_cand_c.numel() > 0:
-                            ca_cls_mask = th.zeros(
-                                (self.nb_classes,), dtype=th.bool, device=device
-                            )
-                            ca_cls_mask[ca_cand_c] = True
-                            query_slot_mask = query_slot_mask | (
-                                (ca_cls_mask & act.all(dim=1)).unsqueeze(1) & act
-                            )
-
-            if prune_unused:
-                prune_candidates = act & (~own_in_slot)
-                if self.top_id is not None:
-                    prune_candidates[self.top_id, :] = False
-                if self.bot_id is not None:
-                    prune_candidates[self.bot_id, :] = False
-                query_slot_mask = query_slot_mask | prune_candidates
-
-            slot_counts = self._compute_slot_live_counts(
-                regions, live_pos, query_slot_mask, chunk_size=8192
-            )
-            # Ensure slots known to contain x_A have count >= 1
-            slot_counts = th.where(
-                own_in_slot & (slot_counts == 0),
-                th.ones_like(slot_counts),
-                slot_counts,
-            )
-
-            # Step (a.1): live classes A whose own element x_A is not crisp-inside A
-            need_cls_ids = th.nonzero(need_own_mask, as_tuple=False).view(-1)
-            if need_cls_ids.numel() > 0:
-                w_need = w[need_cls_ids]  # (M, K, d)
-                act_need = act[need_cls_ids]  # (M, K)
-                cnt_need = slot_counts[need_cls_ids]  # (M, K)
-                log_vol_need = th.where(
-                    act_need,
-                    th.log(th.clamp(w_need, min=1e-12)).sum(dim=-1),
-                    th.full(act_need.shape, float("-inf"), dtype=w.dtype, device=device),
-                )
-
-                best_k = th.zeros((need_cls_ids.numel(),), dtype=th.long, device=device)
-                best_act = act_need[:, 0]
-                best_cnt = cnt_need[:, 0]
-                best_lvol = log_vol_need[:, 0]
-                for k in range(1, k_slots):
-                    cur_act = act_need[:, k]
-                    cur_cnt = cnt_need[:, k]
-                    cur_lvol = log_vol_need[:, k]
-                    better = (~cur_act & best_act) | (
-                        (cur_act == best_act)
-                        & (
-                            (cur_cnt < best_cnt)
-                            | ((cur_cnt == best_cnt) & (cur_lvol < best_lvol))
-                        )
-                    )
-                    best_k = th.where(better, th.full_like(best_k, k), best_k)
-                    best_act = th.where(better, cur_act, best_act)
-                    best_cnt = th.where(better, cur_cnt, best_cnt)
-                    best_lvol = th.where(better, cur_lvol, best_lvol)
-
-                mod.class_centers[need_cls_ids, best_k] = pos_all[need_cls_ids]
-                mod.class_raw_widths[need_cls_ids, best_k] = raw_w_target
-                mod.class_active[need_cls_ids, best_k] = True
-                # Newly placed box at live x_A crisp-contains at least x_A
-                slot_counts[need_cls_ids, best_k] = th.clamp(
-                    slot_counts[need_cls_ids, best_k], min=1
-                )
-                moves += int(need_cls_ids.numel())
-
-            # Step (a.2): ABox class assertions C(a) (element of individual a)
-            if ca_el_a.numel() > 0:
-                ca_dep = mod.depth(pos_all[ca_el_a], ca_c_id, crisp=True)
-                unsat_idx = th.nonzero(ca_dep <= 0.0, as_tuple=False).view(-1)
-                if unsat_idx.numel() > 0:
-                    unsat_el_list = ca_el_a[unsat_idx].detach().cpu().tolist()
-                    unsat_c_list = ca_c_id[unsat_idx].detach().cpu().tolist()
-                    for el_a, c_id in zip(unsat_el_list, unsat_c_list):
-                        reg_c = mod.class_model.regions(th.tensor([c_id], device=device))
-                        cen_c, w_c, eff_act_c = reg_c.cen[0], reg_c.w[0], reg_c.active[0]
-                        dep_a = mod.measure.box_depth(pos_all[el_a], cen_c, w_c)  # (K,)
-                        if bool(((dep_a > 0.0) & eff_act_c).any().item()):
-                            continue
-                        if bool((~eff_act_c).any().item()):
-                            k_star = int(
-                                th.nonzero(~eff_act_c, as_tuple=False)[0].item()
-                            )
-                        elif k_slots == 1:
-                            k_star = 0
-                        else:
-                            cnt_c = slot_counts[c_id]
-                            lvol_c = (
-                                th.log(th.clamp(w_c, min=1e-12))
-                                .sum(dim=-1)
-                                .cpu()
-                                .tolist()
-                            )
-                            cnt_list = cnt_c.cpu().tolist()
-                            k_star = min(
-                                range(k_slots),
-                                key=lambda k: (int(cnt_list[k]), float(lvol_c[k])),
-                            )
-                        mod.class_centers[c_id, k_star].copy_(pos_all[el_a])
-                        mod.class_raw_widths[c_id, k_star].fill_(raw_w_target)
-                        mod.class_active[c_id, k_star] = True
-                        slot_counts[c_id, k_star] = max(
-                            int(slot_counts[c_id, k_star].item()), 1
-                        )
-                        moves += 1
-
-            # Step (b): deactivate active components that crisp-contain no live element
-            if prune_unused:
-                cur_reg = mod.class_regions()
-                unused_active = cur_reg.active & (slot_counts == 0)
-                if self.top_id is not None:
-                    unused_active[self.top_id, :] = False
-                if self.bot_id is not None:
-                    unused_active[self.bot_id, :] = False
-                n_pruned = int(unused_active.sum().item())
-                if n_pruned > 0:
-                    mod.class_active[unused_active] = False
-                    mod.class_raw_widths[unused_active] = _INACTIVE_RAW_WIDTH
-                    moves += n_pruned
-
-        mod.last_reseed_count = int(moves)
+        rule = OwnPointReseeding(size=reseed_size, prune=prune_unused)
+        assertions = None
+        if self.nb_inds > 0:
+            td = self.training_datasets
+            if "class_assertion" in td and len(td["class_assertion"]) > 0:
+                assertions = td["class_assertion"][:]
+        moves = rule.apply(self.module, assertions, top_id=self.top_id, bot_id=self.bot_id)
+        self.module.last_reseed_count = int(moves)
         return moves
 
     @property
@@ -1878,126 +1445,35 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
         self.loss_history = []
         if eff_epochs == 0:
             return self.loss_history
-
         # The training design is a regime: the one assigned to the model, or the
-        # composition of shared regimes given by the model's hyperparameters.
+        # composition of shared regimes given by the model's hyperparameters; the loop is
+        # the one of every sampled objective.
         from mowl.training.grounded import GroundedELTraining
+        from mowl.training.sampled_objective import SampledObjectiveTraining
         regime = self.training_regime
         if regime is None:
             regime = GroundedELTraining.for_model(
                 self, lr_final=eff_lr_final, lr_schedule=lr_schedule)
             regime.attach(self)
-        self._active_regime = regime
-        from mowl.training.schedules import TemperatureAnnealing
+        return SampledObjectiveTraining(seed_offset=1337).run(
+            self, regime, eff_epochs, validate_every=eff_val_every,
+            epoch_callback=epoch_callback, log_every=eff_log_every)
 
-        def _find_annealer(r: Any) -> Any:
-            if isinstance(r, TemperatureAnnealing):
-                return r
-            for sub in getattr(r, "regimes", ()):
-                found = _find_annealer(sub)
-                if found is not None:
-                    return found
-            return None
+    def epoch_record(self, rec: Dict[str, float]) -> None:
+        """Fields of the epoch record besides the loss terms: the dual weights in
+        ``constraint_mode="lagrangian"``."""
+        if self.constraint_mode == "lagrangian":
+            rec["w_fact"] = float(self.dual_weights["fact"])
+            rec["w_axioms"] = float(self.dual_weights["axioms"])
+            rec["w_region"] = float(self.dual_weights["region"])
 
-        annealer = _find_annealer(regime)
-
-        optimizer = regime.optimizer()
-        if optimizer is NotImplemented:
-            optimizer = th.optim.Adam(self.module.parameters(), lr=self.learning_rate)
-        self.optimizer = optimizer
-        gen = th.Generator(device="cpu")
-        gen.manual_seed(self.seed + 1337)
-        self._train_generator = gen
-        best_val_loss = float("inf")
-        saved_best_val = False
-
-        try:
-            for epoch in range(eff_epochs):
-                self.module.train()
-                regime.on_epoch_start(epoch, eff_epochs)
-                # Recorded at full precision when a schedule set it (the module keeps
-                # the temperature in single precision).
-                tau = annealer.history[-1] if annealer is not None else float(self.module.tau)
-
-                losses = self.compute_batch_losses(generator=gen)
-                total_loss = losses["total"]
-                extra_loss = regime.additional_loss(epoch)
-                if extra_loss is not None:
-                    total_loss = total_loss + extra_loss
-
-                optimizer.zero_grad()
-                total_loss.backward()
-                optimizer.step()
-
-                # Projection of the method's parameters onto their domain.
-                self.clamp_dead_logits()
-
-                rec = {k: float(v.detach().item()) for k, v in losses.items()}
-                regime.on_epoch_end(epoch, rec)
-                if self.constraint_mode == "lagrangian":
-                    rec["w_fact"] = float(self.dual_weights["fact"])
-                    rec["w_axioms"] = float(self.dual_weights["axioms"])
-                    rec["w_region"] = float(self.dual_weights["region"])
-                rec["tau"] = float(tau)
-                self.loss_history.append(rec)
-
-                if eff_log_every > 0 and (
-                    (epoch + 1) % eff_log_every == 0 or epoch == 0 or epoch + 1 == eff_epochs
-                ):
-                    logger.info(
-                        "Epoch %d/%d (tau=%.4f): total=%.4e fact=%.4e axioms=%.4e region=%.4e min=%.4e neg=%.4e w=(%.2f,%.2f,%.2f)",
-                        epoch + 1,
-                        eff_epochs,
-                        tau,
-                        rec["total"],
-                        rec["fact"],
-                        rec["axioms"],
-                        rec["region"],
-                        rec["minimality"],
-                        rec["neg"],
-                        rec["w_fact"],
-                        rec["w_axioms"],
-                        rec["w_region"],
-                    )
-
-                if epoch_callback is not None:
-                    epoch_callback(epoch, self)
-
-                if (epoch + 1) % eff_val_every == 0:
-                    if (
-                        self.dataset is not None
-                        and self.dataset.validation is not None
-                        and self._eval_gci_name is not None
-                        and self._eval_gci_name in self.validation_datasets
-                        and len(self.validation_datasets[self._eval_gci_name]) > 0
-                    ):
-                        with th.no_grad():
-                            self.module.eval()
-                            gci_data = self.validation_datasets[self._eval_gci_name][:]
-                            vloss = float(
-                                th.mean(self.module(gci_data, self._eval_gci_name))
-                                .detach()
-                                .item()
-                            )
-                            if vloss < best_val_loss:
-                                best_val_loss = vloss
-                                if self.model_filepath is not None:
-                                    th.save(self.module.state_dict(), self.model_filepath)
-                                    saved_best_val = True
-
-                if regime.should_stop(epoch):
-                    break
-        finally:
-            self._train_generator = None
-            self._active_regime = None
-
-        regime.on_train_end()
-
-        if self.model_filepath is not None and not saved_best_val:
-            if eff_val_every <= eff_epochs or not os.path.exists(self.model_filepath):
-                th.save(self.module.state_dict(), self.model_filepath)
-
-        return self.loss_history
+    def log_epoch(self, epoch: int, epochs: int, rec: Mapping[str, float]) -> None:
+        """Log the terms of an epoch record."""
+        logger.info(
+            "Epoch %d/%d (tau=%.4f): total=%.4e fact=%.4e axioms=%.4e region=%.4e min=%.4e neg=%.4e w=(%.2f,%.2f,%.2f)",
+            epoch + 1, epochs, rec["tau"], rec["total"], rec["fact"], rec["axioms"],
+            rec["region"], rec["minimality"], rec["neg"], rec["w_fact"], rec["w_axioms"],
+            rec["w_region"])
 
     def score_query(
         self,

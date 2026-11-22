@@ -568,7 +568,7 @@ represents each individual :math:`a` as a probability distribution
 support
 :math:`S_a = \{x \in S : x \in C^{\mathcal{I}} \text{ for every training-entailed class } C \text{ of } a\}`,
 where :math:`S` and the sparse membership matrix
-:attr:`~mowl.geometric.membership.MembershipStructure.M` come from the
+:attr:`~mowl.representation.library.membership_structure.MembershipStructure.M` come from the
 :class:`~mowl.geometric.completion.CanonicalModel` of the training ontology. By
 construction, every training-entailed class assertion (including assertions
 entailed through role assertions) has empty complement in :math:`S_a` and scores

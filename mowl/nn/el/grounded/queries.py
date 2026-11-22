@@ -61,6 +61,7 @@ import torch as th
 from mowl.nn.el.grounded.module import GroundedELModule
 from mowl.nn.el.grounded.sampling import is_grounded_geometry
 from mowl.nn.el.structural import Regions
+from mowl.representation.library.box_union_algebra import BoundedBoxUnions
 
 __all__ = [
     "MultiBox",
@@ -84,6 +85,11 @@ _EMPTY_DEPTH_FLOOR: float = -1e6
 _TOP_DEPTH_CEIL: float = 1e6
 _LSE_DEFAULT_TAU: float = 0.1
 _LOG_VOL_FLOOR: float = 1e-30
+
+
+def _algebra(max_boxes):
+    """The set algebra of unions of boxes (a general part) at a bound of ``max_boxes``."""
+    return BoundedBoxUnions(max_boxes, box_type=MultiBox, tau=_LSE_DEFAULT_TAU)
 
 
 class MultiBox(NamedTuple):
@@ -110,6 +116,10 @@ class MultiBox(NamedTuple):
     cen: th.Tensor
     w: th.Tensor
     active: th.Tensor
+
+
+#: The algebra at the default bound (operations that do not cap).
+_ALGEBRA = BoundedBoxUnions(64, box_type=MultiBox, tau=_LSE_DEFAULT_TAU)
 
 
 def _validate_int_ge(name: str, val: int, min_val: int) -> int:
@@ -201,82 +211,17 @@ def _to_1d_long(
 
 def _align_multibox_batch(R1: MultiBox, R2: MultiBox) -> Tuple[MultiBox, MultiBox]:
     """Validate and broadcast batch dimensions of ``R1`` and ``R2``."""
-    if R1.cen.shape[2] != R2.cen.shape[2]:
-        raise ValueError(
-            f"Incompatible embedding dimensions: {R1.cen.shape[2]} vs {R2.cen.shape[2]}"
-        )
-    b1 = R1.cen.shape[0]
-    b2 = R2.cen.shape[0]
-    if b1 == b2:
-        return R1, R2
-    if b1 == 1 and b2 > 1:
-        m1, d = R1.cen.shape[1], R1.cen.shape[2]
-        return (
-            MultiBox(
-                cen=R1.cen.expand(b2, m1, d),
-                w=R1.w.expand(b2, m1, d),
-                active=R1.active.expand(b2, m1),
-            ),
-            R2,
-        )
-    if b2 == 1 and b1 > 1:
-        m2, d = R2.cen.shape[1], R2.cen.shape[2]
-        return (
-            R1,
-            MultiBox(
-                cen=R2.cen.expand(b1, m2, d),
-                w=R2.w.expand(b1, m2, d),
-                active=R2.active.expand(b1, m2),
-            ),
-        )
-    raise ValueError(f"Incompatible MultiBox batch sizes: {b1} vs {b2}")
+    return _ALGEBRA.align(R1, R2)
 
 
 def _compact_active_first(cen: th.Tensor, w: th.Tensor, active: th.Tensor) -> MultiBox:
     """Stably reorder slots so active boxes precede inactive boxes, zeroing inactive slots."""
-    bsz, total, dim = cen.shape
-    if total == 0 or bsz == 0:
-        return MultiBox(cen=cen, w=th.clamp_min(w, 0.0), active=active)
-    idx_grid = th.arange(total, device=active.device).unsqueeze(0)
-    sort_key = th.where(active, idx_grid, idx_grid + total)
-    order = th.argsort(sort_key, dim=1)
-    order_d = order.unsqueeze(-1).expand(bsz, total, dim)
-    cen_out = th.gather(cen, 1, order_d)
-    w_out = th.gather(w, 1, order_d)
-    act_out = th.gather(active, 1, order)
-    act_mask = act_out.unsqueeze(-1)
-    cen_out = th.where(act_mask, cen_out, th.zeros_like(cen_out))
-    w_out = th.where(act_mask, th.clamp_min(w_out, 0.0), th.zeros_like(w_out))
-    return MultiBox(cen=cen_out, w=w_out, active=act_out)
+    return _ALGEBRA.compact(cen, w, active)
 
 
 def _cap_boxes(R: MultiBox, max_boxes: int) -> MultiBox:
     """Cap ``R`` to at most ``max_boxes`` slots by keeping the largest-volume active boxes."""
-    bsz, total, dim = R.cen.shape
-    if total <= max_boxes:
-        act_mask = R.active.unsqueeze(-1)
-        cen_out = th.where(act_mask, R.cen, th.zeros_like(R.cen))
-        w_out = th.where(act_mask, th.clamp_min(R.w, 0.0), th.zeros_like(R.w))
-        return MultiBox(cen=cen_out, w=w_out, active=R.active)
-    if bsz == 0:
-        return MultiBox(
-            cen=R.cen[:, :max_boxes, :],
-            w=th.clamp_min(R.w[:, :max_boxes, :], 0.0),
-            active=R.active[:, :max_boxes],
-        )
-
-    w_safe = th.clamp_min(R.w, _LOG_VOL_FLOOR)
-    log_vol = th.log(w_safe).sum(dim=-1)  # (B, total)
-    score = th.where(R.active, log_vol, th.full_like(log_vol, float("-inf")))
-    _, top_idx = th.topk(score, k=max_boxes, dim=1, largest=True, sorted=True)
-    idx_d = top_idx.unsqueeze(-1).expand(bsz, max_boxes, dim)
-    cen_out = th.gather(R.cen, 1, idx_d)
-    w_out = th.gather(R.w, 1, idx_d)
-    act_out = th.gather(R.active, 1, top_idx)
-    act_mask = act_out.unsqueeze(-1)
-    cen_out = th.where(act_mask, cen_out, th.zeros_like(cen_out))
-    w_out = th.where(act_mask, th.clamp_min(w_out, 0.0), th.zeros_like(w_out))
-    return MultiBox(cen=cen_out, w=w_out, active=act_out)
+    return _ALGEBRA.cap(R, max_boxes)
 
 
 def anchor(
@@ -311,11 +256,7 @@ def anchor(
     _validate_module(module, require_translation=False)
     device = module.elem_pos.weight.device
     idx = _to_1d_long(entity_element_ids, device, "entity_element_ids")
-    pos = module.positions(idx)  # (B, d)
-    cen = pos.unsqueeze(1)  # (B, 1, d)
-    w = th.zeros_like(cen)
-    active = th.ones((cen.shape[0], 1), dtype=th.bool, device=cen.device)
-    return MultiBox(cen=cen, w=w, active=active)
+    return _ALGEBRA.points(module.positions(idx))
 
 
 def project(
@@ -361,10 +302,8 @@ def project(
     _validate_module(module, require_translation=True)
     R_val = _validate_multibox(R, "R", expected_dim=module.embed_dim)
     max_b = _validate_int_ge("max_boxes", max_boxes, 1)
-
-    bsz, m_in, dim = R_val.cen.shape
-    device = R_val.cen.device
-    r_idx = _to_1d_long(rel_ids, device, "rel_ids")
+    bsz = R_val.cen.shape[0]
+    r_idx = _to_1d_long(rel_ids, R_val.cen.device, "rel_ids")
     if r_idx.shape[0] == 1 and bsz > 1:
         r_idx = r_idx.expand(bsz)
     elif bsz == 0 and r_idx.shape[0] == 0:
@@ -373,30 +312,8 @@ def project(
         raise ValueError(
             f"Incompatible batch sizes between R ({bsz}) and rel_ids ({r_idx.shape[0]})"
         )
-
     rel_reg = module.translation_regions(r_idx)
-    kr = rel_reg.cen.shape[1]
-    total = m_in * kr
-    if total == 0:
-        return MultiBox(
-            cen=th.empty((bsz, 0, dim), dtype=R_val.cen.dtype, device=device),
-            w=th.empty((bsz, 0, dim), dtype=R_val.w.dtype, device=device),
-            active=th.empty((bsz, 0), dtype=th.bool, device=device),
-        )
-
-    r_cen = rel_reg.cen.to(dtype=R_val.cen.dtype)
-    r_w = rel_reg.w.to(dtype=R_val.w.dtype)
-    cen_mk = (R_val.cen.unsqueeze(2) + r_cen.unsqueeze(1)).reshape(bsz, total, dim)
-    w_mk = (R_val.w.unsqueeze(2) + r_w.unsqueeze(1)).reshape(bsz, total, dim)
-    act_mk = (R_val.active.unsqueeze(2) & rel_reg.active.unsqueeze(1)).reshape(bsz, total)
-
-    act_mask = act_mk.unsqueeze(-1)
-    cen_mk = th.where(act_mask, cen_mk, th.zeros_like(cen_mk))
-    w_mk = th.where(act_mask, w_mk, th.zeros_like(w_mk))
-    out = MultiBox(cen=cen_mk, w=w_mk, active=act_mk)
-    if total > max_b:
-        return _cap_boxes(out, max_b)
-    return out
+    return _algebra(max_b).minkowski(R_val, rel_reg.cen, rel_reg.w, rel_reg.active)
 
 
 def intersect(
@@ -444,37 +361,7 @@ def intersect(
     r1 = _validate_multibox(R1, "R1")
     r2 = _validate_multibox(R2, "R2")
     max_b = _validate_int_ge("max_boxes", max_boxes, 1)
-    r1, r2 = _align_multibox_batch(r1, r2)
-
-    bsz, m1, dim = r1.cen.shape
-    m2 = r2.cen.shape[1]
-    total = m1 * m2
-    if total == 0:
-        return MultiBox(
-            cen=th.empty((bsz, 0, dim), dtype=r1.cen.dtype, device=r1.cen.device),
-            w=th.empty((bsz, 0, dim), dtype=r1.w.dtype, device=r1.w.device),
-            active=th.empty((bsz, 0), dtype=th.bool, device=r1.active.device),
-        )
-
-    c1 = r1.cen.unsqueeze(2)
-    w1 = r1.w.unsqueeze(2)
-    c2 = r2.cen.unsqueeze(1)
-    w2 = r2.w.unsqueeze(1)
-    lo = th.maximum(c1 - w1, c2 - w2)
-    hi = th.minimum(c1 + w1, c2 + w2)
-    cen_ij = 0.5 * (lo + hi)
-    w_ij = 0.5 * (hi - lo)
-
-    non_empty = th.amin(w_ij, dim=-1) > 0.0
-    act_ij = r1.active.unsqueeze(2) & r2.active.unsqueeze(1) & non_empty
-
-    cen_flat = cen_ij.reshape(bsz, total, dim)
-    w_flat = th.clamp_min(w_ij.reshape(bsz, total, dim), 0.0)
-    act_flat = act_ij.reshape(bsz, total)
-
-    if total <= max_b:
-        return _compact_active_first(cen_flat, w_flat, act_flat)
-    return _cap_boxes(MultiBox(cen=cen_flat, w=w_flat, active=act_flat), max_b)
+    return _algebra(max_b).intersect(r1, r2)
 
 
 def union(
@@ -512,18 +399,7 @@ def union(
     r1 = _validate_multibox(R1, "R1")
     r2 = _validate_multibox(R2, "R2")
     max_b = _validate_int_ge("max_boxes", max_boxes, 1)
-    r1, r2 = _align_multibox_batch(r1, r2)
-
-    cen = th.cat([r1.cen, r2.cen], dim=1)
-    w = th.cat([r1.w, r2.w], dim=1)
-    act = th.cat([r1.active, r2.active], dim=1)
-    act_mask = act.unsqueeze(-1)
-    cen = th.where(act_mask, cen, th.zeros_like(cen))
-    w = th.where(act_mask, th.clamp_min(w, 0.0), th.zeros_like(w))
-    out = MultiBox(cen=cen, w=w, active=act)
-    if cen.shape[1] > max_b:
-        return _cap_boxes(out, max_b)
-    return out
+    return _algebra(max_b).union(r1, r2)
 
 
 def class_boxes(
@@ -636,56 +512,24 @@ def depth(
             )
         pts = points.unsqueeze(0)  # (1, d)
         p_exp = pts.unsqueeze(0).unsqueeze(2)  # (1, 1, 1, d)
-        n_pts = 1
     elif points.ndim == 2:
         if points.shape[1] != dim:
             raise ValueError(
                 f"2-D points must have shape (N, {dim}), got {tuple(points.shape)}"
             )
-        n_pts = points.shape[0]
         p_exp = points.unsqueeze(0).unsqueeze(2)  # (1, N, 1, d)
     elif points.ndim == 3:
         if points.shape[0] != bsz or points.shape[2] != dim:
             raise ValueError(
                 f"3-D points must have shape ({bsz}, N, {dim}), got {tuple(points.shape)}"
             )
-        n_pts = points.shape[1]
         p_exp = points.unsqueeze(2)  # (B, N, 1, d)
     else:
         raise ValueError(
             f"points must have 1, 2, or 3 dimensions, got shape {tuple(points.shape)}"
         )
 
-    if bsz == 0 or n_pts == 0:
-        return th.empty((bsz, n_pts), dtype=R_val.cen.dtype, device=R_val.cen.device)
-    if m_slots == 0:
-        return th.full(
-            (bsz, n_pts),
-            _EMPTY_DEPTH_FLOOR,
-            dtype=R_val.cen.dtype,
-            device=R_val.cen.device,
-        )
-
-    p_exp = p_exp.to(dtype=R_val.cen.dtype, device=R_val.cen.device)
-    coord_depth = R_val.w.unsqueeze(1) - th.abs(p_exp - R_val.cen.unsqueeze(1))  # (B, N, M, d)
-    slot_depth = th.amin(coord_depth, dim=-1)  # (B, N, M)
-
-    act_mask = R_val.active.unsqueeze(1)  # (B, 1, M)
-    has_active = act_mask.any(dim=-1, keepdim=True)  # (B, 1, 1)
-    inactive_fill = th.where(
-        has_active,
-        th.full_like(slot_depth, float("-inf")),
-        th.full_like(slot_depth, _EMPTY_DEPTH_FLOOR),
-    )
-    masked = th.where(act_mask, slot_depth, inactive_fill)
-    if crisp:
-        return th.amax(masked, dim=-1)
-    lse = _LSE_DEFAULT_TAU * th.logsumexp(masked / _LSE_DEFAULT_TAU, dim=-1)
-    return th.where(
-        has_active.squeeze(-1),
-        lse,
-        th.full_like(lse, _EMPTY_DEPTH_FLOOR),
-    )
+    return _ALGEBRA.depth(p_exp, R_val, crisp=crisp)
 
 
 def overlap_depth(
@@ -720,38 +564,7 @@ def overlap_depth(
     """
     r_val = _validate_multibox(R, "R")
     q_val = _validate_multibox(Q, "Q")
-    r_val, q_val = _align_multibox_batch(r_val, q_val)
-
-    bsz, m_slots, dim = r_val.cen.shape
-    k_slots = q_val.cen.shape[1]
-    total = m_slots * k_slots
-    if bsz == 0:
-        return th.empty((0,), dtype=r_val.cen.dtype, device=r_val.cen.device)
-    if total == 0:
-        return th.full(
-            (bsz,), _EMPTY_DEPTH_FLOOR, dtype=r_val.cen.dtype, device=r_val.cen.device
-        )
-
-    q_cen = q_val.cen.to(dtype=r_val.cen.dtype, device=r_val.cen.device)
-    q_w = q_val.w.to(dtype=r_val.w.dtype, device=r_val.w.device)
-    q_act = q_val.active.to(device=r_val.active.device)
-
-    coord_ov = (
-        r_val.w.unsqueeze(2)
-        + q_w.unsqueeze(1)
-        - th.abs(r_val.cen.unsqueeze(2) - q_cen.unsqueeze(1))
-    )  # (B, M, K, d)
-    pair_ov = th.amin(coord_ov, dim=-1).reshape(bsz, total)
-    pair_act = (r_val.active.unsqueeze(2) & q_act.unsqueeze(1)).reshape(bsz, total)
-
-    has_active = pair_act.any(dim=1, keepdim=True)
-    inactive_fill = th.where(
-        has_active,
-        th.full_like(pair_ov, float("-inf")),
-        th.full_like(pair_ov, _EMPTY_DEPTH_FLOOR),
-    )
-    masked = th.where(pair_act, pair_ov, inactive_fill)
-    return th.amax(masked, dim=1)
+    return _ALGEBRA.overlap_depth(r_val, q_val)
 
 
 def score_entities(

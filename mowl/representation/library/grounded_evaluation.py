@@ -27,7 +27,7 @@ import torch as th
 from mowl.representation.library.grounded_parts import EMPTY_DEPTH_FLOOR, register_grounded_part
 from mowl.representation.library.grounded_sampling import RegionSampler
 
-__all__ = ["CrispViolations", "TOLERANCES"]
+__all__ = ["CrispViolations", "ExactDomainCheck", "TOLERANCES"]
 
 #: The tolerances of ``n_axioms_violated_by_depth``.
 TOLERANCES = (("0", 0.0), ("1e-5", 1e-5), ("1e-4", 1e-4), ("1e-3", 1e-3), ("1e-2", 1e-2))
@@ -494,3 +494,129 @@ class _Look:
 
 
 register_grounded_part("evaluation")(CrispViolations)
+
+
+class ExactDomainCheck:
+    """Whether a grounded geometry is an exact model of its ontology: an evaluation regime
+    over a :class:`CrispViolations` report.
+
+    On top of the crisp violation rates (``elem_viol``, ``region_viol`` and the rate at
+    tolerance :math:`10^{-4}`) it reads, crisply:
+
+    - ``exist``: the share of the satisfiable classes whose own element is live and inside
+      the class (without a reasoner: of the live classes);
+    - ``dead_ok``: the dead classes are exactly the unsatisfiable ones (reasoner only), and
+      ``n_false_dead`` the satisfiable classes that are dead;
+    - ``faithful_named_precision`` / ``_recall``: for the satisfiable named classes (at most
+      ``max_named``), the points of each class (its element, ``RegionSampler`` points and the
+      corners of its boxes, those crisp-inside it) decide the inclusion of every ordered
+      pair; *precision* is the share of the separated pairs that are not entailed, *recall*
+      the share of the non-entailed pairs that are separated;
+    - ``exact``: no violation, every class exists and the dead classes are right
+      (``exact_tol1e-4`` at the tolerance :math:`10^{-4}`).
+
+    The reasoner is an object with ``is_satisfiable(iri)`` and ``extension(iri)`` (a
+    :class:`~mowl.geometric.completion.CanonicalModel`); ``None`` skips what needs it.
+
+    :param chunk: Classes per chunk of the existence check.
+    :param max_named: Largest number of named classes of the faithfulness check.
+    """
+
+    REGION_FORMS = CONCEPT_FORMS + ROLE_FORMS
+
+    def __init__(self, chunk=8192, max_named=128):
+        self.chunk, self.max_named = int(chunk), int(max_named)
+
+    def report(self, geometry, base, axioms, generator, n_eval=10000, bot_id=None,
+               reasoner=None, class_index=None, named_index=None, top=None, bottom=None):
+        """The metrics dict; ``base`` is the :meth:`CrispViolations.report` of the
+        geometry."""
+        total = sum(len(axioms[k]) for k in self.REGION_FORMS if k in axioms and len(axioms[k]) > 0)
+        out = {"elem_viol": base["elem_viol"], "region_viol": base["region_viol"],
+               "region_viol_tol1e-4": (float(base["n_axioms_violated_by_depth"]["1e-4"] / total)
+                                       if total > 0 else 0.0),
+               "n_empty_classes": int(base["n_empty_classes"]),
+               "n_dead_elements": int(base["n_dead_elements"])}
+        n = geometry.nb_classes
+        with th.no_grad():
+            positions = geometry.positions()
+            dead = (geometry.dead()[:n] > 0.5).cpu()
+            if bot_id is not None:
+                dead[bot_id] = True
+            inside = th.zeros((n,), dtype=th.bool)
+            for start in range(0, n, self.chunk):
+                ids = th.arange(start, min(start + self.chunk, n), dtype=th.long,
+                                device=positions.device)
+                depth = geometry.depth(positions[ids], ids, crisp=True).cpu()
+                inside[start:start + len(ids)] = (depth > 0.0) & (~dead[start:start + len(ids)])
+            if reasoner is None:
+                live = ~dead
+                out.update(exist=float(inside[live].to(th.float32).mean().item())
+                           if bool(live.any().item()) else 1.0, dead_ok=True,
+                           n_false_dead=None, faithful_named_precision=None,
+                           faithful_named_recall=None, faithful_named=(None, None))
+            else:
+                sat = th.zeros((n,), dtype=th.bool)
+                for iri, c in class_index.items():
+                    sat[c] = False if iri == bottom else bool(reasoner.is_satisfiable(iri))
+                out["dead_ok"] = bool(th.equal(dead, ~sat))
+                out["n_false_dead"] = int((dead & sat).sum().item())
+                out["exist"] = (float(inside[sat].to(dtype=th.float32).mean().item())
+                                if bool(sat.any().item()) else 1.0)
+                named = [(iri, c) for iri, c in named_index.items()
+                         if iri not in (top, bottom) and bool(sat[c].item())][:self.max_named]
+                p, r = self._faithfulness(geometry, positions, named, reasoner, generator,
+                                          n_eval)
+                out.update(faithful_named_precision=p, faithful_named_recall=r,
+                           faithful_named=(p, r))
+        ok = out["exist"] == 1.0 and out["dead_ok"] and out["elem_viol"] == 0.0
+        out["exact"] = bool(ok and out["region_viol"] == 0.0)
+        out["exact_tol1e-4"] = bool(ok and out["region_viol_tol1e-4"] == 0.0)
+        return out
+
+    @staticmethod
+    def _points_of(geometry, positions, c, generator, n_points):
+        from mowl.representation.library.grounded_parts import index_tensor
+        sampler = RegionSampler(n_points, 2, True, None, doubled_gradient=True)
+        idx = index_tensor(c, geometry.nb_classes, "class_ids", positions.device)
+        sample = sampler.classes(geometry.class_model, idx, generator, None)
+        regions = geometry.class_regions()
+        corners = all_box_corners(type(regions)(cen=regions.cen[c:c + 1], w=regions.w[c:c + 1],
+                                                active=regions.active[c:c + 1]), generator)
+        parts = [positions[c:c + 1]]
+        if bool(sample.valid.any().item()):
+            parts.append(sample.points[sample.valid])
+        if corners.numel() > 0:
+            parts.append(corners)
+        points = th.cat(parts, dim=0)
+        return points[geometry.depth(points, c, crisp=True) > 0.0]
+
+    def _faithfulness(self, geometry, positions, named, reasoner, generator, n_eval):
+        if len(named) < 2:
+            return 1.0, 1.0
+        n_points = max(16, min(256, n_eval // max(len(named), 1)))
+        points = {c: self._points_of(geometry, positions, c, generator, n_points)
+                  for _, c in named}
+        tp = fp = tn = fn = 0
+        for a_iri, a in named:
+            for b_iri, b in named:
+                if a == b:
+                    continue
+                entailed = bool(reasoner.extension(a_iri).issubset(reasoner.extension(b_iri)))
+                pts = points[a]
+                included = True if pts.shape[0] == 0 else bool(
+                    (geometry.depth(pts, b, crisp=True) > 0.0).all().item())
+                if entailed and included:
+                    tp += 1
+                elif not entailed and included:
+                    fp += 1
+                elif not entailed:
+                    tn += 1
+                else:
+                    fn += 1
+        precision = float(tn / (tn + fn)) if (tn + fn) > 0 else (1.0 if fp == 0 else 0.0)
+        recall = float(tn / (tn + fp)) if (tn + fp) > 0 else (1.0 if fn == 0 else 0.0)
+        return precision, recall
+
+
+register_grounded_part("evaluation", "exact domain check")(ExactDomainCheck)
