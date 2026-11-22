@@ -71,11 +71,14 @@ _DEFAULTS = {
     "expressive": {"model_kwargs": {"embed_dim": 200}, "epochs": 100},
     "reshuffle": {"model_kwargs": {}, "epochs": 50},
     "concept2box": {"model_kwargs": {"embed_dim": 50}, "epochs": 500},
-    # query embeddings: one epoch is 10 steps on freshly sampled queries
-    "query2box": {"model_kwargs": {"embed_dim": 100}, "epochs": 200},
+    # query embeddings: one epoch is 10 steps on freshly sampled queries. Learning rates
+    # measured on random taxonomies (inferred subsumptions, 2,000 steps): at 5,000 classes
+    # Query2Box reaches filtered MRR 0.20 with 1e-2 and 0.003 (chance 0.002) with the
+    # model default 1e-3; AConE 0.09 with 3e-3, 0.02 with 1e-3 and chance with 1e-2.
+    "query2box": {"model_kwargs": {"embed_dim": 100, "learning_rate": 1e-2}, "epochs": 200},
     "betae": {"model_kwargs": {"embed_dim": 100}, "epochs": 200},
     "cone_qe": {"model_kwargs": {"embed_dim": 100}, "epochs": 200},
-    "acone": {"model_kwargs": {"embed_dim": 100}, "epochs": 200},
+    "acone": {"model_kwargs": {"embed_dim": 100, "learning_rate": 3e-3}, "epochs": 200},
     # Word2Vec on walks or on a corpus, scored with the pair classifier head
     "dl2vec": {"model_kwargs": {"embed_dim": 100}, "epochs": 10},
     "owl2vec_star": {"model_kwargs": {"embed_dim": 100}, "epochs": 10},
