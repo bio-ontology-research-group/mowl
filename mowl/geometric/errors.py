@@ -1,6 +1,7 @@
 """Exception hierarchy for constructive geometric models of EL++ ontologies.
 
 Guarantees:
+
 - All domain-specific exceptions raised by :mod:`mowl.geometric` inherit from
   :class:`GeometricError`.
 - :class:`NotBoxRepresentable` carries a ``report`` attribute holding the
@@ -11,6 +12,7 @@ Guarantees:
   (distinct from :class:`NotBoxRepresentable`, which is a proof of impossibility).
 
 References:
+
 - Gutiérrez-Basulto & Schockaert, KR 2018 (arXiv:1805.10461), Props. 3, 4.
 - Lacerda, Ozaki & Guimarães, TGDK 2(3):2, 2024, Defs. 2, 8, 12, Thms. 13, 16, 18, 25.
 - Leemhuis & Kutz, NeSy 2025 (PMLR 284:303–321), Defs. 1, 3, 6, Props. 4, 5, 8.

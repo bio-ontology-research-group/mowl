@@ -127,15 +127,18 @@ In case you have your own :download:`training <training_ontology.owl>`, :downloa
 
    Custom datasets require the implementation of the `evaluation_classes` attribute. This can be done as:
 
-.. code:: python
+.. testcode::
+
+   from mowl.datasets import PathDataset
 
    class CustomDataset(PathDataset):
-       def __init__(self, *args, **kwargs):
+       def __init__(self, train_path, valid_path, test_path):
            super().__init__(train_path, valid_path, test_path)
 
-      @property
-      def evaluation_classes(self):
-          #################
-	  # your code here
-	  #################
+       @property
+       def evaluation_classes(self):
+           #################
+           # your code here
+           #################
+           pass
           

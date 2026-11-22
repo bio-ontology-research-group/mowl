@@ -12,15 +12,15 @@ Register a part
 There is one decorator for each kind of part. It makes the part available by name to
 :class:`~mowl.models.ComposedEL` and to :func:`mowl.representation.compose`:
 
-==========================================  ==============================================
-Decorator                                   What it registers
-==========================================  ==============================================
-``register_class_model(name)``              a class model (a subclass of ``Classes``)
-``register_relation_model(name)``           a relation model (a subclass of ``Relations``)
-``register_measure(name, default_for=...)``  a measure (a subclass of ``RegionMeasure``)
-``register_method(key, trained_on=...)``    a function that builds a published method
-``register_adapter(*class_names)``          the way to describe an existing module
-==========================================  ==============================================
+============================================  ==============================================
+Decorator                                     What it registers
+============================================  ==============================================
+``register_class_model(name)``                a class model (a subclass of ``Classes``)
+``register_relation_model(name)``             a relation model (a subclass of ``Relations``)
+``register_measure(name, default_for=...)``   a measure (a subclass of ``RegionMeasure``)
+``register_method(key, trained_on=...)``      a function that builds a published method
+``register_adapter(*class_names)``            the way to describe an existing module
+============================================  ==============================================
 
 Names are unique. Registering a second part under a taken name is an error, because it
 would silently change what the name means for everyone.

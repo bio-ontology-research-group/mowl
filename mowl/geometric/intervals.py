@@ -5,6 +5,7 @@ Implements the constructive 1-D interval-union interpretation of Lacerda, Ozaki
 multibox construction of Federico, Leemhuis & Kutz (JOWO 2026, Theorem 3).
 
 Construction:
+
 - Given a :class:`~mowl.geometric.completion.CanonicalModel` with domain
   :math:`\\Delta = \\{d_0, \\dots, d_{m-1}\\}` (indexed :math:`0 \\le i < m`),
   each canonical element at position :math:`i` maps to the closed interval
@@ -18,6 +19,7 @@ Construction:
   (and unknown roles :math:`\\mapsto \\emptyset`).
 
 Guarantees:
+
 - **Exact model of the normalised ontology**: satisfies every normalised axiom
   (:class:`~mowl.geometric.normal_forms.NF1`–:class:`~mowl.geometric.normal_forms.NF4`,
   :class:`~mowl.geometric.normal_forms.NF6`,
@@ -36,6 +38,7 @@ Guarantees:
   inconsistent.
 
 References:
+
 - V. Lacerda, A. Ozaki & R. Guimarães, *Strong Faithfulness for ELH Ontology
   Embeddings*, Transactions on Graph Data and Knowledge (TGDK) 2(3):2, 2024,
   Definitions 2, 8, 12, Theorems 13, 16, 18, 25.
@@ -70,6 +73,7 @@ class IntervalUnionModel(GeometricInterpretation):
     Def. 12) and the 1-D case of Federico, Leemhuis & Kutz (JOWO 2026, Thm. 3).
 
     Guarantees:
+
     - Exact model of the normalised ontology (``cm.axioms``), verified on
       construction via :class:`~mowl.geometric.checker.ModelChecker`.
     - Non-degenerate on all satisfiable concept names in ``cm.names``.

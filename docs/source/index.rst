@@ -37,7 +37,7 @@ mOWL is a Python library. Furtheremore, it binds the OWLAPI, which is written in
 
 In order to use mOWL with all its functionalities, the Java Virtual Machine must be started. We can do that in the following way:
 
-.. code:: python
+.. testcode::
 
    import mowl
    mowl.init_jvm("2g")

@@ -3,9 +3,8 @@ from mowl.base_models.model import Model
 from mowl.datasets.el import ELDataset
 from mowl.projection import projector_factory
 import torch as th
-from torch.utils.data import DataLoader, default_collate
+from torch.utils.data import DataLoader
 from tqdm import trange
-import warnings
 
 from deprecated.sphinx import versionadded, versionchanged
 

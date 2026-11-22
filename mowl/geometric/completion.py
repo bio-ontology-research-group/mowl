@@ -7,6 +7,7 @@ EL++ TBoxes and RBoxes (:class:`~mowl.geometric.normal_forms.NF1`–:class:`~mow
 :class:`~mowl.geometric.normal_forms.NF6`, :class:`~mowl.geometric.normal_forms.NF7`).
 
 Guarantees:
+
 - The canonical interpretation :math:`\\mathcal{I}` satisfies the normalised
   ontology :math:`\\mathcal{O}` (:math:`\\mathcal{I} \\models \\mathcal{O}`).
 - For all concept names :math:`A, B`:
@@ -20,6 +21,7 @@ Guarantees:
   for some individual ``a`` (with the individual IRI in the exception message).
 
 References:
+
 - Kazakov, Krötzsch & Simančík, *The Incredible ELK: From Polynomial Procedures
   to Efficient Reasoning with EL Ontologies*, Journal of Automated Reasoning
   53(1):1–61, 2014.
@@ -312,6 +314,7 @@ class CanonicalModel:
     """Canonical model :math:`\\mathcal{I}` of a consistent normalised EL++ ontology.
 
     Domain and interpretation:
+
     - :math:`\\Delta^{\\mathcal{I}} = \\{d_A : A \\in N_C \\cup \\{\\top\\}, \\bot \\notin S(A)\\}`,
       ordered by sorted satisfiable concept and nominal names ``names``.
     - :math:`A^{\\mathcal{I}} = \\{d_B \\in \\Delta^{\\mathcal{I}} : A \\in S(B)\\}`

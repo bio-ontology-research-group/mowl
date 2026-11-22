@@ -4,6 +4,7 @@ Implements the Helly-satisfiability diagnostic and minimal jointly-unsatisfiable
 concept-name set enumeration.
 
 What a certificate proves:
+
 - By Helly's theorem for axis-parallel boxes in :math:`\\mathbb{R}^d` (Helly
   number 2; Eckhoff 1988; Leemhuis & Kutz, NeSy 2025, Def. 3, Prop. 4), any
   finite family of axis-parallel boxes whose members pairwise intersect has a
@@ -26,6 +27,7 @@ What a certificate proves:
   *exists in which* :math:`C_1 \\sqcap C_2`, :math:`C_2 \\sqcap C_3`, *and*
   :math:`C_1 \\sqcap C_3` *are all non-empty*.
 - Two certificate classes are reported in :class:`HellyReport`:
+
   - ``certificates_nondegenerate``: certificates whose three pairwise
     conjunctions :math:`C_1 \\sqcap C_2`, :math:`C_1 \\sqcap C_3`, and
     :math:`C_2 \\sqcap C_3` are each :math:`\\mathcal{O}`-equivalent to a
@@ -55,6 +57,7 @@ What a certificate proves:
   :class:`~mowl.geometric.boxes.BoxModelBuilder` to search for a model.
 
 Propositional exactness lemma, relevance pruning, and completeness:
+
 - **Lemma (strong reading only).** In the propositional fragment (no
   :class:`~mowl.geometric.normal_forms.NF3`,
   :class:`~mowl.geometric.normal_forms.NF4`,
@@ -115,6 +118,7 @@ Propositional exactness lemma, relevance pruning, and completeness:
   small to medium ontologies. Incremental joint satisfiability is future work.
 
 References:
+
 - M. Leemhuis & O. Kutz, *Understanding the Expressive Capabilities of
   Knowledge Base Embeddings under Box Semantics*, NeSy 2025 (PMLR
   284:303–321), Definitions 3, 6; Propositions 4, 5.
@@ -391,6 +395,7 @@ def helly_check(
     ``cm.entails_conjunction(C_i | C_j, N)``), or ``None`` if no such name exists.
 
     What a certificate proves:
+
     - Each certificate proves that no axis-parallel box model of :math:`\\mathcal{O}`
       exists in which the three pairwise conjunctions :math:`C_1 \\sqcap C_2`,
       :math:`C_1 \\sqcap C_3`, and :math:`C_2 \\sqcap C_3` are all non-empty
@@ -544,7 +549,7 @@ def certificate_triangles(
         (returns ``[]`` if ``max_triangles <= 0``).
 
     Returns
-    ------
+    -------
     List[HellyCertificate]
         Sorted list of non-degenerate singleton certificates.
     """

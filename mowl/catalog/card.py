@@ -9,7 +9,7 @@ Cards are plain data. Creating them does not import any model code and does not 
 running JVM, so the catalogue can be queried and rendered cheaply.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 import importlib
 

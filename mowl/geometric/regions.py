@@ -1,6 +1,7 @@
 """Pure-numpy geometric region types for :mod:`mowl.geometric`.
 
 Semantics and guarantees:
+
 - :class:`IntervalUnion`: finite union of closed 1-D intervals
   :math:`\\bigcup_i [a_i, b_i] \\subseteq \\mathbb{R}`. The constructor drops
   empty intervals (:math:`a_i > b_i`), sorts, and merges overlapping or touching
@@ -408,6 +409,7 @@ class Face:
     """Face of the standard simplex in :math:`\\mathbb{R}^{\\text{dim}}` (:math:`n = \\text{dim} + 1`).
 
     Semantics:
+
     - Represents :math:`F(S) = \\text{conv}\\{v_j : j \\in S\\}` where
       :math:`S = \\text{vertex\\_ids} \\subseteq \\{0, \\dots, n - 1\\}` and
       :math:`v_0, \\dots, v_{n-1}` are the rows of :func:`simplex_points`.
@@ -562,6 +564,7 @@ class Face:
         """Return ``(A_ub, b_ub, A_eq, b_eq)`` of the face in ambient simplex coordinates.
 
         For ambient dimension ``k = self.dim`` and ``n = k + 1`` simplex vertices:
+
         - Barycentric coordinate :math:`\\lambda_j(x) = a_j \\cdot x + c_j` has
           :math:`a_j = e_j, c_j = 0` for :math:`0 \\le j < n - 1` and
           :math:`a_{n-1} = (-1, \\dots, -1), c_{n-1} = 1` for :math:`j = n - 1`.

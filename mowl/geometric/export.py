@@ -7,6 +7,7 @@ or inspecting mOWL embedding modules (such as :class:`~mowl.nn.el.elbe.module.EL
 :class:`~mowl.nn.el.boxsquaredel.module.BoxSquaredELModule`).
 
 Guarantees and limitations:
+
 - :func:`class_points` returns the exact generating simplex-vertex rows for each
   concept name in a :class:`~mowl.geometric.polyhedral.ConvexPolyhedralModel`.
 - :func:`to_bounding_boxes` computes the axis-parallel bounding box
@@ -34,6 +35,7 @@ Guarantees and limitations:
   MILP objective.
 
 References:
+
 - Gutiérrez-Basulto & Schockaert, KR 2018 (arXiv:1805.10461), Props. 3, 4.
 - Lacerda, Ozaki & Guimarães, TGDK 2(3):2, 2024, Defs. 2, 8, 12, Thms. 13, 16, 18, 25.
 - Leemhuis & Kutz, NeSy 2025 (PMLR 284:303–321), Defs. 1, 3, 6, Props. 4, 5, 8.

@@ -98,3 +98,15 @@ References
 .. [pavlovic2025] Pavlović, A., Sallinger, E., & Schockaert, S. (2025). `Faithful Differentiable Reasoning with Reshuffled Region-based Embeddings <https://doi.org/10.24963/kr.2025/48>`_. In: Proceedings of the 22nd International Conference on Principles of Knowledge Representation and Reasoning (KR 2025), 489-499. ArXiv, abs/2406.09529.
 
 .. [teru2020] Teru, K. K., Denis, E. G., & Hamilton, W. L. (2020). `Inductive Relation Prediction by Subgraph Reasoning <https://arxiv.org/abs/1911.06962>`_. In: Proceedings of the 37th International Conference on Machine Learning (ICML 2020).
+
+.. [abboud2020] Abboud, R., Ceylan, I. I., Lukasiewicz, T., & Salvatori, T. (2020). `BoxE: A Box Embedding Model for Knowledge Base Completion <https://arxiv.org/abs/2007.06267>`_. NeurIPS 2020.
+
+.. [dasgupta2020] Dasgupta, S. S., Boratko, M., Zhang, D., Vilnis, L., Li, X. L., & McCallum, A. (2020). `Improving Local Identifiability in Probabilistic Box Embeddings <https://arxiv.org/abs/2010.04831>`_. NeurIPS 2020.
+
+.. [pavlovic2023] Pavlović, A., & Sallinger, E. (2023). `ExpressivE: A Spatio-Functional Embedding For Knowledge Graph Completion <https://arxiv.org/abs/2206.04192>`_. ICLR 2023.
+
+.. [vendrov2016] Vendrov, I., Kiros, R., Fidler, S., & Urtasun, R. (2016). `Order-Embeddings of Images and Language <https://arxiv.org/abs/1511.06361>`_. ICLR 2016.
+
+.. [vilnis2018] Vilnis, L., Li, X., Murty, S., & McCallum, A. (2018). `Probabilistic Embedding of Knowledge Graphs with Box Lattice Measures <https://arxiv.org/abs/1805.06627>`_. ACL 2018.
+
+.. [zhu2024] Zhu, Y., Potyka, N., Xiong, B., Tran, T.-K., Nayyeri, M., Kharlamov, E., & Staab, S. (2024). `Approximating Probabilistic Inference in Statistical EL with Knowledge Graph Embeddings <https://arxiv.org/abs/2407.11821>`_. arXiv:2407.11821.
