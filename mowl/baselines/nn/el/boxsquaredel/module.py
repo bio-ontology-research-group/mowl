@@ -1,5 +1,5 @@
 import mowl.baselines.nn.el.boxsquaredel.losses as L
-from mowl.nn import ELModule
+from mowl.baselines.nn.el.elmodule import ELModule
 import torch as th
 import torch.nn as nn
 

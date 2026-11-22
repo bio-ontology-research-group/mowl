@@ -9,7 +9,7 @@ import torch
 import torch.nn as nn
 
 from mowl.baselines.geometric.core.membership import MembershipStructure
-from mowl.nn import ELModule
+from mowl.baselines.nn.el.elmodule import ELModule
 
 MAX_SUPPORT_ENTRIES: int = 524_288
 

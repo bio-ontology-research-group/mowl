@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Dict, Optional, Tuple, Union
 import torch as th
 import torch.nn as nn
 
-from mowl.nn import ELModule
+from mowl.baselines.nn.el.elmodule import ELModule
 from mowl.baselines.nn.el.boxsquaredel.module import BoxSquaredELModule
 from mowl.baselines.nn.el.multibox_utils import effective_components as _effective_components
 from mowl.baselines.nn.el.multiboxel.module import MultiBoxELModule

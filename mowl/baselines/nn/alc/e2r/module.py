@@ -14,7 +14,7 @@ restriction removes, supplementary material Theorem 11).
 import torch as th
 import torch.nn as nn
 
-from mowl.nn.alc.module import ALCModule
+from mowl.baselines.nn.alc.module import ALCModule
 from mowl.baselines.nn.alc.e2r import losses as L
 
 # Axiom kinds understood by :meth:`E2RModule.forward`; each maps to ``<kind>_loss``.

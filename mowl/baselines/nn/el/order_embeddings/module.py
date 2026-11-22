@@ -2,7 +2,7 @@ r"""Order embeddings (Vendrov et al., ICLR 2016) as a module over the class taxo
 import torch as th
 import torch.nn as nn
 
-from mowl.nn.el.order_embeddings.base import TaxonomyModule
+from mowl.baselines.nn.el.order_embeddings.base import TaxonomyModule
 
 
 class OrderEmbeddingsModule(TaxonomyModule):

@@ -8,7 +8,7 @@ semantics of fuzzy :math:`\\mathcal{ALC}` (Eqs. 1-5 of the paper).
 """
 import torch as th
 
-from mowl.nn.alc.module import ALCModule
+from mowl.baselines.nn.alc.module import ALCModule
 from mowl.owlapi import (ClassExpressionType, OWLClassAssertionAxiom,
                          OWLDisjointClassesAxiom, OWLEquivalentClassesAxiom,
                          OWLObjectPropertyAssertionAxiom, OWLSubClassOfAxiom)

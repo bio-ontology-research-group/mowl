@@ -1,5 +1,5 @@
 import mowl.baselines.nn.el.elbe.losses as L
-from mowl.nn.el.elmodule import ELModule
+from mowl.baselines.nn.el.elmodule import ELModule
 import torch as th
 import torch.nn as nn
 

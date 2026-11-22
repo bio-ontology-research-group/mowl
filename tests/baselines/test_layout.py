@@ -67,13 +67,6 @@ LIBRARY_COMPUTING = ("mowl.representation", "mowl.training", "mowl.evaluation", 
 #: Names a baseline may import from those packages because they do not compute: base classes
 #: that only dispatch, exception classes, a reader of the axioms into index rows.
 ALLOWED_NAMES = {
-    ("mowl.nn", "ELModule"): "base class of the EL modules: dispatch of the normal forms",
-    ("mowl.nn.el.elmodule", "ELModule"): "base class of the EL modules: dispatch of the "
-                                         "normal forms",
-    ("mowl.nn.alc.module", "ALCModule"): "base class of the ALC modules: dispatch of the "
-                                         "axiom forms",
-    ("mowl.nn.el.order_embeddings.base", "TaxonomyModule"): "dispatch of gci0 to two "
-                                                            "abstract methods",
     ("mowl.evaluation.model_scoring", "UnsupportedAxiomForm"): "exception class",
     ("mowl.evaluation.axiom_ranking", "el_rows"): "reads the validation axioms into index "
                                                    "rows (data extraction)",
@@ -83,12 +76,6 @@ ALLOWED_NAMES = {
                                               "extraction)",
     ("mowl.projection", "OWL2VecStarProjector"): "reads the ontology into edges (data "
                                                   "extraction)",
-    ("mowl.models.multiboxel.common", "MultiBoxELOptions"): "constructor options and "
-                                                             "documentation of the model",
-    ("mowl.models.multielbe.common", "MultiELBEOptions"): "constructor options and "
-                                                           "documentation of the model",
-    ("mowl.models.mcmultibox.common", "VolumeMultiBoxELOptions"): "constructor options and "
-                                                                   "documentation of the model",
 }
 
 

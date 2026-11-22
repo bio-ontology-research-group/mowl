@@ -7,7 +7,7 @@ and :mod:`mowl.baselines.geometric.core.cones` for the exact semantics of Özçe
 import numpy as np
 import torch as th
 
-from mowl.nn.alc.module import ALCModule
+from mowl.baselines.nn.alc.module import ALCModule
 from mowl.baselines.nn.alc.alcone import losses as L
 from mowl.owlapi import (ClassExpressionType, OWLClassAssertionAxiom,
                          OWLDisjointClassesAxiom, OWLEquivalentClassesAxiom,

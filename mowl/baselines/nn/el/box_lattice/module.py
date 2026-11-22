@@ -4,7 +4,7 @@ import math
 import torch as th
 import torch.nn as nn
 
-from mowl.nn.el.order_embeddings.base import TaxonomyModule
+from mowl.baselines.nn.el.order_embeddings.base import TaxonomyModule
 
 
 def meet(min_a, max_a, min_b, max_b):

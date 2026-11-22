@@ -8,7 +8,7 @@ import contextlib
 import torch as th
 import torch.nn as nn
 
-from mowl.nn.el.elmodule import ELModule
+from mowl.baselines.nn.el.elmodule import ELModule
 from mowl.baselines.nn.order import cones as C
 from mowl.baselines.nn.order.manifolds import (Euclidean, Hyperboloid, PoincareBall, Sphere,
                                      UpperHalfSpace)

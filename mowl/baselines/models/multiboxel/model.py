@@ -1,7 +1,7 @@
 """The direct implementation of the MultiBoxEL model class (the module of
 :mod:`mowl.baselines.nn.el.multiboxel` and its own extra training loss and loop). The options,
 the data handling and loading are those of :class:`mowl.models.MultiBoxEL`
-(:class:`~mowl.models.multiboxel.common.MultiBoxELOptions`)."""
+(:class:`~mowl.baselines.models.multiboxel.base.MultiBoxELOptions`)."""
 from __future__ import annotations
 
 from typing import Optional
@@ -12,7 +12,7 @@ import torch as th
 from mowl.baselines.nn.el.multiboxel.module import MultiBoxELModule
 from mowl.baselines.nn.el.multiboxel.pointloss import volume_penalty
 from mowl.baselines.geometric.core.normal_forms import BOTTOM, TOP
-from mowl.models.multiboxel.common import MultiBoxELOptions
+from mowl.baselines.models.multiboxel.base import MultiBoxELOptions
 from mowl.baselines.nn.el.structural import build_structural_tables
 
 

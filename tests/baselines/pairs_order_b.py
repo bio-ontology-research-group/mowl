@@ -78,8 +78,11 @@ def _order_pairs():
 
 
 # -- HiT and OnT (a text encoder and a Poincare ball) -------------------------------------
-def _encoder():
-    from mowl.nn.lm.encoders import BagOfWordsEncoder
+def _encoder(side="new"):
+    if side == "old":  # the baselines have their own copy of the encoder
+        from mowl.baselines.nn.lm.text_encoders import BagOfWordsEncoder
+    else:
+        from mowl.nn.lm.encoders import BagOfWordsEncoder
     return BagOfWordsEncoder(dim=8, num_buckets=64)
 
 
@@ -158,7 +161,7 @@ def _text_train(model, epochs):
 
 def _text_pairs():
     def build(side, name, **options):
-        return lambda dataset: _load(side, name)(dataset, encoder=_encoder(), **_TEXT,
+        return lambda dataset: _load(side, name)(dataset, encoder=_encoder(side), **_TEXT,
                                                  **options)
 
     def pair(key, name, **options):

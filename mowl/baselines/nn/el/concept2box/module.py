@@ -3,7 +3,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import mowl.baselines.nn.el.concept2box.losses as L
-from mowl.nn.el.elmodule import ELModule
+from mowl.baselines.nn.el.elmodule import ELModule
 
 
 class Concept2BoxModule(ELModule):

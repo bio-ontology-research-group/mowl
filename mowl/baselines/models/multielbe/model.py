@@ -1,7 +1,7 @@
 """The direct implementation of the MultiELBE model class (the module of
 :mod:`mowl.baselines.nn.el.multielbe` and its own extra training loss). The options and the
 point supervision are those of :class:`mowl.models.MultiELBE`
-(:class:`~mowl.models.multielbe.common.MultiELBEOptions`)."""
+(:class:`~mowl.baselines.models.multielbe.base.MultiELBEOptions`)."""
 from __future__ import annotations
 
 from typing import Optional
@@ -12,7 +12,7 @@ import torch as th
 from mowl.baselines.nn.el.multielbe.module import MultiELBEModule
 from mowl.baselines.nn.el.multiboxel.pointloss import volume_penalty
 from mowl.baselines.geometric.core.normal_forms import BOTTOM, TOP
-from mowl.models.multielbe.common import MultiELBEOptions
+from mowl.baselines.models.multielbe.base import MultiELBEOptions
 
 
 class MultiELBE(MultiELBEOptions):

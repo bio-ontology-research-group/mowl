@@ -1,5 +1,5 @@
 import mowl.baselines.nn.el.elem.losses as L
-from mowl.nn import ELModule
+from mowl.baselines.nn.el.elmodule import ELModule
 from torch import nn
 import torch as th
 from deprecated.sphinx import versionchanged
