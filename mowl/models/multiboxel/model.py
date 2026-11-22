@@ -196,6 +196,11 @@ class MultiBoxEL(MethodRegimes, MultiBoxELOptions):
         super().init_module()
         self._attach_method_regimes()
 
+    def _annealing(self):
+        """The cooling schedule of ``tau_anneal=True``, as a regime."""
+        from mowl.training.schedules import TemperatureAnnealing
+        return [TemperatureAnnealing(self.tau_start, self.tau_end)] if self.tau_anneal else []
+
     def method_regimes(self):
         """The training regimes of the reading, which a regime assigned to
         :attr:`training_regime` is added to (one of the same class replaces one of them):
@@ -207,14 +212,17 @@ class MultiBoxEL(MethodRegimes, MultiBoxELOptions):
         - ``"point"``, ``"mixed"``, ``"hybrid"``:
           :class:`~mowl.training.structural.SampledPointLoss` (the point terms on a sample
           of ``points_per_epoch`` pairs, seed ``points_seed + epoch``);
-        - ``"axiom"``: none.
+        - ``"axiom"``: none;
+        - with ``tau_anneal=True`` in every reading: :class:`~mowl.training.TemperatureAnnealing`
+          from ``tau_start`` to ``tau_end``.
         """
         from mowl.training.structural import ExtraPenalties, SampledPointLoss, StructuralTables
+        regimes = self._annealing()
         if self.objective == "structural":
-            return [StructuralTables(lambda model: dict(
+            return regimes + [StructuralTables(lambda model: dict(
                 k=model.n_components, max_components=model.max_components,
                 enabled=model.structural_definitions, cm=model.canonical_model)),
                 ExtraPenalties()]
         if self.objective in ("point", "mixed", "hybrid"):
-            return [SampledPointLoss(self.points_per_epoch, self.points_seed)]
-        return []
+            return regimes + [SampledPointLoss(self.points_per_epoch, self.points_seed)]
+        return regimes

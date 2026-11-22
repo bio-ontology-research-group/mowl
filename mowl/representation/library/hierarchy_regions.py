@@ -23,11 +23,30 @@ from mowl.representation.library.manifolds import (Euclidean, Hyperboloid, Poinc
                                      UpperHalfSpace)
 from mowl.representation.regions import ConstructorUnavailable, CornerBox, Region
 
-__all__ = ["CodedBox", "Point", "OrderCone", "ConePoint", "Disk", "CurvedBall",
+__all__ = ["meet", "join", "volume", "CodedBox", "Point", "OrderCone", "ConePoint", "Disk", "CurvedBall",
            "depth", "MANIFOLDS"]
 
 
 # -- boxes -------------------------------------------------------------------------------
+# The lattice of boxes (Vilnis et al. 2018, Section 4): the operations on boxes given by their
+# corners. They are used by the volume-ratio measure and by the box lattice and Gumbel box
+# methods; any method that reads boxes by corners can call them.
+def meet(min_a, max_a, min_b, max_b):
+    """Meet of two boxes: the intersection box ``(min, max)``. Components with
+    ``max < min`` mean that the boxes are disjoint (the meet is the bottom element)."""
+    return th.maximum(min_a, min_b), th.minimum(max_a, max_b)
+
+
+def join(min_a, max_a, min_b, max_b):
+    """Join of two boxes: the smallest enclosing box."""
+    return th.minimum(min_a, min_b), th.maximum(max_a, max_b)
+
+
+def volume(mn, mx):
+    """Volume (product of side lengths) of a box, 0 if it is empty."""
+    return th.relu(mx - mn).prod(dim=-1)
+
+
 @dataclass(frozen=True)
 class CodedBox(CornerBox):
     """A box with binary codes (BCBox, Zhang et al. 2022): ``code`` ``(B, d)`` is the code of

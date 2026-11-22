@@ -314,8 +314,9 @@ parts that other methods can use too:
   a time;
 * :func:`mowl.representation.library.structural_regions.pad_slots`: inactive padding slots for
   unions of boxes;
-* :data:`mowl.representation.library.ballfam_energy.ENERGY` and ``BOUNDARY``: the RegD energy
-  and boundary dissimilarity of each region shape;
+* :mod:`mowl.representation.library.boundary_depth`: the boundary and depth dissimilarity of boxes
+  and balls, the formulas of the measure ``"boundary and depth"`` (a swap for any box or ball
+  method, see ``tests/representation/test_region_kind_formulas.py``);
 * :func:`mowl.evaluation.scoring_rules.exp_negative_score`: the score :math:`e^{-\ell}` of a
   loss (ELK-Em), and :func:`mowl.evaluation.region_access.concatenated_rows`: regions exported
   as one row per class.
@@ -328,3 +329,43 @@ parts that other methods can use too:
 
    assert float(exp_negative_score(th.tensor(0.0))) == 1.0
    assert epoch_rng(3, 4).integers(100) == epoch_rng(4, 3).integers(100)
+
+Parts that the general models and the named classes call
+--------------------------------------------------------
+
+The general EL model (:class:`~mowl.base_models.elmodel.EmbeddingELModel`), the composed models
+and the named classes only wire parts; the arithmetic they used to do is in:
+
+* :func:`mowl.training.losses.weighted_mean_loss`: the neutral objective (mean positive loss
+  plus mean negative loss), the combination of :class:`~mowl.training.SumLoss` and the default
+  loss of every EL model; :func:`mowl.training.losses.ranking_hinge_loss`: the hinge of a
+  positive against each of its corrupted axioms; :func:`mowl.training.losses.collapsed_to_chance`:
+  whether a logistic loss sits at :math:`\log 2`;
+* :func:`mowl.training.negatives.corrupt_column_blocks`: the default negative sampler (one block
+  of corrupted rows per column);
+* :func:`mowl.evaluation.validation.mean_module_cost`: the validation loss of a module;
+* :func:`mowl.training.initialisation.extend_embeddings`: the table of a model to which axioms
+  were added, :func:`~mowl.training.initialisation.redraw_after` and
+  :func:`~mowl.training.initialisation.seeded_scope`: initial values drawn in the order (or from
+  the seed) of another module, and a block with the generator seeded and put back;
+  :func:`~mowl.training.initialisation.margin_embedding_range`: the range of the uniform
+  initialisation of the query embeddings;
+* :class:`~mowl.training.TemperatureAnnealing` for the temperature of MultiBoxEL and MultiELBE
+  (``tau_anneal=True``), :class:`~mowl.training.CyclicLearningRate` with ``range_ratio`` for
+  CatE and :func:`mowl.training.schedules.linear_decay_interval` for the word2vec rate;
+* :func:`mowl.training.taxonomy.descendant_fractions`: the unary marginal of the box lattice;
+* :func:`mowl.representation.library.hierarchy_regions.meet`, ``join`` and ``volume``: the lattice
+  of boxes, used by the volume-ratio measure and the box lattice method.
+
+.. testcode::
+
+   import torch as th
+   from mowl.training.losses import ranking_hinge_loss, weighted_mean_loss
+   from mowl.training.schedules import linear_decay_interval
+   from mowl.training.taxonomy import descendant_fractions
+
+   pos, neg = th.tensor([1.0, 2.0]), th.tensor([3.0, 0.0, 5.0, 1.0])
+   assert float(weighted_mean_loss(pos, neg)) == 1.5 + 2.25
+   assert float(ranking_hinge_loss(pos, neg)) >= 0.0
+   assert linear_decay_interval(0.025, 0.0001, 0, 10)[0] == 0.025
+   assert list(descendant_fractions([(1, 0), (2, 1)], 3)) == [1.0, 2 / 3, 1 / 3]

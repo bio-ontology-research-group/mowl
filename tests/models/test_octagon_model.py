@@ -12,7 +12,7 @@ mowl.init_jvm("2g")
 
 from mowl.datasets import PathDataset  # noqa: E402
 from mowl.models.octagon.model import OctagonEL  # noqa: E402
-from mowl.nn.el.octagon import geometry as G  # noqa: E402
+from mowl.representation.library import octagon_geometry as G  # noqa: E402
 from mowl.nn.el.octagon.module import OctagonELModule  # noqa: E402
 from tests.datasetFactory import FamilyDataset  # noqa: E402
 

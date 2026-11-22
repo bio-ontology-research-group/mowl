@@ -12,7 +12,7 @@ from typing import Any, Optional
 
 import torch as th
 
-from mowl.nn.el.octagon import geometry as G
+from mowl.representation.library import octagon_geometry as G
 from mowl.representation.library.shapes_prism_math import NORMALS, supports
 from mowl.representation.library.shapes_gumbel_math import gumbel_intersection
 from mowl.representation.regions import Box, ConstructorUnavailable, Region
@@ -49,7 +49,7 @@ class Point(Region):
 @dataclass(frozen=True)
 class OctagonProduct(Region):
     r"""A product of 2-D octagons, one on each consecutive pair of coordinates
-    (:mod:`mowl.nn.el.octagon.geometry`). Closed under translation and intersection.
+    (:mod:`mowl.representation.library.octagon_geometry`). Closed under translation and intersection.
 
     :param bounds: Support values on the eight facet directions, ``(B, P, 8)``,
         ``P = d / 2``.
@@ -65,7 +65,7 @@ class OctagonProduct(Region):
 
     def is_empty(self):
         """A product is empty iff one of its octagons is (the tightened bounds have a
-        negative width: :func:`mowl.nn.el.octagon.geometry.product_emptiness_slack`)."""
+        negative width: :func:`mowl.representation.library.octagon_geometry.product_emptiness_slack`)."""
         return G.product_emptiness_slack(self.bounds) < 0
 
     def contains(self, points):

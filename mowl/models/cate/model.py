@@ -181,8 +181,8 @@ class CatE(RegimeTrained, CatEBase):
             parts.append(partial(HeadRestrictedHinge, self._interaction_ids, None, None,
                                  "edge"))
         if self.cyclic_lr:
-            parts.append(partial(CyclicLearningRate, self.learning_rate / 10,
-                                 self.learning_rate, 20))
+            parts.append(partial(CyclicLearningRate, None, self.learning_rate, 20,
+                                 range_ratio=10))
         parts.append(partial(ValidationPatience, lambda m: m.validation_mrr(), None,
                              self.early_stopping_patience, True, "validation_history",
                              lambda m: m.dataset.validation is not None

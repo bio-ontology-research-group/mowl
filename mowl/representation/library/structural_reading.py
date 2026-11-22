@@ -73,7 +73,7 @@ def _prism():
 
 
 def _octagon():
-    import mowl.nn.el.octagon.geometry as G
+    import mowl.representation.library.octagon_geometry as G
     from mowl.representation.library.shapes_regions import OctagonProduct
 
     def violation(a, b, margin):

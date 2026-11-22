@@ -90,6 +90,26 @@ def _draw(pool, size, rng):
     return pool[rng.integers(0, len(pool), size=size)]
 
 
+def corrupt_column_blocks(data, columns, pools, device=None):
+    """The negatives of the default sampler: for every ``(column, pool)`` one block of
+    ``len(data)`` rows, each row a copy of a positive whose ``column`` is replaced by an index
+    drawn uniformly (NumPy's global generator, see :func:`_draw`) from ``pool``; the blocks
+    are concatenated, so ``K`` columns give ``K * len(data)`` rows in the layout described
+    above.
+
+    :param data: ``(n, c)`` long tensor of positives.
+    :param columns: The columns to corrupt, one block each.
+    :param pools: For every column the index values the replacement is drawn from.
+    """
+    blocks = []
+    for column, pool in zip(columns, pools):
+        draw = th.tensor(_draw(np.asarray(pool), len(data), None), dtype=th.long, device=device)
+        block = data.clone()
+        block[:, column] = draw
+        blocks.append(block)
+    return th.cat(blocks, dim=0)
+
+
 def _check_alignment(positives, negatives):
     n = len(positives)
     return n > 0 and len(negatives) % n == 0

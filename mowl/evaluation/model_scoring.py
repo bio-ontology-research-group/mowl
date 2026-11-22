@@ -35,6 +35,8 @@ import logging
 import numpy as np
 import torch as th
 
+from mowl.training.initialisation import seeded_scope
+
 logger = logging.getLogger(__name__)
 
 __all__ = ["UnsupportedAxiomForm", "UnsupportedScoring", "axiom_scoring_of",
@@ -228,11 +230,9 @@ class PairClassifierHead:
                 + (f" with role index {relation}" if relation is not None else "")
                 + " to train the pair classifier head on.")
         generator = th.Generator().manual_seed(self.seed)
-        state = th.random.get_rng_state()
-        th.manual_seed(self.seed)
-        net = th.nn.Sequential(th.nn.Linear(4 * vectors.shape[1], self.hidden), th.nn.ReLU(),
-                               th.nn.Linear(self.hidden, 1))
-        th.random.set_rng_state(state)
+        with seeded_scope(self.seed):
+            net = th.nn.Sequential(th.nn.Linear(4 * vectors.shape[1], self.hidden),
+                                   th.nn.ReLU(), th.nn.Linear(self.hidden, 1))
         device = vectors.device
         net = net.to(device)
         optimizer = th.optim.Adam(net.parameters(), lr=self.learning_rate)

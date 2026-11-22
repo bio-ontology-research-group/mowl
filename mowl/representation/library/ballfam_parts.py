@@ -31,7 +31,7 @@ from functools import partial
 import torch as th
 import torch.nn as nn
 
-from mowl.representation.library import ballfam_energy as D
+from mowl.representation.library import boundary_depth as D
 from mowl.representation.class_models import BallClasses, BoxClasses
 from mowl.representation.geometry import ComposedGeometry
 from mowl.representation.measures import RegionMeasure, CentreDistance, Bounds

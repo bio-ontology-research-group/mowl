@@ -315,38 +315,6 @@ class ELKEm(EmbeddingELModel):
             return bool(self.use_contrastive)
         return not any(form in self._training_tensors() for form in ASSERTION_FORMS)
 
-    def _sample_batches(self):
-        batches = {}
-        for name, data in self._training_tensors().items():
-            if len(data) > self.batch_size:
-                data = data[th.randperm(len(data), device=self.device)[:self.batch_size]]
-            batches[name] = data
-        return batches
-
-    def training_loss(self, batches=None):
-        """The objective of one step on a mini-batch per normal form (default: a fresh one),
-        without the regulariser: the per-form losses, the weighted assertion losses and the
-        correlation term, as the default regimes define them."""
-        if batches is None:
-            batches = self._sample_batches()
-        loss = th.tensor(0.0, device=self.device)
-        for name, data in batches.items():
-            pos = self.module(data, name)
-            if name in ASSERTION_FORMS:
-                neg = self.module(self.generate_negatives(name, data), name, neg=True)
-                loss = loss + self.abox_pos_weight * pos.mean() + \
-                    self.abox_neg_weight * neg.mean()
-            else:
-                loss = loss + pos.mean()
-        if self.contrastive_active() and self.contrastive_factor:
-            term = T.PearsonContrastiveTerm(self.contrastive_factor, self.k_neg, active=True)
-            term.model = self
-            term._batches = dict(batches)
-            contrast = term.additional_loss(0)
-            if contrast is not None:
-                loss = loss + contrast
-        return loss
-
     def train(self, epochs, validate_every=1, epoch_callback=None):
         """Train the model with the generic loop and the regimes of the method (see the class
         docstring); a model whose regime was removed (``training_regime = None``) gets the

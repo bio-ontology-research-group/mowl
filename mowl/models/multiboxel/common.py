@@ -340,35 +340,19 @@ class MultiBoxELOptions(EmbeddingELModel):
         return super().get_negative_sampling_config()
 
     def on_epoch_start(self, epoch: int, epochs: int) -> None:
-        """Update ``self.module.tau`` when ``tau_anneal=True`` and trigger structural re-seeding.
+        """Trigger structural re-seeding.
 
         Guarantees:
 
-        - When ``tau_anneal=True`` and ``epochs > 1``, sets
-          ``module.tau = tau_start * (tau_end / tau_start) ** (epoch / (epochs - 1))``
-          so epoch ``0`` uses ``tau_start`` and epoch ``epochs - 1`` uses ``tau_end``.
-        - When ``tau_anneal=False``, leaves ``self.tau`` and ``self.module.tau``
-          unchanged.
         - Under ``objective="structural"``, calls
           ``module.reseed(epoch_rng(points_seed, epoch))`` when
           ``reseed_every > 0 and epoch > 0 and epoch % reseed_every == 0``.
 
-        Non-guarantees:
-
-        - When ``epochs <= 1`` and ``tau_anneal=True``, ``module.tau`` remains ``tau_start``.
-        - The schedule is stateless across :meth:`train` calls: every call to
-          :meth:`train` starts at ``epoch = 0`` and therefore restarts
-          ``module.tau`` from ``tau_start``.
+        The temperature schedule of ``tau_anneal=True`` is not here: it is the training regime
+        :class:`~mowl.training.TemperatureAnnealing` (``method_regimes`` of the model), which
+        sets ``module.tau`` to ``tau_start * (tau_end / tau_start) ** (epoch / (epochs - 1))``
+        (``tau_start`` when ``epochs <= 1``; every :meth:`train` call starts at epoch 0).
         """
-        if self.tau_anneal:
-            if epochs > 1:
-                tau = self.tau_start * (
-                    (self.tau_end / self.tau_start) ** (epoch / (epochs - 1))
-                )
-            else:
-                tau = self.tau_start
-            self.tau = float(tau)
-            self.module.tau = float(tau)
         if (
             self.objective == "structural"
             and self.reseed_every > 0

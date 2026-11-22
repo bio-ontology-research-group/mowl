@@ -269,7 +269,7 @@ def test_prism_containment_matches_vertices():
 
 
 def _octagon_vertices(h):
-    from mowl.nn.el.octagon import geometry as G
+    from mowl.representation.library import octagon_geometry as G
     t = G.tighten(th.as_tensor(h, dtype=th.float64)).numpy()
     n = G.DIRECTIONS.double().numpy()
     return np.array([np.linalg.solve(n[[k, (k + 1) % 8]], t[[k, (k + 1) % 8]])
@@ -277,7 +277,7 @@ def _octagon_vertices(h):
 
 
 def _random_octagon(rng):
-    from mowl.nn.el.octagon import geometry as G
+    from mowl.representation.library import octagon_geometry as G
     c = th.as_tensor(rng.uniform(-1, 1, 2))
     r = th.as_tensor(rng.uniform(0, 1, 8))
     return OctagonRegion(G.from_center_radius(c, r).numpy().reshape(1, 8))
@@ -500,7 +500,7 @@ def _prism(broken=False):
 
 def _octagon(broken=False):
     """The exact T3 configuration of tests/nn/test_octagon_module.py."""
-    from mowl.nn.el.octagon import geometry as G
+    from mowl.representation.library import octagon_geometry as G
     from mowl.nn.el.octagon.module import OctagonELModule
     x1 = G.from_box(th.tensor([0.5, 0.05]), th.tensor([0.5, 0.05])).double()
     x2 = G.from_box(th.tensor([0.05, 0.5]), th.tensor([0.05, 0.5])).double()
