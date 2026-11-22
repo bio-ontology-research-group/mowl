@@ -397,6 +397,12 @@ def test_grounded_is_made_of_the_parts_the_card_names():
                        "individuals": "canonical element", "measure": "bounds per coordinate",
                        "conjunction": "exact"}
     assert grounded_model(role_mode="product").module.parts["relations"] == "region over pairs"
+    # the parts as objects (views of the module: they share its tables)
+    assert (g.class_model.part, len(g.class_model)) == ("union of boxes", 4)
+    assert (g.relation_model.part, len(g.relation_model)) == ("box of translations", 2)
+    assert (g.individual_model.part, len(g.individual_model)) == ("canonical element", 6)
+    assert g.measure.part == "bounds per coordinate"
+    assert type(g.class_model(th.tensor([0, 1]))).__name__ == "MaskedUnionOfBoxes"
     assert geometry_of(model) is g
     # the objective (grounded constraints) and the evaluation regime are parts of the model
     assert isinstance(model, GroundedConstraints) and isinstance(model, GroundedEvaluation)

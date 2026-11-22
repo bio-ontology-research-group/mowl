@@ -187,6 +187,32 @@ class _ExistsRegions(Regions):
         return obj
 
 
+class _PartView:
+    """A part of the grounded geometry as an object: its vocabulary value (``part``), its
+    size and the call that gives the regions of rows. The part shares the tables of the
+    module it is a view of; it owns none."""
+
+    def __init__(self, module, part, classes_of, size):
+        self.module, self.part, self._regions, self._size = module, part, classes_of, size
+
+    def __call__(self, ids):
+        if self._regions is None:
+            raise TypeError("A measure is not called: use inside, apart or member.")
+        return self._regions(self.module, ids)
+
+    def __len__(self):
+        return self._size(self.module)
+
+    def inside(self, a, b):
+        return self.module.inside(a, b)
+
+    def apart(self, a, b):
+        return self.module.apart(a, b)
+
+    def member(self, individual_ids, region):
+        return self.module.member(individual_ids, region)
+
+
 class GroundedELModule(nn.Module, Geometry):
     """Element-grounded multi-box and product-role neural module for :math:`\\mathcal{EL}^{++}`.
 
@@ -1938,12 +1964,39 @@ class GroundedELModule(nn.Module, Geometry):
     def num_individuals(self):
         return self.nb_elements - self.nb_classes
 
+    # The parts, as views of the module (they share its tables, see the note above).
+    @property
+    def class_model(self):
+        """The class model: a union of boxes per class (a view of this module)."""
+        return _PartView(self, "union of boxes", classes_of=lambda m, ids: m.classes(ids),
+                         size=lambda m: m.nb_classes)
+
+    @property
+    def relation_model(self):
+        """The relation model: a region over pairs (``role_mode="product"``) or boxes of
+        translations (a view of this module)."""
+        part = "region over pairs" if self.role_mode == "product" else "box of translations"
+        return _PartView(
+            self, part, size=lambda m: m.nb_rels,
+            classes_of=lambda m, ids: (m.translation_regions(ids) if m.role_mode == "translation"
+                                       else m.role_regions(ids)))
+
+    @property
+    def individual_model(self):
+        """The individual model: the position of the element (a view of this module)."""
+        return _PartView(self, "canonical element", classes_of=lambda m, ids: m.individuals(ids),
+                         size=lambda m: m.nb_elements - m.nb_classes)
+
+    @property
+    def measure(self):
+        """The measure: bounds per coordinate (a view of this module): ``inside``, ``apart``
+        and ``member`` are those of the module."""
+        return _PartView(self, "bounds per coordinate", classes_of=None, size=None)
+
     @property
     def parts(self):
-        return {"classes": "union of boxes",
-                "relations": "region over pairs" if self.role_mode == "product"
-                else "box of translations",
-                "individuals": "canonical element", "measure": "bounds per coordinate",
+        return {"classes": self.class_model.part, "relations": self.relation_model.part,
+                "individuals": self.individual_model.part, "measure": self.measure.part,
                 "conjunction": "exact"}
 
     def forward(
