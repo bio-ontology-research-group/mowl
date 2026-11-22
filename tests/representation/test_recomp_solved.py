@@ -19,7 +19,7 @@ mowl.init_jvm("2g")
 
 from mowl.datasets.dllite import DLLiteKB  # noqa: E402
 from mowl.models import BoxLitE, FaithEL  # noqa: E402
-from mowl.representation import (METHODS, REPRESENTATIONS, Bounds,  # noqa: E402
+from mowl.representation import (METHODS, REPRESENTATIONS,  # noqa: E402
                                  ComposedGeometry, ConstructorUnavailable, Geometry,
                                  geometry_of)
 from mowl.representation.library import solved_boxlite as sb  # noqa: E402
@@ -27,7 +27,7 @@ from mowl.representation.library import solved_faithel as sf  # noqa: E402
 from mowl.representation.library.solved_grounding import (AxiomTable, Domain,  # noqa: E402
                                                           inside_bounds)
 from mowl.representation.library.solved_solver import (  # noqa: E402
-    CvxpySolver, GradientFit, NumpyAlgebra, ScipySolver, SolverFit, TorchAlgebra, evaluate)
+    CvxpySolver, GradientFit, NumpyAlgebra, ScipySolver, TorchAlgebra, evaluate)
 from tests.models.test_canonical_mixture import (IND, NS,  # noqa: E402
                                                  _write_family_abox_dataset)
 

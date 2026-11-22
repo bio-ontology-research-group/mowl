@@ -14,7 +14,6 @@ within ``radius`` of it.
 """
 import logging
 
-import numpy as np
 import torch as th
 
 from mowl.base_models.elmodel import EmbeddingELModel

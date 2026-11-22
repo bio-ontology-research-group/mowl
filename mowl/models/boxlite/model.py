@@ -11,7 +11,7 @@ from mowl.representation.library.solved_boxlite import (
     BoxLitEEmbedding, BoxLitEProgram, VARIANTS, boxlite as _boxlite_geometry,
     kb_faithful_dimension, tbox_faithful_dimension)
 from mowl.representation.library.solved_boxlite_check import check_model
-from mowl.representation.library.solved_solver import GradientFit, Solver, SolverFit
+from mowl.representation.library.solved_solver import GradientFit, SolverFit
 
 __all__ = ["BoxLitE", "SatisfiabilityResult", "kb_faithful_dimension",
            "tbox_faithful_dimension"]
@@ -138,7 +138,7 @@ class BoxLitE(Model):
         self.solver = solver
         self.solver_options = dict(solver_options or {})
         self._program = None
-        self.embedding = None
+        self._embedding = None
         self.result = None
         #: The geometry (a :class:`~mowl.representation.Geometry`): the parts of the method
         #: (class model, relation model, individual model, measure, objective); a solution
@@ -146,6 +146,20 @@ class BoxLitE(Model):
         self.module = _boxlite_geometry(len(kb.concepts), len(kb.roles), len(kb.individuals),
                                         embed_dim=self.embed_dim, s_omega=self.s_omega,
                                         epsilon=self.epsilon, variant=variant)
+
+    @property
+    def embedding(self):
+        """The solved :class:`~mowl.representation.library.solved_boxlite.BoxLitEEmbedding`
+        (``None`` before :meth:`train`). Assigning one loads it into the tables of
+        ``self.module``, so the geometry and the scores always describe the same embedding."""
+        return self._embedding
+
+    @embedding.setter
+    def embedding(self, value):
+        self._embedding = value
+        module = getattr(self, "module", None)
+        if value is not None and module is not None:
+            module.load_values(value.tables())
 
     # ----------------------------------------------------------------------------------
     # Solving
@@ -199,7 +213,6 @@ class BoxLitE(Model):
             raise RuntimeError(f"BoxLitE: the solver returned status {result.status!r} "
                                f"({result.info.get('error', '')}).")
         self.lambdas = lambdas
-        self.module.load_values(result.values)
         self.embedding = result.embedding
         return result
 
@@ -340,5 +353,4 @@ class BoxLitE(Model):
     def load(self, path=None):
         """Read an embedding written by :meth:`save` (and load it into the parts)."""
         self.embedding = BoxLitEEmbedding.load(path or self.model_filepath)
-        self.module.load_values(self.embedding.tables())
         return self.embedding

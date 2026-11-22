@@ -355,7 +355,8 @@ class _FaithBackend(NormalFormBackend):
     """The TBox model of FaithEL: an entity outside its signature costs 1.0."""
 
     def _known(self, expr):
-        sig = self.model.signature
+        from mowl.geometric.normal_forms import TOP
+        sig = set(self.model.signature) | {TOP}       # the top class is known (as in tbox_costs)
         return all(not (e[0] == "name" and e[1] not in sig) for e in _atoms(expr))
 
     def _roles_known(self, *exprs):

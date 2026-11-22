@@ -72,6 +72,15 @@ __all__ = ["GroundedEL"]
 class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
     """Element-grounded multi-box EL++ embedding model with product roles.
 
+    The model is a combination of parts (see :func:`mowl.representation.library.solved_grounded`):
+    ``self.module`` is the geometry (:class:`~mowl.nn.GroundedELModule`: the union of boxes per
+    class, the relation model, the positions of the elements; ``self.module.parts`` names them),
+    the objective is the grounded constraints
+    (:class:`~mowl.models.grounded.objective.GroundedConstraints`: ``compute_batch_losses``),
+    the evaluation regime is :class:`~mowl.models.grounded.evaluation.GroundedEvaluation`
+    (``crisp_report``, ``evaluate_model``), and the training regime is
+    :class:`~mowl.training.GroundedELTraining` (assign another with ``training_regime``).
+
     Guarantees:
 
     - **Reasoner-free training (R1):** :meth:`__init__`, :meth:`init_module`,

@@ -55,7 +55,7 @@ from mowl.representation.library.solved_grounding import (inside_bounds,
                                                            inside_complement_bounds)
 from mowl.representation.library.solved_solver import (NumpyAlgebra, Program, TorchAlgebra,
                                                        CompiledProblem, CvxpySolver,
-                                                       SolveResult, SolverFit)
+                                                       SolveResult)
 from mowl.representation.measures import Bounds
 from mowl.representation.methods import register_method
 from mowl.representation.objectives import Objective
