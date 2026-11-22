@@ -18,7 +18,25 @@ import torch as th
 from mowl.training import query_structures as sampling
 from mowl.nn.query.expression import ids, signature
 
-__all__ = ["SampledQueries", "ReleasedQueries"]
+__all__ = ["SampledQueries", "ReleasedQueries", "UpdateStream"]
+
+
+class UpdateStream:
+    """The updates of a sampler as a dataset of the shared training loop: every access
+    (``stream[:]``) is the next update, in the order the sampler gives them (all the updates
+    of a step, then the next step's)."""
+
+    def __init__(self, sampler):
+        self.sampler = sampler
+        self._pending = []
+
+    def __len__(self):
+        return 1
+
+    def __getitem__(self, index):
+        if not self._pending:
+            self._pending = list(self.sampler.updates())
+        return self._pending.pop(0)
 
 
 class SampledQueries:
@@ -70,6 +88,8 @@ class SampledQueries:
                                 th.tensor(pos, dtype=th.long, device=dev).unsqueeze(1),
                                 th.tensor(np.array(negs), dtype=th.long, device=dev))
         return groups
+
+    updates_per_step = 1
 
     def updates(self):
         """The batches of one step: ``[batch]``."""
@@ -174,6 +194,12 @@ class ReleasedQueries:
                          th.tensor(negs, dtype=th.long, device=dev),
                          th.tensor(weights, dtype=th.float, device=dev))
         return out
+
+    @property
+    def updates_per_step(self):
+        """Number of updates of a step (path, other, path, or the one group there is)."""
+        return 3 if self.groups["other"] and self.groups["path"] else \
+            sum(1 for g in ("path", "other") if self.groups[g])
 
     def updates(self):
         """The batches of one step: path, other, path (or the one group there is)."""
