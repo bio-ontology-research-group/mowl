@@ -18,6 +18,7 @@ Implements §3, §4, §5, §7, and §8 of the GroundedEL design:
    faithfulness precision/recall, and exact-model status.
 
 Guarantees:
+
 - **Reasoner-free training path (R1):** Neither :class:`GroundedEL` construction
   nor :meth:`train` nor :meth:`crisp_report` imports or calls any reasoner or
   semantic completion routine. :class:`~mowl.geometric.completion.CanonicalModel`
@@ -32,6 +33,7 @@ Guarantees:
   losses and deterministic evaluation scores.
 
 Non-guarantees:
+
 - Gradient-based optimisation from random initialisation is non-convex and is
   not guaranteed to reach an exact zero-violation model on every random seed or
   at insufficient component capacity :math:`K`.
@@ -355,9 +357,10 @@ def _coerce_gci_table(
 
 
 class GroundedEL(EmbeddingELModel):
-    """Element-grounded multi-box and product-role :math:`\\mathcal{EL}^{++}` embedding model.
+    """Element-grounded multi-box EL++ embedding model with product roles.
 
     Guarantees:
+
     - **Reasoner-free training (R1):** :meth:`__init__`, :meth:`init_module`,
       :meth:`train`, :meth:`compute_batch_losses`, :meth:`reseed_idle`, and
       :meth:`crisp_report` never import or invoke any reasoner or semantic
@@ -369,6 +372,7 @@ class GroundedEL(EmbeddingELModel):
       leaves element hinge losses bitwise unchanged.
 
     Non-guarantees:
+
     - Does not guarantee global convergence to ``exact=True`` from arbitrary
       random initialisations at finite epoch budgets.
     - When ``use_reasoner=False`` in :meth:`evaluate_model`, reasoner-dependent
@@ -852,6 +856,7 @@ class GroundedEL(EmbeddingELModel):
         consumed by :meth:`compute_batch_losses` and :meth:`crisp_report`.
 
         Guarantees:
+
         - Reasoner-free and JVM-free: never starts a JVM or reads an OWL file.
         - Validates bijective ``0 .. N - 1`` index dictionaries and column bounds
           of all supplied GCI tensors.
@@ -859,6 +864,7 @@ class GroundedEL(EmbeddingELModel):
           completely untouched.
 
         Non-guarantees:
+
         - Calling :meth:`evaluate_model` with ``use_reasoner=True`` on a
           table-constructed instance raises :class:`ValueError` because no OWL
           ontology is attached; pass ``use_reasoner=False``.
@@ -907,8 +913,8 @@ class GroundedEL(EmbeddingELModel):
             Role representation mode (``"product"`` or ``"translation"``).
         inverse_of : Optional[Union[Sequence[int], torch.Tensor, Mapping[Union[str, int], Union[str, int]]]], default None
             Optional inverse-role mapping (role-name -> role-name or index sequence).
-        **kwargs : Any
-            Additional keyword arguments forwarded to :meth:`__init__`.
+        kwargs : Any
+            Additional keyword arguments (``**kwargs``) forwarded to :meth:`__init__`.
 
         Returns
         -------
@@ -939,7 +945,7 @@ class GroundedEL(EmbeddingELModel):
 
     @property
     def individual_index_dict(self) -> Dict[str, int]:
-        """Return mapping from individual IRI to integer index ``0 .. nb_inds - 1``."""
+        """Return the mapping from individual IRI to integer index (``0`` to ``nb_inds - 1``)."""
         cached = getattr(self, "_individual_index_dict", None)
         if cached is not None:
             return cached
@@ -967,6 +973,7 @@ class GroundedEL(EmbeddingELModel):
         """Initialise :class:`~mowl.nn.GroundedELModule` and apply ``init="elements"`` when configured.
 
         Guarantees:
+
         - Seeds PyTorch RNG with ``self.seed`` prior to module construction.
         - Fixes ``dead_logits[bot_id] = +100.0`` and marks ``bot_id`` components
           inactive when :math:`\\bot` is present in :attr:`class_index_dict`.
@@ -974,6 +981,7 @@ class GroundedEL(EmbeddingELModel):
           ``nb_elements`` and calls :meth:`~mowl.nn.GroundedELModule.exact_limit_init`.
 
         Non-guarantees:
+
         - Mutates global ``torch.manual_seed(self.seed)`` during module
           construction for deterministic parameter initialisation.
         """
@@ -1483,10 +1491,12 @@ class GroundedEL(EmbeddingELModel):
         """Reset and return ``self.generator`` for external training loops.
 
         Guarantees:
+
         - Seeds ``self.generator`` with ``seed`` when provided, or ``self.seed + 1337``
           (matching :meth:`train`) when ``seed is None``.
 
         Non-guarantees:
+
         - Mutates ``self.generator`` in-place.
         """
         eff_seed = (self.seed + 1337) if seed is None else int(seed)
@@ -1497,11 +1507,13 @@ class GroundedEL(EmbeddingELModel):
         """Return geometrically annealed :math:`\\tau` at ``(step, total_steps)`` from ``tau0`` to ``tau1``.
 
         Guarantees:
+
         - Pure function of ``(step, total_steps, self.tau0, self.tau1)``.
         - Returns ``self.tau0`` when ``total_steps <= 1`` or ``step <= 0``.
         - Returns ``self.tau1`` at ``step == total_steps - 1`` when ``total_steps > 1``.
 
         Non-guarantees:
+
         - Does not mutate ``self.module.tau`` (use :meth:`step_tau` to update in-place).
         """
         _validate_int_ge("step", step, 0)
@@ -1552,6 +1564,7 @@ class GroundedEL(EmbeddingELModel):
         t in ("fact", "axioms", "region"); a no-op in "fixed" mode. Returns the (new) weights.
 
         Guarantees:
+
         - Reasoner-free (R1).
         - In ``constraint_mode == "fixed"``, leaves :attr:`dual_weights` unchanged
           at ``1.0`` and returns them.
@@ -1561,6 +1574,7 @@ class GroundedEL(EmbeddingELModel):
           and caps at ``self.dual_max``.
 
         Non-guarantees:
+
         - Mutates :attr:`dual_weights` in-place when ``constraint_mode == "lagrangian"``.
 
         Parameters
@@ -1591,9 +1605,11 @@ class GroundedEL(EmbeddingELModel):
         """Reset :attr:`dual_weights` to ``{"fact": 1.0, "axioms": 1.0, "region": 1.0}`` and return them.
 
         Guarantees:
+
         - Resets ``self.dual_weights["fact"] = self.dual_weights["axioms"] = self.dual_weights["region"] = 1.0``.
 
         Non-guarantees:
+
         - Mutates :attr:`dual_weights` in-place.
 
         Returns
@@ -1697,6 +1713,7 @@ class GroundedEL(EmbeddingELModel):
         ``self.encoder`` at forward/scoring time.
 
         Guarantees:
+
         - Reasoner-free (R1): never imports or calls any reasoner or completion algorithm.
         - Chunks computation over ``term_class_ids`` whenever
           ``B * n_terms * K * d > max_elements`` so peak intermediate memory stays
@@ -1707,6 +1724,7 @@ class GroundedEL(EmbeddingELModel):
           data positions.
 
         Non-guarantees:
+
         - Under ``crisp=True`` (hard ``max`` over active component slots), box
           gradients for each ``(protein, term)`` pair route only to the single
           active component slot attaining the maximum depth.
@@ -1769,12 +1787,14 @@ class GroundedEL(EmbeddingELModel):
         ``self.encoder``.
 
         Guarantees:
+
         - Runs under :func:`torch.no_grad` and returns a tensor of shape
           ``(B, n_terms)`` (or ``(1, n_terms)`` when ``features`` is 1-D) with
           values in ``(0, 1)``.
         - Chunks over ``term_class_ids`` when ``B * n_terms * K * d > max_elements``.
 
         Non-guarantees:
+
         - Does not toggle ``self.module.eval()``; callers using dropout/batchnorm in
           ``self.encoder`` should set ``model.module.eval()`` during evaluation.
 
@@ -1828,6 +1848,7 @@ class GroundedEL(EmbeddingELModel):
           ``[0, 1]`` and keep ``dead_logits[bot_id] = +100.0``.
 
         Guarantees:
+
         - Returns a dictionary containing ``"fact"``, ``"axioms"``, ``"region"``,
           ``"minimality"``, ``"neg"``, ``"total"``, and detached 0-dim tensors
           ``"w_fact"``, ``"w_axioms"``, ``"w_region"`` on ``self.device``.
@@ -1837,6 +1858,7 @@ class GroundedEL(EmbeddingELModel):
           via :meth:`step_tau` prior to loss evaluation.
 
         Non-guarantees:
+
         - When ``n_region_samples == 0`` or ``lambda_reg == 0``, ``"region"`` is
           exact ``0.0``.
         - When ``neg_weight > 0``, corrupted pairs are not filtered against the
@@ -3155,6 +3177,7 @@ class GroundedEL(EmbeddingELModel):
         """Relocate idle/least-used class components to uncovered own elements and prune empty slots (§5).
 
         Performs ONLY:
+
         1. For each live class :math:`A` whose own element :math:`x_A` is not
            crisp-inside :math:`A`: places one component box of half-width
            ``reseed_size`` at :math:`p_{x_A}`, using an inactive slot if any,
@@ -3165,6 +3188,7 @@ class GroundedEL(EmbeddingELModel):
            crisp-contain no live element (inspecting element positions only).
 
         Guarantees:
+
         - Reasoner-free (R1): never reads ``gci0``, ``gci1``, ``gci2``, ``gci3``,
           ``gci0_bot``, ``gci1_bot``, ``gci3_bot``, ``role_inclusion``,
           ``role_chain``, or ``object_property_assertion`` tables.
@@ -3176,6 +3200,7 @@ class GroundedEL(EmbeddingELModel):
         - Returns the total number of modified component slots.
 
         Non-guarantees:
+
         - Does not reset Adam optimiser moments directly; :meth:`train` calls
           ``optimizer.state.clear()`` after invoking :meth:`reseed_idle`.
 
@@ -3417,6 +3442,7 @@ class GroundedEL(EmbeddingELModel):
         """Compute per-epoch learning rate as a pure function of ``(epoch, epochs, lr, lr_final, lr_schedule)``.
 
         Guarantees:
+
         - Pure function of its arguments; independent of optimiser state or
           idle-component re-seeding.
         - Returns ``lr`` when ``lr_final is None``, when ``epoch == 0``, or when
@@ -3425,6 +3451,7 @@ class GroundedEL(EmbeddingELModel):
           ``epoch == epochs - 1`` when ``epochs > 1`` and ``lr_final is not None``.
 
         Non-guarantees:
+
         - Assumes caller has already validated ``lr_final`` and ``lr_schedule``.
         """
         if lr_final is None or epochs <= 1:
@@ -3447,6 +3474,7 @@ class GroundedEL(EmbeddingELModel):
         """Run the GroundedEL training loop (§3, §4, §5).
 
         Each epoch:
+
         1. Anneals :math:`\\tau` geometrically from ``tau0`` to ``tau1`` and, when
            ``lr_final is not None``, updates the Adam learning rate across
            ``optimizer.param_groups`` from ``learning_rate`` to ``lr_final``
@@ -3476,6 +3504,7 @@ class GroundedEL(EmbeddingELModel):
         projection of the dead scores are part of the method.
 
         Guarantees:
+
         - Reasoner-free (R1): never imports or calls any reasoner or semantic
           completion algorithm.
         - Deterministic for a fixed ``self.seed``.
@@ -3489,6 +3518,7 @@ class GroundedEL(EmbeddingELModel):
           them.
 
         Non-guarantees:
+
         - When ``epochs == 0``, performs zero gradient steps and returns ``[]``.
 
         Parameters
@@ -3847,6 +3877,7 @@ class GroundedEL(EmbeddingELModel):
         ``gci0_bot`` and ``gci3_bot``) for disjointness/bottom forms.
 
         Guarantees:
+
         - Reasoner-free (R1): never imports or calls any reasoner or
           :class:`~mowl.geometric.completion.CanonicalModel`.
         - Never materialises a :math:`(|\\Delta| \\times |\\mathcal{C}|)` tensor;
@@ -3859,6 +3890,7 @@ class GroundedEL(EmbeddingELModel):
           ``tol`` in ``{0, 1e-5, 1e-4, 1e-3, 1e-2}`` and is non-increasing in ``tol``.
 
         Non-guarantees:
+
         - Does not compute reasoner-dependent metrics (``exist``, ``dead_ok``,
           ``n_false_dead``, ``faithful_named_*``, ``exact``).
 
@@ -5042,6 +5074,7 @@ class GroundedEL(EmbeddingELModel):
         this method ONLY when ``use_reasoner=True``.
 
         Guarantees:
+
         - Returns a dict with keys ``"elem_viol"``, ``"region_viol"``,
           ``"region_viol_tol1e-4"``, ``"exist"``, ``"dead_ok"``,
           ``"n_empty_classes"``, ``"n_dead_elements"``, ``"n_false_dead"``,
@@ -5053,6 +5086,7 @@ class GroundedEL(EmbeddingELModel):
           tolerance ``1e-4``, independent of ``tol``.
 
         Non-guarantees:
+
         - When ``use_reasoner=False``, ``exist`` is evaluated over live classes
           (``dead <= 0.5``) and ``n_false_dead`` and ``faithful_named_*`` are ``None``.
 

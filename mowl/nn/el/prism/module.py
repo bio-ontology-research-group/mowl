@@ -34,6 +34,7 @@ class PrismModule(ELModule):
       as points (degenerate prisms with zero inradius and zero box offsets).
 
     Guarantees:
+
     - Raises :class:`ValueError` if ``embed_dim < 3``.
     - :meth:`prism_params` returns ``(h, box_center, |box_offset|)`` of shapes
       ``(B, 3)``, ``(B, d - 2)``, ``(B, d - 2)`` with non-negative ``box_offset``.
@@ -43,6 +44,7 @@ class PrismModule(ELModule):
       disjointness-if-any-separates; ELBE uses the Euclidean norm).
 
     Non-guarantees:
+
     - :meth:`gci0_bot_loss` (under ``objective="axiom"``) and
       :meth:`gci3_bot_loss` have a floor of ``margin`` at ``margin > 0`` since
       :math:`\\sum_k h_k = 3 |\\rho| \\ge 0`; moreover, :meth:`gci3_bot_loss`
@@ -218,11 +220,13 @@ class PrismModule(ELModule):
         """Return ``(h, box_center, box_offset)`` for class indices ``idx``.
 
         Guarantees:
+
         - ``h`` has shape ``(B, 3)`` with ``h.sum(dim=-1) == 3 * |tri_inradius(idx)|``.
         - ``box_center`` and ``box_offset`` have shape ``(B, d - 2)``, with
           ``box_offset >= 0``.
 
         Non-guarantees:
+
         - Does not detach the returned tensors from the autograd graph.
         """
         tc = self.tri_center(idx)
@@ -280,6 +284,7 @@ class PrismModule(ELModule):
         """Install the compiled :class:`DefinitionTable` and :class:`ExistenceTargets`.
 
         Guarantees:
+
         - Stores ``table`` on :attr:`definition_table`, ``targets`` on
           :attr:`existence_targets`, and ``top_idx`` on :attr:`top_idx`, and
           stages device copies of the table and target index tensors on
@@ -288,6 +293,7 @@ class PrismModule(ELModule):
           and the GCI loss methods use these tables when ``objective="structural"``.
 
         Non-guarantees:
+
         - Does not re-validate table dimensions against ``nb_ont_classes``.
 
         Parameters
@@ -320,12 +326,14 @@ class PrismModule(ELModule):
         is treated as primitive.
 
         Guarantees:
+
         - Returns a :class:`~mowl.nn.el.prism.losses.PrismRegions` on the module
           device with ``h`` of shape ``(B, 3)`` and ``cen, w`` of shape ``(B, d - 2)``.
         - Preserves signed negative half-widths ``w_m < 0`` on defined classes
           whose box intersection is empty along coordinate ``m``.
 
         Non-guarantees:
+
         - Assumes :attr:`definition_table` is acyclic (as guaranteed by
           :meth:`DefinitionTable.from_normal_forms`).
 
@@ -380,10 +388,12 @@ class PrismModule(ELModule):
         """Return :class:`~mowl.nn.el.prism.losses.PrismRegions` for all classes on CPU without grad.
 
         Guarantees:
+
         - Returns a :class:`~mowl.nn.el.prism.losses.PrismRegions` of shape
           ``(nb_ont_classes, ...)`` on the ``cpu`` device with ``requires_grad == False``.
 
         Non-guarantees:
+
         - Detached from the autograd graph and unsuitable for backpropagating loss
           gradients.
 
@@ -410,12 +420,14 @@ class PrismModule(ELModule):
         """Compute existence loss plus primitive size regularisation for ``objective="structural"``.
 
         Guarantees:
+
         - Returns a scalar tensor of shape ``()`` on the module device.
         - Excludes defined classes (``definition_table.def_mask``) and ``top_idx``
           (``owl:Thing``) from the primitive size regularisation term
           ``size_reg * mean([|r|, 2|o|])``.
 
         Non-guarantees:
+
         - Returns ``0.0`` for the existence term when :attr:`existence_targets` is
           ``None`` or ``existence_weight == 0``.
 

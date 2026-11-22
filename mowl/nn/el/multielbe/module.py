@@ -41,6 +41,7 @@ class MultiELBEModule(ELModule):
     :class:`~mowl.nn.el.elbe.module.ELBEModule`.
 
     Guarantees:
+
     - **Exact k = 1 reduction (identical to ELBEModule at equal margin):** When
       ``n_components == 1``, ``component_aggregation == "hard"``,
       ``component_reg == 0.0``, and ``diversity_reg == 0.0`` with weights copied
@@ -62,6 +63,7 @@ class MultiELBEModule(ELModule):
       still accepting ``module.tau = float_value`` assignments.
 
     Non-guarantees:
+
     - Role axiom losses (``role_inclusion``, ``role_chain``) are not implemented
       (``role_axiom_capable = False``).
     - Negative sampling is only supported for ``gci2`` and
@@ -256,12 +258,14 @@ class MultiELBEModule(ELModule):
         """Attach :class:`~mowl.datasets.el.points.PointSupervision` and create ``elem_embed``.
 
         Guarantees:
+
         - Sets ``self.point_supervision = ps``.
         - Allocates ``self.elem_embed`` of shape ``(ps.n_elements, embed_dim)`` on
           the same device and dtype as ``class_embed.weight``, with rows for
           individual-backed elements never indexed from ``elem_embed``.
 
         Non-guarantees:
+
         - Re-calling with a different ``n_elements`` replaces ``self.elem_embed``.
 
         Parameters
@@ -281,10 +285,12 @@ class MultiELBEModule(ELModule):
         """Look up element point embeddings of shape ``(B, d)`` with individual aliasing.
 
         Guarantees:
+
         - Class-element rows are gathered from ``self.elem_embed`` and individual-element
           rows are gathered from ``self.ind_embed``, preserving separate gradient flows.
 
         Non-guarantees:
+
         - Raises ``RuntimeError`` if :meth:`set_point_supervision` has not been called.
 
         Parameters
@@ -314,6 +320,7 @@ class MultiELBEModule(ELModule):
         """Compute point-in-box BCE membership loss for a pair tensor or sampled dict.
 
         Guarantees:
+
         - Accepts either a ``(B, 2)`` integer tensor ``(elem_idx, class_idx)`` (with
           target ``1 - float(neg)``) or a dict from :meth:`PointSupervision.sample`
           containing ``"pos"``, ``"hard"``, and ``"rand"`` keys.
@@ -321,6 +328,7 @@ class MultiELBEModule(ELModule):
           and ``class_offset``.
 
         Non-guarantees:
+
         - Raises ``RuntimeError`` if :meth:`set_point_supervision` has not been called.
 
         Parameters
@@ -363,6 +371,7 @@ class MultiELBEModule(ELModule):
         :math:`m(x_C, r, x_D) = m_D(x_C + r)`.
 
         Guarantees:
+
         - Accepts either a ``(B, 3)`` integer tensor ``(elem_x, r_idx, elem_y)`` or a
           sample dict with key ``"roles"``.
         - Differentiable with respect to ``elem_embed``/``ind_embed``, ``rel_embed``,
@@ -371,6 +380,7 @@ class MultiELBEModule(ELModule):
           membership equals :math:`\\sigma(\\text{ind\\_halfwidth} / \\beta) = \\sigma(5) \\approx 0.9933`.
 
         Non-guarantees:
+
         - Does not use ``ind_offset`` when target elements are individuals.
 
         Parameters
@@ -419,9 +429,11 @@ class MultiELBEModule(ELModule):
         """Compute point-based ABox class assertion score :math:`-\\log(\\max(m_C(x_a), \\varepsilon))`.
 
         Guarantees:
+
         - Returns shape ``(B,)`` using ``self.ind_embed`` without touching ``self.ind_offset``.
 
         Non-guarantees:
+
         - Raises ``ValueError`` if ``nb_inds`` was ``None`` or ``0``.
 
         Parameters
@@ -444,9 +456,11 @@ class MultiELBEModule(ELModule):
         """Compute ``pos_frac`` (:math:`m \\ge 0.5`) and ``hardneg_frac`` (:math:`m < 0.5`).
 
         Guarantees:
+
         - Evaluates in chunks on the module's current device under ``torch.no_grad()``.
 
         Non-guarantees:
+
         - Does not evaluate role pairs.
 
         Parameters
@@ -468,10 +482,12 @@ class MultiELBEModule(ELModule):
         """Alias for ``class_embed`` used by :class:`~mowl.geometric.init.ExactBoxInit`.
 
         Guarantees:
+
         - Returns the exact same ``nn.Embedding`` instance as ``self.class_embed``
           without registering a duplicate parameter in ``state_dict()``.
 
         Non-guarantees:
+
         - Read-only property; reassigning ``class_center`` is not supported.
         """
         return self.class_embed
@@ -480,9 +496,11 @@ class MultiELBEModule(ELModule):
         """Return ``(centers, offsets)`` of shape ``(B, k, d)`` for class indices ``idx``.
 
         Guarantees:
+
         - ``offsets`` is non-negative (computed via ``torch.abs``).
 
         Non-guarantees:
+
         - Does not sort or deduplicate components.
 
         Parameters
@@ -508,10 +526,12 @@ class MultiELBEModule(ELModule):
         """Compute GCI0 loss for :math:`C \\sqsubseteq D` via :func:`~mowl.nn.el.multielbe.losses.gci0_loss`.
 
         Guarantees:
+
         - Returns shape ``(B, 1)``, identical to ``ELBEModule.gci0_loss`` at ``k = 1``
           and equal ``margin``.
 
         Non-guarantees:
+
         - ``neg=True`` is not distinct from ``neg=False``.
 
         Parameters
@@ -547,9 +567,11 @@ class MultiELBEModule(ELModule):
         """Compute GCI0-bot loss for :math:`C \\sqsubseteq \\bot` via :func:`~mowl.nn.el.multielbe.losses.gci0_bot_loss`.
 
         Guarantees:
+
         - Returns shape ``(B,)``, identical to ``ELBEModule.gci0_bot_loss`` at ``k = 1``.
 
         Non-guarantees:
+
         - ``neg=True`` is not distinct from ``neg=False``.
 
         Parameters
@@ -583,10 +605,12 @@ class MultiELBEModule(ELModule):
         """Compute gated GCI1 loss for :math:`C \\sqcap D \\sqsubseteq E` via :func:`~mowl.nn.el.multielbe.losses.gci1_loss`.
 
         Guarantees:
+
         - Returns shape ``(B, 1)``, identical to ``ELBEModule.gci1_loss`` at ``k = 1``
           and equal ``margin`` (both empty and non-empty intersections).
 
         Non-guarantees:
+
         - ``neg=True`` is not distinct from ``neg=False``.
 
         Parameters
@@ -622,6 +646,7 @@ class MultiELBEModule(ELModule):
         """Compute GCI1-bot loss for :math:`C \\sqcap D \\sqsubseteq \\bot` via :func:`~mowl.nn.el.multielbe.losses.gci1_bot_loss`.
 
         Guarantees:
+
         - Returns shape ``(B, 1)``, identical to ``ELBEModule.gci1_bot_loss`` at ``k = 1``
           and equal ``margin``.
         - Differs from single-box ELBE only by averaging the per-pair :math:`L_2`
@@ -631,6 +656,7 @@ class MultiELBEModule(ELModule):
           least ``margin`` in *every* coordinate).
 
         Non-guarantees:
+
         - ``neg=True`` is not distinct from ``neg=False``.
 
         Parameters
@@ -666,10 +692,12 @@ class MultiELBEModule(ELModule):
         """Compute positive GCI2 score for :math:`C \\sqsubseteq \\exists r.D` via :func:`~mowl.nn.el.multielbe.losses.gci2_score`.
 
         Guarantees:
+
         - Returns shape ``(B, 1)``, identical to ``ELBEModule.gci2_score`` at ``k = 1``
           and equal ``margin``.
 
         Non-guarantees:
+
         - Evaluates only the positive inclusion direction (``neg=False``).
 
         Parameters
@@ -697,6 +725,7 @@ class MultiELBEModule(ELModule):
         """Compute GCI2 loss for :math:`C \\sqsubseteq \\exists r.D` (positive or negative) via :func:`~mowl.nn.el.multielbe.losses.gci2_loss`.
 
         Guarantees:
+
         - Returns shape ``(B, 1)``, identical to ``ELBEModule.gci2_loss`` at ``k = 1``
           and equal ``margin`` for both ``neg=False`` and ``neg=True``.
         - For :math:`k \\ge 2`, aggregates ``neg=False`` as
@@ -707,6 +736,7 @@ class MultiELBEModule(ELModule):
           ``"hard"`` and ``"soft"`` (no ``softmin``).
 
         Non-guarantees:
+
         - Roles are single translation vectors rather than multi-box relations.
 
         Parameters
@@ -743,10 +773,12 @@ class MultiELBEModule(ELModule):
         """Compute GCI3 overlap loss for :math:`\\exists r.C \\sqsubseteq D` via :func:`~mowl.nn.el.multielbe.losses.gci3_loss`.
 
         Guarantees:
+
         - Returns shape ``(B, 1)``, identical to ``ELBEModule.gci3_loss`` at ``k = 1``
           and equal ``margin``.
 
         Non-guarantees:
+
         - Uses ELBE's overlap formula rather than full box inclusion.
         - ``neg=True`` is not distinct from ``neg=False``.
 
@@ -784,10 +816,12 @@ class MultiELBEModule(ELModule):
         """Compute GCI3-bot loss for :math:`\\exists r.C \\sqsubseteq \\bot` via :func:`~mowl.nn.el.multielbe.losses.gci3_bot_loss`.
 
         Guarantees:
+
         - Indexes ``data[:, 1]`` for :math:`C` (rows are ``(r, C, bot)``) and
           returns shape ``(B,)``, identical to ``ELBEModule.gci3_bot_loss`` at ``k = 1``.
 
         Non-guarantees:
+
         - ``neg=True`` is not distinct from ``neg=False``.
 
         Parameters
@@ -821,10 +855,12 @@ class MultiELBEModule(ELModule):
         """Compute ABox class assertion loss for :math:`C(a)` via :func:`~mowl.nn.el.multielbe.losses.class_assertion_loss`.
 
         Guarantees:
+
         - Returns shape ``(B, 1)``, identical to ``ELBEModule.class_assertion_loss``
           at ``k = 1`` and equal ``margin``.
 
         Non-guarantees:
+
         - ``neg=True`` is not distinct from ``neg=False``.
 
         Parameters
@@ -869,10 +905,12 @@ class MultiELBEModule(ELModule):
         """Compute ABox object property assertion loss for :math:`r(a, b)` via :func:`~mowl.nn.el.multielbe.losses.object_property_assertion_loss`.
 
         Guarantees:
+
         - Returns shape ``(B, 1)``, identical to ``ELBEModule.object_property_assertion_loss``
           at equal ``margin`` for both ``neg=False`` and ``neg=True``.
 
         Non-guarantees:
+
         - Individuals and roles are single-component embeddings.
 
         Parameters
@@ -917,10 +955,12 @@ class MultiELBEModule(ELModule):
         """Compute optional component centre and volume-overlap diversity penalties.
 
         Guarantees:
+
         - Returns a scalar ``0.0`` tensor on ``class_embed.weight.device`` when
           ``n_components == 1`` or ``component_reg == 0.0 and diversity_reg == 0.0``.
 
         Non-guarantees:
+
         - When both ``component_reg == 0.0`` and ``diversity_reg == 0.0``, unused
           components are permitted to collapse or nest inside other components.
 
@@ -965,10 +1005,12 @@ class MultiELBEModule(ELModule):
         Delegates to :func:`mowl.nn.el.multibox_utils.effective_components`.
 
         Guarantees:
+
         - Returns a CPU ``torch.Tensor`` of shape ``(nb_ont_classes,)`` with
           integer counts in ``0 .. n_components``.
 
         Non-guarantees:
+
         - Does not check whether a component is covered by the *union* of two or
           more other components when it is not contained in any single one.
 

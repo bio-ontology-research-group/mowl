@@ -4,7 +4,7 @@ Every method known to mOWL, whether it is implemented or only documented, has a
 :class:`MethodCard` that records its classification, the logic it covers, its proven
 theoretical guarantees and limitations, and where its implementation lives.
 
-.. code-block:: python
+.. testcode::
 
    from mowl.catalog import list_methods, get_method
 
@@ -14,6 +14,11 @@ theoretical guarantees and limitations, and where its implementation lives.
    card = get_method("elem")
    for g in card.guarantees:
        print(g.kind, g.statement, g.source)
+
+.. testoutput::
+   :options: +ELLIPSIS
+
+   ...ELEmbeddings ball...
 
 A publication usually bundles a representation with a way to train it and a way to
 evaluate it. mOWL catalogues the three separately: methods (:class:`MethodCard`),

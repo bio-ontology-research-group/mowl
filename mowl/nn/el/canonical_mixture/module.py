@@ -34,6 +34,7 @@ class CanonicalMixtureModule(ELModule):
     :math:`p_a(x_a) = 1`).
 
     Guarantees:
+
     - **Faithful by construction:** For every parameter setting, :math:`p_a` is a
       convex combination of elements of the canonical model :math:`\\mathcal{I}`
       restricted to :math:`S_a` (computed by gathering logits on :math:`S_a` only
@@ -59,6 +60,7 @@ class CanonicalMixtureModule(ELModule):
       :math:`p_a \\cdot (E_r p_b)` use :func:`torch.sparse.mm`.
 
     Non-guarantees:
+
     - TBox GCI loss methods (``gci0_loss`` .. ``gci3_bot_loss``) and role-axiom
       losses are not used for training (named classes have no learnable
       parameters; a class is its column of :attr:`MembershipStructure.M`).

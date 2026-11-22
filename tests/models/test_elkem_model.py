@@ -387,3 +387,11 @@ class TestTraining(TestCase):
             neg = model.generate_negatives("class_assertion", pos)
             self.assertEqual(len(neg), 5 * len(pos))
             self.assertFalse(set(map(tuple, neg.tolist())) & observed)
+
+
+def test_model_passes_the_variant_to_its_module():
+    ont = build_ontology()
+    assert ELKEm(Dataset(ont), embed_dim=4).module.variant == "paper"
+    assert ELKEm(Dataset(ont), embed_dim=4, variant="reference").module.variant == "reference"
+    with pytest.raises(ValueError):
+        ELKEm(Dataset(ont), embed_dim=4, variant="other")

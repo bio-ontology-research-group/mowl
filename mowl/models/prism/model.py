@@ -24,6 +24,7 @@ class PrismEL(EmbeddingELModel):
     MSE loss on the support-coordinate GCI losses of :class:`~mowl.nn.PrismModule`.
 
     Guarantees:
+
     - :meth:`count_class_parameters` returns :math:`2d - 1` per ontology class
       (``2`` for ``tri_center``, ``1`` for ``tri_inradius``, ``d - 2`` for
       ``box_center``, and ``d - 2`` for ``box_offset``).
@@ -38,6 +39,7 @@ class PrismEL(EmbeddingELModel):
       ``anchor_weight * init_boxes.anchor_loss(self.module)``.
 
     Non-guarantees:
+
     - Gradient-based training is non-convex and is not guaranteed to reach a
       zero-loss global optimum from arbitrary random initialisations.
     - Role axiom training (``load_role_axioms=True``) is not supported by
@@ -205,6 +207,7 @@ class PrismEL(EmbeddingELModel):
         """Train the model, building structural tables first when ``objective='structural'``.
 
         Guarantees:
+
         - When ``objective="structural"``, compiles a :class:`~mowl.nn.el.structural.DefinitionTable`
           (with ``k=1``, ``max_components=2**30``, ``enabled=self.structural_definitions``,
           ``max_level=self.max_depth``) and :class:`~mowl.nn.el.structural.ExistenceTargets`
@@ -218,6 +221,7 @@ class PrismEL(EmbeddingELModel):
         - When ``objective="axiom"``, delegates directly to ``super().train(...)``.
 
         Non-guarantees:
+
         - Gradient-based training is non-convex and is not guaranteed to reach a
           global minimum from arbitrary random initialisations.
 
@@ -287,10 +291,12 @@ class PrismEL(EmbeddingELModel):
         """Return ``module.structural_extra_loss()`` when ``objective='structural'``, else ``None``.
 
         Guarantees:
+
         - Returns a scalar ``torch.Tensor`` when ``objective="structural"`` and
           ``None`` when ``objective="axiom"``.
 
         Non-guarantees:
+
         - Does not depend on ``epoch``.
 
         Parameters

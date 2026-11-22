@@ -311,6 +311,9 @@ class VolumeMultiBoxELModule(ELModule):
         we use the training loss (volume ratio on the fixed point set). Many pairs have
         distance exactly 1, which is how the thesis obtains Hits@10 close to 0.
 
+        The result has shape ``(N, 1)`` for every form (``(N,)`` with ``per_axiom_column =
+        False``).
+
         :param data: ``(N, 2)`` for ``gci0``, ``(N, 3)`` otherwise.
         :param gci_name: ``"gci0"``, ``"gci1"``, ``"gci2"`` or ``"gci3"``.
         """
@@ -321,7 +324,9 @@ class VolumeMultiBoxELModule(ELModule):
         outs = []
         for i in range(0, len(data), chunk):
             outs.append(self._sample_distance(data[i:i + chunk], gci_name))
-        return th.cat(outs)
+        out = th.cat(outs)
+        # one shape for every form: a column, unless ``per_axiom_column`` is off
+        return out.unsqueeze(-1) if self.per_axiom_column else out
 
     def _ranking_ratio(self, data, gci_name):
         """The training loss of ``gci2`` / ``gci3`` rows, computed for ranking.

@@ -8,6 +8,7 @@ nested component configurations without pushing apart components that are
 already disjoint.
 
 Guarantees:
+
 - **Exact k = 1 identity:** When the aggregated dimension has size ``1``,
   :func:`softmin` returns the single slice (to floating-point precision),
   :func:`soft_weights` returns ``1.0``, and :func:`soft_gci1_terms` reduces to
@@ -27,6 +28,7 @@ Guarantees:
   ``n_components == 1``.
 
 Non-guarantees:
+
 - **Non-zero soft loss at hard solutions and collapse pressure:** For finite
   :math:`\\tau > 0` and :math:`K > 1`, :func:`softmin` satisfies
   :math:`\\min(v) \\le \\text{softmin}_\\tau(v) \\le \\text{mean}(v)` and is strictly
@@ -97,6 +99,7 @@ def softmin(
     and :math:`\\text{softmin}_\\tau(0) = 0`.
 
     Guarantees:
+
     - When ``v.shape[dim] == 1``, equals ``v.squeeze(dim)`` (or ``v`` when
       ``keepdim=True``) to floating-point precision for all ``tau > 0``.
     - Bounded between ``v.amin(dim=dim)`` and ``v.amin(dim=dim) + tau * log(K)``,
@@ -105,6 +108,7 @@ def softmin(
       as ``tau -> inf``.
 
     Non-guarantees:
+
     - At finite ``tau > 0``, ``softmin(v, tau)`` is strictly positive even when
       ``min(v) == 0`` if any other component has ``v_j > 0``; minimising a loss
       built from ``softmin`` therefore pulls all target components toward each
@@ -146,6 +150,7 @@ def soft_weights(
     """Compute soft-argmin weights ``softmax(-v / tau, dim=dim)``.
 
     Guarantees:
+
     - Output has the same shape as ``v``, with non-negative entries that sum to
       ``1`` along ``dim``.
     - When ``v.shape[dim] == 1``, returns a tensor of ones with the same shape
@@ -154,6 +159,7 @@ def soft_weights(
       approaches uniform ``1 / K`` weights as ``tau -> inf``.
 
     Non-guarantees:
+
     - In ``float32``, entries whose score gap ``v_j - min(v)`` exceeds
       ``~100 * tau`` underflow to ``0.0``.
     - Raises :class:`ValueError` if ``tau <= 0``.
@@ -207,12 +213,14 @@ def soft_gci1_terms(
       :math:`D_j` instead of covering :math:`C_i \\cap D_j` with :math:`E_m`).
 
     Guarantees:
+
     - Returns ``(empt_term, gated_incl)``, each of shape ``(B,)``.
     - At ``k = 1``, ``w_00 = 1`` and ``g_00 = 1``, so ``empt_term = empt[:, 0, 0]``
       and ``gated_incl = incl_ijm[:, 0, 0, 0]`` identically for every ``tau > 0``.
     - ``gated_incl`` carries zero gradient with respect to ``empt``.
 
     Non-guarantees:
+
     - At finite ``tau > 0``, ``softmin`` over target components :math:`E_m` is
       strictly positive whenever the :math:`E_m` do not all yield zero inclusion
       error, pulling all :math:`E_m` toward each active intersection until
@@ -291,6 +299,7 @@ def diversity_penalty(
     target components together at finite temperature :math:`\\tau`.
 
     Guarantees:
+
     - Returns a scalar ``torch.Tensor`` of shape ``()`` on ``centers.device``.
     - Returns ``0.0`` when ``k == 1`` (``n_components == 1``) or when ``centers``
       has zero classes.
@@ -311,6 +320,7 @@ def diversity_penalty(
       lengths :math:`\\ge 10^{-3}`).
 
     Non-guarantees:
+
     - Because ``eps > 0`` is added inside :math:`\\log(\\text{inter}_{ij,m} + \\varepsilon)`
       to keep log-space evaluation finite, disjoint pairs contribute
       :math:`\\approx 10^{-6} / \\text{side}` per disjoint coordinate (:math:`O(\\varepsilon)`

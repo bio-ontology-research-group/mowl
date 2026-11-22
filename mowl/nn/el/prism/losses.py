@@ -20,12 +20,14 @@ Proposition 5:
   where :math:`T_1 \\cap T_2` has support vector :math:`\\min(h_1, h_2)` coordinatewise.
 
 Guarantees:
+
 - **Support-sum identity:** :math:`\\sum_{k=1}^3 \\text{supports}(c, r)_k = 3 r`.
 - **Translation equivariance:** :math:`\\text{supports}(c + t, r) = \\text{supports}(c, r) + t \\, \\text{NORMALS}^\\top`.
 - **Return shape:** Every per-GCI loss function of this file returns a 1-D tensor of shape
   ``(B,)``; :class:`~mowl.nn.PrismModule` turns it into a column ``(B, 1)`` like every
   :class:`~mowl.nn.ELModule` (``per_axiom_column = False`` keeps ``(B,)``).
 - **Zero-loss characterisation at margin 0:**
+
   - :func:`prism_inclusion_score` and :func:`gci0_loss` equal ``0`` iff
     :math:`h_C \\le h_D` coordinatewise and box :math:`B_C \\subseteq B_D`.
   - :func:`gci1_loss` uses the exact closed-form intersection
@@ -44,6 +46,7 @@ Guarantees:
   ``margin = 0`` and never produce ``NaN`` or ``Inf`` in inclusion or GCI losses.
 
 Non-guarantees:
+
 - **Positive margin floor on single-class bottom losses:** Because
   :math:`\\sum_{k=1}^3 h_{C,k} = 3 |\\rho_C| \\ge 0`, :func:`gci0_bot_loss` and
   :func:`gci3_bot_loss` (:math:`\\text{relu}(3 |\\rho_C| + \\text{margin})`) have a
@@ -100,11 +103,13 @@ def prism_nonempty_measure(r: PrismRegions) -> th.Tensor:
     """Compute the signed non-emptiness measure :math:`\\text{ne}(P) = \\min(\\sum_k h_k,\\; \\min_m 2 w_m)`.
 
     Guarantees:
+
     - Returns a 1-D tensor of shape ``(B,)``.
     - Strictly positive if and only if :math:`\\sum_{k=1}^3 h_k > 0` and every
       box coordinate has :math:`w_m > 0`.
 
     Non-guarantees:
+
     - Gradients flow only through the branch (triangle support sum or minimum box
       side length) attaining the minimum.
 
@@ -131,10 +136,12 @@ def supports(center: th.Tensor, inradius: th.Tensor) -> th.Tensor:
     See Federico, Leemhuis & Kutz (DL 2026), §4.1 Definition 4.
 
     Guarantees:
+
     - Returns a tensor of shape ``(..., 3)`` matching the batch prefix of ``center``.
     - ``supports(center, inradius).sum(dim=-1)`` equals ``3 * inradius.squeeze(-1)``.
 
     Non-guarantees:
+
     - Does not clamp or take the absolute value of ``inradius``; callers reading
       from an unconstrained embedding table should pass ``torch.abs(raw_inradius)``.
 
@@ -197,6 +204,7 @@ def prism_inclusion_score(
     Euclidean norm along the last axis.
 
     Guarantees:
+
     - Returns a 1-D tensor of shape ``(B,)`` (the module returns the column ``(B, 1)``).
     - At ``margin = 0``, equals ``0`` iff :math:`h_C \\le h_D` in all 3 support
       coordinates and :math:`|b_C - b_D| + |o_C| \\le |o_D|` in all :math:`d-2`
@@ -207,6 +215,7 @@ def prism_inclusion_score(
       :math:`\\sum_k h_{D,k} < 0`.
 
     Non-guarantees:
+
     - Does not gate out empty sub-prisms when :math:`\\sum_k h_{C,k} < 0` if
       some individual coordinate still satisfies :math:`h_{C,k} > h_{D,k} - \\text{margin}`.
 
@@ -254,12 +263,14 @@ def prism_intersection(
     for primitive prisms must pass ``|box_offset|``.
 
     Guarantees:
+
     - Returns ``(h, lower, upper)`` with ``h = torch.minimum(h1, h2)`` of shape
       ``(B, 3)`` and box corners ``lower, upper`` of shape ``(B, d - 2)``.
     - The intersection is non-empty iff ``h.sum(dim=-1) >= 0`` and
       ``(lower <= upper).all(dim=-1)``.
 
     Non-guarantees:
+
     - Does not apply :func:`torch.abs` to the box half-widths in ``b1`` or ``b2``
       (offsets are treated as signed half-widths; callers must pass ``|box_offset|``
       for primitive prisms).
@@ -298,12 +309,14 @@ def prism_regions_intersection(c: PrismRegions, d: PrismRegions) -> PrismRegions
     into centre ``(lower + upper) / 2`` and signed half-width ``(upper - lower) / 2``.
 
     Guarantees:
+
     - Returns a :class:`PrismRegions` with ``h = torch.minimum(c.h, d.h)`` of shape
       ``(B, 3)`` and ``cen, w`` of shape ``(B, d - 2)``.
     - Preserves negative signed half-widths ``w_m < 0`` when the box intervals do
       not overlap in coordinate ``m``.
 
     Non-guarantees:
+
     - Does not apply :func:`torch.abs` to ``c.w``, ``d.w``, or the output ``w``;
       empty intersections produce :math:`\\sum_k h_k < 0` or :math:`w_m < 0`.
 
@@ -331,12 +344,14 @@ def triangle_empty_score(h: th.Tensor, margin: float = 0.0) -> th.Tensor:
     """Penalty :math:`\\text{relu}(\\sum_{k=1}^3 h_k + \\text{margin})` for a triangle to be empty.
 
     Guarantees:
+
     - Returns a 1-D tensor of shape ``(B,)`` when ``h`` has shape ``(B, 3)``.
     - At ``margin = 0``, equals ``0`` whenever :math:`\\sum_{k=1}^3 h_k \\le 0`
       (empty or single-point touching triangle) and equals :math:`\\sum_{k=1}^3 h_k > 0`
       when the triangle has positive inradius.
 
     Non-guarantees:
+
     - At ``margin > 0``, if :math:`\\sum_{k=1}^3 h_k = 3 |\\rho| \\ge 0`, the score
       has a floor of ``margin`` and cannot reach ``0``.
     - Does not inspect the box part of a prism.
@@ -384,11 +399,13 @@ def gci0_loss(
     """GCI0 loss for :math:`C \\sqsubseteq D`.
 
     Guarantees:
+
     - Returns a 1-D tensor of shape ``(B,)`` (the module returns the column ``(B, 1)``).
     - At ``margin = 0``, equals ``0`` iff :math:`h_C \\le h_D` coordinatewise
       and box :math:`B_C \\subseteq B_D`.
 
     Non-guarantees:
+
     - ``neg=True`` is not distinct from ``neg=False`` (GCI0 is not in ``neg_capable_gcis``).
     - When ``margin > 0``, simultaneous :math:`C \\sqsubseteq D` and :math:`D \\sqsubseteq C`
       cannot both achieve ``0``.
@@ -430,11 +447,13 @@ def gci0_bot_loss(
     """GCI0-bot loss :math:`\\text{relu}(\\sum_k h_{C,k} + \\text{margin})` for :math:`C \\sqsubseteq \\bot`.
 
     Guarantees:
+
     - Returns a 1-D tensor of shape ``(B,)`` (the module returns the column ``(B, 1)``).
     - Since :math:`\\sum_{k=1}^3 h_{C,k} = 3 |\\rho_C| \\ge 0`, equals ``0`` at
       ``margin = 0`` iff :math:`|\\rho_C| = 0` (degenerate single-point triangle).
 
     Non-guarantees:
+
     - At ``margin > 0``, because :math:`\\sum_{k=1}^3 h_{C,k} = 3 |\\rho_C| \\ge 0`,
       this loss has a lower bound (floor) of ``margin`` and can never reach ``0``.
     - Does not constrain the box part :math:`B_C`.
@@ -481,6 +500,7 @@ def gci1_loss(
     the prism inclusion score :func:`prism_inclusion_score`.
 
     Guarantees:
+
     - Returns a 1-D tensor of shape ``(B,)`` (the module returns the column ``(B, 1)``).
     - At ``margin = 0``, equals ``0`` iff :math:`T_C \\cap T_D` is non-empty
       (:math:`\\sum_k \\min(h_{C,k}, h_{D,k}) \\ge 0`), :math:`B_C \\cap B_D` is
@@ -491,6 +511,7 @@ def gci1_loss(
       empty, even if the remaining coordinates are nested inside :math:`E`.
 
     Non-guarantees:
+
     - Penalises empty intersections (:math:`T_C \\cap T_D = \\emptyset` or
       :math:`B_C \\cap B_D = \\emptyset`) even though :math:`C \\sqcap D \\sqsubseteq E`
       holds vacuously when :math:`C \\sqcap D = \\emptyset`.
@@ -548,6 +569,7 @@ def gci1_bot_loss(
     :math:`\\min(\\text{relu}(\\sum_k \\min(h_{C,k}, h_{D,k}) + \\text{margin}),\\; \\min_m \\text{relu}(-|b_{C,m} - b_{D,m}| + o_{C,m} + o_{D,m} + \\text{margin}))`.
 
     Guarantees:
+
     - Returns a 1-D tensor of shape ``(B,)`` (the module returns the column ``(B, 1)``).
     - Uses :func:`torch.amin` over box coordinates (semantically
       disjointness-if-any-separates), unlike ELBE which takes the Euclidean norm
@@ -557,6 +579,7 @@ def gci1_bot_loss(
       box coordinate :math:`m`.
 
     Non-guarantees:
+
     - At ``margin = 0``, touching triangles (:math:`\\sum_k \\min(h_{C,k}, h_{D,k}) = 0`,
       intersecting at a single point) and boxes touching at a boundary count as
       disjoint.
@@ -605,12 +628,14 @@ def gci2_score_prisms(
     """Positive GCI2 score on :class:`PrismRegions`: inclusion of :math:`C + r` inside :math:`D`.
 
     Guarantees:
+
     - Returns a 1-D tensor of shape ``(B,)`` matching :func:`gci2_score` with
       ``|c.w|`` and ``|d.w|``.
     - At ``margin = 0``, equals ``0`` iff the translated prism :math:`P_C + r`
       is contained in :math:`P_D`.
 
     Non-guarantees:
+
     - Passes ``torch.abs(c.w)`` and ``torch.abs(d.w)`` to :func:`gci2_score` and
       does not gate out empty source prisms :math:`C`; a defined class that is
       empty only in its box part (:math:`w_m < 0` in some coordinate while
@@ -652,11 +677,13 @@ def gci2_score(
     """Positive GCI2 score: inclusion of :math:`C + r` inside :math:`D`.
 
     Guarantees:
+
     - Returns a 1-D tensor of shape ``(B,)`` (the module returns the column ``(B, 1)``).
     - At ``margin = 0``, equals ``0`` iff the translated prism :math:`P_C + r`
       is contained in :math:`P_D`.
 
     Non-guarantees:
+
     - Role translation is a single vector shift and cannot express role
       fan-out (one-to-many relations) without forcing target prisms to grow.
 
@@ -702,11 +729,13 @@ def gci2_score_neg_prisms(
     """Negative GCI2 score on :class:`PrismRegions`.
 
     Guarantees:
+
     - Returns a 1-D tensor of shape ``(B,)`` matching :func:`gci2_score_neg`.
     - When ``rc is None``, recovers the effective non-negative inradius
       :math:`\\text{relu}(\\sum_k h_{C,k} / 3)` from ``c.h``.
 
     Non-guarantees:
+
     - Passes ``torch.abs(c.w)`` and ``torch.abs(d.w)`` to :func:`gci2_score_neg`
       and, when ``rc is None``, clamps the recovered inradius via
       :math:`\\text{relu}(\\sum_k h_{C,k} / 3)`, so empty defined prisms with
@@ -768,11 +797,13 @@ def gci2_score_neg(
     and the box component is :math:`\\text{relu}(|b_C + r_{\\text{box}} - b_D| - |o_C| - |o_D| - \\text{margin})`.
 
     Guarantees:
+
     - Returns a 1-D tensor of shape ``(B,)`` (the module returns the column ``(B, 1)``).
     - Finite and differentiable for all :math:`r_C \\ge 0`, including point
       individuals (:math:`r_C = 0`).
 
     Non-guarantees:
+
     - Like ELBE's ``gci2_score_neg``, this score measures separation Violation
       (zero when :math:`C + r` is close to :math:`D`, positive when far apart)
       for downstream negative-sampling losses.
@@ -830,11 +861,13 @@ def gci2_loss(
     """GCI2 loss for :math:`C \\sqsubseteq \\exists r.D` (positive and negative).
 
     Guarantees:
+
     - Returns a 1-D tensor of shape ``(B,)`` (the module returns the column ``(B, 1)``).
     - When ``neg=False`` and ``margin = 0``, equals ``0`` iff :math:`P_C + r \\subseteq P_D`.
     - When ``neg=True``, dispatches to :func:`gci2_score_neg`.
 
     Non-guarantees:
+
     - When ``margin > 0``, positive loss requires :math:`P_C + r` to be strictly
       inside :math:`P_D` by ``margin``.
 
@@ -884,11 +917,13 @@ def gci3_score_prisms(
     """Positive GCI3 score on :class:`PrismRegions` for :math:`\\exists r.C \\sqsubseteq D`.
 
     Guarantees:
+
     - Returns a 1-D tensor of shape ``(B,)``.
     - At ``margin = 0``, equals ``0`` iff the shifted prism :math:`P_C - r` has a
       non-empty intersection with :math:`P_D` (using ``|c.w|`` and ``|d.w|``).
 
     Non-guarantees:
+
     - Following ELBE's ``gci3_loss``, requires :math:`P_C - r` to overlap :math:`P_D`
       rather than full existential inclusion when roles are not functional.
     - Passes ``torch.abs(c.w)`` and ``torch.abs(d.w)`` to the box overlap term,
@@ -940,12 +975,14 @@ def gci3_loss(
     :math:`\\text{relu}(|b_C - r_{\\text{box}} - b_D| - o_C - o_D + \\text{margin})`.
 
     Guarantees:
+
     - Returns a 1-D tensor of shape ``(B,)`` (the module returns the column ``(B, 1)``).
     - At ``margin = 0``, equals ``0`` iff the shifted prism :math:`P_C - r` has a
       non-empty intersection with :math:`P_D` (i.e. :math:`\\sum_k \\min(h_{C-r,k}, h_{D,k}) \\ge 0`
       and :math:`|b_C - r_{\\text{box}} - b_D| \\le o_C + o_D` coordinatewise).
 
     Non-guarantees:
+
     - Following ELBE's ``gci3_loss``, this formula only requires :math:`P_C - r`
       to overlap :math:`P_D`, which is a relaxation of full existential inclusion
       when roles are not functional.
@@ -992,11 +1029,13 @@ def gci3_bot_score_prisms(c: PrismRegions, margin: float = 0.0) -> th.Tensor:
     """GCI3-bot score on :class:`PrismRegions` for :math:`\\exists r.C \\sqsubseteq \\bot`.
 
     Guarantees:
+
     - Returns a 1-D tensor of shape ``(B,)`` equal to :func:`triangle_empty_score`
       on ``c.h``.
     - At ``margin = 0``, equals ``0`` whenever :math:`\\sum_{k=1}^3 h_{C,k} \\le 0`.
 
     Non-guarantees:
+
     - At ``margin > 0``, if :math:`\\sum_{k=1}^3 h_{C,k} \\ge 0`, this score has a
       floor of ``margin`` and cannot reach ``0``.
     - Shrinks :math:`C` itself (:math:`\\text{relu}(\\sum_k h_{C,k} + \\text{margin})`),
@@ -1029,11 +1068,13 @@ def gci3_bot_loss(
     """GCI3-bot loss :math:`\\text{relu}(\\sum_k h_{C,k} + \\text{margin})` for :math:`\\exists r.C \\sqsubseteq \\bot`.
 
     Guarantees:
+
     - Returns a 1-D tensor of shape ``(B,)`` (the module returns the column ``(B, 1)``).
     - Since :math:`\\sum_{k=1}^3 h_{C,k} = 3 |\\rho_C| \\ge 0`, equals ``0`` at
       ``margin = 0`` iff :math:`|\\rho_C| = 0`.
 
     Non-guarantees:
+
     - At ``margin > 0``, because :math:`\\sum_{k=1}^3 h_{C,k} = 3 |\\rho_C| \\ge 0`,
       this loss has a lower bound (floor) of ``margin`` and can never reach ``0``.
     - Mirroring ELBE's ``gci3_bot_loss``, shrinks :math:`C` itself rather than
@@ -1076,12 +1117,14 @@ def class_assertion_score_prisms(
     """Class assertion score on :class:`PrismRegions` for :math:`C(a)`.
 
     Guarantees:
+
     - Returns a 1-D tensor of shape ``(B,)``.
     - At ``margin = 0``, equals ``0`` iff the individual point
       :math:`x_a = (x_{\\text{tri}}, x_{\\text{box}})` lies inside :math:`T_C` and
       inside the box with centre ``c.cen`` and half-width ``|c.w|``.
 
     Non-guarantees:
+
     - Does not gate out empty class prisms (:math:`\\sum_k h_{C,k} < 0` or
       :math:`w_{C,m} < 0`): passes ``torch.abs(c.w)`` to
       :func:`prism_inclusion_score`, so a defined class with a negative signed
@@ -1129,12 +1172,14 @@ def class_assertion_loss(
     """Class assertion loss :math:`C(a)` as inclusion of the degenerate point prism :math:`a` in :math:`C`.
 
     Guarantees:
+
     - Returns a 1-D tensor of shape ``(B,)`` (the module returns the column ``(B, 1)``).
     - At ``margin = 0``, equals ``0`` iff the point :math:`x_a = (x_{\\text{tri}}, x_{\\text{box}})`
       lies inside triangle :math:`T_C` (:math:`n_k \\cdot x_{\\text{tri}} \\le h_{C,k}`)
       and inside box :math:`B_C` (:math:`|x_{\\text{box}} - b_C| \\le o_C`).
 
     Non-guarantees:
+
     - ``neg=True`` is not distinct from ``neg=False`` (``class_assertion`` is not
       in ``neg_capable_gcis``).
 
@@ -1175,12 +1220,14 @@ def gci0_structural(c: PrismRegions, d: PrismRegions, margin: float) -> th.Tenso
     :math:`\\text{ne}(C) > 0`).
 
     Guarantees:
+
     - Returns a 1-D tensor of shape ``(B,)``.
     - Non-emptiness gate :math:`\\text{ne}(C) > 0` is detached.
     - At ``margin = 0``, equals ``0`` iff :math:`C` is empty (:math:`\\text{ne}(C) \\le 0`)
       or :math:`P_C \\subseteq P_D`.
 
     Non-guarantees:
+
     - Vacuously ``0`` when :math:`\\text{ne}(C) \\le 0`; non-emptiness of
       satisfiable classes is enforced separately by ``existence_loss``.
 
@@ -1215,11 +1262,13 @@ def gci0_bot_structural(c: PrismRegions) -> th.Tensor:
     so a positive margin would impose a non-zero floor on primitive classes.
 
     Guarantees:
+
     - Returns a 1-D tensor of shape ``(B,)``.
     - Equals ``0`` iff :math:`\\text{ne}(C) \\le 0` (either :math:`\\sum_{k=1}^3 h_{C,k} \\le 0`
       or :math:`\\min_m w_{C,m} \\le 0`).
 
     Non-guarantees:
+
     - Gradients flow only through the branch (triangle support sum or minimum box
       side length) attaining :math:`\\text{ne}(C)`.
 
@@ -1246,12 +1295,14 @@ def gci1_structural(
     """Compute the structural GCI1 loss on :math:`I = C \\cap D` as the gated squared-hinge sum on signed widths (equivalent to ``prism_inclusion_score(C cap D, E, m)**2`` for non-negative widths).
 
     Guarantees:
+
     - Returns a 1-D tensor of shape ``(B,)``.
     - Masked rows and rows with :math:`\\text{ne}(C \\cap D) \\le 0` evaluate to
       exact ``0.0`` with zero gradient.
     - Imposes no emptiness penalties on :math:`C \\cap D`.
 
     Non-guarantees:
+
     - Vacuously ``0`` when :math:`\\text{ne}(C \\cap D) \\le 0`; non-emptiness of
       satisfiable conjunction pairs is enforced separately by ``existence_loss``.
 
@@ -1295,6 +1346,7 @@ def gci1_bot_structural(c: PrismRegions, d: PrismRegions, margin: float) -> th.T
     """Compute the structural GCI1-bot loss :math:`\\text{relu}(\\text{ne}(C \\cap D) + m)^2` for :math:`C \\sqcap D \\sqsubseteq \\bot`.
 
     Guarantees:
+
     - Returns a 1-D tensor of shape ``(B,)``.
     - Equals ``0`` iff :math:`\\text{ne}(C \\cap D) \\le -m`, i.e. either the
       triangle intersection has :math:`\\sum_{k=1}^3 \\min(h_{C,k}, h_{D,k}) \\le -m`
@@ -1302,6 +1354,7 @@ def gci1_bot_structural(c: PrismRegions, d: PrismRegions, margin: float) -> th.T
       (:math:`2 w_{C \\cap D, m} \\le -m`).
 
     Non-guarantees:
+
     - Gradients flow only through the branch (triangle support sum or single box
       coordinate) attaining :math:`\\text{ne}(C \\cap D)`.
 
@@ -1337,6 +1390,7 @@ def object_property_assertion_loss(
     on degenerate point prisms with zero inradius and zero box offsets.
 
     Guarantees:
+
     - Returns a 1-D tensor of shape ``(B,)`` (the module returns the column ``(B, 1)``).
     - When ``neg=False`` and ``margin = 0``, equals ``0`` iff :math:`x_a + r = x_b`
       (since :math:`\\sum_k n_k = 0`, :math:`n_k \\cdot (x_{a,\\text{tri}} + r_{\\text{tri}} - x_{b,\\text{tri}}) \\le 0`
@@ -1344,6 +1398,7 @@ def object_property_assertion_loss(
     - Supports ``neg=True`` via :func:`gci2_score_neg`.
 
     Non-guarantees:
+
     - When ``neg=False`` and ``margin > 0``, because :math:`\\sum_k n_k = 0`, at
       least one support coordinate of :math:`x_a + r - x_b` is non-negative, so
       the triangle term has a positive floor proportional to ``margin``.

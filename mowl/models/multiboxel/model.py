@@ -31,6 +31,7 @@ class MultiBoxEL(EmbeddingELModel):
     inclusion, gated pairwise intersection, and role semantics.
 
     Guarantees:
+
     - **Exact k = 1 reduction:** With ``n_components=1`` and
       ``component_reg=0.0``, the underlying :class:`~mowl.nn.MultiBoxELModule`
       computes the exact same per-GCI losses and regularisation loss (to within
@@ -52,6 +53,7 @@ class MultiBoxEL(EmbeddingELModel):
       objectives.
 
     Non-guarantees:
+
     - Gradient-based training is non-convex and is not guaranteed to reach a
       zero-loss global optimum from arbitrary random initialisations.
     - Role axiom training (``load_role_axioms=True``) is not supported by
@@ -408,11 +410,13 @@ class MultiBoxEL(EmbeddingELModel):
         """Return the cached :class:`~mowl.datasets.el.points.PointSupervision` if built.
 
         Guarantees:
+
         - Returns the :class:`~mowl.datasets.el.points.PointSupervision`
           instance attached to this model once :meth:`_ensure_point_supervision`
           has been called, or ``None`` beforehand.
 
         Non-guarantees:
+
         - Does not trigger lazy construction of point supervision.
 
         Returns
@@ -426,10 +430,12 @@ class MultiBoxEL(EmbeddingELModel):
         """Lazily build or load :class:`~mowl.datasets.el.points.PointSupervision` and attach to ``module``.
 
         Guarantees:
+
         - Builds or loads the :class:`~mowl.datasets.el.points.PointSupervision`
           once and registers ``elem_embed`` on ``self.module``.
 
         Non-guarantees:
+
         - Does not re-run canonical model completion on subsequent calls unless
           ``self._point_supervision`` is reset.
 
@@ -454,12 +460,14 @@ class MultiBoxEL(EmbeddingELModel):
         """Ensure ``elem_embed`` is registered before constructing the Adam optimiser.
 
         Guarantees:
+
         - Under ``objective="point"``, ``"mixed"``, or ``"hybrid"``, calls
           :meth:`_ensure_point_supervision` before ``super().get_optimizer()``
           so ``self.module.elem_embed`` parameters are included in the
           optimiser parameter group.
 
         Non-guarantees:
+
         - Does not construct ``elem_embed`` when ``objective`` is ``"axiom"``
           or ``"structural"``.
 
@@ -476,12 +484,14 @@ class MultiBoxEL(EmbeddingELModel):
         """Disable GCI negative sampling by default when GCI losses are zeroed in point/mixed mode.
 
         Guarantees:
+
         - Returns an empty dict ``{}`` when ``objective in ("point", "mixed")`` and
           ``neg_sampling_gcis is None``.
         - Delegates to ``super().get_negative_sampling_config()`` otherwise (including
           ``"axiom"``, ``"hybrid"``, and ``"structural"``).
 
         Non-guarantees:
+
         - Does not disable GCI negative sampling if the caller explicitly passed
           a non-``None`` ``neg_sampling_gcis`` list.
 
@@ -498,6 +508,7 @@ class MultiBoxEL(EmbeddingELModel):
         """Update ``self.module.tau`` when ``tau_anneal=True`` and trigger structural re-seeding.
 
         Guarantees:
+
         - When ``tau_anneal=True`` and ``epochs > 1``, sets
           ``module.tau = tau_start * (tau_end / tau_start) ** (epoch / (epochs - 1))``
           so epoch ``0`` uses ``tau_start`` and epoch ``epochs - 1`` uses ``tau_end``.
@@ -508,6 +519,7 @@ class MultiBoxEL(EmbeddingELModel):
           ``reseed_every > 0 and epoch > 0 and epoch % reseed_every == 0``.
 
         Non-guarantees:
+
         - When ``epochs <= 1`` and ``tau_anneal=True``, ``module.tau`` remains ``tau_start``.
         - The schedule is stateless across :meth:`train` calls: every call to
           :meth:`train` starts at ``epoch = 0`` and therefore restarts
@@ -540,6 +552,7 @@ class MultiBoxEL(EmbeddingELModel):
         """Compute per-epoch extra training loss for point or structural objectives.
 
         Guarantees:
+
         - Returns ``None`` when ``objective == "axiom"``.
         - Under ``objective == "structural"``, returns
           ``self.module.structural_extra_loss()``.
@@ -550,16 +563,17 @@ class MultiBoxEL(EmbeddingELModel):
           excluded from the volume penalty.
 
         Non-guarantees:
+
         - Does not include region-level GCI losses (handled by the main epoch
           loop).
 
         Parameters
-        -------
+        ----------
         epoch : int
             Zero-based training epoch index used to seed per-epoch sampling.
 
         Returns
-        -------
+        ----------
         torch.Tensor or None
             Scalar additional training loss tensor, or ``None`` under
             ``objective="axiom"``.

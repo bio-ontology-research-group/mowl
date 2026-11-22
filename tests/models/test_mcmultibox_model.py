@@ -40,7 +40,7 @@ class TestVolumeMultiBoxEL(TestCase):
         self.model.eval_gci_name = "gci0"
         data = self.model.training_datasets["gci0"][:][:20]
         dist = self.model.eval_method(data)
-        self.assertEqual(dist.shape, (len(data),))
+        self.assertEqual(dist.shape, (len(data), 1))
         self.assertTrue(((dist >= 0) & (dist <= 1)).all())
         same = th.stack([data[:, 0], data[:, 0]], dim=1)
         self.assertTrue((self.model.evaluation_model(same, "gci0") == 0).all())

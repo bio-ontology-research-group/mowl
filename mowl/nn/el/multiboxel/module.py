@@ -73,6 +73,7 @@ class MultiBoxELModule(ELModule):
     :class:`~mowl.nn.el.boxsquaredel.module.BoxSquaredELModule`.
 
     Guarantees:
+
     - **Exact k = 1 reduction:** When ``n_components == 1`` and ``component_reg == 0.0``
       with weights copied from a :class:`~mowl.nn.el.boxsquaredel.module.BoxSquaredELModule`,
       every GCI loss (positive and negative) and :meth:`regularization_loss`
@@ -88,6 +89,7 @@ class MultiBoxELModule(ELModule):
       still accepting ``module.tau = float_value`` assignments.
 
     Non-guarantees:
+
     - Under ``objective="structural"`` the regions of a DEFINED class
       :math:`A \\equiv X \\sqcap Y` are computed from its definers, but its translation
       bump (``bump_classes[A]``) is not: no definition determines it, so it stays a free
@@ -543,11 +545,13 @@ class MultiBoxELModule(ELModule):
         """Read-only alias for ``ind_center`` so individual point lookups use a uniform attribute name.
 
         Guarantees:
+
         - Returns the exact same ``nn.Embedding`` instance as ``self.ind_center``
           (or ``None`` when ``nb_inds`` is ``None`` or ``0``) without registering
           a duplicate submodule in ``state_dict()``.
 
         Non-guarantees:
+
         - Read-only property; assigning to ``module.ind_embed`` raises :class:`AttributeError`.
         """
         return self.__dict__.get("_modules", {}).get("ind_center", None)
@@ -577,9 +581,11 @@ class MultiBoxELModule(ELModule):
         """Return ``(centers, offsets)`` of shape ``(B, k, d)`` for class indices ``idx``.
 
         Guarantees:
+
         - ``offsets`` is non-negative (computed via ``torch.abs``).
 
         Non-guarantees:
+
         - Does not sort or deduplicate components.
         """
         b_size = idx.shape[0]
@@ -652,6 +658,7 @@ class MultiBoxELModule(ELModule):
         """Attach :class:`~mowl.nn.el.structural.DefinitionTable` and :class:`~mowl.nn.el.structural.ExistenceTargets`.
 
         Guarantees:
+
         - Sets ``self.definition_table``, ``self.existence_targets``, and
           ``self.top_idx``, and stages device copies of the table and target
           index tensors on ``class_center.weight.device``.
@@ -662,6 +669,7 @@ class MultiBoxELModule(ELModule):
           ``W`` changes.
 
         Non-guarantees:
+
         - Does not re-validate table dimensions against ``nb_ont_classes``.
 
         Parameters
@@ -699,11 +707,13 @@ class MultiBoxELModule(ELModule):
         """Return detached CPU witness point coordinates of shape ``(W, embed_dim)``, or ``None`` when disabled.
 
         Guarantees:
+
         - Returns ``None`` when ``self.witness_embed is None``.
         - Otherwise returns a detached CPU ``torch.Tensor`` of shape
           ``(W, embed_dim)`` with ``requires_grad == False``.
 
         Non-guarantees:
+
         - Row order follows ``self.existence_targets.witness.classes``, not
           ``0 .. nb_ont_classes - 1``.
         """
@@ -722,11 +732,13 @@ class MultiBoxELModule(ELModule):
         definers ``(def_x, def_y)``.
 
         Guarantees:
+
         - Returns :class:`~mowl.nn.el.structural.Regions` of shapes
           ``(B, K, d)`` for ``cen`` and ``w`` and ``(B, K)`` for ``active``.
         - Inactive slots always have ``cen = 0`` and ``w = -1``.
 
         Non-guarantees:
+
         - Active computed slots may be geometrically empty (``w[..., m] < 0``).
 
         Parameters
@@ -804,11 +816,13 @@ class MultiBoxELModule(ELModule):
         """Return materialised :class:`~mowl.nn.el.structural.Regions` for all classes on CPU without gradients.
 
         Guarantees:
+
         - Returns :class:`~mowl.nn.el.structural.Regions` of shape
           ``(nb_ont_classes, max_components, embed_dim)`` on CPU with
           ``requires_grad == False``.
 
         Non-guarantees:
+
         - Evaluates all ``nb_ont_classes`` in a single batch.
         """
         with th.no_grad():
@@ -834,6 +848,7 @@ class MultiBoxELModule(ELModule):
         ``witness_weight > 0.0`` and witness targets/embeddings are present.
 
         Guarantees:
+
         - Returns a scalar ``torch.Tensor`` on the module's current device.
         - Excludes ``self.top_idx`` and accepted defined classes from the size
           regularisation term.
@@ -841,6 +856,7 @@ class MultiBoxELModule(ELModule):
           so defined classes propagate gradients to their primitive definers.
 
         Non-guarantees:
+
         - When ``self.existence_targets is None``, the existence and witness
           terms are ``0.0``.
         - Before :meth:`set_structural_tables` the size term is ``0.0`` (``owl:Thing`` and
@@ -916,6 +932,7 @@ class MultiBoxELModule(ELModule):
         Dispatches on ``self.reseed_mode``:
 
         * ``"dead"`` (round-4 §5):
+
           1. Identifies dead primitive components (nested inside another active
              component of the same class, with exact ties broken by lower index,
              or ``min_m |offset| < 1e-3``).
@@ -926,6 +943,7 @@ class MultiBoxELModule(ELModule):
           3. Clamps the largest component of any primitive class target still
              satisfying ``NE(C) < margin`` to ``max(|offset|, margin)``.
         * ``"idle"`` (round-5 §4, requires ``witness_weight > 0``):
+
           1. Finds dead accepted defined classes :math:`A` with
              :math:`\\text{NE}(A) = \\max_{s \\text{ active}} \\text{ne}(A_s) < \\text{margin}`.
           2. Counts component usage ``u[X, c]`` over primitive :math:`X` and
@@ -948,6 +966,7 @@ class MultiBoxELModule(ELModule):
              ``max(|offset|, margin)``).
 
         Guarantees:
+
         - Returns the total number of re-seeding moves and stores it in
           ``self.last_reseed_count``.
         - Never modifies defined classes' raw rows.
@@ -955,6 +974,7 @@ class MultiBoxELModule(ELModule):
           targets or ``witness_embed`` are not attached.
 
         Non-guarantees:
+
         - Does not reset optimiser moments for moved rows.
 
         Parameters
@@ -1190,12 +1210,14 @@ class MultiBoxELModule(ELModule):
         """Attach :class:`~mowl.datasets.el.points.PointSupervision` and lazily create ``elem_embed``.
 
         Guarantees:
+
         - Sets ``self.point_supervision = ps``.
         - Allocates ``self.elem_embed`` of shape ``(ps.n_elements, embed_dim)`` on
           the same device and dtype as ``class_center.weight``, with rows for
           individual-backed elements never indexed from ``elem_embed``.
 
         Non-guarantees:
+
         - Calling again with a different ``ps.n_elements`` re-allocates ``elem_embed``.
 
         Parameters
@@ -1215,11 +1237,13 @@ class MultiBoxELModule(ELModule):
         """Return point coordinates ``(B, d)`` for ``elem_idx``, aliasing individual elements to ``ind_embed``.
 
         Guarantees:
+
         - Class-element rows are gathered from ``self.elem_embed`` and
           individual-element rows from ``self.ind_embed``, preserving separate
           gradient flows while keeping ``ind_offset`` untouched.
 
         Non-guarantees:
+
         - Raises :class:`RuntimeError` if :meth:`set_point_supervision` has not
           been called.
 
@@ -1245,11 +1269,13 @@ class MultiBoxELModule(ELModule):
         """Return Box²EL bump vectors ``(B, d)`` of each element's own class or individual.
 
         Guarantees:
+
         - Looks up ``self.bump_classes`` for class elements and
           ``self.bump_individuals`` for individual elements according to
           ``self.point_supervision``.
 
         Non-guarantees:
+
         - Raises :class:`RuntimeError` if :meth:`set_point_supervision` has not
           been called, or :class:`ValueError` if an individual element is indexed
           when ``bump_individuals is None``.
@@ -1300,12 +1326,14 @@ class MultiBoxELModule(ELModule):
         """Compute point-membership BCE loss.
 
         Guarantees:
+
         - Accepts either a ``(B, 2)`` integer tensor ``[elem_idx, class_idx]`` or
           a sample dictionary from :meth:`~mowl.datasets.el.points.PointSupervision.sample`.
         - Differentiable with respect to ``elem_embed``, ``ind_center``,
           ``class_center``, and ``class_offset``.
 
         Non-guarantees:
+
         - Raises :class:`RuntimeError` if :meth:`set_point_supervision` has not
           been called.
 
@@ -1343,6 +1371,7 @@ class MultiBoxELModule(ELModule):
         """Compute canonical-element role BCE loss via Box²EL head/tail boxes and element bumps.
 
         For each role triple ``(x_C, r, y_D)``:
+
         - Head term: :math:`m_{H_r}(x + b_D)`.
         - Tail term: :math:`m_{T_r}(y + b_C)` when ``y_D`` is a class element, or
           soft membership of the translated tail centre :math:`c_{T_r} - b_C` in
@@ -1351,6 +1380,7 @@ class MultiBoxELModule(ELModule):
         - Combined role membership: :math:`m_{\\text{head}} \\cdot m_{\\text{tail}}`.
 
         Guarantees:
+
         - Accepts either a ``(B, 3)`` integer tensor ``[elem_x, r_idx, elem_y]``
           or a sample dictionary with key ``"roles"``.
         - Differentiable with respect to element points, element bumps, and
@@ -1359,6 +1389,7 @@ class MultiBoxELModule(ELModule):
           :class:`~mowl.nn.el.multielbe.module.MultiELBEModule` does.
 
         Non-guarantees:
+
         - Raises :class:`RuntimeError` if :meth:`set_point_supervision` has not
           been called.
 
@@ -1436,10 +1467,12 @@ class MultiBoxELModule(ELModule):
         """Compute point-mode class assertion score :math:`-\\log m_C(a)` for ``data`` ``(B, 2)``.
 
         Guarantees:
+
         - Returns a 1-D tensor of shape ``(B,)`` using ``self.ind_center``
           without touching ``self.ind_offset``.
 
         Non-guarantees:
+
         - Raises :class:`ValueError` if ``nb_inds`` was ``None`` or ``0``.
 
         Parameters
@@ -1462,10 +1495,12 @@ class MultiBoxELModule(ELModule):
         """Return ``dict(pos_frac=..., hardneg_frac=...)`` evaluated in chunks on the current device.
 
         Guarantees:
+
         - Evaluates all positive and hard-negative pairs under ``torch.no_grad()``
           in chunks of size ``chunk_size`` on the module's current device.
 
         Non-guarantees:
+
         - Does not evaluate role pairs or random negatives.
 
         Parameters
@@ -1493,10 +1528,12 @@ class MultiBoxELModule(ELModule):
         """Compute GCI0 loss (:math:`C \\sqsubseteq D`), dispatching to :func:`~mowl.nn.el.structural.gci0_structural` under ``objective="structural"``.
 
         Guarantees:
+
         - Under ``objective="structural"``, masks out defining rows from
           ``self.definition_table`` to exact ``0.0``.
 
         Non-guarantees:
+
         - Under ``objective="structural"``, vacuously ``0.0`` when :math:`C` has
           no active non-empty slots.
         """
@@ -1571,11 +1608,13 @@ class MultiBoxELModule(ELModule):
         :func:`~mowl.nn.el.structural.gci1_bot_structural` with ``agg=self.bot_agg``.
 
         Guarantees:
+
         - At ``margin = 0``, the ``ne > 0`` slot gate has the identical zero set
           to gating on ``active`` alone (every pair of non-empty active slots is
           disjoint up to boundary contact).
 
         Non-guarantees:
+
         - Deviates from design §4 (which gates on ``active`` alone) at
           ``margin > 0``: empty computed slots (e.g. from defined classes) with
           :math:`-\\text{margin} < \\text{ne} \\le 0` are gated out rather than
@@ -1609,6 +1648,7 @@ class MultiBoxELModule(ELModule):
         """Compute GCI2 loss (:math:`C \\sqsubseteq \\exists r.D`), masking inactive or empty slots under ``objective="structural"``.
 
         Guarantees:
+
         - Under ``objective="structural"``, evaluates :func:`~mowl.nn.el.multiboxel.losses.gci2_score`
           with tightening ``gamma = -self.margin`` when ``neg=False``, or
           :func:`~mowl.nn.el.multiboxel.losses.gci2_score_neg` with
@@ -1616,6 +1656,7 @@ class MultiBoxELModule(ELModule):
           and slot masks ``active & (ne(w) > 0)``.
 
         Non-guarantees:
+
         - Under ``objective="structural"``, when every target slot of :math:`D`
           is masked out (an all-empty, i.e. unsatisfiable, target :math:`D`),
           the target minimum term in :func:`~mowl.nn.el.multiboxel.losses.gci2_score`
@@ -1680,12 +1721,14 @@ class MultiBoxELModule(ELModule):
         """Compute GCI3 loss (:math:`\\exists r.C \\sqsubseteq D`), masking inactive or empty target slots under ``objective="structural"``.
 
         Guarantees:
+
         - Under ``objective="structural"``, evaluates the squared
           :func:`~mowl.nn.el.multiboxel.losses.gci3_score_boxes` with tightening
           ``gamma = -self.margin``, ``aggregation="hard"``, and target mask
           ``r_d.active & (ne(r_d.w) > 0)``.
 
         Non-guarantees:
+
         - Under ``objective="structural"``, returns ``0.0`` when every target
           slot of :math:`D` is masked out (an all-empty, i.e. unsatisfiable,
           target makes :math:`\\exists r.C \\sqsubseteq D` vacuously ``0`` unless
@@ -1749,12 +1792,14 @@ class MultiBoxELModule(ELModule):
         """Compute class assertion loss (:math:`C(a)`), masking inactive or empty class slots under ``objective="structural"``.
 
         Guarantees:
+
         - Under ``objective="structural"``, evaluates
           :func:`~mowl.nn.el.multiboxel.losses.class_assertion_score_boxes` with
           tightening ``gamma = -self.margin``, ``aggregation="hard"``, and class
           mask ``r_c.active & (ne(r_c.w) > 0)``.
 
         Non-guarantees:
+
         - Under ``objective="structural"``, returns ``0.0`` when every slot of
           class :math:`C` is masked out (an all-empty, i.e. unsatisfiable, class
           makes :math:`C(a)` vacuously ``0`` unless :math:`C` is forced
@@ -1857,11 +1902,13 @@ class MultiBoxELModule(ELModule):
         """Compute Box²EL bump regularisation plus optional component and diversity penalties.
 
         Guarantees:
+
         - When ``component_reg == 0.0`` and ``diversity_reg == 0.0`` (or
           ``n_components == 1``), returns the exact same tensor value as
           :meth:`BoxSquaredELModule.regularization_loss`.
 
         Non-guarantees:
+
         - When ``component_reg == 0.0`` and ``diversity_reg == 0.0``, unused
           components are permitted to collapse or nest inside other components.
         """
@@ -1904,10 +1951,12 @@ class MultiBoxELModule(ELModule):
         corners, only the lowest-index component is kept).
 
         Guarantees:
+
         - Returns a CPU ``torch.Tensor`` of shape ``(nb_ont_classes,)`` with
           integer counts in ``0 .. n_components``.
 
         Non-guarantees:
+
         - Does not check whether a component is covered by the *union* of two or
           more other components when it is not contained in any single one.
 

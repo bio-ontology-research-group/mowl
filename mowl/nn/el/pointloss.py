@@ -5,6 +5,7 @@ multi-box components, binary cross-entropy membership loss, and log-side-length
 volume regularisation.
 
 Guarantees:
+
 - :func:`soft_box_membership` returns a tensor in ``(0, 1)`` of shape ``(B, k)``
   computed as :math:`\\min_{\\text{coord}} \\sigma((|o| - |x - c|) / \\beta)`.
   The minimum over coordinates is used instead of the coordinatewise product
@@ -28,6 +29,7 @@ Guarantees:
   :math:`\\text{mean}_{\\text{coord}} \\log(2|o| + 10^{-6})`.
 
 Non-guarantees:
+
 - At finite :math:`\\beta > 0`, :func:`soft_box_membership` takes the minimum of
   :math:`d` coordinate sigmoids and therefore satisfies :math:`0 < m(x) < 1`
   strictly for finite box offsets.
@@ -92,10 +94,12 @@ def soft_box_membership(
     lies inside :math:`[c - |o|, c + |o|]`.
 
     Guarantees:
+
     - Returns a tensor of shape ``(B, k)`` with entries strictly in ``(0, 1)``.
     - Dimension-invariant for isotropic boxes when :math:`x = c`.
 
     Non-guarantees:
+
     - Subgradients pass only through the bottleneck coordinate(s) achieving the
       minimum in each component box.
 
@@ -135,10 +139,12 @@ def union_membership(m: th.Tensor) -> th.Tensor:
     """Aggregate component memberships ``(B, k)`` via noisy-OR :math:`1 - \\prod_i (1 - m_i)`.
 
     Guarantees:
+
     - Returns a 1-D tensor of shape ``(B,)`` in ``[0, 1]``.
     - Reduces identically to ``m[:, 0]`` when ``k == 1``.
 
     Non-guarantees:
+
     - Assumes independent component memberships when combining overlapping boxes.
 
     Parameters
@@ -165,11 +171,13 @@ def membership_bce(
     """Compute weighted binary cross-entropy on membership probabilities ``m``.
 
     Guarantees:
+
     - Clamps ``m`` to ``[eps, 1 - eps]`` so log-probabilities and gradients are
       always finite.
     - Returns a scalar ``0.0`` tensor when ``m`` is empty.
 
     Non-guarantees:
+
     - Never reaches exact ``0.0`` for non-empty batches because ``m`` is clamped
       away from ``0`` and ``1``.
 
@@ -203,10 +211,12 @@ def volume_penalty(offsets: th.Tensor, eps: float = 1e-6) -> th.Tensor:
     """Compute mean log side length :math:`\\text{mean}_{C, i} \\text{mean}_{\\text{coord}} \\log(2|o| + 10^{-6})`.
 
     Guarantees:
+
     - Returns a finite scalar tensor for any non-negative or signed ``offsets``.
     - Returns ``0.0`` when ``offsets`` is empty.
 
     Non-guarantees:
+
     - Can take negative values when box side lengths :math:`2|o|` are smaller than ``1``.
 
     Parameters
@@ -239,11 +249,13 @@ def gather_element_embeddings(
     ``elem_embed(e)``.
 
     Guarantees:
+
     - Gradients for individual elements route exclusively to ``ind_embed.weight``
       (``elem_embed.weight`` is not indexed at individual element rows).
     - Gradients for class elements route exclusively to ``elem_embed.weight``.
 
     Non-guarantees:
+
     - Raises :class:`ValueError` if ``elem_idx`` references an individual element
       when ``ind_embed is None``.
 
@@ -296,11 +308,13 @@ def pair_union_membership(
     """Compute union membership :math:`m_C(x_D)` for a ``(B, 2)`` tensor of ``[elem_idx, class_idx]``.
 
     Guarantees:
+
     - Evaluates :func:`soft_box_membership` at temperature ``module.beta`` and
       aggregates across the ``k`` components of ``class_idx`` via :func:`union_membership`.
     - Returns an empty 1-D tensor on ``module``'s device when ``pairs`` is empty.
 
     Non-guarantees:
+
     - Requires ``module.set_point_supervision(ps)`` to have been called prior to invocation.
 
     Parameters
@@ -342,12 +356,14 @@ def compute_target_membership(
     centred at ``module.ind_embed(ind_idx)``.
 
     Guarantees:
+
     - Returns a 1-D tensor of shape ``(B,)`` in ``(0, 1)``.
     - Uses ``module.ind_halfwidth`` (default :math:`5\\beta`) and
       ``module.ind_embed`` for individual targets without accessing
       ``ind_offset``.
 
     Non-guarantees:
+
     - Raises :class:`RuntimeError` if ``module.point_supervision`` is ``None``
       or :class:`ValueError` if an individual target is encountered when
       ``module.ind_embed`` is ``None``.
@@ -409,6 +425,7 @@ def compute_point_membership_loss(
     """Compute point-based membership BCE loss for a sampled dict or a ``(B, 2)`` pair tensor.
 
     Guarantees:
+
     - When ``batch`` is a mapping, sums the BCE losses for ``"pos"`` (target ``1``,
       weight ``1``), ``"hard"`` (target ``0``, weight ``1``), and ``"rand"``
       (target ``0``, weight ``weight`` or ``module.neg_weight``).
@@ -416,6 +433,7 @@ def compute_point_membership_loss(
       ``neg=True`` else ``1``.
 
     Non-guarantees:
+
     - Ignores role triples ``"roles"`` (handled separately by ``point_role_loss``).
 
     Parameters
@@ -469,12 +487,14 @@ def compute_class_assertion_score_point(
     """Compute point-mode class-assertion ranking score :math:`-\\log m_C(a)` for ``data`` ``(B, 2)`` ``[ind, class]``.
 
     Guarantees:
+
     - Returns a 1-D tensor of shape ``(B,)`` where smaller values indicate higher
       membership probability :math:`m_C(a)`.
     - Reads individual coordinates exclusively from ``module.ind_embed`` without
       accessing ``ind_offset``.
 
     Non-guarantees:
+
     - Raises :class:`ValueError` when the module has no individuals (``nb_inds`` is
       ``None`` or ``0``).
 
@@ -516,6 +536,7 @@ def compute_point_modelness(
     """Compute fraction of positives with ``m >= 0.5`` and hard negatives with ``m < 0.5`` in chunks.
 
     Guarantees:
+
     - Evaluates all pairs in ``ps.pos_pairs`` and ``ps.hard_neg_pairs`` on
       ``module``'s current device under ``torch.no_grad()`` using batches of size
       at most ``chunk_size``.
@@ -523,6 +544,7 @@ def compute_point_modelness(
       pair tensor is empty.
 
     Non-guarantees:
+
     - Does not evaluate role pairs or random negatives.
 
     Parameters

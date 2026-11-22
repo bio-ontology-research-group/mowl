@@ -68,7 +68,7 @@ Let's see the difference of filtered and non-filtered random walks:
 
    from mowl.walking import DeepWalk
 
-   walker = DeepWalk(6,3,alpha=0,outfile="no_filtered_walks", workers=4)
+   walker = DeepWalk(30,3,alpha=0,outfile="no_filtered_walks", workers=4)
    walker.walk(edges)
 
 .. testcode:: filtered
@@ -91,7 +91,7 @@ The output includes the following walks (shown here without repetitions):
 
    from mowl.walking import DeepWalk
 
-   walker2 = DeepWalk(3,3,alpha=0,outfile="filtered_walks", workers=4)
+   walker2 = DeepWalk(30,3,alpha=0,outfile="filtered_walks", workers=4)
    walker2.walk(edges, nodes_of_interest = ["node_1", "node_2"])
 
 .. testcode:: filtered

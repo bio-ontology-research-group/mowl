@@ -36,6 +36,7 @@ class CanonicalMixture(EmbeddingELModel):
     of individuals.
 
     Guarantees:
+
     - Raises ``ValueError("CanonicalMixture needs individuals")`` when the
       dataset contains no individuals.
     - Every training-entailed class assertion (including assertions entailed
@@ -52,6 +53,7 @@ class CanonicalMixture(EmbeddingELModel):
       checkpoint at the end of :meth:`train`.
 
     Non-guarantees:
+
     - Only defined for datasets with individuals; raises :class:`ValueError` on
       TBox-only datasets.
     - Named classes have no dense vector embeddings (a class is its column in

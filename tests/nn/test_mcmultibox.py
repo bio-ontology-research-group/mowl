@@ -411,3 +411,13 @@ def test_ranking_computes_each_distinct_operand_once():
     m.distance(data, "gci2")
     # source operand: one distinct class, evaluated once per point chunk (4), not 40 times
     assert sum(calls) == 4
+
+
+@pytest.mark.parametrize("gci_name", ["gci0", "gci1", "gci2", "gci3"])
+def test_distance_is_a_column_for_every_form(gci_name):
+    m = make_module(n_classes=6, n_rels=2, d=2, n=2, points=64)
+    width = 2 if gci_name == "gci0" else 3
+    data = th.randint(0, 2, (5, width))
+    assert m.distance(data, gci_name).shape == (5, 1)
+    m.per_axiom_column = False
+    assert m.distance(data, gci_name).shape == (5,)

@@ -4,7 +4,7 @@ Benchmarks (dataset + task + evaluation protocol) and the results published for 
 the literature, so that any method of :mod:`mowl.catalog` can be run on a benchmark and
 compared against published numbers.
 
-.. code-block:: python
+.. testcode::
 
    from mowl.benchmarks import list_benchmarks, published_results
 
@@ -13,6 +13,11 @@ compared against published numbers.
 
    for r in published_results(benchmark="box2el-go-inference"):
        print(r.method, r.metrics, r.source.key, r.locator)
+
+.. testoutput::
+   :options: +ELLIPSIS
+
+   ...box2el-go-inference...box2el {...
 
 Listing benchmarks and published results does not need the JVM.
 """

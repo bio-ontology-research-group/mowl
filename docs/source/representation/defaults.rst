@@ -3,7 +3,8 @@ Defaults: correct, or as published
 
 Publications and their code sometimes do something that is not what the text says: a sign that
 is not constrained, a loss that can go below zero, a role that is paired with the wrong
-element. mOWL keeps one rule for such quirks:
+element. mOWL keeps one rule for such quirks. A part defaults to the correct reading, and a
+named method may keep its authors' reading as an option. In detail:
 
 * **A part defaults to the correct behaviour.** A part is meant to be combined with other parts and
   used on your own ontologies, so it must not bring a quirk of one paper into a combination
@@ -82,9 +83,15 @@ Where the rule shows up
 -----------------------
 
 * A cone's aperture is kept in :math:`[0, \pi]` by default (``aperture="clip"``). The AConE
-  method lets it wrap to negative values, as the authors' code does (``"wrap"``).
-* The negation of a cone uses the absolute aperture by default. The methods ``cone_qe`` and
-  ``acone`` use :math:`\pi - \text{aperture}` as published (``signed=True``).
+  method and model let it wrap to negative values, as the authors' code does (``"wrap"``).
+* The negation of a cone uses the absolute aperture by default (``signed_negation=False``,
+  ConE and the parts). The method ``acone`` uses :math:`\pi - \text{aperture}` as published
+  (``signed_negation=True``). The rotation of AConE maps the preimage of a cone the way it maps
+  the image (``aperture_change="signed"`` is the authors' reading).
+* A box intersection is exact: two boxes that are apart give the empty box
+  (``Box.intersect(signed=False)`` gives the earlier box with a positive width).
+* A loss for a missing negative is an error, not the positive loss
+  (``strict_negatives=False`` gives the old behaviour).
 * A loss for a wrong pair is measured in the same sense as the margin (a slack stays a
   slack). ELEmbeddings, EmEL++ and RegD-ELEm use the strict reading of their authors.
 * FALCON's quantifiers look at all pairs of entities. The first mOWL version paired every
@@ -93,4 +100,37 @@ Where the rule shows up
 * Al-cone gives ``owl:Thing`` and ``owl:Nothing`` a constant logit on the scale of the learned
   ones; ``constant_logit=1e4`` restores the earlier, much larger constant.
 
-The changelog has the complete list of changed defaults.
+What changed in default behaviour
+---------------------------------
+
+This is for users of earlier versions (v2.1.0 and before). Each line names the method, what is
+different now, and how to get the old behaviour. Models that did not exist in v2.1.0 have no
+earlier behaviour and are not listed. The changelog has every change.
+
+* **All models with a per-axiom loss** (``ELEmbeddings``, ``ELBE``, ``BoxEL``, ``Box2EL``,
+  ``TransBox`` and the others built on ``ELModule``): every loss has shape ``(B, 1)``;
+  ``module.per_axiom_column = False`` restores the flat ``(B,)``. Asking for a negative loss of
+  a form that has none raises ``NotImplementedError``; ``strict_negatives = False`` restores
+  the silent positive loss.
+* **ELEmbeddings** (and ``RegDELEm``): the loss of :math:`C \sqcap D \sqsubseteq E` has the
+  fourth term of the published loss; ``gci1_radius_term=False`` restores the old loss.
+* **ELBE**: the loss of :math:`C \sqcap D \sqsubseteq E` is one value per sample (it was an
+  ``n x n`` matrix that mixed samples). This was a defect, there is no option for the old
+  numbers. The bottom losses have shape ``(B, 1)``.
+* **BoxEL** (and ``BoxSEL``): the role scale is :math:`|s| + \epsilon`, so no role inverts a
+  box (``positive_scale=False``); the role chain loss composes the maps in order
+  (``role_chain_composition="as_released"``); the role inclusion and role chain losses can be
+  trained (``load_role_axioms=True``); the loss of :math:`\exists r.C \sqsubseteq D` was fixed
+  (a defect, no option).
+* **Box2EL** (``BoxSquaredEL``): losses have shape ``(B, 1)``; the role inclusion and role
+  chain losses of the paper can be trained (``load_role_axioms=True``). Nothing else changed.
+* **TransBox**: a negative loss of a form without one raises (``strict_negatives=False``); with
+  ``formulation="reference"`` the bottom forms follow the authors' code
+  (``reference_bottom_losses="mowl"``).
+* **FALCON**: the quantifiers look at all pairs of entities (``role_pairs="self"``), and
+  ``owl:Nothing`` is the empty set (``nothing="learned"``). ALC models now train on a GPU.
+* **Graph and syntactic methods** (``GraphPlusPyKEENModel``, ``RandomWalkPlusW2VModel``,
+  ``SyntacticPlusW2VModel``): training is unchanged. ``GraphPlusPyKEENModel.axiom_costs`` now
+  scores class and role assertions too, not only :math:`C \sqsubseteq D` and
+  :math:`C \sqsubseteq \exists r.D`. Datasets are cached under ``$XDG_CACHE_HOME/mowl``
+  (override with ``MOWL_DATA_ROOT``).

@@ -28,12 +28,14 @@ def effective_components(
     corners, only the lowest-index component is kept).
 
     Guarantees:
+
     - Returns a 1-D CPU ``torch.Tensor`` of shape ``(n_classes,)`` with integer
       counts in ``0 .. n_components``.
     - Takes ``torch.abs(offsets)`` before computing box corners and comparing
       against ``eps``.
 
     Non-guarantees:
+
     - Does not check whether a component is covered by the *union* of two or
       more other components when it is not contained in any single one.
 

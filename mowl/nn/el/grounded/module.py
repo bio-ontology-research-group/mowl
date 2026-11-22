@@ -25,6 +25,7 @@ Implements §2 and §5 of the GroundedEL design:
    around element positions.
 
 Guarantees:
+
 - **Reasoner-free (R1):** Contains no imports or calls to reasoners or semantic
   completion routines.
 - **Exact limit realisation (R2):** After :meth:`exact_limit_init` with labels
@@ -35,6 +36,7 @@ Guarantees:
   :meth:`role_depth`, and :meth:`role_membership` bitwise identical.
 
 Non-guarantees:
+
 - Under ``agg="max"``, gradients with respect to box parameters flow only through
   the winning active component and bottleneck coordinate.
 - Under ``agg="lse"`` at finite ``agg_tau > 0``, smooth depth exceeds crisp
@@ -188,6 +190,7 @@ class GroundedELModule(nn.Module):
     """Element-grounded multi-box and product-role neural module for :math:`\\mathcal{EL}^{++}`.
 
     Guarantees:
+
     - **Index convention:** Elements ``0 .. nb_classes - 1`` correspond 1-to-1
       with classes ``0 .. nb_classes - 1``; elements ``nb_classes .. nb_elements - 1``
       are individuals.
@@ -205,6 +208,7 @@ class GroundedELModule(nn.Module):
       to the given ``edges``.
 
     Non-guarantees:
+
     - Does not compute semantic completion or least-model labels itself; labels
       and edges passed to :meth:`exact_limit_init` must be supplied by the caller.
     - Under ``agg="max"``, gradients flow only through the argmax active
@@ -424,11 +428,13 @@ class GroundedELModule(nn.Module):
         """Ensure learnable score temperature parameter ``raw_tau_s`` is registered on this module.
 
         Guarantees:
+
         - Returns a scalar :class:`torch.nn.Parameter` ``raw_tau_s`` on the module's
           device and dtype, initialised to ``_inv_softplus(0.1)`` so that
           ``softplus(raw_tau_s) == 0.1``.
 
         Non-guarantees:
+
         - Calling this method for the first time when ``encoder`` was ``None`` at
           construction adds ``raw_tau_s`` to :meth:`parameters`.
         """
@@ -466,10 +472,12 @@ class GroundedELModule(nn.Module):
         """Set the sigmoid membership temperature ``tau``.
 
         Guarantees:
+
         - Updates the registered ``tau`` buffer in-place to ``float(t)``.
         - Raises :class:`ValueError` if ``t <= 0`` or is non-finite.
 
         Non-guarantees:
+
         - Does not alter ``agg_tau``.
 
         Parameters
@@ -524,11 +532,13 @@ class GroundedELModule(nn.Module):
         ``id >= nb_classes`` when ``element_features.shape[0] == nb_elements - nb_classes``).
 
         Guarantees:
+
         - Returns a tensor of shape ``(*element_ids.shape, embed_dim)`` (or
           ``(nb_elements, embed_dim)`` when ``element_ids is None``).
         - Raises :class:`ValueError` if any index is outside ``[0, nb_elements)``.
 
         Non-guarantees:
+
         - Does not normalise or clamp coordinates.
 
         Parameters
@@ -583,12 +593,14 @@ class GroundedELModule(nn.Module):
         everywhere instead of suffering from sigmoid saturation).
 
         Guarantees:
+
         - Returns a tensor of shape ``element_ids.shape`` (or ``(nb_elements,)``
           when ``element_ids is None``) with values in ``[0, 1]``.
         - Has unit gradient :math:`\\partial \\delta_x / \\partial \\text{dead\\_logits}_x = 1`.
         - Raises :class:`ValueError` if any index is outside ``[0, nb_elements)``.
 
         Non-guarantees:
+
         - Callers performing manual gradient updates must clamp ``dead_logits``
           to ``[0, 1]`` after each step to keep the underlying parameter bounded.
 
@@ -623,12 +635,14 @@ class GroundedELModule(nn.Module):
         ``class_active`` is ``True`` and all coordinate widths are strictly positive.
 
         Guarantees:
+
         - Returns :class:`~mowl.nn.el.structural.Regions` with shapes
           ``(B, n_components, embed_dim)`` for ``cen`` and ``w`` and
           ``(B, n_components)`` for ``active``.
         - Inactive components have ``w == 0.0`` and ``active == False``.
 
         Non-guarantees:
+
         - Does not override ``top_id`` or ``bot_id`` (handled in :meth:`depth`
           and :meth:`membership`).
 
@@ -670,6 +684,7 @@ class GroundedELModule(nn.Module):
         parameters of their own and are derived as ``(-c_partner, w_partner)``.
 
         Guarantees:
+
         - Returns :class:`~mowl.nn.el.structural.Regions` with shapes
           ``(B, n_role_components, embed_dim)`` for ``cen`` and ``w`` and
           ``(B, n_role_components)`` for ``active``.
@@ -678,6 +693,7 @@ class GroundedELModule(nn.Module):
           ``(-cen_p, w_p, active_p)``.
 
         Non-guarantees:
+
         - Raises :class:`ValueError` if ``role_mode != "translation"`` or if
           ``rel_ids`` is non-empty when ``nb_rels == 0``.
 
@@ -737,6 +753,7 @@ class GroundedELModule(nn.Module):
         (with lower-indexed partners negated as ``(-c_partner, w_partner)``).
 
         Guarantees:
+
         - In ``"product"`` mode, returns ``(head_regions, tail_regions)`` each of
           shape ``(B, n_role_components, embed_dim)`` with a shared ``active``
           mask of shape ``(B, n_role_components)``.
@@ -745,6 +762,7 @@ class GroundedELModule(nn.Module):
         - Inactive role components have ``w == 0.0`` and ``active == False``.
 
         Non-guarantees:
+
         - Raises :class:`ValueError` if ``rel_ids`` is non-empty when ``nb_rels == 0``.
 
         Parameters
@@ -888,6 +906,7 @@ class GroundedELModule(nn.Module):
         active components when ``agg == "lse"`` and ``crisp=False``.
 
         Guarantees:
+
         - Returns a 1-D tensor of shape ``(B,)``.
         - Under ``agg="max"`` (or ``crisp=True``), entry ``b`` is strictly
           positive if and only if ``points[b]`` lies strictly inside the interior
@@ -897,6 +916,7 @@ class GroundedELModule(nn.Module):
           return the finite floor ``-1e6``.
 
         Non-guarantees:
+
         - Under ``agg="max"``, gradients flow only to the single active component
           attaining the maximum depth.
 
@@ -966,11 +986,13 @@ class GroundedELModule(nn.Module):
         """Compute soft class membership :math:`m(z, A) = \\sigma(\\operatorname{dep}(z, A) / \\tau)`.
 
         Guarantees:
+
         - Returns a 1-D tensor of shape ``(B,)`` with values in ``[0, 1]``.
         - Entries with ``class_ids == top_id`` evaluate to exact ``1.0`` and
           entries with ``class_ids == bot_id`` evaluate to exact ``0.0``.
 
         Non-guarantees:
+
         - For ordinary classes at finite ``tau > 0``, values lie strictly in
           ``(0, 1)`` unless ``depth / tau`` saturates floating-point precision.
 
@@ -1055,6 +1077,7 @@ class GroundedELModule(nn.Module):
         """Compute signed product-box depth :math:`\\max_k \\min(\\operatorname{dep}(x, H_{r,k}), \\operatorname{dep}(y, T_{r,k}))`.
 
         Guarantees:
+
         - Returns a 1-D tensor of shape ``(B,)``.
         - Under ``agg="max"`` (or ``crisp=True``), entry ``b`` is strictly
           positive if and only if there is an active component ``k`` of role
@@ -1063,6 +1086,7 @@ class GroundedELModule(nn.Module):
         - Roles with zero active components return the finite floor ``-1e6``.
 
         Non-guarantees:
+
         - Under ``agg="max"``, gradients flow only to the winning active role
           component and bottleneck coordinate.
 
@@ -1120,9 +1144,11 @@ class GroundedELModule(nn.Module):
         """Compute soft role membership :math:`\\rho(x, y, r) = \\sigma(\\operatorname{role\\_depth}(x, y, r) / \\tau)`.
 
         Guarantees:
+
         - Returns a 1-D tensor of shape ``(B,)`` with values in ``[0, 1]``.
 
         Non-guarantees:
+
         - At finite ``tau > 0``, values lie in ``(0, 1)`` unless saturated.
 
         Parameters
@@ -1264,6 +1290,7 @@ class GroundedELModule(nn.Module):
         with half-width ``1e6`` and ``is_top=True``.
 
         Guarantees:
+
         - For ordinary classes, returns :class:`~mowl.nn.el.structural.Regions` of
           shape ``(B, n_components * n_role_components, embed_dim)`` whose union of
           active boxes equals :math:`\\{z \\in \\mathbb{R}^d : \\exists v \\in V_r,\\, z + v \\in \\mathcal{B}(B)\\}`.
@@ -1272,6 +1299,7 @@ class GroundedELModule(nn.Module):
         - Raises :class:`ValueError` if ``role_mode != "translation"``.
 
         Non-guarantees:
+
         - Only defined in ``"translation"`` mode.
 
         Parameters
@@ -1301,6 +1329,7 @@ class GroundedELModule(nn.Module):
         with half-width ``1e6`` and ``is_top=True``.
 
         Guarantees:
+
         - For ordinary classes, returns :class:`~mowl.nn.el.structural.Regions` of
           shape ``(B, n_components * n_role_components, embed_dim)`` whose union of
           active boxes equals :math:`\\{z \\in \\mathbb{R}^d : \\exists v \\in V_r,\\, z - v \\in \\mathcal{B}(B)\\}`.
@@ -1309,6 +1338,7 @@ class GroundedELModule(nn.Module):
         - Raises :class:`ValueError` if ``role_mode != "translation"``.
 
         Non-guarantees:
+
         - Only defined in ``"translation"`` mode.
 
         Parameters
@@ -1337,6 +1367,7 @@ class GroundedELModule(nn.Module):
         """Compute signed multi-box depth of ``points`` inside :meth:`exists_box` in ``"translation"`` mode.
 
         Guarantees:
+
         - Returns a 1-D tensor of shape ``(B,)``.
         - Under ``agg="max"`` (or ``crisp=True``), entry ``b`` is strictly
           positive if and only if ``points[b]`` lies strictly inside at least
@@ -1345,6 +1376,7 @@ class GroundedELModule(nn.Module):
         - Raises :class:`ValueError` if ``role_mode != "translation"``.
 
         Non-guarantees:
+
         - Under ``agg="max"``, gradients flow only through the winning active
           existential component and bottleneck coordinate.
 
@@ -1415,6 +1447,7 @@ class GroundedELModule(nn.Module):
         Implements requirement R3 (monotone capacity).
 
         Guarantees:
+
         - Appends ``new_K - n_components`` inactive zero-width class components
           (and ``new_role_K - n_role_components`` inactive zero-width role
           components when ``new_role_K`` is provided).
@@ -1424,6 +1457,7 @@ class GroundedELModule(nn.Module):
           ``new_role_K < n_role_components``).
 
         Non-guarantees:
+
         - Replaces ``nn.Parameter`` instances with larger tensors, so any
           external optimizer must be re-initialised if training continues.
 
@@ -1544,6 +1578,7 @@ class GroundedELModule(nn.Module):
         product component :math:`\\operatorname{Box}(p_x, \\delta) \\times \\operatorname{Box}(p_y, \\delta)`.
 
         Guarantees:
+
         - Does not call any reasoner or completion algorithm; uses only the
           caller-supplied ``least_model_labels`` and ``edges``.
         - Distinct element boxes :math:`\\operatorname{Box}(p_i, \\delta)` and
@@ -1554,6 +1589,7 @@ class GroundedELModule(nn.Module):
           ``least_model_labels`` does not have shape ``(nb_elements, nb_classes)``.
 
         Non-guarantees:
+
         - Soundness of the resulting configuration holds if and only if the
           supplied ``least_model_labels`` and ``edges`` form a valid model of the
           ontology.
@@ -1821,6 +1857,7 @@ class GroundedELModule(nn.Module):
         plausible class assertions without sigmoid saturation.
 
         Guarantees:
+
         - For ``gci_name == "class_assertion"`` and ``neg=False``, returns a 1-D
           tensor of shape ``(B,)`` equal to ``-self.depth(self.positions(nb_classes + data[:, 0]), data[:, 1], crisp=True)``.
         - Entry ``b`` is strictly negative if and only if individual ``data[b, 0]``
@@ -1832,6 +1869,7 @@ class GroundedELModule(nn.Module):
           ``(B, 2)`` or if any individual/class index is out of bounds.
 
         Non-guarantees:
+
         - Intended as an evaluation / harness scorer; the GroundedEL training loop
           calls :meth:`~mowl.models.GroundedEL.compute_batch_losses` directly rather
           than routing through ``forward``.

@@ -8,6 +8,7 @@ components. Roles :math:`r` are represented by single head and tail boxes
 single boxes and bumps.
 
 Guarantees:
+
 - **Exact k = 1 identity with Box²EL:** When ``n_components == 1``, every loss
   function in this module (``gci0_loss``, ``gci0_bot_loss``, ``gci1_loss``,
   ``gci1_bot_loss``, ``gci2_loss`` positive and negative, ``gci3_loss``,
@@ -16,6 +17,7 @@ Guarantees:
   to the corresponding function in :mod:`mowl.nn.el.boxsquaredel.losses`,
   including on ``gci1`` batches whose pairwise intersections are empty.
 - **Zero-loss characterisation at margin 0:** At ``gamma = 0``:
+
   - ``gci0_loss`` is zero if and only if each component :math:`C_i` is contained
     in at least one component :math:`D_j`.
   - ``gci1_loss`` is zero when at least one pair :math:`(C_i, D_j)` has a
@@ -30,6 +32,7 @@ Guarantees:
     loss (zero :math:`\\Rightarrow` disjoint, disjoint :math:`\\nRightarrow` zero).
 
 Non-guarantees:
+
 - **Disjointness vs. coordinatewise separation in ``gci1_bot_loss``:** Two boxes
   that are disjoint in :math:`\\mathbb{R}^d` because they are separated along one
   coordinate still incur a positive ``gci1_bot_loss`` if their projections
@@ -135,12 +138,14 @@ def multi_inclusion(
     """Compute pairwise Box²EL inclusion scores between two component sets.
 
     Guarantees:
+
     - For ``ka = kb = 1``, ``multi_inclusion(cen_a, off_a, cen_b, off_b, gamma)[:, 0, 0]``
       equals :func:`mowl.nn.el.boxsquaredel.losses.inclusion_score` on the squeezed boxes.
     - At ``gamma = 0``, entry ``(b, i, j)`` is ``0`` if and only if box ``A_{b,i}``
       is contained in box ``B_{b,j}``.
 
     Non-guarantees:
+
     - When ``gamma < 0``, the score can be zero even when ``A_{b,i}`` slightly
       exceeds ``B_{b,j}``.
 
@@ -179,12 +184,14 @@ def multi_intersection(
     """Compute pairwise lower and upper intersection corners for two component sets.
 
     Guarantees:
+
     - Entry ``(b, i, j)`` has non-empty intersection if and only if
       ``(lower[b, i, j] <= upper[b, i, j]).all()``.
     - For ``ka = kb = 1``, matches the ``(lower, upper)`` corners of
       :func:`mowl.nn.el.boxsquaredel.losses.box_intersection`.
 
     Non-guarantees:
+
     - When a pair is disjoint in coordinate ``m``, ``lower[..., m] > upper[..., m]``
       (phantom box); callers must check ``lower <= upper`` to test non-emptiness.
 
@@ -227,10 +234,12 @@ def gci0_score(
     """Unsquared GCI0 score :math:`\\text{mean}_i \\text{agg}_j \\text{incl}(C_i, D_j)` for :math:`C \\sqsubseteq D`.
 
     Guarantees:
+
     - Reduces to :func:`mowl.nn.el.boxsquaredel.losses.gci0_score` when ``k = 1``.
     - Converges from ``aggregation="soft"`` to ``aggregation="hard"`` as ``tau -> 0+``.
 
     Non-guarantees:
+
     - Does not require different components :math:`C_i` to map into distinct
       components :math:`D_j`.
     - Under ``aggregation="soft"`` at finite ``tau > 0``, the score is not zero
@@ -282,11 +291,13 @@ def gci0_loss(
     """Squared GCI0 loss for :math:`C \\sqsubseteq D`.
 
     Guarantees:
+
     - Matches :func:`mowl.nn.el.boxsquaredel.losses.gci0_loss` at ``k = 1``.
     - At ``gamma = 0`` and ``aggregation="hard"``, equals ``0`` iff every
       component :math:`C_i` is contained in some component :math:`D_j`.
 
     Non-guarantees:
+
     - ``neg=True`` is not distinct from ``neg=False`` (GCI0 is not in ``neg_capable_gcis``).
     """
     return gci0_score(
@@ -310,9 +321,11 @@ def gci0_bot_score(
     """Unsquared GCI0-bot score :math:`\\text{mean}_i \\|o_{C_i}\\|_2` for :math:`C \\sqsubseteq \\bot`.
 
     Guarantees:
+
     - Reduces to :func:`mowl.nn.el.boxsquaredel.losses.gci0_bot_score` at ``k = 1``.
 
     Non-guarantees:
+
     - Constrains half-widths to zero but does not constrain component centres.
     """
     _validate_aggregation(aggregation, tau)
@@ -335,9 +348,11 @@ def gci0_bot_loss(
     """Squared GCI0-bot loss for :math:`C \\sqsubseteq \\bot`.
 
     Guarantees:
+
     - Matches :func:`mowl.nn.el.boxsquaredel.losses.gci0_bot_loss` at ``k = 1``.
 
     Non-guarantees:
+
     - ``neg=True`` is not distinct from ``neg=False``.
     """
     return gci0_bot_score(
@@ -361,6 +376,7 @@ def gci1_score(
     """Unsquared gated GCI1 score for :math:`C \\sqcap D \\sqsubseteq E`.
 
     For each batch row under ``aggregation="hard"``:
+
     - :math:`(i^*, j^*) = \\arg\\min_{i,j} \\text{empt}(C_i, D_j)` (chosen on detached
       emptiness penalties so no gradient flows through the discrete argmin).
     - Gate :math:`g_{ij} = 1` if :math:`\\text{lo}_{ij} \\le \\text{up}_{ij}` in every
@@ -368,6 +384,7 @@ def gci1_score(
     - Score :math:`= \\text{empt}(C_{i^*}, D_{j^*}) + \\frac{\\sum_{i,j} g_{ij} \\min_m \\text{incl}(I(C_i, D_j), E_m)}{\\sum_{i,j} g_{ij}}`.
 
     Under ``aggregation="soft"`` (delegating to :func:`~mowl.nn.el.softagg.soft_gci1_terms`):
+
     - :math:`w_{ij} = \\text{softmax}(-\\text{empt}_{ij} / \\tau)` (with gradient),
       emptiness term :math:`\\sum_{i,j} w_{ij} \\text{empt}_{ij}`, detached gate
       :math:`g_{ij} = \\max(\\text{non\\_empty}_{ij}^\\text{det}, w_{ij}^\\text{det})`
@@ -375,6 +392,7 @@ def gci1_score(
       target), and inner target aggregation :math:`\\text{softmin}_\\tau` over :math:`E_m`.
 
     Guarantees:
+
     - At ``k = 1``, the single pair ``(0, 0)`` is always the designated pair
       (:math:`g_{00} = 1`), so this score matches
       :func:`mowl.nn.el.boxsquaredel.losses.gci1_score` on both empty and
@@ -385,6 +403,7 @@ def gci1_score(
       imposes no penalty.
 
     Non-guarantees:
+
     - If a non-empty intersection :math:`C_i \\cap D_j` cannot be covered by a
       single component :math:`E_m` (even though it could be covered by a union
       of several :math:`E_m`), :math:`\\min_m \\text{incl}(I(C_i, D_j), E_m)` remains positive.
@@ -448,10 +467,12 @@ def gci1_loss(
     """Squared GCI1 loss for :math:`C \\sqcap D \\sqsubseteq E`.
 
     Guarantees:
+
     - Matches :func:`mowl.nn.el.boxsquaredel.losses.gci1_loss` at ``k = 1`` on
       both empty and non-empty intersections.
 
     Non-guarantees:
+
     - ``neg=True`` is not distinct from ``neg=False``.
     """
     return gci1_score(
@@ -477,6 +498,7 @@ def gci1_bot_score(
     """Unsquared GCI1-bot score :math:`\\text{mean}_{i,j} \\|\\text{relu}(-\\text{dist}(C_i, D_j) - \\gamma)\\|_2` for :math:`C \\sqcap D \\sqsubseteq \\bot`.
 
     Guarantees:
+
     - Matches :func:`mowl.nn.el.boxsquaredel.losses.gci1_bot_score` at ``k = 1``.
     - At ``gamma = 0``, equals ``0`` if and only if every component pair
       :math:`(C_i, D_j)` satisfies :math:`\\text{dist}(C_i, D_j) \\ge 0` (separated
@@ -486,6 +508,7 @@ def gci1_bot_score(
       disjoint, disjoint :math:`\\nRightarrow` zero).
 
     Non-guarantees:
+
     - Disjoint component pairs separated in one coordinate whose projections
       overlap in another coordinate (:math:`\\text{dist} < 0` in that coordinate)
       still incur a positive score at ``gamma = 0``.
@@ -517,9 +540,11 @@ def gci1_bot_loss(
     """Squared GCI1-bot loss for :math:`C \\sqcap D \\sqsubseteq \\bot`.
 
     Guarantees:
+
     - Matches :func:`mowl.nn.el.boxsquaredel.losses.gci1_bot_loss` at ``k = 1``.
 
     Non-guarantees:
+
     - ``neg=True`` is not distinct from ``neg=False``.
     """
     return gci1_bot_score(
@@ -554,6 +579,7 @@ def gci2_score(
     """Positive GCI2 loss :math:`(\\text{mean}_i \\text{incl}(C_i + b_D, H_r) + \\text{agg}_j \\text{incl}(D_j + b_C, T_r)) / 2` for :math:`C \\sqsubseteq \\exists r.D`.
 
     Guarantees:
+
     - Matches :func:`mowl.nn.el.boxsquaredel.losses.gci2_score` at ``k = 1``.
     - When ``active_c`` or ``active_d`` is provided under ``aggregation="hard"``,
       inactive source slots are excluded from the mean (with denominator clamped
@@ -562,6 +588,7 @@ def gci2_score(
       ``aggregation="soft"`` (structural mode forces ``"hard"`` aggregation).
 
     Non-guarantees:
+
     - When every target slot in ``active_d`` is masked out for a row (an
       all-empty, i.e. unsatisfiable, target :math:`D`), the target minimum term
       ``term_2`` returns ``0.0`` (making the target half of
@@ -645,6 +672,7 @@ def gci2_score_neg(
     and ``aggregation="soft"`` (no ``softmin``).
 
     Guarantees:
+
     - Matches :func:`mowl.nn.el.boxsquaredel.losses.gci2_score_neg` at ``k = 1``
       when ``active_c`` and ``active_d`` are ``None`` (or all ``True``).
     - At :math:`k \\ge 2`, equals ``0`` on unmasked components if and only if every
@@ -655,6 +683,7 @@ def gci2_score_neg(
     - Identical under ``aggregation="hard"`` and ``aggregation="soft"``.
 
     Non-guarantees:
+
     - ``aggregation`` and ``tau`` are validated for API uniformity but do not
       alter the negative score.
     - When ``active_c`` is all-``False`` (an all-masked, i.e. empty, source), the
@@ -723,10 +752,12 @@ def gci2_loss(
     """GCI2 loss for :math:`C \\sqsubseteq \\exists r.D` (positive and negative).
 
     Guarantees:
+
     - Matches :func:`mowl.nn.el.boxsquaredel.losses.gci2_loss` at ``k = 1`` for
       both ``neg=False`` and ``neg=True``.
 
     Non-guarantees:
+
     - Roles remain single head/tail boxes rather than multi-box relations.
     """
     _validate_aggregation(aggregation, tau)
@@ -778,11 +809,13 @@ def gci3_score_boxes(
     """Unsquared GCI3 score :math:`\\text{agg}_m \\text{incl}(H_r - b_C, D_m)` on pre-unpacked boxes.
 
     Guarantees:
+
     - When ``active is None``, returns the exact same tensor as :func:`gci3_score`.
     - When ``active`` is provided under ``aggregation="hard"``, inactive target
       slots are excluded from the minimum.
 
     Non-guarantees:
+
     - When ``active`` is provided and every target slot in a row is masked out
       (an all-empty, i.e. unsatisfiable, target :math:`D`), returns ``0.0`` for
       that row, making :math:`\\exists r.C \\sqsubseteq D` vacuously ``0`` unless
@@ -824,9 +857,11 @@ def gci3_score(
     """Unsquared GCI3 score :math:`\\text{agg}_m \\text{incl}(H_r - b_C, D_m)` for :math:`\\exists r.C \\sqsubseteq D`.
 
     Guarantees:
+
     - Matches :func:`mowl.nn.el.boxsquaredel.losses.gci3_score` at ``k = 1``.
 
     Non-guarantees:
+
     - ``tail_center`` and ``tail_offset`` are accepted for signature compatibility
       with Box²EL and are not used in the score.
     - Under ``aggregation="soft"`` at finite ``tau > 0``, the score is not zero
@@ -873,9 +908,11 @@ def gci3_loss(
     """Squared GCI3 loss for :math:`\\exists r.C \\sqsubseteq D`.
 
     Guarantees:
+
     - Matches :func:`mowl.nn.el.boxsquaredel.losses.gci3_loss` at ``k = 1``.
 
     Non-guarantees:
+
     - ``neg=True`` is not distinct from ``neg=False``.
     """
     return gci3_score(
@@ -902,10 +939,12 @@ def gci3_bot_score_boxes(
     """Unsquared GCI3-bot score :math:`\\|o_{H_r}\\|_2` for :math:`\\exists r.C \\sqsubseteq \\bot` on box tensors.
 
     Guarantees:
+
     - Returns :math:`\\|\\text{abs}(\\text{off\\_head})\\|_2` of shape ``(B,)``,
       identical to :func:`gci3_bot_score`.
 
     Non-guarantees:
+
     - Independent of :math:`C` (follows Box²EL).
     """
     _validate_aggregation(aggregation, tau)
@@ -921,9 +960,11 @@ def gci3_bot_score(
     """Unsquared GCI3-bot score :math:`\\|o_{H_r}\\|_2` for :math:`\\exists r.C \\sqsubseteq \\bot`.
 
     Guarantees:
+
     - Identical to :func:`mowl.nn.el.boxsquaredel.losses.gci3_bot_score`.
 
     Non-guarantees:
+
     - Independent of :math:`C`.
     """
     _validate_aggregation(aggregation, tau)
@@ -943,9 +984,11 @@ def gci3_bot_loss(
     """Squared GCI3-bot loss for :math:`\\exists r.C \\sqsubseteq \\bot`.
 
     Guarantees:
+
     - Identical to :func:`mowl.nn.el.boxsquaredel.losses.gci3_bot_loss`.
 
     Non-guarantees:
+
     - ``neg=True`` is not distinct from ``neg=False``.
     """
     return gci3_bot_score(
@@ -966,12 +1009,14 @@ def class_assertion_score_boxes(
     """Class assertion score :math:`\\text{agg}_m \\text{incl}(a, C_m)` for :math:`C(a)` on box tensors.
 
     Guarantees:
+
     - When ``active is None``, returns the exact same tensor as
       :func:`class_assertion_loss`.
     - When ``active`` is provided under ``aggregation="hard"``, inactive target
       slots are excluded from the minimum.
 
     Non-guarantees:
+
     - When ``active`` is provided and every target slot in a row is masked out
       (an all-empty, i.e. unsatisfiable, class :math:`C`), returns ``0.0`` for
       that row, making :math:`C(a)` vacuously ``0`` unless :math:`C` is forced
@@ -1008,9 +1053,11 @@ def class_assertion_loss(
     """Class assertion loss :math:`\\text{agg}_m \\text{incl}(a, C_m)` for :math:`C(a)`.
 
     Guarantees:
+
     - Matches :func:`mowl.nn.el.boxsquaredel.losses.class_assertion_loss` at ``k = 1``.
 
     Non-guarantees:
+
     - Individuals remain single boxes rather than multi-boxes.
     - Under ``aggregation="soft"`` at finite ``tau > 0``, the score is not zero
       at a hard model (:func:`~mowl.nn.el.softagg.softmin` :math:`\\le \\text{mean}`
@@ -1054,11 +1101,13 @@ def object_property_assertion_loss(
     """Object property assertion loss :math:`r(a, b)`, delegating to Box²EL unchanged.
 
     Guarantees:
+
     - Identical to :func:`mowl.nn.el.boxsquaredel.losses.object_property_assertion_loss`
       for both ``neg=False`` and ``neg=True`` and under both ``aggregation="hard"``
       and ``aggregation="soft"`` (individuals and roles have a single component).
 
     Non-guarantees:
+
     - Individuals and roles are single boxes.
     """
     _validate_aggregation(aggregation, tau)

@@ -10,7 +10,7 @@ from mowl.nn.el.octagon import losses as L
 
 
 class OctagonELModule(ELModule):
-    r"""Octagon-product :math:`\mathcal{EL}^{++}` module.
+    r"""Octagon-product EL++ module.
 
     An adaptation of Charpenay & Schockaert, IJCAI 2024.
 
@@ -79,8 +79,8 @@ class OctagonELModule(ELModule):
     neg_capable_gcis = frozenset({"gci2"})
     role_axiom_capable = False
 
-    #: A positive margin requires the inclusion with a gap (:func:`~mowl.nn.el.octagon.losses.
-    #: inclusion_loss`: zero iff ``T(h_C) + margin <= h_D``), as in ELBE.
+    #: A positive margin requires the inclusion with a gap, as in ELBE: the inclusion loss is
+    #: zero iff ``T(h_C) + margin <= h_D`` (see :func:`~mowl.nn.el.octagon.losses.inclusion_loss`).
     margin_semantics = "strict"
 
     def __init__(self, nb_ont_classes, nb_rels, nb_inds=None, embed_dim=50, margin=0.0,

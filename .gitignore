@@ -58,3 +58,9 @@ docs/no_filtered_walks
 first_semantic_model
 first_syntactic_w2v_model
 docs/source/representation/combinations.rst
+
+# editor lock files and sphinx-gallery timing pages
+.#*
+\#*#
+docs/source/sg_execution_times.rst
+docs/source/examples/sg_execution_times.rst

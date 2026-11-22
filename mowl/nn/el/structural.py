@@ -27,6 +27,7 @@ Provides the building blocks for the ``objective="structural"`` formulation of
    targets for per-class witness points.
 
 Guarantees:
+
 - **Zero-loss faithfulness at margin 0:** With ``enabled=True`` on
   :class:`DefinitionTable`, at ``margin = 0``, zero sum of
   :func:`gci0_structural`, :func:`gci0_bot_structural`, :func:`gci1_structural`,
@@ -55,6 +56,7 @@ Guarantees:
   (:math:`\\text{inside}(p_i, D) \\le -m`).
 
 Non-guarantees:
+
 - **Hard max routing in :func:`region_size`, :func:`pair_size`, and :func:`inside_measure`:**
   Gradients of :func:`region_size`, :func:`pair_size`, and
   :func:`inside_measure` flow only to the argmax active slot or pair (ties
@@ -166,6 +168,7 @@ def signed_overlap(
         - \\max(c_{a,m} - w_{a,m},\\, c_{b,m} - w_{b,m}).
 
     Guarantees:
+
     - Returns a tensor of shape ``(B, ka, kb, d)`` with the same dtype and device
       as the inputs.
     - Positive in coordinate ``m`` when the intervals overlap (equal to the
@@ -173,6 +176,7 @@ def signed_overlap(
       separated (equal to the negative gap).
 
     Non-guarantees:
+
     - Does not apply ``torch.abs`` to ``w_a`` or ``w_b``; callers must pass
       signed half-widths (``|offset|`` for primitive boxes).
 
@@ -209,6 +213,7 @@ def pair_slots(a: Regions, b: Regions, max_slots: int) -> Regions:
     inactive padding ``cen = 0`` and ``w = -1``.
 
     Guarantees:
+
     - Output :class:`Regions` has shapes ``(B, max_slots, d)`` for ``cen`` and
       ``w`` and ``(B, max_slots)`` for ``active``.
     - Active pairs appear at the leading positions of each row in their original
@@ -218,6 +223,7 @@ def pair_slots(a: Regions, b: Regions, max_slots: int) -> Regions:
       active pairs or if ``max_slots < 1``.
 
     Non-guarantees:
+
     - Active pair slots may still represent geometrically empty intersections
       (indicated by ``w[..., m] < 0`` in one or more coordinates).
 
@@ -287,10 +293,12 @@ def nonempty_measure(w: th.Tensor) -> th.Tensor:
     """Compute the minimum signed side length :math:`\\text{ne}(a) = \\min_m 2 w_m` across coordinates.
 
     Guarantees:
+
     - Reduces the last dimension ``d`` of ``w`` (e.g. ``(B, K, d) -> (B, K)``).
     - Strictly positive if and only if every coordinate has :math:`w_m > 0`.
 
     Non-guarantees:
+
     - Gradients with respect to ``w`` flow only to the coordinate attaining the
       minimum side length.
 
@@ -311,12 +319,14 @@ def region_size(r: Regions) -> th.Tensor:
     """Compute :math:`\\text{NE}(C) = \\max_{i \\text{ active}} \\text{ne}(C_i)` for each row in ``r``.
 
     Guarantees:
+
     - Returns a 1-D tensor of shape ``(B,)``.
     - Inactive slots are masked with ``-inf`` before the maximum and never
       contribute values or gradients.
     - Raises :class:`ValueError` if any row in ``r`` has zero active slots.
 
     Non-guarantees:
+
     - Gradients flow only to the active slot attaining the maximum.
 
     Parameters
@@ -342,6 +352,7 @@ def pair_size(a: Regions, b: Regions) -> th.Tensor:
     """Compute :math:`\\text{NE}(C \\sqcap D) = \\max_{(i,j) \\text{ active}} \\min_m \\text{sov}_m(C_i, D_j)`.
 
     Guarantees:
+
     - Returns a 1-D tensor of shape ``(B,)``.
     - Inactive pairs are masked with ``-inf`` before the maximum; when all active
       pairs are disjoint, selects the least separated active pair so gradient
@@ -349,6 +360,7 @@ def pair_size(a: Regions, b: Regions) -> th.Tensor:
     - Raises :class:`ValueError` if any batch row has zero active pairs.
 
     Non-guarantees:
+
     - Gradients flow only to the single active pair attaining the maximum.
 
     Parameters
@@ -377,6 +389,7 @@ def inside_measure(points: th.Tensor, regions: Regions) -> th.Tensor:
     """Compute signed interior depth :math:`\\max_{s \\text{ active}} \\min_m (w_{s,m} - |p_m - \\text{cen}_{s,m}|)` of ``points`` in ``regions``.
 
     Guarantees:
+
     - Returns a 1-D tensor of shape ``(W,)`` matching the batch dimension of ``points``.
     - Entry ``b`` is strictly positive (at least ``m``) if and only if ``points[b]``
       lies at least ``m`` inside some active slot of ``regions[b]`` in every coordinate.
@@ -386,6 +399,7 @@ def inside_measure(points: th.Tensor, regions: Regions) -> th.Tensor:
     - Raises :class:`ValueError` if ``points`` and ``regions`` have incompatible shapes.
 
     Non-guarantees:
+
     - Gradients flow only to the active slot attaining the maximum and the
       coordinate attaining the minimum (zero gradient on rows with no active slots).
 
@@ -465,12 +479,14 @@ def inclusion_tight(
     Uses the tightening margin convention (:math:`m \\ge 0` tightens containment).
 
     Guarantees:
+
     - Returns a tensor of shape ``(B, ka, kb)``.
     - At ``margin = 0``, entry ``(b, i, j)`` is ``0`` if and only if
       :math:`[c_{a,i} - w_{a,i},\\, c_{a,i} + w_{a,i}] \\subseteq [c_{b,j} - w_{b,j},\\, c_{b,j} + w_{b,j}]`
       in every coordinate (for non-empty :math:`a_i`).
 
     Non-guarantees:
+
     - For an empty source slot with sufficiently negative ``w_a``, the hinge can
       be zero even when ``cen_a`` lies outside ``b``; callers gate source slots
       by :math:`\\text{ne} > 0`.
@@ -510,6 +526,7 @@ def gci0_structural(c: Regions, d: Regions, margin: float) -> th.Tensor:
     returning ``0`` for rows with no active non-empty :math:`C_i`.
 
     Guarantees:
+
     - Returns a 1-D tensor of shape ``(B,)``.
     - Non-emptiness gate :math:`\\text{ne}(C_i) > 0` is detached so inclusion
       violations never push :math:`C_i` to shrink to empty.
@@ -518,6 +535,7 @@ def gci0_structural(c: Regions, d: Regions, margin: float) -> th.Tensor:
     - Raises :class:`ValueError` if any batch row of ``d`` has zero active slots.
 
     Non-guarantees:
+
     - Vacuously ``0`` when :math:`C` has no active non-empty slots; non-emptiness
       of satisfiable classes is enforced separately by :func:`existence_loss`.
 
@@ -557,10 +575,12 @@ def gci0_bot_structural(c: Regions) -> th.Tensor:
     so a positive margin would impose a non-zero floor on primitive classes.
 
     Guarantees:
+
     - Returns a 1-D tensor of shape ``(B,)``.
     - Equals ``0`` iff every active slot of :math:`C` has :math:`\\text{ne}(C_i) \\le 0`.
 
     Non-guarantees:
+
     - Only penalises the minimum coordinate width of each active slot.
 
     Parameters
@@ -602,6 +622,7 @@ def gci1_structural(
     in ``masked``.
 
     Guarantees:
+
     - Returns a 1-D tensor of shape ``(B,)``.
     - Rows with ``masked[b] == True`` or with all active pairs satisfying
       :math:`\\text{ne}(C_i \\cap D_j) \\le 0` evaluate to exact ``0.0`` with zero
@@ -611,6 +632,7 @@ def gci1_structural(
     - Raises :class:`ValueError` if any batch row of ``e`` has zero active slots.
 
     Non-guarantees:
+
     - Requires each non-empty pair box :math:`C_i \\cap D_j` to be covered by a
       single active slot :math:`E_l` rather than a union of multiple slots of :math:`E`.
 
@@ -681,6 +703,7 @@ def gci1_bot_structural(
     pair is active) or ``"sum"`` (per-row sum over active pairs).
 
     Guarantees:
+
     - Returns a 1-D tensor of shape ``(B,)``.
     - Under both ``agg="mean"`` and ``agg="sum"``, equals ``0`` if and only if
       every active component pair :math:`(C_i, D_j)` is separated by at least
@@ -692,6 +715,7 @@ def gci1_bot_structural(
     - Raises :class:`ValueError` if ``agg`` is not ``"mean"`` or ``"sum"``.
 
     Non-guarantees:
+
     - Gradients for each violating pair flow only through the coordinate with the
       smallest signed overlap :math:`\\arg\\min_m \\text{sov}_m(C_i, D_j)`.
 
@@ -746,11 +770,13 @@ def existence_loss(
     where an empty ``class_sizes`` or ``pair_sizes`` tensor contributes ``0.0``.
 
     Guarantees:
+
     - Returns a scalar ``torch.Tensor`` of shape ``()``.
     - Equals ``0`` iff every entry in ``class_sizes`` and ``pair_sizes`` is at
       least ``margin``.
 
     Non-guarantees:
+
     - Does not deduplicate targets; callers should pass deduplicated target sizes
       from :class:`ExistenceTargets`.
 
@@ -801,6 +827,7 @@ def witness_loss(
     where an empty ``inside_pos`` or ``inside_neg`` tensor contributes ``0.0``.
 
     Guarantees:
+
     - Returns a scalar ``torch.Tensor`` of shape ``()``.
     - Equals ``0`` if and only if every entry in ``inside_pos`` is at least
       ``margin`` (:math:`\\text{inside}(p_i, D) \\ge m`, i.e. witness :math:`p_i`
@@ -810,6 +837,7 @@ def witness_loss(
       least :math:`m` outside every active slot of :math:`D`).
 
     Non-guarantees:
+
     - Does not deduplicate target rows; callers should pass deduplicated
       targets from :class:`WitnessTargets`.
 
@@ -848,6 +876,7 @@ class DefinitionTable:
     """Compiled structural conjunction definitions :math:`A := X \\sqcap Y` extracted from normal forms.
 
     Guarantees:
+
     - The accepted definition graph is a DAG: ``level[a] == 1 + max(level[def_x[a]], level[def_y[a]])``
       for every defined class ``a``, and ``level[p] == 0`` for every primitive class ``p``.
     - For every defined class ``a``, ``comps[a] == comps[def_x[a]] * comps[def_y[a]] <= max_components``
@@ -862,6 +891,7 @@ class DefinitionTable:
       auxiliary's region).
 
     Non-guarantees:
+
     - Only compiles binary conjunction definitions :math:`A \\equiv X \\sqcap Y`
       where each inclusion :math:`A \\sqsubseteq D` (:math:`D \\in \\{X, Y\\}`) is
       witnessed either directly in ``gci0`` or via a single role-auxiliary step
@@ -924,6 +954,7 @@ class DefinitionTable:
         """Build a :class:`DefinitionTable` from ``gci0`` and ``gci1`` (and optional ``gci2``/``gci3``) normal-form index tensors.
 
         Guarantees:
+
         - When ``enabled=False``, every class is primitive (``n_defined == 0``,
           ``max_level == 0``, ``comps == k``) and no rows are masked.
         - Candidate definers for ``A`` are the lexicographically smallest
@@ -939,6 +970,7 @@ class DefinitionTable:
           dependency cycles deterministically in increasing class index.
 
         Non-guarantees:
+
         - Definitions whose normalisation introduces nested auxiliaries on both
           sides (e.g.
           :math:`A \\equiv \\text{Pizza} \\sqcap \\exists\\text{hasTopping}.(\\text{PizzaTopping} \\sqcap \\exists\\text{hasSpiciness}.\\text{Hot})`
@@ -1132,6 +1164,7 @@ class DefinitionTable:
         """Return a boolean mask over ``gci0`` rows ``(C, D)`` covered by accepted definitions.
 
         Guarantees:
+
         - Returns a 1-D ``torch.bool`` tensor of length ``rows.shape[0]`` on
           ``rows.device``.
         - Marks entry ``b`` as ``True`` iff ``rows[b]`` is ``(A, X)`` or
@@ -1142,6 +1175,7 @@ class DefinitionTable:
           :math:`\\text{Aux}`.
 
         Non-guarantees:
+
         - Assumes row entries are valid class indices in ``0 .. n_classes - 1``.
 
         Parameters
@@ -1167,12 +1201,14 @@ class DefinitionTable:
         """Return a boolean mask over ``gci1`` rows ``(C, D, E)`` covered by accepted definitions.
 
         Guarantees:
+
         - Returns a 1-D ``torch.bool`` tensor of length ``rows.shape[0]`` on
           ``rows.device``.
         - Marks entry ``b`` as ``True`` iff ``rows[b]`` is ``(X, Y, A)`` or
           ``(Y, X, A)`` for an accepted definition :math:`A \\to (X, Y)`.
 
         Non-guarantees:
+
         - Assumes row entries are valid class indices in ``0 .. n_classes - 1``.
 
         Parameters
@@ -1218,6 +1254,7 @@ def slot_components(
       ``def_x`` and ``def_y``.
 
     Guarantees:
+
     - Returns a ``Dict[int, int]`` mapping each primitive leaf class index in
       the definition tree of ``cls`` to its component index in ``0 .. k - 1``.
     - For any tree-structured definition (distinct primitive leaves), the box of
@@ -1228,6 +1265,7 @@ def slot_components(
       or not an integer.
 
     Non-guarantees:
+
     - If a defined class has a diamond DAG where the same primitive leaf is
       reachable along both ``def_x`` and ``def_y`` with different component
       indices in ``slot``, the right branch (``def_y``) overwrites the left
@@ -1330,6 +1368,7 @@ class WitnessTargets:
     """Satisfiable witness classes and positive/negative class-membership targets for :func:`witness_loss`.
 
     Guarantees:
+
     - ``classes`` is a 1-D ``torch.long`` tensor of shape ``(W,)``, ``pos`` is a
       2-D ``torch.long`` tensor of shape ``(P, 2)``, and ``neg`` is a 2-D
       ``torch.long`` tensor of shape ``(N, 2)`` with rows ``(witness_row, class_idx)``
@@ -1341,6 +1380,7 @@ class WitnessTargets:
       and ``(r, classes[r])`` is always included in ``pos`` for every witness row ``r``.
 
     Non-guarantees:
+
     - Without a :class:`~mowl.geometric.completion.CanonicalModel`, positive and
       negative targets are approximated syntactically from ``gci0`` and ``gci1_bot``
       rows only (entailed subsumptions and entailed disjointness are not inferred).
@@ -1383,8 +1423,10 @@ class WitnessTargets:
         """Build :class:`WitnessTargets` from satisfiable classes, normal forms, and an optional :class:`CanonicalModel`.
 
         Guarantees:
+
         - With ``cm`` provided, for each witness row ``r`` with class ``C = classes[r]``
           whose IRI is in ``cm.concept_names``:
+
           - ``pos`` includes ``(r, D)`` for ``D == C`` and for every target class ``D``
             whose IRI is in ``cm.concept_names`` with ``cm.entails(iri_c, iri_d)``;
           - ``neg`` includes ``(r, D)`` for every satisfiable target class ``D``
@@ -1392,6 +1434,7 @@ class WitnessTargets:
             ``not cm.joint_satisfiable([iri_c, iri_d])`` (excluding any ``D`` in ``pos``);
           - whenever ``C`` or ``D`` has an IRI unknown to ``cm``, falls back to the
             asserted ``gci0``/``gci1_bot`` rule for that pair.
+
           Raises :class:`ValueError` if ``cm`` is provided without ``index_to_iri``
           (or ``class_index_dict``).
         - Without ``cm``, ``pos`` for witness ``C = classes[r]`` is
@@ -1400,6 +1443,7 @@ class WitnessTargets:
         - Excludes ``top_idx`` and ``bottom_idx`` everywhere and deduplicates rows.
 
         Non-guarantees:
+
         - Without ``cm``, indirect subsumptions (:math:`C \\sqsubseteq X_1 \\sqsubseteq X_2`)
           and indirect disjointness (:math:`A \\sqsubseteq X_2,\\; X_2 \\sqcap X_3 \\sqsubseteq \\bot`)
           are not added unless asserted directly in ``gci0`` or ``gci1_bot``.
@@ -1576,6 +1620,7 @@ class ExistenceTargets:
     """Satisfiable classes, conjunction pairs, and optional witness targets.
 
     Guarantees:
+
     - ``classes`` is a 1-D ``torch.long`` tensor of shape ``(C,)`` and ``pairs``
       is a 2-D ``torch.long`` tensor of shape ``(P, 2)`` with ``pairs[:, 0] < pairs[:, 1]``.
     - ``top_idx`` and ``bottom_idx`` are excluded from both ``classes`` and ``pairs``.
@@ -1584,6 +1629,7 @@ class ExistenceTargets:
       and excludes ``top_idx`` and ``bottom_idx``.
 
     Non-guarantees:
+
     - Without a :class:`~mowl.geometric.completion.CanonicalModel`, satisfiability
       is approximated syntactically from ``gci0_bot`` and ``gci1_bot`` rows only.
     - Auxiliary classes minted by :class:`~mowl.ontology.normalize.ELNormalizer`
@@ -1627,6 +1673,7 @@ class ExistenceTargets:
         """Build :class:`ExistenceTargets` from normal forms and an optional :class:`CanonicalModel`.
 
         Guarantees:
+
         - With ``cm`` provided, uses ``cm.is_satisfiable(iri)`` for classes whose
           IRI is in ``cm.concept_names`` and ``cm.joint_satisfiable([iri_c, iri_d])``
           for ``gci1`` pairs whose IRIs are both in ``cm.concept_names``, falling
@@ -1642,6 +1689,7 @@ class ExistenceTargets:
           :meth:`WitnessTargets.from_normal_forms`.
 
         Non-guarantees:
+
         - Does not test pairs that do not occur as the left-hand side of any
           ``gci1`` row.
         - Auxiliary classes minted by :class:`~mowl.ontology.normalize.ELNormalizer`
@@ -1829,6 +1877,7 @@ def build_structural_tables(
     """Build :class:`DefinitionTable`, :class:`ExistenceTargets`, and ``top_idx`` from a model.
 
     Guarantees:
+
     - Extracts ``gci0`` (2 cols ``(C, D)``), ``gci0_bot`` (2 cols ``(C, bot)``),
       ``gci1`` (3 cols ``(C, D, E)``), ``gci1_bot`` (2 cols ``(C, D)``),
       ``gci2`` (3 cols ``(C, r, D)`` as stored by :class:`~mowl.datasets.el.GCI2Dataset`),
@@ -1840,6 +1889,7 @@ def build_structural_tables(
       with :class:`WitnessTargets`.
 
     Non-guarantees:
+
     - Auxiliary classes minted by :class:`~mowl.ontology.normalize.ELNormalizer`
       are unknown to a :class:`~mowl.geometric.completion.CanonicalModel` built
       with ``mowl.geometric``'s normaliser, so their satisfiability uses the
