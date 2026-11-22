@@ -13,7 +13,7 @@ class BoxELModule(ELModule):
 
     """
 
-    neg_capable_gcis = frozenset({"gci2"})
+    neg_capable_gcis = frozenset({"gci2", "object_property_assertion"})
 
     #: Which regulariser is used: ``"global"`` (default), the mean over all class boxes of
     #: the excess of the upper corners over 1 and of negative lower corners, once per step;

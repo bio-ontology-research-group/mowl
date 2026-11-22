@@ -555,7 +555,9 @@ class TestSoftplusRadiusConsistency:
         data = th.tensor([[0, 1, 2], [4, 1, 5]])
         new = self._module()
         old = self._module(consistent_radius=False)
-        # the same loss as the positive form (ELEm ignores neg for gci1) in both
+        # the same loss as the positive form (ELEm ignores neg for gci1) in both, which the
+        # earlier fall-through option strict_negatives=False selects
+        new.strict_negatives = old.strict_negatives = False
         assert th.allclose(new.gci1_loss(data, neg=True), new.gci1_loss(data))
         assert th.allclose(old.gci1_loss(data), new.gci1_loss(data))
         assert not th.allclose(old.gci1_loss(data, neg=True), new.gci1_loss(data, neg=True))

@@ -31,6 +31,16 @@ def register_adapter(*class_names):
     return decorate
 
 
+def _mirror_strict_negatives(geometry, module):
+    """A geometry that describes ``module`` refuses a negative loss of a form without one
+    exactly when the module does (every :class:`~mowl.nn.ELModule` has the attribute
+    ``strict_negatives``)."""
+    objective = getattr(geometry, "objective", None)
+    strict = getattr(module, "strict_negatives", None)
+    if objective is not None and isinstance(strict, bool):
+        objective.strict_negatives = strict
+
+
 def geometry_of(model):
     """The :class:`~mowl.representation.Geometry` of a model or module.
 
@@ -39,7 +49,9 @@ def geometry_of(model):
     if isinstance(model, Geometry):
         return model
     geometry = _geometry_of(model)
-    return _link(geometry, getattr(model, "module", model))
+    module = getattr(model, "module", model)
+    _mirror_strict_negatives(geometry, module)
+    return _link(geometry, module)
 
 
 def _link(geometry, module):

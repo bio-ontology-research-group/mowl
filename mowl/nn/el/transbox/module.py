@@ -29,7 +29,8 @@ class TransBoxModule(ELModule):
     :param strict_negatives: If ``True`` (default), calling the module with ``neg=True``
         for a normal form without a negative loss (everything but ``gci2``) raises
         :class:`NotImplementedError`. ``False`` is the earlier behaviour: the positive loss
-        is returned silently.
+        is returned silently. (The rule and the option are those of every
+        :class:`~mowl.nn.ELModule`.)
     :param reference_bottom_losses: With ``formulation="reference"``: ``"code"`` (default)
         scores ``C ⊑ ⊥`` and ``∃R.C ⊑ ⊥`` as the code scores ``C ⊑ D`` and ``∃R.C ⊑ D``
         with the bottom class as :math:`D` (the loss of
@@ -129,14 +130,6 @@ class TransBoxModule(ELModule):
         if self._reference:
             return CL.gci0_loss(data, self.class_center, self.class_offset, self.margin)
         return L.gci0_loss(data, self.class_center, self.class_offset, self.margin, neg=neg)
-
-    def forward(self, gci, gci_name, neg=False):
-        if neg and self.strict_negatives and gci_name not in self.neg_capable_gcis:
-            raise NotImplementedError(
-                f"TransBoxModule has no negative loss for '{gci_name}' (only "
-                f"{sorted(self.neg_capable_gcis)}); pass strict_negatives=False to get the "
-                f"positive loss instead.")
-        return super().forward(gci, gci_name, neg=neg)
 
     @property
     def _code_bottom(self):

@@ -127,6 +127,9 @@ class MultiELBEModule(ELModule):
     neg_capable_gcis = frozenset({"gci2", "object_property_assertion"})
     role_axiom_capable = False
 
+    #: ELBE's sign convention: a positive margin requires the inclusion with a gap.
+    margin_semantics = "strict"
+
     def __init__(
         self,
         nb_ont_classes: int,

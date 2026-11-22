@@ -207,6 +207,17 @@ class MultiBoxELModule(ELModule):
     neg_capable_gcis = frozenset({"gci2", "object_property_assertion"})
     role_axiom_capable = False
 
+    @property
+    def margin_semantics(self):
+        """The inclusion margin of the ``"structural"`` objective is ``margin``, which
+        tightens (``"strict"``); in every other objective it is ``gamma`` of Box\\ :sup:`2`\\ EL,
+        which loosens (``"slack"``). :attr:`margin_attribute` names the matching attribute."""
+        return "strict" if self.objective == "structural" else "slack"
+
+    @property
+    def margin_attribute(self):
+        return "margin" if self.objective == "structural" else "gamma"
+
     def __init__(
         self,
         nb_ont_classes: int,

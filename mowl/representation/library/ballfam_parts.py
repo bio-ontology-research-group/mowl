@@ -284,8 +284,9 @@ class RegDObjective(Objective):
         super().__init__(host.margin, host.slack, host.epsilon, host.gci3_reading,
                          host.gci2_negative, host.negatives, host.empty, host.gci2_offset,
                          strict_negatives=host.strict_negatives)
-        self.neg_forms = host.neg_forms
         self.regd_forms = frozenset(regd_forms)
+        # the RegD negative of gci0 (a non-inclusion) is one more form with a negative loss
+        self.neg_forms = host.neg_forms | ({"gci0"} & self.regd_forms)
         self.flip_gci2 = bool(flip_gci2)
 
     @property
