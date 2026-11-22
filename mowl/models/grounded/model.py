@@ -239,6 +239,9 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
         evaluation regime of :meth:`crisp_report`
         (:class:`~mowl.representation.library.grounded_evaluation.CrispViolations`): a part
         or a name. By default they are built from the options above at every step.
+    exact_regime : optional
+        Replace the evaluation regime of :meth:`evaluate_model`
+        (:class:`~mowl.representation.library.grounded_evaluation.ExactDomainCheck`).
     """
 
     scored_forms = ("class_assertion",)
@@ -316,6 +319,7 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
         element_sampler: Any = None,
         region_sampler: Any = None,
         crisp_regime: Any = None,
+        exact_regime: Any = None,
     ) -> None:
         _validate_int_ge("embed_dim", embed_dim, 1)
         _validate_int_ge("n_components", n_components, 1)
@@ -579,7 +583,8 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
         for name, kind, part in (("objective", "objective", objective),
                                  ("element_sampler", "element sampler", element_sampler),
                                  ("region_sampler", "region sampler", region_sampler),
-                                 ("crisp_regime", "evaluation", crisp_regime)):
+                                 ("crisp_regime", "evaluation", crisp_regime),
+                                 ("exact_regime", "evaluation", exact_regime)):
             if isinstance(part, str):
                 part = GROUNDED_PARTS[kind][part]()
             if part is not None:

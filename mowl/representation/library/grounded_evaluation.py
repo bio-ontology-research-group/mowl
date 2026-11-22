@@ -617,3 +617,6 @@ class ExactDomainCheck:
         precision = float(tn / (tn + fn)) if (tn + fn) > 0 else (1.0 if fp == 0 else 0.0)
         recall = float(tn / (tn + fp)) if (tn + fp) > 0 else (1.0 if fn == 0 else 0.0)
         return precision, recall
+
+
+register_grounded_part("evaluation", "exact domain check")(ExactDomainCheck)

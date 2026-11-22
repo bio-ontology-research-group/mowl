@@ -164,6 +164,50 @@ is loaded into the geometry by the exact-limit construction
 
    [[1, 1, 0], [0, 1, 0], [0, 0, 1]] [[0, 2, 0], [1, 2, 0]]
 
+The model class only wires the parts; what it computes besides the objective is done by
+general parts that other geometries of elements and unions of boxes can use:
+
+* the exact-limit initialisation (``init="elements"``) is
+  :class:`~mowl.representation.library.finite_model_placement.FiniteModelPlacement`, which
+  realises labels and edges of a finite interpretation as separated points and boxes; the
+  labels and the syntactic edges are read by
+  :func:`~mowl.representation.library.finite_model_placement.interpretation_labels`,
+  :func:`~mowl.representation.library.finite_model_placement.close_labels` and
+  :func:`~mowl.representation.library.finite_model_placement.syntactic_edges`;
+* idle-component re-seeding is
+  :class:`~mowl.representation.library.union_reseeding.OwnPointReseeding` (with the exact
+  counts of :func:`~mowl.representation.library.union_reseeding.slot_point_counts`);
+* the inductive scores and loss of ``compute_data_loss`` are
+  :class:`~mowl.representation.library.inductive_membership.SoftClassScores` and
+  :class:`~mowl.representation.library.inductive_membership.MembershipCrossEntropy`;
+* ``evaluate_model`` is the evaluation regime
+  :class:`~mowl.representation.library.grounded_evaluation.ExactDomainCheck` over the crisp
+  report (``exact_regime=`` replaces it);
+* ``train`` is the loop :class:`~mowl.training.sampled_objective.SampledObjectiveTraining`
+  of any model whose step is one sampled objective.
+
+.. testcode::
+
+   import torch as th
+   from mowl.representation.library import grounded_parts as gp
+   from mowl.representation.library.finite_model_placement import FiniteModelPlacement
+
+   measure = gp.UnionDepth()
+   domain = gp.ElementDomain(3, 3, 2)
+   classes = gp.BoxUnionClasses(3, 3, 2, measure, domain)
+   roles = gp.TranslationBoxRelations(1, 3, 2, measure, domain)
+   labels = th.eye(3, dtype=th.bool)
+   labels[0, 1] = True                       # the element of A is also in B
+   FiniteModelPlacement(delta=0.1).place(domain, classes, roles, labels, edges=[(0, 2, 0)])
+   points = domain.positions()
+   inside = th.stack([classes.depth(points, th.full((3,), c), crisp=True) > 0
+                      for c in range(3)], 1)
+   print(inside.int().tolist())
+
+.. testoutput::
+
+   [[1, 1, 0], [0, 1, 0], [0, 0, 1]]
+
 Logical query answering
 -----------------------
 
