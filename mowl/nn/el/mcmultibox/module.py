@@ -6,7 +6,7 @@ from torch.quasirandom import SobolEngine
 from mowl.representation.geometry import ComposedGeometry
 from mowl.representation.library.multibox_distance import sampled_distance
 from mowl.representation.library.multibox_methods import mcmultibox
-from mowl.representation.library.multibox_modules import ReleasedTables, released_names
+from mowl.representation.library.multibox_modules import ReleasedTables, in_chunks, released_names
 
 #: The forms the thesis defines a loss for.
 _FORMS = ("gci0", "gci1", "gci2", "gci3", "role_inclusion", "role_chain")
@@ -222,10 +222,8 @@ class VolumeMultiBoxELModule(ReleasedTables, ComposedGeometry):
                 f"The thesis (Aharoni 2024) defines no loss for '{form.replace('_loss', '')}'"
                 f"; VolumeMultiBoxELModule does not implement it.")
         step = self.rows_per_chunk("role" if form.startswith("role") else "concept")
-        if step is None or len(rows) <= step:
-            return super().cost(form, rows, neg)
-        return th.cat([super(VolumeMultiBoxELModule, self).cost(form, rows[i:i + step], neg)
-                       for i in range(0, len(rows), step)])
+        return in_chunks(lambda part: super(VolumeMultiBoxELModule, self).cost(form, part, neg),
+                         rows, step)
 
     def _unsupported(self, name):
         raise NotImplementedError(

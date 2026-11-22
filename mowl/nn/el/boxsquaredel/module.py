@@ -1,6 +1,3 @@
-import torch as th
-import torch.nn as nn
-
 from mowl.representation.geometry import ComposedGeometry
 from mowl.representation.library.multibox_methods import box2el
 from mowl.representation.library.multibox_modules import ReleasedTables, released_names
@@ -64,7 +61,7 @@ forms (minimal radius / offset norm of a satisfiable class). Defaults to ``0.01`
 
     def __init__(self, nb_ont_classes, nb_rels, nb_inds=None, embed_dim=50, gamma=0, delta=2,
                  reg_factor=0.05, all_negative_losses=False, epsilon=0.01):
-        rng_state = th.get_rng_state()
+        rng_state = self.rng_state()
         box2el(nb_ont_classes, nb_rels, nb_inds or 0, embed_dim=embed_dim, margin=gamma,
                delta=delta, reg_factor=reg_factor, all_negatives=all_negative_losses,
                epsilon=epsilon, into=self)
@@ -144,9 +141,3 @@ parameter ``all_negative_losses``) and extend :attr:`neg_capable_gcis` according
         if patched is not None:
             return patched
         return super().get_loss_function(gci_name)
-
-    def init_embeddings(self, num_entities, embed_dim, min=-1, max=1):
-        embeddings = nn.Embedding(num_entities, embed_dim)
-        nn.init.uniform_(embeddings.weight, a=min, b=max)
-        embeddings.weight.data /= th.linalg.norm(embeddings.weight.data, axis=1).reshape(-1, 1)
-        return embeddings

@@ -10,7 +10,7 @@ from mowl.representation.library.multibox_modules import (
     UnionModule, check_nonnegative, check_union_options, released_names)
 from mowl.representation.objectives import FORMS
 from mowl.representation.library.structural_methods import StructuralGeometry
-from mowl.representation.library.structural_regions import to_slots
+from mowl.representation.library.structural_regions import pad_slots, to_slots
 from mowl.training.regularization import NormPenalty
 
 _MULTIBOXEL_OBJECTIVES = _VALID_OBJECTIVES + ("structural",)
@@ -260,7 +260,7 @@ class MultiBoxELModule(UnionModule, StructuralGeometry):
             raise ValueError(f"reseed_every must be an int >= 0, got {reseed_every!r}")
         _check_reseed(bot_agg, witness_weight, reseed_mode, reseed_size, reseed_batch)
         structural = objective == "structural"
-        rng_state = th.get_rng_state()
+        rng_state = self.rng_state()
         multiboxel(
             nb_ont_classes, nb_rels, nb_inds or 0, embed_dim=embed_dim,
             margin=margin if structural else gamma, n_components=n_components, delta=delta,
@@ -415,15 +415,7 @@ class MultiBoxELModule(UnionModule, StructuralGeometry):
         inactive padding (``cen = 0``, ``w = -1``); a defined class is the intersection of its
         definers (:func:`~mowl.baselines.nn.el.multiboxel.structural_losses.pair_slots`)."""
         regions = to_slots(self.classes(idx.to(device=self.device, dtype=th.long))).slots
-        pad = self.max_components - regions.cen.shape[1]
-        if pad > 0:
-            b, _, d = regions.cen.shape
-            regions = Regions(
-                cen=th.cat([regions.cen, regions.cen.new_zeros((b, pad, d))], dim=1),
-                w=th.cat([regions.w, -th.ones_like(regions.w[:, :1]).expand(b, pad, d)],
-                         dim=1),
-                active=th.cat([regions.active, regions.active.new_zeros((b, pad))], dim=1))
-        return regions
+        return pad_slots(regions, self.max_components)
 
     def all_class_regions(self):
         """:class:`~mowl.nn.el.structural.Regions` of all classes on the CPU, without
