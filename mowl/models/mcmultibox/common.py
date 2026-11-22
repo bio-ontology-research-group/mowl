@@ -8,7 +8,6 @@ module.
 """
 import logging
 
-import torch as th
 
 from mowl.base_models.elmodel import EmbeddingELModel
 
@@ -84,14 +83,6 @@ class VolumeMultiBoxELOptions(EmbeddingELModel):
             logger.warning("VolumeMultiBoxEL: the thesis defines no loss for %s; these "
                            "axioms are not used for training.", skipped)
         return usable
-
-    @staticmethod
-    def _canonical_order(data):
-        """Sort rows lexicographically: the axiom order produced by the normaliser is not
-        stable between runs, and sorting makes training reproducible for a fixed seed."""
-        for col in reversed(range(data.shape[1])):
-            data = data[th.sort(data[:, col], stable=True).indices]
-        return data
 
     def eval_method(self, data):
         """Evaluation distance of thesis Section 7.1.2 for the GCI type ``eval_gci_name``."""

@@ -9,8 +9,6 @@ from __future__ import annotations
 
 from typing import Optional
 
-import numpy as np
-import torch as th
 
 from mowl.base_models.elmodel import EmbeddingELModel
 from mowl.datasets.el.points import (
@@ -18,6 +16,8 @@ from mowl.datasets.el.points import (
     build_or_load_point_supervision,
 )
 from mowl.geometric.normal_forms import BOTTOM, TOP
+from mowl.training.batching import epoch_rng
+from mowl.training.losses import MSETargetLoss
 from mowl.representation.library.structural_points import POINT_READINGS
 
 __all__ = ["MultiELBEOptions"]
@@ -132,7 +132,7 @@ class MultiELBEOptions(EmbeddingELModel):
         self._point_supervision: Optional[PointSupervision] = None
         self._loaded = False
         self.extended = False
-        self._mse_criterion = th.nn.MSELoss()
+        self._loss_part = MSETargetLoss(0.0, 1.0, reduce="mean_first")
         self.init_module()
 
     def init_module(self):
@@ -300,7 +300,7 @@ class MultiELBEOptions(EmbeddingELModel):
         ``points_seed + epoch``)."""
         ps = self._ensure_point_supervision()
         return ps.sample(self.points_per_epoch,
-                         rng=np.random.default_rng(self.points_seed + int(epoch)))
+                         rng=epoch_rng(self.points_seed, epoch))
 
     def _volume_classes(self):
         """The named classes the volume penalty covers: all but ``owl:Thing`` and

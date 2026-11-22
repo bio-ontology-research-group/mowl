@@ -1,7 +1,6 @@
 """MultiELBE model class."""
 from __future__ import annotations
 
-import torch as th
 
 from mowl.models.multielbe.common import MultiELBEOptions
 from mowl.nn import MultiELBEModule
@@ -147,15 +146,4 @@ class MultiELBE(MethodRegimes, MultiELBEOptions):
         Positive samples should have scores close to 0.
         Negative samples should have scores close to 1.
         """
-        pos_mean = th.mean(pos_scores)
-        loss = self._mse_criterion(
-            pos_mean, th.zeros_like(pos_mean, requires_grad=False)
-        )
-
-        if neg_scores is not None:
-            neg_mean = th.mean(neg_scores)
-            loss += self._mse_criterion(
-                neg_mean, th.ones_like(neg_mean, requires_grad=False)
-            )
-
-        return loss
+        return self._loss_part.combine(None, pos_scores, neg_scores)

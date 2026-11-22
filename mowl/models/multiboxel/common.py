@@ -11,7 +11,6 @@ from __future__ import annotations
 import os
 from typing import Optional, Tuple
 
-import numpy as np
 import torch as th
 import torch.nn as nn
 
@@ -21,6 +20,7 @@ from mowl.datasets.el.points import (
     build_or_load_point_supervision,
 )
 from mowl.geometric.normal_forms import BOTTOM, TOP
+from mowl.training.batching import epoch_rng
 from mowl.nn.el.structural import (
     DefinitionTable,
     ExistenceTargets,
@@ -350,7 +350,7 @@ class MultiBoxELOptions(EmbeddingELModel):
         - When ``tau_anneal=False``, leaves ``self.tau`` and ``self.module.tau``
           unchanged.
         - Under ``objective="structural"``, calls
-          ``module.reseed(np.random.default_rng(points_seed + epoch))`` when
+          ``module.reseed(epoch_rng(points_seed, epoch))`` when
           ``reseed_every > 0 and epoch > 0 and epoch % reseed_every == 0``.
 
         Non-guarantees:
@@ -375,13 +375,13 @@ class MultiBoxELOptions(EmbeddingELModel):
             and epoch > 0
             and epoch % self.reseed_every == 0
         ):
-            self.module.reseed(np.random.default_rng(self.points_seed + int(epoch)))
+            self.module.reseed(epoch_rng(self.points_seed, epoch))
 
     def reseed_components(self, epoch: int = 0) -> int:
         """Re-seed dead or idle components (:meth:`~mowl.nn.MultiBoxELModule.reseed`):
         the protocol of :class:`mowl.training.IdleComponentReseeding`, for use instead
         of the built-in ``reseed_every`` (leave that at 0 when the regime is used)."""
-        return self.module.reseed(np.random.default_rng(self.points_seed + int(epoch)))
+        return self.module.reseed(epoch_rng(self.points_seed, epoch))
 
     def _peek_checkpoint_witness_rows(self, path: Optional[str]) -> Optional[int]:
         """Return ``num_embeddings`` if ``witness_embed.weight`` is present in the checkpoint at ``path``."""
@@ -461,7 +461,7 @@ class MultiBoxELOptions(EmbeddingELModel):
         ``points_seed + epoch``)."""
         ps = self._ensure_point_supervision()
         return ps.sample(self.points_per_epoch,
-                         rng=np.random.default_rng(self.points_seed + int(epoch)))
+                         rng=epoch_rng(self.points_seed, epoch))
 
     def _volume_classes(self):
         """The named classes the volume penalty covers: all but ``owl:Thing`` and
