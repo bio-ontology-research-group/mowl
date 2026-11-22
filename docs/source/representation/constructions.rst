@@ -165,7 +165,7 @@ when it holds at every time point:
 
    0.0 1.0
 
-For a dataset, :class:`~mowl.models.ConstructedModel` builds the method with the ids of the
+For a dataset, :class:`~mowl.models.constructed.ConstructedModel` builds the method with the ids of the
 dataset's classes, relations and individuals. Its ``module`` scores axioms like the module of
 a trained model, so the evaluation regimes rank with it. ``train`` does nothing: the model
 is constructed when it is created.
@@ -174,7 +174,7 @@ is constructed when it is created.
 
    import logging
    from mowl.datasets.builtin import FamilyDataset
-   from mowl.models import ConstructedModel
+   from mowl.models.constructed import ConstructedModel
 
    logging.disable(logging.CRITICAL)
    dataset = FamilyDataset()

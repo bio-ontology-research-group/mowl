@@ -16,7 +16,7 @@ box_milp           box milp          boxes
 
 Every row is a :class:`~mowl.representation.construction.Recipe` registered with
 :func:`~mowl.representation.register_method` (``trained_on="construction"``), so
-``METHODS[key](data)`` builds the geometry, and :class:`~mowl.models.ConstructedModel`
+``METHODS[key](data)`` builds the geometry, and :class:`~mowl.models.constructed.ConstructedModel`
 builds it for a dataset. Any source can be combined with any reading that reads what it
 builds: the canonical model read as cones, as intervals or as faces of a simplex; the
 least model or a Boolean TBox read as intervals; a temporal model read as element sets.

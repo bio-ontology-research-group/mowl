@@ -18,7 +18,7 @@ class ConstructedModel(EmbeddingELModel):
     .. testcode::
 
        from mowl.datasets.builtin import FamilyDataset
-       from mowl.models import ConstructedModel
+       from mowl.models.constructed import ConstructedModel
 
        dataset = FamilyDataset()
        model = ConstructedModel(dataset, method="interval_union")

@@ -133,7 +133,7 @@ def test_the_classes_users_get_are_the_combinations(cm):
 
 
 def test_the_constructed_model_class(ranked):
-    from mowl.models import ConstructedModel
+    from mowl.models.constructed import ConstructedModel
     model = ConstructedModel(ranked, method="interval_union")
     assert model.parts["source"] == "canonical model"
     assert model.parts["reading"] == "intervals"
@@ -240,7 +240,7 @@ def test_swapped_parts_train_and_evaluate(ranked, key, swap):
     """A swapped combination is built ("trained" for one epoch: nothing to do), and an
     evaluation regime ranks with it: finite numbers."""
     from mowl.evaluation.normal_form_ranking import NormalFormRankingRegime
-    from mowl.models import ConstructedModel
+    from mowl.models.constructed import ConstructedModel
     model = ConstructedModel(ranked, method=key, **swap)
     model.train(epochs=1)
     if "reading" in swap:
@@ -256,7 +256,7 @@ def test_swapped_parts_train_and_evaluate(ranked, key, swap):
 @pytest.mark.parametrize("key", ["interval_union", "canonical_model"])
 def test_another_evaluation_regime_the_exact_model_check(ranked, key):
     from mowl.evaluation.exact_model import ExactModelRegime
-    from mowl.models import ConstructedModel
+    from mowl.models.constructed import ConstructedModel
     model = ConstructedModel(ranked, method="interval_union")
     if key == "canonical_model":
         # element sets are no regions of R^d: the exact-model check says it cannot read them
@@ -270,7 +270,7 @@ def test_another_evaluation_regime_the_exact_model_check(ranked, key):
 def test_box_milp_with_two_regimes_and_refused_swaps():
     from mowl.evaluation.exact_model import ExactModelRegime
     from mowl.evaluation.inclusion_accuracy import InclusionAccuracyRegime
-    from mowl.models import ConstructedModel
+    from mowl.models.constructed import ConstructedModel
     from mowl.geometric.errors import MissingDependency
     dataset = PathDataset(os.path.join(FIXTURES, "helly_ok.owl"))
     try:
@@ -398,7 +398,7 @@ def test_finite_model_conversions(cm):
 @pytest.mark.parametrize("reading", CELL_READINGS)
 def test_class_expressions_on_every_reading(ranked, reading):
     """logic_expressions evaluates compound classes on the constructed regions."""
-    from mowl.models import ConstructedModel
+    from mowl.models.constructed import ConstructedModel
     from mowl.owlapi import OWLAPIAdapter
     from mowl.representation.library.logic_expressions import (id_maps, rank_classes,
                                                                rank_individuals,
