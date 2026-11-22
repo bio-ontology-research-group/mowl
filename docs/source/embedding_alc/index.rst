@@ -18,6 +18,18 @@ FALCON, DF-ALC (:class:`~mowl.models.DFALCModel`) and Al-cone
 measure and an objective that read axioms with class expressions of any depth (see
 :doc:`/representation/combine`).
 
+Embed2Reason (:class:`~mowl.models.E2R`) reads its axioms as rows of one kind per form of the
+quantum logic, not as class expressions of any depth, so it is trained by
+:class:`~mowl.models.ComposedSubspace`, the general model for axis-parallel subspace
+geometries; ``E2R`` is that model with ``method="e2r"``, and its parts (the measure, the
+individual model, extra regularisers) can be replaced like those of the other composed models.
+
+.. testcode::
+
+   from mowl.models import ComposedSubspace, E2R
+
+   assert issubclass(E2R, ComposedSubspace)
+
 Reproducing the Family experiment
 ---------------------------------
 

@@ -48,3 +48,21 @@ a dataset together with one of these regimes.
 
    deductive
    faithfulness
+
+Scoring and violation helpers
+-----------------------------
+
+Small evaluation parts that any model of the right kind can use:
+:func:`~mowl.evaluation.model_scoring.pair_costs` is the cost a model's module gives to
+subsumption pairs given as class IRIs or indices, :func:`~mowl.evaluation.score_ranking.rank_by_score`
+orders names by cost with ties kept in order,
+:func:`~mowl.evaluation.fuzzy_violation.violated_axioms` lists the training axioms a fuzzy
+interpretation violates (Eq. 6 of DF-ALC) and
+:func:`~mowl.evaluation.subspace_violation.discretised_violations` decides the axioms of a
+rounded subspace embedding with set operations.
+
+.. testcode::
+
+   from mowl.evaluation.score_ranking import rank_by_score
+
+   assert rank_by_score(["a", "b", "c"], [0.5, 0.1, 0.5]) == ["b", "a", "c"]

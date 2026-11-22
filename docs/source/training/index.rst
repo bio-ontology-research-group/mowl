@@ -265,3 +265,37 @@ cached:
 
 See :mod:`mowl.training.closure` for exactly which rules are applied, and
 :doc:`/evaluation/deductive` for the matching evaluation regime.
+
+Pairs of named classes: data and negatives
+------------------------------------------
+
+The order and lattice embeddings (order embeddings, box lattices, Gumbel boxes, entailment
+cones, shadow cones, disk embeddings) train on the told pairs :math:`C \sqsubseteq D` between
+named classes only. :mod:`mowl.training.taxonomy` has the data side as three functions that
+work for any model that trains on two-column rows: :func:`~mowl.training.taxonomy.named_pair_rows`
+keeps the rows made of named classes, sorted and without duplicates,
+:func:`~mowl.training.taxonomy.pair_codes` codes the told pairs as integers and
+:func:`~mowl.training.taxonomy.redraw_known_pairs` draws again every corruption that is a told
+(or reflexive) pair, for all rows at once.
+
+.. testcode::
+
+   import numpy as np
+   import torch as th
+   from mowl.training.taxonomy import named_pair_rows, pair_codes, redraw_known_pairs
+
+   rows = th.tensor([[3, 1], [0, 5], [3, 1], [2, 2], [0, 1]])
+   told = named_pair_rows(rows, 4, distinct=True)      # [[0, 1], [3, 1]]
+   corruptions = th.tensor([[0, 1], [3, 3]])
+   fresh = redraw_known_pairs(corruptions, 2, [1], pair_codes(told, 4), 4, np.arange(4))
+   assert not (fresh[:, 0] == fresh[:, 1]).any()
+
+:class:`~mowl.training.SumLoss` takes ``positive_floor=True`` for modules whose score of a
+stated axiom is a signed energy (disk embeddings, Eq. 10 and 11): the hinge
+:math:`\max(0, s^+)` of the positives is summed with the mean cost of the negatives.
+
+.. testcode::
+
+   from mowl.training import SumLoss
+
+   loss = SumLoss(positive_floor=True)
