@@ -36,6 +36,7 @@ _NOTE = "Untuned default of the joint benchmarks."
 _DEFAULTS = {
     # normal-form EL models: the training procedure of the Box2EL code, shorter
     "emelvar": dict(_EL, model_kwargs={"embed_dim": 200, "load_role_axioms": True}),
+    "composed": dict(_EL, model_kwargs={"embed_dim": 200}),
     "regd": dict(_EL, model_kwargs={"embed_dim": 200}),
     "regd_elem": dict(_EL, model_kwargs={"embed_dim": 200}),
     "octagon": dict(_EL, model_kwargs={"embed_dim": 200}),

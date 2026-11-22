@@ -84,6 +84,7 @@ they use as relations?
 
 .. testoutput::
 
+   composed - translation
    box2el - head and tail boxes
    boxel - affine map
    boxsel - affine map

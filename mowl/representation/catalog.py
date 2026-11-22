@@ -149,6 +149,9 @@ REPRESENTATIONS = {
         notes="Two spaces: ellipsoids for what a class contains and vectors, optionally "
               "from a language model, for what it means. Relations only hold between "
               "individuals."),
+    "composed": _el((C.BALL, C.BOX), R.TRANSLATION, I.REGION, (M.CENTRE_DISTANCE, M.BOUNDS),
+                    notes="Whatever parts are chosen; the entry lists the parts that can "
+                          "be chosen."),
     # ---- hierarchies ---------------------------------------------------------------------
     "order_embeddings": _hierarchy(C.ORDER_CONE, M.ORDER_VIOLATION),
     "cate": Representation(

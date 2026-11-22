@@ -47,7 +47,7 @@ class TestParts(TestCase):
 
     def test_listing_by_parts(self):
         boxes = {c.key for c in list_methods(parts=(ClassModel.BOX, View.NORMAL_FORMS))}
-        self.assertEqual(boxes, {"box2el", "boxel", "boxsel", "elbe", "elkem", "regd",
+        self.assertEqual(boxes, {"box2el", "boxel", "boxsel", "composed", "elbe", "elkem", "regd",
                                  "transbox"})
         self.assertEqual({c.key for c in list_methods(parts=Composable.MOSTLY)},
                          {"box2el", "multiboxel", "bcbox"})
