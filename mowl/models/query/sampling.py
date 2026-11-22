@@ -41,10 +41,10 @@ def ground(template, answer, graph, rng, max_tries=20):
     if k == "a":
         return anchor(answer)
     if k == "p":
-        incoming = graph.inc.get(answer)
+        incoming = (graph.incoming(answer) if hasattr(graph, "incoming")
+                    else tuple(sorted(graph.inc.get(answer, ()))))
         if not incoming:
             return None
-        incoming = sorted(incoming)
         head, relation = incoming[int(rng.integers(len(incoming)))]
         child = ground(template.children[0], head, graph, rng, max_tries)
         return None if child is None else project(relation, child)

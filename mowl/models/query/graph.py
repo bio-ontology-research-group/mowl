@@ -29,6 +29,17 @@ class QueryGraph:
             self.out[(h, r)].add(t)
             self.inc[t].add((h, r))
         self.universe = set(range(num_entities))
+        self._incoming = {}
+
+    def incoming(self, entity):
+        """The ``(head, relation)`` pairs of the edges into ``entity``, sorted (computed once
+        per entity: the training sampler draws from it in every step, and the classes near
+        the root of a large taxonomy have hundreds of thousands)."""
+        out = self._incoming.get(entity)
+        if out is None:
+            out = tuple(sorted(self.inc.get(entity, ())))
+            self._incoming[entity] = out
+        return out
 
     def successors(self, entity, relation):
         return self.out.get((entity, relation), set())
