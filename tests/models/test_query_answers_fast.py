@@ -125,5 +125,7 @@ def test_the_cost_of_a_sampled_step_does_not_grow_with_the_ontology():
                 sampling.sample_query(template, g, r, pool)
         return time.perf_counter() - t
 
-    small, big = step_time(1000), step_time(8000)
+    # Best of several runs: a single wall-clock measurement is unreliable on a busy machine.
+    small = min(step_time(1000) for _ in range(5))
+    big = min(step_time(8000) for _ in range(5))
     assert big < 6 * small + 0.05, (small, big)
