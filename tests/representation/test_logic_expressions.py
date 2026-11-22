@@ -8,7 +8,7 @@ from mowl.models.e2r.model import E2R
 from mowl.representation import geometry_of, ConstructorUnavailable, METHODS
 from mowl.representation.library.logic_expressions import (
     expression_region, subsumption_cost, rank_classes, rank_individuals, id_maps)
-from mowl.representation.library.logic_subspace import E2RGeometry
+from mowl.representation.library.logic_subspace import SubspaceGeometry
 from tests.representation.test_logic_fuzzy import (
     AD, CLS, R, IND, CLASS_IDS, PROP_IDS, IND_IDS, NS, small_dataset)
 
@@ -152,7 +152,7 @@ class TestFuzzyAndSubspace(TestCase):
         model = E2R(small_dataset(), embed_dim=4)
         maps = id_maps(model)
         g = geometry_of(model)
-        self.assertIsInstance(g, E2RGeometry)
+        self.assertIsInstance(g, SubspaceGeometry)      # the geometry of E2R is its module
         for expression in (inter(A, B), union(A, neg(C)), neg(inter(B, C))):
             region = expression_region(model, expression, *maps)
             self.assertTrue(th.allclose(region.indicator[0],

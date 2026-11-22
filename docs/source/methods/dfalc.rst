@@ -25,11 +25,22 @@ domain (the paper's :math:`\Delta^I = N_I`), optionally extended by anonymous el
 What mOWL implements
 --------------------
 
-* :class:`~mowl.models.dfalc.model.DFALCModel` (catalogue key ``dfalc``), a subclass of
-  :class:`~mowl.base_models.EmbeddingALCModel`, with the module
-  :class:`~mowl.nn.alc.dfalc.module.DFALCModule`. It reuses the ALC dataset and the generic
-  training loop, and scores axioms for the joint benchmarks (``axiom_scoring="method"``,
-  forms ``gci0``-``gci3``) with the hierarchical loss of the candidate inclusion.
+* :class:`~mowl.models.dfalc.model.DFALCModel` (catalogue key ``dfalc``), a combination of parts:
+  :class:`~mowl.models.ComposedALC` with the method ``"dfalc"``
+  (:func:`mowl.representation.library.logic_fuzzy.dfalc`), whose module
+  :class:`~mowl.nn.alc.dfalc.module.DFALCModule` is a :class:`~mowl.representation.Geometry`.
+  The class model is :class:`~mowl.representation.library.logic_fuzzy.TruthTableClasses`
+  (truth values over the domain), the relation model
+  :class:`~mowl.representation.library.logic_fuzzy.TruthMatrix`, the operators those of the
+  Gödel family, the measure :class:`~mowl.representation.library.logic_fuzzy.MeanViolation`
+  (the hierarchical loss) and the objective
+  :class:`~mowl.representation.library.logic_fuzzy.FuzzyObjective` (``rule=True`` for the
+  rule-based losses). Every part can be exchanged (another operator family, the measure of
+  FALCON, ...), see :doc:`/representation/combine`. It reuses the ALC dataset and the
+  training loop of :class:`~mowl.models.ComposedALC`, and scores axioms for the joint
+  benchmarks (``axiom_scoring="method"``, forms ``gci0``-``gci3``) with the hierarchical loss
+  of the candidate inclusion. The hand-written implementation it replaces is kept for
+  comparison in :mod:`mowl.baselines.models.dfalc`.
 * Axiom forms: ``SubClassOf``, ``EquivalentClasses`` and ``DisjointClasses`` between
   arbitrary :math:`\mathcal{ALC}` class expressions, class assertions and object property
   assertions (a fuzzy assertion with truth value 1; the loss is the distance to 1).
@@ -138,3 +149,19 @@ Example
 .. testoutput::
 
    True
+
+The parts of the method can be read back, and exchanged:
+
+.. testcode::
+
+   from mowl.representation import METHODS
+
+   geometry = METHODS["dfalc"](6, 2, 3, embed_dim=4)
+   print(type(geometry.class_model).__name__, type(geometry.measure).__name__)
+   product = METHODS["dfalc"](6, 2, 3, embed_dim=4, family="product")
+   print(type(product.class_model.family).__name__)
+
+.. testoutput::
+
+   TruthTableClasses MeanViolation
+   Product

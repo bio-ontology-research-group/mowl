@@ -8,9 +8,9 @@ from java.util import HashSet
 
 from mowl.datasets import Dataset
 from mowl.models import ComposedEL
-from mowl.nn.alc.alcone.module import ALConeModule
-from mowl.nn.alc.dfalc.module import DFALCModule
-from mowl.nn.alc.falcon.module import FALCONModule
+from mowl.baselines.nn.alc.alcone.module import ALConeModule
+from mowl.baselines.nn.alc.dfalc.module import DFALCModule
+from mowl.baselines.nn.alc.falcon.module import FALCONModule
 from mowl.owlapi import OWLAPIAdapter
 from mowl.representation import geometry_of, ComposedGeometry, METHODS
 from mowl.representation.library import logic_fuzzy as F

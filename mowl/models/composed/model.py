@@ -12,7 +12,9 @@ from mowl.representation.objectives import Objective
 
 #: Where the methods that are not trained on axioms are trained.
 _TRAINERS = {"queries": "mowl.models.query",
-             "sequences": "mowl.models.ComposedSequenceModel"}
+             "sequences": "mowl.models.ComposedSequenceModel",
+             "expressions": "mowl.models.ComposedALC",
+             "construction": "mowl.models.constructed.ConstructedModel"}
 
 
 class ComposedEL(EmbeddingELModel):
@@ -72,13 +74,14 @@ class ComposedEL(EmbeddingELModel):
         if method is not None and method not in M.METHODS:
             raise ValueError(f"Unknown method {method!r}; available: {sorted(M.METHODS)}.")
         if method is not None and M.METHOD_KINDS.get(method, "axioms") != "axioms":
+            kind = M.METHOD_KINDS[method]
             raise TypeError(
-                f"The method {method!r} is trained on {M.METHOD_KINDS[method]}, not on "
+                f"The method {method!r} is trained on {kind}, not on "
                 f"normal-form axioms, so ComposedEL cannot train it. Methods that ComposedEL "
                 f"trains: "
                 f"{sorted(k for k in M.METHODS if M.METHOD_KINDS.get(k) == 'axioms')}; "
                 f"for {method!r} see "
-                f"{_TRAINERS.get(M.METHOD_KINDS[method], 'mowl.models.query')}.")
+                f"{_TRAINERS.get(kind, 'mowl.models.query')}.")
         if method is None and method_options:
             raise TypeError(f"Unexpected arguments {sorted(method_options)}.")
         self.method = method

@@ -36,8 +36,8 @@ import torch as th
 from mowl.owlapi import ClassExpressionType
 from mowl.representation.regions import ConstructorUnavailable
 
-__all__ = ["expression_region", "subsumption_cost", "rank_classes", "rank_individuals",
-           "id_maps", "THING", "NOTHING"]
+__all__ = ["expression_region", "pattern_region", "subsumption_cost", "rank_classes",
+           "rank_individuals", "id_maps", "THING", "NOTHING"]
 
 THING = "http://www.w3.org/2002/07/owl#Thing"
 NOTHING = "http://www.w3.org/2002/07/owl#Nothing"
@@ -210,6 +210,74 @@ def expression_region(geometry, expression, class_to_id, object_property_to_id,
     ev = _evaluator(geometry, class_to_id, object_property_to_id, individual_to_id)
     region = ev.evaluate(_as_expression(expression))
     return (region, ev.gap) if with_gap else region
+
+
+def pattern_region(geometry, expression, x, start=0, with_gap=False):
+    """The regions of a class expression *pattern* for a batch of rows: the form in which the
+    ALC datasets (:class:`~mowl.datasets.alc.ALCDataset`) give their axioms. The expression
+    is a pattern (its named classes and properties are placeholders), and the row ``x[b]``
+    holds the ids that fill it, in the order in which the names occur: a named class takes
+    one column, :math:`\\exists r.C` and :math:`\\forall r.C` the column of ``r`` followed by
+    those of ``C``, :math:`\\sqcap`, :math:`\\sqcup` the columns of their operands, :math:`\\neg`
+    those of its operand.
+
+    It uses the same constructors as :func:`expression_region` (:math:`\\forall r.C` as
+    :math:`\\neg\\exists r.\\neg C`), only for ``B`` rows at once.
+
+    :param geometry: Any :class:`~mowl.representation.Geometry`.
+    :param expression: The pattern (an OWL API class expression).
+    :param x: ``LongTensor (B, k)``.
+    :param start: The column where the pattern starts.
+    :param with_gap: Also return the sum of the gaps of the conjunctions of the pattern, or
+        ``None`` if it has none.
+    :returns: ``(region, next column)``, and the gap if ``with_gap``.
+    :raises ConstructorUnavailable: If the geometry lacks a constructor the pattern uses.
+    """
+    from mowl.representation.adapters import geometry_of
+    geometry = geometry_of(geometry)
+    gaps = []
+
+    def call(name, what, *args):
+        try:
+            return getattr(geometry, name)(*args)
+        except ConstructorUnavailable as error:
+            raise ConstructorUnavailable(
+                f"{error} A class expression with {what} cannot be evaluated by "
+                f"{type(geometry).__name__}.") from None
+
+    def walk(e, column):
+        t = e.getClassExpressionType()
+        if t == _T.OWL_CLASS:
+            return geometry.classes(x[:, column]), column + 1
+        if t in (_T.OBJECT_SOME_VALUES_FROM, _T.OBJECT_ALL_VALUES_FROM):
+            relation = x[:, column]
+            filler, column = walk(e.getFiller(), column + 1)
+            if t == _T.OBJECT_SOME_VALUES_FROM:
+                return call("exists", "an existential restriction", relation, filler), column
+            inner = call("negation", "a universal restriction (as not exists not)", filler)
+            some = call("exists", "a universal restriction (as not exists not)", relation, inner)
+            return call("negation", "a universal restriction (as not exists not)", some), column
+        if t in (_T.OBJECT_INTERSECTION_OF, _T.OBJECT_UNION_OF):
+            operands = e.getOperandsAsList()
+            out, column = walk(operands[0], column)
+            for operand in operands[1:]:
+                other, column = walk(operand, column)
+                if t == _T.OBJECT_INTERSECTION_OF:
+                    out, gap = call("conjunction", "an intersection", out, other)
+                    gaps.append(gap)
+                else:
+                    out = call("disjunction", "a union", out, other)
+            return out, column
+        if t == _T.OBJECT_COMPLEMENT_OF:
+            region, column = walk(e.getOperand(), column)
+            return call("negation", "a complement", region), column
+        raise ConstructorUnavailable(f"The class expression type {t} is not supported "
+                                     f"(only named classes, ⊓, ⊔, ¬, ∃ and ∀).")
+
+    region, column = walk(expression, start)
+    if not with_gap:
+        return region, column
+    return region, column, (sum(gaps[1:], gaps[0]) if gaps else None)
 
 
 def _expand(region, n):

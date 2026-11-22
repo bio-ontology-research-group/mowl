@@ -1,4 +1,4 @@
-r"""Losses of the learnable al-cone model (:class:`~mowl.nn.alc.alcone.module.ALConeModule`).
+r"""Losses of the learnable al-cone model (:class:`~mowl.baselines.nn.alc.alcone.module.ALConeModule`).
 
 The published al-cone papers (Özçep, Leemhuis & Wolter, IJCAI 2020; JAIR 78, 2023) give
 the geometry and model constructions but no learning objective for ontology embedding

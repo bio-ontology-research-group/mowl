@@ -74,7 +74,14 @@ and two constructions:
   (:meth:`~mowl.geometric.cones.ALConeInterpretation.from_ontology`).
 
 :class:`~mowl.models.alcone.model.ALConeModel` (catalogue key ``alcone``) is a learned
-version. The papers give no learning algorithm for ontology embedding (JAIR Sec. 7), so the
+version, a combination of parts: half-axis logits as the class model
+(:class:`~mowl.representation.library.logic_fuzzy.HalfAxisClasses`), incidence matrices as the
+relation model, Gödel operators on logits, the half-axis hinge
+(:class:`~mowl.representation.library.logic_fuzzy.ConeMeasure`) as the measure, a penalty
+against empty classes
+(:class:`~mowl.representation.library.logic_fuzzy.NonDegeneracy`) and an annealed training
+schedule (:class:`~mowl.representation.library.logic_alc.AnnealedRelaxation`), see
+:func:`mowl.representation.library.logic_fuzzy.alcone`. The papers give no learning algorithm for ontology embedding (JAIR Sec. 7), so the
 objective is ours: every concept has two logits per coordinate (one per half-axis, so the
 discretised factor is one of :math:`\{0\}, \mathbb{R}^+, \mathbb{R}^-, \mathbb{R}`), roles
 have incidence logits and individuals support logits. Complex concepts are evaluated with

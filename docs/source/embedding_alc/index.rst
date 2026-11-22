@@ -12,6 +12,12 @@ terms (concept and relation assertions), weighted by ``alpha`` and ``beta``
 (:math:`\mathcal{L} = \alpha\,\mathcal{L}_T + \beta\,\mathcal{L}_{A_1} +
 (1-\alpha-\beta)\,\mathcal{L}_{A_2}`).
 
+FALCON, DF-ALC (:class:`~mowl.models.DFALCModel`) and Al-cone
+(:class:`~mowl.models.ALConeModel`) are combinations of parts, as is any other model that
+:class:`~mowl.models.ComposedALC` puts together from a class model, a relation model, a
+measure and an objective that read axioms with class expressions of any depth (see
+:doc:`/representation/combine`).
+
 Reproducing the Family experiment
 ---------------------------------
 

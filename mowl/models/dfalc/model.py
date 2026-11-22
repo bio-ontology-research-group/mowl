@@ -2,8 +2,8 @@
 import numpy as np
 import torch as th
 
-from mowl.base_models.alcmodel import EmbeddingALCModel
-from mowl.nn.alc.dfalc.module import DFALCModule
+from mowl.models.composed.alc import ComposedALC
+from mowl.nn.alc.dfalc.module import DFALCModule, hierarchical_loss
 
 _THING = "http://www.w3.org/2002/07/owl#Thing"
 _NOTHING = "http://www.w3.org/2002/07/owl#Nothing"
@@ -16,7 +16,7 @@ def _names(index_dict):
     return out
 
 
-class DFALCModel(EmbeddingALCModel):
+class DFALCModel(ComposedALC):
     """Differentiable fuzzy :math:`\\mathcal{ALC}` (Wu et al., 2022, arXiv:2211.12006).
 
     The learned object is a *grounding*: the fuzzy interpretation over a finite domain
@@ -51,6 +51,16 @@ class DFALCModel(EmbeddingALCModel):
     :param learning_rate: Adam learning rate. Defaults to ``0.05``.
     :param batch_size: Batch size of the axiom loaders.
     :param init_std: Standard deviation of the logit initialisation.
+
+    The model is a combination of parts (:class:`~mowl.models.ComposedALC` with the method
+    ``"dfalc"``, see :func:`mowl.representation.library.logic_fuzzy.dfalc`): its module
+    (:class:`~mowl.nn.alc.dfalc.module.DFALCModule`) is a
+    :class:`~mowl.representation.Geometry` whose class model is
+    :class:`~mowl.representation.library.logic_fuzzy.TruthTableClasses`, relation model
+    :class:`~mowl.representation.library.logic_fuzzy.TruthMatrix`, measure
+    :class:`~mowl.representation.library.logic_fuzzy.MeanViolation` and objective
+    :class:`~mowl.representation.library.logic_fuzzy.FuzzyObjective`. The hand-written
+    implementation it replaces is :class:`mowl.baselines.models.dfalc.model.DFALCModel`.
     """
 
     scored_forms = ("gci0", "gci1", "gci2", "gci3")
@@ -63,15 +73,14 @@ class DFALCModel(EmbeddingALCModel):
         if n < 1:
             raise ValueError("The ontology has no individuals: set anon_domain > 0 to give "
                              "the fuzzy interpretation a domain.")
-        super().__init__(dataset, embed_dim=n, batch_size=batch_size, alpha=alpha,
-                         beta=beta, anon_e=0, learning_rate=learning_rate,
-                         model_filepath=model_filepath, device=device)
         self.anon_domain = anon_domain
         self.loss_type = loss_type
         self.init_std = init_std
         self.threshold = threshold
         self.ndomain = n
-        self.init_module()
+        super().__init__(dataset, method="dfalc", embed_dim=n, batch_size=batch_size,
+                         alpha=alpha, beta=beta, anon_e=0, learning_rate=learning_rate,
+                         model_filepath=model_filepath, device=device)
 
     def init_module(self):
         cid = self.class_index_dict
@@ -81,13 +90,7 @@ class DFALCModel(EmbeddingALCModel):
             loss_type=self.loss_type, init_std=self.init_std,
             threshold=self.threshold).to(self.device)
 
-    # The domain is explicit: no sampled entities.
-    def sample_anonymous_entities(self):
-        return None
-
-    def _entity_context(self, anon_e_emb):
-        return None
-
+    # The domain is explicit: no sampled entities (``anon_e=0``).
     def _scoring_context(self):
         # Only its shape is used by the base class to bound the size of a scoring chunk
         # (rows x |Δ|^2 truth values for the role matrices).
@@ -202,14 +205,12 @@ class DFALCModel(EmbeddingALCModel):
 
     # -- scores --------------------------------------------------------------------------
     def _subsumption_costs(self, sub, sup, x, e_emb):
-        from mowl.nn.alc.dfalc.module import hierarchical_loss
         c, nxt = self.module.forward_fs(sub, x, e_emb)
         d, _ = self.module.forward_fs(sup, x, e_emb, cur_index=nxt)
         return hierarchical_loss(c, d)
 
     def score_subsumption(self, sub, sup):
         """Score of :math:`A \\sqsubseteq B` for class IRIs: minus the hierarchical loss."""
-        from mowl.nn.alc.dfalc.module import hierarchical_loss
         cid = self.class_index_dict
         idx = th.tensor([cid[sub], cid[sup]], device=self.device)
         with th.no_grad():

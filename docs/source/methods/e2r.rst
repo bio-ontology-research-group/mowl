@@ -40,7 +40,7 @@ The paper works in :math:`\mathbb{C}^d` over the field :math:`\mathbb{R}`, i.e. 
 :math:`\mathbb{R}^{2d}` (real half, imaginary half). A concept is a relaxed 0/1 indicator
 :math:`y \in [0, 1]^{2d}` that uses the real half only, a relation an indicator :math:`z`
 with at least one real and one imaginary axis, an entity a unit vector :math:`(x_R, 0)`.
-:mod:`mowl.nn.alc.e2r.losses` implements eqs. (1)-(12): structure terms, binarity,
+:mod:`mowl.representation.library.logic_subspace_algebra` implements eqs. (1)-(12): structure terms, binarity,
 membership (residual of the projection), inclusion :math:`\|y_i \odot (1 - y_j)\|^2`,
 conjunction (product), disjunction (max), negation, the universal type restriction
 (eq. 9), and the regularisers against *subspace collapse* (sibling orthogonality,
@@ -56,6 +56,20 @@ intersection, a union or a complement, ``DisjointClasses``, ``SubObjectPropertyO
 restriction :math:`\forall R.C` means "every :math:`R`-successor is in :math:`C`", a range
 constraint. Existential restrictions have no loss and are listed in
 ``model.skipped_axioms``.
+
+The model is a combination of parts (the method ``e2r``,
+:func:`mowl.representation.library.logic_subspace.e2r`, trained on expressions rather than on
+normal forms): subspaces as the class model
+(:class:`~mowl.representation.library.logic_subspace.SubspaceClasses`), subspaces of *pairs*
+as the relation model, vectors for individuals, the operators of the subspace algebra
+(meet, span, orthogonal complement), the residual of the projection as the measure
+(:class:`~mowl.representation.library.logic_subspace.ResidualMeasure`), one equation of
+the paper per kind of axiom as the objective
+(:class:`~mowl.representation.library.logic_subspace.SubspaceObjective`) and the structure
+terms and regularisers as regularisers. Its module :class:`~mowl.nn.alc.e2r.module.E2RModule`
+is a :class:`~mowl.representation.Geometry`, so class expressions built from named classes
+are evaluated with :func:`~mowl.representation.library.logic_expressions.expression_region`.
+The hand-written module it replaces is kept for comparison in :mod:`mowl.baselines.nn.alc.e2r`.
 
 Ranking for membership queries uses the residual length
 :math:`\|(1 - y) \odot x\|` (lower is better, Sec. 5): see

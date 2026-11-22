@@ -7,8 +7,9 @@ import numpy as np
 import torch as th
 
 from mowl.base_models.model import Model
-from mowl.nn.alc.e2r import losses as L
 from mowl.nn.alc.e2r.module import AXIOM_KINDS, E2RModule
+from mowl.representation.library import logic_subspace_algebra as L
+from mowl.representation.library.logic_subspace import Orthogonality, Separation, SubspaceStructure
 from mowl.owlapi import ClassExpressionType, Imports
 
 _THING = "http://www.w3.org/2002/07/owl#Thing"
@@ -61,7 +62,7 @@ class E2R(Model):
     disjunction and negation (eqs. (6)-(8) for relations) are implemented in the module,
     but OWL 2 has no syntax for them, so the model never produces them.
 
-    Deviations from the paper (see also :mod:`mowl.nn.alc.e2r.losses`):
+    Deviations from the paper (see also :mod:`mowl.baselines.nn.alc.e2r.losses`):
 
     * the second term of eq. (4) is omitted (as printed it is not zero in the situation
       where the text says it is); pair vectors are built from entity vectors, so the
@@ -95,7 +96,7 @@ class E2R(Model):
         :math:`C_j`).
     :param max_sibling_pairs: Upper bound on the sibling pairs used by eq. (11); larger
         sets are subsampled once. Defaults to ``100000``.
-    :param role_unit_length: See :class:`~mowl.nn.alc.e2r.module.E2RModule`.
+    :param role_unit_length: See :class:`~mowl.baselines.nn.alc.e2r.module.E2RModule`.
     :param seed: Seed of the Python random generator used for subsampling.
     """
 
@@ -136,6 +137,15 @@ class E2R(Model):
             len(self._iid), len(self._cid), len(self._rid), dim=self.embed_dim,
             top_index=self._cid.get(_THING), bottom_index=self._cid.get(_NOTHING),
             role_unit_length=self.role_unit_length).to(self.device)
+        # the terms of the objective that are not axioms: structure of the indicators (eqs.
+        # (1)-(3)), siblings orthogonal (eq. (11)), separation of a class from its parents
+        # (eq. (12)); the pairs are read from the told hierarchy
+        self.structure = SubspaceStructure()
+        self.orthogonality = Orthogonality(self.reg_orth, self.sibling_pairs,
+                                           self.role_sibling_pairs)
+        self.separation = Separation(self.reg_sep, self.sep_gap, self.separation_pairs,
+                                     self.role_separation_pairs)
+        self.module.regularizers = (self.structure, self.orthogonality, self.separation)
 
     # -- axiom extraction ---------------------------------------------------------------
     def _named_class(self, cexpr):
@@ -414,7 +424,9 @@ class E2R(Model):
         """The E2R objective (eq. (10) with regularisers and negatives) on one random
         batch per axiom kind (``full=True``: on all rows)."""
         m = self.module
-        loss = m.structure_loss(self._class_idx)
+        self.orthogonality.weight, self.separation.weight = self.reg_orth, self.reg_sep
+        self.separation.gap = self.sep_gap
+        loss = self.structure.penalty(m)
         for key, rows in self.training_rows.items():
             kind = self._kind(key)
             batch = rows if full else self._batch(rows)
@@ -424,16 +436,8 @@ class E2R(Model):
                 neg = self._negatives(batch, kind)
                 if len(neg) > 0:
                     loss = loss + self.negative_weight * m(kind, neg, neg=True).mean()
-        if self.reg_orth > 0:
-            for pairs, rel in ((self.sibling_pairs, False), (self.role_sibling_pairs, True)):
-                if len(pairs) > 0:
-                    loss = loss + self.reg_orth * m.orthogonality_loss(pairs, rel).mean()
-        if self.reg_sep > 0:
-            for pairs, rel in ((self.separation_pairs, False),
-                               (self.role_separation_pairs, True)):
-                if len(pairs) > 0:
-                    loss = loss + self.reg_sep * m.separation_loss(
-                        pairs, self.sep_gap, rel).mean()
+        for term in self.orthogonality.terms(m) + self.separation.terms(m):
+            loss = loss + term
         return loss
 
     def total_loss(self):

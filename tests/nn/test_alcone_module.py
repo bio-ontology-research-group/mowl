@@ -15,7 +15,7 @@ import torch as th
 from mowl.geometric.cones import (ALCone, ALConeChecker, ALConeInterpretation, And,
                                   Atomic, BOTTOM_CONCEPT, ConceptAssertion, Exists, Forall,
                                   GCI, Not, Or, RoleAssertion, TOP_CONCEPT)
-from mowl.nn.alc.alcone import losses as L
+from mowl.baselines.nn.alc.alcone import losses as L  # the formulas of the direct module: the oracle
 from mowl.nn.alc.alcone.module import ALConeModule
 from mowl.owlapi import OWLAPIAdapter
 

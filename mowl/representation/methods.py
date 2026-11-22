@@ -30,8 +30,9 @@ DEFAULT_MEASURE = {Ball: CentreDistance, Box: Bounds}
 #: Catalogue key -> function building the method from parts.
 METHODS = {}
 #: Catalogue key -> what the method is trained on: ``"axioms"`` (normal-form axioms, what
-#: :class:`~mowl.models.ComposedEL` trains), ``"queries"`` (query answering) or
-#: ``"sequences"`` (walks and sentences, :class:`~mowl.models.ComposedSequenceModel`).
+#: :class:`~mowl.models.ComposedEL` trains), ``"queries"`` (query answering),
+#: ``"sequences"`` (walks and sentences, :class:`~mowl.models.ComposedSequenceModel`),
+#: ``"expressions"`` (ALC axioms, :class:`~mowl.models.ComposedALC`) or ``"construction"``.
 METHOD_KINDS = {}
 
 
@@ -74,7 +75,7 @@ def register_measure(name, default_for=()):
 
 
 #: What a registered method is fitted on.
-TRAINED_ON = ("axioms", "queries", "sequences", "construction")
+TRAINED_ON = ("axioms", "queries", "sequences", "construction", "expressions")
 
 
 def register_method(key, trained_on="axioms"):
@@ -92,6 +93,11 @@ def register_method(key, trained_on="axioms"):
         :class:`~mowl.models.ComposedSequenceModel` trains.
         ``"construction"``: nothing is trained; the function builds the model from the data
         (:mod:`mowl.representation.construction`; signature ``(data, **options)``).
+        ``"expressions"``: the method is trained on ALC axioms, whose class expressions have
+        any depth (:class:`~mowl.models.ComposedALC`); ``ComposedEL`` refuses it. (Methods
+        whose geometry reads both, such as ``dfalc``, ``falcon`` and ``alcone``, are
+        registered as ``"axioms"``: ``ComposedEL`` trains them on the normal forms,
+        ``ComposedALC`` on the ALC axioms.)
     """
     if trained_on not in TRAINED_ON:
         raise ValueError(f"trained_on must be one of {TRAINED_ON}.")

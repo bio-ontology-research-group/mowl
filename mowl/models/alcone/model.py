@@ -1,14 +1,14 @@
 """Learnable axis-aligned cone (al-cone) embeddings for :math:`\\mathcal{ALC}`."""
 import torch as th
 
-from mowl.base_models.alcmodel import EmbeddingALCModel
+from mowl.models.composed.alc import ComposedALC
 from mowl.nn.alc.alcone.module import ALConeModule
 
 _THING = "http://www.w3.org/2002/07/owl#Thing"
 _NOTHING = "http://www.w3.org/2002/07/owl#Nothing"
 
 
-class ALConeModel(EmbeddingALCModel):
+class ALConeModel(ComposedALC):
     """Al-cone embedding of an :math:`\\mathcal{ALC}` ontology (adaptation).
 
     The geometry is that of Özçep, Leemhuis & Wolter (JAIR 78, 2023): concepts are
@@ -18,7 +18,7 @@ class ALConeModel(EmbeddingALCModel):
     ours: every concept, role and individual is a vector of half-axis logits, complex
     concepts are evaluated with Gödel operators, and each axiom has a margin loss that is
     zero only if the discretised interpretation (:meth:`discretise`) satisfies it (see
-    :mod:`mowl.nn.alc.alcone.losses`). The discretised result can be verified exactly
+    :mod:`mowl.baselines.nn.alc.alcone.losses`). The discretised result can be verified exactly
     with :class:`~mowl.geometric.cones.ALConeChecker` (:meth:`violations`).
 
     Differences to FALCON (:class:`~mowl.models.FALCONModel`), which shares the training
@@ -44,24 +44,53 @@ class ALConeModel(EmbeddingALCModel):
         multiplied by the current temperature (so it vanishes at the end of training);
         it helps to leave local minima. Defaults to ``0.3``.
     :param constant_logit: Magnitude of the logits of ``owl:Thing`` and ``owl:Nothing``
-        (see :class:`~mowl.nn.alc.alcone.module.ALConeModule`). Defaults to ``1.0``; the
+        (see :class:`~mowl.baselines.nn.alc.alcone.module.ALConeModule`). Defaults to ``1.0``; the
         value of earlier versions, ``1e4``, made every loss through them 1e4 times larger.
+
+    The model is a combination of parts (:class:`~mowl.models.ComposedALC` with the method
+    ``"alcone"``, see :func:`mowl.representation.library.logic_fuzzy.alcone`): its module
+    (:class:`~mowl.nn.alc.alcone.module.ALConeModule`) is a
+    :class:`~mowl.representation.Geometry` whose class model is
+    :class:`~mowl.representation.library.logic_fuzzy.HalfAxisClasses`, relation model
+    :class:`~mowl.representation.library.logic_fuzzy.IncidenceMatrices`, measure
+    :class:`~mowl.representation.library.logic_fuzzy.ConeMeasure` and objective
+    :class:`~mowl.representation.library.logic_fuzzy.FuzzyObjective`; the penalty against empty
+    classes is the regulariser :class:`~mowl.representation.library.logic_fuzzy.NonDegeneracy`
+    and the annealed training loop a
+    :class:`~mowl.representation.library.logic_alc.AnnealedRelaxation`. The hand-written
+    implementation it replaces is :class:`mowl.baselines.models.alcone.model.ALConeModel`.
     """
 
     def __init__(self, dataset, dim=8, margin=0.1, nondegeneracy=0.1, alpha=0.4, beta=0.3,
                  learning_rate=0.05, batch_size=256, init_std=0.5, temperature=0.3,
                  noise=0.3, constant_logit=1.0, model_filepath=None, device="cpu"):
-        super().__init__(dataset, embed_dim=dim, batch_size=batch_size, alpha=alpha,
-                         beta=beta, anon_e=0, learning_rate=learning_rate,
-                         model_filepath=model_filepath, device=device)
         self.dim = dim
-        self.margin = margin
         self.nondegeneracy = nondegeneracy
         self.init_std = init_std
+        self.constant_logit = constant_logit
+        super().__init__(dataset, method="alcone", embed_dim=dim, batch_size=batch_size,
+                         alpha=alpha, beta=beta, anon_e=0, learning_rate=learning_rate,
+                         margin=margin, model_filepath=model_filepath, device=device)
         self.temperature = temperature
         self.noise = noise
-        self.constant_logit = constant_logit
-        self.init_module()
+
+    @property
+    def temperature(self):
+        """Initial temperature of the smooth relaxation of training (the training schedule's)."""
+        return self.module.schedule.temperature
+
+    @temperature.setter
+    def temperature(self, value):
+        self.module.schedule.temperature = value
+
+    @property
+    def noise(self):
+        """Scale of the parameter noise of training (the training schedule's)."""
+        return self.module.schedule.noise
+
+    @noise.setter
+    def noise(self, value):
+        self.module.schedule.noise = value
 
     def init_module(self):
         cid = self.class_index_dict
@@ -69,73 +98,32 @@ class ALConeModel(EmbeddingALCModel):
             len(self.dataset.classes), len(self.dataset.individuals),
             len(self.dataset.object_properties), dim=self.dim, margin=self.margin,
             top_index=cid.get(_THING), bottom_index=cid.get(_NOTHING),
-            init_std=self.init_std, constant_logit=self.constant_logit).to(self.device)
-
-    # The al-cone module evaluates concepts on half-axes, not on sampled entities.
-    def sample_anonymous_entities(self):
-        return None
-
-    def _entity_context(self, anon_e_emb):
-        return None
-
-    def _named_class_indices(self):
-        cid = self.class_index_dict
-        idx = [i for name, i in cid.items() if name not in (_THING, _NOTHING)]
-        return th.tensor(idx, dtype=th.long, device=self.device)
-
-    def _epoch_loss(self, dataloaders, e_emb):
-        total = super()._epoch_loss(dataloaders, e_emb)
-        if self.nondegeneracy > 0:
-            idx = self._named_class_indices()
-            if len(idx) > 0:
-                reg = self.nondegeneracy * self.module.nondegeneracy_loss(idx)
-                total = reg if total is None else total + reg
-        return total
+            init_std=self.init_std, constant_logit=self.constant_logit,
+            nondegeneracy=self.nondegeneracy, anneal=0.3, noise=0.3).to(self.device)
 
     def train(self, epochs, validate_every=1, temperature=None):
         """Train with Adam on the axiom losses.
 
         The Gödel operators have sparse subgradients, so training uses the smooth
-        relaxation of :mod:`mowl.nn.alc.alcone.losses` with a temperature that decreases
-        linearly from ``temperature`` (default: the model's ``temperature``) to ``0``
-        over the epochs, with parameter noise proportional to the temperature (see
-        ``noise``). After training the module is left at temperature ``0`` (exact
-        operators). Validation and checkpointing are as in
-        :meth:`EmbeddingALCModel.train`, on the exact loss.
+        relaxation of the operators with a temperature that decreases linearly from
+        ``temperature`` (default: the model's ``temperature``) to ``0`` over the epochs, with
+        parameter noise proportional to the temperature (see ``noise``): the training schedule
+        :class:`~mowl.representation.library.logic_alc.AnnealedRelaxation` of the geometry.
+        After training the module is left at temperature ``0`` (exact operators). Validation
+        and checkpointing are as in :meth:`EmbeddingALCModel.train`, on the exact loss.
 
         :param epochs: Number of epochs (one optimisation step each).
         :param validate_every: Validate every this many epochs.
         :param temperature: Initial temperature.
         """
-        tau0 = self.temperature if temperature is None else temperature
-        self.module = self.module.to(self.device)
-        optimizer = th.optim.Adam(self.module.parameters(), lr=self.learning_rate)
-        best = float("inf")
-        for epoch in range(epochs):
-            self.module.train()
-            self.module.temperature = tau0 * (1.0 - epoch / max(epochs, 1))
-            loss = self._epoch_loss(self.training_dataloaders, None)
-            if loss is None:
-                raise ValueError("No trainable axioms were found in the training ontology.")
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            if self.noise > 0 and self.module.temperature > 0:
-                with th.no_grad():
-                    for p in self.module.parameters():
-                        p.add_(self.noise * self.module.temperature * th.randn_like(p))
-            if self.dataset.validation and (epoch + 1) % validate_every == 0:
-                self.module.temperature = 0.0
-                with th.no_grad():
-                    self.module.eval()
-                    valid = self._epoch_loss(self.validation_dataloaders, None)
-                if valid is not None and float(valid) < best:
-                    best = float(valid)
-                    if self.model_filepath is not None:
-                        th.save(self.module.state_dict(), self.model_filepath)
-        self.module.temperature = 0.0
-        if self.model_filepath is not None and best == float("inf"):
-            th.save(self.module.state_dict(), self.model_filepath)
+        schedule = self.module.schedule
+        kept = schedule.temperature
+        if temperature is not None:
+            schedule.temperature = temperature
+        try:
+            super().train(epochs, validate_every)
+        finally:
+            schedule.temperature = kept
 
     def total_loss(self):
         """Current training loss with the exact operators (no gradient), as a float."""
@@ -171,17 +159,14 @@ class ALConeModel(EmbeddingALCModel):
         return ALConeChecker(self.discretise()).violations(axioms)
 
     def _subsumption_costs(self, sub, sup, x, e_emb):
-        from mowl.nn.alc.alcone.losses import inclusion_loss
-        c, nxt = self.module.forward_fs(sub, x, e_emb)
-        d, _ = self.module.forward_fs(sup, x, e_emb, cur_index=nxt)
-        return inclusion_loss(c, d, 0.0)
+        return super()._subsumption_costs(sub, sup, x, e_emb)
 
     def score_subsumption(self, sub, sup):
         """Score of :math:`A \\sqsubseteq B` for class IRIs ``sub`` and ``sup``: minus the
         inclusion loss with margin 0 (``0`` iff the soft cones satisfy it)."""
-        from mowl.nn.alc.alcone.losses import inclusion_loss
         cid = self.class_index_dict
         idx = th.tensor([cid[sub], cid[sup]], device=self.device)
         with th.no_grad():
-            c = self.module.class_logits(idx)
-            return -float(inclusion_loss(c[0:1], c[1:2], 0.0))
+            c = self.module.classes(idx)
+            return -float(self.module.measure.inside(
+                type(c)(c.values[0:1], c.family), type(c)(c.values[1:2], c.family), 0.0))

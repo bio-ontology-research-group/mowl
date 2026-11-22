@@ -9,7 +9,6 @@ from .el.prism.module import PrismModule
 from .el.canonical_mixture.module import CanonicalMixtureModule
 from .el.transbox.module import TransBoxModule
 from .alc.module import ALCModule
-from .alc.falcon.module import FALCONModule
 from .el.elkem.module import ELKEmModule
 from .el.emelpp.module import EmELPPModule, EmELVarModule
 from .el.regd.module import RegDELBEModule, RegDELEmModule
@@ -20,20 +19,28 @@ from .el.box_lattice.module import BoxLatticeModule
 from .el.gumbel_box.module import GumbelBoxModule
 from .graph.bcbox import BinaryCodeBoxModule
 from .graph.cate import CatEModule
-from .alc.alcone.module import ALConeModule
-from .alc.dfalc.module import DFALCModule
 from .el.eike.module import EIKEModule
 from .el.boxsel.module import BoxSELModule
-from .alc.e2r.module import E2RModule
 from .el.concept2box.module import Concept2BoxModule
 from .order.module import HyperbolicConesModule, ShadowConesModule, DiskEmbeddingsModule
 
 
+# Modules that are put together from parts (:mod:`mowl.representation`) are loaded when they
+# are first asked for: the parts import :class:`ELModule`, so importing them here, while this
+# package is being imported (as :mod:`mowl.representation.geometry` does), would be circular.
+_PART_BUILT = {
+    "GroundedELModule": "mowl.nn.el.grounded.module",
+    "FALCONModule": "mowl.nn.alc.falcon.module",
+    "ALConeModule": "mowl.nn.alc.alcone.module",
+    "DFALCModule": "mowl.nn.alc.dfalc.module",
+    "E2RModule": "mowl.nn.alc.e2r.module",
+}
+
+
 def __getattr__(name):
-    # GroundedELModule is a mowl.representation.Geometry, which imports mowl.nn itself: it is
-    # imported on first use, so that importing mowl.representation first does not meet a
-    # half-initialised mowl.nn.
-    if name == "GroundedELModule":
-        from .el.grounded.module import GroundedELModule
-        return GroundedELModule
+    if name in _PART_BUILT:
+        import importlib
+        value = getattr(importlib.import_module(_PART_BUILT[name]), name)
+        globals()[name] = value
+        return value
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

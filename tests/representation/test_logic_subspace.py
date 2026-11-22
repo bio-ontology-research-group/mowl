@@ -3,7 +3,7 @@ from unittest import TestCase
 
 import torch as th
 
-from mowl.nn.alc.e2r.module import E2RModule
+from mowl.baselines.nn.alc.e2r.module import E2RModule
 from mowl.representation import geometry_of, ConstructorUnavailable
 from mowl.representation.library.logic_subspace import E2RGeometry, Subspace
 
@@ -59,7 +59,7 @@ class TestE2RGeometry(TestCase):
         d = m.dim
         self.assertTrue(th.equal(not_a.indicator[:, :d], 1 - a.indicator[:, :d]))
         self.assertTrue(th.equal(not_a.indicator[:, d:], th.zeros(3, d)))
-        from mowl.nn.alc.e2r import losses as L
+        from mowl.baselines.nn.alc.e2r import losses as L
         self.assertEqual(float(L.negation_loss(a.indicator, not_a.indicator, dim=d).sum()), 0)
         self.assertIsInstance(meet, Subspace)
 
