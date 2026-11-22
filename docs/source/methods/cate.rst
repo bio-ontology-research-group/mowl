@@ -99,6 +99,20 @@ interactions; for datasets that name an evaluation property it is done automatic
 the CatE benchmarks (``python -m mowl.benchmarks run cate-go-completion --method cate``)
 can evaluate the model.
 
+Built from parts
+----------------
+
+``model.module`` is the combination that
+:func:`~mowl.representation.library.hierarchy_methods.cate` names: free vectors in the product
+order as the class model (:class:`~mowl.representation.library.hierarchy_classes.OrderPoints`),
+the order violation of Eq. 6 as the measure, and a lattice geometry
+(:class:`~mowl.representation.library.hierarchy_geometry.LatticeGeometry`) in which the compound
+elements :math:`\exists r.D` and :math:`C \sqcap D` are looked up. The loss of Eq. 7 is
+:func:`~mowl.representation.library.hierarchy_objectives.margin_loss`; ``negative_aggregation``
+and ``filter_negatives`` are its options, and the part of the model that is shared with
+order embeddings is the class model and the measure. The earlier hand-written model is kept for
+comparison in :mod:`mowl.baselines`.
+
 Example
 -------
 
