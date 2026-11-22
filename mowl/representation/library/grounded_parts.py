@@ -69,7 +69,8 @@ from mowl.representation.library.shapes_regions import Point
 
 __all__ = ["ElementDomain", "UnionDepth", "BoxUnionClasses", "ProductBoxRelations",
            "TranslationBoxRelations", "ElementPoints", "ExistsRegions", "index_tensor",
-           "INACTIVE_RAW_WIDTH", "EMPTY_DEPTH_FLOOR", "TOP_DEPTH_CEIL"]
+           "INACTIVE_RAW_WIDTH", "EMPTY_DEPTH_FLOOR", "TOP_DEPTH_CEIL", "GROUNDED_PARTS",
+           "register_grounded_part"]
 
 #: Raw width of an inactive (padding) component: softplus of it is ~0.
 INACTIVE_RAW_WIDTH: float = -100.0
@@ -786,6 +787,18 @@ class ProductBoxRelations(_BoxRelations):
         return (Regions(cen=h_cen, w=h_w, active=eff_active),
                 Regions(cen=t_cen, w=t_w, active=eff_active))
 
+    def pair_regions(self, rel_ids=None):
+        """The relations as unions of boxes of pairs: ``(regions, 2)``, boxes
+        :math:`H_{r,k} \\times T_{r,k}` of dimension :math:`2d` (two blocks); a point is the
+        pair of its halves (:meth:`split_pair`)."""
+        h_reg, t_reg = self.regions(rel_ids)
+        return Regions(cen=th.cat([h_reg.cen, t_reg.cen], dim=-1),
+                       w=th.cat([h_reg.w, t_reg.w], dim=-1), active=h_reg.active), 2
+
+    def split_pair(self, points):
+        """The pair ``(x, y)`` of a point ``(N, 2d)`` of :meth:`pair_regions`."""
+        return points[:, :self._dim], points[:, self._dim:]
+
     def depth(self, x_points, y_points, rel_ids, crisp=False):
         xp, yp, idx = self.align(x_points, y_points, rel_ids)
         if int(xp.shape[0]) == 0:
@@ -858,6 +871,17 @@ class TranslationBoxRelations(_BoxRelations):
             cen, raw_w, act_buf = self.centers[idx], self.raw_widths[idx], self.active[idx]
         cen, w, active = _boxes(cen, raw_w, act_buf)
         return Regions(cen=cen, w=w, active=active)
+
+    def pair_regions(self, rel_ids=None):
+        """The relations as unions of boxes of pairs: ``(regions, 1)``, the boxes of
+        translations; a translation :math:`v` stands for the pair :math:`(0, v)`
+        (:meth:`split_pair`)."""
+        return self.regions(rel_ids), 1
+
+    @staticmethod
+    def split_pair(points):
+        """The pair ``(0, v)`` of a translation ``v``."""
+        return th.zeros_like(points), points
 
     def depth(self, x_points, y_points, rel_ids, crisp=False):
         xp, yp, idx = self.align(x_points, y_points, rel_ids)
@@ -981,3 +1005,35 @@ class ElementPoints:
 
     def __len__(self):
         return self.domain.nb_elements - self.domain.nb_classes
+
+
+# =============================================================================================
+# the registry of the parts of grounded methods
+# =============================================================================================
+#: The parts of grounded methods by kind and name: what a builder (``grounded(...)``,
+#: :class:`~mowl.nn.GroundedELModule`, :class:`~mowl.models.GroundedEL`) accepts by name.
+#: The kinds are ``classes``, ``relations``, ``measure`` (factories with the signature of the
+#: registered class), ``objective``, ``element sampler``, ``region sampler`` and
+#: ``evaluation`` (classes whose constructor takes the options).
+GROUNDED_PARTS = {kind: {} for kind in ("classes", "relations", "measure", "objective",
+                                        "element sampler", "region sampler", "evaluation")}
+
+
+def register_grounded_part(kind, *names):
+    """Decorator: make a part of ``kind`` available under its ``part`` name and ``names``."""
+    def decorate(factory):
+        for name in (getattr(factory, "part", None),) + names:
+            if name is None:
+                continue
+            taken = GROUNDED_PARTS[kind].get(name)
+            if taken is not None and taken is not factory:
+                raise ValueError(f"{name!r} is already a {kind} part ({taken!r}).")
+            GROUNDED_PARTS[kind][name] = factory
+        return factory
+    return decorate
+
+
+register_grounded_part("classes", "box")(BoxUnionClasses)
+register_grounded_part("relations", "product")(ProductBoxRelations)
+register_grounded_part("relations", "translation")(TranslationBoxRelations)
+register_grounded_part("measure", "union depth")(UnionDepth)

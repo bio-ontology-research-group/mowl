@@ -53,7 +53,7 @@ import torch.nn.functional as F
 
 from mowl.base_models.elmodel import EmbeddingELModel
 from mowl.baselines.nn.el.grounded.module import GroundedELModule
-from mowl.nn.el.grounded.sampling import (
+from mowl.baselines.nn.el.grounded.sampling import (
     RegionSample,
     sample_class_region,
     sample_elements,
@@ -106,7 +106,8 @@ from mowl.baselines.nn.el.grounded.module import (
     _validate_positive_float,
 )
 from mowl.baselines.nn.el.grounded.losses import _validate_margin, _validate_nonneg_weight
-from mowl.nn.el.structural import Regions, inside_measure
+from mowl.nn.el.structural import Regions
+from mowl.baselines.nn.el.grounded.module import inside_measure
 from mowl.owlapi.defaults import BOT as BOTTOM, TOP
 
 logger = logging.getLogger(__name__)
@@ -3716,7 +3717,7 @@ class GroundedEL(EmbeddingELModel):
 
         Needs ``role_mode="translation"``.
         """
-        from mowl.nn.el.grounded import queries as Q
+        from mowl.baselines.nn.el.grounded import queries as Q
 
         if method not in ("beam", "box"):
             raise ValueError(f"method must be 'beam' or 'box', got {method!r}")

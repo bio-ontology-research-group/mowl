@@ -114,6 +114,28 @@ _LEGACY_KEYS = {old: f"{part}.{name}" for old, (part, name) in _TABLES.items()
                                                             "top_id", "bot_id")}
 
 
+def _resolve(kind, value):
+    """A part given by name (:data:`GROUNDED_PARTS`) or as it is."""
+    if isinstance(value, str):
+        from mowl.representation.library.grounded_parts import GROUNDED_PARTS
+        names = GROUNDED_PARTS[kind]
+        if value not in names:
+            raise ValueError(f"Unknown {kind} part {value!r}; available: {sorted(names)}.")
+        return names[value]
+    return value
+
+
+def _part(kind, given, default, *args, **kwargs):
+    """The part of ``kind``: the default, or ``given`` (a name, a factory called like the
+    default, or a part)."""
+    given = _resolve(kind, given)
+    if given is None:
+        return default(*args, **kwargs)
+    if isinstance(given, (nn.Module, UnionDepth)) or not callable(given):
+        return given
+    return given(*args, **kwargs)
+
+
 class GroundedELModule(nn.Module, Geometry):
     """Element-grounded multi-box and product-role geometry for :math:`\\mathcal{EL}^{++}`,
     the combination of an element domain, a class model, a relation model and a measure
@@ -152,6 +174,17 @@ class GroundedELModule(nn.Module, Geometry):
     inverse_of : Optional[Sequence[int]], default None
         Symmetric partner mapping of length ``nb_rels`` (``-1``: no inverse); a role with
         ``0 <= inverse_of[r] < r`` owns no parameters and is derived from its partner.
+    class_model, relation_model : optional
+        Replace the class model or the relation model: a name of
+        :data:`~mowl.representation.library.grounded_parts.GROUNDED_PARTS`, a factory
+        ``(size, n_components, embed_dim, measure, domain, ...)`` (such as the class of a
+        part), or a part (it then reads the measure and the element domain of this module).
+        The relation model replaces ``role_mode`` (its ``mode``).
+    measure : optional
+        Replace the measure (a name, a factory ``(agg, agg_tau)`` or a measure).
+
+    Assigning ``module.class_model``, ``module.relation_model`` or ``module.measure``
+    replaces the part in the same way.
     """
 
     def __init__(
@@ -172,6 +205,9 @@ class GroundedELModule(nn.Module, Geometry):
         bot_id: Optional[int] = None,
         role_mode: str = "product",
         inverse_of: Optional[Union[Sequence[int], th.Tensor]] = None,
+        class_model=None,
+        relation_model=None,
+        measure=None,
     ) -> None:
         super().__init__()
         self.nb_classes = _validate_int_ge("nb_classes", nb_classes, 1)
@@ -181,12 +217,15 @@ class GroundedELModule(nn.Module, Geometry):
         n_components = _validate_int_ge("n_components", n_components, 1)
         n_role_components = _validate_int_ge("n_role_components", n_role_components, 1)
         _validate_positive_float("tau", tau)
-        self.depth_measure = UnionDepth(agg=agg, agg_tau=agg_tau)
+        self.depth_measure = _part("measure", measure, UnionDepth, agg=agg, agg_tau=agg_tau)
         self.dead_init_logit = _validate_finite_float("dead_init_logit", dead_init_logit)
         if not isinstance(role_mode, str) or role_mode not in RELATION_MODELS:
             raise ValueError(
                 f"role_mode must be 'product' or 'translation', got {role_mode!r}")
         self.role_mode: str = role_mode
+        if relation_model is not None and not isinstance(relation_model, nn.Module):
+            # a name or a factory: the mode of the part it makes
+            relation_model = _resolve("relations", relation_model)
         inv_buf = _validate_inverse_of(self.nb_rels, inverse_of)
         for name, value in (("top_id", top_id), ("bot_id", bot_id)):
             if value is not None and (isinstance(value, bool) or not isinstance(value, int)
@@ -200,12 +239,14 @@ class GroundedELModule(nn.Module, Geometry):
         self.elements = ElementDomain(self.nb_elements, self.nb_classes, self.embed_dim,
                                       tau=tau, dead_init=self.dead_init_logit,
                                       element_features=element_features, encoder=encoder)
-        self.boxes = BoxUnionClasses(self.nb_classes, n_components, self.embed_dim,
-                                     self.depth_measure, self.elements, top_id=top_id,
-                                     bot_id=bot_id)
-        self.roles = RELATION_MODELS[role_mode](self.nb_rels, n_role_components,
-                                                self.embed_dim, self.depth_measure,
-                                                self.elements, inverse_of=inv_buf)
+        self.boxes = self._adopt(_part(
+            "classes", class_model, BoxUnionClasses, self.nb_classes, n_components,
+            self.embed_dim, self.depth_measure, self.elements, top_id=top_id, bot_id=bot_id))
+        self.roles = self._adopt(_part(
+            "relations", relation_model, RELATION_MODELS[role_mode], self.nb_rels,
+            n_role_components, self.embed_dim, self.depth_measure, self.elements,
+            inverse_of=inv_buf))
+        self.role_mode = getattr(self.roles, "mode", role_mode)
         self.last_reseed_count: int = 0
         self._register_load_state_dict_pre_hook(self._legacy_keys)
 
@@ -220,7 +261,30 @@ class GroundedELModule(nn.Module, Geometry):
                 return getattr(owner, alias[1], None)
         return super().__getattr__(name)
 
+    def _adopt(self, part):
+        """Make ``part`` read the measure and the element domain of this module."""
+        for name, shared in (("measure", self.__dict__.get("depth_measure")),
+                             ("domain", self._modules.get("elements"))):
+            if shared is not None and name in getattr(part, "__dict__", {}):
+                part.__dict__[name] = shared
+        return part
+
     def __setattr__(self, name, value):
+        # replacing a part (nn.Module would otherwise register a new sub-module under the
+        # name and leave the part that is read in place)
+        if name == "class_model":
+            super().__setattr__("boxes", self._adopt(value))
+            return
+        if name == "relation_model":
+            super().__setattr__("roles", self._adopt(value))
+            self.role_mode = getattr(value, "mode", self.role_mode)
+            return
+        if name == "measure":
+            super().__setattr__("depth_measure", value)
+            for part in (self._modules.get("boxes"), self._modules.get("roles")):
+                if part is not None:
+                    self._adopt(part)
+            return
         alias = _TABLES.get(name)
         if alias is not None:
             owner = self.__dict__.get("_modules", {}).get(alias[0])

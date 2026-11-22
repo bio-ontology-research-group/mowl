@@ -89,20 +89,40 @@ tables, combined by :class:`mowl.nn.GroundedELModule`:
   reading :math:`\sigma(\text{depth}/\tau)` and its crisp reading;
 * the **individual model**: the point of the individual's element.
 
-The **objective** is the grounded constraints
-(:class:`~mowl.models.grounded.objective.GroundedConstraints`): every axiom form is a rule in
-a fuzzy logic at sampled elements (:mod:`mowl.nn.el.grounded.constraints`,
+The **objective** is :class:`~mowl.representation.library.grounded_objective.GroundedObjective`:
+for every axiom form an element term, a rule in a fuzzy logic at sampled elements
+(:mod:`mowl.nn.el.grounded.constraints`,
 :class:`~mowl.representation.library.grounded_logic.LukasiewiczRules`: the premises, the life
-of the element and the conclusion) and a depth hinge at points sampled in the regions
+of the element and the conclusion), and a region term, a depth hinge at points sampled in the
+regions of the left-hand side
 (:class:`~mowl.representation.library.grounded_logic.DepthHinges`), plus the minimality
-regulariser. The training regime is the composition of the section below, the evaluation
-regime ``crisp_report`` and ``evaluate_model``
-(:class:`~mowl.models.grounded.evaluation.GroundedEvaluation`). Each is swappable: the logic
-by ``logic=`` (``"godel"``, ``"product"``), the relation model by ``role_mode``, the measure
-by ``agg``, the objective by its options (``n_region_samples``, ``neg_weight``), the training
-regime by a :class:`~mowl.training.ComposedRegime`. The samplers of elements and region
-points (:mod:`mowl.nn.el.grounded.sampling`) and the query algebra
-(:mod:`mowl.nn.el.grounded.queries`) are general machinery over the interface of the parts.
+regulariser. Which elements and which points a step reads are two parts of their own,
+:class:`~mowl.representation.library.grounded_sampling.ElementSampler` and
+:class:`~mowl.representation.library.grounded_sampling.RegionSampler`. The training regime is
+the composition of the section below, the evaluation regime of ``crisp_report``
+:class:`~mowl.representation.library.grounded_evaluation.CrispViolations`. Each is
+swappable: the logic by ``logic=`` (``"godel"``, ``"product"``), the class model, relation
+model and measure by ``class_model=``, ``relation_model=``, ``measure=`` (or ``role_mode``,
+``agg``), the objective, the samplers and the evaluation regime by ``objective=``,
+``element_sampler=``, ``region_sampler=``, ``crisp_regime=`` (or their options such as
+``n_region_samples``, ``neg_weight``), the training regime by a
+:class:`~mowl.training.ComposedRegime`. The query algebra (:mod:`mowl.nn.el.grounded.queries`)
+reads the geometry through the methods of the parts.
+
+.. testcode::
+
+   from mowl.models import GroundedEL
+   from mowl.representation.library.grounded_sampling import RegionSampler
+
+   swapped = GroundedEL.from_tables(
+       {"A": 0, "B": 1}, {"r": 0}, gci0=[[0, 1]], gci2=[[0, 0, 1]], embed_dim=2,
+       relation_model="box of translations", region_sampler=RegionSampler(n_samples=1),
+       log_every=0)
+   print(type(swapped.module.relation_model).__name__, swapped.role_mode)
+
+.. testoutput::
+
+   TranslationBoxRelations translation
 
 .. testcode::
 
