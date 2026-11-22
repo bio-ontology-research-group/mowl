@@ -177,7 +177,8 @@ def test_family_abox_dataset_trains_and_preserves_faithfulness(
     assert epochs_seen == [0, 1, 2]
     assert ckpt.exists()
     saved_state = torch.load(ckpt, map_location="cpu", weights_only=True)
-    assert torch.equal(model.module.b.cpu(), saved_state["b"].cpu())
+    # the parameters are those of the individual model of the parts
+    assert torch.equal(model.module.b.cpu(), saved_state["individual_model.b"].cpu())
 
     # Check after 3 epochs (exact 0.0, no atol)
     post_entailed = model.module.class_assertion_score(entailed_pairs)

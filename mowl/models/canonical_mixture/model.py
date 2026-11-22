@@ -1,4 +1,4 @@
-"""CanonicalMixture model class."""
+"""CanonicalMixture model class: a constructed canonical model and a trained individual model."""
 from __future__ import annotations
 
 import hashlib
@@ -7,33 +7,34 @@ import os
 from pathlib import Path
 from typing import Optional
 
-import torch as th
-from tqdm import trange
-
 import mowl.geometric.completion as completion_mod
 import mowl.geometric.membership as membership_mod
 from mowl.base_models.elmodel import EmbeddingELModel
-from mowl.geometric.completion import CanonicalModel
 from mowl.geometric.membership import MEMBERSHIP_CODE_TAG, MembershipStructure
-from mowl.nn.el.canonical_mixture import (
-    MAX_SUPPORT_ENTRIES,
-    CanonicalMixtureModule,
-)
+from mowl.nn.el.canonical_mixture import CanonicalMixtureModule
+from mowl.representation.construction import READINGS, SOURCES
+from mowl.representation.library.mixture_training import IndividualBatches
 
 logger = logging.getLogger(__name__)
+
+__all__ = ["CanonicalMixture"]
 
 
 class CanonicalMixture(EmbeddingELModel):
     """Canonical-element mixture model for ABox completion under an :math:`\\mathcal{EL}` TBox.
 
-    Builds the :class:`~mowl.geometric.completion.CanonicalModel` and
-    :class:`~mowl.geometric.membership.MembershipStructure` of the training
-    ontology (caching the :class:`MembershipStructure` next to
-    ``dataset.ontology_path`` when available, keyed by the ontology SHA-256,
-    index maps, and the source hashes of ``mowl/geometric/completion.py`` and
-    ``mowl/geometric/membership.py``) and trains a
-    :class:`~mowl.nn.el.canonical_mixture.CanonicalMixtureModule` with mini-batches
-    of individuals.
+    The method is a combination of parts
+    (:mod:`mowl.representation.library.mixture_methods`): the canonical model of the
+    training ontology is *constructed* (the source ``"canonical completion"`` of
+    :mod:`mowl.representation.construction`) and read sparsely as sets of elements (the
+    reading ``"membership"``, a :class:`~mowl.geometric.membership.MembershipStructure`,
+    cached next to ``dataset.ontology_path`` when available, keyed by the ontology SHA-256,
+    the index maps and the source hashes of ``mowl/geometric/completion.py`` and
+    ``mowl/geometric/membership.py``); only the individuals are learned, as distributions
+    over the elements (:class:`~mowl.nn.el.canonical_mixture.CanonicalMixtureModule`). The
+    training regime (``self.training``, default
+    :class:`~mowl.representation.library.mixture_training.IndividualBatches`) goes over
+    mini-batches of individuals.
 
     Guarantees:
 
@@ -58,7 +59,17 @@ class CanonicalMixture(EmbeddingELModel):
       TBox-only datasets.
     - Named classes have no dense vector embeddings (a class is its column in
       :attr:`MembershipStructure.M`).
+
+    :param training: The training regime (default :class:`IndividualBatches`; or
+        :class:`~mowl.representation.library.mixture_training.AssertionBatches`).
+    :param source, reading: The construction (names in
+        :data:`~mowl.representation.construction.SOURCES` and
+        :data:`~mowl.representation.construction.READINGS`, or instances).
     """
+
+    #: :meth:`train` is the loop of the training regime ``self.training``; it consults no hook
+    #: of a :class:`~mowl.training.TrainingRegime`.
+    training_hooks = frozenset()
 
     def __init__(
         self,
@@ -72,6 +83,9 @@ class CanonicalMixture(EmbeddingELModel):
         device: str = "cpu",
         load_normalized: bool = False,
         use_cache: bool = True,
+        training=None,
+        source="canonical completion",
+        reading="membership",
     ) -> None:
         if len(dataset.individuals) == 0:
             raise ValueError("CanonicalMixture needs individuals")
@@ -96,6 +110,10 @@ class CanonicalMixture(EmbeddingELModel):
         self.init_self_mass = float(init_self_mass)
         self.use_cache = bool(use_cache)
         self._eval_gci_name = "class_assertion"
+        self.source = SOURCES[source]() if isinstance(source, str) else source
+        self.reading = READINGS[reading]() if isinstance(reading, str) else reading
+        #: The training regime of the parts.
+        self.training = training if training is not None else IndividualBatches()
 
         self.structure: MembershipStructure = self._build_or_load_structure()
         self.init_module()
@@ -150,8 +168,24 @@ class CanonicalMixture(EmbeddingELModel):
         base = ontology_path[:-4] if ontology_path.endswith(".owl") else ontology_path
         return Path(f"{base}_mowl_{MEMBERSHIP_CODE_TAG}_{digest}.pt")
 
+    @staticmethod
+    def _names(index):
+        return [n for n, _ in sorted(index.items(), key=lambda kv: kv[1])]
+
+    def _construct(self) -> MembershipStructure:
+        """The constructed model: the source builds the canonical model of the training
+        ontology, the reading restricts it to the named classes and the individuals."""
+        built = self.source.build(self.dataset.ontology)
+        self.reading.check(built)
+        index = self.named_class_index_dict
+        if sorted(index.values()) != list(range(len(index))):
+            raise ValueError("The class ids of the dataset are not 0 .. n - 1.")
+        return self.reading.structure(built, self._names(index),
+                                      self._names(self.object_property_index_dict),
+                                      self._names(self.individual_index_dict))
+
     def _build_or_load_structure(self) -> MembershipStructure:
-        """Build :class:`MembershipStructure` from ``dataset.ontology`` or load from cache."""
+        """Build the constructed model from ``dataset.ontology`` or load it from the cache."""
         cache_file = self._cache_path() if self.use_cache else None
         if cache_file is not None and cache_file.exists():
             try:
@@ -163,14 +197,7 @@ class CanonicalMixture(EmbeddingELModel):
                     exc,
                 )
 
-        cm = CanonicalModel.from_ontology(self.dataset.ontology)
-        structure = MembershipStructure.from_canonical_model(
-            cm,
-            class_index_dict=self.named_class_index_dict,
-            individual_index_dict=self.individual_index_dict,
-            relation_index_dict=self.object_property_index_dict,
-            allow_absent_individuals=True,
-        )
+        structure = self._construct()
         if cache_file is not None:
             try:
                 structure.save(cache_file)
@@ -194,57 +221,9 @@ class CanonicalMixture(EmbeddingELModel):
             training_class_assertions=training_ca,
         ).to(self.device)
 
-    def _eval_gci_mean(self, v_data: th.Tensor, gci_name: str) -> float:
-        """Compute mean module output on ``v_data`` in ``batch_size`` chunks."""
-        n = int(v_data.shape[0])
-        if n == 0:
-            return 0.0
-        step = max(int(self.batch_size), 1)
-        total = 0.0
-        for start in range(0, n, step):
-            chunk = v_data[start : start + step]
-            total += float(self.module(chunk, gci_name).detach().sum().item())
-        return total / float(n)
-
-    def _backward_chunked_loss(
-        self, data: th.Tensor, gci_name: str, neg: bool = False
-    ) -> float:
-        """Compute mean loss over ``data`` in support-bounded micro-chunks, accumulating gradients per chunk."""
-        n = int(data.shape[0])
-        if n == 0:
-            return 0.0
-        ranges = self.module._pair_chunk_ranges(
-            data, max_sup_entries=MAX_SUPPORT_ENTRIES
-        )
-        total_loss = 0.0
-        for s_idx, e_idx in ranges:
-            chunk = data[s_idx:e_idx]
-            weight = float(e_idx - s_idx) / float(n)
-            c_loss = self.module(chunk, gci_name, neg=neg).mean() * weight
-            if c_loss.requires_grad:
-                c_loss.backward()
-            total_loss += float(c_loss.detach().item())
-            del c_loss
-        return total_loss
-
     def _compute_validation_loss(self) -> float:
         """Compute validation loss on ``validation_datasets``."""
-        with th.no_grad():
-            self.module.eval()
-            val_datasets = self.validation_datasets
-            if not val_datasets:
-                return 0.0
-
-            gci_name = self._eval_gci_name
-            if gci_name in val_datasets and len(val_datasets[gci_name]) > 0:
-                v_data = val_datasets[gci_name][:]
-                return self._eval_gci_mean(v_data, gci_name)
-
-            for fallback in ("class_assertion", "object_property_assertion"):
-                if fallback in val_datasets and len(val_datasets[fallback]) > 0:
-                    v_data = val_datasets[fallback][:]
-                    return self._eval_gci_mean(v_data, fallback)
-            return 0.0
+        return self.training.validation_loss(self)
 
     def train(
         self,
@@ -252,7 +231,8 @@ class CanonicalMixture(EmbeddingELModel):
         validate_every: int = 1,
         epoch_callback=None,
     ) -> None:
-        """Train the model using mini-batches of individuals.
+        """Train the model with the training regime ``self.training`` (default: mini-batches
+        of individuals).
 
         Parameters
         ----------
@@ -264,120 +244,6 @@ class CanonicalMixture(EmbeddingELModel):
             Optional callback ``epoch_callback(epoch, self)`` called after each
             epoch.
         """
-        n_ind = len(self.individual_index_dict)
-        if n_ind == 0:
+        if len(self.individual_index_dict) == 0:
             raise ValueError("CanonicalMixture needs individuals")
-
-        ca_ds = self.training_datasets.get("class_assertion")
-        ca_data = (
-            ca_ds[:].to(self.device)
-            if (ca_ds is not None and len(ca_ds) > 0)
-            else th.empty((0, 2), dtype=th.long, device=self.device)
-        )
-        opa_ds = self.training_datasets.get("object_property_assertion")
-        opa_data = (
-            opa_ds[:].to(self.device)
-            if (opa_ds is not None and len(opa_ds) > 0)
-            else th.empty((0, 3), dtype=th.long, device=self.device)
-        )
-
-        optimizer = self.get_optimizer()
-        best_loss = float("inf")
-        best_saved = False
-
-        for epoch in trange(epochs):
-            self.module.train()
-            perm = th.randperm(n_ind, device=self.device)
-            epoch_loss = 0.0
-            n_batches = 0
-
-            for start in range(0, n_ind, self.batch_size):
-                batch_inds = perm[start : start + self.batch_size]
-                optimizer.zero_grad()
-                step_loss = 0.0
-                has_supervision = False
-
-                if ca_data.shape[0] > 0:
-                    mask_ca = th.isin(ca_data[:, 0], batch_inds)
-                    if bool(mask_ca.any().item()):
-                        pos_ca = ca_data[mask_ca]
-                        if pos_ca.shape[0] > self.batch_size:
-                            perm_ca = th.randperm(
-                                pos_ca.shape[0], device=self.device
-                            )[: self.batch_size]
-                            pos_ca = pos_ca.index_select(0, perm_ca)
-                        neg_ca = self.module.sample_class_negatives(pos_ca)
-                        step_loss += self._backward_chunked_loss(
-                            pos_ca, "class_assertion", neg=False
-                        )
-                        step_loss += self._backward_chunked_loss(
-                            neg_ca, "class_assertion", neg=True
-                        )
-                        has_supervision = True
-
-                if opa_data.shape[0] > 0:
-                    mask_opa = th.isin(opa_data[:, 0], batch_inds)
-                    if bool(mask_opa.any().item()):
-                        pos_opa = opa_data[mask_opa]
-                        if pos_opa.shape[0] > self.batch_size:
-                            perm_opa = th.randperm(
-                                pos_opa.shape[0], device=self.device
-                            )[: self.batch_size]
-                            pos_opa = pos_opa.index_select(0, perm_opa)
-                        neg_opa = self.module.sample_role_negatives(pos_opa)
-                        step_loss += self._backward_chunked_loss(
-                            pos_opa, "object_property_assertion", neg=False
-                        )
-                        step_loss += self._backward_chunked_loss(
-                            neg_opa, "object_property_assertion", neg=True
-                        )
-                        has_supervision = True
-
-                if self.entropy_reg > 0.0:
-                    n_b = int(batch_inds.shape[0])
-                    for s_i, e_i in self.module._ind_chunk_ranges(
-                        batch_inds, max_sup_entries=MAX_SUPPORT_ENTRIES
-                    ):
-                        w_i = float(e_i - s_i) / float(max(n_b, 1))
-                        reg_c = (
-                            self.module.regularization_loss(batch_inds[s_i:e_i])
-                            * w_i
-                        )
-                        if reg_c.requires_grad:
-                            reg_c.backward()
-                        step_loss += float(reg_c.detach().item())
-                        del reg_c
-
-                if has_supervision or self.entropy_reg > 0.0:
-                    optimizer.step()
-                    epoch_loss += step_loss
-                    n_batches += 1
-
-            train_loss = epoch_loss / max(n_batches, 1)
-
-            if epoch_callback is not None:
-                epoch_callback(epoch, self)
-
-            if validate_every and (epoch + 1) % validate_every == 0:
-                if self.dataset.validation is not None:
-                    valid_loss = self._compute_validation_loss()
-                    if valid_loss < best_loss:
-                        best_loss = valid_loss
-                        th.save(self.module.state_dict(), self.model_filepath)
-                        best_saved = True
-                else:
-                    if train_loss < best_loss:
-                        best_loss = train_loss
-                        th.save(self.module.state_dict(), self.model_filepath)
-                        best_saved = True
-
-        if (
-            best_saved
-            and self.model_filepath is not None
-            and os.path.exists(self.model_filepath)
-        ):
-            self.module.load_state_dict(
-                th.load(
-                    self.model_filepath, map_location=self.device, weights_only=True
-                )
-            )
+        self.training.run(self, epochs, validate_every, epoch_callback)

@@ -17,6 +17,9 @@ numbers:
     A class is the set of canonical elements that belong to it (:class:`ElementSet`), an
     individual a distribution over canonical elements (:class:`Mixture`). Inclusion is
     exact on the sets (0.0 or 1.0); membership is the module's own ``-log`` probability.
+    This adapter describes the direct implementation (kept in ``mowl.baselines``); the
+    method itself is now a combination of parts
+    (:mod:`~mowl.representation.library.mixture_methods`) and its own geometry.
 ``faithel`` (:class:`FaithELGeometry`)
     The TBox is the fixed strongly faithful convex model (costs 0.0 or 1.0, those of
     ``tbox_costs``); the ABox is the learned individual vectors (``member`` is
@@ -210,7 +213,9 @@ class Mixture(Region):
 
 
 class CanonicalMixtureGeometry(Geometry):
-    """The geometry of a :class:`~mowl.nn.el.canonical_mixture.CanonicalMixtureModule`.
+    """The geometry of the direct implementation of the canonical mixture (a module of class
+    ``CanonicalMixtureModule`` in ``mowl.baselines.nn.el.canonical_mixture``; the module of
+    :mod:`mowl.nn` is built from parts and is its own geometry).
 
     ``inside``, ``apart`` and the constructors are exact on sets of canonical elements
     (costs 0.0 / 1.0); ``member`` is the module's own ``-log`` of the probability that the

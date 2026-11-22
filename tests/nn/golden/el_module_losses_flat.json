@@ -869,6 +869,174 @@
 1.19209e-07
 ]
 },
+"CanonicalMixtureModule|gci0_bot|0": {
+"shape": [
+5
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"CanonicalMixtureModule|gci0_bot|1": {
+"shape": [
+5
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"CanonicalMixtureModule|gci0|0": {
+"shape": [
+5
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"CanonicalMixtureModule|gci0|1": {
+"shape": [
+5
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"CanonicalMixtureModule|gci1_bot|0": {
+"shape": [
+5
+],
+"values": [
+1.0,
+0.0,
+1.0,
+0.0,
+0.0
+]
+},
+"CanonicalMixtureModule|gci1_bot|1": {
+"shape": [
+5
+],
+"values": [
+1.0,
+0.0,
+1.0,
+0.0,
+0.0
+]
+},
+"CanonicalMixtureModule|gci1|0": {
+"shape": [
+5
+],
+"values": [
+1.0,
+0.0,
+1.0,
+0.0,
+0.0
+]
+},
+"CanonicalMixtureModule|gci1|1": {
+"shape": [
+5
+],
+"values": [
+1.0,
+0.0,
+1.0,
+0.0,
+0.0
+]
+},
+"CanonicalMixtureModule|gci2|0": {
+"shape": [
+5
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"CanonicalMixtureModule|gci2|1": {
+"shape": [
+5
+],
+"values": [
+1.0,
+1.0,
+1.0,
+1.0,
+1.0
+]
+},
+"CanonicalMixtureModule|gci3_bot|0": {
+"shape": [
+5
+],
+"values": [
+0.0,
+0.0,
+0.0,
+0.0,
+0.0
+]
+},
+"CanonicalMixtureModule|gci3_bot|1": {
+"shape": [
+5
+],
+"values": [
+0.0,
+0.0,
+0.0,
+0.0,
+0.0
+]
+},
+"CanonicalMixtureModule|gci3|0": {
+"shape": [
+5
+],
+"values": [
+0.0,
+0.0,
+0.0,
+0.0,
+0.0
+]
+},
+"CanonicalMixtureModule|gci3|1": {
+"shape": [
+5
+],
+"values": [
+0.0,
+0.0,
+0.0,
+0.0,
+0.0
+]
+},
 "CanonicalMixtureModule|object_property_assertion|0": {
 "shape": [
 5
