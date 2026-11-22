@@ -19,6 +19,8 @@ from mowl.nn import MultiBoxELModule
 import mowl.baselines.nn.el.multiboxel.losses as L
 from mowl.nn.el.structural import (
     build_structural_tables,
+)
+from mowl.baselines.nn.el.multiboxel.structural_losses import (
     nonempty_measure,
     pair_size,
     region_size,

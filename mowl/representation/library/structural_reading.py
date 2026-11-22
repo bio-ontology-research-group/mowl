@@ -22,19 +22,20 @@ sense of :class:`mowl.training.Regularizer`, which a geometry sums with its othe
 regularisers.
 
 The reading works for every region family that has a *violation vector* of the inclusion and
-a *size* (the signed non-emptiness measure): boxes, unions of boxes and slots through the
-kernels of :mod:`mowl.nn.el.structural`; prisms, products of octagons and any family
-registered with :func:`register_family`.
+a *size* (the signed non-emptiness measure): boxes (and so unions of boxes and slots, whose
+boxes are the *pieces* of the region), prisms, products of octagons and any family registered
+with :func:`register_family`. Every form is written once, on pieces: a region of a family is
+one piece; a union of boxes with slots has a box per slot, of which the active ones count.
 """
 
 import torch as th
 
-from mowl.nn.el.structural import (Regions, existence_loss, gci0_bot_structural,
-                                   gci0_structural, gci1_bot_structural, gci1_structural,
-                                   inside_measure, nonempty_measure, pair_size, region_size,
-                                   witness_loss)
+from dataclasses import fields, replace
+
 from mowl.representation.library.multibox_parts import UnionOfBoxes
-from mowl.representation.library.structural_regions import intersect_signed, slots
+from mowl.representation.library.structural_regions import (intersect_signed, largest_side,
+                                                             side, slot_depth, slot_pairs,
+                                                             to_slots)
 from mowl.representation.objectives import Objective
 from mowl.representation.regions import Box
 from mowl.training.regularization import Regularizer
@@ -84,6 +85,17 @@ def _octagon():
     register_family(OctagonProduct, violation, size)
 
 
+def _box():
+    def violation(a, b, margin):
+        return th.relu((a.centre - b.centre).abs() + a.offset - b.offset + margin)
+
+    def size(a):
+        return side(a.offset)
+
+    register_family(Box, violation, size)
+
+
+_box()
 _prism()
 _octagon()
 
@@ -99,20 +111,110 @@ def _is_slots(region):
     return isinstance(region, (UnionOfBoxes, Box))
 
 
-def size_of(region):
-    """``(B,)``: the non-emptiness measure of the class regions: for slots the largest of the
-    slots' smallest extents (:func:`~mowl.nn.el.structural.region_size`), for the other
-    families their registered ``size``."""
+# -- pieces ----------------------------------------------------------------------------
+
+def _count(region):
+    for f in fields(region):
+        value = getattr(region, f.name)
+        if isinstance(value, th.Tensor):
+            return value.shape[0]
+    raise TypeError(f"{type(region).__name__} has no tensors.")
+
+
+def _pieces(region, counting_only=False):
+    """``(pieces, active)``: the region as ``k`` pieces per row, ``pieces`` a flat batch of
+    ``B * k`` regions of one family (row-major) and ``active`` ``(B, k)`` which count. A box,
+    union of boxes or slots: its boxes of signed half-width (``counting_only``: the active
+    slots with interior only); any other family: the region itself, one piece per row."""
     if _is_slots(region):
-        return region_size(slots(region))
-    return _family_of(region)[1](region)
+        s = to_slots(region)
+        batch, k, dim = s.centre.shape
+        active = s.active & (side(s.w.detach()) > 0.0) if counting_only else s.active
+        return Box(s.centre.reshape(-1, dim), s.w.reshape(-1, dim)), active
+    return region, th.ones(_count(region), 1, dtype=th.bool,
+                           device=_first_tensor(region).device)
+
+
+def _first_tensor(region):
+    return next(getattr(region, f.name) for f in fields(region)
+                if isinstance(getattr(region, f.name), th.Tensor))
+
+
+def _meet(a, b, counting_only=False):
+    """``(pieces, active)`` of the intersections of every piece of ``a`` with every piece of
+    ``b`` (a pair counts iff both pieces do)."""
+    if _is_slots(a):
+        sa, sb = to_slots(a), to_slots(b)
+        if counting_only:
+            sa = replace(sa, active=sa.active & (side(sa.w.detach()) > 0.0))
+            sb = replace(sb, active=sb.active & (side(sb.w.detach()) > 0.0))
+        centre, w, active = slot_pairs(sa, sb)
+        dim = centre.shape[-1]
+        return Box(centre.reshape(-1, dim), w.reshape(-1, dim)), active
+    inter, _ = intersect_signed(a, b)
+    return inter, th.ones(_count(inter), 1, dtype=th.bool,
+                          device=_first_tensor(inter).device)
+
+
+def _take(region, index):
+    """The rows ``index`` of every tensor of a region."""
+    return replace(region, **{f.name: getattr(region, f.name)[index] for f in fields(region)
+                              if isinstance(getattr(region, f.name), th.Tensor)})
+
+
+def _sizes(pieces, active):
+    """``(B, k)``: the size of every piece."""
+    return _family_of(pieces)[1](pieces).reshape(active.shape)
+
+
+def _covered(source, source_active, target, target_active, margin):
+    """``(B, ks)``: for every piece of the source, the squared violation of its inclusion in
+    the best counting piece of the target."""
+    batch, ks = source_active.shape
+    kt = target_active.shape[1]
+    rows = th.arange(batch, device=source_active.device)
+    i = (rows[:, None, None] * ks + th.arange(ks, device=rows.device)[None, :, None])
+    j = (rows[:, None, None] * kt + th.arange(kt, device=rows.device)[None, None, :])
+    i, j = i.expand(batch, ks, kt).reshape(-1), j.expand(batch, ks, kt).reshape(-1)
+    violation = _family_of(source)[0]
+    if ks == kt == 1:
+        squares = violation(source, target, margin).square().sum(dim=-1)
+    else:
+        squares = violation(_take(source, i), _take(target, j), margin).square().sum(dim=-1)
+    squares = squares.view(batch, ks, kt)
+    if batch and not bool(target_active.any(dim=1).all()):
+        raise ValueError("The inclusion needs at least one active slot of the target in "
+                         "every row.")
+    return squares.masked_fill(~target_active[:, None, :], float("inf")).amin(dim=2)
+
+
+def _mean_where(values, gate):
+    """``(B,)``: the mean of ``values`` ``(B, k)`` over the entries of ``gate`` (zero where
+    there is none)."""
+    total = th.where(gate, values, th.zeros_like(values)).sum(dim=1)
+    return total / gate.to(values.dtype).sum(dim=1).clamp_min(1.0)
+
+
+def _hinge_mean(values):
+    """The mean of ``relu(values)**2``, zero for an empty tensor."""
+    if values.numel() == 0:
+        return values.new_zeros(())
+    return th.relu(values).square().mean()
+
+
+def size_of(region):
+    """``(B,)``: the non-emptiness measure of the class regions: the largest size among its
+    counting pieces (for slots the largest of the slots' smallest signed sides, for the other
+    families their registered ``size``)."""
+    pieces, active = _pieces(region)
+    return largest_side(_sizes(pieces, active), active)
 
 
 def pair_size_of(a, b):
-    """``(B,)``: the non-emptiness measure of :math:`a \\cap b`."""
-    if _is_slots(a):
-        return pair_size(slots(a), slots(b))
-    return size_of(intersect_signed(a, b)[0])
+    """``(B,)``: the non-emptiness measure of :math:`a \\cap b`: the largest size among the
+    intersections of a counting piece of ``a`` with one of ``b``."""
+    pieces, active = _meet(a, b)
+    return largest_side(_sizes(pieces, active), active)
 
 
 def _family_of(region):
@@ -188,57 +290,49 @@ class StructuralReading(Objective):
     def _view(self, g):
         return _View(g, _abs_offsets) if self.empty_regions == "abs" else g
 
-    # -- the concept forms ----------------------------------------------------------------
+    # -- the concept forms: written once, on pieces ------------------------------------
+    def _included(self, g, rows, source, source_active, target, extra_gate=None):
+        """Every counting piece of the source with interior (detached) included in some
+        counting piece of the target: the mean of the squared violations."""
+        target_pieces, target_active = _pieces(target)
+        best = _covered(source, source_active, target_pieces, target_active, self.m)
+        gate = source_active & (_sizes(_detached(source), source_active) > 0.0)
+        if extra_gate is not None:
+            gate = gate & extra_gate[:, None]
+        return _mean_where(best, gate)
+
     def gci0(self, g, rows, neg=False):
         c, d = g.classes(rows[:, 0]), g.classes(rows[:, 1])
-        m = self.m
-        if _is_slots(c):
-            cost = gci0_structural(slots(c), slots(d), m)
-        else:
-            violation, size = _family_of(c)
-            gate = size(_detached(c)) > 0.0
-            squares = violation(c, d, m).square().sum(dim=-1)
-            cost = th.where(gate, squares, th.zeros_like(squares))
+        source, active = _pieces(c)
+        cost = self._included(g, rows, source, active, d)
         masked = self._masked(g, "masked_gci0", rows)
         if masked is not None:
             cost = th.where(masked, th.zeros_like(cost), cost)
         return cost.reshape(-1, 1)
 
     def gci0_bot(self, g, rows, neg=False):
-        c = g.classes(rows[:, 0])
-        if _is_slots(c):
-            cost = gci0_bot_structural(slots(c))
-        else:
-            cost = th.relu(_family_of(c)[1](c)).square()
+        pieces, active = _pieces(g.classes(rows[:, 0]))
+        cost = _mean_where(th.relu(_sizes(pieces, active)).square(), active)
         return cost.reshape(-1, 1)
 
     def gci1(self, g, rows, neg=False):
         c, d, e = (g.classes(rows[:, i]) for i in range(3))
-        m = self.m
         masked = self._masked(g, "masked_gci1", rows)
-        if _is_slots(c):
-            cost = gci1_structural(slots(c), slots(d), slots(e), m, masked=masked)
-        else:
-            violation, size = _family_of(c)
-            inter, _ = intersect_signed(c, d)
-            gate = size(_detached(inter)) > 0.0
-            if masked is not None:
-                gate = gate & ~masked.bool()
-            squares = violation(inter, e, m).square().sum(dim=-1)
-            cost = th.where(gate, squares, th.zeros_like(squares))
+        source, active = _meet(c, d)
+        free = None if masked is None else ~masked.bool()
+        cost = self._included(g, rows, source, active, e, extra_gate=free)
+        if free is not None:
+            cost = th.where(free, cost, th.zeros_like(cost))
         return cost.reshape(-1, 1)
 
     def gci1_bot(self, g, rows, neg=False):
         c, d = g.classes(rows[:, 0]), g.classes(rows[:, 1])
-        m = self.m
-        if _is_slots(c):
-            r_c, r_d = slots(c), slots(d)
-            act_c = r_c.active & (nonempty_measure(r_c.w.detach()) > 0.0)
-            act_d = r_d.active & (nonempty_measure(r_d.w.detach()) > 0.0)
-            cost = gci1_bot_structural(Regions(r_c.cen, r_c.w, act_c),
-                                       Regions(r_d.cen, r_d.w, act_d), m, agg=self.bot_agg)
+        pieces, active = _meet(c, d, counting_only=_is_slots(c))
+        terms = th.relu(_sizes(pieces, active) + self.m).square()
+        if self.bot_agg == "sum":
+            cost = th.where(active, terms, th.zeros_like(terms)).sum(dim=1)
         else:
-            cost = th.relu(_family_of(c)[1](intersect_signed(c, d)[0]) + m).square()
+            cost = _mean_where(terms, active)
         return cost.reshape(-1, 1)
 
     # -- the forms about relations and assertions: the axiom reading on the region view ----
@@ -287,7 +381,6 @@ class StructuralReading(Objective):
 
 def _detached(region):
     """The region with detached tensors (a gate must not carry gradients)."""
-    from dataclasses import fields, replace
     updates = {f.name: getattr(region, f.name).detach() for f in fields(region)
                if isinstance(getattr(region, f.name), th.Tensor)}
     return replace(region, **updates)
@@ -332,7 +425,8 @@ class ExistencePenalty(Regularizer):
         if self.pairs.numel() > 0:
             ids = self.pairs.to(device)
             pair_sizes = pair_size_of(model.classes(ids[:, 0]), model.classes(ids[:, 1]))
-        return weight * existence_loss(class_sizes, pair_sizes, _number(self.margin))
+        margin = _number(self.margin)
+        return weight * (_hinge_mean(margin - class_sizes) + _hinge_mean(margin - pair_sizes))
 
 
 class SizePenalty(Regularizer):
@@ -367,8 +461,8 @@ class WitnessPenalty(Regularizer):
     (``targets.pos``) and at least :math:`m` outside those it must not (``targets.neg``):
     :math:`\\operatorname{mean} \\max(0, m - \\mathrm{inside})^2 + \\operatorname{mean}
     \\max(0, \\mathrm{inside} + m)^2`, with the signed depth
-    :func:`~mowl.nn.el.structural.inside_measure` in the classes (as slots: through defined
-    classes the gradient reaches their definers).
+    :func:`~mowl.representation.library.structural_regions.slot_depth` in the classes (as
+    slots: through defined classes the gradient reaches their definers).
 
     :param targets: A :class:`~mowl.nn.el.structural.WitnessTargets`.
     :param margin: A number or a function.
@@ -393,6 +487,6 @@ class WitnessPenalty(Regularizer):
             if pairs.numel() == 0:
                 depth.append(th.empty(0, device=device))
                 continue
-            depth.append(inside_measure(embed(pairs[:, 0]),
-                                        slots(model.classes(pairs[:, 1]))))
-        return weight * witness_loss(depth[0], depth[1], _number(self.margin))
+            depth.append(slot_depth(embed(pairs[:, 0]), to_slots(model.classes(pairs[:, 1]))))
+        margin = _number(self.margin)
+        return weight * (_hinge_mean(margin - depth[0]) + _hinge_mean(depth[1] + margin))
