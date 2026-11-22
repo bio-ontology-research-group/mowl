@@ -110,6 +110,7 @@ class Box2ELBaselineLosses(TrainingRegime):
                 module.intersection_radius_term = self.radius_term
         elif _is(module, "BoxELModule") and self.boxel:
             module.regulariser = "box2el_code"
+            module.positive_scale = False  # the code's signed role scale
             self._sum = True
 
     def loss(self, gci_name, pos_scores, neg_scores):

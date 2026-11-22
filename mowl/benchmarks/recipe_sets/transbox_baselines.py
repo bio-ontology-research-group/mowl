@@ -55,7 +55,7 @@ def _build():
         dim, lr = _BOXEL[onto]
         out.append(Recipe(
             benchmark=f"transbox-{onto}-prediction", method="boxel", source=YANG2025,
-            model_kwargs={"embed_dim": dim, "learning_rate": lr},
+            model_kwargs={"embed_dim": dim, "learning_rate": lr, "positive_scale": False},
             training_regime="box2el-code-training", regime_kwargs={"num_negatives": 1},
             epochs=5000, validate_every=100, locator=_CODE,
             notes=("The published BoxEL numbers for ∃r.C ⊑ D (and the combined numbers "

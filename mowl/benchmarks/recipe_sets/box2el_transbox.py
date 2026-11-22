@@ -95,6 +95,9 @@ def _build():
                 if method == "elem":
                     # model/Elem.py has the radius term of C ⊓ D ⊑ E commented out
                     model_kwargs["gci1_radius_term"] = False
+                if method == "boxel":
+                    # the code's BoxEL uses the signed role scale (see BoxELModule)
+                    model_kwargs["positive_scale"] = False
                 out.append(Recipe(
                     benchmark=f"box2el-{onto}-{task}", method=method,
                     source=JACKERMEIER2024,

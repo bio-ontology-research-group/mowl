@@ -31,6 +31,20 @@ class Box:
              return th.mean(F.relu(min_x + delta_x - 1 + eps )) +  th.mean(F.relu(-min_x - eps))
 
 
+def _scale(scaling, positive=True):
+    return th.abs(scaling) if positive else scaling
+
+
+def effective_scale(scaling, positive=True):
+    """The scale factor of a role from its raw parameter, ``|scaling| + eps``.
+
+    With ``positive=False`` the raw signed value is used (``scaling + eps``, the original
+    BoxEL code); a negative scale then swaps the lower and upper corner of a box, which
+    inverts it.
+    """
+    return _scale(scaling, positive) + eps
+
+
 def volumes(boxes, temperature):
     return F.softplus(boxes.delta_embed, beta=temperature).prod(1)
 
@@ -54,7 +68,8 @@ def box2el_code_side_regularizer(box):
             + F.relu(th.linalg.norm(box.min_embed) - 1))
 
 
-def axiom_boxes(gci_name, data, min_embed, delta_embed, relation_embed, scaling_embed):
+def axiom_boxes(gci_name, data, min_embed, delta_embed, relation_embed, scaling_embed,
+                positive_scale=True):
     """The boxes that the Box2EL code regularises for a batch of axioms of one normal
     form (``model/BoxEL.py``, ``nf*_loss``): the classes of the axiom, the intersection
     box of :math:`C \\sqcap D` and the translated box of :math:`C`."""
@@ -68,14 +83,15 @@ def axiom_boxes(gci_name, data, min_embed, delta_embed, relation_embed, scaling_
         return [intersection(c, d), c, d, box(2)]
     if gci_name == "gci2":
         c, d = box(0), box(2)
-        rel, scale = relation_embed(data[:, 1]), scaling_embed(data[:, 1])
-        trans = Box(c.min_embed * (scale + eps) + rel, max_embed=c.max_embed * (scale + eps) + rel)
+        rel = relation_embed(data[:, 1])
+        scale = effective_scale(scaling_embed(data[:, 1]), positive_scale)
+        trans = Box(c.min_embed * scale + rel, max_embed=c.max_embed * scale + rel)
         return [trans, c, d]
     if gci_name == "gci3":
         c, d = box(1), box(2)
-        rel, scale = relation_embed(data[:, 0]), scaling_embed(data[:, 0])
-        trans = Box((c.min_embed - rel) / (scale + eps),
-                    max_embed=(c.max_embed - rel) / (scale + eps))
+        rel = relation_embed(data[:, 0])
+        scale = effective_scale(scaling_embed(data[:, 0]), positive_scale)
+        trans = Box((c.min_embed - rel) / scale, max_embed=(c.max_embed - rel) / scale)
         return [trans, c, d]
     return []
 
@@ -138,7 +154,8 @@ def gci1_bot_loss(data, min_embed, delta_embed, temperature, neg=False):
 
 
 
-def gci2_loss(data, min_embed, delta_embed, relation_embed, scaling_embed, temperature, neg=False):
+def gci2_loss(data, min_embed, delta_embed, relation_embed, scaling_embed, temperature, neg=False,
+              positive_scale=True):
     c_min = min_embed(data[:, 0])
     d_min = min_embed(data[:, 2])
 
@@ -146,13 +163,13 @@ def gci2_loss(data, min_embed, delta_embed, relation_embed, scaling_embed, tempe
     d_delta = delta_embed(data[:, 2])
 
     relation = relation_embed(data[:, 1])
-    scaling = scaling_embed(data[:, 1])
+    scaling = effective_scale(scaling_embed(data[:, 1]), positive_scale)
 
     boxes_c = Box(c_min, delta_embed=c_delta)
     boxes_d = Box(d_min, delta_embed=d_delta)
-    
-    trans_c_min = boxes_c.min_embed*(scaling + eps) + relation
-    trans_c_max = boxes_c.max_embed*(scaling + eps) + relation
+
+    trans_c_min = boxes_c.min_embed * scaling + relation
+    trans_c_max = boxes_c.max_embed * scaling + relation
     trans_boxes = Box(trans_c_min, max_embed=trans_c_max)
 
     if neg:
@@ -162,7 +179,8 @@ def gci2_loss(data, min_embed, delta_embed, relation_embed, scaling_embed, tempe
 
     return loss
 
-def gci3_loss(data, min_embed, delta_embed, relation_embed, scaling_embed, temperature, neg=False):
+def gci3_loss(data, min_embed, delta_embed, relation_embed, scaling_embed, temperature, neg=False,
+              positive_scale=True):
     c_min = min_embed(data[:, 1])
     d_min = min_embed(data[:, 2])
 
@@ -170,13 +188,13 @@ def gci3_loss(data, min_embed, delta_embed, relation_embed, scaling_embed, tempe
     d_delta = delta_embed(data[:, 2])
 
     relation = relation_embed(data[:, 0])
-    scaling = scaling_embed(data[:, 0])
+    scaling = effective_scale(scaling_embed(data[:, 0]), positive_scale)
 
     boxes_c = Box(c_min, delta_embed=c_delta)
     boxes_d = Box(d_min, delta_embed=d_delta)
-    
-    trans_c_min = (boxes_c.min_embed - relation)/(scaling + eps)
-    trans_c_max = (boxes_c.max_embed - relation)/(scaling + eps)
+
+    trans_c_min = (boxes_c.min_embed - relation) / scaling
+    trans_c_max = (boxes_c.max_embed - relation) / scaling
     # The upper corner is passed by keyword: as a positional argument it was taken as the
     # log-width (delta_embed), which made the translated box min + exp(max) wide.
     trans_boxes = Box(trans_c_min, max_embed=trans_c_max)
@@ -197,20 +215,21 @@ def class_assertion_loss(data, ind_embed, ind_delta_embed, min_embed, delta_embe
     return inclusion_loss(box_i, box_c, temperature)
 
 
-def object_property_assertion_loss(data, ind_embed, ind_delta_embed, relation_embed, scaling_embed, temperature, neg=False):
+def object_property_assertion_loss(data, ind_embed, ind_delta_embed, relation_embed, scaling_embed,
+                                  temperature, neg=False, positive_scale=True):
     a_min = ind_embed(data[:, 0])
     a_delta = ind_delta_embed(data[:, 0])
     b_min = ind_embed(data[:, 2])
     b_delta = ind_delta_embed(data[:, 2])
 
     relation = relation_embed(data[:, 1])
-    scaling = scaling_embed(data[:, 1])
+    scaling = effective_scale(scaling_embed(data[:, 1]), positive_scale)
 
     box_a = Box(a_min, delta_embed=a_delta)
     box_b = Box(b_min, delta_embed=b_delta)
 
-    trans_a_min = box_a.min_embed * (scaling + eps) + relation
-    trans_a_max = box_a.max_embed * (scaling + eps) + relation
+    trans_a_min = box_a.min_embed * scaling + relation
+    trans_a_max = box_a.max_embed * scaling + relation
     trans_box = Box(trans_a_min, max_embed=trans_a_max)
 
     if neg:
@@ -218,28 +237,48 @@ def object_property_assertion_loss(data, ind_embed, ind_delta_embed, relation_em
     return inclusion_loss(trans_box, box_b, temperature)
 
 
-def role_inclusion_loss(data, relation_embed, scaling_embed):
+def role_inclusion_loss(data, relation_embed, scaling_embed, positive_scale=True):
+    r"""Loss of :math:`R \sqsubseteq S`: equal translations and a scale of :math:`R` that does
+    not exceed the scale of :math:`S` (so the image of a box under :math:`R` is not larger
+    than under :math:`S`; the scale term is one-sided on purpose)."""
     r_translation = relation_embed(data[:, 0])
     s_translation = relation_embed(data[:, 1])
 
-    r_scaling = scaling_embed(data[:, 0])
-    s_scaling = scaling_embed(data[:, 1])
-    
-    loss_1 = th.norm(r_translation-s_translation, p=2, dim=1,keepdim=True)
-    loss_2 = th.norm(F.relu(r_scaling/(s_scaling +eps) -1), p=2, dim=1,keepdim=True)
-    return loss_1+loss_2
+    r_scaling = _scale(scaling_embed(data[:, 0]), positive_scale)
+    s_scaling = effective_scale(scaling_embed(data[:, 1]), positive_scale)
 
-def role_chain_loss(data, relation_embed, scaling_embed):
+    loss_1 = th.norm(r_translation - s_translation, p=2, dim=1, keepdim=True)
+    loss_2 = th.norm(F.relu(r_scaling / s_scaling - 1), p=2, dim=1, keepdim=True)
+    return loss_1 + loss_2
+
+
+def role_chain_loss(data, relation_embed, scaling_embed, positive_scale=True,
+                    composition="in_order"):
+    r"""Loss of :math:`R \circ S \sqsubseteq T` (columns ``R, S, T`` of ``data``).
+
+    A role acts on a box as :math:`x \mapsto f\,x + t` (scale :math:`f`, translation
+    :math:`t`). Applying :math:`R` and then :math:`S` gives scale :math:`f_R f_S` and
+    translation :math:`f_S t_R + t_S`; the loss asks that translation to equal
+    :math:`t_T` and the composed scale not to exceed :math:`f_T` (one-sided, as in
+    :func:`role_inclusion_loss`).
+
+    :param composition: ``"in_order"`` (default) uses the translation :math:`f_S t_R + t_S`
+        of the composed map. ``"as_released"`` uses :math:`f_R t_R + t_S`, the expression
+        mOWL had before (it scales :math:`t_R` by the scale of the first role, which is
+        not the composition of the two maps).
+    """
+    if composition not in ("in_order", "as_released"):
+        raise ValueError("composition must be 'in_order' or 'as_released'.")
     r_translation = relation_embed(data[:, 0])
     s_translation = relation_embed(data[:, 1])
     t_translation = relation_embed(data[:, 2])
 
-    r_scaling = scaling_embed(data[:, 0])
-    s_scaling = scaling_embed(data[:, 1])
-    t_scaling = scaling_embed(data[:, 2])
-    
-    loss_1 = th.norm(r_scaling*r_translation + s_translation - t_translation, p=2, dim=1,keepdim=True)
-    loss_2 = th.norm(F.relu(r_scaling*s_scaling/(t_scaling +eps) -1), p=2, dim=1,keepdim=True)
-    return loss_1+loss_2
+    r_scaling = _scale(scaling_embed(data[:, 0]), positive_scale)
+    s_scaling = _scale(scaling_embed(data[:, 1]), positive_scale)
+    t_scaling = effective_scale(scaling_embed(data[:, 2]), positive_scale)
 
-
+    first = s_scaling if composition == "in_order" else r_scaling
+    composed = first * r_translation + s_translation
+    loss_1 = th.norm(composed - t_translation, p=2, dim=1, keepdim=True)
+    loss_2 = th.norm(F.relu(r_scaling * s_scaling / t_scaling - 1), p=2, dim=1, keepdim=True)
+    return loss_1 + loss_2

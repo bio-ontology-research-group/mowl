@@ -38,7 +38,8 @@ RECIPES = tuple(
         benchmark=f"boxsel-sel-{name}", method="boxsel", source=ZHU2024,
         model_kwargs={"embed_dim": dim, "learning_rate": lr, "beta": beta,
                       "location_weight": 1.0, "volume_weight": 1.0,
-                      "temperature": 10.0, "temperature_final": 1000.0},
+                      "temperature": 10.0, "temperature_final": 1000.0,
+                      "positive_scale": False},
         epochs=int(round(epochs * n / bs)),
         locator="Table 'Best hyperparameters' (ED, EP, BS, LR, BR); Section 'Implementation'",
         notes=_NOTE.format(bs=bs, epochs=epochs, n=n))

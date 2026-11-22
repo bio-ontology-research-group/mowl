@@ -69,7 +69,8 @@ class BoxSEL(EmbeddingELModel):
                  delta_bounds=(-0.1, 0), relation_bounds=(-0.1, 0.1),
                  scaling_bounds=(0.9, 1.1), temperature=1.0, temperature_final=None,
                  learning_rate=0.001, batch_size=4096 * 8, model_filepath=None, device="cpu",
-                 neg_sampling_gcis=None):
+                 neg_sampling_gcis=None, positive_scale=True,
+                 role_chain_composition="in_order"):
         self.beta = beta
         self.location_weight = location_weight
         self.volume_weight = volume_weight
@@ -79,6 +80,8 @@ class BoxSEL(EmbeddingELModel):
         self.relation_bounds = list(relation_bounds)
         self.scaling_bounds = list(scaling_bounds)
         self.temperature = temperature
+        self.positive_scale = positive_scale
+        self.role_chain_composition = role_chain_composition
         self.temperature_final = temperature_final
         super().__init__(dataset, embed_dim, batch_size, extended=True,
                          model_filepath=model_filepath, device=device,
@@ -95,6 +98,8 @@ class BoxSEL(EmbeddingELModel):
             relation_bounds=self.relation_bounds, scaling_bounds=self.scaling_bounds,
             temperature=self.temperature, beta=self.beta,
             location_weight=self.location_weight, volume_weight=self.volume_weight,
+            positive_scale=self.positive_scale,
+            role_chain_composition=self.role_chain_composition,
         ).to(self.device)
 
     # -- conditionals --------------------------------------------------------------------

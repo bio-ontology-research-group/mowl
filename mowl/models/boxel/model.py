@@ -8,6 +8,11 @@ class BoxEL(EmbeddingELModel):
 
     This model uses box embeddings where each class is represented as an
     axis-aligned box defined by a minimum point and a delta (size) vector.
+
+    :param positive_scale: Use :math:`|s| + \\epsilon` as the scale of a role (default) so
+        that no role inverts a box; ``False`` is the signed scale of the original code.
+    :param role_chain_composition: ``"in_order"`` (default) or ``"as_released"``, see
+        :func:`mowl.nn.el.boxel.losses.role_chain_loss`.
     """
 
     def __init__(self,
@@ -22,7 +27,9 @@ class BoxEL(EmbeddingELModel):
                  batch_size=4096 * 8,
                  model_filepath=None,
                  device='cpu',
-                 neg_sampling_gcis=None
+                 neg_sampling_gcis=None,
+                 positive_scale=True,
+                 role_chain_composition="in_order"
                  ):
         super().__init__(dataset, embed_dim, batch_size, extended=True,
                          model_filepath=model_filepath, device=device,
@@ -34,6 +41,8 @@ class BoxEL(EmbeddingELModel):
         self.relation_bounds = list(relation_bounds)
         self.scaling_bounds = list(scaling_bounds)
         self.temperature = temperature
+        self.positive_scale = positive_scale
+        self.role_chain_composition = role_chain_composition
         self.init_module()
 
     def init_module(self):
@@ -47,4 +56,6 @@ class BoxEL(EmbeddingELModel):
             relation_bounds=self.relation_bounds,
             scaling_bounds=self.scaling_bounds,
             temperature=self.temperature,
+            positive_scale=self.positive_scale,
+            role_chain_composition=self.role_chain_composition,
         ).to(self.device)

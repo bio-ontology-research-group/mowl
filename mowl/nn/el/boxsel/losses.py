@@ -9,7 +9,7 @@ BoxEL), because :math:`r = \\{(a, b) \\mid T^r(a) = b\\}`.
 import torch as th
 import torch.nn.functional as F
 
-from mowl.nn.el.boxel.losses import eps
+from mowl.nn.el.boxel.losses import eps, effective_scale
 
 
 def compile_expression(expr, class_index, role_index):
@@ -33,22 +33,25 @@ def compile_expression(expr, class_index, role_index):
                      "or ('some', role_iri, e).")
 
 
-def expression_box(struct, leaves, pos, min_embed, delta_embed, relation_embed, scaling_embed):
+def expression_box(struct, leaves, pos, min_embed, delta_embed, relation_embed, scaling_embed,
+                   positive_scale=True):
     """Lower and upper corner ``(m, M, next position)`` of the box of an expression, for a
-    batch of rows: ``leaves`` is a ``(B, k)`` index tensor, ``pos`` the next column."""
+    batch of rows: ``leaves`` is a ``(B, k)`` index tensor, ``pos`` the next column.
+    ``positive_scale`` as in :func:`mowl.nn.el.boxel.losses.effective_scale`."""
     kind = struct[0]
     if kind == "atom":
         m = min_embed(leaves[:, pos])
         return m, m + th.exp(delta_embed(leaves[:, pos])), pos + 1
     if kind == "some":
-        rel, scale = relation_embed(leaves[:, pos]), scaling_embed(leaves[:, pos])
+        rel = relation_embed(leaves[:, pos])
+        scale = effective_scale(scaling_embed(leaves[:, pos]), positive_scale)
         m, big, nxt = expression_box(struct[1], leaves, pos + 1, min_embed, delta_embed,
-                                     relation_embed, scaling_embed)
-        return (m - rel) / (scale + eps), (big - rel) / (scale + eps), nxt
+                                     relation_embed, scaling_embed, positive_scale)
+        return (m - rel) / scale, (big - rel) / scale, nxt
     m = big = None
     for sub in struct[1:]:
         m2, big2, pos = expression_box(sub, leaves, pos, min_embed, delta_embed,
-                                       relation_embed, scaling_embed)
+                                       relation_embed, scaling_embed, positive_scale)
         m, big = (m2, big2) if m is None else (th.max(m, m2), th.min(big, big2))
     return m, big, pos
 
