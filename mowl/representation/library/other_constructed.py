@@ -2,11 +2,14 @@
 
 ``canonical_model``, ``least_model``, ``box_milp``, ``interval_union``,
 ``convex_polyhedral``, ``convex_regions``, ``alcone-exact``, ``temporal_cones`` and
-``attributed_dl`` build a model by a construction (a theorem), not by training. They are
-not combinations of parts: nothing is learned, so there is nothing to swap. What they
-share with the trained methods is the questions one asks of a model: what is the region of
-a class, of an individual, of :math:`\\exists r.C` or :math:`C \\sqcap D`; does one lie
-inside another. :class:`ConstructedGeometry` answers them for a constructed model.
+``attributed_dl`` build a model by a construction (a theorem), not by training. Their
+geometry is now the combination of a source and a reading
+(:mod:`mowl.representation.construction`, registered by
+:mod:`mowl.representation.library.construct_methods`). This module keeps the earlier,
+direct geometry of *backends* that ask the construction's own checker, which the geometry
+of FaithEL (:mod:`~mowl.representation.library.other_regions`) is built on; it is no
+longer the adapter of the construction classes. :class:`ConstructedGeometry` answers the
+questions of the common interface for a constructed model.
 
 **Costs are 0.0 where the relation holds and 1.0 where it does not**, computed by the
 exact checker of the construction (:class:`~mowl.geometric.checker.ModelChecker`, the
