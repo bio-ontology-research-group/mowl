@@ -796,7 +796,7 @@ def test_train_lr_schedule_cosine_linear_and_constant(
 
 def _reference_tol0_crisp_rates(model: GroundedEL, n_eval: int = 2000) -> Dict[str, float]:
     """Reference pre-Task-9 bit-for-bit implementation of crisp_report(n_eval) at tol=0."""
-    from mowl.nn.el.grounded.losses import gci0, gci0_bot, gci1, gci1_bot
+    from mowl.nn.el.grounded.constraints import gci0, gci0_bot, gci1, gci1_bot
     from mowl.nn.el.grounded.sampling import sample_class_region, sample_pair_region
 
     mod = model.module
@@ -1181,7 +1181,7 @@ def test_chain_a_sub_b_sub_bot_300_epochs_kills_x_a() -> None:
 
 def test_dead_from_bot_only_false_reproduces_legacy_loss_bit_for_bit() -> None:
     """Task 10 (iv): dead_from_bot_only=False reproduces the pre-Task-10 loss value on a fixed batch bit-for-bit."""
-    from mowl.nn.el.grounded.losses import (
+    from mowl.nn.el.grounded.constraints import (
         fact,
         gci0,
         gci0_bot,

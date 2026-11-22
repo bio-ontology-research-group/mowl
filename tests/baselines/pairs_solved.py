@@ -1,4 +1,5 @@
-"""Comparisons of the solved and grounded methods: ``boxlite``, ``faithel``, ``grounded``.
+"""Comparisons of the solved methods: ``boxlite``, ``faithel`` (``grounded``:
+``pairs_grounded.py``).
 
 BoxLitE is solved by a conic solver; the optional package ``cvxpy`` is not always installed.
 Its comparison therefore sets the embedding of the direct implementation by hand (the same
@@ -255,72 +256,7 @@ def _faithel_pair(key, **options):
                 dataset=_faithel_dataset, epochs=3)
 
 
-# ---------------------------------------------------------------------------------------
-# GroundedEL
-# ---------------------------------------------------------------------------------------
-def _grounded_dataset():
-    from mowl.datasets import PathDataset
-    from tests.geometric.helpers import fixture_path
-    return PathDataset(fixture_path("roles.owl"))
-
-
-_GROUNDED = dict(embed_dim=3, n_components=2, n_role_components=2, epochs=3, batch_size=16,
-                 learning_rate=0.01, n_region_samples=2, n_adv=1, n_random_elements=2,
-                 n_inside_elements=4, n_filler_samples=4, seed=0, log_every=0)
-
-
-def _grounded_new(**options):
-    def build(dataset):
-        from mowl.models import GroundedEL
-        return GroundedEL(dataset, **{**_GROUNDED, **options})
-    return build
-
-
-def _grounded_old(**options):
-    def build(dataset):
-        from mowl.baselines.models.grounded.model import GroundedEL
-        return GroundedEL(dataset, **{**_GROUNDED, **options})
-    return build
-
-
-def _grounded_copy(old, new):
-    new.module.load_state_dict(old.module.state_dict())
-
-
-def _grounded_losses(model):
-    generator = th.Generator().manual_seed(1234)
-    out = model.compute_batch_losses(generator=generator)
-    return {k: v.detach() for k, v in out.items()}
-
-
-def _grounded_scores(model):
-    """The membership of every element in every class, the crisp report (violation rates)."""
-    m = model.module
-    positions = m.positions().detach()
-    n = positions.shape[0]
-    member = th.stack([m.membership(positions, th.full((n,), c, dtype=th.long)).detach()
-                       for c in range(m.nb_classes)])
-    report = model.crisp_report(n_eval=64)
-    return {"membership": member,
-            "violations": th.tensor([float(report["elem_viol"]), float(report["region_viol"])])}
-
-
-def _grounded_train(model, epochs):
-    model.train(epochs=epochs)
-
-
-def _grounded_pair(key, **options):
-    return Pair(key=key, new=_grounded_new(**options), old=_grounded_old(**options),
-                copy=_grounded_copy, scores=_grounded_scores, losses=_grounded_losses,
-                train=_grounded_train,
-                parameters=lambda model: {k: v.detach() for k, v in
-                                          model.module.state_dict().items()},
-                dataset=_grounded_dataset, epochs=3)
-
-
 PAIRS = [_boxlite_pair("paper"), _boxlite_pair("reference"),
          _faithel_pair("faithel"),
-         _faithel_pair("faithel/anchor-only", centroid_score=False, neg_sampling=False),
-         _grounded_pair("grounded"),
-         _grounded_pair("grounded/translation", role_mode="translation", neg_weight=0.5)]
+         _faithel_pair("faithel/anchor-only", centroid_score=False, neg_sampling=False)]
 EXEMPT = {}

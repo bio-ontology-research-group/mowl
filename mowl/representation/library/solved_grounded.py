@@ -2,31 +2,33 @@
 
 GroundedEL positions the elements of a finite domain (one per class, then one per individual)
 and gives every class a region of boxes and every relation a region over pairs around them.
-The method is the combination
+The method is the combination (the parts are in
+:mod:`~mowl.representation.library.grounded_parts` and
+:mod:`~mowl.representation.library.grounded_logic`)
 
 ========================  ======================================================================
-domain                    one element per class, then one per individual (``Domain`` of
-                          ``solved_grounding``)
-individual model          a point: the position of the element
-class model               a union of boxes with a deadness per element (``MaskedUnionOfBoxes``)
-relation model            a union of product boxes over pairs (``role_mode="product"``) or of
-                          translation boxes (``"translation"``)
-measure                   bounds per coordinate: the signed depth of a point in a box
+shared part               ``ElementDomain``: the positions and the deadness of the elements (one
+                          per class, then one per individual) and the membership temperature
+individual model          ``ElementPoints``: the point of the individual's element
+class model               ``BoxUnionClasses``: a union of boxes per class, some inactive
+relation model            ``ProductBoxRelations`` (``role_mode="product"``, a union of products of
+                          boxes) or ``TranslationBoxRelations`` (``"translation"``)
+measure                   ``UnionDepth``: the signed depth in a union of boxes (``agg``)
 objective                 the grounded constraints (``GroundedConstraints`` of
-                          ``mowl.models.grounded.objective``): hinge losses of the axioms
-                          grounded over sampled elements and region points
+                          ``mowl.models.grounded.objective``, the forms of
+                          ``mowl.nn.el.grounded.constraints``): rules in the Łukasiewicz logic
+                          at sampled elements (``logic=`` swaps it), depth hinges at sampled
+                          region points, the minimality regulariser; as a linear program over
+                          a membership table: ``GroundedProgram`` (``grounded_program``)
 training regime           ``mowl.training.GroundedELTraining``: temperature annealing, a
                           learning-rate schedule, idle-component reseeding, dual weights
 evaluation regime         ``crisp_report`` and ``evaluate_model`` (``GroundedEvaluation`` of
                           ``mowl.models.grounded.evaluation``)
 ========================  ======================================================================
 
-The class and relation models of the module share the positions of the elements (a class is
-a region *around* the elements that belong to it), which is why they live in one module,
-:class:`mowl.nn.GroundedELModule`; the module is a
-:class:`~mowl.representation.Geometry` (``classes``, ``individuals``, ``exists``,
-``conjunction``, ``inside``, ``apart``, ``member``) and names its parts (``parts``).
-:func:`grounded` is the named combination.
+:class:`mowl.nn.GroundedELModule` combines the parts (``shared``, ``class_model``,
+``relation_model``, ``individual_model``, ``measure``, ``parts``); it is a
+:class:`~mowl.representation.Geometry`. :func:`grounded` is the named combination.
 """
 
 from mowl.representation.methods import register_method
@@ -45,8 +47,9 @@ def grounded(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, n_compone
     :class:`mowl.models.GroundedEL` (it needs the axioms of the ontology to sample from).
 
     :param n_components, n_role_components: Boxes per class and per role.
-    :param role_mode: ``"product"`` (a role is a set of pairs of boxes) or ``"translation"``
-        (a role is a box of translations).
+    :param role_mode: The relation model: ``"product"`` (a role is a set of pairs of boxes) or
+        ``"translation"`` (a role is a box of translations).
+    :param agg, agg_tau: The measure (maximum or log-sum-exp over the boxes of a union).
     :param tables: An existing module (it is its own geometry; returned as it is).
     """
     if tables is not None:

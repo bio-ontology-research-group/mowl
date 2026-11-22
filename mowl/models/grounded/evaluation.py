@@ -23,8 +23,8 @@ from mowl.nn.el.grounded import (
     sample_pair_region,
     sample_role_region,
 )
-from mowl.nn.el.grounded.module import _EMPTY_DEPTH_FLOOR, _TOP_DEPTH_CEIL, _validate_int_ge
-from mowl.nn.el.grounded.losses import _validate_nonneg_weight
+from mowl.nn.el.grounded.module import _EMPTY_DEPTH_FLOOR, _validate_int_ge
+from mowl.representation.library.grounded_logic import validate_nonneg_weight as _validate_nonneg_weight
 from mowl.owlapi.defaults import BOT as BOTTOM, TOP
 from mowl.models.grounded.common import _TOL_DEPTH_LEVELS, _ToleranceCountDict, _short_iri_map
 
@@ -79,46 +79,10 @@ class GroundedEvaluation:
         mentioned_classes: th.Tensor,
         chunk_size: int = 512,
     ) -> th.Tensor:
-        """Compute signed crisp depth ``(L, M)`` only for ``eval_pos`` and ``mentioned_classes`` in chunks."""
-        mod = self.module
-        device = self.device
-        n_eval_el = int(eval_pos.shape[0])
-        n_ment = int(mentioned_classes.numel())
-        out = th.empty((n_eval_el, n_ment), dtype=th.float32, device=device)
-        if n_eval_el == 0 or n_ment == 0:
-            return out
-
-        for c_s in range(0, n_ment, chunk_size):
-            c_e = min(c_s + chunk_size, n_ment)
-            c_sub = mentioned_classes[c_s:c_e]  # (C_sub,)
-            reg_sub = mod.class_regions(c_sub)  # (C_sub, K, d)
-            c_dep = th.amin(
-                reg_sub.w.unsqueeze(0)
-                - th.abs(eval_pos.unsqueeze(1).unsqueeze(2) - reg_sub.cen.unsqueeze(0)),
-                dim=-1,
-            )  # (L, C_sub, K)
-            has_act = reg_sub.active.any(dim=-1, keepdim=True)  # (C_sub, 1)
-            fill_val = th.where(
-                has_act.unsqueeze(0),
-                th.full_like(c_dep, float("-inf")),
-                th.full_like(c_dep, _EMPTY_DEPTH_FLOOR),
-            )
-            c_dep = th.where(reg_sub.active.unsqueeze(0), c_dep, fill_val)
-            max_dep = th.amax(c_dep, dim=-1)  # (L, C_sub)
-            if self.top_id is not None:
-                max_dep = th.where(
-                    (c_sub == self.top_id).unsqueeze(0),
-                    th.full_like(max_dep, _TOP_DEPTH_CEIL),
-                    max_dep,
-                )
-            if self.bot_id is not None:
-                max_dep = th.where(
-                    (c_sub == self.bot_id).unsqueeze(0),
-                    th.full_like(max_dep, _EMPTY_DEPTH_FLOOR),
-                    max_dep,
-                )
-            out[:, c_s:c_e] = max_dep
-        return out
+        """Crisp depth ``(L, M)`` of ``eval_pos`` in ``mentioned_classes`` (the class model's
+        depth table)."""
+        return self.module.class_model.depth_table(eval_pos, mentioned_classes,
+                                                   chunk_size=chunk_size)
 
 
     def _eval_elem_memberships_chunked(

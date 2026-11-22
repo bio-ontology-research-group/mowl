@@ -1,5 +1,5 @@
-"""Element-grounded EL++ neural module, Łukasiewicz hinge losses, and samplers."""
-from mowl.nn.el.grounded.losses import (
+"""Element-grounded EL++ geometry (built from parts), its grounded constraints, and samplers."""
+from mowl.nn.el.grounded.constraints import (
     class_assertion,
     crisp_membership,
     fact,

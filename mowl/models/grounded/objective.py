@@ -10,37 +10,8 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
 import torch as th
-import torch.nn.functional as F
-from mowl.nn.el.grounded import (
+from mowl.nn.el.grounded.sampling import (
     RegionSample,
-    class_assertion,
-    fact,
-    gci0,
-    gci0_bot,
-    gci0_bot_region,
-    gci0_region,
-    gci1,
-    gci1_bot,
-    gci1_bot_region,
-    gci1_region,
-    gci2,
-    gci2_dead,
-    gci2_region,
-    gci2_region_trans,
-    gci3,
-    gci3_bot,
-    gci3_bot_region,
-    gci3_bot_region_trans,
-    gci3_region,
-    gci3_region_trans,
-    minimality,
-    role_assertion,
-    role_chain,
-    role_chain_region,
-    role_chain_region_trans,
-    role_inclusion,
-    role_inclusion_region,
-    role_inclusion_region_trans,
     sample_class_region,
     sample_elements,
     sample_exists_region,
@@ -190,85 +161,31 @@ class GroundedConstraints:
         r_ids: th.Tensor,
         need_crisp: bool = False,
     ) -> Tuple[th.Tensor, Optional[th.Tensor]]:
-        """Compute ``role_membership`` (and optional crisp role depth) on a ``(B, sx, sy)`` grid."""
-        mod = self.module
-        bsz, sx = x_mat.shape
-        sy = int(y_mat.shape[1])
-        px_2d = pos_all[x_mat]  # (B, sx, d)
-        py_2d = pos_all[y_mat]  # (B, sy, d)
-        if mod.role_mode == "translation":
-            t_reg = mod.translation_regions(r_ids)
-            t_cen = t_reg.cen.to(dtype=px_2d.dtype)
-            t_w = t_reg.w.to(dtype=px_2d.dtype)
-            diff = py_2d.unsqueeze(1) - px_2d.unsqueeze(2)  # (B, sx, sy, d)
-            slot_depth = th.amin(
-                t_w.view(bsz, 1, 1, -1, self.embed_dim)
-                - th.abs(
-                    diff.unsqueeze(3)
-                    - t_cen.view(bsz, 1, 1, -1, self.embed_dim)
-                ),
-                dim=-1,
-            ).reshape(bsz * sx * sy, -1)
-            act_flat = (
-                t_reg.active.view(bsz, 1, 1, -1)
-                .expand(bsz, sx, sy, -1)
-                .reshape(bsz * sx * sy, -1)
-            )
-            dep_soft = mod._aggregate_slot_depth(slot_depth, act_flat, crisp=False)
-            rho_xy = th.sigmoid(dep_soft / mod.tau.to(dtype=dep_soft.dtype))
-            if not need_crisp:
-                return rho_xy, None
-            dep_crisp = mod._aggregate_slot_depth(slot_depth, act_flat, crisp=True)
-            return rho_xy, dep_crisp
-
-        h_reg, t_reg = mod.role_regions(r_ids)
-        h_cen = h_reg.cen.to(dtype=px_2d.dtype)
-        h_w = h_reg.w.to(dtype=px_2d.dtype)
-        t_cen = t_reg.cen.to(dtype=py_2d.dtype)
-        t_w = t_reg.w.to(dtype=py_2d.dtype)
-
-        h_dep = th.amin(
-            h_w.unsqueeze(1) - th.abs(px_2d.unsqueeze(2) - h_cen.unsqueeze(1)), dim=-1
-        )  # (B, sx, K_r)
-        t_dep = th.amin(
-            t_w.unsqueeze(1) - th.abs(py_2d.unsqueeze(2) - t_cen.unsqueeze(1)), dim=-1
-        )  # (B, sy, K_r)
-        slot_depth = th.minimum(h_dep.unsqueeze(2), t_dep.unsqueeze(1)).reshape(
-            bsz * sx * sy, -1
-        )  # (B * sx * sy, K_r)
-        act_flat = (
-            h_reg.active.view(bsz, 1, 1, -1)
-            .expand(bsz, sx, sy, -1)
-            .reshape(bsz * sx * sy, -1)
-        )
-        dep_soft = mod._aggregate_slot_depth(slot_depth, act_flat, crisp=False)
-        rho_xy = th.sigmoid(dep_soft / mod.tau.to(dtype=dep_soft.dtype))
-        if not need_crisp:
-            return rho_xy, None
-        dep_crisp = mod._aggregate_slot_depth(slot_depth, act_flat, crisp=True)
-        return rho_xy, dep_crisp
-
+        """Degrees of the relation model on a ``(B, sx, sy)`` grid of elements (and the crisp
+        depths when ``need_crisp``)."""
+        return self.module.relation_model.grid_membership(
+            pos_all[x_mat], pos_all[y_mat], r_ids, need_crisp=need_crisp)
 
     def _depth_and_membership_pos_grad_only(
         self,
         points: th.Tensor,
         class_ids: th.Tensor,
     ) -> Tuple[th.Tensor, th.Tensor]:
-        """Compute ``(depth, membership)`` with class box parameters detached so gradients flow only to ``points``."""
-        mod = self.module
-        reg = mod.class_regions(class_ids)
-        slot_dep = th.amin(
-            reg.w.detach() - th.abs(points.unsqueeze(1) - reg.cen.detach()),
-            dim=-1,
-        )
-        dep = mod._aggregate_slot_depth(slot_dep, reg.active, crisp=False)
-        m = th.sigmoid(dep / mod.tau.to(dtype=dep.dtype))
-        if self.top_id is not None:
-            m = th.where(class_ids == self.top_id, th.ones_like(m), m)
-        if self.bot_id is not None:
-            m = th.where(class_ids == self.bot_id, th.zeros_like(m), m)
-        return dep, m
+        """``(depth, membership)`` of the class model with its boxes held fixed (gradients
+        reach only ``points``)."""
+        return self.module.class_model.held_membership(points, class_ids)
 
+    @property
+    def constraint_set(self):
+        """The grounded constraints of every axiom form, read in the logic of the model
+        (:class:`~mowl.nn.el.grounded.constraints.ConstraintSet`)."""
+        from mowl.nn.el.grounded.constraints import ConstraintSet
+        rules = getattr(self, "rules", None)
+        cached = self.__dict__.get("_constraint_set")
+        if cached is None or cached.rules is not rules:
+            cached = ConstraintSet(rules) if rules is not None else ConstraintSet()
+            self.__dict__["_constraint_set"] = cached
+        return cached
 
     def compute_batch_losses(
         self,
@@ -340,11 +257,20 @@ class GroundedConstraints:
 
         mod = self.module
         device = self.device
-        dtype = mod.class_centers.dtype
+        dtype = mod.class_model.centers.dtype
         td = self.training_datasets
+        # The parts: class model, relation model, measure, shared element domain, and the
+        # constraints of every form (read in the logic of the model).
+        classes, relations = mod.class_model, mod.relation_model
+        measure, shared = mod.measure, mod.shared
+        C = self.constraint_set
+        hinges = C.hinges
 
-        pos_all = mod.positions()  # (nb_elements, d)
-        dead_raw = mod.dead()
+        def exists_depth(points, rel_ids, class_ids):
+            return relations.exists_depth(points, rel_ids, class_ids, classes)
+
+        pos_all = shared.positions()  # (nb_elements, d)
+        dead_raw = shared.dead()
         if self.bot_id is not None:
             dead_all = dead_raw.clone()
             dead_all[self.bot_id] = 1.0
@@ -361,8 +287,8 @@ class GroundedConstraints:
         if cls_ids.numel() > 0:
             if cls_ids.numel() > self.batch_size:
                 cls_ids = self._sample_rows(cls_ids.unsqueeze(1), generator).squeeze(1)
-            m_self = mod.membership(pos_all[cls_ids], cls_ids)
-            loss_fact = fact(m_self, dead=dead_gate[cls_ids]).mean()
+            m_self = classes.membership(pos_all[cls_ids], cls_ids)
+            loss_fact = C.fact(m_self, dead=dead_gate[cls_ids]).mean()
         else:
             loss_fact = th.zeros((), dtype=dtype, device=device)
 
@@ -390,42 +316,42 @@ class GroundedConstraints:
             a_flat = rows[:, 0].unsqueeze(1).expand(bsz, s_cnt).reshape(-1)
             b_flat = rows[:, 1].unsqueeze(1).expand(bsz, s_cnt).reshape(-1)
             px = pos_all[x_flat]
-            ma = mod.membership(px, a_flat)
-            mb = mod.membership(px, b_flat)
+            ma = classes.membership(px, a_flat)
+            mb = classes.membership(px, b_flat)
             if self.dead_from_bot_only:
                 is_self = x_flat == a_flat
-                in_b_crisp = mod.depth(px, b_flat, crisp=True) > 0.0
+                in_b_crisp = classes.depth(px, b_flat, crisp=True) > 0.0
                 ma_box = th.where(is_self, th.ones_like(ma), ma)
                 mb_box = th.where(in_b_crisp, th.ones_like(mb), mb)
-                h_box = gci0(ma_box, mb_box, dead=dead_gate[x_flat])
+                h_box = C.gci0(ma_box, mb_box, dead=dead_gate[x_flat])
                 a_col = rows[:, 0]
                 b_col = rows[:, 1]
-                d_pull = (1.0 - dead_gate[a_col]) * gci0_region(
-                    mod.depth(pos_all[a_col], b_col), margin=self.region_margin
+                d_pull = (1.0 - dead_gate[a_col]) * C.gci0_region(
+                    classes.depth(pos_all[a_col], b_col), margin=self.region_margin
                 )
                 axiom_terms.append(h_box.mean() + d_pull.mean())
             else:
-                h_box = gci0(ma, mb, dead=dead_gate[x_flat])
+                h_box = C.gci0(ma, mb, dead=dead_gate[x_flat])
                 is_self = x_flat == a_flat
                 is_self_dead = is_self & (dead_gate[x_flat] > 0.5)
                 crisp_viol_0 = (
                     is_self
-                    & ((mod.depth(px, a_flat, crisp=True) > 0.0) | is_self_dead)
-                    & (mod.depth(px, b_flat, crisp=True) <= 0.0)
+                    & ((classes.depth(px, a_flat, crisp=True) > 0.0) | is_self_dead)
+                    & (classes.depth(px, b_flat, crisp=True) <= 0.0)
                 )
                 ma_d = th.where(is_self_dead, th.ones_like(ma), ma.detach())
                 dead_eff_0 = th.where(
                     crisp_viol_0, dead_all[x_flat], th.ones_like(dead_all[x_flat])
                 )
-                h_dead = gci0(ma_d, mb.detach(), dead=dead_eff_0)
+                h_dead = C.gci0(ma_d, mb.detach(), dead=dead_eff_0)
                 axiom_terms.append((h_box + h_dead).mean())
             if do_region:
                 a_reg = rows[:, 0].repeat(self.n_region_samples)
                 b_reg = rows[:, 1].repeat(self.n_region_samples)
                 h_fn = (
                     (
-                        lambda z: gci0_region(
-                            mod.depth(z, rows[:, 1].repeat(max(z.shape[0] // bsz, 1))),
+                        lambda z: C.gci0_region(
+                            classes.depth(z, rows[:, 1].repeat(max(z.shape[0] // bsz, 1))),
                             margin=self.region_margin,
                         )
                     )
@@ -447,10 +373,10 @@ class GroundedConstraints:
                     bv = b_reg[reg.valid]
                     live_a = 1.0 - dead_gate[av]
                     dead_a = dead_gate[av]
-                    reg_h = live_a * gci0_region(
-                        mod.depth(pts, bv), margin=self.region_margin
-                    ) + dead_a * gci0_bot_region(
-                        mod.depth(pts_raw.detach(), av), margin=self.region_margin
+                    reg_h = live_a * C.gci0_region(
+                        classes.depth(pts, bv), margin=self.region_margin
+                    ) + dead_a * C.gci0_bot_region(
+                        classes.depth(pts_raw.detach(), av), margin=self.region_margin
                     )
                     region_terms.append(reg_h.mean())
 
@@ -473,34 +399,34 @@ class GroundedConstraints:
             x_flat = x_mat.reshape(-1)
             a_flat = a_col.unsqueeze(1).expand(bsz, s_cnt).reshape(-1)
             px = pos_all[x_flat]
-            ma = mod.membership(px, a_flat)
+            ma = classes.membership(px, a_flat)
             if self.dead_from_bot_only:
                 crisp_0b = (
                     (x_flat == a_flat)
-                    | (mod.depth(px, a_flat, crisp=True) > 0.0)
+                    | (classes.depth(px, a_flat, crisp=True) > 0.0)
                     | (dead_all[x_flat].detach() > 0.5)
                 )
                 dead_box_0b = th.where(
                     x_flat == a_flat, dead_gate[x_flat], th.ones_like(dead_gate[x_flat])
                 )
-                h_box = gci0_bot(ma, dead=dead_box_0b)
+                h_box = C.gci0_bot(ma, dead=dead_box_0b)
                 ma_d = th.where(crisp_0b, th.ones_like(ma), ma.detach())
                 dead_eff_0b = th.where(
                     crisp_0b, dead_all[x_flat], th.ones_like(dead_all[x_flat])
                 )
-                h_dead = gci0_bot(ma_d, dead=dead_eff_0b)
+                h_dead = C.gci0_bot(ma_d, dead=dead_eff_0b)
                 axiom_terms.append((h_box + h_dead).mean())
             else:
-                h_box = gci0_bot(ma, dead=dead_gate[x_flat])
+                h_box = C.gci0_bot(ma, dead=dead_gate[x_flat])
                 ma_d = th.where(x_flat == a_flat, th.ones_like(ma), ma.detach())
-                h_dead = gci0_bot(ma_d, dead=dead_all[x_flat])
+                h_dead = C.gci0_bot(ma_d, dead=dead_all[x_flat])
                 axiom_terms.append((h_box + h_dead).mean())
             if do_region:
                 a_reg = a_col.repeat(self.n_region_samples)
                 h_fn = (
                     (
-                        lambda z: gci0_bot_region(
-                            mod.depth(z, a_col.repeat(max(z.shape[0] // bsz, 1))),
+                        lambda z: C.gci0_bot_region(
+                            classes.depth(z, a_col.repeat(max(z.shape[0] // bsz, 1))),
                             margin=self.region_margin,
                         )
                     )
@@ -519,8 +445,8 @@ class GroundedConstraints:
                     pts = reg.points[reg.valid].detach()
                     av = a_reg[reg.valid]
                     region_terms.append(
-                        gci0_bot_region(
-                            mod.depth(pts, av), margin=self.region_margin
+                        C.gci0_bot_region(
+                            classes.depth(pts, av), margin=self.region_margin
                         ).mean()
                     )
 
@@ -544,11 +470,11 @@ class GroundedConstraints:
             b_flat = rows[:, 1].unsqueeze(1).expand(bsz, s_cnt).reshape(-1)
             c_flat = rows[:, 2].unsqueeze(1).expand(bsz, s_cnt).reshape(-1)
             px = pos_all[x_flat]
-            ma = mod.membership(px, a_flat)
-            mb = mod.membership(px, b_flat)
-            mc = mod.membership(px, c_flat)
+            ma = classes.membership(px, a_flat)
+            mb = classes.membership(px, b_flat)
+            mc = classes.membership(px, c_flat)
             axiom_terms.append(
-                gci1(ma, mb, mc, dead=dead_gate[x_flat]).mean()
+                C.gci1(ma, mb, mc, dead=dead_gate[x_flat]).mean()
             )
             if do_region:
                 a_reg = rows[:, 0].repeat(self.n_region_samples)
@@ -556,8 +482,8 @@ class GroundedConstraints:
                 c_reg = rows[:, 2].repeat(self.n_region_samples)
                 h_fn = (
                     (
-                        lambda z: gci1_region(
-                            mod.depth(z, rows[:, 2].repeat(max(z.shape[0] // bsz, 1))),
+                        lambda z: C.gci1_region(
+                            classes.depth(z, rows[:, 2].repeat(max(z.shape[0] // bsz, 1))),
                             margin=self.region_margin,
                         )
                     )
@@ -583,8 +509,8 @@ class GroundedConstraints:
                     region_terms.append(
                         (
                             live_ab
-                            * gci1_region(
-                                mod.depth(pts, cv), margin=self.region_margin
+                            * C.gci1_region(
+                                classes.depth(pts, cv), margin=self.region_margin
                             )
                         ).mean()
                     )
@@ -608,10 +534,10 @@ class GroundedConstraints:
             a_flat = rows[:, 0].unsqueeze(1).expand(bsz, s_cnt).reshape(-1)
             b_flat = rows[:, 1].unsqueeze(1).expand(bsz, s_cnt).reshape(-1)
             px = pos_all[x_flat]
-            ma = mod.membership(px, a_flat)
-            mb = mod.membership(px, b_flat)
-            both_crisp = (mod.depth(px, a_flat, crisp=True) > 0.0) & (
-                mod.depth(px, b_flat, crisp=True) > 0.0
+            ma = classes.membership(px, a_flat)
+            mb = classes.membership(px, b_flat)
+            both_crisp = (classes.depth(px, a_flat, crisp=True) > 0.0) & (
+                classes.depth(px, b_flat, crisp=True) > 0.0
             )
             if self.dead_from_bot_only:
                 is_lhs_self = (x_flat == a_flat) | (x_flat == b_flat)
@@ -622,37 +548,37 @@ class GroundedConstraints:
                 d_push = (
                     0.5
                     * (1.0 - dead_gate[x_flat])
-                    * F.relu(th.minimum(dep_a_pos, dep_b_pos))
+                    * hinges.outside(th.minimum(dep_a_pos, dep_b_pos))
                 )
-                h_box = gci1_bot(ma_box, mb_box, dead=dead_gate[x_flat]) + d_push
+                h_box = C.gci1_bot(ma_box, mb_box, dead=dead_gate[x_flat]) + d_push
                 a_col = rows[:, 0]
                 b_col = rows[:, 1]
                 d_sep = 0.5 * (
-                    (1.0 - dead_gate[a_col]) * F.relu(mod.depth(pos_all[a_col], b_col))
-                    + (1.0 - dead_gate[b_col]) * F.relu(mod.depth(pos_all[b_col], a_col))
+                    (1.0 - dead_gate[a_col]) * hinges.outside(classes.depth(pos_all[a_col], b_col))
+                    + (1.0 - dead_gate[b_col]) * hinges.outside(classes.depth(pos_all[b_col], a_col))
                 )
                 dead_eff_1b = th.where(
                     both_crisp, dead_all[x_flat], th.ones_like(dead_all[x_flat])
                 )
-                h_dead = gci1_bot(
+                h_dead = C.gci1_bot(
                     th.ones_like(ma), th.ones_like(mb), dead=dead_eff_1b
                 )
                 axiom_terms.append((h_box + h_dead).mean() + d_sep.mean())
             else:
-                h_box = gci1_bot(ma, mb, dead=dead_gate[x_flat])
+                h_box = C.gci1_bot(ma, mb, dead=dead_gate[x_flat])
                 dead_eff_1b = th.where(
                     both_crisp, dead_all[x_flat], th.ones_like(dead_all[x_flat])
                 )
-                h_dead = gci1_bot(ma.detach(), mb.detach(), dead=dead_eff_1b)
+                h_dead = C.gci1_bot(ma.detach(), mb.detach(), dead=dead_eff_1b)
                 axiom_terms.append((h_box + h_dead).mean())
             if do_region:
                 a_reg = rows[:, 0].repeat(self.n_region_samples)
                 b_reg = rows[:, 1].repeat(self.n_region_samples)
                 h_fn = (
                     (
-                        lambda z: gci1_bot_region(
-                            mod.depth(z, rows[:, 0].repeat(max(z.shape[0] // bsz, 1))),
-                            mod.depth(z, rows[:, 1].repeat(max(z.shape[0] // bsz, 1))),
+                        lambda z: C.gci1_bot_region(
+                            classes.depth(z, rows[:, 0].repeat(max(z.shape[0] // bsz, 1))),
+                            classes.depth(z, rows[:, 1].repeat(max(z.shape[0] // bsz, 1))),
                             margin=self.region_margin,
                         )
                     )
@@ -673,9 +599,9 @@ class GroundedConstraints:
                     av = a_reg[reg.valid]
                     bv = b_reg[reg.valid]
                     region_terms.append(
-                        gci1_bot_region(
-                            mod.depth(pts, av),
-                            mod.depth(pts, bv),
+                        C.gci1_bot_region(
+                            classes.depth(pts, av),
+                            classes.depth(pts, bv),
                             margin=self.region_margin,
                         ).mean()
                     )
@@ -701,25 +627,25 @@ class GroundedConstraints:
             b_flat = rows[:, 2].unsqueeze(1).expand(bsz, s_cnt).reshape(-1)
             px = pos_all[x_flat]
             pb = pos_all[b_flat]
-            ma = mod.membership(px, a_flat)
-            rho_xb = mod.role_membership(px, pb, r_flat)
+            ma = classes.membership(px, a_flat)
+            rho_xb = relations.membership(px, pb, r_flat)
             df_b = dead_all[b_flat].detach()
             if self.dead_from_bot_only:
                 crisp_2d = (
                     (x_flat == a_flat)
-                    | (mod.depth(px, a_flat, crisp=True) > 0.0)
+                    | (classes.depth(px, a_flat, crisp=True) > 0.0)
                     | (dead_all[x_flat].detach() > 0.5)
                 )
                 ma_d = th.where(crisp_2d, th.ones_like(ma), ma.detach())
             else:
                 is_self_dead = (x_flat == a_flat) & (dead_gate[x_flat] > 0.5)
                 ma_d = th.where(is_self_dead, th.ones_like(ma), ma.detach())
-            edge_h = gci2(ma, rho_xb, dead=dead_gate[x_flat], dead_filler=None)
-            dead_prop_h = gci2_dead(
+            edge_h = C.gci2(ma, rho_xb, dead=dead_gate[x_flat], dead_filler=None)
+            dead_prop_h = C.gci2_dead(
                 ma, dead_filler=df_b, dead=dead_gate[x_flat]
             ) + th.where(
                 df_b > 0.5,
-                gci2_dead(ma_d, dead_filler=df_b, dead=dead_all[x_flat]),
+                C.gci2_dead(ma_d, dead_filler=df_b, dead=dead_all[x_flat]),
                 th.zeros_like(ma),
             )
             axiom_terms.append((edge_h + dead_prop_h).mean())
@@ -727,22 +653,20 @@ class GroundedConstraints:
                 a_reg = rows[:, 0].repeat(self.n_region_samples)
                 r_reg = rows[:, 1].repeat(self.n_region_samples)
                 b_reg = rows[:, 2].repeat(self.n_region_samples)
-                if mod.role_mode == "translation":
+                if relations.mode == "translation":
                     h_fn = (
                         (
-                            lambda z: gci2_region_trans(
-                                mod.membership(
+                            lambda z: C.gci2_region_trans(
+                                classes.membership(
                                     z,
                                     rows[:, 0].repeat(max(z.shape[0] // bsz, 1)),
                                 ),
-                                th.sigmoid(
-                                    mod.exists_depth(
+                                measure.soft(
+                                    exists_depth(
                                         z,
                                         rows[:, 1].repeat(max(z.shape[0] // bsz, 1)),
                                         rows[:, 2].repeat(max(z.shape[0] // bsz, 1)),
-                                    )
-                                    / mod.tau.to(dtype=z.dtype)
-                                ),
+                                    ), shared.tau),
                             )
                         )
                         if self.n_adv > 0
@@ -764,22 +688,21 @@ class GroundedConstraints:
                         bv = b_reg[reg.valid]
                         live_a = 1.0 - dead_gate[av]
                         dead_a = dead_gate[av]
-                        m_a_z = mod.membership(pts, av)
-                        ex_dep = mod.exists_depth(pts, rv, bv)
-                        m_exists_z = th.sigmoid(
-                            ex_dep / mod.tau.to(dtype=ex_dep.dtype)
-                        ) * (1.0 - dead_gate[bv])
-                        reg_h = live_a * gci2_region_trans(
+                        m_a_z = classes.membership(pts, av)
+                        ex_dep = exists_depth(pts, rv, bv)
+                        m_exists_z = measure.soft(
+                            ex_dep, shared.tau) * (1.0 - dead_gate[bv])
+                        reg_h = live_a * C.gci2_region_trans(
                             m_a_z, m_exists_z
-                        ) + dead_a * gci0_bot_region(
-                            mod.depth(pts_raw.detach(), av), margin=self.region_margin
+                        ) + dead_a * C.gci0_bot_region(
+                            classes.depth(pts_raw.detach(), av), margin=self.region_margin
                         )
                         region_terms.append(reg_h.mean())
                 else:
                     h_fn = (
                         (
-                            lambda z: gci2_region(
-                                mod.role_depth(
+                            lambda z: C.gci2_region(
+                                relations.depth(
                                     z,
                                     pos_all[
                                         rows[:, 2].repeat(max(z.shape[0] // bsz, 1))
@@ -810,15 +733,15 @@ class GroundedConstraints:
                         bv = b_reg[reg.valid]
                         live_a = 1.0 - dead_gate[av]
                         dead_a = dead_gate[av]
-                        reg_h = live_a * gci2_region(
-                            mod.role_depth(pts, pos_all[bv], rv),
+                        reg_h = live_a * C.gci2_region(
+                            relations.depth(pts, pos_all[bv], rv),
                             margin=self.region_margin,
                             agg=self.agg,
                             agg_tau=self.agg_tau,
-                            depth_a=mod.depth(pts_raw.detach(), av),
+                            depth_a=classes.depth(pts_raw.detach(), av),
                             dead_filler=dead_all[bv].detach(),
-                        ) + dead_a * gci0_bot_region(
-                            mod.depth(pts_raw.detach(), av), margin=self.region_margin
+                        ) + dead_a * C.gci0_bot_region(
+                            classes.depth(pts_raw.detach(), av), margin=self.region_margin
                         )
                         region_terms.append(reg_h.mean())
 
@@ -845,13 +768,13 @@ class GroundedConstraints:
             b_2d = rows[:, 1].unsqueeze(1).expand(bsz, sy).reshape(-1)
             c_2d = rows[:, 2].unsqueeze(1).expand(bsz, sx).reshape(-1)
             mb_grid = (
-                mod.membership(pos_all[y_mat.reshape(-1)], b_2d)
+                classes.membership(pos_all[y_mat.reshape(-1)], b_2d)
                 .view(bsz, 1, sy)
                 .expand(bsz, sx, sy)
                 .reshape(-1)
             )
             mc_grid = (
-                mod.membership(pos_all[x_mat.reshape(-1)], c_2d)
+                classes.membership(pos_all[x_mat.reshape(-1)], c_2d)
                 .view(bsz, sx, 1)
                 .expand(bsz, sx, sy)
                 .reshape(-1)
@@ -860,7 +783,7 @@ class GroundedConstraints:
                 dead_gate[x_mat].unsqueeze(2).expand(bsz, sx, sy).reshape(-1)
             )
             axiom_terms.append(
-                gci3(rho_xy, mb_grid, mc_grid, dead=dead_x_grid).mean()
+                C.gci3(rho_xy, mb_grid, mc_grid, dead=dead_x_grid).mean()
             )
             if do_region:
                 if self.top_id is not None:
@@ -875,12 +798,12 @@ class GroundedConstraints:
                     r_reg = rows_3[:, 0].repeat(self.n_region_samples)
                     b_reg = rows_3[:, 1].repeat(self.n_region_samples)
                     c_reg = rows_3[:, 2].repeat(self.n_region_samples)
-                    if mod.role_mode == "translation":
+                    if relations.mode == "translation":
                         h_fn_3 = (
                             (
-                                lambda z: gci3_region_trans(
-                                    th.sigmoid(
-                                        mod.exists_depth(
+                                lambda z: C.gci3_region_trans(
+                                    measure.soft(
+                                        exists_depth(
                                             z,
                                             rows_3[:, 0].repeat(
                                                 max(z.shape[0] // bsz_3, 1)
@@ -888,10 +811,8 @@ class GroundedConstraints:
                                             rows_3[:, 1].repeat(
                                                 max(z.shape[0] // bsz_3, 1)
                                             ),
-                                        )
-                                        / mod.tau.to(dtype=z.dtype)
-                                    ),
-                                    mod.membership(
+                                        ), shared.tau),
+                                    classes.membership(
                                         z,
                                         rows_3[:, 2].repeat(
                                             max(z.shape[0] // bsz_3, 1)
@@ -919,32 +840,31 @@ class GroundedConstraints:
                             rv = r_reg[ex_samp.valid]
                             bv = b_reg[ex_samp.valid]
                             cv = c_reg[ex_samp.valid]
-                            ex_dep = mod.exists_depth(pts, rv, bv)
-                            m_exists_z = th.sigmoid(
-                                ex_dep / mod.tau.to(dtype=ex_dep.dtype)
-                            ) * (1.0 - dead_gate[bv])
-                            m_c_z = mod.membership(pts, cv)
+                            ex_dep = exists_depth(pts, rv, bv)
+                            m_exists_z = measure.soft(
+                                ex_dep, shared.tau) * (1.0 - dead_gate[bv])
+                            m_c_z = classes.membership(pts, cv)
                             region_terms.append(
-                                gci3_region_trans(m_exists_z, m_c_z).mean()
+                                C.gci3_region_trans(m_exists_z, m_c_z).mean()
                             )
                     else:
                         h_fn_3 = (
                             (
-                                lambda xy: gci3_region(
-                                    mod.role_depth(
+                                lambda xy: C.gci3_region(
+                                    relations.depth(
                                         xy[:, : self.embed_dim],
                                         xy[:, self.embed_dim :],
                                         rows_3[:, 0].repeat(
                                             max(xy.shape[0] // bsz_3, 1)
                                         ),
                                     ),
-                                    mod.depth(
+                                    classes.depth(
                                         xy[:, self.embed_dim :],
                                         rows_3[:, 1].repeat(
                                             max(xy.shape[0] // bsz_3, 1)
                                         ),
                                     ),
-                                    mod.depth(
+                                    classes.depth(
                                         xy[:, : self.embed_dim],
                                         rows_3[:, 2].repeat(
                                             max(xy.shape[0] // bsz_3, 1)
@@ -974,22 +894,22 @@ class GroundedConstraints:
                             bv = b_reg[h_samp.valid]
                             cv = c_reg[h_samp.valid]
                             region_terms.append(
-                                gci3_region(
-                                    mod.role_depth(
+                                C.gci3_region(
+                                    relations.depth(
                                         zx_raw.detach(), zy_raw.detach(), rv
                                     ),
-                                    mod.depth(zy, bv),
-                                    mod.depth(zx, cv),
+                                    classes.depth(zy, bv),
+                                    classes.depth(zx, cv),
                                     margin=self.region_margin,
                                 ).mean()
                             )
                             # Also evaluate at z = zx with y = filler element x_B (§4)
                             py_fill = pos_all[bv]
                             region_terms.append(
-                                gci3_region(
-                                    mod.role_depth(zx_raw.detach(), py_fill, rv),
-                                    mod.depth(py_fill, bv),
-                                    mod.depth(zx, cv),
+                                C.gci3_region(
+                                    relations.depth(zx_raw.detach(), py_fill, rv),
+                                    classes.depth(py_fill, bv),
+                                    classes.depth(zx, cv),
                                     margin=self.region_margin,
                                 ).mean()
                             )
@@ -1018,32 +938,32 @@ class GroundedConstraints:
             b_2d = rows[:, 1].unsqueeze(1).expand(bsz, sy).reshape(-1)
             py_flat = pos_all[y_mat.reshape(-1)]
             mb_grid = (
-                mod.membership(py_flat, b_2d)
+                classes.membership(py_flat, b_2d)
                 .view(bsz, 1, sy)
                 .expand(bsz, sx, sy)
                 .reshape(-1)
             )
             b_crisp_grid = (
-                (mod.depth(py_flat, b_2d, crisp=True) > 0.0)
+                (classes.depth(py_flat, b_2d, crisp=True) > 0.0)
                 .view(bsz, 1, sy)
                 .expand(bsz, sx, sy)
                 .reshape(-1)
             )
             both_crisp = (r_dep_crisp > 0.0) & b_crisp_grid
             x_grid = x_mat.unsqueeze(2).expand(bsz, sx, sy).reshape(-1)
-            h_box = gci3_bot(rho_xy, mb_grid, dead=dead_gate[x_grid])
+            h_box = C.gci3_bot(rho_xy, mb_grid, dead=dead_gate[x_grid])
             if self.dead_from_bot_only:
                 dead_eff_3b = th.where(
                     both_crisp, dead_all[x_grid], th.ones_like(dead_all[x_grid])
                 )
-                h_dead = gci3_bot(
+                h_dead = C.gci3_bot(
                     th.ones_like(rho_xy), th.ones_like(mb_grid), dead=dead_eff_3b
                 )
             else:
                 dead_eff_3b = th.where(
                     both_crisp, dead_all[x_grid], th.ones_like(dead_all[x_grid])
                 )
-                h_dead = gci3_bot(
+                h_dead = C.gci3_bot(
                     rho_xy.detach(), mb_grid.detach(), dead=dead_eff_3b
                 )
             axiom_terms.append((h_box + h_dead).mean())
@@ -1059,12 +979,12 @@ class GroundedConstraints:
                 if bsz_3b > 0:
                     r_reg = rows_3b[:, 0].repeat(self.n_region_samples)
                     b_reg = rows_3b[:, 1].repeat(self.n_region_samples)
-                    if mod.role_mode == "translation":
+                    if relations.mode == "translation":
                         h_fn_3b = (
                             (
-                                lambda z: gci3_bot_region_trans(
-                                    th.sigmoid(
-                                        mod.exists_depth(
+                                lambda z: C.gci3_bot_region_trans(
+                                    measure.soft(
+                                        exists_depth(
                                             z,
                                             rows_3b[:, 0].repeat(
                                                 max(z.shape[0] // bsz_3b, 1)
@@ -1072,9 +992,7 @@ class GroundedConstraints:
                                             rows_3b[:, 1].repeat(
                                                 max(z.shape[0] // bsz_3b, 1)
                                             ),
-                                        )
-                                        / mod.tau.to(dtype=z.dtype)
-                                    )
+                                        ), shared.tau)
                                 )
                             )
                             if self.n_adv > 0
@@ -1096,25 +1014,24 @@ class GroundedConstraints:
                             )
                             rv = r_reg[ex_samp.valid]
                             bv = b_reg[ex_samp.valid]
-                            ex_dep = mod.exists_depth(pts, rv, bv)
-                            m_exists_z = th.sigmoid(
-                                ex_dep / mod.tau.to(dtype=ex_dep.dtype)
-                            ) * (1.0 - dead_gate[bv])
+                            ex_dep = exists_depth(pts, rv, bv)
+                            m_exists_z = measure.soft(
+                                ex_dep, shared.tau) * (1.0 - dead_gate[bv])
                             region_terms.append(
-                                gci3_bot_region_trans(m_exists_z).mean()
+                                C.gci3_bot_region_trans(m_exists_z).mean()
                             )
                     else:
                         h_fn_3b = (
                             (
-                                lambda xy: gci3_bot_region(
-                                    mod.role_depth(
+                                lambda xy: C.gci3_bot_region(
+                                    relations.depth(
                                         xy[:, : self.embed_dim],
                                         xy[:, self.embed_dim :],
                                         rows_3b[:, 0].repeat(
                                             max(xy.shape[0] // bsz_3b, 1)
                                         ),
                                     ),
-                                    mod.depth(
+                                    classes.depth(
                                         xy[:, self.embed_dim :],
                                         rows_3b[:, 1].repeat(
                                             max(xy.shape[0] // bsz_3b, 1)
@@ -1141,11 +1058,11 @@ class GroundedConstraints:
                             rv = r_reg[h_samp.valid]
                             bv = b_reg[h_samp.valid]
                             region_terms.append(
-                                gci3_bot_region(
-                                    mod.role_depth(
+                                C.gci3_bot_region(
+                                    relations.depth(
                                         zx_raw.detach(), zy_raw.detach(), rv
                                     ),
-                                    mod.depth(zy, bv),
+                                    classes.depth(zy, bv),
                                     margin=self.region_margin,
                                 ).mean()
                             )
@@ -1165,24 +1082,24 @@ class GroundedConstraints:
             px = pos_all[x_grid]
             py = pos_all[y_grid]
             axiom_terms.append(
-                role_inclusion(
-                    mod.role_membership(px, py, r_grid),
-                    mod.role_membership(px, py, s_grid),
+                C.role_inclusion(
+                    relations.membership(px, py, r_grid),
+                    relations.membership(px, py, s_grid),
                 ).mean()
             )
             if do_region:
                 r_reg = rows[:, 0].repeat(self.n_region_samples)
                 s_reg = rows[:, 1].repeat(self.n_region_samples)
-                if mod.role_mode == "translation":
+                if relations.mode == "translation":
                     h_fn_ri = (
                         (
-                            lambda v: role_inclusion_region_trans(
-                                mod.role_membership(
+                            lambda v: C.role_inclusion_region_trans(
+                                relations.membership(
                                     th.zeros_like(v),
                                     v,
                                     rows[:, 0].repeat(max(v.shape[0] // bsz, 1)),
                                 ),
-                                mod.role_membership(
+                                relations.membership(
                                     th.zeros_like(v),
                                     v,
                                     rows[:, 1].repeat(max(v.shape[0] // bsz, 1)),
@@ -1208,16 +1125,16 @@ class GroundedConstraints:
                         sv = s_reg[v_samp.valid]
                         z0 = th.zeros_like(v_pts)
                         region_terms.append(
-                            role_inclusion_region_trans(
-                                mod.role_membership(z0, v_pts, rv),
-                                mod.role_membership(z0, v_pts, sv),
+                            C.role_inclusion_region_trans(
+                                relations.membership(z0, v_pts, rv),
+                                relations.membership(z0, v_pts, sv),
                             ).mean()
                         )
                 else:
                     h_fn_ri = (
                         (
-                            lambda xy: role_inclusion_region(
-                                mod.role_depth(
+                            lambda xy: C.role_inclusion_region(
+                                relations.depth(
                                     xy[:, : self.embed_dim],
                                     xy[:, self.embed_dim :],
                                     rows[:, 1].repeat(max(xy.shape[0] // bsz, 1)),
@@ -1243,8 +1160,8 @@ class GroundedConstraints:
                         zy = zy_raw if self.region_lhs_grad else zy_raw.detach()
                         sv = s_reg[h_samp.valid]
                         region_terms.append(
-                            role_inclusion_region(
-                                mod.role_depth(zx, zy, sv),
+                            C.role_inclusion_region(
+                                relations.depth(zx, zy, sv),
                                 margin=self.region_margin,
                             ).mean()
                         )
@@ -1269,17 +1186,17 @@ class GroundedConstraints:
             py = pos_all[y_g]
             pz = pos_all[z_g]
             axiom_terms.append(
-                role_chain(
-                    mod.role_membership(px, py, r_g),
-                    mod.role_membership(py, pz, s_g),
-                    mod.role_membership(px, pz, t_g),
+                C.role_chain(
+                    relations.membership(px, py, r_g),
+                    relations.membership(py, pz, s_g),
+                    relations.membership(px, pz, t_g),
                 ).mean()
             )
             if do_region:
                 r_reg = rows[:, 0].repeat(self.n_region_samples)
                 s_reg = rows[:, 1].repeat(self.n_region_samples)
                 t_reg = rows[:, 2].repeat(self.n_region_samples)
-                if mod.role_mode == "translation":
+                if relations.mode == "translation":
                     v1_samp = sample_role_region(
                         mod,
                         rows[:, 0],
@@ -1308,10 +1225,10 @@ class GroundedConstraints:
                         tv = t_reg[v_chain]
                         z0 = th.zeros_like(v1)
                         region_terms.append(
-                            role_chain_region_trans(
-                                mod.role_membership(z0, v1, rv),
-                                mod.role_membership(z0, v2, sv),
-                                mod.role_membership(z0, v1 + v2, tv),
+                            C.role_chain_region_trans(
+                                relations.membership(z0, v1, rv),
+                                relations.membership(z0, v2, sv),
+                                relations.membership(z0, v1 + v2, tv),
                             ).mean()
                         )
                 else:
@@ -1341,12 +1258,12 @@ class GroundedConstraints:
                         sv = s_reg[v_chain]
                         tv = t_reg[v_chain]
                         region_terms.append(
-                            role_chain_region(
-                                mod.role_depth(
+                            C.role_chain_region(
+                                relations.depth(
                                     zx_raw.detach(), zy_raw.detach(), rv
                                 ),
-                                mod.role_depth(zy, zz_raw.detach(), sv),
-                                mod.role_depth(zx, zz, tv),
+                                relations.depth(zy, zz_raw.detach(), sv),
+                                relations.depth(zx, zz, tv),
                                 margin=self.region_margin,
                             ).mean()
                         )
@@ -1357,7 +1274,7 @@ class GroundedConstraints:
             el_a = self.nb_classes + rows[:, 0]
             c_id = rows[:, 1]
             axiom_terms.append(
-                class_assertion(mod.membership(pos_all[el_a], c_id)).mean()
+                C.class_assertion(classes.membership(pos_all[el_a], c_id)).mean()
             )
 
         # 12. Object property assertion: r(a, b)
@@ -1370,8 +1287,8 @@ class GroundedConstraints:
             r_id = rows[:, 1]
             el_b = self.nb_classes + rows[:, 2]
             axiom_terms.append(
-                role_assertion(
-                    mod.role_membership(pos_all[el_a], pos_all[el_b], r_id)
+                C.role_assertion(
+                    relations.membership(pos_all[el_a], pos_all[el_b], r_id)
                 ).mean()
             )
 
@@ -1385,7 +1302,7 @@ class GroundedConstraints:
             x_neg, y_neg, r_neg = self._regime_corrupted_opa(
                 td["object_property_assertion"], generator
             )
-            rho_neg = mod.role_membership(pos_all[x_neg], pos_all[y_neg], r_neg)
+            rho_neg = relations.membership(pos_all[x_neg], pos_all[y_neg], r_neg)
             loss_neg = rho_neg.mean()
         else:
             loss_neg = th.zeros((), dtype=dtype, device=device)
@@ -1418,7 +1335,7 @@ class GroundedConstraints:
                     0, ord_cls.numel(), (n_min,), dtype=th.long, device=generator.device, generator=generator
                 ).to(device=device)
                 ga = ord_cls[ga_idx]
-            m_rand = mod.membership(pos_all[gx], ga)
+            m_rand = classes.membership(pos_all[gx], ga)
         else:
             m_rand = None
 
@@ -1440,7 +1357,7 @@ class GroundedConstraints:
                 rr = th.randint(
                     0, self.nb_rels, (n_rmin,), dtype=th.long, device=generator.device, generator=generator
                 ).to(device=device)
-            rho_rand = mod.role_membership(pos_all[rx], pos_all[ry], rr)
+            rho_rand = relations.membership(pos_all[rx], pos_all[ry], rr)
         else:
             rho_rand = None
 
@@ -1450,7 +1367,7 @@ class GroundedConstraints:
             if self._dead_min_ids.numel() > 0
             else None
         )
-        loss_min = minimality(
+        loss_min = C.minimality(
             m_rand=m_rand,
             rho_rand=rho_rand,
             dead=dead_for_min,
