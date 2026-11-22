@@ -1,5 +1,5 @@
 from mowl.base_models.elmodel import EmbeddingELModel
-from mowl.nn import ELEmModule
+from mowl.nn.el.elem.module import ELEmModule
 
 
 class ELEmbeddings(EmbeddingELModel):
@@ -17,6 +17,11 @@ class ELEmbeddings(EmbeddingELModel):
     pass ``False`` to train with that loss (the recipes of :mod:`mowl.benchmarks` do so where \
     a publication used such code).
     :type gci1_radius_term: bool, optional
+
+    The module of the model is the combination of parts of the method ``"elem"``
+    (:class:`~mowl.nn.ELEmModule`, a :class:`~mowl.representation.ComposedGeometry`): balls,
+    translations, the centre-distance measure, ELEmbeddings' objective and the unit-norm
+    regulariser. The direct implementation is kept in :mod:`mowl.baselines.models.elembeddings`.
     """
 
     def __init__(self,

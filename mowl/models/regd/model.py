@@ -1,7 +1,7 @@
 import torch as th
 
 from mowl.base_models.elmodel import EmbeddingELModel
-from mowl.nn.el.regd.dissimilarity import contrastive_loss
+from mowl.representation.library.ballfam_energy import contrastive_loss
 from mowl.nn.el.regd.module import RegDELBEModule, RegDELEmModule
 
 

@@ -157,5 +157,5 @@ The geometry names its own parts, using the vocabulary of :doc:`index`:
    measure: bounds per coordinate
    conjunction: exact
 
-The same call works for methods that were not built from parts, such as an ELEmbeddings model
-trained with its own module (``geometry_of`` finds the adapter for it).
+The same call works for models whose module was written by hand, such as a user's own
+subclass of :class:`~mowl.nn.ELModule` (``geometry_of`` finds the adapter for it).

@@ -5,7 +5,7 @@ from unittest import TestCase
 
 import torch as th
 
-import mowl.nn.el.emelpp.losses as L
+import mowl.baselines.nn.el.emelpp.losses as L  # the direct formulas, the reference
 from mowl.nn.el.elem.module import ELEmModule
 from mowl.nn.el.emelpp.module import EmELPPModule, EmELVarModule
 
