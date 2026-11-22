@@ -193,4 +193,21 @@ Example
    5 (2,)
    1 0
 
+The training is the combination of regimes that the model names (``model.training_regime``): a
+random batch per axiom kind and step (:class:`~mowl.training.PerNormalFormMiniBatches`), the
+corruptions of the assertions (:class:`~mowl.training.EdgeCorruption`) without the stated ones
+(:class:`~mowl.training.KnownRowMask`), the sum of the losses (:class:`~mowl.training.SumLoss`)
+and the projection of the indicators into :math:`[0, 1]`
+(:class:`~mowl.training.Regularization` of an :class:`~mowl.training.IntervalProjection`); the
+regularisers of eqs. (1)-(3), (11) and (12) belong to the module. The equations have no margin:
+a margin is refused, not ignored.
+
+.. testcode::
+
+   print([r.key for r in model.training_regime.regimes])
+
+.. testoutput::
+
+   ['per-normal-form-minibatch', 'edge-corruption', 'edge-corruption', 'known-row-mask', 'loss-sum', 'regularization']
+
 The guarantees, with their sources, are listed on the catalogue card ``e2r``.

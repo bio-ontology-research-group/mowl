@@ -54,7 +54,6 @@ class CatEBase(Model):
         self.obvious_morphisms = obvious_morphisms
         self.early_stopping_patience = early_stopping_patience
         self.device = device
-        self._training_regime = None
         self._lattice = None
         self._module = None
         self._validation = None

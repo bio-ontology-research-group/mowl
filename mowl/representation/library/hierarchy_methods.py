@@ -144,8 +144,18 @@ def cate(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50, margin=1.0,
         classes = OrderPoints(table=tables.node_embedding, nonnegative=False)
         existentials = tables.existential_ids
         p = tables.p
-    return LatticeGeometry(classes, OrderViolation("product", p), Objective.hierarchy(margin),
-                           existentials=existentials, conjunctions=conjunctions)
+    geometry = LatticeGeometry(classes, OrderViolation("product", p), Objective.hierarchy(margin),
+                               existentials=existentials, conjunctions=conjunctions)
+    # the training of the paper (Section 3.2 and Eq. 7): minibatches of morphisms, four
+    # corruptions of the superconcept, those that are morphisms masked, the margin loss
+    from functools import partial
+    from mowl.training.graph import EdgeCorruption, EpochBatches, GroupedMarginLoss, KnownRowMask
+    forms = ("gci0",)
+    geometry.default_regimes = (partial(EpochBatches, None, forms),
+                                partial(EdgeCorruption, 4, (1,), None, forms),
+                                partial(KnownRowMask, forms),
+                                partial(GroupedMarginLoss, margin, "per_negative", forms))
+    return geometry
 
 
 # -- boxes ------------------------------------------------------------------------------
@@ -247,8 +257,18 @@ def bcbox(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50, variant="v
     measure = LogVolumeRatio(intersection_temp, volume_temp, gumbel_shift=False,
                              tail="linear", energy_floor=1e-12, dtype=None)
     regularizers = (CodePenalty(code_weight),) if code_weight else ()
-    return hierarchy_geometry(classes, None, measure, Objective.hierarchy(),
-                              regularizers=regularizers)
+    geometry = hierarchy_geometry(classes, None, measure, Objective.hierarchy(),
+                                  regularizers=regularizers)
+    # the training of the paper (Section 4.4): minibatches of edges, 32 corruptions of the source
+    # or the target, those that are edges masked, the self-adversarial cross entropy
+    from functools import partial
+    from mowl.training.graph import EdgeCorruption, EpochBatches, KnownRowMask, SelfAdversarialBCE
+    forms = ("gci0",)
+    geometry.default_regimes = (partial(EpochBatches, None, forms),
+                                partial(EdgeCorruption, 32, (1, 0), None, forms),
+                                partial(KnownRowMask, forms),
+                                partial(SelfAdversarialBCE, True, 1.0, forms))
+    return geometry
 
 
 # -- points on manifolds ----------------------------------------------------------------

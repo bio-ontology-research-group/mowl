@@ -22,8 +22,7 @@ class LinearWarmupDecay(_Schedule):
     """The learning rate rises linearly from 0 to its base value in ``warmup_steps`` steps and
     falls linearly to 0 at the last step (``get_linear_schedule_with_warmup`` of Hugging Face
     transformers, the default scheduler of the trainer of the HiT and OnT codes), stepped once
-    per optimisation step. The number of steps is the one of the call of ``train``
-    (``model.training_steps``).
+    per optimisation step. The number of steps is the one of the call of ``train``.
 
     :param warmup_steps: Steps of the warm-up (default: the model's ``warmup_steps``).
     """
@@ -39,15 +38,18 @@ class LinearWarmupDecay(_Schedule):
         warm = self.warmup_steps if self.warmup_steps is not None \
             else self.model.warmup_steps
         warm = max(0, int(warm))
-        total = int(self.model.training_steps)
+        self.total = getattr(self.model, "training_steps", None)
 
         def schedule(step):
             if step < warm:
                 return step / max(1, warm)
-            return max(0.0, (total - step) / max(1, total - warm))
+            if self.total is None:
+                return 1.0
+            return max(0.0, (self.total - step) / max(1, self.total - warm))
         self.scheduler = th.optim.lr_scheduler.LambdaLR(opt, schedule)
 
     def update(self, epoch, epochs):
+        self.total = epochs
         if epoch > 0:
             self.scheduler.step()
 

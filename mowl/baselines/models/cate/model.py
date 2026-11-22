@@ -26,7 +26,7 @@ class CatE(CatEBase):
         CatE reference code. CatE's own :meth:`train` loop consults no regime hooks, so a
         regime that changes negatives, losses or the optimiser is refused.
         """
-        return self._training_regime
+        return getattr(self, "_training_regime", None)
 
     @training_regime.setter
     def training_regime(self, regime):

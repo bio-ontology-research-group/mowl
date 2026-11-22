@@ -112,7 +112,7 @@ class EdgeCorruption(TrainingRegime):
         corruption decides, ``a`` is replaced when it shows 0 and ``b`` when it shows 1
         ("either the source or the target node", Zhang et al. 2022, Section 4.4).
     :param num_entities: Size of the pool (entities ``0 ... n - 1``; default: the model's
-        ``num_nodes``).
+        ``num_nodes``, else its named classes).
     :param forms: The forms that get corruptions (default: all; the others use the model's).
     :param draw_by: ``"row"``: the draws have shape ``(n, k)`` (the ``k`` corruptions of a row
         are neighbours in the stream); ``"block"``: shape ``(k * n,)`` (the corruptions of one
@@ -142,7 +142,8 @@ class EdgeCorruption(TrainingRegime):
     def pool_size(self):
         if self.num_entities is not None:
             return int(self.num_entities)
-        return int(self.model.num_nodes)
+        nodes = getattr(self.model, "num_nodes", None)
+        return int(nodes) if nodes is not None else len(self.model.named_class_index_dict)
 
     def _draw(self, high, n, device):
         k = self.num_negatives

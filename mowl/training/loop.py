@@ -35,6 +35,8 @@ logger = logging.getLogger(__name__)
 
 __all__ = ["Rows", "RegimeTrained", "steps_per_epoch"]
 
+_UNSET = object()
+
 
 class Rows:
     """A tensor of rows as a training dataset (``len`` and ``[:]``)."""
@@ -73,22 +75,16 @@ class RegimeTrained:
     default_validate_every = None
 
     # ------------------------------------------------------------------ regime
-    #: Attach the regimes of the method at the end of ``__init__`` (a model whose module does
-    #: not exist yet then, or whose options are set later, attaches them itself).
-    attach_defaults_at_init = True
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        if self.attach_defaults_at_init:
-            self._attach_default_regimes()
-
     @property
     def training_regime(self):
         """The :class:`~mowl.training.TrainingRegime` that :meth:`train` uses: the regimes of
         the method (:attr:`default_regimes`) until another is assigned; with ``None`` assigned
         :meth:`train` takes the regimes of the method again. See :mod:`mowl.training.loop`
         for the hooks it consults."""
-        return getattr(self, "_training_regime", None)
+        if self.__dict__.get("_training_regime", _UNSET) is _UNSET:
+            self._training_regime = None
+            self._attach_default_regimes()
+        return self._training_regime
 
     @training_regime.setter
     def training_regime(self, regime):

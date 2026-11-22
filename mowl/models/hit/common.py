@@ -76,7 +76,6 @@ class HiTBase(Model):
         self.history = []
         self.best_validation = None
         self._cache = {}
-        self._training_regime = None
 
     @property
     def c(self):
