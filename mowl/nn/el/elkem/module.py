@@ -66,6 +66,13 @@ class ELKEmModule(ELModule):
       ignored. :class:`~mowl.models.elkem.model.ELKEm` fixes every such class, so this loss
       is zero in training.
 
+    * A ``gci1_bot`` row with a conjunct fixed to the empty box, and a ``gci3_bot`` row whose
+      filler is fixed to the empty box, hold trivially and cost 0. The disjointness primitive
+      would charge the margin for :math:`\\bot \\sqcap \\top \\sqsubseteq \\bot`, a cost
+      that no parameter can remove (``variant="reference"`` keeps that value).
+    * :meth:`zero_margin_loss` returns a column ``(B, 1)`` like every other loss
+      (``per_axiom_column = False`` gives ``(B,)``).
+
     .. rubric:: Variants
 
     ``variant="paper"`` (default) implements Table 2 of the paper with the deviations above.
@@ -185,6 +192,16 @@ class ELKEmModule(ELModule):
     def _fixed_empty(self, idx):
         return self.bot_mask[idx]
 
+    def _trivial_to_zero(self, loss, trivial):
+        r"""Rows of a disjointness axiom with a conjunct fixed to the empty box hold trivially
+        (:math:`\bot \sqcap \top \sqsubseteq \bot`). The disjointness primitive would give
+        them the margin as cost (the half-widths :math:`-\text{BIG}` and :math:`+\text{BIG}` of
+        :math:`\bot` and :math:`\top` cancel), a cost no parameter can remove. The
+        ``"reference"`` variant keeps the primitive's value."""
+        if self.variant == "reference":
+            return loss
+        return th.where(trivial, th.zeros_like(loss), loss)
+
     # ------------------------------------------------------------------ losses
 
     def _current_margin(self):
@@ -208,8 +225,10 @@ class ELKEmModule(ELModule):
             trivial = self._fixed_empty(data[:, 0]) | self._fixed_empty(data[:, 1])
             return incl + th.where(trivial, th.zeros_like(over), over)
         if gci_name == "gci1_bot":
-            return L.disjoint_loss(*self.class_box(data[:, 0]), *self.class_box(data[:, 1]),
+            loss = L.disjoint_loss(*self.class_box(data[:, 0]), *self.class_box(data[:, 1]),
                                    margin)
+            return self._trivial_to_zero(
+                loss, self._fixed_empty(data[:, 0]) | self._fixed_empty(data[:, 1]))
         if gci_name == "gci2":
             el, eu = self.existential_box(data[:, 1], data[:, 2])
             incl = L.inclusion_loss(*self.class_box(data[:, 0]), el, eu, margin)
@@ -227,7 +246,8 @@ class ELKEmModule(ELModule):
             return incl + th.where(trivial, th.zeros_like(over), over)
         if gci_name == "gci3_bot":
             role = self.role(data[:, 0])
-            return L.disjoint_loss(role[0], role[1], *self.class_box(data[:, 1]), margin)
+            loss = L.disjoint_loss(role[0], role[1], *self.class_box(data[:, 1]), margin)
+            return self._trivial_to_zero(loss, self._fixed_empty(data[:, 1]))
         if gci_name == "role_inclusion":
             return L.role_inclusion_loss(self.role(data[:, 0]), self.role(data[:, 1]), margin)
         if gci_name == "role_chain":
@@ -249,7 +269,10 @@ class ELKEmModule(ELModule):
 
     def zero_margin_loss(self, data, gci_name):
         r"""Margin-free loss :math:`\ell^0(\alpha)` of each row, whatever the mode."""
-        return self._loss(gci_name, data, 0.0)
+        loss = self._loss(gci_name, data, 0.0)
+        if self.per_axiom_column and loss.ndim == 1:
+            return loss.unsqueeze(-1)
+        return loss
 
     def score(self, data, gci_name):
         r"""Score :math:`s(\alpha) = \exp(-\ell^0(\alpha)) \in (0, 1]` (Eq. 4 of the paper)."""

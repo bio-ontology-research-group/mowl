@@ -120,6 +120,9 @@ CARD = MethodCard(
             "leemhuis2025, Definition 1, Propositions 4 and 5"),
     ),
     limitations=(
+        "Disjointness axioms with a conjunct fixed to ⊥ (⊥ ⊓ ⊤ ⊑ ⊥, ∃r.⊥ ⊑ ⊥) hold trivially "
+        "and cost 0; the primitive of Eq. 3 would charge the margin, and the module's "
+        "variant='reference' keeps that value.",
         "The score exp(−ℓ⁰) saturates at 1 for every satisfied axiom, so it ranks a large "
         "candidate set poorly (singh2026, Section 5.2).",
         "In mOWL, as in the authors' code, the box of every named class that is not fixed "
