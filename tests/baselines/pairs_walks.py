@@ -211,4 +211,8 @@ PAIRS = [
     _pair("opa2vec/SyntacticPlusW2VModel", _new_corpus_class(True), _old_corpus(True)),
 ]
 
-EXEMPT = {}
+EXEMPT = {
+    "composed_sequences": "ComposedSequenceModel is the generic combination of parts for walk "
+                          "and sentence methods; it has no direct implementation to be "
+                          "compared with (its named combinations are compared above).",
+}

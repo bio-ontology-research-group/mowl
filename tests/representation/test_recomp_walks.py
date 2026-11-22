@@ -266,8 +266,9 @@ def test_listing_by_sequence_parts():
     from mowl.catalog import list_methods
     from mowl.representation.vocabulary import Corpus, Projection
     annotated = {c.key for c in list_methods(parts=Corpus.ANNOTATIONS)}
-    assert annotated == {"opa2vec", "owl2vec_star"}
-    assert {c.key for c in list_methods(parts=Projection.DL2VEC)} == {"dl2vec"}
+    assert annotated == {"opa2vec", "owl2vec_star", "composed_sequences"}
+    assert {c.key for c in list_methods(parts=Projection.DL2VEC)} == {"dl2vec",
+                                                                      "composed_sequences"}
 
 
 # -- defects fixed in the parts ---------------------------------------------------------------
@@ -366,3 +367,14 @@ def test_the_pair_classifier_is_the_same_for_the_same_seed(family):
     first = PairClassifierHead(epochs=5)(model, "gci0", rows)
     second = PairClassifierHead(epochs=5)(model, "gci0", rows)
     assert th.equal(first, second)
+
+
+def test_the_benchmark_runner_trains_the_named_and_the_general_model():
+    from mowl.benchmarks.comparison import compare_methods
+    from tests.benchmarks.test_common import _bench
+    from tests.benchmarks.tiny import scratch_dir, tiny_dataset
+    outcome = compare_methods(_bench("gci0"), methods=["composed_sequences", "onto2vec"],
+                              epochs=1, model_kwargs={"embed_dim": 8, "workers": 1},
+                              dataset=tiny_dataset(), workdir=scratch_dir())
+    assert not outcome.failed, outcome.failed
+    assert {r.method for r in outcome.results} == {"composed_sequences", "onto2vec"}

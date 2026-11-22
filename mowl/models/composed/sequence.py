@@ -51,7 +51,8 @@ class ComposedSequenceModel(Model):
     or pass the parts (``source``, ``encoder``, ``reading``, ``measure``, ``scorer``); a
     part passed together with ``method`` replaces that part of the method.
 
-    :param method: Key of the combination.
+    :param method: Key of the combination. Without a method, a source and an encoder, the
+        model has the parts of ``"dl2vec"`` (and ``method_options`` are its options).
     :param device: Where the scorer computes (the encoders of gensim run on the CPU).
 
     Training (:meth:`train`) writes the sequences the first time (and again after
@@ -77,6 +78,8 @@ class ComposedSequenceModel(Model):
                  measure=None, scorer=None, model_filepath=None, device="cpu",
                  _base_options=None, **method_options):
         super().__init__(dataset, model_filepath=model_filepath, **(_base_options or {}))
+        if method is None and source is None and encoder is None:
+            method = "dl2vec"       # no parts chosen: the parts of DL2Vec
         if method is not None:
             # a part given by name is an option of the method (``encoder="fasttext"``)
             for name, part in (("source", source), ("encoder", encoder),

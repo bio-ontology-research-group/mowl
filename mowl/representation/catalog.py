@@ -287,6 +287,11 @@ REPRESENTATIONS = {
     "gda_projection": _tokens((V.GRAPH, V.CORPUS)),
     "onto2vec": _sequences(V.CORPUS, corpus=Co.AXIOMS),
     "opa2vec": _sequences((V.CORPUS, V.TEXT), corpus=(Co.AXIOMS, Co.ANNOTATIONS)),
+    "composed_sequences": _sequences(
+        (V.GRAPH, V.CORPUS, V.TEXT),
+        projection=(Pj.TAXONOMY, Pj.TAXONOMY_WITH_RELATIONS, Pj.DL2VEC, Pj.OWL2VEC_STAR,
+                    Pj.GDA), walker=(Wk.DEEPWALK, Wk.NODE2VEC),
+        corpus=(Co.AXIOMS, Co.ANNOTATIONS)),
     # ---- constructions -------------------------------------------------------------------
     "canonical_model": _exact(C.FIXED, R.FIXED, I.CANONICAL_ELEMENT, space=S.FINITE_DOMAIN,
                               view=V.ONTOLOGY),

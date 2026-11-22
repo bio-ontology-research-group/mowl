@@ -130,7 +130,11 @@ earlier behaviour and are not listed. The changelog has every change.
 * **FALCON**: the quantifiers look at all pairs of entities (``role_pairs="self"``), and
   ``owl:Nothing`` is the empty set (``nothing="learned"``). ALC models now train on a GPU.
 * **Graph and syntactic methods** (``GraphPlusPyKEENModel``, ``RandomWalkPlusW2VModel``,
-  ``SyntacticPlusW2VModel``): training is unchanged. ``GraphPlusPyKEENModel.axiom_costs`` now
+  ``SyntacticPlusW2VModel``): ``RandomWalkPlusW2VModel`` and ``SyntacticPlusW2VModel`` are
+  combinations of parts (:doc:`sequences`). A second walk replaces the first instead of being
+  appended, training goes on from the vectors there are (``restart=True`` starts anew),
+  start vectors are seeded the same way in every process (``hashfxn=hash`` as before), and
+  annotation sentences name a class by its IRI. ``GraphPlusPyKEENModel.axiom_costs`` now
   scores class and role assertions too, not only :math:`C \sqsubseteq D` and
   :math:`C \sqsubseteq \exists r.D`. Datasets are cached under ``$XDG_CACHE_HOME/mowl``
   (override with ``MOWL_DATA_ROOT``).
