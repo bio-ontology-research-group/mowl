@@ -1,0 +1,500 @@
+"""Measures of the methods that embed a hierarchy (group ``hierarchy``).
+
+====================================  ==================  =================================
+measure                               vocabulary entry    used by
+====================================  ==================  =================================
+:class:`OrderViolation`               order violation     order embeddings, CatE
+:class:`VolumeRatio`                  volume ratio        box lattice
+:class:`SoftVolumeRatio`              smoothed volume     Gumbel boxes, BCBox
+:class:`ConeAngle`                    angle               hyperbolic entailment cones
+:class:`ShadowCone`                   angle               shadow cones
+:class:`Protrusion`                   protrusion          disk embeddings
+:class:`DistanceDepth`                distance and depth  HiT, OnT
+====================================  ==================  =================================
+
+A measure of this group has, besides the ``inside`` of every measure, a ``negative``: the cost
+of a pair that is *not* ordered, which is what the published losses of these methods differ
+in most (a hinge, a log-probability, the plain energy). ``inside(a, b)`` is the cost of
+:math:`a \\sqsubseteq b`; ``a`` is the child and ``b`` the parent.
+
+The energies of the measures that compare against a threshold (cones, order violation,
+protrusion, shadow cones) are available in two readings, as for every part of this library:
+the default is a cost that is zero exactly where the relation holds and accepts a strict
+margin; ``signed=True`` returns the raw signed energy the published code uses (negative
+inside the cone or disk) and takes no margin.
+"""
+
+import math
+
+import torch as th
+import torch.nn.functional as F
+
+from mowl.nn.order import cones as C
+from mowl.nn.order.manifolds import Euclidean, UpperHalfSpace
+from mowl.representation.measures import Bounds, RegionMeasure
+from mowl.representation.methods import register_measure
+from mowl.representation.regions import Ball, Box, ConstructorUnavailable
+from mowl.representation.library.hierarchy_regions import (
+    CodedBox, ConePoint, CornerBox, Disk, OrderCone, Point, depth)
+
+__all__ = ["HierarchyMeasure", "EnergyMeasure", "OrderViolation", "VolumeRatio",
+           "SoftVolumeRatio", "ConeAngle", "ShadowCone", "Protrusion", "DistanceDepth",
+           "neg_log1mexp"]
+
+EULER_GAMMA = 0.5772156649015329
+
+
+class _LogProbability:
+    """Mixin of the measures whose cost is a log-probability and has no margin."""
+
+    @staticmethod
+    def _no_margin(margin, what):
+        if margin:
+            raise ValueError(f"{what} is a log-probability and has no margin; pass 0.")
+
+
+class HierarchyMeasure(_LogProbability, RegionMeasure):
+    """Base class: ``inside`` and ``negative``; the other relations of a measure are
+    unavailable unless a subclass defines them."""
+
+    exact_intersection = False
+
+    def negative(self, a, b, margin=0.0):
+        """The cost of the pair ``a``, ``b`` when it is *not* ordered (low when ``a`` is far
+        from lying inside ``b``)."""
+        raise NotImplementedError
+
+    def _unavailable(self, what):
+        raise ConstructorUnavailable(f"{type(self).__name__} has no {what}.")
+
+    def meets(self, a, b, margin=0.0):
+        self._unavailable("overlap")
+
+    def apart(self, a, b, margin=0.0):
+        self._unavailable("disjointness")
+
+    def empty(self, a):
+        self._unavailable("empty region")
+
+    def nonempty(self, a, epsilon=0.0):
+        self._unavailable("empty region")
+
+
+class EnergyMeasure(HierarchyMeasure):
+    """A measure with a signed energy :math:`e(a, b)` that is :math:`\\le 0` where
+    :math:`a` lies inside :math:`b`. Subclasses define :meth:`raw` (``(B, 1)``).
+
+    :param signed: ``inside`` returns the raw energy (published code of shadow cones and disk
+        embeddings) instead of the hinge :math:`\\max(0, e + \\gamma)`.
+    :param negative_form: ``"hinge"`` (default): :math:`\\max(0, \\gamma - e)`;
+        ``"energy"``: the energy itself (shadow cones: the loss of negatives is left to the
+        training regime).
+    """
+
+    #: Whether the published energy is already hinged at 0 (cones, order violation).
+    floored = False
+
+    def __init__(self, signed=False, negative_form="hinge"):
+        if negative_form not in ("hinge", "energy"):
+            raise ValueError("negative_form must be 'hinge' or 'energy'.")
+        if signed and self.floored:
+            raise ValueError(f"{type(self).__name__} has a non-negative energy already.")
+        self.signed = bool(signed)
+        self.negative_form = negative_form
+
+    def raw(self, a, b):
+        raise NotImplementedError
+
+    def energy(self, a, b):
+        """The energy as published: hinged at 0 where the measure floors, otherwise signed."""
+        self.check(a, b)
+        e = self.raw(a, b)
+        return th.relu(e) if self.floored else e
+
+    def inside(self, a, b, margin=0.0):
+        self.check(a, b)
+        if self.signed:
+            if margin:
+                raise ValueError("A signed energy has no margin; pass 0.")
+            return self.raw(a, b)
+        return th.relu(self.raw(a, b) + margin)
+
+    def negative(self, a, b, margin=0.0):
+        e = self.energy(a, b)
+        return e if self.negative_form == "energy" else th.relu(margin - e)
+
+
+# -- order violation ----------------------------------------------------------------------
+class OrderViolation(EnergyMeasure):
+    r"""The order violation of vectors in an ordered vector space
+    (Vendrov et al. 2016, Eq. 2; Zhapa-Camacho and Hoehndorf 2023, Eq. 6):
+    :math:`\lVert \max(0, v) \rVert_p`.
+
+    :param direction: ``"reversed"`` (order embeddings): :math:`a \preceq b` iff
+        :math:`a_i \ge b_i` for all :math:`i`, the origin is the top element,
+        :math:`v = b - a`. ``"product"`` (CatE): :math:`a \preceq b` iff :math:`a_i \le b_i`,
+        :math:`v = a - b`.
+    :param p: Order of the norm. For :math:`p = 2` the square root is taken of the sum plus
+        :math:`10^{-24}`, which keeps its gradient finite at 0 (and changes the value by at
+        most :math:`10^{-12}`).
+    """
+
+    accepts = (OrderCone,)
+    part = "order violation"
+    floored = True
+
+    def __init__(self, direction="reversed", p=2, negative_form="hinge"):
+        super().__init__(False, negative_form)
+        if direction not in ("reversed", "product"):
+            raise ValueError("direction must be 'reversed' or 'product'.")
+        self.direction = direction
+        self.p = p
+
+    def _norm(self, x):
+        x = th.relu(x)
+        if self.p == 2:
+            return (th.sqrt((x ** 2).sum(dim=-1) + 1e-24) - 1e-12).clamp(min=0.0)
+        return th.linalg.vector_norm(x, ord=self.p, dim=-1)
+
+    def _diff(self, a, b):
+        return b.centre - a.centre if self.direction == "reversed" else a.centre - b.centre
+
+    def raw(self, a, b):
+        return self._norm(self._diff(a, b)).unsqueeze(-1)
+
+    def inside(self, a, b, margin=0.0):
+        self.check(a, b)
+        return self._norm(self._diff(a, b) + margin).unsqueeze(-1)
+
+
+# -- boxes: volumes -----------------------------------------------------------------------
+class VolumeRatio(_LogProbability, Bounds):
+    r"""Hard boxes under the uniform measure: :math:`P(b \mid a) = \mathrm{vol}(a \cap b) /
+    \mathrm{vol}(a)` (Vilnis et al. 2018). The cost of :math:`a \sqsubseteq b` is the
+    negative log of that conditional probability. For disjoint boxes the probability has no
+    gradient, so the lower bound :math:`\mathrm{vol}(a) + \mathrm{vol}(b) -
+    \mathrm{vol}(a \vee b) \le \mathrm{vol}(a \wedge b)` (Section 4.3) is used for it, plus a
+    penalty :math:`w g` with :math:`g` the part of the join that the two boxes do not cover
+    (a term of mOWL, not of the paper: it keeps a gradient for a stated pair that is
+    disjoint).
+
+    :param eps: :math:`\varepsilon` inside the logarithms.
+    :param disjoint_weight: :math:`w`; default :math:`-\log \varepsilon`.
+    :param zero_at_inclusion: ``True`` (default): the cost of an included box is exactly 0
+        (the constant :math:`\log(1 + \varepsilon)` is added); ``False``: as published, it
+        is :math:`-\log(1 + \varepsilon)`.
+    :param dtype: The precision of the volumes (the published module computes in float64).
+
+    The other relations (``meets``, ``empty``, ``nonempty``, the intersection forms) are
+    those of :class:`~mowl.representation.Bounds`; ``apart`` is the conditional probability,
+    which is 0 exactly when the boxes are disjoint.
+    """
+
+    accepts = (Box,)
+    part = "volume ratio"
+    exact_intersection = True
+
+    def __init__(self, eps=1e-6, disjoint_weight=None, zero_at_inclusion=True,
+                 dtype=th.float64, separation="any"):
+        super().__init__(separation)
+        self.eps = float(eps)
+        self.disjoint_weight = -math.log(self.eps) if disjoint_weight is None \
+            else float(disjoint_weight)
+        self.zero_at_inclusion = bool(zero_at_inclusion)
+        self.dtype = dtype
+
+    @staticmethod
+    def _volume(low, high):
+        return th.relu(high - low).prod(dim=-1)
+
+    def conditional(self, a, b):
+        """``(p, gap)``, ``(B, 1)`` each: the estimate of :math:`P(b \\mid a)` (the exact
+        value for intersecting boxes, the lower bound, which is :math:`\\le 0`, for disjoint
+        ones) and the uncovered fraction :math:`g` of the join (0 if they intersect)."""
+        self.check(a, b)
+        lo_a, hi_a = a.lower.to(self.dtype), a.upper.to(self.dtype)
+        lo_b, hi_b = b.lower.to(self.dtype), b.upper.to(self.dtype)
+        tiny = th.finfo(self.dtype).tiny
+        vol_a, vol_b = self._volume(lo_a, hi_a), self._volume(lo_b, hi_b)
+        lo_m, hi_m = th.maximum(lo_a, lo_b), th.minimum(hi_a, hi_b)
+        lo_j, hi_j = th.minimum(lo_a, lo_b), th.maximum(hi_a, hi_b)
+        intersect = (hi_m > lo_m).all(dim=-1)
+        vol_j = self._volume(lo_j, hi_j).clamp(min=tiny)
+        bound = vol_a + vol_b - vol_j
+        joint = th.where(intersect, self._volume(lo_m, hi_m), bound)
+        gap = th.where(intersect, th.zeros_like(vol_j), -bound / vol_j)
+        return (joint / vol_a.clamp(min=tiny)).unsqueeze(-1), gap.unsqueeze(-1)
+
+    def inside(self, a, b, margin=0.0):
+        self._no_margin(margin, "The volume ratio")
+        p, gap = self.conditional(a, b)
+        cost = -th.log(p.clamp(min=0.0) + self.eps) + self.disjoint_weight * gap
+        if self.zero_at_inclusion:
+            cost = cost + math.log1p(self.eps)
+        return cost.to(a.centre.dtype)
+
+    def negative(self, a, b, margin=0.0):
+        """:math:`-\\log(1 - P(b \\mid a))`, the cross entropy with target 0 (the estimate
+        is clamped to :math:`[0, 1 - \\varepsilon]`)."""
+        p, _ = self.conditional(a, b)
+        return (-th.log1p(-p.clamp(min=0.0, max=1.0 - self.eps))).to(a.centre.dtype)
+
+    def apart(self, a, b, margin=0.0):
+        self._no_margin(margin, "The volume ratio")
+        p, _ = self.conditional(a, b)
+        return p.clamp(min=0.0).to(a.centre.dtype)
+
+
+def neg_log1mexp(energy, floor=1e-12):
+    """:math:`-\\log(1 - e^{-E})` for :math:`E \\ge 0` (the cost of a missing edge whose
+    presence has energy :math:`E`), computed stably; :math:`E` is clamped below at
+    ``floor``."""
+    e = th.clamp(energy, min=floor)
+    small = e < math.log(2.0)
+    out_small = th.log(-th.expm1(-th.where(small, e, th.ones_like(e))))
+    out_large = th.log1p(-th.exp(-th.where(small, th.ones_like(e), e)))
+    return -th.where(small, out_small, out_large)
+
+
+class SoftVolumeRatio(_LogProbability, Bounds):
+    r"""Boxes whose corners are Gumbel variables (Dasgupta et al. 2020) or are smoothed by
+    temperatures (Zhang et al. 2022): the same measure with different settings, as the two
+    papers' formulas are. In every dimension :math:`i`
+
+    .. math:: F_i = \frac{m_\nu(\mu^\vee_i - \mu^\wedge_i)}
+                         {m_\nu(a^+_i - a^-_i)}, \quad
+              \mu^\wedge = \mathrm{LSE}_\tau(a^-, b^-),\
+              \mu^\vee = -\mathrm{LSE}_\tau(-a^+, -b^+),
+
+    with :math:`\mathrm{LSE}_\tau(x, y) = \tau \log(e^{x/\tau} + e^{y/\tau})` and the
+    smoothed side length :math:`m_\nu(x) = \nu \log(1 + e^{x/\nu - s})`. The cost of
+    :math:`a \sqsubseteq b` is the energy :math:`E = -\log P(b \mid a) = \sum_i -\log F_i`;
+    the cost of a pair that is not ordered is :math:`-\log(1 - e^{-E})`. With
+    :math:`\tau = \nu = 0` this is the hard box score (the limit of :class:`VolumeRatio`
+    without its disjointness term).
+
+    **Binary codes.** If the regions carry codes (:class:`~.hierarchy_regions.CodedBox`),
+    :math:`E` weights the dimensions: per-class codes :math:`\sum_i a^\diamond_i
+    b^\diamond_i (-\log F_i)`; global code words :math:`\min_j \sum_i B_{ij} (-\log F_i)`.
+
+    :param intersection_temp: :math:`\tau` (Gumbel scale :math:`\beta` of Dasgupta et al.).
+    :param volume_temp: :math:`\nu`; default :math:`\tau`.
+    :param gumbel_shift: :math:`s = 2\gamma` (Euler's constant: the softplus approximation of
+        the expected side length of a Gumbel box, Dasgupta et al. Section 4.2) if ``True``,
+        :math:`s = 0` (the volume temperature of Zhang et al.) if ``False``.
+    :param tail: How :math:`\log m_\nu` is computed where :math:`e^{x/\nu - s}` underflows:
+        ``"exact"`` (:math:`z - \tfrac12 e^z`), ``"floor"`` (:math:`\log(\cdot + 10^{-30})`
+        as in the Gumbel box module) or ``"linear"`` (:math:`z` below :math:`-15`, as in the
+        BCBox code).
+    :param energy_floor: Smallest energy given to a negative pair (:math:`10^{-9}` Gumbel
+        boxes, :math:`10^{-12}` BCBox).
+    :param dtype: Precision of the computation (float64 in the Gumbel box module, the
+        regions' own in BCBox: ``None``).
+    """
+
+    accepts = (Box,)
+    part = "smoothed volume ratio"
+    exact_intersection = True
+
+    def __init__(self, intersection_temp=0.01, volume_temp=None, gumbel_shift=True,
+                 tail="exact", energy_floor=1e-9, dtype=th.float64, separation="any"):
+        super().__init__(separation)
+        if tail not in ("exact", "floor", "linear"):
+            raise ValueError("tail must be 'exact', 'floor' or 'linear'.")
+        if intersection_temp < 0 or (volume_temp is not None and volume_temp < 0):
+            raise ValueError("Temperatures must be non-negative.")
+        self.tau = float(intersection_temp)
+        self.nu = self.tau if volume_temp is None else float(volume_temp)
+        self.shift = 2.0 * EULER_GAMMA if gumbel_shift else 0.0
+        self.tail = tail
+        self.energy_floor = float(energy_floor)
+        self.dtype = dtype
+
+    def _lse(self, x, y):
+        if self.tau == 0:
+            return th.maximum(x, y)
+        return self.tau * th.logaddexp(x / self.tau, y / self.tau)
+
+    def log_side(self, x):
+        """:math:`\\log m_\\nu(x)`, elementwise."""
+        if self.nu == 0:
+            return th.log(th.clamp(x, min=0.0))
+        z = x / self.nu - self.shift
+        if self.tail == "floor":
+            inner = th.log(F.softplus(z) + 1e-30)
+        else:
+            safe = th.clamp(z, min=-15.0)
+            tail = z + th.log1p(-0.5 * th.exp(z)) if self.tail == "exact" else z
+            inner = th.where(z > -15.0, th.log(F.softplus(safe)), tail)
+        return math.log(self.nu) + inner
+
+    def neg_log_scores(self, a, b):
+        """:math:`-\\log F_i` of the dimensions, ``(B, d)``."""
+        self.check(a, b)
+        lo_a, hi_a = self._cast(a.lower), self._cast(a.upper)
+        lo_b, hi_b = self._cast(b.lower), self._cast(b.upper)
+        meet_min = self._lse(lo_a, lo_b)
+        meet_max = -self._lse(-hi_a, -hi_b)
+        return -(self.log_side(meet_max - meet_min) - self.log_side(hi_a - lo_a))
+
+    def _cast(self, x):
+        return x if self.dtype is None else x.to(self.dtype)
+
+    @staticmethod
+    def _weighted(codes, nls):
+        # F^0 = 1: a dimension whose code is exactly 0 is ignored even where -log F is inf.
+        w = codes * nls
+        return th.where(codes == 0, th.zeros_like(w), w)
+
+    def energy(self, a, b):
+        """:math:`E = -\\log P(b \\mid a)`, ``(B, 1)``, with the codes of the regions."""
+        nls = self.neg_log_scores(a, b)
+        code_a, code_b = getattr(a, "code", None), getattr(b, "code", None)
+        words = getattr(a, "global_code", None)
+        if code_a is not None and code_b is not None:
+            e = self._weighted(self._cast(code_a) * self._cast(code_b), nls).sum(dim=-1)
+        elif words is not None:
+            e = self._weighted(self._cast(words), nls.unsqueeze(-1)).sum(dim=-2) \
+                .min(dim=-1).values
+        else:
+            e = nls.sum(dim=-1)
+        return e.unsqueeze(-1)
+
+    def inside(self, a, b, margin=0.0):
+        self._no_margin(margin, "The smoothed volume ratio")
+        return self.energy(a, b).clamp(min=0.0).to(a.centre.dtype)
+
+    def negative(self, a, b, margin=0.0):
+        return neg_log1mexp(self.energy(a, b), self.energy_floor).to(a.centre.dtype)
+
+    def apart(self, a, b, margin=0.0):
+        """:math:`P(b \\mid a)`: small when the boxes are (nearly) disjoint."""
+        self._no_margin(margin, "The smoothed volume ratio")
+        return th.exp(-self.energy(a, b)).to(a.centre.dtype)
+
+
+# -- cones, disks, points -----------------------------------------------------------------
+class ConeAngle(EnergyMeasure):
+    r"""The angle of a point against the aperture of a geodesic cone (Ganea et al. 2018,
+    Eq. 33): :math:`\max(0, \Xi(b, a) - \psi(b))` with :math:`\Xi` the angle between the
+    axis of the cone of the parent :math:`b` and the geodesic to the child :math:`a`; zero
+    iff :math:`a` lies in the cone of :math:`b`. Poincare ball only."""
+
+    accepts = (ConePoint,)
+    part = "angle"
+    floored = True
+
+    def raw(self, a, b):
+        return (C.axis_angle(b.centre, a.centre) - b.aperture).unsqueeze(-1)
+
+
+class ShadowCone(EnergyMeasure):
+    """The distance of a point to the shadow cone of a parent (Yu et al. 2024, Section 4):
+    negative inside the cone, positive outside.
+
+    :param formulation: ``"penumbral-ball"``, ``"penumbral-half-space"``, ``"umbral-ball"``
+        or ``"umbral-half-space"``; the half-space ones need points of an
+        :class:`~mowl.nn.order.manifolds.UpperHalfSpace`, the others of a Poincare ball.
+    :param radius, horosphere_height, gamma3: See :func:`mowl.nn.order.cones.shadow_cone_energy`.
+    """
+
+    accepts = (Point,)
+    part = "angle"
+
+    def __init__(self, formulation="umbral-half-space", radius=0.05, horosphere_height=20.0,
+                 gamma3=1e-4, signed=False, negative_form="hinge"):
+        if formulation not in C.FORMULATIONS:
+            raise ValueError(f"formulation must be one of {C.FORMULATIONS}.")
+        super().__init__(signed, negative_form)
+        self.formulation = formulation
+        self.radius = radius
+        self.horosphere_height = horosphere_height
+        self.gamma3 = gamma3
+
+    def raw(self, a, b):
+        half_space = isinstance(a.manifold, UpperHalfSpace)
+        if half_space != self.formulation.endswith("half-space"):
+            raise TypeError(f"The formulation {self.formulation!r} does not live on "
+                            f"{type(a.manifold).__name__}.")
+        return C.shadow_cone_energy(b.centre, a.centre, self.formulation, self.radius,
+                                    self.horosphere_height, self.gamma3).unsqueeze(-1)
+
+
+class Protrusion(EnergyMeasure):
+    r"""The protrusion of a disk out of another (Suzuki et al. 2019, Eq. 9):
+    :math:`l = d(x_b, x_a) - r_b + r_a`, :math:`\le 0` iff the disk of the parent :math:`b`
+    contains that of the child :math:`a`. The distance is that of the manifold the disks live
+    on, so the same measure serves every space (and, on the Euclidean one, balls: with
+    non-negative radii it is the measure of
+    :class:`~mowl.representation.CentreDistance`). Balls of the Euclidean class models
+    (:class:`~mowl.representation.Ball`) are disks on the Euclidean space."""
+
+    accepts = (Disk, Ball)
+    part = "protrusion"
+    _euclidean = Euclidean()
+
+    def raw(self, a, b):
+        manifold = getattr(a, "manifold", None) or self._euclidean
+        distance = manifold.distance(b.centre, a.centre).reshape(-1, 1)
+        return distance - b.radius.reshape(-1, 1) + a.radius.reshape(-1, 1)
+
+
+class DistanceDepth(HierarchyMeasure):
+    r"""Distance and depth of points (HiT, He et al. 2024, Eq. 6): the cost of :math:`a
+    \sqsubseteq b` is :math:`d(a, b) + \lambda (\lVert b \rVert - \lVert a \rVert)`, the
+    negated subsumption score, with :math:`\lVert x \rVert = d(x, 0)` the depth of a point.
+
+    This is a ranking score, not a satisfiability cost: it is not zero where the relation
+    holds and it can be negative (published reading; there is no other). Pairs that are not
+    ordered are scored by the same function. The *training* loss of HiT is a triplet loss,
+    available as :meth:`triplet`.
+
+    :param centri_weight: :math:`\\lambda` (``centri_weight`` of HiT; 0 uses the distance
+        only).
+    """
+
+    accepts = (Point,)
+    part = "distance and depth"
+
+    def __init__(self, centri_weight=1.0):
+        self.centri_weight = float(centri_weight)
+
+    def inside(self, a, b, margin=0.0):
+        self.check(a, b)
+        self._no_margin(margin, "The distance-and-depth score")
+        gap = depth(b.manifold, b.centre) - depth(a.manifold, a.centre)
+        return (a.manifold.distance(a.centre, b.centre) + self.centri_weight * gap) \
+            .unsqueeze(-1)
+
+    def negative(self, a, b, margin=0.0):
+        return self.inside(a, b)
+
+    def clustering(self, a, b, n, margin):
+        """HiT Eq. 3: :math:`\\max(d(a, b) - d(a, n) + \\alpha, 0)` for a child ``a``, its
+        parent ``b`` and a negative parent ``n``; ``(B, 1)``."""
+        m = a.manifold
+        gap = m.distance(a.centre, b.centre) - m.distance(a.centre, n.centre)
+        return th.relu(gap + margin).unsqueeze(-1)
+
+    def centripetal(self, a, b, margin):
+        """HiT Eq. 4: :math:`\\max(\\lVert b \\rVert - \\lVert a \\rVert + \\beta, 0)`;
+        ``(B, 1)``."""
+        gap = depth(b.manifold, b.centre) - depth(a.manifold, a.centre)
+        return th.relu(gap + margin).unsqueeze(-1)
+
+    def triplet(self, a, b, n, clustering_margin, centripetal_margin, clustering_weight=1.0,
+                centripetal_weight=1.0):
+        """:math:`L_\\prec` (HiT Eq. 5, OnT Eq. 5): clustering plus centripetal loss."""
+        cluster = self.clustering(a, b, n, clustering_margin)
+        centri = self.centripetal(a, b, centripetal_margin)
+        return clustering_weight * cluster + centripetal_weight * centri
+
+
+# -- registration ------------------------------------------------------------------------
+register_measure("order violation", default_for=(OrderCone,))(OrderViolation)
+register_measure("volume ratio", default_for=(CornerBox,))(VolumeRatio)
+register_measure("smoothed volume ratio", default_for=(CodedBox,))(SoftVolumeRatio)
+register_measure("angle", default_for=(ConePoint,))(ConeAngle)
+register_measure("shadow cone")(ShadowCone)
+register_measure("protrusion", default_for=(Disk,))(Protrusion)
+register_measure("distance and depth", default_for=(Point,))(DistanceDepth)
