@@ -185,9 +185,15 @@ general parts that other geometries of elements and unions of boxes can use:
   report (``exact_regime=`` replaces it);
 * ``train`` is the loop :class:`~mowl.training.sampled_objective.SampledObjectiveTraining`
   of any model whose step is one sampled objective.
-* the set operations of the query compiler below (constants, projection along a role,
-  intersection, union, depth) are
-  :class:`~mowl.representation.library.box_union_algebra.BoundedBoxUnions`.
+* the query answering below is general: :mod:`mowl.evaluation.query_search` reads a batch
+  of queries into a tree and evaluates it with
+  :class:`~mowl.evaluation.query_search.RegionCompiler` (``compile_query``),
+  :class:`~mowl.evaluation.query_search.MaxMinBeam` (``score_query_beam``) and
+  :class:`~mowl.evaluation.query_search.WitnessChain` (``score_query_witness``), for any
+  region family; GroundedEL's family is
+  :class:`~mowl.representation.library.element_box_family.ElementBoxFamily` (points, and
+  unions of boxes computed with
+  :class:`~mowl.representation.library.box_union_algebra.BoundedBoxUnions`).
 
 .. testcode::
 
@@ -210,6 +216,18 @@ general parts that other geometries of elements and unions of boxes can use:
 .. testoutput::
 
    [[1, 1, 0], [0, 1, 0], [0, 0, 1]]
+
+.. testcode::
+
+   from mowl.evaluation.query_search import read_batch
+
+   # two-hop queries from the anchors 0 and 3: a chain of two hops per query
+   batch = read_batch(("e", ("r", "r")), [(0, (1, 2)), (3, (1, 1))])
+   print(batch.entities, batch.hops)
+
+.. testoutput::
+
+   (0, 3) ((1, 1), (2, 1))
 
 Logical query answering
 -----------------------

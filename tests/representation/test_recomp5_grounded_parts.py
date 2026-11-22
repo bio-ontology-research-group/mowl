@@ -357,3 +357,55 @@ def test_bounded_box_unions_on_the_regions_of_a_class_model():
     in_a = g.depth(pts, th.zeros(200, dtype=th.long), crisp=True) > 0
     in_b = g.depth(pts, th.ones(200, dtype=th.long), crisp=True) > 0
     assert th.equal(both, in_a & in_b)
+
+
+# -- the grounding of a domain and the encoder of data elements ----------------------------
+def test_domain_index_sets_and_relation_fillers():
+    from mowl.representation.library.grounded_objective import (domain_index_sets,
+                                                                relation_fillers)
+    live, ordinary, probes = domain_index_sets(4, 6, top_id=0, bot_id=3)
+    assert live.tolist() == [0, 1, 2] and ordinary.tolist() == [1, 2]
+    assert probes.tolist() == [0, 1, 2, 4, 5]
+    axioms = {"gci2": th.tensor([[0, 1, 2], [1, 1, 2]]),
+              "object_property_assertion": th.tensor([[0, 0, 1]])}
+    fillers, lhs, mask = relation_fillers(axioms, 2, 6, 4)
+    assert fillers[1].tolist() == [2] and lhs[1].tolist() == [0, 1]
+    assert fillers[0].tolist() == [5] and lhs[0].tolist() == [4]
+    assert mask.tolist() == [[False] * 5 + [True], [False, False, True, False, False, False]]
+
+
+def test_element_domain_encodes_data_elements():
+    domain = gp.ElementDomain(3, 2, 2, encoder=th.nn.Linear(4, 2))
+    assert domain.encode(th.ones(5, 4)).shape == (5, 2)
+    assert domain.encode(th.ones(4)).shape == (1, 2)
+    with pytest.raises(ValueError):
+        domain.encode(th.ones(2, 2, 2))
+
+
+class _Validated(_Toy):
+    """The toy method with validation data: the loop validates it every epoch."""
+
+    eval_gci_name = "gci0"
+
+    def __init__(self):
+        super().__init__()
+        self.module = _ToyModule()
+        self.dataset = type("D", (), {"validation": True})()
+        self.validation_datasets = {"gci0": th.zeros((2, 2), dtype=th.long)}
+
+
+class _ToyModule(th.nn.Linear):
+    def __init__(self):
+        super().__init__(1, 1, bias=False)
+        self.tau = 1.0
+
+    def forward(self, rows, form):
+        return (self.weight.sum() - 3.0).abs().expand(len(rows))
+
+
+def test_sampled_objective_loop_leaves_the_module_in_eval_mode_after_validation():
+    toy = _Validated()
+    regime = ComposedRegime(TemperatureAnnealing(start=1.0, end=0.5))
+    regime.attach(toy)
+    SampledObjectiveTraining().run(toy, regime, 2)
+    assert not toy.module.training

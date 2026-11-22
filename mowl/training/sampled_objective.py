@@ -17,7 +17,9 @@ grounded objective, :class:`~mowl.representation.library.grounded_objective.Grou
    the regime as ``"tau"``), ``regime.on_epoch_end``, ``model.log_epoch(...)`` every
    ``log_every`` epochs, ``epoch_callback(epoch, model)``;
 5. every ``validate_every`` epochs the validation loss of ``model.eval_gci_name``
-   (:func:`~mowl.training.schedules.validation_loss`) and a checkpoint of the best;
+   (:func:`~mowl.training.schedules.validation_loss`) and a checkpoint of the best; the
+   module is then left in evaluation mode (``module.train()`` is called at the start of
+   every epoch);
 6. ``regime.should_stop(epoch)``; at the end ``regime.on_train_end()`` and a final
    checkpoint when none was written.
 
@@ -111,6 +113,9 @@ class SampledObjectiveTraining:
                     epoch_callback(epoch, model)
                 if (epoch + 1) % validate_every == 0 and _has_validation(model):
                     value = validation_loss(model)
+                    # the module stays in evaluation mode until the next epoch starts, as
+                    # the loop of GroundedEL always left it after a validation
+                    model.module.eval()
                     if value < best:
                         best = value
                         if model.model_filepath is not None:

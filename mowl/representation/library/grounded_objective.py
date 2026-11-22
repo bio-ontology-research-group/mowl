@@ -72,6 +72,40 @@ class Grounding(NamedTuple):
     bot_id: Optional[int] = None
 
 
+def domain_index_sets(nb_classes, nb_elements, top_id=None, bot_id=None, device="cpu"):
+    """The index sets of a :class:`Grounding` read off the size of the domain:
+    ``(live_classes, ordinary_classes, dead_probes)``, the classes other than bottom, the
+    classes other than top and bottom, and the elements other than the element of bottom."""
+    def without(n, *drop):
+        return th.tensor([i for i in range(n) if i not in drop], dtype=th.long, device=device)
+    return (without(nb_classes, bot_id), without(nb_classes, top_id, bot_id),
+            without(nb_elements, bot_id))
+
+
+def relation_fillers(axioms, nb_rels, nb_elements, nb_classes, device="cpu"):
+    """The filler and left-hand elements of every relation, in order of first occurrence:
+    from :math:`A \\sqsubseteq \\exists r.B` (``A`` and ``B``) and the role assertions
+    (the elements of the individuals). Returns ``(fillers, lhs, mask)``: dicts of index
+    tensors per relation and the boolean ``(nb_rels, nb_elements)`` table of fillers."""
+    fillers = {r: {} for r in range(nb_rels)}
+    lhs = {r: {} for r in range(nb_rels)}
+    for form, offset in (("gci2", 0), ("object_property_assertion", nb_classes)):
+        rows = axioms[form] if form in axioms else None
+        if rows is None or len(rows) == 0:
+            continue
+        for a, r, b in rows[:].detach().cpu().tolist():
+            fillers[int(r)][offset + int(b)] = None
+            lhs[int(r)][offset + int(a)] = None
+
+    def tensors(table):
+        return {r: th.tensor(list(v), dtype=th.long, device=device) for r, v in table.items()}
+    fillers, lhs = tensors(fillers), tensors(lhs)
+    mask = th.zeros((nb_rels, nb_elements), dtype=th.bool, device=device)
+    for r, ids in fillers.items():
+        mask[r, ids] = True
+    return fillers, lhs, mask
+
+
 class _Step:
     """What one step reads: the parts, the positions and deadness of the elements, the
     samplers and the generator."""
