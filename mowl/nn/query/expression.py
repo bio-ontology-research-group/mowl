@@ -30,10 +30,13 @@ best of the branches, Ren et al. 2020, Section 4.3), :func:`signature` and
 embedded as one batch, and :func:`answers` evaluates a tree on a graph exactly.
 """
 
+from collections.abc import Set
 from dataclasses import dataclass
 from itertools import product
 
-__all__ = ["Node", "Vocabulary", "UnsupportedClassExpression", "anchor", "project",
+import numpy as np
+
+__all__ = ["AnswerSet", "answer_mask", "Node", "Vocabulary", "UnsupportedClassExpression", "anchor", "project",
            "intersect", "union", "negate", "class_expression_to_query", "from_nested",
            "template_from_nested", "to_dnf", "signature", "ids", "from_signature",
            "contains_negation", "contains_union", "answers", "NEGATION_ID"]
@@ -305,13 +308,93 @@ def from_signature(sig, values):
 # Exact answers
 # ---------------------------------------------------------------------------------------
 
+class AnswerSet(Set):
+    """The answers of a query as a read-only set backed by a boolean mask over the entities
+    (computed on first use by :func:`answer_mask`): membership is a lookup, the size is
+    counted once and the elements are enumerated only when asked. It compares equal to a
+    Python ``set`` with the same elements."""
+
+    def __init__(self, node, graph):
+        self.node = node
+        self.graph = graph
+        self._mask = None
+        self._len = None
+
+    @property
+    def mask(self):
+        """Boolean mask over all entities."""
+        if self._mask is None:
+            self._mask = answer_mask(self.node, self.graph)
+        return self._mask
+
+    def contains_many(self, entities):
+        """Boolean array: which of ``entities`` (integers) are answers."""
+        return self.mask[np.asarray(entities, dtype=np.int64)]
+
+    def __contains__(self, entity):
+        return 0 <= entity < self.graph.num_entities and bool(self.mask[entity])
+
+    def __len__(self):
+        if self._len is None:
+            self._len = int(np.count_nonzero(self.mask))
+        return self._len
+
+    def __iter__(self):
+        return iter(np.flatnonzero(self.mask).tolist())
+
+    @classmethod
+    def _from_iterable(cls, it):
+        return set(it)
+
+    def __repr__(self):
+        return f"AnswerSet({self.node!r})"
+
+
+def answer_mask(node, graph):
+    """The exact answers of a query as a boolean mask over the entities of ``graph``, which
+    must offer ``num_entities`` and ``project_mask(entities, relation)`` (a
+    :class:`~mowl.models.query.graph.QueryGraph`). Same semantics as :func:`answers`; the cost
+    is that of the array operations of the query, a few numpy passes over the entities and the
+    edges leaving the intermediate answers."""
+    k = node.kind
+    n = graph.num_entities
+    if k == "a":
+        mask = np.zeros(n, dtype=bool)
+        mask[node.value] = True
+        return mask
+    if k == "p":
+        child = node.children[0]
+        if child.kind == "a":
+            return graph.project_mask(np.array([child.value], dtype=np.int64), node.value)
+        entities = np.flatnonzero(answer_mask(child, graph))
+        return graph.project_mask(entities, node.value)
+    if k == "i":
+        mask = answer_mask(node.children[0], graph)
+        for c in node.children[1:]:
+            mask &= answer_mask(c, graph)
+        return mask
+    if k == "u":
+        mask = answer_mask(node.children[0], graph)
+        for c in node.children[1:]:
+            mask |= answer_mask(c, graph)
+        return mask
+    return ~answer_mask(node.children[0], graph)
+
+
 def answers(node, graph, universe):
     """The exact answer set of a query on ``graph``.
+
+    A graph with ``project_mask`` and ``expand`` (the query graph of the models) is evaluated
+    with array operations and the result is an :class:`AnswerSet`, which computes the
+    answers only when its size or elements are asked for; any other graph is evaluated with
+    Python sets and the result is a ``set``.
 
     :param graph: An object with ``successors(entity, relation) -> set``.
     :param universe: All entities (negation is the complement in it).
     :rtype: set of int
     """
+    if hasattr(graph, "project_mask") and hasattr(graph, "expand"):
+        return AnswerSet(node, graph)
     k = node.kind
     if k == "a":
         return {node.value}

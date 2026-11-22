@@ -130,7 +130,7 @@ class QueryEmbeddingModel(Model):
             self._load_released(dataset, templates, structures)
             self._pool, self.training_structures = [], {}
             return
-        pool = sorted(self.graph.inc)
+        pool = self.graph.entities_with_incoming()
         self._pool = pool
         self.training_structures = (sampling.usable_structures(templates, self.graph,
                                                                self.rng, pool)

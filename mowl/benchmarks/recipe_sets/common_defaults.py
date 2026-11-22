@@ -43,8 +43,13 @@ _DEFAULTS = {
     "prism": dict(_EL, model_kwargs={"embed_dim": 200}),
     "multiboxel": dict(_EL, model_kwargs={"embed_dim": 50}),
     "multielbe": dict(_EL, model_kwargs={"embed_dim": 50}),
-    # no loss for corrupted axioms: their own training loop
-    "mcmultibox": {"model_kwargs": {}, "epochs": 500},
+    # no loss for corrupted axioms: their own training loop. 5 epochs of 5 optimiser steps
+    # each, as in the thesis (Aharoni 2024). One epoch evaluates the volume loss of every
+    # axiom over 20,000 points: measured on one CPU thread, about 0.15 s per class and epoch
+    # (153 s at 1k classes, 689 s at 5k, 2,939 s at 20k; the cost is linear in the number of
+    # axioms), i.e. about 4 h per epoch at 100k classes. The earlier 500 epochs would take
+    # about 85 days at 100k classes on one CPU thread (and the thesis needed 5 epochs).
+    "mcmultibox": {"model_kwargs": {}, "epochs": 5},
     "elkem": {"model_kwargs": {"embed_dim": 50, "load_role_axioms": True}, "epochs": 5000},
     "transbox": dict(_EL, model_kwargs={"embed_dim": 200, "load_role_axioms": True}),
     # other trained models: their own loop
