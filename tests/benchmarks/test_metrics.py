@@ -91,3 +91,25 @@ def test_rank_queries_exclusion_and_filter():
     # A target outside the candidate set is not ranked.
     _, _, kept = rank_queries(Dummy(), "gci0", th.tensor([[0, 7]]), 1, cands, scorer)
     assert kept.tolist() == [False]
+
+
+def test_rank_queries_reports_progress_of_a_long_ranking(capsys):
+    """A long ranking prints a progress line now and then (a ranking of the anatomy
+    inferences ran for hours without one); a short one prints nothing."""
+    from mowl.evaluation.axiom_ranking import rank_queries
+
+    def scorer(model, gci, rows):
+        return (rows[:, 1] - 2).abs().float()
+
+    class Dummy:
+        device = "cpu"
+
+    rows = th.tensor([[0, 3]] * 4)
+    quiet, _, _ = rank_queries(Dummy(), "gci0", rows, 1, th.arange(5), scorer, max_rows=5)
+    assert capsys.readouterr().err == ""
+    loud, _, _ = rank_queries(Dummy(), "gci0", rows, 1, th.arange(5), scorer, max_rows=5,
+                              progress=1e-9)
+    err = capsys.readouterr().err
+    assert "ranking gci0: 1 of 4 queries (5 candidates each)" in err
+    assert "4 of 4 queries" in err and "s left" in err
+    assert loud.tolist() == quiet.tolist()

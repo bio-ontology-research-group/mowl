@@ -227,3 +227,46 @@ def test_collapse_of_conE_is_reported():
     assert abs(m.loss_history[-1] - np.log(2)) < 0.02
     scores = m.score_query(("e", ("r",)), [(0, (1,)), (3, (1,))])
     assert th.allclose(scores[0], scores[1], atol=1e-3)         # the same cone for all queries
+
+
+@pytest.mark.parametrize("cls", ALL)
+@pytest.mark.parametrize("extension", (True, False))
+def test_axiom_costs_are_vectorised_and_equal_the_per_query_costs(cls, extension):
+    """The ranking of the joint benchmarks scores queries x classes rows; the fast path
+    builds the queries column-wise in chunks and gives the numbers of one query object
+    per row."""
+    th.manual_seed(0)
+    ds, c, eats = _dataset()
+    m = cls(ds, embed_dim=8, seed=0, extension=extension)
+    m.scoring_chunk = 7                                       # several chunks
+    n, r = m.num_classes, m._role_ids[NS + "eats"]
+    g = th.Generator().manual_seed(0)
+    rows = {"gci0": th.randint(n, (40, 2), generator=g),
+            "gci2": th.stack([th.randint(n, (40,), generator=g), th.full((40,), r),
+                              th.randint(n, (40,), generator=g)], 1),
+            "class_assertion": th.stack([th.randint(len(m._individual_ids), (40,),
+                                                    generator=g),
+                                         th.randint(n, (40,), generator=g)], 1)}
+    for form, x in rows.items():
+        fast, slow = m.axiom_costs(form, x), m.axiom_costs_by_query(form, x)
+        assert fast.shape == (40,)
+        # equal up to float rounding of the matrix products of different batch sizes
+        assert th.allclose(fast, slow, atol=1e-4, rtol=1e-5), form
+
+
+def test_axiom_costs_build_no_query_object_per_row(monkeypatch):
+    """Scoring many rows must not go through the per-row query objects (that path took
+    about 20 microseconds per candidate axiom, two hours for the anatomy inferences)."""
+    import mowl.models.query.model as qm
+    ds, c, eats = _dataset()
+    m = Query2Box(ds, embed_dim=8)
+    calls = [0]
+    original = qm.to_dnf
+
+    def counting(node):
+        calls[0] += 1
+        return original(node)
+
+    monkeypatch.setattr(qm, "to_dnf", counting)
+    m.axiom_costs("gci0", th.randint(m.num_classes, (1000, 2)))
+    assert calls[0] == 0

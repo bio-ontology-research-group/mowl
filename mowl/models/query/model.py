@@ -415,6 +415,30 @@ class QueryEmbeddingModel(Model):
                 f"contains ¬ (or ∀).")
 
     # -- axiom scores for the rank-based regimes ----------------------------------------
+    #: Query states built at a time by :meth:`axiom_costs` (bounds its memory: about
+    #: ``scoring_chunk * embed_dim * 4`` bytes per state tensor, a few of them at a time).
+    scoring_chunk = 2 ** 16
+
+    def _axiom_queries(self, gci_name, rows):
+        """``(signature, id_matrix, subjects)`` of candidate axioms, built column-wise on
+        the rows' device: every axiom of one form is a query of the same shape (a named
+        class, or ``∃r.D``), so no per-row query object is needed."""
+        from mowl.nn.query.expression import anchor, project
+        rows = rows.long()
+        if gci_name == "class_assertion":
+            subjects, classes = rows[:, 0] + self.num_classes, rows[:, 1]
+        else:
+            subjects, classes = rows[:, 0], rows[:, -1]
+        cols = [classes]
+        node = anchor(0)
+        if self.extension:
+            cols.append(th.full_like(classes, ISA_INV))
+            node = project(ISA_INV, node)
+        if gci_name == "gci2":
+            cols.append(2 + 2 * rows[:, 1] + 1)            # role_relation(r, inverse=True)
+            node = project(0, node)
+        return signature(node), th.stack(cols, dim=1), subjects
+
     @th.no_grad()
     def axiom_costs(self, gci_name, rows):
         """Cost (minus the score; lower is more plausible) of candidate axioms in mOWL's
@@ -423,7 +447,30 @@ class QueryEmbeddingModel(Model):
         ``gci0`` ``[C, D]``: the entity ``C`` is an answer of the query ``D``;
         ``gci2`` ``[C, r, D]``: ``C`` is an answer of ``∃r.D``; ``class_assertion``
         ``[a, C]``: the individual ``a`` is an answer of ``C``.
+
+        The rows are scored on the model's device, :attr:`scoring_chunk` at a time; the
+        cost is that of :meth:`axiom_costs_by_query` (the same numbers), without building
+        a query object per row (a ranking over all classes scores ``queries x classes``
+        rows).
         """
+        from mowl.evaluation.model_scoring import UnsupportedAxiomForm
+        if gci_name not in self.scored_forms:
+            raise UnsupportedAxiomForm(f"{type(self).__name__} has no score for "
+                                       f"{gci_name!r} axioms.")
+        self.module.eval()
+        sig, id_matrix, subjects = self._axiom_queries(gci_name, rows.to(self.device))
+        out = th.empty(len(rows), device=self.device)
+        step = max(1, int(self.scoring_chunk))
+        for start in range(0, len(rows), step):
+            stop = start + step
+            state = self.module.embed(sig, id_matrix[start:stop])
+            out[start:stop] = self.module.logit(state, subjects[start:stop, None])[:, 0]
+        return -out
+
+    @th.no_grad()
+    def axiom_costs_by_query(self, gci_name, rows):
+        """:meth:`axiom_costs` through one query object per row (the general path of
+        :meth:`answer`; slow for many rows, kept as the reference of the fast path)."""
         from mowl.evaluation.model_scoring import UnsupportedAxiomForm
         if gci_name not in self.scored_forms:
             raise UnsupportedAxiomForm(f"{type(self).__name__} has no score for "
