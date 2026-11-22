@@ -37,7 +37,9 @@ representations are then the encoded ones), and no parts.
 
 import contextlib
 import functools
+import inspect
 import math
+import warnings
 from dataclasses import dataclass
 
 import torch as th
@@ -858,6 +860,25 @@ _DEFAULT_LOSS = {
 }
 
 
+def _accepted_options(relations, options):
+    """The options the relation model takes. A named method passes the options of its own
+    relation model (``min_denom`` of ExpressivE); when another relation model is swapped in
+    that does not have them they are dropped with a warning instead of failing."""
+    from mowl.representation import methods as M
+    factory = M.RELATION_MODELS.get(relations, relations) if isinstance(relations, str) \
+        else relations
+    if not options or not isinstance(factory, type):
+        return options
+    parameters = inspect.signature(factory.__init__).parameters
+    if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters.values()):
+        return options
+    dropped = sorted(set(options) - set(parameters))
+    if dropped:
+        warnings.warn(f"{factory.__name__} has no option {dropped}; not used.", UserWarning,
+                      stacklevel=3)
+    return {k: v for k, v in options.items() if k in parameters}
+
+
 def _build(key, nb_classes, nb_relations, nb_individuals, embed_dim, margin, classes,
            relations, objective, tables, relation_options, subclass_id=-2, loss=None,
            sampler=None, regularizers=(), projection="owl2vec_star", init=True):
@@ -870,6 +891,7 @@ def _build(key, nb_classes, nb_relations, nb_individuals, embed_dim, margin, cla
         raise TypeError(f"{key}: tables must be a PyKEEN model; use boxe(...) / "
                         f"expressive(...) with tables, or geometry_of(model).")
     graph = subclass_id != -2
+    relation_options = _accepted_options(relations, relation_options)
     pair_options = dict(relation_options)
     if graph and subclass_id >= 0:
         pair_options["subclass_id"] = subclass_id
@@ -1011,7 +1033,8 @@ def boxe(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=1.0,
     :param subclass_id: See :func:`graph_kge`.
     """
     if tables is not None:
-        subclass_id = relation_options.pop("subclass_id", None)
+        subclass_id = relation_options.pop("subclass_id", None if subclass_id == -2
+                                           else subclass_id)
         reps = tables.relation_representations
         classes_model = PointClasses(
             centres=PyKEENTable(tables.entity_representations[0]),
@@ -1039,7 +1062,8 @@ def expressive(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=
     :func:`boxe` for ``classes``, ``relations``, ``subclass_id`` and ``tables`` (a trained
     PyKEEN ExpressivE)."""
     if tables is not None:
-        subclass_id = relation_options.pop("subclass_id", None)
+        subclass_id = relation_options.pop("subclass_id", None if subclass_id == -2
+                                           else subclass_id)
         classes_model = PointClasses(centres=PyKEENTable(tables.entity_representations[0]))
         inter = tables.interaction
         relations_model = ExpressivERelations(
@@ -1284,7 +1308,10 @@ class PyKEENGeometry(Geometry):
     @property
     def parts(self):
         return {"classes": "point", "relations": getattr(self, "relation_part", "none"),
-                "individuals": "point", "measure": "triple score", "conjunction": "none"}
+                "individuals": "point", "measure": "triple score", "conjunction": "none",
+                "objective": self.loss.describe()["loss"],
+                "negative sampler": self.sampler.describe()["sampler"],
+                "projection": self.projection}
 
     @property
     def relation_part(self):
