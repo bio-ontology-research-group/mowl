@@ -50,6 +50,8 @@ def geometry_of(model):
         return model
     geometry = _geometry_of(model)
     module = getattr(model, "module", model)
+    if geometry is module:      # the module is a geometry (built from parts): nothing to link
+        return geometry
     _mirror_strict_negatives(geometry, module)
     return _link(geometry, module)
 
