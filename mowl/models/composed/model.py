@@ -109,6 +109,17 @@ class ComposedEL(EmbeddingELModel):
         # EL++ role axioms: loaded when the geometry reads them
         self.load_role_axioms = bool(getattr(module, "role_axiom_capable", False))
         self._attach_structural_tables()
+        self._attach_default_regimes()
+
+    def _attach_default_regimes(self):
+        """The training regimes that belong to the method (``geometry.default_regimes``: a
+        tuple of functions that make one regime each, for example the negatives of the paper
+        or its loss), unless a regime is attached already."""
+        factories = getattr(self.module, "default_regimes", ())
+        if factories and self.training_regime is None:
+            from mowl.training.regime import ComposedRegime
+            regimes = [make() for make in factories]
+            self.training_regime = regimes[0] if len(regimes) == 1 else ComposedRegime(*regimes)
 
     def _attach_structural_tables(self):
         """A geometry that reads the structure of the ontology (definitions of classes,

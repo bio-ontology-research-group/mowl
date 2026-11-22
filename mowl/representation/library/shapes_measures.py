@@ -23,9 +23,9 @@ the group needs and the core does not have: ``member`` (a point in a region), ``
 import torch as th
 import torch.nn.functional as F
 
-from mowl.nn.el.concept2box import losses as C2B
+from mowl.representation.library import shapes_gumbel_math as C2B
 from mowl.nn.el.octagon import geometry as G
-from mowl.nn.el.octagon import losses as OL
+from mowl.representation.library import shapes_octagon_math as OL
 from mowl.representation.measures import Bounds, RegionMeasure
 from mowl.representation.methods import register_measure
 from mowl.representation.regions import Box, ConstructorUnavailable

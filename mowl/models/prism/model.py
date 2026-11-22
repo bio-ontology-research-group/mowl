@@ -1,21 +1,19 @@
 """PrismEL model class."""
 from __future__ import annotations
 
-from typing import Optional, Tuple
-
-import torch as th
-
-from mowl.base_models.elmodel import EmbeddingELModel
-from mowl.nn import PrismModule
-from mowl.nn.el.structural import (
-    DefinitionTable,
-    ExistenceTargets,
-    build_structural_tables,
-)
+from mowl.models.composed.model import ComposedEL
+from mowl.nn.el.structural import build_structural_tables
 
 
-class PrismEL(EmbeddingELModel):
+class PrismEL(ComposedEL):
     """Prism (:math:`\\text{triangle} \\times \\text{box}`) :math:`\\mathcal{EL}` embedding model.
+
+    The model is the combination of parts called ``"prism"``
+    (:func:`~mowl.representation.library.shapes_methods.prism`): prisms as classes,
+    translations as relations, individuals as points, support-coordinate bounds as measure,
+    ELBE's mean-squared loss as training regime. It is a :class:`~mowl.models.ComposedEL`,
+    so any part can be swapped. The hand-written loss module of the earlier implementation is
+    :class:`mowl.baselines.models.prism.model.PrismEL`.
 
     Represents every ontology class :math:`C` as a prism
     :math:`P_C = T_C \\times B_C \\subset \\mathbb{R}^2 \\times \\mathbb{R}^{d-2}`
@@ -145,173 +143,92 @@ class PrismEL(EmbeddingELModel):
             or float(anchor_weight) < 0
         ):
             raise ValueError(f"anchor_weight must be >= 0, got {anchor_weight!r}")
-        super().__init__(
-            dataset,
-            embed_dim,
-            batch_size,
-            extended=True,
-            model_filepath=model_filepath,
-            device=device,
-            learning_rate=learning_rate,
-            neg_sampling_gcis=neg_sampling_gcis,
-        )
-
-        self.margin = margin
+        if objective not in ("axiom", "structural"):
+            raise ValueError(f"objective must be 'axiom' or 'structural', got {objective!r}.")
         self.reg_norm = reg_norm
         self.init_boxes = init_boxes
         self.anchor_weight = float(anchor_weight)
-        self.objective = objective
-        self.max_depth = max_depth
-        self.structural_definitions = structural_definitions
-        self.existence_weight = existence_weight
-        self.size_reg = size_reg
-        self.gci2_negative_triangle = gci2_negative_triangle
-        self.empty_box_reading = empty_box_reading
         self.canonical_model = canonical_model
-        self._structural_tables: Optional[
-            Tuple[DefinitionTable, ExistenceTargets, Optional[int]]
-        ] = None
-        self._loaded = False
+        super().__init__(
+            dataset,
+            method="prism",
+            embed_dim=embed_dim,
+            margin=margin,
+            learning_rate=learning_rate,
+            batch_size=batch_size,
+            model_filepath=model_filepath,
+            device=device,
+            neg_sampling_gcis=neg_sampling_gcis,
+            reading=objective,
+            max_depth=max_depth,
+            structural_definitions=structural_definitions,
+            existence_weight=existence_weight,
+            size_reg=size_reg,
+            gci2_negative_triangle=gci2_negative_triangle,
+            empty_box_reading=empty_box_reading,
+        )
         self.extended = False
-        self._mse_criterion = th.nn.MSELoss()
-        self.init_module()
+
+    @property
+    def objective(self):
+        """``"axiom"`` or ``"structural"``: the reading of the method (``reading`` of
+        :func:`~mowl.representation.library.shapes_methods.prism`)."""
+        return getattr(self, "method_options", {}).get("reading", "axiom")
+
+    @objective.setter
+    def objective(self, value):
+        # (ComposedEL keeps an Objective object under this name; the method names its reading)
+        pass
+
+    @property
+    def max_depth(self):
+        return self.method_options["max_depth"]
+
+    @property
+    def structural_definitions(self):
+        return self.module.structural_definitions if hasattr(
+            self.module, "structural_definitions") else self.method_options[
+                "structural_definitions"]
+
+    @property
+    def existence_weight(self):
+        return self.method_options["existence_weight"]
+
+    @property
+    def size_reg(self):
+        return self.method_options["size_reg"]
+
+    @property
+    def gci2_negative_triangle(self):
+        return self.method_options["gci2_negative_triangle"]
+
+    @property
+    def empty_box_reading(self):
+        return self.method_options["empty_box_reading"]
 
     def init_module(self):
-        """Initialise :class:`~mowl.nn.PrismModule`, apply ``init_boxes`` if present, and re-attach cached structural tables."""
-        self.module = PrismModule(
-            len(self.class_index_dict),
-            len(self.object_property_index_dict),
-            len(self.individual_index_dict),
-            embed_dim=self.embed_dim,
-            margin=self.margin,
-            objective=self.objective,
-            max_depth=self.max_depth,
-            structural_definitions=self.structural_definitions,
-            existence_weight=self.existence_weight,
-            size_reg=self.size_reg,
-            gci2_negative_triangle=self.gci2_negative_triangle,
-            empty_box_reading=self.empty_box_reading,
-        ).to(self.device)
-        self.structural_definitions = self.module.structural_definitions
-        self.existence_weight = self.module.existence_weight
-        self.size_reg = self.module.size_reg
+        """Build the prism module from its parts, apply ``init_boxes`` if present, and attach
+        the structural tables when ``objective='structural'``."""
+        super().init_module()
         if self.init_boxes is not None:
             self.init_boxes.apply_to_module(
                 self.module, class_index_dict=self.class_index_dict
             )
-        if self._structural_tables is not None:
-            table, targets, top_idx = self._structural_tables
-            self.module.set_structural_tables(table, targets, top_idx=top_idx)
 
-    def train(self, epochs, validate_every=1, epoch_callback=None):
-        """Train the model, building structural tables first when ``objective='structural'``.
-
-        Guarantees:
-
-        - When ``objective="structural"``, compiles a :class:`~mowl.nn.el.structural.DefinitionTable`
-          (with ``k=1``, ``max_components=2**30``, ``enabled=self.structural_definitions``,
-          ``max_level=self.max_depth``) and :class:`~mowl.nn.el.structural.ExistenceTargets`
-          via :func:`~mowl.nn.el.structural.build_structural_tables`, caches them on
-          the model so :meth:`init_module`, :meth:`load_best_model`, and
-          :meth:`from_pretrained` preserve them, and installs them on :attr:`module`
-          via :meth:`~mowl.nn.PrismModule.set_structural_tables` before delegating
-          to ``super().train(...)``.
-        - Raises :class:`ValueError` if any required training GCI tensor has
-          fewer columns than expected by its normal form.
-        - When ``objective="axiom"``, delegates directly to ``super().train(...)``.
-
-        Non-guarantees:
-
-        - Gradient-based training is non-convex and is not guaranteed to reach a
-          global minimum from arbitrary random initialisations.
-
-        Parameters
-        ----------
-        epochs : int
-            Number of training epochs.
-        validate_every : int, default 1
-            Validation frequency in epochs.
-        epoch_callback : callable, optional
-            Optional callback ``epoch_callback(epoch, model)`` invoked at the end
-            of each 0-based epoch.
-
-        Returns
-        -------
-        None
-            Trains the model in place and returns ``None``.
-        """
-        if self.objective == "structural":
-            self._structural_tables = build_structural_tables(
-                self,
-                k=1,
-                max_components=2**30,
-                enabled=self.structural_definitions,
-                max_level=self.max_depth,
-                cm=self.canonical_model,
-            )
-            table, targets, top_idx = self._structural_tables
-            self.module.set_structural_tables(table, targets, top_idx=top_idx)
-
-        return super().train(
-            epochs=epochs,
-            validate_every=validate_every,
-            epoch_callback=epoch_callback,
-        )
-
-    def load_best_model(self):
-        """Reload the best checkpoint and re-attach structural tables when ``objective='structural'``."""
-        if self.objective == "structural" and self._structural_tables is None:
-            self._structural_tables = build_structural_tables(
-                self,
-                k=1,
-                max_components=2**30,
-                enabled=self.structural_definitions,
-                max_level=self.max_depth,
-                cm=self.canonical_model,
-            )
-        super().load_best_model()
-
-    def from_pretrained(self, model):
-        """Load pretrained weights and ensure structural tables are attached when ``objective='structural'``."""
-        super().from_pretrained(model)
-        if self.objective == "structural":
-            if self._structural_tables is None:
-                self._structural_tables = build_structural_tables(
-                    self,
-                    k=1,
-                    max_components=2**30,
-                    enabled=self.structural_definitions,
-                    max_level=self.max_depth,
-                    cm=self.canonical_model,
-                )
-            table, targets, top_idx = self._structural_tables
-            self.module.set_structural_tables(table, targets, top_idx=top_idx)
-
-    def additional_training_loss(self, epoch):
-        """Return ``module.structural_extra_loss()`` when ``objective='structural'``, else ``None``.
-
-        Guarantees:
-
-        - Returns a scalar ``torch.Tensor`` when ``objective="structural"`` and
-          ``None`` when ``objective="axiom"``.
-
-        Non-guarantees:
-
-        - Does not depend on ``epoch``.
-
-        Parameters
-        ----------
-        epoch : int
-            Current 0-based training epoch index.
-
-        Returns
-        -------
-        Optional[torch.Tensor]
-            Extra structural training loss or ``None``.
-        """
-        if self.objective == "structural":
-            return self.module.structural_extra_loss()
-        return None
+    def _attach_structural_tables(self):
+        """As :class:`~mowl.models.ComposedEL`, with the canonical model of the dataset
+        (``canonical_model``) for the semantic satisfiability of the existence targets."""
+        module = self.module
+        if not getattr(module, "wants_structural_tables", False):
+            self._structural_tables = None
+            return
+        tables = getattr(self, "_structural_tables", None)
+        if tables is None:
+            tables = build_structural_tables(self, cm=self.canonical_model,
+                                             **module.structural_table_options)
+            self._structural_tables = tables
+        table, targets, top_idx = tables
+        module.set_structural_tables(table, targets, top_idx)
 
     def count_class_parameters(self) -> int:
         """Return the number of scalar parameters per ontology class (:math:`2d - 1`).
@@ -331,32 +248,4 @@ class PrismEL(EmbeddingELModel):
         loss = super().get_regularization_loss()
         if self.init_boxes is not None and self.anchor_weight > 0:
             loss = loss + self.anchor_weight * self.init_boxes.anchor_loss(self.module)
-        return loss
-
-    def compute_loss(self, pos_scores, neg_scores=None):
-        """Compute per-GCI batch loss for PrismEL.
-
-        Under ``objective="structural"``, returns ``pos_scores.mean()`` directly
-        (without an outer squaring): the box structural GCI losses (``gci0``,
-        ``gci0_bot``, ``gci1``, ``gci1_bot``) are already squared hinges, whereas
-        the prism role and assertion scores (``gci2``, ``gci3``, ``gci3_bot``,
-        ``class_assertion``, ``object_property_assertion``) are unsquared
-        norms/hinges that enter linearly.
-        Under ``objective="axiom"``, returns ``MSE(pos_scores.mean(), 0)`` matching ELBE.
-        In both modes, if ``neg_scores`` is given, adds ``MSE(neg_scores.mean(), 1)``.
-        """
-        pos_mean = th.mean(pos_scores)
-        if self.objective == "structural":
-            loss = pos_mean
-        else:
-            loss = self._mse_criterion(
-                pos_mean, th.zeros_like(pos_mean, requires_grad=False)
-            )
-
-        if neg_scores is not None:
-            neg_mean = th.mean(neg_scores)
-            loss = loss + self._mse_criterion(
-                neg_mean, th.ones_like(neg_mean, requires_grad=False)
-            )
-
         return loss
