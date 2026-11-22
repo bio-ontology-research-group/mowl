@@ -60,6 +60,7 @@ from mowl.nn.el.grounded.module import (
 from mowl.representation.library.grounded_logic import (validate_margin as _validate_margin,
                                                         validate_nonneg_weight as _validate_nonneg_weight)
 from mowl.nn.el.structural import Regions
+from mowl.representation.library.grounded_parts import UnionDepth
 from mowl.owlapi.defaults import BOT as BOTTOM, TOP
 from mowl.models.grounded.common import _resolve_inverse_of, _validate_index_dict, _coerce_gci_table
 from mowl.models.grounded.evaluation import GroundedEvaluation
@@ -1204,7 +1205,7 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
             )
             c_exp = c_sub.unsqueeze(0).expand(bsz, c_len).reshape(bsz * c_len)
             dep_sub = mod.depth(pos_exp, c_exp, crisp=True).view(bsz, c_len)
-            s_sub = th.sigmoid(dep_sub / tau_s)
+            s_sub = mod.measure.soft(dep_sub, tau_s)
             chunks.append(s_sub)
 
         if len(chunks) == 1:
@@ -1361,10 +1362,7 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
         for start in range(0, n_live, chunk_size):
             end = min(start + chunk_size, n_live)
             p_chunk = live_pos[start:end]  # (C_len, d), C_len <= 8192
-            c_dep = th.amin(
-                w_c.unsqueeze(0) - th.abs(p_chunk.unsqueeze(1) - cen_c.unsqueeze(0)),
-                dim=-1,
-            )  # (C_len, K)
+            c_dep = UnionDepth.box_depth(p_chunk, cen_c.unsqueeze(0), w_c.unsqueeze(0))  # (C_len, K)
             inside = (c_dep > 0.0) & act_c.unsqueeze(0)
             counts += inside.sum(dim=0)
         return counts
@@ -1454,11 +1452,7 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
                     b_sub = b_ids[b_s:b_e]
                     c_sub = cen_q[b_sub]
                     w_sub = w_q[b_sub]
-                    dep = th.amin(
-                        w_sub.unsqueeze(1)
-                        - th.abs(p_chunk.unsqueeze(0) - c_sub.unsqueeze(1)),
-                        dim=-1,
-                    )
+                    dep = UnionDepth.box_depth(p_chunk, c_sub, w_sub).t()  # (b, P)
                     q_counts[b_sub] += (dep > 0.0).sum(dim=1)
 
         counts.view(-1)[q_flat_ids] = q_counts
@@ -1537,9 +1531,7 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
 
             # Check whether each class's own element x_A is crisp-inside each slot of A
             cls_pos = pos_all[: self.nb_classes]  # (nb_classes, d)
-            own_dep = th.amin(
-                w - th.abs(cls_pos.unsqueeze(1) - cen), dim=-1
-            )  # (nb_classes, K)
+            own_dep = mod.measure.box_depth(cls_pos, cen, w)  # (nb_classes, K)
             own_in_slot = (
                 (own_dep > 0.0) & act & live_mask[: self.nb_classes].unsqueeze(1)
             )  # (nb_classes, K)
@@ -1654,17 +1646,9 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
                     unsat_el_list = ca_el_a[unsat_idx].detach().cpu().tolist()
                     unsat_c_list = ca_c_id[unsat_idx].detach().cpu().tolist()
                     for el_a, c_id in zip(unsat_el_list, unsat_c_list):
-                        cen_c = mod.class_centers[c_id]  # (K, d)
-                        raw_w_c = mod.class_raw_widths[c_id]  # (K, d)
-                        act_c = mod.class_active[c_id]  # (K,)
-                        w_pos_c = F.softplus(raw_w_c)
-                        w_c = th.where(
-                            act_c.unsqueeze(-1), w_pos_c, th.zeros_like(w_pos_c)
-                        )
-                        eff_act_c = act_c & (th.amin(w_c, dim=-1) > 0.0)
-                        dep_a = th.amin(
-                            w_c - th.abs(pos_all[el_a].unsqueeze(0) - cen_c), dim=-1
-                        )
+                        reg_c = mod.class_model.regions(th.tensor([c_id], device=device))
+                        cen_c, w_c, eff_act_c = reg_c.cen[0], reg_c.w[0], reg_c.active[0]
+                        dep_a = mod.measure.box_depth(pos_all[el_a], cen_c, w_c)  # (K,)
                         if bool(((dep_a > 0.0) & eff_act_c).any().item()):
                             continue
                         if bool((~eff_act_c).any().item()):

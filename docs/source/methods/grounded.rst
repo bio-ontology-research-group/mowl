@@ -75,31 +75,74 @@ and whether the model is exact).
 Made of parts
 -------------
 
-GroundedEL is a combination of the parts of :mod:`mowl.representation`; the parts of this
-method are designed together (the class and relation models are regions *around* the
-positions of the elements), so they live in one geometry, :class:`mowl.nn.GroundedELModule`:
-the class model is a union of boxes per class, the relation model a region over pairs
-(``role_mode="product"``) or boxes of translations, the individual model the position of the
-element, the measure the bounds of the boxes. The module names them (``module.parts``). The
-objective is the grounded constraints
-(:class:`~mowl.models.grounded.objective.GroundedConstraints`: hinge losses of the axioms
-grounded over sampled elements and region points), the training regime the composition of the
-section below, and the evaluation regime ``crisp_report`` and ``evaluate_model``
-(:class:`~mowl.models.grounded.evaluation.GroundedEvaluation`). Each is swappable: the
-relation model by ``role_mode``, the objective by its options (``n_region_samples``,
-``neg_weight``, ``agg``), the training regime by a
-:class:`~mowl.training.ComposedRegime`.
+GroundedEL is a combination of the parts of :mod:`mowl.representation`
+(:mod:`~mowl.representation.library.grounded_parts`); each part is an object with its own
+tables, combined by :class:`mowl.nn.GroundedELModule`:
+
+* the **element domain** (``ElementDomain``), the part the others share: the positions of the
+  elements, their deadness and the temperature of the soft memberships;
+* the **class model** (``BoxUnionClasses``): a union of boxes per class;
+* the **relation model**: a union of products of boxes (``ProductBoxRelations``,
+  ``role_mode="product"``) or of boxes of translations (``TranslationBoxRelations``,
+  ``role_mode="translation"``);
+* the **measure** (``UnionDepth``): the signed depth of a point in a union of boxes, its soft
+  reading :math:`\sigma(\text{depth}/\tau)` and its crisp reading;
+* the **individual model**: the point of the individual's element.
+
+The **objective** is the grounded constraints
+(:class:`~mowl.models.grounded.objective.GroundedConstraints`): every axiom form is a rule in
+a fuzzy logic at sampled elements (:mod:`mowl.nn.el.grounded.constraints`,
+:class:`~mowl.representation.library.grounded_logic.LukasiewiczRules`: the premises, the life
+of the element and the conclusion) and a depth hinge at points sampled in the regions
+(:class:`~mowl.representation.library.grounded_logic.DepthHinges`), plus the minimality
+regulariser. The training regime is the composition of the section below, the evaluation
+regime ``crisp_report`` and ``evaluate_model``
+(:class:`~mowl.models.grounded.evaluation.GroundedEvaluation`). Each is swappable: the logic
+by ``logic=`` (``"godel"``, ``"product"``), the relation model by ``role_mode``, the measure
+by ``agg``, the objective by its options (``n_region_samples``, ``neg_weight``), the training
+regime by a :class:`~mowl.training.ComposedRegime`. The samplers of elements and region
+points (:mod:`mowl.nn.el.grounded.sampling`) and the query algebra
+(:mod:`mowl.nn.el.grounded.queries`) are general machinery over the interface of the parts.
 
 .. testcode::
 
    from mowl.representation import METHODS
 
    module = METHODS["grounded"](4, 2, 6, 4, role_mode="translation")
-   print(module.parts["classes"], "|", module.parts["relations"])
+   print(module.parts["classes"], "|", module.parts["relations"], "|", module.parts["shared"])
+   print(type(module.class_model).__name__, type(module.relation_model).__name__)
 
 .. testoutput::
 
-   union of boxes | box of translations
+   union of boxes | box of translations | element domain
+   BoxUnionClasses TranslationBoxRelations
+
+The element constraints are linear in the degrees (Łukasiewicz), so over a table of
+memberships they are a linear program
+(:class:`~mowl.representation.library.grounded_program.GroundedProgram`) that a solver fits
+on small problems; with deadness derived by the bottom rules (the Horn reading) its solution
+is the least model. The boxes themselves are not convex in their parameters; the solved table
+is loaded into the geometry by the exact-limit construction
+(:func:`~mowl.representation.library.grounded_program.load_into`).
+
+.. testcode::
+
+   import numpy as np
+   from mowl.representation.library.grounded_program import GroundedProgram, crisp_tables
+   from mowl.representation.library.solved_grounding import AxiomTable, Domain
+   from mowl.representation.library.solved_solver import ScipySolver
+
+   # A ⊑ B, B ⊑ ∃r.C over the classes A, B, C (elements 0, 1, 2)
+   table = AxiomTable(Domain(3, 0, 1), {"gci0": np.array([[0, 1]]),
+                                        "gci2": np.array([[1, 0, 2]])})
+   program = GroundedProgram(table)
+   result = ScipySolver().solve(program, {"eps": 1.0, "eps_r": 1.0, "eps_dead": 1.0})
+   labels, edges, dead = crisp_tables(program, result.values)
+   print(labels.astype(int).tolist(), edges.tolist())
+
+.. testoutput::
+
+   [[1, 1, 0], [0, 1, 0], [0, 0, 1]] [[0, 2, 0], [1, 2, 0]]
 
 Logical query answering
 -----------------------

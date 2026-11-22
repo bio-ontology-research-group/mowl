@@ -407,6 +407,16 @@ class UnionDepth(RegionMeasure):
         lse = self.agg_tau * th.logsumexp(masked / self.agg_tau, dim=1)
         return th.where(has_active.squeeze(1), lse, th.full_like(lse, EMPTY_DEPTH_FLOOR))
 
+    @staticmethod
+    def crisp_union(slot_depth, active):
+        """The crisp depth in the union of boxes for any leading shape: ``slot_depth``
+        ``(..., K)``, ``active`` broadcastable to it; a union without an active box has
+        depth :data:`EMPTY_DEPTH_FLOOR`."""
+        has_act = active.any(dim=-1, keepdim=True)
+        fill = th.where(has_act, th.full_like(slot_depth, float("-inf")),
+                        th.full_like(slot_depth, EMPTY_DEPTH_FLOOR))
+        return th.amax(th.where(active, slot_depth, fill), dim=-1)
+
     def depth(self, points, regions, crisp=False):
         """Depth of ``points`` ``(B, d)`` in the unions ``regions`` (``Regions`` of
         ``(B, K, d)``)."""
@@ -559,6 +569,25 @@ class BoxUnionClasses(Classes):
         dep = self.depth(pts, idx, top_id=top_id, bot_id=bot_id)
         m = self.measure.soft(dep, self.domain.tau)
         return self._constants(m, idx, top_id, bot_id, th.ones_like, th.zeros_like)
+
+    def depth_table(self, points, class_ids, chunk_size=512):
+        """Crisp depth ``(L, C)`` of every point ``(L, d)`` in every class of ``class_ids``
+        (in chunks of classes; top and bottom constants)."""
+        n_points, n_classes = int(points.shape[0]), int(class_ids.numel())
+        out = th.empty((n_points, n_classes), dtype=th.float32, device=points.device)
+        if n_points == 0 or n_classes == 0:
+            return out
+        for c_s in range(0, n_classes, chunk_size):
+            c_sub = class_ids[c_s:c_s + chunk_size]
+            reg = self.regions(c_sub)                                  # (C_sub, K, d)
+            slot = self.measure.box_depth(points.unsqueeze(1), reg.cen.unsqueeze(0),
+                                          reg.w.unsqueeze(0))          # (L, C_sub, K)
+            dep = self.measure.crisp_union(slot, reg.active.unsqueeze(0))
+            out[:, c_s:c_s + chunk_size] = self._constants(
+                dep, c_sub.unsqueeze(0), None, None,
+                lambda d: th.full_like(d, TOP_DEPTH_CEIL),
+                lambda d: th.full_like(d, EMPTY_DEPTH_FLOOR))
+        return out
 
     def held_membership(self, points, class_ids):
         """``(depth, membership)`` with the boxes held fixed: the gradient reaches only the
