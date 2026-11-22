@@ -1,42 +1,40 @@
 """Training designs of the language-model reference codes (HiT, OnT), as named regimes.
 
-The EL embedding models have a generic training loop that consults the hooks of
-:class:`~mowl.training.TrainingRegime` (negatives, loss, schedule, selection), so the
-design of a reference code can be named by composing hook implementations (see
-:mod:`mowl.training.reference`). The language-model based models
-(:class:`~mowl.models.hit.model.HiT`, :class:`~mowl.models.ont.model.OnT) are different:
-their training loop fine-tunes a text encoder on *verbalisations* of axioms, not on
-integer-indexed axiom rows, so the regime hooks do not apply and the loop implements the
-reference design itself.
+The language-model based models (:class:`~mowl.models.hit.model.HiT`,
+:class:`~mowl.models.ont.model.OnT`) fine-tune a text encoder on *verbalisations* of axioms,
+not on integer-indexed axiom rows. Their loop is the generic one of
+:mod:`mowl.training.loop`; the training of a method is a combination of regimes that the model
+names by default (``model.default_regimes``): the minibatches of triplets
+(:class:`~mowl.training.EpochBatches`), the logical losses of OnT
+(:class:`~mowl.training.text.SampledLogicalLosses`), the warm-up and decay of the learning rate
+(:class:`~mowl.training.text.LinearWarmupDecay`) and the selection of the best epoch
+(:class:`~mowl.training.ValidationPatience`).
 
-The classes here name those designs. They are descriptive: they implement no hooks, and
-attaching one to a model does not change how it trains. What they do is
-
-* record, in benchmark results and recipes, which published design a run follows
-  (:attr:`~mowl.benchmarks.runner.BenchmarkResult.training_regime`), and
-* fail fast: :class:`~mowl.models.hit.model.HiT` accepts only these regimes as its
-  ``training_regime``, so a design of another family (an EL regime, whose hooks the LM
-  loop would silently ignore) cannot be attached by mistake.
-
-The designs and their differences from the papers are documented on the catalogue cards
-``hit-code-training`` and ``ont-code-training``
+The classes here name the designs of the reference codes. Attaching one gives the model the
+combination of its own options; they are used to record, in benchmark results and recipes,
+which published design a run follows
+(:attr:`~mowl.benchmarks.runner.BenchmarkResult.training_regime`), and they apply to HiT and OnT
+models only. The designs and their differences from the papers are documented on the
+catalogue cards ``hit-code-training`` and ``ont-code-training``
 (:mod:`mowl.catalog.regimes.lm_code_designs`).
 """
 
-from mowl.training.regime import TrainingRegime
+from mowl.training.regime import ComposedRegime
 
 __all__ = ["LMCodeTraining", "HiTCodeTraining", "OnTCodeTraining"]
 
 
-class LMCodeTraining(TrainingRegime):
-    """Base class of the descriptive regimes of the LM reference codes.
-
-    ``attach`` accepts exactly the models whose own training loop implements the design
-    (:class:`~mowl.models.hit.model.HiT` and its subclasses, e.g.
-    :class:`~mowl.models.ont.model.OnT`).
+class LMCodeTraining(ComposedRegime):
+    """Base class of the regimes of the LM reference codes: the combination of regimes that
+    the model names for its method (:class:`~mowl.models.hit.model.HiT` and its subclasses,
+    e.g. :class:`~mowl.models.ont.model.OnT`).
     """
 
     key = ""
+
+    def __init__(self):
+        super().__init__()
+        self.key = type(self).key
 
     def attach(self, model):
         from mowl.models.hit.model import HiT
@@ -45,6 +43,8 @@ class LMCodeTraining(TrainingRegime):
                 f"{type(self).__name__} is the training design of a language-model "
                 f"reference code and applies to HiT/OnT models only, not to "
                 f"{type(model).__name__}.")
+        self.regimes = tuple(r for r in (make() for make in model.default_regimes)
+                             if r is not None)
         super().attach(model)
 
 

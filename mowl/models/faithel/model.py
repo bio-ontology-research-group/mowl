@@ -80,6 +80,7 @@ class FaithEL(RegimeTrained, EmbeddingELModel):
     """
 
     save_always = True
+    attach_defaults_at_init = False
 
     axiom_scoring = "method"
     scored_forms = ("gci0", "gci1", "gci2", "gci3", "class_assertion",
@@ -111,6 +112,7 @@ class FaithEL(RegimeTrained, EmbeddingELModel):
         #: authors' loop; :class:`~mowl.training.FullBatch`).
         self.training = training if training is not None else AlternatingMinibatches()
         self.init_module()
+        self._attach_default_regimes()
 
     # -- the parts -----------------------------------------------------------------------
     def _centroids(self):

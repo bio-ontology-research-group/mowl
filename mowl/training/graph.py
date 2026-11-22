@@ -378,13 +378,17 @@ class ValidationPatience(TrainingRegime):
         ``"validation_history"``).
     :param usable: ``f(model) -> bool``: whether there is anything to evaluate (default:
         the model has validation data).
+    :param on_best: ``f(model, value, epoch)`` called when an evaluation improves (``epoch``
+        counts from 1).
+    :param save_final: Without anything to evaluate, save the final parameters to
+        ``model_filepath`` (default); ``False``: nothing is saved then.
     """
 
     key = "validation-patience"
     replaces_validation = True
 
     def __init__(self, metric, every=None, patience=10, higher=True,
-                 history="validation_history", usable=None):
+                 history="validation_history", usable=None, on_best=None, save_final=True):
         super().__init__()
         self.metric = metric
         self.every = every
@@ -392,6 +396,8 @@ class ValidationPatience(TrainingRegime):
         self.higher = bool(higher)
         self.history_name = history
         self.usable = usable
+        self.on_best = on_best
+        self.save_final = save_final
         self.steps = 1
         self.best = None
         self._bad = 0
@@ -426,6 +432,8 @@ class ValidationPatience(TrainingRegime):
         if self._better(value):
             self.best, self._bad = value, 0
             th.save(self.model.module.state_dict(), self.model.model_filepath)
+            if self.on_best is not None:
+                self.on_best(self.model, value, epoch)
         else:
             self._bad += 1
             if self.patience is not None and self._bad >= self.patience:
@@ -438,7 +446,7 @@ class ValidationPatience(TrainingRegime):
         if self._active and self.best is not None:
             self.model.module.load_state_dict(
                 th.load(self.model.model_filepath, weights_only=True))
-        elif not self._active:
+        elif not self._active and self.save_final:
             path = getattr(self.model, "_model_filepath", None)
             if path is not None:
                 th.save(self.model.module.state_dict(), path)

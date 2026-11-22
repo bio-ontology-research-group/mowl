@@ -73,14 +73,21 @@ class RegimeTrained:
     default_validate_every = None
 
     # ------------------------------------------------------------------ regime
+    #: Attach the regimes of the method at the end of ``__init__`` (a model whose module does
+    #: not exist yet then, or whose options are set later, attaches them itself).
+    attach_defaults_at_init = True
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.attach_defaults_at_init:
+            self._attach_default_regimes()
+
     @property
     def training_regime(self):
         """The :class:`~mowl.training.TrainingRegime` that :meth:`train` uses: the regimes of
-        the method (:attr:`default_regimes`) until another is assigned; assigning ``None``
-        gives the regimes of the method again. See :mod:`mowl.training.loop` for the hooks it
-        consults."""
-        if getattr(self, "_training_regime", None) is None:
-            self._attach_default_regimes()
+        the method (:attr:`default_regimes`) until another is assigned; with ``None`` assigned
+        :meth:`train` takes the regimes of the method again. See :mod:`mowl.training.loop`
+        for the hooks it consults."""
         return getattr(self, "_training_regime", None)
 
     @training_regime.setter
@@ -163,7 +170,12 @@ class RegimeTrained:
             regime.after_step()
 
     def record_epoch(self, epoch, mean_loss):
-        """Called with the mean loss of every epoch (a model keeps its history here)."""
+        """Called with the mean loss of every epoch before the regime's ``on_epoch_end`` of
+        its last step (a model keeps its history here)."""
+
+    def finish_training(self):
+        """Called once after the regime's ``on_train_end`` (a model finalises what the
+        regimes selected)."""
 
     #: Save the parameters after training even when no ``model_filepath`` was given (a
     #: temporary file is made).
@@ -241,6 +253,8 @@ class RegimeTrained:
         :return: The mean loss of every epoch (also ``model.training_losses``).
         :rtype: list of float
         """
+        if self.training_regime is None:
+            self._attach_default_regimes()
         regime = self.training_regime
         if validate is False:
             validate_every = None
@@ -278,13 +292,15 @@ class RegimeTrained:
                 value = loss.detach().item()
             running += value
             counted += 1
-            if regime is not None:
-                regime.on_epoch_end(step, {"total": value})
-            if (step + 1) % per_epoch == 0:
+            ends_epoch = (step + 1) % per_epoch == 0
+            if ends_epoch:
                 epoch = step // per_epoch
                 history.append(running / max(counted, 1))
                 running, counted = 0.0, 0
                 self.record_epoch(epoch, history[-1])
+            if regime is not None:
+                regime.on_epoch_end(step, {"total": value})
+            if ends_epoch:
                 if verbose:
                     print(f"Epoch {epoch + 1}: loss {history[-1]:.6f}")
                 if epoch_callback is not None:
@@ -293,6 +309,7 @@ class RegimeTrained:
                 break
         if regime is not None:
             regime.on_train_end()
+        self.finish_training()
         if not (regime is not None and regime.replaces_validation):
             self.save_state()
         self.module.eval()
