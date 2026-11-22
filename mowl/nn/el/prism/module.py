@@ -111,6 +111,11 @@ class PrismModule(ELModule):
         satisfied, and an empty target or class is read with its negative half-width, so it
         contains nothing. ``"absolute"`` is the earlier reading that takes ``|w|`` and so
         sees a phantom non-empty box.
+    size_reg_without_tables : bool, default False
+        The size term has to know which class is ``owl:Thing`` (it must not shrink it) and
+        which classes are defined, so by default it is ``0`` until :meth:`set_structural_tables`
+        has been called. ``True`` applies it to every class before that too, which shrinks
+        ``owl:Thing`` (the earlier behaviour of this module).
     """
 
     neg_capable_gcis = frozenset({"gci2", "object_property_assertion"})
@@ -133,6 +138,7 @@ class PrismModule(ELModule):
         size_reg: float = 1e-3,
         gci2_negative_triangle: str = "overlap",
         empty_box_reading: str = "signed",
+        size_reg_without_tables: bool = False,
     ) -> None:
         if empty_box_reading not in _EMPTY_BOX_READINGS:
             raise ValueError(
@@ -181,6 +187,8 @@ class PrismModule(ELModule):
         self.size_reg = float(size_reg)
         self.gci2_negative_triangle = gci2_negative_triangle
         self.empty_box_reading = empty_box_reading
+        self.size_reg_without_tables = bool(size_reg_without_tables)
+        self._tables_installed = False
         self.definition_table: Optional[DefinitionTable] = None
         self.existence_targets: Optional[ExistenceTargets] = None
         self.top_idx: Optional[int] = None
@@ -312,6 +320,7 @@ class PrismModule(ELModule):
         self.definition_table = table
         self.existence_targets = targets
         self.top_idx = top_idx
+        self._tables_installed = True
         self._structural_device = None
         self._sync_structural_device(self.tri_center.weight.device)
 
@@ -428,6 +437,8 @@ class PrismModule(ELModule):
 
         Non-guarantees:
 
+        - Returns ``0.0`` for the size term before :meth:`set_structural_tables` (``owl:Thing``
+          and the defined classes are unknown), unless ``size_reg_without_tables=True``.
         - Returns ``0.0`` for the existence term when :attr:`existence_targets` is
           ``None`` or ``existence_weight == 0``.
 
@@ -466,7 +477,8 @@ class PrismModule(ELModule):
                 class_sizes, pair_sizes, self.margin
             )
 
-        if self.size_reg > 0.0 and self._has_prim:
+        size_known = self._tables_installed or self.size_reg_without_tables
+        if self.size_reg > 0.0 and self._has_prim and size_known:
             assert self._prim_mask_dev is not None
             r_abs = th.abs(self.tri_inradius.weight[self._prim_mask_dev])
             w_abs = 2.0 * th.abs(self.box_offset.weight[self._prim_mask_dev])

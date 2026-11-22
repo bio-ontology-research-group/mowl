@@ -175,6 +175,8 @@ PUBLISHED = [
      {"reading": "structural", "empty_box_reading": "absolute"}, "objective.empty_regions"),
     (OBJECTIVE, "StructuralGeometry", "size_reg_without_tables", False, True, "multiboxel",
      {"reading": "structural", "size_reg_without_tables": True}, "size_reg_without_tables"),
+    (OBJECTIVE, "StructuralGeometry", "size_reg_without_tables", False, True, "prism",
+     {"reading": "structural", "size_reg_without_tables": True}, "size_reg_without_tables"),
 ]
 
 # Options that are neutral: sizes and tables, initialisation, hyper-parameters, labels and

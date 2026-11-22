@@ -93,6 +93,24 @@ class TestStructuralPrism(TestCase):
             self.assertTrue(th.allclose(geometry.regularization_loss(), expected, atol=1e-6))
         self.assertGreater(float(expected + 1), 0)
 
+    def test_size_term_before_the_tables_default_and_old_option(self):
+        # default: no size term before the tables (owl:Thing is unknown), as the module;
+        # size_reg_without_tables=True: every class is shrunk, as the module with that option
+        for flag in (False, True):
+            th.manual_seed(0)
+            module = PrismModule(N, R, NI, embed_dim=D, objective="structural",
+                                 existence_weight=0.0, size_reg=1.0,
+                                 size_reg_without_tables=flag)
+            geometry = geometry_of(module)
+            self.assertEqual(geometry.size_reg_without_tables, flag)
+            expected = module.regularization_loss() + module.structural_extra_loss()
+            self.assertEqual(float(expected) > 0, flag)
+            self.assertTrue(th.allclose(geometry.regularization_loss(), expected, atol=1e-6))
+        from mowl.representation.library.shapes_methods import prism
+        self.assertFalse(prism(N, R, reading="structural").size_reg_without_tables)
+        self.assertTrue(prism(N, R, reading="structural", size_reg_without_tables=True)
+                        .size_reg_without_tables)
+
     def test_defined_classes_are_prisms_with_signed_half_widths(self):
         module = prism_module()
         geometry = geometry_of(module)
