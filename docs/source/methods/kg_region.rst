@@ -19,7 +19,6 @@ What that connection is, and what it is not, is stated here and on the cards ``b
      - Scored axiom forms
    * - :class:`~mowl.models.boxe.model.BoxE`
      - relation: one box per argument position; entity: point and bump
-       (PyKEEN's ``BoxE``)
      - edges of a projection
      - ``gci0``, ``gci2``
    * - :class:`~mowl.models.expressive.model.ExpressivE`
@@ -38,31 +37,53 @@ What that connection is, and what it is not, is stated here and on the cards ``b
 BoxE, ExpressivE and RESHUFFLE on a projection
 ----------------------------------------------
 
-The three models share one path. A projector of :mod:`mowl.projection` turns the ontology
-into triples (the default is :class:`~mowl.projection.OWL2VecStarProjector`: ``C subclassof D``,
-``C r D`` for :math:`C \sqsubseteq \exists r.D`, ``a type C`` for :math:`C(a)`, and ``a r b``
-for :math:`r(a, b)`), a PyKEEN model is trained on them by
-:class:`~mowl.models.GraphPlusPyKEENModel` and an axiom :math:`C \sqsubseteq D` is scored by
-the score of the edge ``C subclassof D``. The class that holds the shared choices is
-:class:`~mowl.models.graph_kge.region_kge.RegionKGEModel`; any other projector can be passed
-with ``projector=``.
+The three models are combinations of the same parts, and :class:`~mowl.models.GraphKGEModel`
+is the one general model that puts any such combination together. A **projection**
+(:mod:`mowl.projection`, a part: a projector, its class or a name such as ``"gda"``) turns the
+ontology into triples (the default is :class:`~mowl.projection.OWL2VecStarProjector`:
+``C subclassof D``, ``C r D`` for :math:`C \sqsubseteq \exists r.D`, ``a type C`` for
+:math:`C(a)`, and ``a r b`` for :math:`r(a, b)`). The **entities** and the **relation model**
+(what a relation is) with the **interaction** that scores a triple make up the geometry
+(:class:`~mowl.representation.library.other_graph.TripleGeometry`; ``model.module.parts``
+names them), the **objective** is a loss on the scores of a triple and its corrupted triples,
+the **negative sampler** corrupts the triples, and the training and evaluation regimes are
+those of the library. An axiom :math:`C \sqsubseteq D` is scored by the score of the edge
+``C subclassof D``. Every part can be swapped by naming another one
+(``BoxE(dataset, relations="region over pairs", loss="margin ranking", projector="dl2vec")``).
 
-* **BoxE** is PyKEEN's implementation (there is no code of ours). The paper's unary
-  relations (types as boxes) become binary ``type`` edges.
-* **ExpressivE** is written as a PyKEEN model (:mod:`mowl.nn.graph.expressive`) after the
-  authors' code: ``tanh`` on entities, centres and widths, the minimal denominator
-  ``min_denom`` and the distance of Equation 3. Only the base model is provided. The
-  pattern theorems (symmetry, hierarchy, mutual exclusion) are checked on hand-built
-  parallelograms in ``tests/nn/test_expressive_module.py``.
-* **RESHUFFLE** is written after the authors' code and checked against the paper
-  (:mod:`mowl.nn.graph.reshuffle`); the paper's Propositions 1, 2 and 7 are tested on a
-  rule graph built by hand. The ablations are options (``aggregation="max_self_noLoop"`` is
-  RESHUFFLE without loop, ``row_function="square"`` is RESHUFFLE2). Differences: the paper
+* **BoxE**: entities are points with a bump, a relation is a head box and a tail box, the
+  interaction is the distance of BoxE, the objective the self-adversarial negative sampling
+  loss (margin 3, temperature 2). The paper's unary relations (types as boxes) become binary
+  ``type`` edges.
+* **ExpressivE**: a relation is a hyper-parallelogram in the virtual triple space; the
+  interaction follows the authors' code: ``tanh`` on entities, centres and widths, the
+  minimal denominator ``min_denom`` and the distance of Equation 3
+  (:mod:`mowl.nn.graph.kge_interactions`). Only the base model is provided. The pattern
+  theorems (symmetry, hierarchy, mutual exclusion) are checked on hand-built parallelograms
+  in ``tests/nn/test_expressive_module.py``.
+* **RESHUFFLE**: entities are encoded by a graph network from fixed random binary matrices
+  (:class:`~mowl.representation.library.other_graph.GraphEncodedPoints`), a relation is a
+  soft coordinate permutation
+  (:class:`~mowl.representation.library.other_graph.ReshuffleRelations`); written after the
+  authors' code and checked against the paper (the Propositions 1, 2 and 7 are tested on a
+  rule graph built by hand in ``tests/nn/test_reshuffle_module.py``). The ablations are options
+  (``kge_kwargs={"aggregation": "max_self_noLoop"}`` is RESHUFFLE without loop,
+  ``kge_kwargs={"row_function": "square"}`` is RESHUFFLE2). Differences: the paper
   initialises the features with probability 0.5 of a 1, the code and our default use 0.3085
-  (``density``), the random features are drawn once, the graph
-  is the projection (transductive), and
-  :meth:`~mowl.nn.graph.reshuffle.Reshuffle.score_on_graph` encodes another graph with fresh
-  features for the inductive setting.
+  (``density``), the random features are drawn once, the graph is the projection
+  (transductive), and :meth:`~mowl.models.Reshuffle.inductive_costs` encodes another graph with
+  fresh features for the inductive setting. Early stopping on the Hits@10 of the validation
+  triples is a training regime (``early_stopping=...``,
+  :class:`~mowl.models.graph_kge.triple_model.HitsEarlyStopping`).
+
+A model trains from the parameters it has: calling ``train`` again goes on, and the ``seed``
+decides the initial values (PyKEEN's own loop draws every parameter again at each call; pass
+``reinitialise=True`` for that). The projection methods ``graph_kge`` and ``gda_projection``
+are the same combination with another relation model (TransE by default) and the margin
+ranking loss, ``gda_projection`` with :class:`~mowl.projection.GDAProjector`;
+:class:`~mowl.models.GraphPlusPyKEENModel` reads the parts from any PyKEEN model. The direct
+implementations (PyKEEN's models trained by PyKEEN's loop) are kept in
+:mod:`mowl.baselines` and compared with these combinations in ``tests/baselines``.
 
 In all three the guarantees of the papers (rule patterns, expressiveness, bounded inference)
 refer to the *projected triples*. They are not statements about the description logic

@@ -1,21 +1,22 @@
-"""BoxE, ExpressivE and RESHUFFLE on a projected ontology (through GraphPlusPyKEENModel)."""
+"""BoxE, ExpressivE and RESHUFFLE on a projected ontology: the named combinations of parts
+(``mowl.models``). Their comparison with the direct implementations is in
+``tests/baselines``; what only the direct, PyKEEN-based implementations have is in
+``tests/baselines/test_kg_region_direct.py``."""
 import pytest
 import torch as th
 
 import mowl
 mowl.init_jvm("1g")
-from mowl.models import BoxE, ExpressivE, GraphPlusPyKEENModel, Reshuffle  # noqa: E402
-from mowl.nn.graph.expressive import ExpressivE as ExpressivEKGE  # noqa: E402
-from mowl.nn.graph.reshuffle import Reshuffle as ReshuffleKGE  # noqa: E402
-from pykeen.models import BoxE as PyKEENBoxE  # noqa: E402
+from mowl.models import BoxE, ExpressivE, GraphKGEModel, Reshuffle  # noqa: E402
+from mowl.representation import Geometry  # noqa: E402
 from tests.models.kg_region_data import abox_dataset  # noqa: E402
 
 pytestmark = pytest.mark.filterwarnings("ignore")
 
 CASES = [
-    (BoxE, PyKEENBoxE, dict(embed_dim=6)),
-    (ExpressivE, ExpressivEKGE, dict(embed_dim=6)),
-    (Reshuffle, ReshuffleKGE, dict(l=5, k=6, num_layers=2, num_negs_per_pos=4)),
+    (BoxE, dict(embed_dim=6)),
+    (ExpressivE, dict(embed_dim=6)),
+    (Reshuffle, dict(l=5, k=6, num_layers=2, num_negs_per_pos=4)),
 ]
 
 
@@ -24,18 +25,17 @@ def dataset():
     return abox_dataset()
 
 
-@pytest.mark.parametrize("cls,kge_cls,kwargs", CASES)
-def test_the_model_is_the_shared_pykeen_path(dataset, cls, kge_cls, kwargs):
+@pytest.mark.parametrize("cls,kwargs", CASES)
+def test_the_model_is_built_from_parts(dataset, cls, kwargs):
     model = cls(dataset, batch_size=64, **kwargs)
-    assert isinstance(model, GraphPlusPyKEENModel)
-    assert isinstance(model.kge_method, kge_cls)
+    assert isinstance(model, GraphKGEModel)
+    assert isinstance(model.module, Geometry)
     assert model.axiom_scoring == "method"
     assert {"gci0", "gci2"} <= set(model.scored_forms)
 
 
-@pytest.mark.parametrize("cls,kge_cls,kwargs", CASES)
-def test_the_projection_has_class_level_and_individual_level_triples(dataset, cls,
-                                                                     kge_cls, kwargs):
+@pytest.mark.parametrize("cls,kwargs", CASES)
+def test_the_projection_has_class_level_and_individual_level_triples(dataset, cls, kwargs):
     model = cls(dataset, batch_size=64, **kwargs)
     relations = set(model.graph_relation_to_id)
     assert model.SUBCLASS_RELATION in relations
@@ -45,8 +45,8 @@ def test_the_projection_has_class_level_and_individual_level_triples(dataset, cl
     assert any(n.endswith("#a1") for n in nodes)         # individuals are entities
 
 
-@pytest.mark.parametrize("cls,kge_cls,kwargs", CASES)
-def test_training_runs_and_scores_axioms(dataset, cls, kge_cls, kwargs):
+@pytest.mark.parametrize("cls,kwargs", CASES)
+def test_training_runs_and_scores_axioms(dataset, cls, kwargs):
     th.manual_seed(0)
     model = cls(dataset, batch_size=64, **kwargs)
     model.train(epochs=3)
@@ -62,9 +62,8 @@ def test_training_runs_and_scores_axioms(dataset, cls, kge_cls, kwargs):
         model.axiom_costs("gci1", rows)
 
 
-@pytest.mark.parametrize("cls,kge_cls,kwargs", CASES)
-def test_training_separates_the_triples_of_the_graph_from_the_others(dataset, cls, kge_cls,
-                                                                      kwargs):
+@pytest.mark.parametrize("cls,kwargs", CASES)
+def test_training_separates_the_triples_of_the_graph_from_the_others(dataset, cls, kwargs):
     th.manual_seed(1)
     model = cls(dataset, batch_size=64, **kwargs)
     factory, kge = model.triples_factory, model.kge_method
@@ -87,13 +86,13 @@ def test_training_separates_the_triples_of_the_graph_from_the_others(dataset, cl
 def test_reshuffle_defaults_are_those_of_the_authors_best_configuration(dataset):
     model = Reshuffle(dataset, l=4, k=5, num_layers=1)
     assert model.num_negs_per_pos == 100 and model.lr == 5e-3
-    kge = model.kge_method
-    assert (kge.l, kge.k, kge.num_layers) == (4, 5, 1)
+    classes = model.module.class_model
+    assert (classes.l, classes.k, classes.num_layers) == (4, 5, 1)
 
 
 def test_expressive_options_reach_the_interaction(dataset):
     model = ExpressivE(dataset, embed_dim=4, min_denom=0.3, p=1, tanh_map=False)
-    interaction = model.kge_method.interaction
+    interaction = model.module.relation_model.interaction
     assert (interaction.min_denom, interaction.p, interaction.tanh_map) == (0.3, 1, False)
 
 
@@ -118,14 +117,9 @@ def test_the_methods_take_part_in_the_joint_ranking_benchmark(method, kwargs, sc
     assert result.protocol_info["scoring"] == scoring
 
 
-def test_boxe_is_pykeens_model_trained_through_the_shared_path(dataset):
-    """The BoxE of mOWL is PyKEEN's, trained by GraphPlusPyKEENModel on the projection;
-    it scores C ⊑ D and C ⊑ ∃r.D with finite values."""
+def test_boxe_scores_subsumption_and_existential_axioms_with_finite_values(dataset):
     th.manual_seed(0)
     model = BoxE(dataset, embed_dim=6, batch_size=64)
-    assert type(model.kge_method) is PyKEENBoxE
-    assert type(model).__mro__[1].__name__ == "RegionKGEModel"
-    assert isinstance(model, GraphPlusPyKEENModel)
     model.train(epochs=3)
     names = {n.rsplit("#", 1)[-1]: i for n, i in model.class_index_dict.items()}
     role = {n.rsplit("#", 1)[-1]: i for n, i in model.object_property_index_dict.items()}

@@ -35,6 +35,9 @@ relation is a matrix on that encoding. It has the geometry of point 1 (PyKEEN's
 representations are then the encoded ones), and no parts.
 """
 
+import contextlib
+import functools
+import math
 from dataclasses import dataclass
 
 import torch as th
@@ -47,13 +50,17 @@ from mowl.representation.methods import (register_measure,
 from mowl.representation.measures import RegionMeasure
 from mowl.representation.objectives import Objective
 from mowl.representation.regions import Ball, Box, ConstructorUnavailable, Region
+from mowl.representation.class_models import Classes
 from mowl.representation.library.shapes_classes import Points
 from mowl.representation.library.shapes_regions import Point
 from mowl.representation.relation_models import Relations
 
 __all__ = ["Point", "PointClasses", "Related", "TripleScore", "BoxERelations",
-           "ExpressivERelations", "triple_geometry", "PyKEENGeometry", "Entities",
-           "ExistsEntities", "PyKEENTable", "graph_kge", "boxe", "expressive"]
+           "ExpressivERelations", "triple_geometry", "TripleGeometry", "PyKEENGeometry",
+           "Entities", "ExistsEntities", "PyKEENTable", "graph_kge", "gda_projection", "boxe",
+           "expressive", "reshuffle", "TripleLoss", "SelfAdversarial", "MarginRanking",
+           "PyKEENLoss", "TRIPLE_LOSSES", "triple_loss", "UniformCorruption",
+           "ReshuffleRelations", "GraphEncodedPoints"]
 
 
 # -- regions ---------------------------------------------------------------------------------
@@ -183,14 +190,16 @@ class BoxERelations(_PairRelations):
                  power_norm=False, subclass_id=None):
         super().__init__()
         from pykeen.nn.modules import BoxEInteraction
+        self._subclass_id = subclass_id
         if tables is None:
-            n = size + 1
+            # a graph names its ``subclass`` relation (``subclass_id``, a row among the
+            # ``size`` relations); without a graph one more row is reserved for it
+            self.reserved = 1 if subclass_id is None else 0
+            n = size + self.reserved
             tables = [_table(n, embed_dim), _table(n, embed_dim), _table(n, 1),
                       _table(n, embed_dim), _table(n, embed_dim), _table(n, 1)]
-            self.reserved = 1
         else:
             self.reserved = 0
-            self._subclass_id = subclass_id
         (self.head_base, self.head_delta, self.head_size,
          self.tail_base, self.tail_delta, self.tail_size) = tables
         self.vectors = self.head_base
@@ -217,7 +226,7 @@ class ExpressivERelations(_PairRelations):
     """ExpressivE (Pavlovic and Sallinger 2023): a relation is a hyper-parallelogram in the
     space of pairs :math:`\\mathbb{R}^{2d}`, given by slopes, centres and widths for the
     head and the tail position (a raw vector of size ``6 d``). The score is that of
-    :class:`mowl.nn.graph.expressive.ExpressivEInteraction`, so costs equal those of an
+    :class:`mowl.nn.graph.kge_interactions.ExpressivEInteraction`, so costs equal those of an
     ExpressivE with the same table. Only centres of the classes are used.
 
     :param table: An existing table of raw relation vectors (``6 d`` wide).
@@ -231,13 +240,13 @@ class ExpressivERelations(_PairRelations):
     def __init__(self, size=None, embed_dim=None, table=None, p=2, tanh_map=True,
                  min_denom=0.5, subclass_id=None):
         super().__init__()
-        from mowl.nn.graph.expressive.module import ExpressivEInteraction
+        from mowl.nn.graph.kge_interactions import ExpressivEInteraction
+        self._subclass_id = subclass_id
         if table is None:
-            table = _table(size + 1, 6 * embed_dim, 0.5)
-            self.reserved = 1
+            self.reserved = 1 if subclass_id is None else 0
+            table = _table(size + self.reserved, 6 * embed_dim, 0.5)
         else:
             self.reserved = 0
-            self._subclass_id = subclass_id
         self.vectors = table
         self.interaction = ExpressivEInteraction(p=p, tanh_map=tanh_map, min_denom=min_denom)
 
@@ -307,10 +316,17 @@ class TripleScore(RegionMeasure):
                     f"cannot read an inclusion of classes.")
             ids = th.full((len(a),), relations.subclass, dtype=th.long,
                           device=a.centre.device)
+        return self.triple(relations, ids, a, filler)
+
+    @staticmethod
+    def triple(relations, ids, head, tail):
+        """The cost ``(B, 1)`` of the triples ``(head, ids, tail)``: the relation model's own
+        ``cost``, or the distance of the centre of the tail to the image of the centre of the
+        head (a translation: TransE)."""
         if hasattr(relations, "cost"):
-            return relations.cost(ids, a, filler)
-        moved = relations.image(ids, Point(_centre(a)))
-        return th.linalg.norm(moved.centre - _centre(filler), dim=1, keepdim=True)
+            return relations.cost(ids, head, tail)
+        moved = relations.image(ids, Point(_centre(head)))
+        return th.linalg.norm(moved.centre - _centre(tail), dim=1, keepdim=True)
 
     def inside(self, a, b, margin=0.0):
         return self._cost(a, b)
@@ -335,8 +351,259 @@ class TripleScore(RegionMeasure):
 register_measure("triple score")(TripleScore)
 
 
+# -- objective: the loss on scores of triples -------------------------------------------------
+def _reduce(values, reduction):
+    return values.sum() if reduction == "sum" else values.mean()
+
+
+class TripleLoss:
+    """The objective of a knowledge graph model: a loss on the scores of a batch of positive
+    triples ``(B, 1)`` and of their corrupted triples ``(B, K)`` (a score is minus the cost
+    of the triple). Subclasses are the losses of the knowledge graph embedding literature;
+    they are written out here, not taken from PyKEEN, so that the combination does not depend
+    on a library's loss class (:class:`PyKEENLoss` adapts one).
+
+    :param reduction: ``"mean"`` or ``"sum"`` over the batch.
+
+    Part (vocabulary value): ``triple loss``.
+    """
+
+    name = ""
+
+    def __init__(self, reduction="mean"):
+        if reduction not in ("mean", "sum"):
+            raise ValueError("reduction must be 'mean' or 'sum'.")
+        self.reduction = reduction
+
+    def __call__(self, positive_scores, negative_scores):
+        raise NotImplementedError
+
+    def describe(self):
+        return {"loss": self.name, "reduction": self.reduction}
+
+
+class SelfAdversarial(TripleLoss):
+    r"""The self-adversarial negative sampling loss (Sun et al. 2019, used by BoxE and
+    ExpressivE): :math:`-\log\sigma(\gamma + s^+) - \sum_i w_i \log\sigma(-s_i^- - \gamma)`
+    with the weights :math:`w = \mathrm{softmax}(\alpha s^-)` of the corrupted triples
+    (no gradient through the weights). With the reduction ``"mean"`` the sum of the two
+    terms is halved.
+
+    :param margin: :math:`\gamma`. :param temperature: :math:`\alpha`.
+    """
+
+    name = "self-adversarial negative sampling"
+
+    def __init__(self, margin=3.0, temperature=2.0, reduction="sum"):
+        super().__init__(reduction)
+        self.margin, self.temperature = margin, temperature
+
+    def __call__(self, positive_scores, negative_scores):
+        positive = -_reduce(nn.functional.logsigmoid(self.margin + positive_scores),
+                            self.reduction)
+        weights = negative_scores.detach().mul(self.temperature).softmax(dim=-1)
+        negative = -nn.functional.logsigmoid(-negative_scores - self.margin)
+        negative = _reduce((weights * negative).sum(dim=-1), self.reduction)
+        factor = 0.5 if self.reduction == "mean" else 1.0
+        return factor * (positive + negative)
+
+    def describe(self):
+        return dict(super().describe(), margin=self.margin, temperature=self.temperature)
+
+
+class MarginRanking(TripleLoss):
+    r"""The pairwise margin ranking loss :math:`h(s^- - s^+ + \gamma)` with :math:`h` the
+    hinge (``"relu"``, TransE and RESHUFFLE) or the soft hinge (``"softplus"``).
+
+    :param margin: :math:`\gamma`.
+    """
+
+    name = "margin ranking"
+
+    def __init__(self, margin=1.0, reduction="mean", activation="relu"):
+        super().__init__(reduction)
+        if activation not in ("relu", "softplus"):
+            raise ValueError("activation must be 'relu' or 'softplus'.")
+        self.margin, self.activation = margin, activation
+
+    def __call__(self, positive_scores, negative_scores):
+        gap = negative_scores - positive_scores + self.margin
+        gap = th.relu(gap) if self.activation == "relu" else nn.functional.softplus(gap)
+        return _reduce(gap, self.reduction)
+
+    def describe(self):
+        return dict(super().describe(), margin=self.margin, activation=self.activation)
+
+
+class PyKEENLoss(TripleLoss):
+    """Any loss of PyKEEN (:mod:`pykeen.losses`) as the objective: the adapter of the
+    knowledge graph embeddings of that library."""
+
+    name = "pykeen loss"
+
+    def __init__(self, loss, num_entities=None):
+        super().__init__(getattr(loss, "reduction", "mean"))
+        self.loss = loss
+        self.num_entities = num_entities
+
+    def __call__(self, positive_scores, negative_scores):
+        return self.loss.process_slcwa_scores(
+            positive_scores=positive_scores, negative_scores=negative_scores,
+            label_smoothing=0.0, batch_filter=None, num_entities=self.num_entities,
+            pos_weights=None, neg_weights=None)
+
+    def describe(self):
+        return {"loss": type(self.loss).__name__, "reduction": self.reduction}
+
+
+#: Name -> loss of the triples.
+TRIPLE_LOSSES = {"self-adversarial": SelfAdversarial, "margin ranking": MarginRanking}
+
+
+def triple_loss(spec, **options):
+    """A loss from a name of :data:`TRIPLE_LOSSES`, a class or an instance."""
+    if isinstance(spec, TripleLoss):
+        if options:
+            raise TypeError("Options are given with a name or a class, not an instance.")
+        return spec
+    if isinstance(spec, str):
+        if spec not in TRIPLE_LOSSES:
+            raise ValueError(f"Unknown loss {spec!r}; available: {sorted(TRIPLE_LOSSES)}.")
+        spec = TRIPLE_LOSSES[spec]
+    return spec(**options)
+
+
+# -- negative sampler ------------------------------------------------------------------------
+class UniformCorruption:
+    """Corrupt a positive triple by replacing its head or its tail (and the relation, if
+    asked) with a uniformly drawn entity, never with the one it had: ``num_negs_per_pos``
+    corrupted triples per positive, the sides taking equal shares of them (the basic
+    sampler of the knowledge graph embedding literature, drawn in the order PyKEEN's is, so
+    that equal seeds give equal triples).
+
+    :param num_negs_per_pos: Corrupted triples per positive (``None``: 1).
+    :param sides: Which of ``"h"``, ``"r"``, ``"t"`` are corrupted.
+
+    Part (vocabulary value): ``negative sampler``.
+    """
+
+    _COLUMN = {"h": 0, "r": 1, "t": 2}
+
+    def __init__(self, num_negs_per_pos=None, sides=("h", "t")):
+        self.num_negs_per_pos = 1 if num_negs_per_pos is None else int(num_negs_per_pos)
+        if not set(sides) <= set(self._COLUMN) or not sides:
+            raise ValueError("sides is a non-empty subset of 'h', 'r', 't'.")
+        self.sides = tuple(sides)
+
+    def __call__(self, positives, num_entities, num_relations):
+        """``(B, K, 3)`` corrupted triples of the positives ``(B, 3)``."""
+        batch = positives.view(-1, 3).repeat_interleave(self.num_negs_per_pos, dim=0)
+        total = batch.shape[0]
+        step = int(math.ceil(total / len(self.sides)))
+        for side, start in zip(self.sides, range(0, total, step), strict=False):
+            column = self._COLUMN[side]
+            stop = min(start + step, total)
+            high = (num_relations if column == 1 else num_entities) - 1
+            replacement = th.randint(high=high, size=(stop - start,), device=batch.device)
+            replacement += (replacement >= batch[start:stop, column]).long()
+            batch[start:stop, column] = replacement
+        return batch.view(*positives.shape[:-1], self.num_negs_per_pos, 3)
+
+    def describe(self):
+        return {"sampler": "uniform corruption", "num_negs_per_pos": self.num_negs_per_pos,
+                "sides": self.sides}
+
+
+class _TripleBatches(th.utils.data.IterableDataset):
+    """Shuffled batches of the triples, one pass per epoch: the positives and, sampled by
+    ``sample``, their corrupted triples."""
+
+    def __init__(self, triples, batch_size, drop_last, sample):
+        self.triples, self.batch_size = triples, batch_size
+        self.drop_last, self.sample = drop_last, sample
+
+    def __iter__(self):
+        indices = th.utils.data.BatchSampler(
+            sampler=th.utils.data.RandomSampler(data_source=range(len(self.triples))),
+            batch_size=self.batch_size, drop_last=self.drop_last)
+        for ids in indices:
+            positives = self.triples[ids]
+            yield positives, self.sample(positives)
+
+    def __len__(self):
+        batches, rest = divmod(len(self.triples), self.batch_size)
+        return batches + (1 if rest and not self.drop_last else 0)
+
+
+# -- the geometry of triples -----------------------------------------------------------------
+class TripleGeometry(ComposedGeometry):
+    """The geometry of a model trained on the triples of a graph: entities, a relation model
+    (what a relation is), the triple score, the objective of a :class:`TripleLoss` and a
+    negative sampler. It is a :class:`~mowl.representation.ComposedGeometry` of the parts of
+    :func:`triple_geometry`, so it also reads the axioms that are triples (``gci0``, ``gci2``,
+    ``class_assertion``, ``object_property_assertion``) and :class:`~mowl.models.ComposedEL`
+    trains it on them; a model of the projection (:mod:`mowl.models.graph_kge`) trains it on
+    the triples of the graph instead (:meth:`triple_cost`).
+
+    :param loss: A :class:`TripleLoss` (default: margin ranking with the margin of the
+        objective).
+    :param sampler: The negative sampler (default: :class:`UniformCorruption`).
+    :param projection: The name of the projection (:mod:`graph_projection`) the method is
+        defined with, for a model that is built without one.
+    """
+
+    def __init__(self, classes, relations, measure, objective=None, individuals=None,
+                 regularizers=(), supported_forms=None, neg_capable_gcis=None, loss=None,
+                 sampler=None, projection="owl2vec_star"):
+        super().__init__(classes, relations, measure, objective, individuals, regularizers,
+                         supported_forms, neg_capable_gcis)
+        self.loss = loss if loss is not None else MarginRanking(self.objective.margin)
+        self.sampler = sampler if sampler is not None else UniformCorruption()
+        self.projection = projection
+        #: Function without arguments that draws all tables again as at the start (set by
+        #: the builder of a method; the default draws every table uniformly in [-1, 1]).
+        self.initialiser = None
+
+    def reset_parameters(self):
+        """Draw the parameters again, as they were drawn when the geometry was built."""
+        if self.initialiser is not None:
+            self.initialiser()
+            return
+        with th.no_grad():
+            for part in (self.class_model, self.relation_model, self.individual_model):
+                if part is None:
+                    continue
+                for child in part.modules():
+                    if isinstance(child, nn.Embedding) and child.weight.requires_grad:
+                        nn.init.uniform_(child.weight, a=-1, b=1)
+
+    def triple_cost(self, heads, relations, tails):
+        """Minus the score of the triples with these entity and relation ids, ``(B, 1)``."""
+        with self.encoding():
+            head, tail = self.classes(heads), self.classes(tails)
+            return self.measure.triple(self.relation_model, relations, head, tail)
+
+    def trainable_parameters(self):
+        """The parameters an optimiser trains (a graph network's fixed features are not)."""
+        return [p for p in self.parameters() if p.requires_grad]
+
+    def encoding(self):
+        """Compute what the entities share over a whole batch once (the encoding of a graph
+        network) and reuse it inside the block."""
+        encoding = getattr(self.class_model, "encoding", None)
+        return contextlib.nullcontext() if encoding is None else encoding()
+
+    @property
+    def parts(self):
+        parts = super().parts
+        parts["objective"] = self.loss.describe()["loss"]
+        parts["negative sampler"] = self.sampler.describe()["sampler"]
+        parts["projection"] = self.projection
+        return parts
+
+
 def triple_geometry(classes, relations, measure, objective=None, individuals=None,
-                    regularizers=()):
+                    regularizers=(), loss=None, sampler=None, projection="owl2vec_star"):
     """The :class:`~mowl.representation.ComposedGeometry` of points and a triple score. The
     forms it reads are the ones a projection turns into triples: ``gci0``, ``gci2``,
     ``class_assertion`` and ``object_property_assertion`` (``supported_forms``); the others
@@ -345,23 +612,269 @@ def triple_geometry(classes, relations, measure, objective=None, individuals=Non
     objective = objective if objective is not None else Objective()
     neg = {"gci0", "gci2", "object_property_assertion"} if objective.negatives == "all" \
         else {"gci2", "object_property_assertion"}
-    return ComposedGeometry(
+    return TripleGeometry(
         classes, relations, measure, objective, individuals, regularizers,
         supported_forms=("gci0", "gci2", "class_assertion", "object_property_assertion"),
-        neg_capable_gcis=neg)
+        neg_capable_gcis=neg, loss=loss, sampler=sampler, projection=projection)
 
 
+# -- RESHUFFLE: a relation is a matrix, an entity is encoded by the graph --------------------
+class ReshuffleRelations(_PairRelations):
+    r"""RESHUFFLE (Pavlovic et al. 2025): a relation is a soft reshuffling of coordinates,
+    an :math:`l \times l` matrix :math:`R_r` obtained from a raw :math:`(l+1) \times l`
+    parameter by a column-wise softmax whose last row is dropped. An entity is a
+    :math:`k \times l` matrix and a triple is scored
+    :math:`-\lVert \mathrm{ReLU}(x_h R_r - x_t) \rVert_2`
+    (:func:`mowl.nn.graph.kge_interactions.reshuffle_interaction`), which is zero exactly when
+    :math:`x_h R_r \le x_t` coordinate-wise.
+
+    The entities that meet this relation model are encoded by a graph network that uses its
+    matrices (:class:`GraphEncodedPoints`).
+
+    :param size: Number of rows of the matrices. With ``inverse=True`` the relations of a graph
+        are the rows ``2r`` (forward) and ``2r + 1`` (inverse) and ``size`` is twice their
+        number; with ``inverse=False`` relation ``r`` is row ``2 r`` and the odd rows only
+        carry messages.
+    :param l: Number of coordinates.
+    :param inverse: Whether the triples carry inverse relations (the setting of the authors'
+        code).
+    :param row_function: ``"softmax"`` or ``"square"`` (the RESHUFFLE2 ablation).
+    :param subclass_id: The row of the relation ``subclass``.
+
+    Part (vocabulary value): ``matrix``. Used by: ``reshuffle``.
+    """
+
+    part = "matrix"
+
+    def __init__(self, size=None, l=25, inverse=True,  # noqa: E741
+                 row_function="softmax", subclass_id=None):
+        super().__init__()
+        from mowl.nn.graph.kge_interactions import relation_matrices
+        self._matrices = relation_matrices
+        self.l, self.inverse, self.row_function = l, bool(inverse), row_function
+        self.reserved = 0
+        self._subclass_id = subclass_id
+        self.vectors = nn.Embedding(size, (l + 1) * l)
+        with th.no_grad():
+            nn.init.normal_(self.vectors.weight)
+        self.loop_raw = nn.Parameter(th.randn(l + 1, l) * 0.1)
+        self._shared = None
+
+    def __len__(self):
+        return self.vectors.num_embeddings // (1 if self.inverse else 2)
+
+    @property
+    def subclass(self):
+        return -1 if self._subclass_id is None else self._subclass_id
+
+    def raw(self):
+        """The raw parameters ``(rows, l + 1, l)``."""
+        return self.vectors.weight.view(-1, self.l + 1, self.l)
+
+    def matrices(self):
+        """``(rows, l, l)`` matrices of all rows and the loop matrix ``(l, l)`` (inside
+        :meth:`shared`, those computed when the block was entered)."""
+        if self._shared is not None:
+            return self._shared
+        return (self._matrices(self.raw(), self.row_function),
+                self._matrices(self.loop_raw, self.row_function))
+
+    @contextlib.contextmanager
+    def shared(self):
+        """Compute the matrices once for everything inside the block: the entity encoding
+        and the cost of a triple use the same tensors, so the gradient of both flows into
+        the parameters through one node."""
+        outer = self._shared
+        if outer is None:
+            self._shared = self.matrices()
+        try:
+            yield self
+        finally:
+            self._shared = outer
+
+    def row(self, ids):
+        """The rows of the relation ids (relation ``r`` is row ``2 r`` without inverses)."""
+        return ids if self.inverse else 2 * ids
+
+    def cost(self, ids, head, tail):
+        from mowl.nn.graph.kge_interactions import reshuffle_interaction
+        matrix = self.matrices()[0][self.row(ids)]
+        k = head.centre.shape[1] // self.l
+        score = reshuffle_interaction(head.centre.view(-1, k, self.l), matrix,
+                                      tail.centre.view(-1, k, self.l))
+        return -score.reshape(-1, 1)
+
+    def reset_parameters(self):
+        with th.no_grad():
+            nn.init.normal_(self.vectors.weight)
+            nn.init.normal_(self.loop_raw, std=0.1)
+
+
+class GraphEncodedPoints(Classes):
+    r"""Entities computed by a graph network (the class model of RESHUFFLE): every entity has
+    a fixed random binary feature matrix :math:`k \times l` and the model is the features
+    after ``num_layers`` rounds of message passing along the edges of the graph, each message
+    the features of a neighbour multiplied by the matrix of the relation
+    (:func:`mowl.nn.graph.kge_interactions.propagate`). So an entity is not a row of a table:
+    an entity that is new to the graph gets an encoding as well
+    (:meth:`encode_graph`).
+
+    The matrices are those of the :class:`ReshuffleRelations` it is bound to
+    (:meth:`bind`); the encoding of a whole batch is computed once inside
+    :meth:`encoding`.
+
+    :param size: Number of entities.
+    :param l, k: Coordinates and rows of the feature matrices.
+    :param triples: ``(E, 3)`` integer tensor of the edges ``[source, relation, target]`` of the
+        graph (forward relation ids ``0 .. R-1``).
+    :param num_layers: Message passing layers.
+    :param aggregation: ``"max_self_and_selfLoop"`` or ``"max_self_noLoop"``.
+    :param density: Probability of a 1 in the random features (the authors' code draws
+        ``N(0, 1) > 0.5``, 0.3085; the paper's text says 0.5).
+    :param feature_seed: Seed of the random features.
+
+    Part (vocabulary value): ``point``; parametrisation ``graph encoder``. Used by:
+    ``reshuffle``.
+    """
+
+    region = Point
+    part = "point"
+    exact_conjunction = False
+
+    def __init__(self, size=None, l=25, k=80, triples=None, num_layers=4,  # noqa: E741
+                 aggregation="max_self_and_selfLoop", density=0.3085, feature_seed=0):
+        super().__init__()
+        from mowl.nn.graph.kge_interactions import random_features
+        if aggregation not in ("max_self_and_selfLoop", "max_self_noLoop"):
+            raise ValueError("aggregation must be 'max_self_and_selfLoop' or "
+                             "'max_self_noLoop'.")
+        self.l, self.k, self.num_layers = l, k, num_layers
+        self.aggregation, self.density = aggregation, density
+        generator = th.Generator().manual_seed(feature_seed)
+        features = random_features(size, k, l, density, generator)
+        # fixed: only the relation matrices (and the loop) are learned
+        self.centres = nn.Embedding.from_pretrained(features.reshape(size, k * l), freeze=True)
+        triples = th.zeros((0, 3), dtype=th.long) if triples is None else triples
+        self.register_buffer("edge_index", th.stack([triples[:, 0], triples[:, 2]]))
+        self.register_buffer("edge_type", triples[:, 1].clone())
+        self._relations = None
+        self._frozen = None
+
+    def bind(self, relations):
+        """Use the matrices of this relation model (not registered as a sub-module: its
+        parameters are those of the geometry's relation model)."""
+        if not isinstance(relations, ReshuffleRelations):
+            raise TypeError("GraphEncodedPoints is bound to ReshuffleRelations.")
+        object.__setattr__(self, "_relations", relations)
+        return self
+
+    def encode(self, features=None, edge_index=None, edge_type=None, all_relations=False):
+        """Entity matrices ``(n, k, l)`` after message passing, and the relation matrices
+        (``all_relations``: all rows, relation ``i`` at ``2i`` and its inverse at ``2i + 1``;
+        otherwise the forward ones). Without arguments: the features and the graph of the
+        model."""
+        from mowl.nn.graph.kge_interactions import propagate
+        if self._relations is None:
+            raise TypeError("GraphEncodedPoints needs the relation model: bind it.")
+        features = self.centres.weight.view(-1, self.k, self.l) if features is None \
+            else features
+        edge_index = self.edge_index if edge_index is None else edge_index
+        edge_type = self.edge_type if edge_type is None else edge_type
+        rel, loop = self._relations.matrices()
+        x = propagate(features, rel, loop, edge_index, edge_type, self.num_layers,
+                      self.aggregation)
+        return x, (rel if all_relations else rel[0::2])
+
+    def encode_graph(self, graph_triples, num_entities, seed=0, all_relations=False):
+        """Entity matrices and relation matrices of another graph over the same relations,
+        with fresh random features drawn with ``seed``: the inductive setting of the paper,
+        where the entities of the test graph are not seen in training."""
+        from mowl.nn.graph.kge_interactions import random_features
+        generator = th.Generator().manual_seed(seed)
+        features = random_features(num_entities, self.k, self.l, self.density, generator)
+        device = self.edge_index.device
+        features, graph_triples = features.to(device), graph_triples.to(device)
+        return self.encode(features, th.stack([graph_triples[:, 0], graph_triples[:, 2]]),
+                           graph_triples[:, 1], all_relations=all_relations)
+
+    @contextlib.contextmanager
+    def encoding(self):
+        outer = self._frozen
+        with self._relations.shared():
+            if outer is None:
+                self._frozen = self.encode(all_relations=self._relations.inverse)[0]
+            try:
+                yield self
+            finally:
+                self._frozen = outer
+
+    def forward(self, ids):
+        x = self._frozen if self._frozen is not None \
+            else self.encode(all_relations=self._relations.inverse)[0]
+        return Point(x[ids].reshape(len(ids), -1))
+
+    def tables(self):
+        return {}
+
+
+# -- initialisation of the tables ------------------------------------------------------------
+def _init_boxe(classes, relations):
+    """The initialisation of BoxE (the authors' and PyKEEN's, drawn in PyKEEN's order):
+    unit-norm entity base and bump vectors, unit-norm relation position and shape vectors,
+    relation sizes uniform in [0, 1]."""
+    from pykeen.nn.init import uniform_norm_
+    with th.no_grad():
+        for table in (classes.centres, classes.bumps):
+            if table is not None:
+                table.weight.copy_(uniform_norm_(th.empty_like(table.weight)))
+        for table, size in ((relations.head_base, False), (relations.head_delta, False),
+                            (relations.head_size, True), (relations.tail_base, False),
+                            (relations.tail_delta, False), (relations.tail_size, True)):
+            if size:
+                nn.init.uniform_(table.weight)
+            else:
+                table.weight.copy_(uniform_norm_(th.empty_like(table.weight)))
+
+
+def _init_normal(classes, relations):
+    """The initialisation of ExpressivE (the default of PyKEEN's representations)."""
+    with th.no_grad():
+        nn.init.normal_(classes.centres.weight)
+        nn.init.normal_(relations.vectors.weight)
+
+
+# -- the methods -----------------------------------------------------------------------------
 _DEFAULT_RELATIONS = {"graph_kge": "translation",
                       "boxe": "head and tail boxes (distance score)",
                       "expressive": "region over pairs"}
 
+#: The loss each method is trained with (the loss of its publication).
+_DEFAULT_LOSS = {
+    "graph_kge": lambda margin: MarginRanking(margin),
+    "gda_projection": lambda margin: MarginRanking(margin),
+    "boxe": lambda margin: SelfAdversarial(3.0, 2.0, "sum"),
+    "expressive": lambda margin: SelfAdversarial(3.0, 2.0, "sum"),
+    "reshuffle": lambda margin: MarginRanking(2.0, "mean"),
+}
+
 
 def _build(key, nb_classes, nb_relations, nb_individuals, embed_dim, margin, classes,
-           relations, objective, tables, relation_options):
+           relations, objective, tables, relation_options, subclass_id=-2, loss=None,
+           sampler=None, regularizers=(), projection="owl2vec_star", init=True):
+    """The geometry of a method from parts. With ``subclass_id`` (an int, ``-1`` if the
+    graph has no such edge) the relations are those of a graph, indexed by its ids, and
+    ``subclass_id`` is the row of the ``subclass`` relation; without it one more relation
+    is reserved for ``subclass`` (the geometry reads axioms)."""
     from mowl.representation import methods as M
     if tables is not None:
         raise TypeError(f"{key}: tables must be a PyKEEN model; use boxe(...) / "
                         f"expressive(...) with tables, or geometry_of(model).")
+    graph = subclass_id != -2
+    pair_options = dict(relation_options)
+    if graph and subclass_id >= 0:
+        pair_options["subclass_id"] = subclass_id
+    elif graph:
+        pair_options["subclass_id"] = -1
     if classes == "point":
         # the entities of a knowledge graph model: points (with a bump for BoxE)
         def class_factory(size, dim):
@@ -371,16 +884,37 @@ def _build(key, nb_classes, nb_relations, nb_individuals, embed_dim, margin, cla
     relation_factory = M.RELATION_MODELS[relations] if isinstance(relations, str) \
         else relations
     class_model = class_factory(nb_classes, embed_dim)
-    relation_model = relation_factory(nb_relations, embed_dim, **relation_options) \
-        if relation_options else relation_factory(nb_relations, embed_dim)
-    if relation_model is not None and not hasattr(relation_model, "subclass"):
+    if relation_factory is None:
+        relation_model = None
+    elif graph and not (isinstance(relation_factory, type)
+                        and issubclass(relation_factory, _PairRelations)):
+        relation_model = relation_factory(nb_relations, embed_dim, **relation_options)
+    else:
+        relation_model = relation_factory(nb_relations, embed_dim, **pair_options) \
+            if pair_options else relation_factory(nb_relations, embed_dim)
+    if relation_model is not None and not graph and not hasattr(relation_model, "subclass"):
         # a relation model without a reserved subclass row (translation): add one
         relation_model = _WithSubclass(relation_model, embed_dim)
+    initialiser = None
+    if init and classes == "point" and isinstance(class_model, Points):
+        if isinstance(relation_model, BoxERelations) and key == "boxe":
+            initialiser = functools.partial(_init_boxe, class_model, relation_model)
+        elif isinstance(relation_model, ExpressivERelations) and key == "expressive":
+            initialiser = functools.partial(_init_normal, class_model, relation_model)
+        if initialiser is not None:
+            initialiser()
     individual_model = class_factory(nb_individuals, embed_dim) if nb_individuals else None
     if objective is None:
         objective = Objective(margin, negatives="gci2")
-    return triple_geometry(class_model, relation_model, TripleScore(), objective,
-                           individuals=individual_model)
+    if loss is None:
+        loss = _DEFAULT_LOSS.get(key, _DEFAULT_LOSS["graph_kge"])(margin)
+    else:
+        loss = triple_loss(loss)
+    geometry = triple_geometry(class_model, relation_model, TripleScore(), objective,
+                               individuals=individual_model, regularizers=regularizers,
+                               loss=loss, sampler=sampler, projection=projection)
+    geometry.initialiser = initialiser
+    return geometry
 
 
 class _WithSubclass(Relations):
@@ -418,30 +952,63 @@ class _WithSubclass(Relations):
 @register_method("graph_kge")
 def graph_kge(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=1.0,
               classes="point", relations="translation", objective=None, tables=None,
-              **relation_options):
+              subclass_id=-2, loss=None, sampler=None, regularizers=(),
+              projection="owl2vec_star", **relation_options):
     """Any knowledge graph model on a projection, as parts: classes and individuals are
     entities, a relation model says what a relation is, the measure is the triple score.
     The default (point classes, translation) is TransE; ``relations="head and tail
     boxes (distance score)"`` is BoxE, ``"region over pairs"`` is ExpressivE, and
     ``classes="ball"`` or ``"box"`` use the centres of those regions as the entities.
 
+    :param subclass_id: ``-2`` (default): the geometry reads axioms and reserves a relation
+        for ``subclass``. A graph (:class:`~mowl.models.graph_kge.TripleGraphModel`) passes
+        the row of the ``subclass`` edge (``-1`` if it has none) and the relations are its
+        own.
+    :param loss: A :class:`TripleLoss` or its name (default: margin ranking with ``margin``).
+    :param sampler: The negative sampler (default: :class:`UniformCorruption`).
+    :param projection: The projection the method is defined with (:mod:`graph_projection`).
+
     A PyKEEN model that is not one of these is not rebuilt: :func:`geometry_of` gives the
     geometry of the trained model, with PyKEEN's own interaction.
     """
     return _build("graph_kge", nb_classes, nb_relations, nb_individuals, embed_dim, margin,
-                  classes, relations, objective, tables, relation_options)
+                  classes, relations, objective, tables, relation_options, subclass_id,
+                  loss, sampler, regularizers, projection)
+
+
+@register_method("gda_projection")
+def gda_projection(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=1.0,
+                   classes="point", relations="translation", objective=None, tables=None,
+                   subclass_id=-2, loss=None, sampler=None, regularizers=(),
+                   projection="gda", **relation_options):
+    """The GDA projection with a knowledge graph embedding: the combination of
+    :func:`graph_kge` with the projection that unfolds an existential restriction through
+    intersections and nested existentials until a named class is reached
+    (:class:`mowl.projection.GDAProjector`; one relation per composed role path). The
+    relation model, the objective and the sampler are those of :func:`graph_kge` (TransE
+    with the margin ranking loss by default); only the projection differs."""
+    return _build("gda_projection", nb_classes, nb_relations, nb_individuals, embed_dim,
+                  margin, classes, relations, objective, tables, relation_options,
+                  subclass_id, loss, sampler, regularizers, projection)
 
 
 @register_method("boxe")
 def boxe(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=1.0,
-         classes="point", objective=None, tables=None, **relation_options):
-    """BoxE from parts: points with a bump, head and tail boxes, the triple score.
+         classes="point", objective=None, tables=None, subclass_id=-2, loss=None,
+         sampler=None, regularizers=(), projection="owl2vec_star", relations=None,
+         **relation_options):
+    """BoxE from parts: points with a bump, head and tail boxes, the triple score, the
+    self-adversarial negative sampling loss (margin 3, temperature 2, summed), uniform
+    corruption of heads and tails.
 
     :param classes: ``"point"`` (the default, with a bump) or any class model name
         (``"ball"``, ``"box"``): then only the centres are used.
+    :param relations: A relation model name (default: head and tail boxes with the
+        distance score); any other relation model of triples is a swap.
     :param tables: A trained PyKEEN :class:`~pykeen.models.BoxE` whose entity and relation
         tables are shared; classes and relations are then indexed by the PyKEEN ids
         (``nb_*`` are ignored) and the ``subclass`` relation is ``subclass_id``.
+    :param subclass_id: See :func:`graph_kge`.
     """
     if tables is not None:
         subclass_id = relation_options.pop("subclass_id", None)
@@ -457,15 +1024,20 @@ def boxe(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=1.0,
                                objective or Objective(margin, negatives="gci2"),
                                individuals=classes_model)
     return _build("boxe", nb_classes, nb_relations, nb_individuals, embed_dim, margin,
-                  classes, "head and tail boxes (distance score)", objective, None,
-                  relation_options)
+                  classes, relations or "head and tail boxes (distance score)", objective,
+                  None, relation_options, subclass_id, loss, sampler, regularizers,
+                  projection)
 
 
 @register_method("expressive")
 def expressive(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=1.0,
-               classes="point", objective=None, tables=None, **relation_options):
-    """ExpressivE from parts: points, parallelograms over pairs, the triple score. See
-    :func:`boxe` for ``classes`` and ``tables`` (a trained PyKEEN ExpressivE)."""
+               classes="point", objective=None, tables=None, subclass_id=-2, loss=None,
+               sampler=None, regularizers=(), projection="owl2vec_star", relations=None,
+               **relation_options):
+    """ExpressivE from parts: points, parallelograms over pairs, the triple score, the
+    self-adversarial negative sampling loss (margin 3, temperature 2, summed). See
+    :func:`boxe` for ``classes``, ``relations``, ``subclass_id`` and ``tables`` (a trained
+    PyKEEN ExpressivE)."""
     if tables is not None:
         subclass_id = relation_options.pop("subclass_id", None)
         classes_model = PointClasses(centres=PyKEENTable(tables.entity_representations[0]))
@@ -477,7 +1049,52 @@ def expressive(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=
                                objective or Objective(margin, negatives="gci2"),
                                individuals=classes_model)
     return _build("expressive", nb_classes, nb_relations, nb_individuals, embed_dim, margin,
-                  classes, "region over pairs", objective, None, relation_options)
+                  classes, relations or "region over pairs", objective, None,
+                  relation_options, subclass_id, loss, sampler, regularizers, projection)
+
+
+@register_method("reshuffle")
+def reshuffle(nb_classes, nb_relations, nb_individuals=0, embed_dim=None, margin=2.0,
+              objective=None, tables=None, subclass_id=-2, loss=None, sampler=None,
+              regularizers=(), projection="owl2vec_star", triples=None, l=25,  # noqa: E741
+              k=80, num_layers=4, aggregation="max_self_and_selfLoop", density=0.3085,
+              feature_seed=0, row_function="softmax", inverse_triples=True):
+    """RESHUFFLE from parts: entities encoded by a graph network from fixed random binary
+    features (:class:`GraphEncodedPoints`), relations that are soft coordinate reshufflings
+    (:class:`ReshuffleRelations`), the triple score, the margin ranking loss with margin 2
+    and the uniform corruption of heads and tails.
+
+    It is defined on a graph: ``triples`` (``(E, 3)`` ids of its edges) is required, and
+    ``nb_relations`` is the number of relations of the graph (the rows of the matrices are
+    twice that, a relation and its inverse).
+
+    :param l, k, num_layers, aggregation, density, feature_seed: See
+        :class:`GraphEncodedPoints`.
+    :param row_function: See :class:`ReshuffleRelations`.
+    :param inverse_triples: Whether the triples carry the inverse relations (ids ``2r`` and
+        ``2r + 1``); ``False`` trains on the forward triples only.
+    """
+    if triples is None:
+        raise ConstructorUnavailable(
+            "reshuffle is defined on a graph: its entities are encoded by message passing "
+            "over the edges. Pass triples=..., or use mowl.models.Reshuffle.")
+    if tables is not None:
+        raise TypeError("reshuffle: tables are not supported.")
+    relation_model = ReshuffleRelations(
+        2 * nb_relations, l, inverse_triples, row_function,
+        subclass_id=None if subclass_id < 0 else (2 * subclass_id if inverse_triples
+                                                  else subclass_id))
+    class_model = GraphEncodedPoints(nb_classes, l, k, th.as_tensor(triples), num_layers,
+                                     aggregation, density, feature_seed)
+    class_model.bind(relation_model)
+    if objective is None:
+        objective = Objective(margin, negatives="gci2")
+    loss = triple_loss(loss) if loss is not None else _DEFAULT_LOSS["reshuffle"](margin)
+    geometry = triple_geometry(class_model, relation_model, TripleScore(), objective,
+                               regularizers=regularizers, loss=loss, sampler=sampler,
+                               projection=projection)
+    geometry.initialiser = relation_model.reset_parameters
+    return geometry
 
 
 # -- the geometry of a trained PyKEEN model --------------------------------------------------
@@ -576,6 +1193,53 @@ class PyKEENGeometry(Geometry):
             score = self.interaction.score_hrt(h=h, r=r, t=t)
             out[known] = -score.reshape(-1, 1).to(out.dtype)
         return out
+
+    # -- the training protocol of a triple model (see TripleGeometry) -----------------------
+    @property
+    def loss(self):
+        """The objective: the loss of the PyKEEN model (:class:`PyKEENLoss`)."""
+        return PyKEENLoss(self.kge.loss, self.kge.num_entities)
+
+    @property
+    def sampler(self):
+        """The negative sampler: :class:`UniformCorruption` with the model's
+        ``num_negs_per_pos``."""
+        return UniformCorruption(self.model.num_negs_per_pos)
+
+    @property
+    def projection(self):
+        return type(self.model.projector).__name__
+
+    def parameters(self):
+        return self.kge.parameters()
+
+    def trainable_parameters(self):
+        return self.kge.get_grad_params()
+
+    def regularization_loss(self):
+        """The regularisation term of the PyKEEN model."""
+        return self.kge.collect_regularization_term()
+
+    def reset_parameters(self):
+        """Draw the parameters of the PyKEEN model again."""
+        self.kge.reset_parameters_()
+
+    def project(self):
+        """Apply the constraints of the PyKEEN model after an optimisation step."""
+        self.kge.post_parameter_update()
+
+    def train(self, mode=True):
+        self.kge.train(mode)
+        return self
+
+    def eval(self):
+        return self.train(False)
+
+    def state_dict(self):
+        return self.kge.state_dict()
+
+    def encoding(self):
+        return contextlib.nullcontext()
 
     def _relation_ids(self, relation_ids):
         r = self._roles[relation_ids.cpu()]

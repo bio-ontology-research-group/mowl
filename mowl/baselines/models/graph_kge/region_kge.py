@@ -1,6 +1,6 @@
 """Region-based knowledge graph embeddings of a projected ontology.
 
-:class:`RegionKGEModel` is :class:`~mowl.models.graph_kge.graph_pykeen_model.GraphPlusPyKEENModel`
+:class:`RegionKGEModel` is :class:`~mowl.baselines.models.graph_kge.graph_pykeen_model.GraphPlusPyKEENModel`
 with the projector, the PyKEEN model class, the optimiser and the training schedule chosen in
 the constructor. BoxE, ExpressivE and RESHUFFLE are three subclasses that only name the
 PyKEEN model class. Projection, training loop, negative sampling (PyKEEN's) and axiom scoring
@@ -9,7 +9,7 @@ are the ones of ``GraphPlusPyKEENModel``; nothing here is specific to one method
 
 import torch as th
 
-from mowl.models.graph_kge.graph_pykeen_model import GraphPlusPyKEENModel
+from mowl.baselines.models.graph_kge.graph_pykeen_model import GraphPlusPyKEENModel
 
 
 class RegionKGEModel(GraphPlusPyKEENModel):

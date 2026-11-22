@@ -4,8 +4,9 @@ import torch as th
 import mowl
 mowl.init_jvm("1g")
 import mowl.datasets  # noqa: F401,E402
-from mowl.nn.graph.expressive import (ExpressivEInteraction, captured,  # noqa: E402
-                                      expressive_distance, expressive_relation_parameters)
+from mowl.nn.graph.kge_interactions import (ExpressivEInteraction, captured,  # noqa: E402
+                                            expressive_distance,
+                                            expressive_relation_parameters)
 
 D = 3
 
