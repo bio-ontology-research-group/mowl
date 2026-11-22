@@ -9,7 +9,7 @@ from mowl.nn.el.structural import Regions
 from mowl.representation.library.multibox_methods import multiboxel
 from mowl.representation.library.multibox_modules import (
     UnionModule, check_nonnegative, check_union_options, released_names)
-from mowl.representation.library.multibox_objective import bump_penalty
+from mowl.representation.objectives import FORMS
 from mowl.representation.library.structural_methods import StructuralGeometry
 from mowl.representation.library.structural_regions import to_slots
 from mowl.training.regularization import NormPenalty
@@ -193,6 +193,16 @@ class MultiBoxELModule(UnionModule, StructuralGeometry):
     """
 
     neg_capable_gcis = frozenset({"gci2", "object_property_assertion"})
+    role_axiom_capable = False
+
+    #: The order in which the tables were initialised (a seeded module has its numbers).
+    released_order = (
+        "class_model.centres", "class_model.offsets", "relation_model.head_centres",
+        "relation_model.head_offsets", "relation_model.tail_centres",
+        "relation_model.tail_offsets", "class_model.bumps", "individual_model.bumps",
+        "individual_model.centres", "individual_model.offsets")
+    #: ``per_axiom_column = False``: the flat ``(B,)`` of the formulas.
+    flat_forms = FORMS
 
     def __init__(
         self,
@@ -251,6 +261,7 @@ class MultiBoxELModule(UnionModule, StructuralGeometry):
             raise ValueError(f"reseed_every must be an int >= 0, got {reseed_every!r}")
         _check_reseed(bot_agg, witness_weight, reseed_mode, reseed_size, reseed_batch)
         structural = objective == "structural"
+        rng_state = th.get_rng_state()
         multiboxel(
             nb_ont_classes, nb_rels, nb_inds or 0, embed_dim=embed_dim,
             margin=margin if structural else gamma, n_components=n_components, delta=delta,
@@ -263,6 +274,7 @@ class MultiBoxELModule(UnionModule, StructuralGeometry):
             witness_weight=float(witness_weight),
             size_reg_without_tables=size_reg_without_tables,
             structural_definitions=structural_definitions, into=self)
+        self.initialise_in_released_order(rng_state)
         self._install_tau(tau)
         self.strict_negatives = True
         self.reading = objective

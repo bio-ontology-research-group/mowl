@@ -11,8 +11,18 @@ parts, and lets a state dictionary written under those names be loaded.
 """
 
 import torch as th
+import torch.nn as nn
+
+from mowl.representation.objectives import ROLE_FORMS
 
 __all__ = ["released_names", "ReleasedTables", "table_of"]
+
+
+def _refuse_role(module, form, rows):
+    """The error of a module without the role axioms of EL++ (what
+    :class:`~mowl.nn.ELModule` says)."""
+    from mowl.nn.el.elmodule import ELModule
+    return getattr(ELModule, f"{form}_loss")(module, rows)
 
 
 def table_of(path, doc=None):
@@ -64,8 +74,50 @@ class ReleasedTables:
 
     released_tables = {}
     released_state = ()
+    #: The tables in the order in which the earlier module drew their initial values.
+    released_order = ()
+    #: The forms whose loss has the flat shape ``(B,)`` when ``per_axiom_column`` is ``False``.
+    flat_forms = ()
+
+    def initialise_in_released_order(self, rng_state):
+        """Draw the initial values of the tables in the order of the earlier module, from the
+        state ``rng_state`` of the generator (that of before the parts were made): a seeded
+        module has the numbers it had. Every table is uniform in :math:`[-1, 1]` with rows (or
+        the blocks of a row, for a union of boxes) of length one."""
+        th.set_rng_state(rng_state)
+        components = getattr(self.class_model, "components", 1)
+        for path in self.released_order:
+            table = table_of(path).fget(self)
+            if table is None:
+                continue
+            rows, width = table.weight.shape
+            parts = components if path.startswith("class_model.") \
+                and path.split(".")[1] in ("centres", "offsets") else 1
+            fresh = nn.Embedding(rows, width)
+            with th.no_grad():
+                nn.init.uniform_(fresh.weight, a=-1, b=1)
+                if rows > 0:
+                    view = fresh.weight.view(rows, parts, -1)
+                    view.div_(th.linalg.norm(view, dim=-1, keepdim=True))
+                table.weight.copy_(fresh.weight)
 
     def cost(self, form, rows, neg=False):
+        if form in ROLE_FORMS and not self.role_axiom_capable:
+            return _refuse_role(self, form, rows)
+        if neg and self.strict_negatives and form not in self.neg_capable_gcis:
+            raise NotImplementedError(
+                f"{type(self).__name__} has no negative loss for '{form}' (it has one for "
+                f"{sorted(self.neg_capable_gcis) or 'no form'}), so neg=True is refused. Do "
+                f"not ask for a negative of this form (negative sampling is restricted to "
+                f"'neg_capable_gcis' by default), or set 'strict_negatives = False' on the "
+                f"module to get the positive loss back instead.")
+        out = self._cost(form, rows, neg)
+        if not self.per_axiom_column and form in self.flat_forms and out.ndim == 2 \
+                and out.shape[1] == 1:
+            return out.squeeze(1)
+        return out
+
+    def _cost(self, form, rows, neg=False):
         if form in ("class_assertion", "object_property_assertion") \
                 and self.individual_model is None:
             raise ValueError("The number of individuals must be specified to use this loss "
@@ -77,36 +129,66 @@ class ReleasedTables:
             rows = th.cat([rows, th.zeros_like(rows), th.zeros_like(rows)], dim=1)
         return super().cost(form, rows, neg)
 
+    def _legacy_keys(self, names):
+        """``{legacy key: [the names of the table in the parts]}`` for the tables of
+        ``names`` (attributes of this class): every name the table has in the module (the
+        class model's, the alias that the geometry gives it, the one below a wrapper of the
+        class model)."""
+        parameters = list(self.named_parameters(remove_duplicate=False))
+        out = {}
+        for legacy in names:
+            table = table_of(self.released_tables[legacy]).fget(self)
+            if table is None:
+                continue
+            weight = table.weight if hasattr(table, "weight") else table
+            suffix = ".weight" if hasattr(table, "weight") else ""
+            out[legacy + suffix] = [name for name, p in parameters if p is weight]
+        return out
+
     def state_dict(self, *args, destination=None, prefix="", keep_vars=False):
         out = super().state_dict(*args, destination=destination, prefix=prefix,
                                  keep_vars=keep_vars)
+        rename = {name: legacy for legacy, names in self._legacy_keys(self.released_state)
+                  .items() for name in names}
         drop = set(_ALIASES) - set(self.released_state)
         for key in list(out):
-            if key.startswith(prefix) and key[len(prefix):].split(".")[0] in drop:
+            if not key.startswith(prefix):
+                continue
+            local = key[len(prefix):]
+            if local in rename:
+                value = out.pop(key)
+                out.setdefault(prefix + rename[local], value)
+            elif local.split(".")[0] in drop or local.startswith("class_model.def_"):
+                # an alias of a table that has its own name, or the tables of the definitions
+                # that a structural class model is wrapped in (not part of the weights)
                 del out[key]
-        for legacy in self.released_state:
-            path = prefix + self.released_tables[legacy]
-            for key in list(out):
-                if key == path or key.startswith(path + "."):
-                    value = out.pop(key)
-                    out.setdefault(prefix + legacy + key[len(path):], value)
         return out
 
     def load_state_dict(self, state_dict, strict=True, assign=False):
         own = th.nn.Module.state_dict(self)
+        legacy = self._legacy_keys(self.released_tables)
         renamed = {}
         for key, value in state_dict.items():
-            head, _, rest = key.partition(".")
-            if key not in own and head in self.released_tables:
-                key = self.released_tables[head] + ("." + rest if rest else "")
-            renamed[key] = value
-        # a table that the module lists under two names (``class_embed`` is the table of the
-        # class model) is given under whichever of them the file has
-        names = {}
+            if key in own:
+                renamed[key] = value
+            elif key in legacy:
+                for name in legacy[key]:
+                    renamed.setdefault(name, value)
+            elif key.replace("class_model.base.", "class_model.") in own:
+                renamed[key.replace("class_model.base.", "class_model.")] = value
+            elif key.startswith("class_model.def_"):
+                continue
+            else:
+                renamed[key] = value
+        # tables the file does not have, because they are not weights: the definitions of a
+        # structural class model; the aliases of a table that the file has under one name
         for key, value in own.items():
-            # (tables without rows have no storage: one empty table is as good as another)
-            names.setdefault((value.data_ptr(), tuple(value.shape)), []).append(key)
-        for keys in names.values():
+            if key not in renamed and key.startswith("class_model.def_"):
+                renamed[key] = value
+        by_table = {}
+        for key, value in own.items():
+            by_table.setdefault((value.data_ptr(), tuple(value.shape)), []).append(key)
+        for keys in by_table.values():
             given = [k for k in keys if k in renamed]
             for key in keys:
                 if given and key not in renamed:

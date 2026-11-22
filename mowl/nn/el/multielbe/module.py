@@ -1,6 +1,8 @@
 """MultiELBE neural module."""
 from __future__ import annotations
 
+import torch as th
+
 from mowl.nn.el.pointloss import _VALID_OBJECTIVES
 from mowl.representation.geometry import ComposedGeometry
 from mowl.representation.library.multibox_methods import multielbe
@@ -123,6 +125,13 @@ class MultiELBEModule(UnionModule, ComposedGeometry):
     #: ELBE's sign convention: a positive margin requires the inclusion with a gap.
     margin_semantics = "strict"
 
+    #: The order in which the tables were initialised (a seeded module has its numbers).
+    released_order = ("class_model.centres", "class_model.offsets", "relation_model.vectors",
+                      "individual_model.centres", "individual_model.offsets")
+    #: ``per_axiom_column = False``: the flat ``(B,)`` of the formulas for these forms (the
+    #: others were columns).
+    flat_forms = ("gci0_bot", "gci3_bot")
+
     def __init__(
         self,
         nb_ont_classes,
@@ -147,6 +156,7 @@ class MultiELBEModule(UnionModule, ComposedGeometry):
         if objective not in _VALID_OBJECTIVES:
             raise ValueError(f"objective must be one of {_VALID_OBJECTIVES}, got "
                              f"{objective!r}")
+        rng_state = th.get_rng_state()
         multielbe(
             nb_ont_classes, nb_rels, nb_inds or 0, embed_dim=embed_dim, margin=margin,
             n_components=n_components, component_reg=component_reg,
@@ -159,6 +169,7 @@ class MultiELBEModule(UnionModule, ComposedGeometry):
             # none; so has the module it extends (ELBE)
             self.individual_model = UnionClasses(0, embed_dim, 1)
             self.ind_embed = self.individual_model.centres
+        self.initialise_in_released_order(rng_state)
         self._install_tau(tau)
         self.strict_negatives = True
         self.reading = objective

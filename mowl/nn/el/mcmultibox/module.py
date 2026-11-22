@@ -112,6 +112,10 @@ class VolumeMultiBoxELModule(ReleasedTables, ComposedGeometry):
     #: The thesis defines no negative losses.
     neg_capable_gcis = frozenset()
     role_axiom_capable = True
+    #: ``per_axiom_column = False``: the flat ``(B,)`` of the formulas.
+    flat_forms = _FORMS
+    #: The module has no margin (the thesis has none).
+    margin = None
 
     def __init__(self, nb_ont_classes, nb_rels, nb_inds=None, embed_dim=5, num_boxes=5,
                  bound=1.0, num_points=20000, temperature=1.0, aggregate="min", seed=0,
