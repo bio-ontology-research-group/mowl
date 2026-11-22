@@ -37,7 +37,7 @@ from mowl.representation.library.query_parts import (
     PointBoxes, BetaPoints, ConePoints, BetaNetwork, ConeNetwork, ConeRotation,
     BoxAttentionIntersection, BoxExactIntersection, BetaAttentionIntersection,
     BetaMeanIntersection, ConeAttentionIntersection, BetaInversion, ConeComplement,
-    BoxDistance, BetaDistance, ConeDistance)
+    BoxDistance, BetaDistance, ConeDistance, deferred_initialisation)
 from mowl.representation.library.boxrel_relations import _ACTIVATIONS, TranslationBoxes
 from mowl.representation.library.query_regions import (
     BetaKL, ConeBounds, as_state, from_state, lift)
@@ -301,14 +301,19 @@ def _betae_parts(n_entities, n_rows, dim, gamma, hidden, layers, intersection, d
         entities = BetaPoints(table=tables.entity_embedding)
         relations = BetaNetwork(tables=tables, inverse_of=role_inverse)
         attention = lambda: BetaAttentionIntersection(tables=tables)  # noqa: E731
+        operator = _part(intersection, {"attention": attention, "mean": BetaMeanIntersection},
+                         "intersection")
     else:
         r = (gamma + 2.0) / dim
-        entities = BetaPoints(n_entities, dim, init_range=r)
-        relations = BetaNetwork(n_rows, dim, hidden, layers, inverse_of=role_inverse,
-                                init_range=r)
-        attention = lambda: BetaAttentionIntersection(dim)  # noqa: E731
-    operator = _part(intersection, {"attention": attention, "mean": BetaMeanIntersection},
-                     "intersection")
+        # the layers of all parts are created first and initialised at the end, in the order
+        # of the reference code: a seed gives the numbers of the direct implementation
+        with deferred_initialisation():
+            entities = BetaPoints(n_entities, dim, init_range=r)
+            relations = BetaNetwork(n_rows, dim, hidden, layers, inverse_of=role_inverse,
+                                    init_range=r)
+            attention = lambda: BetaAttentionIntersection(dim)  # noqa: E731
+            operator = _part(intersection, {"attention": attention,
+                                            "mean": BetaMeanIntersection}, "intersection")
     dist = _part(distance if distance is not None else "kl",
                  {"kl": BetaDistance, "reverse kl": lambda: BetaDistance(reverse=True)},
                  "distance")
@@ -337,14 +342,20 @@ def _cone_parts(n_entities, n_rows, dim, gamma, center_weight, hidden, layers, d
     else:
         angle_range = (gamma + 2.0) / dim
         entities = ConePoints(n_entities, dim, angle_range=angle_range)
+        # the tables of the relations, the intersection and then the projection network are
+        # created in this order (the reference code of ConE): a seed gives the numbers of the
+        # direct implementation
         rel = (ConeNetwork(n_rows, dim, hidden, layers, angle_range=angle_range,
-                           inverse_of=role_inverse) if relations == "network"
+                           inverse_of=role_inverse, build_network=False)
+               if relations == "network"
                else ConeRotation(n_rows, dim, angle_range=angle_range,
                                  inverse_of=role_inverse, aperture=aperture,
                                  aperture_change="signed"))
         attention = lambda: ConeAttentionIntersection(dim, dropout)  # noqa: E731
         modulus = None
     operator = _part(intersection, {"attention": attention}, "intersection")
+    if tables is None and relations == "network":
+        rel.build_network(hidden, layers)
     if distance is None:
         dist = ConeDistance(center_weight, modulus=modulus, angle_range=angle_range)
     else:

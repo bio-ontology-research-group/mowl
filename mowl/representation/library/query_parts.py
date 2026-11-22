@@ -46,9 +46,40 @@ def embedding(parameter):
 
 
 def _uniform(size, dim, low, high):
-    table = nn.Embedding(size, dim)
-    nn.init.uniform_(table.weight, a=low, b=high)
-    return table
+    # no default initialisation first: the random numbers drawn are those of one uniform
+    # tensor, so that a seed gives the tables of the reference codes
+    return nn.Embedding(size, dim, _weight=th.empty(size, dim).uniform_(low, high))
+
+
+_DEFERRED = []
+
+
+class deferred_initialisation:
+    """Context in which the Xavier initialisation of the layers of the parts is applied at
+    the end, in the order of the reference codes (all layers are created first, then
+    initialised). The numbers a seed gives are then those of the direct implementations,
+    which is what makes a trained combination comparable to them run for run."""
+
+    def __enter__(self):
+        _DEFERRED.append(([], []))
+        return self
+
+    def __exit__(self, *exc):
+        early, late = _DEFERRED.pop()
+        if exc[0] is None:
+            for layer in early + late:
+                nn.init.xavier_uniform_(layer.weight)
+        return False
+
+
+def _xavier(layers, late=False):
+    """Xavier-initialise ``layers`` now, or at the end of the enclosing
+    :class:`deferred_initialisation` (``late``: after the layers of the other parts)."""
+    if _DEFERRED:
+        _DEFERRED[-1][1 if late else 0].extend(layers)
+        return
+    for layer in layers:
+        nn.init.xavier_uniform_(layer.weight)
 
 
 # ---------------------------------------------------------------------------------------
@@ -184,8 +215,8 @@ class BetaNetwork(_QueryRelations):
             self.proj_hidden = nn.ModuleList([nn.Linear(hidden, hidden)
                                               for _ in range(layers - 1)])
             self.proj_out = nn.Linear(hidden, 2 * embed_dim)
-            for layer in (self.proj_in, self.proj_out, *self.proj_hidden):
-                nn.init.xavier_uniform_(layer.weight)
+            _xavier((self.proj_in, self.proj_out))
+            _xavier(self.proj_hidden, late=True)
         self.inverse_of = inverse_of
 
     def image(self, ids, region):
@@ -233,7 +264,7 @@ class ConeNetwork(_ConeRelations):
     accepts = (SectorCone,)
 
     def __init__(self, size=None, embed_dim=None, hidden=128, layers=1, tables=None,
-                 angle_range=0.1, inverse_of=None):
+                 angle_range=0.1, inverse_of=None, build_network=True):
         if tables is not None:
             super().__init__(axes=tables.axis_embedding, apertures=tables.aperture_embedding,
                              angle_range=tables.embedding_range, inverse_of=inverse_of)
@@ -241,12 +272,19 @@ class ConeNetwork(_ConeRelations):
                 tables.proj_in, tables.proj_hidden, tables.proj_out)
         else:
             super().__init__(size, embed_dim, angle_range=angle_range, inverse_of=inverse_of)
-            self.proj_in = nn.Linear(2 * embed_dim, hidden)
-            self.proj_hidden = nn.ModuleList([nn.Linear(hidden, hidden)
-                                              for _ in range(layers - 1)])
-            self.proj_out = nn.Linear(hidden, 2 * embed_dim)
-            for layer in (self.proj_in, self.proj_out, *self.proj_hidden):
-                nn.init.xavier_uniform_(layer.weight)
+            if build_network:
+                self.build_network(hidden, layers)
+
+    def build_network(self, hidden=128, layers=1):
+        """Create the projection network (``build_network=False`` in the constructor leaves
+        it to this call, so that a builder can create the other parts in between: the
+        reference code of ConE creates the intersection network first)."""
+        embed_dim = self.dim
+        self.proj_in = nn.Linear(2 * embed_dim, hidden)
+        self.proj_hidden = nn.ModuleList([nn.Linear(hidden, hidden) for _ in range(layers - 1)])
+        self.proj_out = nn.Linear(hidden, 2 * embed_dim)
+        _xavier((self.proj_in, self.proj_out))
+        _xavier(self.proj_hidden, late=True)
 
     def image(self, ids, region):
         r_axis, r_aperture = self.angles(ids)
@@ -359,9 +397,8 @@ class BoxAttentionIntersection(_Intersection):
         else:
             self.center_layer1, self.center_layer2 = nn.Linear(dim, dim), nn.Linear(dim, dim)
             self.offset_layer1, self.offset_layer2 = nn.Linear(dim, dim), nn.Linear(dim, dim)
-            for layer in (self.center_layer1, self.center_layer2, self.offset_layer1,
-                          self.offset_layer2):
-                nn.init.xavier_uniform_(layer.weight)
+            _xavier((self.center_layer1, self.center_layer2, self.offset_layer1,
+                     self.offset_layer2))
 
     def forward(self, regions):
         centers = th.stack([r.centre for r in regions])
@@ -402,8 +439,7 @@ class BetaAttentionIntersection(_Intersection):
         else:
             self.int_layer1 = nn.Linear(2 * dim, 2 * dim)
             self.int_layer2 = nn.Linear(2 * dim, dim)
-            for layer in (self.int_layer1, self.int_layer2):
-                nn.init.xavier_uniform_(layer.weight)
+            _xavier((self.int_layer1, self.int_layer2))
 
     def forward(self, regions):
         alpha = th.stack([r.alpha for r in regions])
@@ -445,9 +481,8 @@ class ConeAttentionIntersection(_Intersection):
             self.aperture_layer1 = nn.Linear(2 * dim, dim)
             self.aperture_layer2 = nn.Linear(dim, dim)
             self.dropout = nn.Dropout(dropout)
-            for layer in (self.axis_layer1, self.aperture_layer1, self.axis_layer2,
-                          self.aperture_layer2):
-                nn.init.xavier_uniform_(layer.weight)
+            _xavier((self.axis_layer1, self.aperture_layer1, self.axis_layer2,
+                     self.aperture_layer2))
 
     def forward(self, regions):
         axes = th.stack([r.axis for r in regions])
