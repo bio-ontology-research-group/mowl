@@ -130,6 +130,10 @@ class BoxClasses(Classes):
     through their absolute value).
 
     :param centres, offsets: Existing tables to use instead of new ones.
+    :param init: ``"separate"`` (default): centres and offsets are each drawn from
+        :math:`U(-1, 1)^n` and scaled to unit norm. ``"joint"`` (the Box2EL and TransBox
+        codes): the centre and the offset of a class form one row of :math:`U(-1, 1)^{2n}`
+        scaled to unit norm. (Only for new tables.)
 
     Part (vocabulary value): ``box``. Used by: ``elbe``, ``regd``, ``transbox``.
     """
@@ -138,12 +142,24 @@ class BoxClasses(Classes):
     part = "box"
     exact_conjunction = True
 
-    def __init__(self, size=None, embed_dim=None, centres=None, offsets=None):
+    def __init__(self, size=None, embed_dim=None, centres=None, offsets=None,
+                 init="separate"):
         super().__init__()
+        if init not in ("separate", "joint"):
+            raise ValueError("init must be 'separate' or 'joint'.")
+        self.init = init
         self.centres = centres if centres is not None else _unit_rows(
             nn.Embedding(size, embed_dim))
         self.offsets = offsets if offsets is not None else _unit_rows(
             nn.Embedding(len(self), self.embed_dim))
+        if init == "joint" and centres is None and offsets is None:
+            # as the codes do it: one row of U(-1, 1)^(2n), scaled to unit norm as a whole
+            weight = th.empty(len(self), 2 * self.embed_dim)
+            nn.init.uniform_(weight, a=-1, b=1)
+            weight = weight / th.linalg.norm(weight, dim=1, keepdim=True)
+            with th.no_grad():
+                self.centres.weight.copy_(weight[:, :self.embed_dim])
+                self.offsets.weight.copy_(weight[:, self.embed_dim:])
 
     def forward(self, ids):
         return Box(self.centres(ids), th.abs(self.offsets(ids)))

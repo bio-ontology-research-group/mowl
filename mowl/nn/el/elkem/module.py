@@ -1,15 +1,21 @@
 r"""Neural module of ELK-Em [singh2026]_."""
 
 import torch as th
-import torch.nn as nn
-import torch.nn.functional as F
 
 import mowl.nn.el.elkem.losses as L
-from mowl.nn.el.elmodule import ELModule
+from mowl.nn.el.part_built import _PartBuiltModule
 
 
-class ELKEmModule(ELModule):
+class ELKEmModule(_PartBuiltModule):
     r"""ELK-Em: closure-aware box embeddings for :math:`\mathcal{EL}^+_\bot` [singh2026]_.
+
+    The module is a :class:`~mowl.representation.ComposedGeometry` made of the parts that the
+    builder ``elkem`` of :mod:`mowl.representation.library.boxrel_methods` names (boxes with
+    classes fixed to the empty or the full box, a relation with a range box, an error box and
+    an affine map, bounds averaged over the coordinates, points for individuals, the ELK-Em
+    objective); ``module.parts`` says which. The earlier hand-written module, which the tests
+    compare this one with, is ``mowl.baselines.nn.el.elkem.module.ELKEmModule``; checkpoints of
+    that module load here.
 
     * A concept name :math:`A` is an axis-aligned box :math:`B_A = [c_A - o_A, c_A + o_A]`
       with :math:`o_A = |\tilde o_A| + \epsilon > 0`, so every trained box is non-empty.
@@ -68,7 +74,7 @@ class ELKEmModule(ELModule):
 
     * A ``gci1_bot`` row with a conjunct fixed to the empty box, and a ``gci3_bot`` row whose
       filler is fixed to the empty box, hold trivially and cost 0. The disjointness primitive
-      would charge the margin for :math:`\\bot \\sqcap \\top \\sqsubseteq \\bot`, a cost
+      would charge the margin for :math:`\bot \sqcap \top \sqsubseteq \bot`, a cost
       that no parameter can remove (``variant="reference"`` keeps that value).
     * :meth:`zero_margin_loss` returns a column ``(B, 1)`` like every other loss
       (``per_axiom_column = False`` gives ``(B,)``).
@@ -97,85 +103,116 @@ class ELKEmModule(ELModule):
 
     VARIANTS = ("paper", "reference")
 
-    #: Only the assertion losses have a distinct negative version (``ReLU(δ - ℓ)``). The
-    #: contrastive term for ``gci0``/``gci2`` is built from the margin-free scores of
-    #: positives and corruptions by :class:`~mowl.models.elkem.model.ELKEm`.
     neg_capable_gcis = frozenset({"class_assertion", "object_property_assertion"})
-
     role_axiom_capable = True
 
-    #: ``relu(offset + margin)`` terms: a positive margin requires the inclusion with a gap
-    #: (in training mode; ``module.eval()`` uses margin 0).
-    margin_semantics = "strict"
+    #: With ``per_axiom_column = False`` every loss is ``(B,)``, as the hand-written module
+    #: returned them.
+    flat_forms = frozenset({"gci0", "gci1", "gci2", "gci3", "gci0_bot", "gci1_bot", "gci3_bot",
+                            "class_assertion", "object_property_assertion", "role_inclusion",
+                            "role_chain"})
+
+    state_dict_aliases = {"class_center.weight": "class_model.centres.weight",
+                          "class_offset.weight": "class_model.offsets.weight",
+                          "bot_mask": "class_model.bot_mask",
+                          "top_mask": "class_model.top_mask",
+                          "range_center.weight": "relation_model.range_centres.weight",
+                          "range_offset.weight": "relation_model.range_offsets.weight",
+                          "error_offset.weight": "relation_model.error_offsets.weight",
+                          "slope.weight": "relation_model.slopes.weight",
+                          "shift.weight": "relation_model.vectors.weight",
+                          "ind_embedding.weight": "individual_model.centres.weight"}
 
     def __init__(self, nb_ont_classes, nb_rels, nb_inds=None, embed_dim=50, margin=0.1,
                  bot_ids=(), top_ids=(), abox_threshold=0.4, epsilon=1e-5, variant="paper"):
-        super().__init__()
+        from mowl.representation.library.boxrel_methods import elkem
         if variant not in self.VARIANTS:
             raise ValueError(f"variant must be one of {self.VARIANTS}, got {variant!r}.")
+        built = elkem(nb_ont_classes, nb_rels, nb_inds or 0, embed_dim=embed_dim,
+                      margin=margin, bot_ids=bot_ids, top_ids=top_ids,
+                      abox_threshold=abox_threshold, epsilon=epsilon, variant=variant)
+        super().__init__(built)
         self.variant = variant
         self.nb_ont_classes = nb_ont_classes
         self.nb_rels = nb_rels
         self.nb_inds = nb_inds
         self.embed_dim = embed_dim
-        self.margin = margin
-        self.abox_threshold = abox_threshold
-        self.epsilon = epsilon
 
-        # Initialisation ranges follow the authors' reference implementation.
-        self.class_center = self._uniform(nb_ont_classes, -0.5, 0.5)
-        self.class_offset = self._uniform(nb_ont_classes, -0.1, 0.1)
-        self.range_center = self._uniform(nb_rels, -0.5, 0.5)
-        self.range_offset = self._uniform(nb_rels, -0.1, 0.1)
-        self.error_offset = self._uniform(nb_rels, -0.1, 0.1)
-        self.slope = self._uniform(nb_rels, 0.9, 1.1)
-        self.shift = self._uniform(nb_rels, -0.1, 0.1)
-        if nb_inds:
-            self.ind_embedding = self._uniform(nb_inds, -0.5, 0.5)
-        else:
-            self.ind_embedding = None
+    # -- the names of the earlier module -----------------------------------------------------
+    @property
+    def class_center(self):
+        return self.class_model.centres
 
-        self.register_buffer("bot_mask", th.zeros(nb_ont_classes, dtype=th.bool))
-        self.register_buffer("top_mask", th.zeros(nb_ont_classes, dtype=th.bool))
-        self.set_fixed_classes(bot_ids, top_ids)
+    @property
+    def class_offset(self):
+        return self.class_model.offsets
 
-    def _uniform(self, num, low, high):
-        embed = nn.Embedding(num, self.embed_dim)
-        nn.init.uniform_(embed.weight, low, high)
-        return embed
+    @property
+    def range_center(self):
+        return self.relation_model.range_centres
+
+    @property
+    def range_offset(self):
+        return self.relation_model.range_offsets
+
+    @property
+    def error_offset(self):
+        return self.relation_model.error_offsets
+
+    @property
+    def slope(self):
+        return self.relation_model.slopes
+
+    @property
+    def shift(self):
+        return self.relation_model.vectors
+
+    @property
+    def ind_embedding(self):
+        return None if self.individual_model is None else self.individual_model.centres
+
+    @property
+    def bot_mask(self):
+        return self.class_model.bot_mask
+
+    @property
+    def top_mask(self):
+        return self.class_model.top_mask
+
+    @property
+    def abox_threshold(self):
+        return self.objective.abox_threshold
+
+    @abox_threshold.setter
+    def abox_threshold(self, value):
+        self.objective.abox_threshold = float(value)
+
+    @property
+    def epsilon(self):
+        """Lower bound added to the half-widths of classes and to the slopes of roles."""
+        return self.class_model.epsilon
+
+    @epsilon.setter
+    def epsilon(self, value):
+        self.class_model.epsilon = value
+        self.relation_model.eps = value
 
     def set_fixed_classes(self, bot_ids=(), top_ids=()):
         """Fix classes to the empty box (``bot_ids``) or the full box (``top_ids``)."""
-        self.bot_mask.zero_()
-        self.top_mask.zero_()
-        bot_ids = th.as_tensor(list(bot_ids), dtype=th.long)
-        top_ids = th.as_tensor(list(top_ids), dtype=th.long)
-        self.bot_mask[bot_ids.to(self.bot_mask.device)] = True
-        self.top_mask[top_ids.to(self.top_mask.device)] = True
-        if (self.bot_mask & self.top_mask).any():
-            raise ValueError("A class cannot be fixed to both the empty and the full box.")
+        self.class_model.fix(bot_ids, top_ids)
 
     # ------------------------------------------------------------------ geometry
 
     def class_box(self, idx):
         """Lower and upper corners of the boxes of the classes ``idx``."""
-        c = self.class_center(idx)
-        o = self.class_offset(idx).abs() + self.epsilon
-        lower, upper = c - o, c + o
-        bot = self.bot_mask[idx].unsqueeze(-1)
-        top = self.top_mask[idx].unsqueeze(-1)
-        big = th.full_like(c, L.BIG)
-        lower = th.where(bot, big, th.where(top, -big, lower))
-        upper = th.where(bot, -big, th.where(top, big, upper))
-        return lower, upper
+        box = self.class_model(idx)
+        return box.lower, box.upper
 
     def role(self, idx):
         """Role tuple ``(range_l, range_u, error_l, error_u, slope, shift)`` of ``idx``."""
-        rc = self.range_center(idx)
-        ro = self.range_offset(idx).abs()
-        eo = self.error_offset(idx).abs()
-        m = self.slope(idx).abs() + self.epsilon
-        return rc - ro, rc + ro, -eo, eo, m, self.shift(idx)
+        rel = self.relation_model
+        box, error = rel.range(idx), rel.error(idx)
+        return box.lower, box.upper, -error, error, rel.slope(idx), rel.vectors(idx)
 
     def individual(self, idx):
         if self.ind_embedding is None:
@@ -186,90 +223,22 @@ class ELKEmModule(ELModule):
     def existential_box(self, role_idx, class_idx):
         r"""Box of :math:`\exists r.C` for role indices ``role_idx`` and class indices
         ``class_idx``."""
-        return L.existential_box(self.role(role_idx), *self.class_box(class_idx),
-                                 sound=self.variant == "paper")
-
-    def _fixed_empty(self, idx):
-        return self.bot_mask[idx]
-
-    def _trivial_to_zero(self, loss, trivial):
-        r"""Rows of a disjointness axiom with a conjunct fixed to the empty box hold trivially
-        (:math:`\bot \sqcap \top \sqsubseteq \bot`). The disjointness primitive would give
-        them the margin as cost (the half-widths :math:`-\text{BIG}` and :math:`+\text{BIG}` of
-        :math:`\bot` and :math:`\top` cancel), a cost no parameter can remove. The
-        ``"reference"`` variant keeps the primitive's value."""
-        if self.variant == "reference":
-            return loss
-        return th.where(trivial, th.zeros_like(loss), loss)
+        box = self.exists(role_idx, self.classes(class_idx))
+        return box.lower, box.upper
 
     # ------------------------------------------------------------------ losses
 
     def _current_margin(self):
         return self.margin if self.training else 0.0
 
-    def _loss(self, gci_name, data, margin, neg=False):
-        if gci_name == "gci0":
-            return L.inclusion_loss(*self.class_box(data[:, 0]), *self.class_box(data[:, 1]),
-                                    margin)
-        if gci_name == "gci0_bot":
-            c = data[:, 0]
-            o = self.class_offset(c).abs() + self.epsilon
-            loss = F.relu(o + margin).mean(dim=-1)
-            return th.where(self._fixed_empty(c), th.zeros_like(loss), loss)
-        if gci_name == "gci1":
-            l1, u1 = self.class_box(data[:, 0])
-            l2, u2 = self.class_box(data[:, 1])
-            il, iu = L.intersection(l1, u1, l2, u2)
-            incl = L.inclusion_loss(il, iu, *self.class_box(data[:, 2]), margin)
-            over = L.overlap_loss(l1, u1, l2, u2, margin)
-            trivial = self._fixed_empty(data[:, 0]) | self._fixed_empty(data[:, 1])
-            return incl + th.where(trivial, th.zeros_like(over), over)
-        if gci_name == "gci1_bot":
-            loss = L.disjoint_loss(*self.class_box(data[:, 0]), *self.class_box(data[:, 1]),
-                                   margin)
-            return self._trivial_to_zero(
-                loss, self._fixed_empty(data[:, 0]) | self._fixed_empty(data[:, 1]))
-        if gci_name == "gci2":
-            el, eu = self.existential_box(data[:, 1], data[:, 2])
-            incl = L.inclusion_loss(*self.class_box(data[:, 0]), el, eu, margin)
-            if self.variant == "reference":
-                rl, ru = self.role(data[:, 1])[:2]
-                incl = incl + L.overlap_loss(rl, ru, *self.class_box(data[:, 2]), margin)
-            return incl
-        if gci_name == "gci3":
-            role = self.role(data[:, 0])
-            cl, cu = self.class_box(data[:, 1])
-            el, eu = L.existential_box(role, cl, cu, sound=self.variant == "paper")
-            incl = L.inclusion_loss(el, eu, *self.class_box(data[:, 2]), margin)
-            over = L.overlap_loss(role[0], role[1], cl, cu, margin)
-            trivial = self._fixed_empty(data[:, 1])
-            return incl + th.where(trivial, th.zeros_like(over), over)
-        if gci_name == "gci3_bot":
-            role = self.role(data[:, 0])
-            loss = L.disjoint_loss(role[0], role[1], *self.class_box(data[:, 1]), margin)
-            return self._trivial_to_zero(loss, self._fixed_empty(data[:, 1]))
-        if gci_name == "role_inclusion":
-            return L.role_inclusion_loss(self.role(data[:, 0]), self.role(data[:, 1]), margin)
-        if gci_name == "role_chain":
-            return L.role_chain_loss(self.role(data[:, 0]), self.role(data[:, 1]),
-                                     self.role(data[:, 2]), margin)
-        if gci_name == "class_assertion":
-            # Column order of mOWL's ClassAssertionDataset: [individual, class].
-            loss = L.point_membership_loss(self.individual(data[:, 0]),
-                                           *self.class_box(data[:, 1]), margin)
-        elif gci_name == "object_property_assertion":
-            # Column order of ObjectPropertyAssertionDataset: [subject, property, object].
-            loss = L.role_assertion_loss(self.individual(data[:, 0]), self.role(data[:, 1]),
-                                         self.individual(data[:, 2]), margin)
-        else:
-            raise ValueError(f"Unknown normal form {gci_name!r}.")
-        if neg:
-            return L.hinge_negative_loss(loss, self.abox_threshold)
-        return loss
-
     def zero_margin_loss(self, data, gci_name):
         r"""Margin-free loss :math:`\ell^0(\alpha)` of each row, whatever the mode."""
-        loss = self._loss(gci_name, data, 0.0)
+        margin = self.objective.margin
+        self.objective.margin = 0.0
+        try:
+            loss = self.cost(gci_name, data)
+        finally:
+            self.objective.margin = margin
         if self.per_axiom_column and loss.ndim == 1:
             return loss.unsqueeze(-1)
         return loss
@@ -278,54 +247,20 @@ class ELKEmModule(ELModule):
         r"""Score :math:`s(\alpha) = \exp(-\ell^0(\alpha)) \in (0, 1]` (Eq. 4 of the paper)."""
         return th.exp(-self.zero_margin_loss(data, gci_name))
 
-    def gci0_loss(self, data, neg=False):
-        return self._loss("gci0", data, self._current_margin(), neg)
-
-    def gci0_bot_loss(self, data, neg=False):
-        return self._loss("gci0_bot", data, self._current_margin(), neg)
-
-    def gci1_loss(self, data, neg=False):
-        return self._loss("gci1", data, self._current_margin(), neg)
-
-    def gci1_bot_loss(self, data, neg=False):
-        return self._loss("gci1_bot", data, self._current_margin(), neg)
-
-    def gci2_loss(self, data, neg=False):
-        return self._loss("gci2", data, self._current_margin(), neg)
-
-    def gci3_loss(self, data, neg=False):
-        return self._loss("gci3", data, self._current_margin(), neg)
-
-    def gci3_bot_loss(self, data, neg=False):
-        return self._loss("gci3_bot", data, self._current_margin(), neg)
-
-    def role_inclusion_loss(self, data, neg=False):
-        return self._loss("role_inclusion", data, self._current_margin(), neg)
-
-    def role_chain_loss(self, data, neg=False):
-        return self._loss("role_chain", data, self._current_margin(), neg)
-
-    def class_assertion_loss(self, data, neg=False):
-        return self._loss("class_assertion", data, self._current_margin(), neg)
-
-    def object_property_assertion_loss(self, data, neg=False):
-        return self._loss("object_property_assertion", data, self._current_margin(), neg)
-
     # ------------------------------------------------------------------ regularisers
 
     def size_regularization_loss(self, class_cap=0.25, range_cap=0.25, error_cap=0.05):
         r"""Box-size penalty of the authors' reference implementation (not described in the
         paper): :math:`\mathrm{mean}\,\mathrm{ReLU}(o - \mathrm{cap})^2` over the half-widths
-        of the trained class boxes, role ranges and role error boxes."""
-        free = ~(self.bot_mask | self.top_mask)
-        class_o = self.class_offset.weight[free].abs()
-        terms = [F.relu(self.range_offset.weight.abs() - range_cap).pow(2).mean(),
-                 F.relu(self.error_offset.weight.abs() - error_cap).pow(2).mean()]
-        if class_o.numel():
-            terms.append(F.relu(class_o - class_cap).pow(2).mean())
-        return sum(terms)
+        of the trained class boxes, role ranges and role error boxes (the part
+        :class:`~mowl.representation.library.boxrel_regularizers.SizeCapPenalty`)."""
+        from mowl.representation.library.boxrel_regularizers import SizeCapPenalty
+        return SizeCapPenalty(class_cap, range_cap, error_cap).penalty(self)
 
     def lexical_loss(self, ind_idx, features, decay=1.0):
         r"""Lexical regularisation loss (Eq. 6 of the paper) of the individuals ``ind_idx``,
         whose external representations are the rows of ``features``."""
         return L.lexical_loss(self.individual(ind_idx), features, decay)
+
+
+__all__ = ["ELKEmModule"]

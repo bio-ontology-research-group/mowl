@@ -207,7 +207,7 @@ NEUTRAL = {
     "class:union of boxes with slots": {"components", "max_components", "bump"},
     "class:unit box": {"min_delta", "init_side", "soft"},
     "class:box with bump": set(), "class:box": set(),
-    "relation:affine map": {"scales", "eps"},
+    "relation:affine map": {"scales", "eps", "shift_bounds", "scale_bounds"},
     "relation:affine map with range and error box": {"range_centres", "range_offsets",
                                                      "error_offsets", "slopes"},
     "relation:angle rotation": {"angle_range", "inverse_of"},

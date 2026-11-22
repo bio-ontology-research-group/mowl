@@ -4,7 +4,8 @@ from unittest import TestCase
 
 import torch as th
 
-from mowl.nn import (BoxELModule, ELBEModule, ELEmModule, ELKEmModule, OctagonELModule,
+from mowl.baselines.nn.el.boxel.module import BoxELModule   # the direct module has no margin
+from mowl.nn import (ELBEModule, ELEmModule, ELKEmModule, OctagonELModule,
                      PrismModule, TransBoxModule)
 from mowl.nn.el.regd import RegDELEmModule
 from mowl.representation import (Ball, Box, CornerBox, ConstructorUnavailable,

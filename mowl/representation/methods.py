@@ -191,15 +191,16 @@ def elem(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1, r
 
 
 def elbe(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
-         all_negatives=False, epsilon=0.01, gci3="overlap", tables=None):
+         all_negatives=False, epsilon=0.01, gci3="overlap", init="separate", tables=None):
     """ELBE (Peng et al. 2022): ELEmbeddings with boxes for balls, compared coordinate by
     coordinate, with a strict margin and no penalty.
 
+    :param init: ``"separate"`` or ``"joint"``, see :class:`~mowl.representation.BoxClasses`.
     :param tables: A module with ``class_embed``, ``class_offset``, ``rel_embed`` (and
         ``ind_embed``, ``ind_offset``) to share parameters with.
     """
     t = tables
-    classes = BoxClasses(nb_classes, embed_dim) if t is None else BoxClasses(
+    classes = BoxClasses(nb_classes, embed_dim, init=init) if t is None else BoxClasses(
         centres=t.class_embed, offsets=t.class_offset)
     relations = Translation(nb_relations, embed_dim) if t is None else Translation(
         vectors=t.rel_embed)

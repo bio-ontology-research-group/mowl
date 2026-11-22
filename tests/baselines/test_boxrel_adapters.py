@@ -1,10 +1,15 @@
-"""The geometry of TransBox, BoxEL, BoxSEL and ELK-Em modules gives the modules' numbers,
-for every form and every option that changes a loss, with the modules' parameters shared."""
+"""The geometry of the direct TransBox, BoxEL, BoxSEL and ELK-Em modules (the baselines) gives
+the modules' numbers, for every form and every option that changes a loss, with the modules'
+parameters shared. (The modules users get are geometries themselves; ``geometry_of`` describes
+the direct modules, and the modules of earlier releases.)"""
 from unittest import TestCase
 
 import torch as th
 
-from mowl.nn import BoxELModule, BoxSELModule, ELKEmModule, TransBoxModule
+from mowl.baselines.nn.el.boxel.module import BoxELModule
+from mowl.baselines.nn.el.boxsel.module import BoxSELModule
+from mowl.baselines.nn.el.elkem.module import ELKEmModule
+from mowl.baselines.nn.el.transbox.module import TransBoxModule
 from mowl.representation import geometry_of, ComposedGeometry
 from mowl.training import Regularization
 
