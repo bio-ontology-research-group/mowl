@@ -72,6 +72,35 @@ model without a reasoner; ``evaluate_model(use_reasoner=True)`` adds the compari
 the canonical model (existence of witnesses, dead elements, faithfulness on named classes,
 and whether the model is exact).
 
+Made of parts
+-------------
+
+GroundedEL is a combination of the parts of :mod:`mowl.representation`; the parts of this
+method are designed together (the class and relation models are regions *around* the
+positions of the elements), so they live in one geometry, :class:`mowl.nn.GroundedELModule`:
+the class model is a union of boxes per class, the relation model a region over pairs
+(``role_mode="product"``) or boxes of translations, the individual model the position of the
+element, the measure the bounds of the boxes. The module names them (``module.parts``). The
+objective is the grounded constraints
+(:class:`~mowl.models.grounded.objective.GroundedConstraints`: hinge losses of the axioms
+grounded over sampled elements and region points), the training regime the composition of the
+section below, and the evaluation regime ``crisp_report`` and ``evaluate_model``
+(:class:`~mowl.models.grounded.evaluation.GroundedEvaluation`). Each is swappable: the
+relation model by ``role_mode``, the objective by its options (``n_region_samples``,
+``neg_weight``, ``agg``), the training regime by a
+:class:`~mowl.training.ComposedRegime`.
+
+.. testcode::
+
+   from mowl.representation import METHODS
+
+   module = METHODS["grounded"](4, 2, 6, 4, role_mode="translation")
+   print(module.parts["classes"], "|", module.parts["relations"])
+
+.. testoutput::
+
+   union of boxes | box of translations
+
 Logical query answering
 -----------------------
 

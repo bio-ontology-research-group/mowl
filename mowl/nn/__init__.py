@@ -7,7 +7,6 @@ from .el.boxsquaredel.module import BoxSquaredELModule
 from .el.multiboxel.module import MultiBoxELModule
 from .el.prism.module import PrismModule
 from .el.canonical_mixture.module import CanonicalMixtureModule
-from .el.grounded.module import GroundedELModule
 from .el.transbox.module import TransBoxModule
 from .alc.module import ALCModule
 from .alc.falcon.module import FALCONModule
@@ -28,3 +27,13 @@ from .el.boxsel.module import BoxSELModule
 from .alc.e2r.module import E2RModule
 from .el.concept2box.module import Concept2BoxModule
 from .order.module import HyperbolicConesModule, ShadowConesModule, DiskEmbeddingsModule
+
+
+def __getattr__(name):
+    # GroundedELModule is a mowl.representation.Geometry, which imports mowl.nn itself: it is
+    # imported on first use, so that importing mowl.representation first does not meet a
+    # half-initialised mowl.nn.
+    if name == "GroundedELModule":
+        from .el.grounded.module import GroundedELModule
+        return GroundedELModule
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

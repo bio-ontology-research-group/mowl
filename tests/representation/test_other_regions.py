@@ -43,7 +43,8 @@ def _exact_grounded():
 def test_grounded_geometry_shares_the_module_and_is_exact_in_the_limit():
     module, lm = _exact_grounded()
     g = geometry_of(module)
-    assert isinstance(g, GroundedGeometry) and g.module is module
+    assert g is module                       # the module is its own geometry (built from parts)
+    assert isinstance(GroundedGeometry(module), GroundedGeometry)   # the adapter still works
     labels = lm.dense_labels()
     a, b = zip(*itertools.product(range(4), repeat=2))
     cost = g.inside(g.classes(th.tensor(a)), g.classes(th.tensor(b))).reshape(4, 4)

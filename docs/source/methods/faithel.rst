@@ -13,6 +13,30 @@ the card in the :doc:`method catalogue <catalogue>`.
    article (Lacerda, Ozaki & Guimarães, 2024) on which the code is based. Statements that
    only the paper makes are not checked here.
 
+Made of parts
+-------------
+
+FaithEL is a combination of the parts of :mod:`mowl.representation`: the TBox is a
+*constructed* part (:class:`~mowl.representation.library.solved_faithel.FaithfulTBox`,
+fixed by reasoning), the class model gives every class a moving point anchored at the
+centroid of its fixed convex region
+(:class:`~mowl.representation.library.solved_faithel.AnchoredClasses`), the relation model a
+moving head and tail point (:class:`~mowl.representation.library.solved_faithel.AnchoredPairs`),
+the measure is the anchor distance, the objective the mean squared errors of the code, and the
+training regime the authors' alternating minibatches. ``FaithEL.module`` is the geometry of
+these parts; ``FaithEL(dataset, training=FullBatch())`` swaps the training regime.
+
+.. testcode::
+
+   from mowl.representation import METHODS
+
+   geometry = METHODS["faithel"](4, 1, 3, 5)         # the combination, from sizes only
+   print(geometry.parts["classes"], "|", geometry.parts["measure"])
+
+.. testoutput::
+
+   convex region | point-to-region distance
+
 Geometry
 --------
 
