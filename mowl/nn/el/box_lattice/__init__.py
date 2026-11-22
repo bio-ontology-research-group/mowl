@@ -1,1 +1,1 @@
-from .module import BoxLatticeModule, UnitCubeBoxModule, join, meet, volume  # noqa: F401
+from .module import BoxLatticeModule, join, meet, volume  # noqa: F401

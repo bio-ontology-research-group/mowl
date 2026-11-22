@@ -1,7 +1,7 @@
 r"""Box lattice embeddings of the class taxonomy."""
 import torch as th
 
-from mowl.models.order_embeddings.base import TaxonomyEmbeddingModel
+from mowl.models.order_parts_a import TaxonomyEmbeddingModel
 from mowl.nn.el.box_lattice.module import BoxLatticeModule
 
 
@@ -12,7 +12,9 @@ class BoxLattice(TaxonomyEmbeddingModel):
     probability :math:`P(D \mid C) = \mathrm{vol}(C \cap D) / \mathrm{vol}(C) = 1`, trained
     with the cross entropy on conditional probabilities and the lower bound of the joint
     for disjoint boxes. See :class:`~mowl.nn.el.box_lattice.BoxLatticeModule` for what is
-    from the paper and what is ours.
+    from the paper and what is ours. The model is a combination of parts
+    (``model.module.parts``), defined once in
+    :func:`mowl.representation.library.hierarchy_methods.box_lattice`.
 
     **Supported.** Axioms :math:`C \sqsubseteq D` between named classes (training and
     scoring); the score of a candidate is the positive loss (lower is more plausible).
