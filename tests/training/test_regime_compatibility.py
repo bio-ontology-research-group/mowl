@@ -28,14 +28,25 @@ def test_the_generic_el_loop_takes_every_regime():
         assert not unsupported_hooks(PairwiseMarginRankingLoss(), cls)
 
 
-@pytest.mark.parametrize("name", ["FALCONModel", "E2R", "BoxE", "FaithEL",
-                                  "DFALCModel", "CatE"])
+@pytest.mark.parametrize("name", ["FALCONModel", "BoxE", "DFALCModel"])
 def test_models_with_their_own_objective_refuse_loss_and_negative_regimes(name):
     import mowl.models as models
     cls = getattr(models, name)
     assert frozenset(cls.training_hooks) == frozenset()
     assert unsupported_hooks(PairwiseMarginRankingLoss(), cls) >= {"loss"}
     assert unsupported_hooks(LinearDecay(), cls)
+
+
+@pytest.mark.parametrize("name", ["E2R", "FaithEL", "CatE", "BinaryCodeBox", "HiT", "OnT"])
+def test_models_whose_loop_is_the_regime_loop_take_every_regime(name):
+    """E2R, FaithEL, CatE, BinaryCodeBox, HiT and OnT have no loop of their own: they run the
+    generic loop of :mod:`mowl.training.loop` (or that of the EL models) and consult every
+    hook, so a loss, negatives or a schedule is honoured."""
+    import mowl.models as models
+    cls = getattr(models, name)
+    assert frozenset(cls.training_hooks) == frozenset(HOOKS)
+    assert not unsupported_hooks(PairwiseMarginRankingLoss(), cls)
+    assert not unsupported_hooks(LinearDecay(), cls)
 
 
 def test_volume_multiboxel_takes_the_regimes_since_its_splits_are_a_regime():
@@ -47,9 +58,7 @@ def test_volume_multiboxel_takes_the_regimes_since_its_splits_are_a_regime():
 
 
 def test_assigning_an_unsupported_regime_raises():
-    from mowl.models import FaithEL, Query2Box
-    with pytest.raises(TypeError, match="does not consult"):
-        FaithEL(tiny_dataset()).training_regime = PairwiseMarginRankingLoss()
+    from mowl.models import Query2Box
     model = Query2Box(tiny_dataset(), embed_dim=8)
     with pytest.raises(TypeError, match="would be ignored"):
         model.training_regime = EitherSideCorruption()

@@ -45,10 +45,15 @@ from mowl.training.elkem import (ELKEmTraining, FixedConceptRouting, AssertionCo
 from mowl.training.conditional import ConditionalStatements, Conditional
 from mowl.training.splits import ShuffledSplits
 from mowl.training.box_regularization import BoxBatchRegulariser
+from mowl.training.graph import (EpochBatches, EdgeCorruption, KnownRowMask, SelfAdversarialBCE,
+                                 GroupedMarginLoss, HeadRestrictedHinge, ValidationPatience)
+from mowl.training.loop import RegimeTrained, Rows
 from mowl.training.regularization import (Regularization, Regularizer, NormPenalty,
                                           MaxNormPenalty, PowerPenalty, SphereProjection,
-                                          BallProjection, IntervalProjection,
+                                          BallProjection, IntervalProjection, ModuleProjection,
                                           embedding_tables)
+from mowl.training.alternating import AlternatingMinibatches, FullBatch, FormSelection
+from mowl.training.text import LinearWarmupDecay, SampledLogicalLosses
 
 __all__ = [
     "HOOKS", "SCHEDULE_HOOKS", "unsupported_hooks",
@@ -84,4 +89,8 @@ __all__ = [
     "ELKEmTraining", "FixedConceptRouting", "AssertionCorruption", "PearsonContrastiveTerm",
     "LexicalRegularisation", "ValidationCheckpoint", "ConditionalStatements", "Conditional",
     "ShuffledSplits", "BoxBatchRegulariser",
+    "EpochBatches", "EdgeCorruption", "KnownRowMask", "SelfAdversarialBCE", "GroupedMarginLoss",
+    "HeadRestrictedHinge", "ValidationPatience", "RegimeTrained", "Rows",
+    "ModuleProjection", "AlternatingMinibatches", "FullBatch", "FormSelection",
+    "LinearWarmupDecay", "SampledLogicalLosses",
 ]

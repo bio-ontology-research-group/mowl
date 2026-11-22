@@ -48,6 +48,29 @@ source or the target with a random vertex, self-adversarial negative weights, an
 :math:`w_r \lVert \mathbf{1} - B \rVert_{\ell_1}` with :math:`w_r` = ``code_reg`` (Section
 4.5), which penalises dropping dimensions and so keeps more of the transitivity bias.
 
+The training is not code of the model but a combination of regimes (:mod:`mowl.training`) that
+the method names; read it, or replace one piece:
+
+.. testcode::
+
+   from mowl.datasets.builtin import FamilyDataset
+   from mowl.models import BinaryCodeBox
+   from mowl.training import EdgeCorruption, EpochBatches, SelfAdversarialBCE
+
+   model = BinaryCodeBox(FamilyDataset(), embed_dim=4, num_negs=8, batch_size=4)
+   print([r.key for r in model.training_regime.regimes])
+   # the same method with the plain sum of Eq. (10) instead of the self-adversarial weights
+   parts = [r if not isinstance(r, SelfAdversarialBCE) else SelfAdversarialBCE(False)
+            for r in model.training_regime.regimes]
+   from mowl.training import ComposedRegime
+   model.training_regime = ComposedRegime(*parts)
+   print(len(model.train(epochs=2)))
+
+.. testoutput::
+
+   ['epoch-batches', 'edge-corruption', 'known-row-mask', 'self-adversarial-bce']
+   2
+
 What the paper leaves open and mOWL chooses:
 
 * codes are the sigmoid of free logits (the paper only says :math:`B \in [0, 1]`);

@@ -96,9 +96,15 @@ def _batch(model, size=24):
 
 
 def _text_losses(model):
+    """The loss of one step on the first training triplets: the combination computes it through
+    the regimes of the loop (``batch_loss`` of the loop), the direct code in its own method."""
+    from mowl.training.loop import RegimeTrained
+    if isinstance(model, RegimeTrained):
+        triplets = model.training_triplets()[:24]
+        return {"loss": model.batch_loss({"triplet": model.triplet_rows(triplets)})}
     triplets, negatives = _batch(model)
-    loss, parts = model.batch_loss(triplets, negatives)
-    return {"loss": loss, **{k: th.tensor(v) for k, v in parts.items()}}
+    loss, _ = model.batch_loss(triplets, negatives)
+    return {"loss": loss}
 
 
 def _text_scores(model):

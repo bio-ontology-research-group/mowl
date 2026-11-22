@@ -24,7 +24,9 @@ centroid of its fixed convex region
 moving head and tail point (:class:`~mowl.representation.library.solved_faithel.AnchoredPairs`),
 the measure is the anchor distance, the objective the mean squared errors of the code, and the
 training regime the authors' alternating minibatches. ``FaithEL.module`` is the geometry of
-these parts; ``FaithEL(dataset, training=FullBatch())`` swaps the training regime.
+these parts; ``FaithEL(dataset, training=FullBatch())`` swaps the batching of the training regime
+(:class:`~mowl.training.AlternatingMinibatches` by default; the projection into the balls around the
+centroids is a :class:`~mowl.training.ModuleProjection` of the same regime).
 
 .. testcode::
 

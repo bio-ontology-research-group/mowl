@@ -355,6 +355,11 @@ class SubspaceObjective(Objective):
     """
 
     def __init__(self, margin=0.0, role_unit_length=True, **kwargs):
+        if margin:
+            raise ValueError(
+                "The equations of E2R have no margin (their losses are squared residuals that "
+                "are zero exactly when the axiom holds), so margin must be 0; got "
+                f"{margin}.")
         super().__init__(margin, **kwargs)
         self.role_unit_length = bool(role_unit_length)
 
@@ -664,6 +669,8 @@ def e2r(nb_classes, nb_relations, nb_individuals=0, embed_dim=100, margin=0.0,
     objective, and the structure terms and regularisers of eqs. (1)-(3), (11), (12).
 
     :param embed_dim: :math:`d`; the vectors have ``2 d`` real coordinates.
+    :param margin: Must be 0: the losses of E2R have no margin, and a margin that no part
+        reads is refused rather than ignored.
     :param role_unit_length: Unit-length terms in the loss of role assertions, see
         :class:`SubspaceObjective`.
     :param unit_length: Unit-length term in the cost of a point in a subspace
@@ -674,6 +681,9 @@ def e2r(nb_classes, nb_relations, nb_individuals=0, embed_dim=100, margin=0.0,
     :param tables: A :class:`~mowl.baselines.nn.alc.e2r.module.E2RModule` (the direct
         implementation) to share parameters with.
     """
+    if margin:
+        raise ValueError(f"E2R has no margin (its losses are zero exactly when the axiom "
+                         f"holds), so margin must be 0; got {margin}.")
     return SubspaceGeometry(**e2r_parts(nb_classes, nb_relations, nb_individuals, embed_dim,
                                         top_index, bottom_index, role_unit_length, unit_length,
                                         regularization, tables))

@@ -44,6 +44,7 @@ from mowl.representation.methods import register_method
 from mowl.representation.objectives import Objective
 from mowl.representation.regions import ConstructorUnavailable, Region
 from mowl.representation.relation_models import Relations
+from mowl.training.alternating import AlternatingMinibatches, FullBatch  # noqa: F401  (loops)
 
 __all__ = ["Anchored", "AnchoredPair", "AnchoredExists", "AnchoredClasses", "AnchoredPairs",
            "AnchorDistance", "AnchoredObjective", "FaithfulTBox", "FaithELGeometry",
@@ -471,76 +472,7 @@ class FaithELGeometry(ComposedGeometry):
                 "conjunction": self.class_model.conjunction_kind, "existential": "exact"}
 
 
-# -- training regimes -------------------------------------------------------------------------------
-class AlternatingMinibatches:
-    """The loop of the authors' code: per epoch, the concept assertions and then the role
-    assertions, each in a random order and in minibatches; one Adam step and one projection
-    per minibatch. ``model.loss_history`` holds the mean loss of every epoch.
-
-    :param batch_size: Assertions per step (default: the model's).
-    :param forms: The forms and the columns of their rows.
-    """
-
-    key = "alternating-minibatches"
-    forms = (("class_assertion", 2), ("object_property_assertion", 3))
-
-    def __init__(self, batch_size=None):
-        self.batch_size = batch_size
-
-    def run(self, model, epochs, epoch_callback=None):
-        batch = self.batch_size or model.batch_size
-        data = {}
-        for name, width in self.forms:
-            ds = model.training_datasets.get(name)
-            data[name] = ds[:].to(model.device) if ds is not None and len(ds) else \
-                th.empty((0, width), dtype=th.long, device=model.device)
-        opt = th.optim.Adam(model.module.parameters(), lr=model.learning_rate)
-        model.loss_history = []
-        for epoch in range(epochs):
-            total, steps = 0.0, 0
-            for name, _ in self.forms:
-                rows = data[name]
-                perm = th.randperm(len(rows), device=model.device)
-                for s in range(0, len(rows), batch):
-                    opt.zero_grad()
-                    loss = model.module.cost(name, rows[perm[s:s + batch]]).mean()
-                    loss.backward()
-                    opt.step()
-                    model.module.project()
-                    total += float(loss.detach())
-                    steps += 1
-            model.loss_history.append(total / max(steps, 1))
-            if epoch_callback is not None:
-                epoch_callback(epoch, model)
-
-
-class FullBatch:
-    """One step per epoch on all assertions of both forms (the mean of the two losses): the
-    generic loop of the other models, as a swap for :class:`AlternatingMinibatches`."""
-
-    key = "full-batch"
-    forms = AlternatingMinibatches.forms
-
-    def run(self, model, epochs, epoch_callback=None):
-        data = {}
-        for name, width in self.forms:
-            ds = model.training_datasets.get(name)
-            data[name] = ds[:].to(model.device) if ds is not None and len(ds) else None
-        opt = th.optim.Adam(model.module.parameters(), lr=model.learning_rate)
-        model.loss_history = []
-        for epoch in range(epochs):
-            opt.zero_grad()
-            loss = sum(model.module.cost(name, rows).mean()
-                       for name, rows in data.items() if rows is not None)
-            if not isinstance(loss, th.Tensor):
-                model.loss_history.append(0.0)
-                continue
-            loss.backward()
-            opt.step()
-            model.module.project()
-            model.loss_history.append(float(loss.detach()))
-            if epoch_callback is not None:
-                epoch_callback(epoch, model)
+# -- training regimes: the loops are regimes of mowl.training (imported above) ------------------
 
 
 # -- the method ------------------------------------------------------------------------------------

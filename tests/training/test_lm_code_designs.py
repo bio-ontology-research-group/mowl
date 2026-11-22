@@ -41,19 +41,21 @@ def test_attach_rejects_non_lm_models():
 
 
 @pytest.mark.parametrize("cls", (HiTCodeTraining, OnTCodeTraining))
-def test_hit_accepts_only_lm_designs(cls):
+def test_hit_takes_the_lm_designs_and_the_other_regimes(cls):
     from mowl.models.hit.model import HiT
     from mowl.nn.lm.encoders import BagOfWordsEncoder
     from mowl.training.margin import SlackMargin
     model = HiT(tiny_dataset(), encoder=BagOfWordsEncoder(dim=8),
                 model_filepath=os.path.join(scratch_dir(), "hit.pt"))
-    model.training_regime = cls()   # records the design; training is unchanged
+    model.training_regime = cls()   # the design of the reference code: the combination the model names
     assert model.training_regime.key == cls.key
     assert model.training_regime.model is model
     model.training_regime = None
     assert model.training_regime is None
-    with pytest.raises(ValueError, match="does not consult regime hooks"):
-        model.training_regime = SlackMargin(0.1)   # an EL hook regime: would be ignored
+    # an EL hook regime is honoured now: the loop of HiT consults every hook
+    model.training_regime = SlackMargin(0.1)
+    assert model.training_regime.key == SlackMargin.key
+    model.training_regime = None
     with pytest.raises(TypeError):
         model.training_regime = "ont-code-training"
 

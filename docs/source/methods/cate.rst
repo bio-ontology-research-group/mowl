@@ -163,6 +163,24 @@ term for the interaction task) in one go:
 
     mean False
 
+The training of the model is the combination of regimes that it names by default
+(``model.training_regime``): minibatches over the morphisms
+(:class:`~mowl.training.EpochBatches`), corruptions of the superconcept
+(:class:`~mowl.training.EdgeCorruption`), the mask of corruptions that are morphisms
+(:class:`~mowl.training.KnownRowMask`), the loss of Eq. 7
+(:class:`~mowl.training.GroupedMarginLoss`), the cyclic learning rate
+(:class:`~mowl.training.CyclicLearningRate`) and, when ``train`` gets ``validate_every``, the
+selection by the validation MRR with early stopping
+(:class:`~mowl.training.ValidationPatience`).
+
+.. testcode::
+
+    print([r.key for r in CatE(Dataset(ontology), embed_dim=4).training_regime.regimes])
+
+.. testoutput::
+
+    ['epoch-batches', 'edge-corruption', 'known-row-mask', 'grouped-margin', 'cyclic-lr', 'validation-patience']
+
 Guarantees and limitations, including why Helly-type limits of convex regions do not apply
 to an order embedding, are listed on the card ``cate`` of the :doc:`method catalogue
 <catalogue>`.

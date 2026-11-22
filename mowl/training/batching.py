@@ -64,7 +64,9 @@ class PerNormalFormMiniBatches(TrainingRegime):
         if there are at most ``batch_size``; ELEmbeddings, Box\\ :sup:`2`\\ EL code),
         ``"cyclic"`` (consecutive batches, cycling; DELE code) or ``"permutation"`` (a random
         subset without replacement, all of them if there are at most ``batch_size``, drawn
-        with ``torch.randperm`` from the global generator; ELK-Em).
+        with ``torch.randperm`` from the global generator; ELK-Em) or ``"replacement"``
+        (``batch_size`` rows with replacement drawn with ``torch.randint`` from the global
+        generator, all of them if there are at most ``batch_size``; the E2R code).
     :param shuffle: For ``order="cyclic"``, shuffle a normal form whenever its cycle
         restarts (the DELE code does not shuffle).
     :param normal_forms: Axiom types that are batched (default: all); the others are used
@@ -81,8 +83,9 @@ class PerNormalFormMiniBatches(TrainingRegime):
     def __init__(self, batch_size=None, order="random", shuffle=False, normal_forms=None,
                  sample_small=False, seed=None):
         super().__init__()
-        if order not in ("random", "cyclic", "permutation"):
-            raise ValueError("order must be 'random', 'cyclic' or 'permutation'.")
+        if order not in ("random", "cyclic", "permutation", "replacement"):
+            raise ValueError("order must be 'random', 'cyclic', 'permutation' or "
+                             "'replacement'.")
         self.batch_size = batch_size
         self.order = order
         self.shuffle = bool(shuffle)
@@ -128,6 +131,10 @@ class PerNormalFormMiniBatches(TrainingRegime):
             if n <= b:
                 return th.arange(n)
             return th.randperm(n, device=view.full.device)[:b]
+        if self.order == "replacement":
+            if n <= b:
+                return th.arange(n)
+            return th.randint(n, (b,), device=view.full.device)
         if self.order == "random":
             if n <= b and not self.sample_small:
                 return th.arange(n)

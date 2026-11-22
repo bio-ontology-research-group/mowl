@@ -63,6 +63,23 @@ to ``training_regime`` is added to them, and one of the same class replaces one 
    kinds = {type(r) for r in model.training_regime.regimes}
    assert {StructuralTables, ExtraPenalties, IdleComponentReseeding} <= kinds
 
+Models whose data are not the EL normal forms (the edges of a graph, the morphisms of a
+lattice, the typed rows of E2R, verbalised triplets) use the same hooks through
+:class:`~mowl.training.RegimeTrained`: :class:`~mowl.models.E2R`,
+:class:`~mowl.models.BinaryCodeBox`, :class:`~mowl.models.CatE`, :class:`~mowl.models.HiT`,
+:class:`~mowl.models.OnT` and :class:`~mowl.models.FaithEL` have no loop of their own. Each names
+its training as a combination of regimes (read ``model.training_regime``): batching
+(:class:`~mowl.training.EpochBatches`, :class:`~mowl.training.PerNormalFormMiniBatches`,
+:class:`~mowl.training.AlternatingMinibatches`), negatives
+(:class:`~mowl.training.EdgeCorruption` with :class:`~mowl.training.KnownRowMask`), the loss
+(:class:`~mowl.training.SelfAdversarialBCE`, :class:`~mowl.training.GroupedMarginLoss`,
+:class:`~mowl.training.SumLoss`, :class:`~mowl.training.SampledLogicalLosses`), the schedule
+(:class:`~mowl.training.CyclicLearningRate`, :class:`~mowl.training.LinearWarmupDecay`),
+selection and stopping (:class:`~mowl.training.ValidationPatience`) and the projection of the
+parameters (:class:`~mowl.training.Regularization` with an
+:class:`~mowl.training.IntervalProjection` or a :class:`~mowl.training.ModuleProjection`).
+Every one of them can be used by the other methods and replaced in these.
+
 Strict and slack margins
 ------------------------
 

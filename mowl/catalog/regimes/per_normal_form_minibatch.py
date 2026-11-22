@@ -15,12 +15,14 @@ REGIME = RegimeCard(
     references=(KULMANOV2019, MONDAL2021, JACKERMEIER2024, MASHKOVA2024NESY, AHARONI2024),
     standalone=False,
     introduced_with=('elem',),
-    used_by=('emelpp', 'box2el', 'mcmultibox'),
+    used_by=('emelpp', 'box2el', 'mcmultibox', 'e2r'),
     implementation='mowl.training.batching.PerNormalFormMiniBatches',
     notes=("ELEmbeddings, Algorithm 1, lines 18-22 ('Randomly sample a minibatch of size bs for "
            "each loss type'); EmEL++, Section 3.3; Box2EL reference code (get_data_batch, 512 "
            'axioms with replacement per normal form, one step per epoch); NeSy 2024/DELE '
            'reference code (cyclic consecutive batches, max_t ceil(n_t/b) steps per epoch, batch '
-           "size 32,768); Aharoni (2024), Section 7.1.3 (5 shuffled batches per epoch). mOWL's "
+           "size 32,768); the E2R code (order 'replacement': batch_size rows drawn with replacement "
+           "from the global torch generator; an epoch has max_k ceil(N_k/b) steps); Aharoni "
+           "(2024), Section 7.1.3 (5 shuffled batches per epoch). mOWL's "
            'generic loop is full-batch; with this regime one mOWL epoch is one step.'),
 )
