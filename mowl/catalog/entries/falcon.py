@@ -59,6 +59,12 @@ CARD = MethodCard(
     intersection_closed=None,
     references=(R.FALCON2022,),
     notes=(
+        "As in the original code, ∃r.C and ∀r.C are evaluated over all pairs of entities "
+        "(memory quadratic in the number of entities, option role_pairs='all'), owl:Nothing "
+        "is the constant empty set and owl:Thing a learned class; earlier mOWL versions used "
+        "only the pair of an entity with itself (role_pairs='self') and learned owl:Nothing. "
+        "The losses add 1e-10 inside the logarithm, as the original code does, so a loss can "
+        "be smaller than 0 by at most 1e-10. "
         "FALCON's paper also states (Appendix A.4, Lemma 1) that balls and axis-parallel "
         "boxes are not representation complete; that statement is recorded on the ELEm and "
         "ELBE cards."),

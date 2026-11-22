@@ -14,13 +14,43 @@ class FALCONModule(ALCModule):
 
     Based on the original implementation at
     https://github.com/bio-ontology-research-group/FALCON
+
+    :param role_pairs: How :math:`\\exists r.C` and :math:`\\forall r.C` read the role.
+        ``"all"`` (default, as in the original code): the degree of an entity :math:`x` is
+        taken over all pairs :math:`(x, y)` of the domain, :math:`\\max_y r(x, y) \\sqcap C(y)`
+        (and :math:`\\min_y` of the residuum for :math:`\\forall`), with
+        :math:`r(x, y) = \\mu(e_x + r, e_y)`; this needs memory quadratic in the domain.
+        ``"self"``: the pair of an entity with itself only, :math:`r(x, x)`, so one value
+        is computed and given to every entity. This was the behaviour of mOWL up to the
+        version that introduced ``role_pairs``; it is a porting error, not the published
+        method.
+    :param top_index: Class index of ``owl:Thing`` (or ``None``).
+    :param bottom_index: Class index of ``owl:Nothing`` (or ``None``).
+    :param thing: ``"learned"`` (default): ``owl:Thing`` has an embedding like any other
+        class, as in the original code. ``"all"``: it is the constant fuzzy set with degree
+        1 everywhere.
+    :param nothing: ``"empty"`` (default, as in the original code): ``owl:Nothing`` is the
+        constant empty fuzzy set (degree 0 everywhere). ``"learned"``: it is an ordinary
+        learned class (mOWL up to the version that introduced ``nothing``).
     """
 
     def __init__(
             self, nclasses, nentities, nrelations, heads_dict, tails_dict, embed_dim=128,
             anon_e=4, t_norm='product', max_measure='max', residuum='notCorD',
-            loss_type='c', num_negs=4, device='cpu'):
+            loss_type='c', num_negs=4, device='cpu', role_pairs='all', top_index=None,
+            bottom_index=None, thing='learned', nothing='empty'):
         super().__init__()
+        if role_pairs not in ('all', 'self'):
+            raise ValueError("role_pairs must be 'all' or 'self'.")
+        if thing not in ('learned', 'all'):
+            raise ValueError("thing must be 'learned' or 'all'.")
+        if nothing not in ('empty', 'learned'):
+            raise ValueError("nothing must be 'empty' or 'learned'.")
+        self.role_pairs = role_pairs
+        self.top_index = top_index if thing == 'all' else None
+        self.bottom_index = bottom_index if nothing == 'empty' else None
+        self.thing = thing
+        self.nothing_reading = nothing
         self.nentities = nentities
         self.anon_e = anon_e
         self.heads_dict = heads_dict
@@ -59,13 +89,9 @@ class FALCONModule(ALCModule):
         if self.t_norm == 'product':
             return x * y
         elif self.t_norm == 'minmax':
-            x = x.unsqueeze(dim=-2)
-            y = y.expand_as(x)
-            return th.cat([x, y], dim=-2).min(dim=-2)[0]
+            return th.minimum(x, y)
         elif self.t_norm == 'Łukasiewicz':
-            x = x.unsqueeze(dim=-2)
-            y = y.expand_as(x)
-            return (((x + y - 1) > 0) * (x + y - 1)).squeeze(dim=-2)
+            return th.relu(x + y - 1)
         else:
             raise ValueError
 
@@ -73,13 +99,9 @@ class FALCONModule(ALCModule):
         if self.t_norm == 'product':
             return x + y - x * y
         elif self.t_norm == 'minmax':
-            x = x.unsqueeze(dim=-2)
-            y = y.expand_as(x)
-            return th.cat([x, y], dim=-2).max(dim=-2)[0]
+            return th.maximum(x, y)
         elif self.t_norm == 'Łukasiewicz':
-            x = x.unsqueeze(dim=-2)
-            y = y.expand_as(x)
-            return 1 - ((((1 - x) + (1 - y) - 1) > 0) * ((1 - x) + (1 - y) - 1)).squeeze(dim=-2)
+            return 1 - th.relu(1 - x - y)
         else:
             raise ValueError
 
@@ -93,12 +115,35 @@ class FALCONModule(ALCModule):
             raise ValueError
 
     def _logical_exist(self, r_fs, c_fs):
+        """``r_fs``: ``(B, N, N)`` pair degrees (``role_pairs="all"``) or ``(B, N)``
+        degrees of the pairs ``(y, y)`` (``"self"``); ``c_fs``: ``(B, N)``."""
+        if self.role_pairs == 'all':
+            return self._exists_rows(r_fs, c_fs)
         ret = self._logical_and(r_fs, c_fs).max(dim=-1)[0].unsqueeze(-1)
         return ret.expand_as(r_fs)
 
+    def _exists_rows(self, r_fs, c_fs):
+        """Degrees of ``exists`` over the last dimension of ``r_fs``, ``(..., N)``, with the
+        filler ``c_fs`` broadcast over the rows."""
+        if c_fs.dim() < r_fs.dim():
+            c_fs = c_fs.unsqueeze(-2)
+        return self._logical_and(r_fs, c_fs).max(dim=-1)[0]
+
     def _logical_forall(self, r_fs, c_fs):
+        if self.role_pairs == 'all':
+            return self._logical_residuum(r_fs, c_fs.unsqueeze(-2)).min(dim=-1)[0]
         ret = self._logical_residuum(r_fs, c_fs).min(dim=-1)[0].unsqueeze(-1)
         return ret.expand_as(r_fs)
+
+    def _constants(self, idx, fs):
+        """Replace the rows of ``fs`` whose class index is ``owl:Thing`` / ``owl:Nothing``
+        by the constant sets (when the reading asks for it). ``idx`` has the shape of
+        ``fs`` without its last dimension."""
+        if self.top_index is not None:
+            fs = th.where((idx == self.top_index).unsqueeze(-1), th.ones_like(fs), fs)
+        if self.bottom_index is not None:
+            fs = th.where((idx == self.bottom_index).unsqueeze(-1), th.zeros_like(fs), fs)
+        return fs
 
     def _get_c_fs_batch(self, c_emb, e_emb):
         e_emb = e_emb.unsqueeze(
@@ -107,10 +152,16 @@ class FALCONModule(ALCModule):
         return self._mem(c_emb, e_emb).squeeze(dim=-1)
 
     def _get_r_fs_batch(self, r_emb, e_emb):
-        e_emb = e_emb.unsqueeze(
-            dim=0).repeat(r_emb.size()[0], 1, 1)
-        r_emb = r_emb.unsqueeze(dim=1).expand_as(e_emb)
-        return self._mem(e_emb + r_emb, e_emb).squeeze(dim=-1)
+        if self.role_pairs == 'self':
+            e_emb = e_emb.unsqueeze(
+                dim=0).repeat(r_emb.size()[0], 1, 1)
+            r_emb = r_emb.unsqueeze(dim=1).expand_as(e_emb)
+            return self._mem(e_emb + r_emb, e_emb).squeeze(dim=-1)
+        # all pairs: r_fs[b, x, y] = mu(e_x + r_b, e_y)
+        n = e_emb.shape[0]
+        head = (e_emb.unsqueeze(0) + r_emb.unsqueeze(1)).unsqueeze(2).expand(-1, -1, n, -1)
+        tail = e_emb.unsqueeze(0).unsqueeze(0).expand(r_emb.shape[0], n, -1, -1)
+        return self._mem(head, tail).squeeze(dim=-1)
 
     def sample_negatives(self, e, r, used_dict):
         ret = th.zeros((e.shape[0], self.num_negs), dtype=th.int64)
@@ -127,7 +178,8 @@ class FALCONModule(ALCModule):
         expr_type = cexpr.getClassExpressionType()
         if expr_type == ClassExpressionType.OWL_CLASS:
             c_emb = self.c_embedding(x[:, cur_index])
-            return self._get_c_fs_batch(c_emb, e_emb), cur_index + 1
+            fs = self._get_c_fs_batch(c_emb, e_emb)
+            return self._constants(x[:, cur_index], fs), cur_index + 1
         elif expr_type == ClassExpressionType.OBJECT_SOME_VALUES_FROM:
             r_emb = self.r_embedding(x[:, cur_index])
             r_fs = checkpoint.checkpoint(self._get_r_fs_batch, r_emb, e_emb,
@@ -218,6 +270,7 @@ class FALCONModule(ALCModule):
                 c_emb = self.c_embedding(x[:, 0, 1]).unsqueeze(dim=1)
                 ex_emb = self.e_embedding(x[:, :, 0])
                 dofm = self._mem(c_emb.expand_as(ex_emb), ex_emb).squeeze(dim=-1)
+                dofm = self._constants(x[:, :, 1], dofm.unsqueeze(-1)).squeeze(-1)
                 res = (- th.log(dofm[:, 0] + 1e-10).mean()
                        - th.log(1 - dofm[:, 1:] + 1e-10).mean())
                 return res / 2
@@ -241,7 +294,7 @@ class FALCONModule(ALCModule):
                 (ex_emb + r_emb).view(-1, ex_emb.shape[-1]), e_emb).view(
                     ex_emb.shape[0], ex_emb.shape[1], -1)
             c_fs = c_fs.unsqueeze(dim=1)
-            dofm = self._logical_exist(r_fs, c_fs)
+            dofm = self._exists_rows(r_fs, c_fs)
             res = (- th.log(dofm[:, 0] + 1e-10).mean() - th.log(1 - dofm[:, 1:] + 1e-10).mean())
             return res / 2
         elif isinstance(axiom, OWLObjectPropertyAssertionAxiom):

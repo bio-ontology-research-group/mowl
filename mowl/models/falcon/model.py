@@ -1,6 +1,9 @@
 from mowl.base_models.alcmodel import EmbeddingALCModel
 from mowl.nn import FALCONModule
 
+_THING = "http://www.w3.org/2002/07/owl#Thing"
+_NOTHING = "http://www.w3.org/2002/07/owl#Nothing"
+
 
 class FALCONModel(EmbeddingALCModel):
     """FALCON model [falcon2022]_: a fuzzy :math:`\\mathcal{ALC}` neural reasoner.
@@ -24,10 +27,23 @@ class FALCONModel(EmbeddingALCModel):
     :type max_measure: str, optional
     :param num_negs: Number of negative samples per ABox axiom. Defaults to ``4``.
     :type num_negs: int, optional
+    :param role_pairs: ``'all'`` (default, the original code): :math:`\\exists r.C` and
+        :math:`\\forall r.C` are evaluated over all pairs of entities, one degree per entity.
+        ``'self'``: only pairs of an entity with itself (one value for every entity; the
+        behaviour of earlier mOWL versions, a porting error). See
+        :class:`~mowl.nn.alc.falcon.module.FALCONModule`.
+    :type role_pairs: str, optional
+    :param thing: ``'learned'`` (default, the original code) or ``'all'``: ``owl:Thing`` is
+        the constant set with degree 1.
+    :type thing: str, optional
+    :param nothing: ``'empty'`` (default, the original code): ``owl:Nothing`` is the constant
+        empty set; ``'learned'``: an ordinary learned class (earlier mOWL versions).
+    :type nothing: str, optional
     """
 
     def __init__(self, dataset, embed_dim=50, anon_e=4, alpha=0.3, beta=0.3,
                  t_norm='product', max_measure='max', num_negs=4,
+                 role_pairs='all', thing='learned', nothing='empty',
                  learning_rate=0.001, batch_size=256, model_filepath=None, device='cpu'):
         super().__init__(dataset, embed_dim=embed_dim, batch_size=batch_size,
                          alpha=alpha, beta=beta, anon_e=anon_e,
@@ -37,6 +53,9 @@ class FALCONModel(EmbeddingALCModel):
         self.t_norm = t_norm
         self.max_measure = max_measure
         self.num_negs = num_negs
+        self.role_pairs = role_pairs
+        self.thing = thing
+        self.nothing = nothing
         self.init_module()
 
     def _build_assertion_dicts(self):
@@ -72,4 +91,9 @@ class FALCONModel(EmbeddingALCModel):
             max_measure=self.max_measure,
             num_negs=self.num_negs,
             device=self.device,
+            role_pairs=self.role_pairs,
+            top_index=self.class_index_dict.get(_THING),
+            bottom_index=self.class_index_dict.get(_NOTHING),
+            thing=self.thing,
+            nothing=self.nothing,
         ).to(self.device)
