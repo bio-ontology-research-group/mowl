@@ -5,7 +5,7 @@ from mowl.catalog.entries import _refs as R
 
 CARD = MethodCard(
     key="composed",
-    expressivity="EL⊥ with ABox",
+    expressivity="ELH(∘)⊥ with ABox",
     tasks=("subsumption", "satisfiability", "disjointness",
            "instance-checking", "role-assertion",),
     name="ComposedEL (a model from parts)",
@@ -25,7 +25,8 @@ CARD = MethodCard(
     implementation="mowl.models.composed.model.ComposedEL",
     module="mowl.representation.geometry.ComposedGeometry",
     axioms=("gci0", "gci1", "gci2", "gci3", "gci0_bot", "gci1_bot", "gci3_bot",
-            "class_assertion", "object_property_assertion"),
+            "class_assertion", "object_property_assertion", "role_inclusion",
+            "role_chain"),
     limitations=(
         "Guarantees depend on the parts chosen: a strict margin with an exact measure "
         "makes a zero loss imply the axiom; a slack margin does not.",),
