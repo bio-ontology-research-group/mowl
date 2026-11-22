@@ -144,6 +144,11 @@ def _pair(method, variant=None, dataset=None, **options):
                 **({} if dataset is None else {"dataset": dataset}))
 
 
+# Parameters that do not move in a TBox-only pair, and why (checked by test_parameters_move.py):
+# EIKE and Concept2Box use their ``ind_embed`` and ``rel_embed`` for assertions only
+# (``object_property_assertion_loss``; TransE-like), EIKE's ``M`` only with
+# ``instance_map="matrix"`` in class assertions. The pairs with ``_abox`` data exercise them:
+# eike/abox (ind_embed, rel_embed), eike/matrix-abox (M), concept2box/abox (rel_embed).
 PAIRS = [
     _pair("octagon", learning_rate=0.01),
     _pair("octagon", "own-margins-and-decay", learning_rate=0.01, disjoint_margin=0.3,

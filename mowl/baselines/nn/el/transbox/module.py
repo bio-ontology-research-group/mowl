@@ -19,8 +19,8 @@ class TransBoxModule(ELModule):
         `Original implementation: <https://github.com/HuiYang1997/TransBox>`_
 
     :param formulation: ``"mowl"`` (default): the losses of
-        :mod:`mowl.nn.el.transbox.losses`. ``"reference"``: the losses of the authors'
-        code (:mod:`mowl.nn.el.transbox.code_losses`), with which the published numbers
+        :mod:`mowl.baselines.nn.el.transbox.losses`. ``"reference"``: the losses of the authors'
+        code (:mod:`mowl.baselines.nn.el.transbox.code_losses`), with which the published numbers
         were obtained, and its initialisation (centre and offset of a box drawn
         together from :math:`U(-1, 1)^{2n}` and scaled to unit norm, instead of each to
         unit norm). These losses are meant to be squared per axiom, with negatives
@@ -34,7 +34,7 @@ class TransBoxModule(ELModule):
     :param reference_bottom_losses: With ``formulation="reference"``: ``"code"`` (default)
         scores ``C ⊑ ⊥`` and ``∃R.C ⊑ ⊥`` as the code scores ``C ⊑ D`` and ``∃R.C ⊑ D``
         with the bottom class as :math:`D` (the loss of
-        :mod:`~mowl.nn.el.transbox.code_losses`, including its centre-norm terms);
+        :mod:`~mowl.baselines.nn.el.transbox.code_losses`, including its centre-norm terms);
         ``"mowl"`` is the earlier behaviour, the formulas of the ``"mowl"`` formulation
         (no centre-norm term). The code has no counterpart for assertions, which keep
         the ``"mowl"`` formulas.

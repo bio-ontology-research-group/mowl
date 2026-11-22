@@ -71,10 +71,10 @@ class ConePoint(Point):
         """Whether the points ``(P, n)`` of the Poincare ball lie in the entailment cones,
         ``(B, P)``: the angle at the apex between the axis and the geodesic to the point is
         at most the half-aperture (the cone contains its apex)."""
-        from mowl.nn.order import cones as C
+        from mowl.representation.library.cone_regions import axis_angle
         x = self.centre.unsqueeze(1).expand(-1, points.shape[0], -1)
         y = points.to(self.centre.dtype).unsqueeze(0).expand(len(self), -1, -1)
-        angle = C.axis_angle(x, y)
+        angle = axis_angle(x, y)
         apex = th.linalg.norm(x - y, dim=-1) < 1e-6
         return (angle <= self.aperture.unsqueeze(-1) + 1e-6) | apex
 

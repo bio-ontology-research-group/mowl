@@ -37,7 +37,7 @@ def expression_box(struct, leaves, pos, min_embed, delta_embed, relation_embed, 
                    positive_scale=True):
     """Lower and upper corner ``(m, M, next position)`` of the box of an expression, for a
     batch of rows: ``leaves`` is a ``(B, k)`` index tensor, ``pos`` the next column.
-    ``positive_scale`` as in :func:`mowl.nn.el.boxel.losses.effective_scale`."""
+    ``positive_scale`` as in :func:`mowl.baselines.nn.el.boxel.losses.effective_scale`."""
     kind = struct[0]
     if kind == "atom":
         m = min_embed(leaves[:, pos])

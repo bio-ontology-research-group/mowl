@@ -191,7 +191,7 @@ class TestBoxSEL(TestBoxEL):
                                         module.regularization_loss(), atol=1e-6))
 
     def test_conditionals(self):
-        from mowl.nn.el.boxsel.losses import compile_expression
+        from mowl.baselines.nn.el.boxsel.losses import compile_expression
         module = self.make(temperature=1.5)
         geometry = geometry_of(module)
         index = {f"c{i}": i for i in range(N)}

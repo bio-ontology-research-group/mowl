@@ -2,8 +2,8 @@ r"""Neural module of ELK-Em [singh2026]_."""
 
 import torch as th
 
-import mowl.nn.el.elkem.losses as L
 from mowl.nn.el.part_built import _PartBuiltModule
+from mowl.training.terms import lexical_similarity_loss
 
 
 class ELKEmModule(_PartBuiltModule):
@@ -264,7 +264,7 @@ class ELKEmModule(_PartBuiltModule):
     def lexical_loss(self, ind_idx, features, decay=1.0):
         r"""Lexical regularisation loss (Eq. 6 of the paper) of the individuals ``ind_idx``,
         whose external representations are the rows of ``features``."""
-        return L.lexical_loss(self.individual(ind_idx), features, decay)
+        return lexical_similarity_loss(self.individual(ind_idx), features, decay)
 
 
 __all__ = ["ELKEmModule"]

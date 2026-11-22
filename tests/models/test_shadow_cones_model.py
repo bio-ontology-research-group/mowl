@@ -13,7 +13,8 @@ mowl.init_jvm("2g")
 import mowl.datasets  # noqa: E402,F401
 from mowl.models import ShadowCones  # noqa: E402
 from mowl.nn.order import RiemannianSGD, ShadowConesModule  # noqa: E402
-from mowl.nn.order import cones as C  # noqa: E402
+from mowl.nn.order.manifolds import PoincareBall, UpperHalfSpace  # noqa: E402
+from mowl.representation.library import cone_regions as C  # noqa: E402
 from tests.models.order_tree import (common_ranking_benchmark, train_and_separate,  # noqa: E402
                                      tree_dataset)
 
@@ -35,7 +36,7 @@ def test_penumbral_ball_is_the_entailment_cone():
         v = (th.rand(2, generator=gen, dtype=th.float64) - 0.5) * 1.6
         if v.norm() > 0.95:
             continue
-        theta = C.penumbral_ball_half_aperture(u, r)
+        theta = C.OriginLight(r).half_aperture(None, u)
         assert theta.item() == pytest.approx(C.cone_half_aperture(u, K).item(), abs=1e-6)
         e = C.shadow_cone_energy(u, v, "penumbral-ball", radius=r)
         inside_cone = C.entailment_cone_energy(u, v, K).item() < 1e-12
@@ -48,22 +49,22 @@ def test_penumbral_signed_distance_is_the_hyperbolic_distance_to_the_boundary():
     on the axis at distance s from the apex is at signed distance asinh(sinh(s) sin(-theta))."""
     u = _pt(0.6, 0.0)
     r = 0.2
-    theta = C.penumbral_ball_half_aperture(u, r).item()
+    theta = C.OriginLight(r).half_aperture(None, u).item()
     on_axis = _pt(0.9, 0.0)
-    s = C.H.distance(u, on_axis, 1.0).item()
+    s = PoincareBall().distance(u, on_axis).item()
     e = C.shadow_cone_energy(u, on_axis, "penumbral-ball", radius=r).item()
     expected = math.asinh(math.sinh(s) * math.sin(-theta))
-    assert e == pytest.approx(expected, abs=1e-2)   # the arccos is clamped
+    assert e == pytest.approx(expected, abs=1e-5)
     assert e < 0
 
 
 def test_half_space_distance_and_axis_angle():
     u = _pt(0.3, 0.5)
     below = _pt(0.3, 0.2)
-    assert C.half_space_distance(u, below).item() == pytest.approx(math.log(0.5 / 0.2))
-    assert C.half_space_axis_angle(u, below).item() == pytest.approx(0.0, abs=5e-3)
+    assert UpperHalfSpace().distance(u, below).item() == pytest.approx(math.log(0.5 / 0.2))
+    assert C.HorosphereLight(20.0).axis_angle(None, u, below).item() == pytest.approx(0.0, abs=1e-5)
     above = _pt(0.3, 0.9)
-    assert C.half_space_axis_angle(u, above).item() == pytest.approx(math.pi, abs=5e-3)
+    assert C.HorosphereLight(20.0).axis_angle(None, u, above).item() == pytest.approx(math.pi, abs=1e-5)
 
 
 @pytest.mark.parametrize("formulation", C.FORMULATIONS)
@@ -85,9 +86,9 @@ def test_energy_sign_inside_and_outside_the_cone(formulation):
     assert e_above > 0
     # for positive altitude the energy is the distance to the apex (paper Sec. 4)
     if formulation.endswith("half-space"):
-        d = C.half_space_distance(u, above).item()
+        d = UpperHalfSpace().distance(u, above).item()
     else:
-        d = C.H.distance(u, above, 1.0).item()
+        d = PoincareBall().distance(u, above).item()
     assert e_above == pytest.approx(d, rel=1e-2, abs=1e-3)
 
 

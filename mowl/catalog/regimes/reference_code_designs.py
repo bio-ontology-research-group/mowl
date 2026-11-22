@@ -133,7 +133,7 @@ REGIMES = (
             "Model selection looks at C ⊑ D only.",
             "The code's loss for C ⊓ D ⊑ E only asks the intersection to overlap Box(E) "
             "(signed half-width), not to lie inside it; see "
-            "mowl.nn.el.transbox.code_losses.",
+            "mowl.baselines.nn.el.transbox.code_losses.",
         ),
         notes=(
             "From run_many_seeds.py, baseline_sweep.py, model/TransBox_reg.py and "

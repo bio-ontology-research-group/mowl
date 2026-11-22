@@ -10,7 +10,7 @@ class ConditionalExpressions:
     ``("and", e1, e2, ...)`` a conjunction and ``("some", e)`` an existential restriction,
     with the indices of the classes and relations of the expression, left to right, as the
     ``(B, k)`` tensor ``leaves``
-    (:func:`mowl.nn.el.boxsel.losses.compile_expression` makes both from names). It is a
+    (:func:`mowl.nn.el.boxsel.expressions.compile_expression` makes both from names). It is a
     mixin of :class:`~mowl.nn.BoxSELModule` and of the geometry of the method ``boxsel``
     (:class:`~mowl.representation.library.boxrel_methods.ConditionalGeometry`); the
     objective of the geometry reads the form ``"conditional"``."""

@@ -37,7 +37,7 @@ def as_conditional(item):
 
 def compile_conditional_expression(expr, class_index, property_index):
     """``(structure, leaf indices)`` of a concept expression; :math:`\\top` has no finite box."""
-    from mowl.nn.el.boxsel import losses as S
+    from mowl.nn.el.boxsel import expressions as S
     if expr == _THING:
         raise ValueError("owl:Thing has no finite box: conditionals over it are not "
                          "supported (the TBox must be safe, Definition 2).")

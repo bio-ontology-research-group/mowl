@@ -21,36 +21,47 @@ from mowl.representation.library.hierarchy_measures import neg_log1mexp
 __all__ = ["margin_loss", "bce_edge_loss"]
 
 
-def margin_loss(pos_cost, neg_cost, margin, aggregation="per_negative", mask=None):
-    """Mean cost of the stated edges plus a hinge of margin ``margin`` on the cost of the
-    corrupted ones (CatE, Eq. 7; Vendrov et al. 2016, Eq. 4 with a mean).
+def _live_mean(values, live):
+    """The mean of ``values`` over the entries where ``live`` is 1 (0 when there are none)."""
+    return (values * live).sum() / live.sum().clamp(min=1)
 
-    :param pos_cost: ``(b,)``, the cost :math:`s(A, B)` of the stated edges.
-    :param neg_cost: ``(b, k)``, the cost of their ``k`` corruptions.
-    :param aggregation: ``"per_negative"``: one hinge per corruption (the paper);
-        ``"mean"``: the costs of the corruptions of an edge are averaged before the hinge
-        (the reference code).
-    :param mask: ``(b, k)`` boolean; ``False`` marks a corruption that is not a negative
-        (it is a stated edge), left out of the means.
+
+def margin_loss(pos_cost, neg_cost, margin, aggregation="per_negative", mask=None):
+    """A named objective for methods that score stated edges and their corruptions with the
+    cost of a measure (:class:`~mowl.representation.library.hierarchy_measures.OrderViolation`
+    and the other hierarchy measures): the mean cost of the stated edges plus the mean *hinge*
+    :math:`\\max(0, \\gamma - \\text{cost})` of the corruptions, so that a stated edge is
+    pulled to cost 0 and a corruption is pushed to cost at least ``margin`` (CatE, Eq. 7;
+    Vendrov et al. 2016, Eq. 4 with means). A corruption that is itself a stated edge is
+    masked out.
+
+    The hinge of one corruption is the ``negative`` reading of the measure; this function
+    adds the averaging over the batch and the two ways of averaging over the corruptions of
+    one edge that the paper and its code use.
+
+    :param pos_cost: ``(b,)``, the cost of the stated edges.
+    :param neg_cost: ``(b, k)``, the cost of their ``k`` corruptions (``(b,)``: one each).
+    :param margin: :math:`\\gamma \\ge 0`.
+    :param aggregation: ``"per_negative"``: one hinge per corruption, averaged over all of
+        them (the paper); ``"mean"``: the costs of the corruptions of an edge are averaged
+        before the hinge, and the hinges over the edges that have corruptions (the code).
+    :param mask: ``(b, k)`` boolean (or ``(b,)``); ``False`` marks a corruption that is
+        not a negative.
     :return: A scalar.
     """
     if neg_cost.dim() == 1:
         neg_cost = neg_cost.unsqueeze(1)
-    if mask is None:
-        mask = th.ones_like(neg_cost, dtype=th.bool)
-    elif mask.dim() == 1:
-        mask = mask.unsqueeze(1)
-    w = mask.to(neg_cost.dtype)
+    live = th.ones_like(neg_cost) if mask is None else (
+        mask.reshape(neg_cost.shape)).to(neg_cost.dtype)
     if aggregation == "per_negative":
-        negative = (th.relu(margin - neg_cost) * w).sum() / w.sum().clamp(min=1)
+        corruptions = _live_mean(th.relu(margin - neg_cost), live)
     elif aggregation == "mean":
-        count = w.sum(dim=1)
-        mean_cost = (neg_cost * w).sum(dim=1) / count.clamp(min=1)
-        valid = (count > 0).to(neg_cost.dtype)
-        negative = (th.relu(margin - mean_cost) * valid).sum() / valid.sum().clamp(min=1)
+        per_edge = live.sum(dim=1)
+        edge_cost = (neg_cost * live).sum(dim=1) / per_edge.clamp(min=1)
+        corruptions = _live_mean(th.relu(margin - edge_cost), (per_edge > 0).to(live.dtype))
     else:
         raise ValueError("aggregation must be 'per_negative' or 'mean'.")
-    return pos_cost.mean() + negative
+    return pos_cost.mean() + corruptions
 
 
 def bce_edge_loss(pos_energy, neg_energy, mask=None, self_adversarial=True, temperature=1.0,

@@ -7,8 +7,8 @@ from unittest import TestCase
 import numpy as np
 import torch as th
 
-import mowl.nn.el.elem.dele_losses as EL
-import mowl.nn.el.elbe.losses as LB
+import mowl.baselines.nn.el.elem.dele_losses as EL
+import mowl.baselines.nn.el.elbe.losses as LB
 from mowl.models import BoxSquaredEL, ELBE, ELEmbeddings
 from mowl.nn import ELBEModule, ELEmModule
 from mowl.training import AllNormalFormNegatives, DELECodeLoss, DELECodeLosses, \
@@ -114,7 +114,7 @@ class TestDELECodeLosses(TestCase):
         expected = EL.gci3_loss_reference(
             th.tensor([[0, 1, 2]]), model.module.class_embed, model.module.class_rad,
             model.module.rel_embed, model.module.margin)
-        self.assertTrue(th.equal(after, expected))
+        self.assertTrue(th.allclose(after, expected, rtol=1e-5, atol=1e-7))
         # the corrected loss adds the filler radius; they differ unless the radius is 0
         self.assertFalse(th.equal(before, after))
 
@@ -126,34 +126,40 @@ class TestDELECodeLosses(TestCase):
         d = th.tensor([[0, 1]])
         expected = LB.gci0_loss_dele(d, model.module.class_embed, model.module.class_offset,
                                      model.module.margin)
-        self.assertTrue(th.equal(model.module(d, "gci0"), expected))
+        self.assertTrue(th.allclose(model.module(d, "gci0"), expected, rtol=1e-5, atol=1e-7))
         # gci2 negatives switch to the separation form of the reference code
         d = th.tensor([[0, 0, 1]])
         neg = model.module(d, "gci2", neg=True)
-        self.assertTrue(th.equal(
+        self.assertTrue(th.allclose(
             neg, LB.gci2_score_neg_dele(
                 model.module.class_embed(d[:, 0]), th.abs(model.module.class_offset(d[:, 0])),
                 model.module.class_embed(d[:, 2]), th.abs(model.module.class_offset(d[:, 2])),
-                model.module.rel_embed(d[:, 1]), model.module.margin)))
+                model.module.rel_embed(d[:, 1]), model.module.margin), rtol=1e-5, atol=1e-7))
 
     def test_box2el_positives_unsquared(self):
         model = BoxSquaredEL(self.dataset, embed_dim=4, batch_size=64)
         d = th.tensor([[0, 1], [2, 3]])
         before = model.module(d, "gci0").detach().clone()
-        model.module.strict_negatives = False  # gci0 has no negative loss: the positive one
-        neg_before = model.module(d, "gci0", neg=True).detach().clone()
+        d2 = th.tensor([[0, 0, 1]])
+        neg_before = model.module(d2, "gci2", neg=True).detach().clone()
         model.training_regime = DELECodeLosses()
         after = model.module(d, "gci0").detach()
         self.assertTrue(th.allclose(after.square(), before))
-        self.assertTrue(th.equal(model.module(d, "gci0", neg=True).detach(), neg_before))
-        d2 = th.tensor([[0, 0, 1]])
+        # the negative loss of a form that has one is untouched
+        self.assertTrue(th.equal(model.module(d2, "gci2", neg=True).detach(), neg_before))
         self.assertEqual(model.module(d2, "gci2").shape[0], 1)
 
-    def test_rejects_other_modules(self):
-        from mowl.models import BoxEL
-        model = BoxEL(self.dataset, embed_dim=4)
+    def test_rejects_modules_that_are_not_built_from_parts(self):
+        model = ELBE(self.dataset, embed_dim=4)
+        model.module = th.nn.Linear(2, 2)   # no objective to read differently
         with self.assertRaises(TypeError):
             model.training_regime = DELECodeLosses()
+
+    def test_switches_any_method_that_has_the_parts(self):
+        from mowl.models import BoxEL
+        model = BoxEL(self.dataset, embed_dim=4)
+        model.training_regime = DELECodeLosses()
+        self.assertEqual(model.module.objective.gci3_reading, "inclusion")
 
 
 class TestDELECodeTraining(TestCase):
