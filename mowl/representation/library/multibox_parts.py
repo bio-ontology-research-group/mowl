@@ -74,6 +74,10 @@ class UnionOfBoxes(Region):
     def components(self):
         return self.centre.shape[1]
 
+    def is_empty(self):
+        """Every box of the union is empty (negative half-width in some coordinate)."""
+        return (self.offset < 0).any(dim=-1).all(dim=-1)
+
     def translate(self, vector):
         return UnionOfBoxes(self.centre + vector.unsqueeze(1), self.offset)
 

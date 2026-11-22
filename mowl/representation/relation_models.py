@@ -38,6 +38,12 @@ class Relations(nn.Module):
         :math:`\\exists r.C`."""
         raise ConstructorUnavailable(f"{type(self).__name__} has no preimage.")
 
+    def tables(self):
+        """The raw parameter tables by attribute name (``{"vectors": ...}`` for a
+        translation; see :func:`~mowl.representation.class_models.raw_tables`)."""
+        from mowl.representation.class_models import raw_tables
+        return raw_tables(self)
+
     def sharp_preimage(self, ids, region):
         """The preimage without any tolerance of the relation (what a *negative* axiom is
         read against). Default: the preimage."""

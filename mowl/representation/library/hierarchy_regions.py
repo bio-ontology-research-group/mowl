@@ -1,9 +1,9 @@
 """Regions and spaces of the methods that embed a hierarchy (group ``hierarchy``).
 
-*Boxes with corners.* :class:`CornerBox` is a :class:`~mowl.representation.Box` that also
-keeps its two corners, so that measures that work with corners (volumes) read them without
-the rounding of ``(low + high) / 2 +- (high - low) / 2``. The unit cube is not a region: it
-is a constraint of the class model (:class:`~.hierarchy_classes.UnitCubeBoxes`).
+*Boxes with corners.* :class:`~mowl.representation.CornerBox` (in the core) is a box that
+also keeps its two corners, so that measures that work with corners (volumes) read them
+without the rounding of ``(low + high) / 2 +- (high - low) / 2``. The unit cube is not a
+region: it is a constraint of the class model (:class:`~.hierarchy_classes.UnitCubeBoxes`).
 
 *Points on a manifold.* :class:`Point` and its refinements :class:`OrderCone`,
 :class:`ConePoint` and :class:`Disk` carry the manifold they live on, so that a measure
@@ -21,53 +21,13 @@ import torch as th
 from mowl.nn.lm import hyperbolic as H
 from mowl.nn.order.manifolds import (Euclidean, Hyperboloid, PoincareBall, Sphere,
                                      UpperHalfSpace)
-from mowl.representation.regions import Box, Region
+from mowl.representation.regions import CornerBox, Region
 
-__all__ = ["CornerBox", "CodedBox", "Point", "OrderCone", "ConePoint", "Disk", "CurvedBall",
+__all__ = ["CodedBox", "Point", "OrderCone", "ConePoint", "Disk", "CurvedBall",
            "depth", "MANIFOLDS"]
 
 
 # -- boxes -------------------------------------------------------------------------------
-@dataclass(frozen=True)
-class CornerBox(Box):
-    """A box that keeps its corners.
-
-    :param low, high: ``(B, d)``. ``high < low`` in a coordinate is allowed and means an
-        empty box (the result of intersecting two disjoint boxes); volumes treat it as 0.
-    """
-
-    low: th.Tensor = None
-    high: th.Tensor = None
-
-    @classmethod
-    def from_corners(cls, low, high, **extra):
-        return cls((low + high) / 2, (high - low).abs() / 2, low, high, **extra)
-
-    @property
-    def lower(self):
-        return self.low
-
-    @property
-    def upper(self):
-        return self.high
-
-    def translate(self, vector):
-        return CornerBox.from_corners(self.low + vector, self.high + vector)
-
-    def scale(self, factor):
-        a, b = self.low * factor, self.high * factor
-        return CornerBox.from_corners(th.minimum(a, b), th.maximum(a, b))
-
-    def grow(self, offset):
-        return CornerBox.from_corners(self.low - offset, self.high + offset)
-
-    def intersect(self, other):
-        low = th.maximum(self.lower, other.lower)
-        high = th.minimum(self.upper, other.upper)
-        gap = th.linalg.norm(th.relu(low - high), dim=1, keepdim=True)
-        return CornerBox.from_corners(low, high), gap
-
-
 @dataclass(frozen=True)
 class CodedBox(CornerBox):
     """A box with binary codes (BCBox, Zhang et al. 2022): ``code`` ``(B, d)`` is the code of

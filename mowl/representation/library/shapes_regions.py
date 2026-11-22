@@ -35,6 +35,10 @@ class Point(Region):
     def translate(self, vector):
         return Point(self.centre + vector, self.bump)
 
+    def is_empty(self):
+        """Never: a point is a region of no extent, not the empty one."""
+        return th.zeros(len(self), dtype=th.bool, device=self.centre.device)
+
 
 @dataclass(frozen=True)
 class OctagonProduct(Region):
@@ -52,6 +56,11 @@ class OctagonProduct(Region):
 
     def __len__(self):
         return self.bounds.shape[0]
+
+    def is_empty(self):
+        """A product is empty iff one of its octagons is (the tightened bounds have a
+        negative width: :func:`mowl.nn.el.octagon.geometry.product_emptiness_slack`)."""
+        return G.product_emptiness_slack(self.bounds) < 0
 
     @classmethod
     def of_point(cls, centre):
@@ -97,6 +106,11 @@ class Prism(Region):
     supports: th.Tensor
     centre: th.Tensor
     offset: th.Tensor
+
+    def is_empty(self):
+        """The triangle is empty where its supports sum to less than zero, and the box where
+        its upper corner lies below its lower one."""
+        return (self.supports.sum(dim=-1) < 0) | (self.offset < 0).any(dim=-1)
 
     @classmethod
     def of_point(cls, point):

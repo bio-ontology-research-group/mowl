@@ -216,11 +216,31 @@ class ComposedGeometry(ELModule, Geometry):
     # -- ELModule -----------------------------------------------------------------------
     @property
     def margin(self):
+        """The margin of the objective. For the geometry of an existing module
+        (:func:`~mowl.representation.geometry_of`) this *is* the module's margin: changing
+        either changes the losses of both. Its sense is :attr:`margin_semantics`."""
         return self.objective.margin
 
     @margin.setter
     def margin(self, value):
         self.objective.margin = float(value)
+
+    def link_margin(self, owner):
+        """Make this geometry's margin the margin of ``owner`` (its ``margin_attribute``,
+        default ``"margin"``), so that the two are one number (see
+        :meth:`Objective.link_margin <mowl.representation.Objective.link_margin>`)."""
+        self.objective.link_margin(owner, getattr(owner, "margin_attribute", "margin"))
+        return self
+
+    def tables(self):
+        """The raw parameter tables of the parts, ``{"classes": {"centres": ..., ...},
+        "relations": {...}, "individuals": {...}}`` (parts that have none are left out):
+        the trained tensors, not copies, for regimes that initialise or inspect the raw
+        parameters."""
+        parts = {"classes": self.class_model, "relations": self.relation_model,
+                 "individuals": self.individual_model}
+        return {name: part.tables() for name, part in parts.items()
+                if part is not None and hasattr(part, "tables")}
 
     def cost(self, form, rows, neg=False):
         """Loss of the axioms ``rows`` of form ``form``."""

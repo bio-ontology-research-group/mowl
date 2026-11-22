@@ -33,9 +33,9 @@ from mowl.nn.order import cones as C
 from mowl.nn.order.manifolds import Euclidean, UpperHalfSpace
 from mowl.representation.measures import Bounds, RegionMeasure
 from mowl.representation.methods import register_measure
-from mowl.representation.regions import Ball, Box, ConstructorUnavailable
+from mowl.representation.regions import Ball, Box, ConstructorUnavailable, CornerBox
 from mowl.representation.library.hierarchy_regions import (
-    CodedBox, ConePoint, CornerBox, Disk, OrderCone, Point, depth)
+    CodedBox, ConePoint, Disk, OrderCone, Point, depth)
 
 __all__ = ["HierarchyMeasure", "EnergyMeasure", "OrderViolation", "VolumeRatio",
            "SoftVolumeRatio", "ConeAngle", "ShadowCone", "Protrusion", "DistanceDepth",

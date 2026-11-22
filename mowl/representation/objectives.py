@@ -246,6 +246,34 @@ class Objective:
                    freeze_size_negatives=freeze_size_negatives, **options)
 
     # -- margins ----------------------------------------------------------------------------
+    _margin_link = None
+    _own_margin = 0.0
+
+    @property
+    def margin(self):
+        """The margin :math:`\\gamma`. After :meth:`link_margin` it *is* the attribute of
+        the linked object, read at every use and written through."""
+        if self._margin_link is not None:
+            owner, attribute = self._margin_link
+            return float(getattr(owner, attribute))
+        return self._own_margin
+
+    @margin.setter
+    def margin(self, value):
+        self._own_margin = float(value)
+        if self._margin_link is not None:
+            owner, attribute = self._margin_link
+            setattr(owner, attribute, float(value))
+
+    def link_margin(self, owner, attribute="margin"):
+        """Make the margin the attribute ``attribute`` of ``owner`` (an existing module):
+        changing either changes both, so that a regime that sets the margin of the module
+        changes the losses of a geometry that describes it, and the other way round. The
+        sense of the margin (``slack``) is not a number: it is a fixed property of the
+        objective (the module's ``margin_semantics``)."""
+        self._margin_link = (owner, attribute)
+        return self
+
     @property
     def m(self):
         """Margin of ``inside`` and ``meets``: positive when strict, negative as a slack."""

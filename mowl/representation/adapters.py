@@ -38,6 +38,25 @@ def geometry_of(model):
     """
     if isinstance(model, Geometry):
         return model
+    geometry = _geometry_of(model)
+    return _link(geometry, getattr(model, "module", model))
+
+
+def _link(geometry, module):
+    """Make the margin of a geometry that describes ``module`` the module's margin, so that
+    the two cannot drift apart (when the adapter has given the geometry the margin of the
+    module: otherwise the margin of the geometry is a number of its own)."""
+    attribute = getattr(module, "margin_attribute", "margin")
+    value = getattr(module, attribute, None)
+    link = getattr(geometry, "link_margin", None)
+    if link is not None and isinstance(value, (int, float)) and not isinstance(value, bool) \
+            and abs(geometry.margin - float(value)) <= 1e-12 \
+            and getattr(module, "margin_semantics", None) in (None, geometry.margin_semantics):
+        link(module)
+    return geometry
+
+
+def _geometry_of(model):
     # The model's own class first (also its base classes): a model without a usable
     # ``.module`` is described by its class. Only then the module.
     for cls in type(model).__mro__:

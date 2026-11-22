@@ -258,6 +258,10 @@ class RegDObjective(Objective):
     def margin(self, value):
         self.host.margin = float(value)
 
+    def link_margin(self, owner, attribute="margin"):
+        self.host.link_margin(owner, attribute)
+        return self
+
     @property
     def m(self):
         """The energy is compared without margin."""

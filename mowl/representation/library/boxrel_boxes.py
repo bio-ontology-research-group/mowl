@@ -2,14 +2,16 @@
 BoxSEL). Points are :class:`~mowl.representation.library.shapes_classes.Points` of the
 family ``"box"``."""
 
+from dataclasses import dataclass
+
 import torch as th
 import torch.nn as nn
 
 from mowl.representation.class_models import Classes
 from mowl.representation.methods import register_class_model
-from mowl.representation.regions import Box
+from mowl.representation.regions import Box, CornerBox
 
-__all__ = ["MinDeltaBoxes", "FixableBoxes", "signed_intersection"]
+__all__ = ["MinDeltaBoxes", "FixableBoxes", "WidthBox", "signed_intersection"]
 
 
 def signed_intersection(a, b):
@@ -26,6 +28,17 @@ def _uniform(num, dim, low, high):
     table = nn.Embedding(num, dim)
     nn.init.uniform_(table.weight, low, high)
     return table
+
+
+@dataclass(frozen=True)
+class WidthBox(CornerBox):
+    """A box that keeps its corners and the width :math:`e^{\\delta}` that its upper corner is
+    the sum of, so that the exact-model check can add them in double precision.
+
+    :param width: ``(B, d)``.
+    """
+
+    width: th.Tensor = None
 
 
 @register_class_model("box with lower corner")
@@ -52,8 +65,9 @@ class MinDeltaBoxes(Classes):
         self.centres = self.mins
 
     def forward(self, ids):
-        half = th.exp(self.deltas(ids)) / 2
-        return Box(self.mins(ids) + half, half)
+        low, width = self.mins(ids), th.exp(self.deltas(ids))
+        half = width / 2
+        return WidthBox(low + half, half, low, low + width, width)
 
 
 @register_class_model("box with fixed classes")
@@ -106,4 +120,5 @@ class FixableBoxes(Classes):
         top = self.top_mask[ids].unsqueeze(-1)
         big = th.full_like(centre, self.big)
         offset = th.where(bot, -big, th.where(top, big, offset))
-        return Box(th.where(bot | top, th.zeros_like(centre), centre), offset)
+        centre = th.where(bot | top, th.zeros_like(centre), centre)
+        return CornerBox(centre, offset, centre - offset, centre + offset)

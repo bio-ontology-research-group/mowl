@@ -25,7 +25,8 @@ from mowl.nn.order.manifolds import (Euclidean, Hyperboloid, PoincareBall, Spher
                                      UpperHalfSpace)
 from mowl.representation.class_models import Classes
 from mowl.representation.library.hierarchy_regions import (
-    CodedBox, ConePoint, CornerBox, CurvedBall, Disk, OrderCone, Point)
+    CodedBox, ConePoint, CurvedBall, Disk, OrderCone, Point)
+from mowl.representation.regions import CornerBox
 from mowl.representation.methods import register_class_model
 
 __all__ = ["HierarchyClasses", "UnitCubeBoxes", "CodedBoxes", "OrderPoints", "PointClasses",

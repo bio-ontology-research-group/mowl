@@ -8,7 +8,7 @@ import torch.nn as nn
 
 from mowl.representation.regions import Ball, Box
 
-__all__ = ["Classes", "BallClasses", "BoxClasses"]
+__all__ = ["Classes", "BallClasses", "BoxClasses", "raw_tables"]
 
 
 def _unit_rows(table):
@@ -16,6 +16,21 @@ def _unit_rows(table):
         nn.init.uniform_(table.weight, a=-1, b=1)
         table.weight /= th.linalg.norm(table.weight, dim=1, keepdim=True)
     return table
+
+
+def raw_tables(module):
+    """The parameter tables of a class or relation model, by the name of the attribute that
+    holds them: ``{"centres": Parameter (N, d), "radii": ...}`` (the weight of every
+    embedding that is a direct child, and the parameters the model holds itself). They are
+    the tensors the optimiser trains, not copies, for regimes that initialise, inspect or
+    constrain the raw parameters (before any activation such as the absolute value)."""
+    tables = {}
+    for name, child in module.named_children():
+        if isinstance(child, nn.Embedding):
+            tables.setdefault(name, child.weight)
+    for name, parameter in module.named_parameters(recurse=False):
+        tables.setdefault(name, parameter)
+    return tables
 
 
 class Classes(nn.Module):
@@ -47,6 +62,11 @@ class Classes(nn.Module):
         "disjunction": ..., "family": ...}`` for fuzzy sets); added to
         :attr:`ComposedGeometry.parts <mowl.representation.ComposedGeometry.parts>`."""
         return {}
+
+    def tables(self):
+        """The raw parameter tables by attribute name (see :func:`raw_tables`): for a ball
+        model ``{"centres": ..., "radii": ...}``, for boxes ``{"centres", "offsets"}``."""
+        return raw_tables(self)
 
     def param_groups(self):
         """Parameter groups for an optimiser with manifolds (one group, no manifold)."""
