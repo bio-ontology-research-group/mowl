@@ -67,6 +67,18 @@ class Subspace(Region):
         gap = th.relu(1 - meet.sum(-1, keepdim=True))
         return Subspace(meet), gap
 
+    def complement(self):
+        """The orthogonal complement inside the concept universe (the real half, which holds
+        every individual vector): the imaginary half is ``0``."""
+        d = self.indicator.shape[-1] // 2
+        out = th.zeros_like(self.indicator)
+        out[..., :d] = 1 - self.indicator[..., :d]
+        return Subspace(out)
+
+    def union(self, other):
+        """The span :math:`S_1 + S_2` (maximum of the indicators)."""
+        return Subspace(th.maximum(self.indicator, other.indicator))
+
 
 @dataclass(frozen=True)
 class Point(Region):
