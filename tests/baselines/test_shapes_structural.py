@@ -7,7 +7,7 @@ import torch as th
 import mowl
 mowl.init_jvm("1g")
 
-from mowl.nn import PrismModule
+from mowl.baselines.nn.el.prism.module import PrismModule
 from mowl.nn.el.structural import DefinitionTable, ExistenceTargets
 from mowl.representation import Bounds, BoxClasses, ComposedGeometry, geometry_of
 from mowl.representation.library.shapes_classes import OctagonClasses, PrismClasses
