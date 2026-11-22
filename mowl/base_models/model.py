@@ -112,6 +112,17 @@ class Model():
                           UserWarning, stacklevel=3)
         return self.expressivity_report
 
+    @property
+    def geometry(self):
+        """What the model contains, behind one interface
+        (:class:`mowl.representation.Geometry`): the regions of classes, individuals and
+        compound classes, and the relations between them.
+
+        :raises NotImplementedError: If the method does not expose a geometry yet.
+        """
+        from mowl.representation import geometry_of
+        return geometry_of(self.module)
+
     def train(self, *args, **kwargs):
         '''Abstract method for training the model. This method must be implemented in children classes
         '''

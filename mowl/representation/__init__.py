@@ -15,6 +15,8 @@ from mowl.representation.class_models import Classes, BallClasses, BoxClasses
 from mowl.representation.relation_models import Relations, Translation
 from mowl.representation.objectives import Objective, FORMS
 from mowl.representation.geometry import Geometry, ComposedGeometry
+from mowl.representation.methods import (METHODS, CLASS_MODELS, RELATION_MODELS, MEASURES,
+                                         compose)
 from mowl.representation.adapters import geometry_of, register_adapter, ADAPTERS
 
 __all__ = ["View", "Space", "ClassModel", "RelationModel", "IndividualModel",
@@ -24,4 +26,5 @@ __all__ = ["View", "Space", "ClassModel", "RelationModel", "IndividualModel",
            "RegionMeasure", "CentreDistance", "Bounds",
            "Classes", "BallClasses", "BoxClasses", "Relations", "Translation",
            "Objective", "FORMS", "Geometry", "ComposedGeometry",
-           "geometry_of", "register_adapter", "ADAPTERS"]
+           "geometry_of", "register_adapter", "ADAPTERS",
+           "METHODS", "CLASS_MODELS", "RELATION_MODELS", "MEASURES", "compose"]
