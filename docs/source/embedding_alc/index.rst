@@ -110,3 +110,64 @@ You can also access the learned embeddings:
 
    class_embeddings = model.class_embeddings
    object_property_embeddings = model.object_property_embeddings
+
+How the ALC models are trained
+------------------------------
+
+The ALC models have no training loop of their own: they run the shared loop of
+:mod:`mowl.training.loop` (one optimisation step per epoch over all batches of all axiom
+patterns, with validation and checkpointing every ``validate_every`` epochs), and what is
+particular to a method is a part:
+
+* the combination of the axiom losses is the objective part
+  :class:`~mowl.representation.library.logic_alc.AxiomKindWeighting`
+  (``model.module.objective.weighting``; ``alpha`` and ``beta`` are its weights of the
+  terminological axioms and the class assertions, the role assertions get
+  ``1 - alpha - beta``). Another weighting is a swap of the objective;
+* the anonymous entities of FALCON are drawn by
+  :class:`~mowl.representation.library.logic_alc.AnonymousElements`;
+* the annealed relaxation of Al-cone
+  (:class:`~mowl.representation.library.logic_alc.AnnealedRelaxation`) is a training regime
+  of the geometry, which the loop consults like any other regime. A regime that changes the
+  course of training (a learning-rate schedule, early stopping) can be assigned; one that
+  changes the loss or the negatives is refused, since the objective reads the axioms itself.
+
+.. testcode::
+
+   from mowl.models import ComposedALC
+   from mowl.representation.library.logic_alc import AxiomKindWeighting
+   from mowl.training import LinearDecay
+
+   assert model.module.objective.weighting.tbox == 0.5
+   tbox_only = ComposedALC(dataset, method="dfalc", embed_dim=10,
+                           objective_options={"weighting": AxiomKindWeighting(1.0, 0.0)})
+   tbox_only.training_regime = LinearDecay()
+   tbox_only.train(epochs=2)
+
+A combination of parts is checked when the model is built. A replaced part that cannot
+evaluate the axioms of the ontology, or that no axiom reads, is refused with the reason, for
+example the truth tables of DF-ALC as the classes of FALCON, whose relation network evaluates
+class expressions on the element vectors and sampled anonymous entities:
+
+.. testcode::
+
+   from mowl.representation import ConstructorUnavailable
+
+   try:
+       ComposedALC(dataset, method="falcon", embed_dim=10, anon_e=2,
+                   classes="fuzzy set (product)")
+   except ConstructorUnavailable as error:
+       print("refused")
+
+.. testoutput::
+
+   refused
+
+Three loops of mOWL are not the shared loop on purpose: the fit of the scoring head of
+vector-only models (:class:`~mowl.evaluation.model_scoring.PairClassifierHead`, an inner fit
+of the evaluation on fixed vectors) and the gradient solver of the solved methods
+(:class:`~mowl.representation.library.solved_solver.GradientFit`, which minimises one
+program) are inner solvers; the regimes of the canonical mixture
+(:mod:`mowl.representation.library.mixture_training`) are a training loop of their own that
+accumulates gradients chunk by chunk, which the shared loop cannot do yet, so that model
+refuses every training regime.

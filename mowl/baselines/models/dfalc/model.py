@@ -2,7 +2,7 @@
 import numpy as np
 import torch as th
 
-from mowl.base_models.alcmodel import EmbeddingALCModel
+from mowl.baselines.models.alc_base import EmbeddingALCModel
 from mowl.baselines.nn.alc.dfalc.module import DFALCModule
 
 _THING = "http://www.w3.org/2002/07/owl#Thing"

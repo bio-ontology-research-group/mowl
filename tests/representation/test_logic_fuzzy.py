@@ -403,8 +403,13 @@ class TestALCone(Shared, TestCase):
         self.assertEqual(float(g(th.tensor([[0, 2]]), "gci1_bot")), 0)      # A, C disjoint
 
     def test_trains_from_parts_and_with_parts_of_other_methods(self):
+        # the annealed relaxation of the method (its training regime, with parameter noise
+        # meant for the learning rate of Al-cone) is taken by ComposedEL too: switched off
+        # here, where the parts alone are trained
+        with_schedule = ComposedEL(small_dataset(), method="alcone", embed_dim=3, margin=0.1)
+        self.assertIs(with_schedule.training_regime, with_schedule.module.schedule)
         self.assertLessEqual(*_train(ComposedEL(
-            small_dataset(), method="alcone", embed_dim=3, margin=0.1), 60), 0)
+            small_dataset(), method="alcone", embed_dim=3, margin=0.1, anneal=None), 60), 0)
         self.assertLessEqual(*_train(ComposedEL(
             small_dataset(), classes="half-axis cone", relations="incidence matrix",
             measure="half-axis hinge", embed_dim=3, margin=0.1), 60), 0)

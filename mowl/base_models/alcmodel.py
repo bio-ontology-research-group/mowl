@@ -1,26 +1,63 @@
-from mowl.base_models.model import Model
 import torch as th
 from torch.utils.data import DataLoader
-from tqdm import trange
+
+from mowl.base_models.model import Model
 from mowl.datasets.alc import ALCDataset
-from mowl.owlapi import (
-    OWLSubClassOfAxiom, OWLEquivalentClassesAxiom, OWLDisjointClassesAxiom,
-    OWLClassAssertionAxiom, OWLObjectPropertyAssertionAxiom,
-)
+from mowl.representation.library.logic_alc import (ABOX_EC, ABOX_EE, TBOX,
+                                                   AnonymousElements, AxiomKindWeighting)
+from mowl.training.loop import RegimeTrained
+from mowl.training.regime import HOOKS
+
+__all__ = ["EmbeddingALCModel", "TBOX", "ABOX_EC", "ABOX_EE"]
+
+#: The hooks of a training regime that the loop of an ALC model consults: the course of
+#: training, the regularisation and projections. The data, the negatives and the loss of an
+#: axiom pattern are the objective's (:class:`AxiomKindWeighting` and the reading of the
+#: geometry); a regime that changes them is refused when it is assigned.
+ALC_TRAINING_HOOKS = frozenset(HOOKS) - {"training_datasets", "negatives", "filter_negatives",
+                                         "loss"}
 
 
-#: Loss-category names for the three FALCON loss terms.
-TBOX = "tbox"
-ABOX_EC = "abox_ec"
-ABOX_EE = "abox_ee"
+class _PatternBatches:
+    """The rows of one axiom pattern as the training loop sees them: ``len`` is the number of
+    rows, ``[:]`` the batches (a :class:`~torch.utils.data.DataLoader`, which draws its order
+    when it is iterated)."""
+
+    def __init__(self, loader):
+        self.loader = loader
+
+    def __len__(self):
+        return len(self.loader.dataset)
+
+    def __getitem__(self, idx):
+        return self.loader
+
+    @property
+    def batches(self):
+        return len(self.loader)
 
 
-class EmbeddingALCModel(Model):
+class EmbeddingALCModel(RegimeTrained, Model):
     """Abstract class that provides basic functionalities for methods that aim to embed the \
     :math:`\\mathcal{ALC}` language.
 
     Subclasses must implement :meth:`init_module`, which sets ``self.module`` to an
-    instance of :class:`ALCModule <mowl.nn.alc.module.ALCModule>`.
+    instance of :class:`ALCModule <mowl.nn.alc.module.ALCModule>` (or a geometry that reads ALC
+    axioms, :class:`~mowl.representation.library.logic_alc.ExpressionGeometry`).
+
+    Training is the shared loop of :mod:`mowl.training.loop` (one optimisation step per epoch
+    over all batches of all axiom patterns, validation and checkpointing every
+    ``validate_every`` epochs) with these parts:
+
+    * the loss of a step: the objective part
+      :class:`~mowl.representation.library.logic_alc.AxiomKindWeighting` of the module's
+      objective (``module.objective.weighting``), or, if it has none, one made of ``alpha``
+      and ``beta``;
+    * the anonymous entities of every epoch:
+      :class:`~mowl.representation.library.logic_alc.AnonymousElements` (``anon_e``);
+    * a training regime (:attr:`training_regime`): the regimes of the module
+      (``module.default_regimes``, such as the annealing of Al-cone) unless another is
+      assigned; the loop consults the hooks in :data:`ALC_TRAINING_HOOKS`.
 
     :param dataset: mOWL dataset to use for training.
     :type dataset: :class:`mowl.datasets.base.Dataset`
@@ -42,6 +79,10 @@ class EmbeddingALCModel(Model):
     axiom_scoring = "method"
     scored_forms = ("gci0", "gci1", "gci2", "gci3")
 
+    training_hooks = ALC_TRAINING_HOOKS
+    #: One optimisation step per epoch, a progress bar, validation by the model itself.
+    loop_style = "epochs"
+
     def __init__(self, dataset, embed_dim=50, batch_size=256, alpha=0.3, beta=0.3,
                  anon_e=4, learning_rate=0.001, model_filepath=None, device="cpu"):
         super().__init__(dataset, model_filepath=model_filepath)
@@ -52,12 +93,8 @@ class EmbeddingALCModel(Model):
         if not isinstance(device, str):
             raise TypeError("Optional parameter device must be of type str.")
 
-        if not (0 <= alpha <= 1 and 0 <= beta <= 1):
-            raise ValueError("Parameters alpha and beta must be in the interval [0, 1].")
-
-        if alpha + beta > 1:
-            raise ValueError("The sum of alpha and beta must not exceed 1 "
-                             "(the ABox-EE weight is 1 - alpha - beta).")
+        #: The weighting of the loss terms when the module's objective has none.
+        self.own_weighting = AxiomKindWeighting(alpha, beta)
 
         self._datasets_loaded = False
         self._dataloaders_loaded = False
@@ -145,17 +182,31 @@ class EmbeddingALCModel(Model):
             patterns[gci_name] = pair
         return patterns[gci_name]
 
+    # -- the parts of training -----------------------------------------------------------
+    @property
+    def weighting(self):
+        """The objective part that combines the costs of the axiom patterns into a loss: the
+        one of the module's objective, or the model's own (``alpha``, ``beta``)."""
+        objective = getattr(self.module, "objective", None)
+        own = getattr(objective, "weighting", None)
+        return self.own_weighting if own is None else own
+
+    @property
+    def anonymous_elements(self):
+        """The sampler of the anonymous entities of an epoch
+        (:class:`~mowl.representation.library.logic_alc.AnonymousElements`, ``anon_e``)."""
+        sampler = self.__dict__.get("_anonymous_elements")
+        if sampler is None or sampler.count != self.anon_e:
+            sampler = self._anonymous_elements = AnonymousElements(self.anon_e)
+        return sampler
+
     def _scoring_context(self):
         """The entity context axioms are scored against: the named individuals and one
         fixed sample of anonymous entities (drawn once, so that scores are reproducible)."""
         context = getattr(self, "_axiom_scoring_context", None)
         if context is None:
-            state = th.random.get_rng_state()
-            th.manual_seed(0)
-            try:
-                context = self._entity_context(self.sample_anonymous_entities())
-            finally:
-                th.random.set_rng_state(state)
+            context = self.anonymous_elements.with_seed(
+                lambda: self._entity_context(self.sample_anonymous_entities()))
             self._axiom_scoring_context = context
         return context
 
@@ -167,23 +218,20 @@ class EmbeddingALCModel(Model):
         d_fs, _ = module.forward_fs(sup, x, e_emb, cur_index=nxt)
         return module.get_cc_loss(module._logical_and(c_fs, module._logical_not(d_fs)))
 
-    @th.no_grad()
     def axiom_costs(self, gci_name, rows, max_cells=2 ** 26):
         """Cost of every candidate axiom in ``rows`` (mOWL normal-form layout, model
         indices): the loss the module assigns to the axiom, lower is more plausible.
 
         :param max_cells: Bound on ``rows per chunk × entities × dimension``.
         """
+        from mowl.evaluation.model_scoring import costs_in_chunks
         if self.module is None:
             self.init_module()
         sub, sup = self._axiom_pattern(gci_name)
         e_emb = self._scoring_context()
-        width = 1 if e_emb is None else max(1, e_emb.shape[0] * e_emb.shape[1])
-        chunk = max(1, max_cells // width)
-        rows = rows.to(self.device)
-        out = [self._subsumption_costs(sub, sup, rows[s:s + chunk], e_emb)
-               for s in range(0, len(rows), chunk)]
-        return th.cat(out) if out else th.zeros(0, device=self.device)
+        width = 1 if e_emb is None else e_emb.numel()
+        return costs_in_chunks(lambda x: self._subsumption_costs(sub, sup, x, e_emb),
+                               rows.to(self.device), max_cells, width)
 
     def _load_datasets(self):
         """This method will create different data attributes and finally the corresponding \
@@ -237,111 +285,118 @@ class EmbeddingALCModel(Model):
     @staticmethod
     def axiom_category(axiom):
         """Classifies an axiom (or axiom pattern) into one of the three FALCON loss \
-        categories: TBox, concept-assertion (ABox-EC) or relation-assertion (ABox-EE)."""
-        if isinstance(axiom, (OWLSubClassOfAxiom, OWLEquivalentClassesAxiom,
-                              OWLDisjointClassesAxiom)):
-            return TBOX
-        elif isinstance(axiom, OWLClassAssertionAxiom):
-            return ABOX_EC
-        elif isinstance(axiom, OWLObjectPropertyAssertionAxiom):
-            return ABOX_EE
-        return None
+        categories: TBox, concept-assertion (ABox-EC) or relation-assertion (ABox-EE) \
+        (:meth:`AxiomKindWeighting.kind \
+        <mowl.representation.library.logic_alc.AxiomKindWeighting.kind>`)."""
+        return AxiomKindWeighting.kind(axiom)
 
     def sample_anonymous_entities(self):
         """Samples a tensor of anonymous-entity embeddings for the current epoch. Half are \
         perturbations of existing named-entity embeddings and half are freshly initialised, \
-        following the original FALCON implementation."""
-        named = self.module.e_embedding.weight.detach()
-        n_named, dim = named.shape[0], self.embed_dim
-        half = self.anon_e // 2
-        n_perturbed = min(half, n_named)
-        n_fresh = self.anon_e - n_perturbed
-
-        parts = []
-        if n_perturbed > 0:
-            noise = th.normal(0, 0.1, size=(n_perturbed, dim)).to(self.device)
-            parts.append(named[:n_perturbed] + noise)
-        if n_fresh > 0:
-            fresh = th.empty(n_fresh, dim).to(self.device)
-            th.nn.init.xavier_uniform_(fresh)
-            parts.append(fresh)
-        return th.cat(parts, dim=0)
+        following the original FALCON implementation \
+        (:class:`~mowl.representation.library.logic_alc.AnonymousElements`)."""
+        return self.anonymous_elements.sample(self.module.e_embedding.weight.detach(),
+                                              self.embed_dim, self.device)
 
     def _entity_context(self, anon_e_emb):
         """Builds the entity-membership context: all named entities followed by the sampled \
         anonymous entities (matching the original FALCON implementation). For purely \
         terminological ontologies (no individuals) only the anonymous entities are used."""
-        n_named = len(self.dataset.individuals)
-        named = self.module.e_embedding.weight[:n_named]
-        return th.cat([named, anon_e_emb], dim=0)
+        return self.anonymous_elements.context(self.module.e_embedding.weight,
+                                               len(self.dataset.individuals), anon_e_emb)
 
     def _epoch_loss(self, dataloaders, e_emb):
-        """Computes the alpha/beta-weighted FALCON loss over a set of dataloaders."""
-        losses = {TBOX: [], ABOX_EC: [], ABOX_EE: []}
-        for axiom, dataloader in dataloaders.items():
-            category = self.axiom_category(axiom)
-            if category is None:
-                continue
-            for batch_data in dataloaders[axiom]:
-                batch = batch_data[0].to(self.device)
-                losses[category].append(th.mean(self.module(axiom, batch, e_emb)))
+        """The loss of all batches of ``{axiom: batches}`` on the entity context ``e_emb``
+        (the :attr:`weighting`), or ``None`` if no axiom is trained."""
+        return self.weighting.loss(self.module, dataloaders, e_emb, self.device)
 
-        weights = {TBOX: self.alpha, ABOX_EC: self.beta,
-                   ABOX_EE: 1 - self.alpha - self.beta}
-        total = None
-        for category, terms in losses.items():
-            if not terms:
-                continue
-            term = sum(terms) / len(terms)
-            weighted = weights[category] * term
-            total = weighted if total is None else total + weighted
-        return total
+    # -- the shared training loop (mowl.training.loop) ---------------------------------------
+    @property
+    def training_datasets(self):
+        """``{axiom pattern: its batches}`` of the training axioms of a kind the
+        :attr:`weighting` trains, what the loop trains on."""
+        return self._patterns(self.training_dataloaders)
+
+    def _patterns(self, dataloaders):
+        weighting = self.weighting
+        return {axiom: _PatternBatches(loader) for axiom, loader in dataloaders.items()
+                if weighting.kind(axiom) is not None}
+
+    def log_training_datasets(self, datasets):
+        if not datasets:
+            raise ValueError("No trainable axioms were found in the training ontology.")
+        self._best_loss = float("inf")
+
+    def on_epoch_start(self, step, steps):
+        """The entity context of the epoch (a fresh sample of anonymous entities)."""
+        self._epoch_context = self._entity_context(self.sample_anonymous_entities())
+
+    def _step_loss(self, datasets, step, negatives=True):
+        self._batch_counts = self.weighting.batch_counts(
+            {axiom: range(batches.batches) for axiom, batches in datasets.items()})
+        return super()._step_loss(datasets, step, negatives=False)
+
+    def score_rows(self, form, rows, neg=False):
+        """The cost of every batch of the axiom pattern ``form`` on the context of the
+        epoch (:meth:`AxiomKindWeighting.batch_costs
+        <mowl.representation.library.logic_alc.AxiomKindWeighting.batch_costs>`)."""
+        return self.weighting.batch_costs(self.module, form, rows, self._epoch_context,
+                                          self.device)
+
+    def combine_scores(self, form, pos_scores, neg_scores=None):
+        return self.weighting.combine(form, pos_scores, self._batch_counts)
+
+    def after_optimizer_step(self):
+        super().after_optimizer_step()
+        project = getattr(self.module, "project", None)
+        if project is not None:
+            with th.no_grad():
+                project()
+
+    def validation_loss(self):
+        """The loss of the validation axioms (no gradient, evaluation mode, a fresh context),
+        or ``None``."""
+        with th.no_grad():
+            self.module.eval()
+            e_emb = self._entity_context(self.sample_anonymous_entities())
+            valid = self._epoch_loss(self.validation_dataloaders, e_emb)
+        return None if valid is None else valid.item()
+
+    def validate_epoch(self, epoch, loss):
+        """Validate and save the parameters (``model_filepath``) when the validation loss is
+        the best so far."""
+        if not self.dataset.validation:
+            return
+        valid = self.validation_loss()
+        if valid is not None and valid < self._best_loss:
+            self._best_loss = valid
+            if self.model_filepath is not None:
+                self.save_parameters()
+
+    def save_parameters(self):
+        th.save(self.module.state_dict(), self.model_filepath)
+
+    def finish_training(self):
+        if self.model_filepath is not None and self._best_loss == float("inf"):
+            self.save_parameters()
+
+    def init_training(self):
+        if self.module is None:
+            self.init_module()
+        self.module = self.module.to(self.device)
 
     def train(self, epochs, validate_every=1):
-        """Trains the model.
+        """Trains the model with the shared loop (:mod:`mowl.training.loop`).
 
         :param epochs: Number of training epochs.
         :type epochs: int
         :param validate_every: Run validation (and checkpoint the best model) every this many \
         epochs. Defaults to ``1``.
         :type validate_every: int, optional
+        :return: The loss of every epoch.
         """
-        if self.module is None:
-            self.init_module()
-        self.module = self.module.to(self.device)
-
-        optimizer = th.optim.Adam(self.module.parameters(), lr=self.learning_rate)
-        best_loss = float("inf")
-
-        for epoch in trange(epochs):
-            self.module.train()
-            anon_e_emb = self.sample_anonymous_entities()
-            e_emb = self._entity_context(anon_e_emb)
-
-            loss = self._epoch_loss(self.training_dataloaders, e_emb)
-            if loss is None:
-                raise ValueError("No trainable axioms were found in the training ontology.")
-
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-
-            valid_loss = None
-            if self.dataset.validation and (epoch + 1) % validate_every == 0:
-                with th.no_grad():
-                    self.module.eval()
-                    anon_e_emb = self.sample_anonymous_entities()
-                    e_emb = self._entity_context(anon_e_emb)
-                    valid = self._epoch_loss(self.validation_dataloaders, e_emb)
-                    valid_loss = valid.item() if valid is not None else None
-
-                if valid_loss is not None and valid_loss < best_loss:
-                    best_loss = valid_loss
-                    if self.model_filepath is not None:
-                        th.save(self.module.state_dict(), self.model_filepath)
-
-        if self.model_filepath is not None and best_loss == float("inf"):
-            th.save(self.module.state_dict(), self.model_filepath)
+        self.init_training()
+        return self.run_training(epochs, validate_every)
 
     @property
     def training_dataset(self):

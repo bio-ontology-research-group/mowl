@@ -157,16 +157,3 @@ class ALConeModel(ComposedALC):
         from mowl.geometric.cones import ALConeChecker
         axioms, _ = self.alc_axioms(ontology)
         return ALConeChecker(self.discretise()).violations(axioms)
-
-    def _subsumption_costs(self, sub, sup, x, e_emb):
-        return super()._subsumption_costs(sub, sup, x, e_emb)
-
-    def score_subsumption(self, sub, sup):
-        """Score of :math:`A \\sqsubseteq B` for class IRIs ``sub`` and ``sup``: minus the
-        inclusion loss with margin 0 (``0`` iff the soft cones satisfy it)."""
-        cid = self.class_index_dict
-        idx = th.tensor([cid[sub], cid[sup]], device=self.device)
-        with th.no_grad():
-            c = self.module.classes(idx)
-            return -float(self.module.measure.inside(
-                type(c)(c.values[0:1], c.family), type(c)(c.values[1:2], c.family), 0.0))
