@@ -8,8 +8,11 @@ import torch as th
 import mowl
 mowl.init_jvm("1g")
 
-from mowl.models import CanonicalMixture, FaithEL  # noqa: E402
-from mowl.models.boxlite.embedding import BoxLitEEmbedding  # noqa: E402
+from mowl.models import CanonicalMixture  # noqa: E402
+# the adapters below describe the direct implementations (the combinations of parts are their
+# own geometry: tests/representation/test_recomp_solved.py)
+from mowl.baselines.models.boxlite.embedding import BoxLitEEmbedding  # noqa: E402
+from mowl.baselines.models.faithel.model import FaithEL  # noqa: E402
 from mowl.nn.el.grounded import GroundedELModule  # noqa: E402
 from mowl.representation import ConstructorUnavailable, geometry_of  # noqa: E402
 from mowl.representation.library.other_regions import (  # noqa: E402
@@ -40,7 +43,8 @@ def _exact_grounded():
 def test_grounded_geometry_shares_the_module_and_is_exact_in_the_limit():
     module, lm = _exact_grounded()
     g = geometry_of(module)
-    assert isinstance(g, GroundedGeometry) and g.module is module
+    assert g is module                       # the module is its own geometry (built from parts)
+    assert isinstance(GroundedGeometry(module), GroundedGeometry)   # the adapter still works
     labels = lm.dense_labels()
     a, b = zip(*itertools.product(range(4), repeat=2))
     cost = g.inside(g.classes(th.tensor(a)), g.classes(th.tensor(b))).reshape(4, 4)

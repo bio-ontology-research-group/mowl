@@ -935,7 +935,7 @@ def test_argument_validation() -> None:
 
 
 def test_no_reasoner_or_canonical_model_in_grounded_ast() -> None:
-    """No module under mowl/nn/el/grounded/ or mowl/models/grounded/ may import or call CanonicalModel, reasoners, or entails/joint_satisfiable (except evaluate_model in mowl/models/grounded/model.py)."""
+    """No module under mowl/nn/el/grounded/ or mowl/models/grounded/ may import or call CanonicalModel, reasoners, or entails/joint_satisfiable (except evaluate_model in mowl/models/grounded/evaluation.py)."""
     repo_root = Path(__file__).resolve().parents[2]
     nn_grounded_dir = repo_root / "mowl" / "nn" / "el" / "grounded"
     models_grounded_dir = repo_root / "mowl" / "models" / "grounded"
@@ -1017,7 +1017,7 @@ def test_no_reasoner_or_canonical_model_in_grounded_ast() -> None:
         _check_subtree(
             tree,
             path,
-            allow_evaluate_model=(path.name == "model.py"),
+            allow_evaluate_model=(path.name in ("model.py", "evaluation.py")),  # evaluate_model lives in evaluation.py
         )
         if path.name == "model.py":
             forbidden_reseed_keys = {

@@ -61,6 +61,42 @@ selected with ``solver="MOSEK"`` if it is installed and licensed. The optimal va
 convex programme does not depend on the solver; when the optimum is unique, the optimal
 embeddings of different solvers agree up to their tolerances, otherwise they may differ.
 
+Made of parts
+-------------
+
+BoxLitE is a combination of the parts of :mod:`mowl.representation`, *fitted by a solver
+instead of by gradient descent*: a box per concept name given by its bounds
+(:class:`~mowl.representation.library.solved_boxlite.BoundsBoxes`), a head, a tail and a bump
+box per role (:class:`~mowl.representation.library.solved_boxlite.HeadTailBumpBoxes`), a
+position and a bump vector per individual, the signed distance as the measure and the
+objective of the paper. ``BoxLitE.module`` is the geometry of these parts. The solver is a
+part of its own (:mod:`mowl.representation.library.solved_solver`): the problem
+(:class:`~mowl.representation.library.solved_boxlite.BoxLitEProgram`) is written once against
+an algebra, so the same formulas give the losses of the geometry (tensors), the checks of a
+solution (arrays, no solver needed) and the CVXPY problem. ``train`` fits the parts with a
+conic solver (default), with another
+:class:`~mowl.representation.library.solved_solver.Solver` (``solver=ScipySolver()``, small
+problems, SciPy only) or by gradient descent on the same program
+(``regime=GradientFit()``, approximate):
+
+.. testcode::
+
+   from mowl.datasets.dllite import DLLiteKB
+   from mowl.models.boxlite.model import BoxLitE
+   from mowl.representation.library.solved_solver import ScipySolver, evaluate
+
+   kb = DLLiteKB.from_lists(inclusions=[("A", "B")], concept_assertions=[("A", "a")])
+   model = BoxLitE.from_kb(kb, embed_dim=kb.n_basic)
+   print(model.module.parts["classes"], model.module.parts["relations"])
+   model.train(solver=ScipySolver(maxiter=50))
+   values = {name: getattr(model.embedding, name) for name in model.embedding._ARRAYS}
+   print(evaluate(model.program, values).feasible(1e-4))
+
+.. testoutput::
+
+   box head and tail boxes
+   True
+
 Guarantees in practice
 ----------------------
 
@@ -70,7 +106,7 @@ Guarantees in practice
   model (Theorem 4 iii-iv). :meth:`~mowl.models.boxlite.model.BoxLitE.decide_satisfiability`
   uses this as a decision procedure.
 * :meth:`~mowl.models.boxlite.model.BoxLitE.check_model` checks a solution with plain set
-  semantics, independently of the loss (:mod:`mowl.models.boxlite.checker`).
+  semantics, independently of the loss (:mod:`mowl.representation.library.solved_boxlite_check`).
 * The approach is restricted to :math:`\text{DL-Lite}_\mathcal{H}` on purpose:
   conjunction on the left of an inclusion makes the constraints non-convex (Section 7).
 
@@ -82,7 +118,7 @@ reproduces what the authors' code (``AleksVap/BoxLitE``, commit ``7d53063``) sol
 produced the published numbers: closed boxes without :math:`\epsilon`, one signed distance
 over the stacked residuals of all assertions instead of a maximum per assertion, a
 different width regulariser and different negatives. The details are in the docstring of
-:mod:`mowl.models.boxlite.program` and in the card's ``notes``.
+:mod:`mowl.representation.library.solved_boxlite` and in the card's ``notes``.
 
 Example
 -------

@@ -355,7 +355,8 @@ class _FaithBackend(NormalFormBackend):
     """The TBox model of FaithEL: an entity outside its signature costs 1.0."""
 
     def _known(self, expr):
-        sig = self.model.signature
+        from mowl.geometric.normal_forms import TOP
+        sig = set(self.model.signature) | {TOP}       # the top class is known (as in tbox_costs)
         return all(not (e[0] == "name" and e[1] not in sig) for e in _atoms(expr))
 
     def _roles_known(self, *exprs):
@@ -367,7 +368,14 @@ class _FaithBackend(NormalFormBackend):
         return super().subsumed(a, b)
 
 
-register_adapter("FaithEL")(FaithELGeometry)
+@register_adapter("FaithEL")
+def _faithel(model):
+    """The geometry of a FaithEL: its own module where the model is built from parts, the
+    adapter geometry (reading the tables of the direct implementation) otherwise."""
+    module = getattr(model, "module", None)
+    if isinstance(module, Geometry):
+        return module
+    return FaithELGeometry(model)
 
 
 # -- boxlite ---------------------------------------------------------------------------------
@@ -449,7 +457,7 @@ class BoxLitEGeometry(Geometry):
             out = [float(self.embedding.role_loss(int(rr), [a], [o])[0])
                    for rr, a, o in zip(r, ids, obj)]
             return th.tensor(out, dtype=th.float32).reshape(-1, 1)
-        from mowl.models.boxlite.embedding import box_distance
+        from mowl.representation.library.solved_boxlite import box_distance
         lower, upper = region.lower.numpy(), region.upper.numpy()
         x = self.embedding.pos[ids]
         return th.as_tensor(box_distance(lower, upper, x, 0.0), dtype=th.float32
@@ -483,6 +491,9 @@ class _Individuals(Region):
 
 
 def _boxlite(model):
+    module = getattr(model, "module", None)
+    if isinstance(module, Geometry):          # the model is built from parts: its own geometry
+        return module
     embedding = getattr(model, "embedding", model)
     if embedding is None:
         raise RuntimeError("BoxLitE has no embedding yet; call train() first.")
