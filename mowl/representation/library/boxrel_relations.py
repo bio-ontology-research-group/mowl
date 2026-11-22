@@ -1,0 +1,244 @@
+"""Relation models of the boxes group: a box of translations (TransBox), an affine map
+(BoxEL, BoxSEL) and an affine map with a range and an error box (ELK-Em).
+
+Besides :meth:`image` and :meth:`preimage` they have the two methods the role axioms need,
+which a relation model answers because only it knows what a relation is:
+
+* ``role_inclusion(sub, sup, measure, margin)``: cost of :math:`r \\sqsubseteq s`,
+* ``role_chain(first, second, sup, measure, margin)``: cost of
+  :math:`r_1 \\circ r_2 \\sqsubseteq s`,
+
+with relation indices as arguments and the measure that compares boxes, ``(B, 1)``.
+"""
+
+import torch as th
+import torch.nn as nn
+
+from mowl.representation.class_models import _unit_rows
+from mowl.representation.library.boxrel_boxes import _uniform
+from mowl.representation.methods import register_relation_model
+from mowl.representation.regions import Box, ConstructorUnavailable
+from mowl.representation.relation_models import Relations
+
+__all__ = ["TranslationBoxes", "Affine", "AffineBoxes"]
+
+
+def _boxes(region, relation):
+    if not isinstance(region, Box):
+        raise ConstructorUnavailable(
+            f"{type(relation).__name__} maps boxes, not {type(region).__name__} regions.")
+    return region
+
+
+@register_relation_model("box of translations")
+class TranslationBoxes(Relations):
+    """A relation is a box of shift vectors (TransBox, Yang et al. 2025):
+    :math:`(x, y) \\in r` iff :math:`x - y` lies in the box :math:`[c_r - o_r, c_r + o_r]`.
+    :math:`\\exists r.C` is the box of :math:`C` shifted by :math:`c_r` and widened by
+    :math:`o_r` (the Minkowski sum), and the images and preimages need regions that can be
+    shifted and widened (boxes). A role chain is the sum of the boxes, a role inclusion an
+    inclusion of boxes.
+
+    :param vectors: Table of the centres :math:`c_r` (the shift vector of a plain
+        translation); ``offsets``: table of the half-widths (stored signed, used through
+        their absolute value).
+    """
+
+    part = "box of translations"
+
+    def __init__(self, size=None, embed_dim=None, vectors=None, offsets=None):
+        super().__init__()
+        self.vectors = vectors if vectors is not None else _unit_rows(
+            nn.Embedding(size, embed_dim))
+        self.offsets = offsets if offsets is not None else _unit_rows(
+            nn.Embedding(len(self.vectors.weight), self.vectors.embedding_dim))
+
+    def box(self, ids):
+        """The box of translations of the relations ``ids``."""
+        return Box(self.vectors(ids), th.abs(self.offsets(ids)))
+
+    def image(self, ids, region):
+        box = self.box(ids)
+        return _boxes(region, self).translate(-box.centre).grow(box.offset)
+
+    def preimage(self, ids, region):
+        box = self.box(ids)
+        return _boxes(region, self).translate(box.centre).grow(box.offset)
+
+    def preimage_all(self, ids, region, clamp=True):
+        """The box of :math:`\\exists r^{all}.C` of the semantic enhancement of TransBox:
+        centre :math:`c_r + c_C`, half-width :math:`o_r - o_C`: the box of the
+        :math:`C`-boxes that the box of translations reaches all of. ``clamp``: cut the
+        half-width at zero (default); the authors' code does not, which gives an inverted
+        box where :math:`o_C > o_r`."""
+        box = self.box(ids)
+        offset = box.offset - _boxes(region, self).offset
+        return Box(region.centre + box.centre, th.relu(offset) if clamp else offset)
+
+    def role_inclusion(self, sub, sup, measure, margin=0.0):
+        return measure.inside(self.box(sub), self.box(sup), margin)
+
+    def role_chain(self, first, second, sup, measure, margin=0.0):
+        a, b = self.box(first), self.box(second)
+        return measure.inside(Box(a.centre + b.centre, a.offset + b.offset), self.box(sup),
+                              margin)
+
+
+@register_relation_model("affine map")
+class Affine(Relations):
+    """A relation is a function that scales and shifts every coordinate (BoxEL, Xiong et
+    al. 2022): :math:`(x, y) \\in r` iff :math:`y = f_r \\odot x + t_r`. The image of a box is
+    a box, :meth:`preimage` (the region of :math:`\\exists r.C`) is the box
+    :math:`(C - t_r) / f_r`. A function: every point has one successor.
+
+    :param vectors: Table of the shifts :math:`t_r`; ``scales``: table of the factors
+        :math:`f_r` (initialised around 1).
+    :param eps: Added to the factors, which keeps the preimage defined.
+    :param signed: ``False`` (default): a negative factor mirrors the box, which stays a
+        box. ``True``: the corners are mapped one by one, so that a negative factor gives
+        an inverted box with negative width, as in the BoxEL code.
+
+    Role axioms: as a function a role is determined by its map, so :math:`r \\sqsubseteq s`
+    costs the distance of the shifts plus the distance of the factors, and
+    :math:`r_1 \\circ r_2 \\sqsubseteq s` the same for the composed map (first :math:`r_1`,
+    then :math:`r_2`); the measure and margin are not used.
+    """
+
+    part = "affine map"
+
+    def __init__(self, size=None, embed_dim=None, vectors=None, scales=None, eps=1e-8,
+                 signed=False):
+        super().__init__()
+        self.vectors = vectors if vectors is not None else _uniform(
+            size, embed_dim, -0.1, 0.1)
+        self.scales = scales if scales is not None else _uniform(
+            len(self.vectors.weight), self.vectors.embedding_dim, 0.9, 1.1)
+        self.eps = eps
+        self.signed = bool(signed)
+
+    def factor(self, ids):
+        return self.scales(ids) + self.eps
+
+    def _spread(self, offset, factor):
+        return offset * (factor if self.signed else factor.abs())
+
+    def image(self, ids, region):
+        f = self.factor(ids)
+        _boxes(region, self)
+        return Box(region.centre * f + self.vectors(ids), self._spread(region.offset, f))
+
+    def preimage(self, ids, region):
+        f = self.factor(ids)
+        _boxes(region, self)
+        return Box((region.centre - self.vectors(ids)) / f,
+                   self._spread(region.offset, 1 / f))
+
+    def _distance(self, a, b):
+        return th.linalg.norm(a, dim=1, keepdim=True) + th.linalg.norm(b, dim=1, keepdim=True)
+
+    def role_inclusion(self, sub, sup, measure=None, margin=0.0):
+        return self._distance(self.vectors(sub) - self.vectors(sup),
+                              self.factor(sub) - self.factor(sup))
+
+    def role_chain(self, first, second, sup, measure=None, margin=0.0):
+        f1, f2 = self.factor(first), self.factor(second)
+        shift = f2 * self.vectors(first) + self.vectors(second)
+        return self._distance(shift - self.vectors(sup), f1 * f2 - self.factor(sup))
+
+
+@register_relation_model("affine map with range and error box")
+class AffineBoxes(Relations):
+    """A relation is a range box :math:`R_r`, an error box :math:`E_r = [-e_r, e_r]` and a
+    diagonal affine map :math:`T_r(x) = m_r x + c_r` with positive slope (ELK-Em, Singh et
+    al. 2026): :math:`(x, y) \\in r` iff :math:`y \\in R_r` and :math:`x \\in T_r(y) \\oplus
+    E_r`, so that :math:`\\exists r.C` is the box :math:`T_r(C \\cap R_r) \\oplus E_r`
+    (:meth:`preimage`).
+
+    :param vectors: Table of the shifts :math:`c_r`. ``range_centres``, ``range_offsets``,
+        ``error_offsets`` and ``slopes`` are the other tables; half-widths and slopes are
+        used through their absolute value (the slope plus ``eps``).
+    :param sound: ``True`` (default): when :math:`C \\cap R_r` is empty the box of
+        :math:`\\exists r.C` stays empty. ``False``: the error box is added anyway, which is
+        what interval arithmetic does in the authors' code and can make an empty
+        restriction non-empty.
+    """
+
+    part = "affine map with range and error box"
+
+    def __init__(self, size=None, embed_dim=None, vectors=None, range_centres=None,
+                 range_offsets=None, error_offsets=None, slopes=None, eps=1e-5, sound=True):
+        super().__init__()
+        n = len(vectors.weight) if vectors is not None else size
+        d = vectors.embedding_dim if vectors is not None else embed_dim
+        self.vectors = vectors if vectors is not None else _uniform(n, d, -0.1, 0.1)
+        self.range_centres = range_centres if range_centres is not None else _uniform(
+            n, d, -0.5, 0.5)
+        self.range_offsets = range_offsets if range_offsets is not None else _uniform(
+            n, d, -0.1, 0.1)
+        self.error_offsets = error_offsets if error_offsets is not None else _uniform(
+            n, d, -0.1, 0.1)
+        self.slopes = slopes if slopes is not None else _uniform(n, d, 0.9, 1.1)
+        self.eps = eps
+        self.sound = bool(sound)
+
+    # -- the three parts of a relation ---------------------------------------------------------
+    def range(self, ids):
+        """The range box :math:`R_r`."""
+        return Box(self.range_centres(ids), th.abs(self.range_offsets(ids)))
+
+    def error(self, ids):
+        """Half-width :math:`e_r` of the error box."""
+        return th.abs(self.error_offsets(ids))
+
+    def slope(self, ids):
+        return th.abs(self.slopes(ids)) + self.eps
+
+    def image_with_error(self, ids, region):
+        """:math:`T_r(A) \\oplus E_r`, without restricting :math:`A` to the range."""
+        return Box(region.centre * self.slope(ids) + self.vectors(ids),
+                   region.offset * self.slope(ids) + self.error(ids))
+
+    def preimage(self, ids, region):
+        box = self.range(ids)
+        _boxes(region, self)
+        lower = th.maximum(region.lower, box.lower)
+        upper = th.minimum(region.upper, box.upper)
+        slope, shift, error = self.slope(ids), self.vectors(ids), self.error(ids)
+        offset = (upper - lower) / 2 * slope
+        if self.sound:
+            empty = (lower > upper).any(dim=1, keepdim=True)
+            offset = th.where(empty, offset, offset + error)
+        else:
+            offset = offset + error
+        return Box((lower + upper) / 2 * slope + shift, offset)
+
+    # -- role axioms ---------------------------------------------------------------------------
+    def _tuple(self, ids):
+        return self.range(ids), self.error(ids), self.slope(ids), self.vectors(ids)
+
+    @staticmethod
+    def _tuple_inclusion(r, s, measure, margin):
+        (range_r, e_r, m_r, c_r), (range_s, e_s, m_s, c_s) = r, s
+        cost = measure.inside(range_r, range_s, margin)
+        for y in (range_r.lower, range_r.upper):
+            cost = cost + measure.inside(Box(m_r * y + c_r, e_r), Box(m_s * y + c_s, e_s),
+                                         margin)
+        return cost
+
+    def role_inclusion(self, sub, sup, measure, margin=0.0):
+        """:math:`\\ell(R_r, R_s) + \\sum_{y \\in \\{l, u\\}} \\ell(T_r(y) \\oplus E_r,
+        T_s(y) \\oplus E_s)` over the end points of the range of :math:`r`."""
+        return self._tuple_inclusion(self._tuple(sub), self._tuple(sup), measure, margin)
+
+    def role_chain(self, first, second, sup, measure, margin=0.0):
+        """The inclusion of the composition
+        :math:`\\langle R_2,\\ m_1 E_2 \\oplus E_1,\\ T_1 \\circ T_2\\rangle` in :math:`s`
+        (an over-approximation of the composition, Proposition 4 of the paper)."""
+        range_1, e_1, m_1, c_1 = self._tuple(first)
+        range_2, e_2, m_2, c_2 = self._tuple(second)
+        composed = (range_2, m_1 * e_2 + e_1, m_1 * m_2, m_1 * c_2 + c_1)
+        return self._tuple_inclusion(composed, self._tuple(sup), measure, margin)
+
+    def image(self, ids, region):
+        raise ConstructorUnavailable("AffineBoxes has no image: the region of "
+                                     "exists r.C is the preimage.")
