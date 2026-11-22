@@ -102,6 +102,9 @@ class PrismModule(ELModule):
     neg_capable_gcis = frozenset({"gci2", "object_property_assertion"})
     role_axiom_capable = False
 
+    #: A positive margin requires the inclusion with a gap (ELBE's convention).
+    margin_semantics = "strict"
+
     def __init__(
         self,
         nb_ont_classes: int,

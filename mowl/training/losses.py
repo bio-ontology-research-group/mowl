@@ -72,6 +72,13 @@ class _ScoreLoss(TrainingRegime):
         self._last_negatives[gci_name] = negatives
         return negatives
 
+    def scores_negatives_like_positives(self, gci_name):
+        # The loss re-scores the negatives with the ordinary score anyway; the loop must not
+        # ask the module for a negative loss it may not have (and would not use).
+        if self.normal_forms is not None and gci_name not in self.normal_forms:
+            return None
+        return self.neg_scores == "positive" and self.needs_positive_form
+
     def _negative_scores(self, gci_name, neg_scores):
         if neg_scores is None:
             return None

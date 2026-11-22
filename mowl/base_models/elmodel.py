@@ -392,7 +392,9 @@ ends training;
         - ``on_train_end()`` once after the last epoch, also after an early stop;
         - ``score_negatives_like_positives``: if ``True``, negatives are scored with the \
 positive form of the loss (``module(neg_data, gci_name)``) before being passed to \
-``loss``, instead of ``module(neg_data, gci_name, neg=True)``.
+``loss``, instead of ``module(neg_data, gci_name, neg=True)``; per axiom type through \
+``scores_negatives_like_positives(gci_name)``, so that a module is asked for a negative loss \
+only where the regime's loss needs one.
 
         Without a regime, :meth:`train` behaves exactly as before regimes existed. Models \
 that override :meth:`train` with a loop of their own declare the hooks that loop consults in \
@@ -798,7 +800,7 @@ that override :meth:`train` with a loop of their own declare the hooks that loop
                     neg_data = regime.filter_negatives(gci_name, gci_dataset, neg_data)
                 neg_scores = None
                 if neg_data is not None:
-                    if regime is not None and regime.score_negatives_like_positives:
+                    if regime is not None and regime.scores_negatives_like_positives(gci_name):
                         neg_scores = self.module(neg_data, gci_name)
                     else:
                         neg_scores = self.module(neg_data, gci_name, neg=True)

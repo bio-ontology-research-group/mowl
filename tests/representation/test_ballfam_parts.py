@@ -23,7 +23,13 @@ def _same(test, module, forms, negs=(False,), geometry=None):
     for form in forms:
         rows = _rows(form)
         for neg in negs:
-            expected = module(rows, form, neg=neg).reshape(-1, 1)
+            try:
+                expected = module(rows, form, neg=neg).reshape(-1, 1)
+            except NotImplementedError:
+                # a module refuses a negative loss it does not have: so does the geometry
+                with test.assertRaises(NotImplementedError):
+                    geometry(rows, form, neg=neg)
+                continue
             got = geometry(rows, form, neg=neg)
             test.assertEqual(got.shape, expected.shape, (form, neg))
             test.assertTrue(th.allclose(got, expected, atol=1e-5), (form, neg))

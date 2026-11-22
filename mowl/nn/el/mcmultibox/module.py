@@ -161,7 +161,6 @@ class VolumeMultiBoxELModule(ELModule):
 
     # ---------------------------------------------------------------------------- losses
     def gci0_loss(self, data, neg=False):
-        self._check_neg(neg)
         cc, co = self.concept_boxes(data[:, 0])
         dc, do = self.concept_boxes(data[:, 1])
 
@@ -172,7 +171,6 @@ class VolumeMultiBoxELModule(ELModule):
         return self._ratio(fn, self.points)
 
     def gci1_loss(self, data, neg=False):
-        self._check_neg(neg)
         c1, o1 = self.concept_boxes(data[:, 0])
         c2, o2 = self.concept_boxes(data[:, 1])
         ec, eo = self.concept_boxes(data[:, 2])
@@ -184,7 +182,6 @@ class VolumeMultiBoxELModule(ELModule):
         return self._ratio(fn, self.points)
 
     def gci2_loss(self, data, neg=False):
-        self._check_neg(neg)
         cc, co = self.concept_boxes(data[:, 0])
         rc, ro = self.role_boxes(data[:, 1])
         dc, do = self.concept_boxes(data[:, 2])
@@ -197,7 +194,6 @@ class VolumeMultiBoxELModule(ELModule):
         return self._ratio(fn, self.points)
 
     def gci3_loss(self, data, neg=False):
-        self._check_neg(neg)
         rc, ro = self.role_boxes(data[:, 0])
         cc, co = self.concept_boxes(data[:, 1])
         dc, do = self.concept_boxes(data[:, 2])
@@ -210,7 +206,6 @@ class VolumeMultiBoxELModule(ELModule):
         return self._ratio(fn, self.points)
 
     def role_inclusion_loss(self, data, neg=False):
-        self._check_neg(neg)
         rc, ro = self.role_boxes(data[:, 0])
         sc, so = self.role_boxes(data[:, 1])
 
@@ -222,7 +217,6 @@ class VolumeMultiBoxELModule(ELModule):
 
     def role_chain_loss(self, data, neg=False):
         """Simplified role chain loss of the thesis (not fully semantic, see class docstring)."""
-        self._check_neg(neg)
         d = self.embed_dim
         r1c, r1o = self.role_boxes(data[:, 0])
         r2c, r2o = self.role_boxes(data[:, 1])
@@ -236,11 +230,6 @@ class VolumeMultiBoxELModule(ELModule):
             return th.minimum(a, self._chi(p, sc, so)), a
 
         return self._ratio(fn, self.role_points)
-
-    def _check_neg(self, neg):
-        if neg:
-            raise NotImplementedError(
-                "The volume-based MultiBoxEL of the thesis has no negative loss.")
 
     def _unsupported(self, name):
         raise NotImplementedError(

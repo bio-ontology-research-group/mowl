@@ -2,9 +2,10 @@ import torch as th
 import torch.nn as nn
 
 from mowl.nn.el.per_axiom_column import PerAxiomColumn
+from mowl.nn.el.strict_negatives import StrictNegatives
 
 
-class ELModule(PerAxiomColumn, nn.Module):
+class ELModule(StrictNegatives, PerAxiomColumn, nn.Module):
     """Subclass of :class:`torch.nn.Module` for :math:`\mathcal{EL}` models.
 
     This class provides \
@@ -16,6 +17,10 @@ class ELModule(PerAxiomColumn, nn.Module):
     Every per-axiom loss of every subclass is a column of shape ``(B, 1)``, never a flat
     ``(B,)`` vector (:class:`~mowl.nn.el.per_axiom_column.PerAxiomColumn`; set the attribute
     ``per_axiom_column = False`` to get the shape the formula produced).
+
+    ``neg=True`` for a form outside :attr:`neg_capable_gcis` raises
+    :class:`NotImplementedError` for every module (:class:`~mowl.nn.el.strict_negatives.StrictNegatives`); the attribute ``strict_negatives = False`` gives the earlier behaviour
+    (the positive loss is returned).
 
     Subclasses should override :attr:`neg_capable_gcis` to declare which GCI loss functions
     genuinely implement a different code path when ``neg=True``.

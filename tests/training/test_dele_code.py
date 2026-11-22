@@ -140,6 +140,7 @@ class TestDELECodeLosses(TestCase):
         model = BoxSquaredEL(self.dataset, embed_dim=4, batch_size=64)
         d = th.tensor([[0, 1], [2, 3]])
         before = model.module(d, "gci0").detach().clone()
+        model.module.strict_negatives = False  # gci0 has no negative loss: the positive one
         neg_before = model.module(d, "gci0", neg=True).detach().clone()
         model.training_regime = DELECodeLosses()
         after = model.module(d, "gci0").detach()

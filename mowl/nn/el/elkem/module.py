@@ -97,6 +97,10 @@ class ELKEmModule(ELModule):
 
     role_axiom_capable = True
 
+    #: ``relu(offset + margin)`` terms: a positive margin requires the inclusion with a gap
+    #: (in training mode; ``module.eval()`` uses margin 0).
+    margin_semantics = "strict"
+
     def __init__(self, nb_ont_classes, nb_rels, nb_inds=None, embed_dim=50, margin=0.1,
                  bot_ids=(), top_ids=(), abox_threshold=0.4, epsilon=1e-5, variant="paper"):
         super().__init__()

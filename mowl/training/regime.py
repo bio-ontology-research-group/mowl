@@ -128,6 +128,16 @@ class TrainingRegime:
     #: ranking, log-sigmoid, BPR, correlation) need.
     score_negatives_like_positives = False
 
+    def scores_negatives_like_positives(self, gci_name):
+        """Whether the negatives of ``gci_name`` are scored with the positive-form loss
+        (see :attr:`score_negatives_like_positives`) rather than the module's negative
+        loss. ``None`` means "this regime does not decide the loss of ``gci_name``" (in a
+        :class:`ComposedRegime` the next regime then does). The training loop asks this for
+        every axiom type, so that a negative loss is requested from the module only where
+        the loss in use needs one: a module has none for most axiom types, and refuses to
+        compute it (:class:`~mowl.nn.ELModule`)."""
+        return self.score_negatives_like_positives
+
     def should_stop(self, epoch):
         """Called at the end of every epoch. Return ``True`` to end training (early
         stopping)."""
@@ -236,6 +246,14 @@ class ComposedRegime(TrainingRegime):
         for r in self.regimes:
             if type(r).loss is not TrainingRegime.loss:
                 return r.score_negatives_like_positives
+        return False
+
+    def scores_negatives_like_positives(self, gci_name):
+        for r in self.regimes:
+            if type(r).loss is not TrainingRegime.loss:
+                decided = r.scores_negatives_like_positives(gci_name)
+                if decided is not None:
+                    return decided
         return False
 
     def should_stop(self, epoch):

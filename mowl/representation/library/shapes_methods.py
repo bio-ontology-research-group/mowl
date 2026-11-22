@@ -96,7 +96,7 @@ def octagon(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0
     elif t is not None and getattr(t, "ind_embed", None) is not None:
         individuals = Points(family="octagon", centres=t.ind_embed)
     objective = ShapeObjective(
-        margin, gci3="inclusion", gci2_negative="outside", negatives="gci2",
+        margin, gci3="inclusion", gci2_negative="outside", negatives=("gci2",),
         disjoint_margin=disjoint_margin, neg_margins={"gci2": neg_margin},
         assertion="distance", strict_negatives=False)
     regularizers = (MinWidthPenalty(min_width),) if min_width and min_width > 0 else ()

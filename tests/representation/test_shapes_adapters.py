@@ -19,7 +19,13 @@ def _same(case, module, geometry, forms, negs=(False,), rows_of=_rows):
     for form in forms:
         rows = rows_of(form)
         for neg in negs:
-            expected = module(rows, form, neg=neg).reshape(-1, 1)
+            try:
+                expected = module(rows, form, neg=neg).reshape(-1, 1)
+            except NotImplementedError:
+                # a module refuses a negative loss it does not have: so does the geometry
+                with case.assertRaises(NotImplementedError):
+                    geometry(rows, form, neg=neg)
+                continue
             got = geometry(rows, form, neg=neg)
             case.assertEqual(got.shape, expected.shape, (form, neg))
             case.assertTrue(th.allclose(got, expected, atol=1e-5),
@@ -58,6 +64,9 @@ class TestOctagon(TestCase):
 
     def test_rebuilt_from_parts_with_copied_parameters(self):
         module = self.make()
+        # the builder reads a negative of a form without one as the positive loss (its
+        # strict_negatives=False); so does the module with the same option
+        module.strict_negatives = False
         geometry = METHODS["octagon"](N, R, I, embed_dim=D, margin=0.07)
         cm = geometry.class_model
         _copy([cm.centres.weight, cm.radii.weight, geometry.relation_model.vectors.weight,
@@ -116,6 +125,9 @@ class TestPrism(TestCase):
 
     def test_rebuilt_from_parts_with_copied_parameters(self):
         module = self.make()
+        # the builder reads a negative of a form without one as the positive loss (its
+        # strict_negatives=False); so does the module with the same option
+        module.strict_negatives = False
         geometry = METHODS["prism"](N, R, I, embed_dim=D + 1, margin=0.07)
         cm = geometry.class_model
         _copy([cm.centres.weight, cm.inradii.weight, cm.box_centres.weight,

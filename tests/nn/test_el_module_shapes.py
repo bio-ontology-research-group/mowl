@@ -20,6 +20,10 @@ GOLDEN = json.loads((Path(__file__).parent / "golden" / "el_module_losses_flat.j
 FLAT_WITH_OPTION = {"BoxSquaredELModule", "MultiBoxELModule"}
 
 
+# These two refused a negative of a form without one before the change as well.
+ALWAYS_STRICT = {"TransBoxModule", "VolumeMultiBoxELModule"}
+
+
 def _old_shape(name, form, golden_shape):
     if name in FLAT_WITH_OPTION and not form.startswith("role_"):
         return (B,)
@@ -27,6 +31,10 @@ def _old_shape(name, form, golden_shape):
 
 
 def _call(module, form, neg):
+    # The golden values are those of the earlier fall-through (neg=True on a form without a
+    # negative loss returned the positive loss); that is what strict_negatives=False selects.
+    if type(module).__name__ not in ALWAYS_STRICT:
+        module.strict_negatives = False
     try:
         out = module(batch(form), form, neg=neg)
     except NotImplementedError:
