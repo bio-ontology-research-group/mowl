@@ -136,7 +136,8 @@ def multiboxel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=
                component_aggregation="hard", tau=1.0, diversity_reg=0.0, epsilon=0.01,
                reading="axiom", beta=0.1, neg_weight=0.1, ind_halfwidth=None, volume_reg=0.0,
                max_components=None, existence_weight=1.0, size_reg=1e-3, bot_agg="mean",
-               witness_weight=0.0, supervision=None, tables=None):
+               witness_weight=0.0, supervision=None, size_reg_without_tables=False,
+               tables=None):
     """MultiBoxEL (Federico, Leemhuis and Kutz 2026): Box2EL with every class a union of
     ``n_components`` boxes (one bump vector per class), in the five readings of the module's
     ``objective`` (here ``reading``):
@@ -153,7 +154,9 @@ def multiboxel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=
         slots) with a definition table (:meth:`StructuralGeometry.set_structural_tables`:
         defined classes are the intersections of their definers,
         :class:`DefinedClasses`) and the penalties existence (``existence_weight``), size
-        (``size_reg``) and witness (``witness_weight``). ``margin`` is the tightening margin
+        (``size_reg``, applied once the tables are installed; ``size_reg_without_tables=True``
+        applies it before that too, which shrinks ``owl:Thing``: the module's earlier
+        behaviour) and witness (``witness_weight``). ``margin`` is the tightening margin
         :math:`m` of the module (``margin``, not ``gamma``); ``bot_agg``. Hard aggregation
         only. Re-seeding is a regime (see :mod:`structural_methods`).
     ``"point"``, ``"mixed"``, ``"hybrid"``
@@ -200,8 +203,10 @@ def multiboxel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=
             classes, _head_tail(nb_relations, embed_dim, t),
             SlotMeasure(_BOUNDS(), reading="structural"), objective, individuals=individuals,
             base_regularizers=regularizers, existence_weight=existence_weight,
-            size_reg=size_reg, witness_weight=witness_weight)
+            size_reg=size_reg, witness_weight=witness_weight,
+            size_reg_without_tables=size_reg_without_tables)
         if t is not None:
+            geometry.tables_installed = bool(getattr(t, "_tables_installed", False))
             geometry.reseed_options.update(mode=t.reseed_mode, size=t.reseed_size,
                                            batch=t.reseed_batch)
             geometry.witness_embed = t.witness_embed
@@ -374,6 +379,7 @@ def _multiboxel(module):
                       max_components=module.max_components,
                       existence_weight=module.existence_weight, size_reg=module.size_reg,
                       bot_agg=module.bot_agg, witness_weight=module.witness_weight,
+                      size_reg_without_tables=getattr(module, "size_reg_without_tables", False),
                       tables=module)
 
 

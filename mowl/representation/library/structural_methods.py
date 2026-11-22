@@ -56,8 +56,11 @@ class StructuralGeometry(ComposedGeometry):
 
     :param base_regularizers: The regularisers that are always there (bump norm, component
         penalties).
-    :param existence_weight, size_reg, witness_weight: The weights of the three penalties
-        (the size penalty is there without a table, as in the module).
+    :param existence_weight, size_reg, witness_weight: The weights of the three penalties.
+    :param size_reg_without_tables: The size penalty has to know which class is ``owl:Thing``
+        (it must not shrink it) and which classes are defined, so by default it is zero until
+        :meth:`set_structural_tables` has been called. ``True``: it is applied to every class
+        before that too (the earlier behaviour, which shrinks ``owl:Thing``).
     :param size_tables, size_scales: ``geometry -> [raw half-width tensors]`` and one factor
         per tensor for the size penalty (default: the offsets of a union of boxes, factor 2;
         a prism: the inradius and the box offsets, factors 1 and 2).
@@ -65,12 +68,15 @@ class StructuralGeometry(ComposedGeometry):
 
     def __init__(self, classes, relations, measure, objective, individuals=None,
                  base_regularizers=(), existence_weight=1.0, size_reg=1e-3,
-                 witness_weight=0.0, size_tables=None, size_scales=(2.0,), **options):
+                 witness_weight=0.0, size_tables=None, size_scales=(2.0,),
+                 size_reg_without_tables=False, **options):
         super().__init__(classes, relations, measure, objective, individuals=individuals,
                          regularizers=(), **options)
         self.base_regularizers = tuple(base_regularizers)
         self.existence_weight, self.size_reg = float(existence_weight), float(size_reg)
         self.witness_weight = float(witness_weight)
+        self.size_reg_without_tables = bool(size_reg_without_tables)
+        self.tables_installed = False
         self.size_tables = size_tables if size_tables is not None else \
             (lambda m: [m._slot_classes.offsets.weight])
         self.size_scales = tuple(size_scales)
@@ -116,12 +122,16 @@ class StructuralGeometry(ComposedGeometry):
             penalties.append(ExistencePenalty(targets.classes, targets.pairs, margin,
                                               lambda: self.existence_weight))
         penalties.append(SizePenalty(self.size_tables, self.size_scales, _rows,
-                                     weight=lambda: self.size_reg))
+                                     weight=self._size_weight))
         if targets is not None and targets.witness is not None \
                 and self.witness_embed is not None:
             penalties.append(WitnessPenalty(targets.witness, margin,
                                             lambda: self.witness_weight))
         self.regularizers = self.base_regularizers + tuple(penalties)
+
+    def _size_weight(self):
+        known = self.tables_installed or self.size_reg_without_tables
+        return self.size_reg if known else 0.0
 
     def set_structural_tables(self, table, targets, top_idx=None):
         """Attach a :class:`~mowl.nn.el.structural.DefinitionTable` and
@@ -132,6 +142,7 @@ class StructuralGeometry(ComposedGeometry):
         base = self._slot_classes
         self.class_model = DefinedClasses(base, table) if table is not None else base
         self.definition_table, self.existence_targets, self.top_idx = table, targets, top_idx
+        self.tables_installed = True
         witness = None if targets is None else targets.witness
         if witness is not None and self.witness_weight > 0.0:
             n = int(witness.classes.numel())
