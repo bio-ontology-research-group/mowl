@@ -216,7 +216,7 @@ def check_nonnegative(name, value):
 
 
 def check_union_options(n_components, embed_dim, component_aggregation, tau, diversity_reg,
-                       beta, ind_halfwidth, neg_weight, volume_reg):
+                        beta, ind_halfwidth, neg_weight, volume_reg):
     """The checks of the options that MultiBoxEL and MultiELBE modules share; returns
     ``(tau, beta, ind_halfwidth)`` as floats (``ind_halfwidth`` is :math:`5\\beta` if
     ``None``)."""

@@ -12,7 +12,11 @@ mcmultibox union of boxes       union of boxes / pairs sampled volume          s
 
 Each function builds new tables, or (``tables=module``) shares those of an existing module;
 the adapters of :func:`mowl.representation.geometry_of` are these functions called with
-``tables=module``. Options of the modules that are not covered are listed in each docstring.
+``tables=module`` (for the direct implementations in :mod:`mowl.baselines`). The public modules
+(:class:`~mowl.nn.BoxSquaredELModule`, :class:`~mowl.nn.MultiBoxELModule`,
+:class:`~mowl.nn.MultiELBEModule`, :class:`~mowl.nn.VolumeMultiBoxELModule`) are these
+combinations: each initialises itself with the function of its method (``into=module``) and keeps
+the names of its tables (:mod:`~mowl.representation.library.multibox_modules`).
 """
 
 import torch as th
@@ -76,11 +80,13 @@ def box2el(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0,
     the negative loss of :math:`C \\sqsubseteq \\exists r.D` is :math:`(\\delta - \\mu)^2`
     per argument, and the norm penalty on the bump vectors.
 
-    Verified equal to :class:`~mowl.nn.BoxSquaredELModule`: every positive loss of the forms
-    ``gci0`` ... ``gci3_bot``, ``class_assertion``, ``object_property_assertion``, the
-    role inclusion and role chain losses, the negative losses of ``gci2`` and
-    ``object_property_assertion`` and, with ``all_negatives=True``, the DELE negative losses
-    of all forms, and the regularisation loss.
+    This is the module :class:`~mowl.nn.BoxSquaredELModule` and the class
+    :class:`~mowl.models.BoxSquaredEL`; both are tested against the direct implementation in
+    :mod:`mowl.baselines` (``tests/baselines``): every positive loss of the forms ``gci0`` ...
+    ``gci3_bot``, ``class_assertion``, ``object_property_assertion``, the role inclusion and
+    role chain losses, the negative losses of ``gci2`` and ``object_property_assertion`` and,
+    with ``all_negatives=True``, the DELE negative losses of all forms, the regularisation
+    loss and three epochs of training are equal.
 
     :param tables: A module with the tables of Box2EL (such as the direct implementation in
         :mod:`mowl.baselines`) to share parameters with.
@@ -162,7 +168,9 @@ def multiboxel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=
     ``objective`` (here ``reading``):
 
     ``"axiom"`` (default)
-        Verified equal to :class:`~mowl.nn.MultiBoxELModule` at ``n_components`` 1 to 3 with
+        The module :class:`~mowl.nn.MultiBoxELModule` and the class
+        :class:`~mowl.models.MultiBoxEL` are this combination; they are tested against the
+        direct implementation in :mod:`mowl.baselines` at ``n_components`` 1 to 3 with
         ``component_aggregation`` ``"hard"`` and ``"soft"`` (``tau``), ``component_reg``,
         ``diversity_reg``, ``reg_factor``, ``delta`` and ``gamma`` (here ``margin``); all
         forms with their positive loss, the negative losses of ``gci2`` and
@@ -278,7 +286,9 @@ def multielbe(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0
     ``n_components`` boxes (translations as relations, strict margin, overlap reading of
     :math:`\\exists r.C \\sqsubseteq D`).
 
-    Covered, and verified equal to :class:`~mowl.nn.MultiELBEModule` at ``n_components`` 1
+    The module :class:`~mowl.nn.MultiELBEModule` and the class
+    :class:`~mowl.models.MultiELBE` are this combination, tested against the direct
+    implementation in :mod:`mowl.baselines` at ``n_components`` 1
     and 2 to 3: ``objective="axiom"`` with ``component_aggregation`` ``"hard"`` and
     ``"soft"`` (``tau``), ``component_reg``, ``diversity_reg``, ``margin``; all forms with
     their positive loss, the negative losses of ``gci2`` and ``object_property_assertion``
@@ -336,18 +346,20 @@ def mcmultibox(nb_classes, nb_relations, nb_individuals=0, embed_dim=5, margin=0
     unions of boxes over pairs, and every loss is :math:`1 - \\mathrm{Vol}(A \\cap B) /
     \\mathrm{Vol}(A)` estimated on a fixed set of sampled points.
 
-    Rebuilt from parts: the class model (:class:`PackedUnionClasses`), the relation model
-    (:class:`PairUnions`: projection on the domain, region of pairs) and the measure
-    (:class:`SampledVolume`, which works for any region with a membership function). The
-    objective is the semantic one: ``gci0`` ... ``gci3`` and the role inclusion read as in the
-    module, the role chain is the thesis' simplified loss. Verified equal to
-    :class:`~mowl.nn.VolumeMultiBoxELModule` for these six losses, also with fresh tables from
-    the same ``seed``.
+    The class model is :class:`PackedUnionClasses`, the relation model :class:`PairUnions`
+    (projection on the domain, region of pairs) and the measure :class:`SampledVolume`, which
+    works for any region with a membership function. The objective is the semantic one:
+    ``gci0`` ... ``gci3`` and the role inclusion read as in the thesis, the role chain is the
+    thesis' simplified loss. The module :class:`~mowl.nn.VolumeMultiBoxELModule` and the
+    class :class:`~mowl.models.VolumeMultiBoxEL` are this combination; they are tested
+    against the direct implementation in :mod:`mowl.baselines` for these six losses, the
+    evaluation distance and the training run, also with fresh tables from the same ``seed``.
 
-    Not covered: the evaluation distance of Section 7.1.2
-    (:meth:`~mowl.nn.VolumeMultiBoxELModule.distance`, a metric, not a loss), and
-    ``eval_points_per_box``. ``gci0_bot`` and ``gci3_bot`` are not defined by the module and
-    raise an error; ``margin`` is ignored. ``gci1_bot``, ``class_assertion``,
+    The evaluation distance of Section 7.1.2 (:meth:`~mowl.nn.VolumeMultiBoxELModule.distance`,
+    a metric, not a loss) is
+    :func:`~mowl.representation.library.multibox_distance.sampled_distance` on these parts.
+    ``gci0_bot`` and ``gci3_bot`` are not defined by the thesis and raise an error in the
+    module; ``margin`` is ignored. ``gci1_bot``, ``class_assertion``,
     ``object_property_assertion`` and the negative loss of ``gci2`` are not defined by the
     module either (it raises), but exist here as extensions (the fraction of :math:`C`
     covered by :math:`D`; the inclusion of the individual boxes), because the measure has

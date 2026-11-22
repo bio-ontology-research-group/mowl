@@ -588,7 +588,7 @@ measured seeds (``strict_loss == 0``, minimum target class and pair
       * - :math:`C \sqcap D \sqsubseteq \bot` (``gci1_bot``, :func:`~mowl.nn.el.structural.gci1_bot_structural`)
         - :math:`\operatorname{agg}_{(i,j) \text{ active}} \operatorname{relu}(\text{ne}(C_i \cap D_j) + m)^2` with ``agg`` = ``bot_agg`` :math:`\in \{\text{"mean"}, \text{"sum"}\}` (default ``"mean"``; ``"sum"`` sums over active pairs instead of dividing by the active-pair count, with module slots gated to active non-empty components :math:`\text{ne} > 0`: identical zero set at :math:`m = 0`, deviating from gating on ``active`` alone only at :math:`m > 0`) — separation by :math:`m` in **at least one** coordinate
       * - :math:`C \sqsubseteq \exists r.D`, :math:`\exists r.C \sqsubseteq D`, :math:`\exists r.C \sqsubseteq \bot`, and ABox assertions (``gci2``, ``gci3``, ``gci3_bot``, ``class_assertion``, ``object_property_assertion``)
-        - Existing Box²EL multibox scores (hard aggregation, with ``gci3`` and ``gci3_bot`` squared) evaluated on the materialised slots :math:`(c, |w|)` with inactive or empty slots (:math:`\neg\text{active} \vee \text{ne}(w) \le 0`) masked out (source slots excluded from means, target slots excluded from minima); because Box²EL ``gamma`` loosens inclusions (:math:`\operatorname{relu}(\text{dist} + 2o - \gamma)`), positive role and assertion scores pass ``gamma = -m`` (tightening inclusion by :math:`m`), whereas negative scores (:func:`~mowl.nn.el.multiboxel.losses.gci2_score_neg` and negative ``object_property_assertion``) keep Box²EL's convention (``gamma = +margin``, which relaxes them by the margin), so the negative-sampling term is unchanged between the axiom and structural objectives; class bumps remain per-class embedding rows
+        - Existing Box²EL multibox scores (hard aggregation, with ``gci3`` and ``gci3_bot`` squared) evaluated on the materialised slots :math:`(c, |w|)` with inactive or empty slots (:math:`\neg\text{active} \vee \text{ne}(w) \le 0`) masked out (source slots excluded from means, target slots excluded from minima); because Box²EL ``gamma`` loosens inclusions (:math:`\operatorname{relu}(\text{dist} + 2o - \gamma)`), positive role and assertion scores pass ``gamma = -m`` (tightening inclusion by :math:`m`), whereas negative scores (:func:`~mowl.baselines.nn.el.multiboxel.losses.gci2_score_neg` and negative ``object_property_assertion``) keep Box²EL's convention (``gamma = +margin``, which relaxes them by the margin), so the negative-sampling term is unchanged between the axiom and structural objectives; class bumps remain per-class embedding rows
 
    Additional per-epoch terms returned by
    :meth:`~mowl.models.MultiBoxEL.additional_training_loss` via
@@ -664,7 +664,7 @@ measured seeds (``strict_loss == 0``, minimum target class and pair
      to ``0.0`` and renders the role or assertion score (or the target half of
      ``gci2``) vacuously ``0`` unless the existence term forces :math:`D` to be
      non-empty; similarly, in the negative score
-     :func:`~mowl.nn.el.multiboxel.losses.gci2_score_neg`, an all-masked (empty)
+     :func:`~mowl.baselines.nn.el.multiboxel.losses.gci2_score_neg`, an all-masked (empty)
      source :math:`C` makes the source half return ``0.0`` rather than
      :math:`\delta^2` (and ``0.0`` overall when both source and target are
      all-masked). Because :math:`\top` (``owl:Thing``) is excluded from

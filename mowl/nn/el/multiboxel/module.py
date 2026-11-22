@@ -1,7 +1,6 @@
 """MultiBoxEL neural module."""
 from __future__ import annotations
 
-import numpy as np
 import torch as th
 
 from mowl.nn.el.pointloss import _VALID_OBJECTIVES
@@ -283,6 +282,7 @@ class MultiBoxELModule(UnionModule, StructuralGeometry):
         self.nb_rels = nb_rels
         self.nb_inds = nb_inds
         self.embed_dim = embed_dim
+        self.__dict__["_ind_embed_readonly"] = True
         self.max_components = max_components
         self.structural_definitions = structural_definitions
         self.reseed_every = reseed_every
@@ -310,6 +310,8 @@ class MultiBoxELModule(UnionModule, StructuralGeometry):
         return "margin" if self.reading == "structural" else "gamma"
 
     def __setattr__(self, name, value):
+        if name == "ind_embed" and self.__dict__.get("_ind_embed_readonly", False):
+            raise AttributeError("ind_embed is a read-only property aliasing ind_center.")
         if name == "witness_weight":
             value = check_nonnegative("witness_weight", value)
             if value <= 0.0 and self.__dict__.get("reseed_options", {}).get("mode") == "idle":

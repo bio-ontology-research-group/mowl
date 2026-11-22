@@ -128,6 +128,9 @@ class VolumeMultiBoxELModule(ReleasedTables, ComposedGeometry):
                    temperature=temperature, aggregate=aggregate, seed=seed,
                    point_chunk_size=point_chunk_size, init_seed=init_seed, into=self)
         self.supported_forms = frozenset(_FORMS)
+        # the thesis defines no negative losses: the module has none (the builder offers the
+        # fraction of a class covered by another as an extension)
+        self.objective.neg_forms, self.objective.negatives = frozenset(), "none"
         self.strict_negatives = True
         self.nb_ont_classes = nb_ont_classes
         self.nb_rels = nb_rels
