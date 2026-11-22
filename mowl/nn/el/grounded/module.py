@@ -46,7 +46,7 @@ Non-guarantees:
 """
 from __future__ import annotations
 
-from typing import Iterable, List, Mapping, Optional, Sequence, Tuple, Union
+from typing import Iterable, Mapping, Optional, Sequence, Tuple, Union
 
 import numpy as np
 import torch as th
@@ -314,8 +314,7 @@ class GroundedELModule(nn.Module, Geometry):
     @property
     def tau_s(self) -> th.Tensor:
         """Positive inductive score temperature :math:`\\max(\\operatorname{softplus}(\\text{raw}), 10^{-3})`."""
-        import torch.nn.functional as F
-        return th.clamp(F.softplus(self.ensure_tau_s()), min=1e-3)
+        return self.elements.tau_s
 
     def set_tau(self, t: float) -> None:
         """Set the membership temperature of the shared part."""
@@ -475,232 +474,12 @@ class GroundedELModule(nn.Module, Geometry):
             ``k != bot_id``; an individual element ``k >= nb_classes`` is live iff
             ``labels[k].any()`` is truthy).
         """
-        if self.n_components < self.nb_elements:
-            raise ValueError(
-                f"exact_limit_init requires n_components >= nb_elements ({self.nb_elements}), "
-                f"got n_components={self.n_components}"
-            )
-        delta_f = _validate_positive_float("delta", delta)
-        if isinstance(seed, bool) or not isinstance(seed, int):
-            raise ValueError(f"seed must be an int, got {seed!r}")
-
-        device = self.class_centers.device
-        dtype = self.class_centers.dtype
-        labels_t = th.as_tensor(least_model_labels, device=device)
-        if labels_t.shape != (self.nb_elements, self.nb_classes):
-            raise ValueError(
-                f"least_model_labels must have shape ({self.nb_elements}, {self.nb_classes}), "
-                f"got {tuple(labels_t.shape)}"
-            )
-        labels_bool = labels_t > 0
-
-        # Parse edges into per-role lists of (x, y) pairs
-        edges_by_role: List[List[Tuple[int, int]]] = [
-            [] for _ in range(self.nb_rels)
-        ]
-        if edges is not None:
-            if isinstance(edges, Mapping):
-                for r_key, pairs in edges.items():
-                    r_idx = _validate_int_ge("role_id", int(r_key), 0)
-                    if r_idx >= self.nb_rels:
-                        raise ValueError(
-                            f"Role index {r_idx} out of range [0, {self.nb_rels})"
-                        )
-                    for x_i, y_i in pairs:
-                        xi = _validate_int_ge("x", int(x_i), 0)
-                        yi = _validate_int_ge("y", int(y_i), 0)
-                        if xi >= self.nb_elements or yi >= self.nb_elements:
-                            raise ValueError(
-                                f"Edge element index ({xi}, {yi}) out of range [0, {self.nb_elements})"
-                            )
-                        edges_by_role[r_idx].append((xi, yi))
-            else:
-                if isinstance(edges, (th.Tensor, np.ndarray)):
-                    edges_arr = th.as_tensor(edges, dtype=th.long).cpu()
-                    if edges_arr.numel() == 0:
-                        triples_list: List[Tuple[int, int, int]] = []
-                    elif edges_arr.ndim == 2 and edges_arr.shape[1] == 3:
-                        triples_list = [
-                            (int(row[0]), int(row[1]), int(row[2]))
-                            for row in edges_arr.tolist()
-                        ]
-                    else:
-                        raise ValueError(
-                            f"Tensor edges must have shape (E, 3), got {tuple(edges_arr.shape)}"
-                        )
-                else:
-                    triples_list = [
-                        (int(t[0]), int(t[1]), int(t[2])) for t in edges
-                    ]
-                for xi, yi, ri in triples_list:
-                    if not (0 <= ri < self.nb_rels):
-                        raise ValueError(
-                            f"Role index {ri} out of range [0, {self.nb_rels})"
-                        )
-                    if not (0 <= xi < self.nb_elements and 0 <= yi < self.nb_elements):
-                        raise ValueError(
-                            f"Edge element index ({xi}, {yi}) out of range [0, {self.nb_elements})"
-                        )
-                    edges_by_role[ri].append((xi, yi))
-
-        if self.nb_rels > 0 and bool((self.inverse_of >= 0).any().item()):
-            inv_list = self.inverse_of.detach().cpu().tolist()
-            for r_idx, inv_r in enumerate(inv_list):
-                if 0 <= inv_r < r_idx:
-                    owner_set = set(edges_by_role[inv_r])
-                    for xi, yi in edges_by_role[r_idx]:
-                        if (yi, xi) not in owner_set:
-                            edges_by_role[inv_r].append((yi, xi))
-                            owner_set.add((yi, xi))
-
-        max_role_edges = max((len(lst) for lst in edges_by_role), default=0)
-        if max_role_edges > self.n_role_components:
-            self.expand_components(self.n_components, new_role_K=max_role_edges)
-
-        # Generate generic random positions on CPU with explicit Generator, then rescale
-        gen = th.Generator(device="cpu")
-        gen.manual_seed(int(seed))
-        raw_pos = th.rand((self.nb_elements, self.embed_dim), dtype=th.float64, generator=gen)
-        # Ensure strict separation in coordinate 0 even if random draws collide in 1-D
-        perm = th.randperm(self.nb_elements, generator=gen).to(dtype=th.float64)
-        raw_pos[:, 0] = perm + 0.5 * raw_pos[:, 0]
-
-        if self.nb_elements > 1:
-            diff_inf = th.amax(
-                th.abs(raw_pos.unsqueeze(1) - raw_pos.unsqueeze(0)), dim=-1
-            )
-            eye_mask = th.eye(self.nb_elements, dtype=th.bool)
-            diff_inf = diff_inf.masked_fill(eye_mask, float("inf"))
-            min_sep = float(diff_inf.min().item())
-            target_sep = 4.0 * delta_f
-            if min_sep < target_sep:
-                raw_pos = raw_pos * (target_sep / max(min_sep, 1e-12))
-
-            if self.role_mode == "translation" and self.nb_elements <= 256:
-                pair_diffs = (raw_pos.unsqueeze(0) - raw_pos.unsqueeze(1)).reshape(
-                    -1, self.embed_dim
-                )  # (N^2, d): entry (i, j) is p_j - p_i
-                non_diag = ~eye_mask.reshape(-1)
-                nd_diffs = pair_diffs[non_diag]  # (N*(N-1), d)
-                if nd_diffs.shape[0] > 0:
-                    min_zero_sep = float(th.amax(th.abs(nd_diffs), dim=-1).min().item())
-                    if nd_diffs.shape[0] > 1:
-                        dd = th.amax(
-                            th.abs(nd_diffs.unsqueeze(1) - nd_diffs.unsqueeze(0)),
-                            dim=-1,
-                        )
-                        dd = dd.masked_fill(
-                            th.eye(nd_diffs.shape[0], dtype=th.bool), float("inf")
-                        )
-                        min_dd_sep = min(min_zero_sep, float(dd.min().item()))
-                    else:
-                        min_dd_sep = min_zero_sep
-                    if min_dd_sep < target_sep:
-                        raw_pos = raw_pos * (target_sep / max(min_dd_sep, 1e-12))
-
-        pos_dev = raw_pos.to(device=device, dtype=dtype)
-        raw_delta = _inv_softplus(delta_f)
-
-        # Determine dead_mask
-        if dead_mask is not None:
-            dead_bool = th.as_tensor(dead_mask, dtype=th.bool, device=device)
-            if dead_bool.shape != (self.nb_elements,):
-                raise ValueError(
-                    f"dead_mask must have shape ({self.nb_elements},), got {tuple(dead_bool.shape)}"
-                )
-        else:
-            cls_ids = th.arange(self.nb_classes, device=device)
-            live_cls = labels_bool[cls_ids, cls_ids].clone()
-            if self.bot_id is not None:
-                live_cls[self.bot_id] = False
-                live_cls = live_cls & (~labels_bool[: self.nb_classes, self.bot_id])
-            if self.nb_elements > self.nb_classes:
-                live_inds = labels_bool[self.nb_classes :].any(dim=1)
-                if self.bot_id is not None:
-                    live_inds = live_inds & (
-                        ~labels_bool[self.nb_classes :, self.bot_id]
-                    )
-                live_all = th.cat([live_cls, live_inds], dim=0)
-            else:
-                live_all = live_cls
-            dead_bool = ~live_all
-
-        with th.no_grad():
-            self.elem_pos.weight.copy_(pos_dev)
-            self.dead_logits.copy_(
-                th.where(
-                    dead_bool,
-                    th.full_like(self.dead_logits, _DEAD_LOGIT),
-                    th.full_like(self.dead_logits, _LIVE_LOGIT),
-                )
-            )
-
-            # Initialize all class components to inactive zero-width
-            self.class_centers.zero_()
-            self.class_raw_widths.fill_(_INACTIVE_RAW_WIDTH)
-            self.class_active.zero_()
-
-            # Component k (0 <= k < nb_elements) of class A is Box(p_k, delta) iff labels[k, A]
-            active_ca = labels_bool.t().contiguous()  # (nb_classes, nb_elements)
-            if self.bot_id is not None:
-                active_ca[self.bot_id, :] = False
-
-            pos_expanded = pos_dev.unsqueeze(0).expand(
-                self.nb_classes, self.nb_elements, self.embed_dim
-            )
-            self.class_centers[:, : self.nb_elements, :] = th.where(
-                active_ca.unsqueeze(-1),
-                pos_expanded,
-                th.zeros_like(pos_expanded),
-            )
-            self.class_raw_widths[:, : self.nb_elements, :] = th.where(
-                active_ca.unsqueeze(-1),
-                th.full_like(pos_expanded, raw_delta),
-                th.full_like(pos_expanded, _INACTIVE_RAW_WIDTH),
-            )
-            self.class_active[:, : self.nb_elements] = active_ca
-
-            # Initialize all role components to inactive zero-width, then populate edges
-            self.role_active.zero_()
-            if self.role_mode == "translation":
-                assert (
-                    self.role_centers is not None
-                    and self.role_raw_widths is not None
-                )
-                self.role_centers.zero_()
-                self.role_raw_widths.fill_(_INACTIVE_RAW_WIDTH)
-                for r_idx, r_edges in enumerate(edges_by_role):
-                    inv_r = int(self.inverse_of[r_idx].item())
-                    if 0 <= inv_r < r_idx:
-                        continue
-                    for k_idx, (x_i, y_i) in enumerate(r_edges):
-                        self.role_centers[r_idx, k_idx].copy_(
-                            pos_dev[y_i] - pos_dev[x_i]
-                        )
-                        self.role_raw_widths[r_idx, k_idx].fill_(raw_delta)
-                        self.role_active[r_idx, k_idx] = True
-            else:
-                assert (
-                    self.role_head_centers is not None
-                    and self.role_head_raw_widths is not None
-                    and self.role_tail_centers is not None
-                    and self.role_tail_raw_widths is not None
-                )
-                self.role_head_centers.zero_()
-                self.role_head_raw_widths.fill_(_INACTIVE_RAW_WIDTH)
-                self.role_tail_centers.zero_()
-                self.role_tail_raw_widths.fill_(_INACTIVE_RAW_WIDTH)
-
-                for r_idx, r_edges in enumerate(edges_by_role):
-                    inv_r = int(self.inverse_of[r_idx].item())
-                    if 0 <= inv_r < r_idx:
-                        continue
-                    for k_idx, (x_i, y_i) in enumerate(r_edges):
-                        self.role_head_centers[r_idx, k_idx].copy_(pos_dev[x_i])
-                        self.role_head_raw_widths[r_idx, k_idx].fill_(raw_delta)
-                        self.role_tail_centers[r_idx, k_idx].copy_(pos_dev[y_i])
-                        self.role_tail_raw_widths[r_idx, k_idx].fill_(raw_delta)
-                        self.role_active[r_idx, k_idx] = True
+        from mowl.representation.library.finite_model_placement import FiniteModelPlacement
+        placement = FiniteModelPlacement(delta=delta, seed=seed, dead_value=_DEAD_LOGIT,
+                                         live_value=_LIVE_LOGIT)
+        placement.place(self.elements, self.boxes, self.roles, least_model_labels, edges=edges,
+                        dead_mask=dead_mask, bot_id=self.bot_id,
+                        expand=lambda k: self.expand_components(self.n_components, new_role_K=k))
 
     # -- the common interface (mowl.representation.Geometry) ----------------------------------
     def classes(self, ids):
@@ -728,9 +507,7 @@ class GroundedELModule(nn.Module, Geometry):
 
     def disjunction(self, a, b):
         """:math:`C \\sqcup D`: the boxes of both."""
-        from mowl.representation.library.other_regions import MaskedUnionOfBoxes
-        return MaskedUnionOfBoxes(th.cat([a.cen, b.cen], 1), th.cat([a.w, b.w], 1),
-                                  th.cat([a.active, b.active], 1))
+        return a.union(b)
 
     def inside(self, a, b):
         """The measure's comparison of two unions of boxes (sufficient for inclusion); for a
