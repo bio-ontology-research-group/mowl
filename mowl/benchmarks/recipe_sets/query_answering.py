@@ -95,12 +95,13 @@ for _kg, _p in _CONE.items():
         "search'", _CONE_NOTE))
 
 _ACONE = {"embed_dim": 800, "gamma": 20.0, "learning_rate": 1e-4, "center_weight": 0.02,
-          "dropout": 0.2}
+          "dropout": 0.2, "signed_negation": True}
 _ACONE_NOTE = ("script.sh of the AConE code: --max_steps 300001, --drop 0.2, -cenr 0.02; "
                "the supplementary table gives d = 800, b = 512, n = 128, gamma = 20, "
                "l = 1e-4, lambda = 0.02. AConE's projection is the rotation (no MLP), so no "
                "hidden size is set. The paper's table does not give the dropout or the "
-               "number of steps; the code's are used.")
+               "number of steps; the code's are used. The negation is the code's pi - aperture "
+               "of the wrapped, possibly negative aperture (signed_negation=True).")
 RECIPES.append(_recipe("query-nell995-betae", "acone", HE2024ACONE, _ACONE, 300,
                        "script.sh of AConE; supplementary Table of hyperparameters",
                        _ACONE_NOTE))
