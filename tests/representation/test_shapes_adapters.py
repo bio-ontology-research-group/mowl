@@ -214,6 +214,15 @@ class TestConcept2Box(TestCase):
         module = self.make()
         _same(self, module, geometry_of(module), self.forms, (False, True))
 
+    def test_gci2_readings(self):
+        for reading in ("axiom", "triple"):
+            module = self.make(gci2_reading=reading)
+            geometry = geometry_of(module)
+            _same(self, module, geometry, ("gci2",), (False, True))
+        rows = _rows("gci2")
+        self.assertFalse(th.allclose(self.make(gci2_reading="axiom")(rows, "gci2"),
+                                     self.make(gci2_reading="triple")(rows, "gci2")))
+
     def test_options(self):
         module = self.make(beta=0.5, alpha=0.3, kge_margin=0.6, cross_margin=0.2,
                            instance_weight=0.7, cross_weight=1.9)

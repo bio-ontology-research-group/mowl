@@ -68,11 +68,24 @@ uses a hinge on the lengths (``CosineOrder(norm_term="hinge")``). The named meth
 Concept2Box
 -----------
 
-For :math:`C \sqsubseteq \exists r.D` the loss asks the box of :math:`D` to lie inside the box
-of :math:`C`, the reverse of the axiom, and the weight of the points inside a box makes the
-cost non-zero for points that are inside. The first follows the convention of the knowledge
-graph triple :math:`(C, r, D)` used in the adaptation, and the second is Equations 8 and 9 of the
-paper. We have not yet checked the first against the paper's convention.
+* The conditional probability of the paper (Equation 4) is near 1 when the box of the *tail*
+  of a triple :math:`(h, r, t)` lies inside the box of its head, so the paper's triple
+  :math:`(\text{Artist}, \text{lives\_in}, \text{City})` puts the box of City inside the box of
+  Artist, and its example triple :math:`(\text{Singer}, \text{is\_a}, \text{Artist})` puts
+  the box of Artist inside that of Singer. The paper does not discuss axioms, so how an
+  axiom becomes a triple is a choice of mOWL. :math:`C \sqsubseteq D` is the triple
+  :math:`(D, \text{subclass}, C)`: the box of :math:`C` inside that of :math:`D`. In the first
+  version :math:`C \sqsubseteq \exists r.D` was the paper's triple :math:`(C, r, D)`, which puts
+  the box of :math:`D` inside that of :math:`C`, the reverse of the axiom and inconsistent with
+  the first reading; this was an error of the port. The default is now ``gci2_reading="axiom"``
+  (the box of :math:`C` inside that of :math:`D` in the context of :math:`r`); the paper's
+  triple is ``gci2_reading="triple"``, which the recipes of the paper select.
+* The cost of a point inside a box is not zero: the distance of Equation 8 adds
+  :math:`\alpha(c)` times the distance of the point to the centre, with
+  :math:`\alpha(c) = \alpha\,\mathrm{sigmoid}(1/\mathrm{Vol}(c)) \ge \alpha/2`
+  (Equation 9). This is the paper (the inside distance "punishes less if the entity is within the
+  box but not close to the center") and is kept, also as the default of the part
+  (``PointToRegion(alpha=0)`` gives zero inside the box).
 
 Query answering
 ---------------
@@ -97,7 +110,6 @@ Not decided yet
 * The losses of MultiELBE for some bottom forms have shape ``(B,)`` where every other
   composed loss has shape ``(B, 1)``. ELBE has to change first, because MultiELBE with one
   component must equal ELBE.
-* The direction of Concept2Box's loss above (not yet compared with the paper).
 
 Behaviours that the named methods still choose
 ----------------------------------------------
