@@ -22,6 +22,18 @@ import torch as th
 from mowl.nn.lm import hyperbolic as H
 
 
+def _exact_zero(near, value_at_floor, function, arg):
+    """``function(arg)``, but exactly 0 (and with zero gradient) where ``near``.
+
+    The distance functions need a floor on their argument, because their derivative is
+    infinite at coincident points; the floor used to make the distance of a point to itself
+    a small positive number, so a region inside itself cost slightly above zero. The points
+    that were pushed to the floor now have distance 0. The argument is kept off the
+    singularity where ``near`` so the gradient stays finite."""
+    safe = th.where(near, th.full_like(arg, value_at_floor), arg)
+    return th.where(near, th.zeros_like(arg), function(safe))
+
+
 class Manifold:
     """Interface: ``rgrad``, ``retract``, ``project``, ``distance``, ``random_points``."""
 
@@ -46,7 +58,8 @@ class Euclidean(Manifold):
         return x + v
 
     def distance(self, x, y):
-        return (x - y).pow(2).sum(-1).clamp_min(1e-12).sqrt()
+        d2 = (x - y).pow(2).sum(-1)
+        return _exact_zero(d2 <= 1e-12, 1.0, th.sqrt, d2)
 
 
 class Sphere(Manifold):
@@ -64,7 +77,11 @@ class Sphere(Manifold):
         return x / x.norm(dim=-1, keepdim=True).clamp_min(1e-12)
 
     def distance(self, x, y):
-        return th.acos((x * y).sum(-1).clamp(-1 + 1e-6, 1 - 1e-6))
+        cos = (x * y).sum(-1).clamp(max=1.0)
+        # below the float32 resolution of the cosine (points closer than about 1.4e-3 rad)
+        # the distance is 0
+        cos = th.where(cos >= 1 - 1e-6, th.ones_like(cos), cos.clamp_min(-1 + 1e-6))
+        return _exact_zero(cos >= 1.0, 0.0, th.acos, cos)
 
 
 class PoincareBall(Manifold):
@@ -91,7 +108,9 @@ class PoincareBall(Manifold):
         return x / n * target
 
     def distance(self, x, y):
-        return H.distance(x, y, 1.0)
+        d = H.distance(x, y, 1.0)
+        # rounding in the Moebius addition leaves ~1e-8 for coincident points
+        return th.where((x == y).all(dim=-1), th.zeros_like(d), d)
 
 
 class UpperHalfSpace(Manifold):
@@ -114,7 +133,7 @@ class UpperHalfSpace(Manifold):
     def distance(self, x, y):
         diff = ((x - y) ** 2).sum(-1)
         arg = 1 + diff / (2 * x[..., -1] * y[..., -1])
-        return th.acosh(arg.clamp_min(1.0 + 1e-7))
+        return _exact_zero(arg <= 1.0 + 1e-7, 1.0 + 1e-6, th.acosh, arg)
 
 
 def lorentz_inner(x, y):
@@ -141,7 +160,10 @@ class Hyperboloid(Manifold):
         return th.cat([x0, spatial], dim=-1)
 
     def distance(self, x, y):
-        return th.acosh((-lorentz_inner(x, y)).clamp_min(1.0 + 1e-7))
+        # -<x, y> = 1 + <x - y, x - y> / 2 on the hyperboloid; the difference form has no
+        # cancellation for nearby points and is exactly 0 for coincident ones
+        arg = 1.0 + 0.5 * lorentz_inner(x - y, x - y).clamp_min(0.0)
+        return _exact_zero(arg <= 1.0 + 1e-7, 1.0 + 1e-6, th.acosh, arg)
 
     @staticmethod
     def from_spatial(spatial):

@@ -364,3 +364,50 @@ def test_row_chunk_size_follows_the_element_budget():
     assert m.rows_per_chunk("concept") == 655 and m.rows_per_chunk("role") == 327
     small = VolumeMultiBoxELModule(10, 2, embed_dim=5, num_boxes=5, num_points=100)
     assert small.rows_per_chunk("concept") == 2 ** 25 // (100 * 25)
+
+
+# ------------------------------------------------------------------------- ranking
+def old_ranking(module, data, gci_name, chunk=1024):
+    """The ranking distance as it was computed: the training loss row by row."""
+    fn = module.get_loss_function(gci_name)
+    with th.no_grad():
+        return th.cat([fn(data[i:i + chunk]) for i in range(0, len(data), chunk)])
+
+
+@pytest.mark.parametrize("gci_name", ["gci2", "gci3"])
+def test_ranking_distance_equals_the_row_by_row_loss(gci_name):
+    th.manual_seed(0)
+    m = make_module(n_classes=9, n_rels=3, d=3, n=2, points=700, temperature=0.5,
+                    point_chunk_size=256, max_chunk_elements=2 ** 12)
+    query = th.randint(0, 9, (1,))
+    rel = th.randint(0, 3, (1,))
+    cands = th.arange(9)
+    if gci_name == "gci2":
+        data = th.stack([query.expand(9), rel.expand(9), cands], dim=1)
+    else:
+        data = th.stack([rel.expand(9), query.expand(9), cands], dim=1)
+    # a head-ranking batch too (varying first operand) and repeated rows
+    other = th.stack([cands, rel.expand(9), query.expand(9)], dim=1) if gci_name == "gci2" \
+        else th.stack([rel.expand(9), cands, query.expand(9)], dim=1)
+    data = th.cat([data, other, data[:3]])
+    got = m.distance(data, gci_name)
+    assert th.allclose(got, old_ranking(m, data, gci_name).reshape(-1, 1), atol=1e-6,
+                       rtol=1e-5)
+    assert got.shape == (len(data), 1)
+
+
+def test_ranking_computes_each_distinct_operand_once():
+    m = make_module(n_classes=40, n_rels=2, d=2, n=2, points=512, point_chunk_size=128)
+    calls = []
+    original = m._chi
+
+    def counting(p, c, o):
+        calls.append(len(c))
+        return original(p, c, o)
+
+    m._chi = counting
+    data = th.stack([th.zeros(40, dtype=th.long), th.zeros(40, dtype=th.long),
+                     th.arange(40)], dim=1)
+    m.distance(data, "gci2")
+    # source operand: one distinct class, evaluated once per point chunk (4), not 40 times
+    assert sum(calls) == 4

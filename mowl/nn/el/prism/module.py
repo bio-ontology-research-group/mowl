@@ -11,6 +11,7 @@ import mowl.nn.el.prism.losses as L
 from mowl.nn.el.structural import DefinitionTable, ExistenceTargets, existence_loss
 
 _PRISM_OBJECTIVES = ("axiom", "structural")
+_EMPTY_BOX_READINGS = ("signed", "absolute")
 
 
 class PrismModule(ELModule):
@@ -48,6 +49,9 @@ class PrismModule(ELModule):
       shrinks :math:`C` itself (:math:`\\text{relu}(\\sum_k h_{C,k} + \\text{margin})`),
       which conflicts with :func:`~mowl.nn.el.structural.existence_loss` whenever
       :math:`C` is satisfiable.
+    - Under ``objective="structural"`` with ``empty_box_reading="absolute"`` (the earlier
+      reading, not the default) the role and assertion scores take ``abs(w)``; see the
+      parameter. The next item describes that reading.
     - Under ``objective="structural"``, only the box GCI losses (:meth:`gci0_loss`,
       :meth:`gci0_bot_loss`, :meth:`gci1_loss`, :meth:`gci1_bot_loss`) are squared
       hinges; the role and assertion scores (:meth:`gci2_loss`, :meth:`gci3_loss`,
@@ -97,6 +101,14 @@ class PrismModule(ELModule):
         triangle and the triangle of :math:`D` (zero iff they overlap); ``"inradius"`` is the
         earlier per-direction test on the inscribed discs, see
         :func:`~mowl.nn.el.prism.losses.gci2_score_neg`.
+    empty_box_reading : {"signed", "absolute"}, default "signed"
+        How the role and assertion scores of ``objective="structural"`` read a DEFINED class
+        whose box part is empty (half-width :math:`w_m < 0`). ``"signed"`` gates by
+        non-emptiness as :class:`~mowl.nn.el.multiboxel.MultiBoxELModule` does: an empty
+        source (``gci2``) or filler (``gci3``, ``gci3_bot``) makes the row vacuously
+        satisfied, and an empty target or class is read with its negative half-width, so it
+        contains nothing. ``"absolute"`` is the earlier reading that takes ``|w|`` and so
+        sees a phantom non-empty box.
     """
 
     neg_capable_gcis = frozenset({"gci2", "object_property_assertion"})
@@ -118,7 +130,13 @@ class PrismModule(ELModule):
         existence_weight: float = 1.0,
         size_reg: float = 1e-3,
         gci2_negative_triangle: str = "overlap",
+        empty_box_reading: str = "signed",
     ) -> None:
+        if empty_box_reading not in _EMPTY_BOX_READINGS:
+            raise ValueError(
+                f"empty_box_reading must be one of {_EMPTY_BOX_READINGS}, "
+                f"got {empty_box_reading!r}"
+            )
         if gci2_negative_triangle not in ("overlap", "inradius"):
             raise ValueError("gci2_negative_triangle must be 'overlap' or 'inradius'.")
         if isinstance(embed_dim, bool) or not isinstance(embed_dim, int) or embed_dim < 3:
@@ -160,6 +178,7 @@ class PrismModule(ELModule):
         self.existence_weight = float(existence_weight)
         self.size_reg = float(size_reg)
         self.gci2_negative_triangle = gci2_negative_triangle
+        self.empty_box_reading = empty_box_reading
         self.definition_table: Optional[DefinitionTable] = None
         self.existence_targets: Optional[ExistenceTargets] = None
         self.top_idx: Optional[int] = None
@@ -515,18 +534,36 @@ class PrismModule(ELModule):
             neg=neg,
         )
 
+    def _empty_gate(self, r: L.PrismRegions) -> th.Tensor:
+        """Boolean ``(B,)``: the prism is non-empty (detached), so its row counts."""
+        return L.prism_nonempty_measure(
+            L.PrismRegions(h=r.h.detach(), cen=r.cen.detach(), w=r.w.detach())
+        ) > 0.0
+
     def gci2_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
         if self.objective == "structural":
             c = self.class_regions(data[:, 0])
             d = self.class_regions(data[:, 2])
-            c_abs = L.PrismRegions(h=c.h, cen=c.cen, w=th.abs(c.w))
-            d_abs = L.PrismRegions(h=d.h, cen=d.cen, w=th.abs(d.w))
             rel = self.rel_embed(data[:, 1])
+            if self.empty_box_reading == "absolute":
+                c_abs = L.PrismRegions(h=c.h, cen=c.cen, w=th.abs(c.w))
+                d_abs = L.PrismRegions(h=d.h, cen=d.cen, w=th.abs(d.w))
+                if neg:
+                    return L.gci2_score_neg_prisms(
+                        c_abs, d_abs, rel, self.margin,
+                        triangle_negative=self.gci2_negative_triangle)
+                return L.gci2_score_prisms(c_abs, d_abs, rel, self.margin)
             if neg:
-                return L.gci2_score_neg_prisms(
+                # a negative needs a non-empty source and target to be meaningful
+                c_abs = L.PrismRegions(h=c.h, cen=c.cen, w=th.abs(c.w))
+                d_abs = L.PrismRegions(h=d.h, cen=d.cen, w=th.abs(d.w))
+                out = L.gci2_score_neg_prisms(
                     c_abs, d_abs, rel, self.margin,
                     triangle_negative=self.gci2_negative_triangle)
-            return L.gci2_score_prisms(c_abs, d_abs, rel, self.margin)
+                keep = self._empty_gate(c) & self._empty_gate(d)
+                return th.where(keep, out, th.zeros_like(out))
+            out = L.gci2_score(c.h, c.cen, c.w, d.h, d.cen, d.w, rel, self.margin, signed=True)
+            return th.where(self._empty_gate(c), out, th.zeros_like(out))
         return L.gci2_loss(
             data,
             self.tri_center,
@@ -544,9 +581,12 @@ class PrismModule(ELModule):
             rel = self.rel_embed(data[:, 0])
             c = self.class_regions(data[:, 1])
             d = self.class_regions(data[:, 2])
-            c_abs = L.PrismRegions(h=c.h, cen=c.cen, w=th.abs(c.w))
-            d_abs = L.PrismRegions(h=d.h, cen=d.cen, w=th.abs(d.w))
-            return L.gci3_score_prisms(c_abs, d_abs, rel, self.margin)
+            if self.empty_box_reading == "absolute":
+                c_abs = L.PrismRegions(h=c.h, cen=c.cen, w=th.abs(c.w))
+                d_abs = L.PrismRegions(h=d.h, cen=d.cen, w=th.abs(d.w))
+                return L.gci3_score_prisms(c_abs, d_abs, rel, self.margin)
+            out = L.gci3_score_prisms(c, d, rel, self.margin, signed=True)
+            return th.where(self._empty_gate(c), out, th.zeros_like(out))
         return L.gci3_loss(
             data,
             self.tri_center,
@@ -560,10 +600,13 @@ class PrismModule(ELModule):
 
     def gci3_bot_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
         if self.objective == "structural":
-            col = 1 if data.shape[1] > 1 else 0
-            c = self.class_regions(data[:, col])
-            c_abs = L.PrismRegions(h=c.h, cen=c.cen, w=th.abs(c.w))
-            return L.gci3_bot_score_prisms(c_abs, self.margin)
+            c = self.class_regions(L.gci3_bot_filler(data))
+            if self.empty_box_reading == "absolute":
+                c_abs = L.PrismRegions(h=c.h, cen=c.cen, w=th.abs(c.w))
+                return L.gci3_bot_score_prisms(c_abs, self.margin)
+            out = L.gci3_bot_score_prisms(c, self.margin)
+            box_empty = th.amin(c.w.detach(), dim=-1) <= 0.0
+            return th.where(box_empty, th.zeros_like(out), out)
         return L.gci3_bot_loss(
             data,
             self.tri_center,
@@ -580,8 +623,10 @@ class PrismModule(ELModule):
         if self.objective == "structural":
             ind_pts = self.ind_embed(data[:, 0])
             c = self.class_regions(data[:, 1])
-            c_abs = L.PrismRegions(h=c.h, cen=c.cen, w=th.abs(c.w))
-            return L.class_assertion_score_prisms(ind_pts, c_abs, self.margin)
+            if self.empty_box_reading == "absolute":
+                c = L.PrismRegions(h=c.h, cen=c.cen, w=th.abs(c.w))
+                return L.class_assertion_score_prisms(ind_pts, c, self.margin)
+            return L.class_assertion_score_prisms(ind_pts, c, self.margin, signed=True)
         return L.class_assertion_loss(
             data,
             self.ind_embed,

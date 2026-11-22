@@ -98,7 +98,11 @@ def usable_structures(templates, graph, rng, pool):
 def negative_entities(found, num_negatives, num_entities, rng):
     """Entities that are not answers (uniform; answers are redrawn once)."""
     neg = rng.integers(num_entities, size=num_negatives)
-    for i, e in enumerate(neg):
-        if int(e) in found:
+    if hasattr(found, "contains_many"):
+        hit = found.contains_many(neg)               # one backward pass for all candidates
+    else:
+        hit = [int(e) in found for e in neg]
+    for i in range(len(neg)):
+        if hit[i]:
             neg[i] = rng.integers(num_entities)
     return neg

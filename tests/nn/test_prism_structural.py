@@ -506,3 +506,76 @@ def test_prism_module_api_symmetry_and_validation() -> None:
         with pytest.raises(ValueError):
             PrismModule(nb_ont_classes=4, nb_rels=1, embed_dim=4, **bad_kw)  # type: ignore[arg-type]
 
+
+
+# --- empty box part of a DEFINED class (structural objective) ---------------------------
+
+def _phantom_module(reading=None):
+    """Classes 0, 1 primitive and apart in box coordinate 0; class 3 = 0 and 1 (empty box)."""
+    options = {} if reading is None else {"empty_box_reading": reading}
+    th.manual_seed(0)
+    mod = PrismModule(5, 1, 2, embed_dim=5, margin=0.05, objective="structural", **options)
+    table = DefinitionTable.from_normal_forms(
+        gci0=th.tensor([[3, 0], [3, 1]]), gci1=th.tensor([[0, 1, 3]]), n_classes=5, k=1,
+        max_components=4, top_idx=4, bottom_idx=None, enabled=True)
+    mod.set_structural_tables(
+        table, ExistenceTargets(classes=th.tensor([0, 1]), pairs=th.zeros((0, 2),
+                                                                        dtype=th.long)), 4)
+    with th.no_grad():
+        mod.box_center.weight[0, 0] = -5.0
+        mod.box_center.weight[1, 0] = 5.0
+        mod.box_offset.weight[:2, 0] = 0.5
+    return mod
+
+
+def test_defined_class_empty_in_box_part_is_not_a_phantom_box() -> None:
+    mod = _phantom_module()
+    assert mod.empty_box_reading == "signed"
+    assert float(mod.class_regions(th.tensor([3])).w[0, 0]) < 0
+    old = _phantom_module("absolute")
+    # class assertion: the empty class contains no individual, the phantom box may
+    rows = th.tensor([[0, 3]])
+    assert float(mod.class_assertion_loss(rows)) > float(old.class_assertion_loss(rows)) - 1e-9
+    assert float(mod.class_assertion_loss(rows)) > 0.0
+    # gci2 with an empty source: vacuously satisfied (as in MultiBoxEL); phantom: not
+    g2 = th.tensor([[3, 0, 0]])
+    assert float(mod.gci2_loss(g2).sum()) == 0.0
+    assert float(old.gci2_loss(g2).sum()) > 0.0
+    # gci3 with an empty filler: vacuous
+    g3 = th.tensor([[0, 3, 0]])
+    assert float(mod.gci3_loss(g3).sum()) == 0.0
+    assert float(old.gci3_loss(g3).sum()) > 0.0
+    # gci3_bot of a class that is empty (box part): satisfied
+    gb = th.tensor([[0, 3, 4]])
+    assert float(mod.gci3_bot_loss(gb).sum()) == 0.0
+    assert float(old.gci3_bot_loss(gb).sum()) > 0.0
+
+
+def test_absolute_reading_matches_the_score_functions_and_non_empty_rows_agree() -> None:
+    new, old = _phantom_module(), _phantom_module("absolute")
+    # primitives only: no empty class involved, both readings give the same numbers
+    for form, rows in (("gci2", th.tensor([[0, 0, 1], [1, 0, 0]])),
+                       ("gci3", th.tensor([[0, 0, 1]])),
+                       ("gci3_bot", th.tensor([[0, 1, 4]])),
+                       ("class_assertion", th.tensor([[0, 1], [1, 0]]))):
+        assert th.allclose(getattr(new, form + "_loss")(rows),
+                           getattr(old, form + "_loss")(rows)), form
+    r = old.class_regions(th.tensor([3]))
+    rel = old.rel_embed(th.tensor([0]))
+    expected = PL.gci2_score_prisms(r, r, rel, old.margin)
+    assert th.allclose(old.gci2_loss(th.tensor([[3, 0, 3]])).reshape(-1), expected)
+
+
+def test_gci3_bot_layout_is_explicit() -> None:
+    for reading in ("signed", "absolute"):
+        mod = _phantom_module(reading)
+        two = mod.gci3_bot_loss(th.tensor([[0, 1]]))
+        three = mod.gci3_bot_loss(th.tensor([[0, 1, 4]]))
+        assert th.equal(two, three)
+        for bad in (th.tensor([[1]]), th.tensor([1, 2]), th.tensor([[0, 1, 2, 3]])):
+            with pytest.raises(ValueError):
+                mod.gci3_bot_loss(bad)
+    mod = _phantom_module()
+    mod.objective = "axiom"
+    with pytest.raises(ValueError):
+        mod.gci3_bot_loss(th.tensor([[1]]))

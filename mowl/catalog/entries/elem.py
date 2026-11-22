@@ -63,6 +63,11 @@ CARD = MethodCard(
             "falcon2022, Appendix A.4, Lemma 1(1)"),
     ),
     limitations=(
+        "The margin has opposite senses in the inclusion and the disjointness losses, as in "
+        "the published losses and the authors' code: a positive margin relaxes the inclusion "
+        "losses (slack) but requires a gap in the gci1_bot loss max(0, r_C + r_D − ‖c − d‖ + "
+        "γ). margin_semantics (and the SlackMargin / StrictMargin regimes) refer to the "
+        "inclusions only.",
         "The authors' released code, and the reference codes derived from it, leave out the "
         "fourth term of the gci1 loss of Eq. (2) of Kulmanov et al., which relates the "
         "radius of the superclass E to the radii of C and D; Theorem 1 does not carry over "

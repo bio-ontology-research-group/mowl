@@ -162,6 +162,22 @@ def _translate_supports(h: th.Tensor, t_tri: th.Tensor) -> th.Tensor:
     return h + t_tri @ normals.T
 
 
+def gci3_bot_filler(data: th.Tensor) -> th.Tensor:
+    """Return the filler class column of a ``gci3_bot`` batch.
+
+    The layout is explicit: ``data`` has shape ``(B, 2)`` or ``(B, 3)`` with columns
+    ``(role, filler)`` or ``(role, filler, bottom)``, and the filler :math:`C` of
+    :math:`\\exists r.C \\sqsubseteq \\bot` is column 1. Any other shape raises
+    ``ValueError`` (the layout used to be guessed from the number of columns).
+    """
+    if data.dim() != 2 or data.shape[1] not in (2, 3):
+        raise ValueError(
+            "gci3_bot data must have shape (B, 2) = (role, filler) or (B, 3) = "
+            f"(role, filler, bottom), got {tuple(data.shape)}"
+        )
+    return data[:, 1]
+
+
 def prism_inclusion_score(
     hc: th.Tensor,
     boxc: th.Tensor,
@@ -170,6 +186,7 @@ def prism_inclusion_score(
     boxd: th.Tensor,
     boxod: th.Tensor,
     margin: float,
+    signed: bool = False,
 ) -> th.Tensor:
     """Compute the prism inclusion score for :math:`(T_C \\times B_C) \\subseteq (T_D \\times B_D)`.
 
@@ -184,6 +201,8 @@ def prism_inclusion_score(
     - At ``margin = 0``, equals ``0`` iff :math:`h_C \\le h_D` in all 3 support
       coordinates and :math:`|b_C - b_D| + |o_C| \\le |o_D|` in all :math:`d-2`
       box coordinates.
+    - With ``signed=True`` the half-widths are used as they are (a negative half-width
+      is an empty box along that coordinate); the default takes absolute values.
     - Finite and differentiable even when :math:`\\sum_k h_{C,k} < 0` or
       :math:`\\sum_k h_{D,k} < 0`.
 
@@ -214,7 +233,10 @@ def prism_inclusion_score(
         Per-row score tensor of shape ``(B,)``.
     """
     tri_vec = th.relu(hc - hd + margin)
-    box_vec = th.relu(th.abs(boxc - boxd) + th.abs(boxo) - th.abs(boxod) + margin)
+    if signed:
+        box_vec = th.relu(th.abs(boxc - boxd) + boxo - boxod + margin)
+    else:
+        box_vec = th.relu(th.abs(boxc - boxd) + th.abs(boxo) - th.abs(boxod) + margin)
     stacked = th.cat([tri_vec, box_vec], dim=-1)
     return th.linalg.norm(stacked, dim=-1)
 
@@ -578,6 +600,7 @@ def gci2_score_prisms(
     d: PrismRegions,
     rel: th.Tensor,
     margin: float,
+    signed: bool = False,
 ) -> th.Tensor:
     """Positive GCI2 score on :class:`PrismRegions`: inclusion of :math:`C + r` inside :math:`D`.
 
@@ -610,6 +633,8 @@ def gci2_score_prisms(
     torch.Tensor
         Per-row score tensor of shape ``(B,)``.
     """
+    if signed:
+        return gci2_score(c.h, c.cen, c.w, d.h, d.cen, d.w, rel, margin, signed=True)
     return gci2_score(c.h, c.cen, th.abs(c.w), d.h, d.cen, th.abs(d.w), rel, margin)
 
 
@@ -622,6 +647,7 @@ def gci2_score(
     od: th.Tensor,
     rel: th.Tensor,
     margin: float,
+    signed: bool = False,
 ) -> th.Tensor:
     """Positive GCI2 score: inclusion of :math:`C + r` inside :math:`D`.
 
@@ -662,7 +688,7 @@ def gci2_score(
     r_box = rel[:, 2:]
     hc_trans = _translate_supports(hc, r_tri)
     bc_trans = bc + r_box
-    return prism_inclusion_score(hc_trans, bc_trans, oc, hd, bd, od, margin)
+    return prism_inclusion_score(hc_trans, bc_trans, oc, hd, bd, od, margin, signed=signed)
 
 
 def gci2_score_neg_prisms(
@@ -853,6 +879,7 @@ def gci3_score_prisms(
     d: PrismRegions,
     rel: th.Tensor,
     margin: float,
+    signed: bool = False,
 ) -> th.Tensor:
     """Positive GCI3 score on :class:`PrismRegions` for :math:`\\exists r.C \\sqsubseteq D`.
 
@@ -888,7 +915,10 @@ def gci3_score_prisms(
     r_box = rel[:, 2:]
     hc_shifted = _translate_supports(c.h, -r_tri)
     tri_term = th.relu(-th.minimum(hc_shifted, d.h).sum(dim=-1) + margin).unsqueeze(-1)
-    box_term = th.relu(th.abs(c.cen - r_box - d.cen) - th.abs(c.w) - th.abs(d.w) + margin)
+    if signed:
+        box_term = th.relu(th.abs(c.cen - r_box - d.cen) - c.w - d.w + margin)
+    else:
+        box_term = th.relu(th.abs(c.cen - r_box - d.cen) - th.abs(c.w) - th.abs(d.w) + margin)
     return th.linalg.norm(th.cat([tri_term, box_term], dim=-1), dim=-1)
 
 
@@ -1014,7 +1044,7 @@ def gci3_bot_loss(
     ----------
     data : torch.Tensor
         Integer tensor of shape ``(B, 2)`` or ``(B, 3)`` where column 1 is ``C``
-        (or shape ``(B, 1)`` where column 0 is ``C``).
+        (see :func:`gci3_bot_filler`; other shapes raise ``ValueError``).
     tri_center : torch.nn.Embedding
         Triangle centre embedding table of shape ``(N, 2)``.
     tri_inradius : torch.nn.Embedding
@@ -1029,9 +1059,9 @@ def gci3_bot_loss(
     torch.Tensor
         Per-axiom loss tensor of shape ``(B,)``.
     """
-    col = 1 if data.shape[1] > 1 else 0
-    tc = tri_center(data[:, col])
-    tr = th.abs(tri_inradius(data[:, col]))
+    col = gci3_bot_filler(data)
+    tc = tri_center(col)
+    tr = th.abs(tri_inradius(col))
     hc = supports(tc, tr)
     empty_box = th.zeros((hc.shape[0], 0), device=hc.device, dtype=hc.dtype)
     return gci3_bot_score_prisms(PrismRegions(h=hc, cen=empty_box, w=empty_box), margin)
@@ -1041,6 +1071,7 @@ def class_assertion_score_prisms(
     ind_pts: th.Tensor,
     c: PrismRegions,
     margin: float,
+    signed: bool = False,
 ) -> th.Tensor:
     """Class assertion score on :class:`PrismRegions` for :math:`C(a)`.
 
@@ -1081,7 +1112,8 @@ def class_assertion_score_prisms(
     zero_r = th.zeros((ind_pts.shape[0], 1), device=ind_pts.device, dtype=ind_pts.dtype)
     hi = supports(x_tri, zero_r)
     oi = th.zeros_like(x_box)
-    return prism_inclusion_score(hi, x_box, oi, c.h, c.cen, th.abs(c.w), margin)
+    return prism_inclusion_score(hi, x_box, oi, c.h, c.cen, c.w if signed else th.abs(c.w),
+                                 margin, signed=signed)
 
 
 def class_assertion_loss(
