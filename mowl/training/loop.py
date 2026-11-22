@@ -196,6 +196,10 @@ class TrainingLoop:
                 validate_every = self.default_validate_every if validate is None \
                     else (self.default_validate_every or 1)
         self._train_validate_every = validate_every
+        history, running, counted = [], 0.0, 0
+        if not by_steps:
+            # a regime may keep the losses itself (ShuffledSplits), after this
+            self.training_losses = history
         datasets = self.training_datasets
         if regime is not None:
             datasets = regime.training_datasets(datasets)
@@ -208,8 +212,8 @@ class TrainingLoop:
             optimizer = regime.optimizer()
         if optimizer is NotImplemented:
             optimizer = self.get_optimizer()
-        history, running, counted = [], 0.0, 0
-        self.training_losses = history
+        if by_steps:
+            self.training_losses = history
         for step in (range(total) if by_steps else trange(total)):
             self.module.train()
             self.on_epoch_start(step, total)
