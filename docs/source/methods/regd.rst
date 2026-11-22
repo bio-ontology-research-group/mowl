@@ -29,7 +29,7 @@ region :math:`v`,
 :math:`d_{bd} \le 0` exactly when the child is inside the parent. :math:`d_{dep}` grows
 without bound as the regions shrink, which gives room for many siblings and many levels in
 few dimensions (Theorems 1 and 2 of the paper). The functions are in
-:mod:`mowl.representation.library.ballfam_energy` (the ``boundary and depth`` measure,
+:mod:`mowl.representation.library.boundary_depth` (the ``boundary and depth`` measure,
 :class:`~mowl.representation.library.ballfam_parts.BoundaryDepth`, uses them).
 
 Normal forms

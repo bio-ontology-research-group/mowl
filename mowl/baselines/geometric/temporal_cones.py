@@ -1,14 +1,14 @@
 """The direct temporal al-cone construction (Leemhuis, FCR 2024, Theorem 2), kept for
 comparison (see :mod:`mowl.baselines`).
 
-In :mod:`mowl.geometric.temporal_cones` the construction is the combination of the source
+In :mod:`mowl.baselines.geometric.core.temporal_cones` the construction is the combination of the source
 ``lasso model`` and the ``half-axes`` reading with one cell per distinct trace.
 """
 from typing import Dict, FrozenSet, List, Tuple
 
-from mowl.geometric import temporal_cones
-from mowl.geometric.cones import ALCone, halfaxis_vector
-from mowl.geometric.temporal_cones import LassoModel
+from mowl.baselines.geometric.core import temporal_cones
+from mowl.baselines.geometric.core.cones import ALCone, halfaxis_vector
+from mowl.baselines.geometric.core.temporal_cones import LassoModel
 
 __all__ = ["TemporalALConeInterpretation"]
 

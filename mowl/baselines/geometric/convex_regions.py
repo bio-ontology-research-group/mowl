@@ -9,12 +9,12 @@ concatenated vectors of its tuples.
 
 :class:`ConvexRegionModel` implements this for the unary and binary predicates of OWL
 (concepts and roles). Coordinates are those of
-:class:`~mowl.geometric.polyhedral.ConvexPolyhedralModel`: the standard simplex of
+:class:`~mowl.baselines.geometric.core.polyhedral.ConvexPolyhedralModel`: the standard simplex of
 ``R^(m-1)``, an affine image of the paper's ``m`` unit vectors on the hyperplane
 ``sum = 1`` (the paper notes that dimension ``m - 1`` suffices for datalog). The regions
-are the :class:`~mowl.geometric.regions.Face` and
-:class:`~mowl.geometric.regions.PairHull` objects the
-:class:`~mowl.geometric.checker.ModelChecker` decides exactly.
+are the :class:`~mowl.baselines.geometric.core.regions.Face` and
+:class:`~mowl.baselines.geometric.core.regions.PairHull` objects the
+:class:`~mowl.baselines.geometric.core.checker.ModelChecker` decides exactly.
 
 Guarantees:
 
@@ -23,7 +23,7 @@ Guarantees:
 - Consequently ``η`` satisfies a normal-form axiom iff ``M`` does (for the forms
   ``NF1`` to ``NF7``), so ``η`` is a model of every axiom set that ``M`` is a model of.
 - The construction does not need the ontology: it needs a finite model. The canonical
-  model gives the strongly faithful case (see :mod:`mowl.geometric.faithfulness`).
+  model gives the strongly faithful case (see :mod:`mowl.baselines.geometric.core.faithfulness`).
 """
 from __future__ import annotations
 
@@ -31,14 +31,14 @@ from typing import TYPE_CHECKING, Dict, FrozenSet, Iterable, Optional, Tuple
 
 import numpy as np
 
-from mowl.geometric.checker import DictInterpretation, ModelChecker
-from mowl.geometric.convex_regions import FiniteInterpretation
-from mowl.geometric.errors import InternalConsistencyError
-from mowl.geometric.normal_forms import Axiom
-from mowl.geometric.regions import Face, PairHull, simplex_points
+from mowl.baselines.geometric.core.checker import DictInterpretation, ModelChecker
+from mowl.baselines.geometric.core.convex_regions import FiniteInterpretation
+from mowl.baselines.geometric.core.errors import InternalConsistencyError
+from mowl.baselines.geometric.core.normal_forms import Axiom
+from mowl.baselines.geometric.core.regions import Face, PairHull, simplex_points
 
 if TYPE_CHECKING:  # pragma: no cover
-    from mowl.geometric.completion import CanonicalModel
+    from mowl.baselines.geometric.core.completion import CanonicalModel
 
 
 class ConvexRegionModel(DictInterpretation):

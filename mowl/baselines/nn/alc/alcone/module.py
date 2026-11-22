@@ -1,13 +1,13 @@
 """Learnable axis-aligned cone module for :math:`\\mathcal{ALC}` (adaptation).
 
 See :mod:`mowl.baselines.nn.alc.alcone.losses` for the parametrisation and the exactness lemma,
-and :mod:`mowl.geometric.cones` for the exact semantics of Özçep, Leemhuis & Wolter
+and :mod:`mowl.baselines.geometric.core.cones` for the exact semantics of Özçep, Leemhuis & Wolter
 (JAIR 2023).
 """
 import numpy as np
 import torch as th
 
-from mowl.nn.alc.module import ALCModule
+from mowl.baselines.nn.alc.module import ALCModule
 from mowl.baselines.nn.alc.alcone import losses as L
 from mowl.owlapi import (ClassExpressionType, OWLClassAssertionAxiom,
                          OWLDisjointClassesAxiom, OWLEquivalentClassesAxiom,
@@ -189,7 +189,7 @@ class ALConeModule(ALCModule):
 
     # -- discretisation -----------------------------------------------------
     def discretise(self, class_names=None, role_names=None, individual_names=None):
-        """Return the discretised :class:`~mowl.geometric.cones.ALConeInterpretation`:
+        """Return the discretised :class:`~mowl.baselines.geometric.core.cones.ALConeInterpretation`:
         half-axis ``h`` belongs to a concept (role pair, individual support) iff its logit
         is ``> 0``. An individual whose support contains both half-axes of a coordinate
         (possible only while :func:`~mowl.baselines.nn.alc.alcone.losses.point_validity_loss` is
@@ -199,7 +199,7 @@ class ALConeModule(ALCModule):
         :param role_names: Sequence mapping role index to name.
         :param individual_names: Sequence mapping individual index to name.
         """
-        from mowl.geometric.cones import ALCone, ALConeInterpretation
+        from mowl.baselines.geometric.core.cones import ALCone, ALConeInterpretation
 
         with th.no_grad():
             cw = self.c_embedding.weight.detach().cpu().numpy() > 0

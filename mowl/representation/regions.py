@@ -28,9 +28,9 @@ class Region:
         """The region scaled by ``factor`` per coordinate (``(B, d)``)."""
         raise ConstructorUnavailable(f"{type(self).__name__} cannot be scaled per coordinate.")
 
-    def rotate(self, *args, **kwargs):
-        """The region rotated (a cone's axis and aperture moved by angles, as a relation of
-        ConE does); only families of angles define it."""
+    def rotate(self, d_axis, d_aperture, aperture="clip"):
+        """The region turned by the angles ``d_axis``, its aperture changed by
+        ``d_aperture`` (families of angular cones)."""
         raise ConstructorUnavailable(f"{type(self).__name__} cannot be rotated.")
 
     def intersect(self, other):

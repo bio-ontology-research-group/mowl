@@ -25,7 +25,7 @@ The model is a PyKEEN :class:`pykeen.models.ERModel`, so it is trained by the ex
 import torch as th
 from pykeen.losses import NSSALoss
 from pykeen.models import ERModel
-from mowl.nn.graph.kge_interactions import (ExpressivEInteraction,  # noqa: F401
+from mowl.baselines.nn.graph.interactions import (ExpressivEInteraction,  # noqa: F401
     captured, expressive_distance, expressive_relation_parameters)
 
 

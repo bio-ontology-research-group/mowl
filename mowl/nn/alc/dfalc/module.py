@@ -15,11 +15,9 @@ it replaces is kept for comparison as :mod:`mowl.baselines.nn.alc.dfalc`.
 """
 from types import SimpleNamespace
 
-import torch as th
-import torch.nn as nn
-
 from mowl.representation.library.logic_alc import ExpressionGeometry
-from mowl.representation.library.logic_fuzzy import (dfalc_parts, has_quantifier,
+from mowl.representation.library.logic_fuzzy import (MeanViolation, dfalc_parts,
+                                                     has_quantifier, truth_tables,
                                                      rule_based_loss, rule_nf4, rule_nf5,
                                                      rule_nf6, rule_nf7)
 
@@ -27,11 +25,11 @@ __all__ = ["DFALCModule", "has_quantifier", "rule_based_loss", "rule_nf4", "rule
            "rule_nf6", "rule_nf7", "hierarchical_loss"]
 
 
-def hierarchical_loss(c, d):
-    """Eq. 8 of the paper for one axiom :math:`C \\sqsubseteq D`: the mean over the domain
-    of :math:`\\max(0, C^I(a) - D^I(a))`, one value per row (the ``inside`` of
-    :class:`~mowl.representation.library.logic_fuzzy.MeanViolation`)."""
-    return th.relu(c - d).mean(dim=-1)
+#: Eq. 8 of the paper for one axiom :math:`C \sqsubseteq D` on degree tensors: the mean over
+#: the domain of :math:`\max(0, C^I(a) - D^I(a))`, one value per row. It is the ``inside``
+#: of the measure :class:`~mowl.representation.library.logic_fuzzy.MeanViolation`
+#: (:meth:`~mowl.representation.library.logic_fuzzy.MeanViolation.inside_degrees`).
+hierarchical_loss = MeanViolation.inside_degrees
 
 
 class DFALCModule(ExpressionGeometry):
@@ -56,12 +54,9 @@ class DFALCModule(ExpressionGeometry):
             raise ValueError("The domain of a DF-ALC interpretation must not be empty.")
         if loss_type not in ("hierarchical", "rule"):
             raise ValueError("loss_type must be 'hierarchical' or 'rule'.")
-        # The tables are drawn in the order of the earlier module (both, then the logits of
-        # both), so that a seed gives the numbers it always gave.
-        classes = nn.Embedding(nclasses, ndomain)
-        relations = nn.Embedding(max(nrelations, 1), ndomain * ndomain)
-        for table in (classes, relations):
-            nn.init.normal_(table.weight, std=init_std)
+        # The tables are drawn in the order of the earlier module, so that a seed gives the
+        # numbers it always gave.
+        classes, relations = truth_tables(nclasses, nrelations, ndomain, init_std)
         tables = SimpleNamespace(ndomain=ndomain, c_embedding=classes, r_embedding=relations,
                                  top_index=top_index, bottom_index=bottom_index,
                                  loss_type=loss_type, threshold=threshold)

@@ -2,7 +2,7 @@
 Pan, DL 2021, Theorems 6 and 12), kept for comparison (see :mod:`mowl.baselines`): the
 grounding, the canonical model and the direct convex polyhedral model
 (:mod:`mowl.baselines.geometric.polyhedral`) in one class. In
-:mod:`mowl.geometric.attributed` it is the combination of the source ``attributed`` and the
+:mod:`mowl.baselines.geometric.core.attributed` it is the combination of the source ``attributed`` and the
 ``simplex`` reading.
 """
 from typing import List
@@ -10,10 +10,10 @@ from typing import List
 import numpy as np
 
 from mowl.baselines.geometric.polyhedral import ConvexPolyhedralModel
-from mowl.geometric.attributed import (ANY, AttributedAxiom, AttributedOntology, Specifier,
+from mowl.baselines.geometric.core.attributed import (ANY, AttributedAxiom, AttributedOntology, Specifier,
                                        _name, ground)
-from mowl.geometric.completion import CanonicalModel
-from mowl.geometric.normal_forms import NormalisedOntology, nominal_name
+from mowl.baselines.geometric.core.completion import CanonicalModel
+from mowl.baselines.geometric.core.normal_forms import NormalisedOntology, nominal_name
 
 __all__ = ["AttributedConvexModel"]
 
@@ -22,13 +22,13 @@ class AttributedConvexModel:
     """A convex geometric model of a ground attributed ontology (Theorem 6 / 12).
 
     :param ontology: An :class:`AttributedOntology`.
-    :raises mowl.geometric.errors.InconsistentOntology: if the ontology is unsatisfiable.
-    :raises mowl.geometric.errors.UnsupportedAxiom: for ``before``/``after``/``between``,
+    :raises mowl.baselines.geometric.core.errors.InconsistentOntology: if the ontology is unsatisfiable.
+    :raises mowl.baselines.geometric.core.errors.UnsupportedAxiom: for ``before``/``after``/``between``,
         temporal specifiers on roles or in open specifiers.
 
     After construction: :attr:`grounding` (``dl(O_g)``), :attr:`canonical_model`
     (the finite model), :attr:`model` (the
-    :class:`~mowl.geometric.polyhedral.ConvexPolyhedralModel` :math:`\\eta'`) and
+    :class:`~mowl.baselines.geometric.core.polyhedral.ConvexPolyhedralModel` :math:`\\eta'`) and
     :attr:`dimension`.
     """
 

@@ -187,6 +187,11 @@ class GroundedELModule(nn.Module, Geometry):
     replaces the part in the same way.
     """
 
+    #: The model that trains this geometry (``ComposedEL`` refuses it and says so); its
+    #: parts are swapped there: ``GroundedEL(..., relation_model="translation")``.
+    trained_by = ("mowl.models.GroundedEL (class_model=, relation_model=, measure=, "
+                  "objective=, element_sampler=, region_sampler=, crisp_regime=, exact_regime=)")
+
     def __init__(
         self,
         nb_elements: int,
@@ -526,7 +531,7 @@ class GroundedELModule(nn.Module, Geometry):
     def member(self, individual_ids, region):
         """The score of a class assertion: minus the signed depth of the individual in the
         region (negative inside, zero on the boundary)."""
-        points = self.positions(self.nb_classes + individual_ids)
+        points = self.positions(self.elements.individual(individual_ids))
         return -self._region_depth(points, region).reshape(-1, 1)
 
     def soft_membership(self, individual_ids, region):
@@ -534,7 +539,7 @@ class GroundedELModule(nn.Module, Geometry):
         from mowl.representation.regions import ConstructorUnavailable
         if region.ids is None:
             raise ConstructorUnavailable("Soft membership is defined for named classes.")
-        points = self.positions(self.nb_classes + individual_ids)
+        points = self.positions(self.elements.individual(individual_ids))
         return self.membership(points, region.ids).reshape(-1, 1)
 
     @property
@@ -651,7 +656,7 @@ class GroundedELModule(nn.Module, Geometry):
         if bsz == 0:
             return th.empty((0,), dtype=dtype, device=device)
 
-        nb_inds = self.nb_elements - self.nb_classes
+        nb_inds = self.elements.nb_individuals
         if nb_inds <= 0:
             raise ValueError(
                 "Cannot score class_assertion when the module has no individual elements "
@@ -660,6 +665,6 @@ class GroundedELModule(nn.Module, Geometry):
 
         ind_ids = self._to_index_tensor(data[:, 0], nb_inds, "individual_ids")
         cls_ids = self._to_index_tensor(data[:, 1], self.nb_classes, "class_ids")
-        el_ids = self.nb_classes + ind_ids
+        el_ids = self.elements.individual(ind_ids)
         pts = self.positions(el_ids)
         return -self.depth(pts, cls_ids, crisp=True)

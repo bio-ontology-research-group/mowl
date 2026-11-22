@@ -53,3 +53,87 @@ def test_every_implemented_method_is_compared_or_exempt(key):
 def test_exemptions_give_a_reason():
     for key, reason in all_exempt().items():
         assert isinstance(reason, str) and len(reason) > 30, key
+
+
+# ----------------------------------------------------------------------------------------
+# The baselines own their computation: they do not import it from the library.
+# ----------------------------------------------------------------------------------------
+BASELINES = os.path.join(ROOT, "baselines")
+
+#: Packages of the library whose code computes (parts, regimes, scores, methods).
+LIBRARY_COMPUTING = ("mowl.representation", "mowl.training", "mowl.evaluation", "mowl.nn",
+                     "mowl.models", "mowl.geometric", "mowl.projection")
+
+#: Names a baseline may import from those packages because they do not compute: base classes
+#: that only dispatch, exception classes, a reader of the axioms into index rows.
+ALLOWED_NAMES = {
+    ("mowl.evaluation.model_scoring", "UnsupportedAxiomForm"): "exception class",
+    ("mowl.evaluation.axiom_ranking", "el_rows"): "reads the validation axioms into index "
+                                                   "rows (data extraction)",
+    ("mowl.projection", "Edge"): "a (head, relation, tail) triple: data structure",
+    ("mowl.projection.base", "ProjectionModel"): "base class of the projectors: holds the edges",
+    ("mowl.projection", "TaxonomyProjector"): "reads the subclass axioms into edges (data "
+                                              "extraction)",
+    ("mowl.projection", "OWL2VecStarProjector"): "reads the ontology into edges (data "
+                                                  "extraction)",
+}
+
+
+def _baseline_files():
+    for folder, _, files in os.walk(BASELINES):
+        if "__pycache__" in folder:
+            continue
+        for name in files:
+            if name.endswith(".py"):
+                yield os.path.join(folder, name)
+
+
+def _library_imports(path):
+    tree = ast.parse(open(path, encoding="utf-8").read())
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
+            targets = [(node.module, a.name) for a in node.names]
+        elif isinstance(node, ast.Import):
+            targets = [(a.name, None) for a in node.names]
+        else:
+            continue
+        for module, name in targets:
+            if any(module == p or module.startswith(p + ".") for p in LIBRARY_COMPUTING):
+                yield node.lineno, module, name
+
+
+def test_baselines_do_not_import_library_computation():
+    offenders = []
+    for path in _baseline_files():
+        rel = os.path.relpath(path, BASELINES).replace(os.sep, "/")
+        for line, module, name in _library_imports(path):
+            if (module, name) not in ALLOWED_NAMES:
+                offenders.append(f"{rel}:{line} imports {module}"
+                                 + (f".{name}" if name else ""))
+    assert not offenders, offenders
+
+
+def test_the_allow_list_has_no_stale_entries():
+    used = set()
+    for path in _baseline_files():
+        for _, module, name in _library_imports(path):
+            used.add((module, name))
+    assert set(ALLOWED_NAMES) <= used, sorted(set(ALLOWED_NAMES) - used)
+    assert all(ALLOWED_NAMES.values())
+
+
+def test_the_library_paths_that_users_know_still_import():
+    import importlib
+    for old in ("mowl.nn.lm.hyperbolic", "mowl.nn.order.manifolds",
+                "mowl.nn.graph.kge_interactions", "mowl.nn.el.octagon.geometry",
+                "mowl.nn.el.multibox_utils", "mowl.nn.numerics", "mowl.nn.query.base"):
+        importlib.import_module(old)
+
+
+def test_a_baseline_has_its_own_copy_of_every_geometry_it_computes_with():
+    from mowl.baselines.nn.lm import hyperbolic as base_hb
+    from mowl.nn.lm import hyperbolic as lib_hb
+    from mowl.baselines.nn.order import manifolds as base_m
+    from mowl.nn.order import manifolds as lib_m
+    assert base_hb is not lib_hb and base_hb.distance is not lib_hb.distance
+    assert base_m.PoincareBall is not lib_m.PoincareBall

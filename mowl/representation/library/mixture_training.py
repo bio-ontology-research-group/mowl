@@ -140,7 +140,16 @@ def _project(geometry):
 
 
 class _Regime:
-    """What the regimes share: negatives, validation and the best checkpoint."""
+    """What the regimes share: negatives, validation and the best checkpoint.
+
+    :meth:`run` is a training loop of its own (epochs of optimiser steps with validation and
+    checkpointing), not an inner solver: it should run in the shared loop of
+    :mod:`mowl.training.loop`. It does not yet because a step here accumulates the gradient
+    chunk by chunk (:func:`_backward`: memory bounded by the support entries of the
+    individuals) and skips the optimiser step of a batch with nothing to supervise, while a
+    step of the shared loop computes one loss and calls ``backward`` once. Until the shared
+    loop has a hook for an accumulated step, the canonical mixture refuses every training
+    regime (``CanonicalMixture.training_hooks`` is empty) instead of ignoring one."""
 
     key = ""
 

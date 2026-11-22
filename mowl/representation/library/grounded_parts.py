@@ -305,6 +305,20 @@ class ElementDomain(nn.Module):
                 th.tensor(inv_softplus(0.1), dtype=w.dtype, device=w.device))
         return self.raw_tau_s
 
+    @staticmethod
+    def domain_size(nb_classes, nb_individuals):
+        """Elements of a domain with one witness per class and one element per individual."""
+        return nb_classes + nb_individuals
+
+    @property
+    def nb_individuals(self):
+        """The elements after the class witnesses."""
+        return self.nb_elements - self.nb_classes
+
+    def individual(self, ids):
+        """The elements of the individuals ``ids`` (they follow the class witnesses)."""
+        return self.nb_classes + ids
+
     @property
     def tau_s(self):
         """The positive score temperature :math:`\\max(\\operatorname{softplus}(\\text{raw}),
@@ -326,6 +340,22 @@ class ElementDomain(nn.Module):
             self.dead_logits.clamp_(0.0, 1.0)
             if fixed_dead is not None:
                 self.dead_logits[fixed_dead] = dead_value
+
+    def encode(self, features, dtype=None):
+        """Positions ``(B, d)`` of data elements (not elements of the domain) from their
+        ``features`` ``(B, F)`` or ``(F,)``, by the encoder."""
+        if not isinstance(features, th.Tensor):
+            raise TypeError(f"features must be a torch.Tensor, got {type(features).__name__}")
+        if features.ndim not in (1, 2):
+            raise ValueError("features must be 2-D (B, feat_dim) (or 1-D (feat_dim,)), got "
+                             f"shape {tuple(features.shape)}")
+        rows = features.reshape(1, -1) if features.ndim == 1 else features
+        rows = rows.to(device=self.device, dtype=dtype or self.elem_pos.weight.dtype)
+        out = self.encoder(rows)
+        if out.ndim != 2 or out.shape[0] != rows.shape[0] or out.shape[1] != self.embed_dim:
+            raise ValueError(f"encoder(features) must return shape ({rows.shape[0]}, "
+                             f"{self.embed_dim}), got {tuple(out.shape)}")
+        return out
 
     def positions(self, element_ids=None):
         """Positions :math:`p_x` of ``element_ids`` (all elements if ``None``), computed by the

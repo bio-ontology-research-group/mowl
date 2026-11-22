@@ -57,7 +57,7 @@ class TestPoints(TestCase):
         self.assertEqual(float(Points(4, 6, "box")(th.arange(4)).offset.abs().max()), 0.0)
         oct_ = OctagonProduct.of_point(c)
         # An octagon of no extent has width zero on every axis.
-        from mowl.nn.el.octagon import geometry as G
+        from mowl.representation.library import octagon_geometry as G
         self.assertTrue(th.allclose(G.widths(oct_.bounds), th.zeros(4, 3, 4), atol=1e-6))
         prism = Prism.of_point(c)
         self.assertTrue(th.allclose(prism.supports.sum(-1), th.zeros(4), atol=1e-6))
@@ -89,7 +89,7 @@ class TestOctagon(TestCase):
             self.assertTrue(bool(((elbe == 0) == (octa < 1e-6)).all()))
 
     def test_intersection_of_boxes_is_the_box_intersection(self):
-        from mowl.nn.el.octagon import geometry as G
+        from mowl.representation.library import octagon_geometry as G
         a, b = _boxes(8, 4, 1), _boxes(8, 4, 2)
         region, gap = OctagonProduct.of_box(a).intersect(OctagonProduct.of_box(b))
         inter, box_gap = a.intersect(b)

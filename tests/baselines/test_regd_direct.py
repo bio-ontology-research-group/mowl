@@ -515,6 +515,15 @@ class TestTreeEmbedding(TestCase):
         module = RegDELEmModule(n, 1, None, embed_dim=2, margin=0, gamma2=0.1)
         self.assertEqual(self._train_and_count_violations(module, n, ancestors), 0)
 
+    def test_box_and_ball_tree_in_three_dimensions_fast(self):
+        """The fast part of the depth-four test below, which runs in CI: the same tree of
+        15 classes in three dimensions."""
+        th.manual_seed(0)
+        n, ancestors = _tree(3)
+        for cls in (RegDELBEModule, RegDELEmModule):
+            module = cls(n, 1, None, embed_dim=3, margin=0, gamma2=0.1)
+            self.assertEqual(self._train_and_count_violations(module, n, ancestors), 0)
+
     @pytest.mark.slow
     def test_box_and_ball_tree_in_five_dimensions_with_depth_four(self):
         th.manual_seed(0)

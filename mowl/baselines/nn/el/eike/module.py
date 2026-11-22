@@ -8,7 +8,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 
-from mowl.nn.el.elmodule import ELModule
+from mowl.baselines.nn.el.elmodule import ELModule
 
 _EPS = 1e-6
 

@@ -6,9 +6,9 @@ from typing import TYPE_CHECKING, Dict, Optional, Tuple, Union
 import torch as th
 import torch.nn as nn
 
-from mowl.nn import ELModule
+from mowl.baselines.nn.el.elmodule import ELModule
 from mowl.baselines.nn.el.boxsquaredel.module import BoxSquaredELModule
-from mowl.nn.el.multibox_utils import effective_components as _effective_components
+from mowl.baselines.nn.el.multibox_utils import effective_components as _effective_components
 from mowl.baselines.nn.el.multiboxel.module import MultiBoxELModule
 import mowl.baselines.nn.el.multielbe.losses as L
 from mowl.baselines.nn.el.multiboxel.pointloss import (
@@ -479,7 +479,7 @@ class MultiELBEModule(ELModule):
 
     @property
     def class_center(self) -> nn.Embedding:
-        """Alias for ``class_embed`` used by :class:`~mowl.geometric.init.ExactBoxInit`.
+        """Alias for ``class_embed`` used by :class:`~mowl.baselines.geometric.core.init.ExactBoxInit`.
 
         Guarantees:
 

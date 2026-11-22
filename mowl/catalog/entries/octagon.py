@@ -163,7 +163,7 @@ CARD = MethodCard(
     notes=(
         "From the paper (Charpenay & Schockaert, IJCAI 2024): the 2-D octagon region (Eq. "
         "6), its closed-form normalisation and emptiness test (Proposition 1, implemented "
-        "in mowl.nn.el.octagon.geometry.tighten and checked against a transcription of "
+        "in mowl.representation.library.octagon_geometry.tighten and checked against a transcription of "
         "the proposition), and closure under intersection (Section 3). In the paper "
         "octagons are knowledge graph RELATION regions over (head, tail) coordinate pairs; "
         "all guarantees taken from the paper are statements about such relation "
@@ -172,7 +172,7 @@ CARD = MethodCard(
         "regions; roles as translations (as in ELBE and the prism model); the "
         "parametrisation (centre plus non-negative radii, non-empty by construction); all "
         "losses, which are exact (zero iff the geometric condition, see "
-        "mowl.representation.library.shapes_octagon_math), including gci3 as the exact inclusion C - t_R in D "
+        "mowl.representation.library.octagon_bounds), including gci3 as the exact inclusion C - t_R in D "
         "instead of ELBE's overlap; negative sampling for gci2 with an exact non-inclusion "
         "loss; the Helly analysis (Helly number 3 for products of planar convex sets, the "
         "T3 model in d = 2 and the T4 non-representability). The paper's learning "

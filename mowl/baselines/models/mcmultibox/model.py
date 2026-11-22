@@ -1,13 +1,13 @@
 """The direct implementation of the volume-based MultiBoxEL model class (the module of
 :mod:`mowl.baselines.nn.el.mcmultibox` and its own training loop). The options, the trainable
 datasets and the evaluation are those of :class:`mowl.models.VolumeMultiBoxEL`
-(:class:`~mowl.models.mcmultibox.common.VolumeMultiBoxELOptions`)."""
+(:class:`~mowl.baselines.models.mcmultibox.base.VolumeMultiBoxELOptions`)."""
 import logging
 
 import torch as th
 
 from mowl.baselines.nn.el.mcmultibox.module import VolumeMultiBoxELModule
-from mowl.models.mcmultibox.common import VolumeMultiBoxELOptions
+from mowl.baselines.models.mcmultibox.base import VolumeMultiBoxELOptions
 
 logger = logging.getLogger(__name__)
 

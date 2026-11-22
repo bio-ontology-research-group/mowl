@@ -25,12 +25,9 @@ The hand-written loss module that this one replaces is kept for comparison as
 """
 from types import SimpleNamespace
 
-import numpy as np
-import torch as th
-import torch.nn as nn
-
 from mowl.representation.library.logic_alc import ExpressionGeometry, Relaxation
-from mowl.representation.library.logic_fuzzy import alcone_parts, empty_cone_penalty
+from mowl.representation.library.logic_fuzzy import (alcone_parts, empty_cone_penalty,
+                                                     half_axis_tables)
 
 __all__ = ["ALConeModule", "CONSTANT_LOGIT", "DEFAULT_CONSTANT_LOGIT"]
 
@@ -83,14 +80,10 @@ class ALConeModule(ExpressionGeometry):
         if margin <= 0:
             raise ValueError("margin must be positive (zero loss implies a model only "
                              "for margin > 0).")
-        # The tables are drawn in the order of the earlier module (all three, then the logits
-        # of all three), so that a seed gives the numbers it always gave.
-        nhalf = 2 * dim
-        classes = nn.Embedding(nclasses, nhalf)
-        relations = nn.Embedding(max(nrelations, 1), nhalf * nhalf)
-        individuals = nn.Embedding(max(nindividuals, 1), nhalf)
-        for table in (classes, relations, individuals):
-            nn.init.normal_(table.weight, std=init_std)
+        # The tables are drawn in the order of the earlier module, so that a seed gives the
+        # numbers it always gave.
+        classes, relations, individuals = half_axis_tables(nclasses, nrelations, nindividuals,
+                                                           dim, init_std)
         tables = SimpleNamespace(
             c_embedding=classes, r_embedding=relations, e_embedding=individuals, dim=dim,
             margin=margin, top_index=top_index, bottom_index=bottom_index,
@@ -99,7 +92,8 @@ class ALConeModule(ExpressionGeometry):
                                         anneal=anneal, noise=noise, tables=tables))
         self.constant_logit = constant_logit
         self.dim = dim
-        self.nhalf = 2 * dim
+        #: The number of half-axes (``2 dim``).
+        self.nhalf = self.relation_model.domain
         self.top_index = top_index
         self.bottom_index = bottom_index
 
@@ -110,8 +104,9 @@ class ALConeModule(ExpressionGeometry):
         return self.class_model(idx).values
 
     def role_logits(self, idx):
-        """Incidence logits of role indices ``idx``, shape ``idx.shape + (2n, 2n)``."""
-        return self.r_embedding(idx).view(*idx.shape, self.nhalf, self.nhalf)
+        """Incidence logits of role indices ``idx``, shape ``idx.shape + (2n, 2n)`` (the
+        stored layout of :class:`~mowl.representation.library.logic_fuzzy.IncidenceMatrices`)."""
+        return self.relation_model.stored(idx)
 
     def individual_logits(self, idx):
         """Support logits of individual indices ``idx``."""
@@ -136,31 +131,17 @@ class ALConeModule(ExpressionGeometry):
         """
         from mowl.geometric.cones import ALCone, ALConeInterpretation
 
-        with th.no_grad():
-            cw = self.c_embedding.weight.detach().cpu().numpy() > 0
-            rw = self.r_embedding.weight.detach().cpu().numpy().reshape(
-                -1, self.nhalf, self.nhalf) > 0
-            ew = self.e_embedding.weight.detach().cpu().numpy()
+        cw = self.class_model.crisp()
+        rw = self.relation_model.crisp()
+        points = self.individual_model.points()
         cnames = list(class_names) if class_names is not None \
-            else [str(i) for i in range(cw.shape[0])]
+            else [str(i) for i in range(len(cw))]
         rnames = list(role_names) if role_names is not None \
-            else [str(i) for i in range(rw.shape[0])]
+            else [str(i) for i in range(len(rw))]
         inames = list(individual_names) if individual_names is not None \
-            else [str(i) for i in range(ew.shape[0])]
-        concepts = {}
-        for i, name in enumerate(cnames):
-            if i in (self.top_index, self.bottom_index):
-                continue
-            concepts[name] = ALCone(cw[i])
+            else [str(i) for i in range(len(points))]
+        concepts = {name: ALCone(cw[i]) for i, name in enumerate(cnames)
+                    if i not in (self.top_index, self.bottom_index)}
         roles = {name: rw[i] for i, name in enumerate(rnames)}
-        inds = {}
-        for k, name in enumerate(inames):
-            u = ew[k].reshape(-1, 2)
-            pt = np.zeros(self.dim)
-            for i, (p, q) in enumerate(u):
-                if p > 0 and (q <= 0 or p >= q):
-                    pt[i] = 1.0
-                elif q > 0:
-                    pt[i] = -1.0
-            inds[name] = pt
-        return ALConeInterpretation(self.dim, concepts, roles, inds)
+        individuals = {name: points[k] for k, name in enumerate(inames)}
+        return ALConeInterpretation(self.dim, concepts, roles, individuals)

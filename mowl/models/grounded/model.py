@@ -40,7 +40,6 @@ Non-guarantees:
 from __future__ import annotations
 
 import logging
-import math
 import random
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 import torch as th
@@ -56,9 +55,12 @@ from mowl.representation.library.grounded_logic import (validate_margin as _vali
                                                         validate_nonneg_weight as _validate_nonneg_weight)
 from mowl.nn.el.structural import Regions
 from mowl.datasets.rows import sort_rows
+from mowl.representation.library.grounded_parts import ElementDomain
+from mowl.training.schedules import ConstantThenCosine, LinearDecay, TemperatureAnnealing
 from mowl.representation.library.finite_model_placement import (close_labels, edge_triples,
                                                                  interpretation_labels,
                                                                  syntactic_edges)
+from mowl.representation.library.grounded_objective import domain_index_sets, relation_fillers
 from mowl.representation.library.inductive_membership import (MembershipCrossEntropy,
                                                               SoftClassScores)
 from mowl.representation.library.union_reseeding import OwnPointReseeding, slot_point_counts
@@ -557,7 +559,7 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
 
         self.nb_classes = len(self.class_index_dict)
         self.nb_inds = len(self.individual_index_dict)
-        self.nb_elements = self.nb_classes + self.nb_inds
+        self.nb_elements = ElementDomain.domain_size(self.nb_classes, self.nb_inds)
         self.nb_rels = len(self.object_property_index_dict)
         self.inverse_of: Optional[List[int]] = _resolve_inverse_of(
             inverse_of, self.object_property_index_dict, self.nb_rels
@@ -840,72 +842,26 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
                                        inverse_of=self.inverse_of)
 
     def _ensure_static_id_tensors(self) -> None:
-        """Lazily build cached class and element index tensors on ``self.device``."""
-        device = self.device
-        if self._live_cls_ids is None:
-            self._live_cls_ids = th.tensor(
-                [c for c in range(self.nb_classes) if c != self.bot_id],
-                dtype=th.long,
-                device=device,
-            )
-        if self._ord_cls_ids is None:
-            self._ord_cls_ids = th.tensor(
-                [
-                    c
-                    for c in range(self.nb_classes)
-                    if c != self.top_id and c != self.bot_id
-                ],
-                dtype=th.long,
-                device=device,
-            )
-        if self._dead_min_ids is None:
-            self._dead_min_ids = th.tensor(
-                [e for e in range(self.nb_elements) if e != self.bot_id],
-                dtype=th.long,
-                device=device,
-            )
+        """Lazily build the cached class and element index sets
+        (:func:`~mowl.representation.library.grounded_objective.domain_index_sets`)."""
+        if self._live_cls_ids is None or self._ord_cls_ids is None or self._dead_min_ids is None:
+            live, ordinary, probes = domain_index_sets(self.nb_classes, self.nb_elements,
+                                                       self.top_id, self.bot_id, self.device)
+            if self._live_cls_ids is None:
+                self._live_cls_ids = live
+            if self._ord_cls_ids is None:
+                self._ord_cls_ids = ordinary
+            if self._dead_min_ids is None:
+                self._dead_min_ids = probes
 
     def _ensure_role_tables(self) -> None:
-        """Build cached per-role filler and LHS element index tables from ``training_datasets``."""
-        if (
-            self._filler_by_role is not None
-            and self._lhs_by_role is not None
-            and self._filler_mask_by_role is not None
-        ):
-            return
-        td = self.training_datasets
-        fillers: Dict[int, Dict[int, None]] = {r: {} for r in range(self.nb_rels)}
-        lhs_map: Dict[int, Dict[int, None]] = {r: {} for r in range(self.nb_rels)}
-
-        if "gci2" in td and len(td["gci2"]) > 0:
-            for row in td["gci2"][:].detach().cpu().tolist():
-                a_id, r_id, b_id = int(row[0]), int(row[1]), int(row[2])
-                fillers[r_id][b_id] = None
-                lhs_map[r_id][a_id] = None
-
-        if "object_property_assertion" in td and len(td["object_property_assertion"]) > 0:
-            for row in td["object_property_assertion"][:].detach().cpu().tolist():
-                ind_a, r_id, ind_b = int(row[0]), int(row[1]), int(row[2])
-                el_a = self.nb_classes + ind_a
-                el_b = self.nb_classes + ind_b
-                fillers[r_id][el_b] = None
-                lhs_map[r_id][el_a] = None
-
-        self._filler_by_role = {
-            r: th.tensor(list(vals.keys()), dtype=th.long, device=self.device)
-            for r, vals in fillers.items()
-        }
-        self._lhs_by_role = {
-            r: th.tensor(list(vals.keys()), dtype=th.long, device=self.device)
-            for r, vals in lhs_map.items()
-        }
-        filler_mask = th.zeros(
-            (self.nb_rels, self.nb_elements), dtype=th.bool, device=self.device
-        )
-        for r, f_ids in self._filler_by_role.items():
-            if f_ids.numel() > 0:
-                filler_mask[r, f_ids] = True
-        self._filler_mask_by_role = filler_mask
+        """Build the cached filler and left-hand elements of every role
+        (:func:`~mowl.representation.library.grounded_objective.relation_fillers`)."""
+        if self._filler_by_role is None or self._lhs_by_role is None \
+                or self._filler_mask_by_role is None:
+            self._filler_by_role, self._lhs_by_role, self._filler_mask_by_role = \
+                relation_fillers(self.training_datasets, self.nb_rels, self.nb_elements,
+                                 self.nb_classes, self.device)
 
     @property
     def tau_s(self) -> th.Tensor:
@@ -943,10 +899,7 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
         """
         _validate_int_ge("step", step, 0)
         _validate_int_ge("total_steps", total_steps, 1)
-        if total_steps <= 1:
-            return float(self.tau0)
-        frac = min(max(step / (total_steps - 1), 0.0), 1.0)
-        return float(self.tau0 * ((self.tau1 / self.tau0) ** frac))
+        return float(TemperatureAnnealing(self.tau0, self.tau1).value_at(step, total_steps))
 
     def step_tau(self, step: int, total_steps: int) -> float:
         """Update ``self.module.tau`` according to the geometric annealing schedule and return the new ``tau``."""
@@ -1061,25 +1014,7 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
             )
         if mod.encoder is None:
             mod.encoder = enc.to(self.device)
-        if not isinstance(features, th.Tensor):
-            raise TypeError(
-                f"features must be a torch.Tensor, got {type(features).__name__}"
-            )
-        if features.ndim == 1:
-            feat_2d = features.unsqueeze(0)
-        elif features.ndim == 2:
-            feat_2d = features
-        else:
-            raise ValueError(
-                f"features must be 2-D (B, feat_dim) (or 1-D (feat_dim,)), got shape {tuple(features.shape)}"
-            )
-        feat_dev = feat_2d.to(device=self.device, dtype=mod.class_centers.dtype)
-        pos = enc(feat_dev)
-        if pos.ndim != 2 or pos.shape[0] != feat_dev.shape[0] or pos.shape[1] != self.embed_dim:
-            raise ValueError(
-                f"encoder(features) must return shape ({feat_dev.shape[0]}, {self.embed_dim}), got {tuple(pos.shape)}"
-            )
-        return pos
+        return mod.elements.encode(features, dtype=mod.class_centers.dtype)
 
     def _chunked_term_scores(
         self,
@@ -1335,11 +1270,9 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
         """
         if lr_final is None or epochs <= 1:
             return float(lr)
-        t = epoch / (epochs - 1)
-        if lr_schedule == "cosine":
-            w = 0.5 * (1.0 + math.cos(math.pi * t))
-            return float(w * lr + (1.0 - w) * lr_final)
-        return float((1.0 - t) * lr + t * lr_final)
+        schedule = (ConstantThenCosine(constant_fraction=0.0, min_lr=lr_final)
+                    if lr_schedule == "cosine" else LinearDecay(min_lr=lr_final))
+        return float(schedule.lr_at(lr, epoch, epochs))
 
     def train(
         self,
@@ -1507,7 +1440,8 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
         if method not in ("beam", "box"):
             raise ValueError(f"method must be 'beam' or 'box', got {method!r}")
         device = self.module.elem_pos.weight.device
-        individuals = self.nb_classes + th.arange(self.nb_inds, dtype=th.long, device=device)
+        individuals = self.module.elements.individual(
+            th.arange(self.nb_inds, dtype=th.long, device=device))
         with th.no_grad():
             if method == "beam":
                 return Q.score_query_beam(

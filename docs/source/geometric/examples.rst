@@ -20,12 +20,12 @@ aliased as :meth:`~mowl.geometric.completion.CanonicalModel.entails_assertion`)
 and assertion contradiction
 (:meth:`~mowl.geometric.completion.CanonicalModel.assertion_contradicted`,
 testing :math:`\mathcal{O} \models N_a \sqcap C \sqsubseteq \bot`).
-:attr:`~mowl.geometric.completion.CanonicalModel.individuals` maps each
+``CanonicalModel.individuals`` maps each
 individual IRI to its nominal name :math:`N_a`,
 :meth:`~mowl.geometric.completion.CanonicalModel.role_instances` returns the
 pairs of individual IRIs connected by a role in the canonical model, and
 :attr:`~mowl.geometric.completion.CanonicalModel.concept_names` returns only the
-non-nominal concept names while :attr:`~mowl.geometric.completion.CanonicalModel.names`
+non-nominal concept names while ``CanonicalModel.names``
 keeps all satisfiable concept and nominal names (so constructive region builders
 assign every satisfiable individual a non-empty region). If any individual is
 unsatisfiable (:math:`\mathcal{O} \models N_a \sqsubseteq \bot`), constructing
@@ -568,7 +568,7 @@ represents each individual :math:`a` as a probability distribution
 support
 :math:`S_a = \{x \in S : x \in C^{\mathcal{I}} \text{ for every training-entailed class } C \text{ of } a\}`,
 where :math:`S` and the sparse membership matrix
-:attr:`~mowl.representation.library.membership_structure.MembershipStructure.M` come from the
+``MembershipStructure.M`` come from the
 :class:`~mowl.geometric.completion.CanonicalModel` of the training ontology. By
 construction, every training-entailed class assertion (including assertions
 entailed through role assertions) has empty complement in :math:`S_a` and scores
@@ -875,7 +875,7 @@ Setting ``objective="structural"`` on :class:`~mowl.models.MultiBoxEL` (default
 ``margin=0.02``, ``reseed_every=0``) or :class:`~mowl.models.PrismEL` (default
 ``margin=0.1``) compiles acyclic binary conjunction definitions
 :math:`A \equiv X \sqcap Y` from the normalised ``gci0`` and ``gci1`` axioms into
-:attr:`~mowl.nn.MultiBoxELModule.definition_table`
+``MultiBoxELModule.definition_table``
 (:class:`~mowl.nn.el.structural.DefinitionTable`), materialises every class as
 :math:`K = \text{max\_components}` component slots with signed half-widths in
 :class:`~mowl.nn.el.structural.Regions` via

@@ -6,7 +6,7 @@ import torch as th
 
 from tests.datasetFactory import FamilyDataset
 from mowl.models.regd.model import RegDELBE, RegDELEm
-from mowl.representation.library.ballfam_energy import contrastive_loss
+from mowl.representation.library.boundary_depth import contrastive_loss
 from mowl.nn.el.regd.module import RegDELBEModule, RegDELEmModule
 
 

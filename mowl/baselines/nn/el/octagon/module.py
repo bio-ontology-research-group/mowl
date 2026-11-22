@@ -4,8 +4,8 @@ from __future__ import annotations
 import torch as th
 import torch.nn as nn
 
-from mowl.nn import ELModule
-from mowl.nn.el.octagon import geometry as G
+from mowl.baselines.nn.el.elmodule import ELModule
+from mowl.baselines.nn.el.octagon import geometry as G
 from mowl.baselines.nn.el.octagon import losses as L
 
 

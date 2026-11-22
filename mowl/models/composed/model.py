@@ -9,6 +9,7 @@ from mowl.nn.el.elmodule import ELModule
 from mowl.representation import methods as M
 from mowl.representation.objectives import Objective
 from mowl.representation.swap import NO_PART, build_method, check_relations_are_read, swap
+from mowl.training.losses import ranking_hinge_loss
 
 
 #: Where the methods that are not trained on axioms are trained.
@@ -143,10 +144,13 @@ class ComposedEL(EmbeddingELModel):
                 module = swap(module, "compose", sizes, self.embed_dim,
                               individuals=self.individuals)
         if not isinstance(module, ELModule):
-            raise TypeError(
+            from mowl.representation.regions import ConstructorUnavailable
+            trainer = getattr(module, "trained_by", None)
+            raise ConstructorUnavailable(
                 f"The geometry of {self.method!r} ({type(module).__name__}) is not an "
                 f"ELModule: it is not trained on normal-form axioms, so ComposedEL cannot "
-                f"train it.")
+                f"train it." + (f" Train it, and swap its parts, with {trainer}."
+                                if trainer else ""))
         self.module = module.to(self.device)
         # EL++ role axioms: loaded when the geometry reads them
         self.load_role_axioms = bool(getattr(module, "role_axiom_capable", False))
@@ -252,13 +256,7 @@ class ComposedEL(EmbeddingELModel):
         ranking = getattr(getattr(self.module, "objective", None), "ranking", None)
         form = getattr(self.module, "last_form", None)
         if ranking and neg_scores is not None and form in ranking:
-            pos = pos_scores.reshape(-1)
-            neg = neg_scores.reshape(-1)
-            if neg.numel() % pos.numel():
-                raise ValueError("The ranking loss needs a whole number of negatives per "
-                                 "positive.")
-            neg = neg.reshape(-1, pos.numel())
-            return th.relu(pos.unsqueeze(0) - neg).mean()
+            return ranking_hinge_loss(pos_scores, neg_scores)
         return super().compute_loss(pos_scores, neg_scores)
 
     def after_optimizer_step(self):

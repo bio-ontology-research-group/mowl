@@ -163,7 +163,9 @@ def build_method(key, nb_classes, nb_relations, nb_individuals=0, embed_dim=50,
             f"The method {key!r} builds a {type(geometry).__name__}, which is not put "
             f"together from replaceable class, relation and measure parts; it does not take "
             f"{sorted(rest)}. Its own options: "
-            f"{[p for p in parameters if p not in ('tables', 'nb_classes', 'nb_relations', 'nb_individuals', 'embed_dim')]}.")
+            f"{[p for p in parameters if p not in ('tables', 'nb_classes', 'nb_relations', 'nb_individuals', 'embed_dim')]}."
+            + (f" Its parts are swapped through {geometry.trained_by}."
+               if getattr(geometry, "trained_by", None) else ""))
     geometry = swap(geometry, key, sizes, embed_dim, **rest)
     if relations is not None and rows is not None:
         try:

@@ -13,7 +13,7 @@ class ELBE(EmbeddingELModel):
 
     Parameters
     ----------
-    init_boxes : mowl.geometric.init.ExactBoxInit, optional
+    init_boxes : mowl.baselines.geometric.core.init.ExactBoxInit, optional
         Optional exact-model box initialisation applied in :meth:`init_module`.
         Rows are matched by IRI against :attr:`class_index_dict`; rows of the
         auxiliary classes introduced by normalisation keep their random

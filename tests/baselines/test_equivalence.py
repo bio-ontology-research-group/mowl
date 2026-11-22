@@ -10,7 +10,8 @@ from tests.baselines.harness import all_pairs, assert_same
 PAIRS = all_pairs()
 IDS = [p.key for p in PAIRS]
 
-from tests.baselines.own_code import foreign_members, own_computation
+from tests.baselines.own_code import (TEMPORARY_EXPECTED_FAILURES, foreign_members,
+                                      named_units, own_computation)
 
 
 def _seed(seed):
@@ -35,8 +36,11 @@ def _skip(pair, check):
 
 
 @pytest.mark.parametrize("pair", PAIRS, ids=IDS)
-def test_the_method_users_get_is_built_from_parts(pair):
+def test_the_method_users_get_is_built_from_parts(pair, request):
     _skip(pair, "parts")
+    if pair.key in TEMPORARY_EXPECTED_FAILURES:
+        request.applymarker(pytest.mark.xfail(strict=True,
+                                              reason=TEMPORARY_EXPECTED_FAILURES[pair.key]))
     from mowl.representation.geometry import Geometry
     _, new = _both(pair)
     assert isinstance(new.module, Geometry), type(new.module)
@@ -50,10 +54,12 @@ def test_the_method_users_get_is_built_from_parts(pair):
     assert isinstance(parts, dict) and len(parts) >= 2, parts
     # Every object the module is made of is a general library class.
     assert not foreign_members(new.module)
-    # Neither the module class nor the model class computes with tensors
-    # itself: the arithmetic belongs to the parts.
-    assert not own_computation(type(new.module))
-    assert not own_computation(type(new))
+    # Neither the module class nor the model class computes with tensors itself, nor do the
+    # module-level functions of the method's own package, nor the general models they are
+    # built on (they wire, hold options and call parts): the computation belongs to the parts.
+    units = named_units(pair.key)
+    assert not own_computation(type(new.module), units)
+    assert not own_computation(type(new), units)
 
 
 @pytest.mark.parametrize("pair", PAIRS, ids=IDS)

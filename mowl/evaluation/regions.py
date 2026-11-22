@@ -43,7 +43,7 @@ Families and what is decided exactly:
   :math:`P_1 \\subseteq P_2` iff :math:`P_1 = \\emptyset` or
   (:math:`h_1 \\le h_2` and :math:`B_1 \\subseteq B_2`).
 * :class:`OctagonRegion` -- products of 2-D octagons; tightening, emptiness, intersection
-  and containment are those of :mod:`mowl.nn.el.octagon.geometry` (imported).
+  and containment are those of :mod:`mowl.representation.library.octagon_geometry` (imported).
 * :class:`UnionRegion` -- finite unions of convex pieces. Intersection distributes over
   the pieces. A union is contained in a union iff every piece is; a box is contained in a
   union of boxes iff the box minus the union is empty, decided by recursive box
@@ -631,7 +631,7 @@ class PrismRegion(Region):
 def _octagon_inradius(h):
     """Largest disc inside the 2-D octagon with bounds ``h`` (shape ``(8,)``), by LP."""
     from scipy.optimize import linprog
-    from mowl.nn.el.octagon.geometry import DIRECTIONS
+    from mowl.representation.library.octagon_geometry import DIRECTIONS
     n = DIRECTIONS.double().numpy()
     norms = np.linalg.norm(n, axis=1)
     a_ub = np.hstack([n, norms[:, None]])
@@ -647,7 +647,7 @@ def _octagon_inradius(h):
 class OctagonRegion(Region):
     """Product :math:`O(h^{(1)}) \\times \\dots \\times O(h^{(P)})` of 2-D octagons over the
     coordinate pairs :math:`(x_{2i}, x_{2i+1})`, bounds ``h`` of shape ``(P, 8)``, with
-    the geometry of :mod:`mowl.nn.el.octagon.geometry` (Charpenay and Schockaert, IJCAI
+    the geometry of :mod:`mowl.representation.library.octagon_geometry` (Charpenay and Schockaert, IJCAI
     2024, Proposition 1)."""
 
     family = "octagon"
@@ -661,36 +661,36 @@ class OctagonRegion(Region):
         return th.as_tensor(self.h, dtype=th.float64)
 
     def is_empty(self, tol=0.0):
-        from mowl.nn.el.octagon import geometry as G
+        from mowl.representation.library import octagon_geometry as G
         return bool(G.product_emptiness_slack(self._t()) < -tol)
 
     def inradius(self):
-        from mowl.nn.el.octagon import geometry as G
+        from mowl.representation.library import octagon_geometry as G
         if self.is_empty():
             return float(G.product_emptiness_slack(self._t())) / 2.0
         return min(_octagon_inradius(row) for row in self.h)
 
     def _intersect(self, other, tol):
         if isinstance(other, OctagonRegion):
-            from mowl.nn.el.octagon import geometry as G
+            from mowl.representation.library import octagon_geometry as G
             return OctagonRegion(G.intersect(self._t(), other._t()).numpy())
         return super()._intersect(other, tol)
 
     def _contains(self, other, tol):
         if isinstance(other, OctagonRegion):
-            from mowl.nn.el.octagon import geometry as G
+            from mowl.representation.library import octagon_geometry as G
             return bool(G.product_contains(self._t(), other._t(), tol=tol))
         return super()._contains(other, tol)
 
     def contains_points(self, points, tol=0.0):
         import torch as th
-        from mowl.nn.el.octagon import geometry as G
+        from mowl.representation.library import octagon_geometry as G
         pts = th.as_tensor(np.atleast_2d(points), dtype=th.float64)
         pts = pts.reshape(pts.shape[0], -1, 2)
         return G.membership(pts, self._t(), tol=tol).all(dim=-1).numpy()
 
     def bounding_box(self):
-        from mowl.nn.el.octagon import geometry as G
+        from mowl.representation.library import octagon_geometry as G
         t = G.tighten(self._t()).numpy()
         lo = np.stack([-t[:, 4], -t[:, 6]], axis=1).reshape(-1)
         hi = np.stack([t[:, 0], t[:, 2]], axis=1).reshape(-1)

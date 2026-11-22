@@ -24,10 +24,11 @@ from functools import partial
 import torch as th
 import torch.nn as nn
 
-from mowl.nn.el.octagon import geometry as G
+from mowl.representation.library import octagon_geometry as G
 from mowl.representation.adapters import register_adapter
 from mowl.representation.geometry import ComposedGeometry
 from mowl.representation.methods import register_method
+from mowl.training.initialisation import redraw_after
 from mowl.representation.objectives import FORMS
 from mowl.representation.relation_models import Translation
 from mowl.training.negatives import PerColumnCorruption
@@ -122,12 +123,12 @@ def _in_the_order_of_the_modules(redraw):
         def wrapper(*args, **kwargs):
             bound = signature.bind(*args, **kwargs)
             bound.apply_defaults()
-            state = th.get_rng_state()
-            geometry = build(*args, **kwargs)
-            if bound.arguments.get("tables") is None:
-                th.set_rng_state(state)
-                redraw(geometry, bound.arguments)
-            return geometry
+            if bound.arguments.get("tables") is not None:
+                return build(*args, **kwargs)
+            made = []
+            redraw_after(lambda: made.append(build(*args, **kwargs)),
+                         lambda: redraw(made[0], bound.arguments))
+            return made[0]
         return wrapper
     return decorate
 

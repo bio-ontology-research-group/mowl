@@ -5,7 +5,7 @@ import torch as th
 from mowl.evaluation.region_access import concatenated_rows
 from mowl.evaluation.scoring_rules import exp_negative_score
 from mowl.evaluation.sel_probability import mean_interval_error
-from mowl.representation.library import ballfam_energy as D
+from mowl.representation.library import boundary_depth as D
 from mowl.representation.library.multibox_modules import in_chunks
 from mowl.representation.library.structural_regions import pad_slots
 from mowl.nn.el.structural import Regions
@@ -50,12 +50,14 @@ def test_mean_interval_error():
     assert mean_interval_error([0.0, 0.5]) == 0.25
 
 
-def test_energy_tables_cover_both_shapes():
+def test_boundary_and_depth_formulas_cover_both_region_kinds():
     c, o = th.zeros(2, 3), th.ones(2, 3)
     for shape in ("ball", "box"):
         size = o[:, 0] if shape == "ball" else o
-        assert D.BOUNDARY[shape](c, size, c, size).shape == (2,)
-        assert D.ENERGY[shape](c, size, c, size).shape == (2,)
+        function = D.ball_boundary_dissimilarity if shape == "ball" else D.box_boundary_dissimilarity
+        assert function(c, size, c, size).shape == (2,)
+        energy = D.ball_energy if shape == "ball" else D.box_energy
+        assert energy(c, size, c, size).shape == (2,)
 
 
 def test_mse_target_loss_part_as_elbe_and_as_another_swap():

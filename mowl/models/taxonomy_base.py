@@ -1,9 +1,8 @@
 r"""Shared model base for order and hierarchy embeddings of the class taxonomy."""
-import numpy as np
 
 from mowl.base_models.elmodel import EmbeddingELModel
 from mowl.evaluation.model_scoring import pair_costs
-from mowl.training.taxonomy import named_pair_rows
+from mowl.training.taxonomy import descendant_fractions, named_pair_rows
 
 
 class TaxonomyEmbeddingModel(EmbeddingELModel):
@@ -111,20 +110,5 @@ class TaxonomyEmbeddingModel(EmbeddingELModel):
         """For each named class the number of its descendants (itself included) in the
         training taxonomy, divided by the number of named classes (the unary marginal of
         the box lattice paper, Section 5.2)."""
-        n = len(self.named_class_index_dict)
-        children = [[] for _ in range(n)]
-        for sub, sup in self.training_datasets["gci0"].data.cpu().numpy():
-            if sub != sup:
-                children[sup].append(sub)
-        memo = {}
-
-        def descendants(root):
-            seen, stack = {root}, [root]
-            while stack:
-                for c in children[stack.pop()]:
-                    if c not in seen:
-                        seen.add(c)
-                        stack.append(c)
-            return seen
-        counts = np.array([len(memo.setdefault(i, descendants(i))) for i in range(n)])
-        return counts / n
+        return descendant_fractions(self.training_datasets["gci0"].data.cpu().numpy(),
+                                    len(self.named_class_index_dict))

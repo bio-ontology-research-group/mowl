@@ -41,7 +41,7 @@ import torch as th
 from pykeen.losses import MarginRankingLoss
 from pykeen.models import ERModel
 from pykeen.nn import Embedding
-from mowl.nn.graph.kge_interactions import (  # noqa: F401
+from mowl.baselines.nn.graph.interactions import (  # noqa: F401
     ReshuffleInteraction, propagate, random_features, relation_matrices,
     reshuffle_interaction)
 

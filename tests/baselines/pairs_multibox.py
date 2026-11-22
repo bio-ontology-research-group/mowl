@@ -26,6 +26,13 @@ def _t3():
     return PathDataset(os.path.join(FIXTURES, "t3.owl"))
 
 
+def _roles():
+    """An ontology with roles, so that all three ranking scores (``C subclass of D``, ``C
+    subclass of exists r.D``, ``exists r.C subclass of D``) exist."""
+    from mowl.datasets import PathDataset
+    return PathDataset(os.path.join(FIXTURES, "roles.owl"))
+
+
 def _copy(old, new):
     new.module.load_state_dict(old.module.state_dict())
 
@@ -123,7 +130,10 @@ def _structural_losses(model):
     """The structural reading needs the definition table and the existence targets of the
     ontology: installed, as ``train`` does, before the losses are read; the penalties are the
     regularisation and the extra loss."""
-    from mowl.nn.el.structural import build_structural_tables
+    if type(model).__module__.startswith("mowl.baselines"):  # the baseline's own tables
+        from mowl.baselines.nn.el.structural import build_structural_tables
+    else:
+        from mowl.nn.el.structural import build_structural_tables
     table, targets, top = build_structural_tables(
         model, k=model.n_components, max_components=model.max_components,
         enabled=model.structural_definitions)
@@ -240,6 +250,10 @@ PAIRS = [
          losses=_structural_losses, dataset=_t3, parameters=_tables(BOX_TABLES)),
     Pair("multiboxel/point", _supervised(_mbp_new), _supervised(_mbp_old), _copy,
          _ranking_scores, losses=_point_losses, dataset=_t3, parameters=_tables(BOX_TABLES)),
+    Pair("multiboxel/structural-roles", _mbt_new, _mbt_old, _copy, _ranking_scores,
+         losses=_structural_losses, dataset=_roles, parameters=_tables(BOX_TABLES)),
+    Pair("multiboxel/point-roles", _supervised(_mbp_new), _supervised(_mbp_old), _copy,
+         _ranking_scores, losses=_point_losses, dataset=_roles, parameters=_tables(BOX_TABLES)),
     Pair("multielbe", _me_new, _me_old, _copy, _ranking_scores, losses=_losses,
          parameters=_tables(ELBE_TABLES)),
     Pair("multielbe/soft-aggregation", _mes_new, _mes_old, _copy, _ranking_scores,

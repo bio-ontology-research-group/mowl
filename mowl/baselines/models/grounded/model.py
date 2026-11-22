@@ -21,7 +21,7 @@ Guarantees:
 
 - **Reasoner-free training path (R1):** Neither :class:`GroundedEL` construction
   nor :meth:`train` nor :meth:`crisp_report` imports or calls any reasoner or
-  semantic completion routine. :class:`~mowl.geometric.completion.CanonicalModel`
+  semantic completion routine. :class:`~mowl.baselines.geometric.core.completion.CanonicalModel`
   is imported lazily exclusively inside :meth:`evaluate_model` when
   ``use_reasoner=True``.
 - **Exact-limit initialisation (R2):** With ``init="elements"`` and caller-supplied
@@ -106,7 +106,7 @@ from mowl.baselines.nn.el.grounded.module import (
     _validate_positive_float,
 )
 from mowl.baselines.nn.el.grounded.losses import _validate_margin, _validate_nonneg_weight
-from mowl.nn.el.structural import Regions
+from mowl.baselines.nn.el.structural import Regions
 from mowl.baselines.nn.el.grounded.module import inside_measure
 from mowl.owlapi.defaults import BOT as BOTTOM, TOP
 
@@ -1599,7 +1599,7 @@ class GroundedEL(EmbeddingELModel):
             for t in ("fact", "axioms", "region"):
                 self.dual_weights[t] = 1.0
             return dict(self.dual_weights)
-        from mowl.training.constraints import dual_ascent_step
+        from mowl.baselines.training.constraints import dual_ascent_step
         dual_ascent_step(self.dual_weights, mean_losses, rho=self.dual_rho,
                          max_weight=self.dual_max, target=self.dual_target)
         return dict(self.dual_weights)
@@ -3572,14 +3572,14 @@ class GroundedEL(EmbeddingELModel):
 
         # The training design is a regime: the one assigned to the model, or the
         # composition of shared regimes given by the model's hyperparameters.
-        from mowl.training.grounded import GroundedELTraining
+        from mowl.baselines.training.grounded import GroundedELTraining
         regime = self.training_regime
         if regime is None:
             regime = GroundedELTraining.for_model(
                 self, lr_final=eff_lr_final, lr_schedule=lr_schedule)
             regime.attach(self)
         self._active_regime = regime
-        from mowl.training.schedules import TemperatureAnnealing
+        from mowl.baselines.training.schedules import TemperatureAnnealing
 
         def _find_annealer(r: Any) -> Any:
             if isinstance(r, TemperatureAnnealing):
@@ -3882,7 +3882,7 @@ class GroundedEL(EmbeddingELModel):
         Guarantees:
 
         - Reasoner-free (R1): never imports or calls any reasoner or
-          :class:`~mowl.geometric.completion.CanonicalModel`.
+          :class:`~mowl.baselines.geometric.core.completion.CanonicalModel`.
         - Never materialises a :math:`(|\\Delta| \\times |\\mathcal{C}|)` tensor;
           computes memberships only for the sampled evaluation elements and the
           classes mentioned by the evaluated axioms, in chunks.
@@ -5073,7 +5073,7 @@ class GroundedEL(EmbeddingELModel):
     ) -> Dict[str, Any]:
         """Compute §7 evaluation metrics dictionary.
 
-        Lazily imports :class:`~mowl.geometric.completion.CanonicalModel` inside
+        Lazily imports :class:`~mowl.baselines.geometric.core.completion.CanonicalModel` inside
         this method ONLY when ``use_reasoner=True``.
 
         Guarantees:
@@ -5097,7 +5097,7 @@ class GroundedEL(EmbeddingELModel):
         ----------
         use_reasoner : bool, default True
             Whether to compute ground-truth satisfiability and subsumptions via
-            :class:`~mowl.geometric.completion.CanonicalModel`.
+            :class:`~mowl.baselines.geometric.core.completion.CanonicalModel`.
         n_eval : int, default 10000
             Sample budget for ``region_viol`` and region inclusion checks.
         tol : float, default 0.0
@@ -5194,7 +5194,7 @@ class GroundedEL(EmbeddingELModel):
                     "use_reasoner=True requires an OWL dataset; pass use_reasoner=False for table-constructed GroundedEL models"
                 )
 
-            from mowl.geometric.completion import CanonicalModel
+            from mowl.baselines.geometric.core.completion import CanonicalModel
 
             cm = CanonicalModel.from_ontology(self.dataset.ontology)
 

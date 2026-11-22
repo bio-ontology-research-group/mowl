@@ -13,6 +13,8 @@ parts, and lets a state dictionary written under those names be loaded.
 import torch as th
 import torch.nn as nn
 
+from mowl.training.initialisation import redraw_after
+
 from mowl.representation.objectives import ROLE_FORMS
 
 __all__ = ["released_names", "ReleasedTables", "table_of"]
@@ -88,18 +90,16 @@ class ReleasedTables:
     #: The forms whose loss has the flat shape ``(B,)`` when ``per_axiom_column`` is ``False``.
     flat_forms = ()
 
-    @staticmethod
-    def rng_state():
-        """The state of the random generator: take it before the parts are made and hand it
-        to :meth:`initialise_in_released_order`."""
-        return th.get_rng_state()
+    def initialise_in_released_order(self, build):
+        """Make the parts with ``build()``, then draw the initial values of the tables in the
+        order of the earlier module from the state of the generator before ``build`` (see
+        :func:`~mowl.training.initialisation.redraw_after`): a seeded module has the numbers it
+        had."""
+        redraw_after(build, self._draw_in_released_order)
 
-    def initialise_in_released_order(self, rng_state):
-        """Draw the initial values of the tables in the order of the earlier module, from the
-        state ``rng_state`` of the generator (that of before the parts were made): a seeded
-        module has the numbers it had. Every table is uniform in :math:`[-1, 1]` with rows (or
-        the blocks of a row, for a union of boxes) of length one."""
-        th.set_rng_state(rng_state)
+    def _draw_in_released_order(self):
+        """Every table is uniform in :math:`[-1, 1]` with rows (or the blocks of a row, for a
+        union of boxes) of length one."""
         components = getattr(self.class_model, "components", 1)
         for path in self.released_order:
             table = table_of(path).fget(self)

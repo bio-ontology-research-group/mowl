@@ -35,7 +35,7 @@ from __future__ import annotations
 
 import torch as th
 
-from mowl.nn.el.octagon import geometry as G
+from mowl.baselines.nn.el.octagon import geometry as G
 
 
 def _axis_max(v: th.Tensor) -> th.Tensor:

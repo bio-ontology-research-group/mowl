@@ -3,7 +3,7 @@ r"""Models of subspace logic (Embed2Reason and relatives) put together from part
 :class:`SubspaceAxiomModel` is what such models share, whatever trains them: the extraction
 of the axioms into rows (one row kind per axiom form of the quantum logic), the
 hierarchy-derived data (siblings, separation pairs, range negatives) and the reasoning and
-scoring on a trained embedding. The maths of the scores is read from ``self._algebra``.
+scoring on a trained embedding. The maths of the scores is that of the subspace geometry of the module.
 
 :class:`ComposedSubspace` trains it with the regimes of :mod:`mowl.training`, for any method
 whose geometry is a :class:`~mowl.representation.library.logic_subspace.SubspaceGeometry`
@@ -21,10 +21,10 @@ import torch as th
 from mowl.base_models.model import Model
 from mowl.evaluation.score_ranking import rank_by_score
 from mowl.evaluation.subspace_violation import discretised_violations
+from mowl.evaluation.validation import summed_mean_cost
 from mowl.nn.alc.e2r.module import AXIOM_KINDS
 from mowl.owlapi import ClassExpressionType, Imports
 from mowl.representation import methods as M
-from mowl.representation.library import logic_subspace_algebra
 from mowl.representation.library.logic_subspace import (Orthogonality, Separation,
                                                         SubspaceStructure)
 from mowl.representation.regions import ConstructorUnavailable
@@ -45,7 +45,7 @@ def _iri(entity):
 
 class SubspaceAxiomModel(Model):
     """The data and the scoring of subspace-logic models (see :class:`mowl.models.E2R`). A
-    subclass sets ``_algebra``, makes ``init_module`` and trains."""
+    subclass makes ``init_module`` and trains."""
 
     axiom_scoring = "method"
     scored_forms = ("gci0", "class_assertion")
@@ -343,11 +343,27 @@ class SubspaceAxiomModel(Model):
     def axiom_loss(self):
         """Sum over axiom kinds of the mean axiom loss (eqs. (4)-(9)) on all rows, without
         structure terms, regularisers and negatives (float)."""
-        with th.no_grad():
-            return float(sum(self.module(self._kind(k), r).mean()
-                             for k, r in self.training_rows.items()))
+        return summed_mean_cost(self.module, {self._kind(k): r
+                                              for k, r in self.training_rows.items()})
 
-    # -- reasoning and scoring ----------------------------------------------------------
+    # -- reasoning and scoring: the geometry computes, the model reads the expressions ----
+    def _expression_tree(self, cexpr):
+        """A class expression (OWL object or class IRI) as the tree of class indices that
+        :meth:`~mowl.representation.library.logic_subspace.SubspaceGeometry.indicator`
+        evaluates."""
+        if isinstance(cexpr, str):
+            return ("class", self._cid[cexpr])
+        ctype = cexpr.getClassExpressionType()
+        if ctype == ClassExpressionType.OWL_CLASS:
+            return ("class", self._cid[_iri(cexpr.asOWLClass())])
+        if ctype == ClassExpressionType.OBJECT_INTERSECTION_OF:
+            return ("and", [self._expression_tree(c) for c in cexpr.getOperandsAsList()])
+        if ctype == ClassExpressionType.OBJECT_UNION_OF:
+            return ("or", [self._expression_tree(c) for c in cexpr.getOperandsAsList()])
+        if ctype == ClassExpressionType.OBJECT_COMPLEMENT_OF:
+            return ("not", self._expression_tree(cexpr.getOperand()))
+        raise NotImplementedError(f"E2R has no subspace for {ctype}.")
+
     def concept_indicator(self, cexpr, binary=False):
         """Indicator vector of a class expression (an OWL class expression or a class
         IRI) built from named classes with :math:`\\sqcap` (product), :math:`\\sqcup`
@@ -355,26 +371,7 @@ class SubspaceAxiomModel(Model):
 
         :param binary: Round the named-class indicators at 0.5 first.
         """
-        d = self.embed_dim
-        if isinstance(cexpr, str):
-            idx = th.tensor([self._cid[cexpr]], device=self.device)
-            y = self.module.concept(idx)[0].detach()
-            return (y > 0.5).to(y) if binary else y
-        ctype = cexpr.getClassExpressionType()
-        if ctype == ClassExpressionType.OWL_CLASS:
-            return self.concept_indicator(_iri(cexpr.asOWLClass()), binary)
-        if ctype == ClassExpressionType.OBJECT_INTERSECTION_OF:
-            return self._algebra.meet(*[self.concept_indicator(c, binary)
-                                        for c in cexpr.getOperandsAsList()])
-        if ctype == ClassExpressionType.OBJECT_UNION_OF:
-            return self._algebra.join(*[self.concept_indicator(c, binary)
-                                        for c in cexpr.getOperandsAsList()])
-        if ctype == ClassExpressionType.OBJECT_COMPLEMENT_OF:
-            y = self.concept_indicator(cexpr.getOperand(), binary)
-            out = th.zeros_like(y)
-            out[:d] = 1 - y[:d]
-            return out
-        raise NotImplementedError(f"E2R has no subspace for {ctype}.")
+        return self.module.indicator(self._expression_tree(cexpr), binary)
 
     def score_membership(self, cexpr, individuals=None, binary=False):
         """Residual length :math:`\\|\\overline{y} \\odot x_a\\|` of each individual for
@@ -384,13 +381,9 @@ class SubspaceAxiomModel(Model):
         :rtype: numpy.ndarray
         """
         y = self.concept_indicator(cexpr, binary)
-        if individuals is None:
-            idx = th.arange(len(self._iid), device=self.device)
-        else:
-            idx = th.tensor([self._iid[i] for i in individuals], device=self.device)
-        with th.no_grad():
-            x = self.module.entity(idx)
-            return self.module.membership_residual(y.unsqueeze(0), x).cpu().numpy()
+        ids = (list(range(len(self._iid))) if individuals is None
+               else [self._iid[i] for i in individuals])
+        return self.module.membership_scores(y, ids)
 
     def rank_members(self, cexpr, binary=False):
         """Individual IRIs sorted by increasing residual for ``cexpr``."""
@@ -403,45 +396,24 @@ class SubspaceAxiomModel(Model):
 
         :rtype: numpy.ndarray
         """
-        with th.no_grad():
-            z = self.module.relation(th.tensor([self._rid[prop]], device=self.device))
-            s = th.tensor([self._iid[a] for a, _ in pairs], device=self.device)
-            o = th.tensor([self._iid[b] for _, b in pairs], device=self.device)
-            xpq = self._algebra.pair_vector(self.module.entity(s), self.module.entity(o),
-                                            self.embed_dim)
-            return self.module.membership_residual(z, xpq).cpu().numpy()
+        return self.module.role_membership_scores(
+            self._rid[prop], [self._iid[a] for a, _ in pairs], [self._iid[b] for _, b in pairs])
 
-    @th.no_grad()
     def axiom_costs(self, gci_name, rows):
         """Cost of every candidate axiom in ``rows`` (model indices), lower is more
-        plausible: the inclusion loss of eq. (5) for ``gci0`` rows ``[C, D]`` and the
-        residual length of Sec. 5 for ``class_assertion`` rows ``[a, C]``."""
-        rows = rows.to(self.device)
-        if gci_name == "gci0":
-            return self._algebra.inclusion_loss(self.module.concept(rows[:, 0]),
-                                                self.module.concept(rows[:, 1]))
-        if gci_name == "class_assertion":
-            return self.module.membership_residual(self.module.concept(rows[:, 1]),
-                                                   self.module.entity(rows[:, 0]))
-        from mowl.evaluation.model_scoring import UnsupportedAxiomForm
-        raise UnsupportedAxiomForm(f"E2R has no score for {gci_name!r} axioms.")
+        plausible (see :meth:`~mowl.representation.library.logic_subspace.SubspaceGeometry.axiom_costs`)."""
+        return self.module.axiom_costs(gci_name, rows)
 
     def score_subsumption(self, sub, sup, binary=False):
         """Inclusion loss of eq. (5) for class expressions ``sub``, ``sup`` (``0`` iff
         the subspace of ``sub`` lies in that of ``sup`` for 0/1 indicators)."""
-        return float(self._algebra.inclusion_loss(self.concept_indicator(sub, binary),
-                                                  self.concept_indicator(sup, binary)))
+        return self.module.inclusion_cost(self.concept_indicator(sub, binary),
+                                          self.concept_indicator(sup, binary))
 
     def discretise(self, threshold=0.5):
         """0/1 indicators of all concepts and relations and the entity vectors, as numpy
         arrays ``(concepts, relations, entities)`` in index order."""
-        m = self.module
-        with th.no_grad():
-            c = m.concept(th.arange(m.c_embedding.weight.shape[0], device=self.device))
-            r = m.r_embedding.weight
-            return ((c > threshold).cpu().numpy().astype(int),
-                    (r > threshold).cpu().numpy().astype(int),
-                    m.e_embedding.weight.detach().cpu().numpy())
+        return self.module.discretise(threshold)
 
     def violations(self, tol=1e-3, threshold=0.5):
         """Training axioms (as ``(kind, row)``) that the discretised embedding violates,
@@ -481,8 +453,6 @@ class ComposedSubspace(RegimeTrained, SubspaceAxiomModel):
         see :class:`mowl.models.E2R`.
     :param method_options: Further options of the method's builder.
     """
-
-    _algebra = logic_subspace_algebra
 
     def __init__(self, dataset, method="e2r", classes=None, relations=None, individuals=None,
                  measure=None, objective=None, objective_options=None, regularizers=(),

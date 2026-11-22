@@ -1,11 +1,11 @@
 """The direct al-cone constructions (Özçep, Leemhuis & Wolter, JAIR 2023), kept for
 comparison (see :mod:`mowl.baselines`).
 
-:class:`ALConeInterpretation` here is the interpretation class of :mod:`mowl.geometric.cones`
+:class:`ALConeInterpretation` here is the interpretation class of :mod:`mowl.baselines.geometric.core.cones`
 with the two constructions as they were written for the paper: elements of a finite model
 on half-axes (:meth:`~ALConeInterpretation.from_finite_model`) and the atoms of a Boolean
 TBox on half-axes (:meth:`~ALConeInterpretation.from_boolean_ontology`, JAIR Props. 7, 8).
-In :mod:`mowl.geometric.cones` both are combinations of a source (``finite model``,
+In :mod:`mowl.baselines.geometric.core.cones` both are combinations of a source (``finite model``,
 ``canonical model``, ``boolean atoms``) and the ``half-axes`` reading.
 """
 import itertools
@@ -13,12 +13,12 @@ from typing import Iterable, Optional
 
 import numpy as np
 
-from mowl.geometric import cones
-from mowl.geometric.cones import (ALCAxiom, ALCone, ALConeChecker, ConceptAssertion,
+from mowl.baselines.geometric.core import cones
+from mowl.baselines.geometric.core.cones import (ALCAxiom, ALCone, ALConeChecker, ConceptAssertion,
                                   FiniteInterpretation, GCI, RoleAssertion, _double,
                                   _doubled_point, _eval_boolean, halfaxis_vector, has_roles,
                                   signature)
-from mowl.geometric.errors import (InconsistentOntology, InternalConsistencyError,
+from mowl.baselines.geometric.core.errors import (InconsistentOntology, InternalConsistencyError,
                                    UnsupportedAxiom)
 
 __all__ = ["ALConeInterpretation"]

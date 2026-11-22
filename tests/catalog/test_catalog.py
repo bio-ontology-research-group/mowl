@@ -107,12 +107,28 @@ def test_every_exported_model_has_a_card():
         implemented.add(card.load())
     missing = []
     for name in exported:
-        if name.endswith("PPI") or name.endswith("GDA"):
-            continue
         obj = getattr(models, name)
-        if inspect.isclass(obj) and obj not in implemented:
+        if not inspect.isclass(obj) or obj in implemented:
+            continue
+        # An example (``mowl/models/<method>/examples/``) fixes the evaluation of a method on
+        # one dataset family; it is not a method, so it has no card of its own, but it must
+        # be a subclass of a class that has one (the card of that class describes it).
+        is_example = ".examples." in obj.__module__ and any(
+            issubclass(obj, card_class) for card_class in implemented)
+        if not is_example:
             missing.append(name)
     assert not missing, f"Exported models without a catalogue card: {sorted(missing)}"
+
+
+def test_the_examples_are_subclasses_of_catalogued_methods():
+    import mowl.models as models
+    implemented = {card.load() for card in list_methods(implemented=True)}
+    examples = [obj for obj in vars(models).values()
+                if inspect.isclass(obj) and ".examples." in obj.__module__]
+    assert {c.__name__ for c in examples} == {"ELEmPPI", "ELEmGDA", "ELBEPPI", "ELBEGDA",
+                                              "BoxELPPI", "BoxELGDA"}
+    for cls in examples:
+        assert any(issubclass(cls, c) and cls is not c for c in implemented), cls
 
 
 def test_catalogue_renders_with_every_card_name():

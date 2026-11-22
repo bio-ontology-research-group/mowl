@@ -5,6 +5,8 @@ from __future__ import annotations
 from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 import numpy as np
 import torch as th
+
+from mowl.datasets.rows import index_table
 from mowl.nn.el.grounded.module import _validate_inverse_of
 
 class _CountInt(int):
@@ -203,50 +205,12 @@ def _coerce_gci_table(
     allow_short_bot_col: bool = False,
     bot_id: Optional[int] = None,
 ) -> _PrebuiltGCIDataset:
-    """Validate and wrap a prebuilt normal-form table into :class:`_PrebuiltGCIDataset`."""
-    if raw is None:
-        empty = th.empty((0, arity), dtype=th.long, device=device)
-        return _PrebuiltGCIDataset(empty, device=device)
+    """Validate and wrap a prebuilt normal-form table into :class:`_PrebuiltGCIDataset`
+    (:func:`mowl.datasets.rows.index_table`)."""
     if isinstance(raw, _PrebuiltGCIDataset):
-        t = raw.data
-    elif hasattr(raw, "data") and isinstance(getattr(raw, "data"), th.Tensor):
-        t = getattr(raw, "data")
-    elif isinstance(raw, th.Tensor):
-        if raw.dtype == th.bool or raw.is_floating_point() or raw.is_complex():
-            raise ValueError(f"{name} tensor must have integer dtype, got {raw.dtype}")
-        t = raw.to(dtype=th.long)
-    elif isinstance(raw, (list, tuple, np.ndarray)):
-        arr = np.asarray(raw)
-        if arr.size == 0:
-            empty = th.empty((0, arity), dtype=th.long, device=device)
-            return _PrebuiltGCIDataset(empty, device=device)
-        if arr.dtype == np.bool_ or np.issubdtype(arr.dtype, np.floating):
-            raise ValueError(f"{name} must contain integer indices, got dtype {arr.dtype}")
-        t = th.as_tensor(arr, dtype=th.long)
-    else:
-        raise TypeError(
-            f"{name} must be a Tensor, sequence, ndarray, or None, got {type(raw).__name__}"
-        )
-
-    if t.numel() == 0:
-        empty = th.empty((0, arity), dtype=th.long, device=device)
-        return _PrebuiltGCIDataset(empty, device=device)
-
-    if t.ndim != 2:
-        raise ValueError(f"{name} must be a 2-D tensor of shape (N, {arity}), got {tuple(t.shape)}")
-    if allow_short_bot_col and t.shape[1] == arity - 1:
-        fill_col = int(bot_id) if bot_id is not None else 0
-        pad = th.full((t.shape[0], 1), fill_col, dtype=th.long, device=t.device)
-        t = th.cat([t, pad], dim=1)
-    if t.shape[1] != arity:
-        raise ValueError(f"{name} must have {arity} columns, got shape {tuple(t.shape)}")
-
-    for c_i, bound in enumerate(col_bounds):
-        col = t[:, c_i]
-        c_min = int(col.min().item())
-        c_max = int(col.max().item())
-        if c_min < 0 or c_max >= bound:
-            raise ValueError(
-                f"{name} column {c_i} indices out of range [0, {bound}): min={c_min}, max={c_max}"
-            )
-    return _PrebuiltGCIDataset(t, device=device)
+        raw = raw.data
+    fill = None
+    if allow_short_bot_col:
+        fill = int(bot_id) if bot_id is not None else 0
+    return _PrebuiltGCIDataset(index_table(raw, arity, col_bounds, name=name, device=device,
+                                           fill_last=fill), device=device)

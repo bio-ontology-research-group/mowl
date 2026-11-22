@@ -8,7 +8,7 @@ import torch as th
 
 # mowl.datasets first: importing mowl.nn first hits a circular import
 import mowl.datasets  # noqa: F401
-import mowl.representation.library.ballfam_energy as D
+import mowl.representation.library.boundary_depth as D
 from mowl.nn.el.regd.module import RegDELBEModule, RegDELEmModule
 
 

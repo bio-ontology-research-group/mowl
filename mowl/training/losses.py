@@ -50,6 +50,35 @@ from mowl.training.regime import TrainingRegime
 from mowl.training.terms import pearson_correlation
 
 
+def weighted_mean_loss(pos_scores, neg_scores=None, pos_weight=1.0, neg_weight=1.0):
+    """The neutral objective: ``pos_weight`` times the mean positive loss plus ``neg_weight``
+    times the mean negative loss (the negatives are optional). It is the default loss of the
+    EL models (:meth:`~mowl.base_models.elmodel.EmbeddingELModel.compute_loss`) and the
+    combination of :class:`SumLoss`."""
+    loss = pos_scores.mean() if pos_weight == 1.0 else pos_weight * pos_scores.mean()
+    if neg_scores is not None:
+        loss = loss + (neg_scores.mean() if neg_weight == 1.0
+                       else neg_weight * neg_scores.mean())
+    return loss
+
+
+def ranking_hinge_loss(pos_scores, neg_scores):
+    """Mean of :math:`[\\mathrm{pos}_i - \\mathrm{neg}_{ij}]_+` over every positive ``i`` and
+    each of its ``K`` corrupted axioms ``j``; ``neg_scores`` holds ``K`` blocks of
+    ``len(pos_scores)`` rows (the layout of :mod:`mowl.training.negatives`)."""
+    pos = pos_scores.reshape(-1)
+    neg = neg_scores.reshape(-1)
+    if neg.numel() % pos.numel():
+        raise ValueError("The ranking loss needs a whole number of negatives per positive.")
+    return th.relu(pos.unsqueeze(0) - neg.reshape(-1, pos.numel())).mean()
+
+
+def collapsed_to_chance(loss, chance=math.log(2), tolerance=0.02):
+    """Whether a logistic loss sits at its chance level :math:`\\log 2` (every score is 0): a
+    model whose loss ends there has collapsed and its embeddings carry no information."""
+    return abs(loss - chance) < tolerance
+
+
 def _flat(x):
     return None if x is None else x.reshape(len(x), -1).mean(dim=1)
 
@@ -141,10 +170,7 @@ class SumLoss(_ScoreLoss):
     def combine(self, gci_name, pos, neg):
         if self.positive_floor:
             pos = th.relu(pos)
-        loss = pos.mean() if self.pos_weight == 1.0 else self.pos_weight * pos.mean()
-        if neg is not None:
-            loss = loss + self.neg_weight * neg.mean()
-        return loss
+        return weighted_mean_loss(pos, neg, self.pos_weight, self.neg_weight)
 
 
 class MSETargetLoss(_ScoreLoss):

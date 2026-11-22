@@ -7,7 +7,7 @@ import numpy as np
 
 from mowl.base_models.model import Model
 from mowl.datasets.dllite import DLLiteKB, extract_dllite, _translate, _Skip, _Trivial
-from mowl.representation.library.solved_boxlite_check import check_model
+from mowl.baselines.models.boxlite.solved_check import check_model
 from mowl.baselines.models.boxlite.embedding import BoxLitEEmbedding
 from mowl.baselines.models.boxlite.program import BoxLitEProgram, VARIANTS
 

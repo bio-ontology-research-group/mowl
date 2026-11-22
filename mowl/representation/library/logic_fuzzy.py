@@ -488,6 +488,25 @@ class HalfAxisClasses(_FuzzyClasses, Classes):
                             self.constant_logit, -self.constant_logit)
         return LogitSet(values, self.family)
 
+    def crisp(self):
+        """The discretised cones: a boolean array ``(size, 2 n)``, half-axis ``h`` of row
+        ``i`` belongs to the cone iff its logit is ``> 0``."""
+        with th.no_grad():
+            return self.centres.weight.detach().cpu().numpy() > 0
+
+    def points(self):
+        """The point of :math:`\\mathbb{R}^n` whose support every row is (the individuals of
+        Al-cone): coordinate ``i`` is ``+1`` if the logit of the positive half-axis is
+        ``> 0`` and not below that of the negative one, ``-1`` if only the negative one is
+        ``> 0`` or it is the larger, ``0`` if neither is (an array ``(size, n)``)."""
+        with th.no_grad():
+            pairs = self.centres.weight.detach().cpu().numpy().reshape(
+                self.centres.weight.shape[0], -1, 2)
+        positive, negative = pairs[..., 0], pairs[..., 1]
+        plus = (positive > 0) & ((negative <= 0) | (positive >= negative))
+        minus = ~plus & (negative > 0)
+        return plus.astype(float) - minus.astype(float)
+
 
 class MembershipNetwork(nn.Module):
     """The two-layer network of FALCON: ``(concept vector, entity vector) -> degree``.
@@ -537,6 +556,10 @@ class Domain(nn.Module):
 
     def __len__(self):
         return self.table.num_embeddings + (0 if self.extra is None else len(self.extra))
+
+    def size(self):
+        """The number of elements of the domain now (with the context, if one is set)."""
+        return len(self) if self.context is None else self.context.shape[0]
 
 
 class NetworkClasses(_FuzzyClasses, Classes):
@@ -588,21 +611,31 @@ class DomainElements(_FuzzyClasses, Classes):
 
     :param size: Number of individuals; :param domain: Size of the domain (at least
         ``size``).
+    :param elements: The :class:`Domain` of a geometry whose domain changes (FALCON: the
+        named elements followed by sampled anonymous ones); individual ``i`` is then the
+        crisp set of element ``i`` of the domain as it is at the call, so that it can be
+        compared with the class expressions evaluated on it.
     """
 
     region = FuzzySet
     part = ClassModel.FUZZY_SET.value
     exact_conjunction = True
 
-    def __init__(self, size, domain, family="godel"):
+    def __init__(self, size, domain, family="godel", elements=None):
         super().__init__()
         if domain < size:
             raise ValueError(f"The domain has {domain} elements for {size} individuals.")
         self.centres = nn.Embedding.from_pretrained(th.eye(size, domain), freeze=True)
         self.family = get_family(family)
+        self.elements = elements
 
     def forward(self, ids):
-        return FuzzySet(self.centres(ids), self.family, index=ids)
+        values = self.centres(ids)
+        if self.elements is not None:
+            extra = self.elements.size() - values.shape[-1]
+            if extra > 0:
+                values = nn.functional.pad(values, (0, extra))
+        return FuzzySet(values, self.family, index=ids)
 
 
 # =========================================================================================
@@ -685,21 +718,33 @@ class IncidenceMatrices(_FuzzyRelations):
         super().__init__(size, None if dim is None else 2 * dim, vectors, init_std)
 
     def matrix(self, ids):
+        return self.stored(ids).transpose(-1, -2)
+
+    def stored(self, ids):
+        """The incidence logits of the relations ``ids`` in the stored layout, entry
+        ``[j, i]`` for "half-axis ``i`` has successor ``j``": ``ids.shape + (2n, 2n)``."""
         n = self.domain
-        return self.vectors(ids).view(*ids.shape, n, n).transpose(-1, -2)
+        return self.vectors(ids).view(*ids.shape, n, n)
+
+    def crisp(self):
+        """The discretised incidence matrices, stored layout: a boolean array
+        ``(size, 2 n, 2 n)``, an entry is in the relation iff its logit is ``> 0``."""
+        n = self.domain
+        with th.no_grad():
+            return self.vectors.weight.detach().cpu().numpy().reshape(-1, n, n) > 0
 
     # The operators run over the stored layout (``[successor, source]``) instead of the
     # transposed table: the same numbers, summed in the order of the table the optimiser
     # holds (the smooth relaxation sums in floating point, so the order is visible).
     def image(self, ids, region):
         family = self._domain_of(region)
-        stored = self.vectors(ids).view(*ids.shape, self.domain, self.domain)
+        stored = self.stored(ids)
         return FuzzySet(family.sup(family.and_(
             stored, region.values.unsqueeze(-2).expand_as(stored)), -1), family)
 
     def preimage(self, ids, region):
         family = self._domain_of(region)
-        stored = self.vectors(ids).view(*ids.shape, self.domain, self.domain)
+        stored = self.stored(ids)
         return FuzzySet(family.sup(family.and_(
             stored, region.values.unsqueeze(-1).expand_as(stored)), -2), family)
 
@@ -845,6 +890,26 @@ class MeanViolation(_FuzzyMeasure):
         degree = region.values.gather(1, point.index.view(-1, 1))
         return th.relu(1 - degree + margin)
 
+    @staticmethod
+    def inside_degrees(c, d, margin=0.0):
+        """The cost of :meth:`inside` on the degree tensors ``c`` and ``d`` themselves (no
+        regions): the mean over the last axis of :math:`\\mathrm{ReLU}(c - d + margin)`, one
+        value per row (DF-ALC's hierarchical loss, Eq. 8)."""
+        return th.relu(c - d + margin).mean(dim=-1)
+
+    def member_at(self, degree):
+        """The cost :math:`1 - C(a)` of an element whose degree in :math:`C` is ``degree``
+        (any shape; :meth:`member` of the element)."""
+        return th.relu(1 - degree)
+
+    def apart_at(self, degree):
+        """The cost :math:`C(a)` of an element that is not to be in :math:`C`."""
+        return th.relu(degree)
+
+
+class MarginUnavailable(ConstructorUnavailable, ValueError):
+    """A measure that has no margin was given one (a :class:`ValueError` too)."""
+
 
 class ConflictMeasure(_FuzzyMeasure):
     """FALCON: a statement is scored by the conflict it leaves, :math:`-\\log(1 - m)` where
@@ -898,7 +963,7 @@ class ConflictMeasure(_FuzzyMeasure):
     @staticmethod
     def _no_margin(margin):
         if margin:
-            raise ValueError("ConflictMeasure has no margin (the conflict is graded).")
+            raise MarginUnavailable("ConflictMeasure has no margin (the conflict is graded).")
 
     def inside(self, a, b, margin=0.0):
         self.check(a, b)
@@ -1001,12 +1066,17 @@ class FuzzyObjective(ExpressionReading, Objective):
     :param role_loss: The loss of a sampled role assertion: ``"contrast"`` (default): the
         positive and the corrupted ones separately, as for class assertions; ``"ranking"``:
         :math:`-\\log\\sigma(\\mathrm{pos} - \\mathrm{neg})` (Bayesian personalised ranking).
+    :param weighting: How the costs of the axiom patterns are combined into the loss of a
+        training step, an
+        :class:`~mowl.representation.library.logic_alc.AxiomKindWeighting`; ``None``
+        (default): the one the model gives (its ``alpha`` and ``beta``).
     """
 
     def __init__(self, margin=0.0, rule=False, threshold=0.8, validity=False,
                  role_assertion="preimage", abox="semantic", num_negs=4, abox_head="subject",
-                 role_loss="contrast", **kwargs):
+                 role_loss="contrast", weighting=None, **kwargs):
         super().__init__(margin, **kwargs)
+        self.weighting = weighting
         if role_assertion not in ("preimage", "image"):
             raise ValueError("role_assertion must be 'preimage' or 'image'.")
         if abox not in ("semantic", "sampled"):
@@ -1036,6 +1106,66 @@ class FuzzyObjective(ExpressionReading, Objective):
     @classmethod
     def alcone(cls, margin=0.1):
         return cls(margin, validity=True, role_assertion="image", negatives="all")
+
+    def requirements(self, g):
+        """Why the geometry ``g`` cannot be read by this objective (a sentence), or ``None``.
+
+        The semantic reading needs nothing beyond the constructors and the measure (a part
+        that lacks one says so when it is asked), but some options need more:
+
+        * ``rule=True`` (the rule-based losses of DF-ALC) reads truth degrees in ``[0, 1]``
+          and the truth matrices of the relations (``matrix``);
+        * ``validity=True`` adds the well-formedness cost of the individuals, which the
+          measure has to define (:meth:`ConeMeasure.validity`);
+        * the sampled reading of assertions (``abox="sampled"``, FALCON) contrasts degrees
+          of named elements with those of corrupted ones, so it needs a class model that
+          gives the degree of a class at an element (``degree_at``), a relation model over
+          pairs of element vectors (``degree_at``, ``head_degrees``, ``vectors``), a domain
+          of element vectors, and a measure with costs of single degrees (``member_at``,
+          ``apart_at``)."""
+        reasons = []
+        if self.rule:
+            if getattr(getattr(g.class_model, "family", None), "logits", True):
+                reasons.append(f"rule=True (the rule-based losses of DF-ALC) reads truth "
+                               f"degrees in [0, 1]; the class model "
+                               f"{type(g.class_model).__name__} gives logits or no fuzzy set")
+            if not hasattr(g.relation_model, "matrix"):
+                reasons.append(f"rule=True needs the truth matrices of the relations "
+                               f"(matrix); the relation model "
+                               f"{type(g.relation_model).__name__} has none")
+        if self.validity and getattr(type(g.measure), "validity", None) in (
+                None, _FuzzyMeasure.validity):
+            reasons.append(f"validity=True adds the well-formedness cost of the individuals "
+                           f"of the measure; {type(g.measure).__name__} has none (it is zero), "
+                           f"so the option would change nothing")
+        if self.abox == "sampled":
+            sampled = self._sampled_requirements(g)
+            if sampled:
+                reasons.append(sampled)
+        return "; ".join(reasons) + "." if reasons else None
+
+    def _sampled_requirements(self, g):
+        missing = []
+        if not hasattr(g.class_model, "degree_at"):
+            missing.append(f"a class model with the degree of a class at an element "
+                           f"(degree_at), not {type(g.class_model).__name__}")
+        relations = g.relation_model
+        if relations is None or not all(hasattr(relations, name) for name in
+                                        ("degree_at", "head_degrees", "vectors")):
+            missing.append(f"a relation model that scores pairs of element vectors "
+                           f"(degree_at, head_degrees, vectors; PairNetworkRelations), not "
+                           f"{type(relations).__name__}")
+        if not hasattr(getattr(g, "domain", None), "vectors"):
+            missing.append("a domain of element vectors (Domain)")
+        if not (hasattr(g.measure, "member_at") and hasattr(g.measure, "apart_at")):
+            missing.append(f"a measure with the cost of a single degree (member_at, "
+                           f"apart_at), not {type(g.measure).__name__}")
+        if not missing:
+            return None
+        return (f"{type(self).__name__}(abox='sampled'), the reading of assertions against "
+                "corrupted ones (FALCON), needs " + ", ".join(missing) + " (the semantic "
+                "reading, objective_options={'abox': 'semantic'}, reads assertions as "
+                "memberships and needs none of these)")
 
     def attach_assertions(self, heads, tails, n_individuals):
         """The role assertions of the training ontology, so that the corrupted assertions of
@@ -1319,6 +1449,31 @@ def _domain_size(nb_individuals, embed_dim, domain):
     return n
 
 
+def truth_tables(nclasses, nrelations, ndomain, init_std=1.0):
+    """The parameter tables of a DF-ALC interpretation over ``ndomain`` elements, drawn in
+    the order of the earlier module (both tables, then the logits of both, normal with
+    ``init_std``): ``(classes (nclasses, n), relations (max(nrelations, 1), n * n))``."""
+    classes = nn.Embedding(nclasses, ndomain)
+    relations = nn.Embedding(max(nrelations, 1), ndomain * ndomain)
+    for table in (classes, relations):
+        nn.init.normal_(table.weight, std=init_std)
+    return classes, relations
+
+
+def half_axis_tables(nclasses, nrelations, nindividuals, dim, init_std=0.5):
+    """The parameter tables of an Al-cone interpretation in :math:`\\mathbb{R}^{dim}`
+    (``2 dim`` half-axes), drawn in the order of the earlier module (all three tables, then
+    the logits of all three, normal with ``init_std``): ``(classes (nclasses, 2 dim),
+    relations (max(nrelations, 1), (2 dim)^2), individuals (max(nindividuals, 1), 2 dim))``."""
+    nhalf = 2 * dim
+    classes = nn.Embedding(nclasses, nhalf)
+    relations = nn.Embedding(max(nrelations, 1), nhalf * nhalf)
+    individuals = nn.Embedding(max(nindividuals, 1), nhalf)
+    for table in (classes, relations, individuals):
+        nn.init.normal_(table.weight, std=init_std)
+    return classes, relations, individuals
+
+
 def dfalc_parts(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, domain=None,
                 loss_type="hierarchical", threshold=0.8, family="godel", top_index=None,
                 bottom_index=None, init_std=1.0, tables=None):
@@ -1404,7 +1559,8 @@ def falcon_parts(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, t_nor
                                          domain=domain, role_pairs=role_pairs)
         measure = ConflictMeasure(max_measure, stabiliser)
         objective.n_individuals = table.num_embeddings
-    individuals = DomainElements(table.num_embeddings, len(domain), family=t_norm)
+    individuals = DomainElements(table.num_embeddings, len(domain), family=t_norm,
+                                 elements=domain)
     return dict(classes=classes, relations=relations, measure=measure, objective=objective,
                 individuals=individuals, domain=domain)
 

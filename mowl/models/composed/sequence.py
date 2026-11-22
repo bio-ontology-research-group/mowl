@@ -8,6 +8,7 @@ import mowl.error.messages as msg
 from mowl.base_models.model import Model
 from mowl.representation import methods as M
 from mowl.representation.sequence import SequenceGeometry
+from mowl.training.schedules import linear_decay_interval
 
 __all__ = ["ComposedSequenceModel", "SequenceScores"]
 
@@ -292,9 +293,7 @@ class ComposedSequenceModel(Model):
             regime.on_epoch_start(epoch, epochs)
             start = end = None
             if rates is not None:
-                high, low = rates
-                start = high - (high - low) * epoch / epochs
-                end = high - (high - low) * (epoch + 1) / epochs
+                start, end = linear_decay_interval(*rates, epoch, epochs)
             loss = encoder.fit(self.corpus_path, 1, start_alpha=start, end_alpha=end)
             self.losses.append(loss)
             regime.on_epoch_end(epoch, {"total": float("nan") if loss is None else loss})

@@ -19,7 +19,7 @@ All functions work on plain tensors and return one value per row.
 import torch as th
 from torch import nn
 
-from mowl.nn.lm import hyperbolic as hb
+from mowl.baselines.nn.lm import hyperbolic as hb
 
 
 def clustering_loss(child, parent, negative, c, margin):

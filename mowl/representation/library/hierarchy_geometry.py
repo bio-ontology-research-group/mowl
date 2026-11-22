@@ -201,9 +201,14 @@ class TextGeometry(ComposedGeometry):
         verbalisation), the relations and the regions of the fillers :math:`D`: both directions
         of the order between :math:`\\exists r.D` and :math:`f_r(D)`."""
         image = self.exists(relation_ids, filler)
-        forward = self.hierarchy_loss(exists, image, negative_1)
-        backward = self.hierarchy_loss(image, exists, negative_2)
-        return 0.5 * (forward + backward)
+        return self.mutual_hierarchy_loss(exists, image, negative_1, negative_2)
+
+    def mutual_hierarchy_loss(self, a, b, negative_a, negative_b):
+        """The mean of the order loss from ``a`` to ``b`` (negatives ``negative_a``) and from
+        ``b`` to ``a`` (negatives ``negative_b``): the two regions are required to be each
+        other's equivalent. Used for :math:`\\exists r.D \\equiv f_r(D)` (OnT Eq. 6) and for
+        any equivalence ``A \\equiv B`` of two regions."""
+        return 0.5 * (self.hierarchy_loss(a, b, negative_a) + self.hierarchy_loss(b, a, negative_b))
 
     def conjunction_loss(self, conjunction, conjuncts, negatives):
         """:math:`L_\\sqcap` of OnT (Eq. 7) for the regions of :math:`C_1 \\sqcap \\dots \\sqcap

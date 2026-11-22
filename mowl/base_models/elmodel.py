@@ -1,6 +1,10 @@
 from mowl.ontology.normalize import ELNormalizer, GCI, is_auxiliary_iri
 from mowl.base_models.model import Model
 from mowl.training.loop import TrainingLoop
+from mowl.training.losses import weighted_mean_loss
+from mowl.training.negatives import corrupt_column_blocks
+from mowl.training.initialisation import extend_embeddings
+from mowl.evaluation.validation import mean_module_cost
 from mowl.datasets.el import ELDataset
 from mowl.projection import projector_factory
 import torch as th
@@ -12,7 +16,6 @@ from org.semanticweb.owlapi.model import OWLClassExpression, OWLClass, OWLObject
 
 import copy
 import numbers
-import numpy as np
 import mowl.error.messages as msg
 import os
 import logging
@@ -582,20 +585,8 @@ that override :meth:`train` with a loop of their own declare the hooks that loop
         data = gci_dataset[:]
         columns, pools = self._resolve_neg_config(gci_name, num_columns=data.shape[1])
 
-        neg_blocks = []
-        for pool, column in zip(pools, columns):
-            all_ids = list(getattr(self, self._NEG_SAMPLING_POOLS[pool]).values())
-
-            idxs_for_negs = np.random.choice(all_ids, size=len(gci_dataset), replace=True)
-            rand_index = th.tensor(idxs_for_negs, dtype=th.long, device=self.device)
-
-            # Build negative data by replacing the specified column
-            neg_block = th.cat([data[:, :column], rand_index.unsqueeze(1)], dim=1)
-            if column + 1 < data.shape[1]:
-                neg_block = th.cat([neg_block, data[:, column + 1:]], dim=1)
-            neg_blocks.append(neg_block)
-
-        return th.cat(neg_blocks, dim=0)
+        id_pools = [list(getattr(self, self._NEG_SAMPLING_POOLS[pool]).values()) for pool in pools]
+        return corrupt_column_blocks(data, columns, id_pools, self.device)
 
     def compute_loss(self, pos_scores, neg_scores=None):
         """Compute loss from positive and negative scores.
@@ -620,10 +611,7 @@ that override :meth:`train` with a loop of their own declare the hooks that loop
         :return: Combined loss value
         :rtype: torch.Tensor
         """
-        loss = th.mean(pos_scores)
-        if neg_scores is not None:
-            loss += th.mean(neg_scores)
-        return loss
+        return weighted_mean_loss(pos_scores, neg_scores)
 
     def get_regularization_loss(self):
         """Get regularization loss from the module.
@@ -800,12 +788,11 @@ that override :meth:`train` with a loop of their own declare the hooks that loop
                 "eval_gci_name must be set before training with validation. "
                 "Set model.eval_gci_name to one of: 'gci0', 'gci1', 'gci2', 'gci3'"
             )
-        with th.no_grad():
-            self.module.eval()
-            gci_data = self.validation_datasets[self._eval_gci_name][:]
-            valid_loss = th.mean(self.module(gci_data, self._eval_gci_name)).detach().item()
-            if valid_loss < self._best_validation_loss:
-                self._best_validation_loss = valid_loss
+        gci_data = self.validation_datasets[self._eval_gci_name][:]
+        valid_loss = mean_module_cost(self.module, gci_data, self._eval_gci_name)
+        if valid_loss < self._best_validation_loss:
+            self._best_validation_loss = valid_loss
+            with th.no_grad():
                 th.save(self.module.state_dict(), self.model_filepath)
         print(f'Epoch {epoch+1}: Train loss: {loss} Valid loss: {valid_loss}')
 
@@ -1034,38 +1021,19 @@ that override :meth:`train` with a loop of their own declare the hooks that loop
         self._object_property_index_dict_cache = None
 
         if prev_class_embeds is not None:
-            new_class_embeds = []
-            for cls in self.class_index_dict:
-                if cls in prev_class_embeds:
-                    new_class_embeds.append(prev_class_embeds[cls])
-                else:
-                    new_class_embeds.append(np.random.normal(size=self.embed_dim))
-            
-
-            new_class_embeds = np.asarray(new_class_embeds)
+            new_class_embeds = extend_embeddings(prev_class_embeds, self.class_index_dict,
+                                                 self.embed_dim)
             self.module.class_embed.weight.data = th.from_numpy(new_class_embeds).float()
 
         if prev_object_property_embeds is not None:
-            new_object_property_embeds = []
-            for rel in self.object_property_index_dict:
-                if rel in prev_object_property_embeds:
-                    new_object_property_embeds.append(prev_object_property_embeds[rel])
-                else:
-                    new_object_property_embeds.append(np.random.normal(size=self.embed_dim))
-            
-            new_object_property_embeds = np.asarray(new_object_property_embeds)
+            new_object_property_embeds = extend_embeddings(
+                prev_object_property_embeds, self.object_property_index_dict, self.embed_dim)
             self.module.rel_embed.weight.data = th.from_numpy(new_object_property_embeds).float()
 
         if prev_individual_embeds is not None:
-            new_individual_embeds = []
-            for ind in self.dataset.individuals:
-                ind = str(ind.toStringID())
-                if ind in prev_individual_embeds:
-                    new_individual_embeds.append(prev_individual_embeds[ind])
-                else:
-                    new_individual_embeds.append(np.random.normal(size=self.embed_dim))
-            
-            new_individual_embeds = np.asarray(new_individual_embeds)
+            new_individual_embeds = extend_embeddings(
+                prev_individual_embeds,
+                [str(ind.toStringID()) for ind in self.dataset.individuals], self.embed_dim)
             self.module.ind_embed.weight.data = th.from_numpy(new_individual_embeds).float()
 
             

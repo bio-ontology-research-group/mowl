@@ -357,3 +357,100 @@ def test_bounded_box_unions_on_the_regions_of_a_class_model():
     in_a = g.depth(pts, th.zeros(200, dtype=th.long), crisp=True) > 0
     in_b = g.depth(pts, th.ones(200, dtype=th.long), crisp=True) > 0
     assert th.equal(both, in_a & in_b)
+
+
+# -- the grounding of a domain and the encoder of data elements ----------------------------
+def test_domain_index_sets_and_relation_fillers():
+    from mowl.representation.library.grounded_objective import (domain_index_sets,
+                                                                relation_fillers)
+    live, ordinary, probes = domain_index_sets(4, 6, top_id=0, bot_id=3)
+    assert live.tolist() == [0, 1, 2] and ordinary.tolist() == [1, 2]
+    assert probes.tolist() == [0, 1, 2, 4, 5]
+    axioms = {"gci2": th.tensor([[0, 1, 2], [1, 1, 2]]),
+              "object_property_assertion": th.tensor([[0, 0, 1]])}
+    fillers, lhs, mask = relation_fillers(axioms, 2, 6, 4)
+    assert fillers[1].tolist() == [2] and lhs[1].tolist() == [0, 1]
+    assert fillers[0].tolist() == [5] and lhs[0].tolist() == [4]
+    assert mask.tolist() == [[False] * 5 + [True], [False, False, True, False, False, False]]
+
+
+def test_element_domain_encodes_data_elements():
+    domain = gp.ElementDomain(3, 2, 2, encoder=th.nn.Linear(4, 2))
+    assert domain.encode(th.ones(5, 4)).shape == (5, 2)
+    assert domain.encode(th.ones(4)).shape == (1, 2)
+    with pytest.raises(ValueError):
+        domain.encode(th.ones(2, 2, 2))
+
+
+class _Validated(_Toy):
+    """The toy method with validation data: the loop validates it every epoch."""
+
+    eval_gci_name = "gci0"
+
+    def __init__(self):
+        super().__init__()
+        self.module = _ToyModule()
+        self.dataset = type("D", (), {"validation": True})()
+        self.validation_datasets = {"gci0": th.zeros((2, 2), dtype=th.long)}
+
+
+class _ToyModule(th.nn.Linear):
+    def __init__(self):
+        super().__init__(1, 1, bias=False)
+        self.tau = 1.0
+
+    def forward(self, rows, form):
+        return (self.weight.sum() - 3.0).abs().expand(len(rows))
+
+
+def test_sampled_objective_loop_leaves_the_module_in_eval_mode_after_validation():
+    toy = _Validated()
+    regime = ComposedRegime(TemperatureAnnealing(start=1.0, end=0.5))
+    regime.attach(toy)
+    SampledObjectiveTraining().run(toy, regime, 2)
+    assert not toy.module.training
+
+
+# -- swapping a part of GroundedEL ---------------------------------------------------------
+def test_composed_el_refuses_grounded_at_build_and_names_its_trainer():
+    from mowl.datasets.builtin import FamilyDataset
+    from mowl.models import ComposedEL
+    from mowl.representation import ConstructorUnavailable
+    data = FamilyDataset()
+    # with a part to swap: refused before training, naming where the parts are swapped
+    with pytest.raises(TypeError, match="GroundedEL"):
+        ComposedEL(data, method="grounded", relations="translation", embed_dim=4)
+    # without: refused because ComposedEL does not train a grounded program
+    with pytest.raises(ConstructorUnavailable, match="GroundedEL"):
+        ComposedEL(data, method="grounded", embed_dim=4)
+
+
+@pytest.mark.parametrize("swap", [dict(relation_model="translation"),
+                                  dict(relation_model="box of translations", agg="lse"),
+                                  dict(role_mode="product")])
+def test_grounded_el_trains_with_a_swapped_part(swap):
+    import math
+    model = _grounded(**swap)
+    history = model.train(epochs=2)
+    assert len(history) == 2 and all(math.isfinite(r["total"]) for r in history)
+    assert all(bool(th.isfinite(p).all()) for p in model.module.parameters())
+
+
+def test_fast_paths_of_the_element_box_family_give_the_same_numbers():
+    from mowl.evaluation.query_search import MaxMinBeam, WitnessChain, read_batch
+    from mowl.nn import GroundedELModule
+    from mowl.representation.library.element_box_family import ElementBoxFamily
+    th.manual_seed(0)
+    m = GroundedELModule(nb_elements=400, nb_classes=40, nb_rels=3, embed_dim=3,
+                         n_components=2, n_role_components=2, role_mode="translation")
+    node = read_batch(("e", ("r", "r", "r")), [(50, (0, 1, 2)), (60, (2, 2, 1))])
+    targets = th.randint(0, 400, (2, 30))
+    with th.no_grad():
+        p = m.positions()
+        out = {}
+        for fast in (True, False):
+            fam = ElementBoxFamily(m, p, fast=fast)
+            out[fast] = (MaxMinBeam(k=8).scores(fam, node),
+                         WitnessChain(k=8).scores(fam, fam, node, targets, m.tau))
+    assert th.equal(out[True][0], out[False][0])
+    assert th.equal(out[True][1], out[False][1])

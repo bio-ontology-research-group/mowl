@@ -24,8 +24,8 @@ import torch as th
 import torch.nn.functional as F
 
 from mowl.representation.library import shapes_gumbel_math as C2B
-from mowl.nn.el.octagon import geometry as G
-from mowl.representation.library import shapes_octagon_math as OL
+from mowl.representation.library import octagon_geometry as G
+from mowl.representation.library import octagon_bounds as OL
 from mowl.representation.measures import Bounds, RegionMeasure
 from mowl.representation.methods import register_measure
 from mowl.representation.regions import Box, ConstructorUnavailable

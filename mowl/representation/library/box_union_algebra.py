@@ -15,7 +15,12 @@ is not exceeded:
 * :meth:`~BoundedBoxUnions.depth`: the signed depth :math:`\\max_m \\min_j (w_{m,j} -
   |p_j - c_{m,j}|)` of points (crisp, or a log-sum-exp at temperature ``tau``);
 * :meth:`~BoundedBoxUnions.overlap_depth`: :math:`\\max_{m,q} \\min_j (w_{m,j} + w_{q,j} -
-  |c_{m,j} - c_{q,j}|)`, positive iff two active boxes meet in their interiors.
+  |c_{m,j} - c_{q,j}|)`, positive iff two active boxes meet in their interiors (and
+  :meth:`~BoundedBoxUnions.overlap_table` against a table of unions);
+* :meth:`~BoundedBoxUnions.union_depth`: the depth of points in unions of any broadcast
+  shape, crisp or as a stable log-sum-exp (:meth:`~BoundedBoxUnions.stable_soft_max`);
+* :meth:`~BoundedBoxUnions.select_rows`, :meth:`~BoundedBoxUnions.flatten`: rows of one of
+  two regions, and the boxes of chosen unions of a table as one region.
 
 When a result would have more than ``max_boxes`` boxes, the largest boxes by volume are kept
 (:meth:`~BoundedBoxUnions.cap`). An empty region has depth :data:`EMPTY_DEPTH`. Results are
@@ -163,6 +168,82 @@ class BoundedBoxUnions:
         out = self.masked(th.cat([r1.cen, r2.cen], dim=1), th.cat([r1.w, r2.w], dim=1),
                           th.cat([r1.active, r2.active], dim=1))
         return self.cap(out) if out.cen.shape[1] > self.max_boxes else out
+
+    @staticmethod
+    def stable_soft_max(values, active, tau):
+        """Log-sum-exp at temperature ``tau`` of ``values`` over the active entries of the
+        last axis, shifted by their detached maximum (finite gradients at any ``tau``);
+        :data:`EMPTY_DEPTH` where no entry is active or the axis is empty."""
+        lead = values.shape[:-1]
+        if values.shape[-1] == 0:
+            return values.new_full(lead, EMPTY_DEPTH)
+        on = active.expand(values.shape)
+        rows = on.any(dim=-1)
+        masked = values.masked_fill(~on, float("-inf"))
+        peak = th.where(rows, masked.amax(dim=-1), th.zeros(lead, dtype=values.dtype,
+                                                              device=values.device)).detach()
+        t = tau.to(dtype=values.dtype, device=values.device) if th.is_tensor(tau) else tau
+        z = th.where(rows.unsqueeze(-1), (masked - peak.unsqueeze(-1)) / t, th.zeros_like(masked))
+        return (peak + t * th.logsumexp(z, dim=-1)).masked_fill(~rows, EMPTY_DEPTH)
+
+    def union_depth(self, points, cen, w, active, tau=None):
+        """Depth of ``points`` in unions of boxes, all broadcast together: ``points``
+        ``(..., 1, d)``, ``cen`` and ``w`` ``(..., M, d)``, ``active`` ``(..., M)``; the
+        result is ``(...)``. Crisp (the largest box depth) without ``tau``, else
+        :meth:`stable_soft_max` at ``tau``. A union without active boxes has depth
+        :data:`EMPTY_DEPTH`."""
+        slot = th.amin(w - th.abs(points - cen), dim=-1)
+        active = active.expand(slot.shape)
+        if tau is not None:
+            return self.stable_soft_max(slot, active, tau)
+        if slot.shape[-1] == 0:
+            return th.full(slot.shape[:-1], EMPTY_DEPTH, dtype=slot.dtype, device=slot.device)
+        return self._masked_max(slot, active)
+
+    def overlap_table(self, r, table):
+        """Overlap depth ``(B, N)`` of every region of ``r`` ``(B, M, d)`` with every union
+        of ``table`` ``(N, K, d)``."""
+        bsz, m, _ = r.cen.shape
+        n, k, _ = table.cen.shape
+        if m * k == 0:
+            return th.full((bsz, n), EMPTY_DEPTH, dtype=r.cen.dtype, device=r.cen.device)
+        t_cen = table.cen.to(dtype=r.cen.dtype, device=r.cen.device)
+        t_w = table.w.to(dtype=r.w.dtype, device=r.w.device)
+        pair = th.amin(r.w[:, None, :, None] + t_w[None, :, None]
+                       - th.abs(r.cen[:, None, :, None] - t_cen[None, :, None]), dim=-1)
+        act = r.active[:, None, :, None] & table.active.to(r.active.device)[None, :, None]
+        return self._masked_max(pair.reshape(bsz, n, m * k), act.reshape(bsz, n, m * k))
+
+    def select_rows(self, mask, r_true, r_false):
+        """Row ``b`` of ``r_true`` where ``mask[b]``, else of ``r_false`` (the shorter one
+        padded with inactive boxes)."""
+        size = max(r_true.cen.shape[1], r_false.cen.shape[1])
+        a, b = self.pad(r_true, size), self.pad(r_false, size)
+        return self.make(th.where(mask[:, None, None], a.cen, b.cen),
+                         th.where(mask[:, None, None], a.w, b.w),
+                         th.where(mask[:, None], a.active, b.active))
+
+    def pad(self, r, size):
+        """``r`` with inactive zero boxes appended up to ``size`` per row."""
+        bsz, m, dim = r.cen.shape
+        if m >= size:
+            return r
+        zeros = r.cen.new_zeros((bsz, size - m, dim))
+        return self.make(th.cat([r.cen, zeros], 1), th.cat([r.w, r.w.new_zeros(zeros.shape)], 1),
+                         th.cat([r.active, r.active.new_zeros((bsz, size - m))], 1))
+
+    def flatten(self, table, keep):
+        """The boxes of all unions of ``table`` ``(N, K, d)`` as one region per row of
+        ``keep`` ``(B, N)`` (a box counts where its union is kept and it is active),
+        active boxes first, at most ``max_boxes``."""
+        n, k, dim = table.cen.shape
+        bsz = keep.shape[0]
+        cen = table.cen.reshape(1, n * k, dim).expand(bsz, n * k, dim)
+        w = table.w.reshape(1, n * k, dim).expand(bsz, n * k, dim)
+        act = (keep[:, :, None] & table.active[None]).reshape(bsz, n * k)
+        if n * k <= self.max_boxes:
+            return self.compact(cen, w, act)
+        return self.cap(self.make(cen, w, act))
 
     def _masked_max(self, values, active, crisp=True):
         """``max`` (or log-sum-exp) of ``values`` over the active slots of the last axis;

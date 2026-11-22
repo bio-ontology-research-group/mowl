@@ -1,6 +1,6 @@
 import torch as th
 from torch.utils import checkpoint
-from mowl.nn.alc.module import ALCModule
+from mowl.baselines.nn.alc.module import ALCModule
 from mowl.owlapi import OWLAPIAdapter, ClassExpressionType, OWLSubClassOfAxiom, \
     OWLEquivalentClassesAxiom, OWLDisjointClassesAxiom, OWLClassAssertionAxiom, \
     OWLObjectPropertyAssertionAxiom

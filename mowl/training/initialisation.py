@@ -9,6 +9,9 @@ radius (or offset) in one vector and normalises that vector *jointly*: with dime
 :math:`n = 200`) and the centre slightly inside the unit sphere.
 """
 
+import contextlib
+
+import numpy as np
 import torch as th
 
 from mowl.training.regime import TrainingRegime
@@ -110,3 +113,46 @@ class JointNormalisedInitialisation(TrainingRegime):
             if rel is not None:
                 w = th.rand(*rel.weight.shape, generator=gen) * 2 - 1
                 rel.weight.copy_((w / th.linalg.norm(w, dim=1, keepdim=True)).to(rel.weight))
+
+
+def extend_embeddings(previous, keys, dim):
+    """The ``(len(keys), dim)`` table whose row for a key in ``previous`` (a dict key ->
+    vector) is the old vector and whose row for a new key is drawn from the standard normal
+    distribution (NumPy's global generator, in the order of ``keys``). Used when axioms are
+    added to a trained model: old entities keep their embedding, new ones start at random."""
+    return np.asarray([previous[key] if key in previous else np.random.normal(size=dim)
+                       for key in keys])
+
+
+def margin_embedding_range(gamma, dim, slack=2.0):
+    """The half-width ``(gamma + slack) / dim`` of the uniform initialisation of the embedding
+    tables of the query embeddings (Query2Box, BetaE, ConE: the reference code initialises
+    every table in ``[-r, r]`` with ``r`` tied to the margin ``gamma`` of the score so that a
+    random point starts inside the margin)."""
+    return (float(gamma) + slack) / dim
+
+
+def redraw_after(build, redraw):
+    """Make something with ``build()``, then run ``redraw()`` from the state the random
+    generator had before ``build``: the initial values ``redraw`` draws are those a module that
+    drew them in a different order (or in a different place) would have drawn under the same
+    seed. Returns what ``build`` returns. The generator is in the state ``redraw`` leaves it in
+    afterwards."""
+    state = th.get_rng_state()
+    result = build()
+    th.set_rng_state(state)
+    redraw()
+    return result
+
+
+@contextlib.contextmanager
+def seeded_scope(seed):
+    """Run a block with the torch generator seeded with ``seed`` and put the generator back as
+    it was afterwards: a deterministic draw (a fixed sample, a probe head) that does not touch
+    the stream of random numbers of the run."""
+    state = th.random.get_rng_state()
+    th.manual_seed(seed)
+    try:
+        yield
+    finally:
+        th.random.set_rng_state(state)

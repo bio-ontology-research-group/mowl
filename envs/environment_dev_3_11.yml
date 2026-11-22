@@ -31,6 +31,7 @@ dependencies:
     - sphinx-rtd-theme
     - pytest
     - pytest-faulthandler
+    - cvxpy
     - coverage
     - flake8
     - autopep8
