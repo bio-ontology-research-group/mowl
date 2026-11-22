@@ -43,6 +43,22 @@ def canonical_model_of(data):
     return CanonicalModel.from_ontology(data)
 
 
+def reads_ontology(data):
+    """Whether :func:`canonical_model_of` can read ``data``: a mOWL dataset, an OWL API
+    ontology, a normalised ontology or a canonical model."""
+    from mowl.geometric.completion import CanonicalModel
+    return (isinstance(data, CanonicalModel) or type(data).__name__ == "NormalisedOntology"
+            or (hasattr(data, "ontology") and hasattr(data, "classes"))
+            or hasattr(data, "getAxioms"))
+
+
+def _rejects_non_ontology(source, data):
+    if reads_ontology(data):
+        return None
+    return (f"it reads an ontology (a mOWL dataset, an OWL API ontology, a normalised "
+            f"ontology or a canonical model), not a {type(data).__name__}")
+
+
 _EL = "normalised EL++ (NF1-NF4, NF6, NF7, bottom forms) with atomic ABox assertions"
 
 
@@ -72,6 +88,9 @@ class CanonicalModelSource(Source):
 
     def __init__(self, nominals=True):
         self.nominals = bool(nominals)
+
+    def rejects(self, data):
+        return _rejects_non_ontology(self, data)
 
     def build(self, data):
         return FiniteModel.from_canonical_model(canonical_model_of(data), self.nominals)
@@ -106,6 +125,14 @@ class LeastModelSource(Source):
 
     def __init__(self, **options):
         self.options = options
+
+    def rejects(self, data):
+        from mowl.geometric.least_model import LeastModel
+        if isinstance(data, (LeastModel, dict)) or (
+                hasattr(data, "nb_classes") and hasattr(data, "nb_rels")):
+            return None
+        return (f"it reads a LeastModel, a dictionary of indexed tables or an indexed model "
+                f"(nb_classes, nb_rels, ...), not a {type(data).__name__}")
 
     def build(self, data):
         from mowl.geometric.least_model import LeastModel, least_model, least_model_from_model
@@ -178,6 +205,13 @@ class BooleanAtomsSource(Source):
         self.names = tuple(names)
         self.max_names = int(max_names)
 
+    def rejects(self, data):
+        import collections.abc
+        if isinstance(data, collections.abc.Iterable):
+            return None
+        return (f"it reads a list of the axiom objects of mowl.geometric.cones (GCI, "
+                f"ConceptAssertion), not a {type(data).__name__}")
+
     def build(self, data):
         from mowl.geometric.cones import (GCI, ConceptAssertion, RoleAssertion, has_roles,
                                           signature, _eval_boolean)
@@ -238,6 +272,13 @@ class LassoSource(Source):
         self.max_prefix, self.max_period = int(max_prefix), int(max_period)
         self.max_bits, self.witnesses = int(max_bits), bool(witnesses)
 
+    def rejects(self, data):
+        from mowl.geometric.temporal_cones import LassoModel, TemporalOntology
+        if isinstance(data, (LassoModel, TemporalOntology)):
+            return None
+        return (f"it reads a TemporalOntology (or a LassoModel) of mowl.geometric."
+                f"temporal_cones, not a {type(data).__name__}")
+
     def build(self, data):
         from mowl.geometric.temporal_cones import LassoModel, find_lasso_model
         model = data
@@ -278,6 +319,13 @@ class AttributedSource(Source):
         Guarantee("strong_faithfulness", "A@S ⊑ B@T holds iff the grounding entails it.",
                   "ground attributed Horn DL"),
     )
+
+    def rejects(self, data):
+        from mowl.geometric.attributed import AttributedOntology
+        if isinstance(data, AttributedOntology):
+            return None
+        return (f"it reads an AttributedOntology of mowl.geometric.attributed, not a "
+                f"{type(data).__name__}")
 
     def build(self, data):
         from mowl.geometric.attributed import ground
@@ -337,6 +385,10 @@ class BoxMILPSource(Source):
     def produces(self):
         from mowl.geometric.boxes import BoxModel
         return BoxModel
+
+    def rejects(self, data):
+        from mowl.geometric.boxes import BoxModel
+        return None if isinstance(data, BoxModel) else _rejects_non_ontology(self, data)
 
     def build(self, data):
         from mowl.geometric.boxes import BoxModel, BoxModelBuilder

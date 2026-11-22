@@ -28,6 +28,11 @@ class Region:
         """The region scaled by ``factor`` per coordinate (``(B, d)``)."""
         raise ConstructorUnavailable(f"{type(self).__name__} cannot be scaled per coordinate.")
 
+    def rotate(self, *args, **kwargs):
+        """The region rotated (a cone's axis and aperture moved by angles, as a relation of
+        ConE does); only families of angles define it."""
+        raise ConstructorUnavailable(f"{type(self).__name__} cannot be rotated.")
+
     def intersect(self, other):
         """``(region, gap)``: the intersection, and a cost ``(B, 1)`` that is zero iff the
         intersection is not empty."""

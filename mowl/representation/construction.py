@@ -137,7 +137,7 @@ class FiniteModel:
             return cls._from_least_model(model)
         size = getattr(model, "size", getattr(model, "domain_size", None))
         if size is None or not hasattr(model, "concepts"):
-            raise TypeError(f"{name} is not a finite interpretation.")
+            raise ConstructorUnavailable(f"{name} is not a finite interpretation.")
         return cls(size, dict(model.concepts), dict(getattr(model, "roles", {}) or {}),
                    dict(getattr(model, "individuals", {}) or {}), origin=model)
 
@@ -255,6 +255,13 @@ class Source:
     def build(self, data):
         """The model built from ``data``."""
         raise NotImplementedError
+
+    def rejects(self, data):
+        """Why this source cannot read ``data`` (a sentence), or ``None``: a source reads one
+        kind of data (its :attr:`logic`), and :func:`construct` refuses data of another kind
+        with :class:`~mowl.representation.ConstructorUnavailable` instead of failing inside
+        the construction."""
+        return None
 
     def name_of(self, name):
         """The name of the built model for a name given to the geometry (identity; the
@@ -923,7 +930,17 @@ def construct(data, source, reading, names=None, roles=None, individuals=None,
             f"the {source.key!r} source builds {[p.__name__ for p in produced]}."
             + getattr(reading, "why_not", lambda p: "")(produced))
     if built is None:
-        built = source.build(data)
+        reason = source.rejects(data)
+        if reason:
+            raise ConstructorUnavailable(f"The {source.key!r} source cannot read this data: "
+                                         f"{reason}")
+        from mowl.geometric.errors import UnsupportedAxiom
+        try:
+            built = source.build(data)
+        except UnsupportedAxiom as error:           # the data is outside the source's logic
+            raise ConstructorUnavailable(
+                f"The {source.key!r} source ({source.logic}) cannot build from this data: "
+                f"{error}") from error
     reading.check(built)
     default = source.default_names(built)
     read = reading.read(built, default[0] if names is None else list(names),

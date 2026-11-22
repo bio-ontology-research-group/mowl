@@ -72,6 +72,12 @@ class ConeInterpretationSource(Source):
         from mowl.geometric.cones import ALConeInterpretation
         return ALConeInterpretation
 
+    def rejects(self, data):
+        from mowl.geometric.cones import ALConeInterpretation
+        if isinstance(data, ALConeInterpretation):
+            return None
+        return f"it reads an ALConeInterpretation, not a {type(data).__name__}"
+
     def build(self, data):
         return data
 

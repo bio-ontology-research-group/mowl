@@ -61,6 +61,13 @@ class VolumeShare(Bounds):
         self.ceiling = ceiling
         self.part = "volume ratio" if temperature is None else "smoothed volume ratio"
 
+    def unread_objective_options(self):
+        """With ``strict_margin="ignore"`` no cost reads the margin of the objective."""
+        if self.strict_margin == "ignore":
+            return {"margin": "the measure ignores a margin (strict_margin='ignore': BoxEL "
+                              "and BoxSEL have none)"}
+        return {}
+
     # -- volumes ----------------------------------------------------------------------------
     def volume(self, region):
         """Volume of the boxes, ``(B, 1)`` (the product of the widths)."""

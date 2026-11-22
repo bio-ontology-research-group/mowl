@@ -8,7 +8,7 @@ from mowl.base_models.elmodel import EmbeddingELModel
 from mowl.nn.el.elmodule import ELModule
 from mowl.representation import methods as M
 from mowl.representation.objectives import Objective
-from mowl.representation.swap import NO_PART, build_method, swap
+from mowl.representation.swap import NO_PART, build_method, check_relations_are_read, swap
 
 
 #: Where the methods that are not trained on axioms are trained.
@@ -152,7 +152,7 @@ class ComposedEL(EmbeddingELModel):
         self.load_role_axioms = bool(getattr(module, "role_axiom_capable", False))
         self._attach_structural_tables()
         self._attach_default_regimes()
-        if self.method is not None and self.swapped_parts:
+        if self.method is not None:
             self._probe()
 
     @property
@@ -167,11 +167,14 @@ class ComposedEL(EmbeddingELModel):
 
     def _probe(self):
         """Evaluate the losses of two axioms of every training form (and the penalties), so
-        that a combination whose parts do not fit raises
+        that a combination whose parts do not fit (or a method that this model cannot train
+        from sizes alone, such as FaithEL, whose TBox is constructed from the ontology) raises
         :class:`~mowl.representation.ConstructorUnavailable` when it is built, naming the
         method and the parts, not in the middle of training."""
         from mowl.representation.regions import ConstructorUnavailable
         module = self.module
+        swapped = sorted(self.swapped_parts)
+        what = f"cannot take {swapped}" if swapped else "cannot be trained by ComposedEL"
         try:
             with th.no_grad():
                 for form, data in self.training_datasets.items():
@@ -182,13 +185,15 @@ class ComposedEL(EmbeddingELModel):
                     if form in getattr(module, "neg_capable_gcis", ()):
                         module(rows, form, neg=True)
                 module.regularization_loss()
+            if self.relations is not None and module.relation_model is not None:
+                check_relations_are_read(module, self.method, self.training_datasets)
         except ConstructorUnavailable as error:
             raise ConstructorUnavailable(
-                f"{self.method!r} cannot take {sorted(self.swapped_parts)}: {error}") from error
+                f"{self.method!r} {what}: {error}") from error
         except (TypeError, AttributeError, RuntimeError, ValueError, IndexError,
                 NotImplementedError, KeyError) as error:
             raise ConstructorUnavailable(
-                f"{self.method!r} cannot take {sorted(self.swapped_parts)}: the combination "
+                f"{self.method!r} {what}: the combination "
                 f"{module.parts} does not evaluate ({type(error).__name__}: {error}).") from error
 
     def _attach_default_regimes(self):

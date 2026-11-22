@@ -566,6 +566,21 @@ class TripleGeometry(ComposedGeometry):
         #: the builder of a method; the default draws every table uniformly in [-1, 1]).
         self.initialiser = None
 
+    def replace_parts(self, classes=None, relations=None, individuals=None, measure=None,
+                      objective=None, regularizers=None):
+        """As :meth:`ComposedGeometry.replace_parts`, except the objective: a model of triples
+        is trained with a :class:`TripleLoss` (``loss=``, see
+        :class:`~mowl.models.graph_kge.GraphKGEModel`), the margin of an
+        :class:`~mowl.representation.Objective` is read by no cost of this geometry, so
+        replacing it would change nothing and is refused."""
+        if objective is not None:
+            raise ConstructorUnavailable(
+                "A model of triples is trained with a TripleLoss, not with an Objective: no "
+                "cost of this geometry reads the objective, so replacing it would change "
+                "nothing. Give loss= to GraphKGEModel (or the builder) instead.")
+        return super().replace_parts(classes, relations, individuals, measure, objective,
+                                     regularizers)
+
     def reset_parameters(self):
         """Draw the parameters again, as they were drawn when the geometry was built."""
         if self.initialiser is not None:
@@ -845,6 +860,11 @@ def _init_normal(classes, relations):
         nn.init.normal_(relations.vectors.weight)
 
 
+# the kind of relation model each initialiser draws the tables of
+_init_boxe.relations = BoxERelations
+_init_normal.relations = ExpressivERelations
+
+
 # -- the methods -----------------------------------------------------------------------------
 _DEFAULT_RELATIONS = {"graph_kge": "translation",
                       "boxe": "head and tail boxes (distance score)",
@@ -862,8 +882,9 @@ _DEFAULT_LOSS = {
 
 def _accepted_options(relations, options):
     """The options the relation model takes. A named method passes the options of its own
-    relation model (``min_denom`` of ExpressivE); when another relation model is swapped in
-    that does not have them they are dropped with a warning instead of failing."""
+    relation model (``min_denom`` of ExpressivE). An option the relation model in use does
+    not declare is an error, never dropped: passing it would be ignored, so the caller is
+    told which options the part takes."""
     from mowl.representation import methods as M
     factory = M.RELATION_MODELS.get(relations, relations) if isinstance(relations, str) \
         else relations
@@ -872,17 +893,21 @@ def _accepted_options(relations, options):
     parameters = inspect.signature(factory.__init__).parameters
     if any(p.kind is inspect.Parameter.VAR_KEYWORD for p in parameters.values()):
         return options
-    dropped = sorted(set(options) - set(parameters))
-    if dropped:
-        warnings.warn(f"{factory.__name__} has no option {dropped}; not used.", UserWarning,
-                      stacklevel=3)
-    return {k: v for k, v in options.items() if k in parameters}
+    unknown = sorted(set(options) - set(parameters))
+    if unknown:
+        accepted = sorted(p for p in parameters if p not in ("self", "size", "embed_dim"))
+        raise TypeError(f"{factory.__name__} has no option {unknown}; it takes {accepted}.")
+    return options
 
 
 def _build(key, nb_classes, nb_relations, nb_individuals, embed_dim, margin, classes,
            relations, objective, tables, relation_options, subclass_id=-2, loss=None,
-           sampler=None, regularizers=(), projection="owl2vec_star", init=True):
-    """The geometry of a method from parts. With ``subclass_id`` (an int, ``-1`` if the
+           sampler=None, regularizers=(), projection="owl2vec_star", init=True, bump=False,
+           initialiser=None):
+    """The geometry of a method from parts. ``bump`` gives point classes a bump vector (BoxE);
+    ``initialiser`` is a function ``(class_model, relation_model)`` that draws the tables as
+    the publication does (:func:`_init_boxe`, :func:`_init_normal`); it is used when the
+    classes are points and the relation model is of the kind it declares in ``relations``. With ``subclass_id`` (an int, ``-1`` if the
     graph has no such edge) the relations are those of a graph, indexed by its ids, and
     ``subclass_id`` is the row of the ``subclass`` relation; without it one more relation
     is reserved for ``subclass`` (the geometry reads axioms)."""
@@ -900,7 +925,7 @@ def _build(key, nb_classes, nb_relations, nb_individuals, embed_dim, margin, cla
     if classes == "point":
         # the entities of a knowledge graph model: points (with a bump for BoxE)
         def class_factory(size, dim):
-            return PointClasses(size, dim, bump=key == "boxe")
+            return PointClasses(size, dim, bump=bump)
     else:
         class_factory = M.CLASS_MODELS[classes] if isinstance(classes, str) else classes
     relation_factory = M.RELATION_MODELS[relations] if isinstance(relations, str) \
@@ -917,14 +942,13 @@ def _build(key, nb_classes, nb_relations, nb_individuals, embed_dim, margin, cla
     if relation_model is not None and not graph and not hasattr(relation_model, "subclass"):
         # a relation model without a reserved subclass row (translation): add one
         relation_model = _WithSubclass(relation_model, embed_dim)
-    initialiser = None
-    if init and classes == "point" and isinstance(class_model, Points):
-        if isinstance(relation_model, BoxERelations) and key == "boxe":
-            initialiser = functools.partial(_init_boxe, class_model, relation_model)
-        elif isinstance(relation_model, ExpressivERelations) and key == "expressive":
-            initialiser = functools.partial(_init_normal, class_model, relation_model)
-        if initialiser is not None:
-            initialiser()
+    if (init and initialiser is not None and classes == "point"
+            and isinstance(class_model, Points)
+            and isinstance(relation_model, initialiser.relations)):
+        initialiser = functools.partial(initialiser, class_model, relation_model)
+        initialiser()
+    else:
+        initialiser = None
     individual_model = class_factory(nb_individuals, embed_dim) if nb_individuals else None
     if objective is None:
         objective = Objective(margin, negatives="gci2")
@@ -1049,7 +1073,7 @@ def boxe(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=1.0,
     return _build("boxe", nb_classes, nb_relations, nb_individuals, embed_dim, margin,
                   classes, relations or "head and tail boxes (distance score)", objective,
                   None, relation_options, subclass_id, loss, sampler, regularizers,
-                  projection)
+                  projection, bump=True, initialiser=_init_boxe)
 
 
 @register_method("expressive")
@@ -1074,7 +1098,8 @@ def expressive(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=
                                individuals=classes_model)
     return _build("expressive", nb_classes, nb_relations, nb_individuals, embed_dim, margin,
                   classes, relations or "region over pairs", objective, None,
-                  relation_options, subclass_id, loss, sampler, regularizers, projection)
+                  relation_options, subclass_id, loss, sampler, regularizers, projection,
+                  initialiser=_init_normal)
 
 
 @register_method("reshuffle")

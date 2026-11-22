@@ -27,6 +27,7 @@ from mowl.representation import methods as M
 from mowl.representation.library import logic_subspace_algebra
 from mowl.representation.library.logic_subspace import (Orthogonality, Separation,
                                                         SubspaceStructure)
+from mowl.representation.regions import ConstructorUnavailable
 from mowl.representation.swap import build_method
 from mowl.training.batching import PerNormalFormMiniBatches
 from mowl.training.graph import EdgeCorruption, KnownRowMask
@@ -502,20 +503,43 @@ class ComposedSubspace(RegimeTrained, SubspaceAxiomModel):
                          max_sibling_pairs, role_unit_length, model_filepath, device, seed)
 
     def init_module(self):
-        geometry = build_method(
-            self.method, len(self._cid), len(self._rid), len(self._iid),
-            embed_dim=self.embed_dim, regularizers=(), top_index=self._cid.get(_THING),
-            bottom_index=self._cid.get(_NOTHING), role_unit_length=self.role_unit_length,
-            regularization=False,
-            **{k: v for k, v in self._part_choices.items() if v is not None},
-            **self.method_options)
+        chosen = {k: v for k, v in self._part_choices.items() if v is not None}
+        try:
+            geometry = build_method(
+                self.method, len(self._cid), len(self._rid), len(self._iid),
+                embed_dim=self.embed_dim, regularizers=(), top_index=self._cid.get(_THING),
+                bottom_index=self._cid.get(_NOTHING), role_unit_length=self.role_unit_length,
+                regularization=False, **chosen, **self.method_options)
+        except ValueError as error:
+            if "objective" not in chosen and "objective_options" not in chosen:
+                raise
+            raise ConstructorUnavailable(      # an objective option the equations refuse
+                f"{self.method!r} cannot take {sorted(chosen)}: {error}") from error
+        if "measure" in chosen and not hasattr(geometry.measure, "residual"):
+            raise ConstructorUnavailable(
+                f"{self.method!r} cannot take the measure {type(geometry.measure).__name__}: "
+                f"E2R scores a membership by the residual of a point against a subspace, and "
+                f"this measure has no residual.")
+        if "objective" in chosen and not hasattr(geometry.objective, "kind_cost"):
+            raise ConstructorUnavailable(
+                f"{self.method!r} cannot take an objective that is not a SubspaceObjective: "
+                f"its losses are the equations of the axiom kinds of E2R "
+                f"(SubspaceObjective.kind_cost), which {type(geometry.objective).__name__} "
+                f"does not have.")
         if not hasattr(geometry, "membership_residual"):
             raise TypeError(
                 f"The geometry of {self.method!r} ({type(geometry).__name__}) is not a "
                 f"subspace geometry: ComposedSubspace cannot train it.")
         reset = getattr(geometry, "reset_parameters", None)
         if reset is not None:
-            reset()
+            try:
+                reset()
+            except (AttributeError, TypeError, RuntimeError) as error:
+                if not chosen:
+                    raise
+                raise ConstructorUnavailable(
+                    f"{self.method!r} cannot take {sorted(chosen)}: its parameters cannot be "
+                    f"drawn as E2R draws them ({type(error).__name__}: {error}).") from error
         self._attach_regularizers(geometry)
 
     def _attach_regularizers(self, geometry):
@@ -531,6 +555,29 @@ class ComposedSubspace(RegimeTrained, SubspaceAxiomModel):
         geometry.regularizers = (self.structure, self.orthogonality, self.separation,
                                  *self.extra_regularizers)
         self.module = geometry.to(self.device)
+        if any(v is not None for v in self._part_choices.values()):
+            self._probe()
+
+    def _probe(self):
+        """Evaluate two rows of every kind of axiom, so that a replaced part that cannot be
+        combined with the rest raises :class:`~mowl.representation.ConstructorUnavailable`
+        when the model is built, naming the parts, not in the middle of training."""
+        chosen = sorted(k for k, v in self._part_choices.items() if v is not None)
+        try:
+            with th.no_grad():
+                for form, rows in self.training_rows.items():
+                    if len(rows):
+                        self.module(self._kind(form), th.as_tensor(rows)[:2])
+                self.module.regularization_loss()
+        except ConstructorUnavailable as error:
+            raise ConstructorUnavailable(
+                f"{self.method!r} cannot take {chosen}: {error}") from error
+        except (TypeError, AttributeError, RuntimeError, ValueError, IndexError,
+                KeyError) as error:
+            raise ConstructorUnavailable(
+                f"{self.method!r} cannot take {chosen}: the combination "
+                f"{self.module.parts} does not evaluate ({type(error).__name__}: "
+                f"{error}).") from error
 
     # -- training -----------------------------------------------------------------------
     @property

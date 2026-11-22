@@ -20,6 +20,16 @@ from mowl.representation.regions import ConstructorUnavailable
 __all__ = ["Geometry", "ComposedGeometry"]
 
 
+def _names(classes, others):
+    """Names of region ``classes`` for a message; the module is added to a name that another
+    region class in ``others`` also has (two different classes can be called ``Point``)."""
+    others = others if isinstance(others, (tuple, list)) else (others,)
+    clash = {c.__name__ for c in others}
+    return [f"{c.__module__.rsplit('.', 1)[-1]}.{c.__name__}" if c.__name__ in clash
+            and any(o is not c for o in others if o.__name__ == c.__name__) else c.__name__
+            for c in classes]
+
+
 class Geometry:
     """Interface of a geometry. Regions are whatever the geometry uses to represent a set
     (a :class:`~mowl.representation.regions.Region`, a fuzzy membership vector, the state
@@ -121,13 +131,7 @@ class ComposedGeometry(ELModule, Geometry):
         self.measure = measure
         self.objective = objective if objective is not None else Objective()
         self.regularizers = tuple(regularizers)
-        if not issubclass(classes.region, measure.accepts):
-            raise TypeError(
-                f"{type(measure).__name__} compares "
-                f"{[c.__name__ for c in measure.accepts]} regions; "
-                f"{type(classes).__name__} gives {classes.region.__name__} regions.")
-        if individuals is not None and not issubclass(individuals.region, measure.accepts):
-            raise TypeError("The individual model must give regions the measure compares.")
+        self._check_parts()
         if relations is not None:
             measure.bind(relations)
         # Names other code expects of an EL module (class models without a table, such as
@@ -210,13 +214,15 @@ class ComposedGeometry(ELModule, Geometry):
         if not issubclass(classes.region, measure.accepts):
             raise ConstructorUnavailable(
                 f"{type(measure).__name__} compares "
-                f"{[c.__name__ for c in measure.accepts]} regions; "
-                f"{type(classes).__name__} gives {classes.region.__name__} regions.")
+                f"{_names(measure.accepts, classes.region)} regions; "
+                f"{type(classes).__name__} gives {_names((classes.region,), measure.accepts)} "
+                f"regions.")
         if individuals is not None and not issubclass(individuals.region, measure.accepts):
             raise ConstructorUnavailable(
                 f"{type(measure).__name__} compares "
-                f"{[c.__name__ for c in measure.accepts]} regions; the individual model "
-                f"{type(individuals).__name__} gives {individuals.region.__name__} regions.")
+                f"{_names(measure.accepts, individuals.region)} regions; the individual model "
+                f"{type(individuals).__name__} gives "
+                f"{_names((individuals.region,), measure.accepts)} regions.")
 
     @property
     def strict_negatives(self):

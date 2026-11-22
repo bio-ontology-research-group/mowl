@@ -3,11 +3,28 @@ Swapping a part of a method: what works
 
 For every method of :data:`mowl.representation.METHODS` and every part it has, this table
 says what happens when the part is replaced *by name* through the constructor of the general
-model of the method (:doc:`combine`): ``works`` (some replacement trains one epoch and gives
-finite numbers), ``unavailable`` (every replacement tried is refused with
-:class:`~mowl.representation.ConstructorUnavailable`: the combination cannot exist, and the
-message names both sides), ``not supported`` (the method has no such part or no general model
-trains it; the reason is below). The table is written by
+model of the method (:doc:`combine`: ``ComposedEL``, ``ComposedALC``, ``ComposedSubspace``,
+``QueryEmbeddingModel``, ``ComposedSequenceModel``, ``ConstructedModel``, and
+``GraphKGEModel`` for the knowledge graph models, whose columns are marked ``(graph)`` or
+are the loss and the sampler of triples). The cells are
+
+``works``
+   at least one replacement is accepted, is the part of the model, **changes the losses (or
+   the parameters that receive gradient) compared with the method as it is**, and trains two
+   epochs to finite numbers;
+``unavailable``
+   every replacement tried is refused at build time with
+   :class:`~mowl.representation.ConstructorUnavailable`, naming both sides. The reason that
+   this is right is written below and in the test (``REFUSES_EVERY``): a method that refuses
+   every candidate of a part without a written reason fails the test;
+``not supported``
+   the method has no such part, or no general model trains it (the reason is below).
+
+A replacement that is accepted but would change nothing (a relation model that no trained
+form reads, an objective option that no loss reads, an objective of a triple model that is
+trained with a loss) is refused at build time, never ignored. The ALC methods ``falcon``,
+``dfalc`` and ``alcone`` are checked with expected failures until their objective is
+validated at build time. The table is written by
 ``python -m tests.representation.test_user_level_swaps`` and checked by the tests.
 
 Query methods (QueryEmbeddingModel)
@@ -17,10 +34,30 @@ Query methods (QueryEmbeddingModel)
    :header-rows: 1
 
    * - method
+     - relations
+     - intersection
+     - distance
+     - negation
    * - ``acone``
+     - not supported
+     - not supported
+     - not supported
+     - works
    * - ``betae``
+     - not supported
+     - works
+     - works
+     - works
    * - ``cone_qe``
+     - works
+     - not supported
+     - not supported
+     - works
    * - ``query2box``
+     - not supported
+     - works
+     - works
+     - unavailable
 
 Axiom methods (ComposedEL, ComposedALC)
 ---------------------------------------
@@ -36,14 +73,24 @@ Axiom methods (ComposedEL, ComposedALC)
      - objective
      - objective_options
      - regularizers
+     - classes (graph)
+     - relations (graph)
+     - loss
+     - sampler
+     - regularizers (graph)
    * - ``alcone``
-     - unavailable
-     - unavailable
-     - works
-     - unavailable
      - works
      - works
      - works
+     - works
+     - works
+     - works
+     - works
+     - 
+     - 
+     - 
+     - 
+     - 
    * - ``bcbox``
      - works
      - works
@@ -52,6 +99,11 @@ Axiom methods (ComposedEL, ComposedALC)
      - works
      - works
      - works
+     - 
+     - 
+     - 
+     - 
+     - 
    * - ``box2el``
      - works
      - works
@@ -60,6 +112,11 @@ Axiom methods (ComposedEL, ComposedALC)
      - works
      - works
      - works
+     - 
+     - 
+     - 
+     - 
+     - 
    * - ``box_lattice``
      - works
      - works
@@ -68,10 +125,20 @@ Axiom methods (ComposedEL, ComposedALC)
      - works
      - works
      - works
+     - 
+     - 
+     - 
+     - 
+     - 
    * - ``boxe``
      - works
      - works
      - 
+     - works
+     - unavailable
+     - unavailable
+     - works
+     - works
      - works
      - works
      - works
@@ -84,6 +151,11 @@ Axiom methods (ComposedEL, ComposedALC)
      - works
      - works
      - works
+     - 
+     - 
+     - 
+     - 
+     - 
    * - ``boxlite``
      - unavailable
      - works
@@ -92,14 +164,37 @@ Axiom methods (ComposedEL, ComposedALC)
      - works
      - works
      - works
+     - 
+     - 
+     - 
+     - 
+     - 
    * - ``boxsel``
      - works
      - works
      - 
      - works
      - works
+     - unavailable
+     - works
+     - 
+     - 
+     - 
+     - 
+     - 
+   * - ``canonical_mixture``
+     - unavailable
+     - unavailable
+     - unavailable
+     - unavailable
      - works
      - works
+     - works
+     - 
+     - 
+     - 
+     - 
+     - 
    * - ``cate``
      - works
      - works
@@ -108,6 +203,11 @@ Axiom methods (ComposedEL, ComposedALC)
      - works
      - works
      - works
+     - 
+     - 
+     - 
+     - 
+     - 
    * - ``concept2box``
      - unavailable
      - works
@@ -116,14 +216,24 @@ Axiom methods (ComposedEL, ComposedALC)
      - works
      - works
      - works
+     - 
+     - 
+     - 
+     - 
+     - 
    * - ``dfalc``
-     - unavailable
-     - works
-     - works
-     - unavailable
      - works
      - works
      - works
+     - works
+     - works
+     - works
+     - works
+     - 
+     - 
+     - 
+     - 
+     - 
    * - ``disk_embeddings``
      - works
      - works
@@ -132,6 +242,11 @@ Axiom methods (ComposedEL, ComposedALC)
      - works
      - works
      - works
+     - 
+     - 
+     - 
+     - 
+     - 
    * - ``eike``
      - unavailable
      - works
@@ -140,6 +255,11 @@ Axiom methods (ComposedEL, ComposedALC)
      - works
      - works
      - works
+     - 
+     - 
+     - 
+     - 
+     - 
    * - ``elbe``
      - works
      - works
@@ -148,6 +268,11 @@ Axiom methods (ComposedEL, ComposedALC)
      - works
      - works
      - works
+     - 
+     - 
+     - 
+     - 
+     - 
    * - ``elem``
      - works
      - works
@@ -156,6 +281,11 @@ Axiom methods (ComposedEL, ComposedALC)
      - works
      - works
      - works
+     - 
+     - 
+     - 
+     - 
+     - 
    * - ``elkem``
      - works
      - works
@@ -164,6 +294,11 @@ Axiom methods (ComposedEL, ComposedALC)
      - works
      - works
      - works
+     - 
+     - 
+     - 
+     - 
+     - 
    * - ``emelpp``
      - works
      - works
@@ -172,6 +307,11 @@ Axiom methods (ComposedEL, ComposedALC)
      - works
      - works
      - works
+     - 
+     - 
+     - 
+     - 
+     - 
    * - ``emelvar``
      - works
      - works
@@ -180,10 +320,20 @@ Axiom methods (ComposedEL, ComposedALC)
      - works
      - works
      - works
+     - 
+     - 
+     - 
+     - 
+     - 
    * - ``expressive``
      - works
      - works
      - 
+     - works
+     - unavailable
+     - unavailable
+     - works
+     - works
      - works
      - works
      - works
@@ -196,11 +346,34 @@ Axiom methods (ComposedEL, ComposedALC)
      - not supported
      - not supported
      - not supported
+     - 
+     - 
+     - 
+     - 
+     - 
    * - ``falcon``
      - unavailable
      - unavailable
      - works
+     - works
+     - works
+     - works
+     - works
+     - 
+     - 
+     - 
+     - 
+     - 
+   * - ``gda_projection``
+     - works
+     - works
+     - 
+     - works
      - unavailable
+     - unavailable
+     - works
+     - works
+     - works
      - works
      - works
      - works
@@ -208,6 +381,11 @@ Axiom methods (ComposedEL, ComposedALC)
      - works
      - works
      - 
+     - works
+     - unavailable
+     - unavailable
+     - works
+     - works
      - works
      - works
      - works
@@ -220,6 +398,11 @@ Axiom methods (ComposedEL, ComposedALC)
      - not supported
      - not supported
      - not supported
+     - 
+     - 
+     - 
+     - 
+     - 
    * - ``gumbel_box``
      - works
      - works
@@ -228,6 +411,11 @@ Axiom methods (ComposedEL, ComposedALC)
      - works
      - works
      - works
+     - 
+     - 
+     - 
+     - 
+     - 
    * - ``hit``
      - works
      - works
@@ -236,6 +424,11 @@ Axiom methods (ComposedEL, ComposedALC)
      - works
      - works
      - works
+     - 
+     - 
+     - 
+     - 
+     - 
    * - ``hyperbolic_cones``
      - works
      - works
@@ -244,6 +437,11 @@ Axiom methods (ComposedEL, ComposedALC)
      - works
      - works
      - works
+     - 
+     - 
+     - 
+     - 
+     - 
    * - ``mcmultibox``
      - works
      - works
@@ -252,6 +450,11 @@ Axiom methods (ComposedEL, ComposedALC)
      - works
      - works
      - works
+     - 
+     - 
+     - 
+     - 
+     - 
    * - ``multiboxel``
      - works
      - works
@@ -260,6 +463,11 @@ Axiom methods (ComposedEL, ComposedALC)
      - works
      - works
      - works
+     - 
+     - 
+     - 
+     - 
+     - 
    * - ``multielbe``
      - works
      - works
@@ -268,6 +476,11 @@ Axiom methods (ComposedEL, ComposedALC)
      - works
      - works
      - works
+     - 
+     - 
+     - 
+     - 
+     - 
    * - ``octagon``
      - works
      - works
@@ -276,6 +489,11 @@ Axiom methods (ComposedEL, ComposedALC)
      - works
      - works
      - works
+     - 
+     - 
+     - 
+     - 
+     - 
    * - ``ont``
      - works
      - works
@@ -284,6 +502,11 @@ Axiom methods (ComposedEL, ComposedALC)
      - works
      - works
      - works
+     - 
+     - 
+     - 
+     - 
+     - 
    * - ``order_embeddings``
      - works
      - works
@@ -292,6 +515,11 @@ Axiom methods (ComposedEL, ComposedALC)
      - works
      - works
      - works
+     - 
+     - 
+     - 
+     - 
+     - 
    * - ``prism``
      - works
      - works
@@ -300,6 +528,11 @@ Axiom methods (ComposedEL, ComposedALC)
      - works
      - works
      - works
+     - 
+     - 
+     - 
+     - 
+     - 
    * - ``regd``
      - works
      - works
@@ -308,11 +541,34 @@ Axiom methods (ComposedEL, ComposedALC)
      - works
      - works
      - works
+     - 
+     - 
+     - 
+     - 
+     - 
    * - ``regd_elem``
      - works
      - works
      - 
      - works
+     - works
+     - works
+     - works
+     - 
+     - 
+     - 
+     - 
+     - 
+   * - ``reshuffle``
+     - not supported
+     - not supported
+     - 
+     - not supported
+     - not supported
+     - not supported
+     - not supported
+     - not supported
+     - not supported
      - works
      - works
      - works
@@ -324,6 +580,11 @@ Axiom methods (ComposedEL, ComposedALC)
      - works
      - works
      - works
+     - 
+     - 
+     - 
+     - 
+     - 
    * - ``transbox``
      - works
      - works
@@ -332,6 +593,11 @@ Axiom methods (ComposedEL, ComposedALC)
      - works
      - works
      - works
+     - 
+     - 
+     - 
+     - 
+     - 
 
 Constructed methods (ConstructedModel)
 --------------------------------------
@@ -340,15 +606,35 @@ Constructed methods (ConstructedModel)
    :header-rows: 1
 
    * - method
+     - source
+     - reading
    * - ``alcone-exact``
+     - works
+     - works
    * - ``attributed_dl``
+     - unavailable
+     - works
    * - ``box_milp``
+     - unavailable
+     - unavailable
    * - ``canonical_model``
+     - works
+     - works
    * - ``convex_polyhedral``
+     - works
+     - works
    * - ``convex_regions``
+     - works
+     - works
    * - ``interval_union``
+     - works
+     - works
    * - ``least_model``
+     - works
+     - works
    * - ``temporal_cones``
+     - unavailable
+     - works
 
 Sequence methods (ComposedSequenceModel)
 ----------------------------------------
@@ -357,11 +643,53 @@ Sequence methods (ComposedSequenceModel)
    :header-rows: 1
 
    * - method
+     - measure
+     - view
+     - walker
+     - source
+     - encoder
+     - reading
+     - scorer
    * - ``dl2vec``
+     - works
+     - works
+     - works
+     - works
+     - works
+     - not supported
+     - works
    * - ``onto2vec``
+     - works
+     - works
+     - not supported
+     - works
+     - works
+     - not supported
+     - works
    * - ``opa2vec``
+     - works
+     - works
+     - not supported
+     - works
+     - works
+     - not supported
+     - works
    * - ``owl2vec_star``
+     - works
+     - works
+     - works
+     - works
+     - works
+     - not supported
+     - works
    * - ``taxonomy_walks``
+     - works
+     - works
+     - works
+     - works
+     - works
+     - not supported
+     - works
 
 Expression methods
 ------------------
@@ -377,30 +705,61 @@ Expression methods
      - objective_options
      - regularizers
    * - ``e2r``
-     - not supported
-     - not supported
-     - not supported
-     - not supported
-     - not supported
-     - not supported
+     - unavailable
+     - unavailable
+     - unavailable
+     - unavailable
+     - works
+     - works
 
 Reasons
 -------
 
-* ``alcone``, classes, unavailable. Last replacement tried: octagon product: 'alcone' cannot take ['classes', 'individuals']: ConeMeasure compares ['FuzzySet'] regions; OctagonClasses gives OctagonProduct regions. (the method's other parts: {'classes': 'axis-aligned cone', 'relations': 'fuzzy relation', 'individuals': 'region', 'measure': 'fuzzy implication'
-* ``alcone``, relations, unavailable. Last replacement tried: fuzzy relation: TruthMatrix relates the 6 elements of its domain; the region is a LogitSet over 12 elements. A class expression with an existential restriction cannot be evaluated by ExpressionGeometry.
-* ``alcone``, measure, unavailable. Last replacement tried: masked bounds: 'alcone' cannot take ['measure']: MaskedBounds compares ['Box'] regions; HalfAxisClasses gives LogitSet regions. (the method's other parts: {'classes': 'axis-aligned cone', 'relations': 'fuzzy relation', 'individuals': 'region', 'measure': 'fuzzy implication', 'conjunction': 'fuzzy op
-* ``boxlite``, classes, unavailable. Last replacement tried: sector cone: 'boxlite' cannot take ['classes']: SignedDistance compares ['Box', 'Point'] regions; ConeClasses gives SectorCone regions. (the method's other parts: {'classes': 'box', 'relations': 'head and tail boxes', 'individuals': 'point with bump', 'measure': 'exact', 'conjunction': 'exact', 'neg
-* ``concept2box``, classes, unavailable. Last replacement tried: sector cone: 'concept2box' cannot take ['classes']: ByRegion compares ['Box', 'Point'] regions; ConeClasses gives SectorCone regions. (the method's other parts: {'classes': 'soft box', 'relations': 'neural network', 'individuals': 'none', 'measure': 'smoothed volume ratio', 'conjunction': 'exact'}).
-* ``dfalc``, classes, unavailable. Last replacement tried: octagon product: 'dfalc' cannot take ['classes', 'individuals']: MeanViolation compares ['FuzzySet'] regions; OctagonClasses gives OctagonProduct regions. (the method's other parts: {'classes': 'fuzzy set', 'relations': 'fuzzy relation', 'individuals': 'region', 'measure': 'fuzzy implication', 'conj
-* ``dfalc``, measure, unavailable. Last replacement tried: masked bounds: 'dfalc' cannot take ['measure']: MaskedBounds compares ['Box'] regions; TruthTableClasses gives FuzzySet regions. (the method's other parts: {'classes': 'fuzzy set', 'relations': 'fuzzy relation', 'individuals': 'region', 'measure': 'fuzzy implication', 'conjunction': 'fuzzy operator'
-* ``eike``, classes, unavailable. Last replacement tried: sector cone: 'eike' cannot take ['classes']: LinkedMeasure compares ['Linked'] regions; ConeClasses gives SectorCone regions. (the method's other parts: {'classes': 'ellipsoid', 'relations': 'translation', 'individuals': 'region', 'measure': 'centre distance', 'conjunction': 'approximate'}).
-* ``eike``, individuals, unavailable. Last replacement tried: sector cone: 'eike' cannot take ['individuals']: LinkedMeasure compares ['Linked'] regions; the individual model ConeClasses gives SectorCone regions. (the method's other parts: {'classes': 'ellipsoid', 'relations': 'translation', 'individuals': 'region', 'measure': 'centre distance', 'conjunction':
-* ``eike``, measure, unavailable. Last replacement tried: point distance: 'eike' cannot take ['measure']: PointDistance compares ['Point'] regions; LinkedClasses gives Linked regions. (the method's other parts: {'classes': 'ellipsoid', 'relations': 'translation', 'individuals': 'region', 'measure': 'centre distance', 'conjunction': 'approximate'}).
+* ``acone``, not supported: acone has no relations option: it is fixed by the method
+* ``acone``, not supported: the builder knows one intersection of cones (attention) and takes any other as an instance
+* ``acone``, not supported: the builder knows one distance of cones and takes any other as an instance
+* ``betae``, not supported: betae has no relations option: it is fixed by the method
+* ``cone_qe``, not supported: the builder knows one intersection of cones (attention) and takes any other as an instance
+* ``cone_qe``, not supported: the builder knows one distance of cones and takes any other as an instance
+* ``query2box``, not supported: query2box has no relations option: it is fixed by the method
+* ``query2box``, negation, unavailable: the library has no negation of boxes (Query2Box has none); the negations of BetaE and ConE act on other region families and are refused with both sides named
+* ``boxe``, objective, unavailable: a model of triples is trained with a TripleLoss (loss= of GraphKGEModel), no cost of its geometry reads an Objective: replacing it would change nothing
+* ``boxe``, objective_options, unavailable: a model of triples is trained with a TripleLoss (loss= of GraphKGEModel), no cost of its geometry reads an Objective: replacing it would change nothing
+* ``boxlite``, classes, unavailable: the measure reads the lower and upper corner tables of its own BoundsBoxes, which are constrained by the solver programme; no other class model has corner tables (box models are refused when the probe finds no 'lower')
+* ``boxsel``, objective_options, unavailable: the only option it has is the margin, and its volume measure ignores a margin (BoxEL and BoxSEL have none)
+* ``canonical_mixture``, classes, unavailable: the measure reads parts of its own region kind (SparseElementSets), which no other entry of the registry provides; every other class model is refused with the two sides named
+* ``canonical_mixture``, relations, unavailable: its relations are canonical roles over element sets; geometric relation models map geometric regions and refuse sparse sets
+* ``canonical_mixture``, individuals, unavailable: the measure reads parts of its own region kind (SparseElementSets), which no other entry of the registry provides; every other class model is refused with the two sides named
+* ``canonical_mixture``, measure, unavailable: ProbabilityMass is the only measure of sparse element sets (the regions are sets of finite-model elements, not geometric regions)
+* ``concept2box``, classes, unavailable: the soft-box measure reads the context table of its own ContextualSoftBox class model (in_context); no other class model has contexts
+* ``eike``, classes, unavailable: the measure reads parts of its own region kind (an ellipsoid and a vector, Linked), which no other entry of the registry provides; every other class model is refused with the two sides named
+* ``eike``, individuals, unavailable: the measure reads parts of its own region kind (Linked), which no other entry of the registry provides; every other class model is refused with the two sides named
+* ``eike``, measure, unavailable: LinkedMeasure is the only measure that compares Linked regions; every other measure compares one region kind
+* ``expressive``, objective, unavailable: a model of triples is trained with a TripleLoss (loss= of GraphKGEModel), no cost of its geometry reads an Objective: replacing it would change nothing
+* ``expressive``, objective_options, unavailable: a model of triples is trained with a TripleLoss (loss= of GraphKGEModel), no cost of its geometry reads an Objective: replacing it would change nothing
 * ``faithel``, not supported: its TBox is constructed by a reasoner from the ontology and its classes are anchored to it; ComposedEL builds from sizes. Train it with FaithEL.
-* ``falcon``, classes, unavailable. Last replacement tried: octagon product: 'falcon' cannot take ['classes', 'individuals']: ConflictMeasure compares ['FuzzySet'] regions; OctagonClasses gives OctagonProduct regions. (the method's other parts: {'classes': 'fuzzy set', 'relations': 'neural network', 'individuals': 'region', 'measure': 'fuzzy implication', 'c
-* ``falcon``, relations, unavailable. Last replacement tried: fuzzy relation: 'falcon' cannot take ['relations']: the combination {'classes': 'fuzzy set', 'relations': 'fuzzy relation', 'individuals': 'region', 'measure': 'fuzzy implication', 'conjunction': 'fuzzy operator', 'negation': 'fuzzy operator', 'disjunction': 'fuzzy operator', 'family': 'Product'} do
-* ``falcon``, measure, unavailable. Last replacement tried: masked bounds: 'falcon' cannot take ['measure']: MaskedBounds compares ['Box'] regions; NetworkClasses gives FuzzySet regions. (the method's other parts: {'classes': 'fuzzy set', 'relations': 'neural network', 'individuals': 'region', 'measure': 'fuzzy implication', 'conjunction': 'fuzzy operator', 
+* ``falcon``, classes, unavailable: the measure reads parts of its own region kind (fuzzy sets of a domain), which no other entry of the registry provides; every other class model is refused with the two sides named
+* ``falcon``, relations, unavailable: its relations are networks over pairs of fuzzy sets; geometric relation models map geometric regions and refuse fuzzy sets
+* ``gda_projection``, objective, unavailable: a model of triples is trained with a TripleLoss (loss= of GraphKGEModel), no cost of its geometry reads an Objective: replacing it would change nothing
+* ``gda_projection``, objective_options, unavailable: a model of triples is trained with a TripleLoss (loss= of GraphKGEModel), no cost of its geometry reads an Objective: replacing it would change nothing
+* ``graph_kge``, objective, unavailable: a model of triples is trained with a TripleLoss (loss= of GraphKGEModel), no cost of its geometry reads an Objective: replacing it would change nothing
+* ``graph_kge``, objective_options, unavailable: a model of triples is trained with a TripleLoss (loss= of GraphKGEModel), no cost of its geometry reads an Objective: replacing it would change nothing
 * ``grounded``, not supported: GroundedELModule is a grounded program over a shared element domain, not an ELModule: ComposedEL refuses it; train it with GroundedEL.
-* ``shadow_cones``, classes, unavailable. Last replacement tried: sector cone: 'shadow_cones' cannot take ['classes']: ShadowCone compares ['Point'] regions; ConeClasses gives SectorCone regions. (the method's other parts: {'classes': 'point', 'relations': 'none', 'individuals': 'none', 'measure': 'angle', 'conjunction': 'none'}).
-* ``e2r``, not supported: its geometry reads ALC axioms through subspaces (a SubspaceGeometry, not an ExpressionGeometry): ComposedALC refuses it, ComposedEL refuses a method trained on expressions. Train it with E2R.
+* ``reshuffle``, not supported: it is defined on a graph (its entities are encoded by message passing over the edges): ComposedEL has no edges to give it. Swap its parts through GraphKGEModel.
+* ``reshuffle``, not supported: reshuffle encodes its entities with a graph network that uses the matrices of its own relations
+* ``shadow_cones``, classes, unavailable: the cone measure compares the Point region of the hierarchy family (hierarchy_regions.Point), the registered 'point' class model gives another class of the same name (shapes_regions.Point): a duplicated region class, not a mathematical obstruction (reported, not fixed here)
+* ``attributed_dl``, source, unavailable: the data of the method is an attributed ontology, which no other source reads (each source reads one kind of data and refuses another with the two sides named)
+* ``box_milp``, source, unavailable: the only reading of a box model is 'boxes'; a finite model cannot in general be read as single boxes (boxes have the Helly property), so every other source is refused with both sides named
+* ``box_milp``, reading, unavailable: a box model is a set of boxes, it has no domain elements for the cell readings to place: only the 'boxes' reading reads it
+* ``temporal_cones``, source, unavailable: the data of the method is a temporal ontology, which no other source reads (each source reads one kind of data and refuses another with the two sides named)
+* ``dl2vec``, not supported: one reading is registered (the vector of the entity's token): it is the method's own
+* ``onto2vec``, not supported: onto2vec reads sentences, there are no walks to walk: give a view too (view=...), then walker= works
+* ``onto2vec``, not supported: one reading is registered (the vector of the entity's token): it is the method's own
+* ``opa2vec``, not supported: opa2vec reads sentences, there are no walks to walk: give a view too (view=...), then walker= works
+* ``opa2vec``, not supported: one reading is registered (the vector of the entity's token): it is the method's own
+* ``owl2vec_star``, not supported: one reading is registered (the vector of the entity's token): it is the method's own
+* ``taxonomy_walks``, not supported: one reading is registered (the vector of the entity's token): it is the method's own
+* ``e2r``, classes, unavailable: the residual measure compares Subspace regions and the registry has no class model of subspaces (E2R's own SubspaceClasses is built by the method, not registered under a name): every registered class model is refused with both sides named
+* ``e2r``, relations, unavailable: E2R's relations map pairs of vectors (a relation is a vector of the pair space, dimension 2d); every registered relation model works in the dimension of one class region and does not evaluate against the pair equations (refused when the model is built)
+* ``e2r``, measure, unavailable: the measure of E2R is the residual of a point against a subspace; every other measure compares another region kind or has no residual (refused when the model is built)
+* ``e2r``, objective, unavailable: the losses of E2R are the equations of its axiom kinds (SubspaceObjective.kind_cost): a general Objective has none, and a SubspaceObjective is the method's own

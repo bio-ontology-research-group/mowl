@@ -292,6 +292,26 @@ class Objective:
             call["margin"] = self.margin
         return call
 
+    def unread_options(self, supported_forms=None):
+        """``{option: reason}`` of the options of this objective that no loss reads in this
+        configuration, so that giving a different value changes nothing (it is refused by
+        :func:`mowl.representation.swap.swap` instead of being ignored).
+
+        :param supported_forms: The forms the geometry reads (default: all).
+        """
+        forms = None if supported_forms is None else set(supported_forms)
+        unread = {}
+        if self.gci2_negative != "delta":
+            unread["delta"] = "it is read only by gci2_negative='delta'"
+        if "gci0" not in self.neg_forms:
+            unread["freeze_size_negatives"] = ("it is read only by the negative loss of gci0, "
+                                               "and gci0 has none (negatives=%r)"
+                                               % (self.negatives,))
+        if forms is not None and "gci2" not in forms:
+            unread["gci2_offset"] = "it is added to the loss of gci2, which the method does " \
+                                    "not read"
+        return unread
+
     def replace(self, **options):
         """A new objective of the same kind with some options replaced (the margin is the
         current one): ``Objective.elem(0.1).replace(gci3="inclusion")``. An option the

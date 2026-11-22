@@ -93,10 +93,51 @@ def _resolve_measure(value):
     return value
 
 
+def forms_reading_relations(geometry, rows_by_form, limit=8):
+    """The forms among ``rows_by_form`` (``{form: rows}``, the training rows) whose loss is
+    computed from the relation model of ``geometry``: the autograd graph of the loss of the
+    form reaches a parameter of the relation model. Empty if no form reads one."""
+    import torch as th
+    parameters = [p for p in geometry.relation_model.parameters() if p.requires_grad]
+    read = []
+    for form, rows in rows_by_form.items():
+        if len(rows) == 0 or not parameters:
+            continue
+        for neg in (False, True) if form in getattr(geometry, "neg_capable_gcis", ()) \
+                else (False,):
+            cost = geometry(rows[:limit], form, neg=True) if neg else geometry(rows[:limit], form)
+            if not isinstance(cost, th.Tensor) or not cost.requires_grad:
+                continue
+            grads = th.autograd.grad(cost.sum(), parameters, allow_unused=True)
+            if any(g is not None for g in grads):
+                read.append(form)
+                break
+    return read
+
+
+def check_relations_are_read(geometry, key, rows_by_form):
+    """Refuse a swapped relation model that no training form reads: its parameters would
+    never move and the losses would be those of the method without it."""
+    if geometry.relation_model is None or not rows_by_form:
+        return
+    if not list(geometry.relation_model.parameters()):
+        return
+    if not forms_reading_relations(geometry, rows_by_form):
+        raise ConstructorUnavailable(
+            f"none of the forms {key!r} is trained on "
+            f"({sorted(f for f, r in rows_by_form.items() if len(r))}) reads one in this "
+            f"combination of parts {geometry.parts}, so the loss would not change and the "
+            f"relation parameters would never move.")
+
+
 def build_method(key, nb_classes, nb_relations, nb_individuals=0, embed_dim=50,
                  classes=None, relations=None, individuals=None, measure=None,
-                 objective=None, objective_options=None, regularizers=(), **options):
+                 objective=None, objective_options=None, regularizers=(), rows=None,
+                 **options):
     """The method ``key`` with the given parts replaced (see the module).
+
+    :param rows: ``{form: rows}`` of the training data. With it, a replaced relation model
+        that no form reads is refused (:func:`check_relations_are_read`).
 
     :param options: Options of the builder of the method.
     :returns: The geometry.
@@ -123,7 +164,14 @@ def build_method(key, nb_classes, nb_relations, nb_individuals=0, embed_dim=50,
             f"together from replaceable class, relation and measure parts; it does not take "
             f"{sorted(rest)}. Its own options: "
             f"{[p for p in parameters if p not in ('tables', 'nb_classes', 'nb_relations', 'nb_individuals', 'embed_dim')]}.")
-    return swap(geometry, key, sizes, embed_dim, **rest)
+    geometry = swap(geometry, key, sizes, embed_dim, **rest)
+    if relations is not None and rows is not None:
+        try:
+            check_relations_are_read(geometry, key, rows)
+        except ConstructorUnavailable as error:
+            raise ConstructorUnavailable(f"{key!r} cannot take ['relations']: {error}") \
+                from error
+    return geometry
 
 
 def swap(geometry, key, sizes, embed_dim, classes=None, relations=None, individuals=None,
@@ -158,6 +206,19 @@ def swap(geometry, key, sizes, embed_dim, classes=None, relations=None, individu
         parts["measure"] = _resolve_measure(measure)
     if objective is not None or objective_options:
         base = objective if objective is not None else geometry.objective
+        if objective_options:
+            unread = base.unread_options(geometry.supported_forms)
+            measure_unread = getattr(parts.get("measure", geometry.measure),
+                                     "unread_objective_options", None)
+            if measure_unread is not None:
+                unread = {**unread, **measure_unread()}
+            current = base.options
+            for name in sorted(objective_options):
+                if name in unread and objective_options[name] != current.get(name):
+                    raise ConstructorUnavailable(
+                        f"{key!r} cannot take the objective option {name}="
+                        f"{objective_options[name]!r}: {unread[name]}, so the losses would "
+                        f"not change.")
         parts["objective"] = base.replace(**objective_options) if objective_options else base
     if regularizers is not None:
         parts["regularizers"] = tuple(geometry.regularizers) + tuple(regularizers)

@@ -28,6 +28,7 @@ from mowl.base_models import KGEModel
 from mowl.projection import Edge
 from mowl.representation.library.graph_projection import ProjectionView
 from mowl.representation.library.other_graph import UniformCorruption
+from mowl.representation.regions import ConstructorUnavailable
 from mowl.evaluation.triple_axioms import AxiomTriples
 from mowl.training.triples import (HitsEarlyStopping, carry_rows,  # noqa: F401
                                    forward_id, positive_triples, train_on_triples)
@@ -463,7 +464,24 @@ class GraphKGEModel(TripleGraphModel):
             seed_generators(self.seed)
         module = build(arguments.pop("nb_classes"), arguments.pop("nb_relations"), 0,
                        sampler=sampler, **self._embedding_options(), **arguments, **options)
+        if self.classes is not None or self.relations is not None:
+            self._probe(module)
         return module.to(self.device)
+
+    def _probe(self, module):
+        """Score two triples, so that a swapped class or relation model that cannot be
+        combined with the rest (a relation model that enlarges a point) is refused when the
+        model is built, naming the parts, and not in the middle of training."""
+        ids = th.zeros(2, dtype=th.long)
+        try:
+            with th.no_grad(), module.encoding():
+                module.triple_cost(ids, ids, ids)
+        except ConstructorUnavailable as error:
+            given = sorted(k for k, v in (("classes", self.classes),
+                                          ("relations", self.relations)) if v is not None)
+            raise ConstructorUnavailable(
+                f"{self.method!r} cannot take {given}: {error} (the method's other parts: "
+                f"{module.parts}).") from error
 
     def _embedding_options(self):
         return dict(embed_dim=self.embed_dim)
