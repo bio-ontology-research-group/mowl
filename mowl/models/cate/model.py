@@ -6,10 +6,10 @@ import os
 import torch as th
 
 from mowl.base_models.model import Model
-from mowl.nn.graph.cate.losses import order_margin_loss
 from mowl.nn.graph.cate.module import CatEModule
 from mowl.projection.categorical import saturation as sat
 from mowl.projection.categorical.lattice import CatELattice, UnseenConceptError
+from mowl.representation.library.hierarchy_objectives import margin_loss
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,12 @@ class CatE(Model):
     trained to satisfy :math:`f(A) \\preceq f(B)` in the product order with the score
     :math:`s(A, B) = \\lVert \\max(0, f(A) - f(B)) \\rVert_2` (Eq. 6) and the margin loss of
     Eq. 7, whose negatives replace :math:`B` by an element drawn uniformly from the
-    lattice (:class:`~mowl.nn.graph.cate.CatEModule`).
+    lattice (:class:`~mowl.nn.graph.cate.CatEModule`). The model is a combination of parts
+    (``model.module.parts``), defined once in
+    :func:`mowl.representation.library.hierarchy_methods.cate`: free vectors in the product
+    order as the class model, lookup of the compound elements, the order violation as the
+    measure; the loss of Eq. 7 is :func:`~mowl.representation.library.hierarchy_objectives.
+    margin_loss`.
 
     **Scoring.** A query is scored by :math:`s` between lattice elements (lower is
     better): :math:`C \\sqsubseteq D` by :math:`s(C, D)`, :math:`C(a)` by
@@ -91,7 +96,7 @@ class CatE(Model):
     :param cyclic_lr: Use the cyclic learning rate (otherwise a constant one).
     :type cyclic_lr: bool
     :param negative_aggregation: ``"per_negative"`` (Eq. 7) or ``"mean"`` (reference
-        code), see :func:`~mowl.nn.graph.cate.order_margin_loss`.
+        code), see :func:`~mowl.representation.library.hierarchy_objectives.margin_loss`.
     :type negative_aggregation: str
     :param filter_negatives: Discard corruptions that are morphisms of the lattice (or
         reflexive), as Eq. 7 sums over non-morphisms only; ``False`` keeps them, as the
@@ -264,7 +269,8 @@ class CatE(Model):
     def init_module(self):
         """Create the :class:`~mowl.nn.graph.cate.CatEModule`."""
         lat = self.lattice
-        module = CatEModule(len(lat), self.embed_dim, p=self.p)
+        module = CatEModule(len(lat), self.embed_dim, p=self.p, margin=self.margin)
+        module.link_margin(self)
         if lat.existential_to_id:
             keys = list(lat.existential_to_id.items())
             module.set_existentials([k[0] for k, _ in keys], [k[1] for k, _ in keys],
@@ -314,12 +320,11 @@ class CatE(Model):
         pos_scores = module.order_violation(pos[:, 0], pos[:, 1])
         neg_scores = module.order_violation(
             pos[:, 0].unsqueeze(1).expand(-1, self.num_negs), neg_dst)
-        loss = order_margin_loss(pos_scores, neg_scores, self.margin,
-                                 negative_aggregation=self.negative_aggregation,
-                                 neg_mask=mask)
+        loss = margin_loss(pos_scores, neg_scores, self.margin,
+                           aggregation=self.negative_aggregation, mask=mask)
         if self.interaction_loss:
             loss = loss + self._interaction_loss(pos[:, 0], pos_scores)
-        return loss
+        return loss + module.regularization_loss()
 
     def _interaction_ids(self):
         """(head ids, existential ids) of the interaction loss: the lattice elements of

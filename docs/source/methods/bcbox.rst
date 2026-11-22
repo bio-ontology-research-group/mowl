@@ -121,6 +121,35 @@ second).
   codes change which pairs of vertices count as edges, not the intersection behaviour of
   regions, so they do not address it; unions of boxes (MultiBoxEL) do.
 
+Built from parts
+----------------
+
+The model is a combination of parts, defined once in
+:func:`~mowl.representation.library.hierarchy_methods.bcbox`: boxes with codes as the class
+model (:class:`~mowl.representation.library.hierarchy_classes.CodedBoxes`), the smoothed
+volume ratio that reads the codes as the measure
+(:class:`~mowl.representation.library.hierarchy_measures.LogVolumeRatio`), the energy
+:math:`E` as the cost of an edge and :math:`-\log(1 - e^{-E})` as that of a corruption,
+the self-adversarial binary cross entropy of Eq. (10)
+(:func:`~mowl.representation.library.hierarchy_objectives.bce_edge_loss`) and the code lasso as
+the regulariser (``code_reg``). The earlier hand-written module is kept for comparison in
+:mod:`mowl.baselines`.
+
+.. testcode::
+
+    from mowl.datasets.builtin import FamilyDataset
+    from mowl.models.bcbox.model import BinaryCodeBox
+
+    model = BinaryCodeBox(FamilyDataset(), embed_dim=4, variant="gbc", code_reg=0.1)
+    print(model.module.parts["classes"], "/", model.module.parts["measure"])
+    print(len(model.module.regularizers))
+
+.. testoutput::
+    :options: +ELLIPSIS
+
+    ...soft box / smoothed volume ratio
+    1
+
 Example
 -------
 

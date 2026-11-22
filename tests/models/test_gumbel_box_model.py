@@ -10,7 +10,8 @@ mowl.init_jvm("2g")
 
 from mowl.evaluation.model_scoring import axiom_scoring_of  # noqa: E402
 from mowl.models.gumbel_box import GumbelBox  # noqa: E402
-from mowl.nn.el.gumbel_box import GumbelBoxModule, softplus_volume  # noqa: E402
+from mowl.nn.el.gumbel_box import GumbelBoxModule
+from mowl.baselines.nn.el.gumbel_box import softplus_volume  # noqa: E402
 from tests.models.taxonomy_helpers import (check_trained_taxonomy, total_loss,  # noqa: E402
                                            train)
 
@@ -92,7 +93,7 @@ def test_trains_on_the_taxonomy_and_declares_scoring():
 
 
 def test_log_guard_stable_matches_epsilon_where_both_are_exact_and_keeps_gradient():
-    from mowl.nn.el.gumbel_box import log_softplus_volume
+    from mowl.baselines.nn.el.gumbel_box import log_softplus_volume
     x = th.tensor([0.5, 0.05, 0.0, -0.1], dtype=th.double)
     old = log_softplus_volume(x, 0.01, guard="epsilon")
     new = log_softplus_volume(x, 0.01)

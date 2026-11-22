@@ -1,5 +1,5 @@
 r"""Order embeddings of the class taxonomy."""
-from mowl.models.order_embeddings.base import TaxonomyEmbeddingModel
+from mowl.models.order_parts_a import TaxonomyEmbeddingModel
 from mowl.nn.el.order_embeddings.module import OrderEmbeddingsModule
 
 
@@ -9,12 +9,17 @@ class OrderEmbeddings(TaxonomyEmbeddingModel):
     A class is a non-negative vector; :math:`C \sqsubseteq D` holds when the vector of
     :math:`C` is coordinatewise at least that of :math:`D` (reversed product order),
     violations are penalised by :math:`E(x, y) = \lVert \max(0, y - x) \rVert_2` and the
-    loss is the max-margin loss of Eq. 4. See
-    :class:`~mowl.nn.el.order_embeddings.OrderEmbeddingsModule`.
+    loss is the max-margin loss of Eq. 4. The model is a combination of parts
+    (``model.module.parts``): the class model of non-negative vectors, the order violation
+    as the measure and the hinge objective, defined once in
+    :func:`mowl.representation.library.hierarchy_methods.order_embeddings`; see
+    :class:`~mowl.nn.el.order_embeddings.OrderEmbeddingsModule`. Any part can be swapped
+    (``ComposedEL(dataset, method="order_embeddings", ...)`` or the parts of
+    :mod:`mowl.representation`).
 
     **Supported.** Axioms :math:`C \sqsubseteq D` between named classes (training and
     scoring: subsumption prediction/inference). Nothing else in the ontology is used
-    (:class:`~mowl.models.order_embeddings.base.TaxonomyEmbeddingModel`). This is an
+    (:class:`~mowl.models.order_parts_a.TaxonomyEmbeddingModel`). This is an
     **adaptation**: the paper embeds hypernymy, entailment and image-caption order; mOWL
     takes the subclass axioms of the ontology as the order pairs. A zero loss on the
     training pairs implies that the embedding preserves the *transitive closure* of the

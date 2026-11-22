@@ -97,7 +97,8 @@ def test_the_survey_covers_every_module_with_an_inclusion_margin():
 # The margin of these modules is a margin of the negative loss or of a ranking, and does not
 # enter the loss of an inclusion, so they declare no ``margin_semantics``.
 NEGATIVE_ONLY = {"DiskEmbeddingsModule": "gci0", "HyperbolicConesModule": "gci0",
-                 "ShadowConesModule": "gci0", "OrderEmbeddingsModule": "gci0"}
+                 "ShadowConesModule": "gci0", "OrderEmbeddingsModule": "gci0",
+                 "BoxLatticeModule": "gci0", "GumbelBoxModule": "gci0"}
 
 
 @pytest.mark.parametrize("name", sorted(NEGATIVE_ONLY))

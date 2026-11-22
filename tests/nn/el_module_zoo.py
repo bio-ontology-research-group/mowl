@@ -82,7 +82,10 @@ def all_el_module_classes():
             yield from subs(s)
     out = {}
     for c in subs(ELModule):
-        if c.__module__.startswith("mowl.nn.") and not c.__name__.startswith("_"):
+        # (the graph modules, BCBox and CatE, score the vertices of a graph and the elements of
+        # a lattice, not the normal forms of an ontology)
+        if c.__module__.startswith("mowl.nn.") and not c.__module__.startswith("mowl.nn.graph.") \
+                and not c.__name__.startswith("_"):
             out[c.__name__] = c
     return [out[k] for k in sorted(out)]
 

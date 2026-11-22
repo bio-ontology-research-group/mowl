@@ -1,16 +1,23 @@
 """Order embedding of the CatE lattice (Zhapa-Camacho and Hoehndorf,
-arXiv:2305.07163v3, Section 3.2)."""
+arXiv:2305.07163v3, Section 3.2), built from parts."""
 
 import torch as th
-import torch.nn as nn
+
+from mowl.representation.library.hierarchy_geometry import LatticeGeometry
+from mowl.representation.library.hierarchy_methods import cate
+from mowl.representation.library.hierarchy_modules import adopt
 
 
-class CatEModule(nn.Module):
+class CatEModule(LatticeGeometry):
     """One vector :math:`f_\\theta(X) \\in \\mathbb{R}^n` per element of the lattice,
     ordered by the product order (:math:`a \\preceq b` iff :math:`a_i \\le b_i` for all
-    :math:`i`, the paper's Theorem 1).
-
-    The score of a morphism :math:`A \\sqsubseteq B` is the order violation of Eq. 6,
+    :math:`i`, the paper's Theorem 1): the combination that
+    :func:`mowl.representation.library.hierarchy_methods.cate` names (read
+    ``module.parts``). The class model is
+    :class:`~mowl.representation.library.hierarchy_classes.OrderPoints`; the compound
+    classes :math:`\\exists r.D` and :math:`C \\sqcap D` are elements with embeddings of
+    their own, looked up (:class:`~mowl.representation.library.hierarchy_geometry.
+    LatticeGeometry`); the measure is the order violation of Eq. 6,
 
     .. math:: s(A, B) = \\lVert \\max(0, f_\\theta(A) - f_\\theta(B)) \\rVert_p ,
 
@@ -19,28 +26,36 @@ class CatEModule(nn.Module):
 
     Calling the module with ``(rows, gci_name)`` follows the conventions of
     :mod:`mowl.evaluation.el_scoring`, with lattice element ids in place of class
-    indices: ``"gci0"`` rows ``[C, D]`` and ``"edge"`` rows ``[A, B]`` are scored as
-    :math:`s(C, D)`; ``"class_assertion"`` rows ``[a, C]`` as :math:`s(\\{a\\}, C)`;
-    ``"gci2"`` rows ``[C, r, D]`` (``r`` a role index) as :math:`s(C, \\exists r.D)`,
-    which needs the element :math:`\\exists r.D` (registered with
-    :meth:`set_existentials`).
+    indices, and returns one score per row, shape ``(B,)``: ``"gci0"`` rows ``[C, D]`` and
+    ``"edge"`` rows ``[A, B]`` are scored as :math:`s(C, D)`; ``"class_assertion"`` rows
+    ``[a, C]`` as :math:`s(\\{a\\}, C)`; ``"gci2"`` rows ``[C, r, D]`` (``r`` a role index) as
+    :math:`s(C, \\exists r.D)`, which needs the element :math:`\\exists r.D` (registered with
+    :meth:`set_existentials`). With ``neg=True`` the cost of a corruption is the hinge
+    :math:`\\max(0, \\gamma - s)` (``margin`` :math:`\\gamma`).
+
+    The earlier hand-written module is kept for comparison as
+    ``mowl.baselines.nn.graph.cate.CatEModule``.
 
     :param num_nodes: Number of lattice elements.
     :param embed_dim: Dimension :math:`n`.
     :param p: Order of the norm in Eq. 6.
+    :param margin: The margin :math:`\\gamma` of the cost of a corruption (CatE's loss has
+        it in the model; default 1).
     """
 
-    def __init__(self, num_nodes, embed_dim, p=2):
-        super().__init__()
+    def __init__(self, num_nodes, embed_dim, p=2, margin=1.0):
+        adopt(self, cate(num_nodes, embed_dim=embed_dim, margin=margin, p=p))
         self.num_nodes = num_nodes
         self.embed_dim = embed_dim
         self.p = p
-        self.node_embedding = nn.Embedding(num_nodes, embed_dim)
-        # Xavier-uniform initialisation, the PyKEEN TransE default used by the reference
-        # implementation.
-        nn.init.xavier_uniform_(self.node_embedding.weight)
         self.register_buffer("existential_keys", th.zeros(0, dtype=th.long))
         self.register_buffer("existential_nodes", th.zeros(0, dtype=th.long))
+        self._existential_ids = self.existential_ids
+
+    @property
+    def node_embedding(self):
+        """The table of the vectors of the elements."""
+        return self.class_embed
 
     def set_existentials(self, role_ids, filler_ids, node_ids):
         """Register the elements :math:`\\exists r.D`: ``node_ids[i]`` is the element for
@@ -69,25 +84,18 @@ class CatEModule(nn.Module):
 
     def order_violation(self, sub, sup):
         """:math:`s(A, B)` of Eq. 6 for element ids ``sub`` (:math:`A`) and ``sup``
-        (:math:`B`) of the same shape."""
-        diff = self.node_embedding(sub) - self.node_embedding(sup)
-        return th.linalg.vector_norm(th.relu(diff), ord=self.p, dim=-1)
+        (:math:`B`) of the same shape; the result has that shape."""
+        return self.measure.energy(self.classes(sub), self.classes(sup)).squeeze(-1)
 
-    def forward(self, rows, gci_name="edge"):
+    def forward(self, rows, gci_name="edge", neg=False):
         rows = rows.long()
         if gci_name in ("edge", "gci0", "class_assertion"):
-            return self.order_violation(rows[:, 0], rows[:, 1])
+            return self.cost("gci0", rows[:, :2], neg).reshape(-1)
         if gci_name == "gci2":
-            ex = self.existential_ids(rows[:, 1], rows[:, 2])
-            if (ex < 0).any():
-                from mowl.projection.categorical.lattice import UnseenConceptError
-                bad = rows[ex < 0][0].tolist()
-                raise UnseenConceptError(
-                    f"The existential restriction of row {bad} (role index {bad[1]}, "
-                    f"filler element {bad[2]}) is not an element of the CatE lattice. "
-                    f"CatE scores C ⊑ ∃r.D only when ∃r.D was added before training "
-                    f"(model option 'existentials').")
-            return self.order_violation(rows[:, 0], ex)
+            if neg:
+                raise NotImplementedError("CatE has no negative cost of 'gci2' rows.")
+            region = self.exists(rows[:, 1], self.classes(rows[:, 2]))
+            return self.inside(self.classes(rows[:, 0]), region).reshape(-1)
         raise NotImplementedError(
             f"CatE scores 'edge', 'gci0', 'class_assertion' and 'gci2' rows, not "
             f"{gci_name!r}. Other axioms are scored through elements of the lattice "

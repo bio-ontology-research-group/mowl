@@ -61,6 +61,42 @@ Example
    ...BoxLattice ['gci0']
    ...GumbelBox ['gci0']
 
+Built from parts
+----------------
+
+Each class is the combination of parts that its builder in
+:mod:`mowl.representation.library.hierarchy_methods` names: a class model, a measure and an
+objective (``order_embeddings``: vectors of the reversed product order, the order violation,
+the max-margin hinge; ``box_lattice``: boxes in the unit cube, the volume ratio, the cross
+entropy with frozen sizes in negative pairs and the ``project()`` onto the cube;
+``gumbel_box``: the same boxes with the smoothed volume ratio), with the regulariser
+of the options (``max_regularization``). ``model.module`` is a
+:class:`~mowl.representation.ComposedGeometry`, ``model.module.parts`` says what it is made of,
+and every part can be replaced by another one, here the measure of the Gumbel boxes on the
+boxes of the box lattice:
+
+.. testcode::
+
+   from mowl.datasets.builtin import FamilyDataset
+   from mowl.models import BoxLattice
+   from mowl.representation.library.hierarchy_measures import LogVolumeRatio
+
+   model = BoxLattice(FamilyDataset(), embed_dim=4)
+   print(model.module.parts["classes"], "/", model.module.parts["measure"])
+   model.module.measure = LogVolumeRatio(0.05, 0.05, gumbel_shift=True, tail="linear")
+   model.train(epochs=1, validate_every=10)
+   print(model.module.parts["measure"])
+
+.. testoutput::
+   :options: +ELLIPSIS
+
+   ...box / volume ratio
+   smoothed volume ratio
+
+The hand-written modules and models that these combinations replaced are kept in
+:mod:`mowl.baselines` as the reference that the combinations are tested against (same
+losses, scores and training run, ``tests/baselines``).
+
 References
 ----------
 

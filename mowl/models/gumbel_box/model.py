@@ -1,5 +1,5 @@
 r"""Gumbel box embeddings of the class taxonomy."""
-from mowl.models.order_embeddings.base import TaxonomyEmbeddingModel
+from mowl.models.order_parts_a import TaxonomyEmbeddingModel
 from mowl.nn.el.gumbel_box.module import GumbelBoxModule
 
 
@@ -10,7 +10,8 @@ class GumbelBox(TaxonomyEmbeddingModel):
     random variables: the intersection is again a Gumbel box and the softplus-smoothed
     expected volume gives a gradient also for disjoint boxes, so no lower bound trick is
     needed. See :class:`~mowl.nn.el.gumbel_box.GumbelBoxModule` for what is from the paper
-    and what is ours.
+    and what is ours. The model is a combination of parts (``model.module.parts``), defined
+    once in :func:`mowl.representation.library.hierarchy_methods.gumbel_box`.
 
     **Supported.** Axioms :math:`C \sqsubseteq D` between named classes (training and
     scoring; the score is :math:`-\log P(D \mid C)`, lower is more plausible).

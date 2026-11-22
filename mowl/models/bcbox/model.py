@@ -7,8 +7,8 @@ import torch as th
 import torch.nn as nn
 
 from mowl.base_models.graph_model import GraphModel
-from mowl.nn.graph.bcbox.losses import bce_negative_sampling_loss
 from mowl.nn.graph.bcbox.module import BinaryCodeBoxModule
+from mowl.representation.library.hierarchy_objectives import bce_edge_loss
 
 
 class _SubsumptionScorer(nn.Module):
@@ -38,7 +38,12 @@ class BinaryCodeBox(GraphModel):
     Reimplementation of Zhang, Boratko, Musco and McCallum, *Modeling Transitivity and
     Cyclicity in Directed Graphs via Binary Code Box Embeddings*, NeurIPS 2022
     [zhang2022bcbox]_. The geometry, energies and regulariser are in
-    :class:`mowl.nn.graph.bcbox.BinaryCodeBoxModule`.
+    :class:`mowl.nn.graph.bcbox.BinaryCodeBoxModule`, a combination of parts
+    (``model.module.parts``) defined once in
+    :func:`mowl.representation.library.hierarchy_methods.bcbox`: boxes with codes as the
+    class model, the smoothed volume ratio that reads the codes as the measure, the energy
+    and :math:`-\\log(1 - e^{-E})` as the costs of an edge and of a corruption, and the
+    code lasso as the regulariser.
 
     **Why a** :class:`~mowl.base_models.GraphModel` **and not an**
     :class:`~mowl.base_models.EmbeddingELModel`. The paper models one simple directed graph
@@ -187,7 +192,8 @@ class BinaryCodeBox(GraphModel):
         self._module = BinaryCodeBoxModule(
             self.num_nodes, self.embed_dim, variant=self.variant, num_codes=self.num_codes,
             code_dims=self.code_dims, intersection_temp=self.intersection_temp,
-            volume_temp=self.volume_temp, code_init=self.code_init).to(self.device)
+            volume_temp=self.volume_temp, code_init=self.code_init,
+            code_weight=self.code_reg).to(self.device)
 
     @property
     def module(self):
@@ -221,12 +227,10 @@ class BinaryCodeBox(GraphModel):
         neg, mask = self.sample_negatives(pos)
         pos_energy = self.module(pos)
         neg_energy = self.module(neg)
-        loss = bce_negative_sampling_loss(
-            pos_energy, neg_energy, neg_mask=mask, self_adversarial=self.self_adversarial,
-            adversarial_temperature=self.adversarial_temperature).mean()
-        if self.code_reg > 0:
-            loss = loss + self.code_reg * self.module.code_regularization()
-        return loss
+        loss = bce_edge_loss(
+            pos_energy, neg_energy, mask=mask, self_adversarial=self.self_adversarial,
+            temperature=self.adversarial_temperature).mean()
+        return loss + self.module.regularization_loss()
 
     def train(self, epochs=100, verbose=False):
         """Train with Adam on minibatches of positive edges.

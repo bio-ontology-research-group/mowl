@@ -1,27 +1,28 @@
-r"""Order embeddings (Vendrov et al., ICLR 2016) as a module over the class taxonomy."""
+r"""Order embeddings (Vendrov et al., ICLR 2016) over the class taxonomy, built from parts."""
 import torch as th
-import torch.nn as nn
 
-from mowl.nn.el.order_embeddings.base import TaxonomyModule
+from mowl.representation.geometry import ComposedGeometry
+from mowl.representation.library.hierarchy_methods import order_embeddings
+from mowl.representation.library.hierarchy_measures import OrderViolation
+from mowl.representation.library.hierarchy_modules import FlatLossOption, adopt
 
 
-class OrderEmbeddingsModule(TaxonomyModule):
-    r"""Every class is a vector :math:`f(C) = |w_C| \in \mathbb{R}^d_+`.
+class OrderEmbeddingsModule(FlatLossOption, ComposedGeometry):
+    r"""Every class is a vector :math:`f(C) = |w_C| \in \mathbb{R}^d_+`; a subclass axiom
+    :math:`C \sqsubseteq D` is the pair :math:`f(C) \preceq f(D)` in the reversed product
+    order (:math:`x \preceq y` iff :math:`x_i \ge y_i` for all :math:`i`).
 
-    **From the paper** (Vendrov et al., Section 2 and 3): the *reversed product order* on
-    :math:`\mathbb{R}^d_+`, :math:`x \preceq y \iff x_i \ge y_i` for all :math:`i` (a more
-    specific concept has larger coordinates, the origin is the top element); the order
-    violation penalty (Eq. 2)
+    The module is the combination that :func:`mowl.representation.library.hierarchy_methods.
+    order_embeddings` names (read ``module.parts``): a class model of non-negative vectors
+    (:class:`~mowl.representation.library.hierarchy_classes.OrderPoints`), the order
+    violation :math:`E(x, y) = \lVert \max(0, y - x) \rVert_2` of Vendrov et al. (Eq. 2) as
+    the measure
+    (:class:`~mowl.representation.library.hierarchy_measures.OrderViolation`) and the
+    max-margin loss of Eq. 4 as the objective (cost :math:`E` for a stated pair,
+    :math:`\max(0, \alpha - E)` for a corrupted one). It reads ``gci0`` only.
 
-    .. math:: E(x, y) = \lVert \max(0, y - x) \rVert_2,
-
-    which is zero iff :math:`x \preceq y`; and the max-margin loss (Eq. 4) that asks
-    :math:`E` to be zero for stated pairs and at least :math:`\alpha` for corrupted ones.
-    The embedding is non-negative by taking the absolute value of a free parameter (the
-    paper does this for the image embeddings, Eq. 6).
-
-    **mOWL.** A subclass axiom :math:`C \sqsubseteq D` is the pair :math:`f(C) \preceq f(D)`,
-    so its cost is :math:`E(f(C), f(D))`.
+    The earlier hand-written module is kept for comparison as
+    ``mowl.baselines.nn.el.order_embeddings.OrderEmbeddingsModule``.
 
     :param nb_ont_classes: Number of classes (named and auxiliary).
     :param embed_dim: Dimension :math:`d`.
@@ -30,23 +31,25 @@ class OrderEmbeddingsModule(TaxonomyModule):
     """
 
     def __init__(self, nb_ont_classes, embed_dim=50, margin=1.0, init_scale=1.0):
-        super().__init__(nb_ont_classes)
+        adopt(self, order_embeddings(nb_ont_classes, embed_dim=embed_dim, margin=margin,
+                                     init_scale=init_scale))
+        self.nb_ont_classes = nb_ont_classes
         self.embed_dim = embed_dim
-        self.margin = float(margin)
-        self.class_embed = nn.Embedding(nb_ont_classes, embed_dim)
-        nn.init.uniform_(self.class_embed.weight, a=0.0, b=init_scale)
-
-    def vectors(self, idx):
-        """The non-negative vectors of the classes ``idx``."""
-        return self.class_embed(idx).abs()
 
     @staticmethod
     def violation(x, y):
-        r""":math:`E(x, y) = \lVert \max(0, y - x) \rVert_2` per row."""
-        return th.sqrt((th.relu(y - x) ** 2).sum(dim=-1) + 1e-24) - 1e-12
+        r""":math:`E(x, y) = \lVert \max(0, y - x) \rVert_2` per row, for vectors."""
+        return OrderViolation("reversed", 2).violation(x, y)
+
+    def vectors(self, idx):
+        """The non-negative vectors of the classes ``idx``."""
+        return self.classes(idx).centre
 
     def positive_loss(self, sub, sup):
-        return self.violation(self.vectors(sub), self.vectors(sup)).clamp(min=0.0)
+        """Cost of ``sub ⊑ sup``, ``(B,)``."""
+        return self.inside(self.classes(sub), self.classes(sup)).reshape(-1)
 
     def negative_loss(self, sub, sup):
-        return th.relu(self.margin - self.violation(self.vectors(sub), self.vectors(sup)))
+        """Cost of a pair that is *not* ordered (the hinge), ``(B,)``."""
+        return self.cost("gci0", th.stack([sub, sup], dim=1), True).reshape(-1)
+

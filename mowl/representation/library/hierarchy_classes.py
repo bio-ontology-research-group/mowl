@@ -183,11 +183,15 @@ class CodedBoxes(HierarchyClasses):
                         device=learned.device, dtype=learned.dtype)
         return th.cat((fixed, learned), dim=-1)
 
-    def forward(self, ids):
+    def forward(self, ids, detach_size=False):
+        """The boxes of ``ids`` with their codes; with ``detach_size`` the side lengths carry
+        no gradient (the corners move together), as for the boxes of the unit cube."""
         code = self.vertex_codes(ids) if self.variant == "vbc" else None
         global_code = self.global_codes() if self.variant == "gbc" else None
-        return CodedBox.from_corners(self.box_min[ids], self.box_max[ids], code=code,
-                                     global_code=global_code)
+        low, high = self.box_min[ids], self.box_max[ids]
+        if detach_size:
+            high = low + (high - low).detach()
+        return CodedBox.from_corners(low, high, code=code, global_code=global_code)
 
     def code_regularization(self):
         """:math:`\\lVert 1 - B \\rVert_1` of the trainable codes (0 for ``"gbox"``)."""
