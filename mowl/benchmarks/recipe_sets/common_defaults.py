@@ -57,6 +57,8 @@ _DEFAULTS = {
     "falcon": {"model_kwargs": {"embed_dim": 50}, "epochs": 100},
     "alcone": {"model_kwargs": {}, "epochs": 500},
     "e2r": {"model_kwargs": {"embed_dim": 100}, "epochs": 500},
+    # the general model of subspace logic: E2R's parts unless others are chosen
+    "composed_subspace": {"model_kwargs": {"embed_dim": 100, "method": "e2r"}, "epochs": 500},
     "bcbox": {"model_kwargs": {"embed_dim": 32}, "epochs": 500},
     "dfalc": {"model_kwargs": {"anon_domain": 8}, "epochs": 200},
     # ALC axioms of any depth, trained as DF-ALC on a domain of 8 elements
@@ -73,6 +75,8 @@ _DEFAULTS = {
     "faithel": {"model_kwargs": {}, "epochs": 100},
     "grounded": {"model_kwargs": {}, "epochs": 500},
     "graph_kge": {"model_kwargs": {"embed_dim": 200}, "epochs": 100},
+    # the general model of the graph methods: graph_kge's parts unless others are chosen
+    "composed_graph_kge": {"model_kwargs": {"embed_dim": 200}, "epochs": 100},
     # region-based KGEs of the projection (PyKEEN loop) and the two-view box model
     "boxe": {"model_kwargs": {"embed_dim": 200}, "epochs": 100},
     "expressive": {"model_kwargs": {"embed_dim": 200}, "epochs": 100},

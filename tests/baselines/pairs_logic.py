@@ -289,4 +289,7 @@ EXEMPT = {
     "composed-alc": "ComposedALC is the generic combination of parts for ALC axioms itself (the "
                     "named methods dfalc, falcon and alcone are compared); it has no direct "
                     "implementation to be compared with.",
+    "composed_subspace": "ComposedSubspace is the generic combination of parts for subspace "
+                         "logic itself (the named method e2r is compared); it has no direct "
+                         "implementation to be compared with.",
 }

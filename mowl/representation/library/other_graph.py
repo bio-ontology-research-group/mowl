@@ -1244,6 +1244,11 @@ class PyKEENGeometry(Geometry):
         """Apply the constraints of the PyKEEN model after an optimisation step."""
         self.kge.post_parameter_update()
 
+    @property
+    def training(self):
+        """Whether the PyKEEN model is in training mode."""
+        return self.kge.training
+
     def train(self, mode=True):
         self.kge.train(mode)
         return self
