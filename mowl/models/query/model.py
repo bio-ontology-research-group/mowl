@@ -34,6 +34,19 @@ from mowl.representation.methods import METHODS
 from mowl.training.regime import SCHEDULE_HOOKS  # noqa: E402
 
 
+def _check_options(method, builder, given):
+    """An argument the builder has no part or option for raises ``TypeError`` that names the
+    accepted ones."""
+    import inspect
+    parameters = inspect.signature(builder).parameters
+    skipped = {"nb_classes", "nb_relations", "nb_individuals", "embed_dim", "gamma", "tables",
+               "num_classes", "extension"}
+    unknown = sorted(set(given) - set(parameters))
+    if unknown:
+        raise TypeError(f"The method {method!r} takes no {unknown}; accepted: "
+                        f"{sorted(set(parameters) - skipped)}.")
+
+
 class QueryEmbeddingModel(Model):
     """A query embedding model of an ontology: :class:`~mowl.models.Query2Box`,
     :class:`~mowl.models.BetaE`, :class:`~mowl.models.ConE` and :class:`~mowl.models.AConE`
@@ -149,6 +162,7 @@ class QueryEmbeddingModel(Model):
         for iri, i in self._individual_ids.items():
             self.entity_names[self.num_classes + i] = iri
         options = {**self.geometry_defaults, **geometry_kwargs}
+        _check_options(method, builder, geometry_kwargs)
         self.module = builder(
             self.num_classes, len(self._role_ids), len(self._individual_ids), embed_dim,
             self.gamma, num_classes=self.num_classes, extension=extension,

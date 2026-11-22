@@ -30,6 +30,7 @@ published method does something odd because the paper does.
 
    use
    combine
+   swaps
    combinations
    extending
    defaults

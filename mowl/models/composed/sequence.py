@@ -53,6 +53,12 @@ class ComposedSequenceModel(Model):
 
     :param method: Key of the combination. Without a method, a source and an encoder, the
         model has the parts of ``"dl2vec"`` (and ``method_options`` are its options).
+    :param source, encoder, reading, measure, scorer: A part (an object, taken as it is, or a
+        name, which is an option of the method) that replaces that part of ``method``.
+    :param view: The projection of the ontology that the walks run on (a name, a projector
+        or a view; ``projection`` of the method) and ``walker``: ``"deepwalk"``,
+        ``"node2vec"`` or a walking model. Only a method with walks has them; for the others
+        they raise ``TypeError``.
     :param device: Where the scorer computes (the encoders of gensim run on the CPU).
 
     Training (:meth:`train`) writes the sequences the first time (and again after
@@ -76,35 +82,42 @@ class ComposedSequenceModel(Model):
 
     def __init__(self, dataset, method=None, source=None, encoder=None, reading=None,
                  measure=None, scorer=None, model_filepath=None, device="cpu",
-                 _base_options=None, **method_options):
+                 _base_options=None, view=None, walker=None, **method_options):
         super().__init__(dataset, model_filepath=model_filepath, **(_base_options or {}))
         if method is None and source is None and encoder is None:
             method = "dl2vec"       # no parts chosen: the parts of DL2Vec
+        if view is not None:
+            method_options["projection"] = view
+        if walker is not None:
+            method_options["walker"] = walker
         if method is not None:
-            # a part given by name is an option of the method (``encoder="fasttext"``)
-            for name, part in (("source", source), ("encoder", encoder),
-                               ("reading", reading), ("measure", measure),
-                               ("scorer", scorer)):
-                if isinstance(part, str):
+            # a part given by name or as an object is an option of the method, which
+            # builds the geometry with it; a replaced source takes the place of the walks
+            if source is not None:
+                clash = sorted({"projection", "projection_options", "walker", "num_walks",
+                                "walk_length", "alpha", "p", "q", "walks_file", "corpus",
+                                "fresh_walks", "entailment", "annotation_entity_form"}
+                               & set(method_options))
+                if clash:
+                    raise TypeError(f"{clash} describe the walks and sentences of the "
+                                    f"method, which source= replaces.")
+            for name, part in (("encoder", encoder), ("reading", reading),
+                               ("measure", measure), ("scorer", scorer)):
+                if part is not None:
                     method_options[name] = part
-            source, encoder, reading, measure, scorer = (
-                None if isinstance(p, str) else p
-                for p in (source, encoder, reading, measure, scorer))
+            encoder = reading = measure = scorer = None
             if method not in M.METHODS or M.METHOD_KINDS.get(method) != "sequences":
                 raise ValueError(
                     f"{method!r} is not a method that learns from sequences; those are "
                     f"{sorted(k for k, v in M.METHOD_KINDS.items() if v == 'sequences')}.")
-            geometry = M.METHODS[method](len(self.class_index_dict),
-                                         len(self.object_property_index_dict),
-                                         len(self.individual_index_dict), **method_options)
-            for name, part in (("source", source), ("encoder", encoder),
-                               ("reading", reading), ("measure", measure),
-                               ("scorer", scorer)):
-                if part is not None:
-                    setattr(geometry, name, part)
+            geometry = self._build(method, method_options)
+            if source is not None:
+                geometry.source = source
         else:
             if method_options:
                 raise TypeError(f"Unexpected arguments {sorted(method_options)}.")
+            if view is not None or walker is not None:
+                raise TypeError("view and walker are parts of a method: pass method=...")
             from mowl.representation.library.walks_encoders import (TokenVectors, DotSigmoid,
                                                                     PairClassifier)
             from mowl.representation.library.walks_views import Walks
@@ -120,6 +133,25 @@ class ComposedSequenceModel(Model):
         self._written = False
         #: The training loss of every call of the encoder (``None`` if it reports none).
         self.losses = []
+
+    def _build(self, method, options):
+        """The geometry of ``method``; an option it has no part for raises ``TypeError``
+        that names the accepted ones."""
+        import inspect
+        from mowl.representation.library import walks_methods
+        build = M.METHODS[method]
+        accepted = set(inspect.signature(build).parameters)
+        if any(p.kind is inspect.Parameter.VAR_KEYWORD
+               for p in inspect.signature(build).parameters.values()):
+            accepted |= set(inspect.signature(walks_methods.compose_sequences).parameters)
+        accepted -= {"nb_classes", "nb_relations", "nb_individuals", "options"}
+        unknown = sorted(set(options) - accepted)
+        if unknown:
+            raise TypeError(f"The method {method!r} takes no {unknown}; accepted: "
+                            f"{sorted(accepted)} (and the parts source, encoder, reading, "
+                            f"measure, scorer).")
+        return build(len(self.class_index_dict), len(self.object_property_index_dict),
+                     len(self.individual_index_dict), **options)
 
     # -- parts --------------------------------------------------------------------------
     @property

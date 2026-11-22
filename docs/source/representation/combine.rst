@@ -68,6 +68,101 @@ axiom holds. The objectives of the publications are options of the same
 :class:`~mowl.representation.Objective`, and a named ``method`` sets the ones its authors
 used (see :doc:`defaults`).
 
+Replace one part of a published method
+--------------------------------------
+
+The main use of the parts: take a published method and change one thing. Name the method
+and give the part you want instead. A part is a name from its registry (the lists below), a
+function ``(size, embed_dim)`` or a part you built yourself, which is used as it is.
+
+.. testcode::
+
+   from mowl.representation import Objective
+
+   elbe = ComposedEL(dataset, method="elbe", relations="affine map", embed_dim=16)
+   print(elbe.module.parts["classes"], "/", elbe.module.parts["relations"])
+
+   # the objective of the method with one option changed
+   inclusion = ComposedEL(dataset, method="elbe", objective_options={"gci3": "inclusion"},
+                          embed_dim=16)
+   print(inclusion.module.objective.gci3_reading)
+
+.. testoutput::
+   :hide:
+   :options: +ELLIPSIS
+
+   ...
+
+The arguments are the same for every method and for every general model
+(:class:`~mowl.models.ComposedEL`, :class:`~mowl.models.ComposedALC`):
+
+``classes``, ``relations``, ``individuals``, ``measure``
+    Another class model, relation model, individual model or measure. ``relations="none"``
+    removes the relation model. A new class model gets individuals of its own kind unless you
+    give ``individuals`` too.
+``objective``, ``objective_options``
+    Another :class:`~mowl.representation.Objective`, or options of the method's own
+    objective that are replaced (:meth:`~mowl.representation.Objective.replace`).
+``regularizers``
+    Penalties that are added to those of the method.
+
+Two things can go wrong, and both are errors, never silence. A pair of parts that cannot
+exist (balls under a measure that compares boxes) raises
+:class:`~mowl.representation.ConstructorUnavailable` and names both sides. An argument the
+method cannot take raises ``TypeError`` and lists the accepted ones.
+
+.. testcode::
+
+   from mowl.representation import ConstructorUnavailable
+
+   try:
+       ComposedEL(dataset, method="elbe", classes="ball", embed_dim=16)
+   except ConstructorUnavailable as error:
+       print("refused:", str(error)[:60])
+
+.. testoutput::
+   :hide:
+   :options: +ELLIPSIS
+
+   ...
+
+The other general models do the same with the parts of their kind of method:
+:class:`~mowl.models.ComposedSequenceModel` takes ``view``, ``walker``, ``source``,
+``encoder``, ``reading``, ``measure`` and ``scorer``; the query model
+(:class:`~mowl.models.query.model.QueryEmbeddingModel`) takes ``intersection``,
+``distance``, ``negation`` and, for ConE, ``relations``;
+:class:`~mowl.models.constructed.ConstructedModel` takes ``source`` and ``reading``. A
+method that has no such part (a method that reads sentences has no walker) refuses the
+argument. :doc:`swaps` lists, for every method and every part, what works and what is
+refused and why.
+
+The named classes follow one rule
+---------------------------------
+
+``ELEmbeddings``, ``ELBE``, ``BoxEL`` and all the other named classes are one combination
+each. They take their own options (the ones in their signature) and nothing else: a part
+argument they do not list is refused with an error that says where to go. To replace a
+part, use the general model with the key of the method.
+
+.. testcode::
+
+   from mowl.models import ELEmbeddings
+
+   try:
+       ELEmbeddings(dataset, relations="affine map")
+   except TypeError as error:
+       print("refused:", str(error)[:60])
+
+   # the same swap, through the general model
+   model = ComposedEL(dataset, method="elem", relations="translation with tolerance",
+                      embed_dim=16)
+
+.. testoutput::
+   :hide:
+   :options: +ELLIPSIS
+
+   ...
+
 What parts exist
 ----------------
 

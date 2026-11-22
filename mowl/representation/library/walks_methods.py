@@ -25,6 +25,8 @@ The functions have the signature of :func:`~mowl.representation.register_method`
 sequences). :class:`~mowl.models.ComposedSequenceModel` trains them.
 """
 
+import warnings
+
 from mowl.representation.methods import register_method
 from mowl.representation.sequence import SequenceGeometry, OntologyView, SequenceSource
 from mowl.representation.library.walks_views import (
@@ -55,13 +57,26 @@ def _corpus_view(kind, entailment, annotation_entity_form):
     raise ValueError(f"Unknown corpus {kind!r}; use 'axioms', 'annotations' or a view.")
 
 
-def compose_sequences(nb_classes=0, nb_relations=0, nb_individuals=0, embed_dim=100,
-                      projection=None, projection_options=None, walker="deepwalk",
-                      num_walks=10, walk_length=20, alpha=0.1, p=1.0, q=1.0,
+#: The defaults of the options that only a named walker or encoder reads.
+_WALK_DEFAULTS = dict(num_walks=10, walk_length=20, alpha=0.1, p=1.0, q=1.0, walks_file=None)
+_ENCODER_DEFAULTS = dict(sg=1, window=5, min_count=1, restart=False)
+
+
+def _unused(owner, why, **options):
+    """Options that were given (not ``None``) to a part that does not read them: an error,
+    not silence."""
+    given = sorted(k for k, v in options.items() if v is not None)
+    if given:
+        raise TypeError(f"{given} given, but {owner} {why}.")
+
+
+def compose_sequences(nb_classes=0, nb_relations=0, nb_individuals=0, embed_dim=None,
+                      projection=None, projection_options=None, walker=None,
+                      num_walks=None, walk_length=None, alpha=None, p=None, q=None,
                       walks_file=None, fresh_walks=True, corpus=(),
                       annotation_entity_form="iri", entailment=None, encoder="word2vec",
-                      sg=1, window=5, min_count=1, workers=4, seed=0,
-                      word2vec_options=None, restart=False, reading="token",
+                      sg=None, window=None, min_count=None, workers=None, seed=None,
+                      word2vec_options=None, restart=None, reading="token",
                       measure="dot sigmoid", scorer="pair classifier",
                       scorer_options=None, source=None):
     """A sequence method from freely chosen parts.
@@ -87,15 +102,44 @@ def compose_sequences(nb_classes=0, nb_relations=0, nb_individuals=0, embed_dim=
     Encoder (:data:`~.walks_encoders.ENCODERS`): ``encoder`` is ``"word2vec"``,
     ``"fasttext"`` or an encoder object; ``embed_dim``, ``sg``, ``window``, ``min_count``,
     ``workers``, ``seed`` and ``word2vec_options`` (any other option of gensim) configure a
-    named one, ``restart`` see :class:`~.walks_encoders.Word2VecEncoder`.
+    named one, ``restart`` see :class:`~.walks_encoders.Word2VecEncoder`. (Defaults: the
+    option is ``None``, which means ``embed_dim=100``, ``sg=1``, ``window=5``,
+    ``min_count=1``, ``workers=4``, ``seed=0``, ``restart=False``, ``walker="deepwalk"``,
+    ``num_walks=10``, ``walk_length=20``, ``alpha=0.1``, ``p=q=1``.) An option that the
+    chosen parts do not read (``window`` with an encoder object, ``walker`` without a
+    projection, ``scorer_options`` with a scorer object) raises ``TypeError``.
 
     Reading, measure, scorer: names in :data:`~.walks_encoders.READINGS`,
     :data:`~.walks_encoders.PAIR_MEASURES`, :data:`~.walks_encoders.SCORERS` (with
     ``scorer_options`` for a named scorer) or objects.
     """
+    walk_options = dict(num_walks=num_walks, walk_length=walk_length, alpha=alpha, p=p, q=q,
+                        walks_file=walks_file)
+    if source is not None:
+        _unused("a source was given", "which replaces them", projection=projection,
+                projection_options=projection_options, walker=walker, **walk_options)
+        if corpus:
+            raise TypeError("corpus given, but a source was given, which replaces it.")
+    elif projection is None:
+        _unused("there is no projection to walk on", "(a walker needs one)",
+                walker=walker, projection_options=projection_options)
+        ignored = sorted(k for k, v in walk_options.items() if v is not None)
+        if ignored:
+            # the settings of the walks, given to every method alike by the benchmark
+            # recipes: a method without walks does not read them, and says so
+            warnings.warn(f"{ignored} are options of walks; this method has none "
+                          f"(no projection), so they are not used.", UserWarning,
+                          stacklevel=3)
+    if scorer_options and not isinstance(scorer, str):
+        raise TypeError("scorer_options given, but the scorer is an object.")
     if source is None:
         sources = []
         if projection is not None:
+            if walker is not None and not isinstance(walker, str):
+                _unused("the walker is an object, which has its own settings",
+                        "(they are options of a named walker)", **walk_options)
+            if walker is None:
+                walker = "deepwalk"
             if isinstance(projection, str):
                 view = projection_view(projection, entailment=entailment,
                                        **(projection_options or {}))
@@ -104,9 +148,14 @@ def compose_sequences(nb_classes=0, nb_relations=0, nb_individuals=0, embed_dim=
             else:
                 view = ProjectionView(projection, entailment=entailment)
             if isinstance(walker, str):
-                walker = make_walker(walker, num_walks=num_walks, walk_length=walk_length,
-                                     alpha=alpha, p=p, q=q, workers=workers, seed=seed,
-                                     outfile=walks_file)
+                walk = {**_WALK_DEFAULTS, **{k: v for k, v in walk_options.items()
+                                             if v is not None}}
+                walker = make_walker(walker, num_walks=walk["num_walks"],
+                                     walk_length=walk["walk_length"], alpha=walk["alpha"],
+                                     p=walk["p"], q=walk["q"],
+                                     workers=4 if workers is None else workers,
+                                     seed=0 if seed is None else seed,
+                                     outfile=walk["walks_file"])
             sources.append(Walks(view, walker, fresh=fresh_walks))
         for kind in ((corpus,) if isinstance(corpus, (str, OntologyView)) else corpus):
             sources.append(Sentences(_corpus_view(kind, entailment, annotation_entity_form)))
@@ -118,9 +167,21 @@ def compose_sequences(nb_classes=0, nb_relations=0, nb_individuals=0, embed_dim=
     if isinstance(encoder, str):
         if encoder not in ENCODERS:
             raise ValueError(f"Unknown encoder {encoder!r}; available: {sorted(ENCODERS)}.")
-        encoder = ENCODERS[encoder](vector_size=embed_dim, sg=sg, window=window,
-                                    min_count=min_count, workers=workers, seed=seed,
-                                    restart=restart, **(word2vec_options or {}))
+        opts = {**_ENCODER_DEFAULTS, **{k: v for k, v in dict(
+            sg=sg, window=window, min_count=min_count, restart=restart).items()
+            if v is not None}}
+        encoder = ENCODERS[encoder](vector_size=100 if embed_dim is None else embed_dim,
+                                    workers=4 if workers is None else workers,
+                                    seed=0 if seed is None else seed, **opts,
+                                    **(word2vec_options or {}))
+    else:
+        if not (source is None and projection is not None and isinstance(walker, str)):
+            _unused("neither a named encoder nor a named walker reads them", "",
+                    workers=workers, seed=seed)
+        _unused("the encoder is an object, which has its own settings",
+                "(they are options of a named encoder)", embed_dim=embed_dim, sg=sg,
+                window=window, min_count=min_count, restart=restart,
+                word2vec_options=word2vec_options or None)
     return SequenceGeometry(source, encoder,
                             _named(reading, READINGS, "reading"),
                             _named(measure, PAIR_MEASURES, "measure"),
@@ -128,16 +189,17 @@ def compose_sequences(nb_classes=0, nb_relations=0, nb_individuals=0, embed_dim=
 
 
 @register_method("dl2vec", trained_on="sequences")
-def dl2vec(nb_classes=0, nb_relations=0, nb_individuals=0, embed_dim=100,
+def dl2vec(nb_classes=0, nb_relations=0, nb_individuals=0, embed_dim=None,
            bidirectional_taxonomy=True, **options):
     """DL2Vec (Chen et al. 2020): the DL2Vec projection of the class axioms, random walks,
     word2vec skip-gram. Options: those of :func:`compose_sequences`."""
-    return compose_sequences(embed_dim=embed_dim, projection="dl2vec", projection_options={
+    projection = options.pop("projection", "dl2vec")
+    return compose_sequences(embed_dim=embed_dim, projection=projection, projection_options={
         "bidirectional_taxonomy": bidirectional_taxonomy}, **options)
 
 
 @register_method("owl2vec_star", trained_on="sequences")
-def owl2vec_star(nb_classes=0, nb_relations=0, nb_individuals=0, embed_dim=100,
+def owl2vec_star(nb_classes=0, nb_relations=0, nb_individuals=0, embed_dim=None,
                  bidirectional_taxonomy=True, include_literals=False, lexical=False,
                  **options):
     """OWL2Vec* (Chen et al. 2021): the OWL2Vec* projection, random walks, word2vec
@@ -147,10 +209,11 @@ def owl2vec_star(nb_classes=0, nb_relations=0, nb_individuals=0, embed_dim=100,
         after the walks (off by default, as in :mod:`mowl.benchmarks.families`).
     :param include_literals: Annotation triples as edges of the graph.
     """
+    projection = options.pop("projection", "owl2vec_star")
     corpus = tuple(options.pop("corpus", ()))
     if lexical and "annotations" not in corpus:
         corpus += ("annotations",)
-    return compose_sequences(embed_dim=embed_dim, projection="owl2vec_star",
+    return compose_sequences(embed_dim=embed_dim, projection=projection,
                              projection_options={
                                  "bidirectional_taxonomy": bidirectional_taxonomy,
                                  "include_literals": include_literals},
@@ -158,20 +221,20 @@ def owl2vec_star(nb_classes=0, nb_relations=0, nb_individuals=0, embed_dim=100,
 
 
 @register_method("taxonomy_walks", trained_on="sequences")
-def taxonomy_walks(nb_classes=0, nb_relations=0, nb_individuals=0, embed_dim=100,
+def taxonomy_walks(nb_classes=0, nb_relations=0, nb_individuals=0, embed_dim=None,
                    bidirectional_taxonomy=True, relations=False, **options):
     """Random walks on the class hierarchy (DeepWalk or node2vec), word2vec skip-gram.
 
     :param relations: Also an ``r`` edge for every :math:`A \\sqsubseteq \\exists r.B`
         (the taxonomy-with-relations projection).
     """
-    name = "taxonomy_rels" if relations else "taxonomy"
+    name = options.pop("projection", "taxonomy_rels" if relations else "taxonomy")
     return compose_sequences(embed_dim=embed_dim, projection=name, projection_options={
         "bidirectional_taxonomy": bidirectional_taxonomy}, **options)
 
 
 @register_method("onto2vec", trained_on="sequences")
-def onto2vec(nb_classes=0, nb_relations=0, nb_individuals=0, embed_dim=100, **options):
+def onto2vec(nb_classes=0, nb_relations=0, nb_individuals=0, embed_dim=None, **options):
     """Onto2Vec (Smaili et al. 2018): every axiom a sentence, word2vec skip-gram. To read
     the entailed axioms too, pass ``entailment=Entailment(...)``."""
     options.setdefault("corpus", ("axioms",))
@@ -179,7 +242,7 @@ def onto2vec(nb_classes=0, nb_relations=0, nb_individuals=0, embed_dim=100, **op
 
 
 @register_method("opa2vec", trained_on="sequences")
-def opa2vec(nb_classes=0, nb_relations=0, nb_individuals=0, embed_dim=100, **options):
+def opa2vec(nb_classes=0, nb_relations=0, nb_individuals=0, embed_dim=None, **options):
     """OPA2Vec (Smaili et al. 2019): the axiom sentences of Onto2Vec followed by the
     annotation sentences (labels, definitions, synonyms), word2vec skip-gram. mOWL does not
     pre-train on an external text corpus."""

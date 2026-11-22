@@ -1,4 +1,6 @@
 from deprecated.sphinx import deprecated, versionchanged, versionadded
+import functools
+import re
 import tempfile
 from mowl.datasets import Dataset
 from mowl.owlapi import OWLAPIAdapter
@@ -6,6 +8,33 @@ from mowl.evaluation import RankingEvaluator
 from mowl.error import messages as msg
 from java.util import HashSet
 
+
+
+#: The arguments that swap a part of a method (see :mod:`mowl.representation.swap`).
+PART_ARGUMENTS = ("classes", "relations", "individuals", "measure", "objective",
+                  "objective_options", "regularizers", "intersection", "distance",
+                  "negation", "source", "reading", "encoder", "scorer", "walker", "view")
+
+
+def _refusing_parts(init):
+    """``init`` that explains a part argument it does not take: the named classes are one
+    combination of parts each; the parts are swapped in the general models."""
+    @functools.wraps(init)
+    def wrapper(self, *args, **kwargs):
+        try:
+            init(self, *args, **kwargs)
+        except TypeError as error:
+            match = re.search(r"unexpected keyword argument '(\w+)'", str(error))
+            if match and match.group(1) in PART_ARGUMENTS and match.group(1) in kwargs:
+                raise TypeError(
+                    f"{type(self).__name__} is a named combination of parts and takes only "
+                    f"its own options, not the part {match.group(1)!r}. To replace a part, "
+                    f"use the general model of its kind with the method key: "
+                    f"ComposedEL / ComposedALC / ComposedSequenceModel / "
+                    f"QueryEmbeddingModel / ConstructedModel(dataset, method=<key>, "
+                    f"{match.group(1)}=...) (see the page 'Combine parts').") from error
+            raise
+    return wrapper
 
 
 @versionchanged(version="0.1.0", reason="Parameter ``model_filepath`` added in the base class for \
@@ -19,6 +48,11 @@ class Model():
     :type model_filepath: str, optional
     """
 
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if "__init__" in cls.__dict__:
+            cls.__init__ = _refusing_parts(cls.__dict__["__init__"])
 
     #: How the rank-based evaluation regimes obtain axiom scores from the model:
     #: ``"module"``, ``"evaluation_model"``, ``"method"`` or ``"vectors"``; ``None`` if

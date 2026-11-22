@@ -145,6 +145,79 @@ class ComposedGeometry(ELModule, Geometry):
             self.objective.neg_forms if neg_capable_gcis is None else neg_capable_gcis)
         self.margin_semantics = "slack" if self.objective.slack else "strict"
 
+    def replace_parts(self, classes=None, relations=None, individuals=None, measure=None,
+                      objective=None, regularizers=None):
+        """Replace parts of this geometry (built parts, not names; ``None`` keeps the part;
+        :func:`mowl.representation.swap.build_method` resolves the names). The pairs that
+        cannot be combined raise :class:`~mowl.representation.ConstructorUnavailable`,
+        naming both sides, and leave the geometry as it was.
+
+        :param regularizers: A tuple that *replaces* the regularisers.
+        """
+        old = (self.class_model, self.relation_model, self.individual_model, self.measure,
+               self.objective, self.regularizers, self.supported_forms,
+               self.neg_capable_gcis)
+        default_forms = self.supported_forms == frozenset(
+            FORMS + (ROLE_FORMS if self.role_axiom_capable else ()))
+        default_neg = self.neg_capable_gcis == frozenset(self.objective.neg_forms)
+        try:
+            if classes is not None:
+                self.class_model = classes
+            if relations is not None:
+                self.relation_model = None if relations is False else relations
+            if individuals is not None:
+                self.individual_model = individuals
+            if measure is not None:
+                self._assign("measure", measure)
+            if objective is not None:
+                self.objective = objective
+            if regularizers is not None:
+                self.regularizers = tuple(regularizers)
+            self._check_parts()
+            if self.relation_model is not None:
+                self.measure.bind(self.relation_model)
+            self._assign("class_embed", getattr(self.class_model, "centres", None))
+            self._assign("rel_embed", getattr(self.relation_model, "vectors", None))
+            self._assign("ind_embed", getattr(self.individual_model, "centres", None))
+            if relations is not None and default_forms:
+                self.supported_forms = frozenset(
+                    FORMS + (ROLE_FORMS if self.role_axiom_capable else ()))
+            if objective is not None:
+                if default_neg:
+                    self.neg_capable_gcis = frozenset(self.objective.neg_forms)
+                self.margin_semantics = "slack" if self.objective.slack else "strict"
+        except Exception:
+            (self.class_model, self.relation_model, self.individual_model, self.measure,
+             self.objective, self.regularizers, self.supported_forms,
+             self.neg_capable_gcis) = old
+            self._assign("class_embed", getattr(self.class_model, "centres", None))
+            self._assign("rel_embed", getattr(self.relation_model, "vectors", None))
+            self._assign("ind_embed", getattr(self.individual_model, "centres", None))
+            self._assign("measure", self.measure)
+            raise
+        return self
+
+    def _assign(self, name, value):
+        """Set an attribute that may be registered as a parameter or a module of another
+        type."""
+        for registry in (self._parameters, self._modules, self._buffers):
+            registry.pop(name, None)
+        self.__dict__.pop(name, None)
+        setattr(self, name, value)
+
+    def _check_parts(self):
+        classes, measure, individuals = self.class_model, self.measure, self.individual_model
+        if not issubclass(classes.region, measure.accepts):
+            raise ConstructorUnavailable(
+                f"{type(measure).__name__} compares "
+                f"{[c.__name__ for c in measure.accepts]} regions; "
+                f"{type(classes).__name__} gives {classes.region.__name__} regions.")
+        if individuals is not None and not issubclass(individuals.region, measure.accepts):
+            raise ConstructorUnavailable(
+                f"{type(measure).__name__} compares "
+                f"{[c.__name__ for c in measure.accepts]} regions; the individual model "
+                f"{type(individuals).__name__} gives {individuals.region.__name__} regions.")
+
     @property
     def strict_negatives(self):
         """The ``strict_negatives`` of the objective (the one rule of every EL module: a

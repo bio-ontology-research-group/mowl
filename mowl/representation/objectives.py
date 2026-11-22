@@ -32,6 +32,9 @@ functions that build other published methods (:mod:`mowl.representation.library`
 Every option is off by default.
 """
 
+import functools
+import inspect
+
 import torch as th
 
 from mowl.representation.regions import ConstructorUnavailable
@@ -244,6 +247,79 @@ class Objective:
         options.setdefault("negatives", "gci0")
         return cls(margin, inside_margin=inside_margin, gci0_negative="negative",
                    freeze_size_negatives=freeze_size_negatives, **options)
+
+    # -- options -------------------------------------------------------------------------
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        if "__init__" in cls.__dict__:
+            cls.__init__ = _recording(cls.__dict__["__init__"])
+
+    @classmethod
+    def option_names(cls):
+        """The options :meth:`replace` accepts: the parameters of the constructor (and, if
+        it passes further ``**options``, those of :class:`Objective`)."""
+        names, forwards = set(), False
+        for klass in cls.__mro__:
+            init = klass.__dict__.get("__init__")
+            if init is None or klass is object:
+                continue
+            for name, p in inspect.signature(getattr(init, "__wrapped__", init)).parameters.items():
+                if p.kind is inspect.Parameter.VAR_KEYWORD:
+                    forwards = True
+                elif name != "self" and p.kind is not inspect.Parameter.VAR_POSITIONAL:
+                    names.add(name)
+            if not forwards:
+                break
+            forwards = False
+        return tuple(sorted(names))
+
+    @property
+    def options(self):
+        """The options this objective was created with (the arguments of its constructor,
+        with the current margin): what :meth:`replace` starts from."""
+        args, kwargs = self._init_call
+        init = type(self).__init__
+        init = getattr(init, "__wrapped__", init)
+        signature = inspect.signature(init)
+        bound = signature.bind(self, *args, **kwargs)
+        bound.apply_defaults()
+        call = dict(bound.arguments)
+        call.pop("self")
+        for name, p in signature.parameters.items():
+            if p.kind is inspect.Parameter.VAR_KEYWORD:
+                call.update(call.pop(name, {}))
+        if "margin" in call:
+            call["margin"] = self.margin
+        return call
+
+    def replace(self, **options):
+        """A new objective of the same kind with some options replaced (the margin is the
+        current one): ``Objective.elem(0.1).replace(gci3="inclusion")``. An option the
+        objective does not have raises :class:`TypeError` that names the accepted ones."""
+        accepted = self.option_names()
+        unknown = set(options) - set(accepted)
+        if unknown:
+            raise TypeError(f"{type(self).__name__} has no option(s) {sorted(unknown)}; "
+                            f"accepted: {list(accepted)}.")
+        call = {**self.options, **options}
+        init = type(self).__init__
+        signature = inspect.signature(getattr(init, "__wrapped__", init))
+        positional = []
+        for name, p in signature.parameters.items():
+            if name == "self":
+                continue
+            if p.kind is inspect.Parameter.VAR_POSITIONAL:
+                positional.extend(call.pop(name, ()))
+                break
+            if p.kind is inspect.Parameter.POSITIONAL_OR_KEYWORD and any(
+                    q.kind is inspect.Parameter.VAR_POSITIONAL
+                    for q in signature.parameters.values()):
+                positional.append(call.pop(name))
+        try:
+            return type(self)(*positional, **call)
+        except TypeError as error:
+            raise TypeError(f"{type(self).__name__} cannot take {sorted(options)}: {error}; "
+                            f"accepted: {list(accepted)}.") from error
 
     #: The norm the unit-norm term of ``unit_norm`` pulls the centres towards (1; ELEmbeddings
     #: has the target ``reg_norm`` of its regularisation).
@@ -550,6 +626,17 @@ def _check_relation_model(g, form):
         relations.check_region(region)
 
 
+def _recording(init):
+    """``init`` that remembers the arguments of the outermost constructor call (for
+    :meth:`Objective.replace`)."""
+    @functools.wraps(init)
+    def wrapper(self, *args, **kwargs):
+        if "_init_call" not in self.__dict__:
+            self._init_call = (args, kwargs)
+        init(self, *args, **kwargs)
+    return wrapper
+
+
 def _check(value, allowed, name):
     if value not in allowed:
         raise ValueError(f"{name} must be one of {[a for a in allowed if a is not None]}"
@@ -565,3 +652,6 @@ def _unhinged_apart(a, b, margin):
     """``apart`` without the hinge, for ball regions (the only published use)."""
     distance = th.linalg.norm(a.centre - b.centre, dim=1, keepdim=True)
     return a.radius + b.radius - distance + margin
+
+
+Objective.__init__ = _recording(Objective.__init__)

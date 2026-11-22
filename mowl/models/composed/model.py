@@ -8,6 +8,7 @@ from mowl.base_models.elmodel import EmbeddingELModel
 from mowl.nn.el.elmodule import ELModule
 from mowl.representation import methods as M
 from mowl.representation.objectives import Objective
+from mowl.representation.swap import NO_PART, build_method, swap
 
 
 #: Where the methods that are not trained on axioms are trained.
@@ -40,17 +41,28 @@ class ComposedEL(EmbeddingELModel):
 
     :param method: Key of :data:`mowl.representation.METHODS`. The parts are then those of
         the method and ``method_options`` are passed to its function (for example
-        ``gci3="inclusion"``).
-    :param classes: Name of a class model (:data:`mowl.representation.CLASS_MODELS`) or a
-        function ``(size, embed_dim)`` returning one.
+        ``gci3="inclusion"``). Every part argument below that is given together with
+        ``method`` *replaces* that part of the method
+        (:func:`mowl.representation.swap.build_method`); a replacement that cannot exist
+        raises :class:`~mowl.representation.ConstructorUnavailable` naming both sides, an
+        argument the method cannot take raises ``TypeError``.
+    :param classes: Name of a class model (:data:`mowl.representation.CLASS_MODELS`), a
+        function ``(size, embed_dim)`` returning one, or a class model (taken as it is).
     :param relations: Name of a relation model
-        (:data:`mowl.representation.RELATION_MODELS`), such a function, or ``None``.
+        (:data:`mowl.representation.RELATION_MODELS`), such a function or a relation model;
+        ``"none"``: no relation model.
+    :param individuals: As ``classes``, for the individuals (``"none"``: none). Default: of
+        the kind of the classes.
     :param measure: Name of a measure (:data:`mowl.representation.MEASURES`), a measure
-        object, or ``None`` for the default of the class model.
+        object, or ``None`` for the default of the class model (of the method).
     :param objective: An :class:`~mowl.representation.Objective`; default
-        ``Objective(margin)``.
+        ``Objective(margin)`` (the objective of the method).
+    :param objective_options: With ``method``: options of the method's own objective that
+        are replaced (``{"gci3": "inclusion"}``, see
+        :meth:`~mowl.representation.Objective.replace`).
     :param margin: Margin of the default objective, or of ``method``.
-    :param regularizers: Penalties (:class:`mowl.training.Regularizer`) of the module.
+    :param regularizers: Penalties (:class:`mowl.training.Regularizer`) of the module; with
+        ``method`` they are added to those of the method.
 
     The model trains on the axiom forms its geometry can read
     (:attr:`~mowl.representation.ComposedGeometry.supported_forms`): the others are left
@@ -64,9 +76,9 @@ class ComposedEL(EmbeddingELModel):
     axioms (``"acone"``, ``"query2box"``, ...) are refused with an error that says so.
     """
 
-    def __init__(self, dataset, method=None, classes="box", relations="translation",
+    def __init__(self, dataset, method=None, classes=None, relations=None,
                  measure=None, objective=None, embed_dim=50, margin=0.0, regularizers=(),
-                 learning_rate=0.001, batch_size=4096 * 8, model_filepath=None,
+                 individuals=None, objective_options=None, learning_rate=0.001, batch_size=4096 * 8, model_filepath=None,
                  device="cpu", neg_sampling_gcis=None, **method_options):
         super().__init__(dataset, embed_dim, batch_size, extended=True,
                          model_filepath=model_filepath, device=device,
@@ -84,8 +96,15 @@ class ComposedEL(EmbeddingELModel):
                 f"{_TRAINERS.get(kind, 'mowl.models.query')}.")
         if method is None and method_options:
             raise TypeError(f"Unexpected arguments {sorted(method_options)}.")
+        if method is None and objective_options:
+            raise TypeError("objective_options are options of the objective of a method; "
+                            "without one, pass objective=Objective(...).")
+        if method is None:
+            classes = "box" if classes is None else classes
+            relations = "translation" if relations is None else relations
         self.method = method
         self.classes, self.relations, self.measure = classes, relations, measure
+        self.individuals, self.objective_options = individuals, objective_options
         self.objective = objective
         self.margin = margin
         self.regularizers = tuple(regularizers)
@@ -100,15 +119,26 @@ class ComposedEL(EmbeddingELModel):
             options = dict(self.method_options)
             if "margin" in inspect.signature(build).parameters:
                 options["margin"] = self.margin
-            module = build(*sizes, embed_dim=self.embed_dim, **options)
-            if self.regularizers:
-                module.regularizers = module.regularizers + self.regularizers
+            module = build_method(
+                self.method, *sizes, embed_dim=self.embed_dim, classes=self.classes,
+                relations=self.relations, individuals=self.individuals,
+                measure=self.measure, objective=self.objective,
+                objective_options=self.objective_options, regularizers=self.regularizers,
+                **options)
         else:
+            relations = None if (isinstance(self.relations, str)
+                                 and self.relations == NO_PART) else self.relations
             objective = self.objective if self.objective is not None \
                 else Objective(self.margin)
             module = M.compose(*sizes, embed_dim=self.embed_dim, classes=self.classes,
-                               relations=self.relations, measure=self.measure,
+                               relations=relations, measure=self.measure,
+                               individuals=not (isinstance(self.individuals, str)
+                                                and self.individuals == NO_PART),
                                objective=objective, regularizers=self.regularizers)
+            if self.individuals is not None and not (
+                    isinstance(self.individuals, str) and self.individuals == NO_PART):
+                module = swap(module, "compose", sizes, self.embed_dim,
+                              individuals=self.individuals)
         if not isinstance(module, ELModule):
             raise TypeError(
                 f"The geometry of {self.method!r} ({type(module).__name__}) is not an "
@@ -119,6 +149,44 @@ class ComposedEL(EmbeddingELModel):
         self.load_role_axioms = bool(getattr(module, "role_axiom_capable", False))
         self._attach_structural_tables()
         self._attach_default_regimes()
+        if self.method is not None and self.swapped_parts:
+            self._probe()
+
+    @property
+    def swapped_parts(self):
+        """The part arguments given together with ``method`` (they replace the parts of the
+        method)."""
+        given = {"classes": self.classes, "relations": self.relations,
+                 "individuals": self.individuals, "measure": self.measure,
+                 "objective": self.objective, "objective_options": self.objective_options,
+                 "regularizers": self.regularizers or None}
+        return {k: v for k, v in given.items() if v is not None}
+
+    def _probe(self):
+        """Evaluate the losses of two axioms of every training form (and the penalties), so
+        that a combination whose parts do not fit raises
+        :class:`~mowl.representation.ConstructorUnavailable` when it is built, naming the
+        method and the parts, not in the middle of training."""
+        from mowl.representation.regions import ConstructorUnavailable
+        module = self.module
+        try:
+            with th.no_grad():
+                for form, data in self.training_datasets.items():
+                    if len(data) == 0:
+                        continue
+                    rows = data[:2]
+                    module(rows, form)
+                    if form in getattr(module, "neg_capable_gcis", ()):
+                        module(rows, form, neg=True)
+                module.regularization_loss()
+        except ConstructorUnavailable as error:
+            raise ConstructorUnavailable(
+                f"{self.method!r} cannot take {sorted(self.swapped_parts)}: {error}") from error
+        except (TypeError, AttributeError, RuntimeError, ValueError, IndexError,
+                NotImplementedError, KeyError) as error:
+            raise ConstructorUnavailable(
+                f"{self.method!r} cannot take {sorted(self.swapped_parts)}: the combination "
+                f"{module.parts} does not evaluate ({type(error).__name__}: {error}).") from error
 
     def _attach_default_regimes(self):
         """The training regimes that belong to the method (``geometry.default_regimes``: a

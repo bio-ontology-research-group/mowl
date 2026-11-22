@@ -7,6 +7,7 @@ from tqdm import trange
 
 from mowl.base_models.alcmodel import EmbeddingALCModel
 from mowl.representation import methods as M
+from mowl.representation.swap import NO_PART, build_method
 from mowl.representation.library.logic_alc import ExpressionGeometry
 
 _THING = "http://www.w3.org/2002/07/owl#Thing"
@@ -38,9 +39,15 @@ class ComposedALC(EmbeddingALCModel):
     :param method: Key of :data:`mowl.representation.METHODS` whose geometry reads ALC axioms
         (``"dfalc"``, ``"falcon"``, ``"alcone"``); ``method_options`` are passed to its
         function.
-    :param classes: Name of a class model (:data:`mowl.representation.CLASS_MODELS`) or a
-        function ``(size, embed_dim)``.
-    :param relations: Name of a relation model, or such a function.
+    :param classes: Name of a class model (:data:`mowl.representation.CLASS_MODELS`), a
+        function ``(size, embed_dim)`` or a class model. With ``method`` it replaces the
+        class model of the method (so do the other parts below;
+        :func:`mowl.representation.swap.build_method`).
+    :param relations: Name of a relation model, such a function or a relation model;
+        ``"none"``: none.
+    :param individuals: As ``classes``, for the individuals.
+    :param objective_options: With ``method``: options of the method's own objective that
+        are replaced (:meth:`~mowl.representation.Objective.replace`).
     :param measure: Name of a measure, or a measure object; ``None``: the default of the
         class model.
     :param objective: An :class:`~mowl.representation.library.logic_alc.ExpressionReading`
@@ -62,8 +69,9 @@ class ComposedALC(EmbeddingALCModel):
     #: The training loop is the model's own: a training regime is not consulted.
     training_hooks = frozenset()
 
-    def __init__(self, dataset, method=None, classes="fuzzy set", relations="fuzzy relation",
+    def __init__(self, dataset, method=None, classes=None, relations=None,
                  measure=None, objective=None, regularizers=(), schedule=None, embed_dim=50,
+                 individuals=None, objective_options=None,
                  batch_size=256, alpha=0.3, beta=0.3, anon_e=0, margin=0.0,
                  learning_rate=0.001, model_filepath=None, device="cpu", **method_options):
         super().__init__(dataset, embed_dim=embed_dim, batch_size=batch_size, alpha=alpha,
@@ -73,8 +81,15 @@ class ComposedALC(EmbeddingALCModel):
             raise ValueError(f"Unknown method {method!r}; available: {sorted(M.METHODS)}.")
         if method is None and method_options:
             raise TypeError(f"Unexpected arguments {sorted(method_options)}.")
+        if method is None and objective_options:
+            raise TypeError("objective_options are options of the objective of a method; "
+                            "without one, pass objective=FuzzyObjective(...).")
+        if method is None:
+            classes = "fuzzy set" if classes is None else classes
+            relations = "fuzzy relation" if relations is None else relations
         self.method = method
         self.classes, self.relations, self.measure = classes, relations, measure
+        self.individuals, self.objective_options = individuals, objective_options
         self.objective = objective
         self.regularizers = tuple(regularizers)
         self.schedule = schedule
@@ -100,16 +115,17 @@ class ComposedALC(EmbeddingALCModel):
             for name, iri in (("top_index", _THING), ("bottom_index", _NOTHING)):
                 if name in parameters and name not in options:
                     options[name] = cid.get(iri)
-            module = build(classes, relations, max(individuals, 1), embed_dim=self.embed_dim,
-                           **options)
-            if self.regularizers:
-                module.regularizers = module.regularizers + self.regularizers
-            return module
+            return build_method(
+                self.method, classes, relations, max(individuals, 1),
+                embed_dim=self.embed_dim, classes=self.classes, relations=self.relations,
+                individuals=self.individuals, measure=self.measure, objective=self.objective,
+                objective_options=self.objective_options, regularizers=self.regularizers,
+                **options)
         from mowl.representation.library.logic_fuzzy import DomainElements, FuzzyObjective
         class_factory = M._part(self.classes, M.CLASS_MODELS, "class model")
         class_model = class_factory(classes, self.embed_dim)
         relation_model = None
-        if self.relations is not None and relations:
+        if self.relations is not None and relations and self.relations != NO_PART:
             relation_model = M._part(self.relations, M.RELATION_MODELS, "relation model")(
                 relations, self.embed_dim)
         measure = self.measure
@@ -118,7 +134,11 @@ class ComposedALC(EmbeddingALCModel):
         elif isinstance(measure, str):
             measure = M._part(measure, M.MEASURES, "measure")()
         domain = getattr(class_model, "domain_size", None)
-        if domain is not None:
+        if self.individuals is not None and self.individuals != NO_PART:
+            individual_model = M._part(self.individuals, M.CLASS_MODELS, "individual model")
+            if not isinstance(individual_model, th.nn.Module):
+                individual_model = individual_model(max(individuals, 1), self.embed_dim)
+        elif domain is not None:
             individual_model = DomainElements(max(individuals, 1), domain,
                                               family=class_model.family)
         else:
@@ -128,6 +148,15 @@ class ComposedALC(EmbeddingALCModel):
         return ExpressionGeometry(class_model, relation_model, measure, objective,
                                   individuals=individual_model,
                                   regularizers=self.regularizers, schedule=self.schedule)
+
+    @property
+    def swapped_parts(self):
+        """The part arguments given together with ``method``."""
+        given = {"classes": self.classes, "relations": self.relations,
+                 "individuals": self.individuals, "measure": self.measure,
+                 "objective": self.objective, "objective_options": self.objective_options,
+                 "regularizers": self.regularizers or None}
+        return {k: v for k, v in given.items() if v is not None} if self.method else {}
 
     def init_module(self):
         module = self._build()
@@ -199,6 +228,27 @@ class ComposedALC(EmbeddingALCModel):
         return total
 
     def train(self, epochs, validate_every=1):
+        if self.swapped_parts:
+            return self._train_swapped(epochs, validate_every)
+        return self._train(epochs, validate_every)
+
+    def _train_swapped(self, epochs, validate_every):
+        """Train. A combination of replaced parts that does not evaluate raises
+        :class:`~mowl.representation.ConstructorUnavailable`, naming the method and the
+        parts."""
+        from mowl.representation.regions import ConstructorUnavailable
+        try:
+            return self._train(epochs, validate_every)
+        except ConstructorUnavailable:
+            raise
+        except (TypeError, AttributeError, RuntimeError, ValueError, IndexError,
+                NotImplementedError, KeyError) as error:
+            raise ConstructorUnavailable(
+                f"{self.method!r} cannot take {sorted(self.swapped_parts)}: the combination "
+                f"{self.module.parts} does not train ({type(error).__name__}: {error}).") \
+                from error
+
+    def _train(self, epochs, validate_every=1):
         """Trains the model: one optimiser step per epoch on the alpha/beta-weighted loss of
         the ALC axioms and the regularisers, with the hooks of the training schedule of the
         geometry (:class:`~mowl.representation.library.logic_alc.TrainingSchedule`).
