@@ -666,13 +666,14 @@ Soft component aggregation and diversity regularisation
 Under hard aggregation (``component_aggregation="hard"``), taking ``amin`` over
 target components and ``argmin`` over pairwise emptiness routes gradient only to
 the single nearest component, leaving non-nearest components dead from random
-initialisation. Soft component aggregation (implemented in :mod:`mowl.nn.el.softagg` and
-available on both :class:`~mowl.models.MultiBoxEL` and
+initialisation. Soft component aggregation (an option of the measure of unions of boxes,
+:class:`~mowl.representation.library.multibox_parts.UnionMeasure`, available on both
+:class:`~mowl.models.MultiBoxEL` and
 :class:`~mowl.models.MultiELBE`) sets ``component_aggregation="soft"`` to
 replace every target minimum by the normalised log-mean-exp soft-minimum
-:func:`~mowl.nn.el.softagg.softmin`
+:func:`~mowl.representation.library.multibox_parts.soft_minimum`
 (:math:`\text{softmin}_\tau(v) = -\tau(\log\sum_{j=1}^K \exp(-v_j/\tau) - \log K)`)
-and ``gci1``'s designated pair by :func:`~mowl.nn.el.softagg.soft_gci1_terms`
+and ``gci1``'s designated pair by soft-argmin weights
 (softmax emptiness weights :math:`w_{ij} = \text{softmax}(-\text{empt}_{ij}/\tau)`
 with a detached selection gate
 :math:`g_{ij} = \max(\text{non\_empty}_{ij}^{\text{det}}, w_{ij}^{\text{det}})`).
@@ -684,7 +685,8 @@ softmax weights :math:`\exp(-\Delta/\tau)` underflow to exact ``0.0`` once the
 score gap :math:`\Delta` exceeds :math:`\approx 100\tau`. Because
 :math:`\text{softmin}_\tau(v) \le \text{mean}(v)` pulls all target components
 together at finite :math:`\tau > 0`, ``diversity_reg`` adds the log-space
-pairwise soft containment ratio :func:`~mowl.nn.el.softagg.diversity_penalty`,
+pairwise soft containment ratio
+:class:`~mowl.representation.library.multibox_objective.DiversityPenalty`,
 which evaluates to ``1.0`` on identical boxes at any ambient dimension :math:`d`
 and to :math:`\le 10^{-3}` when components are disjoint:
 
@@ -696,7 +698,10 @@ and to :math:`\le 10^{-3}` when components are disjoint:
    import torch
    from mowl.datasets.builtin import FamilyDataset
    from mowl.models import MultiBoxEL, MultiELBE
-   from mowl.nn.el.softagg import diversity_penalty, softmin
+   from types import SimpleNamespace
+
+   from mowl.representation.library.multibox_objective import DiversityPenalty
+   from mowl.representation.library.multibox_parts import UnionClasses, soft_minimum
 
    ds = FamilyDataset()
 
@@ -730,15 +735,17 @@ and to :math:`\le 10^{-3}` when components are disjoint:
    me.train(epochs=3, validate_every=10)
    assert abs(float(me.module.tau.item()) - 0.05) < 1e-6
 
-   # 2. Shared helpers in mowl.nn.el.softagg: softmin and log-space diversity_penalty
+   # 2. The parts: the soft minimum and the log-space diversity penalty
    v = torch.tensor([[0.0, 2.0]])
-   assert float(softmin(v, tau=1e-4, dim=-1).item()) < 1e-3
-   ident_c = torch.zeros((1, 2, 50), requires_grad=True)
-   ident_o = torch.full((1, 2, 50), 0.2)
-   pen = diversity_penalty(ident_c, ident_o)
+   assert float(soft_minimum(v, 1e-4, dim=-1).item()) < 1e-3
+   classes = UnionClasses(1, 50, components=2)  # one class, two identical boxes
+   with torch.no_grad():
+       classes.centres.weight.zero_()
+       classes.offsets.weight.fill_(0.2)
+   pen = DiversityPenalty(1.0).penalty(SimpleNamespace(class_model=classes))
    pen.backward()
    assert abs(float(pen.item()) - 1.0) < 1e-5
-   assert float(ident_c.grad.norm().item()) > 0.0
+   assert float(classes.centres.weight.grad.norm().item()) > 0.0
 
 
 Canonical-element point supervision
@@ -757,7 +764,8 @@ and canonical role edges :math:`(x_C, r, x_D)`, while rejection-sampling
 non-entailed random negative pairs on the fly against ``pos_pairs`` (weighted by
 ``neg_weight``, default ``0.1``, with nothing per-element stored),
 sampling up to ``points_per_epoch`` (default ``100_000``) pairs per epoch. In
-:mod:`mowl.nn.el.pointloss`, soft coordinate-minimum box membership
+:class:`~mowl.representation.library.structural_points.SoftMembership`, soft
+coordinate-minimum box membership
 :math:`m(x; c, o) = \min_{\text{coord}} \sigma((|o| - |x - c|)/\beta)` (with
 temperature ``beta``, default ``0.1``) is combined across components via
 noisy-OR :math:`m_C(x) = 1 - \prod_i (1 - m_{C_i}(x))` (evaluating individual
@@ -853,8 +861,8 @@ Setting ``objective="structural"`` on :class:`~mowl.models.MultiBoxEL` (default
 :meth:`~mowl.nn.MultiBoxELModule.all_class_regions` (with inactive slots padded
 as ``cen = 0, w = -1``), masks the defining ``gci0``/``gci1`` rows to exact
 ``0.0`` loss, and supervises satisfiable classes and conjunction pairs with
-:func:`~mowl.nn.el.structural.existence_loss` and single-coordinate separation
-in :func:`~mowl.nn.el.structural.gci1_bot_structural`. On the :math:`T_3`
+:func:`~mowl.baselines.nn.el.multiboxel.structural_losses.existence_loss` and single-coordinate separation
+in :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.gci1_bot_structural`. On the :math:`T_3`
 fixture, the three pairwise definitions :math:`A \equiv X_1 \sqcap X_2`,
 :math:`B \equiv X_2 \sqcap X_3`, and :math:`C \equiv X_1 \sqcap X_3` are
 compiled into ``n_defined == 3`` defined classes:

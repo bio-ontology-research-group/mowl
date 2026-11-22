@@ -1,6 +1,6 @@
-"""The volume-based MultiBoxEL: its module and the maths of sampled volumes.
+"""The volume-based MultiBoxEL: its module.
 
-:mod:`~mowl.nn.el.mcmultibox.volume` is used by the parts of the method
+The maths of sampled volumes is part of the parts of the method
 (:mod:`mowl.representation.library.multibox_parts`), which the module is built from, so the
 module is loaded when it is asked for and not when the package is imported.
 """

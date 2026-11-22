@@ -2,13 +2,13 @@ import logging
 
 import torch as th
 
-from mowl.base_models.elmodel import EmbeddingELModel
+from mowl.models.mcmultibox.common import VolumeMultiBoxELOptions
 from mowl.nn.el.mcmultibox.module import VolumeMultiBoxELModule
 
 logger = logging.getLogger(__name__)
 
 
-class VolumeMultiBoxEL(EmbeddingELModel):
+class VolumeMultiBoxEL(VolumeMultiBoxELOptions):
     r"""Volume-based MultiBoxEL, after [aharoni2024]_ (Chapter 7).
 
     Concepts are unions of ``num_boxes`` boxes in :math:`\mathbb{R}^d`, roles are unions of boxes
@@ -52,7 +52,7 @@ class VolumeMultiBoxEL(EmbeddingELModel):
     :param num_points: Number of quasi-Monte-Carlo points.
     :param temperature: Sigmoid temperature (thesis: 1).
     :param aggregate: ``"min"`` (default) or ``"mean"`` (literal thesis formula); see
-        :mod:`mowl.nn.el.mcmultibox.volume`.
+        :func:`~mowl.representation.library.multibox_parts.soft_indicator`.
     :param learning_rate: Adam learning rate (not in the thesis).
     :param num_batches: Batches per epoch.
     :param seed: Seed for the point set, the initialisation and batch shuffling.
@@ -67,72 +67,7 @@ class VolumeMultiBoxEL(EmbeddingELModel):
     #: :meth:`train` is a loop of its own with a fixed objective; it takes no training regime.
     training_hooks = frozenset()
 
-    #: Normal forms with a loss in the thesis.
-    TRAINABLE_GCIS = ("gci0", "gci1", "gci2", "gci3", "role_inclusion", "role_chain")
-
-    def __init__(self, dataset, embed_dim=5, num_boxes=5, bound=1.0, num_points=20000,
-                 temperature=1.0, aggregate="min", learning_rate=0.01, num_batches=5,
-                 seed=0, point_chunk_size=2048, eval_points_per_box=32,
-                 model_filepath=None, device="cpu", load_role_axioms=False,
-                 max_chunk_elements=2 ** 25):
-        super().__init__(dataset, embed_dim, 4096, extended=True, model_filepath=model_filepath,
-                         device=device, learning_rate=learning_rate,
-                         load_role_axioms=load_role_axioms)
-        if num_batches < 1:
-            raise ValueError("num_batches must be at least 1.")
-        self.num_boxes = num_boxes
-        self.bound = bound
-        self.num_points = num_points
-        self.temperature = temperature
-        self.aggregate = aggregate
-        self.num_batches = num_batches
-        self.seed = seed
-        self.point_chunk_size = point_chunk_size
-        self.eval_points_per_box = eval_points_per_box
-        self.max_chunk_elements = max_chunk_elements
-        #: Mean training loss of each epoch (sum over normal forms), filled by :meth:`train`.
-        self.training_losses = []
-        self.init_module()
-
-    def init_module(self):
-        self.module = VolumeMultiBoxELModule(
-            len(self.class_index_dict),
-            len(self.object_property_index_dict),
-            nb_inds=len(self.individual_index_dict) or None,
-            embed_dim=self.embed_dim,
-            num_boxes=self.num_boxes,
-            bound=self.bound,
-            num_points=self.num_points,
-            temperature=self.temperature,
-            aggregate=self.aggregate,
-            seed=self.seed,
-            point_chunk_size=self.point_chunk_size,
-            eval_points_per_box=self.eval_points_per_box,
-            max_chunk_elements=self.max_chunk_elements,
-        ).to(self.device)
-
-    def _trainable_datasets(self):
-        usable = {}
-        skipped = []
-        for name, ds in self.training_datasets.items():
-            if len(ds) == 0:
-                continue
-            if name in self.TRAINABLE_GCIS:
-                usable[name] = ds
-            else:
-                skipped.append(name)
-        if skipped:
-            logger.warning("VolumeMultiBoxEL: the thesis defines no loss for %s; these "
-                           "axioms are not used for training.", skipped)
-        return usable
-
-    @staticmethod
-    def _canonical_order(data):
-        """Sort rows lexicographically: the axiom order produced by the normaliser is not
-        stable between runs, and sorting makes training reproducible for a fixed seed."""
-        for col in reversed(range(data.shape[1])):
-            data = data[th.sort(data[:, col], stable=True).indices]
-        return data
+    module_class = VolumeMultiBoxELModule
 
     def train(self, epochs, validate_every=1, epoch_callback=None):
         """Train with ``num_batches`` optimiser steps per epoch.
@@ -190,25 +125,3 @@ class VolumeMultiBoxEL(EmbeddingELModel):
             logger.info(msg)
             if epoch_callback is not None:
                 epoch_callback(epoch, self)
-
-    def eval_method(self, data):
-        """Evaluation distance of thesis Section 7.1.2 for the GCI type ``eval_gci_name``."""
-        if self._eval_gci_name is None:
-            raise ValueError("eval_gci_name must be set before evaluation.")
-        return self.module.distance(data, self._eval_gci_name)
-
-    @property
-    def evaluation_model(self):
-        """Callable ``(data, gci_name) -> distances`` for the mOWL evaluators (lower is better)."""
-        if self._evaluation_model is not None:
-            return self._evaluation_model
-        module = self.module
-
-        def model(data, gci_name, neg=False):
-            return module.distance(data, gci_name)
-
-        return model
-
-    @evaluation_model.setter
-    def evaluation_model(self, value):
-        self._evaluation_model = value

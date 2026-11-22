@@ -2,7 +2,7 @@
 import pytest
 import torch as th
 
-import mowl.nn.el.mcmultibox.volume as V
+import mowl.baselines.nn.el.mcmultibox.volume as V
 from mowl.nn.el.mcmultibox.module import VolumeMultiBoxELModule
 
 
@@ -397,20 +397,22 @@ def test_ranking_distance_equals_the_row_by_row_loss(gci_name):
 
 
 def test_ranking_computes_each_distinct_operand_once(monkeypatch):
+    import mowl.representation.library.multibox_parts as P
     m = make_module(n_classes=40, n_rels=2, d=2, n=2, points=512, point_chunk_size=128)
     calls = []
-    original = V.soft_membership
+    original = P.box_membership
 
     def counting(p, c, o, *args, **kwargs):
         calls.append(len(c))
         return original(p, c, o, *args, **kwargs)
 
-    monkeypatch.setattr(V, "soft_membership", counting)
+    monkeypatch.setattr(P, "box_membership", counting)
     data = th.stack([th.zeros(40, dtype=th.long), th.zeros(40, dtype=th.long),
                      th.arange(40)], dim=1)
     m.distance(data, "gci2")
-    # source operand: one distinct class, evaluated once per point chunk (4), not 40 times
-    assert sum(calls) == 4
+    # per point chunk (4): the one distinct source class once, and the domain boxes of the one
+    # distinct relation once (not 40 times each)
+    assert sum(calls) == 8
 
 
 @pytest.mark.parametrize("gci_name", ["gci0", "gci1", "gci2", "gci3"])

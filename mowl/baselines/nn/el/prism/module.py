@@ -50,7 +50,7 @@ class PrismModule(ELModule):
       :meth:`gci3_bot_loss` have a floor of ``margin`` at ``margin > 0`` since
       :math:`\\sum_k h_k = 3 |\\rho| \\ge 0`; moreover, :meth:`gci3_bot_loss`
       shrinks :math:`C` itself (:math:`\\text{relu}(\\sum_k h_{C,k} + \\text{margin})`),
-      which conflicts with :func:`~mowl.nn.el.structural.existence_loss` whenever
+      which conflicts with :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.existence_loss` whenever
       :math:`C` is satisfiable.
     - Under ``objective="structural"``, only the box GCI losses (:meth:`gci0_loss`,
       :meth:`gci0_bot_loss`, :meth:`gci1_loss`, :meth:`gci1_bot_loss`) are squared
@@ -91,7 +91,7 @@ class PrismModule(ELModule):
         definitions :math:`A \\equiv X \\sqcap Y` via
         :class:`~mowl.nn.el.structural.DefinitionTable`.
     existence_weight : float, default 1.0
-        Non-negative weight multiplying :func:`~mowl.nn.el.structural.existence_loss`
+        Non-negative weight multiplying :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.existence_loss`
         in :meth:`structural_extra_loss`.
     size_reg : float, default 1e-3
         Non-negative weight multiplying the primitive prism size regulariser

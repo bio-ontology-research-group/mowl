@@ -17,18 +17,21 @@ Relation models
     arguments move the boxes) and :class:`PairUnions` (a union of boxes over pairs).
 
 Measures
-    :class:`UnionMeasure` lifts any box measure to unions of boxes; :class:`SampledVolume`
-    scores every relation as a volume ratio estimated on sampled points and works for every
-    region that has a point-membership function.
+    :class:`UnionMeasure` lifts any box measure to unions of boxes, with the hard or the soft
+    (:func:`soft_minimum`, temperature ``tau``) aggregation over the components;
+    :class:`SampledVolume` scores every relation as a volume ratio estimated on sampled points
+    and works for every region that has a point-membership function
+    (:func:`membership_sampler`, :func:`box_membership`, :func:`sobol_points`).
 """
 
+import math
 from dataclasses import dataclass
 
 import torch as th
 import torch.nn as nn
+from torch.quasirandom import SobolEngine
+from torch.utils.checkpoint import checkpoint
 
-import mowl.nn.el.mcmultibox.volume as V
-from mowl.nn.el.softagg import soft_gci1_terms, softmin
 from mowl.representation.class_models import BoxClasses, Classes
 from mowl.representation.measures import Bounds, RegionMeasure
 from mowl.representation.methods import (DEFAULT_MEASURE, register_class_model, register_measure,
@@ -38,7 +41,40 @@ from mowl.representation.relation_models import Relations
 
 __all__ = ["BumpedBox", "UnionOfBoxes", "MembershipIntersection", "DomainProjection",
            "ProductRegion", "BumpedBoxClasses", "UnionClasses", "PackedUnionClasses",
-           "HeadTailRelations", "PairUnions", "UnionMeasure", "SampledVolume"]
+           "HeadTailRelations", "PairUnions", "UnionMeasure", "SampledVolume",
+           "check_temperature", "soft_minimum", "box_membership", "membership_sampler",
+           "sobol_points"]
+
+
+# ====================================================================================
+# soft aggregation
+# ====================================================================================
+
+def check_temperature(tau, name="tau"):
+    """``tau`` as a float: a positive finite number (or a one-element tensor of one)."""
+    if isinstance(tau, th.Tensor) and tau.numel() == 1 and tau.dtype != th.bool:
+        value = float(tau.detach())
+    elif isinstance(tau, (int, float)) and not isinstance(tau, bool):
+        value = float(tau)
+    else:
+        raise ValueError(f"{name} must be a positive number, got {tau!r}")
+    if not (value > 0.0 and math.isfinite(value)):
+        raise ValueError(f"{name} must be > 0 and finite, got {tau!r}")
+    return value
+
+
+def soft_minimum(values, tau, dim=-1):
+    """The soft minimum :math:`-\\tau \\log \\frac{1}{K} \\sum_j e^{-v_j / \\tau}` along
+    ``dim``: between the minimum and the mean of the values, the minimum as
+    :math:`\\tau \\to 0`, the value itself where there is one; its gradient is the soft argmin
+    :math:`\\operatorname{softmax}(-v / \\tau)`. Computed around the minimum, so that no
+    exponential overflows."""
+    t = check_temperature(tau)
+    if values.shape[dim] == 1:
+        return values.squeeze(dim)
+    low = values.amin(dim=dim, keepdim=True)
+    spread = th.exp((low - values) / t).mean(dim=dim, keepdim=True)
+    return (low - t * th.log(spread)).squeeze(dim)
 
 
 # ====================================================================================
@@ -193,22 +229,38 @@ class DomainProjection(_SampledRegion):
     role_offset: th.Tensor
     filler: Region
     bound: float = 1.0
+    #: ``(B,)``: the row of ``role_centre`` of every row (``None``: row ``b`` is row ``b``).
+    #: The relation model gives each distinct relation one row, so that the membership in its
+    #: domain boxes is computed once however many fillers it comes with.
+    rows: th.Tensor = None
 
     @property
     def batch(self):
-        return self.role_centre.shape[0]
+        return self.role_centre.shape[0] if self.rows is None else self.rows.shape[0]
 
     @property
     def dim(self):
         return self.role_centre.shape[-1] // 2
 
+    def _per_row(self, tensor):
+        return tensor if self.rows is None else tensor[self.rows]
+
     def sampler(self, temperature, aggregate):
         filler = _union(self.filler)
-        gate = V.project_gate(self.role_centre, self.role_offset, filler.centre,
-                              filler.offset, self.bound, temperature, aggregate)
-        return lambda points: V.projection_membership(points, self.role_centre,
-                                                      self.role_offset, gate, temperature,
-                                                      aggregate)
+        d = self.dim
+        # a role box counts as much as its codomain box meets the filler (inside the space)
+        role_low = self._per_row(self.role_centre - self.role_offset)[..., d:]
+        role_high = self._per_row(self.role_centre + self.role_offset)[..., d:]
+        lower = th.maximum(role_low[:, :, None], (filler.centre - filler.offset)[:, None])
+        upper = th.minimum(role_high[:, :, None], (filler.centre + filler.offset)[:, None])
+        gate = soft_indicator(upper.clamp(max=self.bound) - lower.clamp(min=-self.bound),
+                              temperature, aggregate).amax(dim=-1)
+
+        def fn(points):
+            domain = box_membership(points, self.role_centre[..., :d], self.role_offset[..., :d],
+                                    temperature, aggregate)
+            return th.minimum(self._per_row(domain), gate[:, None, :]).amax(dim=-1)
+        return fn
 
 
 @dataclass(frozen=True)
@@ -248,6 +300,48 @@ def _device(region):
     return _device(region.parts[0] if hasattr(region, "parts") else region.first)
 
 
+def soft_indicator(slack, temperature=1.0, aggregate="min"):
+    """``relu(agg(sigmoid(slack / T)) - 0.5)`` over the last dimension: positive iff every
+    entry of ``slack`` is (``aggregate="min"``); ``"mean"`` is the literal formula of Aharoni
+    (2024), positive everywhere for a box of positive width."""
+    if aggregate not in ("min", "mean"):
+        raise ValueError(f"aggregate must be 'min' or 'mean', got {aggregate!r}.")
+    soft = th.sigmoid(slack / temperature)
+    inner = soft.amin(dim=-1) if aggregate == "min" else soft.mean(dim=-1)
+    return th.relu(inner - 0.5)
+
+
+def box_membership(points, centre, offset, temperature=1.0, aggregate="min"):
+    """The soft membership of every point ``(P, d)`` in every box ``(B, n, d)``, ``(B, P, n)``:
+    :func:`soft_indicator` of the distances of the point to the faces of the box (Aharoni
+    2024, Section 7.1.1)."""
+    gap = points[None, :, None, :] - centre[:, None]
+    half = offset[:, None]
+    return soft_indicator(th.cat([half - gap, half + gap], dim=-1), temperature, aggregate)
+
+
+def sobol_points(num_points, dim, bound, seed=0, device="cpu"):
+    """A scrambled Sobol point set ``(num_points, dim)`` in :math:`[-b, b]^{dim}`, the same for
+    the same seed."""
+    unit = SobolEngine(dimension=dim, scramble=True, seed=seed).draw(num_points)
+    return (unit.to(th.float32) * 2.0 - 1.0).mul(bound).to(device)
+
+
+def mean_memberships(fn, points, chunk_size):
+    """The means over ``points`` of the memberships ``fn(points) -> (m_1, ..., m_n)`` (each
+    ``(B, P)``), chunk by chunk; under gradients each chunk is recomputed in the backward pass
+    instead of kept (memory of one chunk)."""
+    def sums(chunk):
+        return th.stack([m.sum(dim=-1) for m in fn(chunk)])
+
+    total = None
+    for chunk in th.split(points, chunk_size):
+        part = checkpoint(sums, chunk, use_reentrant=False) if th.is_grad_enabled() \
+            else sums(chunk)
+        total = part if total is None else total + part
+    return tuple(total / points.shape[0])
+
+
 def membership_sampler(region, temperature=1.0, aggregate="min"):
     """A function from points ``(P, d)`` to the soft memberships ``(B, P)`` of the points in
     the regions of the batch. Defined for balls, boxes, unions of boxes and the regions of
@@ -257,8 +351,8 @@ def membership_sampler(region, temperature=1.0, aggregate="min"):
         return region.sampler(temperature, aggregate)
     if isinstance(region, UnionOfBoxes) or isinstance(region, Box):
         union = _union(region)
-        return lambda points: V.soft_membership(points, union.centre, union.offset,
-                                                temperature, aggregate)
+        return lambda points: box_membership(points, union.centre, union.offset,
+                                             temperature, aggregate).amax(dim=-1)
     if isinstance(region, Ball):
         # positive iff the point is inside, like the box membership
         def fn(points):
@@ -605,8 +699,9 @@ class PairUnions(Relations):
         return boxes.contains(pairs).reshape(batch, k, -1).any(dim=1)
 
     def preimage(self, ids, region):
-        centre, offset = self._boxes(ids)
-        return DomainProjection(centre, offset, region, self.bound)
+        roles, rows = th.unique(ids, return_inverse=True)
+        centre, offset = self._boxes(roles)
+        return DomainProjection(centre, offset, region, self.bound, rows)
 
     def role_inclusion(self, sub, sup, measure, margin=0.0):
         """:math:`r \\sqsubseteq s`: the region of pairs of :math:`r` inside that of
@@ -692,7 +787,7 @@ class UnionMeasure(RegionMeasure):
     def _agg(self, x, dim):
         if self.aggregation == "hard":
             return th.amin(x, dim=dim)
-        return softmin(x, tau=self.tau, dim=dim)
+        return soft_minimum(x, self.tau, dim=dim)
 
     # -- the relations --------------------------------------------------------------------
     def inside(self, a, b, margin=0.0):
@@ -763,21 +858,19 @@ class UnionMeasure(RegionMeasure):
             Box(c.centre.reshape(batch, 1, 1, kc, d).expand(shape).reshape(-1, d),
                 c.offset.reshape(batch, 1, 1, kc, d).expand(shape).reshape(-1, d)),
             margin).reshape(batch, ka, kb, kc)
-        non_empty = (lower.detach() <= upper.detach()).all(dim=-1).reshape(batch, ka, kb)
+        non_empty = (lower.detach() <= upper.detach()).all(dim=-1).reshape(batch, ka * kb)
+        # the designated pair, which pays for the emptiness: the pair that intersects most
+        # (hard: a one-hot weight; soft: the soft argmin of the gaps, temperature tau)
         if self.aggregation == "hard":
-            arange = th.arange(batch, device=empt.device)
-            designated = th.argmin(empt.detach(), dim=1)
-            mask = th.zeros((batch, ka * kb), dtype=th.bool, device=empt.device)
-            mask[arange, designated] = True
-            gate = (non_empty | mask.view(batch, ka, kb)).to(dtype=empt.dtype).detach()
-            gated = (gate * th.amin(inclusion, dim=3)).sum(dim=(1, 2)) / gate.sum(dim=(1, 2))
-            return (gated + empt[arange, designated]).unsqueeze(1)
-        if ka != kb:
-            raise ValueError("The soft aggregation of a conjunction needs equally many "
-                             "components in both arguments.")
-        soft_empt, gated = soft_gci1_terms(empt.reshape(batch, ka, kb), non_empty,
-                                           inclusion, tau=self.tau)
-        return (gated + soft_empt).unsqueeze(1)
+            weights = th.zeros_like(empt).scatter_(1, empt.detach().argmin(dim=1,
+                                                                            keepdim=True), 1.0)
+        else:
+            weights = th.softmax(-empt / check_temperature(self.tau), dim=1)
+        # every pair that intersects, and the designated one, pays for the inclusion
+        gate = th.maximum(non_empty.to(empt.dtype), weights.detach())
+        covered = self._agg(inclusion, 3).reshape(batch, ka * kb)
+        gated = (gate * covered).sum(dim=1) / gate.sum(dim=1)
+        return (gated + (weights * empt).sum(dim=1)).unsqueeze(1)
 
 
 register_measure("union of bounds", default_for=(UnionOfBoxes,))(UnionMeasure)
@@ -795,8 +888,9 @@ class SampledVolume(RegionMeasure, nn.Module):
     for balls, and are not exact in the sense of :class:`~mowl.representation.Box`.
 
     ``apart(A, B)`` is the fraction of :math:`A` covered by :math:`B` (zero iff, on the
-    sample, they do not meet): the thesis defines no such loss, it is an extension. ``margin``
-    has no meaning and is ignored; ``meets``, ``empty`` and ``nonempty`` are not defined.
+    sample, they do not meet): the thesis defines no such loss, it is an extension. The
+    measure has no margin: a margin other than 0 is refused (``ValueError``); ``meets``,
+    ``empty`` and ``nonempty`` are not defined.
 
     :param points: ``None`` (draw Sobol points when a region of a dimension is first seen),
         or a list of point sets, one per dimension used (``(P, d)`` tensors, kept as buffers).
@@ -846,7 +940,7 @@ class SampledVolume(RegionMeasure, nn.Module):
     def points(self, dim, device=None):
         """The point set of dimension ``dim`` (drawn on first use)."""
         if dim not in self._dims:
-            self._add(V.sobol_points(self.num_points, dim, self.bound, self.seed + len(
+            self._add(sobol_points(self.num_points, dim, self.bound, self.seed + len(
                 self._dims), device or "cpu"))
         return getattr(self, f"points_{dim}")
 
@@ -855,16 +949,27 @@ class SampledVolume(RegionMeasure, nn.Module):
         fn_a = membership_sampler(denominator_region, self.temperature, self.aggregate)
         fn_n = membership_sampler(numerator_region, self.temperature, self.aggregate)
         points = self.points(dim, _device(denominator_region))
-        num, den = V.chunked_means(lambda p: (fn_n(p), fn_a(p)), points, self.chunk_size)
-        return num, den
+        return mean_memberships(lambda p: (fn_n(p), fn_a(p)), points, self.chunk_size)
+
+    def _no_margin(self, margin):
+        if margin:
+            raise ValueError(
+                f"SampledVolume has no margin (a volume ratio is zero exactly when the "
+                f"relation holds on the sample); got margin={margin!r}. Use margin 0.")
+
+    def covered(self, a, b):
+        """``(B,)``: the fraction :math:`\\mathrm{Vol}(A \\cap B) / \\mathrm{Vol}(A)` of ``a``
+        that ``b`` covers (zero where ``a`` has no volume on the sample)."""
+        num, den = self._ratio(MembershipIntersection((a, b)), a)
+        return num / (den + self.eps)
 
     def inside(self, a, b, margin=0.0):
-        num, den = self._ratio(MembershipIntersection((a, b)), a)
-        return V.containment_loss(num, den, self.eps).unsqueeze(1)
+        self._no_margin(margin)
+        return (1.0 - self.covered(a, b)).unsqueeze(1)
 
     def apart(self, a, b, margin=0.0):
-        num, den = self._ratio(MembershipIntersection((a, b)), a)
-        return (num / (den + self.eps)).unsqueeze(1)
+        self._no_margin(margin)
+        return self.covered(a, b).unsqueeze(1)
 
     def intersect(self, a, b):
         """The minimum of the memberships; the gap is zero (a sampled region has no

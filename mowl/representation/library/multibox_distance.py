@@ -10,7 +10,7 @@ such geometry, not only the module of the paper.
 
 import torch as th
 
-import mowl.nn.el.mcmultibox.volume as V
+from mowl.representation.library.multibox_parts import membership_sampler
 
 __all__ = ["sampled_distance", "ranking_ratio", "box_samples_outside"]
 
@@ -57,57 +57,40 @@ def _sample_distance(geometry, data, gci_name, unit_points):
 
 def ranking_ratio(geometry, data, gci_name, step=None):
     """The training loss of ``gci2`` / ``gci3`` rows, computed for ranking: the volume ratio
-    on the fixed point set, with the memberships computed once per *distinct* operand and
-    not once per row (the candidates of a query usually differ in one operand only), points in
-    chunks of the measure's ``chunk_size``, operands in chunks of ``step``. Returns ``(N,)``."""
+    of the measure on its fixed point set, with the regions and their memberships made once
+    per *distinct* operand and not once per row (the candidates of a query usually differ in
+    one operand only): the class, or the preimage of the filler under the relation, which the
+    relation model makes once per distinct relation. Points in chunks of the measure's
+    ``chunk_size``, operands in chunks of ``step``. Returns ``(N,)``."""
     measure, relations = geometry.measure, geometry.relation_model
+
+    def concept(keys):
+        return geometry.classes(keys[:, 0])
+
+    def existential(keys):
+        return relations.preimage(keys[:, 0], geometry.classes(keys[:, 1]))
+
     if gci_name == "gci2":
-        left_keys, right_keys = data[:, :1], data[:, 1:3]
+        operands = ((data[:, :1], concept), (data[:, 1:3], existential))
     else:
-        left_keys, right_keys = data[:, :2], data[:, 2:3]
-    left_u, left_inv = th.unique(left_keys, dim=0, return_inverse=True)
-    right_u, right_inv = th.unique(right_keys, dim=0, return_inverse=True)
-    step = step or max(len(left_u), len(right_u), 1)
-    temperature, aggregate = measure.temperature, measure.aggregate
-    d = relations.embed_dim
-
-    def concept(keys, col):
-        return _unions(geometry, keys[:, col])
-
-    def concept_operand(keys):
-        c, o = concept(keys, 0)
-        return lambda p: V.soft_membership(p, c, o, temperature, aggregate)
-
-    def projection(keys):
-        # the membership in the domain boxes of a role depends on the role only: computed
-        # once per distinct role; the gate depends on (role, filler) but is small
-        roles, inv = th.unique(keys[:, 0], return_inverse=True)
-        rc, ro = relations._boxes(roles)
-        fc, fo = concept(keys, 1)
-        gate = V.project_gate(rc[inv], ro[inv], fc, fo, measure.bound, temperature, aggregate)
-
-        def fn(p):
-            per_box = V.soft_box_membership(p, rc[..., :d], ro[..., :d], temperature,
-                                            aggregate)
-            return th.minimum(per_box[inv], gate.unsqueeze(1)).amax(dim=-1)
-        return fn
-
-    left_op, right_op = ((concept_operand, projection) if gci_name == "gci2"
-                         else (projection, concept_operand))
+        operands = ((data[:, :2], existential), (data[:, 2:3], concept))
+    distinct = [th.unique(keys, dim=0, return_inverse=True) for keys, _ in operands]
+    step = step or max(max(len(keys) for keys, _ in distinct), 1)
+    samplers = [[membership_sampler(region_of(keys[i:i + step]), measure.temperature,
+                                    measure.aggregate) for i in range(0, len(keys), step)]
+                for (keys, _), (_, region_of) in zip(distinct, operands)]
+    (_, left_rows), (_, right_rows) = distinct
     points = measure.points(geometry.class_model.embed_dim, data.device)
+    shared = th.zeros(len(data), device=data.device)
+    own = th.zeros(len(data), device=data.device)
+    for chunk in th.split(points, measure.chunk_size):
+        left, right = (th.cat([fn(chunk) for fn in fns]) for fns in samplers)
+        for rows in th.arange(len(data), device=data.device).split(step):
+            a, b = left[left_rows[rows]], right[right_rows[rows]]
+            shared[rows] += th.minimum(a, b).sum(dim=-1)
+            own[rows] += a.sum(dim=-1)
     total = points.shape[0]
-    num = th.zeros(len(data), device=data.device)
-    den = th.zeros(len(data), device=data.device)
-    for start in range(0, total, measure.chunk_size):
-        p = points[start:start + measure.chunk_size]
-        left = th.cat([left_op(left_u[i:i + step])(p) for i in range(0, len(left_u), step)])
-        right = th.cat([right_op(right_u[i:i + step])(p)
-                        for i in range(0, len(right_u), step)])
-        for j in range(0, len(data), step):
-            a, b = left[left_inv[j:j + step]], right[right_inv[j:j + step]]
-            num[j:j + step] += th.minimum(a, b).sum(dim=-1)
-            den[j:j + step] += a.sum(dim=-1)
-    return V.containment_loss(num / total, den / total)
+    return 1.0 - (shared / total) / (own / total + measure.eps)
 
 
 @th.no_grad()

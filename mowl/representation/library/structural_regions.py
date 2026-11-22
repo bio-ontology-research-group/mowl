@@ -330,6 +330,14 @@ class DefinedClasses(Classes):
         self.register_buffer("def_mask", mask.clone().bool())
         self.register_buffer("def_x", x.clone().long())
         self.register_buffer("def_y", y.clone().long())
+        # the rows that state a definition, as keys ``A * N + C`` and ``(X * N + Y) * N + A``
+        # (the table also lists those entailed through a role auxiliary); not weights
+        keys0 = getattr(table, "_masked_gci0_keys", None)
+        keys1 = getattr(table, "_masked_gci1_keys", None)
+        self.register_buffer("def_gci0_keys", None if keys0 is None else keys0.clone().long(),
+                             persistent=False)
+        self.register_buffer("def_gci1_keys", None if keys1 is None else keys1.clone().long(),
+                             persistent=False)
 
     def __getattr__(self, name):
         try:
@@ -378,11 +386,20 @@ class DefinedClasses(Classes):
         return _replace_rows(region, rows, inter)
 
     # -- the rows that state a definition ------------------------------------------------
+    def _stated(self, rows, keys):
+        """Whether the rows (class ids, row-major as keys over the classes) are among
+        ``keys``."""
+        n = int(self.def_mask.shape[0])
+        code = th.zeros(rows.shape[0], dtype=th.long, device=keys.device)
+        for column in rows.to(device=keys.device, dtype=th.long).unbind(dim=1):
+            code = code * n + column
+        return th.isin(code, keys).to(rows.device)
+
     def masked_gci0(self, rows):
         """``(B,)`` boolean: ``gci0`` rows :math:`A \\sqsubseteq X`, :math:`A \\sqsubseteq Y`
         of a definition."""
-        if self.table is not None:
-            return self.table.masked_gci0(rows)
+        if self.def_gci0_keys is not None:
+            return self._stated(rows[:, :2], self.def_gci0_keys)
         rows = rows.to(self.def_x.device)
         a, c = rows[:, 0], rows[:, 1]
         return self.def_mask[a] & ((self.def_x[a] == c) | (self.def_y[a] == c))
@@ -390,8 +407,8 @@ class DefinedClasses(Classes):
     def masked_gci1(self, rows):
         """``(B,)`` boolean: ``gci1`` rows :math:`X \\sqcap Y \\sqsubseteq A` of a definition
         (in either order)."""
-        if self.table is not None:
-            return self.table.masked_gci1(rows)
+        if self.def_gci1_keys is not None:
+            return self._stated(rows[:, :3], self.def_gci1_keys)
         rows = rows.to(self.def_x.device)
         a = rows[:, 2]
         both = ((self.def_x[a] == rows[:, 0]) & (self.def_y[a] == rows[:, 1])) | \

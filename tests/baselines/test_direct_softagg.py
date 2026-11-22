@@ -5,7 +5,7 @@ import pytest
 import torch
 
 from mowl.nn import MultiBoxELModule, MultiELBEModule
-from mowl.nn.el.softagg import diversity_penalty, soft_gci1_terms, soft_weights, softmin
+from mowl.baselines.nn.el.multiboxel.softagg import diversity_penalty, soft_gci1_terms, soft_weights, softmin
 
 
 def _random_batch(

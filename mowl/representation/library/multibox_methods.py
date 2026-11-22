@@ -27,10 +27,11 @@ from mowl.representation.library.multibox_objective import (
 from mowl.representation.objectives import Objective
 from mowl.representation.library.multibox_parts import (
     BumpedBoxClasses, HeadTailRelations, PackedUnionClasses, PairUnions, SampledVolume,
-    UnionClasses, UnionMeasure, _packed_init)
+    UnionClasses, UnionMeasure, _packed_init, sobol_points)
 from mowl.representation.measures import Bounds
 from mowl.representation.adapters import register_adapter
-from mowl.representation.methods import register_method
+from mowl.representation.methods import (CLASS_MODELS, MEASURES, RELATION_MODELS,
+                                         register_method)
 from mowl.representation.relation_models import Translation
 from mowl.representation.library.structural_measure import SlotMeasure
 from mowl.representation.library.structural_methods import StructuralGeometry
@@ -56,6 +57,44 @@ def _build(geometry_class, into, *args, **kwargs):
         return geometry_class(*args, **kwargs)
     geometry_class.__init__(into, *args, **kwargs)
     return into
+
+
+_REPLACEABLE = """
+    :param classes, relations, measure, objective: Replace the part of the method: a part
+        object, the name of a registered part (made with ``(size, embed_dim)``; a measure:
+        ``()``), or ``None`` (the part of the method). Not with ``tables``.
+    :param regularizers: Added to the regularisers of the method.
+"""
+
+
+def _replacement(value, registry, kind, *arguments):
+    """The part that replaces the method's own: ``None`` (keep it), a part object, a registered
+    name or a factory (made with ``arguments``)."""
+    if value is None or not (isinstance(value, str) or isinstance(value, type)):
+        return value
+    if isinstance(value, str):
+        if value not in registry:
+            raise ValueError(f"Unknown {kind} {value!r}; available: {sorted(registry)}.")
+        value = registry[value]
+    return value(*arguments)
+
+
+def _replace(defaults, tables, nb_classes, nb_relations, embed_dim, classes=None,
+             relations=None, measure=None, objective=None):
+    """The parts of a method: ``defaults`` maps ``"classes"``, ``"relations"``, ``"measure"``,
+    ``"objective"`` to functions that make the method's own part; a part the caller gives
+    replaces it (and the function is not called)."""
+    given = {"classes": _replacement(classes, CLASS_MODELS, "class model", nb_classes,
+                                     embed_dim),
+             "relations": _replacement(relations, RELATION_MODELS, "relation model",
+                                       nb_relations, embed_dim),
+             "measure": _replacement(measure, MEASURES, "measure"),
+             "objective": objective}
+    given = {k: v for k, v in given.items() if v is not None}
+    if given and tables is not None:
+        raise ValueError(f"Replacing parts ({sorted(given)}) does not go with sharing the "
+                         f"tables of a module (tables=...).")
+    return {k: given[k] if k in given else make() for k, make in defaults.items()}
 
 
 def _BOUNDS():
@@ -359,7 +398,8 @@ def mcmultibox(nb_classes, nb_relations, nb_individuals=0, embed_dim=5, margin=0
     a metric, not a loss) is
     :func:`~mowl.representation.library.multibox_distance.sampled_distance` on these parts.
     ``gci0_bot`` and ``gci3_bot`` are not defined by the thesis and raise an error in the
-    module; ``margin`` is ignored. ``gci1_bot``, ``class_assertion``,
+    module. The method has no margin: a ``margin`` other than 0 is refused (the measure
+    refuses one too). ``gci1_bot``, ``class_assertion``,
     ``object_property_assertion`` and the negative loss of ``gci2`` are not defined by the
     module either (it raises), but exist here as extensions (the fraction of :math:`C`
     covered by :math:`D`; the inclusion of the individual boxes), because the measure has
@@ -370,6 +410,9 @@ def mcmultibox(nb_classes, nb_relations, nb_individuals=0, embed_dim=5, margin=0
     :param into: The public module (:class:`~mowl.nn.VolumeMultiBoxELModule`) to initialise
         with these parts.
     """
+    if margin:
+        raise ValueError(f"The volume-based MultiBoxEL has no margin (its losses are volume "
+                         f"ratios); got margin={margin!r}.")
     t = tables
     if t is not None:
         classes = PackedUnionClasses(table=t.class_embed)
@@ -387,9 +430,8 @@ def mcmultibox(nb_classes, nb_relations, nb_individuals=0, embed_dim=5, margin=0
         if nb_individuals:
             individuals = PackedUnionClasses(table=th.nn.Parameter(
                 _packed_init(nb_individuals, 1, embed_dim, bound, gen)))
-        from mowl.nn.el.mcmultibox import volume as V
-        points = [V.sobol_points(num_points, embed_dim, bound, seed),
-                  V.sobol_points(num_points, 2 * embed_dim, bound, seed + 1)]
+        points = [sobol_points(num_points, embed_dim, bound, seed),
+                  sobol_points(num_points, 2 * embed_dim, bound, seed + 1)]
         measure = SampledVolume(points, bound=bound, temperature=temperature,
                                 aggregate=aggregate, chunk_size=point_chunk_size)
     objective = Objective(negatives="gci2", strict_negatives=False)

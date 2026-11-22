@@ -13,7 +13,7 @@ from mowl.datasets import Dataset, PathDataset
 from mowl.geometric.normal_forms import TOP
 from mowl.models import MultiBoxEL, MultiELBE
 from mowl.nn import MultiBoxELModule, MultiELBEModule
-from mowl.nn.el.pointloss import soft_box_membership, union_membership
+from mowl.baselines.nn.el.multiboxel.pointloss import soft_box_membership, union_membership
 from tests.geometric.helpers import _random_batch, fixture_path
 
 

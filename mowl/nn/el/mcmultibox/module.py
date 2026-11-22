@@ -40,7 +40,7 @@ class VolumeMultiBoxELModule(ReleasedTables, ComposedGeometry):
     Volumes are estimated on a fixed set of ``num_points`` quasi-random points of
     :math:`S = [-b_o, b_o]^d` (a scrambled Sobol sequence, deterministic given ``seed``; a second
     set in :math:`[-b_o, b_o]^{2d}` is used for the role losses) with the soft membership
-    function of :mod:`mowl.nn.el.mcmultibox.volume`. Every loss is
+    function of :func:`~mowl.representation.library.multibox_parts.box_membership`. Every loss is
     :math:`1 - \mathrm{Vol}(A \cap B)/\mathrm{Vol}(A)`:
 
     * ``gci0`` :math:`C \sqsubseteq D`: :math:`A = \llbracket C\rrbracket`,
@@ -63,7 +63,7 @@ class VolumeMultiBoxELModule(ReleasedTables, ComposedGeometry):
     :math:`\pi[R_j \cap (S \times D)]` is the domain box of :math:`R_j` if its codomain box meets
     the filler multibox (inside :math:`S`) and empty otherwise. The "meets" test is made soft with
     the same sigmoid construction as the membership function (see
-    :func:`~mowl.nn.el.mcmultibox.volume.soft_overlap_gate`). This is our reading of the
+    :class:`~mowl.representation.library.multibox_parts.DomainProjection`). This is our reading of the
     thesis' :math:`\pi`; the thesis does not describe how it is evaluated.
 
     **Not covered.** The thesis defines no loss for the bottom forms (``gci0_bot``, ``gci1_bot``,
@@ -75,7 +75,7 @@ class VolumeMultiBoxELModule(ReleasedTables, ComposedGeometry):
 
     **Deviations / unspecified in the thesis** (ours): the bound :math:`b_o` (default 1), the
     aggregate over coordinates (``"min"`` by default, because the thesis' literal ``mean`` is
-    positive everywhere, see :mod:`mowl.nn.el.mcmultibox.volume`), the
+    positive everywhere, see :func:`~mowl.representation.library.multibox_parts.soft_indicator`), the
     initialisation (centres uniform in :math:`[-b_o, b_o]`, offsets uniform in
     :math:`[0.4, 0.9] b_o`, large enough that random multiboxes overlap in
     :math:`d = 5`), the sigmoid temperature (1, as the thesis), set intersection as
@@ -93,7 +93,7 @@ class VolumeMultiBoxELModule(ReleasedTables, ComposedGeometry):
         reports that fewer than 10,000 gave zero evaluation scores).
     :param temperature: Sigmoid temperature (thesis: none, i.e. 1).
     :param aggregate: ``"min"`` (default; membership positive iff inside) or ``"mean"`` (the
-        literal thesis formula, positive everywhere; see :mod:`mowl.nn.el.mcmultibox.volume`).
+        literal thesis formula, positive everywhere; see :func:`~mowl.representation.library.multibox_parts.soft_indicator`).
     :param seed: Seed of the point set (and of the weight initialisation if ``init_seed`` is
         ``None``).
     :param point_chunk_size: Number of points processed at once (memory/speed trade-off only).

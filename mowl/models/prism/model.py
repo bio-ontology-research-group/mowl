@@ -98,7 +98,7 @@ class PrismEL(ComposedEL):
         auxiliaries :math:`A \\sqsubseteq \\exists r.C \\sqsubseteq \\text{Aux}`)
         via :class:`~mowl.nn.el.structural.DefinitionTable`.
     existence_weight : float, default 1.0
-        Non-negative weight multiplying :func:`~mowl.nn.el.structural.existence_loss`
+        Non-negative weight multiplying :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.existence_loss`
         in :meth:`~mowl.nn.PrismModule.structural_extra_loss` under
         ``objective="structural"``.
     size_reg : float, default 1e-3
