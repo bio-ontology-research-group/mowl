@@ -58,7 +58,7 @@ those of the library. An axiom :math:`C \sqsubseteq D` is scored by the score of
 * **ExpressivE**: a relation is a hyper-parallelogram in the virtual triple space; the
   interaction follows the authors' code: ``tanh`` on entities, centres and widths, the
   minimal denominator ``min_denom`` and the distance of Equation 3
-  (:mod:`mowl.nn.graph.kge_interactions`). Only the base model is provided. The pattern
+  (:mod:`mowl.representation.library.graph_interactions`). Only the base model is provided. The pattern
   theorems (symmetry, hierarchy, mutual exclusion) are checked on hand-built parallelograms
   in ``tests/nn/test_expressive_module.py``.
 * **RESHUFFLE**: entities are encoded by a graph network from fixed random binary matrices

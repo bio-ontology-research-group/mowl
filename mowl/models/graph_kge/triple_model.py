@@ -18,11 +18,9 @@ part swapped; :class:`~mowl.models.BoxE`, :class:`~mowl.models.ExpressivE` and
 :class:`~mowl.models.GraphPlusPyKEENModel` reads the parts from any PyKEEN model.
 """
 
-import copy
 import logging
 import os
 
-import numpy as np
 import torch as th
 
 import mowl.error.messages as msg
@@ -30,7 +28,10 @@ from mowl.base_models import KGEModel
 from mowl.projection import Edge
 from mowl.representation.library.graph_projection import projection as make_projection
 from mowl.representation.library.other_graph import UniformCorruption
-from mowl.training.regime import TrainingRegime
+from mowl.evaluation.triple_axioms import AxiomTriples
+from mowl.training.triples import (HitsEarlyStopping, carry_rows,  # noqa: F401
+                                   forward_id, positive_triples, train_on_triples)
+from mowl.utils.random import seed_generators
 
 logger = logging.getLogger(__name__)
 
@@ -183,15 +184,10 @@ class TripleGraphModel(KGEModel):
 
     def training_triples(self):
         """The positive triples ``(E, 3)`` of the graph in model ids (with the inverse
-        triples when :attr:`create_inverse_triples`: ``(h, 2r, t)`` and ``(t, 2r + 1, h)``)."""
-        triples = self.triples_factory.mapped_triples
-        if not self.create_inverse_triples:
-            return triples
-        forward = triples.clone()
-        forward[:, 1] = 2 * triples[:, 1]
-        backward = triples.clone()
-        backward[:, 1] = 2 * triples[:, 1] + 1
-        return th.cat([forward, backward.flip(1)])
+        triples when :attr:`create_inverse_triples`: ``(h, 2r, t)`` and ``(t, 2r + 1, h)``;
+        :func:`mowl.training.triples.positive_triples`)."""
+        return positive_triples(self.triples_factory.mapped_triples,
+                                self.create_inverse_triples)
 
     # -- the geometry --------------------------------------------------------------------
     def _make_module(self):
@@ -264,76 +260,37 @@ class TripleGraphModel(KGEModel):
         return True
 
     # -- scores of axioms -----------------------------------------------------------------
-    def _index_maps(self):
-        maps = self._axiom_index_maps
-        if maps is None:
-            nodes = self.triples_factory.entity_to_id
-            relations = self.triples_factory.relation_to_id
-            class_map = th.full((max(1, len(self.dataset.classes)),), -1, dtype=th.long)
-            for iri, i in self.class_index_dict.items():
-                class_map[i] = nodes.get(iri, -1)
-            individual_map = th.full((max(1, len(self.dataset.individuals)),), -1,
-                                     dtype=th.long)
-            for iri, i in self.individual_index_dict.items():
-                individual_map[i] = nodes.get(iri, -1)
-            role_map = th.full((max(1, len(self.dataset.object_properties)),), -1,
-                               dtype=th.long)
-            for iri, i in self.object_property_index_dict.items():
-                role_map[i] = relations.get(iri, -1)
-            maps = self._axiom_index_maps = (class_map, role_map,
-                                             relations.get(self.SUBCLASS_RELATION, -1),
-                                             individual_map,
-                                             relations.get(self.TYPE_RELATION, -1))
-        return maps
+    def _axioms(self):
+        """The evaluation part that reads axioms as triples
+        (:class:`~mowl.evaluation.triple_axioms.AxiomTriples`)."""
+        axioms = self._axiom_index_maps
+        if axioms is None:
+            factory = self.triples_factory
+            dataset = self.dataset
+            axioms = self._axiom_index_maps = AxiomTriples(
+                self.class_index_dict, self.individual_index_dict,
+                self.object_property_index_dict,
+                (len(dataset.classes), len(dataset.individuals),
+                 len(dataset.object_properties)),
+                factory.entity_to_id, factory.relation_to_id, self.SUBCLASS_RELATION,
+                self.TYPE_RELATION, self.create_inverse_triples)
+        return axioms
 
-    @th.no_grad()
     def axiom_costs(self, gci_name, rows):
         """Cost of every candidate axiom in ``rows`` (indices of the dataset's classes,
         object properties and individuals), lower is more plausible: minus the score the
-        model gives to the edge the axiom is projected to.
-
-        * ``gci0`` rows ``[C, D]``: the edge ``C -subclassof-> D``;
-        * ``gci2`` rows ``[C, r, D]``: the edge ``C -r-> D``;
-        * ``class_assertion`` rows ``[a, C]``: the edge ``a -type-> C``;
-        * ``object_property_assertion`` rows ``[a, r, b]``: the edge ``a -r-> b``.
+        model gives to the edge the axiom is projected to (see
+        :class:`~mowl.evaluation.triple_axioms.AxiomTriples`: ``gci0`` is the edge
+        ``subclassof``, ``gci2`` the edge ``C -r-> D``, a class assertion the ``type`` edge,
+        a role assertion its edge).
 
         An axiom whose role is not an edge label of the graph (and a class assertion when
-        the projection has no type edges) gets an infinite cost. A class or individual that
-        occurs in no edge is a node with an untrained vector, as everywhere in this
-        model."""
-        module = self.module
+        the projection has no type edges) gets an infinite cost."""
         if gci_name not in self.scored_forms:
             from mowl.evaluation.model_scoring import UnsupportedAxiomForm
             raise UnsupportedAxiomForm(
                 f"{type(self).__name__} has no score for {gci_name!r} axioms.")
-        class_map, role_map, subclass, individual_map, type_relation = self._index_maps()
-        cpu = rows.cpu()
-        if gci_name == "gci0":
-            head, tail = class_map[cpu[:, 0]], class_map[cpu[:, 1]]
-            relation = th.full_like(head, subclass)
-        elif gci_name == "gci2":
-            head, tail = class_map[cpu[:, 0]], class_map[cpu[:, 2]]
-            relation = role_map[cpu[:, 1]]
-        elif gci_name == "class_assertion":
-            head, tail = individual_map[cpu[:, 0]], class_map[cpu[:, 1]]
-            relation = th.full_like(head, type_relation)
-        else:
-            head, tail = individual_map[cpu[:, 0]], individual_map[cpu[:, 2]]
-            relation = role_map[cpu[:, 1]]
-        if self.create_inverse_triples:
-            relation = th.where(relation >= 0, 2 * relation, relation)
-        known = (head >= 0) & (tail >= 0) & (relation >= 0)
-        out = th.full((len(cpu),), float("inf"))
-        if known.any():
-            triples = th.stack([head[known], relation[known], tail[known]], dim=1)
-            module.eval()
-            costs = []
-            for s in range(0, len(triples), 2 ** 16):
-                chunk = triples[s:s + 2 ** 16].to(self.device)
-                costs.append(module.triple_cost(chunk[:, 0], chunk[:, 1], chunk[:, 2])
-                             .reshape(-1).cpu())
-            out[known] = th.cat(costs).float()
-        return out.to(rows.device)
+        return self._axioms().costs(self.module, gci_name, rows, self.device)
 
     # -- training -------------------------------------------------------------------------
     def _check_training_setup(self):
@@ -345,92 +302,21 @@ class TripleGraphModel(KGEModel):
             raise AttributeError(msg.PYKEEN_BATCH_SIZE_NOT_SET)
 
     def train(self, epochs=0):
-        """Train on the triples of the graph.
-
-        Every epoch visits the triples in random batches; the corrupted triples of a batch
-        (the sampler of the geometry, or the regime's ``negatives``) are scored with the same
-        triple score, the objective of the geometry (or the regime's ``loss``) turns the scores
-        into the loss, plus the regularisation of the geometry; after the optimiser step the
-        geometry's constraints are applied (``module.project()``).
+        """Train on the triples of the graph (:func:`mowl.training.triples.train_on_triples`):
+        shuffled batches, the corrupted triples of the sampler of the geometry (or the
+        regime's ``negatives``), the objective of the geometry (or the regime's ``loss``),
+        its regularisation, and its constraints after every step.
 
         :param epochs: Number of epochs to train the model.
         :type epochs: int
         """
-        module = self.module
         self._check_training_setup()
-        regime = self.training_regime
         factory = self.triples_factory
-        triples = self.training_triples()
-        num_entities, num_relations = factory.num_entities, factory.num_relations
-
-        if self.reinitialise:
-            module.reset_parameters()
-        optimizer = NotImplemented
-        if regime is not None:
-            optimizer = regime.optimizer()
-        if optimizer is NotImplemented:
-            optimizer = self.optimizer(params=module.trainable_parameters(), lr=self.lr)
-
-        def sample(positives):
-            negatives = NotImplemented
-            if regime is not None:
-                negatives = regime.negatives("triple", positives)
-            if negatives is NotImplemented:
-                negatives = module.sampler(positives, num_entities, num_relations)
-            if regime is not None:
-                negatives = regime.filter_negatives("triple", positives, negatives)
-            return negatives
-
-        batches = th.utils.data.DataLoader(
-            dataset=_batches(triples, self.batch_size, self.drop_last, sample),
-            batch_size=None, batch_sampler=None)
-        if len(batches) == 0:
-            raise ValueError("There is no training batch: the graph has no triples.")
-        for epoch in range(1, 1 + epochs):
-            module.train()
-            if regime is not None:
-                regime.on_epoch_start(epoch - 1, epochs)
-            total = 0.0
-            for positives, negatives in batches:
-                optimizer.zero_grad(set_to_none=True)
-                positives = positives.to(self.device)
-                negatives = negatives.to(self.device)
-                shape = negatives.shape[:-1]
-                positive_scores = -module.triple_cost(positives[:, 0], positives[:, 1],
-                                                      positives[:, 2])
-                flat = negatives.reshape(-1, 3)
-                negative_scores = -module.triple_cost(flat[:, 0], flat[:, 1],
-                                                      flat[:, 2]).reshape(*shape)
-                loss = NotImplemented
-                if regime is not None:
-                    loss = regime.loss("triple", positive_scores, negative_scores)
-                if loss is NotImplemented:
-                    loss = module.loss(positive_scores, negative_scores)
-                loss = loss + self._regularization(module, regime)
-                if not th.isfinite(loss):
-                    raise FloatingPointError("The loss is not finite.")
-                loss.backward()
-                optimizer.step()
-                module.project()
-                if regime is not None:
-                    regime.after_step()
-                total += loss.item()
-            if regime is not None:
-                regime.on_epoch_end(epoch - 1, {"total": total})
-                if regime.should_stop(epoch - 1):
-                    break
-        if regime is not None:
-            regime.on_train_end()
+        train_on_triples(self.module, self.training_triples(), factory.num_entities,
+                         factory.num_relations, self.optimizer, self.lr, self.batch_size,
+                         epochs, self.training_regime, self.device, self.drop_last,
+                         self.reinitialise)
         self._save()
-
-    @staticmethod
-    def _regularization(module, regime):
-        term = module.regularization_loss()
-        if regime is not None:
-            out = regime.regularization(term)
-            if out is not NotImplemented:
-                term = out
-        return term
 
     def _save(self):
         th.save(self.module.state_dict(), self.model_filepath)
@@ -469,8 +355,8 @@ class TripleGraphModel(KGEModel):
                 (old.relation_model, new.relation_model, old_relations, relations)):
             if old_part is None or new_part is None:
                 continue
-            _carry(old_part, new_part, before, after, self.create_inverse_triples
-                   and old_part is old.relation_model)
+            doubled = self.create_inverse_triples and old_part is old.relation_model
+            carry_rows(old_part, new_part, before, after, doubled)
         return self
 
     def from_pretrained(self, model):
@@ -481,35 +367,6 @@ class TripleGraphModel(KGEModel):
             raise FileNotFoundError("Pretrained model path does not exist")
         self._is_pretrained = True
         self.module.load_state_dict(th.load(model, weights_only=False))
-
-
-def _batches(triples, batch_size, drop_last, sample):
-    from mowl.representation.library.other_graph import _TripleBatches
-    return _TripleBatches(triples, batch_size, drop_last, sample)
-
-
-def _carry(old, new, before, after, doubled):
-    """Copy the rows of the tables of the part ``old`` into ``new`` for the keys they share
-    (``before``, ``after``: key -> row; ``doubled``: the rows of a relation are ``2 i`` and
-    ``2 i + 1``)."""
-    new_params = dict(new.named_parameters())
-    for name, parameter in old.named_parameters():
-        target = new_params.get(name)
-        if target is None or parameter.shape[1:] != target.shape[1:]:
-            continue
-        if not parameter.requires_grad:
-            continue
-        with th.no_grad():
-            for key, i in before.items():
-                j = after.get(key)
-                if j is None:
-                    continue
-                if doubled:
-                    for d in (0, 1):
-                        if 2 * i + d < len(parameter) and 2 * j + d < len(target):
-                            target[2 * j + d] = parameter[2 * i + d]
-                elif i < len(parameter) and j < len(target):
-                    target[j] = parameter[i]
 
 
 class GraphKGEModel(TripleGraphModel):
@@ -587,7 +444,6 @@ class GraphKGEModel(TripleGraphModel):
                     subclass_id=subclass)
 
     def _make_module(self):
-        import random
         from mowl.representation import methods as M
         build = M.METHODS[self.method]
         arguments = self._graph_arguments()
@@ -604,9 +460,7 @@ class GraphKGEModel(TripleGraphModel):
         if self.regularizers:
             options["regularizers"] = self.regularizers
         if self.seed is not None:
-            random.seed(self.seed)
-            np.random.seed(self.seed)
-            th.manual_seed(self.seed)
+            seed_generators(self.seed)
         module = build(arguments.pop("nb_classes"), arguments.pop("nb_relations"), 0,
                        sampler=sampler, **self._embedding_options(), **arguments, **options)
         return module.to(self.device)
@@ -630,123 +484,3 @@ class GraphKGEModel(TripleGraphModel):
         raise TypeError(f"{type(self).__name__} is built from the parts of the method "
                         f"{self.method!r}; swap a part with the arguments of the constructor "
                         f"(classes, relations, loss, sampler, regularizers).")
-
-
-class HitsEarlyStopping(TrainingRegime):
-    """Early stopping on the Hits@k of the validation triples: the evaluation regime of the
-    RESHUFFLE experiments (every ``frequency`` epochs, stop when ``patience`` evaluations in a
-    row did not improve the best Hits@k by ``relative_delta``, then restore the best
-    parameters). Hits@k is the share of validation triples, over both sides, whose true
-    entity ranks among the first ``k`` of all entities (filtered: the other known triples of
-    the graph are not counted; ties share their ranks).
-
-    The validation triples are those of the validation ontology of the dataset projected like
-    the training ontology (:meth:`TripleGraphModel.validation_triples`).
-    """
-
-    key = ""
-    #: Attribute of the regime read by a model's loop: no hooks other than these are changed.
-
-    def __init__(self, frequency=10, patience=10, relative_delta=0.01, k=10, batch_size=64):
-        super().__init__()
-        self.frequency, self.patience = int(frequency), int(patience)
-        self.relative_delta, self.k, self.batch_size = float(relative_delta), int(k), batch_size
-        self.history = []
-        self._best, self._best_state, self._bad, self._val = None, None, 0, None
-
-    def attach(self, model):
-        super().attach(model)
-        self.history, self._best, self._best_state, self._bad = [], None, None, 0
-        self._val = None
-
-    def _ranks(self, module, queries, relations, candidates_are, truth, known, n):
-        """Rank of ``truth`` among all entities as the ``candidates_are`` ("tail" or
-        "head") of the queries."""
-        ranks = []
-        everyone = th.arange(n)
-        for start in range(0, len(queries), self.batch_size):
-            q = queries[start:start + self.batch_size]
-            r = relations[start:start + self.batch_size]
-            t = truth[start:start + self.batch_size]
-            b = len(q)
-            repeated = q.repeat_interleave(n)
-            rels = r.repeat_interleave(n)
-            cands = everyone.repeat(b)
-            cost = module.triple_cost(repeated, rels, cands).reshape(b, n)
-            true_cost = cost[th.arange(b), t].clone()
-            for row in range(b):
-                for other in known.get((int(q[row]), int(r[row])), ()):
-                    if other != int(t[row]):
-                        cost[row, other] = float("inf")
-            optimistic = (cost < true_cost[:, None]).sum(dim=1) + 1
-            pessimistic = (cost <= true_cost[:, None]).sum(dim=1)
-            ranks.append((optimistic + pessimistic) / 2.0)
-        return th.cat(ranks)
-
-    @th.no_grad()
-    def hits_at_k(self):
-        """Hits@k of the validation triples, filtered, both sides, all entities."""
-        model = self.model
-        module, factory = model.module, model.triples_factory
-        n = factory.num_entities
-        if self._val is None:
-            self._val = model.validation_triples()
-        val, inverse = self._val, model.create_inverse_triples
-        forward = 2 * val[:, 1] if inverse else val[:, 1]
-        backward = 2 * val[:, 1] + 1 if inverse else val[:, 1]
-        tails, heads = {}, {}
-        for h, r, t in th.cat([factory.mapped_triples, val]).tolist():
-            tails.setdefault((h, forward_id(r, inverse)), set()).add(t)
-            if inverse:
-                heads.setdefault((t, 2 * r + 1), set()).add(h)
-            else:
-                heads.setdefault((t, r), set()).add(h)
-        module.eval()
-        with module.encoding():
-            tail_ranks = self._ranks(module, val[:, 0], forward, "tail", val[:, 2], tails, n)
-            if inverse:
-                head_ranks = self._ranks(module, val[:, 2], backward, "tail", val[:, 0],
-                                         heads, n)
-            else:
-                head_ranks = self._head_ranks(module, val, n, heads)
-        ranks = th.cat([tail_ranks, head_ranks])
-        return float((ranks <= self.k).float().mean())
-
-    def _head_ranks(self, module, val, n, known):
-        ranks = []
-        everyone = th.arange(n)
-        for start in range(0, len(val), self.batch_size):
-            v = val[start:start + self.batch_size]
-            b = len(v)
-            cost = module.triple_cost(everyone.repeat(b), v[:, 1].repeat_interleave(n),
-                                      v[:, 2].repeat_interleave(n)).reshape(b, n)
-            true_cost = cost[th.arange(b), v[:, 0]].clone()
-            for row in range(b):
-                for other in known.get((int(v[row, 2]), int(v[row, 1])), ()):
-                    if other != int(v[row, 0]):
-                        cost[row, other] = float("inf")
-            optimistic = (cost < true_cost[:, None]).sum(dim=1) + 1
-            pessimistic = (cost <= true_cost[:, None]).sum(dim=1)
-            ranks.append((optimistic + pessimistic) / 2.0)
-        return th.cat(ranks)
-
-    def should_stop(self, epoch):
-        if (epoch + 1) % self.frequency:
-            return False
-        hits = self.hits_at_k()
-        self.history.append(hits)
-        if self._best is None or hits > self._best * (1.0 + self.relative_delta):
-            self._best, self._bad = hits, 0
-            self._best_state = copy.deepcopy(self.model.module.state_dict())
-        else:
-            self._bad += 1
-        return self._bad >= self.patience
-
-    def on_train_end(self):
-        if self._best_state is not None:
-            self.model.module.load_state_dict(self._best_state)
-
-
-def forward_id(relation, inverse):
-    """The model id of the forward relation ``relation`` of the graph."""
-    return 2 * relation if inverse else relation

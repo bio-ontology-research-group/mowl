@@ -5,7 +5,7 @@ import torch as th
 import mowl
 mowl.init_jvm("1g")
 import mowl.datasets  # noqa: F401,E402
-from mowl.nn.graph.kge_interactions import (propagate, random_features,  # noqa: E402
+from mowl.representation.library.graph_interactions import (propagate, random_features,  # noqa: E402
                                             relation_matrices, reshuffle_interaction)
 
 L = 6

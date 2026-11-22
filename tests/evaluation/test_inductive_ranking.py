@@ -240,7 +240,7 @@ def test_reshuffle_costs_inf_for_a_relation_it_never_saw(model, dataset):
 
 def test_with_inverse_triples_a_head_is_scored_from_the_tail_with_the_inverse_matrix(dataset):
     from mowl.models import Reshuffle
-    from mowl.nn.graph.kge_interactions import reshuffle_interaction
+    from mowl.representation.library.graph_interactions import reshuffle_interaction
     th.manual_seed(0)
     model = Reshuffle(dataset, l=6, k=8, num_layers=2, num_negs_per_pos=4, batch_size=16,
                       inverse_triples=True)
