@@ -289,5 +289,4 @@ EXEMPT = {
     "composed-alc": "ComposedALC is the generic combination of parts for ALC axioms itself (the "
                     "named methods dfalc, falcon and alcone are compared); it has no direct "
                     "implementation to be compared with.",
-" Its trained counterpart, alcone, is compared.",
 }
