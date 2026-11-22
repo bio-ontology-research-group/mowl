@@ -239,6 +239,31 @@ class TestELKEm(Case, TestCase):
         self.assertTrue(th.allclose(geometry_of(module)(data, "gci0_bot"),
                                     module(data, "gci0_bot").reshape(-1, 1), atol=1e-6))
 
+    def test_disjointness_with_an_empty_class_default_and_old_option(self):
+        # variant="paper" (the default of module and builder): a disjointness row with a class
+        # fixed to the empty box costs 0; variant="reference" (the authors' code) charges the
+        # margin. Module and parts agree in both, and the two differ from each other.
+        gci1_bot = th.tensor([[0, 1, 5], [1, 0, 5], [4, 3, 5]])    # class 0 is bottom, 1 top
+        gci3_bot = th.tensor([[1, 0, 1], [1, 2, 1]])
+        default = self.fixed()
+        self.assertEqual(default.variant, "paper")
+        for variant, trivial_cost in (("paper", 0.0), (None, 0.0), ("reference", 0.07)):
+            # (the cost of a disjointness with an empty filler depends on the range box)
+            module = default if variant is None else self.fixed(variant=variant)
+            geometry = geometry_of(module)
+            for form, data, n_trivial in (("gci1_bot", gci1_bot, 2), ("gci3_bot", gci3_bot, 1)):
+                got = geometry(data, form)
+                self.assertTrue(th.allclose(got, module(data, form).reshape(-1, 1), atol=1e-6))
+                if form == "gci1_bot" or variant != "reference":
+                    self.assertTrue(th.allclose(got[:n_trivial],
+                                                th.full((n_trivial, 1), trivial_cost),
+                                                atol=1e-6), (variant, form, got))
+            # the margin-free loss is a column, in the module as in the geometry's mode
+            self.assertEqual(module.zero_margin_loss(gci1_bot, "gci1_bot").shape, (3, 1))
+        from mowl.representation.library.boxrel_methods import elkem
+        self.assertTrue(elkem(N, R).objective.trivial_disjointness)
+        self.assertFalse(elkem(N, R, variant="reference").objective.trivial_disjointness)
+
     def test_evaluation_mode(self):
         module = self.make().eval()
         self.assertSame(module)

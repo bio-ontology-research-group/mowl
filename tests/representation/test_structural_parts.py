@@ -188,6 +188,37 @@ class TestStructuralMultiBoxEL(TestCase):
         self.assertNotIn("ExistencePenalty", {type(r).__name__ for r in geometry.regularizers})
         self.assert_same_losses(module, geometry)
 
+    def test_size_penalty_without_tables_default_and_old_option(self):
+        # default (module and parts): no size term before the tables say what owl:Thing and
+        # the defined classes are; size_reg_without_tables=True (old): every class is shrunk.
+        default = structural_module(set_tables=False)
+        self.assertFalse(default.size_reg_without_tables)
+        geometry = geometry_of(default)
+        self.assertFalse(geometry.size_reg_without_tables)
+        self.assertEqual(float(geometry.regularization_loss()
+                               - default.regularization_loss()), 0.0)
+        old = structural_module(set_tables=False, size_reg_without_tables=True)
+        old_geometry = geometry_of(old)
+        self.assertTrue(old_geometry.size_reg_without_tables)
+        self.assertGreater(float(old.structural_extra_loss()), 0.0)
+        self.assertTrue(th.allclose(
+            old_geometry.regularization_loss(),
+            old.regularization_loss() + old.structural_extra_loss(), atol=1e-6))
+        self.assertGreater(float(old_geometry.regularization_loss()
+                                 - geometry.regularization_loss()), 0.0)
+        # with tables installed the two options agree, in module and parts
+        for flag in (False, True):
+            module = structural_module(size_reg_without_tables=flag)
+            self.assertTrue(th.allclose(
+                geometry_of(module).regularization_loss(),
+                module.regularization_loss() + module.structural_extra_loss(), atol=1e-6))
+        # the builder: the default is False
+        self.assertFalse(METHODS["multiboxel"](N, R, reading="structural")
+                         .size_reg_without_tables)
+        self.assertTrue(METHODS["multiboxel"](N, R, reading="structural",
+                                              size_reg_without_tables=True)
+                        .size_reg_without_tables)
+
     def test_parameters_are_shared(self):
         module = structural_module()
         geometry = geometry_of(module)

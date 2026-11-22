@@ -76,6 +76,13 @@ class TestStructuralPrism(TestCase):
             self.assertIsInstance(geometry.class_model, DefinedClasses)
             self.assertGreater(self.compare(module, geometry), 10)
 
+    def test_every_form_with_the_absolute_reading_of_an_empty_box(self):
+        # the old option of the module equals the parts with empty_box_reading="absolute"
+        module = prism_module(empty_box_reading="absolute")
+        geometry = geometry_of(module)
+        self.assertEqual(geometry.objective.empty_regions, "abs")
+        self.assertGreater(self.compare(module, geometry), 10)
+
     def test_regularisation_is_the_modules_extra_loss(self):
         for options in ({}, {"existence_weight": 0.0}, {"size_reg": 0.0}):
             module = prism_module()
@@ -96,31 +103,80 @@ class TestStructuralPrism(TestCase):
         self.assertTrue(th.equal(old.cen, new.centre))
         self.assertTrue(th.equal(old.w, new.offset))
 
-    def test_the_module_reads_an_empty_box_as_a_phantom_in_roles_the_reading_does_not(self):
+    def empty_box_setup(self, **options):
         # Class 3 is defined as 0 and 1. Move the two boxes apart in one coordinate: the box
         # part of the defined class is empty (negative half-width), its triangle is not.
-        module = prism_module()
+        module = prism_module(**options)
         with th.no_grad():
             module.box_center.weight[0, 0] = -5.0
             module.box_center.weight[1, 0] = 5.0
             module.box_offset.weight[:2, 0] = 0.5
         module.set_structural_tables(module.definition_table, module.existence_targets, TOP)
+        return module
+
+    def empty_rows(self):
+        rows = {form: ROWS[form][:3].clone() for form in
+                ("class_assertion", "gci2", "gci3", "gci3_bot")}
+        rows["class_assertion"][:, 1] = 3        # the defined (empty) class is the class
+        rows["gci2"][:, 0] = 3                   # ... the source
+        rows["gci3"][:, 1] = 3                   # ... the filler
+        rows["gci3_bot"][:, 1] = 3               # ... the filler
+        return rows
+
+    def test_module_and_parts_agree_on_an_empty_box_by_default(self):
+        # the default reading of both is the signed one: the empty box is empty
+        module = self.empty_box_setup()
+        self.assertEqual(module.empty_box_reading, "signed")
         geometry = geometry_of(module)
-        region = geometry.classes(th.tensor([3]))
-        self.assertLess(float(region.offset[0, 0]), 0)
-        rows = ROWS["class_assertion"][:1].clone()
-        rows[0, 1] = 3
-        # the module (and the builder, which keeps it) take abs(w): a phantom box ...
-        self.assertTrue(th.allclose(module.class_assertion_loss(rows).reshape(-1, 1),
-                                    geometry.class_assertion_loss(rows), atol=1e-6))
-        # ... the reading without that option sees the empty box as it is
+        self.assertEqual(geometry.objective.empty_regions, "keep")
+        self.assertLess(float(geometry.classes(th.tensor([3])).offset[0, 0]), 0)
+        nonzero = 0
+        for form, rows in self.empty_rows().items():
+            for neg in (False, True):
+                try:
+                    old = getattr(module, form + "_loss")(rows, neg=neg).reshape(-1, 1)
+                except NotImplementedError:
+                    continue
+                new = getattr(geometry, form + "_loss")(rows, neg=neg)
+                self.assertTrue(th.allclose(old, new, atol=1e-6), (form, neg, old, new))
+                nonzero += float(old.abs().sum() > 0)
+        # the rows with the empty class as source or filler are vacuous: zero cost
+        for form in ("gci2", "gci3", "gci3_bot"):
+            rows = self.empty_rows()[form]
+            self.assertEqual(float(geometry(rows, form).abs().sum()), 0.0, form)
+        self.assertEqual(float(geometry(self.empty_rows()["gci2"], "gci2", neg=True).sum()), 0)
+
+    def test_the_absolute_reading_of_an_empty_box_is_the_old_option(self):
+        # empty_box_reading="absolute" (module) = empty_regions="abs" (parts): a phantom box,
+        # in both; and it differs from the default reading.
+        module = self.empty_box_setup(empty_box_reading="absolute")
+        geometry = geometry_of(module)
+        self.assertEqual(geometry.objective.empty_regions, "abs")
+        default = geometry_of(self.empty_box_setup())
+        phantom = 0
+        for form, rows in self.empty_rows().items():
+            old = getattr(module, form + "_loss")(rows).reshape(-1, 1)
+            new = getattr(geometry, form + "_loss")(rows)
+            self.assertTrue(th.allclose(old, new, atol=1e-6), (form, old, new))
+            phantom += float(not th.allclose(new, getattr(default, form + "_loss")(rows),
+                                             atol=1e-6))
+        self.assertGreaterEqual(phantom, 3)
+        # the reading without the option (the parts' "keep" over the same module) differs
         keep = ComposedGeometry(
             geometry.class_model, geometry.relation_model, geometry.measure,
             StructuralReading(0.05, empty_regions="keep", gci3="overlap", gci3_bot="filler",
                               empty_margin=True, negatives="gci2", strict_negatives=False),
             individuals=geometry.individual_model)
+        rows = self.empty_rows()["class_assertion"]
         self.assertFalse(th.allclose(keep.class_assertion_loss(rows),
                                      geometry.class_assertion_loss(rows), atol=1e-6))
+        # the builder: the old option is a keyword, the default is signed
+        from mowl.representation.library.shapes_methods import prism
+        self.assertEqual(prism(N, R, reading="structural").objective.empty_regions, "keep")
+        self.assertEqual(prism(N, R, reading="structural",
+                               empty_box_reading="absolute").objective.empty_regions, "abs")
+        with self.assertRaises(ValueError):
+            prism(N, R, reading="structural", empty_box_reading="other")
 
 
 class TestOtherFamilies(TestCase):

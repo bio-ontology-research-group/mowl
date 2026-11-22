@@ -138,15 +138,20 @@ class ELKEmObjective(Objective):
         :math:`C \\sqsubseteq \\exists r.D` (the authors' code does; the paper does not).
     :param evaluation_margin: Margin used when the geometry is in evaluation mode
         (``module.eval()``); ``None``: the same as in training. ELK-Em uses 0.
+    :param trivial_disjointness: A disjointness row with an empty conjunct (a class fixed to
+        the empty box) holds trivially and costs 0 (default). ``False``: the cost of the
+        disjointness measure, which charges the margin for the empty box and cannot be
+        reduced (the authors' code; selected by ``variant="reference"`` of the method).
     """
 
     def __init__(self, margin=0.1, abox_threshold=0.4, gci2_overlap=False,
-                 evaluation_margin=0.0):
+                 evaluation_margin=0.0, trivial_disjointness=True):
         super().__init__(margin, slack=False, negatives=("class_assertion",
                                                          "object_property_assertion"),
                          strict_negatives=False)
         self.abox_threshold = float(abox_threshold)
         self.gci2_overlap = bool(gci2_overlap)
+        self.trivial_disjointness = bool(trivial_disjointness)
         self.evaluation_margin = evaluation_margin
 
     def _m_of(self, g):
@@ -172,8 +177,18 @@ class ELKEmObjective(Objective):
         trivial = g.measure.is_empty(a) | g.measure.is_empty(b)
         return cost + th.where(trivial, th.zeros_like(over), over)
 
+    def _trivial_to_zero(self, cost, *empty):
+        if not self.trivial_disjointness:
+            return cost
+        trivial = empty[0]
+        for e in empty[1:]:
+            trivial = trivial | e
+        return th.where(trivial, th.zeros_like(cost), cost)
+
     def gci1_bot(self, g, rows, neg=False):
-        return g.measure.apart(g.classes(rows[:, 0]), g.classes(rows[:, 1]), self._m_of(g))
+        a, b = g.classes(rows[:, 0]), g.classes(rows[:, 1])
+        cost = g.measure.apart(a, b, self._m_of(g))
+        return self._trivial_to_zero(cost, g.measure.is_empty(a), g.measure.is_empty(b))
 
     def gci2(self, g, rows, neg=False):
         m = self._m_of(g)
@@ -191,8 +206,9 @@ class ELKEmObjective(Objective):
         return cost + th.where(g.measure.is_empty(filler), th.zeros_like(over), over)
 
     def gci3_bot(self, g, rows, neg=False):
-        return g.measure.apart(g.relation_model.range(rows[:, 0]), g.classes(rows[:, 1]),
-                               self._m_of(g))
+        filler = g.classes(rows[:, 1])
+        cost = g.measure.apart(g.relation_model.range(rows[:, 0]), filler, self._m_of(g))
+        return self._trivial_to_zero(cost, g.measure.is_empty(filler))
 
     def class_assertion(self, g, rows, neg=False):
         cost = g.measure.inside(g.individuals(rows[:, 0]), g.classes(rows[:, 1]),

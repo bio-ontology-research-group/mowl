@@ -118,7 +118,7 @@ def _octagon(module):
 @register_method("prism")
 def prism(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
           gci2_negative_triangle="overlap", reading="axiom", existence_weight=1.0,
-          size_reg=1e-3, tables=None):
+          size_reg=1e-3, empty_box_reading="signed", tables=None):
     r"""The prism method (Federico, Leemhuis and Kutz 2026), default objective of the module
     (``objective="axiom"``): classes are triangle :math:`\times` box, relations translations,
     individuals points.
@@ -144,10 +144,11 @@ def prism(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
     :meth:`~mowl.representation.library.structural_methods.StructuralGeometry.set_structural_tables`
     attaches the table) and the existence and size penalties (``existence_weight``,
     ``size_reg``); ``margin`` is the tightening margin :math:`m`. The forms about relations
-    and assertions are read as in the axiom reading with the *absolute* box half-widths
-    (``empty_regions="abs"``): a defined class that is empty only in its box part is read as a
-    phantom non-empty box there, which is the module's behaviour (and a defect of it, see the
-    report); the reading's default ``empty_regions="keep"`` does not do that.
+    and assertions read a defined class that is empty only in its box part (negative
+    half-width) as empty (``empty_box_reading="signed"``, the default: an empty source or
+    filler makes the row vacuous, an empty target contains nothing). ``"absolute"`` is the
+    earlier reading of the module (``empty_regions="abs"``): the absolute value of the
+    half-widths, a phantom non-empty box.
 
     :param tables: A module with ``tri_center``, ``tri_inradius``, ``box_center``,
         ``box_offset``, ``rel_embed`` (and ``ind_embed``) to share parameters with.
@@ -156,7 +157,11 @@ def prism(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
         raise ValueError("gci2_negative_triangle must be 'overlap' or 'inradius'.")
     if reading not in ("axiom", "structural"):
         raise ValueError("reading must be 'axiom' or 'structural'.")
+    if empty_box_reading not in ("signed", "absolute"):
+        raise ValueError("empty_box_reading must be 'signed' or 'absolute'.")
     t = tables
+    if t is not None:
+        empty_box_reading = getattr(t, "empty_box_reading", empty_box_reading)
     if t is not None:
         gci2_negative_triangle = getattr(t, "gci2_negative_triangle", gci2_negative_triangle)
     if t is None:
@@ -180,8 +185,10 @@ def prism(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
         from mowl.representation.library.structural_reading import StructuralReading
         geometry = StructuralGeometry(
             classes, relations, measure,
-            StructuralReading(margin, empty_regions="abs", gci3_bot="filler", **options),
+            StructuralReading(margin, empty_regions="abs" if empty_box_reading == "absolute"
+                              else "keep", gci3_bot="filler", **options),
             individuals=individuals, existence_weight=existence_weight, size_reg=size_reg,
+            size_reg_without_tables=True,  # as the prism module (which shrinks owl:Thing too)
             size_tables=lambda m: [m._slot_classes.inradii.weight,
                                    m._slot_classes.box_offsets.weight],
             size_scales=(1.0, 2.0), neg_capable_gcis={"gci2", "object_property_assertion"})
@@ -202,7 +209,9 @@ def _prism(module):
     return prism(None, None, margin=module.margin,
                  reading=getattr(module, "objective", "axiom"),
                  existence_weight=getattr(module, "existence_weight", 1.0),
-                 size_reg=getattr(module, "size_reg", 1e-3), tables=module)
+                 size_reg=getattr(module, "size_reg", 1e-3),
+                 empty_box_reading=getattr(module, "empty_box_reading", "signed"),
+                 tables=module)
 
 
 # -- eike -------------------------------------------------------------------------------------

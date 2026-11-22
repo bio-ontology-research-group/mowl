@@ -157,9 +157,12 @@ class StructuralReading(Objective):
         model has definitions (``masked_gci0``, ``masked_gci1``).
     :param empty_regions: How the forms about relations and assertions see a region of
         negative extent (a defined class that is empty): ``"keep"`` (default: the region as
-        it is; a union of boxes with slots ignores the empty slots by itself) or ``"abs"``
-        (the absolute value of the half-widths, so an empty box is a phantom non-empty one:
-        what the prism module does, which the ``prism`` builder selects).
+        it is, signed; a region that is not slots and is empty makes the rows with it as
+        source (``gci2``) or filler (``gci3``) vacuous, a negative ``gci2`` of an empty source
+        or target has no cost, and a union of boxes with slots ignores the empty slots by
+        itself) or ``"abs"`` (the absolute value of the half-widths, so an empty box is a
+        phantom non-empty one: the earlier reading of the prism module, which the ``prism``
+        builder selects with ``empty_box_reading="absolute"``).
     """
 
     def __init__(self, margin=0.02, *, bot_agg="mean", definitions=True,
@@ -239,14 +242,41 @@ class StructuralReading(Objective):
         return cost.reshape(-1, 1)
 
     # -- the forms about relations and assertions: the axiom reading on the region view ----
+    def _nonempty(self, g, region):
+        """``(B, 1)`` boolean (detached): the region is not empty (``empty_regions="keep"``
+        for a family that is not slots, whose empty slots are ignored by themselves);
+        ``None`` where no gate applies."""
+        if self.empty_regions != "keep" or _is_slots(region):
+            return None
+        return (_family_of(region)[1](_detached(region)) > 0.0).reshape(-1, 1)
+
+    @staticmethod
+    def _gated(cost, gate):
+        return cost if gate is None else th.where(gate, cost, th.zeros_like(cost))
+
     def gci2(self, g, rows, neg=False):
-        return super().gci2(self._view(g), rows, neg)
+        cost = super().gci2(self._view(g), rows, neg)
+        # An empty source is included in everything and nothing lies in an empty target: the
+        # row is vacuous (positive), and a negative of it asks for what cannot hold (no cost).
+        gate = self._nonempty(g, g.classes(rows[:, 0]))
+        if neg and gate is not None:
+            gate = gate & self._nonempty(g, g.classes(rows[:, 2]))
+        return self._gated(cost, gate)
 
     def gci3(self, g, rows, neg=False):
-        return super().gci3(self._view(g), rows, neg)
+        cost = super().gci3(self._view(g), rows, neg)
+        # an empty filler: the region of (exists r.C) is empty and lies in everything
+        return self._gated(cost, self._nonempty(g, g.classes(rows[:, 1])))
 
     def gci3_bot(self, g, rows, neg=False):
-        return super().gci3_bot(self._view(g), rows, neg)
+        cost = super().gci3_bot(self._view(g), rows, neg)
+        filler = g.classes(rows[:, 1])
+        if self.empty_regions == "keep" and hasattr(filler, "offset") \
+                and hasattr(filler, "supports"):
+            # a prism whose box is empty (the box part of the filler has no point)
+            gate = (filler.offset.detach().amin(dim=-1) > 0.0).reshape(-1, 1)
+            return self._gated(cost, gate)
+        return cost
 
     def class_assertion(self, g, rows, neg=False):
         return super().class_assertion(self._view(g), rows, neg)

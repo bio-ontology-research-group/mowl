@@ -265,7 +265,8 @@ def elkem(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
         classes.fix(bot_ids, top_ids)
         relations = AffineBoxes(nb_relations, embed_dim, eps=epsilon, sound=sound)
         individuals = _box_points(nb_individuals, embed_dim) if nb_individuals else None
-    objective = ELKEmObjective(margin, abox_threshold, gci2_overlap=not sound)
+    objective = ELKEmObjective(margin, abox_threshold, gci2_overlap=not sound,
+                              trivial_disjointness=sound)
     regularizers = (SizeCapPenalty(weight=size_weight),) if size_weight else ()
     return ComposedGeometry(classes, relations,
                             AveragedBounds(extent="norm", conjunction="nonempty",
