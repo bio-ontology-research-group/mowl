@@ -113,11 +113,6 @@ class RegimeTrained:
         self.training_regime = regimes[0] if len(regimes) == 1 else ComposedRegime(*regimes)
 
     # ------------------------------------------------------------------- data
-    @property
-    def training_datasets(self):
-        """``{form: dataset}`` of the training data (:class:`Rows`)."""
-        raise NotImplementedError(f"{type(self).__name__} must define training_datasets.")
-
     def score_rows(self, form, rows, neg=False):
         """The per-row cost of ``rows`` of ``form``; ``neg=True`` for corruptions scored with
         the module's negative cost."""
@@ -243,7 +238,7 @@ class RegimeTrained:
         :param epoch_callback: ``callable(epoch, model)`` called after every epoch.
         :param validate: ``False`` switches validation off; ``True`` asks for the model's
             default interval (or every epoch).
-        :return: The mean loss of every epoch.
+        :return: The mean loss of every epoch (also ``model.training_losses``).
         :rtype: list of float
         """
         regime = self.training_regime
@@ -265,6 +260,7 @@ class RegimeTrained:
         if optimizer is NotImplemented:
             optimizer = self.get_optimizer()
         history, running, counted = [], 0.0, 0
+        self.training_losses = history
         for step in range(total):
             self.module.train()
             self.on_epoch_start(step, total)

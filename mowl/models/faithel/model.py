@@ -16,12 +16,17 @@ import logging
 
 import torch as th
 
+from functools import partial
+
 from mowl.base_models.elmodel import EmbeddingELModel
 from mowl.geometric.faithfulness import StronglyFaithfulModel
 from mowl.geometric.normal_forms import (BOTTOM, TOP, NormalisedOntology, is_nominal_name,
                                          normalise)
-from mowl.representation.library.solved_faithel import (AlternatingMinibatches, FaithfulTBox,
-                                                        faith_centroids, faithel as _faithel)
+from mowl.representation.library.solved_faithel import (FaithfulTBox, faith_centroids,
+                                                        faithel as _faithel)
+from mowl.training.alternating import AlternatingMinibatches
+from mowl.training.loop import RegimeTrained
+from mowl.training.regularization import ModuleProjection, Regularization
 
 logger = logging.getLogger(__name__)
 
@@ -39,7 +44,7 @@ def _tbox_only(no):
         role_names=set(no.role_names), dropped_axioms=no.dropped_axioms)
 
 
-class FaithEL(EmbeddingELModel):
+class FaithEL(RegimeTrained, EmbeddingELModel):
     """FaithEL: a fixed strongly faithful convex TBox model and learned ABox embeddings.
 
     Individuals live in the space of the canonical-model simplex (dimension ``n - 1`` for
@@ -63,15 +68,18 @@ class FaithEL(EmbeddingELModel):
     :param learning_rate: Adam step size.
     :param max_elements: Refuse ontologies whose Definition 26 canonical model would have
         more elements than this (it has one per pair of concept names).
-    :param training: The training regime of the parts (default: the authors' alternating
-        minibatches, :class:`~mowl.representation.library.solved_faithel.AlternatingMinibatches`).
+    :param training: The batching of the training (default: the authors' alternating
+        minibatches, :class:`~mowl.training.AlternatingMinibatches`; :class:`~mowl.training.
+        FullBatch` takes one step per epoch). The training of the method is this regime and
+        the projection of the parameters into the balls around the centroids
+        (:class:`~mowl.training.Regularization` of a :class:`~mowl.training.ModuleProjection`),
+        read ``model.training_regime``.
 
     Without individuals the model has nothing to train; its TBox scores (``gci0``-``gci3``)
     are still available.
     """
 
-    #: :meth:`train` is a loop of its own with a fixed objective; it takes no training regime.
-    training_hooks = frozenset()
+    save_always = True
 
     axiom_scoring = "method"
     scored_forms = ("gci0", "gci1", "gci2", "gci3", "class_assertion",
@@ -99,8 +107,8 @@ class FaithEL(EmbeddingELModel):
         self.neg_sampling = neg_sampling
         self.centroid_score = centroid_score
         self.seed = seed
-        #: The training regime of the parts (:class:`AlternatingMinibatches`: the authors'
-        #: loop; :class:`~mowl.representation.library.solved_faithel.FullBatch`).
+        #: The batching of the training (:class:`~mowl.training.AlternatingMinibatches`: the
+        #: authors' loop; :class:`~mowl.training.FullBatch`).
         self.training = training if training is not None else AlternatingMinibatches()
         self.init_module()
 
@@ -136,16 +144,16 @@ class FaithEL(EmbeddingELModel):
         """Keep each moving parameter within ``radius`` of the centroid of its region."""
         self.module.project()
 
-    def train(self, epochs, validate_every=1, epoch_callback=None):
-        """Train the individual embeddings and the moving parameters for ``epochs`` epochs.
+    @property
+    def default_regimes(self):
+        """The training of the method: the batching of :attr:`training` and the projection of
+        the moving parameters into the balls around the centroids after every step."""
+        return (lambda: self.training, partial(Regularization, ModuleProjection()))
 
-        Concept and role assertions are alternated per step as in the authors' code (the
-        training regime ``self.training``); the projection to the radius is applied after
-        every step. ``self.loss_history`` holds the mean loss of each epoch.
-        """
-        self.training.run(self, epochs, epoch_callback)
-        if self.model_filepath:
-            th.save(self.module.state_dict(), self.model_filepath)
+    @property
+    def loss_history(self):
+        """The mean loss of each epoch of the last call of :meth:`train`."""
+        return getattr(self, "training_losses", [])
 
     # -- scores --------------------------------------------------------------------------
     def class_assertion_costs(self, rows):

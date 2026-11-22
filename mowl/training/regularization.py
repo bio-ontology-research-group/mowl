@@ -238,6 +238,27 @@ class IntervalProjection(_Projection):
         return x.clamp(min=self.low, max=self.high)
 
 
+class ModuleProjection(Regularizer):
+    """After every step, the projection that the module of the model defines (``module.project()``):
+    for a geometry whose parts keep their parameters in a region, for example the balls around
+    the centroids of FaithEL. A module without ``project`` is refused."""
+
+    kind = "projection"
+
+    def __init__(self):
+        super().__init__("class_embed")
+
+    def tensors(self, model):
+        module = getattr(model, "module", model)
+        if not callable(getattr(module, "project", None)):
+            raise TypeError(f"{type(module).__name__} has no project() to apply.")
+        return []
+
+    @th.no_grad()
+    def project(self, model):
+        model.module.project()
+
+
 class Regularization(TrainingRegime):
     """Apply regularisers to a model: the penalties are added to the loss of every
     optimisation step, the projections are applied after every step, in the order given.
