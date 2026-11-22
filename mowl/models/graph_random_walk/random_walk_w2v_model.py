@@ -65,11 +65,14 @@ class RandomWalkPlusW2VModel(ComposedSequenceModel, RandomWalkModel):
 
     def set_w2v_model(self, *args, **kwargs):
         """
-        Sets the Word2Vec model to be used for training. The set model will be a :class:`gensim.models.word2vec.Word2Vec` object.
+        Sets the Word2Vec model to be used for training. The set model will be a
+        :class:`gensim.models.word2vec.Word2Vec` object.
 
-        :param args: Arguments to be passed to the :class:`Word2Vec <gensim.models.word2vec.Word2Vec>` constructor.
-        :param kwargs: Keyword arguments to be passed to the :class:`Word2Vec <gensim.models.word2vec.Word2Vec>` constructor
-            (and ``restart``, see :class:`~mowl.representation.library.walks_encoders.Word2VecEncoder`).
+        :param args: Arguments to be passed to the
+            :class:`Word2Vec <gensim.models.word2vec.Word2Vec>` constructor.
+        :param kwargs: Keyword arguments to be passed to the
+            :class:`Word2Vec <gensim.models.word2vec.Word2Vec>` constructor (and ``restart``,
+            see :class:`~mowl.representation.library.walks_encoders.Word2VecEncoder`).
         """
         super().set_w2v_model(*args, **kwargs)
 
@@ -91,7 +94,8 @@ class RandomWalkPlusW2VModel(ComposedSequenceModel, RandomWalkModel):
         """
         Triggers the Word2Vec training process.
 
-        :param epochs: Number of epochs to train the model. If None, the value of the epochs parameter passed to the constructor will be used.
+        :param epochs: Number of epochs to train the model. If None, the value of the epochs
+            parameter passed to the constructor will be used.
         :type epochs: int
         """
         super().train(epochs)

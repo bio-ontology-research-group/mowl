@@ -71,8 +71,9 @@ def _walk_model(dataset, projector, embed_dim=100, num_walks=10, walk_length=20,
     model.set_projector(projector)
     outfile = (model_filepath or model.model_filepath) + ".walks"
     if walker == "node2vec":
+        # mowl.walking.Node2Vec takes no seed: its walks differ from run to run
         model.set_walker(Node2Vec(num_walks, walk_length, p=p, q=q, outfile=outfile,
-                                  workers=workers, seed=seed))
+                                  workers=workers))
     else:
         model.set_walker(DeepWalk(num_walks, walk_length, alpha, outfile=outfile,
                                   workers=workers, seed=seed))

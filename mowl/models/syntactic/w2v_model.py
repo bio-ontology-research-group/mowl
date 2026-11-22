@@ -66,9 +66,11 @@ class SyntacticPlusW2VModel(ComposedSequenceModel, SyntacticModel):
                         annotation_entity_form="iri"):
         """Generates the corpus of the training ontology. It uses the Manchester OWL Syntax.
 
-        :param save: if True, the corpus is saved into the model filepath, otherwise, the corpus is returned as a list of sentences. Default is True.
+        :param save: if True, the corpus is saved into the model filepath, otherwise, the
+            corpus is returned as a list of sentences. Default is True.
         :type save: bool, optional
-        :param with_annotations: if True, the corpus is generated with the annotations, otherwise, the corpus is generated only with the axioms. Default is False.
+        :param with_annotations: if True, the corpus is generated with the annotations,
+            otherwise, the corpus is generated only with the axioms. Default is False.
         :type with_annotations: bool, optional
         :param annotation_entity_form: ``"iri"`` (default) or ``"bracketed iri"``, see
             :class:`~mowl.representation.library.walks_views.AnnotationCorpus`.
@@ -100,7 +102,8 @@ class SyntacticPlusW2VModel(ComposedSequenceModel, SyntacticModel):
         """
         Triggers the Word2Vec training process.
 
-        :param epochs: Number of epochs to train the model. If None, the value of the epochs parameter passed to the constructor will be used.
+        :param epochs: Number of epochs to train the model. If None, the value of the epochs
+            parameter passed to the constructor will be used.
         :type epochs: int
         """
         super().train(epochs)

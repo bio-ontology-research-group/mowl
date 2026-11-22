@@ -78,6 +78,15 @@ class ComposedSequenceModel(Model):
                  _base_options=None, **method_options):
         super().__init__(dataset, model_filepath=model_filepath, **(_base_options or {}))
         if method is not None:
+            # a part given by name is an option of the method (``encoder="fasttext"``)
+            for name, part in (("source", source), ("encoder", encoder),
+                               ("reading", reading), ("measure", measure),
+                               ("scorer", scorer)):
+                if isinstance(part, str):
+                    method_options[name] = part
+            source, encoder, reading, measure, scorer = (
+                None if isinstance(p, str) else p
+                for p in (source, encoder, reading, measure, scorer))
             if method not in M.METHODS or M.METHOD_KINDS.get(method) != "sequences":
                 raise ValueError(
                     f"{method!r} is not a method that learns from sequences; those are "

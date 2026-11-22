@@ -254,7 +254,8 @@ class EntityReading:
     part = ""
 
     def vectors(self, encoder, names):
-        """``(vectors, known)`` for the entity names ``names`` (IRIs)."""
+        """``(vectors, known)`` for the entity names ``names`` (IRIs); the vector of a name
+        that is not known is zero."""
         raise NotImplementedError
 
 
@@ -323,6 +324,21 @@ class SequenceGeometry(Geometry):
         self.owner = None
         self._cache = {}
 
+    # -- what code written for torch modules asks (the evaluation regimes) --------------
+    #: The geometry has no parameters of torch; it is never in training mode.
+    training = False
+
+    def eval(self):
+        """No-op (the vectors are the encoder's; nothing changes between modes)."""
+        return self
+
+    def train(self, mode=True):
+        """No-op, see :meth:`eval`; training is done by the model."""
+        return self
+
+    def parameters(self):
+        return iter(())
+
     # -- binding ------------------------------------------------------------------------
     def bind(self, model):
         """Tie the geometry to ``model``: class ``i`` is the ``i``-th name of
@@ -359,14 +375,19 @@ class SequenceGeometry(Geometry):
         return self._cache[kind]
 
     def _tokens(self, kind, ids):
+        # the rows of names without a vector are zero in the table (EntityReading)
         vectors, known = self.table(kind)
         ids = th.as_tensor(ids).reshape(-1).cpu()
-        inside = ids < len(known)
-        rows = ids.clamp(max=max(len(known) - 1, 0))
         if len(known) == 0:
-            return Tokens(th.zeros((len(ids), self.dimension)), th.zeros(len(ids), dtype=th.bool))
+            return Tokens(th.zeros((len(ids), self.dimension)),
+                          th.zeros(len(ids), dtype=th.bool))
+        inside = ids < len(known)
+        if bool(inside.all()):
+            return Tokens(vectors[ids], known[ids])
+        rows = ids.clamp(max=len(known) - 1)
         v, k = vectors[rows], known[rows] & inside
-        return Tokens(th.where(k[:, None], v, th.zeros_like(v)), k)
+        v[~inside] = 0
+        return Tokens(v, k)
 
     @property
     def dimension(self):

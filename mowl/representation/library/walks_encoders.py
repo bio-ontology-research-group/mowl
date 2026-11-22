@@ -259,8 +259,7 @@ class DotSigmoid(PairMeasure):
     part = Measure.SIMILARITY.value
 
     def _similarity(self, a, b):
-        x, y = a.vectors.double(), b.vectors.double()
-        return th.sigmoid((x * y).sum(dim=1, keepdim=True))
+        return th.sigmoid((a.vectors * b.vectors).sum(dim=1, keepdim=True))
 
     def cost(self, a, b):
         return _mask(1 - self._similarity(a, b), a, b, float("inf"))
@@ -276,8 +275,8 @@ class Cosine(PairMeasure):
     part = Measure.SIMILARITY.value
 
     def _cos(self, a, b):
-        x, y = a.vectors.double(), b.vectors.double()
-        return th.nn.functional.cosine_similarity(x, y, dim=1, eps=1e-12)[:, None]
+        return th.nn.functional.cosine_similarity(a.vectors, b.vectors, dim=1,
+                                                  eps=1e-12)[:, None]
 
     def cost(self, a, b):
         return _mask((1 - self._cos(a, b)) / 2, a, b, float("inf"))
@@ -356,8 +355,8 @@ class PairClassifier(TaskScorer):
 
     def reset(self):
         head = self.head
-        options = {k: getattr(head, k) for k in ("hidden", "epochs", "negatives",
-                                                  "learning_rate", "batch_size", "seed")}
+        names = ("hidden", "epochs", "negatives", "learning_rate", "batch_size", "seed")
+        options = {k: getattr(head, k) for k in names}
         self.head = type(head)(**options)
 
     def __call__(self, model, gci_name, rows):
