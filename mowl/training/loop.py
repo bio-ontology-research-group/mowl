@@ -183,15 +183,17 @@ class RegimeTrained:
             th.save(self.module.state_dict(), path)
 
     # -------------------------------------------------------------- one step
-    def batch_loss(self, batches, step=0):
+    def batch_loss(self, batches, step=0, negatives=True):
         """The loss of the batches ``{form: rows}`` as the loop computes it (negatives,
         scores and combination of the regime, then the additional and regularisation terms).
-        The model's hooks are used where the regime does not decide."""
+        The model's hooks are used where the regime does not decide.
+
+        :param negatives: ``False``: no corruptions."""
         data = {form: Rows(rows) if isinstance(rows, th.Tensor) else rows
                 for form, rows in batches.items()}
-        return self._step_loss(data, step)
+        return self._step_loss(data, step, negatives)
 
-    def _step_loss(self, datasets, step):
+    def _step_loss(self, datasets, step, negatives=True):
         regime = self.training_regime
         self.negative_masks = {}
         loss = th.tensor(0.0, device=self.device)
@@ -200,13 +202,15 @@ class RegimeTrained:
                 continue
             rows = dataset[:]
             pos_scores = self.score_rows(form, rows)
-            neg_data = NotImplemented
-            if regime is not None:
-                neg_data = regime.negatives(form, dataset)
-            if neg_data is NotImplemented:
-                neg_data = self.generate_negatives(form, dataset)
-            if regime is not None:
-                neg_data = regime.filter_negatives(form, dataset, neg_data)
+            neg_data = None
+            if negatives:
+                neg_data = NotImplemented
+                if regime is not None:
+                    neg_data = regime.negatives(form, dataset)
+                if neg_data is NotImplemented:
+                    neg_data = self.generate_negatives(form, dataset)
+                if regime is not None:
+                    neg_data = regime.filter_negatives(form, dataset, neg_data)
             neg_scores = None
             if neg_data is not None:
                 like_pos = regime is not None and regime.scores_negatives_like_positives(form)

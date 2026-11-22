@@ -114,26 +114,41 @@ class EdgeCorruption(TrainingRegime):
     :param num_entities: Size of the pool (entities ``0 ... n - 1``; default: the model's
         ``num_nodes``).
     :param forms: The forms that get corruptions (default: all; the others use the model's).
+    :param draw_by: ``"row"``: the draws have shape ``(n, k)`` (the ``k`` corruptions of a row
+        are neighbours in the stream); ``"block"``: shape ``(k * n,)`` (the corruptions of one
+        block of the layout are). Only the random stream differs.
+    :param coin_first: Draw the coins of two columns before the entities (default) or after.
     """
 
     key = "edge-corruption"
 
-    def __init__(self, num_negatives=1, columns=(1,), num_entities=None, forms=None):
+    def __init__(self, num_negatives=1, columns=(1,), num_entities=None, forms=None,
+                 draw_by="row", coin_first=True):
         super().__init__()
         if int(num_negatives) < 1:
             raise ValueError("num_negatives must be at least 1.")
         columns = tuple(int(c) for c in columns)
         if len(columns) not in (1, 2):
             raise ValueError("columns must name one or two columns.")
+        if draw_by not in ("row", "block"):
+            raise ValueError("draw_by must be 'row' or 'block'.")
         self.num_negatives = int(num_negatives)
         self.columns = columns
         self.num_entities = num_entities
         self.forms = None if forms is None else tuple(forms)
+        self.draw_by = draw_by
+        self.coin_first = bool(coin_first)
 
     def pool_size(self):
         if self.num_entities is not None:
             return int(self.num_entities)
         return int(self.model.num_nodes)
+
+    def _draw(self, high, n, device):
+        k = self.num_negatives
+        if self.draw_by == "block":
+            return th.randint(0, high, (k * n,), device=device)
+        return th.randint(0, high, (n, k), device=device).t().reshape(-1)
 
     def negatives(self, form, dataset):
         if self.forms is not None and form not in self.forms:
@@ -142,17 +157,20 @@ class EdgeCorruption(TrainingRegime):
         n, k = len(pos), self.num_negatives
         if n == 0:
             return None
-        neg = pos.unsqueeze(1).repeat(1, k, 1)
+        neg = pos.repeat(k, 1)
         if len(self.columns) == 2:
             first, second = self.columns
-            coin = th.randint(0, 2, (n, k), device=pos.device)
-            random_nodes = th.randint(0, self.pool_size(), (n, k), device=pos.device)
-            neg[..., first] = th.where(coin == 0, random_nodes, neg[..., first])
-            neg[..., second] = th.where(coin == 1, random_nodes, neg[..., second])
+            if self.coin_first:
+                coin = self._draw(2, n, pos.device)
+                entity = self._draw(self.pool_size(), n, pos.device)
+            else:
+                entity = self._draw(self.pool_size(), n, pos.device)
+                coin = self._draw(2, n, pos.device)
+            neg[:, first] = th.where(coin == 0, entity, neg[:, first])
+            neg[:, second] = th.where(coin == 1, entity, neg[:, second])
         else:
-            neg[..., self.columns[0]] = th.randint(0, self.pool_size(), (n, k),
-                                                   device=pos.device)
-        return neg.transpose(0, 1).reshape(-1, pos.shape[1])
+            neg[:, self.columns[0]] = self._draw(self.pool_size(), n, pos.device)
+        return neg
 
 
 class KnownRowMask(TrainingRegime):
@@ -164,14 +182,18 @@ class KnownRowMask(TrainingRegime):
 
     :param forms: The forms to mark (default: all with corruptions).
     :param reflexive: Also mark corruptions whose first two columns are equal.
+    :param drop: Remove the marked corruptions from the negatives instead of marking them (the
+        losses that take a plain mean over the corruptions, such as E2R's; ``None`` if none
+        is left).
     """
 
     key = "known-row-mask"
 
-    def __init__(self, forms=None, reflexive=True):
+    def __init__(self, forms=None, reflexive=True, drop=False):
         super().__init__()
         self.forms = None if forms is None else tuple(forms)
         self.reflexive = bool(reflexive)
+        self.drop = bool(drop)
         self._known = {}
 
     def training_datasets(self, datasets):
@@ -192,6 +214,9 @@ class KnownRowMask(TrainingRegime):
         mask = ~th.isin(self._codes(negatives, width), self._codes(known, width))
         if self.reflexive:
             mask = mask & (negatives[:, 0] != negatives[:, 1])
+        if self.drop:
+            kept = negatives[mask]
+            return kept if len(kept) > 0 else None
         masks = getattr(self.model, _MASKS, None)
         if masks is None:
             masks = self.model.negative_masks = {}
