@@ -182,14 +182,14 @@ def test_point_mode_class_assertion_score_is_neg_log_m() -> None:
             )
             score_fwd = mod(data, "class_assertion")
             score_direct = mod.class_assertion_score_point(data)
-            assert torch.allclose(score_fwd, score_direct, atol=1e-6)
+            assert torch.allclose(score_fwd.reshape(-1), score_direct, atol=1e-6)
 
             x = mod.ind_embed(data[:, 0])
             cen, off = mod.class_boxes(data[:, 1])
             m = union_membership(soft_box_membership(x, cen, off, beta=0.1))
             expected = -torch.log(m.clamp(min=1e-12))
-            assert score_fwd.shape == (4,)
-            assert torch.allclose(score_fwd, expected, atol=1e-6)
+            assert score_fwd.shape == ((4, 1) if mod_cls is MultiBoxELModule else (4,))
+            assert torch.allclose(score_fwd.reshape(-1), expected, atol=1e-6)
 
 
 def test_hybrid_objective_keeps_all_axiom_losses_and_point_supervision(

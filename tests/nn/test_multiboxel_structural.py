@@ -961,8 +961,8 @@ def test_bot_agg_module_and_model_sum_vs_mean_and_validation() -> None:
 
     # Batch of gci1_bot rows: (A, D) -> 4 * 2 = 8 active pairs; (X1, D) -> 2 * 2 = 4 active pairs; (A, A) -> 4 * 4 = 16 active pairs
     rows = th.tensor([[0, 3], [1, 3], [0, 0]], dtype=th.long)
-    out_mean = mod_mean.gci1_bot_loss(rows)
-    out_sum = mod_s.gci1_bot_loss(rows)
+    out_mean = mod_mean.gci1_bot_loss(rows).reshape(-1)
+    out_sum = mod_s.gci1_bot_loss(rows).reshape(-1)
     expected_n_pairs = th.tensor([8.0, 4.0, 16.0], dtype=out_mean.dtype)
     assert bool((out_mean > 0.0).all())
     assert th.allclose(out_sum, out_mean * expected_n_pairs, atol=1e-6, rtol=1e-6)
