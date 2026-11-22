@@ -14,34 +14,20 @@ exactly that and nothing more:
 * ``exists``, ``conjunction``, ``negation`` and ``disjunction`` are unavailable
   (:class:`~mowl.representation.ConstructorUnavailable`).
 
-All six methods are two classes of mOWL (``RandomWalkPlusW2VModel`` for the graph methods
-and ``SyntacticPlusW2VModel`` for the corpus methods); the projection, the walker and the
-corpus differ, the geometry does not. They are not combinations of parts: there is no
-region, so there is nothing to combine a measure with.
+This geometry describes a trained ``RandomWalkPlusW2VModel`` or ``SyntacticPlusW2VModel``
+(and the direct implementations of the baseline area) from the outside, by reading its
+word2vec model. The methods themselves are combinations of parts (view, sequences, encoder,
+reading, measure, scorer): see :mod:`mowl.representation.sequence`; the ``module`` of those
+classes is that combination.
 """
 
 import torch as th
 
 from mowl.representation.adapters import register_adapter
 from mowl.representation.geometry import Geometry
-from mowl.representation.regions import Region
+from mowl.representation.sequence import Tokens
 
 __all__ = ["Tokens", "SimilarityGeometry"]
-
-
-class Tokens(Region):
-    """The vectors of names (``(B, d)``); ``known`` marks the names that have a vector."""
-
-    def __init__(self, vectors, known):
-        self.vectors = vectors
-        self.known = known
-
-    @property
-    def centre(self):
-        return self.vectors
-
-    def __len__(self):
-        return self.vectors.shape[0]
 
 
 class SimilarityGeometry(Geometry):

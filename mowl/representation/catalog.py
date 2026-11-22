@@ -9,7 +9,8 @@ octagons as class regions), the entry describes the adaptation.
 from mowl.representation.vocabulary import (
     View as V, Space as S, ClassModel as C, RelationModel as R, IndividualModel as I,
     Measure as M, Construction as K, Parametrisation as P, Composable as Y, Representation,
-    OperatorFamily as F)
+    OperatorFamily as F, Projection as Pj, Corpus as Co, Walker as Wk, Encoder as En,
+    Reading as Rd, Scorer as Sc)
 
 
 def _el(classes, relations, individuals, measure, conjunction=K.EXACT, existential=K.EXACT,
@@ -34,6 +35,22 @@ def _tokens(view):
                           individuals=I.POINT, measure=M.SIMILARITY, composable=Y.YES,
                           notes="The method is its view of the ontology followed by a word "
                                 "embedding model; the two are already separate in mOWL.")
+
+
+def _sequences(view, projection=(), walker=(), corpus=()):
+    """A method that learns from sequences (:mod:`mowl.representation.sequence`): every name
+    is a point read from the encoder; the measure is a similarity, candidate axioms are
+    ranked with a classifier on pairs of vectors (or the similarity)."""
+    return Representation(view=view, space=S.EUCLIDEAN, classes=C.POINT, relations=R.TOKEN,
+                          individuals=I.POINT, measure=M.SIMILARITY, composable=Y.YES,
+                          projection=projection, walker=walker, corpus=corpus,
+                          encoder=(En.WORD2VEC_SKIPGRAM, En.WORD2VEC_CBOW,
+                                   En.FASTTEXT_SKIPGRAM, En.FASTTEXT_CBOW),
+                          reading=Rd.TOKEN, scorer=(Sc.PAIR_CLASSIFIER, Sc.SIMILARITY),
+                          notes="A view of the ontology, sequences made from it, an encoder "
+                                "of the sequences, the vector of each entity's token and a "
+                                "scorer of candidate axioms; each part can be exchanged "
+                                "(mowl.models.ComposedSequenceModel).")
 
 
 def _exact(classes, relations, individuals, space=S.EUCLIDEAN, view=V.CANONICAL_MODEL,
@@ -261,12 +278,15 @@ REPRESENTATIONS = {
                      notes="Entity embeddings are computed by message passing from fixed "
                            "random features, so unseen entities get an embedding."),
     # ---- walks and sentences -------------------------------------------------------------
-    "dl2vec": _tokens((V.GRAPH, V.CORPUS)),
-    "owl2vec_star": _tokens((V.GRAPH, V.CORPUS, V.TEXT)),
-    "taxonomy_walks": _tokens((V.GRAPH, V.CORPUS)),
+    "dl2vec": _sequences((V.GRAPH, V.CORPUS), projection=Pj.DL2VEC,
+                         walker=(Wk.DEEPWALK, Wk.NODE2VEC)),
+    "owl2vec_star": _sequences((V.GRAPH, V.CORPUS, V.TEXT), projection=Pj.OWL2VEC_STAR,
+                               walker=(Wk.DEEPWALK, Wk.NODE2VEC), corpus=Co.ANNOTATIONS),
+    "taxonomy_walks": _sequences((V.GRAPH, V.CORPUS), projection=(
+        Pj.TAXONOMY, Pj.TAXONOMY_WITH_RELATIONS), walker=(Wk.DEEPWALK, Wk.NODE2VEC)),
     "gda_projection": _tokens((V.GRAPH, V.CORPUS)),
-    "onto2vec": _tokens(V.CORPUS),
-    "opa2vec": _tokens((V.CORPUS, V.TEXT)),
+    "onto2vec": _sequences(V.CORPUS, corpus=Co.AXIOMS),
+    "opa2vec": _sequences((V.CORPUS, V.TEXT), corpus=(Co.AXIOMS, Co.ANNOTATIONS)),
     # ---- constructions -------------------------------------------------------------------
     "canonical_model": _exact(C.FIXED, R.FIXED, I.CANONICAL_ELEMENT, space=S.FINITE_DOMAIN,
                               view=V.ONTOLOGY),

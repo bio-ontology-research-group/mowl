@@ -10,6 +10,11 @@ from mowl.representation import methods as M
 from mowl.representation.objectives import Objective
 
 
+#: Where the methods that are not trained on axioms are trained.
+_TRAINERS = {"queries": "mowl.models.query",
+             "sequences": "mowl.models.ComposedSequenceModel"}
+
+
 class ComposedEL(EmbeddingELModel):
     """An :math:`\\mathcal{EL}` embedding model put together from parts: a class model, a
     relation model, a measure and an objective (:mod:`mowl.representation`).
@@ -72,7 +77,8 @@ class ComposedEL(EmbeddingELModel):
                 f"normal-form axioms, so ComposedEL cannot train it. Methods that ComposedEL "
                 f"trains: "
                 f"{sorted(k for k in M.METHODS if M.METHOD_KINDS.get(k) == 'axioms')}; "
-                f"for {method!r} see mowl.models.query.")
+                f"for {method!r} see "
+                f"{_TRAINERS.get(M.METHOD_KINDS[method], 'mowl.models.query')}.")
         if method is None and method_options:
             raise TypeError(f"Unexpected arguments {sorted(method_options)}.")
         self.method = method

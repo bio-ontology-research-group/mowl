@@ -30,7 +30,8 @@ DEFAULT_MEASURE = {Ball: CentreDistance, Box: Bounds}
 #: Catalogue key -> function building the method from parts.
 METHODS = {}
 #: Catalogue key -> what the method is trained on: ``"axioms"`` (normal-form axioms, what
-#: :class:`~mowl.models.ComposedEL` trains) or ``"queries"`` (query answering).
+#: :class:`~mowl.models.ComposedEL` trains), ``"queries"`` (query answering) or
+#: ``"sequences"`` (walks and sentences, :class:`~mowl.models.ComposedSequenceModel`).
 METHOD_KINDS = {}
 
 
@@ -82,9 +83,12 @@ def register_method(key, trained_on="axioms"):
         :class:`~mowl.models.ComposedEL` trains on the normal-form axioms (a geometry that
         reads only some forms says which: ``supported_forms``). ``"queries"``: the method is
         trained on query structures (:mod:`mowl.models.query`) and ``ComposedEL`` refuses it.
+        ``"sequences"``: the method learns from walks or sentences; the function returns a
+        :class:`~mowl.representation.sequence.SequenceGeometry` that
+        :class:`~mowl.models.ComposedSequenceModel` trains.
     """
-    if trained_on not in ("axioms", "queries"):
-        raise ValueError("trained_on must be 'axioms' or 'queries'.")
+    if trained_on not in ("axioms", "queries", "sequences"):
+        raise ValueError("trained_on must be 'axioms', 'queries' or 'sequences'.")
 
     def decorate(function):
         _unique(METHODS, key, function)
