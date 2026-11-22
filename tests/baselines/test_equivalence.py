@@ -10,6 +10,8 @@ from tests.baselines.harness import all_pairs, assert_same
 PAIRS = all_pairs()
 IDS = [p.key for p in PAIRS]
 
+from tests.baselines.own_code import foreign_members, own_computation
+
 
 def _seed(seed):
     random.seed(seed)
@@ -46,25 +48,12 @@ def test_the_method_users_get_is_built_from_parts(pair):
     parts = new.module.parts
     parts = parts() if callable(parts) else parts
     assert isinstance(parts, dict) and len(parts) >= 2, parts
-    # Every object the module is made of is a general library class, not code
-    # from a per-method model file.
-    general = ("mowl.representation", "mowl.training", "mowl.evaluation",
-               "mowl.projection", "mowl.walking", "mowl.corpus", "mowl.reasoning",
-               "mowl.datasets", "mowl.owlapi", "mowl.ontology", "mowl.utils")
-    members = list(vars(new.module).values())
-    if hasattr(new.module, "modules"):
-        members += [m for m in new.module.modules() if m is not new.module]
-    for member in members:
-        where = type(member).__module__
-        if where.startswith("mowl."):
-            assert where.startswith(general), (type(member).__name__, where)
-    # The module is a general class, or a named combination that adds no
-    # computation of its own.
-    cls = type(new.module)
-    if not cls.__module__.startswith("mowl.representation"):
-        own = sorted(k for k, v in vars(cls).items()
-                     if callable(v) and not k.startswith("__"))
-        assert not own, (cls.__module__, cls.__name__, own)
+    # Every object the module is made of is a general library class.
+    assert not foreign_members(new.module)
+    # Neither the module class nor the model class computes with tensors
+    # itself: the arithmetic belongs to the parts.
+    assert not own_computation(type(new.module))
+    assert not own_computation(type(new))
 
 
 @pytest.mark.parametrize("pair", PAIRS, ids=IDS)
