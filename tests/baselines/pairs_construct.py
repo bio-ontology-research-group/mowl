@@ -2,9 +2,12 @@
 construction.
 
 Nothing is trained, so there are no losses and no training run to compare; the checks
-are the constructed regions (as tensors), the truth values of a set of test axioms, and
-the geometry (built from parts) on the side of the combination. ``scores`` returns both
-the regions and the truth values; it reads the public interface the two classes share.
+are everything a construction produces, element by element: the constructed regions and
+points (as tensors), the truth values of test axioms of every axiom form the checker knows
+(subsumption, conjunction, bottom and top forms, existential forms on both sides, role
+inclusion and role chains; an axiom a checker refuses is recorded as such, so both sides must
+refuse the same ones), and the guarantees the construction promises (model, non-degeneracy,
+strong faithfulness). ``scores`` reads the public interface the two classes share.
 """
 import itertools
 
@@ -33,8 +36,8 @@ def _no_copy(old, new):
 
 
 def _nf_axioms(cm):
-    """Normal-form test axioms over the names of the canonical model."""
-    from mowl.geometric.normal_forms import BOTTOM, NF1, NF2, NF3, NF4
+    """Normal-form test axioms of every form over the names of the canonical model."""
+    from mowl.geometric.normal_forms import BOTTOM, NF1, NF2, NF3, NF4, NF6, NF7, TOP
     names = sorted(cm.names)
     axioms = [NF1(a, b) for a, b in itertools.product(names, repeat=2)]
     axioms += [NF2(a, b, c) for a, b, c in itertools.product(names[:6], repeat=3)]
@@ -42,11 +45,34 @@ def _nf_axioms(cm):
     for r in sorted(cm.role_names):
         axioms += [NF3(a, r, b) for a, b in itertools.product(names, repeat=2)]
         axioms += [NF4(r, a, b) for a, b in itertools.product(names, repeat=2)]
+        axioms += [NF3(a, r, BOTTOM) for a in names] + [NF4(r, a, BOTTOM) for a in names]
+        axioms += [NF3(a, r, TOP) for a in names] + [NF4(r, TOP, a) for a in names]
+    axioms += [NF1(TOP, a) for a in names] + [NF1(a, TOP) for a in names]
+    axioms += [NF1(a, BOTTOM) for a in names]
+    roles = sorted(cm.role_names)
+    axioms += [NF6(r, s) for r, s in itertools.product(roles, repeat=2)]
+    axioms += [NF7(r, s, t) for r, s, t in itertools.product(roles, repeat=3)]
     return axioms
 
 
 def _truth(model, axioms):
-    return th.tensor([float(model.satisfies(ax)) for ax in axioms])
+    """1 if the model satisfies the axiom, 0 if not, 2 if its checker refuses the axiom
+    (both sides must refuse the same axioms)."""
+    out = []
+    for axiom in axioms:
+        try:
+            out.append(float(model.satisfies(axiom)))
+        except Exception:
+            out.append(2.0)
+    return th.tensor(out)
+
+
+def _guarantees(model):
+    """The guarantees of a construction that a model offers: a model of its ontology,
+    non-degenerate (every satisfiable name has a non-empty region), strongly faithful on
+    names (region inclusion is entailment)."""
+    return th.tensor([float(getattr(model, name)()) for name in
+                      ("is_model", "is_nondegenerate", "is_strongly_faithful_on_names")])
 
 
 # -- interval union -------------------------------------------------------------------------
@@ -62,7 +88,8 @@ def _interval_scores(model):
     for i, r in enumerate(sorted(cm.role_names)):
         for k, (x, y) in enumerate(model.role_region(r).rects):
             roles[i, k] = th.tensor([*x, *y], dtype=th.float64)
-    return {"regions": regions, "roles": roles, "truth": _truth(model, _nf_axioms(cm))}
+    return {"regions": regions, "roles": roles, "truth": _truth(model, _nf_axioms(cm)),
+            "guarantees": _guarantees(model)}
 
 
 def _new_intervals(dataset):
@@ -85,6 +112,8 @@ def _face_scores(model, names, roles, axioms):
     hulls = [th.as_tensor(model.role_region(r).points, dtype=th.float64) for r in roles]
     out = {"vertices": vertices, "points": th.as_tensor(model._points),
            "truth": _truth(model, axioms)}
+    if hasattr(model, "is_strongly_faithful_on_names"):
+        out["guarantees"] = _guarantees(model)
     for r, hull in zip(roles, hulls):
         out[f"role {r}"] = hull
     return out
@@ -126,6 +155,9 @@ def _convex_scores(model):
     out = _face_scores(model, sorted(fm.concepts), sorted(fm.roles), cm_axioms)
     phi = model.phi()
     out["phi"] = th.tensor([float(phi.same_as(fm))])
+    out["violations"] = th.tensor([float(len(model.check().violations(cm_axioms)))])
+    out["is_model of the ontology"] = th.tensor(
+        [float(model.check().is_model(model._ontology_axioms))])
     return out
 
 
@@ -136,6 +168,7 @@ def _convex(module):
         cls = importlib.import_module(module).ConvexRegionModel
         model = cls.from_canonical_model(cm)
         model._test_axioms = _nf_axioms(cm)
+        model._ontology_axioms = list(cm.axioms)
         return model
     return build
 
@@ -143,7 +176,7 @@ def _convex(module):
 # -- al-cones ----------------------------------------------------------------------------------
 def _alc_axioms(names, roles, individuals):
     from mowl.geometric.cones import (And, Atomic, ConceptAssertion, Exists, Forall, GCI, Not,
-                                      Or)
+                                      Or, RoleAssertion)
     atoms = [Atomic(n) for n in names]
     out = [GCI(a, b) for a, b in itertools.product(atoms, repeat=2)]
     out += [GCI(Not(a), Or((b, Not(a)))) for a, b in itertools.product(atoms[:4], repeat=2)]
@@ -154,6 +187,20 @@ def _alc_axioms(names, roles, individuals):
         out += [GCI(Forall(r, a), b) for a, b in itertools.product(atoms[:4], repeat=2)]
     out += [ConceptAssertion(a, i) for i in individuals for a in atoms]
     out += [ConceptAssertion(Not(a), i) for i in individuals for a in atoms[:4]]
+    out += [RoleAssertion(r, i, j) for r in roles for i in individuals for j in individuals]
+    return out
+
+
+def _alc_concepts(names, roles):
+    """Compound concepts whose al-cones are compared entry by entry."""
+    from mowl.geometric.cones import And, Atomic, Exists, Forall, Not, Or
+    atoms = [Atomic(n) for n in names]
+    out = list(atoms) + [Not(a) for a in atoms]
+    out += [And((a, b)) for a, b in itertools.product(atoms[:4], repeat=2)]
+    out += [Or((a, b)) for a, b in itertools.product(atoms[:4], repeat=2)]
+    for r in roles:
+        out += [Exists(r, a) for a in atoms] + [Forall(r, a) for a in atoms]
+        out += [Exists(r, Not(a)) for a in atoms[:4]]
     return out
 
 
@@ -167,6 +214,13 @@ def _cone_scores(model):
            "truth": th.tensor([float(checker.satisfies(ax))
                                for ax in _alc_axioms(names, roles, individuals)]),
            "dim": th.tensor([float(model.dim)])}
+    concepts = _alc_concepts(names, roles)
+    out["concept cones"] = th.tensor(np.stack([model.cone(c).bits for c in concepts]),
+                                     dtype=th.float64)
+    if hasattr(model, "_source_axioms"):
+        out["is_model of the ontology"] = th.tensor(
+            [float(checker.is_model(model._source_axioms))])
+        out["violations"] = th.tensor([float(len(checker.violations(model._source_axioms)))])
     if individuals:
         out["individuals"] = th.tensor(np.stack([model.individuals[a] for a in individuals]))
     for r in roles:
@@ -180,7 +234,9 @@ def _cones(module, how):
         cls = importlib.import_module(module).ALConeInterpretation
         if how == "canonical":
             return cls.from_canonical_model(_cm(dataset))
-        return cls.from_boolean_ontology(dataset, faithful=how == "faithful")
+        model = cls.from_boolean_ontology(dataset, faithful=how == "faithful")
+        model._source_axioms = list(dataset)
+        return model
     return build
 
 
@@ -203,7 +259,9 @@ def _temporal(module):
     def build(onto):
         import importlib
         cls = importlib.import_module(module).TemporalALConeInterpretation
-        return cls.from_ontology(onto, max_prefix=1, max_period=2)
+        model = cls.from_ontology(onto, max_prefix=1, max_period=2)
+        model._source_ontology = onto
+        return model
     return build
 
 
@@ -219,7 +277,15 @@ def _temporal_scores(model):
     individuals = sorted(model.individuals)
     members = th.tensor([[float(model.instance_of(i, parse_axiom(f"{n} <= {n}").sub, t))
                           for n in names for t in range(model.length)] for i in individuals])
-    return {"bits": bits, "truth": truth, "members": members,
+    onto = model._source_ontology
+    concepts = [parse_axiom(f"{n} <= {op}{m}").sup for n in names for m in names
+                for op in ("", "X ", "F ", "G ", "~")]
+    cones = th.tensor(np.stack([model.cone(c, t).bits for c in concepts
+                                for t in range(model.length)]), dtype=th.float64)
+    return {"bits": bits, "truth": truth, "members": members, "concept cones": cones,
+            "is_model of the ontology": th.tensor([float(model.is_model(onto))]),
+            "violations": th.tensor([float(len(model.violations(onto.axioms)))]),
+            "successor": th.tensor([float(model.successor(t)) for t in range(model.length)]),
             "individuals": th.tensor(np.stack([model.individuals[i] for i in individuals])),
             "shape": th.tensor([float(model.dim), float(model.length),
                                 float(model.loop_start), float(len(model.traces))])}
@@ -228,10 +294,12 @@ def _temporal_scores(model):
 # -- attributed ---------------------------------------------------------------------------------
 def _attributed_ontology():
     from mowl.geometric.attributed import (AttributedOntology, Basic, ConceptFact, ConceptInc,
-                                           Specifier)
+                                           RoleFact, RoleInc, Specifier)
     s, t = Specifier.closed(source="s"), Specifier.closed(source="t")
     return AttributedOntology([
         ConceptFact("A", "a", s), ConceptFact("A", "b", t), ConceptFact("C", "b", s),
+        RoleFact("R", "a", "b", s), RoleFact("R", "b", "a", t), RoleInc("R", s, "Q"),
+        ConceptInc((Basic("R", s, exists=True),), Basic("C", s)),
         ConceptInc((Basic("A", s),), Basic("B", s)),
         ConceptInc((Basic("B", s), Basic("C", s)), Basic("D", s))])
 
@@ -256,8 +324,21 @@ def _attributed_scores(model):
                        for a in "ab"])
     included = th.tensor([[float(model.included(c, s, d, t)) for (d, t) in names]
                           for (c, s) in names])
+    roles = [(r, sp) for r in "RQ" for sp in specs]
+    role_regions = {f"role {r}@{k}": th.as_tensor(model.role_region(r, sp).points,
+                                                  dtype=th.float64)
+                    for k, (r, sp) in enumerate(roles)}
+    holds_role = th.tensor([[float(model.holds_role(a, r, b, sp)) for (r, sp) in roles]
+                            for a in "ab" for b in "ab"])
+    entailed = th.tensor([[float(model.entails_instance(a, c, sp)) for (c, sp) in names]
+                          for a in "ab"])
+    satisfiable = th.tensor([float(model.is_satisfiable(c, sp)) for (c, sp) in names])
+    axioms = th.tensor([float(model.satisfies(k)) for k in range(len(model.ontology.axioms))])
     return {"vertices": vertices, "holds": holds, "included": included,
             "is_model": th.tensor([float(model.is_model())]),
+            "violations": th.tensor([float(len(model.violations()))]),
+            "axioms satisfied": axioms, "holds role": holds_role, "entailed": entailed,
+            "satisfiable": satisfiable, **role_regions,
             "points": th.tensor(np.stack([model.point(a) for a in "ab"]))}
 
 

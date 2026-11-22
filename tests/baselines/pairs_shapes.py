@@ -62,7 +62,14 @@ def _parameters(names, network):
                if getattr(model.module, name) is not None}
         if network:
             for key, value in _network(model.module).state_dict().items():
-                out[f"network.{key}"] = value.detach().clone()
+                value = value.detach().clone()
+                if key == "2.bias":
+                    # The first half of this bias (the centre) has a gradient that is zero
+                    # in theory; its drift is rounding noise times Adam's step and is
+                    # checked on its own (test_concept2box_bias_noise.py). The offset half
+                    # is compared like every other parameter.
+                    value = value[value.numel() // 2:]
+                out[f"network.{key}"] = value
         return out
     return parameters
 
@@ -126,12 +133,7 @@ def _pair(method, variant=None, dataset=None, **options):
             dataset, embed_dim=EMBED, **options))
 
     network = method == "concept2box"
-    # Concept2Box: the bias of the centre in the last layer of the network has a gradient that
-    # is zero in theory (a common shift of both boxes of an axiom changes nothing), so what
-    # Adam gets is rounding noise of 1e-11, which it scales to the size of a step: 6e-5 after
-    # three epochs, while the gradients of both implementations agree to 1e-11 and the losses
-    # and scores after training agree to 1e-5.
-    atol = 1e-4 if network else 1e-5
+    atol = 1e-5
     return Pair(key=method if variant is None else f"{method}/{variant}", new=new, old=old,
                 copy=_copy(TABLES[method], network), scores=_scores,
                 parameters=_parameters(TABLES[method], network), atol=atol,

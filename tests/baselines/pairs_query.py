@@ -75,9 +75,29 @@ def _scores(model):
     return out
 
 
+def _per_structure(model, batch):
+    """The total loss of a batch, and for every structure of the batch the logits of the
+    positive answer and of the negatives and the mean negative-sampling loss of its queries
+    (the logits come from the module's own ``embed`` and ``logit``, the loss terms are
+    computed here, not by either side)."""
+    import torch.nn.functional as F
+    weighted = any(len(group) > 4 for group in batch.values())
+    out = {"loss": model.released_loss(batch) if weighted else model.loss(batch)}
+    for name, group in batch.items():
+        sig, rows, pos, neg = group[:4]
+        state = model.module.embed(sig, rows)
+        p = model.module.logit(state, pos)
+        n = model.module.logit(state, neg)
+        out[name + "/positive logits"] = p
+        out[name + "/negative logits"] = n
+        out[name + "/loss"] = (-F.logsigmoid(p).squeeze(1)
+                               - F.logsigmoid(-n).mean(dim=1)).mean() / 2
+    return out
+
+
 def _losses(model):
     batch = model._batch() if hasattr(model, "_batch") else model.sampler.batch()
-    return {"loss": model.loss(batch)}
+    return _per_structure(model, batch)
 
 
 def _parameters(model):
@@ -119,9 +139,12 @@ def _released_losses(model):
     """The weighted loss of one path batch and one other batch of the released sampler: the
     combination through ``model.loss`` of the batch of its sampler, the direct model through
     its own ``released_loss`` of its own batch."""
-    if hasattr(model, "_released_batch") and not hasattr(model, "sampler"):
-        return {g: model.released_loss(model._released_batch(g)) for g in ("path", "other")}
-    return {g: model.loss(model.sampler.batch(g)) for g in ("path", "other")}
+    out = {}
+    for g in ("path", "other"):
+        batch = (model._released_batch(g) if hasattr(model, "_released_batch")
+                 and not hasattr(model, "sampler") else model.sampler.batch(g))
+        out.update({g + "/" + k: v for k, v in _per_structure(model, batch).items()})
+    return out
 
 
 PAIRS = [
