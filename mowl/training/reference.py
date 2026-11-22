@@ -451,6 +451,8 @@ class EmELppCodeTraining(ComposedRegime):
             model.eval_gci_name = "gci0"
 
 
+# Reference code by definition: the RegD / ELBE / ELEm code initialises the parameters of
+# these two module kinds by name (``class_offset`` / ``class_rad``).
 def joint_unit_init(module):
     """Initialise the class regions as the RegD code (and the ELBE / ELEm code it
     adapts) does: one embedding row per class holding the centre *and* the size
