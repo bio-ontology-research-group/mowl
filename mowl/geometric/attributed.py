@@ -62,7 +62,7 @@ from typing import Dict, FrozenSet, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 
-from mowl.geometric.completion import CanonicalModel
+from mowl.geometric.completion import CanonicalModel  # noqa: F401
 from mowl.geometric.errors import UnsupportedAxiom
 from mowl.geometric.normal_forms import (
     BOTTOM,
@@ -73,7 +73,7 @@ from mowl.geometric.normal_forms import (
     NF6,
     TOP,
     Axiom,
-    NormalisedOntology,
+    NormalisedOntology,  # noqa: F401
     nominal_name,
 )
 from mowl.geometric.polyhedral import ConvexPolyhedralModel
@@ -480,13 +480,24 @@ class AttributedConvexModel:
     axiom_scoring = None
 
     def __init__(self, ontology: AttributedOntology):
+        from mowl.representation.construction import SOURCES
         self.ontology = ontology
-        self.grounding = ground(ontology)
-        normalised = NormalisedOntology(
-            list(self.grounding.axioms), set(self.grounding.concept_names),
-            set(self.grounding.role_names), 0)
-        self.canonical_model = CanonicalModel.from_normalised(normalised)
+        # the combination of parts: the source "attributed" (grounding and canonical
+        # model), read as faces of the simplex
+        built = SOURCES["attributed"]().build(ontology)
+        self.canonical_model, self.grounding = built.origin
+        self._built = built
         self.model = ConvexPolyhedralModel(self.canonical_model)
+
+    @property
+    def module(self):
+        """The geometry of the combination (recipe ``attributed_dl``): a class id is a
+        name ``(concept, specifier)``."""
+        geometry = getattr(self, "_geometry", None)
+        if geometry is None:
+            from mowl.representation.library.construct_methods import recipe_geometry
+            geometry = self._geometry = recipe_geometry("attributed_dl", self._built)
+        return geometry
 
     @property
     def dimension(self) -> int:

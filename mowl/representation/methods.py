@@ -82,9 +82,11 @@ def register_method(key, trained_on="axioms"):
         :class:`~mowl.models.ComposedEL` trains on the normal-form axioms (a geometry that
         reads only some forms says which: ``supported_forms``). ``"queries"``: the method is
         trained on query structures (:mod:`mowl.models.query`) and ``ComposedEL`` refuses it.
+        ``"construction"``: nothing is trained; the function builds the model from the data
+        (:mod:`mowl.representation.construction`; signature ``(data, **options)``).
     """
-    if trained_on not in ("axioms", "queries"):
-        raise ValueError("trained_on must be 'axioms' or 'queries'.")
+    if trained_on not in ("axioms", "queries", "construction"):
+        raise ValueError("trained_on must be 'axioms', 'queries' or 'construction'.")
 
     def decorate(function):
         _unique(METHODS, key, function)

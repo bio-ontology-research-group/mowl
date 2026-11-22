@@ -554,7 +554,7 @@ def constructed_geometry(model, **options):
     raise NotImplementedError(f"No geometry for {name}.")
 
 
-register_adapter("BoxModel", "IntervalUnionModel", "ConvexPolyhedralModel",
-                 "ConvexRegionModel", "CanonicalModel", "FiniteInterpretation",
-                 "LeastModel", "ALConeInterpretation", "TemporalALConeInterpretation",
-                 "AttributedConvexModel")(constructed_geometry)
+# The geometry of these models is now the combination of a source and a reading
+# (mowl.representation.library.construct_methods registers it); this direct geometry of
+# backends stays for the geometries built on it (FaithEL) and as a reference.
+del register_adapter

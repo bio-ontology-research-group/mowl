@@ -89,7 +89,7 @@ from mowl.geometric.cones import (
     Not,
     Or,
     TOP_CONCEPT,
-    halfaxis_vector,
+    halfaxis_vector,  # noqa: F401  (re-exported)
 )
 
 __all__ = [
@@ -544,27 +544,38 @@ class TemporalALConeInterpretation:
         """The construction of Theorem 2 of the paper (see the module docstring): every
         distinct trace becomes a half-axis, the atom :math:`A` at time :math:`i` is the
         al-cone of the half-axes of the traces with :math:`A` at :math:`i`, and an
-        individual is the ray of its trace's half-axis."""
-        distinct: List[Tuple[FrozenSet[str], ...]] = []
-        index: Dict[Tuple[FrozenSet[str], ...], int] = {}
-        for tr in model.traces:
-            key = tuple(tr)
-            if key not in index:
-                index[key] = len(distinct)
-                distinct.append(key)
-        # An odd number of traces leaves one half-axis without a trace; it gets a copy of
-        # the trace of half-axis 0, so the interpretation has no element of its own.
-        axes = list(distinct) + ([distinct[0]] if len(distinct) % 2 == 1 else [])
-        dim = max(1, len(axes) // 2)
-        names = sorted(set().union(*(s for key in distinct for s in key)))
-        atoms = {name: [ALCone.from_halfaxes(
-            dim, [h for h, key in enumerate(axes) if name in key[t]])
-            for t in range(model.length)] for name in names}
-        inds = {a: halfaxis_vector(dim, index[tuple(model.traces[d])])
-                for a, d in model.individuals.items()}
-        out = cls(dim, model.loop_start, atoms, inds, length=model.length)
-        out.traces = distinct
+        individual is the ray of its trace's half-axis.
+
+        This is the combination of the source ``lasso model`` and the reading
+        ``half-axes`` with one cell per distinct trace (``merge=True``); :attr:`module` is
+        its geometry."""
+        from mowl.representation.construction import RECIPES
+        geometry = RECIPES["temporal_cones"].build(model)
+        regions = geometry.read.classes
+        bits = regions.bits
+        atoms = {name: [ALCone(bits[row, t].numpy()) for t in range(model.length)]
+                 for row, name in enumerate(geometry.names)}
+        inds = {a: geometry.read.individuals.centre[k].numpy()
+                for k, a in enumerate(geometry.individual_names)}
+        out = cls(regions.dim, model.loop_start, atoms, inds, length=model.length)
+        # the distinct traces, in the order of their cells
+        _, cell = geometry.reading.cells(geometry.built)
+        first = {}
+        for element, c in enumerate(cell):
+            first.setdefault(c, element)
+        out.traces = [tuple(model.traces[first[c]]) for c in sorted(first)]
+        out._geometry = geometry
         return out
+
+    @property
+    def module(self):
+        """The geometry of the combination this interpretation was built from
+        (:meth:`from_lasso_model`)."""
+        geometry = getattr(self, "_geometry", None)
+        if geometry is None:
+            raise AttributeError("A temporal al-cone interpretation given by its cones has no "
+                                 "construction; build it with from_lasso_model.")
+        return geometry
 
     @classmethod
     def from_ontology(cls, ontology: TemporalOntology, max_prefix: int = 2, max_period: int = 3,
