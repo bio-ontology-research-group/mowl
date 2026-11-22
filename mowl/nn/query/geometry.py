@@ -415,7 +415,8 @@ class AConEGeometry(ConEGeometry):
         to ``(-pi, pi]`` like the axis, so an aperture can be negative (a cone of aperture
         ``a`` is the cone of ``|a|``) and a sum above ``pi`` comes back small; this is the
         authors' code (``convert_to_arguments`` of the AConE repository). ``"clip"``:
-        clipped to ``[0, pi]``, the range of the aperture of every other state: a negative sum is a point, a sum above ``pi`` the whole circle.
+        clipped to ``[0, pi]``, the range of the aperture of every other state: a negative sum
+        is a point, a sum above ``pi`` the whole circle.
     """
 
     def __init__(self, num_entities, num_relations, dim, gamma=20.0, center_weight=0.02,
