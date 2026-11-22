@@ -159,14 +159,14 @@ class BoxELModule(_PartBuiltModule):
         """The regulariser of the BoxEL baseline of the Box2EL code for one batch of boxes:
         the mean excess of the upper corners over 1 plus the excess of the Frobenius norm of
         the batch's lower corners over 1 (one scalar per batch, not per box)."""
-        return (th.mean(th.relu(box.upper - 1 + 1e-8))
-                + th.relu(th.linalg.norm(box.lower) - 1))
+        upper = th.mean(th.relu(box.upper - 1 + 1e-8))
+        return upper + th.relu(th.linalg.norm(box.lower) - 1)
 
     def forward(self, gci, gci_name, neg=False):
         if self.regulariser == "box2el_code" and self.training and th.is_grad_enabled():
             for box in self._axiom_boxes(gci_name, gci):
-                self._pending_regulariser = (self._pending_regulariser
-                                             + self._side_regulariser(box))
+                term = self._side_regulariser(box)
+                self._pending_regulariser = self._pending_regulariser + term
         return super().forward(gci, gci_name, neg=neg)
 
     def regularization_loss(self):
