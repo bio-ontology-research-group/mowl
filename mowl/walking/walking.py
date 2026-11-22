@@ -38,6 +38,18 @@ class WalkingModel():
         self.walk_length = walk_length
         self.workers = workers
 
+    #: Whether the walks are the same for the same ``seed`` (see the subclasses).
+    seeded = False
+
+    def _start_outfile(self, append=False):
+        """Empties :attr:`outfile` (creating it) before a walk, unless ``append``. The Java
+        walkers open the file for writing; DeepWalk's opens it in *append* mode, so without this
+        a second ``walk`` (or a file left by an earlier run) would keep the old walks in front of
+        the new ones."""
+        if not append:
+            with open(self.outfile, "w"):
+                pass
+
     # Abstract methods
     @versionchanged(version="0.1.0", reason="The method now can accept a list of entities to \
         focus on when generating the random walks.")

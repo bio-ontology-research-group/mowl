@@ -84,11 +84,13 @@ Ignoring it."])
         os.remove(outfile)
 
     def test_walking_on_updated_graph(self):
-        """This should test that walks file get updated (not overwritten) when walking on updated graph"""
+        """This should test that walks file get updated (not overwritten) when walking on updated
+        graph. The walker empties its file before a walk unless ``append=True``, so this is the
+        incremental mode."""
         num_walks = 10
         walk_length = 2
         
-        deepwalk = DeepWalk(num_walks, walk_length)
+        deepwalk = DeepWalk(num_walks, walk_length, append=True)
         deepwalk.walk(self.graph)
         with open(deepwalk.outfile, "r") as f:
             walks = f.readlines()

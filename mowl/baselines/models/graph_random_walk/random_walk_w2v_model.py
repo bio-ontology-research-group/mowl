@@ -115,13 +115,25 @@ class RandomWalkPlusW2VModel(RandomWalkModel):
             self.axioms_added = False
             self._edges = self.projector.project(self.dataset.ontology)
             
-            self.walker.walk(self._edges)
+            self._walk(self._edges)
             
         sentences = LineSentence(self.walker.outfile)
         self.w2v_model.build_vocab(sentences, update=self.update_w2v_model)
         if epochs > 0:
             self.w2v_model.train(sentences, total_examples=self.w2v_model.corpus_count, epochs=epochs)
         
+    def _walk(self, edges, **kwargs):
+        """The published behaviour: the walks are appended to the file (the walkers empty it
+        unless ``append=True``)."""
+        old = getattr(self.walker, "append", None)
+        if old is not None:
+            self.walker.append = True
+        try:
+            self.walker.walk(edges, **kwargs)
+        finally:
+            if old is not None:
+                self.walker.append = old
+
     def add_axioms(self, *axioms):
         classes = set()
         object_properties = set()
@@ -136,7 +148,7 @@ class RandomWalkPlusW2VModel(RandomWalkModel):
             
         self.dataset.add_axioms(*axioms)
         self._edges = self.projector.project(self.dataset.ontology)
-        self.walker.walk(self._edges, nodes_of_interest=new_entities)
+        self._walk(self._edges, nodes_of_interest=new_entities)
         self.update_w2v_model = True
         #Rebuild vocab
         sentences = LineSentence(self.walker.outfile)

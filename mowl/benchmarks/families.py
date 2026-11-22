@@ -14,9 +14,12 @@ factories here are plain defaults for comparison runs, not the settings of a pap
 """
 
 import inspect
+import logging
 import os
 
 from mowl.benchmarks import runner
+
+logger = logging.getLogger(__name__)
 
 
 def _accepts(callable_, name):
@@ -71,7 +74,11 @@ def _walk_model(dataset, projector, embed_dim=100, num_walks=10, walk_length=20,
     model.set_projector(projector)
     outfile = (model_filepath or model.model_filepath) + ".walks"
     if walker == "node2vec":
-        # mowl.walking.Node2Vec takes no seed: its walks differ from run to run
+        # mowl.walking.Node2Vec takes no seed (the Scala walker draws from an unseeded
+        # generator): its walks differ from run to run, whatever ``seed`` says. Say so.
+        logger.warning("node2vec walks are not seeded: the walks (and so the embeddings) "
+                       "differ from run to run even with seed=%s; only Word2Vec follows "
+                       "the seed.", seed)
         model.set_walker(Node2Vec(num_walks, walk_length, p=p, q=q, outfile=outfile,
                                   workers=workers))
     else:

@@ -6,10 +6,13 @@ WALKING_METHODS = ["deepwalk", "node2vec"]
 
 
 def walker_factory(method_name, num_walks, walk_length, outfile=None, workers=1, alpha=0.,
-                   p=1., q=1.):
+                   p=1., q=1., seed=0):
+    """A walker by name. ``seed`` seeds DeepWalk; node2vec has no seed (its walks differ from
+    run to run, ``walker.seeded`` is ``False``)."""
 
     if method_name == "deepwalk":
-        return DeepWalk(num_walks, walk_length, alpha=alpha, outfile=outfile, workers=workers)
+        return DeepWalk(num_walks, walk_length, alpha=alpha, outfile=outfile, workers=workers,
+                        seed=seed)
     elif method_name == "node2vec":
         return Node2Vec(num_walks, walk_length, p=p, q=q, outfile=outfile, workers=workers)
     else:

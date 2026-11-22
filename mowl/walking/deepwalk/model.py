@@ -21,6 +21,13 @@ class DeepWalk(WalkingModel):
     
     :param alpha: Probability of restart, defaults to 0
     :type alpha: float, optional
+    :param seed: Seed of the walks. The walks are the same for the same seed when ``workers`` \
+    is 1; with several workers the order of the lines of the file depends on thread timing.
+    :type seed: int, optional
+    :param append: ``False`` (default): the output file is emptied before every :meth:`walk`. \
+    The Java walker appends to its file, so before this option a second walk, or a file left \
+    from an earlier run, trained on old and new walks together. ``True`` keeps that behaviour.
+    :type append: bool, optional
     '''
 
     def __init__(self,
@@ -29,7 +36,8 @@ class DeepWalk(WalkingModel):
                  alpha=0.,
                  outfile=None,
                  workers=1,
-                 seed=0
+                 seed=0,
+                 append=False
                  ):
         super().__init__(num_walks, walk_length, outfile=outfile, workers=workers)
 
@@ -41,6 +49,8 @@ class DeepWalk(WalkingModel):
                 raise TypeError("Optional parameter alpha must be a float")
         self.alpha = alpha
         self.seed = seed
+        self.append = append
+        self.seeded = workers == 1
 
     @versionchanged(version="0.1.0", reason="The method now can accept a list of entities to \
     focus on when generating the random walks.")
@@ -63,6 +73,7 @@ class DeepWalk(WalkingModel):
             newEdge = Edge(edge.src, edge.rel, edge.dst)
             edgesJ.add(newEdge)
 
+        self._start_outfile(self.append)
         walker = DW(edgesJ, self.num_walks, self.walk_length, self.alpha, self.workers,
                     self.outfile, nodes_of_interest, self.seed)
 
