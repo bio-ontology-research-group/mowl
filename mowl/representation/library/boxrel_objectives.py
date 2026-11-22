@@ -35,6 +35,7 @@ def boxel_objective(margin=0.0, gci1_bot="product", **options):
     options.setdefault("negatives", "gci2")
     options.setdefault("bottom", "class")
     options.setdefault("gci2_reading", "image")
+    options.setdefault("strict_negatives", False)
     return Objective(margin, gci1_bot=gci1_bot, **options)
 
 
@@ -112,6 +113,7 @@ class BoxSELObjective(Objective):
         options.setdefault("negatives", "gci2")
         options.setdefault("bottom", "class")
         options.setdefault("gci2_reading", "image")
+        options.setdefault("strict_negatives", False)
         super().__init__(margin, gci1_bot=gci1_bot, **options)
 
     def cost(self, g, form, rows, neg=False):
@@ -141,7 +143,8 @@ class ELKEmObjective(Objective):
     def __init__(self, margin=0.1, abox_threshold=0.4, gci2_overlap=False,
                  evaluation_margin=0.0):
         super().__init__(margin, slack=False, negatives=("class_assertion",
-                                                         "object_property_assertion"))
+                                                         "object_property_assertion"),
+                         strict_negatives=False)
         self.abox_threshold = float(abox_threshold)
         self.gci2_overlap = bool(gci2_overlap)
         self.evaluation_margin = evaluation_margin

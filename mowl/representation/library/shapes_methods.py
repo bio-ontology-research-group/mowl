@@ -98,7 +98,7 @@ def octagon(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0
     objective = ShapeObjective(
         margin, gci3="inclusion", gci2_negative="outside", negatives="gci2",
         disjoint_margin=disjoint_margin, neg_margins={"gci2": neg_margin},
-        assertion="distance")
+        assertion="distance", strict_negatives=False)
     regularizers = (MinWidthPenalty(min_width),) if min_width and min_width > 0 else ()
     return ComposedGeometry(classes, relations, OctagonBounds(), objective,
                             individuals=individuals, regularizers=regularizers,
@@ -166,7 +166,7 @@ def prism(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
     objective = ShapeObjective(
         margin, gci3="overlap",
         gci2_negative="overlap" if gci2_negative_triangle == "overlap" else "shrunk",
-        negatives="gci2", empty_margin=True)
+        negatives="gci2", empty_margin=True, strict_negatives=False)
     return ComposedGeometry(classes, relations, PrismBounds(empty="triangle"), objective,
                             individuals=individuals,
                             neg_capable_gcis={"gci2", "object_property_assertion"})
@@ -239,7 +239,7 @@ def eike(nb_classes, nb_relations, nb_individuals=0, embed_dim=100, margin=0.0, 
     individuals = LinkedClasses(points, MappedVectors(points.centres, matrix))
     measure = LinkedMeasure(EllipsoidMeasure(containment), CosineOrder(norm_term), alpha)
     objective = ShapeObjective(
-        0.0, negatives="gci2",
+        0.0, negatives="gci2", strict_negatives=False,
         ranking={"gci0": gamma_sub, "class_assertion": gamma_ins,
                  "object_property_assertion": gamma_rel})
     return ComposedGeometry(classes, relations, measure, objective, individuals=individuals,

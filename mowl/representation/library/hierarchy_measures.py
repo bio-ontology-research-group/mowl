@@ -286,8 +286,9 @@ class SoftVolumeRatio(_LogProbability, Bounds):
         ``"exact"`` (:math:`z - \tfrac12 e^z`), ``"floor"`` (:math:`\log(\cdot + 10^{-30})`
         as in the Gumbel box module) or ``"linear"`` (:math:`z` below :math:`-15`, as in the
         BCBox code).
-    :param energy_floor: Smallest energy given to a negative pair (:math:`10^{-9}` Gumbel
-        boxes, :math:`10^{-12}` BCBox).
+    :param energy_floor: Smallest energy given to a negative pair (default :math:`10^{-12}`,
+        the guard of the binary code boxes and of the Gumbel boxes; :math:`10^{-9}` is the
+        earlier guard of the Gumbel box module, ``log_guard="epsilon"``).
     :param dtype: Precision of the computation (float64 in the Gumbel box module, the
         regions' own in BCBox: ``None``).
     """
@@ -297,7 +298,7 @@ class SoftVolumeRatio(_LogProbability, Bounds):
     exact_intersection = True
 
     def __init__(self, intersection_temp=0.01, volume_temp=None, gumbel_shift=True,
-                 tail="exact", energy_floor=1e-9, dtype=th.float64, separation="any"):
+                 tail="exact", energy_floor=1e-12, dtype=th.float64, separation="any"):
         super().__init__(separation)
         if tail not in ("exact", "floor", "linear"):
             raise ValueError("tail must be 'exact', 'floor' or 'linear'.")

@@ -162,10 +162,30 @@ class TestObjective(TestCase):
         self.assertEqual(g.role_inclusion_loss(th.tensor([[0, 1]])).shape, (1, 1))
         self.assertEqual(g.role_chain_loss(th.tensor([[0, 1, 2]])).shape, (1, 1))
         self.assertEqual(g(th.tensor([[0, 1]]), "role_inclusion").shape, (1, 1))
-        # no negative reading: the positive loss
+        # no negative reading: an error by default, the positive loss as an option
         rows = th.tensor([[0, 1]])
-        self.assertTrue(th.equal(g(rows, "role_inclusion", neg=True),
-                                 g(rows, "role_inclusion")))
+        with self.assertRaises(NotImplementedError):
+            g(rows, "role_inclusion", neg=True)
+        lenient = ComposedGeometry(BoxClasses(3, 2), Translation(3, 2), Bounds(),
+                                   Objective(strict_negatives=False))
+        self.assertTrue(th.equal(lenient(rows, "role_inclusion", neg=True),
+                                 lenient(rows, "role_inclusion")))
+
+    def test_strict_negatives_by_default_in_the_objective(self):
+        rows = th.tensor([[0, 1]])
+        for negatives, form in (("gci2", "gci0"), ("gci0", "gci2"), ("none", "gci0")):
+            rows = th.tensor([[0, 1]]) if form == "gci0" else th.tensor([[0, 0, 1]])
+            strict = ComposedGeometry(BoxClasses(3, 2), Translation(3, 2), Bounds(),
+                                      Objective(negatives=negatives))
+            with self.assertRaises(NotImplementedError):
+                strict(rows, form, neg=True)
+            lenient = ComposedGeometry(BoxClasses(3, 2), Translation(3, 2), Bounds(),
+                                       Objective(negatives=negatives, strict_negatives=False))
+            self.assertTrue(th.equal(lenient(rows, form, neg=True), lenient(rows, form)))
+        # the published ELEmbeddings and ELBE losses give the positive loss
+        self.assertFalse(Objective.elem().strict_negatives)
+        self.assertFalse(Objective.elbe().strict_negatives)
+        self.assertTrue(Objective().strict_negatives)
 
     def test_unit_norm_terms(self):
         plain = ComposedGeometry(BallClasses(4, 3), Translation(2, 3), CentreDistance(),

@@ -87,11 +87,12 @@ class Objective:
         ``"gci2"`` (:math:`C \\sqsubseteq \\exists r.D` and role assertions: for the others
         ``neg=True`` returns the positive loss, as the original modules do), ``"gci0"``
         (hierarchy methods), ``"none"``, or a collection of form names.
-    :param strict_negatives: ``False`` (default): asking for the negative loss of a form that
-        has none (``neg=True`` outside ``negatives``) gives the positive loss, which is the
-        contract of :class:`~mowl.nn.ELModule` (``neg_capable_gcis`` says which forms differ)
-        and what the published losses of most modules do. ``True``: it is an error
-        (:class:`NotImplementedError`), as in :class:`~mowl.nn.TransBoxModule`.
+    :param strict_negatives: ``True`` (default): asking for the negative loss of a form that
+        has none (``neg=True`` outside ``negatives``) is an error
+        (:class:`NotImplementedError`), as in :class:`~mowl.nn.TransBoxModule`: a positive
+        loss is not a negative one. ``False``: it gives the positive loss, which is what most
+        of the existing modules do (:class:`~mowl.nn.ELModule`: ``neg_capable_gcis`` says
+        which forms differ); the functions that rebuild such a module set it.
     :param empty: ``"size"`` (default): the loss of :math:`C \\sqsubseteq \\bot` is the
         size of the region. ``"raw"``: the signed radius parameter, as in the ELEmbeddings
         code (unbounded below).
@@ -158,7 +159,7 @@ class Objective:
                  disjoint_margin=None, empty_margin=False, neg_margins=None,
                  negative_margin="same", squared=False, delta=2.0, weights=None,
                  ranking=None, unit_norm=False, tolerance_weight=1.0, gci0_shift=None,
-                 freeze_size_negatives=False, inside_margin=None, strict_negatives=False):
+                 freeze_size_negatives=False, inside_margin=None, strict_negatives=True):
         _check(gci3, ("inclusion", "overlap"), "gci3")
         _check(gci2_negative, ("apart", "overlap", "linear", "delta", "outside", "shrunk",
                                "negative"), "gci2_negative")
@@ -213,6 +214,7 @@ class Objective:
              gci3="overlap", **options):
         """ELEmbeddings (Kulmanov et al. 2019) as implemented in mOWL."""
         options.setdefault("negative_margin", "strict")
+        options.setdefault("strict_negatives", False)
         return cls(margin, slack=True, epsilon=epsilon, gci3=gci3,
                    gci2_negative="linear" if linear_negative else "apart",
                    negatives="all" if all_negatives else "gci2", empty="raw",
@@ -221,6 +223,7 @@ class Objective:
     @classmethod
     def elbe(cls, margin=0.1, all_negatives=False, epsilon=0.01, gci3="overlap", **options):
         """ELBE (Peng et al. 2022) as implemented in mOWL."""
+        options.setdefault("strict_negatives", False)
         return cls(margin, slack=False, epsilon=epsilon, gci3=gci3,
                    gci2_negative="overlap", negatives="all" if all_negatives else "gci2",
                    **options)

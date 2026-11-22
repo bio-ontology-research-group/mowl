@@ -244,7 +244,8 @@ class RegDObjective(Objective):
         self.host = host
         self.consistent_radius = bool(consistent_radius)
         super().__init__(host.margin, host.slack, host.epsilon, host.gci3_reading,
-                         host.gci2_negative, host.negatives, host.empty, host.gci2_offset)
+                         host.gci2_negative, host.negatives, host.empty, host.gci2_offset,
+                         strict_negatives=host.strict_negatives)
         self.neg_forms = host.neg_forms
         self.regd_forms = frozenset(regd_forms)
         self.flip_gci2 = bool(flip_gci2)
@@ -353,7 +354,7 @@ def _elpp(tolerant, nb_classes, nb_relations, nb_individuals, embed_dim, margin,
     objective = Objective(margin, slack=True, gci3="overlap",
                           gci2_negative="linear" if linear_negative else "apart",
                           negatives="gci2", negative_margin="strict", unit_norm=True,
-                          gci3_bot="filler",
+                          gci3_bot="filler", strict_negatives=False,
                           tolerance_weight=sigma_reg_weight, gci0_shift=gci0_shift)
     return ComposedGeometry(classes, relations, CentreDistance(gci1_radius_term), objective,
                             individuals=individuals)

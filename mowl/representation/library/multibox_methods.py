@@ -72,7 +72,7 @@ def box2el(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0,
     objective = Objective(
         margin, slack=True, epsilon=epsilon, gci3="inclusion", gci2_negative="delta",
         negatives="all" if all_negatives else "gci2", squared=True, delta=delta,
-        gci3_bot_negative="filler")
+        gci3_bot_negative="filler", strict_negatives=False)
     return ComposedGeometry(classes, _head_tail(nb_relations, embed_dim, t),
                             Bounds(separation="every"), objective, individuals=individuals,
                             regularizers=(bump_penalty(reg_factor),))
@@ -139,7 +139,8 @@ def multiboxel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=
         tau = t.tau
     objective = Objective(
         margin, slack=True, epsilon=epsilon, gci3="inclusion", gci2_negative="delta",
-        negatives="gci2", squared=True, delta=delta, gci3_bot_negative="filler")
+        negatives="gci2", squared=True, delta=delta, gci3_bot_negative="filler",
+        strict_negatives=False)
     measure = UnionMeasure(Bounds(separation="every"), component_aggregation, tau)
     regularizers = [bump_penalty(reg_factor)] + _union_regularizers(component_reg,
                                                                     diversity_reg)
@@ -177,7 +178,7 @@ def multielbe(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0
     if t is not None:
         tau = t.tau
     objective = Objective(margin, slack=False, epsilon=epsilon, gci3=gci3,
-                          gci2_negative="overlap", negatives="gci2")
+                          gci2_negative="overlap", negatives="gci2", strict_negatives=False)
     measure = UnionMeasure(Bounds(separation="every"), component_aggregation, tau)
     return ComposedGeometry(classes, relations, measure, objective, individuals=individuals,
                             regularizers=_union_regularizers(component_reg, diversity_reg))
@@ -233,7 +234,7 @@ def mcmultibox(nb_classes, nb_relations, nb_individuals=0, embed_dim=5, margin=0
                   V.sobol_points(num_points, 2 * embed_dim, bound, seed + 1)]
         measure = SampledVolume(points, bound=bound, temperature=temperature,
                                 aggregate=aggregate, chunk_size=point_chunk_size)
-    geometry = ComposedGeometry(classes, relations, measure, Objective(negatives="gci2"),
+    geometry = ComposedGeometry(classes, relations, measure, Objective(negatives="gci2", strict_negatives=False),
                                 individuals=individuals, neg_capable_gcis=frozenset())
     geometry.margin_semantics = None
     return geometry
