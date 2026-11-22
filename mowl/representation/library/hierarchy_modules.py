@@ -12,7 +12,7 @@ step. The classes themselves live next to the earlier modules (``mowl.nn.el.<met
 from mowl.representation.geometry import ComposedGeometry
 from mowl.representation.library.hierarchy_geometry import LatticeGeometry
 
-__all__ = ["adopt"]
+__all__ = ["adopt", "FlatLossOption"]
 
 
 def adopt(module, built):
@@ -32,4 +32,34 @@ def adopt(module, built):
             individuals=built.individual_model, regularizers=built.regularizers,
             supported_forms=built.supported_forms,
             neg_capable_gcis=built.neg_capable_gcis)
+    if isinstance(module, FlatLossOption):
+        module.margin_semantics = None
     return module
+
+
+class FlatLossOption:
+    """Mixin (before the geometry class) of the public module classes of the taxonomy
+    methods, which keep the interface of an :class:`~mowl.nn.ELModule` that reads ``gci0``
+    only:
+
+    * a form the geometry does not read raises :class:`NotImplementedError`, as every
+      module does for a form it does not implement (the part-built geometry itself raises
+      :class:`~mowl.representation.ConstructorUnavailable`, which says which part is
+      missing);
+    * ``module.per_axiom_column = False`` gives the flat ``(B,)`` vector of the formula
+      instead of the column ``(B, 1)`` (the values are the same);
+    * the margin does not enter the cost of a stated pair (it is the margin of the negative
+      cost), so ``margin_semantics`` is ``None``.
+    """
+
+    margin_semantics = None
+
+    def cost(self, form, rows, neg=False):
+        if form not in self.supported_forms:
+            raise NotImplementedError(
+                f"{type(self).__name__} reads {sorted(self.supported_forms)} only, not "
+                f"{form!r}.")
+        out = super().cost(form, rows, neg)
+        if not self.per_axiom_column and out.dim() == 2 and out.shape[-1] == 1:
+            return out.squeeze(-1)
+        return out

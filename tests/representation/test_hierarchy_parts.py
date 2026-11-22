@@ -5,12 +5,12 @@ from unittest import TestCase
 import torch as th
 
 from mowl.models import ComposedEL
-from mowl.nn.el.box_lattice import BoxLatticeModule
-from mowl.nn.el.gumbel_box import GumbelBoxModule
-from mowl.nn.el.order_embeddings import OrderEmbeddingsModule
-from mowl.nn.graph.bcbox import BinaryCodeBoxModule
-from mowl.nn.graph.bcbox.losses import neg_log1mexp as bcbox_neg_loss
-from mowl.nn.graph.cate import CatEModule
+from mowl.baselines.nn.el.box_lattice import BoxLatticeModule
+from mowl.baselines.nn.el.gumbel_box import GumbelBoxModule
+from mowl.baselines.nn.el.order_embeddings import OrderEmbeddingsModule
+from mowl.baselines.nn.graph.bcbox import BinaryCodeBoxModule
+from mowl.baselines.nn.graph.bcbox.losses import neg_log1mexp as bcbox_neg_loss
+from mowl.baselines.nn.graph.cate import CatEModule
 from mowl.nn.lm import BagOfWordsEncoder, HiTModule, OnTModule
 from mowl.nn.order import (DiskEmbeddingsModule, HyperbolicConesModule, RiemannianSGD,
                            ShadowConesModule)

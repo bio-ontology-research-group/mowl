@@ -3,10 +3,11 @@ import torch as th
 
 from mowl.representation.geometry import ComposedGeometry
 from mowl.representation.library.hierarchy_methods import order_embeddings
-from mowl.representation.library.hierarchy_modules import adopt
+from mowl.representation.library.hierarchy_measures import OrderViolation
+from mowl.representation.library.hierarchy_modules import FlatLossOption, adopt
 
 
-class OrderEmbeddingsModule(ComposedGeometry):
+class OrderEmbeddingsModule(FlatLossOption, ComposedGeometry):
     r"""Every class is a vector :math:`f(C) = |w_C| \in \mathbb{R}^d_+`; a subclass axiom
     :math:`C \sqsubseteq D` is the pair :math:`f(C) \preceq f(D)` in the reversed product
     order (:math:`x \preceq y` iff :math:`x_i \ge y_i` for all :math:`i`).
@@ -34,6 +35,11 @@ class OrderEmbeddingsModule(ComposedGeometry):
                                      init_scale=init_scale))
         self.nb_ont_classes = nb_ont_classes
         self.embed_dim = embed_dim
+
+    @staticmethod
+    def violation(x, y):
+        r""":math:`E(x, y) = \lVert \max(0, y - x) \rVert_2` per row, for vectors."""
+        return OrderViolation("reversed", 2).violation(x, y)
 
     def vectors(self, idx):
         """The non-negative vectors of the classes ``idx``."""

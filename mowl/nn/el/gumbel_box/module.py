@@ -4,10 +4,10 @@ import torch as th
 
 from mowl.representation.geometry import ComposedGeometry
 from mowl.representation.library.hierarchy_methods import gumbel_box
-from mowl.representation.library.hierarchy_modules import adopt
+from mowl.representation.library.hierarchy_modules import FlatLossOption, adopt
 
 
-class GumbelBoxModule(ComposedGeometry):
+class GumbelBoxModule(FlatLossOption, ComposedGeometry):
     r"""Gumbel box embeddings of the class taxonomy, the combination that
     :func:`mowl.representation.library.hierarchy_methods.gumbel_box` names (read
     ``module.parts``): the box lattice's class model

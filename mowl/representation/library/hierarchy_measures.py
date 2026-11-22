@@ -168,6 +168,11 @@ class OrderViolation(EnergyMeasure):
         self.check(a, b)
         return self._norm(self._diff(a, b) + margin).unsqueeze(-1)
 
+    def violation(self, a, b):
+        """The violation of plain vectors ``a`` below ``b`` (tensors, not regions), shape of
+        the vectors without the last dimension."""
+        return self._norm(b - a if self.direction == "reversed" else a - b)
+
 
 # -- boxes: volumes -----------------------------------------------------------------------
 def neg_log1mexp(energy, floor=1e-12):
@@ -363,10 +368,12 @@ class LogVolumeRatio(_LogProbability, Bounds):
         if self.smoothed:
             return self.energy(a, b).clamp(min=0.0).to(a.centre.dtype)
         p, gap = self.conditional(a, b)
-        cost = -th.log(p.clamp(min=0.0) + self.eps) + self.disjoint_weight * gap
         if self.zero_at_inclusion:
-            cost = cost + math.log1p(self.eps)
-        return cost.to(a.centre.dtype)
+            # exactly 0 for an included pair (p = 1), whatever the rounding of p
+            log_term = -th.log((p.clamp(min=0.0, max=1.0) + self.eps) / (1.0 + self.eps))
+        else:
+            log_term = -th.log(p.clamp(min=0.0) + self.eps)
+        return (log_term + self.disjoint_weight * gap).to(a.centre.dtype)
 
     def negative(self, a, b, margin=0.0):
         """:math:`-\\log(1 - P(b \\mid a))`, the cross entropy with target 0 (hard boxes: the

@@ -4,7 +4,7 @@ import torch as th
 
 from mowl.representation.geometry import ComposedGeometry
 from mowl.representation.library.hierarchy_methods import box_lattice
-from mowl.representation.library.hierarchy_modules import adopt
+from mowl.representation.library.hierarchy_modules import FlatLossOption, adopt
 
 
 def meet(min_a, max_a, min_b, max_b):
@@ -23,7 +23,7 @@ def volume(mn, mx):
     return th.relu(mx - mn).prod(dim=-1)
 
 
-class BoxLatticeModule(ComposedGeometry):
+class BoxLatticeModule(FlatLossOption, ComposedGeometry):
     r"""Box lattice embeddings of the class taxonomy, the combination that
     :func:`mowl.representation.library.hierarchy_methods.box_lattice` names (read
     ``module.parts``): boxes in the unit cube
