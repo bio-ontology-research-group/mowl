@@ -200,12 +200,12 @@ for k in (3, 5):
 # constructively by intersecting the component boxes of their operands
 # (:meth:`~mowl.nn.MultiBoxELModule.all_class_regions`). Training optimises:
 #
-# * **Existence** (:func:`~mowl.baselines.nn.el.multiboxel.structural_losses.existence_loss` via
-#   :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.nonempty_measure`): every satisfiable class
+# * **Existence** (:class:`~mowl.representation.library.structural_reading.ExistencePenalty` via
+#   :func:`~mowl.representation.library.structural_reading.size_of`): every satisfiable class
 #   must have at least one active slot whose minimum half-width exceeds
 #   ``margin``.
-# * **Disjointness** (:func:`~mowl.baselines.nn.el.multiboxel.structural_losses.gci1_bot_structural` via
-#   :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.signed_overlap`): for every
+# * **Disjointness** (:meth:`~mowl.representation.library.structural_reading.StructuralReading.gci1_bot` via
+#   :func:`~mowl.representation.library.structural_reading.pair_size_of`): for every
 #   :math:`A_i \sqcap A_j \sqsubseteq \bot`, every pair of non-empty active
 #   slots must be separated by at least ``margin`` along some coordinate.
 #
@@ -223,7 +223,7 @@ for k in (3, 5):
 #
 # 1. **Sum aggregation** (``bot_agg="sum"``): sums the squared-hinge overlap
 #    penalties over all active slot pairs of :math:`(C, D)` in
-#    :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.gci1_bot_structural` instead of averaging
+#    :meth:`~mowl.representation.library.structural_reading.StructuralReading.gci1_bot` instead of averaging
 #    them (``bot_agg="mean"``), preventing the :math:`1 / (S_C S_D)` dilution as
 #    the number of definition slots grows.
 # 2. **Canonical-model witness points** (``witness_weight=1.0``): compiles a
@@ -231,7 +231,7 @@ for k in (3, 5):
 #    model and attaches one learnable point :math:`p(w) \in \mathbb{R}^d` per
 #    satisfiable class (:meth:`~mowl.nn.MultiBoxELModule.witness_points`). Using
 #    :func:`~mowl.nn.el.structural.inside_measure`,
-#    :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.witness_loss` pulls :math:`p(A_i)` inside at
+#    :class:`~mowl.representation.library.structural_reading.WitnessPenalty` pulls :math:`p(A_i)` inside at
 #    least one active component of every :math:`X_j` (:math:`j \ne i`) and pushes
 #    it outside *every* active component of :math:`X_i` (since
 #    :math:`A_i \sqcap X_i \sqsubseteq \bot` is entailed by the canonical model).

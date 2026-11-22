@@ -189,7 +189,7 @@ Limitations and caveats
      **without** nominals (``ObjectOneOf``), functionality
      (``FunctionalObjectProperty``), and range (``ObjectPropertyRange``) axioms.
    * *Separation of ``concept_names`` and ``names``:* :attr:`~mowl.geometric.completion.CanonicalModel.concept_names`
-     excludes nominal names :math:`N_a`, whereas :attr:`~mowl.geometric.completion.CanonicalModel.names`
+     excludes nominal names :math:`N_a`, whereas ``CanonicalModel.names``
      keeps all satisfiable concept and nominal names so that constructive region
      builders assign every satisfiable individual a non-empty region.
    * *Inconsistent individuals and unsupported ABox axioms:* If completion

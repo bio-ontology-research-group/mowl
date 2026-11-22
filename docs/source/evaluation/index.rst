@@ -1,7 +1,7 @@
 Evaluating the embeddings
 ===============================
 
-.. |ppidataset| replace:: :class:`PPIYeastDataset <mowl.datasets.builin.PPIYeastDataset>`
+.. |ppidataset| replace:: :class:`PPIYeastDataset <mowl.datasets.builtin.PPIYeastDataset>`
 .. |ppievaluator| replace:: :class:`PPIEvaluator <mowl.evaluation.PPIEvaluator>`
 			  
 The evaluation of models is specific to the task, which is given by the dataset. For example, when using the |ppidataset|, we will use the |ppievaluator|. For example, a typical pipeline to train a model would be:
