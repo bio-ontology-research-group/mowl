@@ -25,7 +25,7 @@ from mowl.representation.library.manifolds import (Euclidean, Hyperboloid, Poinc
                                      UpperHalfSpace)
 from mowl.representation.class_models import Classes
 from mowl.representation.library.hierarchy_regions import (
-    CodedBox, ConePoint, CurvedBall, Disk, OrderCone, Point)
+    CodedBox, ConePoint, CurvedBall, Disk, OrderCone, ManifoldPoint)
 from mowl.representation.regions import CornerBox
 from mowl.representation.methods import register_class_model
 
@@ -266,7 +266,7 @@ class PointClasses(HierarchyClasses):
     Part (vocabulary value): ``point``. Used by: ``shadow_cones``.
     """
 
-    region = Point
+    region = ManifoldPoint
     part = "point"
 
     def __init__(self, size=None, embed_dim=None, manifold=None, init_scale=0.1,
@@ -284,7 +284,7 @@ class PointClasses(HierarchyClasses):
         self._embed_dim = table.embedding_dim - isinstance(self.manifold, Hyperboloid)
 
     def forward(self, ids):
-        return Point(self.centres(ids), self.manifold, ids)
+        return ManifoldPoint(self.centres(ids), self.manifold, ids)
 
     def param_groups(self):
         return [{"params": [self.centres.weight], "manifold": self.manifold}]
@@ -400,7 +400,7 @@ class TextPoints(HierarchyClasses):
         ball that circumscribes the hypercube :math:`[-1, 1]^d` (HiT, Section 3).
     """
 
-    region = Point
+    region = ManifoldPoint
     part = "point"
 
     def __init__(self, encoder, texts=None, manifold=None, curvature=None):
@@ -420,7 +420,7 @@ class TextPoints(HierarchyClasses):
             raise TypeError("This class model has no list of texts: pass a list of strings.")
         else:
             texts = [self.texts[int(i)] for i in th.as_tensor(ids).reshape(-1)]
-        return Point(self.encoder(texts), self.manifold)
+        return ManifoldPoint(self.encoder(texts), self.manifold)
 
 
 # -- registration ------------------------------------------------------------------------
@@ -428,4 +428,21 @@ register_class_model("unit box")(UnitCubeBoxes)
 register_class_model("order cone")(OrderPoints)
 register_class_model("manifold point")(PointClasses)
 register_class_model("geodesic cone")(ConePoints)
+
+
+@register_class_model("half-space point")
+def half_space_points(size, embed_dim):
+    """Points of the Poincare half-space (:class:`PointClasses` on an
+    :class:`~mowl.representation.library.manifolds.UpperHalfSpace`): the manifold the umbral
+    shadow cones are defined on, where ``"manifold point"`` is the Poincare ball."""
+    return PointClasses(size, embed_dim, manifold=UpperHalfSpace())
+
+
+@register_class_model("euclidean manifold point")
+def euclidean_manifold_points(size, embed_dim):
+    """Points of Euclidean space with the manifold structure of the hierarchy family
+    (:class:`ManifoldPoint`), which the order and cone measures compare; the plain
+    ``"point"`` is :class:`~mowl.representation.library.shapes_regions.Point`, a point
+    with an optional bump."""
+    return PointClasses(size, embed_dim, manifold=Euclidean())
 register_class_model("disk")(DiskClasses)

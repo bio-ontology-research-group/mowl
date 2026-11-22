@@ -15,7 +15,7 @@ mowl.init_jvm("2g")
 from mowl.nn.lm import hyperbolic as H  # noqa: E402
 from mowl.nn.order.manifolds import PoincareBall, UpperHalfSpace  # noqa: E402
 from mowl.representation.library import cone_regions as C  # noqa: E402
-from mowl.representation.library.hierarchy_regions import Point  # noqa: E402
+from mowl.representation.library.hierarchy_regions import ManifoldPoint as Point  # noqa: E402
 
 D = th.float64
 S = th.linspace(-12.0, 12.0, 24001, dtype=D)           # arclength grid of a geodesic

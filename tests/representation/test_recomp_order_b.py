@@ -25,7 +25,7 @@ from mowl.representation.library.hierarchy_classes import (
 from mowl.representation.library.hierarchy_geometry import TextGeometry
 from mowl.representation.library.hierarchy_measures import (
     ConeAngle, DistanceDepth, Protrusion, ShadowCone)
-from mowl.representation.library.hierarchy_regions import CurvedBall, Point
+from mowl.representation.library.hierarchy_regions import CurvedBall, ManifoldPoint as Point
 from mowl.representation.library.hierarchy_relations import TextRotation
 from mowl.training import NormPenalty, PerNormalFormMiniBatches, SumLoss
 

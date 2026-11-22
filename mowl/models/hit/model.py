@@ -6,7 +6,7 @@ from functools import partial
 import torch as th
 
 from mowl.models.hit.common import DEFAULT_CENTRI_GRID, HiTBase  # noqa: F401
-from mowl.representation.library.hierarchy_regions import Point
+from mowl.representation.library.hierarchy_regions import ManifoldPoint
 from mowl.training.graph import EpochBatches, ValidationPatience
 from mowl.training.loop import RegimeTrained, Rows
 from mowl.training.text import LinearWarmupDecay
@@ -119,18 +119,18 @@ class HiT(RegimeTrained, HiTBase):
 
     def _cost(self, sub, sup, lam):
         manifold = self.module.class_model.manifold
-        return self.module.measure.inside(Point(sub, manifold), Point(sup, manifold),
+        return self.module.measure.inside(ManifoldPoint(sub, manifold), ManifoldPoint(sup, manifold),
                                           centri_weight=lam).squeeze(-1)
 
     def _ranking_scores(self, query, candidates, candidates_are_children, lam):
         manifold = self.module.class_model.manifold
         return self.module.measure.ranking_scores(
-            Point(query, manifold), Point(candidates, manifold), candidates_are_children, lam,
+            ManifoldPoint(query, manifold), ManifoldPoint(candidates, manifold), candidates_are_children, lam,
             self.score_dtype)
 
     def _score_pair(self, x, lam):
         manifold = self.module.class_model.manifold
-        cost = self.module.measure.inside(Point(x[:1], manifold), Point(x[1:], manifold),
+        cost = self.module.measure.inside(ManifoldPoint(x[:1], manifold), ManifoldPoint(x[1:], manifold),
                                           centri_weight=lam)
         return float(-cost.reshape(()))
 
@@ -186,7 +186,7 @@ class HiT(RegimeTrained, HiTBase):
         g = self.module
         negatives = g.classes(self.texts(rows[:, 2])).centre
         child, parent = g.classes(self.texts(rows[:, 0])), g.classes(self.texts(rows[:, 1]))
-        return g.hierarchy_loss(child, parent, Point(negatives, g.class_model.manifold)
+        return g.hierarchy_loss(child, parent, ManifoldPoint(negatives, g.class_model.manifold)
                                 ).reshape(-1)
 
     def on_epoch_start(self, step, steps):

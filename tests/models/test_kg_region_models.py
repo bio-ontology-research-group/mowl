@@ -79,7 +79,9 @@ def test_training_separates_the_triples_of_the_graph_from_the_others(dataset, cl
 
     before = gap()
     model.lr = 0.05
-    model.train(epochs=30)
+    # RESHUFFLE's margin (2) and its softmax relations need longer than the point models: its
+    # gap first closes (0.30 -> 0.24 after 30 epochs) and opens after (0.38 after 100)
+    model.train(epochs=100)
     assert gap() > max(before, 0.0)
 
 

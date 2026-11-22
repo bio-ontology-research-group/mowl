@@ -40,7 +40,8 @@ from mowl.representation.class_models import Classes
 from mowl.representation.geometry import ComposedGeometry, Geometry
 from mowl.representation.library import logic_subspace_algebra as _algebra
 from mowl.representation.measures import RegionMeasure
-from mowl.representation.methods import register_method
+from mowl.representation.methods import (register_class_model, register_method,
+                                          register_relation_model)
 from mowl.representation.objectives import Objective
 from mowl.representation.regions import Region
 from mowl.representation.relation_models import Relations
@@ -281,6 +282,8 @@ class SubspaceClasses(Classes):
     region = Subspace
     part = "subspace"
     exact_conjunction = True
+    #: The class model of the individuals that goes with this one (a vector per individual).
+    individual_factory = None        # set below, once PointIndividuals exists
 
     def __init__(self, size=None, dim=None, centres=None, top_index=None, bottom_index=None):
         super().__init__()
@@ -307,6 +310,25 @@ class SubspaceClasses(Classes):
     def project(self):
         """Clip the indicators to :math:`[0, 1]` in place."""
         self.centres.weight.clamp_(0, 1)
+
+
+class BinarySubspaceClasses(SubspaceClasses):
+    """The subspaces of :class:`SubspaceClasses` initialised as random axis sets (every axis
+    is in the subspace with probability one half, an indicator of exactly 0 or 1) instead of
+    uniform relaxed indicators in :math:`[0, 1]`. The region, the equations and the measure
+    are the same; only the starting point of the optimisation differs, a start that is
+    already a subspace of the lattice that the structure term :math:`\\Omega` (eq. (3))
+    pushes the relaxed ones towards.
+
+    Part (vocabulary value): ``subspace``.
+    """
+
+    def __init__(self, size=None, dim=None, centres=None, top_index=None, bottom_index=None):
+        super().__init__(size, dim, centres, top_index, bottom_index)
+        if centres is None:
+            with th.no_grad():
+                self.centres.weight[:, :self.dim] = (
+                    th.rand(self.centres.weight.shape[0], self.dim) < 0.5).float()
 
 
 class SubspaceRelations(Relations):
@@ -369,6 +391,12 @@ class PointIndividuals(Classes):
 
     def forward(self, ids):
         return Point(self.centres(ids))
+
+
+SubspaceClasses.individual_factory = PointIndividuals
+register_class_model("subspace")(SubspaceClasses)
+register_class_model("binary subspace")(BinarySubspaceClasses)
+register_relation_model("subspace")(SubspaceRelations)
 
 
 class ResidualMeasure(RegionMeasure):

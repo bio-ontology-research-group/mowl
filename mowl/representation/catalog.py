@@ -249,6 +249,18 @@ REPRESENTATIONS = {
         negation=K.FUZZY, disjunction=K.FUZZY,
         operators=(F.PRODUCT, F.GOEDEL, F.LUKASIEWICZ, F.LOGIT_GOEDEL), composable=Y.YES,
         notes="Whatever parts are chosen; the entry lists the parts that can be chosen."),
+    "composed_subspace": Representation(
+        view=V.CLASS_EXPRESSIONS, space=S.SUBSPACES, classes=C.SUBSPACE,
+        relations=R.SUBSPACE, individuals=I.POINT, measure=M.POINT_TO_REGION,
+        conjunction=K.EXACT, existential=K.NONE, negation=K.EXACT, disjunction=K.EXACT,
+        composable=Y.PARTLY,
+        notes="The general model of subspace logic: the parts of the method it is built "
+              "from (e2r) can be replaced where the equations can read them."),
+    "composed_graph_kge": Representation(
+        view=V.GRAPH, space=S.EUCLIDEAN, classes=C.POINT,
+        relations=(R.TRANSLATION, R.ROTATION, R.MATRIX, R.HEAD_TAIL_BOXES, R.PAIR_REGION),
+        individuals=I.POINT, measure=M.TRIPLE_SCORE, composable=Y.YES,
+        notes="Whatever parts are chosen on the triples of a projection."),
     # ---- query answering -----------------------------------------------------------------
     "query2box": _query(C.BOX, R.TRANSLATION_BOX, I.POINT,
                         (M.POINT_TO_REGION, M.BOUNDS), K.NONE, S.EUCLIDEAN,
@@ -282,7 +294,7 @@ REPRESENTATIONS = {
               "split into representations and an interaction."),
     "boxe": _kg(R.HEAD_TAIL_BOXES, individuals=I.POINT_WITH_BUMP),
     "expressive": _kg(R.PAIR_REGION),
-    "reshuffle": _kg(R.MATRIX, parametrisation=P.GRAPH_ENCODER,
+    "reshuffle": _kg(R.MATRIX, individuals=I.NONE, parametrisation=P.GRAPH_ENCODER,
                      notes="Entity embeddings are computed by message passing from fixed "
                            "random features, so unseen entities get an embedding."),
     # ---- walks and sentences -------------------------------------------------------------
@@ -292,7 +304,12 @@ REPRESENTATIONS = {
                                walker=(Wk.DEEPWALK, Wk.NODE2VEC), corpus=Co.ANNOTATIONS),
     "taxonomy_walks": _sequences((V.GRAPH, V.CORPUS), projection=(
         Pj.TAXONOMY, Pj.TAXONOMY_WITH_RELATIONS), walker=(Wk.DEEPWALK, Wk.NODE2VEC)),
-    "gda_projection": _tokens((V.GRAPH, V.CORPUS)),
+    "gda_projection": Representation(
+        view=V.GRAPH, space=S.EUCLIDEAN, classes=C.POINT,
+        relations=(R.TRANSLATION, R.ROTATION, R.MATRIX), individuals=I.POINT,
+        measure=M.TRIPLE_SCORE, composable=Y.YES,
+        notes="graph_kge on the GDA projection (one relation per composed role path): TransE "
+              "with the margin ranking loss by default."),
     "onto2vec": _sequences(V.CORPUS, corpus=Co.AXIOMS),
     "opa2vec": _sequences((V.CORPUS, V.TEXT), corpus=(Co.AXIOMS, Co.ANNOTATIONS)),
     "composed_sequences": _sequences(

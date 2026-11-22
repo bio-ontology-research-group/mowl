@@ -7,7 +7,7 @@ import torch as th
 from torch import nn
 
 from mowl.representation.library import poincare_ball as hb
-from mowl.representation.library.hierarchy_regions import Point
+from mowl.representation.library.hierarchy_regions import ManifoldPoint
 from mowl.representation.regions import ConstructorUnavailable
 from mowl.representation.relation_models import Relations
 
@@ -53,7 +53,7 @@ class TextRotation(Relations):
 
     def preimage(self, ids, region):
         embedding = self.encoder(self._texts(ids))
-        return Point(self.role_model(region.centre, embedding, self.c), region.manifold)
+        return ManifoldPoint(self.role_model(region.centre, embedding, self.c), region.manifold)
 
     def image(self, ids, region):
         raise ConstructorUnavailable("The map of a relation has no inverse here.")

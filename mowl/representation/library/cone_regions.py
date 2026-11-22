@@ -36,7 +36,7 @@ import torch as th
 
 from mowl.representation.library import poincare_ball as H
 from mowl.nn.order.manifolds import PoincareBall, UpperHalfSpace
-from mowl.representation.library.hierarchy_regions import Point
+from mowl.representation.library.hierarchy_regions import ManifoldPoint
 from mowl.representation.regions import ConstructorUnavailable
 
 __all__ = ["Light", "OriginLight", "HorosphereLight", "InfinityLight", "Shadow",
@@ -210,7 +210,7 @@ def light_for(formulation, radius=0.05, horosphere_height=20.0):
 
 
 @dataclass(frozen=True)
-class Shadow(Point):
+class Shadow(ManifoldPoint):
     """The cone at the apex ``centre`` cast by ``light`` (``umbral``: of a ball of radius
     ``radius`` around the apex, else of the point). ``gamma3`` is the push of the apex into the
     cone that the distance uses where a point lies beyond the apex (Appendix G of Yu et al.:

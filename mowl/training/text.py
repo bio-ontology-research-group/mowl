@@ -101,7 +101,7 @@ class SampledLogicalLosses(TrainingRegime):
             return None
         g = model.module
         manifold = g.class_model.manifold
-        from mowl.representation.library.hierarchy_regions import Point
+        from mowl.representation.library.hierarchy_regions import ManifoldPoint
         n = len(rows)
         negatives = g.classes(model.texts(rows[:, 2])).centre
         loss = None
@@ -111,8 +111,8 @@ class SampledLogicalLosses(TrainingRegime):
             neg1 = negatives[th.randperm(n, device=negatives.device)[:k]]
             neg2 = negatives[th.randperm(n, device=negatives.device)[:k]]
             l_r = g.existential_loss(g.compound([e[0] for e in ex]), [e[1] for e in ex],
-                                     g.classes([e[2] for e in ex]), Point(neg1, manifold),
-                                     Point(neg2, manifold)).mean()
+                                     g.classes([e[2] for e in ex]), ManifoldPoint(neg1, manifold),
+                                     ManifoldPoint(neg2, manifold)).mean()
             self.terms["existential"] = float(l_r.detach())
             loss = self.existential_weight * l_r
         if model.conjunctions:
@@ -125,7 +125,7 @@ class SampledLogicalLosses(TrainingRegime):
                     weights.append(1.0 / len(ops))
             idx = th.randint(0, n, (len(conj_texts),), device=negatives.device)
             per_row = g.hierarchy_loss(g.compound(conj_texts), g.classes(part_texts),
-                                       Point(negatives[idx], manifold)).squeeze(-1)
+                                       ManifoldPoint(negatives[idx], manifold)).squeeze(-1)
             w = th.tensor(weights, device=per_row.device, dtype=per_row.dtype)
             l_c = (w * per_row).sum() / len(cj)
             self.terms["conjunction"] = float(l_c.detach())

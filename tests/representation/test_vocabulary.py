@@ -93,6 +93,9 @@ def _build(key):
     from mowl.representation import METHODS, METHOD_KINDS
     if METHOD_KINDS[key] == "queries":
         return METHODS[key](nb_classes=6, nb_relations=6, num_classes=3, embed_dim=8)
+    if key == "reshuffle":      # defined on a graph: it needs the edges its entities are encoded from
+        return METHODS[key](5, 2, 3, 8, triples=[[0, 0, 1], [1, 1, 2], [2, 0, 3]], l=4, k=4,
+                            num_layers=1)
     return METHODS[key](5, 2, 3, 8)
 
 

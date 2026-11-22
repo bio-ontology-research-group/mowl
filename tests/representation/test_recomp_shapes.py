@@ -161,8 +161,10 @@ def test_eike_is_two_linked_spaces_with_a_ranking_loss(abox):
     assert g.objective.ranking == {"gci0": 0.5, "class_assertion": 0.3,
                                    "object_property_assertion": 0.7}
     assert set(g.supported_forms) == {"gci0", "class_assertion", "object_property_assertion"}
-    regime = model.training_regime
-    assert isinstance(regime, PerColumnCorruption)
+    # the paper's negatives and its loss are two regimes of one composed regime
+    regime = [r for r in model.training_regime.regimes if isinstance(r, PerColumnCorruption)]
+    assert len(regime) == 1 and len(model.training_regime.regimes) == 2
+    regime = regime[0]
     assert regime.columns == {"gci0": (0, 1), "class_assertion": (0, 1),
                               "object_property_assertion": (0, 2)}
     assert METHODS["eike"] is SM.eike

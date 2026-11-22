@@ -349,11 +349,6 @@ REFUSES_EVERY = {
     ("eike", "measure"): "LinkedMeasure is the only measure that compares Linked regions; "
                          "every other measure compares one region kind",
     ("eike", "individuals"): _NO_CLASS_FOR_MEASURE.format("Linked"),
-    ("shadow_cones", "classes"): "the cone measure compares the Point region of the hierarchy "
-                                 "family (hierarchy_regions.Point), the registered 'point' "
-                                 "class model gives another class of the same name "
-                                 "(shapes_regions.Point): a duplicated region class, not a "
-                                 "mathematical obstruction (reported, not fixed here)",
     ("canonical_mixture", "classes"): _NO_CLASS_FOR_MEASURE.format("SparseElementSets"),
     ("canonical_mixture", "individuals"): _NO_CLASS_FOR_MEASURE.format("SparseElementSets"),
     ("canonical_mixture", "measure"): "ProbabilityMass is the only measure of sparse element "
@@ -1137,12 +1132,10 @@ def _subspace_candidates(kind, model):
 
 
 SUBSPACE_REFUSES_EVERY = {
-    ("e2r", "classes"): "the residual measure compares Subspace regions and the registry has "
-                        "no class model of subspaces (E2R's own SubspaceClasses is built by "
-                        "the method, not registered under a name): every registered class "
-                        "model is refused with both sides named",
     ("e2r", "relations"): "E2R's relations map pairs of vectors (a relation is a vector of the "
-                          "pair space, dimension 2d); every registered relation model works "
+                          "pair space, dimension 2d); the registered 'subspace' relation "
+                          "model is the method's own, and every other registered relation "
+                          "model works "
                           "in the dimension of one class region and does not evaluate "
                           "against the pair equations (refused when the model is built)",
     ("e2r", "measure"): "the measure of E2R is the residual of a point against a subspace; "
@@ -1187,6 +1180,9 @@ def test_the_subspace_method_takes_a_replacement_of_every_part(kind):
     if not accepted:
         assert ("e2r", kind) in SUBSPACE_REFUSES_EVERY, ("e2r", kind, refusals)
         OUTCOMES[("e2r", kind)] = (UNAVAILABLE, SUBSPACE_REFUSES_EVERY[("e2r", kind)])
+    else:
+        assert ("e2r", kind) not in SUBSPACE_REFUSES_EVERY, ("accepts a replacement: remove "
+                                                             "it from the table", kind)
 
 
 # -- the outcome matrix ----------------------------------------------------------------------

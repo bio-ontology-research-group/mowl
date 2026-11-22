@@ -197,7 +197,9 @@ def swap(geometry, key, sizes, embed_dim, classes=None, relations=None, individu
         if isinstance(factory, str):
             factory = M.CLASS_MODELS[factory]
         if factory is not None:
-            factory = _guarded(factory, 'individual model')
+            # a class model may say which individual model goes with it (subspaces: vectors)
+            factory = _guarded(getattr(factory, "individual_factory", None) or factory,
+                               'individual model')
         if factory is None:
             raise ConstructorUnavailable(
                 f"The class model {type(classes).__name__} was given as an instance, so the "

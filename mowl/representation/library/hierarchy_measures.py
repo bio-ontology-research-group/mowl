@@ -34,7 +34,7 @@ from mowl.representation.measures import Bounds, RegionMeasure
 from mowl.representation.methods import DEFAULT_MEASURE, register_measure
 from mowl.representation.regions import Ball, Box, ConstructorUnavailable, CornerBox
 from mowl.representation.library.hierarchy_regions import (
-    CodedBox, ConePoint, Disk, OrderCone, Point, depth, join, meet, volume)
+    CodedBox, ConePoint, Disk, OrderCone, ManifoldPoint, depth, join, meet, volume)
 from mowl.representation.library.cone_regions import (
     FORMULATIONS, OriginLight, Shadow, light_for)
 
@@ -445,7 +445,7 @@ class ShadowCone(EnergyMeasure):
     Part (vocabulary value): ``angle``. Used by: ``shadow_cones``.
     """
 
-    accepts = (Point,)
+    accepts = (ManifoldPoint,)
     part = "angle"
 
     def __init__(self, formulation="umbral-half-space", radius=0.05, horosphere_height=20.0,
@@ -506,7 +506,7 @@ class DistanceDepth(HierarchyMeasure):
     Part (vocabulary value): ``distance and depth``. Used by: ``hit``, ``ont``.
     """
 
-    accepts = (Point,)
+    accepts = (ManifoldPoint,)
     part = "distance and depth"
     reading = "score"
 
@@ -527,7 +527,7 @@ class DistanceDepth(HierarchyMeasure):
                        centri_weight=None, dtype=th.float64):
         """The scores (higher: more plausible) of every candidate against every query, the
         negated costs of :meth:`inside`, ``(n, m)``: ``query`` ``(n, d)`` and ``candidates``
-        ``(m, d)`` are points of the ball of the class model (``Point`` centres); the
+        ``(m, d)`` are points of the ball of the class model (``ManifoldPoint`` centres); the
         candidates are the subclasses of the queries when ``candidates_are_children``, their
         superclasses otherwise. This is the evaluation of HiT/OnT on thousands of candidates:
         the distance matrix is computed in ``dtype`` without an ``(n, m, d)`` tensor."""
@@ -572,4 +572,4 @@ DEFAULT_MEASURE[CodedBox] = lambda: LogVolumeRatio(0.01)
 register_measure("angle", default_for=(ConePoint,))(ConeAngle)
 register_measure("shadow cone")(ShadowCone)
 register_measure("protrusion", default_for=(Disk,))(Protrusion)
-register_measure("distance and depth", default_for=(Point,))(DistanceDepth)
+register_measure("distance and depth", default_for=(ManifoldPoint,))(DistanceDepth)

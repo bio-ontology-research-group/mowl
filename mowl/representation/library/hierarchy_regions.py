@@ -5,7 +5,7 @@ also keeps its two corners, so that measures that work with corners (volumes) re
 without the rounding of ``(low + high) / 2 +- (high - low) / 2``. The unit cube is not a
 region: it is a constraint of the class model (:class:`~.hierarchy_classes.UnitCubeBoxes`).
 
-*Points on a manifold.* :class:`Point` and its refinements :class:`OrderCone`,
+*Points on a manifold.* :class:`ManifoldPoint` and its refinements :class:`OrderCone`,
 :class:`ConePoint` and :class:`Disk` carry the manifold they live on, so that a measure
 needs nothing but the regions. The manifolds are those of :mod:`mowl.representation.library.manifolds`
 (the library of the cones, shadow cones and disks); :class:`CurvedBall` adds the curvature
@@ -23,7 +23,7 @@ from mowl.representation.library.manifolds import (Euclidean, Hyperboloid, Poinc
                                      UpperHalfSpace)
 from mowl.representation.regions import ConstructorUnavailable, CornerBox, Region
 
-__all__ = ["meet", "join", "volume", "CodedBox", "Point", "OrderCone", "ConePoint", "Disk", "CurvedBall",
+__all__ = ["meet", "join", "volume", "CodedBox", "ManifoldPoint", "OrderCone", "ConePoint", "Disk", "CurvedBall",
            "depth", "MANIFOLDS"]
 
 
@@ -59,7 +59,7 @@ class CodedBox(CornerBox):
 
 # -- points ------------------------------------------------------------------------------
 @dataclass(frozen=True)
-class Point(Region):
+class ManifoldPoint(Region):
     """A point of a manifold.
 
     :param centre: ``(B, n)`` coordinates in the model of the manifold.
@@ -74,13 +74,13 @@ class Point(Region):
 
 
 @dataclass(frozen=True)
-class OrderCone(Point):
+class OrderCone(ManifoldPoint):
     """An element of an ordered vector space (order embeddings, CatE); the order is the one of
     :class:`~.hierarchy_measures.OrderViolation`."""
 
 
 @dataclass(frozen=True)
-class ConePoint(Point):
+class ConePoint(ManifoldPoint):
     """A point with the geodesic cone of half-aperture ``aperture`` (``(B,)``) at it
     (hyperbolic entailment cones)."""
 
@@ -99,7 +99,7 @@ class ConePoint(Point):
 
 
 @dataclass(frozen=True)
-class Disk(Point):
+class Disk(ManifoldPoint):
     """A point with a radius ``radius`` (``(B,)``, real, possibly negative: a generalised
     formal disk, Suzuki et al. 2019)."""
 

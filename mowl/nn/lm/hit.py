@@ -13,7 +13,7 @@ functions they were once are the reference in :mod:`mowl.baselines.nn.lm.hit`.
 
 from mowl.representation.library import hierarchy_methods as HM
 from mowl.representation.library.hierarchy_geometry import TextGeometry
-from mowl.representation.library.hierarchy_regions import Point
+from mowl.representation.library.hierarchy_regions import ManifoldPoint
 from mowl.representation.regions import Region
 
 __all__ = ["HiTModule"]
@@ -63,7 +63,7 @@ class HiTModule(TextGeometry):
         return self.encoder(list(texts))
 
     def _regions(self, *xs):
-        return [x if isinstance(x, Region) else Point(x, self.class_model.manifold)
+        return [x if isinstance(x, Region) else ManifoldPoint(x, self.class_model.manifold)
                 for x in xs]
 
     def hierarchy_loss(self, child, parent, negative):
