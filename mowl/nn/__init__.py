@@ -1,4 +1,7 @@
 from .el.elmodule import ELModule
+# The part-built modules (ELBEModule, ...) are made of the parts of mowl.representation, which
+# in turn read the base classes of this package: each imports the other first.
+import mowl.representation  # noqa: F401  (must stay after ELModule, before the modules)
 from .el.elem.module import ELEmModule
 from .el.elbe.module import ELBEModule
 from .el.multielbe.module import MultiELBEModule

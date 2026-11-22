@@ -1,0 +1,67 @@
+"""The module classes of the methods that are combinations of parts.
+
+``mowl.nn.ELBEModule`` and its siblings (``BoxELModule``, ``TransBoxModule``, ...) are
+:class:`~mowl.representation.ComposedGeometry` objects: the method is the combination of a
+class model, a relation model, a measure and an objective that its builder
+(:func:`mowl.representation.register_method`) defines, and the module class only keeps the
+constructor, the attribute names and the hooks that the released class had.
+:class:`PartBuiltModule` is what these classes share.
+"""
+
+import torch as th
+
+from mowl.nn.el.elmodule import ELModule
+from mowl.representation.geometry import ComposedGeometry
+
+__all__ = ["PartBuiltModule"]
+
+
+class PartBuiltModule(ComposedGeometry):
+    """A :class:`~mowl.representation.ComposedGeometry` whose parts come from the builder of
+    a published method.
+
+    * The per-axiom losses are looked up by *method* (``gci0_loss``, ...), like those of every
+      :class:`~mowl.nn.ELModule`, so a subclass that overrides one of them is called
+      (:class:`~mowl.representation.ComposedGeometry` itself asks the objective directly).
+    * ``strict_negatives`` is ``True`` as in every module: a negative loss of a form without
+      one is an error.
+    * Checkpoints saved by the earlier, hand-written module of the method still load:
+      :attr:`state_dict_aliases` names the earlier parameter names.
+
+    :param built: The geometry returned by the builder of the method.
+    :param individuals: Replaces the individual model of ``built`` (to keep an empty table
+        where the earlier module had one).
+    """
+
+    #: ``{earlier parameter name: name in the part-built module}``, for checkpoints of the
+    #: hand-written module of the method (``{"min_embedding.weight":
+    #: "class_model.mins.weight"}``).
+    state_dict_aliases = {}
+
+    def __init__(self, built, individuals=None):
+        ComposedGeometry.__init__(
+            self, built.class_model, built.relation_model, built.measure, built.objective,
+            individuals=individuals if individuals is not None else built.individual_model,
+            regularizers=built.regularizers, supported_forms=built.supported_forms,
+            neg_capable_gcis=built.neg_capable_gcis)
+        self.strict_negatives = True
+        self._register_load_state_dict_pre_hook(_rename_earlier_parameters)
+
+    def get_loss_function(self, gci_name):
+        return ELModule.get_loss_function(self, gci_name)
+
+
+def _rename_earlier_parameters(module, state_dict, prefix, *args):
+    """Load hook: a checkpoint of the hand-written module has its parameters under the
+    earlier names; give them the names of the parts (and of every alias of the same
+    table) and drop the earlier names."""
+    own = module.state_dict(keep_vars=True)
+    for old, new in module.state_dict_aliases.items():
+        if prefix + old not in state_dict or new not in own:
+            continue
+        value = state_dict[prefix + old]
+        for name, tensor in own.items():
+            if tensor is own[new] and prefix + name not in state_dict:
+                state_dict[prefix + name] = value
+        if old not in own:
+            del state_dict[prefix + old]

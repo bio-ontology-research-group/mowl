@@ -5,6 +5,7 @@ model, individual model, constructors, measure, parametrisation);
 :mod:`mowl.representation.catalog` states them for every catalogued method.
 """
 
+import mowl.nn  # noqa: F401  (the part-built modules of mowl.nn need these parts and the other way round)
 from mowl.representation.vocabulary import (
     View, Space, ClassModel, RelationModel, IndividualModel, Construction, Measure,
     Parametrisation, Composable, Representation, CONSTRUCTORS)

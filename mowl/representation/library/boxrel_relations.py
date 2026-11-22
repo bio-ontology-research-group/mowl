@@ -201,6 +201,8 @@ class Affine(Relations):
     :param role_chain_composition: ``"in_order"`` (default) composes the two maps
         (:math:`f_2 t_1 + t_2`); ``"as_released"`` is the expression mOWL had before
         (:math:`f_1 t_1 + t_2`).
+    :param shift_bounds, scale_bounds: Ranges of the uniform initialisation of the shifts and
+        of the factors (new tables only).
 
     Role axioms (the measure and margin are not used): a role is a function, so
     :math:`r \\sqsubseteq s` holds iff the two maps are equal, and
@@ -226,7 +228,8 @@ class Affine(Relations):
     accepts = (Box,)
 
     def __init__(self, size=None, embed_dim=None, vectors=None, scales=None, eps=1e-8,
-                 scale="positive", role_chain_composition="in_order", role_scale="equal"):
+                 scale="positive", role_chain_composition="in_order", role_scale="equal",
+                 shift_bounds=(-0.1, 0.1), scale_bounds=(0.9, 1.1)):
         super().__init__()
         if role_scale not in ("equal", "at_most"):
             raise ValueError("role_scale must be 'equal' or 'at_most'.")
@@ -236,9 +239,9 @@ class Affine(Relations):
         if role_chain_composition not in self.COMPOSITIONS:
             raise ValueError(f"role_chain_composition must be one of {self.COMPOSITIONS}.")
         self.vectors = vectors if vectors is not None else _uniform(
-            size, embed_dim, -0.1, 0.1)
+            size, embed_dim, *shift_bounds)
         self.scales = scales if scales is not None else _uniform(
-            len(self.vectors.weight), self.vectors.embedding_dim, 0.9, 1.1)
+            len(self.vectors.weight), self.vectors.embedding_dim, *scale_bounds)
         self.eps = eps
         self.scale = scale
         self.role_chain_composition = role_chain_composition
@@ -321,7 +324,8 @@ class AffineBoxes(Relations):
         super().__init__()
         n = len(vectors.weight) if vectors is not None else size
         d = vectors.embedding_dim if vectors is not None else embed_dim
-        self.vectors = vectors if vectors is not None else _uniform(n, d, -0.1, 0.1)
+        # drawn in the order of the released module of ELK-Em (range, error, slope, shift),
+        # so that a seed gives the same numbers
         self.range_centres = range_centres if range_centres is not None else _uniform(
             n, d, -0.5, 0.5)
         self.range_offsets = range_offsets if range_offsets is not None else _uniform(
@@ -329,6 +333,7 @@ class AffineBoxes(Relations):
         self.error_offsets = error_offsets if error_offsets is not None else _uniform(
             n, d, -0.1, 0.1)
         self.slopes = slopes if slopes is not None else _uniform(n, d, 0.9, 1.1)
+        self.vectors = vectors if vectors is not None else _uniform(n, d, -0.1, 0.1)
         self.eps = eps
         self.sound = bool(sound)
 

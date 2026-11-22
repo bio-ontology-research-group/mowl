@@ -10,11 +10,11 @@ import torch.nn as nn
 
 from mowl.representation.adapters import register_adapter
 from mowl.representation.class_models import BoxClasses
-from mowl.representation.library.boxrel_boxes import (
-    FixableBoxes, MinDeltaBoxes, signed_intersection)
+from mowl.representation.library.boxrel_boxes import FixableBoxes, MinDeltaBoxes
 from mowl.representation.library.shapes_classes import Points as _Points
 from mowl.representation.library.boxrel_measures import (
     AveragedBounds, MaskedBounds, VolumeShare)
+from mowl.nn.el.boxsel.module import ConditionalExpressions
 from mowl.representation.geometry import ComposedGeometry
 from mowl.representation.library.boxrel_objectives import (
     BoxSELObjective, ELKEmObjective, TransBoxObjective, boxel_objective)
@@ -106,7 +106,8 @@ def _transbox(module):
 @register_method("boxel")
 def boxel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0,
           temperature=1.0, gci1_bot="volume product", scale="positive",
-          role_chain_composition="in_order", tables=None):
+          role_chain_composition="in_order", min_bounds=(1e-4, 0.2), delta_bounds=(-0.1, 0.0),
+          relation_bounds=(-0.1, 0.1), scaling_bounds=(0.9, 1.1), tables=None):
     """BoxEL (Xiong et al. 2022): boxes stored as lower corner and log-width, an affine map
     per relation, a smoothed volume ratio, and a penalty that keeps the boxes in the unit
     cube.
@@ -122,11 +123,15 @@ def boxel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0,
         does) or ``"mirror"``. The three agree while every factor is positive.
     :param role_chain_composition: ``"in_order"`` (default) or ``"as_released"``, see
         :class:`Affine`.
+    :param min_bounds, delta_bounds, relation_bounds, scaling_bounds: Ranges of the uniform
+        initialisation of the lower corners, the log-widths, the shifts and the factors of a
+        role (new tables only).
     :param tables: A :class:`~mowl.nn.BoxELModule` to share parameters with.
     """
     return _boxel_geometry(ComposedGeometry, boxel_objective(margin, _product(gci1_bot)),
                            nb_classes, nb_relations, nb_individuals, embed_dim, temperature,
-                           (scale, role_chain_composition), tables, (LocationPenalty(1.0),))
+                           (scale, role_chain_composition), tables, (LocationPenalty(1.0),),
+                           (min_bounds, delta_bounds, relation_bounds, scaling_bounds))
 
 
 def _product(gci1_bot):
@@ -134,9 +139,11 @@ def _product(gci1_bot):
 
 
 def _boxel_geometry(geometry, objective, nb_classes, nb_relations, nb_individuals, embed_dim,
-                    temperature, role_options, tables, regularizers):
+                    temperature, role_options, tables, regularizers,
+                    bounds=((1e-4, 0.2), (-0.1, 0.0), (-0.1, 0.1), (0.9, 1.1))):
     t = tables
     scale, composition = role_options
+    min_bounds, delta_bounds, relation_bounds, scaling_bounds = bounds
     if t is not None:
         classes = MinDeltaBoxes(mins=t.min_embedding, deltas=t.delta_embedding)
         relations = Affine(vectors=t.relation_embedding, scales=t.scaling_embedding,
@@ -145,10 +152,13 @@ def _boxel_geometry(geometry, objective, nb_classes, nb_relations, nb_individual
         individuals = None if t.ind_embedding is None else MinDeltaBoxes(
             mins=t.ind_embedding, deltas=t.ind_delta_embedding)
     else:
-        classes = MinDeltaBoxes(nb_classes, embed_dim)
+        classes = MinDeltaBoxes(nb_classes, embed_dim, min_bounds=min_bounds,
+                                delta_bounds=delta_bounds)
         relations = Affine(nb_relations, embed_dim, scale=scale,
-                           role_chain_composition=composition, role_scale="at_most")
-        individuals = MinDeltaBoxes(nb_individuals, embed_dim) if nb_individuals else None
+                           role_chain_composition=composition, role_scale="at_most",
+                           shift_bounds=relation_bounds, scale_bounds=scaling_bounds)
+        individuals = MinDeltaBoxes(nb_individuals, embed_dim, min_bounds=min_bounds,
+                                    delta_bounds=delta_bounds) if nb_individuals else None
     return geometry(classes, relations, VolumeShare(temperature, strict_margin="ignore"),
                     objective,
                     individuals=individuals, regularizers=regularizers)
@@ -168,51 +178,25 @@ def _role_options(module):
 
 
 # ==========================================================================================
-class ConditionalGeometry(ComposedGeometry):
-    """A geometry that also reads *conditionals* :math:`(D \\mid C)[l, u]` (BoxSEL). The
-    class expressions are nested tuples without names: ``("atom",)`` is a class,
-    ``("and", e1, e2, ...)`` a conjunction and ``("some", e)`` an existential restriction,
-    with the indices of the classes and relations of the expression, left to right, as the
-    ``(B, k)`` tensor ``leaves``
-    (:func:`mowl.nn.el.boxsel.losses.compile_expression` makes both from names)."""
-
-    def expression(self, struct, leaves, pos=0):
-        """``(region, next position)`` of the expression ``struct`` for a batch."""
-        kind = struct[0]
-        if kind == "atom":
-            return self.classes(leaves[:, pos]), pos + 1
-        if kind == "some":
-            inner, nxt = self.expression(struct[1], leaves, pos + 1)
-            return self.exists(leaves[:, pos], inner), nxt
-        region = None
-        for sub in struct[1:]:
-            part, pos = self.expression(sub, leaves, pos)
-            region = part if region is None else signed_intersection(region, part)
-        return region, pos
-
-    def conditional_loss(self, conclusion, premise, leaves_d, leaves_c, lower, upper):
-        """Loss of a batch of conditionals ``(D | C)[l, u]``, ``(B, 1)``."""
-        return self.cost("conditional", (conclusion, premise, leaves_d, leaves_c, lower,
-                                         upper))
-
-    @th.no_grad()
-    def probability(self, conclusion, premise, leaves_d, leaves_c):
-        """Proportion of the premise region that lies in the conclusion region, exact."""
-        c, _ = self.expression(premise, leaves_c)
-        d, _ = self.expression(conclusion, leaves_d)
-        return self.measure.probability(c, d)
+class ConditionalGeometry(ConditionalExpressions, ComposedGeometry):
+    """A geometry that also reads *conditionals* :math:`(D \\mid C)[l, u]` (BoxSEL): the
+    expressions, ``conditional_loss`` and ``probability`` of
+    :class:`~mowl.nn.el.boxsel.module.ConditionalExpressions` over the parts of the method."""
 
 
 @register_method("boxsel")
 def boxsel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0,
            temperature=1.0, gci1_bot="volume product", scale="positive",
            role_chain_composition="in_order", beta=1.0,
-           location_weight=1.0, volume_weight=0.0, tables=None):
+           location_weight=1.0, volume_weight=0.0, min_bounds=(1e-4, 0.2),
+           delta_bounds=(-0.1, 0.0), relation_bounds=(-0.1, 0.1), scaling_bounds=(0.9, 1.1),
+           tables=None):
     """BoxSEL (Zhu et al. 2024): BoxEL and the statement type of a conditional probability,
     with the two penalties :math:`L_{loc}` and :math:`L_{vol}`.
 
     :param beta, location_weight, volume_weight: Side of the cube and the weights of the
         two penalties (a weight of 0 leaves the penalty out).
+    :param min_bounds, delta_bounds, relation_bounds, scaling_bounds: As in :func:`boxel`.
     :param tables: A :class:`~mowl.nn.BoxSELModule` to share parameters with.
     """
     regularizers = []
@@ -223,7 +207,8 @@ def boxsel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0,
     return _boxel_geometry(ConditionalGeometry,
                            BoxSELObjective(margin, gci1_bot=_product(gci1_bot)),
                            nb_classes, nb_relations, nb_individuals, embed_dim, temperature,
-                           (scale, role_chain_composition), tables, tuple(regularizers))
+                           (scale, role_chain_composition), tables, tuple(regularizers),
+                           (min_bounds, delta_bounds, relation_bounds, scaling_bounds))
 
 
 @register_adapter("BoxSELModule")
@@ -264,7 +249,8 @@ def elkem(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
         classes = FixableBoxes(nb_classes, embed_dim, epsilon=epsilon)
         classes.fix(bot_ids, top_ids)
         relations = AffineBoxes(nb_relations, embed_dim, eps=epsilon, sound=sound)
-        individuals = _box_points(nb_individuals, embed_dim) if nb_individuals else None
+        individuals = _box_points(nb_individuals, embed_dim, init="uniform",
+                                  scale=0.5) if nb_individuals else None
     objective = ELKEmObjective(margin, abox_threshold, gci2_overlap=not sound,
                               trivial_disjointness=sound)
     regularizers = (SizeCapPenalty(weight=size_weight),) if size_weight else ()
