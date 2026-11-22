@@ -106,6 +106,8 @@ class PrismEL(EmbeddingELModel):
         under ``objective="structural"``.
     gci2_negative_triangle : {"overlap", "inradius"}, default "overlap"
         See :class:`~mowl.nn.PrismModule`.
+    empty_box_reading : {"signed", "absolute"}, default "signed"
+        See :class:`~mowl.nn.PrismModule`.
     canonical_model : mowl.geometric.completion.CanonicalModel, optional, default None
         Optional pre-computed :class:`~mowl.geometric.completion.CanonicalModel`
         used to determine semantic satisfiability in
@@ -133,6 +135,7 @@ class PrismEL(EmbeddingELModel):
         size_reg=1e-3,
         gci2_negative_triangle="overlap",
         canonical_model=None,
+        empty_box_reading="signed",
     ):
         if (
             isinstance(anchor_weight, bool)
@@ -161,6 +164,7 @@ class PrismEL(EmbeddingELModel):
         self.existence_weight = existence_weight
         self.size_reg = size_reg
         self.gci2_negative_triangle = gci2_negative_triangle
+        self.empty_box_reading = empty_box_reading
         self.canonical_model = canonical_model
         self._structural_tables: Optional[
             Tuple[DefinitionTable, ExistenceTargets, Optional[int]]
@@ -184,6 +188,7 @@ class PrismEL(EmbeddingELModel):
             existence_weight=self.existence_weight,
             size_reg=self.size_reg,
             gci2_negative_triangle=self.gci2_negative_triangle,
+            empty_box_reading=self.empty_box_reading,
         ).to(self.device)
         self.structural_definitions = self.module.structural_definitions
         self.existence_weight = self.module.existence_weight
