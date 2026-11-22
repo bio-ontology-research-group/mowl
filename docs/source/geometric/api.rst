@@ -234,7 +234,7 @@ implementation:
 Structural region algebra, definition tables, and losses
 --------------------------------------------------------
 
-.. automodule:: mowl.nn.el.structural
+.. automodule:: mowl.representation.library.structural_tables
    :members:
    :show-inheritance:
 
