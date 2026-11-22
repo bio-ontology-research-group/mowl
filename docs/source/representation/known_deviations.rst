@@ -88,9 +88,6 @@ ELBE, ELEmbeddings, Prism and the methods built on them
   :math:`\exists r.C \sqsubseteq \bot` cannot reach zero for a positive margin (the sum of the
   triangle supports is not negative), and the second shrinks :math:`C` itself. They are the
   formulas of the paper and are kept.
-* Shadow cones (and, in smaller measure, disk embeddings): a class compared with itself costs
-  a tiny positive number (up to about :math:`5 \cdot 10^{-4}` in a test) because of the
-  numerical floors of the distance. It is not zero exactly.
 
 ELK-Em
 ------

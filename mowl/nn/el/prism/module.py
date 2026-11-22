@@ -51,18 +51,16 @@ class PrismModule(ELModule):
       shrinks :math:`C` itself (:math:`\\text{relu}(\\sum_k h_{C,k} + \\text{margin})`),
       which conflicts with :func:`~mowl.nn.el.structural.existence_loss` whenever
       :math:`C` is satisfiable.
-    - Under ``objective="structural"`` with ``empty_box_reading="absolute"`` (the earlier
-      reading, not the default) the role and assertion scores take ``abs(w)``; see the
-      parameter. The next item describes that reading.
     - Under ``objective="structural"``, only the box GCI losses (:meth:`gci0_loss`,
       :meth:`gci0_bot_loss`, :meth:`gci1_loss`, :meth:`gci1_bot_loss`) are squared
       hinges; the role and assertion scores (:meth:`gci2_loss`, :meth:`gci3_loss`,
       :meth:`gci3_bot_loss`, :meth:`class_assertion_loss`,
-      :meth:`object_property_assertion_loss`) are unsquared norms/hinges and pass
-      ``torch.abs(w)`` on materialised defined classes, so a defined class that
-      is empty only in its box part (:math:`w_m < 0` while :math:`\\sum_k h_k > 0`)
-      becomes a phantom non-empty box of half-width :math:`|w_m| > 0` in role and
-      assertion scores.
+      :meth:`object_property_assertion_loss`) are unsquared norms/hinges.
+    - Only with ``empty_box_reading="absolute"`` (the earlier reading, not the default):
+      those role and assertion scores pass ``torch.abs(w)`` on materialised defined classes,
+      so a defined class that is empty only in its box part (:math:`w_m < 0` while
+      :math:`\\sum_k h_k > 0`) becomes a phantom non-empty box of half-width :math:`|w_m| > 0`.
+      The default ``"signed"`` reading does not have this.
     - Touching triangles (:math:`\\sum_k \\min(h_{C,k}, h_{D,k}) = 0`) count as
       disjoint at ``margin = 0``.
     - Role axiom losses (``role_inclusion``, ``role_chain``) are not implemented

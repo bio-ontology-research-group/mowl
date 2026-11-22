@@ -39,7 +39,7 @@ component idle and reproducing the single-box Helly obstruction across all
 This tutorial builds :math:`\mathcal{T}_k` (:math:`k \in \{3, 5\}`) with the
 mOWL OWLAPI adapter, certifies single-box impossibility via
 :func:`~mowl.geometric.helly.helly_check` and
-:class:`~mowl.geometric.completion.CanonicalModel`, compares the round-4
+:class:`~mowl.geometric.completion.CanonicalModel`, compares the
 default structural recipe against the witness-point recipe across three random
 seeds, and visualises the resulting 2-D multi-box regions at :math:`k = 5`.
 """
@@ -197,7 +197,7 @@ for k in (3, 5):
 #   slots must be separated by at least ``margin`` along some coordinate.
 #
 # **Why the default structural recipe gets trapped.** Even with
-# ``n_components=2`` boxes per primitive class :math:`X_j`, the round-4 defaults
+# ``n_components=2`` boxes per primitive class :math:`X_j`, the default settings
 # (``bot_agg="mean"``, ``witness_weight=0.0``, ``reseed_every=0``,
 # ``reseed_mode="dead"``, ``size_reg=1e-3``) allow every :math:`A_i` to satisfy
 # existence using the *same* single component of each :math:`X_j`. Restricted to
@@ -206,7 +206,7 @@ for k in (3, 5):
 # slots share a common intersection and all :math:`\binom{k}{2}` pairs
 # :math:`(A_i, A_j)` overlap.
 #
-# **The three round-5 ingredients** break this symmetry:
+# **The three witness-point ingredients** break this symmetry:
 #
 # 1. **Sum aggregation** (``bot_agg="sum"``): sums the squared-hinge overlap
 #    penalties over all active slot pairs of :math:`(C, D)` in
@@ -428,8 +428,8 @@ fig, axes = plt.subplots(1, 2, figsize=(13, 5.8))
 palette = plt.cm.tab10(np.linspace(0.0, 0.5, 5))
 
 panel_specs = [
-    ("default", "Round-4 default recipe (Helly trap)"),
-    ("witness", "Round-5 witness-point recipe (Exact model)"),
+    ("default", "Default recipe (Helly trap)"),
+    ("witness", "Witness-point recipe (Exact model)"),
 ]
 
 for ax, (recipe_name, title_prefix) in zip(axes, panel_specs):

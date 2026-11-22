@@ -142,11 +142,15 @@ class BoundaryDepth(RegionMeasure):
     :param p: Exponent of the depth dissimilarity; default 1 for boxes, 2 for balls.
     :param gamma1, gamma2: The margins of the paper's loss.
     :param eps: Lower bound of sizes (they are divided by).
-    :param depth_on_containment: ``False`` (default): the depth term only where the child is
-        not inside, as in the authors' released code, so that a contained region costs
-        nothing. ``True``: everywhere, as in the paper's formula (the methods ``regd`` and
-        ``regd_elem`` select it by default): a region strictly inside another then still
-        has a positive cost, so a zero cost is not what "inside" means.
+    :param depth_on_containment: ``True`` is the formula of the paper (Eq. 9: the depth term is
+        always added); a region strictly inside another then still has a positive cost, so a
+        zero cost is not what "inside" means, and the methods ``regd`` and ``regd_elem`` select
+        it by default. ``False`` (the default of the part) is the reading of the authors'
+        released code in training (the depth term only where the child is not inside, so a
+        contained region costs nothing); the code itself adds the depth term always when it
+        scores (evaluation mode). The text of the paper was not available to check Eq. 9
+        against: the statement about it is that of the method's card and of the audit of the
+        parts' defaults.
     :param host: Measure for the other relations.
 
     Part (vocabulary value): ``boundary and depth``. Used by: ``regd``, ``regd_elem``.

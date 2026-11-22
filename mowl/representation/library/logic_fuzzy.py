@@ -346,7 +346,8 @@ class TruthTableClasses(_FuzzyClasses, Classes):
 class HalfAxisClasses(_FuzzyClasses, Classes):
     """A class is a set of half-axes of :math:`\\mathbb{R}^n` (an axis-aligned cone), given
     by one logit per half-axis; ``> 0`` means the half-axis belongs to the cone (Al-cone).
-    ``owl:Thing`` and ``owl:Nothing`` are the constants :math:`\\pm 10^4`. Also used for the
+    ``owl:Thing`` and ``owl:Nothing`` are the constants :math:`\\pm c` (``constant_logit``,
+    default 1; the earlier mOWL module used :math:`10^4`). Also used for the
     individuals of Al-cone (the support of the point).
 
     :param size: Number of classes; :param dim: :math:`n` (there are ``2 n`` logits).

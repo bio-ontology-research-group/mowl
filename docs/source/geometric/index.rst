@@ -825,7 +825,7 @@ measured seeds (``strict_loss == 0``, minimum target class and pair
    **Recommended settings for learning from random initialisation (witness-point recipe):**
    On deep conjunction chains such as the Helly-obstruction family :math:`T_k`
    (:math:`A_i \equiv \sqcap_{j \neq i} X_j` with :math:`A_i \sqcap A_j \sqsubseteq \bot`),
-   the round-4 defaults (``bot_agg="mean", witness_weight=0.0, reseed_every=0, reseed_mode="dead", size_reg=1e-3``)
+   the default settings (``bot_agg="mean", witness_weight=0.0, reseed_every=0, reseed_mode="dead", size_reg=1e-3``)
    can fall into a *component-assignment Helly trap*: every live defined class
    selects the same component of each shared primitive :math:`X_j` (reducing each
    :math:`A_i` to a single box while spare components stay idle), and averaging

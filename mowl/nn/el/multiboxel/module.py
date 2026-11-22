@@ -931,7 +931,7 @@ class MultiBoxELModule(ELModule):
 
         Dispatches on ``self.reseed_mode``:
 
-        * ``"dead"`` (round-4 §5):
+        * ``"dead"`` :
 
           1. Identifies dead primitive components (nested inside another active
              component of the same class, with exact ties broken by lower index,
@@ -942,7 +942,7 @@ class MultiBoxELModule(ELModule):
              half its width.
           3. Clamps the largest component of any primitive class target still
              satisfying ``NE(C) < margin`` to ``max(|offset|, margin)``.
-        * ``"idle"`` (round-5 §4, requires ``witness_weight > 0``):
+        * ``"idle"`` (requires ``witness_weight > 0``):
 
           1. Finds dead accepted defined classes :math:`A` with
              :math:`\\text{NE}(A) = \\max_{s \\text{ active}} \\text{ne}(A_s) < \\text{margin}`.
