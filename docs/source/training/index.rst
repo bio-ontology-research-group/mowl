@@ -265,3 +265,32 @@ cached:
 
 See :mod:`mowl.training.closure` for exactly which rules are applied, and
 :doc:`/evaluation/deductive` for the matching evaluation regime.
+
+Small parts of the box and ball methods
+---------------------------------------
+
+The named classes of RegD, ELBE, BoxSEL, ELK-Em, Box\ :sup:`2`\ EL, MultiBoxEL, MultiELBE and
+the volume-based MultiBoxEL do no arithmetic themselves; what they used to compute is done by
+parts that other methods can use too:
+
+* :func:`mowl.training.batching.epoch_rng`: the random generator of an epoch (seed plus
+  epoch), used to sample points and to re-seed components;
+* :class:`~mowl.training.MSETargetLoss` with ``reduce="mean_first"``: ELBE's and MultiELBE's loss;
+* :func:`mowl.representation.library.multibox_modules.in_chunks`: a loss evaluated a few rows at
+  a time;
+* :func:`mowl.representation.library.structural_regions.pad_slots`: inactive padding slots for
+  unions of boxes;
+* :data:`mowl.representation.library.ballfam_energy.ENERGY` and ``BOUNDARY``: the RegD energy
+  and boundary dissimilarity of each region shape;
+* :func:`mowl.evaluation.scoring_rules.exp_negative_score`: the score :math:`e^{-\ell}` of a
+  loss (ELK-Em), and :func:`mowl.evaluation.region_access.concatenated_rows`: regions exported
+  as one row per class.
+
+.. testcode::
+
+   import torch as th
+   from mowl.evaluation.scoring_rules import exp_negative_score
+   from mowl.training.batching import epoch_rng
+
+   assert float(exp_negative_score(th.tensor(0.0))) == 1.0
+   assert epoch_rng(3, 4).integers(100) == epoch_rng(4, 3).integers(100)
