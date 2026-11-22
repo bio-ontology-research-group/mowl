@@ -86,6 +86,11 @@ MULTIBOXEL = MethodCard(
             verified_in_mowl="tests/nn/test_multiboxel_losses.py"),
     ),
     limitations=(
+        "Under the structural objective the translation bump of a DEFINED class is a free "
+        "parameter: no definition determines it, and only role axioms that mention the class "
+        "train it (the bump is a role-interaction parameter, not part of the region). The "
+        "size term is applied only after the structural tables are installed, so that it never "
+        "shrinks owl:Thing (size_reg_without_tables=True restores the earlier behaviour).",
         "Neither Federico et al. nor Aharoni give a bound on the number of boxes or a loss; "
         "mOWL fixes k (``n_components``) in advance.",
         "Under the default objective='axiom', zero gci1_bot loss implies that all k² "

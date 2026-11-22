@@ -88,6 +88,13 @@ class MultiBoxELModule(ELModule):
       still accepting ``module.tau = float_value`` assignments.
 
     Non-guarantees:
+    - Under ``objective="structural"`` the regions of a DEFINED class
+      :math:`A \\equiv X \\sqcap Y` are computed from its definers, but its translation
+      bump (``bump_classes[A]``) is not: no definition determines it, so it stays a free
+      parameter trained only through the role axioms that mention :math:`A`. This is
+      intended: the bump is a role-interaction parameter of Box\\ :math:`^2`\\ EL, not part
+      of the region, and an intersection of two bumps has no canonical value. It is not
+      constrained by the existence or size terms.
     - Role axiom losses (``role_inclusion``, ``role_chain``) are not implemented
       (``role_axiom_capable = False``).
     - Negative sampling is only supported for ``gci2`` and
@@ -172,6 +179,11 @@ class MultiBoxELModule(ELModule):
     size_reg : float, default 1e-3
         Non-negative weight on the primitive side-length regulariser
         ``mean(2 * |offset|)`` in :meth:`structural_extra_loss`.
+    size_reg_without_tables : bool, default False
+        The size term needs to know which class is ``owl:Thing`` (it must not shrink it) and
+        which classes are defined. It is therefore applied only once
+        :meth:`set_structural_tables` has installed the tables. ``True`` applies it to every
+        class also before that (the earlier behaviour, which shrinks ``owl:Thing``).
     reseed_every : int, default 0
         Epoch interval for heuristic discrete re-seeding (:meth:`reseed`) under
         ``objective="structural"`` (``0`` disables re-seeding).
@@ -242,6 +254,7 @@ class MultiBoxELModule(ELModule):
         structural_definitions: bool = True,
         existence_weight: float = 1.0,
         size_reg: float = 1e-3,
+        size_reg_without_tables: bool = False,
         reseed_every: int = 0,
         bot_agg: str = "mean",
         witness_weight: float = 0.0,
@@ -393,6 +406,8 @@ class MultiBoxELModule(ELModule):
         self.structural_definitions = bool(structural_definitions)
         self.existence_weight = float(existence_weight)
         self.size_reg = float(size_reg)
+        self.size_reg_without_tables = bool(size_reg_without_tables)
+        self._tables_installed = False
         self.reseed_every = int(reseed_every)
         self.bot_agg = bot_agg
         self.witness_weight = float(witness_weight)
@@ -661,6 +676,7 @@ class MultiBoxELModule(ELModule):
         self.definition_table = table
         self.existence_targets = targets
         self.top_idx = top_idx
+        self._tables_installed = True
         if (
             targets is not None
             and targets.witness is not None
@@ -827,6 +843,8 @@ class MultiBoxELModule(ELModule):
         Non-guarantees:
         - When ``self.existence_targets is None``, the existence and witness
           terms are ``0.0``.
+        - Before :meth:`set_structural_tables` the size term is ``0.0`` (``owl:Thing`` and
+          the defined classes are unknown), unless ``size_reg_without_tables=True``.
         """
         device = self.class_center.weight.device
         dtype = self.class_center.weight.dtype
@@ -855,7 +873,8 @@ class MultiBoxELModule(ELModule):
         else:
             ex_term = th.zeros((), dtype=dtype, device=device)
 
-        if self.size_reg > 0.0 and self._has_prim:
+        size_known = self._tables_installed or self.size_reg_without_tables
+        if self.size_reg > 0.0 and self._has_prim and size_known:
             assert self._prim_mask_dev is not None
             raw_off = th.abs(self.class_offset.weight[self._prim_mask_dev])
             size_term = self.size_reg * (2.0 * raw_off).mean()

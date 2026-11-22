@@ -1500,3 +1500,30 @@ def test_reseed_mode_validation_and_dead_mode_unchanged() -> None:
 
 
 
+
+
+def test_size_term_needs_the_tables_and_never_shrinks_thing() -> None:
+    """Without installed tables owl:Thing is unknown: no size term (old option: all classes)."""
+    def build(**kw):
+        th.manual_seed(0)
+        return MultiBoxELModule(
+            nb_ont_classes=4, nb_rels=1, embed_dim=3, n_components=1, objective="structural",
+            existence_weight=0.0, size_reg=1.0, **kw)
+
+    mod = build()
+    assert mod.size_reg_without_tables is False
+    assert float(mod.structural_extra_loss()) == 0.0
+    old = build(size_reg_without_tables=True)
+    expected = float((2.0 * th.abs(old.class_offset.weight)).mean())
+    assert float(old.structural_extra_loss()) == pytest.approx(expected)
+    # with tables (Thing = 3, no definitions) Thing is excluded in both
+    table = DefinitionTable.from_normal_forms(
+        gci0=th.zeros((0, 2), dtype=th.long), gci1=th.zeros((0, 3), dtype=th.long),
+        n_classes=4, k=1, max_components=1, top_idx=3, bottom_idx=None, enabled=True)
+    targets = ExistenceTargets(classes=th.zeros(0, dtype=th.long),
+                               pairs=th.zeros((0, 2), dtype=th.long))
+    for m in (mod, old):
+        m.set_structural_tables(table, targets, top_idx=3)
+        with_top = float(m.structural_extra_loss())
+        exp = float((2.0 * th.abs(m.class_offset.weight[:3])).mean())
+        assert with_top == pytest.approx(exp)
