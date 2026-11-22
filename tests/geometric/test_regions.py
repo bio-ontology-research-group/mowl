@@ -330,3 +330,13 @@ def test_is_simplex_vertex_rows() -> None:
     assert is_simplex_vertex_rows(np.array([[1.0, 1.0, 0.0]]), 3) is False
     assert is_simplex_vertex_rows(np.array([[2.0, 0.0, 0.0]]), 3) is False
     assert is_simplex_vertex_rows(pts4, 2) is False
+
+
+def test_pair_hull_of_pairs_concatenates_the_vertices():
+    import numpy as np
+    from mowl.geometric.regions import PairHull
+    points = np.array([[1.0, 0.0], [0.0, 1.0], [2.0, 3.0]])
+    hull = PairHull.of_pairs(points, [(0, 2), (1, 1)])
+    assert hull.points.tolist() == [[1.0, 0.0, 2.0, 3.0], [0.0, 1.0, 0.0, 1.0]]
+    assert PairHull.of_pairs(points, []).points.shape == (0, 4)
+    assert PairHull.pair_point(points, 2, 0).tolist() == [2.0, 3.0, 1.0, 0.0]

@@ -157,9 +157,7 @@ class ConvexRegionModel(DictInterpretation):
         relations = geometry.relation_model
         for r, name in enumerate(geometry.roles):
             pairs = [] if relations is None else relations.pairs[r].nonzero().tolist()
-            rows = [np.concatenate([self._points[i], self._points[j]]) for i, j in pairs]
-            roles[name] = PairHull(np.vstack(rows) if rows
-                                   else np.zeros((0, 2 * self.dimension)))
+            roles[name] = PairHull.of_pairs(self._points, pairs)
         super().__init__("polyhedral", universe, classes, roles, names=list(classes))
         self._checker: Optional[ModelChecker] = None
         if axioms is not None:
@@ -204,5 +202,5 @@ class ConvexRegionModel(DictInterpretation):
             roles[name] = frozenset(
                 (i, j) for i in range(m) for j in range(m)
                 if chk._point_in_pair_hull(
-                    np.concatenate([self._points[i], self._points[j]]), hull))
+                    PairHull.pair_point(self._points, i, j), hull))
         return FiniteInterpretation(m, concepts, roles)
