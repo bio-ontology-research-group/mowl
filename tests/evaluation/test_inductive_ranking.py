@@ -218,7 +218,7 @@ def test_reshuffle_sees_the_facts_of_the_graph_it_is_given(dataset):
     model = Reshuffle(dataset, l=6, k=8, num_layers=1, num_negs_per_pos=4, batch_size=16,
                       kge_kwargs={"aggregation": "max_self_noLoop"})
     model.train(epochs=1)
-    weights = model._kge_method.relation_representations[0]._embeddings.weight
+    weights = model.module.relation_model.vectors.weight
     with th.no_grad():
         weights.view(weights.shape[0], 7, 6)[1::2, -1, :] = 1e4
     works = _r("works")
@@ -240,7 +240,7 @@ def test_reshuffle_costs_inf_for_a_relation_it_never_saw(model, dataset):
 
 def test_with_inverse_triples_a_head_is_scored_from_the_tail_with_the_inverse_matrix(dataset):
     from mowl.models import Reshuffle
-    from mowl.nn.graph.reshuffle.module import reshuffle_interaction
+    from mowl.nn.graph.kge_interactions import reshuffle_interaction
     th.manual_seed(0)
     model = Reshuffle(dataset, l=6, k=8, num_layers=2, num_negs_per_pos=4, batch_size=16,
                       inverse_triples=True)
@@ -251,7 +251,7 @@ def test_with_inverse_triples_a_head_is_scored_from_the_tail_with_the_inverse_ma
     heads, tails = model.inductive_costs(graph, rows, target="head"), \
         model.inductive_costs(graph, rows, target="tail")
     assert not th.allclose(heads, tails)
-    x, rel = model._kge_method.encode_graph(
+    x, rel = model.module.class_model.encode_graph(
         th.tensor([[graph.entities.index(h), model.triples_factory.relation_to_id[r],
                     graph.entities.index(t)]
                    for h, r, t in graph.iri_triples()
@@ -281,10 +281,11 @@ def test_reshuffle_stops_early_on_the_validation_triples_of_the_training_graph(d
     model = Reshuffle(dataset, l=6, k=8, num_layers=1, num_negs_per_pos=4, batch_size=16,
                       early_stopping={"frequency": 1, "patience": 1, "relative_delta": 0.5})
     model.train(epochs=6)
-    stopper = model._make_stopper()
-    assert stopper.frequency == 1 and stopper.patience == 1
-    assert len(stopper.evaluation_triples_factory.mapped_triples) == len(VALID)
-    assert Reshuffle(dataset, l=6, k=8, num_layers=1)._make_stopper() is None
+    regime = model.training_regime
+    assert regime.frequency == 1 and regime.patience == 1
+    assert len(regime.history) >= 1
+    assert len(regime._val) == len(VALID)
+    assert Reshuffle(dataset, l=6, k=8, num_layers=1).training_regime is None
 
 
 # -- registry -----------------------------------------------------------------------------

@@ -36,6 +36,7 @@ representations are then the encoded ones), and no parts.
 """
 
 import contextlib
+import functools
 import math
 from dataclasses import dataclass
 
@@ -897,11 +898,9 @@ def _build(key, nb_classes, nb_relations, nb_individuals, embed_dim, margin, cla
     initialiser = None
     if init and classes == "point" and isinstance(class_model, Points):
         if isinstance(relation_model, BoxERelations) and key == "boxe":
-            def initialiser(c=class_model, r=relation_model):
-                _init_boxe(c, r)
+            initialiser = functools.partial(_init_boxe, class_model, relation_model)
         elif isinstance(relation_model, ExpressivERelations) and key == "expressive":
-            def initialiser(c=class_model, r=relation_model):
-                _init_normal(c, r)
+            initialiser = functools.partial(_init_normal, class_model, relation_model)
         if initialiser is not None:
             initialiser()
     individual_model = class_factory(nb_individuals, embed_dim) if nb_individuals else None

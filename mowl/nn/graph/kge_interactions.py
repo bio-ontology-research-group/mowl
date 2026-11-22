@@ -138,7 +138,8 @@ def random_features(num_entities, k, l,  # noqa: E741
     return (th.rand(num_entities, k, l, generator=generator) < density).float()
 
 
-def propagate(x, rel, loop, edge_index, edge_type, num_layers, aggregation="max_self_and_selfLoop"):
+def propagate(x, rel, loop, edge_index, edge_type, num_layers,
+              aggregation="max_self_and_selfLoop"):
     """Run ``num_layers`` message passing layers.
 
     :param x: Features ``(n, k, l)``.

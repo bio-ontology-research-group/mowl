@@ -98,8 +98,11 @@ BOXE = MethodCard(
     helly="2 (axis-parallel boxes; eckhoff1988)",
     related=("graph_kge",),
     notes=(
-        "Not reimplemented: this is PyKEEN's BoxE (pykeen.models.BoxE) trained through "
-        "GraphPlusPyKEENModel with PyKEEN's negative sampling and self-adversarial loss. "
+        "A combination of parts (mowl.models.BoxE; the method 'boxe' of mowl.representation): "
+        "points with a bump, head and tail boxes with the distance of BoxE (PyKEEN's "
+        "BoxEInteraction), the self-adversarial negative sampling loss, uniform corruption of "
+        "heads and tails, trained on the triples of a projection. The direct implementation "
+        "(PyKEEN's BoxE trained by PyKEEN's loop) is in mowl.baselines. "
         "Ontology link: the triples are the edges of a mowl.projection projector (default OWL2VecStarProjector: C subclassof D, C r D for C ⊑ ∃r.D, a type C for C(a), r(a, b)); axioms the projector does not read are ignored. Scores are available for C ⊑ D (gci0, the subclassof edge), C ⊑ ∃r.D (gci2), C(a) (class_assertion, the type edge) and r(a, b) (object_property_assertion, the role edge). The paper's unary relations (types as boxes) become binary "
         "type edges and classes are entities, so every guarantee above refers to the "
         "projected triples, not to the description logic semantics. Higher-arity facts are "
@@ -163,10 +166,12 @@ EXPRESSIVE = MethodCard(
     code_url="https://github.com/aleksvap/expressive",
     related=("graph_kge", "boxe"),
     notes=(
-        "Reimplemented as a PyKEEN ERModel (mowl.nn.graph.expressive) after the authors' "
-        "code (tanh maps, minimal denominator Dmin, distance of Equation 3, self-adversarial "
-        "loss with margin 3 and temperature 2) and trained through GraphPlusPyKEENModel; "
-        "only the base model, not the ablations. Ontology link: the triples are the edges of a mowl.projection projector (default OWL2VecStarProjector: C subclassof D, C r D for C ⊑ ∃r.D, a type C for C(a), r(a, b)); axioms the projector does not read are ignored. Scores are available for C ⊑ D (gci0, the subclassof edge), C ⊑ ∃r.D (gci2), C(a) (class_assertion, the type edge) and r(a, b) (object_property_assertion, the role edge). Composition "
+        "A combination of parts (mowl.models.ExpressivE; the method 'expressive' of "
+        "mowl.representation) after the authors' code (tanh maps, minimal denominator Dmin, "
+        "distance of Equation 3 in mowl.nn.graph.kge_interactions, self-adversarial loss with "
+        "margin 3 and temperature 2), trained on the triples of a projection; only the base "
+        "model, not the ablations. The direct implementation (a PyKEEN ERModel) is in "
+        "mowl.baselines. Ontology link: the triples are the edges of a mowl.projection projector (default OWL2VecStarProjector: C subclassof D, C r D for C ⊑ ∃r.D, a type C for C(a), r(a, b)); axioms the projector does not read are ignored. Scores are available for C ⊑ D (gci0, the subclassof edge), C ⊑ ∃r.D (gci2), C(a) (class_assertion, the type edge) and r(a, b) (object_property_assertion, the role edge). Composition "
         "patterns hold for the projected triples; role chains of the ontology are not "
         "read."),
 )

@@ -23,7 +23,8 @@ class GraphPlusPyKEENModel(TripleGraphModel):
     model gives the entity and relation representations, the interaction function and its
     loss, and the model is trained on the triples as every model of
     :class:`~mowl.models.graph_kge.triple_model.TripleGraphModel` is. :attr:`module` is the
-    geometry that reads the PyKEEN model (:class:`~mowl.representation.library.other_graph.PyKEENGeometry`):
+    geometry that reads the PyKEEN model
+    (:class:`~mowl.representation.library.other_graph.PyKEENGeometry`):
     its representations are the parts, its interaction the score, its loss the objective;
     the sampler is :class:`~mowl.representation.library.other_graph.UniformCorruption` with
     ``num_negs_per_pos`` corrupted triples. Use ``projector=mowl.projection.GDAProjector()``

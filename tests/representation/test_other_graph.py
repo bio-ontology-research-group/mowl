@@ -1,4 +1,6 @@
-"""Knowledge graph models in the common interface (group ``other``)."""
+"""Knowledge graph models in the common interface (group ``other``): the geometry of a PyKEEN
+model (the adapter, tested here with the PyKEEN models of the direct implementations) and the
+parts that combine with the other methods."""
 import pytest
 import torch as th
 
@@ -6,7 +8,10 @@ import mowl
 mowl.init_jvm("1g")
 pytest.importorskip("pykeen")
 
-from mowl.models import BoxE, ComposedEL, ExpressivE, Reshuffle  # noqa: E402
+from mowl.baselines.models.boxe import BoxE  # noqa: E402  (PyKEEN models of the adapter)
+from mowl.baselines.models.expressive import ExpressivE  # noqa: E402
+from mowl.baselines.models.reshuffle import Reshuffle  # noqa: E402
+from mowl.models import ComposedEL  # noqa: E402
 from mowl.representation import (ComposedGeometry, ConstructorUnavailable,  # noqa: E402
                                  Objective, geometry_of)
 from mowl.representation.library.other_graph import (  # noqa: E402
