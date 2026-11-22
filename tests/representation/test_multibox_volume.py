@@ -1,6 +1,7 @@
 """The volume-based multibox as a geometry and as parts, and the sampled volume measure."""
 from unittest import TestCase
 
+import numpy as np
 import torch as th
 
 from mowl.models import ComposedEL
@@ -182,6 +183,7 @@ class TestSampledVolume(TestCase):
 
     def test_with_union_classes_and_head_tail_relations(self):
         th.manual_seed(0)
+        np.random.seed(0)      # the negatives of the model are drawn with numpy
         model = ComposedEL(self.dataset, classes="union of boxes",
                            relations="head and tail boxes",
                            measure=SampledVolume(num_points=300, chunk_size=128),

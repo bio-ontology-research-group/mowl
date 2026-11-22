@@ -42,7 +42,7 @@ import torch.nn as nn
 
 from mowl.representation.adapters import register_adapter
 from mowl.representation.geometry import ComposedGeometry, Geometry
-from mowl.representation.methods import (register_class_model, register_measure,
+from mowl.representation.methods import (register_measure,
                                          register_method, register_relation_model)
 from mowl.representation.measures import RegionMeasure
 from mowl.representation.objectives import Objective
@@ -118,11 +118,6 @@ def PointClasses(size=None, embed_dim=None, bump=False, centres=None, bumps=None
                   bump=bump, bumps=bumps)
 
 
-# aliases of the part "point" (the names the knowledge graph builders use)
-register_class_model("entity point")(PointClasses)
-register_class_model("point with bump")(lambda size, dim: PointClasses(size, dim, bump=True))
-
-
 # -- relation models: a relation is a set of pairs ------------------------------------------
 class _PairRelations(Relations):
     """Base of relation models that are sets of pairs of points.
@@ -158,7 +153,17 @@ class _PairRelations(Relations):
 class BoxERelations(_PairRelations):
     """BoxE (Abboud et al. 2020): a relation is a *head box* and a *tail box*;
     :math:`r(h, t)` holds when :math:`h` bumped by :math:`t` lies in the head box and
-    :math:`t` bumped by :math:`h` in the tail box. The score is that of PyKEEN's
+    :math:`t` bumped by :math:`h` in the tail box.
+
+    This is the other of the two head-and-tail-box relation models of the library, and the two
+    differ in what they are, not in how they are written: the boxes of
+    :class:`~mowl.representation.library.multibox_parts.HeadTailRelations` (Box2EL,
+    MultiBoxEL; key ``"head and tail boxes"``) are given by centre and half-width and the
+    relation is a *region* statement (a class is related if its region lies in the head box
+    moved by the bump of the filler: containment of regions), while here the boxes are given
+    by the base, delta and size of BoxE and the cost is a *distance score* of two points
+    (PyKEEN's interaction), which is not a containment and cannot be written with a region
+    measure. Used by: ``boxe``. The score is that of PyKEEN's
     :class:`~pykeen.nn.modules.BoxEInteraction` (whose functions compute the boxes and the
     distance), so costs equal those of a PyKEEN BoxE with the same tables.
 
@@ -248,7 +253,7 @@ class ExpressivERelations(_PairRelations):
         return -score.reshape(-1, 1)
 
 
-register_relation_model("boxe boxes")(BoxERelations)
+register_relation_model("head and tail boxes (distance score)")(BoxERelations)
 register_relation_model("region over pairs")(ExpressivERelations)
 
 
@@ -337,7 +342,8 @@ def triple_geometry(classes, relations, measure, objective=None, individuals=Non
         neg_capable_gcis=neg)
 
 
-_DEFAULT_RELATIONS = {"graph_kge": "translation", "boxe": "head and tail boxes",
+_DEFAULT_RELATIONS = {"graph_kge": "translation",
+                      "boxe": "head and tail boxes (distance score)",
                       "expressive": "region over pairs"}
 
 
@@ -347,9 +353,12 @@ def _build(key, nb_classes, nb_relations, nb_individuals, embed_dim, margin, cla
     if tables is not None:
         raise TypeError(f"{key}: tables must be a PyKEEN model; use boxe(...) / "
                         f"expressive(...) with tables, or geometry_of(model).")
-    class_factory = M.CLASS_MODELS[classes] if isinstance(classes, str) else classes
-    if classes == "point" and key == "boxe":
-        class_factory = M.CLASS_MODELS["point with bump"]
+    if classes == "point":
+        # the entities of a knowledge graph model: points (with a bump for BoxE)
+        def class_factory(size, dim):
+            return PointClasses(size, dim, bump=key == "boxe")
+    else:
+        class_factory = M.CLASS_MODELS[classes] if isinstance(classes, str) else classes
     relation_factory = M.RELATION_MODELS[relations] if isinstance(relations, str) \
         else relations
     class_model = class_factory(nb_classes, embed_dim)
@@ -399,13 +408,13 @@ class _WithSubclass(Relations):
 
 @register_method("graph_kge")
 def graph_kge(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=1.0,
-              classes="entity point", relations="translation", objective=None, tables=None,
+              classes="point", relations="translation", objective=None, tables=None,
               **relation_options):
     """Any knowledge graph model on a projection, as parts: classes and individuals are
     entities, a relation model says what a relation is, the measure is the triple score.
     The default (point classes, translation) is TransE; ``relations="head and tail
-    boxes"`` is BoxE, ``"region over pairs"`` is ExpressivE, and ``classes="ball"`` or
-    ``"box"`` use the centres of those regions as the entities.
+    boxes (distance score)"`` is BoxE, ``"region over pairs"`` is ExpressivE, and
+    ``classes="ball"`` or ``"box"`` use the centres of those regions as the entities.
 
     A PyKEEN model that is not one of these is not rebuilt: :func:`geometry_of` gives the
     geometry of the trained model, with PyKEEN's own interaction.
@@ -416,7 +425,7 @@ def graph_kge(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=1
 
 @register_method("boxe")
 def boxe(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=1.0,
-         classes="entity point", objective=None, tables=None, **relation_options):
+         classes="point", objective=None, tables=None, **relation_options):
     """BoxE from parts: points with a bump, head and tail boxes, the triple score.
 
     :param classes: ``"point"`` (the default, with a bump) or any class model name
@@ -439,12 +448,13 @@ def boxe(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=1.0,
                                objective or Objective(margin, negatives="gci2"),
                                individuals=classes_model)
     return _build("boxe", nb_classes, nb_relations, nb_individuals, embed_dim, margin,
-                  classes, "head and tail boxes", objective, None, relation_options)
+                  classes, "head and tail boxes (distance score)", objective, None,
+                  relation_options)
 
 
 @register_method("expressive")
 def expressive(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=1.0,
-               classes="entity point", objective=None, tables=None, **relation_options):
+               classes="point", objective=None, tables=None, **relation_options):
     """ExpressivE from parts: points, parallelograms over pairs, the triple score. See
     :func:`boxe` for ``classes`` and ``tables`` (a trained PyKEEN ExpressivE)."""
     if tables is not None:

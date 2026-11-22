@@ -25,7 +25,7 @@ from mowl.representation.library.hierarchy_classes import (
 from mowl.representation.library.hierarchy_geometry import (
     hierarchy_geometry, TextGeometry)
 from mowl.representation.library.hierarchy_measures import (
-    ConeAngle, Protrusion, ShadowCone, SoftVolumeRatio, VolumeRatio)
+    ConeAngle, Protrusion, ShadowCone, LogVolumeRatio)
 from tests.datasetFactory import FamilyDataset
 
 N = 14
@@ -201,13 +201,13 @@ class TestBoxes(Same, TestCase):
         th.manual_seed(5)
         lattice = BoxLatticeModule(N, 3)
         g = geometry_of(lattice)
-        soft = hierarchy_geometry(g.class_model, None, SoftVolumeRatio(0.01),
+        soft = hierarchy_geometry(g.class_model, None, LogVolumeRatio(0.01),
                                   Objective.hierarchy())
         gumbel = GumbelBoxModule(N, 3, beta=0.01, min_delta=lattice.min_delta)
         gumbel.class_embed.weight.data.copy_(lattice.class_embed.weight.data)
         rows = pairs()
         self.assertClose(soft(rows, "gci0"), gumbel(rows, "gci0"))
-        self.assertTrue(isinstance(g.measure, VolumeRatio))
+        self.assertTrue(isinstance(g.measure, LogVolumeRatio) and not g.measure.smoothed)
         self.assertEqual(g.class_model.part, "box")
 
     def test_hard_limit_of_the_soft_measure(self):
@@ -217,7 +217,7 @@ class TestBoxes(Same, TestCase):
         a, b = g.classes(rows[:, 0]), g.classes(rows[:, 1])
         p, gap = g.measure.conditional(a, b)
         meets = (gap == 0).reshape(-1)
-        hard = SoftVolumeRatio(0.0, 0.0, gumbel_shift=False).energy(a, b)
+        hard = LogVolumeRatio(0.0, 0.0, gumbel_shift=False).energy(a, b)
         self.assertTrue(meets.any())
         self.assertTrue(th.allclose(hard[meets].double(), -th.log(p[meets]), atol=1e-4))
 
@@ -379,7 +379,7 @@ class TestRegistry(TestCase):
         for key in ("order_embeddings", "cate", "box_lattice", "gumbel_box", "bcbox",
                     "hyperbolic_cones", "shadow_cones", "disk_embeddings", "hit", "ont"):
             self.assertIn(key, M.METHODS)
-        for name in ("volume ratio", "smoothed volume ratio", "order violation", "angle",
+        for name in ("log volume ratio", "order violation", "angle",
                      "protrusion", "distance and depth", "shadow cone"):
             self.assertIn(name, M.MEASURES)
         for name in ("unit box", "order cone", "point", "geodesic cone", "disk"):
@@ -465,7 +465,7 @@ class TestParts(TestCase):
             hierarchy_geometry(classes, None, ConeAngle(), Objective.hierarchy())
 
     def test_measures_swap_on_the_box_lattice_class_model(self):
-        for measure in (VolumeRatio(), SoftVolumeRatio(0.02), Bounds()):
+        for measure in (LogVolumeRatio(), LogVolumeRatio(0.02), Bounds()):
             th.manual_seed(0)
             margin = 0.0 if not isinstance(measure, Bounds) else 0.05
             g = hierarchy_geometry(UnitCubeBoxes(N, 3), None, measure,
@@ -475,7 +475,7 @@ class TestParts(TestCase):
 
     def test_volume_ratio_on_the_boxes_of_elbe(self):
         classes = BoxClasses(N, 3)
-        g = hierarchy_geometry(classes, None, VolumeRatio(), Objective.hierarchy())
+        g = hierarchy_geometry(classes, None, LogVolumeRatio(), Objective.hierarchy())
         self.assertTrue(bool(th.isfinite(g(pairs(), "gci0")).all()))
         self.assertTrue(bool(th.isfinite(g(pairs(), "gci0", neg=True)).all()))
 
@@ -508,7 +508,7 @@ class TestComposedWithOtherMethods(TestCase):
 
     def test_trains(self):
         for kwargs in ({"classes": "unit box"},
-                       {"classes": "unit box", "measure": SoftVolumeRatio(0.05)},
+                       {"classes": "unit box", "measure": LogVolumeRatio(0.05)},
                        {"classes": "unit box", "measure": Bounds()}):
             th.manual_seed(0)
             model = ComposedEL(self.dataset, embed_dim=8, objective=Objective(0.0),

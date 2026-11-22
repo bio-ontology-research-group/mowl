@@ -111,8 +111,10 @@ class TestPartsInComposedEL(TestCase):
     def test_box_of_translations_with_boxes_and_with_balls(self):
         for classes in ("box", "ball"):
             th.manual_seed(0)
-            model = ComposedEL(self.dataset, classes=classes, relations="shift and widen",
-                               embed_dim=8, margin=0.05)
+            model = ComposedEL(
+                self.dataset, classes=classes, embed_dim=8, margin=0.05,
+                relations=lambda n, d: TranslationBoxes(n, d, activation="relu",
+                                                        init_range=0.1))
             self.assertEqual(model.module.parts["relations"], "box of translations")
             self.trains(model)
 

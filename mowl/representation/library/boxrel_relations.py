@@ -148,11 +148,6 @@ class TranslationBoxes(Relations):
         return th.cat([self.vectors.weight, self.offsets.weight], -1).detach()
 
 
-register_relation_model("shift and widen")(
-    lambda size, embed_dim: TranslationBoxes(size, embed_dim, activation="relu",
-                                             init_range=0.1))  # alias of the query group
-
-
 @register_relation_model("affine map")
 class Affine(Relations):
     """A relation is a function that scales and shifts every coordinate (BoxEL, Xiong et

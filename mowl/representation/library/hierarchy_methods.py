@@ -36,8 +36,7 @@ from mowl.representation.library.hierarchy_geometry import (
     LatticeGeometry, TextGeometry, hierarchy_geometry)
 from mowl.representation.objectives import Objective
 from mowl.representation.library.hierarchy_measures import (
-    ConeAngle, DistanceDepth, OrderViolation, Protrusion, ShadowCone, SoftVolumeRatio,
-    VolumeRatio)
+    ConeAngle, DistanceDepth, LogVolumeRatio, OrderViolation, Protrusion, ShadowCone)
 from mowl.representation.library.hierarchy_relations import TextRotation
 from mowl.representation.methods import register_method
 from mowl.training.regularization import Regularizer
@@ -147,7 +146,9 @@ def box_lattice(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50, min_
         zero_at_inclusion = tables.zero_at_inclusion
     regularizers = (MaxCornerPenalty(max_regularization),) if max_regularization else ()
     return hierarchy_geometry(
-        classes, None, VolumeRatio(eps, disjoint_weight, zero_at_inclusion=zero_at_inclusion),
+        classes, None,
+        LogVolumeRatio(eps=eps, disjoint_weight=disjoint_weight,
+                       zero_at_inclusion=zero_at_inclusion),
         Objective.hierarchy(freeze_size_negatives=freeze_delta_negatives),
         regularizers=regularizers)
 
@@ -178,9 +179,9 @@ def gumbel_box(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50, beta=
         log_guard = tables.log_guard
     regularizers = (MaxCornerPenalty(max_regularization),) if max_regularization else ()
     stable = log_guard == "stable"
-    measure = SoftVolumeRatio(beta, beta, gumbel_shift=True,
-                              tail="linear" if stable else "floor",
-                              energy_floor=1e-12 if stable else 1e-9)
+    measure = LogVolumeRatio(beta, beta, gumbel_shift=True,
+                             tail="linear" if stable else "floor",
+                             energy_floor=1e-12 if stable else 1e-9)
     return hierarchy_geometry(classes, None, measure, Objective.hierarchy(),
                               regularizers=regularizers)
 
@@ -207,8 +208,8 @@ def bcbox(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50, variant="v
     else:
         classes = CodedBoxes(variant=tables.variant, tables=tables)
         intersection_temp, volume_temp = tables.intersection_temp, tables.volume_temp
-    measure = SoftVolumeRatio(intersection_temp, volume_temp, gumbel_shift=False,
-                              tail="linear", energy_floor=1e-12, dtype=None)
+    measure = LogVolumeRatio(intersection_temp, volume_temp, gumbel_shift=False,
+                             tail="linear", energy_floor=1e-12, dtype=None)
     regularizers = (CodePenalty(code_weight),) if code_weight else ()
     return hierarchy_geometry(classes, None, measure, Objective.hierarchy(),
                               regularizers=regularizers)

@@ -119,7 +119,7 @@ class TestEqualToExisting(TestCase):
     def test_registered(self):
         self.assertTrue({"query2box", "betae", "cone_qe", "acone"} <= set(METHODS))
         self.assertIn("sector cone", CLASS_MODELS)
-        self.assertIn("shift and widen", RELATION_MODELS)
+        self.assertIn("box of translations", RELATION_MODELS)
         self.assertIn("angle rotation", RELATION_MODELS)
         self.assertIn("angle", MEASURES)
 

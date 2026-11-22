@@ -9,14 +9,22 @@ from mowl.representation.library.boxrel_boxes import signed_intersection
 from mowl.representation.measures import Bounds
 from mowl.representation.methods import register_measure
 
-__all__ = ["VolumeRatio", "AveragedBounds", "MaskedBounds"]
+__all__ = ["VolumeShare", "AveragedBounds", "MaskedBounds"]
 
 
-@register_measure("softplus volume ratio")
-class VolumeRatio(Bounds):
-    """Boxes compared by volume: :math:`A \\subseteq B` costs
-    :math:`1 - \\mathrm{Vol}(A \\cap B) / \\mathrm{Vol}(A)`, the share of :math:`A` outside
-    :math:`B`; :math:`A \\cap B = \\emptyset` costs the share inside. Zero iff the relation
+@register_measure("volume share")
+class VolumeShare(Bounds):
+    """Boxes compared by the *share* of the volume of :math:`A` that lies in :math:`B`:
+    :math:`A \\subseteq B` costs :math:`1 - \\mathrm{Vol}(A \\cap B) / \\mathrm{Vol}(A)`, the
+    share of :math:`A` outside :math:`B`. This is one of three different volume-ratio
+    formulas: the others are
+    :class:`~mowl.representation.library.hierarchy_measures.LogVolumeRatio` (the cost is
+    :math:`-\\log` of the ratio) and
+    :class:`~mowl.representation.library.shapes_measures.GumbelVolumeRatio` (the ratio of
+    expected Gumbel volumes, :math:`(1 - \\text{ratio})^p`). Used by: ``boxel`` and ``boxsel``
+    (softplus volume); the exact volume (``temperature=None``) is used by no published method.
+
+    :math:`A \\cap B = \\emptyset` costs the share inside. Zero iff the relation
     holds when the volume is exact (``temperature=None``); with the softplus volume of
     BoxEL (``temperature`` :math:`\\beta`) the cost of ``apart`` is never exactly zero and
     approaches the exact one as :math:`\\beta` grows.
@@ -106,7 +114,7 @@ class VolumeRatio(Bounds):
         """The proportion of the premise that lies in the conclusion, with exact volumes
         (``nan`` where the premise has no volume), ``(B, 1)``."""
         self.check(premise, conclusion)
-        exact = VolumeRatio(temperature=None)
+        exact = VolumeShare(temperature=None)
         return exact.volume(signed_intersection(premise, conclusion)) / exact.volume(premise)
 
 
@@ -178,9 +186,3 @@ class MaskedBounds(Bounds):
             half = -half
         s = (th.abs(centre - c.centre) + half - c.offset) * mask
         return self.empty_weight * gap + self._norm(s + margin * mask)
-
-
-@register_measure("exact volume ratio")
-def _exact_volume_ratio():
-    """The volume ratio with exact (not smoothed) volumes."""
-    return VolumeRatio(temperature=None)

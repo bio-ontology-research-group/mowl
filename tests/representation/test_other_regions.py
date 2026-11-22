@@ -13,7 +13,8 @@ from mowl.models.boxlite.embedding import BoxLitEEmbedding  # noqa: E402
 from mowl.nn.el.grounded import GroundedELModule  # noqa: E402
 from mowl.representation import ConstructorUnavailable, geometry_of  # noqa: E402
 from mowl.representation.library.other_regions import (  # noqa: E402
-    BoxLitEGeometry, CanonicalMixtureGeometry, FaithELGeometry, GroundedGeometry, MultiBox)
+    BoxLitEGeometry, CanonicalMixtureGeometry, FaithELGeometry, GroundedGeometry,
+    MaskedUnionOfBoxes)
 from tests.models.test_canonical_mixture import (  # noqa: E402
     IND, NS, _write_family_abox_dataset)
 
@@ -57,7 +58,7 @@ def test_grounded_geometry_shares_the_module_and_is_exact_in_the_limit():
     assert inside.tolist() == [True, True, True, False]
     # conjunction and disjunction are exact unions of boxes
     both, gap = g.conjunction(g.classes(th.tensor([0])), g.classes(th.tensor([1])))
-    assert isinstance(both, MultiBox) and gap.item() == 0.0
+    assert isinstance(both, MaskedUnionOfBoxes) and gap.item() == 0.0
     assert g.inside(both, g.classes(th.tensor([1]))).item() < 1e-6
     union = g.disjunction(g.classes(th.tensor([0])), g.classes(th.tensor([3])))
     assert g.inside(g.classes(th.tensor([0])), union).item() < 1e-6

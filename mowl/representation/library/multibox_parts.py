@@ -59,7 +59,13 @@ class BumpedBox(Box):
 
 @dataclass(frozen=True)
 class UnionOfBoxes(Region):
-    """The union of ``k`` boxes per class.
+    """The union of ``k`` boxes per class. All boxes are there (no mask); the intersection of
+    two unions keeps every pair of boxes, each with its distance, and the cost is the distance
+    of the nearest pair. Where boxes can be inactive (defined classes, queries of the grounded
+    model) the region is
+    :class:`~mowl.representation.library.other_regions.MaskedUnionOfBoxes`, a different
+    region with the exact set intersection. Used by: ``multiboxel``, ``multielbe``,
+    ``mcmultibox``.
 
     :param centre: ``(B, k, d)``.
     :param offset: ``(B, k, d)``, non-negative half-widths.
@@ -386,9 +392,15 @@ register_class_model("union of boxes")(lambda size, embed_dim: UnionClasses(size
 # ====================================================================================
 
 class HeadTailRelations(Relations):
-    """A relation is a head box and a tail box (Box2EL; also BoxE, with points). A pair
-    :math:`(x, y)` is in the relation if :math:`x` shifted by the bump of :math:`y` lies in
-    the head box and :math:`y` shifted by the bump of :math:`x` lies in the tail box.
+    """A relation is a head box and a tail box (Box2EL, MultiBoxEL), given by centre and
+    half-width. A pair :math:`(x, y)` is in the relation if :math:`x` shifted by the bump of
+    :math:`y` lies in the head box and :math:`y` shifted by the bump of :math:`x` lies in the
+    tail box: a statement about *regions* (containment, read by any measure of boxes, balls
+    or unions). BoxE has the same geometry but scores a pair of points by a distance and not
+    by containment, with its own parametrisation (base, delta, size): that is
+    :class:`~mowl.representation.library.other_graph.BoxERelations`
+    (``"head and tail boxes (distance score)"``), a different relation model. Used by:
+    ``box2el``, ``multiboxel``.
 
     The bump belongs to the arguments: the relation model reads the ``bump`` field of the
     regions it is given (a :class:`BumpedBox` or :class:`UnionOfBoxes` made by a class model

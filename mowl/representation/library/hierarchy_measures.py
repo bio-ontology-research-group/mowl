@@ -4,8 +4,8 @@
 measure                               vocabulary entry    used by
 ====================================  ==================  =================================
 :class:`OrderViolation`               order violation     order embeddings, CatE
-:class:`VolumeRatio`                  volume ratio        box lattice
-:class:`SoftVolumeRatio`              smoothed volume     Gumbel boxes, BCBox
+:class:`LogVolumeRatio`               volume ratio,       box lattice, Gumbel boxes, BCBox
+                                      smoothed volume
 :class:`ConeAngle`                    angle               hyperbolic entailment cones
 :class:`ShadowCone`                   angle               shadow cones
 :class:`Protrusion`                   protrusion          disk embeddings
@@ -32,13 +32,13 @@ import torch.nn.functional as F
 from mowl.nn.order import cones as C
 from mowl.nn.order.manifolds import Euclidean, UpperHalfSpace
 from mowl.representation.measures import Bounds, RegionMeasure
-from mowl.representation.methods import register_measure
+from mowl.representation.methods import DEFAULT_MEASURE, register_measure
 from mowl.representation.regions import Ball, Box, ConstructorUnavailable, CornerBox
 from mowl.representation.library.hierarchy_regions import (
     CodedBox, ConePoint, Disk, OrderCone, Point, depth)
 
-__all__ = ["HierarchyMeasure", "EnergyMeasure", "OrderViolation", "VolumeRatio",
-           "SoftVolumeRatio", "ConeAngle", "ShadowCone", "Protrusion", "DistanceDepth",
+__all__ = ["HierarchyMeasure", "EnergyMeasure", "OrderViolation", "LogVolumeRatio",
+           "ConeAngle", "ShadowCone", "Protrusion", "DistanceDepth",
            "neg_log1mexp"]
 
 EULER_GAMMA = 0.5772156649015329
@@ -168,49 +168,124 @@ class OrderViolation(EnergyMeasure):
 
 
 # -- boxes: volumes -----------------------------------------------------------------------
-class VolumeRatio(_LogProbability, Bounds):
-    r"""Hard boxes under the uniform measure: :math:`P(b \mid a) = \mathrm{vol}(a \cap b) /
-    \mathrm{vol}(a)` (Vilnis et al. 2018). The cost of :math:`a \sqsubseteq b` is the
-    negative log of that conditional probability. For disjoint boxes the probability has no
-    gradient, so the lower bound :math:`\mathrm{vol}(a) + \mathrm{vol}(b) -
-    \mathrm{vol}(a \vee b) \le \mathrm{vol}(a \wedge b)` (Section 4.3) is used for it, plus a
-    penalty :math:`w g` with :math:`g` the part of the join that the two boxes do not cover
-    (a term of mOWL, not of the paper: it keeps a gradient for a stated pair that is
-    disjoint).
+def neg_log1mexp(energy, floor=1e-12):
+    """:math:`-\\log(1 - e^{-E})` for :math:`E \\ge 0` (the cost of a missing edge whose
+    presence has energy :math:`E`), computed stably; :math:`E` is clamped below at
+    ``floor``."""
+    e = th.clamp(energy, min=floor)
+    small = e < math.log(2.0)
+    out_small = th.log(-th.expm1(-th.where(small, e, th.ones_like(e))))
+    out_large = th.log1p(-th.exp(-th.where(small, th.ones_like(e), e)))
+    return -th.where(small, out_small, out_large)
 
-    :param eps: :math:`\varepsilon` inside the logarithms.
-    :param disjoint_weight: :math:`w`; default :math:`-\log \varepsilon`.
-    :param zero_at_inclusion: ``True`` (default): the cost of an included box is exactly 0
-        (the constant :math:`\log(1 + \varepsilon)` is added); ``False``: as published, it
-        is :math:`-\log(1 + \varepsilon)`.
-    :param dtype: The precision of the volumes (the published module computes in float64).
 
-    The other relations (``meets``, ``empty``, ``nonempty``, the intersection forms) are
-    those of :class:`~mowl.representation.Bounds`; ``apart`` is the conditional probability,
-    which is 0 exactly when the boxes are disjoint.
+class LogVolumeRatio(_LogProbability, Bounds):
+    r"""The negative log of the conditional probability :math:`P(b \mid a)` of two boxes as
+    the cost of :math:`a \sqsubseteq b`, and :math:`-\log(1 - P)` as the cost of a pair that
+    is not ordered. This is *one* formula with two ways of getting the probability; the other
+    volume-ratio measures are different formulas
+    (:class:`~mowl.representation.library.boxrel_measures.VolumeShare`: ``1 - ratio``;
+    :class:`~mowl.representation.library.shapes_measures.GumbelVolumeRatio`: ``(1 - ratio)^p``).
+
+    **Hard boxes** (``intersection_temp=None``, default; the box lattice, Vilnis et al. 2018):
+    :math:`P(b \mid a) = \mathrm{vol}(a \cap b) / \mathrm{vol}(a)` under the uniform
+    measure. For disjoint boxes the probability has no gradient, so the lower bound
+    :math:`\mathrm{vol}(a) + \mathrm{vol}(b) - \mathrm{vol}(a \vee b) \le
+    \mathrm{vol}(a \wedge b)` (Section 4.3) is used for it, plus a penalty :math:`w g` with
+    :math:`g` the part of the join that the two boxes do not cover (a term of mOWL, not of the
+    paper: it keeps a gradient for a stated pair that is disjoint).
+
+    **Smoothed boxes** (``intersection_temp`` a number; Gumbel boxes, Dasgupta et al. 2020,
+    and binary code boxes, Zhang et al. 2022). In every dimension :math:`i`
+
+    .. math:: F_i = \frac{m_\nu(\mu^\vee_i - \mu^\wedge_i)}
+                         {m_\nu(a^+_i - a^-_i)}, \quad
+              \mu^\wedge = \mathrm{LSE}_\tau(a^-, b^-),\
+              \mu^\vee = -\mathrm{LSE}_\tau(-a^+, -b^+),
+
+    with :math:`\mathrm{LSE}_\tau(x, y) = \tau \log(e^{x/\tau} + e^{y/\tau})` and the
+    smoothed side length :math:`m_\nu(x) = \nu \log(1 + e^{x/\nu - s})`. The cost of
+    :math:`a \sqsubseteq b` is the energy :math:`E = -\log P(b \mid a) = \sum_i -\log F_i`;
+    the cost of a pair that is not ordered is :math:`-\log(1 - e^{-E})`. With
+    :math:`\tau = \nu = 0` this is the hard box score without the disjointness term.
+    If the regions carry codes (:class:`~.hierarchy_regions.CodedBox`), :math:`E` weights the
+    dimensions: per-class codes :math:`\sum_i a^\diamond_i b^\diamond_i (-\log F_i)`; global
+    code words :math:`\min_j \sum_i B_{ij} (-\log F_i)`.
+
+    Used by: ``box_lattice`` (hard), ``gumbel_box`` and ``bcbox`` (smoothed).
+
+    :param intersection_temp: ``None``: hard boxes. Otherwise :math:`\tau` (the Gumbel scale
+        :math:`\beta` of Dasgupta et al.); ``0`` is the hard limit of the smoothed score.
+    :param volume_temp: Smoothed boxes: :math:`\nu`; default :math:`\tau`.
+    :param gumbel_shift: Smoothed boxes: :math:`s = 2\gamma` (Euler's constant: the softplus
+        approximation of the expected side length of a Gumbel box, Dasgupta et al.
+        Section 4.2) if ``True``, :math:`s = 0` (the volume temperature of Zhang et al.) if
+        ``False``.
+    :param tail: Smoothed boxes: how :math:`\log m_\nu` is computed where
+        :math:`e^{x/\nu - s}` underflows: ``"exact"`` (:math:`z - \tfrac12 e^z`), ``"floor"``
+        (:math:`\log(\cdot + 10^{-30})`, the earlier guard of the Gumbel box module) or
+        ``"linear"`` (:math:`z` below :math:`-15`, the guard of the BCBox code and of the
+        Gumbel box module).
+    :param energy_floor: Smoothed boxes: smallest energy given to a negative pair (default
+        :math:`10^{-12}`, the guard of the binary code boxes and of the Gumbel boxes;
+        :math:`10^{-9}` is the earlier guard of the Gumbel box module).
+    :param eps: Hard boxes: :math:`\varepsilon` inside the logarithms.
+    :param disjoint_weight: Hard boxes: :math:`w`; default :math:`-\log \varepsilon`.
+    :param zero_at_inclusion: Hard boxes: ``True`` (default): the cost of an included box is
+        exactly 0 (the constant :math:`\log(1 + \varepsilon)` is added); ``False``: the
+        guard of the earlier code, :math:`-\log(1 + \varepsilon)`.
+    :param dtype: The precision of the computation (float64 in the published modules of the
+        box lattice and the Gumbel box; ``None``: the regions' own, as in BCBox).
+
+    The other relations (``meets``, ``empty``, ``nonempty``, the intersection forms) are those
+    of :class:`~mowl.representation.Bounds`; ``apart`` is the conditional probability, which
+    is (nearly) 0 when the boxes are (nearly) disjoint.
     """
 
     accepts = (Box,)
-    part = "volume ratio"
     exact_intersection = True
 
-    def __init__(self, eps=1e-6, disjoint_weight=None, zero_at_inclusion=True,
-                 dtype=th.float64, separation="any"):
+    def __init__(self, intersection_temp=None, volume_temp=None, *, eps=1e-6,
+                 disjoint_weight=None, zero_at_inclusion=True, gumbel_shift=True,
+                 tail="exact", energy_floor=1e-12, dtype=th.float64, separation="any"):
         super().__init__(separation)
+        self.smoothed = intersection_temp is not None
+        if not self.smoothed and volume_temp is not None:
+            raise ValueError("volume_temp is a parameter of smoothed boxes: pass "
+                             "intersection_temp as well (0 for the hard limit).")
+        if tail not in ("exact", "floor", "linear"):
+            raise ValueError("tail must be 'exact', 'floor' or 'linear'.")
+        if self.smoothed and (intersection_temp < 0 or (volume_temp is not None
+                                                        and volume_temp < 0)):
+            raise ValueError("Temperatures must be non-negative.")
+        self.part = "smoothed volume ratio" if self.smoothed else "volume ratio"
+        # hard boxes
         self.eps = float(eps)
         self.disjoint_weight = -math.log(self.eps) if disjoint_weight is None \
             else float(disjoint_weight)
         self.zero_at_inclusion = bool(zero_at_inclusion)
+        # smoothed boxes
+        self.tau = None if not self.smoothed else float(intersection_temp)
+        self.nu = None if not self.smoothed else self.tau if volume_temp is None \
+            else float(volume_temp)
+        self.shift = 2.0 * EULER_GAMMA if gumbel_shift else 0.0
+        self.tail = tail
+        self.energy_floor = float(energy_floor)
         self.dtype = dtype
 
+    # -- hard boxes -------------------------------------------------------------------------
     @staticmethod
     def _volume(low, high):
         return th.relu(high - low).prod(dim=-1)
 
     def conditional(self, a, b):
-        """``(p, gap)``, ``(B, 1)`` each: the estimate of :math:`P(b \\mid a)` (the exact
-        value for intersecting boxes, the lower bound, which is :math:`\\le 0`, for disjoint
-        ones) and the uncovered fraction :math:`g` of the join (0 if they intersect)."""
+        """Hard boxes: ``(p, gap)``, ``(B, 1)`` each: the estimate of :math:`P(b \\mid a)`
+        (the exact value for intersecting boxes, the lower bound, which is :math:`\\le 0`, for
+        disjoint ones) and the uncovered fraction :math:`g` of the join (0 if they
+        intersect)."""
+        if self.smoothed:
+            raise ConstructorUnavailable("conditional() is the probability of hard boxes; "
+                                         "smoothed boxes have an energy().")
         self.check(a, b)
         lo_a, hi_a = a.lower.to(self.dtype), a.upper.to(self.dtype)
         lo_b, hi_b = b.lower.to(self.dtype), b.upper.to(self.dtype)
@@ -225,99 +300,14 @@ class VolumeRatio(_LogProbability, Bounds):
         gap = th.where(intersect, th.zeros_like(vol_j), -bound / vol_j)
         return (joint / vol_a.clamp(min=tiny)).unsqueeze(-1), gap.unsqueeze(-1)
 
-    def inside(self, a, b, margin=0.0):
-        self._no_margin(margin, "The volume ratio")
-        p, gap = self.conditional(a, b)
-        cost = -th.log(p.clamp(min=0.0) + self.eps) + self.disjoint_weight * gap
-        if self.zero_at_inclusion:
-            cost = cost + math.log1p(self.eps)
-        return cost.to(a.centre.dtype)
-
-    def negative(self, a, b, margin=0.0):
-        """:math:`-\\log(1 - P(b \\mid a))`, the cross entropy with target 0 (the estimate
-        is clamped to :math:`[0, 1 - \\varepsilon]`)."""
-        p, _ = self.conditional(a, b)
-        return (-th.log1p(-p.clamp(min=0.0, max=1.0 - self.eps))).to(a.centre.dtype)
-
-    def apart(self, a, b, margin=0.0):
-        self._no_margin(margin, "The volume ratio")
-        p, _ = self.conditional(a, b)
-        return p.clamp(min=0.0).to(a.centre.dtype)
-
-
-def neg_log1mexp(energy, floor=1e-12):
-    """:math:`-\\log(1 - e^{-E})` for :math:`E \\ge 0` (the cost of a missing edge whose
-    presence has energy :math:`E`), computed stably; :math:`E` is clamped below at
-    ``floor``."""
-    e = th.clamp(energy, min=floor)
-    small = e < math.log(2.0)
-    out_small = th.log(-th.expm1(-th.where(small, e, th.ones_like(e))))
-    out_large = th.log1p(-th.exp(-th.where(small, th.ones_like(e), e)))
-    return -th.where(small, out_small, out_large)
-
-
-class SoftVolumeRatio(_LogProbability, Bounds):
-    r"""Boxes whose corners are Gumbel variables (Dasgupta et al. 2020) or are smoothed by
-    temperatures (Zhang et al. 2022): the same measure with different settings, as the two
-    papers' formulas are. In every dimension :math:`i`
-
-    .. math:: F_i = \frac{m_\nu(\mu^\vee_i - \mu^\wedge_i)}
-                         {m_\nu(a^+_i - a^-_i)}, \quad
-              \mu^\wedge = \mathrm{LSE}_\tau(a^-, b^-),\
-              \mu^\vee = -\mathrm{LSE}_\tau(-a^+, -b^+),
-
-    with :math:`\mathrm{LSE}_\tau(x, y) = \tau \log(e^{x/\tau} + e^{y/\tau})` and the
-    smoothed side length :math:`m_\nu(x) = \nu \log(1 + e^{x/\nu - s})`. The cost of
-    :math:`a \sqsubseteq b` is the energy :math:`E = -\log P(b \mid a) = \sum_i -\log F_i`;
-    the cost of a pair that is not ordered is :math:`-\log(1 - e^{-E})`. With
-    :math:`\tau = \nu = 0` this is the hard box score (the limit of :class:`VolumeRatio`
-    without its disjointness term).
-
-    **Binary codes.** If the regions carry codes (:class:`~.hierarchy_regions.CodedBox`),
-    :math:`E` weights the dimensions: per-class codes :math:`\sum_i a^\diamond_i
-    b^\diamond_i (-\log F_i)`; global code words :math:`\min_j \sum_i B_{ij} (-\log F_i)`.
-
-    :param intersection_temp: :math:`\tau` (Gumbel scale :math:`\beta` of Dasgupta et al.).
-    :param volume_temp: :math:`\nu`; default :math:`\tau`.
-    :param gumbel_shift: :math:`s = 2\gamma` (Euler's constant: the softplus approximation of
-        the expected side length of a Gumbel box, Dasgupta et al. Section 4.2) if ``True``,
-        :math:`s = 0` (the volume temperature of Zhang et al.) if ``False``.
-    :param tail: How :math:`\log m_\nu` is computed where :math:`e^{x/\nu - s}` underflows:
-        ``"exact"`` (:math:`z - \tfrac12 e^z`), ``"floor"`` (:math:`\log(\cdot + 10^{-30})`
-        as in the Gumbel box module) or ``"linear"`` (:math:`z` below :math:`-15`, as in the
-        BCBox code).
-    :param energy_floor: Smallest energy given to a negative pair (default :math:`10^{-12}`,
-        the guard of the binary code boxes and of the Gumbel boxes; :math:`10^{-9}` is the
-        earlier guard of the Gumbel box module, ``log_guard="epsilon"``).
-    :param dtype: Precision of the computation (float64 in the Gumbel box module, the
-        regions' own in BCBox: ``None``).
-    """
-
-    accepts = (Box,)
-    part = "smoothed volume ratio"
-    exact_intersection = True
-
-    def __init__(self, intersection_temp=0.01, volume_temp=None, gumbel_shift=True,
-                 tail="exact", energy_floor=1e-12, dtype=th.float64, separation="any"):
-        super().__init__(separation)
-        if tail not in ("exact", "floor", "linear"):
-            raise ValueError("tail must be 'exact', 'floor' or 'linear'.")
-        if intersection_temp < 0 or (volume_temp is not None and volume_temp < 0):
-            raise ValueError("Temperatures must be non-negative.")
-        self.tau = float(intersection_temp)
-        self.nu = self.tau if volume_temp is None else float(volume_temp)
-        self.shift = 2.0 * EULER_GAMMA if gumbel_shift else 0.0
-        self.tail = tail
-        self.energy_floor = float(energy_floor)
-        self.dtype = dtype
-
+    # -- smoothed boxes ---------------------------------------------------------------------
     def _lse(self, x, y):
         if self.tau == 0:
             return th.maximum(x, y)
         return self.tau * th.logaddexp(x / self.tau, y / self.tau)
 
     def log_side(self, x):
-        """:math:`\\log m_\\nu(x)`, elementwise."""
+        """Smoothed boxes: :math:`\\log m_\\nu(x)`, elementwise."""
         if self.nu == 0:
             return th.log(th.clamp(x, min=0.0))
         z = x / self.nu - self.shift
@@ -330,7 +320,7 @@ class SoftVolumeRatio(_LogProbability, Bounds):
         return math.log(self.nu) + inner
 
     def neg_log_scores(self, a, b):
-        """:math:`-\\log F_i` of the dimensions, ``(B, d)``."""
+        """Smoothed boxes: :math:`-\\log F_i` of the dimensions, ``(B, d)``."""
         self.check(a, b)
         lo_a, hi_a = self._cast(a.lower), self._cast(a.upper)
         lo_b, hi_b = self._cast(b.lower), self._cast(b.upper)
@@ -348,7 +338,11 @@ class SoftVolumeRatio(_LogProbability, Bounds):
         return th.where(codes == 0, th.zeros_like(w), w)
 
     def energy(self, a, b):
-        """:math:`E = -\\log P(b \\mid a)`, ``(B, 1)``, with the codes of the regions."""
+        """Smoothed boxes: :math:`E = -\\log P(b \\mid a)`, ``(B, 1)``, with the codes of
+        the regions."""
+        if not self.smoothed:
+            raise ConstructorUnavailable("energy() is the score of smoothed boxes; hard "
+                                         "boxes have a conditional().")
         nls = self.neg_log_scores(a, b)
         code_a, code_b = getattr(a, "code", None), getattr(b, "code", None)
         words = getattr(a, "global_code", None)
@@ -361,17 +355,32 @@ class SoftVolumeRatio(_LogProbability, Bounds):
             e = nls.sum(dim=-1)
         return e.unsqueeze(-1)
 
+    # -- the costs ---------------------------------------------------------------------------
     def inside(self, a, b, margin=0.0):
-        self._no_margin(margin, "The smoothed volume ratio")
-        return self.energy(a, b).clamp(min=0.0).to(a.centre.dtype)
+        self._no_margin(margin, "The log volume ratio")
+        if self.smoothed:
+            return self.energy(a, b).clamp(min=0.0).to(a.centre.dtype)
+        p, gap = self.conditional(a, b)
+        cost = -th.log(p.clamp(min=0.0) + self.eps) + self.disjoint_weight * gap
+        if self.zero_at_inclusion:
+            cost = cost + math.log1p(self.eps)
+        return cost.to(a.centre.dtype)
 
     def negative(self, a, b, margin=0.0):
-        return neg_log1mexp(self.energy(a, b), self.energy_floor).to(a.centre.dtype)
+        """:math:`-\\log(1 - P(b \\mid a))`, the cross entropy with target 0 (hard boxes: the
+        estimate is clamped to :math:`[0, 1 - \\varepsilon]`)."""
+        if self.smoothed:
+            return neg_log1mexp(self.energy(a, b), self.energy_floor).to(a.centre.dtype)
+        p, _ = self.conditional(a, b)
+        return (-th.log1p(-p.clamp(min=0.0, max=1.0 - self.eps))).to(a.centre.dtype)
 
     def apart(self, a, b, margin=0.0):
         """:math:`P(b \\mid a)`: small when the boxes are (nearly) disjoint."""
-        self._no_margin(margin, "The smoothed volume ratio")
-        return th.exp(-self.energy(a, b)).to(a.centre.dtype)
+        self._no_margin(margin, "The log volume ratio")
+        if self.smoothed:
+            return th.exp(-self.energy(a, b)).to(a.centre.dtype)
+        p, _ = self.conditional(a, b)
+        return p.clamp(min=0.0).to(a.centre.dtype)
 
 
 # -- cones, disks, points -----------------------------------------------------------------
@@ -493,8 +502,8 @@ class DistanceDepth(HierarchyMeasure):
 
 # -- registration ------------------------------------------------------------------------
 register_measure("order violation", default_for=(OrderCone,))(OrderViolation)
-register_measure("volume ratio", default_for=(CornerBox,))(VolumeRatio)
-register_measure("smoothed volume ratio", default_for=(CodedBox,))(SoftVolumeRatio)
+register_measure("log volume ratio", default_for=(CornerBox,))(LogVolumeRatio)
+DEFAULT_MEASURE[CodedBox] = lambda: LogVolumeRatio(0.01)
 register_measure("angle", default_for=(ConePoint,))(ConeAngle)
 register_measure("shadow cone")(ShadowCone)
 register_measure("protrusion", default_for=(Disk,))(Protrusion)

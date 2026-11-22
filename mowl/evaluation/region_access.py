@@ -127,14 +127,14 @@ def _union_boxes(centre, offset, active=None):
 
 def _register_library_regions():
     from mowl.representation.library.multibox_parts import UnionOfBoxes
-    from mowl.representation.library.other_regions import MultiBox
+    from mowl.representation.library.other_regions import MaskedUnionOfBoxes
     from mowl.representation.library.shapes_regions import OctagonProduct, Prism
 
     @evaluation_regions.register(UnionOfBoxes)
     def _unions(region, purpose="The exact-model check"):
         return _union_boxes(_np(region.centre), _np(region.offset))
 
-    @evaluation_regions.register(MultiBox)
+    @evaluation_regions.register(MaskedUnionOfBoxes)
     def _grounded(region, purpose="The exact-model check"):
         return _union_boxes(_np(region.cen), _np(region.w), _np(region.active).astype(bool))
 

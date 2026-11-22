@@ -14,7 +14,7 @@ from mowl.representation.library.boxrel_boxes import (
     FixableBoxes, MinDeltaBoxes, signed_intersection)
 from mowl.representation.library.shapes_classes import Points as _Points
 from mowl.representation.library.boxrel_measures import (
-    AveragedBounds, MaskedBounds, VolumeRatio)
+    AveragedBounds, MaskedBounds, VolumeShare)
 from mowl.representation.geometry import ComposedGeometry
 from mowl.representation.library.boxrel_objectives import (
     BoxSELObjective, ELKEmObjective, TransBoxObjective, boxel_objective)
@@ -147,7 +147,7 @@ def _boxel_geometry(geometry, objective, nb_classes, nb_relations, nb_individual
         relations = Affine(nb_relations, embed_dim, scale=scale,
                            role_chain_composition=composition)
         individuals = MinDeltaBoxes(nb_individuals, embed_dim) if nb_individuals else None
-    return geometry(classes, relations, VolumeRatio(temperature), objective,
+    return geometry(classes, relations, VolumeShare(temperature), objective,
                     individuals=individuals, regularizers=regularizers)
 
 

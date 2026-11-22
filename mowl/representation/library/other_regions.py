@@ -6,7 +6,7 @@ common interface, sharing the parameters of the existing module and giving the m
 numbers:
 
 ``grounded`` (:class:`GroundedGeometry`)
-    A class is a union of boxes (:class:`MultiBox`), an individual a point, a relation (in
+    A class is a union of boxes (:class:`MaskedUnionOfBoxes`), an individual a point, a relation (in
     ``role_mode="translation"``) a set of translation vectors. Conjunction (all pairs of
     boxes) and disjunction (all boxes) are exact, :math:`\\exists r.C` is the module's
     ``exists_box``. ``inside`` is a *sufficient* test (every active box of ``A`` lies in
@@ -40,7 +40,7 @@ from mowl.representation.library.other_graph import Point, Related
 from mowl.representation.measures import Bounds
 from mowl.representation.regions import Box, ConstructorUnavailable, Region
 
-__all__ = ["MultiBox", "GroundedGeometry", "ElementSet", "Mixture",
+__all__ = ["MaskedUnionOfBoxes", "GroundedGeometry", "ElementSet", "Mixture",
            "CanonicalMixtureGeometry", "FaithELGeometry", "BoxLitEGeometry", "Universe"]
 
 #: Cost of a region that is not inside an empty one (the finite floor of the module).
@@ -48,8 +48,16 @@ _BIG = 1e6
 
 
 # -- grounded ---------------------------------------------------------------------------------
-class MultiBox(Region):
-    """A union of boxes per row: ``cen`` and ``w`` are ``(B, K, d)`` (centre and
+class MaskedUnionOfBoxes(Region):
+    """A union of boxes per row, some of which may be *inactive* (the grounded model of
+    queries and defined classes), unlike
+    :class:`~mowl.representation.library.multibox_parts.UnionOfBoxes`, whose boxes are all
+    there and whose intersection keeps every pair with its distance. Here the intersection is
+    the exact set intersection: a pair that does not intersect is dropped (inactive) and the
+    cost is the distance of the nearest pair (a large number if no pair is active). A
+    ``MaskedUnionOfBoxes`` is read by the loss functions of the grounded module (it carries
+    the :class:`~mowl.nn.el.structural.Regions` of the module, ``structural``). Used by:
+    the grounded model. ``cen`` and ``w`` are ``(B, K, d)`` (centre and
     half-width), ``active`` ``(B, K)``. ``ids`` are the class ids the region was made from
     (for named classes), else ``None``."""
 
@@ -81,7 +89,8 @@ class MultiBox(Region):
         gap = th.where((self.active[:, :, None] & other.active[:, None]).reshape(b, -1),
                        gap, th.full_like(gap, _BIG)).amin(dim=1, keepdim=True)
         gap = th.where(active.any(dim=1, keepdim=True), th.zeros_like(gap), gap)
-        return MultiBox(cen, th.where(active[..., None], w, th.zeros_like(w)), active), gap
+        w = th.where(active[..., None], w, th.zeros_like(w))
+        return MaskedUnionOfBoxes(cen, w, active), gap
 
 
 class GroundedGeometry(Geometry):
@@ -96,7 +105,7 @@ class GroundedGeometry(Geometry):
         self.module = module
 
     def classes(self, ids):
-        return MultiBox.of(self.module.class_regions(ids), ids)
+        return MaskedUnionOfBoxes.of(self.module.class_regions(ids), ids)
 
     def individuals(self, ids):
         return Point(self.module.positions(self.module.nb_classes + ids))
@@ -108,14 +117,14 @@ class GroundedGeometry(Geometry):
                 "mode a role is a set of pairs of boxes (see GroundedELModule.role_depth).")
         if region.ids is None:
             raise ConstructorUnavailable("The filler of exists must be a named class.")
-        return MultiBox.of(self.module.exists_box(relation_ids, region.ids))
+        return MaskedUnionOfBoxes.of(self.module.exists_box(relation_ids, region.ids))
 
     def conjunction(self, a, b):
         return a.intersect(b)
 
     def disjunction(self, a, b):
-        return MultiBox(th.cat([a.cen, b.cen], 1), th.cat([a.w, b.w], 1),
-                        th.cat([a.active, b.active], 1))
+        return MaskedUnionOfBoxes(th.cat([a.cen, b.cen], 1), th.cat([a.w, b.w], 1),
+                                  th.cat([a.active, b.active], 1))
 
     def inside(self, a, b):
         """Zero if every active box of ``a`` lies in one active box of ``b`` (sufficient

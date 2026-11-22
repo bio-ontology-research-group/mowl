@@ -8,7 +8,7 @@ Measure                        Regions                  Vocabulary
 :class:`EllipsoidMeasure`      ellipsoids and points    centre distance
 :class:`CosineOrder`           vectors                  similarity
 :class:`LinkedMeasure`         linked regions           (that of the first space)
-:class:`SoftVolumeRatio`       (soft) boxes             smoothed volume ratio
+:class:`GumbelVolumeRatio`      (soft) boxes             smoothed volume ratio
 :class:`PointToRegion`         point and (soft) box     point-to-region distance
 :class:`PointDistance`         points                   centre distance
 :class:`ByRegion`              any                      (that of the first rule)
@@ -33,7 +33,7 @@ from mowl.representation.library.shapes_regions import (
     Point, OctagonProduct, Prism, Ellipsoid, Vector, Linked, SoftBox)
 
 __all__ = ["OctagonBounds", "PrismBounds", "EllipsoidMeasure", "CosineOrder", "LinkedMeasure",
-           "SoftVolumeRatio", "PointToRegion", "PointDistance", "ByRegion"]
+           "GumbelVolumeRatio", "PointToRegion", "PointDistance", "ByRegion"]
 
 
 def _col(x):
@@ -334,12 +334,18 @@ class LinkedMeasure(RegionMeasure):
 
 # -- soft boxes and points ----------------------------------------------------------------------
 
-class SoftVolumeRatio(RegionMeasure):
+class GumbelVolumeRatio(RegionMeasure):
     r"""Boxes compared by the ratio of their expected Gumbel volumes (Dasgupta et al. 2020;
     Concept2Box): :math:`\phi(A, B) = \mathrm{E}[\mathrm{Vol}(A \cap B)] /
     \mathrm{E}[\mathrm{Vol}(A)]`, near 1 when :math:`A` is inside :math:`B` and near 0
     when they are apart. The volumes are positive for every pair of boxes, so disjoint boxes
-    still receive gradients; with :math:`\beta \to 0` they become hard volumes.
+    still receive gradients; with :math:`\beta \to 0` they become hard volumes. This is one of
+    three different volume-ratio formulas (the others:
+    :class:`~mowl.representation.library.boxrel_measures.VolumeShare`, ``1 - ratio`` with
+    softplus volumes, and
+    :class:`~mowl.representation.library.hierarchy_measures.LogVolumeRatio`, ``-log ratio``);
+    here the cost is a power of the deviation of :math:`\phi` from its target. Used by:
+    ``concept2box``.
 
     * ``inside``: :math:`[1 - \phi + m]_+^p`; ``apart``: :math:`[\phi + m]_+^p`;
       ``meets``: :math:`[m - \phi]_+^p`.
@@ -536,7 +542,7 @@ class ByRegion(RegionMeasure):
         return self._measure(a, b).intersection_nonempty(a, b, margin, epsilon)
 
 
-register_measure("gumbel volume ratio", default_for=(SoftBox,))(SoftVolumeRatio)
+register_measure("gumbel volume ratio", default_for=(SoftBox,))(GumbelVolumeRatio)
 register_measure("point-to-region distance")(PointToRegion)
 register_measure("octagon bounds", default_for=(OctagonProduct,))(OctagonBounds)
 register_measure("prism bounds", default_for=(Prism,))(PrismBounds)

@@ -11,7 +11,7 @@ from mowl.representation.library.shapes_classes import (
     Points, OctagonClasses, PrismClasses, EllipsoidClasses, SoftBoxClasses, RelationsByRegion,
     ContextualSoftBoxClasses, ContextTransform)
 from mowl.representation.library.shapes_measures import (
-    OctagonBounds, PrismBounds, EllipsoidMeasure, SoftVolumeRatio, PointToRegion, ByRegion,
+    OctagonBounds, PrismBounds, EllipsoidMeasure, GumbelVolumeRatio, PointToRegion, ByRegion,
     LinkedMeasure, CosineOrder, PointDistance)
 from mowl.representation.library.shapes_objective import ShapeObjective
 from mowl.representation.library.shapes_regions import (
@@ -30,7 +30,7 @@ class TestRegistration(TestCase):
     def test_parts_are_registered_and_named_by_the_vocabulary(self):
         for key in ("point", "octagon product", "triangle x box", "ellipsoid", "soft box"):
             self.assertIn(key, CLASS_MODELS)
-        for key in ("smoothed volume ratio", "point-to-region distance"):
+        for key in ("gumbel volume ratio", "point-to-region distance"):
             self.assertIn(key, MEASURES)
         for key in ("octagon", "prism", "eike", "concept2box"):
             self.assertIn(key, METHODS)
@@ -38,7 +38,7 @@ class TestRegistration(TestCase):
         self.assertEqual(PrismClasses.part, "triangle x box")
         self.assertEqual(EllipsoidClasses.part, "ellipsoid")
         self.assertEqual(SoftBoxClasses.part, "soft box")
-        self.assertEqual(SoftVolumeRatio.part, "smoothed volume ratio")
+        self.assertEqual(GumbelVolumeRatio.part, "smoothed volume ratio")
         self.assertEqual(PointToRegion.part, "point-to-region distance")
 
     def test_compose_by_name(self):
@@ -235,7 +235,7 @@ class TestVectorsAndLinks(TestCase):
 class TestSoftBoxes(TestCase):
 
     def test_ratio_is_the_hard_ratio_for_small_beta(self):
-        m = SoftVolumeRatio(beta=0.01)
+        m = GumbelVolumeRatio(beta=0.01)
         a = Box(th.zeros(1, 2), th.ones(1, 2))
         b = Box(th.tensor([[1.0, 0.0]]), th.ones(1, 2))
         self.assertAlmostEqual(float(m.ratio(a, b)), 0.5, delta=0.02)
@@ -243,14 +243,14 @@ class TestSoftBoxes(TestCase):
         far = Box(th.full((1, 2), 10.0), th.ones(1, 2))
         self.assertLess(float(m.ratio(a, far)), 1e-3)
         # Smoothed: positive even for disjoint boxes (at a moderate scale).
-        self.assertGreater(float(SoftVolumeRatio(beta=1.0).ratio(a, far)), 0)
+        self.assertGreater(float(GumbelVolumeRatio(beta=1.0).ratio(a, far)), 0)
 
     def test_costs_and_power(self):
         a = Box(th.zeros(1, 2), th.ones(1, 2))
         b = Box(th.tensor([[1.0, 0.0]]), th.ones(1, 2))
-        phi = float(SoftVolumeRatio(0.01).ratio(a, b))
-        self.assertAlmostEqual(float(SoftVolumeRatio(0.01, 2).inside(a, b)), (1 - phi) ** 2, 5)
-        self.assertAlmostEqual(float(SoftVolumeRatio(0.01, 1).apart(a, b)), phi, 5)
+        phi = float(GumbelVolumeRatio(0.01).ratio(a, b))
+        self.assertAlmostEqual(float(GumbelVolumeRatio(0.01, 2).inside(a, b)), (1 - phi) ** 2, 5)
+        self.assertAlmostEqual(float(GumbelVolumeRatio(0.01, 1).apart(a, b)), phi, 5)
 
     def test_soft_intersection_is_symmetric_and_carries_beta(self):
         a, b = _boxes(4, 3, 1), _boxes(4, 3, 2)
@@ -269,7 +269,7 @@ class TestSoftBoxes(TestCase):
                          1.0)
 
     def test_by_region_needs_a_rule(self):
-        m = ByRegion([(Box, Box, SoftVolumeRatio()), (Point, Point, PointDistance())])
+        m = ByRegion([(Box, Box, GumbelVolumeRatio()), (Point, Point, PointDistance())])
         with self.assertRaises(TypeError):
             m.inside(Point(th.zeros(1, 2)), Box(th.zeros(1, 2), th.ones(1, 2)))
 
@@ -345,7 +345,7 @@ class TestCombinations(TestCase):
             SoftBoxClasses(n, d, beta=0.5), Translation(r, d), Bounds(), Objective(0.05),
             individuals=SoftBoxClasses(i, d)))
         self.assertTrains(lambda n, r, i: ComposedGeometry(
-            BoxClasses(n, d), Translation(r, d), SoftVolumeRatio(0.5), Objective(),
+            BoxClasses(n, d), Translation(r, d), GumbelVolumeRatio(0.5), Objective(),
             individuals=BoxClasses(i, d)))
 
     def test_octagons_and_prisms_with_the_semantic_objective_and_translations(self):

@@ -11,7 +11,7 @@ from mowl.representation import (BallClasses, Bounds, BoxClasses, ConstructorUna
 from mowl.representation.regions import Box
 from mowl.representation.library.boxrel_boxes import MinDeltaBoxes, signed_intersection
 from mowl.representation.library.boxrel_measures import (
-    AveragedBounds, MaskedBounds, VolumeRatio)
+    AveragedBounds, MaskedBounds, VolumeShare)
 from mowl.representation.library.boxrel_relations import (
     Affine, AffineBoxes, TranslationBoxes)
 from tests.datasetFactory import FamilyDataset
@@ -32,8 +32,7 @@ class TestRegistered(TestCase):
             self.assertIn(key, RELATION_MODELS)
         for key in ("box with lower corner", "box with fixed classes"):
             self.assertIn(key, CLASS_MODELS)
-        for key in ("smoothed volume ratio", "volume ratio", "averaged bounds",
-                    "masked bounds"):
+        for key in ("volume share", "averaged bounds", "masked bounds"):
             self.assertIn(key, MEASURES)
 
     def test_vocabulary_values(self):
@@ -42,14 +41,14 @@ class TestRegistered(TestCase):
         self.assertEqual(Affine.part, RelationModel.AFFINE.value)
         self.assertEqual(AffineBoxes.part, RelationModel.AFFINE_BOXES.value)
         self.assertEqual(MinDeltaBoxes.part, ClassModel.BOX.value)
-        self.assertEqual(VolumeRatio().part, Measure.SOFT_VOLUME_RATIO.value)
-        self.assertEqual(VolumeRatio(None).part, Measure.VOLUME_RATIO.value)
+        self.assertEqual(VolumeShare().part, Measure.SOFT_VOLUME_RATIO.value)
+        self.assertEqual(VolumeShare(None).part, Measure.VOLUME_RATIO.value)
 
 
 class TestMeasures(TestCase):
 
     def test_exact_volume_ratio(self):
-        m = VolumeRatio(temperature=None)
+        m = VolumeShare(temperature=None)
         a, b = box([0, 0], [1, 1]), box([0, 0], [0.5, 1])
         self.assertAlmostEqual(float(m.inside(b, a)), 0.0, places=6)
         self.assertAlmostEqual(float(m.inside(a, b)), 0.5, places=6)
@@ -58,20 +57,20 @@ class TestMeasures(TestCase):
         self.assertAlmostEqual(float(m.apart(a, b)), 0.5, places=6)
 
     def test_slack_and_ignored_strict_margin(self):
-        m = VolumeRatio(temperature=None)
+        m = VolumeShare(temperature=None)
         a, b = box([0, 0], [1, 1]), box([0, 0], [0.5, 1])
         self.assertAlmostEqual(float(m.inside(a, b, -0.6)), 0.0, places=6)
         self.assertAlmostEqual(float(m.inside(b, a, 0.3)), 0.0, places=6)
 
     def test_smoothed_approaches_exact(self):
         a, b = box([0, 0], [1, 1]), box([0.2, 0], [1.5, 1])
-        exact = float(VolumeRatio(None).inside(a, b))
-        costs = [abs(float(VolumeRatio(t).inside(a, b)) - exact) for t in (1, 10, 100)]
+        exact = float(VolumeShare(None).inside(a, b))
+        costs = [abs(float(VolumeShare(t).inside(a, b)) - exact) for t in (1, 10, 100)]
         self.assertGreater(costs[0], costs[1])
         self.assertGreater(costs[1], costs[2])
 
     def test_conditional(self):
-        m = VolumeRatio(None)
+        m = VolumeShare(None)
         c, d = box([0, 0], [1, 1]), box([0, 0], [0.5, 1])
         self.assertAlmostEqual(float(m.conditional(c, d, 0.4, 0.6)), 0.0, places=6)
         self.assertAlmostEqual(float(m.conditional(c, d, 0.6, 0.9)), 0.1, places=6)
@@ -220,7 +219,7 @@ class TestObjectives(TestCase):
     def test_role_forms_in_any_box_combination(self):
         for classes, relations, measure in (
                 (BoxClasses(4, 3), TranslationBoxes(3, 3), Bounds()),
-                (MinDeltaBoxes(4, 3), TranslationBoxes(3, 3), VolumeRatio()),
+                (MinDeltaBoxes(4, 3), TranslationBoxes(3, 3), VolumeShare()),
                 (BoxClasses(4, 3), Affine(3, 3), Bounds()),
                 (BoxClasses(4, 3), AffineBoxes(3, 3), AveragedBounds())):
             g = ComposedGeometry(classes, relations, measure, Objective(0.01))
@@ -284,13 +283,13 @@ class TestComposedELWithTheParts(TestCase):
                                    ("affine map", None),
                                    ("affine map with range and error box",
                                     "averaged bounds"),
-                                   ("affine map", "softplus volume ratio")):
+                                   ("affine map", "volume share")):
             self.assertTrains(classes="box", relations=relations, measure=measure,
                               objective=Objective(0.02))
 
     def test_class_model_and_measure_with_other_relations(self):
         self.assertTrains(classes="box with lower corner", relations="translation",
-                          measure="softplus volume ratio")
+                          measure="volume share")
         self.assertTrains(classes="box with lower corner", relations="box of translations",
                           measure="bounds per coordinate", objective=Objective(0.02))
         self.assertTrains(classes="box with fixed classes", relations="translation",

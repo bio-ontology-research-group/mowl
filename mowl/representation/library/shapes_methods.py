@@ -29,7 +29,7 @@ from mowl.representation.library.shapes_classes import (
     Points, OctagonClasses, PrismClasses, EllipsoidClasses, VectorClasses, MappedVectors,
     LinkedClasses, ContextualSoftBoxClasses, ContextTransform, RelationsByRegion, table)
 from mowl.representation.library.shapes_measures import (
-    OctagonBounds, PrismBounds, EllipsoidMeasure, CosineOrder, LinkedMeasure, SoftVolumeRatio,
+    OctagonBounds, PrismBounds, EllipsoidMeasure, CosineOrder, LinkedMeasure, GumbelVolumeRatio,
     PointToRegion, PointDistance, ByRegion)
 from mowl.representation.library.shapes_objective import ShapeObjective
 from mowl.representation.library.shapes_regions import Point, SoftBox
@@ -291,7 +291,7 @@ def concept2box(nb_classes, nb_relations, nb_individuals=0, embed_dim=32, margin
     relations = RelationsByRegion([(SoftBox, ContextTransform(classes)),
                                    (Point, translations)])
     measure = ByRegion([
-        (Box, Box, SoftVolumeRatio(beta, power=2)),
+        (Box, Box, GumbelVolumeRatio(beta, power=2)),
         (Point, Box, PointToRegion(alpha, beta, weighted=True, squash=True)),
         (Point, Point, PointDistance(1))])
     objective = ShapeObjective(
