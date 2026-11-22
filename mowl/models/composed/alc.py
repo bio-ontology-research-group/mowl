@@ -8,7 +8,6 @@ from tqdm import trange
 from mowl.base_models.alcmodel import EmbeddingALCModel
 from mowl.representation import methods as M
 from mowl.representation.library.logic_alc import ExpressionGeometry
-from mowl.representation.objectives import Objective
 
 _THING = "http://www.w3.org/2002/07/owl#Thing"
 _NOTHING = "http://www.w3.org/2002/07/owl#Nothing"
@@ -135,8 +134,8 @@ class ComposedALC(EmbeddingALCModel):
         if not isinstance(module, ExpressionGeometry):
             raise TypeError(
                 f"The geometry of {self.method!r} ({type(module).__name__}) does not read ALC "
-                f"axioms (it is not an ExpressionGeometry): ComposedALC cannot train it. Methods "
-                f"it trains: {sorted(k for k in M.METHODS if k in ('dfalc', 'falcon', 'alcone'))}.")
+                f"axioms (it is not an ExpressionGeometry): ComposedALC cannot train it. "
+                f"Methods it trains: dfalc, falcon, alcone.")
         if self.schedule is not None and hasattr(module, "schedule"):
             module.schedule = self.schedule
         self.module = module.to(self.device)

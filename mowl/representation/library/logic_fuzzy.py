@@ -16,11 +16,15 @@ measure            mean violation      conflict (``-log``)      either-or hinge
 =================  ==================  =======================  ==========================
 
 Each cell is a small class below. They are combined by
-:class:`~mowl.representation.ComposedGeometry` (the region family gives it negation and
-disjunction); the three methods are the functions :func:`dfalc`, :func:`falcon` and
-:func:`alcone` (registered in :data:`mowl.representation.METHODS`), and
-:func:`~mowl.representation.geometry_of` builds them over the tables of the existing
-modules. The operator family is a part of its own
+:class:`~mowl.representation.library.logic_alc.ExpressionGeometry` (a
+:class:`~mowl.representation.ComposedGeometry`; the region family gives it negation and
+disjunction, and it reads axioms with class expressions of any depth through
+:class:`FuzzyObjective`); the three methods are the functions :func:`dfalc`, :func:`falcon` and
+:func:`alcone` (registered in :data:`mowl.representation.METHODS`; the classes
+:class:`~mowl.models.DFALCModel`, :class:`~mowl.models.FALCONModel` and
+:class:`~mowl.models.ALConeModel` are these combinations), and
+:func:`~mowl.representation.geometry_of` builds them over the tables of the direct
+implementations (:mod:`mowl.baselines`). The operator family is a part of its own
 (:data:`FAMILIES`): every method can be built with every family, and the class models,
 relation models and measures can be exchanged (see the tests).
 
@@ -138,8 +142,8 @@ def _is_literal(e):
 
 
 class _CL:
-    """The operators of :mod:`mowl.nn.alc.alcone.losses` (same formulas; that module
-    cannot be imported without the JVM)."""
+    """The operators of Al-cone on logits: smooth maximum and minimum with a temperature,
+    and the either-or hinge of its losses."""
 
     @staticmethod
     def smax(x, y, tau):
@@ -301,7 +305,7 @@ class Lukasiewicz(Family):
 
 class LogitGoedel(Family):
     """Goedel operators on *logits* (Al-cone): minimum, maximum, negation of the sign. With
-    ``tau > 0`` the smooth bounds of :mod:`mowl.nn.alc.alcone.losses` are used.
+    ``tau > 0`` the smooth bounds (log-sum-exp) are used.
 
     :param tau: Temperature, or ``source`` (an object with a ``temperature`` attribute that
         is read at every call, as the Al-cone module's is changed during training).
@@ -1153,8 +1157,7 @@ class FuzzyObjective(ExpressionReading, Objective):
             # a plain assertion: the degree of the individual in the class, towards 1 for
             # the asserted individual and towards 0 for the corrupted ones
             degree = g.class_model.degree_at(x[:, :, 1], x[:, :, 0])
-            return (measure.member_at(degree[:, 0]).mean()
-                    + measure.apart_at(degree[:, 1:]).mean()) / 2
+            return self._contrast(measure, degree)
         # an assertion with a compound class expression ``e : ∃R.C`` (or ``e : C``): the
         # individual, shifted by the role if there is one, is paired with every element of
         # the domain through the relation network, and the best pair with an element of C
@@ -1171,8 +1174,7 @@ class FuzzyObjective(ExpressionReading, Objective):
         pairs = pairs.reshape(head.shape[0], head.shape[1], -1)
         family = region.family
         degree = family.and_(pairs, region.values.unsqueeze(dim=1)).max(dim=-1)[0]
-        return (measure.member_at(degree[:, 0]).mean()
-                + measure.apart_at(degree[:, 1:]).mean()) / 2
+        return self._contrast(measure, degree)
 
     def role_scores(self, g, x):
         """The degrees of the role assertions ``x`` and of their corrupted assertions
@@ -1184,9 +1186,15 @@ class FuzzyObjective(ExpressionReading, Objective):
         if self.role_loss == "ranking":
             diff = degree[:, 0].unsqueeze(dim=-1) - degree[:, 1:]
             return -th.nn.functional.logsigmoid(diff).mean()
-        measure = g.measure
-        return (measure.member_at(degree[:, 0]).mean()
-                + measure.apart_at(degree[:, 1:]).mean()) / 2
+        return self._contrast(g.measure, degree)
+
+    @staticmethod
+    def _contrast(measure, degree):
+        """The mean cost of the first column (the assertion, to be true) plus that of the
+        others (the corrupted assertions, to be false), halved."""
+        positive = measure.member_at(degree[:, 0]).mean()
+        negative = measure.apart_at(degree[:, 1:]).mean()
+        return (positive + negative) / 2
 
     def _sampled_role_degrees(self, g, x):
         heads, tails = self.heads, self.tails

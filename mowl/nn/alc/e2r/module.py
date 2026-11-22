@@ -61,7 +61,8 @@ class E2RModule(SubspaceGeometry):
     :param top_index: Index of ``owl:Thing`` or ``None``.
     :param bottom_index: Index of ``owl:Nothing`` or ``None``.
     :param role_unit_length: Add the unit-length terms of the two entities to role assertion
-        losses (see :func:`~mowl.representation.library.logic_subspace_algebra.role_membership_loss`).
+        losses (see
+        :func:`~mowl.representation.library.logic_subspace_algebra.role_membership_loss`).
     """
 
     def __init__(self, num_entities, num_classes, num_relations, dim=100, top_index=None,

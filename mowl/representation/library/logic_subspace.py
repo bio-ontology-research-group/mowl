@@ -95,7 +95,8 @@ def _losses():
 
 
 class E2RGeometry(Geometry):
-    """The geometry of an :class:`~mowl.nn.alc.e2r.E2RModule`; shares its parameters.
+    """The geometry of an earlier hand-written E2R module
+    (:class:`mowl.baselines.nn.alc.e2r.module.E2RModule`); shares its parameters.
 
     :param module: The module.
     :param unit_length: Add the unit-length term :math:`(1 - x^\\top x)^2` of eq. (4) to the

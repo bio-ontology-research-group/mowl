@@ -308,9 +308,9 @@ class CardsAndParts(TestCase):
                 region = expression_region(g, expression, CLASS_IDS, PROP_IDS, IND_IDS)
                 self.assertEqual(len(region), 1)
             if card.axioms:       # the card of FALCON does not list them
-                self.assertTrue({"subclass_of", "equivalent_classes", "disjoint_classes",
-                                 "class_assertion", "object_property_assertion"}
-                                <= set(card.axioms), key)
+                listed = {"subclass_of", "equivalent_classes", "disjoint_classes",
+                          "class_assertion", "object_property_assertion"}
+                self.assertTrue(listed <= set(card.axioms), key)
 
     def test_the_alc_axioms_of_the_cards_have_a_reading(self):
         model = ComposedALC(alc_dataset(), method="dfalc", embed_dim=6)

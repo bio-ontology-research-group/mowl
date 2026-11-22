@@ -82,7 +82,10 @@ def all_el_module_classes():
             yield from subs(s)
     out = {}
     for c in subs(ELModule):
-        if c.__module__.startswith("mowl.nn.") and not c.__name__.startswith("_"):
+        # the ALC modules (mowl.nn.alc) are geometries too, but they read ALC axioms
+        # (forward(axiom, rows)), not the normal forms this survey is about
+        if (c.__module__.startswith("mowl.nn.") and not c.__module__.startswith("mowl.nn.alc.")
+                and not c.__name__.startswith("_")):
             out[c.__name__] = c
     return [out[k] for k in sorted(out)]
 
