@@ -11,9 +11,9 @@ import torch as th
 
 from mowl.baselines.nn.el.multiboxel.module import MultiBoxELModule
 from mowl.baselines.nn.el.multiboxel.pointloss import volume_penalty
-from mowl.geometric.normal_forms import BOTTOM, TOP
+from mowl.baselines.geometric.core.normal_forms import BOTTOM, TOP
 from mowl.models.multiboxel.common import MultiBoxELOptions
-from mowl.nn.el.structural import build_structural_tables
+from mowl.baselines.nn.el.structural import build_structural_tables
 
 
 class MultiBoxEL(MultiBoxELOptions):
@@ -80,9 +80,9 @@ class MultiBoxEL(MultiBoxELOptions):
         Guarantees:
 
         - When ``objective="structural"``, compiles a
-          :class:`~mowl.nn.el.structural.DefinitionTable` and
-          :class:`~mowl.nn.el.structural.ExistenceTargets` via
-          :func:`~mowl.nn.el.structural.build_structural_tables`, caches them on
+          :class:`~mowl.baselines.nn.el.structural.DefinitionTable` and
+          :class:`~mowl.baselines.nn.el.structural.ExistenceTargets` via
+          :func:`~mowl.baselines.nn.el.structural.build_structural_tables`, caches them on
           the model so :meth:`init_module`, :meth:`load_best_model`, and
           :meth:`from_pretrained` preserve them, and attaches them via
           :meth:`~mowl.nn.MultiBoxELModule.set_structural_tables` before

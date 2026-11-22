@@ -21,14 +21,37 @@ _NOT_TRAINED = ("The method is constructed (completion, closed form, search), no
 _SKIP = {"losses": _NOT_TRAINED, "training": _NOT_TRAINED}
 
 
+def _ns(x):
+    """The package of the geometric syntax and mathematics that the object ``x`` (or the module
+    name ``x``) belongs to: the library's, or the frozen copy of the baselines."""
+    name = x if isinstance(x, str) else type(x).__module__
+    return "mowl.baselines.geometric.core" if name.startswith("mowl.baselines") \
+        else "mowl.geometric"
+
+
+def _imp(x, module):
+    import importlib
+    return importlib.import_module(f"{_ns(x)}.{module}")
+
+
+class _Sided:
+    """Input data made of classes of the geometric package: each side gets objects of its
+    own package (the baselines have their own copy of the classes)."""
+
+    def __init__(self, make):
+        self.make = make
+
+    def get(self, side):
+        return self.make(_ns(side))
+
+
 def _abox():
     from tests.models.kg_region_data import abox_dataset
     return abox_dataset()
 
 
-def _cm(dataset):
-    from mowl.geometric.completion import CanonicalModel
-    return CanonicalModel.from_dataset(dataset)
+def _cm(dataset, side="mowl.geometric"):
+    return _imp(side, "completion").CanonicalModel.from_dataset(dataset)
 
 
 def _no_copy(old, new):
@@ -37,7 +60,9 @@ def _no_copy(old, new):
 
 def _nf_axioms(cm):
     """Normal-form test axioms of every form over the names of the canonical model."""
-    from mowl.geometric.normal_forms import BOTTOM, NF1, NF2, NF3, NF4, NF6, NF7, TOP
+    nf = _imp(cm, "normal_forms")
+    BOTTOM, NF1, NF2, NF3, NF4, NF6, NF7, TOP = (nf.BOTTOM, nf.NF1, nf.NF2, nf.NF3, nf.NF4,
+                                                nf.NF6, nf.NF7, nf.TOP)
     names = sorted(cm.names)
     axioms = [NF1(a, b) for a, b in itertools.product(names, repeat=2)]
     axioms += [NF2(a, b, c) for a, b, c in itertools.product(names[:6], repeat=3)]
@@ -99,7 +124,7 @@ def _new_intervals(dataset):
 
 def _old_intervals(dataset):
     from mowl.baselines.geometric.intervals import IntervalUnionModel
-    return IntervalUnionModel.from_canonical_model(_cm(dataset))
+    return IntervalUnionModel.from_canonical_model(_cm(dataset, "mowl.baselines"))
 
 
 # -- faces of the simplex ---------------------------------------------------------------------
@@ -132,7 +157,8 @@ def _new_polyhedral(dataset, thicken=False):
 
 def _old_polyhedral(dataset, thicken=False):
     from mowl.baselines.geometric.polyhedral import ConvexPolyhedralModel
-    return ConvexPolyhedralModel.from_canonical_model(_cm(dataset), thicken=thicken)
+    return ConvexPolyhedralModel.from_canonical_model(_cm(dataset, "mowl.baselines"),
+                                                      thicken=thicken)
 
 
 def _family():
@@ -164,7 +190,7 @@ def _convex_scores(model):
 def _convex(module):
     def build(dataset):
         import importlib
-        cm = _cm(dataset)
+        cm = _cm(dataset, module)
         cls = importlib.import_module(module).ConvexRegionModel
         model = cls.from_canonical_model(cm)
         model._test_axioms = _nf_axioms(cm)
@@ -174,9 +200,11 @@ def _convex(module):
 
 
 # -- al-cones ----------------------------------------------------------------------------------
-def _alc_axioms(names, roles, individuals):
-    from mowl.geometric.cones import (And, Atomic, ConceptAssertion, Exists, Forall, GCI, Not,
-                                      Or, RoleAssertion)
+def _alc_axioms(names, roles, individuals, side="mowl.geometric"):
+    c = _imp(side, "cones")
+    And, Atomic, ConceptAssertion, Exists, Forall, GCI, Not, Or, RoleAssertion = (
+        c.And, c.Atomic, c.ConceptAssertion, c.Exists, c.Forall, c.GCI, c.Not, c.Or,
+        c.RoleAssertion)
     atoms = [Atomic(n) for n in names]
     out = [GCI(a, b) for a, b in itertools.product(atoms, repeat=2)]
     out += [GCI(Not(a), Or((b, Not(a)))) for a, b in itertools.product(atoms[:4], repeat=2)]
@@ -191,9 +219,10 @@ def _alc_axioms(names, roles, individuals):
     return out
 
 
-def _alc_concepts(names, roles):
+def _alc_concepts(names, roles, side="mowl.geometric"):
     """Compound concepts whose al-cones are compared entry by entry."""
-    from mowl.geometric.cones import And, Atomic, Exists, Forall, Not, Or
+    c = _imp(side, "cones")
+    And, Atomic, Exists, Forall, Not, Or = c.And, c.Atomic, c.Exists, c.Forall, c.Not, c.Or
     atoms = [Atomic(n) for n in names]
     out = list(atoms) + [Not(a) for a in atoms]
     out += [And((a, b)) for a, b in itertools.product(atoms[:4], repeat=2)]
@@ -205,16 +234,16 @@ def _alc_concepts(names, roles):
 
 
 def _cone_scores(model):
-    from mowl.geometric.cones import ALConeChecker
+    ALConeChecker = _imp(model, "cones").ALConeChecker
     names, roles = sorted(model.concepts), sorted(model.roles)
     individuals = sorted(model.individuals)
     checker = ALConeChecker(model)
     out = {"bits": th.tensor(np.stack([model.concepts[n].bits for n in names]),
                              dtype=th.float64),
            "truth": th.tensor([float(checker.satisfies(ax))
-                               for ax in _alc_axioms(names, roles, individuals)]),
+                               for ax in _alc_axioms(names, roles, individuals, model)]),
            "dim": th.tensor([float(model.dim)])}
-    concepts = _alc_concepts(names, roles)
+    concepts = _alc_concepts(names, roles, model)
     out["concept cones"] = th.tensor(np.stack([model.cone(c).bits for c in concepts]),
                                      dtype=th.float64)
     if hasattr(model, "_source_axioms"):
@@ -233,15 +262,23 @@ def _cones(module, how):
         import importlib
         cls = importlib.import_module(module).ALConeInterpretation
         if how == "canonical":
-            return cls.from_canonical_model(_cm(dataset))
-        model = cls.from_boolean_ontology(dataset, faithful=how == "faithful")
-        model._source_axioms = list(dataset)
+            return cls.from_canonical_model(_cm(dataset, module))
+        axioms = dataset.get(module)
+        model = cls.from_boolean_ontology(axioms, faithful=how == "faithful")
+        model._source_axioms = list(axioms)
         return model
     return build
 
 
 def _boolean_tbox():
-    from mowl.geometric.cones import And, Atomic, ConceptAssertion, GCI, Not, Or
+    return _Sided(_boolean_tbox_of)
+
+
+def _boolean_tbox_of(ns):
+    import importlib
+    c = importlib.import_module(ns + ".cones")
+    And, Atomic, ConceptAssertion, GCI, Not, Or = (c.And, c.Atomic, c.ConceptAssertion, c.GCI,
+                                                  c.Not, c.Or)
     A, B, C, D = (Atomic(x) for x in "ABCD")
     return [GCI(A, B), GCI(And((B, C)), Not(D)), GCI(D, Or((A, C))),
             ConceptAssertion(A, "a"), ConceptAssertion(Or((C, D)), "b"),
@@ -250,15 +287,21 @@ def _boolean_tbox():
 
 # -- temporal al-cones --------------------------------------------------------------------------
 def _temporal_ontology():
-    from mowl.geometric.temporal_cones import TemporalOntology
-    return TemporalOntology.parse(tbox=["A <= X B", "B <= X A", "A <= ~B", "C <= F A"],
-                                  abox=["A(a)", "C(c)", "~C(b)"])
+    return _Sided(_temporal_ontology_of)
+
+
+def _temporal_ontology_of(ns):
+    import importlib
+    return importlib.import_module(ns + ".temporal_cones").TemporalOntology.parse(
+        tbox=["A <= X B", "B <= X A", "A <= ~B", "C <= F A"],
+        abox=["A(a)", "C(c)", "~C(b)"])
 
 
 def _temporal(module):
     def build(onto):
         import importlib
         cls = importlib.import_module(module).TemporalALConeInterpretation
+        onto = onto.get(module)
         model = cls.from_ontology(onto, max_prefix=1, max_period=2)
         model._source_ontology = onto
         return model
@@ -266,7 +309,7 @@ def _temporal(module):
 
 
 def _temporal_scores(model):
-    from mowl.geometric.temporal_cones import parse_axiom
+    parse_axiom = _imp(model, "temporal_cones").parse_axiom
     names = sorted(model.atoms)
     bits = th.tensor(np.stack([[c.bits for c in model.atoms[n]] for n in names]),
                      dtype=th.float64)
@@ -293,8 +336,15 @@ def _temporal_scores(model):
 
 # -- attributed ---------------------------------------------------------------------------------
 def _attributed_ontology():
-    from mowl.geometric.attributed import (AttributedOntology, Basic, ConceptFact, ConceptInc,
-                                           RoleFact, RoleInc, Specifier)
+    return _Sided(_attributed_ontology_of)
+
+
+def _attributed_ontology_of(ns):
+    import importlib
+    a = importlib.import_module(ns + ".attributed")
+    AttributedOntology, Basic, ConceptFact, ConceptInc, RoleFact, RoleInc, Specifier = (
+        a.AttributedOntology, a.Basic, a.ConceptFact, a.ConceptInc, a.RoleFact, a.RoleInc,
+        a.Specifier)
     s, t = Specifier.closed(source="s"), Specifier.closed(source="t")
     return AttributedOntology([
         ConceptFact("A", "a", s), ConceptFact("A", "b", t), ConceptFact("C", "b", s),
@@ -307,12 +357,13 @@ def _attributed_ontology():
 def _attributed(module):
     def build(onto):
         import importlib
-        return importlib.import_module(module).AttributedConvexModel(onto)
+        return importlib.import_module(module).AttributedConvexModel(onto.get(module))
     return build
 
 
 def _attributed_scores(model):
-    from mowl.geometric.attributed import ANY, Specifier
+    a = _imp(model, "attributed")
+    ANY, Specifier = a.ANY, a.Specifier
     specs = [Specifier.closed(source="s"), Specifier.closed(source="t"), ANY]
     names = [(c, s) for c in "ABCD" for s in specs]
     n = model.model._points.shape[0]

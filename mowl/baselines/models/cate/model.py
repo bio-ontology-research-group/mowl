@@ -1,13 +1,13 @@
 """The direct implementation of CatE: its own loss, minibatches, cyclic learning rate and
 early stopping in the model class. Kept for the comparison in ``tests/baselines``; the lattice,
 the validation queries, the scoring and the evaluation are shared
-(:mod:`mowl.models.cate.common`)."""
+(:mod:`mowl.baselines.models.cate.base`)."""
 
 import torch as th
 
 from mowl.baselines.nn.graph.cate.losses import order_margin_loss
 from mowl.baselines.nn.graph.cate.module import CatEModule
-from mowl.models.cate.common import CatEBase, UnseenConceptError  # noqa: F401
+from mowl.baselines.models.cate.base import CatEBase, UnseenConceptError  # noqa: F401
 
 __all__ = ["CatE", "UnseenConceptError"]
 
@@ -31,7 +31,7 @@ class CatE(CatEBase):
     @training_regime.setter
     def training_regime(self, regime):
         if regime is not None:
-            from mowl.training.regime import TrainingRegime, check_compatible
+            from mowl.baselines.training.regime import TrainingRegime, check_compatible
             if not isinstance(regime, TrainingRegime):
                 raise TypeError("training_regime must be a mowl.training.TrainingRegime "
                                 "or None.")

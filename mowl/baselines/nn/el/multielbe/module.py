@@ -479,7 +479,7 @@ class MultiELBEModule(ELModule):
 
     @property
     def class_center(self) -> nn.Embedding:
-        """Alias for ``class_embed`` used by :class:`~mowl.geometric.init.ExactBoxInit`.
+        """Alias for ``class_embed`` used by :class:`~mowl.baselines.geometric.core.init.ExactBoxInit`.
 
         Guarantees:
 

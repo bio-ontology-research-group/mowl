@@ -62,7 +62,7 @@ BASELINES = os.path.join(ROOT, "baselines")
 
 #: Packages of the library whose code computes (parts, regimes, scores, methods).
 LIBRARY_COMPUTING = ("mowl.representation", "mowl.training", "mowl.evaluation", "mowl.nn",
-                     "mowl.models")
+                     "mowl.models", "mowl.geometric", "mowl.projection")
 
 #: Names a baseline may import from those packages because they do not compute: base classes
 #: that only dispatch, exception classes, a reader of the axioms into index rows.
@@ -77,27 +77,18 @@ ALLOWED_NAMES = {
     ("mowl.evaluation.model_scoring", "UnsupportedAxiomForm"): "exception class",
     ("mowl.evaluation.axiom_ranking", "el_rows"): "reads the validation axioms into index "
                                                    "rows (data extraction)",
+    ("mowl.projection", "Edge"): "a (head, relation, tail) triple: data structure",
+    ("mowl.projection.base", "ProjectionModel"): "base class of the projectors: holds the edges",
+    ("mowl.projection", "TaxonomyProjector"): "reads the subclass axioms into edges (data "
+                                              "extraction)",
+    ("mowl.projection", "OWL2VecStarProjector"): "reads the ontology into edges (data "
+                                                  "extraction)",
     ("mowl.models.multiboxel.common", "MultiBoxELOptions"): "constructor options and "
                                                              "documentation of the model",
     ("mowl.models.multielbe.common", "MultiELBEOptions"): "constructor options and "
                                                            "documentation of the model",
     ("mowl.models.mcmultibox.common", "VolumeMultiBoxELOptions"): "constructor options and "
                                                                    "documentation of the model",
-}
-
-#: Files that still import library code that computes and are NOT yet frozen. Each entry is a
-#: debt, not a design: the reason says what is shared and who owns the follow-up.
-NOT_YET_FROZEN = {
-    "nn/el/grounded/": "owned by the grounded helper (r5-grounded): regions, structural tables",
-    "models/grounded/": "owned by the grounded helper (r5-grounded): regimes, schedules",
-    "models/query/model.py": "shared query grounding (graph, sampling, expression, schedule "
-                             "hooks); the geometries and losses are frozen",
-    "models/bcbox/model.py": "BinaryCodeBoxBase: edge extraction and evaluation wiring",
-    "models/cate/model.py": "CatEBase: lattice extraction and evaluation wiring",
-    "models/prism/model.py": "structural supervision tables (data extraction)",
-    "models/multiboxel/model.py": "structural supervision tables (data extraction)",
-    "nn/el/prism/module.py": "structural supervision table classes",
-    "nn/el/multiboxel/module.py": "structural supervision tables and slot_components",
 }
 
 
@@ -124,16 +115,10 @@ def _library_imports(path):
                 yield node.lineno, module, name
 
 
-def _deferred(rel):
-    return next((k for k in NOT_YET_FROZEN if rel.startswith(k)), None)
-
-
 def test_baselines_do_not_import_library_computation():
     offenders = []
     for path in _baseline_files():
         rel = os.path.relpath(path, BASELINES).replace(os.sep, "/")
-        if _deferred(rel):
-            continue
         for line, module, name in _library_imports(path):
             if (module, name) not in ALLOWED_NAMES:
                 offenders.append(f"{rel}:{line} imports {module}"
@@ -141,17 +126,13 @@ def test_baselines_do_not_import_library_computation():
     assert not offenders, offenders
 
 
-def test_the_allow_lists_have_no_stale_entries():
-    used_names, used_files = set(), set()
+def test_the_allow_list_has_no_stale_entries():
+    used = set()
     for path in _baseline_files():
-        rel = os.path.relpath(path, BASELINES).replace(os.sep, "/")
         for _, module, name in _library_imports(path):
-            used_names.add((module, name))
-            if _deferred(rel):
-                used_files.add(_deferred(rel))
-    assert set(ALLOWED_NAMES) <= used_names, sorted(set(ALLOWED_NAMES) - used_names)
-    assert set(NOT_YET_FROZEN) <= used_files, sorted(set(NOT_YET_FROZEN) - used_files)
-    assert all(ALLOWED_NAMES.values()) and all(NOT_YET_FROZEN.values())
+            used.add((module, name))
+    assert set(ALLOWED_NAMES) <= used, sorted(set(ALLOWED_NAMES) - used)
+    assert all(ALLOWED_NAMES.values())
 
 
 def test_the_library_paths_that_users_know_still_import():

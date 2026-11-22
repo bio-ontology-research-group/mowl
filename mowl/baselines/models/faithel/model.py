@@ -5,7 +5,7 @@ accompanies Lacerda, Ozaki & Guimarães, RuleML+RR 2024; the paper text itself w
 available, only that code and the TGDK article it builds on).
 
 The TBox is not learned. The geometry of concepts and roles is the convex interpretation
-of the Definition 26 canonical model (:class:`~mowl.geometric.faithfulness.
+of the Definition 26 canonical model (:class:`~mowl.baselines.geometric.core.faithfulness.
 StronglyFaithfulModel`, region family ``"convex"``), so every TBox axiom of the supported
 forms holds exactly when it is entailed. Only the ABox is learned: one vector per
 individual, and per concept a "moving" parameter, per role a head and a tail parameter,
@@ -18,8 +18,8 @@ import torch as th
 from torch import nn
 
 from mowl.base_models.elmodel import EmbeddingELModel
-from mowl.geometric.faithfulness import StronglyFaithfulModel
-from mowl.geometric.normal_forms import (BOTTOM, NF1, NF2, NF3, NF4, TOP, NormalisedOntology,
+from mowl.baselines.geometric.core.faithfulness import StronglyFaithfulModel
+from mowl.baselines.geometric.core.normal_forms import (BOTTOM, NF1, NF2, NF3, NF4, TOP, NormalisedOntology,
                                          is_nominal_name, normalise)
 
 logger = logging.getLogger(__name__)

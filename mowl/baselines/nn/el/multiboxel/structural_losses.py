@@ -4,7 +4,7 @@ implementation (a frozen copy; the library computes them from the parts in
 :mod:`mowl.representation.library.structural_regions`).
 
 The definition tables, existence targets and witness targets are data, not losses: they are
-in :mod:`mowl.nn.el.structural`, which both implementations read.
+in :mod:`mowl.baselines.nn.el.structural`, which both implementations read.
 
 Provides the building blocks for the ``objective="structural"`` formulation of
 :class:`~mowl.models.MultiBoxEL` and :class:`~mowl.models.PrismEL`:

@@ -1,12 +1,12 @@
 """The direct implementation of binary code box embeddings: its own loss and Adam loop in the
 model class. Kept for the comparison in ``tests/baselines``; the graph, the scoring and the
-evaluation are shared (:mod:`mowl.models.bcbox.common`)."""
+evaluation are shared (:mod:`mowl.baselines.models.bcbox.base`)."""
 
 import torch as th
 
 from mowl.baselines.nn.graph.bcbox.losses import bce_negative_sampling_loss
 from mowl.baselines.nn.graph.bcbox.module import BinaryCodeBoxModule
-from mowl.models.bcbox.common import BinaryCodeBoxBase
+from mowl.baselines.models.bcbox.base import BinaryCodeBoxBase
 
 
 class BinaryCodeBox(BinaryCodeBoxBase):

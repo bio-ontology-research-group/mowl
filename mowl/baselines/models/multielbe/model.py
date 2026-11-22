@@ -11,7 +11,7 @@ import torch as th
 
 from mowl.baselines.nn.el.multielbe.module import MultiELBEModule
 from mowl.baselines.nn.el.multiboxel.pointloss import volume_penalty
-from mowl.geometric.normal_forms import BOTTOM, TOP
+from mowl.baselines.geometric.core.normal_forms import BOTTOM, TOP
 from mowl.models.multielbe.common import MultiELBEOptions
 
 

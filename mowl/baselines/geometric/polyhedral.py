@@ -6,33 +6,33 @@ simplex coordinates (Lacerda, Ozaki & Guimarães, TGDK 2024, §5).
 
 Construction:
 
-- Given a :class:`~mowl.geometric.completion.CanonicalModel` with
+- Given a :class:`~mowl.baselines.geometric.core.completion.CanonicalModel` with
   :math:`n = |\\text{cm.names}|` satisfiable concept names (including
   :math:`\\top`), let :math:`k = n - 1` be the ambient dimension and
   :math:`v_0, \\dots, v_{n-1} \\in \\mathbb{R}^k` be the rows of
-  :func:`~mowl.geometric.regions.simplex_points` (row :math:`i` = element
+  :func:`~mowl.baselines.geometric.core.regions.simplex_points` (row :math:`i` = element
   :math:`i`).
-- Universe :math:`U = \\eta(\\top)` is the :class:`~mowl.geometric.regions.Face`
+- Universe :math:`U = \\eta(\\top)` is the :class:`~mowl.baselines.geometric.core.regions.Face`
   spanned by all :math:`n` vertices :math:`\\{0, \\dots, n - 1\\}`.
 - For every concept name :math:`A`, :math:`\\eta(A)` is the
-  :class:`~mowl.geometric.regions.Face` with
+  :class:`~mowl.baselines.geometric.core.regions.Face` with
   ``vertex_ids = cm.extension(A)`` (:math:`F(A^{\\mathcal{I}}) = \\text{conv}\\{v_i : i \\in A^{\\mathcal{I}}\\}`,
-  and the empty :class:`~mowl.geometric.regions.Face` for ``BOTTOM`` or unknown
+  and the empty :class:`~mowl.baselines.geometric.core.regions.Face` for ``BOTTOM`` or unknown
   names).
 - For every role name :math:`r`, :math:`\\eta(r)` is the
-  :class:`~mowl.geometric.regions.PairHull` whose rows are the concatenated
+  :class:`~mowl.baselines.geometric.core.regions.PairHull` whose rows are the concatenated
   vertex pairs :math:`v_i \\oplus v_j \\in \\mathbb{R}^{2k}` over
   :math:`(i, j) \\in r^{\\mathcal{I}}` (and an empty
-  :class:`~mowl.geometric.regions.PairHull` of shape ``(0, 2k)`` for unknown
+  :class:`~mowl.baselines.geometric.core.regions.PairHull` of shape ``(0, 2k)`` for unknown
   or empty roles).
 - Optional ``thicken=True`` (propositional fragment only, when ``cm.axioms``
-  contains no :class:`~mowl.geometric.normal_forms.NF3`,
-  :class:`~mowl.geometric.normal_forms.NF4`,
-  :class:`~mowl.geometric.normal_forms.NF6`, or
-  :class:`~mowl.geometric.normal_forms.NF7` axioms; otherwise raises
-  :class:`~mowl.geometric.errors.UnsupportedAxiom`): replaces each class
-  :class:`~mowl.geometric.regions.Face` by a
-  :class:`~mowl.geometric.regions.ThickFace` with :math:`\\varepsilon = \\tfrac{1}{2n}`
+  contains no :class:`~mowl.baselines.geometric.core.normal_forms.NF3`,
+  :class:`~mowl.baselines.geometric.core.normal_forms.NF4`,
+  :class:`~mowl.baselines.geometric.core.normal_forms.NF6`, or
+  :class:`~mowl.baselines.geometric.core.normal_forms.NF7` axioms; otherwise raises
+  :class:`~mowl.baselines.geometric.core.errors.UnsupportedAxiom`): replaces each class
+  :class:`~mowl.baselines.geometric.core.regions.Face` by a
+  :class:`~mowl.baselines.geometric.core.regions.ThickFace` with :math:`\\varepsilon = \\tfrac{1}{2n}`
   whose H-representation intersects the simplex constraints
   :math:`\\lambda_j(x) \\ge 0` with :math:`\\lambda_j(x) \\le \\varepsilon` for
   :math:`j \\notin S`, yielding full-dimensional regions with non-empty interior
@@ -41,12 +41,12 @@ Construction:
 Guarantees:
 
 - **Exact model of the normalised ontology**: satisfies every normalised axiom
-  (:class:`~mowl.geometric.normal_forms.NF1`–:class:`~mowl.geometric.normal_forms.NF4`,
-  :class:`~mowl.geometric.normal_forms.NF6`,
-  :class:`~mowl.geometric.normal_forms.NF7`, and :math:`\\bot` forms) of
+  (:class:`~mowl.baselines.geometric.core.normal_forms.NF1`–:class:`~mowl.baselines.geometric.core.normal_forms.NF4`,
+  :class:`~mowl.baselines.geometric.core.normal_forms.NF6`,
+  :class:`~mowl.baselines.geometric.core.normal_forms.NF7`, and :math:`\\bot` forms) of
   ``cm.axioms``, verified on construction by
-  :class:`~mowl.geometric.checker.ModelChecker`. Raises
-  :class:`~mowl.geometric.errors.InternalConsistencyError` listing any violated
+  :class:`~mowl.baselines.geometric.core.checker.ModelChecker`. Raises
+  :class:`~mowl.baselines.geometric.core.errors.InternalConsistencyError` listing any violated
   axioms if verification fails.
 - **Non-degenerate**: :math:`\\eta(A) \\neq \\emptyset` for every satisfiable
   concept name :math:`A` in ``cm.names`` (regions are non-empty,
@@ -59,8 +59,8 @@ Guarantees:
   bound; a dimension linear in the number of concept names is unavoidable in
   the worst case for convex models that realise the relevant conjunctions
   (Gutiérrez-Basulto & Schockaert, KR 2018, Proposition 4).
-- :class:`~mowl.geometric.errors.InconsistentOntology` propagates from
-  :class:`~mowl.geometric.completion.CanonicalModel` when the ontology is
+- :class:`~mowl.baselines.geometric.core.errors.InconsistentOntology` propagates from
+  :class:`~mowl.baselines.geometric.core.completion.CanonicalModel` when the ontology is
   inconsistent.
 
 References:
@@ -83,9 +83,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Dict, Iterable, List, Optional
 import numpy as np
 
-from mowl.geometric.checker import GeometricInterpretation, ModelChecker
-from mowl.geometric.errors import InternalConsistencyError, UnsupportedAxiom
-from mowl.geometric.normal_forms import (
+from mowl.baselines.geometric.core.checker import GeometricInterpretation, ModelChecker
+from mowl.baselines.geometric.core.errors import InternalConsistencyError, UnsupportedAxiom
+from mowl.baselines.geometric.core.normal_forms import (
     BOTTOM,
     NF3,
     NF4,
@@ -94,12 +94,12 @@ from mowl.geometric.normal_forms import (
     TOP,
     Axiom,
 )
-from mowl.geometric.regions import Face, PairHull, ThickFace, simplex_points
+from mowl.baselines.geometric.core.regions import Face, PairHull, ThickFace, simplex_points
 
 if TYPE_CHECKING:  # pragma: no cover
     from org.semanticweb.owlapi.model import OWLOntology
     from mowl.datasets import Dataset
-    from mowl.geometric.completion import CanonicalModel
+    from mowl.baselines.geometric.core.completion import CanonicalModel
 
 
 class ConvexPolyhedralModel(GeometricInterpretation):
@@ -112,7 +112,7 @@ class ConvexPolyhedralModel(GeometricInterpretation):
     Guarantees:
 
     - Exact model of the normalised ontology (``cm.axioms``), verified on
-      construction via :class:`~mowl.geometric.checker.ModelChecker`.
+      construction via :class:`~mowl.baselines.geometric.core.checker.ModelChecker`.
     - Non-degenerate (non-empty, lower-dimensional simplex faces) on all
       satisfiable concept names in ``cm.names``.
     - Strongly faithful on concept names in ``cm.names``.
@@ -194,7 +194,7 @@ class ConvexPolyhedralModel(GeometricInterpretation):
     def from_canonical_model(
         cls, cm: CanonicalModel, thicken: bool = False
     ) -> ConvexPolyhedralModel:
-        """Build a :class:`ConvexPolyhedralModel` from an existing :class:`~mowl.geometric.completion.CanonicalModel`."""
+        """Build a :class:`ConvexPolyhedralModel` from an existing :class:`~mowl.baselines.geometric.core.completion.CanonicalModel`."""
         return cls(cm, thicken=thicken)
 
     @classmethod
@@ -202,7 +202,7 @@ class ConvexPolyhedralModel(GeometricInterpretation):
         cls, dataset: Dataset, thicken: bool = False
     ) -> ConvexPolyhedralModel:
         """Normalise a mOWL :class:`~mowl.datasets.Dataset`, saturate its canonical model, and build a :class:`ConvexPolyhedralModel`."""
-        from mowl.geometric.completion import CanonicalModel
+        from mowl.baselines.geometric.core.completion import CanonicalModel
 
         return cls(CanonicalModel.from_dataset(dataset), thicken=thicken)
 
@@ -211,7 +211,7 @@ class ConvexPolyhedralModel(GeometricInterpretation):
         cls, ontology: OWLOntology, thicken: bool = False
     ) -> ConvexPolyhedralModel:
         """Normalise an OWLAPI ``OWLOntology``, saturate its canonical model, and build a :class:`ConvexPolyhedralModel`."""
-        from mowl.geometric.completion import CanonicalModel
+        from mowl.baselines.geometric.core.completion import CanonicalModel
 
         return cls(CanonicalModel.from_ontology(ontology), thicken=thicken)
 
@@ -227,12 +227,12 @@ class ConvexPolyhedralModel(GeometricInterpretation):
 
     @property
     def class_regions(self) -> Dict[str, Face]:
-        """Return a copy of the mapping from known concept names to :class:`~mowl.geometric.regions.Face` regions."""
+        """Return a copy of the mapping from known concept names to :class:`~mowl.baselines.geometric.core.regions.Face` regions."""
         return dict(self._class_regions)
 
     @property
     def role_regions(self) -> Dict[str, PairHull]:
-        """Return a copy of the mapping from known role names to :class:`~mowl.geometric.regions.PairHull` regions."""
+        """Return a copy of the mapping from known role names to :class:`~mowl.baselines.geometric.core.regions.PairHull` regions."""
         return dict(self._role_regions)
 
     def element_points(self) -> np.ndarray:
@@ -244,7 +244,7 @@ class ConvexPolyhedralModel(GeometricInterpretation):
         return self.class_region(name).vertices.copy()
 
     def class_region(self, name: str) -> Face:
-        """Return :math:`\\eta(\\text{name})`, or an empty :class:`~mowl.geometric.regions.Face` for ``BOTTOM`` and unknown names."""
+        """Return :math:`\\eta(\\text{name})`, or an empty :class:`~mowl.baselines.geometric.core.regions.Face` for ``BOTTOM`` and unknown names."""
         if name == BOTTOM:
             return self._empty_face
         if name == TOP:
@@ -252,11 +252,11 @@ class ConvexPolyhedralModel(GeometricInterpretation):
         return self._class_regions.get(name, self._empty_face)
 
     def role_region(self, role: str) -> PairHull:
-        """Return :math:`\\eta(\\text{role})`, or an empty :class:`~mowl.geometric.regions.PairHull` for unknown roles."""
+        """Return :math:`\\eta(\\text{role})`, or an empty :class:`~mowl.baselines.geometric.core.regions.PairHull` for unknown roles."""
         return self._role_regions.get(role, self._empty_role)
 
     def check(self) -> ModelChecker:
-        """Return the cached :class:`~mowl.geometric.checker.ModelChecker` bound to this interpretation."""
+        """Return the cached :class:`~mowl.baselines.geometric.core.checker.ModelChecker` bound to this interpretation."""
         if self._checker is None:
             self._checker = ModelChecker(self)
         return self._checker

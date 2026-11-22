@@ -9,7 +9,7 @@ import torch.nn as nn
 from mowl.nn import ELModule
 import mowl.baselines.nn.el.prism.losses as L
 from mowl.baselines.nn.el.multiboxel.structural_losses import existence_loss
-from mowl.nn.el.structural import DefinitionTable, ExistenceTargets
+from mowl.baselines.nn.el.structural import DefinitionTable, ExistenceTargets
 
 _PRISM_OBJECTIVES = ("axiom", "structural")
 _EMPTY_BOX_READINGS = ("signed", "absolute")
@@ -89,7 +89,7 @@ class PrismModule(ELModule):
     structural_definitions : bool, default True
         Whether ``objective="structural"`` compiles acyclic conjunction
         definitions :math:`A \\equiv X \\sqcap Y` via
-        :class:`~mowl.nn.el.structural.DefinitionTable`.
+        :class:`~mowl.baselines.nn.el.structural.DefinitionTable`.
     existence_weight : float, default 1.0
         Non-negative weight multiplying :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.existence_loss`
         in :meth:`structural_extra_loss`.
