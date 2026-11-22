@@ -1,0 +1,716 @@
+"""Parts of EmEL++, EmEL(var) and RegD, and the three methods built from them.
+
+New parts:
+
+* :class:`RoleAxiomTranslation` (``"translation with role axioms"``): the translation
+  relation model with the two methods through which a relation model exposes role axioms,
+  ``inclusion(r, s)`` and ``chain(r, s, t)``.
+* :class:`ToleranceTranslation` (``"translation with tolerance"``): a translation whose
+  image and preimage are fuzzy by a learned tolerance per relation (EmEL(var)).
+* :class:`BoundaryDepth` (``"boundary and depth"``): the RegD inclusion energy, for boxes and
+  for balls.
+* :class:`RadiusBallClasses`: balls whose radius is a chosen function of the stored
+  parameter.
+
+New readings of the axiom forms, as subclasses of
+:class:`~mowl.representation.Objective`: :class:`ELPPObjective` (role axioms, norm terms,
+tolerance penalty) and :class:`RegDObjective` (RegD for the inclusion forms, a host objective
+for the others).
+
+Methods: ``emelpp``, ``emelvar``, ``regd`` (boxes) and ``regd_elem`` (balls), registered with
+:func:`~mowl.representation.register_method` and, for the existing modules, as adapters.
+
+What is *not* a part: the contrastive training loss of RegD (it needs the sampled negatives
+of a positive pair together and lives in :mod:`mowl.models.regd`), and the shift vector of
+the EmEL++ Keras code (an optional learned translation of ``C`` in ``C subClassOf D``, set
+on the module by a training regime) is only read, through ``gci0_shift``.
+"""
+
+from dataclasses import replace
+
+import torch as th
+import torch.nn as nn
+
+from mowl.nn.el.emelpp.losses import _direction_term
+from mowl.nn.el.regd import dissimilarity as D
+from mowl.representation.class_models import BallClasses, BoxClasses
+from mowl.representation.geometry import ComposedGeometry
+from mowl.representation.measures import RegionMeasure, CentreDistance, Bounds
+from mowl.representation.methods import (register_measure, register_method,
+                                         register_relation_model, DEFAULT_MEASURE)
+from mowl.representation.adapters import register_adapter
+from mowl.representation.objectives import Objective
+from mowl.representation.regions import Ball, Box, ConstructorUnavailable
+from mowl.representation.relation_models import Translation
+
+__all__ = ["ROLE_FORMS", "ExtendedGeometry", "RoleAxiomTranslation", "ToleranceTranslation",
+           "RadiusBallClasses", "BoundaryDepth", "ELPPObjective", "RegDObjective",
+           "emelpp", "emelvar", "regd", "regd_elem"]
+
+#: The role axiom forms of the EL++ pipeline.
+ROLE_FORMS = ("role_inclusion", "role_chain")
+
+
+class _View:
+    """A geometry with some attributes replaced (the objectives use it to read a form with
+    another measure or another existential restriction)."""
+
+    def __init__(self, geometry, **overrides):
+        self._geometry = geometry
+        self._overrides = overrides
+
+    def __getattr__(self, name):
+        if name in self._overrides:
+            return self._overrides[name]
+        return getattr(self._geometry, name)
+
+
+def _grow(region, amount):
+    """The region enlarged by ``amount`` (``(B, 1)``) in every direction."""
+    if isinstance(region, Ball):
+        return replace(region, radius=region.radius + amount, raw=None)
+    if isinstance(region, Box):
+        return region.grow(amount)
+    raise ConstructorUnavailable(f"{type(region).__name__} cannot be enlarged.")
+
+
+# -- geometry ----------------------------------------------------------------------------
+
+
+class ExtendedGeometry(ComposedGeometry):
+    """A :class:`~mowl.representation.ComposedGeometry` that also trains on role axioms when
+    its relation model has ``inclusion`` and ``chain`` and its objective reads
+    ``role_inclusion`` and ``role_chain`` (:class:`ELPPObjective`)."""
+
+    @property
+    def role_axiom_capable(self):
+        has_relations = hasattr(self.relation_model, "inclusion")
+        return has_relations and hasattr(self.objective, "role_inclusion")
+
+    def role_inclusion_loss(self, rows, neg=False):
+        """Loss of the role inclusions :math:`r \\sqsubseteq s` (rows ``(r, s)``)."""
+        return self.cost("role_inclusion", rows, neg)
+
+    def role_chain_loss(self, rows, neg=False):
+        """Loss of the role chains :math:`r \\circ s \\sqsubseteq t` (rows ``(r, s, t)``)."""
+        return self.cost("role_chain", rows, neg)
+
+    @property
+    def parts(self):
+        parts = dict(super().parts)
+        parts["conjunction"] = "exact" if self.class_model.exact_conjunction \
+            else "approximate"
+        return parts
+
+
+# -- relation models ------------------------------------------------------------------------
+
+
+@register_relation_model("translation with role axioms")
+class RoleAxiomTranslation(Translation):
+    """The translation relation model with role axioms. A relation is a function
+    :math:`x \\mapsto x + v_r`, so :math:`r \\sqsubseteq s` holds iff :math:`v_r = v_s` and
+    :math:`r \\circ s \\sqsubseteq t` iff :math:`v_r + v_s = v_t`.
+
+    :param direction: ``None`` (default): the cost of an axiom is the distance of the two
+        sides. ``"row"``: the term :math:`|1 - \\cos(a, b)|` of EmEL++ (Mondal et al. 2021,
+        Eq. 8-9) is added per row; ``"batch"``: the version of the authors' Keras code,
+        normalised over the batch, one number added to every row.
+    """
+
+    def __init__(self, size=None, embed_dim=None, vectors=None, direction=None):
+        super().__init__(size, embed_dim, vectors)
+        if direction not in (None, "row", "batch"):
+            raise ValueError("direction must be None, 'row' or 'batch'.")
+        self.direction = direction
+
+    def _cost(self, left, right, slack):
+        cost = th.relu(th.linalg.norm(right - left, dim=1, keepdim=True) - slack)
+        if self.direction is not None:
+            cost = cost + _direction_term(left, right, self.direction)
+        return cost
+
+    def inclusion(self, r, s, slack=0.0):
+        """Cost ``(B, 1)`` of :math:`r \\sqsubseteq s` for the relations ``r``, ``s``; zero
+        iff the shift vectors are within ``slack`` of each other."""
+        return self._cost(self.vectors(r), self.vectors(s), slack)
+
+    def chain(self, r, s, t, slack=0.0):
+        """Cost ``(B, 1)`` of :math:`r \\circ s \\sqsubseteq t`."""
+        return self._cost(self.vectors(r) + self.vectors(s), self.vectors(t), slack)
+
+
+@register_relation_model("translation with tolerance")
+class ToleranceTranslation(RoleAxiomTranslation):
+    """A translation that is exact up to a learned tolerance :math:`\\sigma_r \\ge 0` per
+    relation (EmEL(var), Mohapatra et al. 2021): :math:`y` is related to :math:`x` if it lies
+    within :math:`\\sigma_r` of :math:`x + v_r`. The image and the preimage of a region are
+    the translated region enlarged by :math:`\\sigma_r` in every direction.
+
+    :param tolerances: An existing table ``(size, 1)`` to use instead of a new one (stored
+        signed, used through its absolute value).
+    :param sigma_init: Initial tolerance of a new table.
+    """
+
+    part = "translation with tolerance"
+
+    def __init__(self, size=None, embed_dim=None, vectors=None, tolerances=None,
+                 sigma_init=0.1, direction=None):
+        super().__init__(size, embed_dim, vectors, direction)
+        if tolerances is None:
+            tolerances = nn.Embedding(len(self), 1)
+            nn.init.constant_(tolerances.weight, sigma_init)
+        self.tolerances = tolerances
+
+    def tolerance(self, ids):
+        """:math:`\\sigma_r` of the relations ``ids``, ``(B, 1)``."""
+        return th.abs(self.tolerances(ids))
+
+    def image(self, ids, region):
+        return _grow(super().image(ids, region), self.tolerance(ids))
+
+    def preimage(self, ids, region):
+        return _grow(super().preimage(ids, region), self.tolerance(ids))
+
+    def sharp_preimage(self, ids, region):
+        """The preimage without the tolerance (what a negative axiom is read against)."""
+        return super().preimage(ids, region)
+
+
+# -- class models ---------------------------------------------------------------------------
+
+
+class RadiusBallClasses(BallClasses):
+    """Balls whose radius is a function of the stored parameter.
+
+    :param radius: ``"abs"`` (as :class:`~mowl.representation.BallClasses`), ``"relu"``
+        (:math:`\\max(0, r)`, the EmEL++ Keras code) or ``"softplus"`` (the training code of
+        RegD's ``Elem``).
+    """
+
+    def __init__(self, size=None, embed_dim=None, centres=None, radii=None, radius="abs"):
+        super().__init__(size, embed_dim, centres, radii)
+        if radius not in ("abs", "relu", "softplus"):
+            raise ValueError("radius must be 'abs', 'relu' or 'softplus'.")
+        self.radius_form = radius
+
+    def forward(self, ids):
+        raw = self.radii(ids)
+        radius = {"abs": th.abs, "relu": th.relu,
+                  "softplus": nn.functional.softplus}[self.radius_form](raw)
+        return Ball(self.centres(ids), radius, raw)
+
+
+# -- measure ----------------------------------------------------------------------------------
+
+
+@register_measure("boundary and depth")
+class BoundaryDepth(RegionMeasure):
+    """The inclusion energy of RegD (Yang et al. 2025): boundary dissimilarity plus
+    :math:`\\lambda` times depth dissimilarity, of the child inside the parent, for boxes and
+    for balls. :meth:`inside` is :math:`\\max\\{E + \\text{margin}, \\gamma_1\\}`, zero (with
+    :math:`\\gamma_1 = 0`) iff the region lies inside the other. The raw, signed energy is
+    :meth:`energy`.
+
+    RegD defines inclusion only. :meth:`not_inside` is its negative term (the child is not
+    inside the parent, by :math:`\\gamma_2`). Every other relation (``meets``, ``apart``,
+    ``empty``, ``nonempty``, the intersection of balls) is that of the ``host`` measure,
+    by default the default measure of the region family.
+
+    :param lamda: :math:`\\lambda`.
+    :param p: Exponent of the depth dissimilarity; default 1 for boxes, 2 for balls.
+    :param gamma1, gamma2: The margins of the paper's loss.
+    :param eps: Lower bound of sizes (they are divided by).
+    :param depth_on_containment: ``False``: the depth term only where the child is not
+        inside, as in the authors' released code.
+    :param host: Measure for the other relations.
+    """
+
+    accepts = (Ball, Box)
+    part = "boundary and depth"
+    exact_intersection = False
+
+    def __init__(self, lamda=1.0, p=None, gamma1=0.0, gamma2=0.0, eps=1e-4,
+                 depth_on_containment=True, host=None):
+        if lamda < 0:
+            raise ValueError("lamda must be non-negative.")
+        if eps <= 0:
+            raise ValueError("eps must be positive.")
+        self.lamda, self.p, self.gamma1, self.gamma2, self.eps = lamda, p, gamma1, gamma2, eps
+        self.depth_on_containment = depth_on_containment
+        self.host = host
+
+    def host_for(self, region_class):
+        """The measure of the relations RegD does not define."""
+        if self.host is not None:
+            return self.host
+        return DEFAULT_MEASURE[region_class]()
+
+    def regularise(self, region):
+        """The region with its sizes at least ``eps``."""
+        if isinstance(region, Ball):
+            return replace(region, radius=region.radius.clamp_min(self.eps))
+        return Box(region.centre, region.offset.clamp_min(self.eps))
+
+    def _args(self, parent, child):
+        self.check(parent, child)
+        parent, child = self.regularise(parent), self.regularise(child)
+        if isinstance(parent, Ball):
+            return (parent.centre, parent.radius.squeeze(-1),
+                    child.centre, child.radius.squeeze(-1))
+        return parent.centre, parent.offset, child.centre, child.offset
+
+    def energy(self, a, b):
+        """:math:`E(b, a)`, ``(B, 1)``: ``a`` is the child, ``b`` the parent. Signed."""
+        args = self._args(b, a)
+        if isinstance(a, Ball):
+            e = D.ball_energy(*args, lamda=self.lamda, p=2 if self.p is None else self.p,
+                              depth_on_containment=self.depth_on_containment)
+        else:
+            e = D.box_energy(*args, lamda=self.lamda, p=1 if self.p is None else self.p,
+                             depth_on_containment=self.depth_on_containment)
+        return e.unsqueeze(-1)
+
+    def boundary(self, a, b):
+        """Boundary dissimilarity of the child ``a`` in the parent ``b``, ``(B, 1)``."""
+        args = self._args(b, a)
+        f = D.ball_boundary_dissimilarity if isinstance(a, Ball) \
+            else D.box_boundary_dissimilarity
+        return f(*args).unsqueeze(-1)
+
+    def inside(self, a, b, margin=0.0):
+        return th.clamp(self.energy(a, b) + margin, min=self.gamma1)
+
+    def not_inside(self, a, b, margin=0.0):
+        """Zero iff ``a`` is not inside ``b`` (by :math:`\\gamma_2` + ``margin``)."""
+        return th.clamp(self.gamma2 + margin - self.boundary(a, b), min=0.0)
+
+    # RegD has no other relations: the host measure answers.
+    def meets(self, a, b, margin=0.0):
+        return self.host_for(type(a)).meets(a, b, margin)
+
+    def apart(self, a, b, margin=0.0):
+        return self.host_for(type(a)).apart(a, b, margin)
+
+    def empty(self, a):
+        return self.host_for(type(a)).empty(a)
+
+    def nonempty(self, a, epsilon=0.0):
+        return self.host_for(type(a)).nonempty(a, epsilon)
+
+    def intersection_inside(self, a, b, c, margin=0.0):
+        if isinstance(a, Ball):
+            return self.host_for(Ball).intersection_inside(a, b, c, margin)
+        region, gap = self.regularise(a).intersect(self.regularise(b))
+        return self.inside(region, c, margin) + gap
+
+    def intersection_apart(self, a, b, c, margin=0.0):
+        return self.host_for(type(a)).intersection_apart(a, b, c, margin)
+
+    def intersection_nonempty(self, a, b, margin=0.0, epsilon=0.0):
+        return self.host_for(type(a)).intersection_nonempty(a, b, margin, epsilon)
+
+
+# -- objectives -------------------------------------------------------------------------------
+
+
+class ELPPObjective(Objective):
+    """The reading of the axiom forms of EmEL++ and EmEL(var), as options on top of
+    :class:`~mowl.representation.Objective`, plus the role axioms.
+
+    :param unit_norm: Add :math:`|\\lVert x \\rVert - 1|` of every class (individual) centre
+        to the loss of each axiom, and of every shift vector to the loss of each role axiom
+        (EmEL++, Eq. 1-10). Default off.
+    :param tolerance_weight: Weight of the term :math:`+\\sigma_r` added to a positive
+        loss with an existential restriction when the relation model has a tolerance
+        (Mohapatra et al. 2021, Eq. 7-8, weight 1; with weight 1 the term cancels what the
+        tolerance gains in the hinge, so a smaller weight lets the tolerance pay off).
+    :param gci0_shift: A tensor, or a function returning one (or ``None``), added to the
+        centre of :math:`C` in :math:`C \\sqsubseteq D` (the learned "SubClassOf" vector of
+        the EmEL++ Keras code).
+
+    Role axioms (``role_inclusion``, ``role_chain``) are read through the relation model's
+    ``inclusion`` and ``chain``; the margin is a slack of the distance of the shift vectors
+    (the semantic reading has none, as equality of vectors is not strict).
+    """
+
+    def __init__(self, margin=0.0, slack=False, epsilon=0.01, gci3="inclusion",
+                 gci2_negative="apart", negatives="all", empty="size", gci2_offset=0.0,
+                 unit_norm=False, tolerance_weight=1.0, gci0_shift=None):
+        super().__init__(margin, slack, epsilon, gci3, gci2_negative, negatives, empty,
+                         gci2_offset)
+        self.unit_norm = bool(unit_norm)
+        self.tolerance_weight = float(tolerance_weight)
+        self.gci0_shift = gci0_shift
+
+    @classmethod
+    def emelpp(cls, margin=0.1, linear_negative=False, epsilon=0.01, gci0_shift=None,
+               tolerance_weight=1.0):
+        """EmEL++ / EmEL(var) as implemented in mOWL."""
+        return cls(margin, slack=True, epsilon=epsilon, gci3="overlap",
+                   gci2_negative="linear" if linear_negative else "apart",
+                   negatives="gci2", empty="size", gci2_offset=0.0, unit_norm=True,
+                   tolerance_weight=tolerance_weight, gci0_shift=gci0_shift)
+
+    # -- helpers ----------------------------------------------------------------------------
+    def _norms(self, *regions):
+        if not self.unit_norm:
+            return 0.0
+        return sum(th.abs(th.linalg.norm(r.centre, dim=1, keepdim=True) - 1)
+                   for r in regions)
+
+    @staticmethod
+    def _sharp(g):
+        """The geometry with the existential restriction without tolerance."""
+        rm = g.relation_model
+        if hasattr(rm, "sharp_preimage"):
+            return _View(g, exists=rm.sharp_preimage)
+        return g
+
+    def _tolerance(self, g, relation):
+        rm = g.relation_model
+        if hasattr(rm, "tolerance") and self.tolerance_weight:
+            return self.tolerance_weight * rm.tolerance(relation)
+        return 0.0
+
+    def _shift(self):
+        shift = self.gci0_shift
+        return shift() if callable(shift) else shift
+
+    # -- forms ------------------------------------------------------------------------------
+    def cost(self, g, form, rows, neg=False):
+        if form in ROLE_FORMS:
+            return getattr(self, form)(g, rows, neg)
+        return super().cost(g, form, rows, neg)
+
+    def gci0(self, g, rows, neg=False):
+        c, d = g.classes(rows[:, 0]), g.classes(rows[:, 1])
+        shift = self._shift()
+        if shift is not None and not self._neg(neg):
+            cost = g.measure.inside(c.translate(shift), d, self.m)
+        else:
+            cost = super().gci0(g, rows, neg)
+        return cost + self._norms(c, d)
+
+    def gci1(self, g, rows, neg=False):
+        cost = super().gci1(g, rows, neg)
+        return cost + self._norms(*(g.classes(rows[:, i]) for i in range(3)))
+
+    def _existential(self, g, sub, relation, filler, neg):
+        cost = super()._existential(self._sharp(g) if neg else g, sub, relation, filler, neg)
+        if not neg:
+            cost = cost + self._tolerance(g, relation)
+        return cost
+
+    def gci2(self, g, rows, neg=False):
+        c, d = g.classes(rows[:, 0]), g.classes(rows[:, 2])
+        return self._existential(g, c, rows[:, 1], d, neg) + self._norms(c, d)
+
+    def gci3(self, g, rows, neg=False):
+        neg_read = self._neg(neg)
+        cost = super().gci3(self._sharp(g) if neg_read else g, rows, neg)
+        if not neg_read:
+            cost = cost + self._tolerance(g, rows[:, 0])
+        return cost + self._norms(g.classes(rows[:, 1]), g.classes(rows[:, 2]))
+
+    def gci1_bot(self, g, rows, neg=False):
+        cost = super().gci1_bot(g, rows, neg)
+        return cost + self._norms(g.classes(rows[:, 0]), g.classes(rows[:, 1]))
+
+    def class_assertion(self, g, rows, neg=False):
+        cost = super().class_assertion(g, rows, neg)
+        return cost + self._norms(g.individuals(rows[:, 0]), g.classes(rows[:, 1]))
+
+    def object_property_assertion(self, g, rows, neg=False):
+        a, b = g.individuals(rows[:, 0]), g.individuals(rows[:, 2])
+        return self._existential(g, a, rows[:, 1], b, neg) + self._norms(a, b)
+
+    # -- role axioms ------------------------------------------------------------------------
+    def _roles(self, g, name):
+        relations = g.relation_model
+        if not hasattr(relations, name):
+            raise ConstructorUnavailable(
+                f"{type(relations).__name__} does not expose role axioms (no {name!r}).")
+        return relations
+
+    def _vector_norms(self, relations, *ids):
+        if not self.unit_norm:
+            return 0.0
+        return sum(th.abs(th.linalg.norm(relations.vectors(i), dim=1, keepdim=True) - 1)
+                   for i in ids)
+
+    def role_inclusion(self, g, rows, neg=False):
+        """:math:`r \\sqsubseteq s`."""
+        relations = self._roles(g, "inclusion")
+        slack = self.margin if self.slack else 0.0
+        cost = relations.inclusion(rows[:, 0], rows[:, 1], slack)
+        return cost + self._vector_norms(relations, rows[:, 0], rows[:, 1])
+
+    def role_chain(self, g, rows, neg=False):
+        """:math:`r \\circ s \\sqsubseteq t`."""
+        relations = self._roles(g, "chain")
+        slack = self.margin if self.slack else 0.0
+        cost = relations.chain(rows[:, 0], rows[:, 1], rows[:, 2], slack)
+        return cost + self._vector_norms(relations, rows[:, 0], rows[:, 1], rows[:, 2])
+
+
+class RegDObjective(Objective):
+    """RegD (Yang et al. 2025): the inclusion forms are read with the RegD energy, every
+    other form by a ``host`` objective (ELBE's or ELEmbeddings', with its own margin).
+
+    The negative reading of :math:`C \\sqsubseteq D` and :math:`C \\sqsubseteq \\exists r.D`
+    is *non-inclusion* (:meth:`BoundaryDepth.not_inside`), not disjointness; the other
+    inclusion forms have no negative loss.
+
+    :param host: The :class:`~mowl.representation.Objective` of the other forms. Its margin
+        is this objective's :attr:`margin`.
+    :param regd_forms: The forms read with the energy. The conjunction of balls is not a
+        ball, so ``gci1`` is only in the list for boxes.
+    :param flip_gci2: Read :math:`C \\sqsubseteq \\exists r.D` as the reverse inclusion
+        :math:`D \\sqsubseteq \\exists r.C` (the prediction-task code of the authors).
+    """
+
+    def __init__(self, host, regd_forms=("gci0", "gci1", "gci2", "gci3"), flip_gci2=False):
+        self.host = host
+        super().__init__(host.margin, host.slack, host.epsilon, host.gci3_reading,
+                         host.gci2_negative, host.negatives, host.empty, host.gci2_offset)
+        self.regd_forms = frozenset(regd_forms)
+        self.flip_gci2 = bool(flip_gci2)
+
+    @property
+    def margin(self):
+        return self.host.margin
+
+    @margin.setter
+    def margin(self, value):
+        self.host.margin = float(value)
+
+    @property
+    def m(self):
+        """The energy is compared without margin."""
+        return 0.0
+
+    def _delegate(self, name, g, rows, neg):
+        view = _View(g, measure=g.measure.host_for(g.class_model.region))
+        return getattr(self.host, name)(view, rows, neg)
+
+    def gci0(self, g, rows, neg=False):
+        if "gci0" not in self.regd_forms:
+            return self._delegate("gci0", g, rows, neg)
+        c, d = g.classes(rows[:, 0]), g.classes(rows[:, 1])
+        return g.measure.not_inside(c, d) if neg else g.measure.inside(c, d)
+
+    def gci1(self, g, rows, neg=False):
+        if "gci1" not in self.regd_forms:
+            return self._delegate("gci1", g, rows, neg)
+        c, d, e = (g.classes(rows[:, i]) for i in range(3))
+        return g.measure.intersection_inside(c, d, e)
+
+    def gci2(self, g, rows, neg=False):
+        if "gci2" not in self.regd_forms:
+            return self._delegate("gci2", g, rows, neg)
+        c, r, d = g.classes(rows[:, 0]), rows[:, 1], g.classes(rows[:, 2])
+        if self.flip_gci2:
+            sub, target = d, g.exists(r, c)
+        else:
+            sub, target = c, g.exists(r, d)
+        return g.measure.not_inside(sub, target) if neg else g.measure.inside(sub, target)
+
+    def gci3(self, g, rows, neg=False):
+        if "gci3" not in self.regd_forms:
+            return self._delegate("gci3", g, rows, neg)
+        exists = g.exists(rows[:, 0], g.classes(rows[:, 1]))
+        return g.measure.inside(exists, g.classes(rows[:, 2]))
+
+
+def _host_forward(name):
+    def form(self, g, rows, neg=False):
+        return self._delegate(name, g, rows, neg)
+    form.__name__ = name
+    form.__doc__ = f"``{name}`` as the host objective reads it."
+    return form
+
+
+for _name in ("gci0_bot", "gci1_bot", "gci3_bot", "class_assertion",
+              "object_property_assertion"):
+    setattr(RegDObjective, _name, _host_forward(_name))
+del _name
+
+
+# -- methods ----------------------------------------------------------------------------------
+
+
+def _ball_tables(t, radius="abs"):
+    classes = RadiusBallClasses(centres=t.class_embed, radii=t.class_rad, radius=radius)
+    individuals = None
+    if getattr(t, "ind_embed", None) is not None:
+        individuals = BallClasses(centres=t.ind_embed, radii=t.ind_rad)
+    return classes, individuals
+
+
+def _norm_regularizers(reg_norm, individuals):
+    from mowl.training.regularization import NormPenalty
+    names = ("class_embed", "ind_embed") if individuals else ("class_embed",)
+    return (NormPenalty(parameters=names, target=reg_norm),)
+
+
+def _elpp(tolerant, nb_classes, nb_relations, nb_individuals, embed_dim, margin,
+          linear_negative, gci1_radius_term, radius, role_direction, sigma_init,
+          sigma_reg_weight, gci0_shift, tables):
+    t = tables
+    if t is None:
+        classes = RadiusBallClasses(nb_classes, embed_dim, radius=radius)
+        individuals = BallClasses(nb_individuals, embed_dim) if nb_individuals else None
+        vectors = tolerances = None
+    else:
+        classes, individuals = _ball_tables(t, radius)
+        vectors = t.rel_embed
+        tolerances = getattr(t, "rel_sigma", None)
+    if tolerant:
+        relations = ToleranceTranslation(nb_relations, embed_dim, vectors, tolerances,
+                                         sigma_init, direction=role_direction)
+    else:
+        relations = RoleAxiomTranslation(nb_relations, embed_dim, vectors,
+                                         direction=role_direction)
+    objective = ELPPObjective.emelpp(margin, linear_negative=linear_negative,
+                                     gci0_shift=gci0_shift,
+                                     tolerance_weight=sigma_reg_weight)
+    return ExtendedGeometry(classes, relations, CentreDistance(gci1_radius_term), objective,
+                            individuals=individuals)
+
+
+@register_method("emelpp")
+def emelpp(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
+           linear_negative=False, gci1_radius_term=True, radius="abs", role_direction="row",
+           gci0_shift=None, tables=None):
+    """EmEL++ (Mondal et al. 2021): ELEmbeddings with the norm terms inside every axiom
+    loss, the fourth term of the conjunction loss and role axioms on the shift vectors.
+
+    :param role_direction: ``"row"`` as published; ``"batch"`` is the Keras code's reading;
+        ``None`` drops the cosine term.
+    :param tables: A module with ``class_embed``, ``class_rad``, ``rel_embed`` (and
+        ``ind_embed``, ``ind_rad``) to share parameters with.
+    """
+    return _elpp(False, nb_classes, nb_relations, nb_individuals, embed_dim, margin,
+                 linear_negative, gci1_radius_term, radius, role_direction, 0.1, 1.0,
+                 gci0_shift, tables)
+
+
+@register_method("emelvar")
+def emelvar(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
+            linear_negative=False, gci1_radius_term=True, radius="abs",
+            role_direction="row", sigma_init=0.1, sigma_reg_weight=1.0, gci0_shift=None,
+            tables=None):
+    """EmEL(var) (Mohapatra et al. 2021): EmEL++ with a learned tolerance per relation.
+
+    :param tables: As for :func:`emelpp`, plus ``rel_sigma``.
+    """
+    return _elpp(True, nb_classes, nb_relations, nb_individuals, embed_dim, margin,
+                 linear_negative, gci1_radius_term, radius, role_direction, sigma_init,
+                 sigma_reg_weight, gci0_shift, tables)
+
+
+def _regd_measure(host_measure, lamda, p, gamma1, gamma2, eps, depth_on_containment):
+    return BoundaryDepth(lamda, p, gamma1, gamma2, eps, depth_on_containment,
+                         host=host_measure)
+
+
+@register_method("regd")
+def regd(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
+         all_negatives=False, epsilon=0.01, lamda=1.0, p=1, gamma1=0.0, gamma2=0.0,
+         eps=1e-4, depth_on_containment=True, flip_gci2=False, tables=None):
+    """RegD on ELBE (Yang et al. 2025): boxes, translations, the RegD energy for the
+    inclusion forms, ELBE's losses (with ``margin``) for the others.
+
+    :param tables: A module with ``class_embed``, ``class_offset``, ``rel_embed`` (and
+        ``ind_embed``, ``ind_offset``) to share parameters with.
+    """
+    t = tables
+    classes = BoxClasses(nb_classes, embed_dim) if t is None else BoxClasses(
+        centres=t.class_embed, offsets=t.class_offset)
+    relations = Translation(nb_relations, embed_dim) if t is None else Translation(
+        vectors=t.rel_embed)
+    individuals = None
+    if t is None and nb_individuals:
+        individuals = BoxClasses(nb_individuals, embed_dim)
+    elif t is not None and getattr(t, "ind_embed", None) is not None:
+        individuals = BoxClasses(centres=t.ind_embed, offsets=t.ind_offset)
+    host = Objective.elbe(margin, all_negatives=all_negatives, epsilon=epsilon)
+    measure = _regd_measure(Bounds(separation="every"), lamda, p, gamma1, gamma2, eps,
+                            depth_on_containment)
+    return ExtendedGeometry(classes, relations, measure, RegDObjective(host, flip_gci2=flip_gci2),
+                            individuals=individuals)
+
+
+@register_method("regd_elem")
+def regd_elem(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
+              reg_norm=1, all_negatives=False, epsilon=0.01, gci1_radius_term=True,
+              lamda=1.0, p=2, gamma1=0.0, gamma2=0.0, eps=1e-4, depth_on_containment=True,
+              flip_gci2=False, radius="abs", tables=None):
+    """RegD on ELEmbeddings: balls, translations, the RegD energy for ``gci0``, ``gci2`` and
+    ``gci3``, ELEmbeddings' losses (slack ``margin``, unit-norm penalty) for the others.
+
+    :param radius: ``"abs"`` or ``"softplus"`` (see :class:`RadiusBallClasses`).
+    :param tables: A module with ``class_embed``, ``class_rad``, ``rel_embed`` (and
+        ``ind_embed``, ``ind_rad``) to share parameters with.
+    """
+    t = tables
+    if t is None:
+        classes = RadiusBallClasses(nb_classes, embed_dim, radius=radius)
+        relations = Translation(nb_relations, embed_dim)
+        individuals = BallClasses(nb_individuals, embed_dim) if nb_individuals else None
+    else:
+        classes, individuals = _ball_tables(t, radius)
+        relations = Translation(vectors=t.rel_embed)
+    host = Objective.elem(margin, all_negatives=all_negatives, epsilon=epsilon)
+    measure = _regd_measure(CentreDistance(gci1_radius_term), lamda, p, gamma1, gamma2, eps,
+                            depth_on_containment)
+    objective = RegDObjective(host, regd_forms=("gci0", "gci2", "gci3"),
+                              flip_gci2=flip_gci2)
+    return ExtendedGeometry(classes, relations, measure, objective, individuals=individuals,
+                            regularizers=_norm_regularizers(reg_norm,
+                                                            individuals is not None))
+
+
+# -- adapters ---------------------------------------------------------------------------------
+
+
+@register_adapter("EmELPPModule")
+def _emelpp_adapter(module):
+    return emelpp(None, None, embed_dim=module.embed_dim, margin=module.margin,
+                  linear_negative=module.negative_loss_form == "linear",
+                  gci1_radius_term=module.intersection_radius_term,
+                  radius=module.radius_form, role_direction=module.role_direction,
+                  gci0_shift=lambda: getattr(module, "subclass_relation", None),
+                  tables=module)
+
+
+@register_adapter("EmELVarModule")
+def _emelvar_adapter(module):
+    return emelvar(None, None, embed_dim=module.embed_dim, margin=module.margin,
+                   linear_negative=module.negative_loss_form == "linear",
+                   gci1_radius_term=module.intersection_radius_term,
+                   radius=module.radius_form, role_direction=module.role_direction,
+                   sigma_reg_weight=module.sigma_reg_weight,
+                   gci0_shift=lambda: getattr(module, "subclass_relation", None),
+                   tables=module)
+
+
+def _regd_options(module):
+    return dict(margin=module.margin, all_negatives=module.all_negative_losses,
+                epsilon=module.epsilon, lamda=module.lamda, p=module.p,
+                gamma1=module.gamma1, gamma2=module.gamma2, eps=module.eps,
+                depth_on_containment=module.depth_on_containment,
+                flip_gci2=module.flip_gci2, tables=module)
+
+
+@register_adapter("RegDELBEModule")
+def _regd_adapter(module):
+    return regd(None, None, embed_dim=module.embed_dim, **_regd_options(module))
+
+
+@register_adapter("RegDELEmModule")
+def _regd_elem_adapter(module):
+    return regd_elem(None, None, embed_dim=module.embed_dim, reg_norm=module.reg_norm,
+                     gci1_radius_term=module.gci1_radius_term, radius=module.radius,
+                     **_regd_options(module))
