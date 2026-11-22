@@ -77,6 +77,6 @@ class ComposedEL(EmbeddingELModel):
         self.module = module.to(self.device)
 
     @property
-    def geometry(self):
+    def as_geometry(self):
         """The module, which is a :class:`~mowl.representation.Geometry`."""
         return self.module

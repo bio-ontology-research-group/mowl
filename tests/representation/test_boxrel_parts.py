@@ -297,7 +297,7 @@ class TestComposedELWithTheParts(TestCase):
     def test_published_combinations(self):
         for method in ("transbox", "boxel", "boxsel", "elkem"):
             model = self.assertTrains(method=method, margin=0.02)
-            self.assertEqual(type(model.geometry), type(model.module))
+            self.assertEqual(type(model.as_geometry), type(model.module))
         self.assertTrains(method="transbox", formulation="reference", margin=0.02)
         self.assertTrains(method="transbox", enhanced=False, margin=0.02)
         self.assertTrains(method="elkem", variant="reference", margin=0.02)

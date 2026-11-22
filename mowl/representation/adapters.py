@@ -6,6 +6,8 @@ the same tables, and its losses equal the module's. Modules that are not a combi
 parts get a geometry of their own.
 """
 
+import inspect
+
 from mowl.representation import methods
 from mowl.representation.geometry import Geometry
 
@@ -16,7 +18,9 @@ ADAPTERS = {}
 
 
 def register_adapter(*module_class_names):
-    """Decorator: use the function as the adapter of the module classes with these names."""
+    """Decorator: use the function as the adapter of the module classes with these names.
+    The function takes the module; if it has a parameter ``model``, it also gets the model
+    the module belongs to (``None`` when only a module was given)."""
     def decorate(function):
         for name in module_class_names:
             ADAPTERS[name] = function
@@ -39,6 +43,9 @@ def geometry_of(model):
         raise NotImplementedError(
             f"{type(module).__name__} does not expose a geometry yet. Modules that do: "
             f"{sorted(ADAPTERS)}.")
+    # An adapter may take the model as well (texts, sizes and options that live there).
+    if "model" in inspect.signature(adapter).parameters:
+        return adapter(module, model=model if model is not module else None)
     return adapter(module)
 
 

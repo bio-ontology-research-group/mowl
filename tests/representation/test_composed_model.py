@@ -62,7 +62,7 @@ class TestComposedEL(TestCase):
             after = sum(float(model.module(d[:], f).mean())
                         for f, d in model.training_datasets.items() if len(d))
             self.assertLess(after, before, kwargs)
-            self.assertIsInstance(model.geometry, ComposedGeometry)
+            self.assertIsInstance(model.as_geometry, ComposedGeometry)
 
     def test_new_combination(self):
         # Boxes with the semantic objective and a slack margin: not a published method.
@@ -89,5 +89,5 @@ class TestComposedEL(TestCase):
 
     def test_existing_models_have_a_geometry(self):
         model = ELBE(self.dataset, embed_dim=8)
-        self.assertIs(model.geometry.class_embed, model.module.class_embed)
+        self.assertIs(model.as_geometry.class_embed, model.module.class_embed)
         self.assertEqual(geometry_of(model).parts["measure"], "bounds per coordinate")
