@@ -9,7 +9,7 @@ geometry class of this group.
 
 import torch as th
 
-from mowl.nn.el.softagg import diversity_penalty
+from mowl.representation.regions import Box
 from mowl.training.regularization import NormPenalty, Regularizer
 
 __all__ = ["bump_penalty", "ComponentSpread", "DiversityPenalty"]
@@ -61,14 +61,26 @@ class ComponentSpread(Regularizer):
 
 
 class DiversityPenalty(Regularizer):
-    """The soft containment ratio between the components of every class
-    (:func:`~mowl.nn.el.softagg.diversity_penalty`), which counters the collapse that the soft
-    aggregation causes."""
+    """How much the components of a class cover each other, which counters the collapse that
+    the soft aggregation causes: for every class and every pair :math:`i < j` of its boxes the
+    share of the smaller box that the two have in common, coordinate by coordinate in log
+    space, :math:`\\exp \\sum_m [\\log(\\mathrm{overlap}_m + \\varepsilon) -
+    \\log(\\min(\\mathrm{side}_{i,m}, \\mathrm{side}_{j,m}) + \\varepsilon)]` (1 for two equal
+    boxes at any dimension), summed over the pairs and averaged over the classes.
+
+    Where the corners of the two boxes coincide, the overlap takes the lower corner of the
+    first and the upper corner of the second box, so that two equal boxes still get a gradient
+    that moves them apart.
+
+    :param weight: Factor.
+    :param eps: :math:`\\varepsilon`.
+    """
 
     kind = "penalty"
 
-    def __init__(self, weight=1.0):
+    def __init__(self, weight=1.0, eps=1e-6):
         super().__init__(parameters=(), weight=weight)
+        self.eps = eps
 
     def penalty(self, model):
         classes = model.class_model
@@ -76,5 +88,12 @@ class DiversityPenalty(Regularizer):
         if k < 2 or self.weight == 0 or len(classes) == 0:
             return None
         shape = (len(classes), k, classes.embed_dim)
-        return self.weight * diversity_penalty(classes.centres.weight.view(shape),
-                                               th.abs(classes.offsets.weight).view(shape))
+        box = Box(classes.centres.weight.view(shape), classes.offsets.weight.view(shape).abs())
+        first, second = th.triu_indices(k, k, offset=1, device=box.centre.device)
+        low_a, low_b = box.lower[:, first], box.lower[:, second]
+        high_a, high_b = box.upper[:, first], box.upper[:, second]
+        overlap = th.relu(th.where(high_a < high_b, high_a, high_b)
+                          - th.where(low_a >= low_b, low_a, low_b))
+        smaller = 2.0 * th.minimum(box.offset[:, first], box.offset[:, second])
+        share = th.log(overlap + self.eps) - th.log(smaller + self.eps)
+        return self.weight * share.sum(dim=-1).exp().sum(dim=1).mean()

@@ -375,6 +375,10 @@ class TestVolumeMultiBoxEL(Case):
         module = BoxSquaredEL(self.dataset, embed_dim=3).module
         module.measure = Sampled(num_points=128, bound=1.5)
         rows = th.tensor([[0, 1], [1, 2]])
+        # the sampled measure has no margin: Box2EL's margin is refused, not ignored
+        with self.assertRaises(ValueError):
+            module(rows, "gci0")
+        module.objective.margin = 0.0
         finite(self, module(rows, "gci0"))
         self.assertEqual(module.parts["measure"], "sampled volume")
 

@@ -206,7 +206,12 @@ CanonicalMixture model
 Soft component aggregation and diversity regularisation
 -------------------------------------------------------
 
-.. automodule:: mowl.nn.el.softagg
+The parts: :func:`~mowl.representation.library.multibox_parts.soft_minimum` and the
+aggregation of :class:`~mowl.representation.library.multibox_parts.UnionMeasure`, and the
+regulariser :class:`~mowl.representation.library.multibox_objective.DiversityPenalty`. The
+direct implementation, which the comparison tests read:
+
+.. automodule:: mowl.baselines.nn.el.multiboxel.softagg
    :members:
    :show-inheritance:
 
@@ -218,7 +223,10 @@ Canonical-element point supervision and losses
    :members:
    :show-inheritance:
 
-.. automodule:: mowl.nn.el.pointloss
+The parts: :mod:`mowl.representation.library.structural_points`. The direct
+implementation:
+
+.. automodule:: mowl.baselines.nn.el.multiboxel.pointloss
    :members:
    :show-inheritance:
 
@@ -227,6 +235,14 @@ Structural region algebra, definition tables, and losses
 --------------------------------------------------------
 
 .. automodule:: mowl.nn.el.structural
+   :members:
+   :show-inheritance:
+
+The losses are computed from the parts
+(:class:`~mowl.representation.library.structural_reading.StructuralReading` and the slot
+algebra of :mod:`mowl.representation.library.structural_regions`). The direct implementation:
+
+.. automodule:: mowl.baselines.nn.el.multiboxel.structural_losses
    :members:
    :show-inheritance:
 

@@ -78,7 +78,20 @@ from mowl.datasets import PathDataset
 from mowl.geometric.completion import CanonicalModel
 from mowl.geometric.helly import helly_check
 from mowl.models import MultiBoxEL
-from mowl.nn.el.structural import nonempty_measure, signed_overlap
+from mowl.representation.library.structural_regions import SlotBoxes, side, slot_pairs
+
+
+def nonempty_measure(w):
+    """The smallest signed side of every slot: positive iff the slot has interior."""
+    return side(w)
+
+
+def signed_overlap(cen_a, w_a, cen_b, w_b):
+    """Per pair of slots and coordinate the signed overlap (negative where apart)."""
+    a = SlotBoxes.make(cen_a, w_a, th.ones(cen_a.shape[:2], dtype=th.bool))
+    b = SlotBoxes.make(cen_b, w_b, th.ones(cen_b.shape[:2], dtype=th.bool))
+    _, w, _ = slot_pairs(a, b)
+    return (2.0 * w).view(cen_a.shape[0], cen_a.shape[1], cen_b.shape[1], -1)
 from mowl.owlapi import OWLAPIAdapter
 
 # %%
@@ -187,12 +200,12 @@ for k in (3, 5):
 # constructively by intersecting the component boxes of their operands
 # (:meth:`~mowl.nn.MultiBoxELModule.all_class_regions`). Training optimises:
 #
-# * **Existence** (:func:`~mowl.nn.el.structural.existence_loss` via
-#   :func:`~mowl.nn.el.structural.nonempty_measure`): every satisfiable class
+# * **Existence** (:func:`~mowl.baselines.nn.el.multiboxel.structural_losses.existence_loss` via
+#   :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.nonempty_measure`): every satisfiable class
 #   must have at least one active slot whose minimum half-width exceeds
 #   ``margin``.
-# * **Disjointness** (:func:`~mowl.nn.el.structural.gci1_bot_structural` via
-#   :func:`~mowl.nn.el.structural.signed_overlap`): for every
+# * **Disjointness** (:func:`~mowl.baselines.nn.el.multiboxel.structural_losses.gci1_bot_structural` via
+#   :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.signed_overlap`): for every
 #   :math:`A_i \sqcap A_j \sqsubseteq \bot`, every pair of non-empty active
 #   slots must be separated by at least ``margin`` along some coordinate.
 #
@@ -210,7 +223,7 @@ for k in (3, 5):
 #
 # 1. **Sum aggregation** (``bot_agg="sum"``): sums the squared-hinge overlap
 #    penalties over all active slot pairs of :math:`(C, D)` in
-#    :func:`~mowl.nn.el.structural.gci1_bot_structural` instead of averaging
+#    :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.gci1_bot_structural` instead of averaging
 #    them (``bot_agg="mean"``), preventing the :math:`1 / (S_C S_D)` dilution as
 #    the number of definition slots grows.
 # 2. **Canonical-model witness points** (``witness_weight=1.0``): compiles a
@@ -218,7 +231,7 @@ for k in (3, 5):
 #    model and attaches one learnable point :math:`p(w) \in \mathbb{R}^d` per
 #    satisfiable class (:meth:`~mowl.nn.MultiBoxELModule.witness_points`). Using
 #    :func:`~mowl.nn.el.structural.inside_measure`,
-#    :func:`~mowl.nn.el.structural.witness_loss` pulls :math:`p(A_i)` inside at
+#    :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.witness_loss` pulls :math:`p(A_i)` inside at
 #    least one active component of every :math:`X_j` (:math:`j \ne i`) and pushes
 #    it outside *every* active component of :math:`X_i` (since
 #    :math:`A_i \sqcap X_i \sqsubseteq \bot` is entailed by the canonical model).

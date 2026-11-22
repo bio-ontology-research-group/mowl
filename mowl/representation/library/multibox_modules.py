@@ -200,10 +200,23 @@ class ReleasedTables:
 # the modules of unions of boxes (MultiBoxEL, MultiELBE)
 # ====================================================================================
 
-from mowl.nn.el.pointloss import (_validate_beta, _validate_ind_halfwidth,
-                                  compute_point_modelness)
-from mowl.nn.el.softagg import _validate_tau
 from mowl.representation.library.multibox_objective import ComponentSpread, DiversityPenalty
+from mowl.representation.library.multibox_parts import check_temperature as _validate_tau
+
+
+def _positive(name, value):
+    """``value`` as a float; an error unless it is a positive number."""
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or float(value) <= 0.0:
+        raise ValueError(f"{name} must be a positive float, got {value!r}")
+    return float(value)
+
+
+def _validate_beta(beta):
+    return _positive("beta", beta)
+
+
+def _validate_ind_halfwidth(ind_halfwidth):
+    return _positive("ind_halfwidth", ind_halfwidth)
 
 __all__ += ["UnionModule", "check_nonnegative", "check_union_options"]
 
@@ -438,7 +451,14 @@ DiversityPenalty`."""
     def point_modelness(self, ps=None, chunk_size=8192):
         """``pos_frac`` (:math:`m \\ge 0.5`) and ``hardneg_frac`` (:math:`m < 0.5`) of the
         pairs of a supervision."""
-        return compute_point_modelness(self, ps=ps, chunk_size=chunk_size)
+        if ps is None:
+            ps = self.point_supervision
+        if ps is None:
+            raise ValueError("PointSupervision must be provided or set via "
+                             "set_point_supervision(ps).")
+        if self.point_supervision is None:
+            self.set_point_supervision(ps)
+        return self.point_terms.modelness(self, ps, chunk_size)
 
     # -- the components of a class --------------------------------------------------------
     def class_boxes(self, idx):

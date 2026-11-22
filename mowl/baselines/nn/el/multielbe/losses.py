@@ -76,7 +76,7 @@ from mowl.baselines.nn.el.multiboxel.losses import (
     _validate_aggregation,
     multi_intersection,
 )
-from mowl.nn.el.softagg import soft_gci1_terms, softmin
+from mowl.baselines.nn.el.multiboxel.softagg import soft_gci1_terms, softmin
 
 
 __all__ = [

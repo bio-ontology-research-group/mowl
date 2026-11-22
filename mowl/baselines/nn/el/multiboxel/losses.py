@@ -63,7 +63,7 @@ from typing import Optional, Tuple, Union
 import torch as th
 
 import mowl.baselines.nn.el.boxsquaredel.losses as B2L
-from mowl.nn.el.softagg import _validate_tau, soft_gci1_terms, softmin
+from mowl.baselines.nn.el.multiboxel.softagg import _validate_tau, soft_gci1_terms, softmin
 
 
 def _validate_aggregation(

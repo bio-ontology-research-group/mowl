@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import torch as th
 
-from mowl.nn.el.pointloss import _VALID_OBJECTIVES
+from mowl.representation.library.structural_points import POINT_READINGS as _VALID_OBJECTIVES
 from mowl.representation.geometry import ComposedGeometry
 from mowl.representation.library.multibox_methods import multielbe
 from mowl.representation.library.multibox_parts import UnionClasses
@@ -62,10 +62,10 @@ class MultiELBEModule(UnionModule, ComposedGeometry):
     - Negative sampling is only supported for ``gci2`` and
       ``object_property_assertion`` (``neg_capable_gcis``).
     - Under ``component_aggregation="soft"`` at finite ``tau > 0``, the soft
-      loss is not zero at a hard model because :func:`~mowl.nn.el.softagg.softmin`
+      loss is not zero at a hard model because :func:`~mowl.representation.library.multibox_parts.soft_minimum`
       (:math:`\\le \\text{mean}`) pulls all target components toward each source
       component in proportion to their softmax weights; ``diversity_reg``
-      (:func:`~mowl.nn.el.softagg.diversity_penalty`) exists to counteract this
+      (:class:`~mowl.representation.library.multibox_objective.DiversityPenalty`) exists to counteract this
       collapse pressure.
 
     Parameters

@@ -12,7 +12,9 @@ regime :class:`~mowl.training.structure.IdleComponentReseeding` calls.
 import numpy as np
 import torch as th
 
-from mowl.nn.el.structural import nonempty_measure, pair_size, slot_components
+from mowl.nn.el.structural import slot_components
+from mowl.representation.library.structural_reading import pair_size_of
+from mowl.representation.library.structural_regions import side as nonempty_measure
 
 __all__ = ["reseed_components"]
 
@@ -167,7 +169,7 @@ def reseed_components(geometry, rng):
         moves = 0
         if targets.pairs.numel() > 0:
             pairs = targets.pairs.to(device=device, dtype=th.long)
-            sizes = pair_size(_regions(geometry, pairs[:, 0]), _regions(geometry, pairs[:, 1]))
+            sizes = pair_size_of(geometry.classes(pairs[:, 0]), geometry.classes(pairs[:, 1]))
             violated = np.flatnonzero((sizes < margin).detach().cpu().numpy())
             if violated.size > 0:
                 perm = rng.permutation(violated.size)

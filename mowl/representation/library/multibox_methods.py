@@ -27,10 +27,11 @@ from mowl.representation.library.multibox_objective import (
 from mowl.representation.objectives import Objective
 from mowl.representation.library.multibox_parts import (
     BumpedBoxClasses, HeadTailRelations, PackedUnionClasses, PairUnions, SampledVolume,
-    UnionClasses, UnionMeasure, _packed_init)
+    UnionClasses, UnionMeasure, _packed_init, sobol_points)
 from mowl.representation.measures import Bounds
 from mowl.representation.adapters import register_adapter
-from mowl.representation.methods import register_method
+from mowl.representation.methods import (CLASS_MODELS, MEASURES, RELATION_MODELS,
+                                         register_method)
 from mowl.representation.relation_models import Translation
 from mowl.representation.library.structural_measure import SlotMeasure
 from mowl.representation.library.structural_methods import StructuralGeometry
@@ -56,6 +57,36 @@ def _build(geometry_class, into, *args, **kwargs):
         return geometry_class(*args, **kwargs)
     geometry_class.__init__(into, *args, **kwargs)
     return into
+
+
+def _replacement(value, registry, kind, *arguments):
+    """The part that replaces the method's own: ``None`` (keep it), a part object, a registered
+    name or a factory (made with ``arguments``)."""
+    if value is None or not (isinstance(value, str) or isinstance(value, type)):
+        return value
+    if isinstance(value, str):
+        if value not in registry:
+            raise ValueError(f"Unknown {kind} {value!r}; available: {sorted(registry)}.")
+        value = registry[value]
+    return value(*arguments)
+
+
+def _replace(defaults, tables, nb_classes, nb_relations, embed_dim, classes=None,
+             relations=None, measure=None, objective=None):
+    """The parts of a method: ``defaults`` maps ``"classes"``, ``"relations"``, ``"measure"``,
+    ``"objective"`` to functions that make the method's own part; a part the caller gives
+    replaces it (and the function is not called)."""
+    given = {"classes": _replacement(classes, CLASS_MODELS, "class model", nb_classes,
+                                     embed_dim),
+             "relations": _replacement(relations, RELATION_MODELS, "relation model",
+                                       nb_relations, embed_dim),
+             "measure": _replacement(measure, MEASURES, "measure"),
+             "objective": objective}
+    given = {k: v for k, v in given.items() if v is not None}
+    if given and tables is not None:
+        raise ValueError(f"Replacing parts ({sorted(given)}) does not go with sharing the "
+                         f"tables of a module (tables=...).")
+    return {k: given[k] if k in given else make() for k, make in defaults.items()}
 
 
 def _BOUNDS():
@@ -162,7 +193,8 @@ def multiboxel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=
                reading="axiom", beta=0.1, neg_weight=0.1, ind_halfwidth=None, volume_reg=0.0,
                max_components=None, existence_weight=1.0, size_reg=1e-3, bot_agg="mean",
                witness_weight=0.0, supervision=None, size_reg_without_tables=False,
-               structural_definitions=True, tables=None, into=None):
+               structural_definitions=True, tables=None, into=None, classes=None,
+               relations=None, measure=None, objective=None, regularizers=()):
     """MultiBoxEL (Federico, Leemhuis and Kutz 2026): Box2EL with every class a union of
     ``n_components`` boxes (one bump vector per class), in the five readings of the module's
     ``objective`` (here ``reading``):
@@ -202,8 +234,13 @@ def multiboxel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=
         definition table and targets).
     :param into: The public module (:class:`~mowl.nn.MultiBoxELModule`) to initialise with
         these parts.
+    :param classes, relations, measure, objective: Replace the part of the method: a part
+        object, the name of a registered part (made with ``(size, embed_dim)``; a measure:
+        ``()``), or ``None`` (the part of the method). Not with ``tables``.
+    :param regularizers: Added to the regularisers of the method.
     """
     t = tables
+    regularizers_added = tuple(regularizers)
     if reading not in ("axiom", "structural", "point", "mixed", "hybrid"):
         raise ValueError("reading must be 'axiom', 'structural', 'point', 'mixed' or "
                          "'hybrid'.")
@@ -217,8 +254,8 @@ def multiboxel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=
                              "reading.")
         centres, offsets, bumps, ind_centres, ind_offsets, ind_bumps = (
             None if t is None else getattr(t, n, None) for n in names)
-        classes = SlotClasses(nb_classes, embed_dim, n_components, max_components,
-                              bump=True, centres=centres, offsets=offsets, bumps=bumps) \
+        own_classes = SlotClasses(nb_classes, embed_dim, n_components, max_components,
+                                  bump=True, centres=centres, offsets=offsets, bumps=bumps) \
             if t is None else SlotClasses(components=n_components,
                                           max_components=max_components, centres=centres,
                                           offsets=offsets, bumps=bumps)
@@ -228,14 +265,20 @@ def multiboxel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=
         elif ind_centres is not None:
             individuals = UnionClasses(components=1, centres=ind_centres,
                                        offsets=ind_offsets, bumps=ind_bumps)
-        objective = StructuralReading(
-            margin, bot_agg=bot_agg, definitions=structural_definitions, epsilon=epsilon,
-            gci2_negative="delta", delta=delta, squared=("gci3", "gci3_bot"),
-            gci3_bot_negative="filler")
+        parts = _replace({
+            "classes": lambda: own_classes,
+            "relations": lambda: _head_tail(nb_relations, embed_dim, t),
+            "measure": lambda: SlotMeasure(_BOUNDS(), reading="structural"),
+            "objective": lambda: StructuralReading(
+                margin, bot_agg=bot_agg, definitions=structural_definitions, epsilon=epsilon,
+                gci2_negative="delta", delta=delta, squared=("gci3", "gci3_bot"),
+                gci3_bot_negative="filler")}, t, nb_classes, nb_relations, embed_dim,
+            classes=classes, relations=relations, measure=measure, objective=objective)
         geometry = _build(
-            StructuralGeometry, into, classes, _head_tail(nb_relations, embed_dim, t),
-            SlotMeasure(_BOUNDS(), reading="structural"), objective, individuals=individuals,
-            base_regularizers=regularizers, existence_weight=existence_weight,
+            StructuralGeometry, into, parts["classes"], parts["relations"], parts["measure"],
+            parts["objective"], individuals=individuals,
+            base_regularizers=regularizers + list(regularizers_added),
+            existence_weight=existence_weight,
             size_reg=size_reg, witness_weight=witness_weight,
             size_reg_without_tables=size_reg_without_tables)
         if into is not None:
@@ -250,27 +293,31 @@ def multiboxel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=
                 geometry.set_structural_tables(t.definition_table, t.existence_targets,
                                                t.top_idx)
         return geometry
-    classes, individuals = _union_parts(nb_classes, embed_dim, n_components, nb_individuals,
-                                        t, names, bump=True)
+    own_classes, individuals = _union_parts(nb_classes, embed_dim, n_components,
+                                            nb_individuals, t, names, bump=True)
     if t is not None:
         tau = t.tau
     options = dict(slack=True, epsilon=epsilon, gci3="inclusion", gci2_negative="delta",
                    negatives="gci2", squared=True, delta=delta, gci3_bot_negative="filler",
                    strict_negatives=False)
     terms = None
-    if reading == "axiom":
-        objective = Objective(margin, **options)
     if reading != "axiom" or into is not None:
         terms = _points(reading, t, embed_dim, beta if t is None else t.beta, neg_weight
                         if t is None else t.neg_weight, ind_halfwidth if t is None
                         else t.ind_halfwidth, volume_reg if t is None else t.volume_reg,
                         supervision)
-    if reading != "axiom":
-        objective = PointReading(terms, reading, margin, **options)
-    measure = UnionMeasure(_BOUNDS(), component_aggregation, tau, meets_reading="every")
-    geometry = _build(ComposedGeometry, into, classes,
-                      _head_tail(nb_relations, embed_dim, t), measure, objective,
-                      individuals=individuals, regularizers=regularizers)
+    parts = _replace({
+        "classes": lambda: own_classes,
+        "relations": lambda: _head_tail(nb_relations, embed_dim, t),
+        "measure": lambda: UnionMeasure(_BOUNDS(), component_aggregation, tau,
+                                        meets_reading="every"),
+        "objective": lambda: Objective(margin, **options) if reading == "axiom"
+        else PointReading(terms, reading, margin, **options)},
+        t, nb_classes, nb_relations, embed_dim,
+        classes=classes, relations=relations, measure=measure, objective=objective)
+    geometry = _build(ComposedGeometry, into, parts["classes"], parts["relations"],
+                      parts["measure"], parts["objective"], individuals=individuals,
+                      regularizers=regularizers + list(regularizers_added))
     if terms is not None:
         geometry.point_terms = terms
     return geometry
@@ -281,7 +328,8 @@ def multielbe(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0
               n_components=1, component_reg=0.0, component_aggregation="hard", tau=1.0,
               diversity_reg=0.0, epsilon=0.01, gci3="overlap", reading="axiom", beta=0.1,
               neg_weight=0.1, ind_halfwidth=None, volume_reg=0.0, supervision=None,
-              tables=None, into=None):
+              tables=None, into=None, classes=None, relations=None, measure=None,
+              objective=None, regularizers=()):
     """MultiELBE (Federico, Leemhuis and Kutz 2026): ELBE with every class a union of
     ``n_components`` boxes (translations as relations, strict margin, overlap reading of
     :math:`\\exists r.C \\sqsubseteq D`).
@@ -305,34 +353,42 @@ def multielbe(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0
         :mod:`mowl.baselines`) to share parameters with.
     :param into: The public module (:class:`~mowl.nn.MultiELBEModule`) to initialise with
         these parts.
+    :param classes, relations, measure, objective: Replace the part of the method: a part
+        object, the name of a registered part (made with ``(size, embed_dim)``; a measure:
+        ``()``), or ``None`` (the part of the method). Not with ``tables``.
+    :param regularizers: Added to the regularisers of the method.
     """
     t = tables
     if reading not in ("axiom", "point", "mixed", "hybrid"):
         raise ValueError("reading must be 'axiom', 'point', 'mixed' or 'hybrid'.")
-    classes, individuals = _union_parts(
+    own_classes, individuals = _union_parts(
         nb_classes, embed_dim, n_components, nb_individuals, t,
         ("class_embed", "class_offset", "none", "ind_embed", "ind_offset", "none"),
         bump=False)
-    relations = Translation(nb_relations, embed_dim) if t is None else Translation(
-        vectors=t.rel_embed)
     if t is not None:
         tau = t.tau
     options = dict(slack=False, epsilon=epsilon, gci3=gci3, gci2_negative="overlap",
                    negatives="gci2", strict_negatives=False)
     terms = None
-    if reading == "axiom":
-        objective = Objective(margin, **options)
     if reading != "axiom" or into is not None:
         terms = _points(reading, t, embed_dim, beta if t is None else t.beta, neg_weight
                         if t is None else t.neg_weight, ind_halfwidth if t is None
                         else t.ind_halfwidth, volume_reg if t is None else t.volume_reg,
                         supervision)
-    if reading != "axiom":
-        objective = PointReading(terms, reading, margin, **options)
-    measure = UnionMeasure(_BOUNDS(), component_aggregation, tau, meets_reading="every")
-    geometry = _build(ComposedGeometry, into, classes, relations, measure, objective,
-                      individuals=individuals,
-                      regularizers=_union_regularizers(component_reg, diversity_reg))
+    parts = _replace({
+        "classes": lambda: own_classes,
+        "relations": lambda: Translation(nb_relations, embed_dim) if t is None
+        else Translation(vectors=t.rel_embed),
+        "measure": lambda: UnionMeasure(_BOUNDS(), component_aggregation, tau,
+                                        meets_reading="every"),
+        "objective": lambda: Objective(margin, **options) if reading == "axiom"
+        else PointReading(terms, reading, margin, **options)},
+        t, nb_classes, nb_relations, embed_dim,
+        classes=classes, relations=relations, measure=measure, objective=objective)
+    geometry = _build(ComposedGeometry, into, parts["classes"], parts["relations"],
+                      parts["measure"], parts["objective"], individuals=individuals,
+                      regularizers=_union_regularizers(component_reg, diversity_reg)
+                      + list(regularizers))
     if terms is not None:
         geometry.point_terms = terms
     return geometry
@@ -342,6 +398,7 @@ def multielbe(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0
 def mcmultibox(nb_classes, nb_relations, nb_individuals=0, embed_dim=5, margin=0.0,
                num_boxes=5, bound=1.0, num_points=20000, temperature=1.0, aggregate="min",
                seed=0, point_chunk_size=2048, init_seed=None, tables=None, into=None,
+               classes=None, relations=None, measure=None, objective=None, regularizers=(),
                num_batches=5):
     """The volume-based MultiBoxEL (Aharoni 2024): classes are unions of boxes, relations are
     unions of boxes over pairs, and every loss is :math:`1 - \\mathrm{Vol}(A \\cap B) /
@@ -360,7 +417,8 @@ def mcmultibox(nb_classes, nb_relations, nb_individuals=0, embed_dim=5, margin=0
     a metric, not a loss) is
     :func:`~mowl.representation.library.multibox_distance.sampled_distance` on these parts.
     ``gci0_bot`` and ``gci3_bot`` are not defined by the thesis and raise an error in the
-    module; ``margin`` is ignored. ``gci1_bot``, ``class_assertion``,
+    module. The method has no margin: a ``margin`` other than 0 is refused (the measure
+    refuses one too). ``gci1_bot``, ``class_assertion``,
     ``object_property_assertion`` and the negative loss of ``gci2`` are not defined by the
     module either (it raises), but exist here as extensions (the fraction of :math:`C`
     covered by :math:`D`; the inclusion of the individual boxes), because the measure has
@@ -372,32 +430,46 @@ def mcmultibox(nb_classes, nb_relations, nb_individuals=0, embed_dim=5, margin=0
         implementation in :mod:`mowl.baselines`) to share parameters (and point sets) with.
     :param into: The public module (:class:`~mowl.nn.VolumeMultiBoxELModule`) to initialise
         with these parts.
+    :param classes, relations, measure, objective: Replace the part of the method: a part
+        object, the name of a registered part (made with ``(size, embed_dim)``; a measure:
+        ``()``), or ``None`` (the part of the method). Not with ``tables``.
+    :param regularizers: Added to the regularisers of the method.
     """
+    if margin:
+        raise ValueError(f"The volume-based MultiBoxEL has no margin (its losses are volume "
+                         f"ratios); got margin={margin!r}.")
     t = tables
     if t is not None:
-        classes = PackedUnionClasses(table=t.class_embed)
-        relations = PairUnions(table=t.rel_embed, bound=t.bound)
+        own_classes = PackedUnionClasses(table=t.class_embed)
+        own_relations = PairUnions(table=t.rel_embed, bound=t.bound)
         individuals = PackedUnionClasses(table=t.ind_embed) if t.ind_embed is not None \
             else None
-        measure = SampledVolume([t.points, t.role_points], bound=t.bound,
-                                temperature=t.temperature, aggregate=t.aggregate,
-                                chunk_size=t.point_chunk_size)
+        own_measure = SampledVolume([t.points, t.role_points], bound=t.bound,
+                                    temperature=t.temperature, aggregate=t.aggregate,
+                                    chunk_size=t.point_chunk_size)
     else:
+        # the tables are drawn in this order from the seed, so they are made even when a
+        # caller replaces one of them (a replaced part does not shift the others' numbers)
         gen = th.Generator().manual_seed(seed if init_seed is None else init_seed)
-        classes = PackedUnionClasses(nb_classes, embed_dim, num_boxes, bound, generator=gen)
-        relations = PairUnions(nb_relations, embed_dim, num_boxes, bound, generator=gen)
+        own_classes = PackedUnionClasses(nb_classes, embed_dim, num_boxes, bound,
+                                         generator=gen)
+        own_relations = PairUnions(nb_relations, embed_dim, num_boxes, bound, generator=gen)
         individuals = None
         if nb_individuals:
             individuals = PackedUnionClasses(table=th.nn.Parameter(
                 _packed_init(nb_individuals, 1, embed_dim, bound, gen)))
-        from mowl.nn.el.mcmultibox import volume as V
-        points = [V.sobol_points(num_points, embed_dim, bound, seed),
-                  V.sobol_points(num_points, 2 * embed_dim, bound, seed + 1)]
-        measure = SampledVolume(points, bound=bound, temperature=temperature,
-                                aggregate=aggregate, chunk_size=point_chunk_size)
-    objective = Objective(negatives="gci2", strict_negatives=False)
-    geometry = _build(ComposedGeometry, into, classes, relations, measure, objective,
-                      individuals=individuals, neg_capable_gcis=frozenset())
+        points = [sobol_points(num_points, embed_dim, bound, seed),
+                  sobol_points(num_points, 2 * embed_dim, bound, seed + 1)]
+        own_measure = SampledVolume(points, bound=bound, temperature=temperature,
+                                    aggregate=aggregate, chunk_size=point_chunk_size)
+    parts = _replace({"classes": lambda: own_classes, "relations": lambda: own_relations,
+                      "measure": lambda: own_measure,
+                      "objective": lambda: Objective(negatives="gci2", strict_negatives=False)},
+                     t, nb_classes, nb_relations, embed_dim, classes=classes,
+                     relations=relations, measure=measure, objective=objective)
+    geometry = _build(ComposedGeometry, into, parts["classes"], parts["relations"],
+                      parts["measure"], parts["objective"], individuals=individuals,
+                      neg_capable_gcis=frozenset(), regularizers=tuple(regularizers))
     geometry.margin_semantics = None
     # an epoch is num_batches steps on a shuffled split of the axioms (a step of a model that
     # trains with ComposedEL is one epoch of the generic loop: train for epochs * num_batches)

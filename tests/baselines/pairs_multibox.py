@@ -131,6 +131,7 @@ def _structural_losses(model):
     out = _losses(model)
     out["regularization"] = th.as_tensor(model.module.regularization_loss())
     out["structural_extra"] = th.as_tensor(model.module.structural_extra_loss())
+    out["extra"] = th.as_tensor(_extra_loss(model, 0))
     return out
 
 
@@ -140,8 +141,20 @@ def _point_losses(model):
     out = _losses(model)
     model.module.train()
     out.update({f"train/{k}": v for k, v in _losses(model).items()})
-    out["points"] = th.as_tensor(model.additional_training_loss(0))
+    out["points"] = th.as_tensor(_extra_loss(model, 0))
     return out
+
+
+def _extra_loss(model, epoch):
+    """The extra training loss of an epoch: the model's own (the direct implementation) or
+    that of its regimes (the class users get: the point loss and the structural penalties
+    are regimes, :mod:`mowl.training.structural`)."""
+    total = model.additional_training_loss(epoch)
+    regime = model.training_regime
+    extra = None if regime is None else regime.additional_loss(epoch)
+    if extra is not None:
+        total = extra if total is None else total + extra
+    return total
 
 
 _mb_new = _multi(_MB_NEW, n_components=2, margin=0.05, delta=2.0, reg_factor=0.2)

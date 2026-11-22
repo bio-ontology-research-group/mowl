@@ -12,7 +12,7 @@ import mowl.baselines.nn.el.boxsquaredel.losses as B2L
 from mowl.baselines.nn.el.boxsquaredel.module import BoxSquaredELModule
 from mowl.nn.el.multibox_utils import effective_components as _effective_components
 import mowl.baselines.nn.el.multiboxel.losses as L
-from mowl.nn.el.pointloss import (
+from mowl.baselines.nn.el.multiboxel.pointloss import (
     _VALID_OBJECTIVES,
     _validate_beta,
     _validate_ind_halfwidth,
@@ -24,12 +24,9 @@ from mowl.nn.el.pointloss import (
     membership_bce,
     soft_box_membership,
 )
-from mowl.nn.el.softagg import _validate_tau, diversity_penalty
-from mowl.nn.el.structural import (
-    DefinitionTable,
-    ExistenceTargets,
+from mowl.baselines.nn.el.multiboxel.softagg import _validate_tau, diversity_penalty
+from mowl.baselines.nn.el.multiboxel.structural_losses import (
     Regions,
-    WitnessTargets,
     existence_loss,
     gci0_bot_structural,
     gci0_structural,
@@ -40,8 +37,13 @@ from mowl.nn.el.structural import (
     pair_size,
     pair_slots,
     region_size,
-    slot_components,
     witness_loss,
+)
+from mowl.nn.el.structural import (
+    DefinitionTable,
+    ExistenceTargets,
+    WitnessTargets,
+    slot_components,
 )
 
 if TYPE_CHECKING:
@@ -159,7 +161,7 @@ class MultiBoxELModule(ELModule):
         ``5.0 * beta``.
     margin : float, default 0.02
         Tightening margin :math:`m` used by ``objective="structural"`` for GCI
-        inclusions, ``gci1_bot`` separation, and :func:`~mowl.nn.el.structural.existence_loss`.
+        inclusions, ``gci1_bot`` separation, and :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.existence_loss`.
         For Box\\ :math:`^2`\\ EL role and assertion scores (where ``gamma`` loosens
         inclusions via :math:`\\text{relu}(\\text{dist} + 2 o - \\gamma)`), positive
         scores pass ``gamma = -margin`` so :math:`m > 0` tightens inclusion, while
@@ -176,7 +178,7 @@ class MultiBoxELModule(ELModule):
         definitions :math:`A \\equiv X \\sqcap Y` via
         :class:`~mowl.nn.el.structural.DefinitionTable`.
     existence_weight : float, default 1.0
-        Non-negative weight on :func:`~mowl.nn.el.structural.existence_loss` in
+        Non-negative weight on :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.existence_loss` in
         :meth:`structural_extra_loss`.
     size_reg : float, default 1e-3
         Non-negative weight on the primitive side-length regulariser
@@ -192,9 +194,9 @@ class MultiBoxELModule(ELModule):
     bot_agg : {"mean", "sum"}, default "mean"
         Aggregation over active component pairs in :meth:`gci1_bot_loss` under
         ``objective="structural"`` (passed as ``agg`` to
-        :func:`~mowl.nn.el.structural.gci1_bot_structural`).
+        :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.gci1_bot_structural`).
     witness_weight : float, default 0.0
-        Non-negative weight on :func:`~mowl.nn.el.structural.witness_loss` in
+        Non-negative weight on :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.witness_loss` in
         :meth:`structural_extra_loss` under ``objective="structural"``. When
         ``witness_weight > 0.0`` and ``targets.witness`` is attached via
         :meth:`set_structural_tables`, allocates ``self.witness_embed`` with
@@ -728,7 +730,7 @@ class MultiBoxELModule(ELModule):
         Primitive classes occupy slots ``0 .. k - 1`` with ``w = |offset| >= 0``
         (active) and pad slots ``k .. K - 1`` with ``cen = 0, w = -1``
         (inactive). Defined classes in ``self.definition_table`` are computed
-        recursively via :func:`~mowl.nn.el.structural.pair_slots` from their
+        recursively via :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.pair_slots` from their
         definers ``(def_x, def_y)``.
 
         Guarantees:
@@ -1525,7 +1527,7 @@ class MultiBoxELModule(ELModule):
         )
 
     def gci0_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
-        """Compute GCI0 loss (:math:`C \\sqsubseteq D`), dispatching to :func:`~mowl.nn.el.structural.gci0_structural` under ``objective="structural"``.
+        """Compute GCI0 loss (:math:`C \\sqsubseteq D`), dispatching to :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.gci0_structural` under ``objective="structural"``.
 
         Guarantees:
 
@@ -1559,7 +1561,7 @@ class MultiBoxELModule(ELModule):
         )
 
     def gci0_bot_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
-        """Compute GCI0-bot loss (:math:`C \\sqsubseteq \\bot`), dispatching to :func:`~mowl.nn.el.structural.gci0_bot_structural` under ``objective="structural"``."""
+        """Compute GCI0-bot loss (:math:`C \\sqsubseteq \\bot`), dispatching to :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.gci0_bot_structural` under ``objective="structural"``."""
         if self.objective == "structural":
             r_c = self.class_regions(data[:, 0])
             return gci0_bot_structural(r_c)
@@ -1575,7 +1577,7 @@ class MultiBoxELModule(ELModule):
         )
 
     def gci1_loss(self, data: th.Tensor, neg: bool = False) -> th.Tensor:
-        """Compute GCI1 loss (:math:`C \\sqcap D \\sqsubseteq E`), dispatching to :func:`~mowl.nn.el.structural.gci1_structural` under ``objective="structural"``."""
+        """Compute GCI1 loss (:math:`C \\sqcap D \\sqsubseteq E`), dispatching to :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.gci1_structural` under ``objective="structural"``."""
         if self.objective == "structural":
             r_c = self.class_regions(data[:, 0])
             r_d = self.class_regions(data[:, 1])
@@ -1605,7 +1607,7 @@ class MultiBoxELModule(ELModule):
         Under ``objective="structural"``, gates active slots of :math:`C` and
         :math:`D` by detached non-emptiness
         (``r.active & (nonempty_measure(r.w.detach()) > 0.0)``) before calling
-        :func:`~mowl.nn.el.structural.gci1_bot_structural` with ``agg=self.bot_agg``.
+        :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.gci1_bot_structural` with ``agg=self.bot_agg``.
 
         Guarantees:
 

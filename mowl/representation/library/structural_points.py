@@ -31,9 +31,8 @@ points is in a relation:
 import numpy as np
 import torch as th
 import torch.nn as nn
+import torch.nn.functional as F
 
-from mowl.nn.el.pointloss import (gather_element_embeddings, membership_bce, soft_box_membership,
-                                  union_membership, volume_penalty)
 from mowl.representation.library.multibox_parts import UnionOfBoxes
 from mowl.representation.measures import RegionMeasure
 from mowl.representation.methods import register_measure
@@ -41,7 +40,31 @@ from mowl.representation.objectives import Objective
 from mowl.representation.regions import Ball, Box
 from mowl.training.regularization import Regularizer
 
-__all__ = ["SoftMembership", "PointTerms", "PointReading", "PointPenalty"]
+__all__ = ["SoftMembership", "PointTerms", "PointReading", "PointPenalty", "VolumePenalty",
+           "POINT_READINGS", "log_volume"]
+
+#: The readings of the axioms of MultiBoxEL and MultiELBE besides ``"structural"``.
+POINT_READINGS = ("axiom", "point", "mixed", "hybrid")
+
+
+def log_volume(offsets, eps=1e-6):
+    """The mean over boxes and coordinates of :math:`\\log(2|o| + \\varepsilon)`: the log
+    side length (zero for no box). Small boxes make it very negative: as a penalty it pulls
+    the classes towards small regions."""
+    if offsets.numel() == 0:
+        return offsets.new_zeros(())
+    sides = th.log(offsets.abs().mul(2.0).add(eps))
+    return sides.mean(dim=-1).mean()
+
+
+def _bce(probability, target, weight=1.0, eps=1e-6):
+    """Weighted binary cross-entropy of probabilities clamped to ``[eps, 1 - eps]`` (zero for
+    an empty batch)."""
+    if probability.numel() == 0:
+        return probability.new_zeros(())
+    p = probability.clamp(eps, 1.0 - eps)
+    return F.binary_cross_entropy(p, th.full_like(p, float(target)),
+                                  weight=th.full_like(p, float(weight)))
 
 
 def _point(region):
@@ -76,13 +99,22 @@ class SoftMembership(RegionMeasure):
         if isinstance(region, Ball):
             depth = region.radius.reshape(-1) - th.linalg.norm(x - region.centre, dim=-1)
             return th.sigmoid(depth / self.beta)
-        if isinstance(region, UnionOfBoxes):
-            m = soft_box_membership(x, region.centre, region.offset, beta=self.beta)
-            active = getattr(region, "active", None)
-            if active is not None:
-                m = th.where(active, m, th.zeros_like(m))
-            return union_membership(m)
-        return soft_box_membership(x, region.centre, region.offset, beta=self.beta).squeeze(1)
+        if not isinstance(region, UnionOfBoxes):
+            return self.box_probability(x, region.centre[:, None], region.offset[:, None])[:, 0]
+        m = self.box_probability(x, region.centre, region.offset)
+        active = getattr(region, "active", None)
+        if active is not None:
+            m = th.where(active, m, th.zeros_like(m))
+        # the noisy-or of the boxes of the union
+        return 1.0 - (1.0 - m).prod(dim=-1)
+
+    def box_probability(self, x, centre, offset):
+        """``(B, k)``: the soft membership of the points ``x`` ``(B, d)`` in each of the ``k``
+        boxes ``(B, k, d)`` of their row: the smallest, over the coordinates, sigmoid of the
+        depth :math:`(|o| - |x - c|) / \\beta` (the minimum, not the product, so that it does
+        not decay with the dimension)."""
+        depth = offset.abs() - (x[:, None, :] - centre).abs()
+        return th.sigmoid(depth / self.beta).amin(dim=-1)
 
     def _clamped(self, a, b):
         x = a if isinstance(a, th.Tensor) else _point(a)
@@ -107,7 +139,7 @@ class PointTerms(nn.Module):
     :param neg_weight: Weight of the random negatives.
     :param ind_halfwidth: Half-width of the virtual box of an individual that is the filler of
         a role triple (default :math:`5\\beta`).
-    :param volume_reg: Weight of :func:`~mowl.nn.el.pointloss.volume_penalty` of the classes
+    :param volume_reg: Weight of :func:`log_volume` of the classes
         ``volume_classes``.
     :param volume_classes: Class ids the volume penalty covers (the named classes except top
         and bottom).
@@ -146,9 +178,21 @@ class PointTerms(nn.Module):
     def points(self, g, elements):
         """Coordinates of canonical elements: classes' from ``elem_embed``, individuals' from
         the table of the individual model."""
+        table = self.elem_embed
+        idx = elements.to(table.weight.device, th.long)
+        is_individual = self.supervision.element_is_individual.to(idx.device)[idx]
+        if not bool(is_individual.any()):
+            return table(idx)
         individuals = getattr(g.individual_model, "centres", None)
-        return gather_element_embeddings(elements, self.supervision, self.elem_embed,
-                                         individuals)
+        if individuals is None:
+            raise ValueError("PointSupervision contains individual elements, but the "
+                             "geometry has no individuals.")
+        own = self.supervision.element_class_index.to(idx.device)[idx]
+        if bool(is_individual.all()):
+            return individuals(own)
+        out = table(idx.masked_fill(is_individual, 0))
+        return th.where(is_individual[:, None], individuals(own.masked_fill(~is_individual, 0)),
+                        out)
 
     def bumps(self, g, elements):
         """The bump vector of the class or individual each element stands for."""
@@ -182,10 +226,10 @@ class PointTerms(nn.Module):
                 pairs = batch.get(key)
                 if pairs is None or pairs.numel() == 0 or w <= 0.0:
                     continue
-                loss = loss + membership_bce(self._pair_probability(g, pairs), target, weight=w)
+                loss = loss + _bce(self._pair_probability(g, pairs), target, weight=w)
             return loss
         w = (self.neg_weight if neg else 1.0) if weight is None else float(weight)
-        return membership_bce(self._pair_probability(g, batch), 0.0 if neg else 1.0, weight=w)
+        return _bce(self._pair_probability(g, batch), 0.0 if neg else 1.0, weight=w)
 
     def target_membership(self, g, points, elements):
         """Soft membership of ``points`` ``(B, d)`` in the target elements: in the region of
@@ -238,16 +282,35 @@ class PointTerms(nn.Module):
         else:
             m = self.target_membership(g, self.points(g, x) + relations.vectors(r), y)
         w = (self.neg_weight if neg else 1.0) if weight is None else float(weight)
-        return membership_bce(m, 0.0 if neg else 1.0, weight=w)
+        return _bce(m, 0.0 if neg else 1.0, weight=w)
 
     def volume(self, g):
-        """:func:`~mowl.nn.el.pointloss.volume_penalty` of the offsets of the classes
-        ``volume_classes`` (zero if there are none)."""
+        """:func:`log_volume` of the offsets of the classes ``volume_classes`` (zero if there
+        are none)."""
         if self.volume_classes is None or len(self.volume_classes) == 0:
             return th.zeros((), device=self.elem_embed.weight.device)
         ids = th.as_tensor(self.volume_classes, dtype=th.long,
                            device=self.elem_embed.weight.device)
-        return volume_penalty(g.classes(ids).offset)
+        return log_volume(g.classes(ids).offset)
+
+    @th.no_grad()
+    def modelness(self, g, supervision=None, chunk_size=8192):
+        """How far the points are a model of the supervision: the fraction of the positive
+        pairs with membership at least 0.5 (``pos_frac``) and of the hard negatives with less
+        (``hardneg_frac``); 1 for none."""
+        supervision = self.supervision if supervision is None else supervision
+        out = {}
+        for key, pairs, positive in (("pos_frac", supervision.pos_pairs, True),
+                                     ("hardneg_frac", supervision.hard_neg_pairs, False)):
+            if pairs.shape[0] == 0:
+                out[key] = 1.0
+                continue
+            hits = 0
+            for chunk in th.split(pairs, max(int(chunk_size), 1)):
+                m = self._pair_probability(g, chunk)
+                hits += int(((m >= 0.5) if positive else (m < 0.5)).sum())
+            out[key] = hits / pairs.shape[0]
+        return out
 
     def loss(self, g, batch):
         """The extra loss of a point objective for a sample ``batch``: membership, role, and
@@ -298,6 +361,34 @@ class PointReading(Objective):
 
     def class_assertion(self, g, rows, neg=False):
         return self.terms.class_assertion_score(g, rows)
+
+
+class VolumePenalty(Regularizer):
+    """:func:`log_volume` of the boxes of the classes ``classes`` (a function of the geometry
+    or a list of class ids; default all), times ``weight``: a pull towards small regions for
+    any class model whose regions are boxes or unions of boxes (the volume term of the point
+    objectives of MultiBoxEL and MultiELBE, without the top and bottom classes).
+
+    :param weight: Factor (zero: no penalty).
+    :param classes: Class ids, or ``geometry -> class ids``, or ``None`` (all classes).
+    """
+
+    kind = "penalty"
+
+    def __init__(self, weight=1e-3, classes=None):
+        super().__init__(parameters=(), weight=weight)
+        self.classes = classes
+
+    def penalty(self, model):
+        if float(self.weight) <= 0.0:
+            return None
+        ids = self.classes(model) if callable(self.classes) else self.classes
+        if ids is None:
+            ids = th.arange(len(model.class_model), device=model.device)
+        ids = th.as_tensor(ids, dtype=th.long, device=model.device)
+        if ids.numel() == 0:
+            return None
+        return float(self.weight) * log_volume(model.classes(ids).offset)
 
 
 class PointPenalty(Regularizer):

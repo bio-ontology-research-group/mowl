@@ -1039,7 +1039,7 @@ def gci3_bot_score_prisms(c: PrismRegions, margin: float = 0.0) -> th.Tensor:
     - At ``margin > 0``, if :math:`\\sum_{k=1}^3 h_{C,k} \\ge 0`, this score has a
       floor of ``margin`` and cannot reach ``0``.
     - Shrinks :math:`C` itself (:math:`\\text{relu}(\\sum_k h_{C,k} + \\text{margin})`),
-      which directly conflicts with :func:`~mowl.nn.el.structural.existence_loss`
+      which directly conflicts with :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.existence_loss`
       whenever :math:`C` is satisfiable.
     - Does not inspect the box part ``c.cen, c.w`` or role embeddings.
 

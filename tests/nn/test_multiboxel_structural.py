@@ -22,6 +22,8 @@ from mowl.nn.el.structural import (
     Regions,
     WitnessTargets,
     build_structural_tables,
+)
+from mowl.baselines.nn.el.multiboxel.structural_losses import (
     nonempty_measure,
     region_size,
 )

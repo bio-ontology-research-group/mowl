@@ -4,8 +4,16 @@ half-widths and inactive slots, and the wrapper "defined classes are intersectio
 Regions
     :class:`SlotBoxes`: ``K`` slots per class, each a box of signed half-width (a negative
     half-width in a coordinate means the slot is empty along it) and an ``active`` flag.
-    The intersection of two of them is the exact set of pairs (:func:`pair_slots` of the
-    structural module), truncated to the ``K`` slots of the first argument.
+    The intersection of two of them is the exact set of pairs (:func:`slot_pairs`), truncated
+    to the ``K`` slots of the first argument.
+
+Slot algebra
+    :func:`slot_pairs` (every intersection of a slot of one region with a slot of another, as
+    boxes of signed half-width), :func:`side` (the smallest signed side of a box: positive
+    iff it has interior), :func:`largest_side` (the size of a union: that of its largest
+    counting box) and :func:`slot_depth` (how far a point lies inside a union of slots).
+    They are written on :class:`~mowl.representation.Box` and are what the structural reading
+    and its penalties are computed from.
 
 Class models
     :class:`SlotClasses`: a union of ``k`` boxes per class padded with inactive slots to
@@ -21,17 +29,80 @@ from dataclasses import dataclass, fields, replace
 
 import torch as th
 
-from mowl.nn.el.structural import Regions, nonempty_measure, pair_slots
+from mowl.nn.el.structural import Regions
 from mowl.representation.class_models import Classes
 from mowl.representation.library.multibox_parts import UnionClasses, UnionOfBoxes
 from mowl.representation.methods import register_class_model
 from mowl.representation.regions import Box, ConstructorUnavailable
 
 __all__ = ["SlotBoxes", "to_slots", "slots", "intersect_signed", "SlotClasses",
-           "DefinedClasses"]
+           "DefinedClasses", "slot_pairs", "side", "largest_side", "slot_depth"]
 
 #: The gap of two regions without a single pair of active slots.
 _BIG = 1e6
+#: The depth of a point in a region without a single active slot (finite, no gradient).
+_NO_SLOT_DEPTH = -1e6
+
+
+# ====================================================================================
+# slot algebra
+# ====================================================================================
+
+def side(offset):
+    """The smallest signed side length :math:`2 \\min_m w_m` of boxes of signed half-width
+    ``offset`` ``(..., d) -> (...)``: positive iff the box has interior, negative (by how much)
+    where it is empty."""
+    return offset.amin(dim=-1) * 2.0
+
+
+def largest_side(sides, active):
+    """The size of a union of boxes: the largest :func:`side` among its counting boxes,
+    ``(B, K), (B, K) -> (B,)``. An error where a row has no counting box (its size is not
+    defined)."""
+    if active.shape[0] and not bool(active.any(dim=1).all()):
+        raise ValueError("The size of a union needs at least one active slot in every row.")
+    return th.where(active, sides, th.full_like(sides, -float("inf"))).max(dim=1).values
+
+
+def _grid(tensor, k_other, first):
+    """``(B, k, d)`` repeated for every slot of the other region: ``(B * k * k_other, d)`` in
+    the order (row, slot of the first region, slot of the second)."""
+    batch, k, dim = tensor.shape
+    if first:
+        tiled = tensor[:, :, None, :].expand(batch, k, k_other, dim)
+    else:
+        tiled = tensor[:, None, :, :].expand(batch, k_other, k, dim)
+    return tiled.reshape(-1, dim)
+
+
+def slot_pairs(a, b):
+    """Every intersection of a slot of ``a`` with a slot of ``b`` (both :class:`SlotBoxes`):
+    ``(centre, w, active)`` of shapes ``(B, ka * kb, d)`` and ``(B, ka * kb)``, the pairs in
+    the order ``(i, j)``, the half-widths signed (negative where the two slots are apart: the
+    signed intersection of :class:`~mowl.representation.Box`), a pair active iff both slots
+    are."""
+    batch, ka, dim = a.centre.shape
+    kb = b.centre.shape[1]
+    left = Box(_grid(a.centre, kb, True), _grid(a.w, kb, True))
+    right = Box(_grid(b.centre, ka, False), _grid(b.w, ka, False))
+    both, _ = left.intersect(right, signed=True)
+    active = (a.active[:, :, None] & b.active[:, None, :]).reshape(batch, ka * kb)
+    return (both.centre.view(batch, ka * kb, dim), both.offset.view(batch, ka * kb, dim),
+            active)
+
+
+def slot_depth(points, region):
+    """How far the points ``(W, d)`` lie inside the regions ``(W, K, d)`` (:class:`SlotBoxes`,
+    one region per point): the largest, over the active slots, of the smallest
+    :math:`w_m - |p_m - c_m|` over the coordinates (positive iff the point is in the interior of
+    a slot). A row without an active slot is ``-1e6``, without gradient."""
+    if points.shape[0] == 0:
+        return points.new_empty(0)
+    per_slot = (region.w - (points[:, None, :] - region.centre).abs()).amin(dim=-1)
+    some = region.active.any(dim=1)
+    best = th.where(region.active, per_slot, th.full_like(per_slot, -float("inf")))
+    best = best.max(dim=1).values
+    return th.where(some, best, th.full_like(best, _NO_SLOT_DEPTH))
 
 
 @dataclass(frozen=True)
@@ -63,7 +134,7 @@ class SlotBoxes(UnionOfBoxes):
     def gate(self):
         """``(B, K)``: active and with positive extent in every coordinate (the slots that
         the structural losses take into account)."""
-        return self.active & (nonempty_measure(self.w) > 0.0)
+        return self.active & (side(self.w) > 0.0)
 
     @property
     def slots(self):
@@ -103,17 +174,38 @@ class SlotBoxes(UnionOfBoxes):
         both are, its half-width signed (negative where the slots are apart), the active
         ones first and at most as many as ``self`` has slots. The gap is zero iff some
         pair of active slots intersects (and large where there is none)."""
-        a, b = self.slots, to_slots(other).slots
-        out = pair_slots(a, b, self.centre.shape[1])
-        pair_active = (a.active.unsqueeze(2) & b.active.unsqueeze(1))
-        lo = th.maximum((a.cen - a.w).unsqueeze(2), (b.cen - b.w).unsqueeze(1))
-        hi = th.minimum((a.cen + a.w).unsqueeze(2), (b.cen + b.w).unsqueeze(1))
-        gap = th.linalg.norm(th.relu(lo - hi), dim=-1).flatten(1)
-        gap = th.where(pair_active.flatten(1), gap, th.full_like(gap, _BIG))
-        gap = gap.amin(dim=1, keepdim=True)
-        meets = (out.active & (nonempty_measure(out.w) > 0)).any(dim=1, keepdim=True)
+        other = to_slots(other)
+        centre, w, active = slot_pairs(self, other)
+        batch, total, dim = centre.shape
+        room = self.centre.shape[1]
+        if batch and int(active.sum(dim=1).max()) > room:
+            raise ValueError(f"The intersection has {int(active.sum(dim=1).max())} active "
+                             f"pairs of slots in a row, more than the {room} slots there are.")
+        # the active pairs first, each group in its order (i, j); then cut or pad to ``room``
+        order = th.sort((~active).to(th.int8), dim=1, stable=True).indices
+        centre = centre.gather(1, order[..., None].expand_as(centre))
+        w = w.gather(1, order[..., None].expand_as(w))
+        active = active.gather(1, order)
+        if total < room:
+            missing = room - total
+            centre = th.cat([centre, centre.new_zeros(batch, missing, dim)], dim=1)
+            w = th.cat([w, w.new_full((batch, missing, dim), -1.0)], dim=1)
+            active = th.cat([active, active.new_zeros(batch, missing)], dim=1)
+        centre, w, active = centre[:, :room], w[:, :room], active[:, :room]
+        keep = active[..., None]
+        centre = th.where(keep, centre, th.zeros_like(centre))
+        w = th.where(keep, w, th.full_like(w, -1.0))
+        # the gap: zero iff some pair of active slots meets; else the nearest active pair
+        lower = th.maximum(_grid(self.centre - self.w, other.centre.shape[1], True),
+                           _grid(other.centre - other.w, self.centre.shape[1], False))
+        upper = th.minimum(_grid(self.centre + self.w, other.centre.shape[1], True),
+                           _grid(other.centre + other.w, self.centre.shape[1], False))
+        gap = th.linalg.norm(th.relu(lower - upper), dim=-1).view(batch, total)
+        pair_active = (self.active[:, :, None] & other.active[:, None, :]).reshape(batch, total)
+        gap = th.where(pair_active, gap, th.full_like(gap, _BIG)).amin(dim=1, keepdim=True)
+        meets = (active & (side(w) > 0)).any(dim=1, keepdim=True)
         gap = th.where(meets, th.zeros_like(gap), gap)
-        return SlotBoxes.make(out.cen, out.w, out.active), gap
+        return SlotBoxes.make(centre, w, active), gap
 
 
 def to_slots(region):
@@ -238,6 +330,14 @@ class DefinedClasses(Classes):
         self.register_buffer("def_mask", mask.clone().bool())
         self.register_buffer("def_x", x.clone().long())
         self.register_buffer("def_y", y.clone().long())
+        # the rows that state a definition, as keys ``A * N + C`` and ``(X * N + Y) * N + A``
+        # (the table also lists those entailed through a role auxiliary); not weights
+        keys0 = getattr(table, "_masked_gci0_keys", None)
+        keys1 = getattr(table, "_masked_gci1_keys", None)
+        self.register_buffer("def_gci0_keys", None if keys0 is None else keys0.clone().long(),
+                             persistent=False)
+        self.register_buffer("def_gci1_keys", None if keys1 is None else keys1.clone().long(),
+                             persistent=False)
 
     def __getattr__(self, name):
         try:
@@ -286,11 +386,20 @@ class DefinedClasses(Classes):
         return _replace_rows(region, rows, inter)
 
     # -- the rows that state a definition ------------------------------------------------
+    def _stated(self, rows, keys):
+        """Whether the rows (class ids, row-major as keys over the classes) are among
+        ``keys``."""
+        n = int(self.def_mask.shape[0])
+        code = th.zeros(rows.shape[0], dtype=th.long, device=keys.device)
+        for column in rows.to(device=keys.device, dtype=th.long).unbind(dim=1):
+            code = code * n + column
+        return th.isin(code, keys).to(rows.device)
+
     def masked_gci0(self, rows):
         """``(B,)`` boolean: ``gci0`` rows :math:`A \\sqsubseteq X`, :math:`A \\sqsubseteq Y`
         of a definition."""
-        if self.table is not None:
-            return self.table.masked_gci0(rows)
+        if self.def_gci0_keys is not None:
+            return self._stated(rows[:, :2], self.def_gci0_keys)
         rows = rows.to(self.def_x.device)
         a, c = rows[:, 0], rows[:, 1]
         return self.def_mask[a] & ((self.def_x[a] == c) | (self.def_y[a] == c))
@@ -298,8 +407,8 @@ class DefinedClasses(Classes):
     def masked_gci1(self, rows):
         """``(B,)`` boolean: ``gci1`` rows :math:`X \\sqcap Y \\sqsubseteq A` of a definition
         (in either order)."""
-        if self.table is not None:
-            return self.table.masked_gci1(rows)
+        if self.def_gci1_keys is not None:
+            return self._stated(rows[:, :3], self.def_gci1_keys)
         rows = rows.to(self.def_x.device)
         a = rows[:, 2]
         both = ((self.def_x[a] == rows[:, 0]) & (self.def_y[a] == rows[:, 1])) | \

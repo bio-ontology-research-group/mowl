@@ -13,7 +13,7 @@ from mowl.datasets import Dataset, PathDataset
 from mowl.geometric.normal_forms import TOP
 from mowl.models import MultiBoxEL, MultiELBE
 from mowl.nn import MultiBoxELModule, MultiELBEModule
-from mowl.nn.el.pointloss import soft_box_membership, union_membership
+from mowl.baselines.nn.el.multiboxel.pointloss import soft_box_membership, union_membership
 from tests.geometric.helpers import _random_batch, fixture_path
 
 
@@ -62,11 +62,12 @@ def test_point_objective_tbox_only(tmp_path: Path, abox_kb) -> None:
         assert model.module.ind_embed.weight.grad is not None
         assert bool((model.module.ind_embed.weight.grad.abs() > 0).any().item())
 
-        # Verify TOP is excluded from the volume penalty in additional_training_loss
+        # Verify TOP is excluded from the volume penalty of the point loss (the regime
+        # SampledPointLoss of the reading: the extra loss of a training step)
         if TOP in model.named_class_index_dict:
             top_idx = model.named_class_index_dict[TOP]
             model.module.zero_grad()
-            add_loss = model.additional_training_loss(0)
+            add_loss = model.training_regime.additional_loss(0)
             assert add_loss is not None
             add_loss.backward()
             assert model.module.class_offset.weight.grad is not None
@@ -276,7 +277,7 @@ def test_hybrid_objective_keeps_all_axiom_losses_and_point_supervision(
             points_seed=0,
             model_filepath=str(tmp_path / f"{model_cls.__name__}_hy.pt"),
         )
-        add_loss = model.additional_training_loss(0)
+        add_loss = model.training_regime.additional_loss(0)
         assert add_loss is not None
         assert torch.isfinite(add_loss)
         assert add_loss.requires_grad

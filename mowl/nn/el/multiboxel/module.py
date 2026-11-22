@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import torch as th
 
-from mowl.nn.el.pointloss import _VALID_OBJECTIVES
+from mowl.representation.library.structural_points import POINT_READINGS as _VALID_OBJECTIVES
 from mowl.nn.el.structural import Regions
 from mowl.representation.library.multibox_methods import multiboxel
 from mowl.representation.library.multibox_modules import (
@@ -75,10 +75,10 @@ class MultiBoxELModule(UnionModule, StructuralGeometry):
     - Negative sampling is only supported for ``gci2`` and
       ``object_property_assertion`` (``neg_capable_gcis``).
     - Under ``component_aggregation="soft"`` at finite ``tau > 0``, the soft
-      loss is not zero at a hard model because :func:`~mowl.nn.el.softagg.softmin`
+      loss is not zero at a hard model because :func:`~mowl.representation.library.multibox_parts.soft_minimum`
       (:math:`\\le \\text{mean}`) pulls all target components toward each source
       component in proportion to their softmax weights; ``diversity_reg``
-      (:func:`~mowl.nn.el.softagg.diversity_penalty`) exists to counteract this
+      (:class:`~mowl.representation.library.multibox_objective.DiversityPenalty`) exists to counteract this
       collapse pressure.
 
     Parameters
@@ -110,7 +110,7 @@ class MultiBoxELModule(UnionModule, StructuralGeometry):
         Soft-assignment temperature stored as a registered buffer on the module.
     diversity_reg : float, default 0.0
         Weight for the pairwise component volume overlap regulariser
-        :func:`~mowl.nn.el.softagg.diversity_penalty`.
+        :class:`~mowl.representation.library.multibox_objective.DiversityPenalty`.
     objective : str, default "axiom"
         Training objective mode: ``"axiom"``, ``"point"``, ``"mixed"``,
         ``"hybrid"``, or ``"structural"``. Under ``objective="point"`` and
@@ -132,7 +132,7 @@ class MultiBoxELModule(UnionModule, StructuralGeometry):
         ``5.0 * beta``.
     margin : float, default 0.02
         Tightening margin :math:`m` used by ``objective="structural"`` for GCI
-        inclusions, ``gci1_bot`` separation, and :func:`~mowl.nn.el.structural.existence_loss`.
+        inclusions, ``gci1_bot`` separation, and :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.existence_loss`.
         For Box\\ :math:`^2`\\ EL role and assertion scores (where ``gamma`` loosens
         inclusions via :math:`\\text{relu}(\\text{dist} + 2 o - \\gamma)`), positive
         scores pass ``gamma = -margin`` so :math:`m > 0` tightens inclusion, while
@@ -149,7 +149,7 @@ class MultiBoxELModule(UnionModule, StructuralGeometry):
         definitions :math:`A \\equiv X \\sqcap Y` via
         :class:`~mowl.nn.el.structural.DefinitionTable`.
     existence_weight : float, default 1.0
-        Non-negative weight on :func:`~mowl.nn.el.structural.existence_loss` in
+        Non-negative weight on :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.existence_loss` in
         :meth:`structural_extra_loss`.
     size_reg : float, default 1e-3
         Non-negative weight on the primitive side-length regulariser
@@ -165,9 +165,9 @@ class MultiBoxELModule(UnionModule, StructuralGeometry):
     bot_agg : {"mean", "sum"}, default "mean"
         Aggregation over active component pairs in :meth:`gci1_bot_loss` under
         ``objective="structural"`` (passed as ``agg`` to
-        :func:`~mowl.nn.el.structural.gci1_bot_structural`).
+        :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.gci1_bot_structural`).
     witness_weight : float, default 0.0
-        Non-negative weight on :func:`~mowl.nn.el.structural.witness_loss` in
+        Non-negative weight on :func:`~mowl.baselines.nn.el.multiboxel.structural_losses.witness_loss` in
         :meth:`structural_extra_loss` under ``objective="structural"``. When
         ``witness_weight > 0.0`` and ``targets.witness`` is attached via
         :meth:`set_structural_tables`, allocates ``self.witness_embed`` with
@@ -413,7 +413,7 @@ class MultiBoxELModule(UnionModule, StructuralGeometry):
         """:class:`~mowl.nn.el.structural.Regions` with ``K = max_components`` slots of the
         classes ``idx``: the components of a primitive class (``w = |offset| >= 0``, active) and
         inactive padding (``cen = 0``, ``w = -1``); a defined class is the intersection of its
-        definers (:func:`~mowl.nn.el.structural.pair_slots`)."""
+        definers (:func:`~mowl.baselines.nn.el.multiboxel.structural_losses.pair_slots`)."""
         regions = to_slots(self.classes(idx.to(device=self.device, dtype=th.long))).slots
         pad = self.max_components - regions.cen.shape[1]
         if pad > 0:
@@ -447,6 +447,12 @@ class MultiBoxELModule(UnionModule, StructuralGeometry):
             if term is not None:
                 total = total + term
         return total
+
+    def extra_penalties(self):
+        """The penalties of the structural reading (existence, size, witness): the
+        regularisers of the geometry that :meth:`regularization_loss` does not count; the
+        regime :class:`~mowl.training.structural.ExtraPenalties` adds them to training."""
+        return self._structural_penalties()
 
     def _structural_penalties(self):
         base = self.__dict__.get("base_regularizers", self.regularizers)

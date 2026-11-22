@@ -15,19 +15,21 @@ from mowl.nn.el.structural import (
     ExistenceTargets,
     Regions,
     WitnessTargets,
+    inside_measure,
+    slot_components,
+)
+from mowl.baselines.nn.el.multiboxel.structural_losses import (
     existence_loss,
     gci0_bot_structural,
     gci0_structural,
     gci1_bot_structural,
     gci1_structural,
     inclusion_tight,
-    inside_measure,
     nonempty_measure,
     pair_size,
     pair_slots,
     region_size,
     signed_overlap,
-    slot_components,
     witness_loss,
 )
 from tests.geometric.helpers import NS, fixture_path, t3_cm, t3_dataset
