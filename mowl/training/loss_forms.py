@@ -18,6 +18,8 @@ regimes here sets.
 from mowl.training.regime import TrainingRegime
 
 
+# Reference code by definition: these regimes switch options of one specific module (ELEm,
+# EmEL++, BoxEL) to reproduce one publication's implementation, so they name its class.
 def _is(module, name):
     return any(cls.__name__ == name for cls in type(module).__mro__)
 

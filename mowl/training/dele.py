@@ -448,6 +448,8 @@ def dele_regime(closure=None, epsilon=None, filter_negatives=True, reasoner="can
 # explicitly (DELECodeLosses) instead of being hidden in the modules.
 # ---------------------------------------------------------------------------------------
 
+# Reference code by definition: the functions below (and _DELE_LOSSES) re-implement the DELE
+# code for three specific modules and read their parameters by name on purpose.
 def _elem_gci3_loss(module, data, neg=False):
     import mowl.nn.el.elem.losses as L
     if module._dele_neg(neg):

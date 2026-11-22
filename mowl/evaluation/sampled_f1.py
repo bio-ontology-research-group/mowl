@@ -29,9 +29,12 @@ of Tables 3 and 4) is:
   (:func:`reference_best_threshold`); F1, precision and recall of the test split at
   that threshold (``score <= threshold`` is positive).
 
-The matrix entry ``relu(d_bd)`` of the boxes is computed from the raw embedding
-parameters (absolute offsets), for balls from the absolute radii; this matches the code
-for boxes. The ball branch of the code computes boundary terms with absolute radii too
+The matrix entry ``relu(d_bd)`` of the boxes is computed from the regions of the
+geometry of the model (:func:`mowl.representation.geometry_of`: absolute offsets, absolute
+radii), so it applies to every method whose classes are boxes or balls; this matches the
+code for boxes. The child region of ``gci2`` is the region of ``exists r.B`` of the
+geometry (the filler shifted by ``-r`` for a translation).
+The ball branch of the code computes boundary terms with absolute radii too
 (its training uses softplus radii; the difference is documented on the method card).
 """
 
@@ -40,6 +43,7 @@ import torch as th
 
 from mowl.evaluation.regime import EvaluationRegime
 from mowl.evaluation.axiom_ranking import el_rows
+from mowl.evaluation.region_access import all_class_regions, centre_and_size
 
 #: Column of the score matrix whose entry is the positive score of a row, per normal
 #: form, as in the reference code (``compute_nf1_ranks`` / ``compute_nf3_ranks`` of
@@ -50,29 +54,38 @@ from mowl.evaluation.axiom_ranking import el_rows
 REFERENCE_POSITIVE_COLUMN = {"gci0": 1, "gci2": 1}
 
 
-def class_regions(module):
-    """Centres and sizes of all class regions, from the module's embeddings.
+_PURPOSE = "The sampled-F1 score"
 
-    Boxes (``class_offset``): centres and absolute offsets. Balls (``class_rad``):
-    centres and absolute radii.
+
+def _regions(module):
+    """``(geometry, centers, sizes, is_ball)`` of the module, read through its geometry."""
+    region, geometry = all_class_regions(module, _PURPOSE)
+    return (geometry,) + centre_and_size(region, _PURPOSE)
+
+
+def class_regions(module):
+    """Centres and sizes of all class regions, from the geometry of the module
+    (:func:`mowl.representation.geometry_of`).
+
+    Boxes: centres and (non-negative) half-widths. Balls: centres and radii.
 
     :return: ``(centers, sizes, is_ball)`` tensors on the module's device.
+    :raises NotImplementedError: If the module has no geometry yet.
+    :raises TypeError: If its classes are neither balls nor boxes.
     """
-    if hasattr(module, "class_offset"):
-        return module.class_embed.weight, module.class_offset.weight.abs(), False
-    if hasattr(module, "class_rad"):
-        return module.class_embed.weight, module.class_rad.weight.abs().squeeze(-1), True
-    raise TypeError(f"Module {type(module).__name__} has neither boxes nor balls.")
+    return _regions(module)[1:]
 
 
-def _child_regions(module, gci_name, rows):
-    """The fixed child region of every query row, as in the reference code."""
-    centers, sizes, is_ball = class_regions(module)
+def _child_regions(geometry, centers, sizes, gci_name, rows):
+    """The fixed child region of every query row, as in the reference code: the region
+    of ``C`` for ``C ⊑ D``; the region of ``∃r.B`` (the filler shifted back by ``r`` for
+    a translation) for ``A ⊑ ∃r.B``."""
     if gci_name == "gci0":
         return centers[rows[:, 0]], sizes[rows[:, 0]]
     if gci_name == "gci2":
-        translated = centers[rows[:, 2]] - module.rel_embed.weight[rows[:, 1]]
-        return translated, sizes[rows[:, 2]]
+        region = geometry.exists(rows[:, 1], geometry.classes(rows[:, 2]))
+        centre, size, _ = centre_and_size(region, _PURPOSE)
+        return centre, size
     raise ValueError(f"Unsupported normal form {gci_name!r}.")
 
 
@@ -119,22 +132,22 @@ def candidate_dists(module, gci_name, rows, row_batch=64, candidate_chunk=16384,
     fixed child region of row ``i`` inside the region of class ``X``; the entry of the
     row's column-0 class is ``+inf`` (the code filters ``C ⊑ C``).
 
-    :param module: An EL module with boxes (``class_offset``) or balls (``class_rad``)
-        and translations (``rel_embed``): ELBE, ELEm, RegD.
+    :param module: A model or module with a geometry of boxes or balls
+        (:func:`mowl.representation.geometry_of`): ELBE, ELEm, RegD, Box2EL, TransBox, ...
     :param gci_name: ``"gci0"`` (candidates replace the superclass) or ``"gci2"``
         (candidates replace the subclass; the child is the filler translated by ``-r``).
     :param rows: Query rows in mOWL's column layout, on any device.
     :param score: ``"boundary"`` or ``"energy"`` (see :func:`_score`).
     :return: A float tensor of shape ``(len(rows), number of classes)`` on the CPU.
     """
-    centers, sizes, is_ball = class_regions(module)
+    geometry, centers, sizes, is_ball = _regions(module)
     device = centers.device
     n_classes = centers.shape[0]
     rows = rows.to(device)
     out = th.empty((len(rows), n_classes), dtype=th.float32)
     for i in range(0, len(rows), row_batch):
         chunk = rows[i:i + row_batch]
-        child_center, child_size = _child_regions(module, gci_name, chunk)
+        child_center, child_size = _child_regions(geometry, centers, sizes, gci_name, chunk)
         for j in range(0, n_classes, candidate_chunk):
             cc = centers[j:j + candidate_chunk]
             cs = sizes[j:j + candidate_chunk]
@@ -149,11 +162,11 @@ def candidate_dists(module, gci_name, rows, row_batch=64, candidate_chunk=16384,
 def pair_scores(module, gci_name, rows, score="boundary"):
     """The axiom's own score (:func:`_score`) of the child region inside the region of
     the kept class -- the superclass D for ``gci0``, the subclass A for ``gci2``."""
-    centers, sizes, is_ball = class_regions(module)
+    geometry, centers, sizes, is_ball = _regions(module)
     device = centers.device
     rows = rows.to(device)
     head_col = 1 if gci_name == "gci0" else 0
-    child_center, child_size = _child_regions(module, gci_name, rows)
+    child_center, child_size = _child_regions(geometry, centers, sizes, gci_name, rows)
     return _score(child_center, child_size, centers[rows[:, head_col]],
                   sizes[rows[:, head_col]], is_ball, score).cpu()
 

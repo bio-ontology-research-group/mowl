@@ -189,6 +189,7 @@ def boxel_overlap_scores(module, gci_name, rows):
 
 #: Centre-distance scorers of Jackermeier et al. (WWW 2024, Appendix F), by module class
 #: name. Box2EL uses its bump-vector formulas, ELBE and ELEm the translational ones.
+# Reference formulas by definition: each entry is the published score of one module class.
 CENTRE_DISTANCE_SCORERS = {
     "BoxSquaredELModule": _box2el_scores,
     "ELBEModule": _elbe_scores,
@@ -196,6 +197,10 @@ CENTRE_DISTANCE_SCORERS = {
     "TransBoxModule": _transbox_scores,
     "BoxELModule": boxel_overlap_scores,
 }
+
+
+#: Scorers whose score already treats empty intersections in the way of their own paper.
+_OWN_EMPTY_INTERSECTION_RULE = (_transbox_scores, boxel_overlap_scores)
 
 
 def _scorer_of(model):
@@ -226,40 +231,20 @@ def centre_distance_scores(model, gci_name, rows):
     return scorer(model.module, gci_name, rows)
 
 
-def _box2el_boxes(module):
-    return module.class_center.weight, module.class_offset.weight.abs()
-
-
-def _elbe_boxes(module):
-    return module.class_embed.weight, module.class_offset.weight.abs()
-
-
-def _elem_boxes(module):
-    centre = module.class_embed.weight
-    return centre, module.class_rad.weight.abs().expand(-1, centre.shape[1])
-
-
-#: ``(centres, half-widths)`` of the class boxes by module class name, for the models
-#: whose :math:`C \\sqcap D \\sqsubseteq E` score depends on whether the boxes of
-#: :math:`C` and :math:`D` intersect. Balls count as boxes, as in the Box2EL code.
-CLASS_BOXES = {
-    "BoxSquaredELModule": _box2el_boxes,
-    "ELBEModule": _elbe_boxes,
-    "ELEmModule": _elem_boxes,
-}
-
-
 def empty_intersection(model, rows):
     """For rows ``[C, D, ...]``: whether the boxes of ``C`` and ``D`` are disjoint (in at
-    least one dimension), or ``None`` if mOWL has no box reader for the module."""
-    reader = None
-    for cls in type(getattr(model, "module", None)).__mro__:
-        if cls.__name__ in CLASS_BOXES:
-            reader = CLASS_BOXES[cls.__name__]
-            break
-    if reader is None:
+    least one dimension), or ``None`` if the classes of the model are not boxes or balls
+    or it has no geometry yet. The regions are those of the geometry of the model
+    (:func:`mowl.representation.geometry_of`); balls count as boxes with the radius as
+    half-width in every dimension, as in the Box2EL code."""
+    from mowl.evaluation.region_access import all_class_regions, centre_and_size
+    try:
+        region, _ = all_class_regions(model, "The empty-intersection rule")
+        centre, half, is_ball = centre_and_size(region, "The empty-intersection rule")
+    except (NotImplementedError, TypeError):
         return None
-    centre, half = reader(model.module)
+    if is_ball:
+        half = half[:, None].expand(-1, centre.shape[1])
     c, d = rows[:, 0], rows[:, 1]
     lower = th.maximum(centre[c] - half[c], centre[d] - half[d])
     upper = th.minimum(centre[c] + half[c], centre[d] + half[d])
@@ -272,11 +257,11 @@ def centre_distance_zero_empty_scores(model, gci_name, rows):
     :math:`C \\sqcap D \\sqsubseteq E`, every candidate gets score 0 when the boxes of
     :math:`C` and :math:`D` do not intersect. All candidates then tie, and the rank of
     the true answer is its position in the candidate list. Models with a scorer that
-    handles empty intersections itself (TransBox masks the empty dimensions) and models
-    without a box reader in :data:`CLASS_BOXES` are scored as by
+    handles empty intersections itself (TransBox masks the empty dimensions; BoxEL's is a
+    volume) and models whose classes are not boxes or balls are scored as by
     :func:`centre_distance_scores`."""
     scores = centre_distance_scores(model, gci_name, rows)
-    if gci_name != "gci1":
+    if gci_name != "gci1" or _scorer_of(model) in _OWN_EMPTY_INTERSECTION_RULE:
         return scores
     empty = empty_intersection(model, rows)
     if empty is None:

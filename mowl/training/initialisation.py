@@ -30,6 +30,8 @@ def _box_groups(module):
     return groups
 
 
+# Reference code by definition: the initialisation of the ELEm / ELBE reference code, which
+# is about the two specific modules; other methods register their groups here.
 #: Module class name -> function returning the ``(centre, size)`` embedding pairs that are
 #: normalised together. Base classes count (EmEL++ is an ELEm module).
 JOINT_GROUPS = {

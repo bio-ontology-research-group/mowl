@@ -13,10 +13,10 @@ which asks whether *all* axioms of an ontology hold, this regime reports the fra
 the atomic subsumptions of a split that hold, for any split (training, validation,
 testing): on held-out axioms it measures inductive generalisation of the geometry.
 
-Regions: balls for modules with ``class_embed`` and ``class_rad`` (ELEmbeddings, EmEL++,
-EmEL(var)): :math:`\\|c_C - c_D\\| + |r_C| \\le |r_D|`; single boxes for the modules in
-:data:`mowl.evaluation.exact_model.REGION_EXTRACTORS` (ELBE, Box\\ :sup:`2`\\ EL,
-TransBox): :math:`l_D \\le l_C` and :math:`u_C \\le u_D`. An empty box (some
+Regions: those of the geometry of the model (:func:`mowl.representation.geometry_of`).
+Balls (ELEmbeddings, EmEL++, EmEL(var), ...): :math:`\\|c_C - c_D\\| + |r_C| \\le |r_D|`;
+single boxes (ELBE, Box\\ :sup:`2`\\ EL, TransBox, ...): :math:`l_D \\le l_C` and
+:math:`u_C \\le u_D`. An empty box (some
 :math:`l_i > u_i`) is included in every box. A tolerance ``tol`` is allowed on every
 comparison.
 """
@@ -26,21 +26,19 @@ import torch as th
 
 from mowl.evaluation.regime import EvaluationRegime
 from mowl.evaluation.axiom_ranking import el_rows
+from mowl.evaluation.region_access import all_class_regions, centre_and_size
 
 
-def _ball_inclusion(module, rows, tol):
-    c = module.class_embed.weight.detach()
-    r = module.class_rad.weight.detach().abs().reshape(-1)
+def _ball_inclusion(centre, radius, rows, tol):
     sub, sup = rows[:, 0], rows[:, 1]
-    dist = th.linalg.norm(c[sub] - c[sup], dim=1)
-    return (dist + r[sub] <= r[sup] + tol).cpu().numpy()
+    dist = th.linalg.norm(centre[sub] - centre[sup], dim=1)
+    return (dist + radius[sub] <= radius[sup] + tol).cpu().numpy()
 
 
-def _box_inclusion(model, rows, tol):
-    from mowl.evaluation.exact_model import REGION_EXTRACTORS
-    comps = REGION_EXTRACTORS[type(model.module).__name__](model.module)
-    lo = np.stack([np.asarray(c[0][0], dtype=float) for c in comps])
-    hi = np.stack([np.asarray(c[0][1], dtype=float) for c in comps])
+def _box_inclusion(centre, offset, rows, tol):
+    # Double precision, as the exact-model check reads boxes.
+    centre, offset = centre.double(), offset.double()
+    lo, hi = (centre - offset).cpu().numpy(), (centre + offset).cpu().numpy()
     sub, sup = rows[:, 0].numpy(), rows[:, 1].numpy()
     empty = (lo[sub] > hi[sub] + tol).any(axis=1)
     inside = ((lo[sup] <= lo[sub] + tol) & (hi[sub] <= hi[sup] + tol)).all(axis=1)
@@ -49,21 +47,21 @@ def _box_inclusion(model, rows, tol):
 
 def inclusion_mask(model, rows, tol=1e-6):
     """Boolean array: for every ``gci0`` row ``[C, D]``, whether the region of ``C`` lies
-    inside the region of ``D``.
+    inside the region of ``D``. The regions are those of the geometry of the model
+    (:func:`mowl.representation.geometry_of`), balls or single boxes.
 
-    :raises NotImplementedError: If the regions of the model's module cannot be read.
+    :raises NotImplementedError: If the model has no geometry yet.
+    :raises TypeError: If its classes are neither balls nor boxes.
     """
-    from mowl.evaluation.exact_model import REGION_EXTRACTORS
-    module = model.module
     rows = rows.cpu()
     if len(rows) == 0:
         return np.zeros(0, dtype=bool)
-    if hasattr(module, "class_embed") and hasattr(module, "class_rad"):
-        return _ball_inclusion(module, rows.to(module.class_embed.weight.device), tol)
-    if type(module).__name__ in REGION_EXTRACTORS:
-        return _box_inclusion(model, rows, tol)
-    raise NotImplementedError(
-        f"Cannot read ball or box regions from {type(module).__name__}.")
+    region, _ = all_class_regions(model, "The inclusion accuracy")
+    with th.no_grad():
+        centre, size, is_ball = centre_and_size(region, "The inclusion accuracy")
+        if is_ball:
+            return _ball_inclusion(centre, size, rows.to(centre.device), tol)
+        return _box_inclusion(centre, size, rows, tol)
 
 
 class InclusionAccuracyRegime(EvaluationRegime):

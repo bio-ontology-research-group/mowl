@@ -67,18 +67,6 @@ def _all_idx(module, n=None):
     return th.arange(n, device=device)
 
 
-def _elbe_regions(module):
-    return _boxes(module.class_embed.weight, module.class_offset.weight)
-
-
-def _box2el_regions(module):
-    return _boxes(module.class_center.weight, module.class_offset.weight)
-
-
-def _transbox_regions(module):
-    return _boxes(module.class_center_embedding.weight, module.class_offset_embedding.weight)
-
-
 def _elkem_regions(module):
     import torch as th
     with th.no_grad():
@@ -86,31 +74,11 @@ def _elkem_regions(module):
     return [BoxRegion(lo, hi) for lo, hi in zip(_np(lower), _np(upper))]
 
 
-def _regd_box_regions(module):
-    import torch as th
-    with th.no_grad():
-        center, offset = module._region(_all_idx(module))
-    return [BoxRegion(c - o, c + o) for c, o in zip(_np(center), _np(offset))]
-
-
 def _boxel_regions(module):
     import torch as th
     lo = _np(module.min_embedding.weight)
     hi = lo + _np(th.exp(module.delta_embedding.weight))
     return [BoxRegion(a, b) for a, b in zip(lo, hi)]
-
-
-def _ball_regions(module):
-    center = _np(module.class_embed.weight)
-    radius = np.abs(_np(module.class_rad.weight)).reshape(-1)
-    return [BallRegion(c, r) for c, r in zip(center, radius)]
-
-
-def _regd_ball_regions(module):
-    import torch as th
-    with th.no_grad():
-        center, radius = module._region(_all_idx(module))
-    return [BallRegion(c, r) for c, r in zip(_np(center), _np(radius).reshape(-1))]
 
 
 def _component_unions(cen, off, active=None):
@@ -153,33 +121,20 @@ def _octagon_regions(module):
     return [OctagonRegion(h[i]) for i in range(h.shape[0])]
 
 
-#: Region readers by module class name. Each takes the module and returns one
+#: Region readers by module class name (reference readers that read the parameters as the
+#: module's losses do; modules without one fall back to their geometry, see
+#: :func:`find_reader`). Each takes the module and returns one
 #: :class:`~mowl.evaluation.regions.Region` per class index, reading the parameters as
 #: the module's losses do (absolute values of offsets and radii, materialised defined
 #: classes of the structural objectives, fixed empty / full boxes of ELK-Em).
 REGION_READERS = {
-    "ELBEModule": _elbe_regions,
-    "BoxSquaredELModule": _box2el_regions,
-    "TransBoxModule": _transbox_regions,
     "ELKEmModule": _elkem_regions,
-    "RegDELBEModule": _regd_box_regions,
     "BoxELModule": _boxel_regions,
-    "ELEmModule": _ball_regions,  # also EmELPPModule, EmELVarModule (subclasses)
-    "RegDELEmModule": _regd_ball_regions,
     "MultiBoxELModule": _structural_union_regions,
     "MultiELBEModule": _multielbe_regions,
     "VolumeMultiBoxELModule": _volume_multibox_regions,
     "PrismModule": _prism_regions,
     "OctagonELModule": _octagon_regions,
-}
-
-#: Single-box extractors in the format of earlier versions (for every class index a list
-#: with one ``(lo, hi)`` pair). Kept for :mod:`mowl.evaluation.inclusion_accuracy`; new
-#: code should use :data:`REGION_READERS`.
-REGION_EXTRACTORS = {
-    name: (lambda module, _f=fn: [[(b.lo, b.hi)] for b in _f(module)])
-    for name, fn in (("ELBEModule", _elbe_regions), ("BoxSquaredELModule", _box2el_regions),
-                     ("TransBoxModule", _transbox_regions))
 }
 
 #: Modules that subclass a registered module but are not region models of that kind.
@@ -190,9 +145,35 @@ NOT_REGION_MODULES = {
 }
 
 
+def _geometry_regions(module):
+    """Balls or boxes of every class, read through the geometry of the module."""
+    import torch as th
+    from mowl.evaluation.region_access import all_class_regions, centre_and_size
+    with th.no_grad():
+        region, _ = all_class_regions(module, "The exact-model check")
+        centre, size, is_ball = centre_and_size(region, "The exact-model check")
+    centre, size = _np(centre), _np(size)
+    if is_ball:
+        return [BallRegion(c, r) for c, r in zip(centre, size.reshape(-1))]
+    return [BoxRegion(c - o, c + o) for c, o in zip(centre, size)]
+
+
+def _has_ball_or_box_geometry(module):
+    from mowl.representation import geometry_of
+    from mowl.representation.regions import Ball, Box
+    try:
+        geometry = geometry_of(module)
+        probe = geometry.classes(_all_idx(module, 1))
+    except (NotImplementedError, TypeError, AttributeError, RuntimeError, StopIteration):
+        return False
+    return isinstance(probe, (Ball, Box))
+
+
 def find_reader(module):
     """The reader of :data:`REGION_READERS` for ``module`` (by class name, walking the
-    method resolution order), or ``None``."""
+    method resolution order); failing that, the reader of the geometry of the module if
+    its classes are balls or boxes (:func:`mowl.representation.geometry_of`); else
+    ``None``."""
     for cls in type(module).__mro__:
         if cls.__name__ in NOT_REGION_MODULES:
             return None
@@ -202,6 +183,8 @@ def find_reader(module):
         r = module.all_class_regions()
         if hasattr(r, "active"):
             return _structural_union_regions
+    if _has_ball_or_box_geometry(module):
+        return _geometry_regions
     return None
 
 
