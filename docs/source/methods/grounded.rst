@@ -193,7 +193,9 @@ general parts that other geometries of elements and unions of boxes can use:
   region family; GroundedEL's family is
   :class:`~mowl.representation.library.element_box_family.ElementBoxFamily` (points, and
   unions of boxes computed with
-  :class:`~mowl.representation.library.box_union_algebra.BoundedBoxUnions`).
+  :class:`~mowl.representation.library.box_union_algebra.BoundedBoxUnions`; its option
+  ``fast=True``, the default, scores role hops without gradient on the CPU with in-place
+  buffers and prunes the witnesses of a chain by distance bounds: the same numbers, faster).
 
 .. testcode::
 

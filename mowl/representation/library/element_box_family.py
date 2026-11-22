@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import torch as th
 
-from mowl.representation.library.box_union_algebra import BoundedBoxUnions, Boxes
+from mowl.representation.library.box_union_algebra import EMPTY_DEPTH, BoundedBoxUnions, Boxes
 
 __all__ = ["ElementBoxFamily", "TOP_HALF_WIDTH"]
 
@@ -38,10 +38,15 @@ class ElementBoxFamily:
         (for example detached ones).
     :param box_type: Type of the regions (``cen=``, ``w=``, ``active=``).
     :param tau: Temperature of the smooth depth of a region.
+    :param fast: Without gradient on the CPU, compose a role hop over all elements with
+        preallocated buffers and in-place arithmetic (:meth:`role_hop_all`); the numbers are
+        the same as those of :meth:`role_degree` and
+        :func:`~mowl.evaluation.query_search.max_min`.
     """
 
-    def __init__(self, geometry, positions=None, box_type=Boxes, tau=0.1):
+    def __init__(self, geometry, positions=None, box_type=Boxes, tau=0.1, fast=True):
         self.geometry, self._positions = geometry, positions
+        self.fast = bool(fast)
         self.box_type, self.tau = box_type, tau
         ref = positions if positions is not None else geometry.positions(th.arange(1))
         self.dtype, self.device = ref.dtype, ref.device
@@ -186,6 +191,89 @@ class ElementBoxFamily:
                                [:, :, None, None, :], cen[:, None], w, act, tau=tau)
                for s in range(0, max(1, targets.shape[1]), step)]
         return out[0] if len(out) == 1 else th.cat(out, dim=1)
+
+    def role_hop_all(self, ids, best, valid, role_ids, budget=1 << 20):
+        """The max-min of a role hop against every element (``(B, N)``), or ``None`` when the
+        fast path does not apply (gradient enabled, not on the CPU, ``fast=False``)."""
+        if not self.fast or th.is_grad_enabled() or self.device.type != "cpu":
+            return None
+        rel = self.geometry.translation_regions(role_ids)
+        bsz, k = ids.shape
+        kr, dim, n = rel.cen.shape[1], self.embed_dim, self.n_elements
+        out = th.empty((bsz, n), dtype=self.dtype, device=self.device)
+        if bsz == 0 or n == 0:
+            return out
+        shift = (self.positions(ids).to(dtype=self.dtype).unsqueeze(2)
+                 + rel.cen.to(dtype=self.dtype).unsqueeze(1))           # (B, K, Kr, d)
+        width = rel.w.to(dtype=self.dtype)[:, None].expand(bsz, k, kr, dim)
+        on, alive = rel.active, valid
+        every_on, every_alive = bool(on.all()), bool(alive.all())
+        rows = max(1, min(bsz, (1 << 16) // max(1, k * kr * dim)))
+        cols = max(1, min(n, budget // max(1, rows * k * kr * dim)))
+        points = self.positions(th.arange(n, device=self.device)).to(dtype=self.dtype)
+        work = th.empty((rows * k * kr, cols, dim), dtype=self.dtype, device=self.device)
+        for r0 in range(0, bsz, rows):
+            r1 = min(bsz, r0 + rows)
+            span = (r1 - r0) * k * kr
+            centre = shift[r0:r1].reshape(span, 1, dim)
+            half = width[r0:r1].reshape(span, 1, dim)
+            for c0 in range(0, n, cols):
+                c1 = min(n, c0 + cols)
+                buf = work[:span, :c1 - c0]
+                th.sub(points[c0:c1].unsqueeze(0), centre, out=buf)
+                buf.abs_()
+                th.sub(half, buf, out=buf)
+                slot = buf.amin(dim=-1).view(r1 - r0, k, kr, c1 - c0)
+                if not every_on:
+                    has = on[r0:r1].any(dim=1)[:, None, None, None]
+                    slot = th.where(on[r0:r1][:, None, :, None], slot,
+                                    th.where(has, th.full_like(slot, float("-inf")),
+                                             th.full_like(slot, EMPTY_DEPTH)))
+                hop = th.minimum(slot.amax(dim=2), best[r0:r1].unsqueeze(2))   # (b, K, c)
+                if not every_alive:
+                    any_alive = alive[r0:r1].any(dim=1)[:, None, None]
+                    hop = th.where(alive[r0:r1].unsqueeze(2), hop,
+                                   th.where(any_alive, th.full_like(hop, float("-inf")),
+                                            th.full_like(hop, EMPTY_DEPTH)))
+                out[r0:r1, c0:c1] = hop.amax(dim=1)
+        return out
+
+    def role_hop_top(self, ids, best, valid, role_ids, k):
+        """The ``k`` best elements of a role hop (``(ids, scores)`` as
+        :func:`~mowl.evaluation.query_search.top_witnesses` would choose them from the full
+        hop), or ``None`` when the fast path does not apply. Elements are pruned with bounds
+        from the :math:`\\ell_\\infty` distance to the centres of the boxes (the depth of a
+        box lies between the smallest and the largest half-width minus that distance); only
+        the survivors are scored exactly."""
+        n = self.n_elements
+        if not self.fast or th.is_grad_enabled() or self.device.type != "cpu" or n <= 256:
+            return None
+        rel = self.geometry.translation_regions(role_ids)
+        if rel.cen.shape[1] == 0 or not bool(rel.active.all()) or not bool(valid.any(1).all()):
+            return None
+        bsz, kw = ids.shape
+        kr, dim = rel.cen.shape[1], self.embed_dim
+        keep = min(k, n)
+        centres = (self.positions(ids).to(dtype=self.dtype).unsqueeze(2)
+                   + rel.cen.to(dtype=self.dtype).unsqueeze(1)).reshape(bsz, kw * kr, dim)
+        points = self.positions(th.arange(n, device=self.device)).to(dtype=self.dtype)
+        far = th.cdist(centres, points.unsqueeze(0).expand(bsz, n, dim), p=float("inf"))
+        far = far.view(bsz, kw, kr, n)
+        w = rel.w.to(dtype=self.dtype)
+        cap = th.where(valid, best, th.full_like(best, float("-inf")))[:, :, None]
+        low = th.minimum((w.amin(-1)[:, None, :, None] - far).amax(2), cap).amax(1)
+        high = th.minimum((w.amax(-1)[:, None, :, None] - far).amax(2), cap).amax(1)
+        bar = low.topk(keep, dim=1).values[:, -1:]
+        slack = 1e-5 * (1.0 + high.abs())
+        alive = (high + slack) >= bar                       # a superset of the k best
+        width = int(alive.sum(1).max())
+        order = th.argsort(th.where(alive, th.zeros_like(low), th.ones_like(low)), dim=1,
+                           stable=True)[:, :width]           # survivors by element index
+        from mowl.evaluation.query_search import max_min
+        exact = max_min(best, valid, self.role_degree(ids, role_ids, order))
+        exact = th.where(th.gather(alive, 1, order), exact, th.full_like(exact, float("-inf")))
+        pick = th.argsort(exact, dim=1, descending=True, stable=True)[:, :keep]
+        return th.gather(order, 1, pick), th.gather(exact, 1, pick)
 
     def class_degree(self, ids, classes=None, tau=None, budget=1 << 26):
         """Degree of the witness ``ids[b, k]`` in a class: ``(B, C, K)`` for all classes,

@@ -53,12 +53,13 @@ def _draw(kind, gen, device, *args, **kwargs):
     return out if out.device == th.device(device) else out.to(device=device)
 
 
-def box_corners(lower, upper, blocks=1, inset=INTERIOR):
+def box_corners(lower, upper, blocks=1, inset=INTERIOR, valid=None):
     """Corners of the boxes ``[lower, upper]`` ``(B, D)``, pulled ``inset`` (relative)
     inside: ``(B, M, D)``. A box of dimension ``D = blocks * d`` is a product of ``blocks``
     boxes of dimension ``d`` (a box of pairs: ``blocks=2``); the corners are taken with the
     same signs in every block. For ``d <= 4`` the :math:`2^d` corners, else the :math:`2d`
-    centres of the faces. The corners stay functions of ``lower`` and ``upper``."""
+    centres of the faces. The corners stay functions of ``lower`` and ``upper``. Rows that
+    are not ``valid`` (a boolean ``(B,)``) give zero corners."""
     centre = 0.5 * (lower + upper)
     half = 0.5 * (upper - lower) * (1.0 - inset)
     d = lower.shape[1] // blocks
@@ -69,7 +70,10 @@ def box_corners(lower, upper, blocks=1, inset=INTERIOR):
         eye = th.eye(d, dtype=lower.dtype, device=lower.device)
         signs = th.cat([-eye, eye], dim=0)
     signs = signs.repeat(1, blocks)
-    return centre.unsqueeze(1) + half.unsqueeze(1) * signs.unsqueeze(0)
+    corners = centre.unsqueeze(1) + half.unsqueeze(1) * signs.unsqueeze(0)
+    if valid is None:
+        return corners
+    return th.where(valid.view(-1, 1, 1), corners, th.zeros_like(corners))
 
 
 def _relative(points, lower, upper):
@@ -380,6 +384,12 @@ class ElementSampler:
         m = self._probe_count(n_elements)
         return tuple(_draw("randint", gen, device, 0, hi, (m,), dtype=th.long)
                      for hi in (n_elements, n_elements, n_relations))
+
+    def corrupted_elements(self, rows, n_individuals, gen, per_row=1, first_individual=0):
+        """:meth:`corrupted` as elements ``(x, y, r)``: the individuals ``a`` are the
+        elements ``first_individual + a``."""
+        rows = self.corrupted(rows, n_individuals, gen, per_row)
+        return first_individual + rows[:, 0], first_individual + rows[:, 2], rows[:, 1]
 
     def corrupted(self, rows, n_individuals, gen, per_row=1):
         """Corrupted role assertions ``(a, r, b)``: ``min(len(rows), batch_size) * per_row``

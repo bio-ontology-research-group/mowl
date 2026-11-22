@@ -347,10 +347,3 @@ def foreign_members(module):
 #: expected failures: when the owner's work is merged and the case passes, the test run fails
 #: ("XPASS(strict)") and the entry must be deleted. Nothing else is expected to fail.
 TEMPORARY_EXPECTED_FAILURES = {}
-for _key in ("grounded", "grounded/translation", "grounded/all-forms",
-             "grounded/all-forms-translation", "grounded/ablations", "grounded/lagrangian",
-             "grounded/queries"):
-    TEMPORARY_EXPECTED_FAILURES[_key] = (
-        "TEMPORARY(r5-grounded): GroundedEL computes in mowl/nn/el/grounded/{queries,module,"
-        "sampling}.py and mowl/models/grounded/{model,common,objective}.py; r5-grounded owns "
-        "them this round. Remove this entry at merge.")

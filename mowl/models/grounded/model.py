@@ -40,7 +40,6 @@ Non-guarantees:
 from __future__ import annotations
 
 import logging
-import math
 import random
 from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, Union
 import torch as th
@@ -56,6 +55,8 @@ from mowl.representation.library.grounded_logic import (validate_margin as _vali
                                                         validate_nonneg_weight as _validate_nonneg_weight)
 from mowl.nn.el.structural import Regions
 from mowl.datasets.rows import sort_rows
+from mowl.representation.library.grounded_parts import ElementDomain
+from mowl.training.schedules import ConstantThenCosine, LinearDecay, TemperatureAnnealing
 from mowl.representation.library.finite_model_placement import (close_labels, edge_triples,
                                                                  interpretation_labels,
                                                                  syntactic_edges)
@@ -558,7 +559,7 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
 
         self.nb_classes = len(self.class_index_dict)
         self.nb_inds = len(self.individual_index_dict)
-        self.nb_elements = self.nb_classes + self.nb_inds
+        self.nb_elements = ElementDomain.domain_size(self.nb_classes, self.nb_inds)
         self.nb_rels = len(self.object_property_index_dict)
         self.inverse_of: Optional[List[int]] = _resolve_inverse_of(
             inverse_of, self.object_property_index_dict, self.nb_rels
@@ -898,10 +899,7 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
         """
         _validate_int_ge("step", step, 0)
         _validate_int_ge("total_steps", total_steps, 1)
-        if total_steps <= 1:
-            return float(self.tau0)
-        frac = min(max(step / (total_steps - 1), 0.0), 1.0)
-        return float(self.tau0 * ((self.tau1 / self.tau0) ** frac))
+        return float(TemperatureAnnealing(self.tau0, self.tau1).value_at(step, total_steps))
 
     def step_tau(self, step: int, total_steps: int) -> float:
         """Update ``self.module.tau`` according to the geometric annealing schedule and return the new ``tau``."""
@@ -1272,11 +1270,9 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
         """
         if lr_final is None or epochs <= 1:
             return float(lr)
-        t = epoch / (epochs - 1)
-        if lr_schedule == "cosine":
-            w = 0.5 * (1.0 + math.cos(math.pi * t))
-            return float(w * lr + (1.0 - w) * lr_final)
-        return float((1.0 - t) * lr + t * lr_final)
+        schedule = (ConstantThenCosine(constant_fraction=0.0, min_lr=lr_final)
+                    if lr_schedule == "cosine" else LinearDecay(min_lr=lr_final))
+        return float(schedule.lr_at(lr, epoch, epochs))
 
     def train(
         self,
@@ -1444,7 +1440,8 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
         if method not in ("beam", "box"):
             raise ValueError(f"method must be 'beam' or 'box', got {method!r}")
         device = self.module.elem_pos.weight.device
-        individuals = self.nb_classes + th.arange(self.nb_inds, dtype=th.long, device=device)
+        individuals = self.module.elements.individual(
+            th.arange(self.nb_inds, dtype=th.long, device=device))
         with th.no_grad():
             if method == "beam":
                 return Q.score_query_beam(

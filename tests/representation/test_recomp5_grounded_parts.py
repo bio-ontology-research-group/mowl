@@ -409,3 +409,48 @@ def test_sampled_objective_loop_leaves_the_module_in_eval_mode_after_validation(
     regime.attach(toy)
     SampledObjectiveTraining().run(toy, regime, 2)
     assert not toy.module.training
+
+
+# -- swapping a part of GroundedEL ---------------------------------------------------------
+def test_composed_el_refuses_grounded_at_build_and_names_its_trainer():
+    from mowl.datasets.builtin import FamilyDataset
+    from mowl.models import ComposedEL
+    from mowl.representation import ConstructorUnavailable
+    data = FamilyDataset()
+    # with a part to swap: refused before training, naming where the parts are swapped
+    with pytest.raises(TypeError, match="GroundedEL"):
+        ComposedEL(data, method="grounded", relations="translation", embed_dim=4)
+    # without: refused because ComposedEL does not train a grounded program
+    with pytest.raises(ConstructorUnavailable, match="GroundedEL"):
+        ComposedEL(data, method="grounded", embed_dim=4)
+
+
+@pytest.mark.parametrize("swap", [dict(relation_model="translation"),
+                                  dict(relation_model="box of translations", agg="lse"),
+                                  dict(role_mode="product")])
+def test_grounded_el_trains_with_a_swapped_part(swap):
+    import math
+    model = _grounded(**swap)
+    history = model.train(epochs=2)
+    assert len(history) == 2 and all(math.isfinite(r["total"]) for r in history)
+    assert all(bool(th.isfinite(p).all()) for p in model.module.parameters())
+
+
+def test_fast_paths_of_the_element_box_family_give_the_same_numbers():
+    from mowl.evaluation.query_search import MaxMinBeam, WitnessChain, read_batch
+    from mowl.nn import GroundedELModule
+    from mowl.representation.library.element_box_family import ElementBoxFamily
+    th.manual_seed(0)
+    m = GroundedELModule(nb_elements=400, nb_classes=40, nb_rels=3, embed_dim=3,
+                         n_components=2, n_role_components=2, role_mode="translation")
+    node = read_batch(("e", ("r", "r", "r")), [(50, (0, 1, 2)), (60, (2, 2, 1))])
+    targets = th.randint(0, 400, (2, 30))
+    with th.no_grad():
+        p = m.positions()
+        out = {}
+        for fast in (True, False):
+            fam = ElementBoxFamily(m, p, fast=fast)
+            out[fast] = (MaxMinBeam(k=8).scores(fam, node),
+                         WitnessChain(k=8).scores(fam, fam, node, targets, m.tau))
+    assert th.equal(out[True][0], out[False][0])
+    assert th.equal(out[True][1], out[False][1])
