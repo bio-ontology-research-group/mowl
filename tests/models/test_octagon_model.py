@@ -51,7 +51,7 @@ def test_trains_on_family_dataset(scratch_dir: Path) -> None:
     model.eval_gci_name = "gci0"
     data = model.training_datasets["gci0"][:5]
     scores = model.evaluation_model(data, "gci0")
-    assert scores.shape == (len(data),) and (scores >= 0).all()
+    assert scores.shape == (len(data), 1) and (scores >= 0).all()  # a column (round 3)
 
 
 def test_odd_dimension_rejected(scratch_dir: Path) -> None:
