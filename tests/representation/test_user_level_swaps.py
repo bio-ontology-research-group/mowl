@@ -91,6 +91,8 @@ def el_options(key):
                        texts=[f"class {i}" for i in range(64)])
     if key == "falcon":
         options["anon_domain"] = 2
+    if key == "mcmultibox":
+        options["margin"] = 0.0     # its losses are volume ratios: a margin is refused
     return options
 
 

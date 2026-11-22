@@ -210,7 +210,8 @@ def _same(a, b):
 def test_elkem_validation_and_decay_match_the_direct_training():
     from mowl.baselines.models.elkem.model import ELKEm as Direct
     from mowl.models import ELKEm
-    from tests.baselines.pairs_boxrel import ordered      # the same row order on both sides
+    def ordered(build):       # (rows have had one order for every build since the fix)
+        return build
     ds = tiny_dataset()
     models = []
     for cls in (Direct, ELKEm):
@@ -252,7 +253,10 @@ def test_volume_multiboxel_checkpoint_and_callback_match_the_direct_training():
 def test_elkem_lexical_regulariser_and_assertions_match_the_direct_training():
     from mowl.baselines.models.elkem.model import ELKEm as Direct
     from mowl.models import ELKEm
-    from tests.baselines.pairs_boxrel import NS, ordered, tiny_ontology
+    from tests.baselines.pairs_boxrel import NS, tiny_ontology
+
+    def ordered(build):
+        return build
     features = {NS + "a": [1.0, 0.0, 0.5], NS + "b": [0.9, 0.1, 0.4]}
     models = []
     for cls in (Direct, ELKEm):

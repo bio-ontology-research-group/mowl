@@ -431,7 +431,6 @@ def test_geometry_of_a_model_whose_module_is_its_geometry_keeps_its_margin():
     import logging
     from mowl.datasets.builtin import FamilyDataset
     from mowl.models import ComposedEL
-    logging.disable(logging.CRITICAL)
     model = ComposedEL(FamilyDataset(), method="elbe", embed_dim=4, margin=0.1)
     g = geometry_of(model)
     assert g is model.module

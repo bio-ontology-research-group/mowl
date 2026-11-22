@@ -29,7 +29,6 @@ from mowl.representation.objectives import Objective
 from mowl.training import NormPenalty, SumLoss
 from tests.datasetFactory import FamilyDataset
 
-logging.disable(logging.CRITICAL)
 
 EMBED = 4
 
