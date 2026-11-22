@@ -1,10 +1,11 @@
 import mowl.nn.el.boxsquaredel.losses as L
 from mowl.nn import ELModule
+from mowl.nn.el.per_axiom_column import PerAxiomColumn
 import torch as th
 import torch.nn as nn
 
 
-class BoxSquaredELModule(ELModule):
+class BoxSquaredELModule(PerAxiomColumn, ELModule):
     """
     Implementation of Box :math:`^2` EL from [jackermeier2023]_.
 
@@ -17,6 +18,13 @@ Defaults to ``False``, which leaves the module exactly as before. See also \
     :param epsilon: The :math:`\\varepsilon` of the DELE negative losses for bottom normal \
 forms (minimal radius / offset norm of a satisfiable class). Defaults to ``0.01``.
     :type epsilon: float, optional
+
+    Every per-axiom loss is a column of shape ``(B, 1)`` (:class:`~mowl.nn.el.per_axiom_column.PerAxiomColumn`;
+    set ``per_axiom_column = False`` for the earlier flat ``(B,)``).
+
+    ``gci3_bot`` (:math:`\\exists r.C \\sqsubseteq \\bot`) shrinks the head box of :math:`r`, while its
+    DELE negative (``all_negative_losses=True``, Eq. 17 of DELE) uses the offset of the filler
+    :math:`C`. Both are kept as published; they do not describe the same constraint.
     """
 
     neg_capable_gcis = frozenset({"gci2", "object_property_assertion"})

@@ -30,7 +30,7 @@ class BoxSELModule(BoxELModule):
         """``(m, M)`` of the expression (:mod:`~mowl.nn.el.boxsel.losses`) for a batch."""
         m, big, _ = S.expression_box(struct, leaves, 0, self.min_embedding,
                                      self.delta_embedding, self.relation_embedding,
-                                     self.scaling_embedding)
+                                     self.scaling_embedding, self.positive_scale)
         return m, big
 
     def conditional_loss(self, conclusion, premise, leaves_d, leaves_c, lower, upper):

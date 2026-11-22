@@ -72,6 +72,10 @@ CARD = MethodCard(
         "gci3_bot shrinks C itself, which conflicts with the existence term "
         "(mOWL geometric documentation, 'Prism non-guarantees').",
         "The objective is non-convex; reaching a zero-loss model is not guaranteed.",
+        "The negative loss of C ⊑ ∃r.D uses the exact triangle overlap test (zero iff the "
+        "translated triangle and that of D overlap); gci2_negative_triangle='inradius' is "
+        "the earlier per-direction test on the inscribed discs. gci3 (∃r.C ⊑ D) only asks "
+        "for overlap, as in ELBE, not inclusion.",
     ),
     intersection_closed=True,
     helly=("3. Derived: the triangle factor consists of convex sets in R^2 (Helly number "

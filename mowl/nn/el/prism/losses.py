@@ -670,6 +670,7 @@ def gci2_score_neg_prisms(
     rel: th.Tensor,
     margin: float,
     rc: Optional[th.Tensor] = None,
+    triangle_negative: str = "overlap",
 ) -> th.Tensor:
     """Negative GCI2 score on :class:`PrismRegions`.
 
@@ -707,7 +708,8 @@ def gci2_score_neg_prisms(
     if rc is None:
         rc = th.relu(c.h.sum(dim=-1, keepdim=True) / 3.0)
     return gci2_score_neg(
-        c.h, rc, c.cen, th.abs(c.w), d.h, d.cen, th.abs(d.w), rel, margin
+        c.h, rc, c.cen, th.abs(c.w), d.h, d.cen, th.abs(d.w), rel, margin,
+        triangle_negative=triangle_negative,
     )
 
 
@@ -721,8 +723,18 @@ def gci2_score_neg(
     od: th.Tensor,
     rel: th.Tensor,
     margin: float,
+    triangle_negative: str = "overlap",
 ) -> th.Tensor:
     """Negative GCI2 score mirroring ELBE's ``gci2_score_neg`` across triangle supports and box coords.
+
+    ``triangle_negative`` selects the triangle part. ``"overlap"`` (default) is the exact
+    overlap test of the translated triangle and the triangle of :math:`D`,
+    :math:`\\text{relu}(-\\sum_k \\min(h_{C+r,k}, h_{D,k}) - \\text{margin})`, which is ``0`` iff the
+    two triangles overlap (the measure :func:`gci3_score_prisms` uses); it is one number
+    per row, like the positive scores. ``"inradius"`` is the earlier formula below, a
+    per-direction test on the inscribed discs: it is positive for a small triangle in a
+    corner of a large one (they overlap) and the three terms do not describe the
+    separation of the triangles.
 
     Since :math:`h_{C+r,k} - 2 |r_C| - h_{D,k} = (c_C + r_{\\text{tri}} - c_D) \\cdot n_k - |r_C| - |r_D|`,
     the triangle component is :math:`\\text{relu}(h_{C+r} - 2 |r_C| - h_D - \\text{margin})`
@@ -764,10 +776,15 @@ def gci2_score_neg(
     torch.Tensor
         Per-row negative score tensor of shape ``(B,)``.
     """
+    if triangle_negative not in ("overlap", "inradius"):
+        raise ValueError("triangle_negative must be 'overlap' or 'inradius'.")
     r_tri = rel[:, :2]
     r_box = rel[:, 2:]
     hc_trans = _translate_supports(hc, r_tri)
-    tri_vec = th.relu(hc_trans - 2.0 * th.abs(rc) - hd - margin)
+    if triangle_negative == "overlap":
+        tri_vec = th.relu(-th.minimum(hc_trans, hd).sum(dim=-1, keepdim=True) - margin)
+    else:
+        tri_vec = th.relu(hc_trans - 2.0 * th.abs(rc) - hd - margin)
     box_vec = th.relu(th.abs(bc + r_box - bd) - th.abs(oc) - th.abs(od) - margin)
     return th.linalg.norm(th.cat([tri_vec, box_vec], dim=-1), dim=-1)
 
@@ -781,6 +798,7 @@ def gci2_loss(
     rel_embed: th.nn.Embedding,
     margin: float,
     neg: bool = False,
+    triangle_negative: str = "overlap",
 ) -> th.Tensor:
     """GCI2 loss for :math:`C \\sqsubseteq \\exists r.D` (positive and negative).
 
@@ -824,7 +842,8 @@ def gci2_loss(
     d_reg = PrismRegions(h=hd, cen=bd, w=od)
     if neg:
         rc = th.abs(tri_inradius(data[:, 0]))
-        return gci2_score_neg_prisms(c_reg, d_reg, rel, margin, rc=rc)
+        return gci2_score_neg_prisms(c_reg, d_reg, rel, margin, rc=rc,
+                                     triangle_negative=triangle_negative)
     return gci2_score_prisms(c_reg, d_reg, rel, margin)
 
 
@@ -1277,6 +1296,7 @@ def object_property_assertion_loss(
     rel_embed: th.nn.Embedding,
     margin: float,
     neg: bool = False,
+    triangle_negative: str = "overlap",
 ) -> th.Tensor:
     """Object property assertion loss :math:`r(a, b)` for point individuals :math:`a, b`.
 
@@ -1327,5 +1347,6 @@ def object_property_assertion_loss(
     o2 = th.zeros_like(b2)
 
     if neg:
-        return gci2_score_neg(h1, zero_r, b1, o1, h2, b2, o2, rel, margin)
+        return gci2_score_neg(h1, zero_r, b1, o1, h2, b2, o2, rel, margin,
+                              triangle_negative=triangle_negative)
     return gci2_score(h1, b1, o1, h2, b2, o2, rel, margin)

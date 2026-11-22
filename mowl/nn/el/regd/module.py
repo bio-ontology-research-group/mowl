@@ -2,6 +2,7 @@ from contextlib import contextmanager
 
 import torch as th
 
+import mowl.nn.el.elem.losses as L
 import mowl.nn.el.regd.dissimilarity as D
 from mowl.nn.el.elbe.module import ELBEModule
 from mowl.nn.el.elem.module import ELEmModule
@@ -209,6 +210,14 @@ class RegDELEmModule(_RegDMixin, ELEmModule):
         ``gci1_bot`` use the softplus radii too). Note that the RegD code *evaluates*
         with ``|class_rad|`` whatever the training used; the evaluation regime
         ``regd-sampled-f1`` does the same.
+    :param consistent_radius: With ``radius="softplus"``: ``True`` (default) makes every
+        normal form that reads a class radius use the softplus radius (``gci0_bot``,
+        ``gci3_bot``, class assertions, and ``gci1`` / ``gci1_bot`` including their
+        negatives), so a class has one radius. ``False`` is the earlier behaviour, in which
+        only the positive ``gci0``-``gci3`` and ``gci1_bot`` used softplus and the other
+        forms still read ``|class_rad|`` (one class, two radii). The RegD code uses softplus
+        in every form. Individuals keep their own ``|ind_rad|`` radius. No effect with
+        ``radius="abs"``.
     :param gci1_radius_term: See :class:`~mowl.nn.ELEmModule`. The RegD code's ``Elem``
         has the term commented out (``False``).
     """
@@ -220,7 +229,7 @@ class RegDELEmModule(_RegDMixin, ELEmModule):
     def __init__(self, nb_ont_classes, nb_rels, nb_inds=None, embed_dim=50, margin=0.1,
                  reg_norm=1, lamda=1.0, p=2, gamma1=0.0, gamma2=0.0, eps=1e-4,
                  depth_on_containment=True, flip_gci2=False, radius="abs",
-                 gci1_radius_term=True):
+                 gci1_radius_term=True, consistent_radius=True):
         super().__init__(nb_ont_classes, nb_rels, nb_inds, embed_dim=embed_dim, margin=margin,
                          reg_norm=reg_norm, gci1_radius_term=gci1_radius_term)
         self._init_regd(lamda, p, gamma1, gamma2, eps, depth_on_containment,
@@ -228,6 +237,7 @@ class RegDELEmModule(_RegDMixin, ELEmModule):
         if radius not in ("abs", "softplus"):
             raise ValueError("radius must be 'abs' or 'softplus'.")
         self.radius = radius
+        self.consistent_radius = bool(consistent_radius)
 
     def _radius(self, index):
         raw = self.class_rad(index).squeeze(-1)
@@ -239,8 +249,26 @@ class RegDELEmModule(_RegDMixin, ELEmModule):
         center = self.class_embed(index)
         return center, self._radius(index).clamp_min(self.eps)
 
+    def _soft_radius(self, index):
+        """Radius of the classes ``index`` with shape ``(n, 1)``, the callable the ELEm
+        losses expect in place of ``class_rad``."""
+        return self._radius(index).unsqueeze(-1)
+
+    @property
+    def _all_forms_softplus(self):
+        return self.radius == "softplus" and self.consistent_radius
+
     def gci1_loss(self, data, neg=False):
-        if self.radius == "abs" or neg:
+        if self.radius == "abs":
+            return super().gci1_loss(data, neg=neg)
+        if self.consistent_radius:
+            if self._dele_neg(neg):
+                loss = L.gci1_loss_neg(data, self.class_embed, self._soft_radius, self.margin)
+            else:
+                loss = L.gci1_loss(data, self.class_embed, self._soft_radius, self.margin,
+                                   radius_term=self.gci1_radius_term)
+            return self._penalised(loss, data, (0, 1, 2))
+        if neg:
             return super().gci1_loss(data, neg=neg)
         # ELEm's C1 ⊓ C2 ⊑ D with softplus radii (Elem.nf2Loss of the RegD code).
         c, d, e = (self.class_embed(data[:, i]) for i in range(3))
@@ -256,10 +284,42 @@ class RegDELEmModule(_RegDMixin, ELEmModule):
         return loss
 
     def gci1_bot_loss(self, data, neg=False):
-        if self.radius == "abs" or neg:
+        if self.radius == "abs":
+            return super().gci1_bot_loss(data, neg=neg)
+        if self.consistent_radius:
+            if self._dele_neg(neg):
+                loss = L.gci1_bot_loss_neg(data, self.class_embed, self._soft_radius,
+                                           self.margin)
+            else:
+                loss = L.gci1_bot_loss(data, self.class_embed, self._soft_radius, self.margin)
+            return self._penalised(loss, data, (0, 1))
+        if neg:
             return super().gci1_bot_loss(data, neg=neg)
         # ELEm's disjointness with softplus radii (Elem.disJointLoss of the RegD code).
         c, d = self.class_embed(data[:, 0]), self.class_embed(data[:, 1])
         rc, rd = self._radius(data[:, 0]).unsqueeze(-1), self._radius(data[:, 1]).unsqueeze(-1)
         dst = th.linalg.norm(d - c, dim=1, keepdim=True)
         return th.relu(rc + rd - dst + self.margin)
+
+    def gci0_bot_loss(self, data, neg=False):
+        if not self._all_forms_softplus:
+            return super().gci0_bot_loss(data, neg=neg)
+        if self._dele_neg(neg):
+            return L.gci0_bot_loss_neg(data, self._soft_radius, self.epsilon)
+        return L.gci0_bot_loss(data, self._soft_radius)
+
+    def gci3_bot_loss(self, data, neg=False):
+        if not self._all_forms_softplus:
+            return super().gci3_bot_loss(data, neg=neg)
+        if self._dele_neg(neg):
+            return L.gci3_bot_loss_neg(data, self._soft_radius, self.epsilon)
+        return L.gci3_bot_loss(data, self._soft_radius)
+
+    def class_assertion_loss(self, data, neg=False):
+        if not self._all_forms_softplus:
+            return super().class_assertion_loss(data, neg=neg)
+        if self.ind_embed is None:
+            raise ValueError("The number of individuals must be specified to use this "
+                             "loss function.")
+        return L.class_assertion_loss(data, self.ind_embed, self.ind_rad, self.class_embed,
+                                      self._soft_radius, self.margin, neg=neg)

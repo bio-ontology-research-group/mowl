@@ -61,6 +61,13 @@ CARD = MethodCard(
     limitations=(
         "Inverse role transformations assume non-zero scaling entries (xiong2022, NF4 "
         "discussion).",
+        "The role scale is |s| + eps by default (positive_scale=True); the original code "
+        "uses the signed s + eps, where a negative scale inverts boxes (the recipes that "
+        "reproduce published numbers select positive_scale=False).",
+        "role_chain_loss composes the role maps in order (translation f_S t_R + t_S); "
+        "role_chain_composition='as_released' gives the earlier expression. gci1_bot is "
+        "Vol(C ∩ D) / (Vol(C) Vol(D)) as in the released code, which is not scale "
+        "invariant.",
     ),
     intersection_closed=True,
     helly="2 (axis-parallel boxes, any dimension; eckhoff1988, as stated in leemhuis2025, "

@@ -23,11 +23,26 @@ class BoxELModule(ELModule):
     #: boxes). Set by the training regime :class:`~mowl.training.Box2ELBaselineLosses`.
     regulariser = "global"
 
+    #: Role scale factors: ``True`` (default) uses :math:`|s| + \epsilon`, so a role never
+    #: inverts a box; ``False`` uses the raw signed :math:`s + \epsilon` of the original
+    #: BoxEL code (a negative scale swaps the corners of the translated box). The two agree
+    #: while every scale is positive (initially they lie in [0.9, 1.1]). Set by the
+    #: constructor argument ``positive_scale``.
+    positive_scale = True
+
+    #: Composition used by the role chain loss (see
+    #: :func:`~mowl.nn.el.boxel.losses.role_chain_loss`): ``"in_order"`` (default) or
+    #: ``"as_released"``. Role axioms are only used with ``load_role_axioms=True``.
+    role_chain_composition = "in_order"
+
+    role_axiom_capable = True
+
     def _record_regulariser(self, gci_name, data):
         if self.regulariser != "box2el_code" or not (self.training and th.is_grad_enabled()):
             return
         boxes = L.axiom_boxes(gci_name, data, self.min_embedding, self.delta_embedding,
-                              self.relation_embedding, self.scaling_embedding)
+                              self.relation_embedding, self.scaling_embedding,
+                              self.positive_scale)
         for box in boxes:
             self._pending_regulariser = (self._pending_regulariser
                                          + L.box2el_code_side_regularizer(box))
@@ -38,8 +53,11 @@ class BoxELModule(ELModule):
     def __init__(self, nb_ont_classes, nb_rels, nb_inds=None, embed_dim=50,
                  min_bounds=[1e-4, 0.2], delta_bounds=[-0.1, 0],
                  relation_bounds=[-0.1, 0.1],
-                 scaling_bounds=[0.9,1.1], temperature=1.0):
+                 scaling_bounds=[0.9,1.1], temperature=1.0, positive_scale=True,
+                 role_chain_composition="in_order"):
         super().__init__()
+        self.positive_scale = bool(positive_scale)
+        self.role_chain_composition = role_chain_composition
         self.nb_ont_classes = nb_ont_classes
         self.nb_rels = nb_rels
         self.nb_inds = nb_inds
@@ -80,13 +98,16 @@ class BoxELModule(ELModule):
         return L.gci1_bot_loss(data, self.min_embedding, self.delta_embedding, self.temperature, neg=neg)
 
     def gci2_loss(self, data, neg=False):
-        return L.gci2_loss(data, self.min_embedding, self.delta_embedding, self.relation_embedding, self.scaling_embedding, self.temperature, neg=neg)
+        return L.gci2_loss(data, self.min_embedding, self.delta_embedding, self.relation_embedding, self.scaling_embedding, self.temperature, neg=neg,
+                           positive_scale=self.positive_scale)
 
     def gci3_loss(self, data, neg=False):
-        return L.gci3_loss(data, self.min_embedding, self.delta_embedding, self.relation_embedding, self.scaling_embedding, self.temperature, neg=neg)
+        return L.gci3_loss(data, self.min_embedding, self.delta_embedding, self.relation_embedding, self.scaling_embedding, self.temperature, neg=neg,
+                           positive_scale=self.positive_scale)
 
     def gci3_bot_loss(self, data, neg=False):
-        return L.gci3_bot_loss(data, self.min_embedding, self.delta_embedding, self.relation_embedding, self.scaling_embedding, self.temperature, neg=neg)
+        return L.gci3_bot_loss(data, self.min_embedding, self.delta_embedding, self.relation_embedding, self.scaling_embedding, self.temperature, neg=neg,
+                           positive_scale=self.positive_scale)
 
     def class_assertion_loss(self, data, neg=False):
         if self.ind_embedding is None:
@@ -96,7 +117,17 @@ class BoxELModule(ELModule):
     def object_property_assertion_loss(self, data, neg=False):
         if self.ind_embedding is None:
             raise ValueError("The number of individuals must be specified to use this loss function.")
-        return L.object_property_assertion_loss(data, self.ind_embedding, self.ind_delta_embedding, self.relation_embedding, self.scaling_embedding, self.temperature, neg=neg)
+        return L.object_property_assertion_loss(data, self.ind_embedding, self.ind_delta_embedding, self.relation_embedding, self.scaling_embedding, self.temperature, neg=neg,
+                           positive_scale=self.positive_scale)
+
+    def role_inclusion_loss(self, data, neg=False):
+        return L.role_inclusion_loss(data, self.relation_embedding, self.scaling_embedding,
+                                     positive_scale=self.positive_scale)
+
+    def role_chain_loss(self, data, neg=False):
+        return L.role_chain_loss(data, self.relation_embedding, self.scaling_embedding,
+                                 positive_scale=self.positive_scale,
+                                 composition=self.role_chain_composition)
 
     def regularization_loss(self):
         if self.regulariser == "box2el_code":

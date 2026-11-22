@@ -494,7 +494,10 @@ def _box2el_positive(score_fn, original):
     def loss(module, data, neg=False):
         if neg:
             return original(data, neg=True)
-        return score_fn(module, data)
+        out = score_fn(module, data)
+        if getattr(module, "per_axiom_column", False) and out.ndim == 1:
+            out = out.unsqueeze(-1)  # a column, like the module's own losses
+        return out
     return loss
 
 

@@ -8,6 +8,7 @@ import torch as th
 import torch.nn as nn
 
 from mowl.nn import ELModule
+from mowl.nn.el.per_axiom_column import PerAxiomColumn
 import mowl.nn.el.boxsquaredel.losses as B2L
 from mowl.nn.el.boxsquaredel.module import BoxSquaredELModule
 from mowl.nn.el.multibox_utils import effective_components as _effective_components
@@ -60,7 +61,7 @@ def _validate_multiboxel_objective(objective: str) -> str:
     return objective
 
 
-class MultiBoxELModule(ELModule):
+class MultiBoxELModule(PerAxiomColumn, ELModule):
     """Multi-component Box\\ :math:`^2`\\ EL neural module.
 
     Every ontology class :math:`C` is represented as a union of
