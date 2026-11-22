@@ -57,7 +57,7 @@ With the stand-in encoder, so that it runs without ``sentence-transformers``:
 
    from mowl.datasets.builtin import FamilyDataset
    from mowl.models.ont import OnT
-   from mowl.nn.lm.encoders import BagOfWordsEncoder
+   from mowl.representation.library.text_encoders import BagOfWordsEncoder
    from mowl.owlapi import OWLAPIAdapter
 
    dataset = FamilyDataset()

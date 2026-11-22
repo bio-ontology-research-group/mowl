@@ -401,7 +401,7 @@ def hit(nb_classes=None, nb_relations=0, nb_individuals=0, embed_dim=None, margi
     triplet loss :meth:`TextGeometry.hierarchy_loss`. The sizes are not used: classes are
     texts.
 
-    :param encoder: The encoder (:mod:`mowl.nn.lm.encoders`).
+    :param encoder: The encoder (:mod:`mowl.representation.library.text_encoders`).
     :param texts: The verbalisation of every class id (optional; without it classes are given
         as lists of strings).
     :param centri_weight: :math:`\\lambda` (HiT selects it on validation data).

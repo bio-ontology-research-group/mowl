@@ -25,7 +25,7 @@ __all__ = ["OnTModule", "RoleTransformation"]
 class OnTModule(HiTModule):
     """HiT module with OnT's role transformations and logical losses.
 
-    :param encoder: An encoder module (see :mod:`mowl.nn.lm.encoders`).
+    :param encoder: An encoder module (see :mod:`mowl.representation.library.text_encoders`).
     :param use_roles: ``False`` gives the ablation OnT(w/o r) (Section 5.1): only the
         hierarchy loss of Eq. 5 is used (the geometry has no relation model).
     :param conjunction_weight: Weight of :math:`L_\\sqcap` (1 in the paper).

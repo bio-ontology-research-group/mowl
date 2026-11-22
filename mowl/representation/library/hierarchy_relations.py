@@ -6,7 +6,7 @@ import math
 import torch as th
 from torch import nn
 
-from mowl.nn.lm import hyperbolic as hb
+from mowl.representation.library import poincare_ball as hb
 from mowl.representation.library.hierarchy_regions import Point
 from mowl.representation.regions import ConstructorUnavailable
 from mowl.representation.relation_models import Relations
@@ -68,7 +68,7 @@ class RoleTransformation(nn.Module):
     :math:`d/2` and :math:`k_r = \\exp` of the first.
 
     :param dim: Embedding dimension (even).
-    :param pairing: Coordinate pairing of the rotation, see :func:`mowl.nn.lm.hyperbolic.rotate`.
+    :param pairing: Coordinate pairing of the rotation, see :func:`mowl.representation.library.poincare_ball.rotate`.
     :param use_scaling: Apply :math:`k_r` (paper) or not (reference code, default).
     """
 
