@@ -413,17 +413,18 @@ class AConEGeometry(ConEGeometry):
 
     :param aperture: How the sum of apertures is kept an angle. ``"wrap"`` (default): wrapped
         to ``(-pi, pi]`` like the axis, so an aperture can be negative (a cone of aperture
-        ``a`` is the cone of ``|a|``) and a sum above ``pi`` comes back small; this is
-        mOWL's reading of the complex-number multiplication and could not be checked
-        against the authors' code (the public repository has the ConE projection network
-        only). ``"clip"``: clipped to ``[0, pi]``, the range of the aperture of every other
-        state: a negative sum is a point, a sum above ``pi`` the whole circle.
+        ``a`` is the cone of ``|a|``) and a sum above ``pi`` comes back small; this is the
+        authors' code (``convert_to_arguments`` of the AConE repository). ``"clip"``:
+        clipped to ``[0, pi]``, the range of the aperture of every other state: a negative sum is a point, a sum above ``pi`` the whole circle.
     """
 
-    def __init__(self, *args, aperture="wrap", **kwargs):
+    def __init__(self, num_entities, num_relations, dim, gamma=20.0, center_weight=0.02,
+                 hidden=128, layers=1, dropout=0.0, signed_negation=False, aperture="wrap"):
         if aperture not in ("wrap", "clip"):
             raise ValueError("aperture must be 'wrap' or 'clip'.")
-        super().__init__(*args, **kwargs)
+        super().__init__(num_entities, num_relations, dim, gamma, center_weight=center_weight,
+                         hidden=hidden, layers=layers, dropout=dropout,
+                         signed_negation=signed_negation)
         self.aperture_mode = aperture
 
     def _make_projection(self, dim, hidden, layers):

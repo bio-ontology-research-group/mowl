@@ -227,3 +227,14 @@ def test_collapse_of_conE_is_reported():
     assert abs(m.loss_history[-1] - np.log(2)) < 0.02
     scores = m.score_query(("e", ("r",)), [(0, (1,)), (3, (1,))])
     assert th.allclose(scores[0], scores[1], atol=1e-3)         # the same cone for all queries
+
+
+def test_geometry_options_reach_the_geometry_from_the_model():
+    ds = _dataset()
+    m = AConE(ds, embed_dim=8, signed_negation=True, aperture="clip")
+    assert m.module.signed_negation is True and m.module.aperture_mode == "clip"
+    m = AConE(ds, embed_dim=8)
+    assert m.module.signed_negation is False and m.module.aperture_mode == "wrap"
+    assert Query2Box(ds, embed_dim=8, clamp_extent=True).module.clamp_extent is True
+    assert Query2Box(ds, embed_dim=8).module.clamp_extent is False
+    assert ConE(ds, embed_dim=8, signed_negation=True).module.signed_negation is True
