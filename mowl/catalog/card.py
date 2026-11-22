@@ -300,6 +300,14 @@ class MethodCard:
         return check_ontology(ontology, supported, warn=warn)
 
     @property
+    def representation(self):
+        """The parts of the method (:class:`mowl.representation.Representation`: view of
+        the ontology, space, class, relation and individual model, constructors, measure,
+        parametrisation), or ``None`` if they are not recorded."""
+        from mowl.representation import REPRESENTATIONS
+        return REPRESENTATIONS.get(self.key)
+
+    @property
     def implemented(self):
         """``True`` if mOWL ships an implementation of the method."""
         return self.status is not Status.CATALOGUED

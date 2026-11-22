@@ -115,6 +115,9 @@ class Benchmark:
     encodes: tuple = ()
     extra_inference_tasks: tuple = None
     target: Target = None
+    #: Abilities a method needs beyond the inference tasks: ``"unseen names"`` (the test
+    #: data name classes, individuals or entities that training did not see).
+    requires: tuple = ()
 
     @property
     def assumption(self):

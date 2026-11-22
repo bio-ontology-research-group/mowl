@@ -11,6 +11,7 @@ relevant published methods it does not implement, with the reason.
    :maxdepth: 1
 
    catalogue
+   parts
    regimes
    training_and_evaluation
    adding_a_method

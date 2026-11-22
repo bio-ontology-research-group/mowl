@@ -158,6 +158,14 @@ def missing_support(method, benchmark):
             for name in COMPLETION_TASKS[t].needs:
                 if Construct[name] not in expressivity:
                     out.append(f"construct {Construct[name].value} (for {t})")
+    for ability in benchmark.requires:
+        if ability == "unseen names":
+            rep = card.representation
+            if rep is None or not rep.inductive:
+                out.append("embeddings for names not seen in training (the method looks "
+                           "its embeddings up in a table)")
+        else:
+            out.append(f"ability {ability!r}")
     return list(dict.fromkeys(out))
 
 

@@ -69,6 +69,8 @@ def card_to_rst(card):
         rows.append(("Inference tasks", ", ".join(card.tasks)))
     if card.assumption:
         rows.append(("World assumption of its own objective", card.assumption))
+    if card.representation is not None:
+        rows += card.representation.rows()
     hooks = _training_hooks(card)
     if hooks is not None:
         rows.append(("Training regimes it takes", hooks))
@@ -146,11 +148,36 @@ def overview_table_rst(cards=None):
     return "\n".join(lines) + "\n"
 
 
+def parts_table_rst(cards=None):
+    """Return a ``list-table`` with the parts of every method (see
+    :mod:`mowl.representation`)."""
+    cards = list_methods() if cards is None else cards
+    lines = [".. list-table::", "   :header-rows: 1", "   :widths: 16 12 14 16 14 16 12", "",
+             "   * - Method", "     - View", "     - A class is", "     - A relation is",
+             "     - An individual is", '     - "Inside" is scored by',
+             "     - Splits into parts"]
+
+    def join(values):
+        return _esc(", ".join(v.value for v in values))
+    for c in cards:
+        rep = c.representation
+        if rep is None:
+            continue
+        lines += [f"   * - :ref:`{c.name} <method-{c.key}>`", f"     - {join(rep.view)}",
+                  f"     - {join(rep.classes)}", f"     - {join(rep.relations)}",
+                  f"     - {join(rep.individuals)}", f"     - {join(rep.measure)}",
+                  f"     - {rep.composable.value}"]
+    return "\n".join(lines) + "\n"
+
+
 def catalogue_to_rst():
     """Return the full catalogue page."""
     out = [".. This file is generated from mowl.catalog by docs/source/conf.py. "
            "Do not edit.\n", _title("Method catalogue", "="),
-           "Overview\n--------\n", overview_table_rst()]
+           "Overview\n--------\n", overview_table_rst(),
+           _title("The parts of every method", "-"),
+           "What each method is made of, part by part; see :doc:`parts` for the "
+           "vocabulary.\n", parts_table_rst()]
     for family, title in FAMILY_TITLES.items():
         cards = list_methods(family=family)
         if not cards:

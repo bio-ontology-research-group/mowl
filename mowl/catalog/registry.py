@@ -62,7 +62,7 @@ def get_method(key):
 
 
 def list_methods(family=None, status=None, logic=None, implemented=None, task=None,
-                 covers=None):
+                 covers=None, parts=None, inductive=None):
     """Return catalogued methods, optionally filtered, sorted by family and key.
 
     :param family: Keep only this :class:`~mowl.catalog.card.Family` (or its value).
@@ -74,8 +74,16 @@ def list_methods(family=None, status=None, logic=None, implemented=None, task=No
     :param covers: Keep only methods whose supported expressivity includes this one (a
         :class:`mowl.logic.Expressivity` or its name), e.g. the expressivity of an ontology
         (:func:`mowl.logic.ontology_expressivity`).
+    :param parts: Keep only methods whose representation has this part, or all of these
+        parts: members of the vocabularies of :mod:`mowl.representation` (or their values),
+        e.g. ``ClassModel.BOX`` or ``(ClassModel.BOX, RelationModel.TRANSLATION)``.
+    :param inductive: If ``True``/``False``, keep only methods that do / do not give an
+        embedding to names not seen in training.
     :rtype: list[MethodCard]
     """
+    if parts is not None and (isinstance(parts, str) or not isinstance(parts, (tuple, list,
+                                                                              set, frozenset))):
+        parts = (parts,)
     family = Family(family) if family is not None else None
     status = Status(status) if status is not None else None
     if isinstance(covers, str):
@@ -96,6 +104,14 @@ def list_methods(family=None, status=None, logic=None, implemented=None, task=No
         if covers is not None:
             supported = card.supported_expressivity
             if supported is None or not covers <= supported:
+                continue
+        if parts is not None or inductive is not None:
+            rep = card.representation
+            if rep is None:
+                continue
+            if parts is not None and not all(rep.has(p) for p in parts):
+                continue
+            if inductive is not None and rep.inductive != inductive:
                 continue
         out.append(card)
     return sorted(out, key=lambda c: (c.family.value, c.region, c.key))

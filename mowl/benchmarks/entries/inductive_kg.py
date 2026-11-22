@@ -37,6 +37,7 @@ BENCHMARKS = [
         protocol="mowl.benchmarks.protocols.bindings.InductiveLinkPredictionProtocol",
         metrics=_METRICS, subsets=("all", "tail", "head"),
         higher_is_better={m: m != "mr" for m in _METRICS},
-        references=(PAVLOVIC2025, TERU2020), notes=_NOTES)
+        references=(PAVLOVIC2025, TERU2020), notes=_NOTES,
+        requires=("unseen names",))
     for name, label in _LABELS.items() for version in ("v1", "v2", "v3", "v4")
 ]
