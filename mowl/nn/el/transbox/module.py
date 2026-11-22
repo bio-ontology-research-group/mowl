@@ -26,6 +26,17 @@ class TransBoxModule(ELModule):
         unit norm). These losses are meant to be squared per axiom, with negatives
         pushed to a target, by the training regime
         :class:`~mowl.training.TransBoxCodeTraining`.
+    :param strict_negatives: If ``True`` (default), calling the module with ``neg=True``
+        for a normal form without a negative loss (everything but ``gci2``) raises
+        :class:`NotImplementedError`. ``False`` is the earlier behaviour: the positive loss
+        is returned silently.
+    :param reference_bottom_losses: With ``formulation="reference"``: ``"code"`` (default)
+        scores ``C ⊑ ⊥`` and ``∃R.C ⊑ ⊥`` as the code scores ``C ⊑ D`` and ``∃R.C ⊑ D``
+        with the bottom class as :math:`D` (the loss of
+        :mod:`~mowl.nn.el.transbox.code_losses`, including its centre-norm terms);
+        ``"mowl"`` is the earlier behaviour, the formulas of the ``"mowl"`` formulation
+        (no centre-norm term). The code has no counterpart for assertions, which keep
+        the ``"mowl"`` formulas.
     """
 
     FORMULATIONS = ("mowl", "reference")
@@ -39,8 +50,13 @@ class TransBoxModule(ELModule):
     margin_semantics = "strict"
 
     def __init__(self, nb_ont_classes, nb_rels, nb_inds=None, embed_dim=50,
-                 margin=0.1, use_enhancement=True, reg_factor=0.1, formulation="mowl"):
+                 margin=0.1, use_enhancement=True, reg_factor=0.1, formulation="mowl",
+                 strict_negatives=True, reference_bottom_losses="code"):
         super().__init__()
+        if reference_bottom_losses not in ("code", "mowl"):
+            raise ValueError("reference_bottom_losses must be 'code' or 'mowl'.")
+        self.strict_negatives = bool(strict_negatives)
+        self.reference_bottom_losses = reference_bottom_losses
         if formulation not in self.FORMULATIONS:
             raise ValueError(f"formulation must be one of {self.FORMULATIONS}.")
         self.formulation = formulation
@@ -114,7 +130,21 @@ class TransBoxModule(ELModule):
             return CL.gci0_loss(data, self.class_center, self.class_offset, self.margin)
         return L.gci0_loss(data, self.class_center, self.class_offset, self.margin, neg=neg)
 
+    def forward(self, gci, gci_name, neg=False):
+        if neg and self.strict_negatives and gci_name not in self.neg_capable_gcis:
+            raise NotImplementedError(
+                f"TransBoxModule has no negative loss for '{gci_name}' (only "
+                f"{sorted(self.neg_capable_gcis)}); pass strict_negatives=False to get the "
+                f"positive loss instead.")
+        return super().forward(gci, gci_name, neg=neg)
+
+    @property
+    def _code_bottom(self):
+        return self._reference and self.reference_bottom_losses == "code"
+
     def gci0_bot_loss(self, data, neg=False):
+        if self._code_bottom:
+            return CL.gci0_loss(data, self.class_center, self.class_offset, self.margin)
         return L.gci0_bot_loss(data, self.class_center, self.class_offset, self.margin, neg=neg)
 
     def gci1_loss(self, data, neg=False):
@@ -145,6 +175,9 @@ class TransBoxModule(ELModule):
                            self.relation_center, self.relation_offset, self.margin, neg=neg)
 
     def gci3_bot_loss(self, data, neg=False):
+        if self._code_bottom:
+            return CL.gci3_loss(data, self.class_center, self.class_offset,
+                                self.relation_center, self.relation_offset, self.margin)
         return L.gci3_bot_loss(data, self.class_center, self.class_offset,
                                self.relation_center, self.relation_offset, self.margin, neg=neg)
 
