@@ -153,6 +153,15 @@ def _register_library_regions():
         return [PrismRegion(h[i], centre[i] - offset[i], centre[i] + offset[i])
                 for i in range(h.shape[0])]
 
+    from mowl.representation.library.construct_regions import IntervalUnions
+
+    @evaluation_regions.register(IntervalUnions)
+    def _interval_unions(region, purpose="The exact-model check"):
+        # one 1-D box per interval of the row (the constructed interval-union model)
+        from mowl.evaluation.regions import BoxRegion, UnionRegion
+        return [UnionRegion([BoxRegion([lo], [hi]) for lo, hi in region.intervals(i)], dim=1)
+                for i in range(len(region))]
+
     @evaluation_regions.register(OctagonProduct)
     def _octagons(region, purpose="The exact-model check"):
         from mowl.evaluation.regions import OctagonRegion

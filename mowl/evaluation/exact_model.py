@@ -80,12 +80,12 @@ def _geometry_regions(module):
 def _has_convertible_geometry(module):
     """Whether the module has a geometry whose class regions have a converter."""
     import torch as th
-    from mowl.evaluation.region_access import evaluation_regions
+    from mowl.evaluation.region_access import device_of, evaluation_regions
     from mowl.representation import geometry_of
     try:
         geometry = geometry_of(module)
-        probe = geometry.classes(th.zeros(1, dtype=th.long,
-                                          device=next(module.parameters()).device))
+        # (device_of: a module without parameters, a constructed model, is on the CPU)
+        probe = geometry.classes(th.zeros(1, dtype=th.long, device=device_of(module)))
     except (NotImplementedError, TypeError, AttributeError, RuntimeError, StopIteration):
         return False
     return evaluation_regions.dispatch(type(probe)) is not evaluation_regions.dispatch(object)

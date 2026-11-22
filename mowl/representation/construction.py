@@ -849,9 +849,12 @@ class ConstructionGeometry(ComposedGeometry):
     def parts(self):
         parts = super().parts
         parts.update({"source": self.source.key, "reading": self.reading.key,
-                      "individuals": self.reading.individual_part,
+                      "individuals": self.reading.individual_part
+                      if self.individual_model is not None else "none",
                       "relations": self.reading.relation_part
                       if self.relation_model is not None else "none"})
+        if self.relation_model is None:
+            parts["existential"] = "none"
         return parts
 
 

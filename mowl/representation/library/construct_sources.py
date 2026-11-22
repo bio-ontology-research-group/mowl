@@ -137,11 +137,13 @@ class FiniteModelSource(Source):
     guarantees = ()
 
     def build(self, data):
-        if type(data).__name__ == "CanonicalModel":
-            # the finite interpretation of the convex-regions construction: concept names
-            # without nominals, no individuals
+        if type(data).__name__ == "CanonicalModel" or (hasattr(data, "ontology")
+                                                       and hasattr(data, "classes")):
+            # an ontology: the finite interpretation of its canonical model that the
+            # convex-regions construction takes (concept names without nominals, no
+            # individuals)
             from mowl.geometric.convex_regions import FiniteInterpretation
-            data = FiniteInterpretation.from_canonical_model(data)
+            data = FiniteInterpretation.from_canonical_model(canonical_model_of(data))
         return FiniteModel.of(data)
 
 
