@@ -5,7 +5,6 @@ Every pair copies the parameters of the direct module into the combination throu
 ``load_state_dict`` (the checkpoints of the direct module load into the combination), so the
 copy is itself a test of that.
 """
-import numpy as np
 import torch as th
 
 from tests.baselines.harness import Pair
@@ -56,22 +55,6 @@ def tiny_ontology():
     ont.addAxiom(f.getOWLClassAssertionAxiom(c["K"], b))
     ont.addAxiom(f.getOWLObjectPropertyAssertionAxiom(r["t"], a, b))
     return Dataset(ont)
-
-
-def ordered(build):
-    """The rows of the training axioms in a fixed order. The order in which the ontology
-    reader yields the axioms changes from one model to the next (it follows the hashes of Java
-    objects), and the negatives of a row are drawn by row, so two models that start from the
-    same parameters and the same seed would still see different negatives."""
-    def make(dataset):
-        model = build(dataset)
-        for data in model.training_datasets.values():
-            if len(data):
-                rows = data.data.cpu().numpy()
-                order = np.lexsort(rows.T[::-1])
-                data._data = data.data[th.as_tensor(order, device=data.data.device)]
-        return model
-    return make
 
 
 def copy_state(old, new):
@@ -126,7 +109,7 @@ def _elbe(old, **options):
         else:
             from mowl.models import ELBE
         return ELBE(dataset, embed_dim=EMBED, learning_rate=0.01, batch_size=64, **options)
-    return ordered(build)
+    return build
 
 
 ELBE_TABLES = ("class_embed", "class_offset", "rel_embed")
@@ -143,7 +126,7 @@ def _transbox(old, **options):
         else:
             from mowl.models import TransBox
         return TransBox(dataset, embed_dim=EMBED, learning_rate=0.01, batch_size=64, **options)
-    return ordered(build)
+    return build
 
 
 # -- BoxEL and BoxSEL --------------------------------------------------------------------------
@@ -157,7 +140,7 @@ def _boxel(old, **options):
         else:
             from mowl.models import BoxEL
         return BoxEL(dataset, embed_dim=EMBED, learning_rate=0.01, batch_size=64, **options)
-    return ordered(build)
+    return build
 
 
 CONDITIONALS = [("http://Mother", "http://Female", 0.6), ("http://Father", "http://Male", 0.4)]
@@ -171,7 +154,7 @@ def _boxsel(old, **options):
             from mowl.models import BoxSEL
         return BoxSEL(dataset, conditionals=CONDITIONALS, embed_dim=EMBED, learning_rate=0.01,
                       batch_size=64, **options)
-    return ordered(build)
+    return build
 
 
 def _boxsel_abox(old, **options):
@@ -183,7 +166,7 @@ def _boxsel_abox(old, **options):
         conditionals = [(NS + "B", NS + "A", 0.7), (NS + "D", NS + "A", 0.0, 0.3)]
         return BoxSEL(dataset, conditionals=conditionals, embed_dim=EMBED, learning_rate=0.01,
                       batch_size=64, **options)
-    return ordered(build)
+    return build
 
 
 # -- ELK-Em ------------------------------------------------------------------------------------
@@ -199,7 +182,7 @@ def _elkem(old, **options):
             from mowl.models import ELKEm
         return ELKEm(dataset, embed_dim=EMBED, learning_rate=0.01, batch_size=64,
                      lr_decay_epoch=None, **options)
-    return ordered(build)
+    return build
 
 
 def _elkem_losses(model):

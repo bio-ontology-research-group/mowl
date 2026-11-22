@@ -42,32 +42,15 @@ def _tables(names):
     return parameters
 
 
-def _sorted(data):
-    """The rows in a fixed order: the order of the axioms of a dataset depends on the run."""
-    order = th.arange(len(data))
-    for column in reversed(range(data.shape[1])):
-        order = order[th.sort(data[order, column], stable=True).indices]
-    return data[order]
-
-
-def _train(model, epochs):
-    """Train with the rows of every form in a fixed order: negatives are drawn row by row, and
-    the order of the rows of a dataset differs between two models of the same ontology."""
-    for dataset in model.training_datasets.values():
-        if len(dataset):
-            dataset._data = _sorted(dataset.data)
-    model.train(epochs=epochs)
-
-
 def _losses(model, forms=None):
-    """The loss of every axiom form of the training data, the rows in a fixed order, and the
-    negative loss of the forms that have one."""
+    """The loss of every axiom form of the training data and the negative loss of the forms
+    that have one."""
     out = {}
     module = model.module
     for form, dataset in model.training_datasets.items():
         if len(dataset) == 0 or (forms is not None and form not in forms):
             continue
-        rows = _sorted(dataset[:])
+        rows = dataset[:]
         out[form] = module(rows, form)
         if form in getattr(module, "neg_capable_gcis", ()):
             out[form + "/neg"] = module(rows, form, neg=True)
@@ -233,25 +216,23 @@ def _volume_losses(model):
 
 PAIRS = [
     Pair("box2el", _b2_new, _b2_old, _copy, _ranking_scores, losses=_losses,
-         parameters=_tables(BOX_TABLES), train=_train),
+         parameters=_tables(BOX_TABLES)),
     Pair("box2el/all-negatives", _b2all_new, _b2all_old, _copy, _ranking_scores, losses=_losses,
-         parameters=_tables(BOX_TABLES), train=_train),
+         parameters=_tables(BOX_TABLES)),
     Pair("multiboxel", _mb_new, _mb_old, _copy, _ranking_scores, losses=_losses,
-         parameters=_tables(BOX_TABLES), train=_train),
+         parameters=_tables(BOX_TABLES)),
     Pair("multiboxel/soft-aggregation", _mbs_new, _mbs_old, _copy, _ranking_scores,
-         losses=_losses, parameters=_tables(BOX_TABLES), train=_train),
+         losses=_losses, parameters=_tables(BOX_TABLES)),
     Pair("multiboxel/structural", _mbt_new, _mbt_old, _copy, _ranking_scores,
-         losses=_structural_losses, dataset=_t3, parameters=_tables(BOX_TABLES),
-         train=_train),
+         losses=_structural_losses, dataset=_t3, parameters=_tables(BOX_TABLES)),
     Pair("multiboxel/point", _supervised(_mbp_new), _supervised(_mbp_old), _copy,
-         _ranking_scores, losses=_point_losses, dataset=_t3, parameters=_tables(BOX_TABLES),
-         train=_train),
+         _ranking_scores, losses=_point_losses, dataset=_t3, parameters=_tables(BOX_TABLES)),
     Pair("multielbe", _me_new, _me_old, _copy, _ranking_scores, losses=_losses,
-         parameters=_tables(ELBE_TABLES), train=_train),
+         parameters=_tables(ELBE_TABLES)),
     Pair("multielbe/soft-aggregation", _mes_new, _mes_old, _copy, _ranking_scores,
-         losses=_losses, parameters=_tables(ELBE_TABLES), train=_train),
+         losses=_losses, parameters=_tables(ELBE_TABLES)),
     Pair("mcmultibox", _volume(_MC_NEW), _volume(_MC_OLD), _copy, _volume_scores,
-         losses=_volume_losses, parameters=_tables(VOLUME_TABLES), train=_train, epochs=2),
+         losses=_volume_losses, parameters=_tables(VOLUME_TABLES), epochs=2),
 ]
 
 EXEMPT = {}

@@ -102,6 +102,9 @@ class GDAProjector(ProjectionModel):
     def project(self, ontology):
         r"""Generates the projection of the ontology.
 
+        The edges are returned sorted by ``(src, rel, dst)`` (:meth:`Edge.sort
+        <mowl.projection.edge.Edge.sort>`), not in the order of the Java hash set.
+
         :param ontology: The ontology to be processed.
         :type ontology: :class:`org.semanticweb.owlapi.model.OWLOntology`
         """
@@ -114,4 +117,4 @@ class GDAProjector(ProjectionModel):
         edges = [Edge(str(e.src()), str(e.rel()), str(e.dst())) for e in
                  edges if str(e.dst()) != ""]
 
-        return edges
+        return Edge.sort(edges)

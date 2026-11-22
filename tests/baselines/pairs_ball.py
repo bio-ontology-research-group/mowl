@@ -26,15 +26,14 @@ def _rows(model, form, n=5):
 
 
 def _losses(model):
-    """The loss of every axiom form on the training axioms, rows sorted: the order in which
-    two models of one dataset list the rows of a form is not fixed, and the comparison is of
-    the losses, not of the order."""
+    """The loss of every axiom form on the training axioms, rows as the datasets list them
+    (the same order for two models of one dataset)."""
     out = {}
     module = model.module
     for form, data in model.training_datasets.items():
         if len(data) == 0:
             continue
-        rows = th.unique(data[:], dim=0)
+        rows = data[:]
         out[form] = module(rows, form)
         if form in getattr(module, "neg_capable_gcis", ()):
             out[form + "/neg"] = module(rows, form, neg=True)
