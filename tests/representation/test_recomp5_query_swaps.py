@@ -40,7 +40,7 @@ def test_the_pairwise_ranking_regime_trains_a_ball_method():
 
 # -- text_ranking with an encoder that is not the bag of words ----------------------------------
 class CharacterEncoder(th.nn.Module):
-    """Maps a text to the counts of a few letters, passed through a learnable linear layer."""
+    """Maps a text to its letter counts, through a learnable linear layer."""
     dim = 8
 
     def __init__(self):
@@ -78,7 +78,7 @@ def test_encode_batched_and_the_grid_work_on_any_scorer():
     assert mrr == 1.0 and value == 0.0
 
 
-# -- query_scoring with other region families ------------------------------------------------------
+# -- query_scoring with other region families ----------------------------------------
 @pytest.mark.parametrize("cls", [BetaE, ConE, AConE])
 def test_query_scoring_serves_every_region_family(cls):
     model = cls(FamilyDataset(), embed_dim=8, batch_size=8, negatives=2, seed=0)
