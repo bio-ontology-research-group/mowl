@@ -22,15 +22,18 @@ __all__ = ["Point", "OctagonProduct", "Prism", "Ellipsoid", "Vector", "Linked", 
 
 @dataclass(frozen=True)
 class Point(Region):
-    """A point; the region of an individual where no family of regions is attached to it.
+    """A point; the region of an individual where no family of regions is attached to it, or
+    an entity of a knowledge graph model, optionally with a *bump* vector (BoxE).
 
     :param centre: ``(B, d)``.
+    :param bump: ``(B, d)`` or ``None``.
     """
 
     centre: th.Tensor
+    bump: th.Tensor = None
 
     def translate(self, vector):
-        return Point(self.centre + vector)
+        return Point(self.centre + vector, self.bump)
 
 
 @dataclass(frozen=True)

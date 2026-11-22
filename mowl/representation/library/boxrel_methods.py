@@ -11,7 +11,8 @@ import torch.nn as nn
 from mowl.representation.adapters import register_adapter
 from mowl.representation.class_models import BoxClasses
 from mowl.representation.library.boxrel_boxes import (
-    FixableBoxes, MinDeltaBoxes, Points, signed_intersection)
+    FixableBoxes, MinDeltaBoxes, signed_intersection)
+from mowl.representation.library.shapes_classes import Points as _Points
 from mowl.representation.library.boxrel_measures import (
     AveragedBounds, MaskedBounds, VolumeRatio)
 from mowl.representation.geometry import ComposedGeometry
@@ -25,6 +26,11 @@ from mowl.representation.methods import register_method
 from mowl.training.regularization import MaxNormPenalty, NormPenalty
 
 __all__ = ["transbox", "boxel", "boxsel", "elkem", "ConditionalGeometry"]
+
+
+def _box_points(*args, **kwargs):
+    """The individuals: points, as boxes of width zero."""
+    return _Points(*args, family="box", **kwargs)
 
 
 def _joint_tables(size, dim):
@@ -60,16 +66,16 @@ def transbox(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.
         relations = TranslationBoxes(vectors=t.relation_center_embedding,
                                      offsets=t.relation_offset_embedding,
                                      convention="x-y")
-        individuals = None if t.ind_embedding is None else Points(centres=t.ind_embedding)
+        individuals = None if t.ind_embedding is None else _box_points(centres=t.ind_embedding)
     elif formulation == "reference":
         classes = BoxClasses(*(None, None), *_joint_tables(nb_classes, embed_dim))
         relations = TranslationBoxes(None, None, *_joint_tables(nb_relations, embed_dim),
                                      convention="x-y")
-        individuals = Points(nb_individuals, embed_dim) if nb_individuals else None
+        individuals = _box_points(nb_individuals, embed_dim) if nb_individuals else None
     else:
         classes = BoxClasses(nb_classes, embed_dim)
         relations = TranslationBoxes(nb_relations, embed_dim, convention="x-y")
-        individuals = Points(nb_individuals, embed_dim) if nb_individuals else None
+        individuals = _box_points(nb_individuals, embed_dim) if nb_individuals else None
     reference = formulation == "reference"
     measure = MaskedBounds(separation="every", empty_weight=1.0 if reference else 0.5,
                            gci1="overlap" if reference else "inclusion")
@@ -228,12 +234,12 @@ def elkem(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
         relations = AffineBoxes(vectors=t.shift, range_centres=t.range_center,
                                 range_offsets=t.range_offset, error_offsets=t.error_offset,
                                 slopes=t.slope, eps=t.epsilon, sound=sound)
-        individuals = None if t.ind_embedding is None else Points(centres=t.ind_embedding)
+        individuals = None if t.ind_embedding is None else _box_points(centres=t.ind_embedding)
     else:
         classes = FixableBoxes(nb_classes, embed_dim, epsilon=epsilon)
         classes.fix(bot_ids, top_ids)
         relations = AffineBoxes(nb_relations, embed_dim, eps=epsilon, sound=sound)
-        individuals = Points(nb_individuals, embed_dim) if nb_individuals else None
+        individuals = _box_points(nb_individuals, embed_dim) if nb_individuals else None
     objective = ELKEmObjective(margin, abox_threshold, gci2_overlap=not sound)
     regularizers = (SizeCapPenalty(weight=size_weight),) if size_weight else ()
     return ComposedGeometry(classes, relations, AveragedBounds(), objective,

@@ -28,7 +28,7 @@ from mowl.representation.library.query_regions import (
     BetaRegion, SectorCone, as_state, beta_kl, from_state, to_aperture, to_axis,
     wrap_angle)
 from mowl.representation.methods import register_relation_model
-from mowl.representation.regions import Ball, Box, ConstructorUnavailable
+from mowl.representation.regions import Box, ConstructorUnavailable
 from mowl.representation.relation_models import Relations
 
 __all__ = ["PointBoxes", "BetaPoints", "ConePoints", "BetaNetwork",

@@ -76,22 +76,31 @@ class Points(Classes):
         ``"octagon"``, ``"prism"``, ``"ellipsoid"`` or ``"soft box"``.
     :param centres: An existing table to use instead of a new one.
     :param init, scale: Initialisation of a new table (see :func:`table`).
+    :param bump: Whether a point of the family ``"point"`` has a bump vector as well (BoxE,
+        a knowledge graph entity); ``bumps`` is an existing table for it.
     """
 
     part = "point"
     exact_conjunction = False
 
     def __init__(self, size=None, embed_dim=None, family="point", centres=None, init="unit",
-                 scale=1.0):
+                 scale=1.0, bump=False, bumps=None):
         super().__init__()
+        if (bump or bumps is not None) and family != "point":
+            raise ValueError("Only points of the family 'point' have a bump.")
         if family not in _FAMILIES:
             raise ValueError(f"Unknown family {family!r}; known: {sorted(_FAMILIES)}.")
         self.family = family
         self.region = _FAMILIES[family][0]
         self._make = _FAMILIES[family][1]
         self.centres = centres if centres is not None else table(size, embed_dim, init, scale)
+        if bumps is None and bump:
+            bumps = table(len(self), self.embed_dim, init, scale)
+        self.bumps = bumps
 
     def forward(self, ids):
+        if self.bumps is not None:
+            return Point(self.centres(ids), self.bumps(ids))
         return self._make(self.centres(ids))
 
 

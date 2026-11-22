@@ -41,13 +41,14 @@ import torch as th
 import torch.nn as nn
 
 from mowl.representation.adapters import register_adapter
-from mowl.representation.class_models import Classes
 from mowl.representation.geometry import ComposedGeometry, Geometry
 from mowl.representation.methods import (register_class_model, register_measure,
                                          register_method, register_relation_model)
 from mowl.representation.measures import RegionMeasure
 from mowl.representation.objectives import Objective
 from mowl.representation.regions import Ball, Box, ConstructorUnavailable, Region
+from mowl.representation.library.shapes_classes import Points
+from mowl.representation.library.shapes_regions import Point
 from mowl.representation.relation_models import Relations
 
 __all__ = ["Point", "PointClasses", "Related", "TripleScore", "BoxERelations",
@@ -56,22 +57,6 @@ __all__ = ["Point", "PointClasses", "Related", "TripleScore", "BoxERelations",
 
 
 # -- regions ---------------------------------------------------------------------------------
-@dataclass(frozen=True)
-class Point(Region):
-    """A point (an entity of a knowledge graph model), optionally with a *bump* vector
-    (BoxE).
-
-    :param centre: ``(B, d)``.
-    :param bump: ``(B, d)`` or ``None``.
-    """
-
-    centre: th.Tensor
-    bump: th.Tensor = None
-
-    def translate(self, vector):
-        return Point(self.centre + vector, self.bump)
-
-
 @dataclass(frozen=True)
 class Related(Region):
     """The symbolic region :math:`\\exists r.C` of a relation that is a set of pairs: the
@@ -124,28 +109,16 @@ def _table(size, dim, scale=1.0):
     return table
 
 
-class PointClasses(Classes):
-    """A class (or individual) is a point, as in a knowledge graph embedding.
-
-    :param bump: Whether a point has a bump vector as well (BoxE).
-    :param centres, bumps: Existing tables to use instead of new ones.
-    """
-
-    region = Point
-    part = "point"
-    exact_conjunction = False
-
-    def __init__(self, size=None, embed_dim=None, bump=False, centres=None, bumps=None):
-        super().__init__()
-        self.centres = centres if centres is not None else _table(size, embed_dim)
-        if bumps is None and bump:
-            bumps = _table(len(self), self.embed_dim)
-        self.bumps = bumps
-
-    def forward(self, ids):
-        return Point(self.centres(ids), None if self.bumps is None else self.bumps(ids))
+def PointClasses(size=None, embed_dim=None, bump=False, centres=None, bumps=None):
+    """A class (or individual) is a point, as in a knowledge graph embedding: the class model
+    :class:`~mowl.representation.library.shapes_classes.Points` of the family ``"point"``
+    with the uniform initialisation of the knowledge graph models, and with a bump vector
+    for BoxE (``bump=True``)."""
+    return Points(size, embed_dim, family="point", centres=centres, init="uniform",
+                  bump=bump, bumps=bumps)
 
 
+# aliases of the part "point" (the names the knowledge graph builders use)
 register_class_model("entity point")(PointClasses)
 register_class_model("point with bump")(lambda size, dim: PointClasses(size, dim, bump=True))
 
@@ -345,7 +318,7 @@ class TripleScore(RegionMeasure):
     intersection_apart = intersection_nonempty = intersection_inside
 
 
-register_measure("triple score", default_for=(Point,))(TripleScore)
+register_measure("triple score")(TripleScore)
 
 
 def triple_geometry(classes, relations, measure, objective=None, individuals=None,

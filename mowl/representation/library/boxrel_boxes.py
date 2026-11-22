@@ -1,14 +1,15 @@
 """Class models of the boxes group: boxes stored as lower corner and log-width (BoxEL,
-BoxSEL), and points (the individuals of TransBox and ELK-Em)."""
+BoxSEL). Points are :class:`~mowl.representation.library.shapes_classes.Points` of the
+family ``"box"``."""
 
 import torch as th
 import torch.nn as nn
 
-from mowl.representation.class_models import Classes, _unit_rows
+from mowl.representation.class_models import Classes
 from mowl.representation.methods import register_class_model
 from mowl.representation.regions import Box
 
-__all__ = ["MinDeltaBoxes", "Points", "FixableBoxes", "signed_intersection"]
+__all__ = ["MinDeltaBoxes", "FixableBoxes", "signed_intersection"]
 
 
 def signed_intersection(a, b):
@@ -53,27 +54,6 @@ class MinDeltaBoxes(Classes):
     def forward(self, ids):
         half = th.exp(self.deltas(ids)) / 2
         return Box(self.mins(ids) + half, half)
-
-
-class Points(Classes):
-    """An individual is a point: a box of width zero. A point of a class model whose
-    regions are boxes, for the individuals of methods that embed classes as boxes.
-
-    :param centres: An existing table to use instead of a new one.
-    """
-
-    region = Box
-    part = "point"
-    exact_conjunction = True
-
-    def __init__(self, size=None, embed_dim=None, centres=None):
-        super().__init__()
-        self.centres = centres if centres is not None else _unit_rows(
-            nn.Embedding(size, embed_dim))
-
-    def forward(self, ids):
-        centre = self.centres(ids)
-        return Box(centre, th.zeros_like(centre))
 
 
 @register_class_model("box with fixed classes")
