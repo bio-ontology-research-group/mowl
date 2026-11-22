@@ -6,7 +6,7 @@ import torch as th
 import torch.nn as nn
 from torch.quasirandom import SobolEngine
 
-import mowl.nn.el.mcmultibox.volume as V
+import mowl.baselines.nn.el.mcmultibox.volume as V
 from mowl.nn.el.elmodule import ELModule
 
 

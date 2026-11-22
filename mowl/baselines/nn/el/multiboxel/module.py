@@ -12,7 +12,7 @@ import mowl.baselines.nn.el.boxsquaredel.losses as B2L
 from mowl.baselines.nn.el.boxsquaredel.module import BoxSquaredELModule
 from mowl.nn.el.multibox_utils import effective_components as _effective_components
 import mowl.baselines.nn.el.multiboxel.losses as L
-from mowl.nn.el.pointloss import (
+from mowl.baselines.nn.el.multiboxel.pointloss import (
     _VALID_OBJECTIVES,
     _validate_beta,
     _validate_ind_halfwidth,
@@ -24,12 +24,9 @@ from mowl.nn.el.pointloss import (
     membership_bce,
     soft_box_membership,
 )
-from mowl.nn.el.softagg import _validate_tau, diversity_penalty
-from mowl.nn.el.structural import (
-    DefinitionTable,
-    ExistenceTargets,
+from mowl.baselines.nn.el.multiboxel.softagg import _validate_tau, diversity_penalty
+from mowl.baselines.nn.el.multiboxel.structural_losses import (
     Regions,
-    WitnessTargets,
     existence_loss,
     gci0_bot_structural,
     gci0_structural,
@@ -40,8 +37,13 @@ from mowl.nn.el.structural import (
     pair_size,
     pair_slots,
     region_size,
-    slot_components,
     witness_loss,
+)
+from mowl.nn.el.structural import (
+    DefinitionTable,
+    ExistenceTargets,
+    WitnessTargets,
+    slot_components,
 )
 
 if TYPE_CHECKING:

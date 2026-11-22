@@ -69,14 +69,14 @@ from typing import Any, Callable, Optional
 
 import torch as th
 
-import mowl.nn.el.elbe.losses as EL
+import mowl.baselines.nn.el.elbe.losses as EL
 from mowl.baselines.nn.el.multiboxel.losses import (
     _resolve_n_components,
     _unpack_boxes,
     _validate_aggregation,
     multi_intersection,
 )
-from mowl.nn.el.softagg import soft_gci1_terms, softmin
+from mowl.baselines.nn.el.multiboxel.softagg import soft_gci1_terms, softmin
 
 
 __all__ = [

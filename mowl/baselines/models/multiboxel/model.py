@@ -15,7 +15,7 @@ from mowl.datasets.el.points import (
 )
 from mowl.geometric.normal_forms import BOTTOM, TOP
 from mowl.baselines.nn.el.multiboxel.module import MultiBoxELModule
-from mowl.nn.el.pointloss import volume_penalty
+from mowl.baselines.nn.el.multiboxel.pointloss import volume_penalty
 from mowl.nn.el.structural import (
     DefinitionTable,
     ExistenceTargets,

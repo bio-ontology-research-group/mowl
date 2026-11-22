@@ -8,7 +8,8 @@ import torch.nn as nn
 
 from mowl.nn import ELModule
 import mowl.baselines.nn.el.prism.losses as L
-from mowl.nn.el.structural import DefinitionTable, ExistenceTargets, existence_loss
+from mowl.baselines.nn.el.multiboxel.structural_losses import existence_loss
+from mowl.nn.el.structural import DefinitionTable, ExistenceTargets
 
 _PRISM_OBJECTIVES = ("axiom", "structural")
 _EMPTY_BOX_READINGS = ("signed", "absolute")

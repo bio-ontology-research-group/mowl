@@ -11,7 +11,7 @@ from mowl.baselines.nn.el.boxsquaredel.module import BoxSquaredELModule
 from mowl.nn.el.multibox_utils import effective_components as _effective_components
 from mowl.baselines.nn.el.multiboxel.module import MultiBoxELModule
 import mowl.baselines.nn.el.multielbe.losses as L
-from mowl.nn.el.pointloss import (
+from mowl.baselines.nn.el.multiboxel.pointloss import (
     _validate_beta,
     _validate_ind_halfwidth,
     _validate_objective,
@@ -22,7 +22,7 @@ from mowl.nn.el.pointloss import (
     gather_element_embeddings,
     membership_bce,
 )
-from mowl.nn.el.softagg import _validate_tau, diversity_penalty
+from mowl.baselines.nn.el.multiboxel.softagg import _validate_tau, diversity_penalty
 
 if TYPE_CHECKING:
     from mowl.datasets.el.points import PointSupervision

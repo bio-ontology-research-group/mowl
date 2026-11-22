@@ -13,7 +13,7 @@ from mowl.datasets.el.points import (
 )
 from mowl.geometric.normal_forms import BOTTOM, TOP
 from mowl.baselines.nn.el.multielbe.module import MultiELBEModule
-from mowl.nn.el.pointloss import (
+from mowl.baselines.nn.el.multiboxel.pointloss import (
     _validate_objective,
     volume_penalty,
 )
