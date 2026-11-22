@@ -266,3 +266,15 @@ def test_elkem_lexical_regulariser_and_assertions_match_the_direct_training():
         th.manual_seed(5)
         model.train(epochs=3)
     _same(old, new)
+
+
+def test_every_new_regime_has_a_catalogue_card_that_names_it():
+    import inspect
+    from mowl.catalog.registry import get_regime
+    for key in ("fixed-concept-routing", "assertion-corruption", "pearson-contrastive-term",
+                "lexical-regularisation", "validation-checkpoint", "elkem-training",
+                "conditional-statements", "shuffled-splits", "grouped-logsumexp-contrastive",
+                "box-batch-regulariser"):
+        card = get_regime(key)
+        cls = card.load()
+        assert inspect.isclass(cls) and cls.key == key, key
