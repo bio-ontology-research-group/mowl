@@ -324,7 +324,7 @@ class CatE(Model):
                            aggregation=self.negative_aggregation, mask=mask)
         if self.interaction_loss:
             loss = loss + self._interaction_loss(pos[:, 0], pos_scores)
-        return loss
+        return loss + module.regularization_loss()
 
     def _interaction_ids(self):
         """(head ids, existential ids) of the interaction loss: the lattice elements of
