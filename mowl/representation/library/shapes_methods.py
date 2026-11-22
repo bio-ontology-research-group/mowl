@@ -117,7 +117,8 @@ def _octagon(module):
 
 @register_method("prism")
 def prism(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
-          gci2_negative_triangle="overlap", tables=None):
+          gci2_negative_triangle="overlap", reading="axiom", existence_weight=1.0,
+          size_reg=1e-3, tables=None):
     r"""The prism method (Federico, Leemhuis and Kutz 2026), default objective of the module
     (``objective="axiom"``): classes are triangle :math:`\times` box, relations translations,
     individuals points.
@@ -131,42 +132,61 @@ def prism(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
     (``meets_shrunk``), which is not an overlap test: a small triangle in a corner of a large
     one overlaps it and still has a positive cost.
 
-    The module's ``objective="structural"`` (definitions of conjunctions compiled into the
-    class regions, a squared-hinge loss, an existence loss) is not built from parts: with
-    ``tables`` of such a module the regions of the classes are the module's (defined classes
-    are intersections), and the losses are those of the parts, not the module's structural
-    ones.
+    ``reading="structural"`` (the module's ``objective="structural"``): the structural reading
+    (:class:`~mowl.representation.library.structural_reading.StructuralReading`: squared hinges
+    with non-emptiness gates for the concept forms, rows that state a definition zero), the
+    class model wrapped in
+    :class:`~mowl.representation.library.structural_regions.DefinedClasses` (a defined class is
+    the intersection of its definers, with signed box half-widths:
+    :meth:`~mowl.representation.library.structural_methods.StructuralGeometry.set_structural_tables`
+    attaches the table) and the existence and size penalties (``existence_weight``,
+    ``size_reg``); ``margin`` is the tightening margin :math:`m`. The forms about relations
+    and assertions are read as in the axiom reading with the *absolute* box half-widths
+    (``empty_regions="abs"``): a defined class that is empty only in its box part is read as a
+    phantom non-empty box there, which is the module's behaviour (and a defect of it, see the
+    report); the reading's default ``empty_regions="keep"`` does not do that.
 
     :param tables: A module with ``tri_center``, ``tri_inradius``, ``box_center``,
         ``box_offset``, ``rel_embed`` (and ``ind_embed``) to share parameters with.
     """
     if gci2_negative_triangle not in ("overlap", "inradius"):
         raise ValueError("gci2_negative_triangle must be 'overlap' or 'inradius'.")
+    if reading not in ("axiom", "structural"):
+        raise ValueError("reading must be 'axiom' or 'structural'.")
     t = tables
     if t is not None:
         gci2_negative_triangle = getattr(t, "gci2_negative_triangle", gci2_negative_triangle)
     if t is None:
         classes = PrismClasses(nb_classes, embed_dim)
     else:
-        def defined(ids):
-            r = t.class_regions(ids)
-            return r.h, r.cen, r.w
-        structural = getattr(t, "objective", "axiom") == "structural" \
-            and getattr(t, "definition_table", None) is not None
-        resolver = defined if structural else None
         classes = PrismClasses(tri_centres=t.tri_center, tri_inradii=t.tri_inradius,
-                               box_centres=t.box_center, box_offsets=t.box_offset,
-                               resolver=resolver)
+                               box_centres=t.box_center, box_offsets=t.box_offset)
     relations = _translations(t, nb_relations, embed_dim, "unit", 1.0)
     individuals = None
     if t is None and nb_individuals:
         individuals = Points(nb_individuals, embed_dim, family="prism")
     elif t is not None and getattr(t, "ind_embed", None) is not None:
         individuals = Points(family="prism", centres=t.ind_embed)
-    objective = ShapeObjective(
-        margin, gci3="overlap",
+    options = dict(
+        gci3="overlap",
         gci2_negative="overlap" if gci2_negative_triangle == "overlap" else "shrunk",
         negatives="gci2", empty_margin=True, strict_negatives=False)
+    if reading == "structural":
+        from mowl.representation.library.structural_methods import StructuralGeometry
+        from mowl.representation.library.structural_reading import StructuralReading
+        geometry = StructuralGeometry(
+            classes, relations, PrismBounds(empty="triangle"),
+            StructuralReading(margin, empty_regions="abs", gci3_bot="filler", **options),
+            individuals=individuals, existence_weight=existence_weight, size_reg=size_reg,
+            size_tables=lambda m: [m._slot_classes.inradii.weight,
+                                   m._slot_classes.box_offsets.weight],
+            size_scales=(1.0, 2.0), neg_capable_gcis={"gci2", "object_property_assertion"})
+        if t is not None and getattr(t, "definition_table", None) is not None:
+            geometry.set_structural_tables(t.definition_table,
+                                           getattr(t, "existence_targets", None),
+                                           getattr(t, "top_idx", None))
+        return geometry
+    objective = ShapeObjective(margin, **options)
     return ComposedGeometry(classes, relations, PrismBounds(empty="triangle"), objective,
                             individuals=individuals,
                             neg_capable_gcis={"gci2", "object_property_assertion"})
@@ -174,7 +194,10 @@ def prism(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
 
 @register_adapter("PrismModule")
 def _prism(module):
-    return prism(None, None, margin=module.margin, tables=module)
+    return prism(None, None, margin=module.margin,
+                 reading=getattr(module, "objective", "axiom"),
+                 existence_weight=getattr(module, "existence_weight", 1.0),
+                 size_reg=getattr(module, "size_reg", 1e-3), tables=module)
 
 
 # -- eike -------------------------------------------------------------------------------------

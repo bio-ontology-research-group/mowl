@@ -105,6 +105,13 @@ class PrismBounds(RegionMeasure):
       the box).
     * ``meets_shrunk``: the negative reading of the published loss, see its docstring.
 
+    The half-widths of the box part are read as they are: a *negative* half-width is a box that
+    is empty in that coordinate (the signed intersection of
+    :class:`~mowl.representation.library.structural_regions.DefinedClasses`), and the costs
+    treat it as such (an empty region is not included in a smaller one, does not meet, is
+    apart from everything). The regions of the class models have non-negative half-widths,
+    for which nothing changes.
+
     :param empty: ``"whole"`` or ``"triangle"``.
     """
 
@@ -118,7 +125,7 @@ class PrismBounds(RegionMeasure):
 
     def inside(self, a, b, margin=0.0):
         tri = th.relu(a.supports - b.supports + margin)
-        gap = th.abs(a.centre - b.centre) + th.abs(a.offset) - th.abs(b.offset)
+        gap = th.abs(a.centre - b.centre) + a.offset - b.offset
         return _norm(th.cat([tri, th.relu(gap + margin)], dim=-1))
 
     def meets(self, a, b, margin=0.0):
@@ -127,7 +134,7 @@ class PrismBounds(RegionMeasure):
 
     @staticmethod
     def _box_meets(a, b, margin):
-        gap = th.abs(a.centre - b.centre) - th.abs(a.offset) - th.abs(b.offset)
+        gap = th.abs(a.centre - b.centre) - a.offset - b.offset
         return th.relu(gap + margin)
 
     def meets_shrunk(self, a, b, margin=0.0):
@@ -143,7 +150,7 @@ class PrismBounds(RegionMeasure):
 
     def apart(self, a, b, margin=0.0):
         tri = th.relu(th.minimum(a.supports, b.supports).sum(dim=-1) + margin)
-        overlap = th.abs(a.offset) + th.abs(b.offset) - th.abs(a.centre - b.centre)
+        overlap = a.offset + b.offset - th.abs(a.centre - b.centre)
         box = th.relu(overlap + margin).amin(dim=-1)
         return _col(th.minimum(tri, box))
 
@@ -151,10 +158,10 @@ class PrismBounds(RegionMeasure):
         tri = th.relu(a.supports.sum(dim=-1, keepdim=True) + margin)
         if self.empty_form == "triangle":
             return tri
-        return _norm(th.cat([tri, th.abs(a.offset)], dim=-1))
+        return _norm(th.cat([tri, th.relu(a.offset)], dim=-1))
 
     def nonempty(self, a, epsilon=0.0):
-        size = th.minimum(a.supports.sum(dim=-1), 2.0 * th.abs(a.offset).amin(dim=-1))
+        size = th.minimum(a.supports.sum(dim=-1), 2.0 * a.offset.amin(dim=-1))
         return _col(th.relu(epsilon - size))
 
 

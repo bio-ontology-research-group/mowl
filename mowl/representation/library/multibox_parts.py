@@ -499,8 +499,18 @@ class HeadTailRelations(Relations):
         two boxes (``meets`` with margin ``margin``); the mean over components for unions."""
         first = _each(measure)(sub, self.preimage(ids, filler), margin)
         second = _each(measure)(filler, self.image(ids, sub), margin)
-        return (delta - first).square().mean(dim=1, keepdim=True) \
-            + (delta - second).square().mean(dim=1, keepdim=True)
+        return _mean_over(sub, (delta - first).square()) \
+            + _mean_over(filler, (delta - second).square())
+
+
+def _mean_over(region, values):
+    """The mean over the components of ``region`` of ``values`` ``(B, k)``: over the slots
+    that count where the region says which (``gate``: structural slots; zero if none does)."""
+    gate = getattr(region, "gate", None)
+    if gate is None:
+        return values.mean(dim=1, keepdim=True)
+    total = th.where(gate, values, th.zeros_like(values)).sum(dim=1, keepdim=True)
+    return total / gate.sum(dim=1, keepdim=True).clamp_min(1)
 
 
 def _some(measure):

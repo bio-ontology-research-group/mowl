@@ -123,14 +123,19 @@ class Prism(Region):
         return Prism(self.supports + vector[:, :2] @ normals.T, self.centre + vector[:, 2:],
                      self.offset)
 
-    def intersect(self, other):
+    def intersect(self, other, signed=False):
+        """The intersection and its gap (zero iff it is not empty). ``signed=True``: the
+        half-widths of the box part are :math:`(upper - lower) / 2`, negative where the
+        boxes are apart (as in the prism module's definitions of classes), instead of
+        their absolute value."""
         h = th.minimum(self.supports, other.supports)
         lower = th.maximum(self.centre - self.offset, other.centre - other.offset)
         upper = th.minimum(self.centre + self.offset, other.centre + other.offset)
         triangle_gap = th.relu(-h.sum(dim=-1, keepdim=True))
         box_gap = th.linalg.norm(th.relu(lower - upper), dim=-1, keepdim=True)
         gap = triangle_gap + box_gap
-        return Prism(h, (lower + upper) / 2.0, th.abs(upper - lower) / 2.0), gap
+        half = (upper - lower) / 2.0
+        return Prism(h, (lower + upper) / 2.0, half if signed else th.abs(half)), gap
 
 
 @dataclass(frozen=True)

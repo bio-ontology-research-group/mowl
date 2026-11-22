@@ -28,6 +28,11 @@ from mowl.representation.measures import Bounds
 from mowl.representation.adapters import register_adapter
 from mowl.representation.methods import register_method
 from mowl.representation.relation_models import Translation
+from mowl.representation.library.structural_measure import SlotMeasure
+from mowl.representation.library.structural_methods import StructuralGeometry
+from mowl.representation.library.structural_points import PointReading, PointTerms, SoftMembership
+from mowl.representation.library.structural_reading import StructuralReading
+from mowl.representation.library.structural_regions import SlotClasses
 
 __all__ = ["box2el", "multiboxel", "multielbe", "mcmultibox"]
 
@@ -106,52 +111,128 @@ def _union_regularizers(component_reg, diversity_reg):
     return out
 
 
+def _points(reading, t, embed_dim, beta, neg_weight, ind_halfwidth, volume_reg,
+            supervision):
+    """The point terms of a point reading: the soft membership, the weights, and (from the
+    module or ``supervision``) the points of the canonical elements."""
+    terms = PointTerms(None, embed_dim, SoftMembership(beta), neg_weight, ind_halfwidth,
+                       volume_reg)
+    if t is not None and getattr(t, "point_supervision", None) is not None:
+        terms.set_supervision(t.point_supervision, getattr(t, "elem_embed", None))
+    elif supervision is not None:
+        terms.set_supervision(supervision)
+    return terms
+
+
 @register_method("multiboxel")
 def multiboxel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0,
                n_components=2, delta=2.0, reg_factor=0.05, component_reg=0.0,
                component_aggregation="hard", tau=1.0, diversity_reg=0.0, epsilon=0.01,
-               tables=None):
+               reading="axiom", beta=0.1, neg_weight=0.1, ind_halfwidth=None, volume_reg=0.0,
+               max_components=None, existence_weight=1.0, size_reg=1e-3, bot_agg="mean",
+               witness_weight=0.0, supervision=None, tables=None):
     """MultiBoxEL (Federico, Leemhuis and Kutz 2026): Box2EL with every class a union of
-    ``n_components`` boxes (one bump vector per class).
+    ``n_components`` boxes (one bump vector per class), in the five readings of the module's
+    ``objective`` (here ``reading``):
 
-    Covered, and verified equal to :class:`~mowl.nn.MultiBoxELModule` at ``n_components`` 1
-    and 2 to 3: ``objective="axiom"`` (the default) with ``component_aggregation`` ``"hard"``
-    and ``"soft"`` (``tau``), ``component_reg``, ``diversity_reg``, ``reg_factor``, ``delta``
-    and ``gamma`` (here ``margin``); all forms with their positive loss, the negative losses
-    of ``gci2`` and ``object_property_assertion``, and the regularisation loss.
+    ``"axiom"`` (default)
+        Verified equal to :class:`~mowl.nn.MultiBoxELModule` at ``n_components`` 1 to 3 with
+        ``component_aggregation`` ``"hard"`` and ``"soft"`` (``tau``), ``component_reg``,
+        ``diversity_reg``, ``reg_factor``, ``delta`` and ``gamma`` (here ``margin``); all
+        forms with their positive loss, the negative losses of ``gci2`` and
+        ``object_property_assertion``, and the regularisation loss.
+    ``"structural"``
+        The structural reading (:class:`StructuralReading`: squared hinges with
+        non-emptiness gates) on slots of boxes (:class:`SlotClasses`, ``max_components``
+        slots) with a definition table (:meth:`StructuralGeometry.set_structural_tables`:
+        defined classes are the intersections of their definers,
+        :class:`DefinedClasses`) and the penalties existence (``existence_weight``), size
+        (``size_reg``) and witness (``witness_weight``). ``margin`` is the tightening margin
+        :math:`m` of the module (``margin``, not ``gamma``); ``bot_agg``. Hard aggregation
+        only. Re-seeding is a regime (see :mod:`structural_methods`).
+    ``"point"``, ``"mixed"``, ``"hybrid"``
+        The axiom reading with the forms the module switches off while training
+        (:class:`PointReading`), the class assertion read as :math:`-\\log m_C(a)`, and the
+        point loss in ``geometry.point_terms`` (:class:`PointTerms`: ``beta``,
+        ``neg_weight``, ``ind_halfwidth``, ``volume_reg``; the supervision from the module or
+        ``supervision``).
 
-    Not covered: ``objective`` ``"point"``, ``"mixed"``, ``"hybrid"`` (point supervision) and
-    ``"structural"`` (definition tables, existence and witness losses, re-seeding), and with
-    them their parameters (``beta``, ``neg_weight``, ``volume_reg``, ``ind_halfwidth``,
-    ``margin`` as the tightening margin of the structural objective, ``max_components``,
-    ``structural_definitions``, ``existence_weight``, ``size_reg``, ``reseed_*``, ``bot_agg``,
-    ``witness_weight``). The DELE negative losses of the other forms are not offered (the
-    module has none).
+    The DELE negative losses of the other forms are not offered (the module has none).
 
-    :param tables: A :class:`~mowl.nn.MultiBoxELModule` to share parameters with.
+    :param tables: A :class:`~mowl.nn.MultiBoxELModule` to share parameters with (and, for
+        ``"structural"``, its definition table and targets).
     """
     t = tables
-    classes, individuals = _union_parts(
-        nb_classes, embed_dim, n_components, nb_individuals, t,
-        ("class_center", "class_offset", "bump_classes", "ind_center", "ind_offset",
-         "bump_individuals"), bump=True)
-    if t is not None:
-        tau = t.tau
-    objective = Objective(
-        margin, slack=True, epsilon=epsilon, gci3="inclusion", gci2_negative="delta",
-        negatives="gci2", squared=True, delta=delta, gci3_bot_negative="filler",
-        strict_negatives=False)
-    measure = UnionMeasure(Bounds(separation="every"), component_aggregation, tau)
+    if reading not in ("axiom", "structural", "point", "mixed", "hybrid"):
+        raise ValueError("reading must be 'axiom', 'structural', 'point', 'mixed' or "
+                         "'hybrid'.")
+    names = ("class_center", "class_offset", "bump_classes", "ind_center", "ind_offset",
+             "bump_individuals")
     regularizers = [bump_penalty(reg_factor)] + _union_regularizers(component_reg,
                                                                     diversity_reg)
-    return ComposedGeometry(classes, _head_tail(nb_relations, embed_dim, t), measure,
-                            objective, individuals=individuals, regularizers=regularizers)
+    if reading == "structural":
+        if component_aggregation != "hard":
+            raise ValueError("component_aggregation must be 'hard' for the structural "
+                             "reading.")
+        centres, offsets, bumps, ind_centres, ind_offsets, ind_bumps = (
+            None if t is None else getattr(t, n, None) for n in names)
+        classes = SlotClasses(nb_classes, embed_dim, n_components, max_components,
+                              bump=True, centres=centres, offsets=offsets, bumps=bumps) \
+            if t is None else SlotClasses(components=n_components,
+                                          max_components=max_components, centres=centres,
+                                          offsets=offsets, bumps=bumps)
+        individuals = None
+        if t is None and nb_individuals:
+            individuals = UnionClasses(nb_individuals, embed_dim, 1, bump=True)
+        elif ind_centres is not None:
+            individuals = UnionClasses(components=1, centres=ind_centres,
+                                       offsets=ind_offsets, bumps=ind_bumps)
+        objective = StructuralReading(
+            margin, bot_agg=bot_agg, epsilon=epsilon, gci2_negative="delta", delta=delta,
+            squared=("gci3", "gci3_bot"), gci3_bot_negative="filler")
+        geometry = StructuralGeometry(
+            classes, _head_tail(nb_relations, embed_dim, t),
+            SlotMeasure(Bounds(separation="every")), objective, individuals=individuals,
+            base_regularizers=regularizers, existence_weight=existence_weight,
+            size_reg=size_reg, witness_weight=witness_weight)
+        if t is not None:
+            geometry.reseed_options.update(mode=t.reseed_mode, size=t.reseed_size,
+                                           batch=t.reseed_batch)
+            geometry.witness_embed = t.witness_embed
+            if t.definition_table is not None or t.existence_targets is not None:
+                geometry.set_structural_tables(t.definition_table, t.existence_targets,
+                                               t.top_idx)
+        return geometry
+    classes, individuals = _union_parts(nb_classes, embed_dim, n_components, nb_individuals,
+                                        t, names, bump=True)
+    if t is not None:
+        tau = t.tau
+    options = dict(slack=True, epsilon=epsilon, gci3="inclusion", gci2_negative="delta",
+                   negatives="gci2", squared=True, delta=delta, gci3_bot_negative="filler",
+                   strict_negatives=False)
+    terms = None
+    if reading == "axiom":
+        objective = Objective(margin, **options)
+    else:
+        terms = _points(reading, t, embed_dim, beta if t is None else t.beta, neg_weight
+                        if t is None else t.neg_weight, ind_halfwidth if t is None
+                        else t.ind_halfwidth, volume_reg if t is None else t.volume_reg,
+                        supervision)
+        objective = PointReading(terms, reading, margin, **options)
+    measure = UnionMeasure(Bounds(separation="every"), component_aggregation, tau)
+    geometry = ComposedGeometry(classes, _head_tail(nb_relations, embed_dim, t), measure,
+                                objective, individuals=individuals, regularizers=regularizers)
+    if terms is not None:
+        geometry.point_terms = terms
+    return geometry
 
 
 @register_method("multielbe")
 def multielbe(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
               n_components=1, component_reg=0.0, component_aggregation="hard", tau=1.0,
-              diversity_reg=0.0, epsilon=0.01, gci3="overlap", tables=None):
+              diversity_reg=0.0, epsilon=0.01, gci3="overlap", reading="axiom", beta=0.1,
+              neg_weight=0.1, ind_halfwidth=None, volume_reg=0.0, supervision=None,
+              tables=None):
     """MultiELBE (Federico, Leemhuis and Kutz 2026): ELBE with every class a union of
     ``n_components`` boxes (translations as relations, strict margin, overlap reading of
     :math:`\\exists r.C \\sqsubseteq D`).
@@ -163,12 +244,17 @@ def multielbe(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0
     (mean over all pairs of components), and the regularisation loss. ``gci3="inclusion"``
     gives the corrected reading, which the module does not have.
 
-    Not covered: ``objective`` ``"point"``, ``"mixed"``, ``"hybrid"`` and their parameters
-    (``beta``, ``neg_weight``, ``volume_reg``, ``ind_halfwidth``).
+    ``reading`` ``"point"``, ``"mixed"``, ``"hybrid"``: the axiom reading with the forms the
+    module switches off while training (:class:`PointReading`), the class assertion read as
+    :math:`-\\log m_C(a)`, the point loss in ``geometry.point_terms`` (:class:`PointTerms`:
+    the membership of :math:`x + r` in the target for a role triple; ``beta``, ``neg_weight``,
+    ``ind_halfwidth``, ``volume_reg``). There is no structural reading of this module.
 
     :param tables: A :class:`~mowl.nn.MultiELBEModule` to share parameters with.
     """
     t = tables
+    if reading not in ("axiom", "point", "mixed", "hybrid"):
+        raise ValueError("reading must be 'axiom', 'point', 'mixed' or 'hybrid'.")
     classes, individuals = _union_parts(
         nb_classes, embed_dim, n_components, nb_individuals, t,
         ("class_embed", "class_offset", "none", "ind_embed", "ind_offset", "none"),
@@ -177,11 +263,25 @@ def multielbe(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0
         vectors=t.rel_embed)
     if t is not None:
         tau = t.tau
-    objective = Objective(margin, slack=False, epsilon=epsilon, gci3=gci3,
-                          gci2_negative="overlap", negatives="gci2", strict_negatives=False)
+    options = dict(slack=False, epsilon=epsilon, gci3=gci3, gci2_negative="overlap",
+                   negatives="gci2", strict_negatives=False)
+    terms = None
+    if reading == "axiom":
+        objective = Objective(margin, **options)
+    else:
+        terms = _points(reading, t, embed_dim, beta if t is None else t.beta, neg_weight
+                        if t is None else t.neg_weight, ind_halfwidth if t is None
+                        else t.ind_halfwidth, volume_reg if t is None else t.volume_reg,
+                        supervision)
+        objective = PointReading(terms, reading, margin, **options)
     measure = UnionMeasure(Bounds(separation="every"), component_aggregation, tau)
-    return ComposedGeometry(classes, relations, measure, objective, individuals=individuals,
-                            regularizers=_union_regularizers(component_reg, diversity_reg))
+    geometry = ComposedGeometry(classes, relations, measure, objective,
+                                individuals=individuals,
+                                regularizers=_union_regularizers(component_reg,
+                                                                 diversity_reg))
+    if terms is not None:
+        geometry.point_terms = terms
+    return geometry
 
 
 @register_method("mcmultibox")
@@ -255,11 +355,20 @@ def _box2el(module):
 
 @register_adapter("MultiBoxELModule")
 def _multiboxel(module):
-    return multiboxel(None, None, embed_dim=module.embed_dim, margin=module.gamma,
+    """The geometry of the module in its own objective (``module.objective``); with the
+    structural objective the geometry has the module's definition table, targets and
+    witness points as they are *now* (call again after ``set_structural_tables``)."""
+    structural = module.objective == "structural"
+    return multiboxel(None, None, embed_dim=module.embed_dim,
+                      margin=module.margin if structural else module.gamma,
                       n_components=module.n_components, delta=module.delta,
                       reg_factor=module.reg_factor, component_reg=module.component_reg,
                       component_aggregation=module.component_aggregation,
-                      diversity_reg=module.diversity_reg, tables=module)
+                      diversity_reg=module.diversity_reg, reading=module.objective,
+                      max_components=module.max_components,
+                      existence_weight=module.existence_weight, size_reg=module.size_reg,
+                      bot_agg=module.bot_agg, witness_weight=module.witness_weight,
+                      tables=module)
 
 
 @register_adapter("MultiELBEModule")
@@ -267,7 +376,8 @@ def _multielbe(module):
     return multielbe(None, None, embed_dim=module.embed_dim, margin=module.margin,
                      n_components=module.n_components, component_reg=module.component_reg,
                      component_aggregation=module.component_aggregation,
-                     diversity_reg=module.diversity_reg, tables=module)
+                     diversity_reg=module.diversity_reg, reading=module.objective,
+                     tables=module)
 
 
 @register_adapter("VolumeMultiBoxELModule")

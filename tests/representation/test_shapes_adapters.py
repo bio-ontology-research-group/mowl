@@ -135,8 +135,8 @@ class TestPrism(TestCase):
         self.assertEqual(geometry.neg_capable_gcis, module.neg_capable_gcis)
 
     def test_structural_module_has_a_geometry_with_its_regions(self):
-        # Class 0 is defined as the conjunction of classes 1 and 2: its region is theirs.
-        # The losses are those of the parts, not the structural losses of the module.
+        # Class 0 is defined as the conjunction of classes 1 and 2: its region is theirs; the
+        # losses are the structural ones (tests/representation/test_shapes_structural.py).
         from mowl.nn.el.structural import DefinitionTable
         module = self.make(objective="structural")
         table = DefinitionTable.from_normal_forms(

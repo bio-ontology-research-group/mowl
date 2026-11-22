@@ -124,9 +124,62 @@ def test_find_reader_gives_a_reader_for_every_module(name):
     assert len(regions) == N
 
 
-def test_modules_that_still_have_a_reader_are_those_with_defined_classes():
-    # MultiBoxEL with the structural objective: its geometry has the primitive regions only
-    assert set(exact_model.REGION_READERS) == {"MultiBoxELModule"}
+def test_no_module_has_a_reader_of_its_own_any_more():
+    # MultiBoxEL with the structural objective had one (its defined classes are the
+    # intersections of their definers); its geometry has them now
+    assert exact_model.REGION_READERS == {}
+
+
+def _structural_multibox(n_components=2, max_components=4, perturb=0.4):
+    from mowl.nn.el.structural import DefinitionTable, ExistenceTargets
+    th.manual_seed(3)
+    module = MultiBoxELModule(N, 2, embed_dim=3, n_components=n_components,
+                              objective="structural", max_components=max_components)
+    gci0 = th.tensor([[3, 0], [3, 1], [4, 1], [4, 2], [5, 3], [5, 2], [6, 0]])
+    gci1 = th.tensor([[0, 1, 3], [1, 2, 4], [3, 2, 5]])
+    table = DefinitionTable.from_normal_forms(
+        gci0=gci0, gci1=gci1, n_classes=N, k=n_components, max_components=max_components,
+        top_idx=None, bottom_idx=None, enabled=True)
+    module.set_structural_tables(table, ExistenceTargets(
+        classes=th.arange(N), pairs=th.tensor([[0, 1]])))
+    assert table.n_defined >= 2     # 5 = 3 and 2 needs 8 slots
+    _perturb(module, seed=5, scale=perturb)
+    return module
+
+
+def _legacy_structural(module):
+    # the reader that exact_model.py had for MultiBoxELModule: the regions of the module with
+    # the definitions resolved, the active slots only
+    with th.no_grad():
+        r = module.all_class_regions()
+    return _legacy_union(r.cen, r.w, r.active.numpy())
+
+
+def test_structural_multibox_defined_classes_are_read_through_the_geometry():
+    # the oracle is the old reader of the module; the numbers are identical
+    for components, slots in ((2, 4), (1, 1), (2, 8)):
+        module = _structural_multibox(components, slots)
+        old = _legacy_structural(module)
+        new = geometry_evaluation_regions(module)
+        assert len(new) == len(old) == N
+        for a, b in zip(new, old):
+            _same(a, b)
+        # a defined class (3 = 0 and 1) is not its own row: it has the intersection of the
+        # regions of its definers
+        row = module.class_boxes(th.tensor([3]))
+        own = _legacy_union(*row)[0]
+        assert not (len(own.pieces) == len(new[3].pieces) and all(
+            np.array_equal(p.lo, q.lo) for p, q in zip(own.pieces, new[3].pieces)))
+
+
+def test_structural_multibox_exact_model_reads_the_defined_classes():
+    module = _structural_multibox()
+    reader = exact_model.find_reader(module)
+    assert reader is not None
+    regions = reader(module)
+    old = _legacy_structural(module)
+    for a, b in zip(regions, old):
+        _same(a, b)
 
 
 def test_elkem_empty_and_full_boxes_say_so():

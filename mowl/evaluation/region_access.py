@@ -75,7 +75,8 @@ def evaluation_regions(region, purpose="The exact-model check"):
     :class:`mowl.evaluation.regions.Region`, one per row, for the exact decision procedures
     of :mod:`mowl.evaluation.regions`.
 
-    Boxes (also soft boxes: their location box), balls, unions of boxes, prisms and
+    Boxes (also soft boxes: their location box), balls, unions of boxes (also with slots
+    and signed half-widths: the structural MultiBoxEL, with its defined classes), prisms and
     products of octagons are converted. A region that says it is empty
     (:meth:`~mowl.representation.Region.is_empty`) gives an empty evaluation region. The
     arithmetic is that of the region: a box that keeps its corners
@@ -129,10 +130,17 @@ def _register_library_regions():
     from mowl.representation.library.multibox_parts import UnionOfBoxes
     from mowl.representation.library.other_regions import MaskedUnionOfBoxes
     from mowl.representation.library.shapes_regions import OctagonProduct, Prism
+    from mowl.representation.library.structural_regions import SlotBoxes
 
     @evaluation_regions.register(UnionOfBoxes)
     def _unions(region, purpose="The exact-model check"):
         return _union_boxes(_np(region.centre), _np(region.offset))
+
+    @evaluation_regions.register(SlotBoxes)
+    def _slots(region, purpose="The exact-model check"):
+        # the active slots with their signed half-widths (a slot of negative half-width is
+        # an empty box: lower corner above the upper one)
+        return _union_boxes(_np(region.centre), _np(region.w), _np(region.active).astype(bool))
 
     @evaluation_regions.register(MaskedUnionOfBoxes)
     def _grounded(region, purpose="The exact-model check"):

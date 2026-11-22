@@ -1,0 +1,189 @@
+"""MultiBoxEL and MultiELBE with the objectives other than ``"axiom"``, from parts, and the
+geometry that carries a definition table.
+
+=============  ======================================================================
+``reading``    parts
+=============  ======================================================================
+``axiom``      (:mod:`multibox_methods`) union of boxes, head and tail boxes, bounds
+``structural`` slots of boxes (:class:`SlotClasses`) wrapped in :class:`DefinedClasses`,
+               :class:`SlotMeasure`, :class:`StructuralReading`, penalties
+               (:class:`ExistencePenalty`, :class:`SizePenalty`, :class:`WitnessPenalty`)
+``point``,     union of boxes, the axiom measure, :class:`PointReading` with
+``mixed``,     :class:`PointTerms` (soft membership, :class:`SoftMembership`)
+``hybrid``
+=============  ======================================================================
+
+What is **not** a part: *re-seeding* during training (moving components that cover nothing
+to where they are needed) changes the structure of the model between optimisation steps; it
+is a training regime (:class:`mowl.training.structure.IdleComponentReseeding`). The geometry
+offers the hook the regime calls (:meth:`StructuralGeometry.reseed_components`); the
+relocation rule is the module's :meth:`~mowl.nn.MultiBoxELModule.reseed`, applied to the
+tables of the geometry (shared with the module, or through a module shell over them): it is
+about the layout of the tables of unions of boxes, not about an axiom.
+"""
+
+import numpy as np
+import torch as th
+import torch.nn as nn
+
+from mowl.nn.el.multibox_utils import effective_components
+from mowl.representation.geometry import ComposedGeometry
+from mowl.representation.library.structural_measure import SlotMeasure
+from mowl.representation.library.structural_points import (PointReading, PointTerms,
+                                                           SoftMembership)
+from mowl.representation.library.structural_reading import (ExistencePenalty, SizePenalty,
+                                                            StructuralReading, WitnessPenalty)
+from mowl.representation.library.structural_regions import DefinedClasses, SlotClasses
+
+__all__ = ["StructuralGeometry"]
+
+
+def _rows(model):
+    """The classes the size penalty covers: not defined, not the top class."""
+    classes = model.class_model
+    if isinstance(classes, DefinedClasses):
+        return classes.primitive_mask(model.top_idx)
+    mask = th.ones(len(classes), dtype=th.bool, device=model.device)
+    if model.top_idx is not None and 0 <= model.top_idx < len(classes):
+        mask[model.top_idx] = False
+    return mask
+
+
+class StructuralGeometry(ComposedGeometry):
+    """A :class:`~mowl.representation.ComposedGeometry` of slots of boxes with the
+    structural tables: :meth:`set_structural_tables` wraps the class model in
+    :class:`DefinedClasses` and adds the existence and witness penalties.
+
+    :param base_regularizers: The regularisers that are always there (bump norm, component
+        penalties).
+    :param existence_weight, size_reg, witness_weight: The weights of the three penalties
+        (the size penalty is there without a table, as in the module).
+    :param size_tables, size_scales: ``geometry -> [raw half-width tensors]`` and one factor
+        per tensor for the size penalty (default: the offsets of a union of boxes, factor 2;
+        a prism: the inradius and the box offsets, factors 1 and 2).
+    """
+
+    def __init__(self, classes, relations, measure, objective, individuals=None,
+                 base_regularizers=(), existence_weight=1.0, size_reg=1e-3,
+                 witness_weight=0.0, size_tables=None, size_scales=(2.0,), **options):
+        super().__init__(classes, relations, measure, objective, individuals=individuals,
+                         regularizers=(), **options)
+        self.base_regularizers = tuple(base_regularizers)
+        self.existence_weight, self.size_reg = float(existence_weight), float(size_reg)
+        self.witness_weight = float(witness_weight)
+        self.size_tables = size_tables if size_tables is not None else \
+            (lambda m: [m._slot_classes.offsets.weight])
+        self.size_scales = tuple(size_scales)
+        self.definition_table = None
+        self.existence_targets = None
+        self.top_idx = None
+        self.witness_embed = None
+        self.last_reseed_count = 0
+        self.reseed_options = {"mode": "dead", "size": 0.15, "batch": 1}
+        self._set_penalties()
+
+    # -- tables ---------------------------------------------------------------------------
+    @property
+    def _slot_classes(self):
+        classes = self.class_model
+        return classes.base if isinstance(classes, DefinedClasses) else classes
+
+    def _set_penalties(self):
+        penalties = []
+        targets = self.existence_targets
+        margin = lambda: self.objective.margin  # noqa: E731
+        if targets is not None:
+            penalties.append(ExistencePenalty(targets.classes, targets.pairs, margin,
+                                              lambda: self.existence_weight))
+        penalties.append(SizePenalty(self.size_tables, self.size_scales, _rows,
+                                     weight=lambda: self.size_reg))
+        if targets is not None and targets.witness is not None \
+                and self.witness_embed is not None:
+            penalties.append(WitnessPenalty(targets.witness, margin,
+                                            lambda: self.witness_weight))
+        self.regularizers = self.base_regularizers + tuple(penalties)
+
+    def set_structural_tables(self, table, targets, top_idx=None):
+        """Attach a :class:`~mowl.nn.el.structural.DefinitionTable` and
+        :class:`~mowl.nn.el.structural.ExistenceTargets` (as the module's method of the same
+        name): defined classes become the intersections of their definers, and the
+        existence (and, with ``witness_weight > 0`` and witness targets, the witness) penalties
+        read ``targets``."""
+        base = self._slot_classes
+        self.class_model = DefinedClasses(base, table) if table is not None else base
+        self.definition_table, self.existence_targets, self.top_idx = table, targets, top_idx
+        witness = None if targets is None else targets.witness
+        if witness is not None and self.witness_weight > 0.0:
+            n = int(witness.classes.numel())
+            if self.witness_embed is None or self.witness_embed.num_embeddings != n:
+                embed = nn.Embedding(n, base.embed_dim)
+                with th.no_grad():
+                    nn.init.uniform_(embed.weight, a=-1.0, b=1.0)
+                    if n > 0:
+                        embed.weight.div_(th.linalg.norm(embed.weight, dim=-1, keepdim=True))
+                self.witness_embed = embed.to(base.centres.weight.device)
+        self._set_penalties()
+
+    def witness_points(self):
+        """Detached CPU witness coordinates ``(W, d)``, or ``None`` when there are none."""
+        if self.witness_embed is None:
+            return None
+        return self.witness_embed.weight.detach().cpu().clone()
+
+    def effective_components(self, eps=1e-3):
+        """Per class the number of components that are not degenerate and not nested in
+        another (:func:`mowl.nn.el.multibox_utils.effective_components`), on the raw
+        tables."""
+        base = self._slot_classes
+        shape = (len(base), base.components, base.embed_dim)
+        return effective_components(base.centres.weight.view(shape),
+                                    base.offsets.weight.view(shape), eps=eps)
+
+    # -- re-seeding: a regime ---------------------------------------------------------------
+    def _shell(self):
+        """A :class:`~mowl.nn.MultiBoxELModule` over the tables of this geometry (no
+        parameters of its own: they are the tables), through which the relocation rule of
+        the module runs."""
+        from mowl.nn import MultiBoxELModule
+        base = self._slot_classes
+        shell = MultiBoxELModule(0, 0, embed_dim=base.embed_dim, n_components=base.components,
+                                 objective="structural", max_components=base.max_components,
+                                 witness_weight=self.witness_weight,
+                                 reseed_mode=self.reseed_options["mode"],
+                                 reseed_size=self.reseed_options["size"],
+                                 reseed_batch=self.reseed_options["batch"],
+                                 margin=self.objective.margin)
+        shell.nb_ont_classes = len(base)
+        shell.class_center, shell.class_offset = base.centres, base.offsets
+        shell.bump_classes = base.bumps
+        if self.definition_table is not None or self.existence_targets is not None:
+            shell.witness_embed = self.witness_embed
+            shell.set_structural_tables(self.definition_table, self.existence_targets,
+                                        self.top_idx)
+            shell.witness_embed = self.witness_embed
+        return shell
+
+    def reseed(self, rng):
+        """Relocate dead or idle components (see the class docstring); returns the number of
+        moves."""
+        moves = self._shell().reseed(rng)
+        self.last_reseed_count = moves
+        return moves
+
+    def reseed_components(self, epoch=0):
+        """The hook of :class:`~mowl.training.structure.IdleComponentReseeding` (the
+        regime): re-seed with a generator seeded by ``epoch``."""
+        return self.reseed(np.random.default_rng(int(epoch)))
+
+
+# ------------------------------------------------------------------------------------
+# the point objectives
+# ------------------------------------------------------------------------------------
+
+def point_reading(mode, margin, terms, **options):
+    """:class:`PointReading` with the options of the axiom objective of MultiBoxEL."""
+    return PointReading(terms, mode, margin, **options)
+
+
+__all__ += ["point_reading", "SlotClasses", "SlotMeasure", "StructuralReading",
+            "PointTerms", "SoftMembership"]

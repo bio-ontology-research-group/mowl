@@ -46,7 +46,7 @@ non-empty interiors.
 import math
 
 from mowl.evaluation.regime import EvaluationRegime
-from mowl.evaluation.regions import (BoxRegion, EmptyRegion, UndecidedInclusion, UnionRegion,
+from mowl.evaluation.regions import (EmptyRegion, UndecidedInclusion, UnionRegion,
                                      Universe, satisfies)
 
 
@@ -54,34 +54,14 @@ def _np(t):
     return t.detach().cpu().double().numpy()
 
 
-def _component_unions(cen, off, active=None):
-    cen, off = _np(cen), _np(off)
-    out = []
-    for i in range(cen.shape[0]):
-        comps = [BoxRegion(cen[i, k] - off[i, k], cen[i, k] + off[i, k])
-                 for k in range(cen.shape[1]) if active is None or active[i, k]]
-        out.append(UnionRegion(comps, dim=cen.shape[2]))
-    return out
-
-
-def _structural_union_regions(module):
-    r = module.all_class_regions()
-    return _component_unions(r.cen, r.w, r.active.cpu().numpy())
-
-
-#: Region readers by module class name, for the modules whose class regions the geometry
-#: does not give. Every other module is read through its geometry
+#: Region readers by module class name, for a module whose class regions the geometry does
+#: not give. Empty: every module is read through its geometry
 #: (:func:`mowl.evaluation.region_access.geometry_evaluation_regions`: balls, boxes, unions
-#: of boxes, prisms and products of octagons). Each reader takes the module and returns one
-#: :class:`~mowl.evaluation.regions.Region` per class index.
-#:
-#: ``MultiBoxELModule``: with the structural objective the module resolves *defined* classes
-#: (a class defined as a conjunction has the intersection of the regions of its definition)
-#: and some of its boxes are inactive; its geometry has the tables, not the definition table,
-#: so it describes the primitive regions only.
-REGION_READERS = {
-    "MultiBoxELModule": _structural_union_regions,
-}
+#: of boxes with slots (MultiBoxEL with the structural objective: its defined classes are the
+#: intersections of their definers in its geometry), prisms and products of octagons). A
+#: reader takes the module and returns one :class:`~mowl.evaluation.regions.Region` per class
+#: index.
+REGION_READERS = {}
 
 #: Modules that subclass a registered module but are not region models of that kind.
 NOT_REGION_MODULES = {
@@ -121,10 +101,6 @@ def find_reader(module):
             return None
         if cls.__name__ in REGION_READERS:
             return REGION_READERS[cls.__name__]
-    if hasattr(module, "all_class_regions"):
-        r = module.all_class_regions()
-        if hasattr(r, "active"):
-            return _structural_union_regions
     if _has_convertible_geometry(module):
         return _geometry_regions
     return None
