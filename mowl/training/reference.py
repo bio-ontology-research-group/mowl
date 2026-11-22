@@ -139,7 +139,8 @@ class TransBoxCodeTraining(Box2ELCodeTraining):
 
     The per-axiom losses themselves are those of the code: for :class:`~mowl.models.TransBox`
     this regime requires ``formulation="reference"``
-    (:mod:`mowl.nn.el.transbox.code_losses`), whose negative loss is an overlap that the
+    (the ``reference`` formulation of :class:`~mowl.nn.TransBoxModule`), whose negative
+    loss is an overlap that the
     squared target loss pushes to ``neg_dist``.
 
     Deviations, not replicated: the code draws the negatives once before training and
@@ -186,10 +187,13 @@ class TransBoxCodeTraining(Box2ELCodeTraining):
 
     def loss(self, gci_name, pos_scores, neg_scores):
         if self.nf2_pairwise and gci_name == "gci1" and "gci1" in self._datasets:
-            from mowl.nn.el.transbox.code_losses import gci1_terms
+            # the two terms of the loss of C and D in E, as the module's parts give them: the
+            # emptiness penalty p of the intersection region, and the rest q = loss - p
             module = self.model.module
-            p, q = gci1_terms(self._datasets["gci1"][:], module.class_center,
-                              module.class_offset, module.margin)
+            rows = self._datasets["gci1"][:]
+            _, p = module.classes(rows[:, 0]).intersect(module.classes(rows[:, 1]))
+            p = p.reshape(-1)
+            q = module(rows, "gci1").reshape(-1) - p
             return ((p[:, None] + q[None, :]) ** 2).mean()
         return super().loss(gci_name, pos_scores, neg_scores)
 

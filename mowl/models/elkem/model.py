@@ -5,7 +5,7 @@ import torch as th
 from tqdm import trange
 
 from mowl.base_models.elmodel import EmbeddingELModel
-from mowl.nn.el.elkem.losses import pearson_contrastive_loss
+from mowl.training.terms import correlation_contrastive_loss as pearson_contrastive_loss
 from mowl.nn.el.elkem.module import ELKEmModule
 
 logger = logging.getLogger(__name__)

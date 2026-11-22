@@ -11,7 +11,7 @@ from mowl.training import (Box2ELCodeTraining, FixedNegatives, PerColumnCorrupti
                            JointNormalisedInitialisation, UnboundedNegativeLoss,
                            PerAxiomNormPenalty, Box2ELBaselineLosses,
                            PerNormalFormMiniBatches, ComposedRegime)
-from mowl.nn.el.boxel import losses as boxel_losses
+from mowl.baselines.nn.el.boxel import losses as boxel_losses
 from tests.benchmarks.tiny import scratch_dir, tiny_dataset
 
 

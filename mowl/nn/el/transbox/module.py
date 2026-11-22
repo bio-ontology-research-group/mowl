@@ -23,7 +23,7 @@ class TransBoxModule(_PartBuiltModule):
         `Original implementation: <https://github.com/HuiYang1997/TransBox>`_
 
     :param formulation: ``"mowl"`` (default): the losses of mOWL. ``"reference"``: the losses
-        of the authors' code (:mod:`mowl.nn.el.transbox.code_losses`), with which the published
+        of the authors' code (:mod:`mowl.baselines.nn.el.transbox.code_losses`), with which the published
         numbers were obtained, and its initialisation (centre and offset of a box drawn
         together from :math:`U(-1, 1)^{2n}` and scaled to unit norm, instead of each to
         unit norm). These losses are meant to be squared per axiom, with negatives

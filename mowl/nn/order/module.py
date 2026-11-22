@@ -16,7 +16,7 @@ import contextlib
 
 import torch as th
 
-from mowl.nn.order import cones as C
+from mowl.representation.library import cone_regions as C
 from mowl.representation.geometry import ComposedGeometry
 from mowl.representation.library import hierarchy_methods as HM
 

@@ -79,7 +79,7 @@ class Box2ELBaselineLosses(TrainingRegime):
       :math:`E` (it is commented out in the code);
     * BoxEL: the losses of a batch are *summed* (not averaged) and the regulariser is the
       code's ``l2_side_regularizer`` of every box of every batch
-      (:func:`mowl.nn.el.boxel.losses.box2el_code_side_regularizer`).
+      (:func:`mowl.baselines.nn.el.boxel.losses.box2el_code_side_regularizer`).
 
     Other modules (Box2EL, ELBE) are left unchanged.
 

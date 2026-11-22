@@ -117,8 +117,11 @@ def _pairs():
         _pair("emelpp", EmELPP, OldEmELPP, BALL_TABLES, margin=0.1),
         _pair("emelpp/role_axioms", EmELPP, OldEmELPP, BALL_TABLES, margin=0.1,
               load_role_axioms=True),
+        # sigma_reg_weight 0.7, not 0.5: Family has one C <= exists r.D and one exists r.C <= D
+        # axiom, whose gradients on sigma are -w + ... and +w, which cancel exactly at 0.5, so
+        # that sigma did not move (tests/baselines/test_parameters_move.py)
         _pair("emelvar", EmELVar, OldEmELVar, BALL_TABLES + ("rel_sigma",), margin=0.1,
-              sigma_reg_weight=0.5),
+              sigma_reg_weight=0.7),
         _pair("emelvar/paper_weight", EmELVar, OldEmELVar, BALL_TABLES + ("rel_sigma",),
               margin=0.1, load_role_axioms=True),
         _pair("regd", RegDELBE, OldRegDELBE, box_tables, margin=0.05, num_neg=2),

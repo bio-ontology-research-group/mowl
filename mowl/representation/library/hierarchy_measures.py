@@ -29,13 +29,14 @@ import math
 import torch as th
 import torch.nn.functional as F
 
-from mowl.nn.order import cones as C
 from mowl.nn.order.manifolds import Euclidean, UpperHalfSpace
 from mowl.representation.measures import Bounds, RegionMeasure
 from mowl.representation.methods import DEFAULT_MEASURE, register_measure
 from mowl.representation.regions import Ball, Box, ConstructorUnavailable, CornerBox
 from mowl.representation.library.hierarchy_regions import (
     CodedBox, ConePoint, Disk, OrderCone, Point, depth)
+from mowl.representation.library.cone_regions import (
+    FORMULATIONS, OriginLight, Shadow, light_for)
 
 __all__ = ["HierarchyMeasure", "EnergyMeasure", "OrderViolation", "LogVolumeRatio",
            "ConeAngle", "ShadowCone", "Protrusion", "DistanceDepth",
@@ -417,7 +418,9 @@ class ConeAngle(EnergyMeasure):
         self.apex = apex
 
     def raw(self, a, b):
-        angle = C.axis_angle(b.centre, a.centre)
+        # "formula": the arccosine of the clamped cosine, as the published formula is evaluated
+        angle = OriginLight(1.0).axis_angle(b.manifold, b.centre, a.centre,
+                                            cos_clamp=1e-6 if self.apex == "formula" else 0.0)
         if self.apex == "inside":
             apex = th.linalg.norm(a.centre - b.centre, dim=-1) < 1e-7
             angle = th.where(apex, th.zeros_like(angle), angle)
@@ -431,7 +434,8 @@ class ShadowCone(EnergyMeasure):
     :param formulation: ``"penumbral-ball"``, ``"penumbral-half-space"``, ``"umbral-ball"``
         or ``"umbral-half-space"``; the half-space ones need points of an
         :class:`~mowl.nn.order.manifolds.UpperHalfSpace`, the others of a Poincare ball.
-    :param radius, horosphere_height, gamma3: See :func:`mowl.nn.order.cones.shadow_cone_energy`.
+    :param radius, horosphere_height, gamma3: See
+        :class:`~mowl.representation.library.cone_regions.Shadow`.
 
     Part (vocabulary value): ``angle``. Used by: ``shadow_cones``.
     """
@@ -441,8 +445,8 @@ class ShadowCone(EnergyMeasure):
 
     def __init__(self, formulation="umbral-half-space", radius=0.05, horosphere_height=20.0,
                  gamma3=1e-4, signed=False, negative_form="hinge"):
-        if formulation not in C.FORMULATIONS:
-            raise ValueError(f"formulation must be one of {C.FORMULATIONS}.")
+        if formulation not in FORMULATIONS:
+            raise ValueError(f"formulation must be one of {FORMULATIONS}.")
         super().__init__(signed, negative_form)
         self.formulation = formulation
         self.radius = radius
@@ -454,8 +458,9 @@ class ShadowCone(EnergyMeasure):
         if half_space != self.formulation.endswith("half-space"):
             raise ConstructorUnavailable(f"The formulation {self.formulation!r} does not "
                                          f"live on {type(a.manifold).__name__}.")
-        return C.shadow_cone_energy(b.centre, a.centre, self.formulation, self.radius,
-                                    self.horosphere_height, self.gamma3).unsqueeze(-1)
+        light, umbral = light_for(self.formulation, self.radius, self.horosphere_height)
+        cone = Shadow(b.centre, b.manifold, b.ids, light, umbral, self.radius, self.gamma3)
+        return cone.signed_distance(a.centre).unsqueeze(-1)
 
 
 class Protrusion(EnergyMeasure):

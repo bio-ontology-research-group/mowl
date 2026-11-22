@@ -13,7 +13,7 @@ Guarantees:
   negative, ``gci3_loss``, ``gci3_bot_loss``, ``class_assertion_loss``,
   ``object_property_assertion_loss``) reduces algebraically and numerically (to
   floating-point tolerance ``1e-6``) to the corresponding function in
-  :mod:`mowl.nn.el.elbe.losses` at equal ``margin``, including on ``gci1`` batches
+  :mod:`mowl.baselines.nn.el.elbe.losses` at equal ``margin``, including on ``gci1`` batches
   whose pairwise intersections are empty and preserving ELBE's margin sign
   convention (positive ``margin`` tightens).
 - **Zero-loss characterisation:**
@@ -69,7 +69,7 @@ from typing import Any, Callable, Optional
 
 import torch as th
 
-import mowl.nn.el.elbe.losses as EL
+import mowl.baselines.nn.el.elbe.losses as EL
 from mowl.baselines.nn.el.multiboxel.losses import (
     _resolve_n_components,
     _unpack_boxes,
@@ -177,13 +177,13 @@ def multi_inclusion(
 ) -> th.Tensor:
     """Compute pairwise ELBE inclusion scores between two component sets.
 
-    Delegates to :func:`mowl.nn.el.elbe.losses.box_inclusion_score` via
+    Delegates to :func:`mowl.baselines.nn.el.elbe.losses.box_inclusion_score` via
     :func:`multi_pair_score`.
 
     Guarantees:
 
     - For ``ka = kb = 1``, ``multi_inclusion(cen_a, off_a, cen_b, off_b, margin)[:, 0, 0]``
-      equals :func:`mowl.nn.el.elbe.losses.box_inclusion_score` on the squeezed boxes.
+      equals :func:`mowl.baselines.nn.el.elbe.losses.box_inclusion_score` on the squeezed boxes.
     - At ``margin = 0``, entry ``(b, i, j)`` is ``0`` if and only if box ``A_{b,i}``
       is contained in box ``B_{b,j}``.
 
@@ -227,7 +227,7 @@ def gci0_loss(
 
     Guarantees:
 
-    - Returns shape ``(B, 1)``, matching :func:`mowl.nn.el.elbe.losses.gci0_loss` at ``k = 1``
+    - Returns shape ``(B, 1)``, matching :func:`mowl.baselines.nn.el.elbe.losses.gci0_loss` at ``k = 1``
       under both ``"hard"`` and ``"soft"``.
     - At ``margin = 0`` and ``aggregation="hard"``, equals ``0`` if and only if
       every component :math:`C_i` is contained in at least one component :math:`D_j`.
@@ -288,7 +288,7 @@ def gci0_bot_loss(
 
     Guarantees:
 
-    - Returns shape ``(B,)``, matching :func:`mowl.nn.el.elbe.losses.gci0_bot_loss` at ``k = 1``.
+    - Returns shape ``(B,)``, matching :func:`mowl.baselines.nn.el.elbe.losses.gci0_bot_loss` at ``k = 1``.
     - Equals ``0`` if and only if all :math:`k` component offsets of :math:`C` are zero.
 
     Non-guarantees:
@@ -353,7 +353,7 @@ def gci1_loss(
 
     Guarantees:
 
-    - Returns shape ``(B, 1)``, matching :func:`mowl.nn.el.elbe.losses.gci1_loss` at ``k = 1``
+    - Returns shape ``(B, 1)``, matching :func:`mowl.baselines.nn.el.elbe.losses.gci1_loss` at ``k = 1``
       on both empty and non-empty intersections under both ``"hard"`` and ``"soft"``.
     - At ``margin = 0`` under ``aggregation="hard"``:
 
@@ -446,13 +446,13 @@ def gci1_bot_loss(
 
     Computes the arithmetic mean of non-negative ELBE pairwise disjointness
     scores over all :math:`k^2` component pairs :math:`(C_i, D_j)` (differing
-    from single-box :func:`mowl.nn.el.elbe.losses.gci1_bot_loss` only in this
+    from single-box :func:`mowl.baselines.nn.el.elbe.losses.gci1_bot_loss` only in this
     mean aggregation over the :math:`k^2` pairs, while retaining ELBE's
     Euclidean norm over coordinates inside each pair).
 
     Guarantees:
 
-    - Returns shape ``(B, 1)``, matching :func:`mowl.nn.el.elbe.losses.gci1_bot_loss` at ``k = 1``.
+    - Returns shape ``(B, 1)``, matching :func:`mowl.baselines.nn.el.elbe.losses.gci1_bot_loss` at ``k = 1``.
     - Because the loss is the mean of non-negative pairwise terms, it equals
       ``0`` if and only if **all** :math:`k^2` component pairs :math:`(C_i, D_j)`
       score ``0``—which under ELBE's :math:`L_2`-norm coordinate score means each
@@ -514,7 +514,7 @@ def gci2_score(
 
     Guarantees:
 
-    - Returns shape ``(B, 1)``, matching :func:`mowl.nn.el.elbe.losses.gci2_score` at ``k = 1``.
+    - Returns shape ``(B, 1)``, matching :func:`mowl.baselines.nn.el.elbe.losses.gci2_score` at ``k = 1``.
     - At ``margin = 0`` and ``aggregation="hard"``, equals ``0`` if and only if
       every translated component :math:`C_i + r` is contained in at least one
       target component :math:`D_j`.
@@ -580,13 +580,13 @@ def gci2_loss(
 
     Aggregation for :math:`k \\ge 2`:
 
-    - When ``neg=False``, :math:`s` is :func:`mowl.nn.el.elbe.losses.gci2_score`
+    - When ``neg=False``, :math:`s` is :func:`mowl.baselines.nn.el.elbe.losses.gci2_score`
       (:math:`\\|\\text{relu}(|c_{C,i} + r - c_{D,j}| + o_{C,i} - o_{D,j} + \\text{margin})\\|_2`),
       aggregated as :math:`\\text{mean}_i \\min_j s(C_i, D_j, r)` under ``"hard"``
       (or :math:`\\text{mean}_i \\text{softmin}_{\\tau, j} s(C_i, D_j, r)` under
       ``"soft"``), so every translated component :math:`C_i + r` must be
       contained in some :math:`D_j`.
-    - When ``neg=True``, :math:`s` is :func:`mowl.nn.el.elbe.losses.gci2_score_neg`
+    - When ``neg=True``, :math:`s` is :func:`mowl.baselines.nn.el.elbe.losses.gci2_score_neg`
       (:math:`\\|\\text{relu}(|c_{C,i} + r - c_{D,j}| - o_{C,i} - o_{D,j} - \\text{margin})\\|_2`),
       aggregated as the mean over all :math:`k^2` component pairs
       :math:`\\text{mean}_{i,j} s(C_i, D_j, r)` identically under both ``"hard"``
@@ -594,7 +594,7 @@ def gci2_loss(
 
     Guarantees:
 
-    - Returns shape ``(B, 1)``, matching :func:`mowl.nn.el.elbe.losses.gci2_loss`
+    - Returns shape ``(B, 1)``, matching :func:`mowl.baselines.nn.el.elbe.losses.gci2_loss`
       at ``k = 1`` for both ``neg=False`` and ``neg=True``.
     - Converges from ``aggregation="soft"`` to ``aggregation="hard"`` as ``tau -> 0+``
       (and is identical for ``neg=True`` at all ``tau``).
@@ -668,13 +668,13 @@ def gci3_pair_score(
 ) -> th.Tensor:
     """Pairwise ELBE GCI3 overlap score :math:`\\|\\text{relu}(|c - r - d| - o_c - o_d + \\text{margin})\\|_2`.
 
-    Preserves ELBE's actual overlap formula (:mod:`mowl.nn.el.elbe.losses` ``gci3_loss``)
+    Preserves ELBE's actual overlap formula (:mod:`mowl.baselines.nn.el.elbe.losses` ``gci3_loss``)
     verbatim so that ``k = 1`` reproduces :class:`~mowl.nn.el.elbe.module.ELBEModule`
     at equal ``margin``.
 
     Guarantees:
 
-    - Returns shape ``(N, 1)`` matching the body of :func:`mowl.nn.el.elbe.losses.gci3_loss`.
+    - Returns shape ``(N, 1)`` matching the body of :func:`mowl.baselines.nn.el.elbe.losses.gci3_loss`.
     - At ``margin = 0``, equals ``0`` if and only if the shifted box
       :math:`(c - r, o_c)` overlaps :math:`(d, o_d)` in every coordinate.
 
@@ -724,7 +724,7 @@ def gci3_loss(
 
     Guarantees:
 
-    - Returns shape ``(B, 1)``, matching :func:`mowl.nn.el.elbe.losses.gci3_loss` at ``k = 1``.
+    - Returns shape ``(B, 1)``, matching :func:`mowl.baselines.nn.el.elbe.losses.gci3_loss` at ``k = 1``.
     - At ``margin = 0`` and ``aggregation="hard"``, equals ``0`` if and only if
       each shifted component :math:`C_i - r` overlaps at least one target
       component :math:`D_j`.
@@ -790,11 +790,11 @@ def gci3_bot_loss(
     """ELBE GCI3-bot loss :math:`\\text{mean}_i \\|o_{C_i}\\|_2` for :math:`\\exists r.C \\sqsubseteq \\bot`.
 
     Indexes ``data[:, 1]`` for :math:`C` (rows are ``(r, C, bot)``) exactly as
-    :func:`mowl.nn.el.elbe.losses.gci3_bot_loss` does.
+    :func:`mowl.baselines.nn.el.elbe.losses.gci3_bot_loss` does.
 
     Guarantees:
 
-    - Returns shape ``(B,)``, matching :func:`mowl.nn.el.elbe.losses.gci3_bot_loss` at ``k = 1``.
+    - Returns shape ``(B,)``, matching :func:`mowl.baselines.nn.el.elbe.losses.gci3_bot_loss` at ``k = 1``.
     - Equals ``0`` if and only if all :math:`k` component offsets of :math:`C` are zero.
 
     Non-guarantees:
@@ -847,7 +847,7 @@ def class_assertion_loss(
 
     Guarantees:
 
-    - Returns shape ``(B, 1)``, matching :func:`mowl.nn.el.elbe.losses.class_assertion_loss` at ``k = 1``.
+    - Returns shape ``(B, 1)``, matching :func:`mowl.baselines.nn.el.elbe.losses.class_assertion_loss` at ``k = 1``.
     - At ``margin = 0`` and ``aggregation="hard"``, equals ``0`` if and only if
       the individual box :math:`a` is contained in at least one component :math:`C_m`.
 
@@ -911,11 +911,11 @@ def object_property_assertion_loss(
     aggregation: str = "hard",
     tau: float = 1.0,
 ) -> th.Tensor:
-    """ELBE object property assertion loss for :math:`r(a, b)`, delegating to :mod:`mowl.nn.el.elbe.losses`.
+    """ELBE object property assertion loss for :math:`r(a, b)`, delegating to :mod:`mowl.baselines.nn.el.elbe.losses`.
 
     Guarantees:
 
-    - Returns shape ``(B, 1)``, identical to :func:`mowl.nn.el.elbe.losses.object_property_assertion_loss`
+    - Returns shape ``(B, 1)``, identical to :func:`mowl.baselines.nn.el.elbe.losses.object_property_assertion_loss`
       for both ``neg=False`` and ``neg=True``.
 
     Non-guarantees:

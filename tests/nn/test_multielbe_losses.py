@@ -5,7 +5,7 @@ import pytest
 import torch
 
 from mowl.nn import ELBEModule, MultiELBEModule
-import mowl.nn.el.elbe.losses as EL
+import mowl.baselines.nn.el.elbe.losses as EL
 import mowl.baselines.nn.el.multielbe.losses as MEL
 from tests.geometric.helpers import _random_batch
 

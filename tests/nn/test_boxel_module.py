@@ -2,10 +2,10 @@ import pytest
 import torch as th
 import torch.nn.functional as F
 
-import mowl.nn.el.boxel.losses as L
+import mowl.baselines.nn.el.boxel.losses as L
 from mowl.nn.el.boxel.module import BoxELModule
 from mowl.nn.el.boxsel.module import BoxSELModule
-from mowl.nn.el.boxsel import losses as S
+from mowl.baselines.nn.el.boxsel import losses as S
 
 
 def _module(cls=BoxELModule, **kw):

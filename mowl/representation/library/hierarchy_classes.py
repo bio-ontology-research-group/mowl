@@ -20,7 +20,7 @@ table of an existing module (``table=``), which then shares its parameters with 
 import torch as th
 import torch.nn as nn
 
-from mowl.nn.order import cones as C
+from mowl.representation.library import cone_regions as C
 from mowl.nn.order.manifolds import (Euclidean, Hyperboloid, PoincareBall, Sphere,
                                      UpperHalfSpace)
 from mowl.representation.class_models import Classes

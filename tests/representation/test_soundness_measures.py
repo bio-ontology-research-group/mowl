@@ -723,7 +723,7 @@ def test_shadow_cones_are_reflexive_and_nested():
     What the construction promises is sampled: a point lies in its own cone (exactly: the next
     test), and the cones are nested (a point ``y`` of the cone of ``x``,
     ``x`` in the cone of ``b``: ``y`` is in the cone of ``b``)."""
-    from mowl.nn.order import cones as C
+    from mowl.representation.library import cone_regions as C
     g = _gen(4)
     n = 300000
     b = th.randn(n, 2, generator=g)
@@ -760,7 +760,7 @@ def _own_cone_points(form, n=100000, seed=4):
 def test_shadow_cones_cost_nothing_inside_themselves(form):
     """A class inside itself costs exactly 0 on every formulation (a point that coincides with
     the apex is the apex), with finite gradients."""
-    from mowl.nn.order import cones as C
+    from mowl.representation.library import cone_regions as C
     p = _own_cone_points(form)
     energy = C.shadow_cone_energy(p, p.clone(), form, 0.05, 20.0, 1e-4)
     assert float(energy.abs().max()) == 0.0, form

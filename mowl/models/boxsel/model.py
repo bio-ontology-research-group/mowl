@@ -5,7 +5,7 @@ import numpy as np
 import torch as th
 
 from mowl.base_models.elmodel import EmbeddingELModel
-from mowl.nn.el.boxsel import losses as S
+from mowl.nn.el.boxsel import expressions as S
 from mowl.nn.el.boxsel.module import BoxSELModule
 
 _THING = "http://www.w3.org/2002/07/owl#Thing"

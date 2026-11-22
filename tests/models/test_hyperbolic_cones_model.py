@@ -12,7 +12,7 @@ mowl.init_jvm("2g")
 import mowl.datasets  # noqa: E402,F401
 from mowl.models import HyperbolicCones  # noqa: E402
 from mowl.nn.order import HyperbolicConesModule, RiemannianSGD  # noqa: E402
-from mowl.nn.order import cones as C  # noqa: E402
+from mowl.representation.library import cone_regions as C  # noqa: E402
 from mowl.nn.order.manifolds import PoincareBall  # noqa: E402
 from tests.models.order_tree import (common_ranking_benchmark,  # noqa: E402
                                      train_and_separate, tree_dataset)

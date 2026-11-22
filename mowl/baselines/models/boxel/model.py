@@ -12,7 +12,7 @@ class BoxEL(EmbeddingELModel):
     :param positive_scale: Use :math:`|s| + \\epsilon` as the scale of a role (default) so
         that no role inverts a box; ``False`` is the signed scale of the original code.
     :param role_chain_composition: ``"in_order"`` (default) or ``"as_released"``, see
-        :func:`mowl.nn.el.boxel.losses.role_chain_loss`.
+        :func:`mowl.baselines.nn.el.boxel.losses.role_chain_loss`.
     """
 
     def __init__(self,

@@ -13,7 +13,7 @@ from unittest import TestCase
 
 import torch as th
 
-import mowl.nn.el.elkem.losses as L
+import mowl.baselines.nn.el.elkem.losses as L
 from mowl.nn.el.elkem.module import ELKEmModule
 
 EPS = 1e-5

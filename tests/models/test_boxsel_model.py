@@ -7,7 +7,7 @@ from java.util import HashSet
 
 from mowl.datasets import Dataset
 from mowl.models.boxsel.model import BoxSEL, Conditional
-from mowl.nn.el.boxsel import losses as S
+from mowl.baselines.nn.el.boxsel import losses as S
 from mowl.owlapi import OWLAPIAdapter
 
 NS = "http://mowl/boxsel#"

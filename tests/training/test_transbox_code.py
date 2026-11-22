@@ -169,7 +169,7 @@ def test_elbe_options_of_the_transbox_code(dataset):
 
 
 def test_nf2_pairwise_option():
-    from mowl.nn.el.transbox.code_losses import gci1_terms
+    from mowl.baselines.nn.el.transbox.code_losses import gci1_terms
     model = _model(tiny_dataset(), formulation="reference")
     regime = TransBoxCodeTraining(batch_size=4, margin=0.0, nf2_pairwise=True,
                                   select=False)

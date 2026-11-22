@@ -47,6 +47,7 @@ import torch as th
 import torch.nn.functional as F
 
 from mowl.training.regime import TrainingRegime
+from mowl.training.terms import pearson_correlation
 
 
 def _flat(x):
@@ -476,9 +477,7 @@ class PearsonCorrelationLoss(_ScoreLoss):
         scores = th.cat([pos, neg])
         sigma = th.exp(-scores) if self.score_transform == "exp_neg" else -scores
         t = th.cat([th.ones_like(pos), th.zeros_like(neg)])
-        sc = sigma - sigma.mean()
-        tc = t - t.mean()
-        return (sc * tc).sum() / (sc.norm() * tc.norm() + self.eps)
+        return pearson_correlation(sigma, t, self.eps)
 
     def combine(self, gci_name, pos, neg):
         loss = self._positive_term(pos)

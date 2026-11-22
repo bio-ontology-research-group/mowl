@@ -18,7 +18,7 @@ class BoxELModule(ELModule):
     #: Which regulariser is used: ``"global"`` (default), the mean over all class boxes of
     #: the excess of the upper corners over 1 and of negative lower corners, once per step;
     #: or ``"box2el_code"``, the regulariser of the BoxEL baseline of the
-    #: Box\ :sup:`2`\ EL code (:func:`~mowl.nn.el.boxel.losses.box2el_code_side_regularizer`
+    #: Box\ :sup:`2`\ EL code (:func:`~mowl.baselines.nn.el.boxel.losses.box2el_code_side_regularizer`
     #: of every box of every batch, including negatives, intersections and translated
     #: boxes). Set by the training regime :class:`~mowl.training.Box2ELBaselineLosses`.
     regulariser = "global"
@@ -31,7 +31,7 @@ class BoxELModule(ELModule):
     positive_scale = True
 
     #: Composition used by the role chain loss (see
-    #: :func:`~mowl.nn.el.boxel.losses.role_chain_loss`): ``"in_order"`` (default) or
+    #: :func:`~mowl.baselines.nn.el.boxel.losses.role_chain_loss`): ``"in_order"`` (default) or
     #: ``"as_released"``. Role axioms are only used with ``load_role_axioms=True``.
     role_chain_composition = "in_order"
 

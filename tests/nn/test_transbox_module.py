@@ -1,8 +1,8 @@
 import pytest
 import torch as th
 
-import mowl.nn.el.transbox.code_losses as CL
-import mowl.nn.el.transbox.losses as L
+import mowl.baselines.nn.el.transbox.code_losses as CL
+import mowl.baselines.nn.el.transbox.losses as L
 from mowl.nn.el.transbox.module import TransBoxModule
 
 D2 = th.tensor([[0, 1], [2, 3]])

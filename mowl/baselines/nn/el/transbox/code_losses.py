@@ -3,7 +3,7 @@ HuiYang1997/TransBox), used by :class:`~mowl.nn.TransBoxModule` with
 ``formulation="reference"``.
 
 The published numbers of Yang et al. (WWW 2025) were obtained with these formulas, which
-differ from mOWL's default TransBox losses (:mod:`mowl.nn.el.transbox.losses`) in five
+differ from mOWL's default TransBox losses (:mod:`mowl.baselines.nn.el.transbox.losses`) in five
 ways:
 
 1. **Centre-norm term inside every axiom.** Every concept loss adds

@@ -22,6 +22,8 @@ from mowl.training.losses import (SumLoss, MSETargetLoss, PairwiseMarginRankingL
                                   LogSigmoidLoss, BPRLoss, LogSumExpContrastiveLoss,
                                   SoftmaxEnergyContrastiveLoss, PearsonCorrelationLoss,
                                   ProbabilisticBCELoss, NormalFormFrequencyWeighting)
+from mowl.training.terms import (pearson_correlation, correlation_contrastive_loss,
+                                 lexical_similarity_loss)
 from mowl.training.positives import (TransitiveReductionPositives,
                                      TransitiveClosurePositives, ValidationAxiomsAsPositives)
 from mowl.training.schedules import StepDecay, ConstantThenCosine, CyclicLearningRate, \
@@ -63,6 +65,7 @@ __all__ = [
     "SumLoss", "MSETargetLoss", "PairwiseMarginRankingLoss", "LogSigmoidLoss", "BPRLoss",
     "LogSumExpContrastiveLoss", "SoftmaxEnergyContrastiveLoss",
     "PearsonCorrelationLoss", "ProbabilisticBCELoss",
+    "pearson_correlation", "correlation_contrastive_loss", "lexical_similarity_loss",
     "NormalFormFrequencyWeighting",
     "TransitiveReductionPositives", "TransitiveClosurePositives",
     "StepDecay", "ConstantThenCosine", "CyclicLearningRate", "ReduceOnPlateau",

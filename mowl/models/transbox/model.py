@@ -30,7 +30,7 @@ class TransBox(EmbeddingELModel):
     .. note::
         ``formulation="reference"`` switches to the loss functions and the
         initialisation of the authors' code (see :class:`~mowl.nn.TransBoxModule` and
-        :mod:`mowl.nn.el.transbox.code_losses`). Train it with the regime
+        :mod:`mowl.baselines.nn.el.transbox.code_losses`). Train it with the regime
         :class:`~mowl.training.TransBoxCodeTraining`, which squares the losses per axiom
         and pushes negatives to a target; the default ``"mowl"`` formulation is
         unchanged. ``strict_negatives`` and ``reference_bottom_losses`` select the
