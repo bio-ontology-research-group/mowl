@@ -25,7 +25,7 @@ class CanonicalMixtureModule(FlatLossOption, MixtureGeometry):
     ``mowl.baselines.nn.el.canonical_mixture.CanonicalMixtureModule``.
 
     :param structure: The constructed model, a
-        :class:`~mowl.geometric.membership.MembershipStructure`.
+        :class:`~mowl.representation.library.membership_structure.MembershipStructure`.
     :param rank: Rank :math:`r` of the logits.
     :param entropy_reg: Weight of the entropy regulariser :math:`\\lambda \\operatorname{mean}_a
         H(p_a)` (:meth:`regularization_loss` of a batch of individuals).
@@ -39,7 +39,7 @@ class CanonicalMixtureModule(FlatLossOption, MixtureGeometry):
 
     def __init__(self, structure, rank=50, entropy_reg=0.0, init_self_mass=0.9,
                  training_class_assertions=None):
-        from mowl.geometric.membership import MembershipStructure
+        from mowl.representation.library.membership_structure import MembershipStructure
         if not isinstance(structure, MembershipStructure):
             raise TypeError(
                 f"structure must be a MembershipStructure, got {type(structure).__name__}")

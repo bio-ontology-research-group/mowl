@@ -60,7 +60,7 @@ class MixtureGeometry(ComposedGeometry):
     :meth:`class_assertion_score`, :meth:`object_property_assertion_score`,
     :meth:`rank_classes`, :meth:`log_p`, and it draws the negatives of its regime
     (:meth:`sample_class_negatives`, :meth:`sample_role_negatives`). ``structure`` is the
-    constructed model (a :class:`~mowl.geometric.membership.MembershipStructure`).
+    constructed model (a :class:`~mowl.representation.library.membership_structure.MembershipStructure`).
 
     ``member`` is the exact score :math:`-\\log P(a \\in C)` (``inf`` for probability zero);
     the losses of the objective are those of the measure (binary cross entropy).
@@ -230,7 +230,7 @@ def canonical_mixture(nb_classes, nb_relations, nb_individuals=0, embed_dim=50,
     """The canonical mixture from its parts (module docstring).
 
     :param structure: The constructed model (a
-        :class:`~mowl.geometric.membership.MembershipStructure`, the reading ``"membership"``
+        :class:`~mowl.representation.library.membership_structure.MembershipStructure`, the reading ``"membership"``
         of the canonical model; :class:`mowl.models.CanonicalMixture` builds it). Without it
         (a geometry built from sizes) every class has one element of its own and every
         individual an element of no class.

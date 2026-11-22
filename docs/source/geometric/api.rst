@@ -182,7 +182,7 @@ kept for comparison in :mod:`mowl.baselines`.
 Canonical membership structure
 ------------------------------
 
-.. automodule:: mowl.geometric.membership
+.. automodule:: mowl.representation.library.membership_structure
    :members:
    :show-inheritance:
 

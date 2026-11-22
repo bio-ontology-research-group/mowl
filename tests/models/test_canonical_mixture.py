@@ -12,7 +12,7 @@ mowl.init_jvm("2g")
 
 from org.semanticweb.owlapi.model import IRI
 
-import mowl.geometric.membership as membership_mod
+import mowl.representation.library.membership_structure as membership_mod
 from mowl.datasets import PathDataset
 from mowl.geometric.normal_forms import BOTTOM, TOP
 from mowl.models import CanonicalMixture

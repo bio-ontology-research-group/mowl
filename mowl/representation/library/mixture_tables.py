@@ -18,7 +18,7 @@ relation model            :class:`CanonicalRoles`: a role is its set of pairs of
 ========================  ======================================================================
 
 The sparse tables (:class:`MembershipTable`) are read off a
-:class:`~mowl.geometric.membership.MembershipStructure`, the neutral restriction of the
+:class:`~mowl.representation.library.membership_structure.MembershipStructure`, the neutral restriction of the
 canonical model to :math:`S` (``M[x, C]`` iff the element ``x`` belongs to ``C``). The trained
 parts of the canonical mixture (:mod:`~mowl.representation.library.mixture_individuals`) put
 distributions over the same elements.
@@ -68,7 +68,7 @@ class MembershipTable(nn.Module):
     ``|S| x n_classes`` is dense. The buffers are constructed, not learned: they are not
     part of the ``state_dict``.
 
-    :param structure: A :class:`~mowl.geometric.membership.MembershipStructure`.
+    :param structure: A :class:`~mowl.representation.library.membership_structure.MembershipStructure`.
     """
 
     def __init__(self, structure):
@@ -320,7 +320,7 @@ class CanonicalCompletionSource(CanonicalModelSource):
 class MembershipRead(ReadModel):
     """What :class:`MembershipReading` returns: a :class:`ReadModel
     <mowl.representation.construction.ReadModel>` with the restriction of the canonical model
-    to the support (``structure``, a :class:`~mowl.geometric.membership.MembershipStructure`)
+    to the support (``structure``, a :class:`~mowl.representation.library.membership_structure.MembershipStructure`)
     and its :class:`MembershipTable` (``table``)."""
 
     def __init__(self, structure, table, classes, relations, names, roles, individuals):
@@ -377,9 +377,9 @@ class MembershipReading(Reading):
                                          "(or a finite model built from one).")
 
     def structure(self, built, names, roles, individuals):
-        """The :class:`~mowl.geometric.membership.MembershipStructure` of ``built`` for
+        """The :class:`~mowl.representation.library.membership_structure.MembershipStructure` of ``built`` for
         class, role and individual names in the order of their ids."""
-        from mowl.geometric.membership import MembershipStructure
+        from mowl.representation.library.membership_structure import MembershipStructure
         cm = built.origin if isinstance(built, FiniteModel) else built
         return MembershipStructure.from_canonical_model(
             cm, {n: i for i, n in enumerate(names)},
@@ -406,7 +406,7 @@ def membership_from_sizes(nb_classes, nb_relations, nb_individuals):
     """A constructed model for a geometry built from sizes only: one element per class
     (belonging to that class only) and one element per individual (belonging to no class),
     no pairs of any role."""
-    from mowl.geometric.membership import MembershipStructure
+    from mowl.representation.library.membership_structure import MembershipStructure
     n = nb_classes + nb_individuals
     idx = th.arange(nb_classes)
     m = th.sparse_coo_tensor(th.stack([idx, idx]), th.ones(nb_classes, dtype=th.bool),
