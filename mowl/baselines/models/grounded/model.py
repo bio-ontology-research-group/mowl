@@ -53,7 +53,7 @@ import torch.nn.functional as F
 
 from mowl.base_models.elmodel import EmbeddingELModel
 from mowl.baselines.nn.el.grounded.module import GroundedELModule
-from mowl.nn.el.grounded.sampling import (
+from mowl.baselines.nn.el.grounded.sampling import (
     RegionSample,
     sample_class_region,
     sample_elements,
@@ -3716,7 +3716,7 @@ class GroundedEL(EmbeddingELModel):
 
         Needs ``role_mode="translation"``.
         """
-        from mowl.nn.el.grounded import queries as Q
+        from mowl.baselines.nn.el.grounded import queries as Q
 
         if method not in ("beam", "box"):
             raise ValueError(f"method must be 'beam' or 'box', got {method!r}")
