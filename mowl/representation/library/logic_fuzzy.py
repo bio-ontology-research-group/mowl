@@ -54,7 +54,7 @@ __all__ = ["FuzzySet", "Family", "Product", "Goedel", "Lukasiewicz", "LogitGoede
            "dfalc", "falcon", "alcone"]
 
 #: Logit of the constants owl:Thing and owl:Nothing of the Al-cone module.
-CONSTANT_LOGIT = 1e4
+DEFAULT_CONSTANT_LOGIT = 1.0
 
 
 def _df():
@@ -339,6 +339,9 @@ class HalfAxisClasses(_FuzzyClasses, Classes):
     individuals of Al-cone (the support of the point).
 
     :param size: Number of classes; :param dim: :math:`n` (there are ``2 n`` logits).
+    :param constant_logit: Magnitude of the logits of ``owl:Thing`` (``+``) and
+        ``owl:Nothing`` (``-``); it has to be at least the margin, and a large value scales
+        every loss that involves them. Default ``1.0``; the earlier mOWL module used ``1e4``.
     """
 
     region = FuzzySet
@@ -346,8 +349,9 @@ class HalfAxisClasses(_FuzzyClasses, Classes):
     exact_conjunction = True
 
     def __init__(self, size=None, dim=None, logits=None, family=None, top_index=None,
-                 bottom_index=None, init_std=0.5):
+                 bottom_index=None, init_std=0.5, constant_logit=DEFAULT_CONSTANT_LOGIT):
         super().__init__()
+        self.constant_logit = float(constant_logit)
         if logits is None:
             logits = nn.Embedding(size, 2 * dim)
             nn.init.normal_(logits.weight, std=init_std)
@@ -357,7 +361,7 @@ class HalfAxisClasses(_FuzzyClasses, Classes):
 
     def forward(self, ids):
         values = _constants(self.centres(ids), ids, self.top_index, self.bottom_index,
-                            CONSTANT_LOGIT, -CONSTANT_LOGIT)
+                            self.constant_logit, -self.constant_logit)
         return FuzzySet(values, self.family)
 
 
@@ -519,28 +523,30 @@ class PairNetworkRelations(Relations):
     """A relation is a vector; the degree of ``r(a, b)`` is the network applied to
     ``(vector(a) + r, vector(b))`` (FALCON).
 
-    :param exists: How :math:`\\exists r.C` is read. ``"pairwise"`` (default): the degree of
-        element ``a`` is :math:`\\sup_b \\mathrm{net}(e_a + r, e_b) \\sqcap C(b)`.
-        ``"global"``: :math:`\\sup_b \\mathrm{net}(e_b + r, e_b) \\sqcap C(b)`, the same for
-        every element of the domain, as the existing mOWL module ``forward_fs`` computes it
-        (a porting error: the published FALCON pairs every element with every other, the
-        pairwise reading). Kept only so that the adapter of that module has equal losses.
+    :param role_pairs: Which pairs :math:`\\exists r.C` and :math:`\\forall r.C` range over.
+        ``"all"`` (default, as published and as :class:`~mowl.nn.FALCONModule` does by
+        default): the degree of element ``a`` is :math:`\\sup_b \\mathrm{net}(e_a + r, e_b)
+        \\sqcap C(b)`, over all pairs of the domain (memory quadratic in the domain).
+        ``"self"``: :math:`\\sup_b \\mathrm{net}(e_b + r, e_b) \\sqcap C(b)`, the pair of an
+        element with itself, one value for every element of the domain. That was a porting
+        error of the earlier mOWL module (``role_pairs="self"``); the published method does
+        not do it.
     """
 
     part = RelationModel.NETWORK.value
 
     def __init__(self, size=None, embed_dim=None, vectors=None, network=None, domain=None,
-                 exists="pairwise"):
+                 role_pairs="all"):
         super().__init__()
-        if exists not in ("pairwise", "global"):
-            raise ValueError("exists must be 'pairwise' or 'global'.")
+        if role_pairs not in ("all", "self"):
+            raise ValueError("role_pairs must be 'all' or 'self'.")
         if vectors is None:
             vectors = nn.Embedding(size, embed_dim)
             nn.init.xavier_uniform_(vectors.weight)
         self.vectors = vectors
         self.network = network
         self.domain = domain
-        self.exists = exists
+        self.role_pairs = role_pairs
 
     def _pairs(self, ids):
         """``(B, N, N)``: degree of ``r(x, y)`` for all pairs of the domain."""
@@ -565,7 +571,7 @@ class PairNetworkRelations(Relations):
 
     def preimage(self, ids, region):
         family = region.family
-        if self.exists == "pairwise":
+        if self.role_pairs == "all":
             return FuzzySet(family.exists(self._pairs(ids), region.values), family)
         r, e = self.vectors(ids), self.domain()
         n = e.shape[0]
@@ -894,8 +900,9 @@ def dfalc(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0,
 
 @register_method("falcon")
 def falcon(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0,
-           t_norm="product", max_measure="max", stabiliser="add", exists="pairwise",
-           anon_domain=0, tables=None):
+           t_norm="product", max_measure="max", stabiliser="add", role_pairs="all",
+           anon_domain=0, top_index=None, bottom_index=None, thing="learned",
+           nothing="empty", tables=None):
     """FALCON (Tang et al. 2022): class vectors, a membership network over (vector, element
     vector) pairs, a network over pairs for roles, a t-norm, the conflict of the
     counterexample as the measure. The domain is the table of the individuals (plus
@@ -905,18 +912,31 @@ def falcon(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0,
         name of :data:`FAMILIES`).
     :param stabiliser: ``"add"``, the published reading that is not the default of its part
         (``-log(1 - m + 1e-10)``).
-    :param exists: ``"pairwise"`` (default, as published); ``"global"`` is the domain-constant
-        :math:`\\exists r.C` of the existing module's ``forward_fs``, used by its adapter.
+    :param role_pairs: ``"all"`` (default, as published): :math:`\\exists r.C` ranges over
+        all pairs of elements; ``"self"``: over the pair of an element with itself (the
+        earlier mOWL module, a porting error), see :class:`PairNetworkRelations`.
+    :param top_index, bottom_index: Class ids of ``owl:Thing`` and ``owl:Nothing``.
+    :param thing: ``"learned"`` (default, as published): ``owl:Thing`` is an ordinary learned
+        class; ``"all"``: the constant set of degree 1.
+    :param nothing: ``"empty"`` (default, as published): ``owl:Nothing`` is the constant empty
+        set; ``"learned"``: an ordinary learned class (the earlier mOWL module).
     :param tables: A :class:`~mowl.nn.alc.falcon.FALCONModule` to share parameters with.
     """
+    if thing not in ("learned", "all") or nothing not in ("empty", "learned"):
+        raise ValueError("thing must be 'learned' or 'all', nothing 'empty' or 'learned'.")
+    top_index = top_index if thing == "all" else None
+    bottom_index = bottom_index if nothing == "empty" else None
     if tables is not None:
         t = tables
+        top_index, bottom_index = t.top_index, t.bottom_index
+        role_pairs = t.role_pairs
         network = MembershipNetwork(fc_0=t.fc_0, fc_1=t.fc_1)
         domain = Domain(t.e_embedding)
         classes = NetworkClasses(centres=t.c_embedding, network=network, domain=domain,
-                                 family=t_norm if t_norm is not None else t.t_norm)
+                                 family=t_norm if t_norm is not None else t.t_norm,
+                                 top_index=top_index, bottom_index=bottom_index)
         relations = PairNetworkRelations(vectors=t.r_embedding, network=network,
-                                         domain=domain, exists=exists)
+                                         domain=domain, role_pairs=role_pairs)
         n = len(domain)
         measure = ConflictMeasure(t.max_measure, stabiliser)
     else:
@@ -927,9 +947,10 @@ def falcon(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0,
         if len(domain) < 1:
             raise ValueError("FALCON needs a domain: individuals or anon_domain > 0.")
         classes = NetworkClasses(nb_classes, embed_dim, network=network, domain=domain,
-                                 family=t_norm)
+                                 family=t_norm, top_index=top_index,
+                                 bottom_index=bottom_index)
         relations = PairNetworkRelations(max(nb_relations, 1), embed_dim, network=network,
-                                         domain=domain, exists=exists)
+                                         domain=domain, role_pairs=role_pairs)
         n = len(domain)
         measure = ConflictMeasure(max_measure, stabiliser)
     individuals = DomainElements(table.num_embeddings if tables is None
@@ -943,7 +964,8 @@ def falcon(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0,
 
 @register_method("alcone")
 def alcone(nb_classes, nb_relations, nb_individuals=0, embed_dim=8, margin=0.1,
-           temperature=0.0, family=None, top_index=None, bottom_index=None, tables=None):
+           temperature=0.0, family=None, top_index=None, bottom_index=None,
+           constant_logit=DEFAULT_CONSTANT_LOGIT, tables=None):
     """Learnable Al-cone (adaptation of Oezcep, Leemhuis and Wolter 2023): half-axis logits
     for classes and individuals, incidence logits for roles, Goedel operators on logits, the
     half-axis hinge as the measure, and a well-formedness cost on individuals.
@@ -952,6 +974,8 @@ def alcone(nb_classes, nb_relations, nb_individuals=0, embed_dim=8, margin=0.1,
     :param margin: The strict margin :math:`\\gamma > 0`.
     :param temperature: Smoothing of the operators (``0``: exact); a module's temperature is
         read live.
+    :param constant_logit: Magnitude of the logits of ``owl:Thing`` and ``owl:Nothing``, see
+        :class:`HalfAxisClasses`.
     :param family: Another operator family on logits instead of Goedel (any
         :data:`FAMILIES` entry whose values are logits).
     :param tables: A :class:`~mowl.nn.alc.alcone.ALConeModule` to share parameters with.
@@ -960,7 +984,8 @@ def alcone(nb_classes, nb_relations, nb_individuals=0, embed_dim=8, margin=0.1,
     if t is not None:
         fam = LogitGoedel(source=t) if family is None else get_family(family)
         classes = HalfAxisClasses(logits=t.c_embedding, family=fam, top_index=t.top_index,
-                                  bottom_index=t.bottom_index)
+                                  bottom_index=t.bottom_index,
+                                  constant_logit=t.constant_logit)
         relations = IncidenceMatrices(vectors=t.r_embedding, dim=t.dim)
         individuals = HalfAxisClasses(logits=t.e_embedding, family=fam)
         measure = ConeMeasure(source=t)
@@ -968,7 +993,7 @@ def alcone(nb_classes, nb_relations, nb_individuals=0, embed_dim=8, margin=0.1,
     else:
         fam = LogitGoedel(temperature) if family is None else get_family(family)
         classes = HalfAxisClasses(nb_classes, embed_dim, family=fam, top_index=top_index,
-                                  bottom_index=bottom_index)
+                                  bottom_index=bottom_index, constant_logit=constant_logit)
         relations = IncidenceMatrices(max(nb_relations, 1), embed_dim)
         individuals = HalfAxisClasses(max(nb_individuals, 1), embed_dim, family=fam)
         measure = ConeMeasure(tau=temperature)
@@ -984,7 +1009,7 @@ def _dfalc_adapter(module):
 @register_adapter("FALCONModule")
 def _falcon_adapter(module):
     return falcon(None, None, t_norm=module.t_norm, max_measure=module.max_measure,
-                  exists="global", tables=module)
+                  tables=module)
 
 
 @register_adapter("ALConeModule")
