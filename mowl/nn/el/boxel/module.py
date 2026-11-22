@@ -1,9 +1,9 @@
 import torch as th
 
-from mowl.nn.el.part_built import PartBuiltModule
+from mowl.nn.el.part_built import _PartBuiltModule
 
 
-class BoxELModule(PartBuiltModule):
+class BoxELModule(_PartBuiltModule):
     """Implementation of BoxEL from [xiong2022]_.
 
     The module is a :class:`~mowl.representation.ComposedGeometry` made of the parts that the

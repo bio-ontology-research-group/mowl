@@ -1,7 +1,7 @@
-from mowl.nn.el.part_built import PartBuiltModule
+from mowl.nn.el.part_built import _PartBuiltModule
 
 
-class TransBoxModule(PartBuiltModule):
+class TransBoxModule(_PartBuiltModule):
     """Implementation of TransBox from [yang2025]_.
 
     TransBox is an EL++-closed ontology embedding method: atomic concepts

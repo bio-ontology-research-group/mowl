@@ -1,11 +1,11 @@
 import torch.nn as nn
 
-from mowl.nn.el.part_built import PartBuiltModule
+from mowl.nn.el.part_built import _PartBuiltModule
 from mowl.representation.class_models import BoxClasses
 from mowl.representation.objectives import Objective
 
 
-class ELBEModule(PartBuiltModule):
+class ELBEModule(_PartBuiltModule):
     """Implementation of ELBE from [peng2020]_.
 
     The module is a :class:`~mowl.representation.ComposedGeometry` made of the parts that the

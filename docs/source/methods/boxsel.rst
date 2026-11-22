@@ -18,7 +18,15 @@ What mOWL implements
 --------------------
 
 :class:`~mowl.models.boxsel.model.BoxSEL` (catalogue key ``boxsel``) with the module
-:class:`~mowl.nn.el.boxsel.module.BoxSELModule`, a subclass of the BoxEL model and module:
+:class:`~mowl.nn.el.boxsel.module.BoxSELModule`, a subclass of the BoxEL model and module.
+The module is a :class:`~mowl.representation.ComposedGeometry` made of the parts that the
+builder ``boxsel`` (``mowl/representation/library/boxrel_methods.py``) names: boxes stored as
+a lower corner and a log-width, an affine map per relation, the smoothed volume ratio as the
+measure, the objective of BoxEL with the form "conditional" added, and the two penalties
+:math:`L_{loc}` and :math:`L_{vol}`. Any of them can be replaced (see :doc:`/representation/combine`);
+the hand-written module that this one replaced is kept as ``mowl.baselines.nn.el.boxsel.module``
+and the tests compare the two number by number.
+
 
 * The ontology gives the deterministic axioms (all :math:`\mathcal{EL}^\bot` normal forms and
   assertions), trained with the BoxEL losses and scored for the joint benchmarks as BoxEL.

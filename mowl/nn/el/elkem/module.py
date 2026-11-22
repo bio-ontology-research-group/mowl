@@ -3,10 +3,10 @@ r"""Neural module of ELK-Em [singh2026]_."""
 import torch as th
 
 import mowl.nn.el.elkem.losses as L
-from mowl.nn.el.part_built import PartBuiltModule
+from mowl.nn.el.part_built import _PartBuiltModule
 
 
-class ELKEmModule(PartBuiltModule):
+class ELKEmModule(_PartBuiltModule):
     r"""ELK-Em: closure-aware box embeddings for :math:`\mathcal{EL}^+_\bot` [singh2026]_.
 
     The module is a :class:`~mowl.representation.ComposedGeometry` made of the parts that the

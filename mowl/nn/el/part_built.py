@@ -5,17 +5,17 @@
 class model, a relation model, a measure and an objective that its builder
 (:func:`mowl.representation.register_method`) defines, and the module class only keeps the
 constructor, the attribute names and the hooks that the released class had.
-:class:`PartBuiltModule` is what these classes share.
+:class:`_PartBuiltModule` is what these classes share.
 """
 
 
 from mowl.nn.el.elmodule import ELModule
 from mowl.representation.geometry import ComposedGeometry
 
-__all__ = ["PartBuiltModule"]
+__all__ = []
 
 
-class PartBuiltModule(ComposedGeometry):
+class _PartBuiltModule(ComposedGeometry):
     """A :class:`~mowl.representation.ComposedGeometry` whose parts come from the builder of
     a published method.
 

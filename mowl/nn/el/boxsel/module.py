@@ -29,6 +29,11 @@ class ConditionalExpressions:
             region = part if region is None else region.intersect(part)[0]
         return region, pos
 
+    def box(self, struct, leaves):
+        """``(lower, upper)`` corners of the box of the expression ``struct`` for a batch."""
+        region, _ = self.expression(struct, leaves)
+        return region.lower, region.upper
+
     def conditional_loss(self, conclusion, premise, leaves_d, leaves_c, lower, upper):
         """Loss of a batch of conditionals ``(D | C)[l, u]`` whose conclusions and premises
         have the structures ``conclusion`` and ``premise``; ``leaves_*`` are index tensors.
