@@ -459,11 +459,12 @@ class ELKEm(EmbeddingELModel):
             extra = self.additional_training_loss(epoch)
             if extra is not None:
                 loss = loss + extra
-            loss = loss + self.get_regularization_loss()
+            loss = loss + self.step_regularization_loss()
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            self.after_optimizer_step()
             scheduler.step()
 
             if epoch_callback is not None:

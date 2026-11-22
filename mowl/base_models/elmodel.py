@@ -361,7 +361,8 @@ of :class:`torch.utils.data.DataLoader`
     #: The generic loop of :meth:`train` consults every hook.
     training_hooks = frozenset((
         "training_datasets", "negatives", "filter_negatives", "loss", "optimizer",
-        "on_epoch_start", "on_epoch_end", "should_stop", "on_train_end", "additional_loss"))
+        "on_epoch_start", "on_epoch_end", "should_stop", "on_train_end", "additional_loss",
+        "regularization", "after_step"))
 
     @property
     def training_regime(self):
@@ -622,6 +623,25 @@ that override :meth:`train` with a loop of their own declare the hooks that loop
             return self.module.regularization_loss()
         return 0
 
+    def step_regularization_loss(self):
+        """The regularisation term of one optimisation step: :meth:`get_regularization_loss`
+        unless the :attr:`training_regime` replaces or extends it
+        (:class:`mowl.training.Regularization`). Training loops call this."""
+        reg = self.get_regularization_loss()
+        regime = self.training_regime
+        if regime is not None:
+            out = regime.regularization(reg)
+            if out is not NotImplemented:
+                reg = out
+        return reg
+
+    def after_optimizer_step(self):
+        """Called by training loops after every optimisation step; lets the
+        :attr:`training_regime` project the parameters."""
+        regime = self.training_regime
+        if regime is not None:
+            regime.after_step()
+
     def get_optimizer(self):
         """Create and return the optimizer.
 
@@ -799,11 +819,12 @@ that override :meth:`train` with a loop of their own declare the hooks that loop
                     loss = loss + regime_extra_loss
 
             # Add regularization loss
-            loss = loss + self.get_regularization_loss()
+            loss = loss + self.step_regularization_loss()
 
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            self.after_optimizer_step()
             train_loss += loss.detach().item()
             if regime is not None:
                 regime.on_epoch_end(epoch, {"total": train_loss})

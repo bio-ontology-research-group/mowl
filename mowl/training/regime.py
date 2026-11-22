@@ -28,7 +28,8 @@ method paper (like a particular negative sampling scheme).
 #: its loop consults in ``training_hooks``; a regime that overrides a hook the model does not
 #: consult is refused when it is assigned, instead of being ignored.
 HOOKS = ("training_datasets", "negatives", "filter_negatives", "loss", "optimizer",
-         "on_epoch_start", "on_epoch_end", "should_stop", "on_train_end", "additional_loss")
+         "on_epoch_start", "on_epoch_end", "should_stop", "on_train_end", "additional_loss",
+         "regularization", "after_step")
 
 #: Hooks that concern the optimiser and the course of training only, not the data, the
 #: negatives or the loss. A loop with an objective of its own can still consult these.
@@ -143,6 +144,20 @@ class TrainingRegime:
         """Extra loss term added once per epoch, or ``None``."""
         return None
 
+    def regularization(self, default):
+        """The regularisation term of one optimisation step.
+
+        :param default: The term the model would use (its module's
+            ``regularization_loss``; ``0`` if it has none).
+        :return: The term to use instead, or ``NotImplemented`` to keep ``default``. See
+            :mod:`mowl.training.regularization`.
+        """
+        return NotImplemented
+
+    def after_step(self):
+        """Called after every optimisation step, before :meth:`on_epoch_end` (projections
+        of the parameters back into an allowed set)."""
+
     def on_epoch_end(self, epoch, losses):
         """Called at the end of every epoch, after the optimisation step and before
         validation (structural changes of the model such as re-seeding components,
@@ -238,6 +253,19 @@ class ComposedRegime(TrainingRegime):
     def on_epoch_end(self, epoch, losses):
         for r in self.regimes:
             r.on_epoch_end(epoch, losses)
+
+    def regularization(self, default):
+        # Chained: every regime sees the term the previous ones left.
+        changed = False
+        for r in self.regimes:
+            out = r.regularization(default)
+            if out is not NotImplemented:
+                default, changed = out, True
+        return default if changed else NotImplemented
+
+    def after_step(self):
+        for r in self.regimes:
+            r.after_step()
 
     def additional_loss(self, epoch):
         total = None

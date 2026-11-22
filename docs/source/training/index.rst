@@ -107,6 +107,66 @@ model is evaluated on entailed knowledge as well as on novel axioms.
 :class:`~mowl.training.ClosurePositives` adds entailed axioms as training positives. It is
 **not** part of the papers and is provided as an extension.
 
+Regularisation
+--------------
+
+Where the parameters of a model may lie is a choice separate from the representation and
+from the loss. Publications mean three different things by it:
+
+- a **penalty** added to the loss, such as the :math:`|\lVert c \rVert - 1|` of
+  ELEmbeddings, which holds only approximately;
+- a **projection** after every optimisation step, such as the normalisation of the entity
+  vectors in TransE, which holds exactly;
+- a **parametrisation** that cannot be violated, such as a box size stored as a logarithm.
+  This is part of the model and stays there, and so do the constraints a geometry needs to
+  be well defined (points inside the Poincaré ball, boxes inside the unit cube).
+
+Penalties and projections are components (:mod:`mowl.training.regularization`) that the
+regime :class:`~mowl.training.Regularization` applies to any model trained by the generic
+loop, in addition to the regularisation term of the model's module or, with
+``keep_default=False``, instead of it. ELEmbeddings with its centres exactly on the unit
+sphere instead of pulled towards it:
+
+.. testcode::
+
+   from mowl.datasets.builtin import FamilyDataset
+   from mowl.models import ELEmbeddings, ELBE
+   from mowl.training import (Regularization, SphereProjection, NormPenalty,
+                              embedding_tables)
+
+   model = ELEmbeddings(FamilyDataset(), embed_dim=10)
+   model.training_regime = Regularization(SphereProjection(), keep_default=False)
+   model.train(epochs=2)
+   norms = model.module.class_embed.weight.norm(dim=1)
+   print(bool((norms - 1).abs().max() < 1e-5))
+
+.. testoutput::
+   :options: +ELLIPSIS
+
+   ...True
+
+``Regularization(keep_default=False)`` alone trains without the penalty. The same components
+work on other methods; ``embedding_tables`` lists what can be constrained:
+
+.. testcode::
+
+   boxes = ELBE(FamilyDataset(), embed_dim=10)
+   print(embedding_tables(boxes))
+   boxes.training_regime = Regularization(NormPenalty(parameters="class_embed", weight=0.1))
+   boxes.train(epochs=2)
+
+.. testoutput::
+   :options: +ELLIPSIS
+
+   ('class_embed', ...)...
+
+The penalties are :class:`~mowl.training.NormPenalty` (norm near a target),
+:class:`~mowl.training.MaxNormPenalty` (norm below a bound) and
+:class:`~mowl.training.PowerPenalty` (L1, L2, N3); the projections are
+:class:`~mowl.training.SphereProjection`, :class:`~mowl.training.BallProjection` and
+:class:`~mowl.training.IntervalProjection`. A term a module adds inside the loss of every
+axiom (EmEL++) is part of that loss and is not switched off.
+
 The reference code
 ------------------
 

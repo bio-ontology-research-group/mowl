@@ -37,6 +37,10 @@ from mowl.training.reference import (Box2ELCodeTraining, TransBoxCodeTraining,
                                      ELKEmCodeTraining, EmELppCodeTraining,
                                      RegDCodeTraining)
 from mowl.training.cate import CateCodeTraining
+from mowl.training.regularization import (Regularization, Regularizer, NormPenalty,
+                                          MaxNormPenalty, PowerPenalty, SphereProjection,
+                                          BallProjection, IntervalProjection,
+                                          embedding_tables)
 
 __all__ = [
     "HOOKS", "SCHEDULE_HOOKS", "unsupported_hooks",
@@ -46,6 +50,8 @@ __all__ = [
     "EmELppCodeTraining", "EmELppCodeObjective", "ValidationAxiomsAsPositives",
     "RegDCodeTraining",
     "CateCodeTraining",
+    "Regularization", "Regularizer", "NormPenalty", "MaxNormPenalty", "PowerPenalty",
+    "SphereProjection", "BallProjection", "IntervalProjection", "embedding_tables",
     "DeductiveClosure", "NORMAL_FORMS",
     "DELECodeLoss", "DELECodeLosses", "DELECodeTraining",
     "AllNormalFormNegatives", "ClosureFilteredNegatives", "ClosurePositives", "dele_regime",
