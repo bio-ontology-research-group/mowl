@@ -130,7 +130,10 @@ def _structural_losses(model):
     """The structural reading needs the definition table and the existence targets of the
     ontology: installed, as ``train`` does, before the losses are read; the penalties are the
     regularisation and the extra loss."""
-    from mowl.nn.el.structural import build_structural_tables
+    if type(model).__module__.startswith("mowl.baselines"):  # the baseline's own tables
+        from mowl.baselines.nn.el.structural import build_structural_tables
+    else:
+        from mowl.nn.el.structural import build_structural_tables
     table, targets, top = build_structural_tables(
         model, k=model.n_components, max_components=model.max_components,
         enabled=model.structural_definitions)
