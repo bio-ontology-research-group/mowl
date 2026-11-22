@@ -129,7 +129,7 @@ def test_declared_scoring_is_that_of_boxel():
     m = BoxSEL(_dataset(), embed_dim=2)
     assert m.axiom_scoring == "module"
     rows = T([[m.class_index_dict[ADM], m.class_index_dict[APP]]])
-    assert m.module(rows, "gci0").shape == (1,)
+    assert m.module(rows, "gci0").shape == (1, 1)
 
 
 def test_volume_regulariser_is_eq_10_of_the_paper():

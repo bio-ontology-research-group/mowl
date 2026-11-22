@@ -624,8 +624,8 @@ def test_sparse_memory_and_role_score(abox_kb: OWLOntology) -> None:
     reg_loss = module.regularization_loss(
         torch.tensor([bob, ann, carl], dtype=torch.long)
     )
-    assert pos_loss.shape == (2,)
-    assert neg_loss.shape == (1,)
+    assert pos_loss.shape == (2, 1)
+    assert neg_loss.shape == (1, 1)
     assert reg_loss.ndim == 0
     assert torch.isfinite(reg_loss)
 

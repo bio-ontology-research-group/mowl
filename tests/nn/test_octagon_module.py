@@ -57,7 +57,7 @@ def test_shapes_and_validation():
                        ("gci3_bot", _idx([1, 0, 4])), ("class_assertion", _idx([0, 1])),
                        ("object_property_assertion", _idx([0, 1, 2]))]:
         out = mod(data, name)
-        assert out.shape == (1,) and th.isfinite(out).all() and (out >= 0).all()
+        assert out.shape == (1, 1) and th.isfinite(out).all() and (out >= 0).all()
     assert mod.role_axiom_capable is False
     assert mod.neg_capable_gcis == frozenset({"gci2"})
     for bad in (3, 0, 7):
@@ -232,7 +232,7 @@ def test_box_special_case_matches_elbe(margin):
         octa.set_class_bounds(i, G.from_box(centers[i].view(2, 2), offsets[i].view(2, 2)))
     pairs = th.tensor(list(itertools.permutations(range(n), 2)))
     e0 = elbe(pairs, "gci0").reshape(-1)
-    o0 = octa(pairs, "gci0")
+    o0 = octa(pairs, "gci0").reshape(-1)
     assert th.equal(e0 <= 1e-12, o0 <= 1e-12)
     assert ((e0 > 1e-12).sum() > 10) and ((e0 <= 1e-12).sum() > 10)
     assert th.all(e0 <= o0 + 1e-9) and th.all(o0 <= 5 ** 0.5 * e0 + 1e-9)
@@ -248,13 +248,13 @@ def test_box_special_case_matches_elbe(margin):
     triples = th.tensor([[i, r, j] for i, j in itertools.permutations(range(12), 2)
                          for r in range(3)])
     e2 = elbe(triples, "gci2").reshape(-1)
-    o2 = octa(triples, "gci2")
+    o2 = octa(triples, "gci2").reshape(-1)
     assert th.equal(e2 <= 1e-12, o2 <= 1e-12)
     assert th.all(e2 <= o2 + 1e-9) and th.all(o2 <= 5 ** 0.5 * e2 + 1e-9)
 
     # gci1 (C ⊓ D ⊑ E): same zero set (non-empty intersection, contained in E)
     tri = th.tensor(list(itertools.permutations(range(12), 3)))
-    assert th.equal(elbe(tri, "gci1").reshape(-1) <= 1e-12, octa(tri, "gci1") <= 1e-12)
+    assert th.equal(elbe(tri, "gci1").reshape(-1) <= 1e-12, octa(tri, "gci1").reshape(-1) <= 1e-12)
 
 
 # --------------------------------------------------------------------------------------

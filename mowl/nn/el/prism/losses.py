@@ -22,8 +22,9 @@ Proposition 5:
 Guarantees:
 - **Support-sum identity:** :math:`\\sum_{k=1}^3 \\text{supports}(c, r)_k = 3 r`.
 - **Translation equivariance:** :math:`\\text{supports}(c + t, r) = \\text{supports}(c, r) + t \\, \\text{NORMALS}^\\top`.
-- **Return shape:** Every per-GCI loss returns a 1-D tensor of shape ``(B,)``
-  like MultiBoxEL (whereas ELBE returns ``(B, 1)``).
+- **Return shape:** Every per-GCI loss function of this file returns a 1-D tensor of shape
+  ``(B,)``; :class:`~mowl.nn.PrismModule` turns it into a column ``(B, 1)`` like every
+  :class:`~mowl.nn.ELModule` (``per_axiom_column = False`` keeps ``(B,)``).
 - **Zero-loss characterisation at margin 0:**
   - :func:`prism_inclusion_score` and :func:`gci0_loss` equal ``0`` iff
     :math:`h_C \\le h_D` coordinatewise and box :math:`B_C \\subseteq B_D`.
@@ -179,7 +180,7 @@ def prism_inclusion_score(
     Euclidean norm along the last axis.
 
     Guarantees:
-    - Returns a 1-D tensor of shape ``(B,)`` like MultiBoxEL (ELBE returns ``(B, 1)``).
+    - Returns a 1-D tensor of shape ``(B,)`` (the module returns the column ``(B, 1)``).
     - At ``margin = 0``, equals ``0`` iff :math:`h_C \\le h_D` in all 3 support
       coordinates and :math:`|b_C - b_D| + |o_C| \\le |o_D|` in all :math:`d-2`
       box coordinates.
@@ -361,7 +362,7 @@ def gci0_loss(
     """GCI0 loss for :math:`C \\sqsubseteq D`.
 
     Guarantees:
-    - Returns a 1-D tensor of shape ``(B,)`` like MultiBoxEL (ELBE returns ``(B, 1)``).
+    - Returns a 1-D tensor of shape ``(B,)`` (the module returns the column ``(B, 1)``).
     - At ``margin = 0``, equals ``0`` iff :math:`h_C \\le h_D` coordinatewise
       and box :math:`B_C \\subseteq B_D`.
 
@@ -407,7 +408,7 @@ def gci0_bot_loss(
     """GCI0-bot loss :math:`\\text{relu}(\\sum_k h_{C,k} + \\text{margin})` for :math:`C \\sqsubseteq \\bot`.
 
     Guarantees:
-    - Returns a 1-D tensor of shape ``(B,)`` like MultiBoxEL (ELBE returns ``(B, 1)``).
+    - Returns a 1-D tensor of shape ``(B,)`` (the module returns the column ``(B, 1)``).
     - Since :math:`\\sum_{k=1}^3 h_{C,k} = 3 |\\rho_C| \\ge 0`, equals ``0`` at
       ``margin = 0`` iff :math:`|\\rho_C| = 0` (degenerate single-point triangle).
 
@@ -458,7 +459,7 @@ def gci1_loss(
     the prism inclusion score :func:`prism_inclusion_score`.
 
     Guarantees:
-    - Returns a 1-D tensor of shape ``(B,)`` like MultiBoxEL (ELBE returns ``(B, 1)``).
+    - Returns a 1-D tensor of shape ``(B,)`` (the module returns the column ``(B, 1)``).
     - At ``margin = 0``, equals ``0`` iff :math:`T_C \\cap T_D` is non-empty
       (:math:`\\sum_k \\min(h_{C,k}, h_{D,k}) \\ge 0`), :math:`B_C \\cap B_D` is
       non-empty (:math:`\\text{lower} \\le \\text{upper}` coordinatewise), and
@@ -525,7 +526,7 @@ def gci1_bot_loss(
     :math:`\\min(\\text{relu}(\\sum_k \\min(h_{C,k}, h_{D,k}) + \\text{margin}),\\; \\min_m \\text{relu}(-|b_{C,m} - b_{D,m}| + o_{C,m} + o_{D,m} + \\text{margin}))`.
 
     Guarantees:
-    - Returns a 1-D tensor of shape ``(B,)`` like MultiBoxEL (ELBE returns ``(B, 1)``).
+    - Returns a 1-D tensor of shape ``(B,)`` (the module returns the column ``(B, 1)``).
     - Uses :func:`torch.amin` over box coordinates (semantically
       disjointness-if-any-separates), unlike ELBE which takes the Euclidean norm
       over box coordinates and requires separation in every coordinate.
@@ -625,7 +626,7 @@ def gci2_score(
     """Positive GCI2 score: inclusion of :math:`C + r` inside :math:`D`.
 
     Guarantees:
-    - Returns a 1-D tensor of shape ``(B,)`` like MultiBoxEL (ELBE returns ``(B, 1)``).
+    - Returns a 1-D tensor of shape ``(B,)`` (the module returns the column ``(B, 1)``).
     - At ``margin = 0``, equals ``0`` iff the translated prism :math:`P_C + r`
       is contained in :math:`P_D`.
 
@@ -741,7 +742,7 @@ def gci2_score_neg(
     and the box component is :math:`\\text{relu}(|b_C + r_{\\text{box}} - b_D| - |o_C| - |o_D| - \\text{margin})`.
 
     Guarantees:
-    - Returns a 1-D tensor of shape ``(B,)`` like MultiBoxEL (ELBE returns ``(B, 1)``).
+    - Returns a 1-D tensor of shape ``(B,)`` (the module returns the column ``(B, 1)``).
     - Finite and differentiable for all :math:`r_C \\ge 0`, including point
       individuals (:math:`r_C = 0`).
 
@@ -803,7 +804,7 @@ def gci2_loss(
     """GCI2 loss for :math:`C \\sqsubseteq \\exists r.D` (positive and negative).
 
     Guarantees:
-    - Returns a 1-D tensor of shape ``(B,)`` like MultiBoxEL (ELBE returns ``(B, 1)``).
+    - Returns a 1-D tensor of shape ``(B,)`` (the module returns the column ``(B, 1)``).
     - When ``neg=False`` and ``margin = 0``, equals ``0`` iff :math:`P_C + r \\subseteq P_D`.
     - When ``neg=True``, dispatches to :func:`gci2_score_neg`.
 
@@ -909,7 +910,7 @@ def gci3_loss(
     :math:`\\text{relu}(|b_C - r_{\\text{box}} - b_D| - o_C - o_D + \\text{margin})`.
 
     Guarantees:
-    - Returns a 1-D tensor of shape ``(B,)`` like MultiBoxEL (ELBE returns ``(B, 1)``).
+    - Returns a 1-D tensor of shape ``(B,)`` (the module returns the column ``(B, 1)``).
     - At ``margin = 0``, equals ``0`` iff the shifted prism :math:`P_C - r` has a
       non-empty intersection with :math:`P_D` (i.e. :math:`\\sum_k \\min(h_{C-r,k}, h_{D,k}) \\ge 0`
       and :math:`|b_C - r_{\\text{box}} - b_D| \\le o_C + o_D` coordinatewise).
@@ -998,7 +999,7 @@ def gci3_bot_loss(
     """GCI3-bot loss :math:`\\text{relu}(\\sum_k h_{C,k} + \\text{margin})` for :math:`\\exists r.C \\sqsubseteq \\bot`.
 
     Guarantees:
-    - Returns a 1-D tensor of shape ``(B,)`` like MultiBoxEL (ELBE returns ``(B, 1)``).
+    - Returns a 1-D tensor of shape ``(B,)`` (the module returns the column ``(B, 1)``).
     - Since :math:`\\sum_{k=1}^3 h_{C,k} = 3 |\\rho_C| \\ge 0`, equals ``0`` at
       ``margin = 0`` iff :math:`|\\rho_C| = 0`.
 
@@ -1096,7 +1097,7 @@ def class_assertion_loss(
     """Class assertion loss :math:`C(a)` as inclusion of the degenerate point prism :math:`a` in :math:`C`.
 
     Guarantees:
-    - Returns a 1-D tensor of shape ``(B,)`` like MultiBoxEL (ELBE returns ``(B, 1)``).
+    - Returns a 1-D tensor of shape ``(B,)`` (the module returns the column ``(B, 1)``).
     - At ``margin = 0``, equals ``0`` iff the point :math:`x_a = (x_{\\text{tri}}, x_{\\text{box}})`
       lies inside triangle :math:`T_C` (:math:`n_k \\cdot x_{\\text{tri}} \\le h_{C,k}`)
       and inside box :math:`B_C` (:math:`|x_{\\text{box}} - b_C| \\le o_C`).
@@ -1304,7 +1305,7 @@ def object_property_assertion_loss(
     on degenerate point prisms with zero inradius and zero box offsets.
 
     Guarantees:
-    - Returns a 1-D tensor of shape ``(B,)`` like MultiBoxEL (ELBE returns ``(B, 1)``).
+    - Returns a 1-D tensor of shape ``(B,)`` (the module returns the column ``(B, 1)``).
     - When ``neg=False`` and ``margin = 0``, equals ``0`` iff :math:`x_a + r = x_b`
       (since :math:`\\sum_k n_k = 0`, :math:`n_k \\cdot (x_{a,\\text{tri}} + r_{\\text{tri}} - x_{b,\\text{tri}}) \\le 0`
       for all :math:`k=1,2,3` iff :math:`x_{a,\\text{tri}} + r_{\\text{tri}} = x_{b,\\text{tri}}`).

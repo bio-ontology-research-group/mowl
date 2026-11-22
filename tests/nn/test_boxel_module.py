@@ -41,7 +41,7 @@ def test_signed_scale_option_gives_the_old_numbers():
     c = L.Box(c_min, delta_embed=c_delta)
     t = L.Box(c.min_embed * (sc + L.eps) + rel, max_embed=c.max_embed * (sc + L.eps) + rel)
     expected = L.inclusion_loss(t, L.Box(d_min, delta_embed=d_delta), m.temperature)
-    assert th.allclose(m(data, "gci2"), expected)
+    assert th.allclose(m(data, "gci2").reshape(-1), expected)
     assert not th.allclose(m(data, "gci2"), _module()(data, "gci2"))
 
 

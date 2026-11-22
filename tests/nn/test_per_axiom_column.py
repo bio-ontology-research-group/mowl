@@ -1,5 +1,5 @@
-"""Box2EL and MultiBoxEL return every per-axiom loss as a column (B, 1). MultiELBE is left as it
-is: its tests require the shapes of ELBE at one component, and ELBE returns (B,) for two forms."""
+"""Box2EL and MultiBoxEL return every per-axiom loss as a column (B, 1). The same holds for
+every ELModule: see test_el_module_shapes.py."""
 import pytest
 import torch as th
 

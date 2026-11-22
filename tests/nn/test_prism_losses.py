@@ -612,11 +612,11 @@ def test_shapes_all_gcis() -> None:
 
     for gci_name, batch in batches.items():
         out = mod(batch, gci_name, neg=False)
-        assert out.shape == (B,), f"Expected ({B},) for {gci_name}, got {out.shape}"
+        assert out.shape == (B, 1), f"Expected ({B}, 1) for {gci_name}, got {out.shape}"
         assert torch.isfinite(out).all()
         if gci_name in mod.neg_capable_gcis:
             out_neg = mod(batch, gci_name, neg=True)
-            assert out_neg.shape == (B,)
+            assert out_neg.shape == (B, 1)
             assert torch.isfinite(out_neg).all()
 
     mod_no_inds = PrismModule(nb_ont_classes=n_classes, nb_rels=n_rels, embed_dim=d)
