@@ -1,10 +1,10 @@
 from mowl.ontology.normalize import ELNormalizer, GCI, is_auxiliary_iri
 from mowl.base_models.model import Model
+from mowl.training.loop import TrainingLoop
 from mowl.datasets.el import ELDataset
 from mowl.projection import projector_factory
 import torch as th
 from torch.utils.data import DataLoader
-from tqdm import trange
 
 from deprecated.sphinx import versionadded, versionchanged
 
@@ -22,7 +22,7 @@ logger.addHandler(logging.StreamHandler())
 logger.setLevel(logging.INFO)
 
 @versionchanged(version="2.0.0", reason="Added the 'load_normalized' parameter.")
-class EmbeddingELModel(Model):
+class EmbeddingELModel(TrainingLoop, Model):
     """Abstract class for :math:`\mathcal{EL}` embedding methods.
 
     :param dataset: mOWL dataset to use for training and evaluation.
@@ -766,118 +766,48 @@ that override :meth:`train` with a loop of their own declare the hooks that loop
             num_columns = data.shape[1] if data is not None and data.dim() == 2 else None
             self._resolve_neg_config(gci_name, num_columns=num_columns, require_pool=False)
 
-        # Training regime (None by default: every hook below falls back to the model)
-        regime = self.training_regime
-        self._train_validate_every = validate_every
-        training_datasets = self.training_datasets
-        if regime is not None:
-            training_datasets = regime.training_datasets(training_datasets)
+        # The loop is the one of mowl.training.loop, counted by epochs (see loop_style)
+        self._best_validation_loss = float('inf')
+        return self.run_training(epochs, validate_every=validate_every,
+                                 epoch_callback=epoch_callback)
 
-        # Log dataset sizes
-        points_per_dataset = {k: len(v) for k, v in training_datasets.items()}
+    #: An epoch is one optimisation step; the model validates itself (:meth:`validate_epoch`).
+    loop_style = "epochs"
+
+    def score_rows(self, form, rows, neg=False):
+        """The per-row loss of ``rows`` of the normal form ``form``; ``neg=True`` for
+        corruptions, scored with the negative loss of the module."""
+        return self.module(rows, form, neg=True) if neg else self.module(rows, form)
+
+    def combine_scores(self, form, pos_scores, neg_scores=None):
+        """The loss of a normal form when no regime decides it: :meth:`compute_loss`."""
+        return self.compute_loss(pos_scores, neg_scores)
+
+    def log_training_datasets(self, datasets):
         string = "Training datasets: \n"
-        for k, v in points_per_dataset.items():
-            string += f"\t{k}: {v}\n"
+        for k, v in datasets.items():
+            string += f"\t{k}: {len(v)}\n"
         logger.info(string)
 
-        optimizer = NotImplemented
-        if regime is not None:
-            optimizer = regime.optimizer()
-        if optimizer is NotImplemented:
-            optimizer = self.get_optimizer()
-        best_loss = float('inf')
-
-        for epoch in trange(epochs):
-            self.module.train()
-            self.on_epoch_start(epoch, epochs)
-            if regime is not None:
-                regime.on_epoch_start(epoch, epochs)
-
-            train_loss = 0
-            loss = th.tensor(0.0, device=self.device)
-
-            for gci_name, gci_dataset in training_datasets.items():
-                if len(gci_dataset) == 0:
-                    continue
-
-                # Compute positive loss
-                pos_scores = self.module(gci_dataset[:], gci_name)
-
-                # Generate and compute negative loss if applicable
-                neg_data = NotImplemented
-                if regime is not None:
-                    neg_data = regime.negatives(gci_name, gci_dataset)
-                if neg_data is NotImplemented:
-                    neg_data = self.generate_negatives(gci_name, gci_dataset)
-                if regime is not None:
-                    neg_data = regime.filter_negatives(gci_name, gci_dataset, neg_data)
-                neg_scores = None
-                if neg_data is not None:
-                    if regime is not None and regime.scores_negatives_like_positives(gci_name):
-                        neg_scores = self.module(neg_data, gci_name)
-                    else:
-                        neg_scores = self.module(neg_data, gci_name, neg=True)
-
-                gci_loss = NotImplemented
-                if regime is not None:
-                    gci_loss = regime.loss(gci_name, pos_scores, neg_scores)
-                if gci_loss is NotImplemented:
-                    gci_loss = self.compute_loss(pos_scores, neg_scores)
-                loss = loss + gci_loss
-
-            extra_loss = self.additional_training_loss(epoch)
-            if extra_loss is not None:
-                loss = loss + extra_loss
-            if regime is not None:
-                regime_extra_loss = regime.additional_loss(epoch)
-                if regime_extra_loss is not None:
-                    loss = loss + regime_extra_loss
-
-            # Add regularization loss
-            loss = loss + self.step_regularization_loss()
-
-            if regime is not None and regime.skips_empty_steps and not loss.requires_grad:
-                pass    # every batch of this step is empty: no optimisation step
-            else:
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-                self.after_optimizer_step()
-                train_loss += loss.detach().item()
-            if regime is not None:
-                regime.on_epoch_end(epoch, {"total": train_loss})
-
-            if epoch_callback is not None:
-                epoch_callback(epoch, self)
-
-            # Validation (a regime that selects the checkpoint itself replaces it)
-            if (epoch + 1) % validate_every == 0 and not (
-                    regime is not None and regime.replaces_validation):
-                if self.dataset.validation is not None:
-                    if self._eval_gci_name is None:
-                        raise ValueError(
-                            "eval_gci_name must be set before training with validation. "
-                            "Set model.eval_gci_name to one of: 'gci0', 'gci1', 'gci2', 'gci3'"
-                        )
-                    with th.no_grad():
-                        self.module.eval()
-                        valid_loss = 0
-                        gci_data = self.validation_datasets[self._eval_gci_name][:]
-                        vloss = th.mean(self.module(gci_data, self._eval_gci_name))
-                        valid_loss += vloss.detach().item()
-
-                        if valid_loss < best_loss:
-                            best_loss = valid_loss
-                            th.save(self.module.state_dict(), self.model_filepath)
-                    print(f'Epoch {epoch+1}: Train loss: {train_loss} Valid loss: {valid_loss}')
-                else:
-                    print(f'Epoch {epoch+1}: Train loss: {train_loss}')
-
-            if regime is not None and regime.should_stop(epoch):
-                break
-
-        if regime is not None:
-            regime.on_train_end()
+    def validate_epoch(self, epoch, loss):
+        """Validation after an epoch: the mean loss of the module on the validation axioms of
+        ``eval_gci_name``; the best state is saved to ``model_filepath``."""
+        if self.dataset.validation is None:
+            print(f'Epoch {epoch+1}: Train loss: {loss}')
+            return
+        if self._eval_gci_name is None:
+            raise ValueError(
+                "eval_gci_name must be set before training with validation. "
+                "Set model.eval_gci_name to one of: 'gci0', 'gci1', 'gci2', 'gci3'"
+            )
+        with th.no_grad():
+            self.module.eval()
+            gci_data = self.validation_datasets[self._eval_gci_name][:]
+            valid_loss = th.mean(self.module(gci_data, self._eval_gci_name)).detach().item()
+            if valid_loss < self._best_validation_loss:
+                self._best_validation_loss = valid_loss
+                th.save(self.module.state_dict(), self.model_filepath)
+        print(f'Epoch {epoch+1}: Train loss: {loss} Valid loss: {valid_loss}')
 
     def eval_method(self, data):
         """Evaluation method used for scoring. Override if needed.

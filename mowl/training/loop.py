@@ -28,12 +28,13 @@ steps and reports one mean loss per epoch, as the papers count. Regimes see step
 import logging
 
 import torch as th
+from tqdm import trange
 
 from mowl.training.regime import HOOKS, check_compatible, TrainingRegime
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["Rows", "RegimeTrained", "steps_per_epoch"]
+__all__ = ["Rows", "TrainingLoop", "RegimeTrained", "steps_per_epoch"]
 
 _UNSET = object()
 
@@ -60,7 +61,201 @@ def steps_per_epoch(regime):
     return 1
 
 
-class RegimeTrained:
+class TrainingLoop:
+    """The one training loop of mOWL: what :class:`RegimeTrained` models and
+    :class:`~mowl.base_models.EmbeddingELModel` share. :meth:`run_training` consults every hook
+    of the :class:`~mowl.training.TrainingRegime` and of the model (negatives, scores, the
+    combination of losses, schedules, projections, selection).
+
+    A model provides ``module``, ``training_datasets``, ``training_regime``, ``device``,
+    ``score_rows``, ``generate_negatives``, ``combine_scores``, ``get_optimizer``,
+    ``get_regularization_loss`` and the hooks below (defaults here do nothing).
+
+    :attr:`loop_style` names how an epoch is counted:
+
+    * ``"steps"`` (default): an epoch is ``steps_per_epoch`` optimisation steps of the
+      batching regime and a mean loss is recorded per epoch; the regimes of the method are
+      attached if none is; validation is the business of a selection regime; the parameters
+      are saved at the end and the module is left in evaluation mode;
+    * ``"epochs"`` (:class:`~mowl.base_models.EmbeddingELModel`): an epoch is one step, there
+      is a progress bar, the model validates itself every ``validate_every`` epochs
+      (:meth:`validate_epoch`), nothing is saved at the end and the module stays in training
+      mode.
+    """
+
+    loop_style = "steps"
+
+    #: ``validate_every`` of :meth:`run_training` when the call gives none (``None``: no
+    #: validation).
+    default_validate_every = None
+
+    def on_epoch_start(self, step, steps):
+        """Called at the start of every step before the regime's hook."""
+
+    def additional_training_loss(self, step):
+        return None
+
+    def record_epoch(self, epoch, mean_loss):
+        """Called with the mean loss of every epoch before the regime's ``on_epoch_end`` of
+        its last step (a model keeps its history here)."""
+
+    def finish_training(self):
+        """Called once after the regime's ``on_train_end`` (a model finalises what the
+        regimes selected)."""
+
+    def validate_epoch(self, epoch, loss):
+        """Validation of the model itself after an epoch (``loop_style = "epochs"``)."""
+
+    def log_training_datasets(self, datasets):
+        """Called once with the datasets that the run trains on."""
+
+    #: Save the parameters after training even when no ``model_filepath`` was given (a
+    #: temporary file is made).
+    save_always = False
+
+    def save_state(self):
+        """Save the parameters to ``model_filepath`` (after training, unless a regime selects
+        the checkpoint)."""
+        path = self.model_filepath if self.save_always else getattr(self, "_model_filepath",
+                                                                    None)
+        if path is not None:
+            th.save(self.module.state_dict(), path)
+
+    # -------------------------------------------------------------- one step
+    def batch_loss(self, batches, step=0, negatives=True):
+        """The loss of the batches ``{form: rows}`` as the loop computes it (negatives,
+        scores and combination of the regime, then the additional and regularisation terms).
+        The model's hooks are used where the regime does not decide.
+
+        :param negatives: ``False``: no corruptions."""
+        data = {form: Rows(rows) if isinstance(rows, th.Tensor) else rows
+                for form, rows in batches.items()}
+        return self._step_loss(data, step, negatives)
+
+    def _step_loss(self, datasets, step, negatives=True):
+        regime = self.training_regime
+        self.negative_masks = {}
+        loss = th.tensor(0.0, device=self.device)
+        for form, dataset in datasets.items():
+            if len(dataset) == 0:
+                continue
+            rows = dataset[:]
+            pos_scores = self.score_rows(form, rows)
+            neg_data = None
+            if negatives:
+                neg_data = NotImplemented
+                if regime is not None:
+                    neg_data = regime.negatives(form, dataset)
+                if neg_data is NotImplemented:
+                    neg_data = self.generate_negatives(form, dataset)
+                if regime is not None:
+                    neg_data = regime.filter_negatives(form, dataset, neg_data)
+            neg_scores = None
+            if neg_data is not None:
+                like_pos = regime is not None and regime.scores_negatives_like_positives(form)
+                neg_scores = self.score_rows(form, neg_data, neg=not like_pos)
+            form_loss = NotImplemented
+            if regime is not None:
+                form_loss = regime.loss(form, pos_scores, neg_scores)
+            if form_loss is NotImplemented:
+                form_loss = self.combine_scores(form, pos_scores, neg_scores)
+            loss = loss + form_loss
+        extra = self.additional_training_loss(step)
+        if extra is not None:
+            loss = loss + extra
+        if regime is not None:
+            extra = regime.additional_loss(step)
+            if extra is not None:
+                loss = loss + extra
+        return loss + self.step_regularization_loss()
+
+    # ------------------------------------------------------------------ train
+    def run_training(self, epochs=100, validate_every=None, verbose=False, epoch_callback=None,
+                     validate=None):
+        """Train with the training regime of the model (or the one assigned).
+
+        :param epochs: Number of epochs; with ``loop_style = "steps"`` an epoch has
+            ``steps_per_epoch`` optimisation steps of the batching regime (one without).
+        :param validate_every: Epochs between the evaluations of a model selection regime
+            (``None``: the default of the model, usually no validation).
+        :param verbose: Print the mean loss of every epoch.
+        :param epoch_callback: ``callable(epoch, model)`` called after every epoch.
+        :param validate: ``False`` switches validation off; ``True`` asks for the model's
+            default interval (or every epoch).
+        :return: The mean loss of every epoch (also ``model.training_losses``).
+        :rtype: list of float
+        """
+        by_steps = self.loop_style == "steps"
+        if by_steps and self.training_regime is None:
+            self._attach_default_regimes()
+        regime = self.training_regime
+        if by_steps:
+            if validate is False:
+                validate_every = None
+            elif validate_every is None:
+                validate_every = self.default_validate_every if validate is None \
+                    else (self.default_validate_every or 1)
+        self._train_validate_every = validate_every
+        datasets = self.training_datasets
+        if regime is not None:
+            datasets = regime.training_datasets(datasets)
+        self.log_training_datasets(datasets)
+        per_epoch = steps_per_epoch(regime) if by_steps else 1
+        total = epochs * per_epoch
+        self.training_steps = total
+        optimizer = NotImplemented
+        if regime is not None:
+            optimizer = regime.optimizer()
+        if optimizer is NotImplemented:
+            optimizer = self.get_optimizer()
+        history, running, counted = [], 0.0, 0
+        self.training_losses = history
+        for step in (range(total) if by_steps else trange(total)):
+            self.module.train()
+            self.on_epoch_start(step, total)
+            if regime is not None:
+                regime.on_epoch_start(step, total)
+            loss = self._step_loss(datasets, step)
+            value = 0.0
+            if regime is not None and regime.skips_empty_steps and not loss.requires_grad:
+                pass
+            else:
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+                self.after_optimizer_step()
+                value = loss.detach().item()
+            running += value
+            counted += 1
+            ends_epoch = (step + 1) % per_epoch == 0
+            if ends_epoch:
+                epoch = step // per_epoch
+                history.append(running / max(counted, 1))
+                running, counted = 0.0, 0
+                self.record_epoch(epoch, history[-1])
+            if regime is not None:
+                regime.on_epoch_end(step, {"total": value})
+            if ends_epoch:
+                if verbose:
+                    print(f"Epoch {epoch + 1}: loss {history[-1]:.6f}")
+                if epoch_callback is not None:
+                    epoch_callback(epoch, self)
+                if not by_steps and (epoch + 1) % validate_every == 0 and not (
+                        regime is not None and regime.replaces_validation):
+                    self.validate_epoch(epoch, history[-1])
+            if regime is not None and regime.should_stop(step):
+                break
+        if regime is not None:
+            regime.on_train_end()
+        self.finish_training()
+        if by_steps:
+            if not (regime is not None and regime.replaces_validation):
+                self.save_state()
+            self.module.eval()
+        return history
+
+
+class RegimeTrained(TrainingLoop):
     """Mixin (before the model base class) that trains with the hooks of a
     :class:`~mowl.training.TrainingRegime`. See the module docstring for what the model
     provides. Models name the regimes that belong to the method by setting
@@ -71,8 +266,8 @@ class RegimeTrained:
     #: The generic loop consults every hook.
     training_hooks = frozenset(HOOKS)
 
-    #: ``validate_every`` of :meth:`train` when the call gives none (``None``: no validation).
-    default_validate_every = None
+    #: Counted by steps, whatever the other base classes of the model say.
+    loop_style = "steps"
 
     # ------------------------------------------------------------------ regime
     @property
@@ -138,12 +333,6 @@ class RegimeTrained:
     def get_optimizer(self):
         return th.optim.Adam(self.module.parameters(), lr=self.learning_rate)
 
-    def on_epoch_start(self, step, steps):
-        """Called at the start of every step before the regime's hook."""
-
-    def additional_training_loss(self, step):
-        return None
-
     def get_regularization_loss(self):
         module = self.module
         return module.regularization_loss() if hasattr(module, "regularization_loss") else 0
@@ -165,148 +354,8 @@ class RegimeTrained:
         if regime is not None:
             regime.after_step()
 
-    def record_epoch(self, epoch, mean_loss):
-        """Called with the mean loss of every epoch before the regime's ``on_epoch_end`` of
-        its last step (a model keeps its history here)."""
-
-    def finish_training(self):
-        """Called once after the regime's ``on_train_end`` (a model finalises what the
-        regimes selected)."""
-
-    #: Save the parameters after training even when no ``model_filepath`` was given (a
-    #: temporary file is made).
-    save_always = False
-
-    def save_state(self):
-        """Save the parameters to ``model_filepath`` (after training, unless a regime selects
-        the checkpoint)."""
-        path = self.model_filepath if self.save_always else getattr(self, "_model_filepath",
-                                                                    None)
-        if path is not None:
-            th.save(self.module.state_dict(), path)
-
-    # -------------------------------------------------------------- one step
-    def batch_loss(self, batches, step=0, negatives=True):
-        """The loss of the batches ``{form: rows}`` as the loop computes it (negatives,
-        scores and combination of the regime, then the additional and regularisation terms).
-        The model's hooks are used where the regime does not decide.
-
-        :param negatives: ``False``: no corruptions."""
-        data = {form: Rows(rows) if isinstance(rows, th.Tensor) else rows
-                for form, rows in batches.items()}
-        return self._step_loss(data, step, negatives)
-
-    def _step_loss(self, datasets, step, negatives=True):
-        regime = self.training_regime
-        self.negative_masks = {}
-        loss = th.tensor(0.0, device=self.device)
-        for form, dataset in datasets.items():
-            if len(dataset) == 0:
-                continue
-            rows = dataset[:]
-            pos_scores = self.score_rows(form, rows)
-            neg_data = None
-            if negatives:
-                neg_data = NotImplemented
-                if regime is not None:
-                    neg_data = regime.negatives(form, dataset)
-                if neg_data is NotImplemented:
-                    neg_data = self.generate_negatives(form, dataset)
-                if regime is not None:
-                    neg_data = regime.filter_negatives(form, dataset, neg_data)
-            neg_scores = None
-            if neg_data is not None:
-                like_pos = regime is not None and regime.scores_negatives_like_positives(form)
-                neg_scores = self.score_rows(form, neg_data, neg=not like_pos)
-            form_loss = NotImplemented
-            if regime is not None:
-                form_loss = regime.loss(form, pos_scores, neg_scores)
-            if form_loss is NotImplemented:
-                form_loss = self.combine_scores(form, pos_scores, neg_scores)
-            loss = loss + form_loss
-        extra = self.additional_training_loss(step)
-        if extra is not None:
-            loss = loss + extra
-        if regime is not None:
-            extra = regime.additional_loss(step)
-            if extra is not None:
-                loss = loss + extra
-        return loss + self.step_regularization_loss()
-
-    # ------------------------------------------------------------------ train
     def train(self, epochs=100, validate_every=None, verbose=False, epoch_callback=None,
               validate=None):
-        """Train with the training regime of the method (or the one assigned).
-
-        :param epochs: Number of epochs; an epoch has ``steps_per_epoch`` optimisation steps
-            of the batching regime (one without).
-        :param validate_every: Epochs between the evaluations of a model selection regime
-            (``None``: the default of the model, usually no validation).
-        :param verbose: Print the mean loss of every epoch.
-        :param epoch_callback: ``callable(epoch, model)`` called after every epoch.
-        :param validate: ``False`` switches validation off; ``True`` asks for the model's
-            default interval (or every epoch).
-        :return: The mean loss of every epoch (also ``model.training_losses``).
-        :rtype: list of float
-        """
-        if self.training_regime is None:
-            self._attach_default_regimes()
-        regime = self.training_regime
-        if validate is False:
-            validate_every = None
-        elif validate_every is None:
-            validate_every = self.default_validate_every if validate is None \
-                else (self.default_validate_every or 1)
-        self._train_validate_every = validate_every
-        datasets = self.training_datasets
-        if regime is not None:
-            datasets = regime.training_datasets(datasets)
-        per_epoch = steps_per_epoch(regime)
-        total = epochs * per_epoch
-        self.training_steps = total
-        optimizer = NotImplemented
-        if regime is not None:
-            optimizer = regime.optimizer()
-        if optimizer is NotImplemented:
-            optimizer = self.get_optimizer()
-        history, running, counted = [], 0.0, 0
-        self.training_losses = history
-        for step in range(total):
-            self.module.train()
-            self.on_epoch_start(step, total)
-            if regime is not None:
-                regime.on_epoch_start(step, total)
-            loss = self._step_loss(datasets, step)
-            value = 0.0
-            if regime is not None and regime.skips_empty_steps and not loss.requires_grad:
-                pass
-            else:
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-                self.after_optimizer_step()
-                value = loss.detach().item()
-            running += value
-            counted += 1
-            ends_epoch = (step + 1) % per_epoch == 0
-            if ends_epoch:
-                epoch = step // per_epoch
-                history.append(running / max(counted, 1))
-                running, counted = 0.0, 0
-                self.record_epoch(epoch, history[-1])
-            if regime is not None:
-                regime.on_epoch_end(step, {"total": value})
-            if ends_epoch:
-                if verbose:
-                    print(f"Epoch {epoch + 1}: loss {history[-1]:.6f}")
-                if epoch_callback is not None:
-                    epoch_callback(epoch, self)
-            if regime is not None and regime.should_stop(step):
-                break
-        if regime is not None:
-            regime.on_train_end()
-        self.finish_training()
-        if not (regime is not None and regime.replaces_validation):
-            self.save_state()
-        self.module.eval()
-        return history
+        """Train with the training regime of the method (or the one assigned): the loop of
+        :meth:`TrainingLoop.run_training`."""
+        return self.run_training(epochs, validate_every, verbose, epoch_callback, validate)
