@@ -1,5 +1,3 @@
-import torch as th
-
 from mowl.models.order_base import OrderEmbeddingModel
 from mowl.nn.order.module import ShadowConesModule
 
@@ -12,7 +10,8 @@ class ShadowCones(OrderEmbeddingModel):
     point of the half-space or the ball, the measure is the signed distance to the shadow cone
     of ``formulation``, the objective is the hierarchy objective; ``model.module`` is that
     :class:`~mowl.representation.ComposedGeometry`. The softmax of Eq. 1 over the negatives of
-    a positive is the reduction of :meth:`compute_loss`. The direct implementation it is tested
+    a positive is the regime :class:`~mowl.training.GroupedLogSumExpContrastiveLoss`, the default
+    regime of the method. The direct implementation it is tested
     against is ``mowl.baselines.models.shadow_cones``.
 
     Classes are points of the Poincare half-space or ball; :math:`C \sqsubseteq D` holds
@@ -86,16 +85,13 @@ class ShadowCones(OrderEmbeddingModel):
             radius=self.radius, horosphere_height=self.horosphere_height,
             gamma3=self.gamma3, init_scale=self.init_scale, seed=self.seed,
             margin=self.gamma1, negative=self.negative).to(self.device)
+        self.module.default_regimes = (self._default_loss,)
+        self._attach_default_regimes()
 
-    def compute_loss(self, pos_scores, neg_scores=None):
-        """Eq. 1 of the paper, averaged over the positives; ``neg_scores`` holds ``K``
-        blocks of one value per positive: the hinge :math:`\\max(0, \\gamma_1 - E^-)`
-        (``negative="hinge"``) or the raw energy :math:`E^-` (``"energy"``)."""
-        pos = th.clamp(pos_scores.reshape(-1), min=self.gamma2)
-        if neg_scores is None:
-            return pos.mean()
-        n = pos.shape[0]
-        neg = neg_scores.reshape(-1, n).t()
-        if self.negative == "energy":
-            neg = th.relu(self.gamma1 - neg)
-        return (pos + th.logsumexp(neg, dim=1)).mean()
+    def _default_loss(self):
+        """Eq. 1 of the paper: each positive against its ``num_neg`` negatives, the regime
+        :class:`~mowl.training.GroupedLogSumExpContrastiveLoss` (clamp ``gamma2``; with
+        ``negative="energy"`` the hinge of ``gamma1`` is taken on the raw energies)."""
+        from mowl.training.losses import GroupedLogSumExpContrastiveLoss
+        return GroupedLogSumExpContrastiveLoss(
+            self.gamma2, "energy" if self.negative == "energy" else "module", self.gamma1)

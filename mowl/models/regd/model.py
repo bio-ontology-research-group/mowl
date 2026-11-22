@@ -3,7 +3,6 @@ from contextlib import contextmanager
 import torch as th
 
 from mowl.base_models.elmodel import EmbeddingELModel
-from mowl.representation.library.ballfam_energy import contrastive_loss
 from mowl.nn.el.regd.module import RegDELBEModule, RegDELEmModule
 
 
@@ -61,21 +60,21 @@ class _RegDModel(EmbeddingELModel):
 
     def _after_init_module(self):
         self.evaluation_model = _EnergyView(self.module)
+        # the training of the method: Eq. 10 for gci0 and gci2, the host's loss for the rest
+        self.module.default_regimes = (self._contrastive_regime, self._host_loss_regime)
+        self._attach_default_regimes()
 
-    def compute_loss(self, pos_scores, neg_scores=None):
-        """For ``gci0`` and ``gci2``, the contrastive loss of Section 3.3 (Eq. 10) with the
-        ``num_neg`` negatives of each positive; for every other normal form, the host model's
-        loss."""
-        if neg_scores is not None and self._contrastive():
-            n = pos_scores.shape[0]
-            negatives = neg_scores.reshape(-1, n).t()
-            return contrastive_loss(pos_scores.reshape(-1), negatives, self.gamma1)
-        return super().compute_loss(pos_scores, neg_scores)
+    def _contrastive_regime(self):
+        """The contrastive loss of Section 3.3 (Eq. 10): each positive of ``gci0`` and
+        ``gci2`` against its ``num_neg`` negatives, the regime
+        :class:`~mowl.training.GroupedLogSumExpContrastiveLoss`."""
+        from mowl.training.losses import GroupedLogSumExpContrastiveLoss
+        forms = tuple(getattr(self.module, "contrastive_gcis", ("gci0", "gci2")))
+        return GroupedLogSumExpContrastiveLoss(self.gamma1, normal_forms=forms)
 
-    def _contrastive(self):
-        """Whether the last loss was of a form with the contrastive loss."""
-        forms = getattr(self.module, "contrastive_gcis", frozenset({"gci0", "gci2"}))
-        return getattr(self.module, "last_form", None) in forms
+    def _host_loss_regime(self):
+        """The loss of the other normal forms: the host model's (``None``: the base sum)."""
+        return None
 
     def eval_method(self, data):
         with _scoring(self.module):
@@ -186,16 +185,11 @@ class RegDELBE(_RegDModel):
         ).to(self.device)
         self._after_init_module()
 
-    def compute_loss(self, pos_scores, neg_scores=None):
-        """See :meth:`_RegDModel.compute_loss`. Other normal forms: ELBE's mean-squared-error
-        loss (positives towards 0, negatives towards 1)."""
-        if neg_scores is not None and self._contrastive():
-            return super().compute_loss(pos_scores, neg_scores)
-        pos_mean = th.mean(pos_scores)
-        loss = th.square(pos_mean)
-        if neg_scores is not None:
-            loss = loss + th.square(th.mean(neg_scores) - 1.0)
-        return loss
+    def _host_loss_regime(self):
+        """ELBE's mean-squared-error loss (positives towards 0, negatives towards 1) for the
+        normal forms that are not trained with the contrastive loss."""
+        from mowl.training.losses import MSETargetLoss
+        return MSETargetLoss(0.0, 1.0, reduce="mean_first")
 
 
 class RegDELEm(_RegDModel):

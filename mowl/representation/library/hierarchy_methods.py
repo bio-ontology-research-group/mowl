@@ -247,7 +247,8 @@ def hyperbolic_cones(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50,
 def shadow_cones(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50,
                  formulation="umbral-half-space", radius=0.05, horosphere_height=20.0,
                  gamma3=1e-4, init_scale=0.01, margin=0.01, negative_form="hinge",
-                 tables=None, seed=None, measure=None, objective=None, regularizers=()):
+                 tables=None, seed=None, measure=None, objective=None, regularizers=(),
+                 gamma2=0.0):
     """Shadow cones (Yu et al. 2024): points of the Poincare half-space or ball, the signed
     distance to the shadow cone of the parent as the cost. As published the cost of a stated
     pair is signed (negative inside the cone, ``signed=True``). The cost of a corrupted pair is
@@ -259,6 +260,9 @@ def shadow_cones(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50,
     :param tables: A module with the options of shadow cones and ``class_embed`` (the direct
         module of :mod:`mowl.baselines.nn.order`) to share parameters with.
     :param seed: Seed of the initialisation of the points (new tables only).
+    :param gamma2: The clamp of the positive energy in the loss of the method (Eq. 1), the
+        regime :class:`~mowl.training.GroupedLogSumExpContrastiveLoss` that the geometry names in
+        ``default_regimes``.
     :param measure, objective, regularizers: Swap a part: another measure of points of the
         manifold (default: the signed shadow-cone distance of ``formulation``), another
         objective (default: the hierarchy objective of margin ``margin``), penalties added
@@ -284,9 +288,16 @@ def shadow_cones(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50,
     if measure is None:
         measure = ShadowCone(formulation, radius, horosphere_height, gamma3, signed=True,
                              negative_form=negative_form)
-    return hierarchy_geometry(classes, None, measure,
-                              objective if objective is not None else Objective.hierarchy(margin),
-                              regularizers=regularizers)
+    geometry = hierarchy_geometry(
+        classes, None, measure,
+        objective if objective is not None else Objective.hierarchy(margin),
+        regularizers=regularizers)
+    from functools import partial
+    from mowl.training.losses import GroupedLogSumExpContrastiveLoss
+    geometry.default_regimes = (partial(
+        GroupedLogSumExpContrastiveLoss, gamma2,
+        "energy" if negative_form == "energy" else "module", margin),)
+    return geometry
 
 
 _DISK_SPACES = {"hyperbolic": Hyperboloid, "spherical": Sphere, "euclidean": Euclidean}

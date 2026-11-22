@@ -391,6 +391,53 @@ class SoftmaxEnergyContrastiveLoss(_ScoreLoss):
         return F.cross_entropy(logits, target)
 
 
+class GroupedLogSumExpContrastiveLoss(_ScoreLoss):
+    r"""Each positive against its own group of negatives: the mean over the positives of
+    :math:`\max(E^+, \gamma) + \log\sum_k \exp(h_k)`, where :math:`h_k` is the module's
+    negative loss of the :math:`k`-th corruption of that positive (a hinge, for example
+    :math:`\max(0, \gamma_1 - E^-_k)`). It is Eq. 1 of the shadow cones paper (the softmax
+    cross-entropy of a positive against ``K`` negatives, with :math:`\gamma = \gamma_2`)
+    and Eq. 10 of RegD (with :math:`\gamma = \gamma_1`), and differs from
+    :class:`LogSumExpContrastiveLoss`, which pools all negatives of the step.
+
+    The negatives of a form must be grouped as the corrupting regimes produce them: ``K``
+    blocks of one corruption per positive (a number of rows that is a multiple of the number
+    of positives); otherwise the loss refuses.
+
+    :param gamma: Clamp of the positive score from below.
+    :param negative_form: ``"module"``: the module's negative loss is the hinge :math:`h_k`;
+        ``"energy"``: the module returns raw energies :math:`E^-` and the hinge
+        :math:`\max(0, \gamma_{neg} - E^-)` is taken here.
+    :param gamma_neg: The margin of the hinge for ``negative_form="energy"``.
+    :param normal_forms: The forms trained with this loss; the others fall back to the
+        model's loss (RegD: ``gci0`` and ``gci2``).
+    """
+
+    key = "grouped-logsumexp-contrastive"
+    needs_positive_form = False
+
+    def __init__(self, gamma=0.0, negative_form="module", gamma_neg=0.0, normal_forms=None):
+        super().__init__(normal_forms=normal_forms, neg_scores="module")
+        if negative_form not in ("module", "energy"):
+            raise ValueError("negative_form must be 'module' or 'energy'.")
+        self.gamma = float(gamma)
+        self.negative_form = negative_form
+        self.gamma_neg = float(gamma_neg)
+
+    def combine(self, gci_name, pos, neg):
+        pos = th.clamp(pos, min=self.gamma)
+        if neg is None:
+            return pos.mean()
+        paired = self._paired(pos, neg)
+        if paired is None:
+            raise ValueError(
+                f"{type(self).__name__} needs a whole number of negatives per positive "
+                f"({len(neg)} negatives for {len(pos)} positives of {gci_name!r}).")
+        if self.negative_form == "energy":
+            paired = F.relu(self.gamma_neg - paired)
+        return (pos + th.logsumexp(paired, dim=1)).mean()
+
+
 class PearsonCorrelationLoss(_ScoreLoss):
     """ELK-Em's contrastive loss (Singh et al. 2026, Section 4.2, Eq. 5):
     :math:`1 - \\frac{(\\sigma - \\bar\\sigma)^\\top (t - \\bar t)}

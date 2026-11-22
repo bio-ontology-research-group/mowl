@@ -16,7 +16,7 @@ def _contrastive_training_loss(model, gci_name="gci0"):
     with th.no_grad():
         positive = model.module(dataset[:], gci_name)
         negatives = model.module(model.generate_negatives(gci_name, dataset), gci_name, neg=True)
-        return model.compute_loss(positive, negatives).item()
+        return model.training_regime.loss(gci_name, positive, negatives).item()
 
 
 class _RegDModelTests:
@@ -66,7 +66,7 @@ class _RegDModelTests:
         negative = th.rand(3 * len(data), 1)
         expected = contrastive_loss(positive.reshape(-1), negative.reshape(3, -1).t(),
                                     self.model.gamma1)
-        self.assertAlmostEqual(self.model.compute_loss(positive, negative).item(),
+        self.assertAlmostEqual(self.model.training_regime.loss("gci0", positive, negative).item(),
                                expected.item(), places=6)
 
     def test_scoring_uses_the_raw_energy(self):
