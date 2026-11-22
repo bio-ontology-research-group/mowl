@@ -72,7 +72,8 @@ class OrderEmbeddingModel(EmbeddingELModel):
                 keep &= data[:, 0] != nothing
             data = th.unique(data[keep], dim=0)
             self._order_datasets = {"gci0": _PairDataset(data.to(self.device))}
-            self._known_pairs = set((data[:, 0] * n_named + data[:, 1]).tolist())
+            self._known_codes = th.unique(data[:, 0] * n_named + data[:, 1])
+            self._known_pairs = set(self._known_codes.tolist())
         return self._order_datasets
 
     def generate_negatives(self, gci_name, gci_dataset, max_resample=10):
@@ -82,16 +83,21 @@ class OrderEmbeddingModel(EmbeddingELModel):
         n = len(gci_dataset)
         n_named = len(self.named_class_index_dict)
         ids = np.array(list(self.named_class_index_dict.values()))
-        columns = [c for c in self.get_negative_sampling_config()[gci_name]["corrupt_column"]]
+        columns = th.tensor(self.get_negative_sampling_config()[gci_name]["corrupt_column"],
+                            dtype=th.long, device=neg.device)
+        column_of_row = columns.repeat_interleave(n)
+        known = self._known_codes.to(neg.device)
+        # Vectorised: one pass over all negatives costs a few tensor operations, whatever
+        # their number (a Python loop over rows made an epoch of 800 000 negatives take
+        # thousands of seconds on a GPU, one device synchronisation per row).
         for _ in range(max_resample):
-            codes = (neg[:, 0] * n_named + neg[:, 1]).tolist()
-            bad = [i for i, c in enumerate(codes)
-                   if c in self._known_pairs or neg[i, 0] == neg[i, 1]]
-            if not bad:
+            codes = neg[:, 0] * n_named + neg[:, 1]
+            bad = th.nonzero(th.isin(codes, known) | (neg[:, 0] == neg[:, 1])).flatten()
+            if len(bad) == 0:
                 break
-            for i in bad:
-                col = columns[i // n]
-                neg[i, col] = int(np.random.choice(ids))
+            fresh = th.as_tensor(np.random.choice(ids, size=len(bad)), dtype=neg.dtype,
+                                 device=neg.device)
+            neg[bad, column_of_row[bad]] = fresh
         return neg
 
     # -- training ------------------------------------------------------------------------
