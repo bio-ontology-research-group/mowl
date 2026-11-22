@@ -234,7 +234,9 @@ DISK_EMBEDDINGS = MethodCard(
         "SGD (Eqs. 13-14). Adaptations: generic full-batch training instead of the paper's "
         "sampling; the spherical model is not initialised from Poincaré embeddings; the "
         "polyhedral quasi-metrics used for the equivalence with order embeddings are not "
-        "implemented. Rankings use the signed protrusion l, not its positive part."),
+        "implemented. Rankings use the signed protrusion l, not its positive part. The manifold "
+        "distances are exactly 0 for coincident points (they used to have a small floor), so "
+        "a disk inside itself costs exactly 0."),
 )
 
 BOX_LATTICE = MethodCard(
