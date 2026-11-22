@@ -64,6 +64,15 @@ def released_names(state=None, **paths):
     return decorate
 
 
+def in_chunks(function, rows, step):
+    """``function(rows)`` evaluated ``step`` rows at a time and concatenated: the same
+    values with a bounded memory use. ``step=None`` (or at least ``len(rows)``) evaluates
+    all rows at once."""
+    if step is None or len(rows) <= step:
+        return function(rows)
+    return th.cat([function(rows[i:i + step]) for i in range(0, len(rows), step)])
+
+
 class ReleasedTables:
     """Mixin for a module whose parameters are held by parts: it keeps the interface of the
     module it replaces. The state dictionary has the names of that module
@@ -78,6 +87,12 @@ class ReleasedTables:
     released_order = ()
     #: The forms whose loss has the flat shape ``(B,)`` when ``per_axiom_column`` is ``False``.
     flat_forms = ()
+
+    @staticmethod
+    def rng_state():
+        """The state of the random generator: take it before the parts are made and hand it
+        to :meth:`initialise_in_released_order`."""
+        return th.get_rng_state()
 
     def initialise_in_released_order(self, rng_state):
         """Draw the initial values of the tables in the order of the earlier module, from the

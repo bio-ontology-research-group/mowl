@@ -1,7 +1,6 @@
 """MultiELBE neural module."""
 from __future__ import annotations
 
-import torch as th
 
 from mowl.representation.library.structural_points import POINT_READINGS as _VALID_OBJECTIVES
 from mowl.representation.geometry import ComposedGeometry
@@ -156,7 +155,7 @@ class MultiELBEModule(UnionModule, ComposedGeometry):
         if objective not in _VALID_OBJECTIVES:
             raise ValueError(f"objective must be one of {_VALID_OBJECTIVES}, got "
                              f"{objective!r}")
-        rng_state = th.get_rng_state()
+        rng_state = self.rng_state()
         multielbe(
             nb_ont_classes, nb_rels, nb_inds or 0, embed_dim=embed_dim, margin=margin,
             n_components=n_components, component_reg=component_reg,

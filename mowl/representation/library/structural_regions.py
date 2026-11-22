@@ -229,6 +229,20 @@ def slots(region):
     return to_slots(region).slots
 
 
+def pad_slots(regions, room):
+    """The :class:`~mowl.nn.el.structural.Regions` ``regions`` with inactive padding slots
+    (centre 0, half-width -1, inactive) added until every class has ``room`` slots; unchanged
+    if it has that many already."""
+    pad = room - regions.cen.shape[1]
+    if pad <= 0:
+        return regions
+    b, _, d = regions.cen.shape
+    return Regions(
+        cen=th.cat([regions.cen, regions.cen.new_zeros((b, pad, d))], dim=1),
+        w=th.cat([regions.w, -th.ones_like(regions.w[:, :1]).expand(b, pad, d)], dim=1),
+        active=th.cat([regions.active, regions.active.new_zeros((b, pad))], dim=1))
+
+
 def intersect_signed(a, b):
     """``(region, gap)``: the intersection of two regions with *signed* extent where the
     family has it (the half-widths are negative where the regions are apart: a box, a prism,

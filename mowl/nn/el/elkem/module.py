@@ -1,8 +1,7 @@
 r"""Neural module of ELK-Em [singh2026]_."""
 
-import torch as th
-
 from mowl.nn.el.part_built import _PartBuiltModule
+from mowl.training.elkem import exp_margin_free_score
 from mowl.training.terms import lexical_similarity_loss
 
 
@@ -249,7 +248,7 @@ class ELKEmModule(_PartBuiltModule):
 
     def score(self, data, gci_name):
         r"""Score :math:`s(\alpha) = \exp(-\ell^0(\alpha)) \in (0, 1]` (Eq. 4 of the paper)."""
-        return th.exp(-self.zero_margin_loss(data, gci_name))
+        return exp_margin_free_score(self, data, gci_name)
 
     # ------------------------------------------------------------------ regularisers
 

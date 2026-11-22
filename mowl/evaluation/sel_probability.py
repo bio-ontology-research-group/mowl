@@ -48,8 +48,16 @@ def batch_probabilities(model, conditionals):
         idx = [i for i, _, _ in items]
         ld = th.tensor([d for _, d, _ in items], dtype=th.long, device=model.device)
         lc = th.tensor([c for _, _, c in items], dtype=th.long, device=model.device)
-        out[idx] = model.module.probability(sd, sc, ld, lc).detach().cpu().numpy()
+        out[idx] = model.module.probability(sd, sc, ld, lc).detach().cpu().numpy().reshape(-1)
     return out
+
+
+def mean_interval_error(errors):
+    """Mean of per-conditional distances to their intervals (the paper's MAE for point
+    conditionals), ``0.0`` for an empty list. ``nan`` entries (premises without volume)
+    propagate."""
+    errors = list(errors)
+    return float(np.mean(errors)) if errors else 0.0
 
 
 def interval_metrics(truth, lower, upper):

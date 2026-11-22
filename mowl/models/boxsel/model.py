@@ -1,5 +1,4 @@
 """BoxSEL: box embeddings of Statistical EL (Zhu et al., 2024)."""
-import numpy as np
 import torch as th
 
 from mowl.base_models.elmodel import EmbeddingELModel
@@ -138,8 +137,8 @@ class BoxSEL(EmbeddingELModel):
         return out
 
     def mean_absolute_error(self):
-        errors = self.conditional_errors()
-        return float(np.mean(errors)) if errors else 0.0
+        from mowl.evaluation.sel_probability import mean_interval_error
+        return mean_interval_error(self.conditional_errors())
 
     @staticmethod
     def probability_interval(models, conclusion, premise):

@@ -36,6 +36,12 @@ import torch as th
 from mowl.training.regime import TrainingRegime
 
 
+def epoch_rng(seed, epoch=0):
+    """The NumPy random generator of an epoch: seeded with ``seed + epoch``, so that an epoch
+    draws the same sample whenever it is run (sampling of points, re-seeding of components)."""
+    return np.random.default_rng(int(seed) + int(epoch))
+
+
 class _BatchView(th.utils.data.Dataset):
     """The current mini-batch of a dataset."""
 

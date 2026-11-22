@@ -1,6 +1,5 @@
 from mowl.base_models.elmodel import EmbeddingELModel
 from mowl.nn import ELBEModule
-import torch as th
 
 from mowl.training.losses import MSETargetLoss
 
@@ -69,10 +68,10 @@ class ELBE(EmbeddingELModel):
         self.init = init
         self._loaded = False
         self.extended = False
-        self._mse_criterion = th.nn.MSELoss()
         # ELBE's objective: the squared mean score of the positives plus the squared distance
         # of the mean score of the negatives to 1, per normal form (see compute_loss)
-        self.training_regime = MSETargetLoss(0.0, 1.0, reduce="mean_first")
+        self._loss_part = MSETargetLoss(0.0, 1.0, reduce="mean_first")
+        self.training_regime = self._loss_part
         self.init_module()
 
     def init_module(self):
@@ -101,14 +100,4 @@ class ELBE(EmbeddingELModel):
         Positive samples should have scores close to 0.
         Negative samples should have scores close to 1.
         """
-        pos_mean = th.mean(pos_scores)
-        loss = self._mse_criterion(pos_mean, th.zeros_like(pos_mean, requires_grad=False))
-
-        if neg_scores is not None:
-            neg_mean = th.mean(neg_scores)
-            loss += self._mse_criterion(neg_mean, th.ones_like(neg_mean, requires_grad=False))
-
-        return loss
-
-
-
+        return self._loss_part.combine(None, pos_scores, neg_scores)

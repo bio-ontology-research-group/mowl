@@ -21,6 +21,14 @@ class VolumeMultiBoxEL(VolumeMultiBoxELOptions):
 
     module_class = VolumeMultiBoxELModule
 
+    @staticmethod
+    def _canonical_order(data):
+        """Sort rows lexicographically: the axiom order produced by the normaliser is not
+        stable between runs, and sorting makes training reproducible for a fixed seed."""
+        for col in reversed(range(data.shape[1])):
+            data = data[th.sort(data[:, col], stable=True).indices]
+        return data
+
     def train(self, epochs, validate_every=1, epoch_callback=None):
         """Train with ``num_batches`` optimiser steps per epoch.
 

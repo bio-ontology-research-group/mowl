@@ -14,7 +14,7 @@ import torch as th
 from mowl.representation import geometry_of
 from mowl.representation.regions import Ball, Box, CornerBox
 
-__all__ = ["geometry_for", "centre_and_size", "all_class_regions", "device_of",
+__all__ = ["concatenated_rows", "geometry_for", "centre_and_size", "all_class_regions", "device_of",
            "evaluation_regions", "geometry_evaluation_regions"]
 
 
@@ -25,6 +25,13 @@ def device_of(model):
         return next(module.parameters()).device
     except (AttributeError, StopIteration):
         return th.device("cpu")
+
+
+def concatenated_rows(columns):
+    """One NumPy row per item from tensors that share their first dimension: the columns
+    are concatenated along dimension 1, detached and moved to the CPU. Used to export
+    regions (``lower``, ``upper``) or role parameters as one vector per entity."""
+    return th.cat(list(columns), dim=1).detach().cpu().numpy()
 
 
 def geometry_for(model, purpose):

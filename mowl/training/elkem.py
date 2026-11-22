@@ -176,11 +176,18 @@ def zero_margin_loss(module, rows, form):
     return loss.reshape(len(rows), -1)[:, 0] if loss.dim() > 1 else loss
 
 
+def exp_margin_free_score(module, rows, form):
+    """:math:`\\exp(-\\ell^0(\\alpha))` of the margin-free loss of ``rows`` (a score in
+    :math:`(0, 1]` for any geometry with a loss per normal form)."""
+    from mowl.evaluation.scoring_rules import exp_negative_score
+    return exp_negative_score(zero_margin_loss(module, rows, form))
+
+
 def margin_free_score(module, rows, form):
     """:math:`s(\\alpha) = \\exp(-\\ell^0(\\alpha))`, the score of ELK-Em (Eq. 4)."""
     if hasattr(module, "score"):
         return module.score(rows, form)
-    return th.exp(-zero_margin_loss(module, rows, form))
+    return exp_margin_free_score(module, rows, form)
 
 
 def pearson_loss(pos_scores, neg_scores, eps=1e-8):

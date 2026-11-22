@@ -127,14 +127,15 @@ class _RegDInterface:
 
     def energy(self, parent_center, parent_size, child_center, child_size):
         """RegD energy of child regions inside parent regions, shape ``(n, 1)``."""
-        return self._energy(parent_center, parent_size, child_center, child_size,
-                            lamda=self.lamda, p=self.p,
-                            depth_on_containment=self.depth_on_containment).unsqueeze(-1)
+        return D.ENERGY[self._shape](parent_center, parent_size, child_center, child_size,
+                                     lamda=self.lamda, p=self.p,
+                                     depth_on_containment=self.depth_on_containment
+                                     ).unsqueeze(-1)
 
     def boundary(self, parent_center, parent_size, child_center, child_size):
         """Boundary dissimilarity of child regions in parent regions, shape ``(n, 1)``."""
-        return self._boundary(parent_center, parent_size, child_center,
-                              child_size).unsqueeze(-1)
+        return D.BOUNDARY[self._shape](parent_center, parent_size, child_center,
+                                       child_size).unsqueeze(-1)
 
 
 class RegDELBEModule(_RegDInterface, _PartBuiltModule):
@@ -175,8 +176,7 @@ class RegDELBEModule(_RegDInterface, _PartBuiltModule):
 
     regd_gcis = frozenset({"gci0", "gci1", "gci2", "gci3"})
     margin_semantics = "strict"
-    _energy = staticmethod(D.box_energy)
-    _boundary = staticmethod(D.box_boundary_dissimilarity)
+    _shape = "box"  # key into ``ballfam_energy.ENERGY`` / ``BOUNDARY``
 
     def __init__(self, nb_ont_classes, nb_rels, nb_inds=None, embed_dim=50, margin=0.1,
                  lamda=1.0, p=1, gamma1=0.0, gamma2=0.0, eps=1e-4,
@@ -239,8 +239,7 @@ class RegDELEmModule(_RegDInterface, ELEmModule):
     """
 
     regd_gcis = frozenset({"gci0", "gci2", "gci3"})
-    _energy = staticmethod(D.ball_energy)
-    _boundary = staticmethod(D.ball_boundary_dissimilarity)
+    _shape = "ball"  # key into ``ballfam_energy.ENERGY`` / ``BOUNDARY``
 
     def __init__(self, nb_ont_classes, nb_rels, nb_inds=None, embed_dim=50, margin=0.1,
                  reg_norm=1, lamda=1.0, p=2, gamma1=0.0, gamma2=0.0, eps=1e-4,

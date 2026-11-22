@@ -177,3 +177,8 @@ def contrastive_loss(positive_energy, negative_scores, gamma1=0.0):
     positive = th.clamp(positive_energy, min=gamma1)
     negative = th.logsumexp(negative_scores, dim=1)
     return (positive + negative).mean()
+
+
+#: The boundary dissimilarity and the energy of each region shape, by shape name.
+BOUNDARY = {"ball": ball_boundary_dissimilarity, "box": box_boundary_dissimilarity}
+ENERGY = {"ball": ball_energy, "box": box_energy}

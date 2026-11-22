@@ -20,6 +20,10 @@ class MultiELBE(MultiELBEOptions):
 
     module_class = MultiELBEModule
 
+    @property
+    def _mse_criterion(self):
+        return th.nn.MSELoss()
+
     def additional_training_loss(self, epoch: int) -> Optional[th.Tensor]:
         """Compute sampled canonical-element point and role losses plus volume regulariser.
 
