@@ -28,7 +28,7 @@ def test_the_generic_el_loop_takes_every_regime():
         assert not unsupported_hooks(PairwiseMarginRankingLoss(), cls)
 
 
-@pytest.mark.parametrize("name", ["FALCONModel", "E2R", "BoxE", "FaithEL", "VolumeMultiBoxEL",
+@pytest.mark.parametrize("name", ["FALCONModel", "E2R", "BoxE", "FaithEL",
                                   "DFALCModel", "CatE"])
 def test_models_with_their_own_objective_refuse_loss_and_negative_regimes(name):
     import mowl.models as models
@@ -36,6 +36,14 @@ def test_models_with_their_own_objective_refuse_loss_and_negative_regimes(name):
     assert frozenset(cls.training_hooks) == frozenset()
     assert unsupported_hooks(PairwiseMarginRankingLoss(), cls) >= {"loss"}
     assert unsupported_hooks(LinearDecay(), cls)
+
+
+def test_volume_multiboxel_takes_the_regimes_since_its_splits_are_a_regime():
+    """Its shuffled splits are the regime ShuffledSplits (mowl.training.splits); it no longer
+    has a loop of its own, so it consults every hook."""
+    from mowl.models import VolumeMultiBoxEL
+    assert frozenset(VolumeMultiBoxEL.training_hooks) == frozenset(HOOKS)
+    assert not unsupported_hooks(PairwiseMarginRankingLoss(), VolumeMultiBoxEL)
 
 
 def test_assigning_an_unsupported_regime_raises():

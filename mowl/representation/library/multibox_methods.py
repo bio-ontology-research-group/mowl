@@ -341,7 +341,8 @@ def multielbe(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0
 @register_method("mcmultibox")
 def mcmultibox(nb_classes, nb_relations, nb_individuals=0, embed_dim=5, margin=0.0,
                num_boxes=5, bound=1.0, num_points=20000, temperature=1.0, aggregate="min",
-               seed=0, point_chunk_size=2048, init_seed=None, tables=None, into=None):
+               seed=0, point_chunk_size=2048, init_seed=None, tables=None, into=None,
+               num_batches=5):
     """The volume-based MultiBoxEL (Aharoni 2024): classes are unions of boxes, relations are
     unions of boxes over pairs, and every loss is :math:`1 - \\mathrm{Vol}(A \\cap B) /
     \\mathrm{Vol}(A)` estimated on a fixed set of sampled points.
@@ -365,6 +366,8 @@ def mcmultibox(nb_classes, nb_relations, nb_individuals=0, embed_dim=5, margin=0
     covered by :math:`D`; the inclusion of the individual boxes), because the measure has
     ``apart`` and the geometry has individuals. They are not verified against anything.
 
+    :param num_batches: Steps per epoch of the default regime
+        :class:`~mowl.training.splits.ShuffledSplits`.
     :param tables: A module with the tables of the volume-based MultiBoxEL (the direct
         implementation in :mod:`mowl.baselines`) to share parameters (and point sets) with.
     :param into: The public module (:class:`~mowl.nn.VolumeMultiBoxELModule`) to initialise
@@ -396,6 +399,16 @@ def mcmultibox(nb_classes, nb_relations, nb_individuals=0, embed_dim=5, margin=0
     geometry = _build(ComposedGeometry, into, classes, relations, measure, objective,
                       individuals=individuals, neg_capable_gcis=frozenset())
     geometry.margin_semantics = None
+    # an epoch is num_batches steps on a shuffled split of the axioms (a step of a model that
+    # trains with ComposedEL is one epoch of the generic loop: train for epochs * num_batches)
+    from functools import partial
+    from mowl.training.elkem import ValidationCheckpoint
+    from mowl.training.splits import ShuffledSplits
+    geometry.default_regimes = (
+        partial(ShuffledSplits, num_batches, seed,
+                forms=("gci0", "gci1", "gci2", "gci3", "role_inclusion", "role_chain"),
+                what="the thesis"),
+        partial(ValidationCheckpoint, "loss", steps_per_epoch=num_batches))
     return geometry
 
 

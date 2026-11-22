@@ -5,6 +5,8 @@ of a method, with new tables or (``tables=module``) with those of an existing mo
 is how :func:`mowl.representation.geometry_of` describes the module.
 """
 
+from functools import partial
+
 import torch as th
 import torch.nn as nn
 
@@ -23,6 +25,8 @@ from mowl.representation.library.boxrel_regularizers import (
 from mowl.representation.library.boxrel_relations import (
     Affine, AffineBoxes, TranslationBoxes)
 from mowl.representation.methods import register_method
+from mowl.training.conditional import ConditionalStatements
+from mowl.training.elkem import ELKEmTraining
 from mowl.training.regularization import MaxNormPenalty, NormPenalty
 
 __all__ = ["transbox", "boxel", "boxsel", "elkem", "ConditionalGeometry"]
@@ -204,11 +208,15 @@ def boxsel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0,
         regularizers.append(LocationPenalty(beta, weight=location_weight))
     if volume_weight:
         regularizers.append(VolumePenalty(beta, weight=volume_weight))
-    return _boxel_geometry(ConditionalGeometry,
-                           BoxSELObjective(margin, gci1_bot=_product(gci1_bot)),
-                           nb_classes, nb_relations, nb_individuals, embed_dim, temperature,
-                           (scale, role_chain_composition), tables, tuple(regularizers),
-                           (min_bounds, delta_bounds, relation_bounds, scaling_bounds))
+    geometry = _boxel_geometry(ConditionalGeometry,
+                               BoxSELObjective(margin, gci1_bot=_product(gci1_bot)),
+                               nb_classes, nb_relations, nb_individuals, embed_dim,
+                               temperature, (scale, role_chain_composition), tables,
+                               tuple(regularizers),
+                               (min_bounds, delta_bounds, relation_bounds, scaling_bounds))
+    # the conditionals are trained with their own loss term (those of the model, if any)
+    geometry.default_regimes = (partial(ConditionalStatements),)
+    return geometry
 
 
 @register_adapter("BoxSELModule")
@@ -254,10 +262,14 @@ def elkem(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
     objective = ELKEmObjective(margin, abox_threshold, gci2_overlap=not sound,
                               trivial_disjointness=sound)
     regularizers = (SizeCapPenalty(weight=size_weight),) if size_weight else ()
-    return ComposedGeometry(classes, relations,
-                            AveragedBounds(extent="norm", conjunction="nonempty",
-                                           empty_boxes="formula"), objective,
-                            individuals=individuals, regularizers=regularizers)
+    geometry = ComposedGeometry(classes, relations,
+                                AveragedBounds(extent="norm", conjunction="nonempty",
+                                               empty_boxes="formula"), objective,
+                                individuals=individuals, regularizers=regularizers)
+    # how the method trains: mini-batches, assertion negatives, the correlation term, the
+    # step decay and the model selection (the options of the named class are its own)
+    geometry.default_regimes = (partial(ELKEmTraining),)
+    return geometry
 
 
 @register_adapter("ELKEmModule")
