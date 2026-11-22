@@ -105,6 +105,9 @@ class ComposedEL(EmbeddingELModel):
         self.method = method
         self.classes, self.relations, self.measure = classes, relations, measure
         self.individuals, self.objective_options = individuals, objective_options
+        # (kept under a name of its own: a named method may use ``objective`` for an option
+        # of its own, as PrismEL does for its reading)
+        self._objective_part = objective
         self.objective = objective
         self.margin = margin
         self.regularizers = tuple(regularizers)
@@ -122,13 +125,13 @@ class ComposedEL(EmbeddingELModel):
             module = build_method(
                 self.method, *sizes, embed_dim=self.embed_dim, classes=self.classes,
                 relations=self.relations, individuals=self.individuals,
-                measure=self.measure, objective=self.objective,
+                measure=self.measure, objective=self._objective_part,
                 objective_options=self.objective_options, regularizers=self.regularizers,
                 **options)
         else:
             relations = None if (isinstance(self.relations, str)
                                  and self.relations == NO_PART) else self.relations
-            objective = self.objective if self.objective is not None \
+            objective = self._objective_part if self._objective_part is not None \
                 else Objective(self.margin)
             module = M.compose(*sizes, embed_dim=self.embed_dim, classes=self.classes,
                                relations=relations, measure=self.measure,
@@ -158,7 +161,7 @@ class ComposedEL(EmbeddingELModel):
         method)."""
         given = {"classes": self.classes, "relations": self.relations,
                  "individuals": self.individuals, "measure": self.measure,
-                 "objective": self.objective, "objective_options": self.objective_options,
+                 "objective": self._objective_part, "objective_options": self.objective_options,
                  "regularizers": self.regularizers or None}
         return {k: v for k, v in given.items() if v is not None}
 
