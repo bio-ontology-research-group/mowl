@@ -106,7 +106,8 @@ from mowl.baselines.nn.el.grounded.module import (
     _validate_positive_float,
 )
 from mowl.baselines.nn.el.grounded.losses import _validate_margin, _validate_nonneg_weight
-from mowl.nn.el.structural import Regions, inside_measure
+from mowl.nn.el.structural import Regions
+from mowl.baselines.nn.el.grounded.module import inside_measure
 from mowl.owlapi.defaults import BOT as BOTTOM, TOP
 
 logger = logging.getLogger(__name__)

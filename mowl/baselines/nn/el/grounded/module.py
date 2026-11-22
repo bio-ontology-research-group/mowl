@@ -53,8 +53,77 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 
-from mowl.nn.el.structural import Regions, inside_measure
+from mowl.nn.el.structural import Regions
 from mowl.representation.geometry import Geometry
+
+
+# The depth in a union of boxes of the direct implementation (its own copy; the parts
+# compute it with mowl.representation.library.grounded_parts.UnionDepth).
+def inside_measure(points: th.Tensor, regions: Regions) -> th.Tensor:
+    """Compute signed interior depth :math:`\\max_{s \\text{ active}} \\min_m (w_{s,m} - |p_m - \\text{cen}_{s,m}|)` of ``points`` in ``regions``.
+
+    Guarantees:
+
+    - Returns a 1-D tensor of shape ``(W,)`` matching the batch dimension of ``points``.
+    - Entry ``b`` is strictly positive (at least ``m``) if and only if ``points[b]``
+      lies at least ``m`` inside some active slot of ``regions[b]`` in every coordinate.
+    - Inactive slots are masked before the maximum; if a batch row has no active
+      slots, its output is the finite constant ``-1e6`` with zero gradient so
+      that downstream losses keep finite gradients.
+    - Raises :class:`ValueError` if ``points`` and ``regions`` have incompatible shapes.
+
+    Non-guarantees:
+
+    - Gradients flow only to the active slot attaining the maximum and the
+      coordinate attaining the minimum (zero gradient on rows with no active slots).
+
+    Parameters
+    ----------
+    points : torch.Tensor
+        Point coordinates of shape ``(W, d)``.
+    regions : Regions
+        Target regions of shape ``(W, K, d)`` for ``cen`` and ``w`` and
+        ``(W, K)`` for ``active``.
+
+    Returns
+    -------
+    torch.Tensor
+        Signed inside measure of shape ``(W,)``.
+    """
+    if points.ndim != 2:
+        raise ValueError(
+            f"points must be 2-D (W, d), got shape {tuple(points.shape)}"
+        )
+    if (
+        regions.cen.ndim != 3
+        or regions.w.ndim != 3
+        or regions.active.ndim != 2
+        or regions.cen.shape != regions.w.shape
+        or regions.cen.shape[:2] != regions.active.shape
+        or points.shape[0] != regions.cen.shape[0]
+        or points.shape[1] != regions.cen.shape[2]
+    ):
+        raise ValueError(
+            f"Incompatible shapes between points {tuple(points.shape)} and regions "
+            f"(cen={tuple(regions.cen.shape)}, w={tuple(regions.w.shape)}, "
+            f"active={tuple(regions.active.shape)})."
+        )
+
+    bsz = int(points.shape[0])
+    if bsz == 0:
+        return th.empty((0,), dtype=points.dtype, device=points.device)
+
+    coord_depth = regions.w - th.abs(points.unsqueeze(1) - regions.cen)
+    slot_depth = th.amin(coord_depth, dim=-1)  # (W, K)
+
+    has_active = regions.active.any(dim=1, keepdim=True)  # (W, 1)
+    inactive_fill = th.where(
+        has_active,
+        th.full_like(slot_depth, float("-inf")),
+        th.full_like(slot_depth, -1e6),
+    )
+    masked = th.where(regions.active, slot_depth, inactive_fill)
+    return th.amax(masked, dim=1)
 
 __all__ = ["GroundedELModule"]
 
