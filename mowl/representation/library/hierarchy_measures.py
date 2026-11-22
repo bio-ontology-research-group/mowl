@@ -253,6 +253,11 @@ class LogVolumeRatio(_LogProbability, Bounds):
     accepts = (Box,)
     exact_intersection = True
 
+    @staticmethod
+    def probability(energy):
+        """:math:`P = e^{-E}`: the probability of an edge from its energy."""
+        return th.exp(-energy)
+
     def __init__(self, intersection_temp=None, volume_temp=None, *, eps=1e-6,
                  disjoint_weight=None, zero_at_inclusion=True, gumbel_shift=True,
                  tail="exact", energy_floor=1e-12, dtype=th.float64, separation="any"):

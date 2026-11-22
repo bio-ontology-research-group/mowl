@@ -100,9 +100,7 @@ class BinaryCodeBoxModule(ComposedGeometry):
 
         Shape ``(code_dims, k)`` for ``"gbc"`` and ``(num_nodes, code_dims)`` for ``"vbc"``.
         """
-        if self.code_logits is None:
-            return None
-        return th.sigmoid(self.code_logits)
+        return self.class_model.trainable_codes()
 
     def global_codes(self):
         """The full global code matrix :math:`B \\in [0, 1]^{d \\times k}` (``"gbc"`` only)."""

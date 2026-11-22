@@ -9,6 +9,7 @@ import os
 import torch as th
 
 from mowl.base_models.model import Model
+from mowl.evaluation.lattice_ranking import order_mean_reciprocal_rank, score_columns
 from mowl.projection.categorical import saturation as sat
 from mowl.projection.categorical.lattice import CatELattice, UnseenConceptError
 
@@ -222,25 +223,10 @@ class CatEBase(Model):
         self._validation = out
         return out
 
-    @th.no_grad()
     def validation_mrr(self):
-        """Raw mean reciprocal rank of the validation queries (ties: average rank)."""
-        module = self.module
-        module.eval()
-        rr = []
-        for head, true, cands in self.validation_queries():
-            cands = cands.to(self.device)
-            scores = module.order_violation(th.full_like(cands, head), cands)
-            mask = cands != head
-            scores, cands = scores[mask], cands[mask]
-            true_score = module.order_violation(th.tensor([head], device=self.device),
-                                                th.tensor([true], device=self.device))[0]
-            better = (scores < true_score).sum().item()
-            ties = (scores == true_score).sum().item()
-            rank = 1 + better + max(ties - 1, 0) / 2
-            rr.append(1.0 / rank)
-        module.train()
-        return sum(rr) / len(rr) if rr else 0.0
+        """Raw mean reciprocal rank of the validation queries (ties: average rank; see
+        :func:`mowl.evaluation.lattice_ranking.order_mean_reciprocal_rank`)."""
+        return order_mean_reciprocal_rank(self.module, self.validation_queries(), self.device)
 
     # ---------------------------------------------------------------- scoring
     def _tensor(self, ids):
@@ -267,9 +253,7 @@ class CatEBase(Model):
 
         :raises UnseenConceptError: If some :math:`\\exists r.D` is not an element.
         """
-        rows = th.stack([self._tensor(sub_ids), self._tensor(role_ids),
-                         self._tensor(filler_ids)], dim=1)
-        return self.module(rows, "gci2")
+        return score_columns(self.module, "gci2", (sub_ids, role_ids, filler_ids), self.device)
 
     def score(self, axiom):
         """Score of a ``SubClassOf``, ``ClassAssertion`` or ``ObjectPropertyAssertion``

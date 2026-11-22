@@ -26,7 +26,7 @@ import torch as th
 import mowl.error.messages as msg
 from mowl.base_models import KGEModel
 from mowl.projection import Edge
-from mowl.representation.library.graph_projection import projection as make_projection
+from mowl.representation.library.graph_projection import ProjectionView
 from mowl.representation.library.other_graph import UniformCorruption
 from mowl.evaluation.triple_axioms import AxiomTriples
 from mowl.training.triples import (HitsEarlyStopping, carry_rows,  # noqa: F401
@@ -426,7 +426,7 @@ class GraphKGEModel(TripleGraphModel):
         self.batch_size = batch_size
         self._num_negs_per_pos = num_negs_per_pos
         default = "gda" if method == "gda_projection" else "owl2vec_star"
-        self.set_projector(make_projection(projector, default))
+        self.set_projector(ProjectionView(projector, default=default).projector)
         self._make_module_now()
 
     def _make_module_now(self):

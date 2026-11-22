@@ -2,12 +2,12 @@
 
 import logging
 
-import torch as th
 from deprecated.sphinx import versionchanged
 
 import mowl.error.messages as msg
 from mowl.base_models.graph_model import RandomWalkModel
 from mowl.models.composed.sequence import ComposedSequenceModel
+from mowl.utils.device import default_device
 
 logger = logging.getLogger(__name__)
 
@@ -37,18 +37,17 @@ class RandomWalkPlusW2VModel(ComposedSequenceModel, RandomWalkModel):
 
     def __init__(self, *args, **kwargs):
         from mowl.representation.library.walks_views import Walks
-        device = th.device("cuda" if th.cuda.is_available() else "cpu")
-        super().__init__(*args, source=Walks(), device=device, **kwargs)
+        super().__init__(*args, source=Walks(), device=default_device(), **kwargs)
 
     # -- parts --------------------------------------------------------------------------
     def set_projector(self, projector):
         """Sets the projector: the graph view of the walks
-        (:class:`~mowl.representation.library.walks_views.ProjectionView`).
+        (:class:`~mowl.representation.library.graph_projection.ProjectionView`).
 
         :param projector: the projector to be set
         :type projector: :class:`Projection <mowl.projection.base.ProjectionModel>` object
         """
-        from mowl.representation.library.walks_views import ProjectionView
+        from mowl.representation.library.graph_projection import ProjectionView
         super().set_projector(projector)
         self.module.source.view = ProjectionView(projector)
         self._written = False

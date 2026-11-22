@@ -1,14 +1,12 @@
 """Order embedding of the CatE lattice (Zhapa-Camacho and Hoehndorf,
 arXiv:2305.07163v3, Section 3.2), built from parts."""
 
-import torch as th
-
-from mowl.representation.library.hierarchy_geometry import LatticeGeometry
+from mowl.representation.library.hierarchy_geometry import ExistentialElements, LatticeGeometry
 from mowl.representation.library.hierarchy_methods import cate
 from mowl.representation.library.hierarchy_modules import adopt
 
 
-class CatEModule(LatticeGeometry):
+class CatEModule(ExistentialElements, LatticeGeometry):
     """One vector :math:`f_\\theta(X) \\in \\mathbb{R}^n` per element of the lattice,
     ordered by the product order (:math:`a \\preceq b` iff :math:`a_i \\le b_i` for all
     :math:`i`, the paper's Theorem 1): the combination that
@@ -45,39 +43,14 @@ class CatEModule(LatticeGeometry):
 
     def __init__(self, num_nodes, embed_dim, p=2, margin=1.0):
         adopt(self, cate(num_nodes, embed_dim=embed_dim, margin=margin, p=p))
-        self.num_nodes = num_nodes
         self.embed_dim = embed_dim
         self.p = p
-        self.register_buffer("existential_keys", th.zeros(0, dtype=th.long))
-        self.register_buffer("existential_nodes", th.zeros(0, dtype=th.long))
-        self._existential_ids = self.existential_ids
+        self._init_existentials(num_nodes)
 
     @property
     def node_embedding(self):
         """The table of the vectors of the elements."""
         return self.class_embed
-
-    def set_existentials(self, role_ids, filler_ids, node_ids):
-        """Register the elements :math:`\\exists r.D`: ``node_ids[i]`` is the element for
-        role ``role_ids[i]`` and filler element ``filler_ids[i]``."""
-        role_ids = th.as_tensor(role_ids, dtype=th.long).reshape(-1)
-        filler_ids = th.as_tensor(filler_ids, dtype=th.long).reshape(-1)
-        node_ids = th.as_tensor(node_ids, dtype=th.long).reshape(-1)
-        keys = role_ids * self.num_nodes + filler_ids
-        keys, order = th.sort(keys)
-        dev = self.node_embedding.weight.device
-        self.existential_keys = keys.to(dev)
-        self.existential_nodes = node_ids[order].to(dev)
-
-    def existential_ids(self, role_ids, filler_ids):
-        """Element ids of :math:`\\exists r.D`; ``-1`` where it is not an element."""
-        keys = role_ids.long() * self.num_nodes + filler_ids.long()
-        if len(self.existential_keys) == 0:
-            return th.full_like(keys, -1)
-        last = len(self.existential_keys) - 1
-        pos = th.searchsorted(self.existential_keys, keys).clamp(max=last)
-        found = self.existential_keys[pos] == keys
-        return th.where(found, self.existential_nodes[pos], th.full_like(keys, -1))
 
     def embed(self, ids):
         return self.node_embedding(ids)

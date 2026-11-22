@@ -140,7 +140,7 @@ class BinaryCodeBoxBase(GraphModel):
     @th.no_grad()
     def score_edges(self, src, dst):
         """Edge probability :math:`P = e^{-E}` of ``src -> dst`` (mOWL direction)."""
-        return th.exp(-self.edge_energy(src, dst))
+        return self.module.measure.probability(self.edge_energy(src, dst))
 
     @th.no_grad()
     def energy_matrix(self):
@@ -193,17 +193,11 @@ class BinaryCodeBoxBase(GraphModel):
         :rtype: dict
         """
         node_to_id = self.graph_node_to_id
-        module = self.module
-        out = {}
-        for cls in self.dataset.classes.as_str:
-            if cls not in node_to_id:
-                continue
-            i = node_to_id[cls]
-            parts = [module.box_min[i], module.box_max[i]]
-            if module.variant == "vbc":
-                parts.append(module.vertex_codes(th.tensor(i, device=module.box_min.device)))
-            out[cls] = th.cat(parts).detach().cpu().numpy()
-        return out
+        names = [c for c in self.dataset.classes.as_str if c in node_to_id]
+        ids = th.tensor([node_to_id[c] for c in names], dtype=th.long,
+                        device=self.device)
+        vectors = self.module.class_model.vectors(ids).detach().cpu().numpy()
+        return dict(zip(names, vectors))
 
 
 def best_f1(energies, adjacency):

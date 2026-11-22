@@ -34,6 +34,7 @@ scorers) and the named methods in :mod:`mowl.representation.library.walks_method
 
 import os
 import tempfile
+import weakref
 
 import torch as th
 
@@ -343,7 +344,8 @@ class SequenceGeometry(Geometry):
     def bind(self, model):
         """Tie the geometry to ``model``: class ``i`` is the ``i``-th name of
         ``model.class_index_dict`` (and so for individuals and relations)."""
-        self.owner = model
+        # a weak reference: the model owns the geometry, not the other way round
+        self.owner = weakref.proxy(model)
         self.refresh()
         return self
 
