@@ -30,10 +30,18 @@ DEFAULT_MEASURE = {Ball: CentreDistance, Box: Bounds}
 METHODS = {}
 
 
+def _unique(registry, name, value):
+    """Names are unique: a second part under a taken name would silently replace the
+    first for everyone who asks for it by name."""
+    if name in registry and registry[name] is not value:
+        raise ValueError(f"{name!r} is already registered ({registry[name]!r}).")
+
+
 def register_class_model(name):
     """Decorator: make a class model available under ``name`` (a function or class
     ``(size, embed_dim) -> Classes``)."""
     def decorate(factory):
+        _unique(CLASS_MODELS, name, factory)
         CLASS_MODELS[name] = factory
         return factory
     return decorate
@@ -42,6 +50,7 @@ def register_class_model(name):
 def register_relation_model(name):
     """Decorator: make a relation model available under ``name``."""
     def decorate(factory):
+        _unique(RELATION_MODELS, name, factory)
         RELATION_MODELS[name] = factory
         return factory
     return decorate
@@ -51,6 +60,7 @@ def register_measure(name, default_for=()):
     """Decorator: make a measure available under ``name``; ``default_for`` lists region
     classes it becomes the default measure of."""
     def decorate(factory):
+        _unique(MEASURES, name, factory)
         MEASURES[name] = factory
         for region in default_for:
             DEFAULT_MEASURE[region] = factory
@@ -63,6 +73,7 @@ def register_method(key):
     from parts. Signature: ``(nb_classes, nb_relations, nb_individuals=0, embed_dim=50,
     ..., tables=None) -> Geometry``."""
     def decorate(function):
+        _unique(METHODS, key, function)
         METHODS[key] = function
         return function
     return decorate

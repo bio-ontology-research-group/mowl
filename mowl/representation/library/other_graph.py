@@ -146,7 +146,7 @@ class PointClasses(Classes):
         return Point(self.centres(ids), None if self.bumps is None else self.bumps(ids))
 
 
-register_class_model("point")(PointClasses)
+register_class_model("entity point")(PointClasses)
 register_class_model("point with bump")(lambda size, dim: PointClasses(size, dim, bump=True))
 
 
@@ -275,7 +275,7 @@ class ExpressivERelations(_PairRelations):
         return -score.reshape(-1, 1)
 
 
-register_relation_model("head and tail boxes")(BoxERelations)
+register_relation_model("boxe boxes")(BoxERelations)
 register_relation_model("region over pairs")(ExpressivERelations)
 
 
@@ -437,7 +437,7 @@ class _WithSubclass(Relations):
 
 @register_method("graph_kge")
 def graph_kge(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=1.0,
-              classes="point", relations="translation", objective=None, tables=None,
+              classes="entity point", relations="translation", objective=None, tables=None,
               **relation_options):
     """Any knowledge graph model on a projection, as parts: classes and individuals are
     entities, a relation model says what a relation is, the measure is the triple score.
@@ -454,7 +454,7 @@ def graph_kge(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=1
 
 @register_method("boxe")
 def boxe(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=1.0,
-         classes="point", objective=None, tables=None, **relation_options):
+         classes="entity point", objective=None, tables=None, **relation_options):
     """BoxE from parts: points with a bump, head and tail boxes, the triple score.
 
     :param classes: ``"point"`` (the default, with a bump) or any class model name
@@ -482,7 +482,7 @@ def boxe(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=1.0,
 
 @register_method("expressive")
 def expressive(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=1.0,
-               classes="point", objective=None, tables=None, **relation_options):
+               classes="entity point", objective=None, tables=None, **relation_options):
     """ExpressivE from parts: points, parallelograms over pairs, the triple score. See
     :func:`boxe` for ``classes`` and ``tables`` (a trained PyKEEN ExpressivE)."""
     if tables is not None:

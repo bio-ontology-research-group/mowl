@@ -12,7 +12,7 @@ from mowl.representation.methods import register_measure
 __all__ = ["VolumeRatio", "AveragedBounds", "MaskedBounds"]
 
 
-@register_measure("smoothed volume ratio")
+@register_measure("softplus volume ratio")
 class VolumeRatio(Bounds):
     """Boxes compared by volume: :math:`A \\subseteq B` costs
     :math:`1 - \\mathrm{Vol}(A \\cap B) / \\mathrm{Vol}(A)`, the share of :math:`A` outside
@@ -180,7 +180,7 @@ class MaskedBounds(Bounds):
         return self.empty_weight * gap + self._norm(s + margin * mask)
 
 
-@register_measure("volume ratio")
+@register_measure("exact volume ratio")
 def _exact_volume_ratio():
     """The volume ratio with exact (not smoothed) volumes."""
     return VolumeRatio(temperature=None)

@@ -213,5 +213,5 @@ class BetaKL(RegionMeasure):
 
 
 register_class_model("sector cone")(ConeClasses)
-register_measure("angle", default_for=(SectorCone,))(ConeBounds)
+register_measure("sector angle", default_for=(SectorCone,))(ConeBounds)
 register_measure("divergence", default_for=(BetaRegion,))(BetaKL)

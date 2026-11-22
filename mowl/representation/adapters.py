@@ -44,7 +44,8 @@ def geometry_of(model):
             f"{type(module).__name__} does not expose a geometry yet. Modules that do: "
             f"{sorted(ADAPTERS)}.")
     # An adapter may take the model as well (texts, sizes and options that live there).
-    if "model" in inspect.signature(adapter).parameters:
+    parameters = list(inspect.signature(adapter).parameters)
+    if "model" in parameters[1:]:
         return adapter(module, model=model if model is not module else None)
     return adapter(module)
 

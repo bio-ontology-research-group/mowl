@@ -536,7 +536,7 @@ class ByRegion(RegionMeasure):
         return self._measure(a, b).intersection_nonempty(a, b, margin, epsilon)
 
 
-register_measure("smoothed volume ratio", default_for=(SoftBox,))(SoftVolumeRatio)
+register_measure("gumbel volume ratio", default_for=(SoftBox,))(SoftVolumeRatio)
 register_measure("point-to-region distance")(PointToRegion)
 register_measure("octagon bounds", default_for=(OctagonProduct,))(OctagonBounds)
 register_measure("prism bounds", default_for=(Prism,))(PrismBounds)

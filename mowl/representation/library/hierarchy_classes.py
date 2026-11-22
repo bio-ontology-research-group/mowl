@@ -400,7 +400,7 @@ def _order_cone(size, embed_dim):
     return OrderPoints(size, embed_dim)
 
 
-@register_class_model("point")
+@register_class_model("manifold point")
 def _point(size, embed_dim):
     return PointClasses(size, embed_dim)
 

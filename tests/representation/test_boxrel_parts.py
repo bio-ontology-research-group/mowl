@@ -274,13 +274,13 @@ class TestComposedELWithTheParts(TestCase):
                                    ("affine map", None),
                                    ("affine map with range and error box",
                                     "averaged bounds"),
-                                   ("affine map", "smoothed volume ratio")):
+                                   ("affine map", "softplus volume ratio")):
             self.assertTrains(classes="box", relations=relations, measure=measure,
                               objective=Objective(0.02))
 
     def test_class_model_and_measure_with_other_relations(self):
         self.assertTrains(classes="box with lower corner", relations="translation",
-                          measure="smoothed volume ratio")
+                          measure="softplus volume ratio")
         self.assertTrains(classes="box with lower corner", relations="box of translations",
                           measure="bounds per coordinate", objective=Objective(0.02))
         self.assertTrains(classes="box with fixed classes", relations="translation",
