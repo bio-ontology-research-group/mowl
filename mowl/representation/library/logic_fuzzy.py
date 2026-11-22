@@ -35,8 +35,11 @@ from dataclasses import dataclass
 import torch as th
 import torch.nn as nn
 
+from mowl.owlapi import ClassExpressionType
 from mowl.representation.class_models import Classes
-from mowl.representation.geometry import ComposedGeometry
+from mowl.representation.library.logic_alc import (
+    AnnealedRelaxation, ExpressionGeometry, ExpressionReading, Relaxation)
+from mowl.representation.library.logic_expressions import pattern_region
 from mowl.representation.measures import RegionMeasure
 from mowl.representation.methods import (register_class_model, register_measure,
                                          register_method, register_relation_model)
@@ -45,22 +48,93 @@ from mowl.representation.regions import ConstructorUnavailable, Region
 from mowl.representation.relation_models import Relations
 from mowl.representation.vocabulary import ClassModel, Construction, RelationModel
 from mowl.representation.adapters import register_adapter
+from mowl.training.regularization import Regularizer
 
 __all__ = ["FuzzySet", "LogitSet", "Family", "Product", "Goedel", "Lukasiewicz", "LogitGoedel",
            "FAMILIES", "get_family", "register_family", "TruthTableClasses",
            "HalfAxisClasses", "NetworkClasses", "DomainElements", "MembershipNetwork",
            "Domain", "TruthMatrix", "IncidenceMatrices", "PairNetworkRelations",
            "MeanViolation", "ConflictMeasure", "ConeMeasure", "FuzzyObjective",
+           "NonDegeneracy", "rule_based_loss", "rule_nf4", "rule_nf5", "rule_nf6", "rule_nf7",
            "dfalc", "falcon", "alcone"]
 
 #: Logit of the constants owl:Thing and owl:Nothing of the Al-cone module.
 DEFAULT_CONSTANT_LOGIT = 1.0
 
 
-def _df():
-    # The DF-ALC module imports the OWL API, which needs the JVM; import it when used.
-    from mowl.nn.alc.dfalc import module
-    return module
+# =========================================================================================
+# the rule-based losses of DF-ALC (Wu et al. 2022, Eqs. 9-13)
+# =========================================================================================
+
+def _g(v, w):
+    """G(v, w) = ReLU(v - w), excluded from the gradient (paper, after Eq. 9)."""
+    return th.relu(v - w).detach()
+
+
+def rule_based_loss(c, d):
+    """Eq. 9 for an inclusion :math:`C \\sqsubseteq D` without quantifier:
+    :math:`\\sum_s (1 - D(s)) G(C(s), D(s))`, averaged over the domain (one value per row);
+    ``c``, ``d``: ``(B, N)``."""
+    return ((1 - d) * th.relu(c - d).detach()).mean(dim=-1)
+
+
+def rule_nf4(b, a, r, alpha):
+    """Eq. 10 for :math:`B \\sqsubseteq \\exists r.A` (``alpha`` is :math:`\\alpha'`), per row.
+    Product t-norm. ``b``, ``a``: ``(B, n)``; ``r``: ``(B, n, n)`` with ``r[:, s, a] =
+    r(s, a)``. First term: where :math:`A(s)` is below the threshold but some :math:`a` has
+    :math:`\\sum_a B(a) r(a, s)` above it, raise :math:`A(s)`. Second term (summed over
+    :math:`a`, read from the garbled index structure of the printed formula): raise
+    :math:`r(s, a)` when :math:`B(s) A(a)` exceeds it."""
+    pred = th.einsum("ba,bas->bs", b, r)
+    t1 = (1 - a) * _g(alpha, a) * _g(pred, alpha)
+    t2 = ((1 - r) * _g(b.unsqueeze(-1) * a.unsqueeze(1), r)).mean(dim=-1)
+    return (t1 + t2).mean(dim=-1)
+
+
+def rule_nf5(b, a, r, alpha):
+    """Eq. 11 for :math:`B \\sqsubseteq \\forall r.A`: the first term of NF4 with threshold
+    :math:`\\alpha`."""
+    pred = th.einsum("ba,bas->bs", b, r)
+    return ((1 - a) * _g(alpha, a) * _g(pred, alpha)).mean(dim=-1)
+
+
+def rule_nf6(a, b, r, alpha):
+    """Eq. 12 for :math:`\\exists r.A \\sqsubseteq B`: raise :math:`B(s)` where it is below the
+    threshold and :math:`\\sum_a A(a) r(s, a)` is above it."""
+    succ = th.einsum("ba,bsa->bs", a, r)
+    return ((1 - b) * _g(alpha, b) * _g(succ, alpha)).mean(dim=-1)
+
+
+def rule_nf7(a, b, r, alpha):
+    """Eq. 13 for :math:`\\forall r.A \\sqsubseteq B`: the NF6 term plus the NF4/NF5 term
+    raising :math:`A(s)` from :math:`\\sum_a B(a) r(a, s)`."""
+    succ = th.einsum("ba,bsa->bs", a, r)
+    pred = th.einsum("ba,bas->bs", b, r)
+    t = (1 - b) * _g(alpha, b) * _g(succ, alpha) + (1 - a) * _g(alpha, a) * _g(pred, alpha)
+    return t.mean(dim=-1)
+
+
+_QUANTIFIERS = (ClassExpressionType.OBJECT_SOME_VALUES_FROM,
+                ClassExpressionType.OBJECT_ALL_VALUES_FROM)
+
+
+def has_quantifier(cexpr):
+    """Whether the class expression contains ``∃`` or ``∀``."""
+    t = cexpr.getClassExpressionType()
+    if t in _QUANTIFIERS:
+        return True
+    if t in (ClassExpressionType.OBJECT_INTERSECTION_OF, ClassExpressionType.OBJECT_UNION_OF):
+        return any(has_quantifier(o) for o in cexpr.getOperandsAsList())
+    if t == ClassExpressionType.OBJECT_COMPLEMENT_OF:
+        return has_quantifier(cexpr.getOperand())
+    return False
+
+
+def _is_literal(e):
+    t = e.getClassExpressionType()
+    if t == ClassExpressionType.OBJECT_COMPLEMENT_OF:
+        return e.getOperand().getClassExpressionType() == ClassExpressionType.OWL_CLASS
+    return t == ClassExpressionType.OWL_CLASS
 
 
 class _CL:
@@ -312,6 +386,14 @@ class _FuzzyClasses:
         return {"negation": "fuzzy operator", "disjunction": "fuzzy operator",
                 "family": type(self.family).__name__}
 
+    def degree_at(self, ids, elements):
+        """The degree of the domain elements ``elements`` in the classes ``ids`` (any shape,
+        both the same): the entries of :meth:`forward` that are asked for. A class model
+        that can compute them without the whole domain does so."""
+        shape = ids.shape
+        values = self.forward(ids.reshape(-1)).values
+        return values.gather(1, elements.reshape(-1, 1)).reshape(shape)
+
 
 class TruthTableClasses(_FuzzyClasses, Classes):
     """A class is a vector of truth values over a finite domain, ``sigmoid(logit)`` per
@@ -326,6 +408,11 @@ class TruthTableClasses(_FuzzyClasses, Classes):
     region = FuzzySet
     part = ClassModel.FUZZY_SET.value
     exact_conjunction = True
+
+    @property
+    def domain_size(self):
+        """The number of elements of the domain."""
+        return self.centres.embedding_dim
 
     def __init__(self, size=None, domain=None, logits=None, family="godel", top_index=None,
                  bottom_index=None, init_std=1.0):
@@ -399,7 +486,13 @@ class MembershipNetwork(nn.Module):
 
 class Domain(nn.Module):
     """The finite domain of a method with a learned vector per element: the table of the
-    named individuals, plus ``extra`` anonymous elements (learned rows) when given."""
+    named individuals, plus ``extra`` anonymous elements (learned rows) when given, or the
+    anonymous elements that a training loop samples for one evaluation (``context``)."""
+
+    #: Elements set from the outside for one evaluation (the sampled anonymous entities of
+    #: FALCON: the named elements followed by the sample), or ``None``. When set, they *are*
+    #: the domain.
+    context = None
 
     def __init__(self, table, extra=0):
         super().__init__()
@@ -410,8 +503,14 @@ class Domain(nn.Module):
                 th.empty(extra, table.embedding_dim)))
 
     def forward(self):
+        if self.context is not None:
+            return self.context
         weight = self.table.weight
         return weight if self.extra is None else th.cat([weight, self.extra], dim=0)
+
+    def vectors(self, ids):
+        """The vectors of the named elements ``ids`` (whatever the context)."""
+        return self.table(ids)
 
     def __len__(self):
         return self.table.num_embeddings + (0 if self.extra is None else len(self.extra))
@@ -450,6 +549,14 @@ class NetworkClasses(_FuzzyClasses, Classes):
                               e.unsqueeze(0).expand(c.shape[0], -1, -1))
         values = _constants(values, ids, self.top_index, self.bottom_index, 1.0, 0.0)
         return FuzzySet(values, self.family)
+
+    def degree_at(self, ids, elements):
+        """The network on the pairs (class vector, vector of the named element), without the
+        rest of the domain; ``owl:Thing`` and ``owl:Nothing`` are the constants where they
+        are."""
+        degree = self.network(self.centres(ids), self.domain.vectors(elements))
+        return _constants(degree.unsqueeze(-1), ids, self.top_index, self.bottom_index,
+                          1.0, 0.0).squeeze(-1)
 
 
 class DomainElements(_FuzzyClasses, Classes):
@@ -577,6 +684,20 @@ class PairNetworkRelations(Relations):
         self.network = network
         self.domain = domain
         self.role_pairs = role_pairs
+
+    def degree_at(self, ids, heads, tails):
+        """The degree of the pairs of named elements ``(heads, tails)`` in the relations
+        ``ids`` (all of one shape): the network on ``(vector(head) + r, vector(tail))``,
+        without the rest of the domain."""
+        return self.network(self.domain.vectors(heads) + self.vectors(ids),
+                            self.domain.vectors(tails))
+
+    def head_degrees(self, head_vectors):
+        """The degree of the pairs of every head vector ``(M, D)`` with every element of the
+        domain, ``(M, N)``: the network on ``(head, element)``."""
+        e = self.domain()
+        return self.network(head_vectors.unsqueeze(1).expand(-1, e.shape[0], -1),
+                            e.unsqueeze(0).expand(head_vectors.shape[0], -1, -1))
 
     def _pairs(self, ids):
         """``(B, N, N)``: degree of ``r(x, y)`` for all pairs of the domain."""
@@ -712,6 +833,19 @@ class ConflictMeasure(_FuzzyMeasure):
         rest = rest + 1e-10 if self.stabiliser == "add" else rest.clamp_min(1e-10)
         return -th.log(rest).unsqueeze(-1)
 
+    def _stabilised(self, rest):
+        rest = rest + 1e-10 if self.stabiliser == "add" else rest.clamp_min(1e-10)
+        return -th.log(rest)
+
+    def member_at(self, degree):
+        """The cost :math:`-\\log C(a)` of an element whose degree in :math:`C` is ``degree``
+        (any shape; the same as :meth:`member` of the crisp set of the element)."""
+        return self._stabilised(degree)
+
+    def apart_at(self, degree):
+        """The cost :math:`-\\log(1 - C(a))` of an element that is not to be in :math:`C`."""
+        return self._stabilised(1 - degree)
+
     @staticmethod
     def _no_margin(margin):
         if margin:
@@ -789,28 +923,58 @@ register_measure("half-axis hinge", default_for=(LogitSet,))(ConeMeasure)
 # the objective and the geometry
 # =========================================================================================
 
-class FuzzyObjective(Objective):
-    """The reading of the axiom forms for fuzzy geometries.
+class FuzzyObjective(ExpressionReading, Objective):
+    """The reading of the axiom forms, and of ALC axioms, for fuzzy geometries.
 
     Besides the options of :class:`~mowl.representation.Objective`:
 
     :param rule: ``True``: the rule-based losses of DF-ALC (Eq. 9 for :math:`C \\sqsubseteq D`
         with the gradient only through :math:`D`, Eq. 10 for :math:`C \\sqsubseteq \\exists r.D`,
-        Eq. 12 for :math:`\\exists r.C \\sqsubseteq D`).
-    :param threshold: The threshold :math:`\\alpha` of Eqs. 10 and 12.
+        Eq. 12 for :math:`\\exists r.C \\sqsubseteq D`; for ALC axioms also Eqs. 11 and 13 for
+        :math:`\\forall`).
+    :param threshold: The threshold :math:`\\alpha` of Eqs. 10 to 13.
     :param validity: Add the well-formedness cost of the individuals to assertions (Al-cone).
     :param role_assertion: ``"preimage"`` (default): :math:`a \\in \\exists r.\\{b\\}`.
         ``"image"``: :math:`b` lies in the image of :math:`a` under :math:`r`. Equal for
         crisp relations; the published losses of all three methods read it as ``"image"``.
+    :param abox: How the assertions of ALC axioms are read. ``"semantic"`` (default): an
+        individual is a member of the class expression, the measure says how much.
+        ``"sampled"``: the reading of FALCON: every assertion is contrasted with corrupted
+        ones (``num_negs`` individuals drawn at random for a class assertion, heads and
+        tails not asserted for a role assertion), the loss is the mean cost of the positives
+        plus that of the negatives, halved, and an assertion with a compound class expression
+        pairs the individual with every element of the domain through the relation network.
+        Needs :meth:`attach_assertions` for the role assertions.
+    :param num_negs: Corrupted assertions per assertion (``abox="sampled"``).
+    :param abox_head: ``"object"``: the role assertion rows of the ALC dataset are
+        ``[object, role, subject]`` and the relation network reads ``(vector(object) + r,
+        vector(subject))``, as FALCON's code does it (this is the opposite direction of
+        :math:`\\exists r.C`, which reads ``(vector(x) + r, vector(y))`` for a pair
+        :math:`r(x, y)`). ``"subject"`` (default): ``(vector(subject) + r, vector(object))``.
+    :param role_loss: The loss of a sampled role assertion: ``"contrast"`` (default): the
+        positive and the corrupted ones separately, as for class assertions; ``"ranking"``:
+        :math:`-\\log\\sigma(\\mathrm{pos} - \\mathrm{neg})` (Bayesian personalised ranking).
     """
 
     def __init__(self, margin=0.0, rule=False, threshold=0.8, validity=False,
-                 role_assertion="preimage", **kwargs):
+                 role_assertion="preimage", abox="semantic", num_negs=4, abox_head="subject",
+                 role_loss="contrast", **kwargs):
         super().__init__(margin, **kwargs)
         if role_assertion not in ("preimage", "image"):
             raise ValueError("role_assertion must be 'preimage' or 'image'.")
+        if abox not in ("semantic", "sampled"):
+            raise ValueError("abox must be 'semantic' or 'sampled'.")
+        if abox_head not in ("subject", "object"):
+            raise ValueError("abox_head must be 'subject' or 'object'.")
+        if role_loss not in ("contrast", "ranking"):
+            raise ValueError("role_loss must be 'contrast' or 'ranking'.")
+        self.role_loss = role_loss
         self.rule, self.threshold = bool(rule), float(threshold)
         self.validity, self.role_assertion = bool(validity), role_assertion
+        self.abox, self.num_negs, self.abox_head = abox, int(num_negs), abox_head
+        #: The asserted ``(tail, role) -> heads`` and ``(head, role) -> tails``, and the
+        #: number of named individuals negatives are drawn from (``abox="sampled"``).
+        self.heads, self.tails, self.n_individuals = {}, {}, 0
 
     @classmethod
     def dfalc(cls, loss_type="hierarchical", threshold=0.8):
@@ -818,45 +982,53 @@ class FuzzyObjective(Objective):
                    negatives="all")
 
     @classmethod
-    def falcon(cls):
-        return cls(0.0, role_assertion="image", negatives="all")
+    def falcon(cls, num_negs=4, abox_head="object", role_loss="contrast"):
+        return cls(0.0, role_assertion="image", negatives="all", abox="sampled",
+                   num_negs=num_negs, abox_head=abox_head, role_loss=role_loss)
 
     @classmethod
     def alcone(cls, margin=0.1):
         return cls(margin, validity=True, role_assertion="image", negatives="all")
 
+    def attach_assertions(self, heads, tails, n_individuals):
+        """The role assertions of the training ontology, so that the corrupted assertions of
+        ``abox="sampled"`` are not asserted ones: ``heads[(tail, role)]`` lists the heads of
+        the pair, ``tails[(head, role)]`` the tails, with *head* the first column of the
+        dataset rows (the object); ``n_individuals`` is the number of named individuals."""
+        self.heads, self.tails, self.n_individuals = heads, tails, int(n_individuals)
+
     # -- rule-based losses --------------------------------------------------------------
     def gci0(self, g, rows, neg=False):
         if self.rule and not neg:
             c, d = g.classes(rows[:, 0]), g.classes(rows[:, 1])
-            return _df().rule_based_loss(c.values, d.values).unsqueeze(-1)
+            return rule_based_loss(c.values, d.values).unsqueeze(-1)
         return super().gci0(g, rows, neg)
 
     def gci1(self, g, rows, neg=False):
         if self.rule and not neg:
             c, d, e = (g.classes(rows[:, i]) for i in range(3))
             both, _ = c.intersect(d)
-            return _df().rule_based_loss(both.values, e.values).unsqueeze(-1)
+            return rule_based_loss(both.values, e.values).unsqueeze(-1)
         return super().gci1(g, rows, neg)
 
     def gci2(self, g, rows, neg=False):
         if self.rule and not neg:
             b, a = g.classes(rows[:, 0]), g.classes(rows[:, 2])
             r = g.relation_model.matrix(rows[:, 1])
-            return _df().rule_nf4(b.values, a.values, r, self.threshold).unsqueeze(-1)
+            return rule_nf4(b.values, a.values, r, self.threshold).unsqueeze(-1)
         return super().gci2(g, rows, neg)
 
     def gci3(self, g, rows, neg=False):
         if self.rule and not neg:
             a, b = g.classes(rows[:, 1]), g.classes(rows[:, 2])
             r = g.relation_model.matrix(rows[:, 0])
-            return _df().rule_nf6(a.values, b.values, r, self.threshold).unsqueeze(-1)
+            return rule_nf6(a.values, b.values, r, self.threshold).unsqueeze(-1)
         return super().gci3(g, rows, neg)
 
     def gci0_bot(self, g, rows, neg=False):
         if self.rule and not neg:
             c = g.classes(rows[:, 0])
-            return _df().rule_based_loss(c.values, th.zeros_like(c.values)).unsqueeze(-1)
+            return rule_based_loss(c.values, th.zeros_like(c.values)).unsqueeze(-1)
         return super().gci0_bot(g, rows, neg)
 
     # -- assertions ---------------------------------------------------------------------
@@ -881,6 +1053,168 @@ class FuzzyObjective(Objective):
         if self.validity:
             cost = cost + g.measure.validity(a, self.m) + g.measure.validity(b, self.m)
         return cost
+
+    # -- ALC axioms ---------------------------------------------------------------------
+    def _rule_nf47(self, g, sub, sup, x):
+        """The rule-based loss of normal forms 4-7 (Eqs. 10-13) if the inclusion has one of
+        the shapes ``L ⊑ ∃r.L``, ``L ⊑ ∀r.L``, ``∃r.L ⊑ L``, ``∀r.L ⊑ L`` (L a concept name
+        or its negation), else ``None``."""
+        some = ClassExpressionType.OBJECT_SOME_VALUES_FROM
+        st, ut = sub.getClassExpressionType(), sup.getClassExpressionType()
+        if _is_literal(sub) and ut in _QUANTIFIERS and _is_literal(sup.getFiller()):
+            b, nxt = pattern_region(g, sub, x, 0)
+            r = g.relation_model.matrix(x[:, nxt])
+            a, _ = pattern_region(g, sup.getFiller(), x, nxt + 1)
+            rule = rule_nf4 if ut == some else rule_nf5
+            return rule(b.values, a.values, r, self.threshold)
+        if _is_literal(sup) and st in _QUANTIFIERS and _is_literal(sub.getFiller()):
+            r = g.relation_model.matrix(x[:, 0])
+            a, nxt = pattern_region(g, sub.getFiller(), x, 1)
+            b, _ = pattern_region(g, sup, x, nxt)
+            rule = rule_nf6 if st == some else rule_nf7
+            return rule(a.values, b.values, r, self.threshold)
+        return None
+
+    def inclusion(self, g, sub, sup, x):
+        if self.rule:
+            out = self._rule_nf47(g, sub, sup, x)
+            if out is not None:
+                return out
+            if not (has_quantifier(sub) or has_quantifier(sup)):
+                a, b, _ = self.regions(g, sub, sup, x)
+                return rule_based_loss(a.values, b.values)
+        return super().inclusion(g, sub, sup, x)
+
+    def equivalence(self, g, first, second, x):
+        # C ⊑ D with every rule that applies; D ⊑ C only with the rule for inclusions
+        # without a quantifier (the shapes of normal forms 4-7 are not mirrored).
+        a, b, _ = self.regions(g, first, second, x)
+        forward = self.inclusion(g, first, second, x)
+        if self.rule and not (has_quantifier(first) or has_quantifier(second)):
+            backward = rule_based_loss(b.values, a.values)
+        else:
+            backward = g.inside(b, a).reshape(len(x), -1).sum(-1)
+        return forward + backward
+
+    def class_assertion_pattern(self, g, expression, x):
+        if self.abox == "sampled":
+            return self._sampled_class_assertion(g, expression, x)
+        region, _ = pattern_region(g, expression, x, 1)
+        a = g.individuals(x[:, 0])
+        cost = g.measure.member(a, region, self.m)
+        if self.validity:
+            cost = cost + g.measure.validity(a, self.m)
+        return cost.reshape(len(x), -1).sum(-1)
+
+    def role_assertion_pattern(self, g, x):
+        if self.abox == "sampled":
+            return self._sampled_role_assertion(g, x)
+        # the rows of the ALC dataset are [object, role, subject]
+        return self.object_property_assertion(g, x[:, [2, 1, 0]]).reshape(len(x), -1).sum(-1)
+
+    # -- the sampled reading of assertions (FALCON) --------------------------------------
+    def _sample_negatives(self, e, r, used):
+        """For every row, ``num_negs`` named individuals that are not in ``used[(e, r)]``."""
+        ret = th.zeros((e.shape[0], self.num_negs), dtype=th.int64)
+        for i in range(e.shape[0]):
+            taken = th.tensor(used[(e[i].item(), r[i].item())])
+            pool = th.ones(self.n_individuals)
+            pool[taken] = 0
+            pool = pool.nonzero()
+            ret[i, :] = pool[th.randint(len(pool), (self.num_negs,))].flatten()
+        return ret
+
+    def _sampled_class_assertion(self, g, expression, x):
+        n = self.num_negs
+        x = x.unsqueeze(dim=1)
+        size = [1] * len(x.size())
+        size[1] = n
+        negative = x.repeat(size)
+        negative[:, :, 0] = th.randint(self.n_individuals, (x.shape[0], n))
+        x = th.cat([x, negative], dim=1)
+        measure = g.measure
+        if expression.getClassExpressionType() == ClassExpressionType.OWL_CLASS:
+            # a plain assertion: the degree of the individual in the class, towards 1 for
+            # the asserted individual and towards 0 for the corrupted ones
+            degree = g.class_model.degree_at(x[:, :, 1], x[:, :, 0])
+            return (measure.member_at(degree[:, 0]).mean()
+                    + measure.apart_at(degree[:, 1:]).mean()) / 2
+        # an assertion with a compound class expression ``e : ∃R.C`` (or ``e : C``): the
+        # individual, shifted by the role if there is one, is paired with every element of
+        # the domain through the relation network, and the best pair with an element of C
+        some = expression.getClassExpressionType() == ClassExpressionType.OBJECT_SOME_VALUES_FROM
+        if some:
+            relation, filler, columns = x[:, :, 1], expression.getFiller(), x[:, 0, 2:]
+        else:
+            relation, filler, columns = None, expression, x[:, 0, 1:]
+        region, _ = pattern_region(g, filler, columns, 0)
+        head = g.domain.vectors(x[:, :, 0])
+        if relation is not None:
+            head = head + g.relation_model.vectors(relation)
+        pairs = g.relation_model.head_degrees(head.reshape(-1, head.shape[-1]))
+        pairs = pairs.reshape(head.shape[0], head.shape[1], -1)
+        family = region.family
+        degree = family.and_(pairs, region.values.unsqueeze(dim=1)).max(dim=-1)[0]
+        return (measure.member_at(degree[:, 0]).mean()
+                + measure.apart_at(degree[:, 1:]).mean()) / 2
+
+    def role_scores(self, g, x):
+        """The degrees of the role assertions ``x`` and of their corrupted assertions
+        (``abox="sampled"``), flattened (for evaluating a trained model)."""
+        return self._sampled_role_degrees(g, x).flatten()
+
+    def _sampled_role_assertion(self, g, x):
+        degree = self._sampled_role_degrees(g, x)
+        if self.role_loss == "ranking":
+            diff = degree[:, 0].unsqueeze(dim=-1) - degree[:, 1:]
+            return -th.nn.functional.logsigmoid(diff).mean()
+        measure = g.measure
+        return (measure.member_at(degree[:, 0]).mean()
+                + measure.apart_at(degree[:, 1:]).mean()) / 2
+
+    def _sampled_role_degrees(self, g, x):
+        heads, tails = self.heads, self.tails
+        if self.abox_head == "subject":
+            x, heads, tails = x[:, [2, 1, 0]], tails, heads
+        n = self.num_negs
+        x = x.unsqueeze(dim=1)
+        size = [1] * len(x.size())
+        size[1] = n
+        negative_head = x.repeat(size)
+        negative_head[:, :, 0] = self._sample_negatives(x[:, :, 2], x[:, :, 1], heads)
+        negative_tail = x.repeat(size)
+        negative_tail[:, :, 2] = self._sample_negatives(x[:, :, 0], x[:, :, 1], tails)
+        x = th.cat([x, negative_head, negative_tail], dim=1)
+        return g.relation_model.degree_at(x[:, :, 1], x[:, :, 0], x[:, :, 2])
+
+
+class NonDegeneracy(Regularizer):
+    """Pushes every named class away from the empty cone :math:`\\{0\\}`: the mean over the
+    classes (not ``owl:Thing`` and ``owl:Nothing``) of :math:`\\mathrm{relu}(\\gamma - \\max_h
+    c_h)` on the half-axis logits, so a class has a half-axis with logit at least the margin.
+    It is not part of the semantics: it assumes that the named classes are satisfiable. Needs
+    a half-axis class model (:class:`HalfAxisClasses`).
+
+    :param weight: Factor of the penalty.
+    :param margin: :math:`\\gamma`; ``None``: the margin of the geometry's objective.
+    """
+
+    def __init__(self, weight=0.1, margin=None):
+        super().__init__("class_embed", None, weight)
+        self.margin = margin
+
+    def penalty(self, model):
+        g = getattr(model, "module", model)
+        classes = g.class_model
+        special = {classes.top_index, classes.bottom_index}
+        ids = [i for i in range(len(classes)) if i not in special]
+        if self.weight <= 0 or not ids:
+            return None
+        ids = th.tensor(ids, dtype=th.long, device=g.device)
+        margin = g.objective.margin if self.margin is None else self.margin
+        tau = g.temperature
+        loss = th.relu(margin - CL.reduce_max(classes.centres(ids), -1, tau)).mean()
+        return self.weight * loss
 
 
 # =========================================================================================
@@ -924,21 +1258,11 @@ def _domain_size(nb_individuals, embed_dim, domain):
     return n
 
 
-@register_method("dfalc")
-def dfalc(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0,
-          domain=None, loss_type="hierarchical", threshold=0.8, family="godel",
-          top_index=None, bottom_index=None, init_std=1.0, tables=None):
-    """DF-ALC (Wu et al. 2022): truth tables over a finite domain, truth matrices for the
-    roles, Goedel operators, the mean violation as the measure. Individual ``i`` is domain
-    element ``i``.
-
-    :param embed_dim: Size of the domain if ``domain`` is not given (at least the number of
-        individuals).
-    :param family: The operator family; ``"godel"`` is the published method, any member of
-        :data:`FAMILIES` can be used instead.
-    :param loss_type: ``"hierarchical"`` (Eq. 8) or ``"rule"`` (Eqs. 9, 10, 12).
-    :param tables: A :class:`~mowl.nn.alc.dfalc.DFALCModule` to share parameters with.
-    """
+def dfalc_parts(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, domain=None,
+                loss_type="hierarchical", threshold=0.8, family="godel", top_index=None,
+                bottom_index=None, init_std=1.0, tables=None):
+    """The parts of DF-ALC, as the keyword arguments of
+    :class:`~mowl.representation.library.logic_alc.ExpressionGeometry` (see :func:`dfalc`)."""
     t = tables
     if t is not None:
         n = t.ndomain
@@ -951,20 +1275,93 @@ def dfalc(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0,
         classes = TruthTableClasses(nb_classes, n, family=family, top_index=top_index,
                                     bottom_index=bottom_index, init_std=init_std)
         relations = TruthMatrix(max(nb_relations, 1), n, init_std=init_std)
-    individuals = DomainElements(n, n, family=family)
-    return ComposedGeometry(classes, relations, MeanViolation(),
-                            FuzzyObjective.dfalc(loss_type, threshold), individuals=individuals)
+    return dict(classes=classes, relations=relations, measure=MeanViolation(),
+                objective=FuzzyObjective.dfalc(loss_type, threshold),
+                individuals=DomainElements(n, n, family=family))
+
+
+@register_method("dfalc")
+def dfalc(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0,
+          domain=None, loss_type="hierarchical", threshold=0.8, family="godel",
+          top_index=None, bottom_index=None, init_std=1.0, tables=None):
+    """DF-ALC (Wu et al. 2022): truth tables over a finite domain, truth matrices for the
+    roles, Goedel operators, the mean violation as the measure. Individual ``i`` is domain
+    element ``i``.
+
+    The geometry reads ALC axioms (``forward(axiom, rows)``) as well as normal forms.
+
+    :param embed_dim: Size of the domain if ``domain`` is not given (at least the number of
+        individuals).
+    :param family: The operator family; ``"godel"`` is the published method, any member of
+        :data:`FAMILIES` can be used instead.
+    :param loss_type: ``"hierarchical"`` (Eq. 8) or ``"rule"`` (Eqs. 9 to 13).
+    :param tables: A :class:`~mowl.baselines.nn.alc.dfalc.module.DFALCModule` (the direct
+        implementation) to share parameters with.
+    """
+    return ExpressionGeometry(**dfalc_parts(
+        nb_classes, nb_relations, nb_individuals, embed_dim, domain, loss_type, threshold,
+        family, top_index, bottom_index, init_std, tables))
+
+
+def falcon_parts(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, t_norm="product",
+                 max_measure="max", stabiliser="add", role_pairs="all", anon_domain=0,
+                 top_index=None, bottom_index=None, thing="learned", nothing="empty",
+                 num_negs=4, abox_head="object", role_loss="contrast", tables=None):
+    """The parts of FALCON, as the keyword arguments of
+    :class:`~mowl.representation.library.logic_alc.ExpressionGeometry` (see :func:`falcon`)."""
+    if thing not in ("learned", "all") or nothing not in ("empty", "learned"):
+        raise ValueError("thing must be 'learned' or 'all', nothing 'empty' or 'learned'.")
+    top_index = top_index if thing == "all" else None
+    bottom_index = bottom_index if nothing == "empty" else None
+    objective = FuzzyObjective.falcon(num_negs, abox_head, role_loss)
+    if tables is not None:
+        t = tables
+        top_index, bottom_index = t.top_index, t.bottom_index
+        role_pairs = t.role_pairs
+        network = MembershipNetwork(fc_0=t.fc_0, fc_1=t.fc_1)
+        domain = Domain(t.e_embedding)
+        classes = NetworkClasses(centres=t.c_embedding, network=network, domain=domain,
+                                 family=t_norm if t_norm is not None else t.t_norm,
+                                 top_index=top_index, bottom_index=bottom_index)
+        relations = PairNetworkRelations(vectors=t.r_embedding, network=network,
+                                         domain=domain, role_pairs=role_pairs)
+        measure = ConflictMeasure(t.max_measure, stabiliser)
+        objective.num_negs = t.num_negs
+        objective.attach_assertions(t.heads_dict, t.tails_dict, t.nentities)
+        table = t.e_embedding
+    else:
+        network = MembershipNetwork(embed_dim)
+        table = nn.Embedding(nb_individuals, embed_dim)
+        nn.init.xavier_uniform_(table.weight)
+        domain = Domain(table, anon_domain)
+        if len(domain) < 1:
+            raise ValueError("FALCON needs a domain: individuals or anon_domain > 0.")
+        classes = NetworkClasses(nb_classes, embed_dim, network=network, domain=domain,
+                                 family=t_norm, top_index=top_index,
+                                 bottom_index=bottom_index)
+        relations = PairNetworkRelations(max(nb_relations, 1), embed_dim, network=network,
+                                         domain=domain, role_pairs=role_pairs)
+        measure = ConflictMeasure(max_measure, stabiliser)
+        objective.n_individuals = table.num_embeddings
+    individuals = DomainElements(table.num_embeddings, len(domain), family=t_norm)
+    return dict(classes=classes, relations=relations, measure=measure, objective=objective,
+                individuals=individuals, domain=domain)
 
 
 @register_method("falcon")
 def falcon(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0,
            t_norm="product", max_measure="max", stabiliser="add", role_pairs="all",
            anon_domain=0, top_index=None, bottom_index=None, thing="learned",
-           nothing="empty", tables=None):
+           nothing="empty", num_negs=4, abox_head="object", role_loss="contrast",
+           tables=None):
     """FALCON (Tang et al. 2022): class vectors, a membership network over (vector, element
     vector) pairs, a network over pairs for roles, a t-norm, the conflict of the
-    counterexample as the measure. The domain is the table of the individuals (plus
-    ``anon_domain`` learned anonymous elements).
+    counterexample as the measure, and assertions contrasted with corrupted ones. The domain
+    is the table of the individuals (plus ``anon_domain`` learned anonymous elements; a
+    training loop may also sample anonymous elements for one evaluation, see
+    :class:`~mowl.representation.library.logic_fuzzy.Domain`).
+
+    The geometry reads ALC axioms (``forward(axiom, rows, e_emb)``) as well as normal forms.
 
     :param t_norm: The operator family (``"product"``, ``"minmax"``, ``"Łukasiewicz"`` or any
         name of :data:`FAMILIES`).
@@ -978,85 +1375,106 @@ def falcon(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0,
         class; ``"all"``: the constant set of degree 1.
     :param nothing: ``"empty"`` (default, as published): ``owl:Nothing`` is the constant empty
         set; ``"learned"``: an ordinary learned class (the earlier mOWL module).
-    :param tables: A :class:`~mowl.nn.alc.falcon.FALCONModule` to share parameters with.
+    :param num_negs: Corrupted assertions per assertion, see :class:`FuzzyObjective`.
+    :param abox_head: ``"object"`` (as the FALCON code reads the role assertions of the ALC
+        dataset, the one the named method selects) or ``"subject"`` (the part's default: the
+        direction of :math:`\\exists r.C`), see :class:`FuzzyObjective`.
+    :param role_loss: ``"contrast"`` or ``"ranking"``, see :class:`FuzzyObjective`.
+    :param tables: A :class:`~mowl.baselines.nn.alc.falcon.module.FALCONModule` (the direct
+        implementation) to share parameters with.
     """
-    if thing not in ("learned", "all") or nothing not in ("empty", "learned"):
-        raise ValueError("thing must be 'learned' or 'all', nothing 'empty' or 'learned'.")
-    top_index = top_index if thing == "all" else None
-    bottom_index = bottom_index if nothing == "empty" else None
-    if tables is not None:
-        t = tables
-        top_index, bottom_index = t.top_index, t.bottom_index
-        role_pairs = t.role_pairs
-        network = MembershipNetwork(fc_0=t.fc_0, fc_1=t.fc_1)
-        domain = Domain(t.e_embedding)
-        classes = NetworkClasses(centres=t.c_embedding, network=network, domain=domain,
-                                 family=t_norm if t_norm is not None else t.t_norm,
-                                 top_index=top_index, bottom_index=bottom_index)
-        relations = PairNetworkRelations(vectors=t.r_embedding, network=network,
-                                         domain=domain, role_pairs=role_pairs)
-        n = len(domain)
-        measure = ConflictMeasure(t.max_measure, stabiliser)
-    else:
-        network = MembershipNetwork(embed_dim)
-        table = nn.Embedding(nb_individuals, embed_dim)
-        nn.init.xavier_uniform_(table.weight)
-        domain = Domain(table, anon_domain)
-        if len(domain) < 1:
-            raise ValueError("FALCON needs a domain: individuals or anon_domain > 0.")
-        classes = NetworkClasses(nb_classes, embed_dim, network=network, domain=domain,
-                                 family=t_norm, top_index=top_index,
-                                 bottom_index=bottom_index)
-        relations = PairNetworkRelations(max(nb_relations, 1), embed_dim, network=network,
-                                         domain=domain, role_pairs=role_pairs)
-        n = len(domain)
-        measure = ConflictMeasure(max_measure, stabiliser)
-    individuals = DomainElements(table.num_embeddings if tables is None
-                                 else tables.e_embedding.num_embeddings, n, family=t_norm)
-    geometry = ComposedGeometry(classes, relations, measure, FuzzyObjective.falcon(),
-                                individuals=individuals)
-    geometry.domain = domain
-    geometry.network = network
+    parts = falcon_parts(nb_classes, nb_relations, nb_individuals, embed_dim, t_norm,
+                         max_measure, stabiliser, role_pairs, anon_domain, top_index,
+                         bottom_index, thing, nothing, num_negs, abox_head, role_loss,
+                         tables)
+    geometry = ExpressionGeometry(**parts)
+    geometry.network = parts["classes"].network
     return geometry
 
 
-@register_method("alcone")
-def alcone(nb_classes, nb_relations, nb_individuals=0, embed_dim=8, margin=0.1,
-           temperature=0.0, family=None, top_index=None, bottom_index=None,
-           constant_logit=DEFAULT_CONSTANT_LOGIT, tables=None):
-    """Learnable Al-cone (adaptation of Oezcep, Leemhuis and Wolter 2023): half-axis logits
-    for classes and individuals, incidence logits for roles, Goedel operators on logits, the
-    half-axis hinge as the measure, and a well-formedness cost on individuals.
-
-    :param embed_dim: :math:`n`; there are ``2 n`` half-axes.
-    :param margin: The strict margin :math:`\\gamma > 0`.
-    :param temperature: Smoothing of the operators (``0``: exact); a module's temperature is
-        read live.
-    :param constant_logit: Magnitude of the logits of ``owl:Thing`` and ``owl:Nothing``, see
-        :class:`HalfAxisClasses`.
-    :param family: Another operator family on logits instead of Goedel (any
-        :data:`FAMILIES` entry whose values are logits).
-    :param tables: A :class:`~mowl.nn.alc.alcone.ALConeModule` to share parameters with.
-    """
+def alcone_parts(nb_classes, nb_relations, nb_individuals=0, embed_dim=8, margin=0.1,
+                 temperature=0.0, family=None, top_index=None, bottom_index=None,
+                 constant_logit=DEFAULT_CONSTANT_LOGIT, init_std=0.5, anneal=0.3, noise=0.3,
+                 nondegeneracy=0.1, tables=None):
+    """The parts of Al-cone, as the keyword arguments of
+    :class:`~mowl.representation.library.logic_alc.ExpressionGeometry` (see :func:`alcone`)."""
     t = tables
     if t is not None:
-        fam = LogitGoedel(source=t) if family is None else get_family(family)
+        relaxation = _ModuleTemperature(t)
+        fam = LogitGoedel(source=relaxation) if family is None else get_family(family)
         classes = HalfAxisClasses(logits=t.c_embedding, family=fam, top_index=t.top_index,
                                   bottom_index=t.bottom_index,
                                   constant_logit=t.constant_logit)
         relations = IncidenceMatrices(vectors=t.r_embedding, dim=t.dim)
         individuals = HalfAxisClasses(logits=t.e_embedding, family=fam)
-        measure = ConeMeasure(source=t)
+        measure = ConeMeasure(source=relaxation)
         margin = t.margin
+        nondegeneracy = 0.0
     else:
-        fam = LogitGoedel(temperature) if family is None else get_family(family)
+        relaxation = Relaxation(temperature)
+        fam = LogitGoedel(source=relaxation) if family is None else get_family(family)
         classes = HalfAxisClasses(nb_classes, embed_dim, family=fam, top_index=top_index,
-                                  bottom_index=bottom_index, constant_logit=constant_logit)
-        relations = IncidenceMatrices(max(nb_relations, 1), embed_dim)
-        individuals = HalfAxisClasses(max(nb_individuals, 1), embed_dim, family=fam)
-        measure = ConeMeasure(tau=temperature)
-    return ComposedGeometry(classes, relations, measure, FuzzyObjective.alcone(margin),
-                            individuals=individuals)
+                                  bottom_index=bottom_index, constant_logit=constant_logit,
+                                  init_std=init_std)
+        relations = IncidenceMatrices(max(nb_relations, 1), embed_dim, init_std=init_std)
+        individuals = HalfAxisClasses(max(nb_individuals, 1), embed_dim, family=fam,
+                                      init_std=init_std)
+        measure = ConeMeasure(source=relaxation)
+    return dict(classes=classes, relations=relations, measure=measure,
+                objective=FuzzyObjective.alcone(margin), individuals=individuals,
+                regularizers=(NonDegeneracy(nondegeneracy),) if nondegeneracy else (),
+                schedule=None if anneal is None else AnnealedRelaxation(anneal, noise),
+                relaxation=relaxation)
+
+
+class _ModuleTemperature:
+    """The temperature of an existing module, read and written live (a geometry that
+    describes the module shares its relaxation)."""
+
+    def __init__(self, module):
+        self.module = module
+
+    @property
+    def temperature(self):
+        return self.module.temperature
+
+    @temperature.setter
+    def temperature(self, value):
+        self.module.temperature = value
+
+
+@register_method("alcone")
+def alcone(nb_classes, nb_relations, nb_individuals=0, embed_dim=8, margin=0.1,
+           temperature=0.0, family=None, top_index=None, bottom_index=None,
+           constant_logit=DEFAULT_CONSTANT_LOGIT, init_std=0.5, anneal=0.3, noise=0.3,
+           nondegeneracy=0.1, tables=None):
+    """Learnable Al-cone (adaptation of Oezcep, Leemhuis and Wolter 2023): half-axis logits
+    for classes and individuals, incidence logits for roles, Goedel operators on logits, the
+    half-axis hinge as the measure, a well-formedness cost on individuals, a penalty against
+    empty classes, and a training loop that anneals a smoothing of the operators.
+
+    The geometry reads ALC axioms (``forward(axiom, rows)``) as well as normal forms.
+
+    :param embed_dim: :math:`n`; there are ``2 n`` half-axes.
+    :param margin: The strict margin :math:`\\gamma > 0`.
+    :param temperature: The current smoothing of the operators (``0``: exact), a number that
+        the training schedule changes.
+    :param constant_logit: Magnitude of the logits of ``owl:Thing`` and ``owl:Nothing``, see
+        :class:`HalfAxisClasses`.
+    :param family: Another operator family on logits instead of Goedel (any
+        :data:`FAMILIES` entry whose values are logits).
+    :param anneal: Initial temperature of the training schedule
+        (:class:`~mowl.representation.library.logic_alc.AnnealedRelaxation`), falling to ``0``
+        over the epochs; ``None``: no schedule.
+    :param noise: Scale of the parameter noise of the schedule (times the temperature).
+    :param nondegeneracy: Weight of :class:`NonDegeneracy`; ``0``: no such penalty.
+    :param tables: A :class:`~mowl.baselines.nn.alc.alcone.module.ALConeModule` (the direct
+        implementation) to share parameters with.
+    """
+    return ExpressionGeometry(**alcone_parts(
+        nb_classes, nb_relations, nb_individuals, embed_dim, margin, temperature, family,
+        top_index, bottom_index, constant_logit, init_std, anneal, noise, nondegeneracy,
+        tables))
 
 
 @register_adapter("DFALCModule")

@@ -67,12 +67,14 @@ class ComposedEL(EmbeddingELModel):
         if method is not None and method not in M.METHODS:
             raise ValueError(f"Unknown method {method!r}; available: {sorted(M.METHODS)}.")
         if method is not None and M.METHOD_KINDS.get(method, "axioms") != "axioms":
+            kind = M.METHOD_KINDS[method]
+            see = "mowl.models.ComposedALC" if kind == "expressions" else "mowl.models.query"
             raise TypeError(
-                f"The method {method!r} is trained on {M.METHOD_KINDS[method]}, not on "
+                f"The method {method!r} is trained on {kind}, not on "
                 f"normal-form axioms, so ComposedEL cannot train it. Methods that ComposedEL "
                 f"trains: "
                 f"{sorted(k for k in M.METHODS if M.METHOD_KINDS.get(k) == 'axioms')}; "
-                f"for {method!r} see mowl.models.query.")
+                f"for {method!r} see {see}.")
         if method is None and method_options:
             raise TypeError(f"Unexpected arguments {sorted(method_options)}.")
         self.method = method

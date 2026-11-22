@@ -30,7 +30,9 @@ DEFAULT_MEASURE = {Ball: CentreDistance, Box: Bounds}
 #: Catalogue key -> function building the method from parts.
 METHODS = {}
 #: Catalogue key -> what the method is trained on: ``"axioms"`` (normal-form axioms, what
-#: :class:`~mowl.models.ComposedEL` trains) or ``"queries"`` (query answering).
+#: :class:`~mowl.models.ComposedEL` trains), ``"queries"`` (query answering) or
+#: ``"expressions"`` (ALC axioms with class expressions of any depth, what
+#: :class:`~mowl.models.ComposedALC` trains).
 METHOD_KINDS = {}
 
 
@@ -82,9 +84,14 @@ def register_method(key, trained_on="axioms"):
         :class:`~mowl.models.ComposedEL` trains on the normal-form axioms (a geometry that
         reads only some forms says which: ``supported_forms``). ``"queries"``: the method is
         trained on query structures (:mod:`mowl.models.query`) and ``ComposedEL`` refuses it.
+        ``"expressions"``: the method is trained on ALC axioms, whose class expressions have
+        any depth (:class:`~mowl.models.ComposedALC`); ``ComposedEL`` refuses it. (Methods
+        whose geometry reads both, such as ``dfalc``, ``falcon`` and ``alcone``, are
+        registered as ``"axioms"``: ``ComposedEL`` trains them on the normal forms,
+        ``ComposedALC`` on the ALC axioms.)
     """
-    if trained_on not in ("axioms", "queries"):
-        raise ValueError("trained_on must be 'axioms' or 'queries'.")
+    if trained_on not in ("axioms", "queries", "expressions"):
+        raise ValueError("trained_on must be 'axioms', 'queries' or 'expressions'.")
 
     def decorate(function):
         _unique(METHODS, key, function)
