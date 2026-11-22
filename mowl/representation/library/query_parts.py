@@ -477,8 +477,10 @@ class ConeAttentionIntersection(_Intersection):
                                                           tables.aperture_layer2)
             self.dropout = tables.dropout
         else:
-            self.axis_layer1, self.axis_layer2 = nn.Linear(2 * dim, dim), nn.Linear(dim, dim)
+            # created in the order of the reference code (the seed gives its numbers)
+            self.axis_layer1 = nn.Linear(2 * dim, dim)
             self.aperture_layer1 = nn.Linear(2 * dim, dim)
+            self.axis_layer2 = nn.Linear(dim, dim)
             self.aperture_layer2 = nn.Linear(dim, dim)
             self.dropout = nn.Dropout(dropout)
             _xavier((self.axis_layer1, self.aperture_layer1, self.axis_layer2,

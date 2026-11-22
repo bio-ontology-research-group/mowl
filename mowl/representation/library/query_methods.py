@@ -37,7 +37,7 @@ from mowl.representation.library.query_parts import (
     PointBoxes, BetaPoints, ConePoints, BetaNetwork, ConeNetwork, ConeRotation,
     BoxAttentionIntersection, BoxExactIntersection, BetaAttentionIntersection,
     BetaMeanIntersection, ConeAttentionIntersection, BetaInversion, ConeComplement,
-    BoxDistance, BetaDistance, ConeDistance, deferred_initialisation)
+    BoxDistance, BetaDistance, ConeDistance, deferred_initialisation, _uniform)
 from mowl.representation.library.boxrel_relations import _ACTIVATIONS, TranslationBoxes
 from mowl.representation.library.query_regions import (
     BetaKL, ConeBounds, as_state, from_state, lift)
@@ -210,6 +210,8 @@ class ComposedQueryGeometry(QueryGeometry, Geometry):
     def parts(self):
         return {"classes": self.entities.part, "relations": self.relations.part,
                 "measure": self.measure.part,
+                "intersection": type(self.intersection).__name__,
+                "distance": type(self.distance_part).__name__,
                 "conjunction": "exact" if self.intersection.exact else "approximate",
                 "negation": "none" if self.negation_part is None
                 else ("exact" if getattr(self.negation_part, "exact", False)
@@ -283,9 +285,10 @@ def _query2box_parts(n_entities, n_rows, dim, gamma, center_weight, activation, 
     else:
         r = (gamma + 2.0) / dim
         entities = PointBoxes(n_entities, dim, init_range=r)
-        relations = TranslationBoxes(n_rows, dim, activation=activation,
-                                     inverse_of=role_inverse, init_range=r,
-                                     clamp_extent=clamp_extent)
+        # the tables are drawn as in the reference code (one uniform tensor each)
+        relations = TranslationBoxes(
+            vectors=_uniform(n_rows, dim, -r, r), offsets=_uniform(n_rows, dim, 0, r),
+            activation=activation, inverse_of=role_inverse, clamp_extent=clamp_extent)
         attention = lambda: BoxAttentionIntersection(dim)  # noqa: E731
     operator = _part(intersection, {"attention": attention, "exact": BoxExactIntersection},
                      "intersection")

@@ -81,6 +81,50 @@ Training samples queries of the structures 1p, 2p, 3p, 2i, 3i, ip, pi (and, with
 reference codes. This loop is shared by the four methods
 (:class:`~mowl.models.query.model.QueryEmbeddingModel`). Default sizes are small.
 
+The four methods are combinations of parts
+------------------------------------------
+
+Each method is a named combination of an entity model, a relation model, an intersection
+operator, a negation operator and a distance (the builders
+:func:`~mowl.representation.library.query_methods.query2box`,
+:func:`~mowl.representation.library.query_methods.betae`,
+:func:`~mowl.representation.library.query_methods.cone_qe` and
+:func:`~mowl.representation.library.query_methods.acone`, registered in
+:data:`mowl.representation.METHODS` as trained on queries), plus the other parts of the
+training and evaluation regimes: the objective
+(:class:`~mowl.representation.library.query_objective.QueryObjective`), the query sampler
+(:mod:`mowl.models.query.sampler`) and the evaluation regime. ``model.module`` is the
+geometry built from the parts; the keyword arguments of a model class go to the builder, so
+any part can be swapped. Parts of different region families do not fit and are refused with
+an error that says which.
+
+.. testcode::
+
+   from mowl.datasets.builtin import FamilyDataset
+   from mowl.models import BetaE, Query2Box
+   from mowl.representation.library.query_objective import QueryObjective
+
+   dataset = FamilyDataset()
+   model = Query2Box(dataset, embed_dim=8, intersection="exact", distance="l2",
+                     objective=QueryObjective(kind="hinge"))
+   print(model.parts["method"], model.parts["conjunction"], model.parts["objective"])
+   beta = BetaE(dataset, embed_dim=8, intersection="mean", negation=None)
+   print(beta.module.supports_negation)
+   try:
+       Query2Box(dataset, embed_dim=8, negation="complement")
+   except TypeError as error:
+       print(type(error).__name__)
+
+.. testoutput::
+
+   query2box exact hinge negative sampling
+   False
+   ConstructorUnavailable
+
+The earlier hand-written implementations, one geometry and one model class per paper, are in
+:mod:`mowl.baselines` (``mowl.baselines.models.query2box`` and so on). They are the reference
+that the combinations are tested against (same losses, same scores, same training run).
+
 Tasks and evaluation
 --------------------
 
