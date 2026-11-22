@@ -39,7 +39,8 @@ logger = logging.getLogger(__name__)
 
 __all__ = ["UnsupportedAxiomForm", "UnsupportedScoring", "axiom_scoring_of",
            "module_scores", "pair_costs", "evaluation_model_scores", "method_scores", "PairClassifierHead",
-           "pair_classifier_scores", "resolve_model_scorer", "scorable_forms"]
+           "pair_classifier_scores", "resolve_model_scorer", "scorable_forms",
+           "costs_in_chunks"]
 
 
 class UnsupportedAxiomForm(ValueError):
@@ -64,6 +65,20 @@ def axiom_scoring_of(model):
             f"(see mowl.evaluation.model_scoring), or pass a scorer "
             f"f(model, gci_name, rows) as the 'scoring' argument of the regime.")
     return kind
+
+
+@th.no_grad()
+def costs_in_chunks(cost, rows, max_cells=2 ** 26, width=1):
+    """``cost(rows)`` evaluated on consecutive chunks of ``rows`` and concatenated, without
+    gradient, so that a scorer whose memory grows with ``rows × width`` (the entities of a
+    context times its dimension) stays below ``max_cells`` cells per chunk.
+
+    :param cost: ``rows -> one cost per row``.
+    :param width: Cells per row of the scorer (at least 1).
+    """
+    chunk = max(1, max_cells // max(1, width))
+    out = [cost(rows[s:s + chunk]) for s in range(0, len(rows), chunk)]
+    return th.cat(out) if out else th.zeros(0, device=rows.device)
 
 
 def _per_row(out, n):

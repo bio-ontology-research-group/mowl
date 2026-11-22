@@ -28,13 +28,19 @@ def test_the_generic_el_loop_takes_every_regime():
         assert not unsupported_hooks(PairwiseMarginRankingLoss(), cls)
 
 
-@pytest.mark.parametrize("name", ["FALCONModel", "DFALCModel"])
-def test_models_with_their_own_objective_refuse_loss_and_negative_regimes(name):
+@pytest.mark.parametrize("name", ["FALCONModel", "DFALCModel", "ALConeModel", "ComposedALC"])
+def test_alc_models_refuse_loss_and_negative_regimes_and_take_schedules(name):
+    """The ALC models train in the shared loop (:mod:`mowl.training.loop`) with an objective
+    of their own (the reading of the axiom patterns and its weighting): a regime that changes
+    the loss, the negatives or the data is refused, a schedule is consulted."""
     import mowl.models as models
+    from mowl.base_models.alcmodel import ALC_TRAINING_HOOKS
     cls = getattr(models, name)
-    assert frozenset(cls.training_hooks) == frozenset()
+    assert frozenset(cls.training_hooks) == ALC_TRAINING_HOOKS
     assert unsupported_hooks(PairwiseMarginRankingLoss(), cls) >= {"loss"}
-    assert unsupported_hooks(LinearDecay(), cls)
+    assert unsupported_hooks(EitherSideCorruption(), cls) >= {"negatives"}
+    assert not unsupported_hooks(LinearDecay(), cls)
+    assert not unsupported_hooks(EarlyStopping(), cls)
 
 
 @pytest.mark.parametrize("name", ["BoxE", "ExpressivE", "Reshuffle"])

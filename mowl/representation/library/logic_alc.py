@@ -16,8 +16,18 @@ the placeholders. This module adds the two parts that read such axioms:
   ``forward(rows, "gci0")``), together with the operator interface of
   :class:`~mowl.nn.alc.module.ALCModule` (``forward_fs``, ``_logical_and``...).
 
-and a training hook, :class:`TrainingSchedule`, for methods whose loop changes the geometry
-during training (a temperature that is annealed to zero).
+and the parts that the training of these geometries is made of:
+
+* :class:`AxiomKindWeighting`: the objective part that combines the costs of the axiom
+  patterns into the loss of a step (terminological axioms, class assertions and role
+  assertions weighted, FALCON's ``alpha``/``beta``); every :class:`ExpressionReading`
+  objective carries one as ``objective.weighting``;
+* :class:`AnonymousElements`: the sampler of the anonymous domain elements a geometry with an
+  open domain is evaluated on (FALCON);
+* :class:`TrainingSchedule`: a :class:`~mowl.training.TrainingRegime` that a geometry carries
+  (``geometry.schedule``) and that the shared training loop (:mod:`mowl.training.loop`)
+  consults, for methods whose training changes the geometry (:class:`AnnealedRelaxation`: a
+  temperature annealed to zero).
 """
 
 import torch as th
@@ -28,9 +38,171 @@ from mowl.owlapi import (OWLClassAssertionAxiom, OWLDisjointClassesAxiom,
                          OWLSubClassOfAxiom)
 from mowl.representation.geometry import ComposedGeometry
 from mowl.representation.library.logic_expressions import pattern_region
+from mowl.training.regime import TrainingRegime
 
 __all__ = ["ExpressionReading", "ExpressionGeometry", "TrainingSchedule", "Relaxation",
-           "AnnealedRelaxation"]
+           "AnnealedRelaxation", "AxiomKindWeighting", "AnonymousElements", "TBOX",
+           "ABOX_EC", "ABOX_EE"]
+
+#: The kinds of axioms :class:`AxiomKindWeighting` weighs: terminological axioms, class
+#: assertions (concept-assertion, "ABox-EC") and role assertions ("ABox-EE").
+TBOX = "tbox"
+ABOX_EC = "abox_ec"
+ABOX_EE = "abox_ee"
+
+
+class AxiomKindWeighting:
+    """Objective part: how the costs of the axiom patterns of an ontology are combined into
+    the loss of one training step of an ALC geometry.
+
+    An axiom is of one of three kinds (:meth:`kind`): terminological (``SubClassOf``,
+    ``EquivalentClasses``, ``DisjointClasses``), a class assertion or a role assertion. Every
+    axiom pattern is evaluated in batches; the cost of a batch is the mean of the costs of its
+    rows (:meth:`batch_costs`), and the loss is
+
+    .. math::
+
+       \\sum_k w_k \\cdot \\frac{1}{n_k} \\sum_{b \\in k} \\mathrm{cost}(b)
+
+    over the kinds :math:`k` that have batches, :math:`n_k` the number of batches of kind
+    :math:`k` (all patterns of the kind together). Axioms of no kind are not trained. This is
+    the weighting of FALCON (``alpha``, ``beta``), which DF-ALC and Al-cone use as well; any
+    other combination of weights is a swap (``ComposedALC(objective=...)``, or
+    ``objective_options={"weighting": AxiomKindWeighting(...)}``).
+
+    :param tbox: Weight :math:`\\alpha` of the terminological axioms.
+    :param class_assertions: Weight :math:`\\beta` of the class assertions.
+    :param role_assertions: Weight of the role assertions; ``None`` (default):
+        :math:`1 - \\alpha - \\beta`, and then :math:`\\alpha, \\beta \\in [0, 1]` with
+        :math:`\\alpha + \\beta \\le 1`.
+    """
+
+    KINDS = (TBOX, ABOX_EC, ABOX_EE)
+
+    def __init__(self, tbox=0.3, class_assertions=0.3, role_assertions=None):
+        if role_assertions is None:
+            if not (0 <= tbox <= 1 and 0 <= class_assertions <= 1):
+                raise ValueError("Parameters alpha and beta must be in the interval [0, 1].")
+            if tbox + class_assertions > 1:
+                raise ValueError("The sum of alpha and beta must not exceed 1 "
+                                 "(the ABox-EE weight is 1 - alpha - beta).")
+            role_assertions = 1 - tbox - class_assertions
+        elif min(tbox, class_assertions, role_assertions) < 0:
+            raise ValueError("The weights of the axiom kinds must not be negative.")
+        self.tbox, self.class_assertions = tbox, class_assertions
+        self.role_assertions = role_assertions
+
+    def __repr__(self):
+        return (f"AxiomKindWeighting(tbox={self.tbox}, class_assertions="
+                f"{self.class_assertions}, role_assertions={self.role_assertions})")
+
+    @property
+    def weights(self):
+        """``{kind: weight}``."""
+        return {TBOX: self.tbox, ABOX_EC: self.class_assertions,
+                ABOX_EE: self.role_assertions}
+
+    @staticmethod
+    def kind(axiom):
+        """The kind of an axiom (or axiom pattern): :data:`TBOX`, :data:`ABOX_EC`,
+        :data:`ABOX_EE`, or ``None`` for an axiom that is not trained."""
+        if isinstance(axiom, (OWLSubClassOfAxiom, OWLEquivalentClassesAxiom,
+                              OWLDisjointClassesAxiom)):
+            return TBOX
+        if isinstance(axiom, OWLClassAssertionAxiom):
+            return ABOX_EC
+        if isinstance(axiom, OWLObjectPropertyAssertionAxiom):
+            return ABOX_EE
+        return None
+
+    @staticmethod
+    def batch_costs(geometry, axiom, batches, context=None, device="cpu"):
+        """The cost of every batch of rows of the pattern ``axiom``: the mean over its rows of
+        ``geometry(axiom, rows, context)``, one value per batch (shape ``(n_batches,)``).
+        The batches are evaluated one after the other as they come (a loader that shuffles
+        draws its order here)."""
+        costs = [th.mean(geometry(axiom, batch[0].to(device), context)) for batch in batches]
+        return th.stack(costs) if costs else th.zeros(0, device=device)
+
+    def batch_counts(self, patterns):
+        """``{kind: number of batches}`` of ``{axiom: batches}`` (anything with ``len``)."""
+        counts = dict.fromkeys(self.KINDS, 0)
+        for axiom, batches in patterns.items():
+            kind = self.kind(axiom)
+            if kind is not None:
+                counts[kind] += len(batches)
+        return counts
+
+    def combine(self, axiom, costs, counts):
+        """The share of the loss of the batch costs ``costs`` of the pattern ``axiom``, given
+        the numbers of batches of every kind of the step (:meth:`batch_counts`)."""
+        kind = self.kind(axiom)
+        return self.weights[kind] * costs.sum() / counts[kind]
+
+    def loss(self, geometry, patterns, context=None, device="cpu"):
+        """The loss of ``{axiom: batches}``, or ``None`` if no axiom is of a kind."""
+        per_kind = {kind: [] for kind in self.KINDS}
+        for axiom, batches in patterns.items():
+            kind = self.kind(axiom)
+            if kind is not None:
+                per_kind[kind].append(self.batch_costs(geometry, axiom, batches, context,
+                                                       device))
+        total = None
+        for kind, costs in per_kind.items():
+            costs = [c for c in costs if len(c)]
+            if not costs:
+                continue
+            term = self.weights[kind] * th.cat(costs).mean()
+            total = term if total is None else total + term
+        return total
+
+
+class AnonymousElements:
+    """Sampler of the anonymous domain elements that a geometry with an open domain is
+    evaluated on (FALCON): every epoch ``count`` element vectors, half of them (at most the
+    number of named elements) perturbations of the first named element vectors by Gaussian
+    noise of scale ``noise``, the others drawn fresh (Xavier uniform), as in the original
+    FALCON code. The context of one evaluation is the named elements followed by the sample
+    (:meth:`context`).
+
+    :param count: Number of anonymous elements per epoch (``0``: none).
+    :param noise: Scale of the perturbation.
+    """
+
+    def __init__(self, count=4, noise=0.1):
+        self.count, self.noise = int(count), float(noise)
+
+    def sample(self, named, dim, device="cpu"):
+        """``count`` anonymous element vectors of dimension ``dim`` (``named``: the table of
+        the named element vectors, detached)."""
+        n_perturbed = min(self.count // 2, named.shape[0])
+        n_fresh = self.count - n_perturbed
+        parts = []
+        if n_perturbed > 0:
+            noise = th.normal(0, self.noise, size=(n_perturbed, dim)).to(device)
+            parts.append(named[:n_perturbed] + noise)
+        if n_fresh > 0:
+            fresh = th.empty(n_fresh, dim).to(device)
+            th.nn.init.xavier_uniform_(fresh)
+            parts.append(fresh)
+        return th.cat(parts, dim=0)
+
+    @staticmethod
+    def context(named, n_named, sample):
+        """The first ``n_named`` rows of ``named`` followed by ``sample`` (only the sample for
+        an ontology without individuals)."""
+        return th.cat([named[:n_named], sample], dim=0)
+
+    @staticmethod
+    def with_seed(make, seed=0):
+        """``make()`` evaluated with the random generator seeded with ``seed``, which is
+        restored afterwards (a fixed context, so that scores are reproducible)."""
+        state = th.random.get_rng_state()
+        th.manual_seed(seed)
+        try:
+            return make()
+        finally:
+            th.random.set_rng_state(state)
 
 
 class ExpressionReading:
@@ -104,6 +276,28 @@ class ExpressionReading:
         return g.measure.member(g.individuals(subject), target,
                                 self.m).reshape(len(x), -1).sum(-1)
 
+    # -- scores ---------------------------------------------------------------------------
+    @staticmethod
+    def inclusion_score(g, sub, sup, x):
+        """The cost of the inclusion of the class expression patterns ``sub`` in ``sup`` for
+        the rows ``x``, one value per row: the ``inside`` of the measure with no margin and
+        no gap (what the rank-based evaluation regimes rank)."""
+        a, column = pattern_region(g, sub, x, 0)
+        b, _ = pattern_region(g, sup, x, column)
+        return g.measure.inside(a, b, 0.0).reshape(len(x), -1).sum(-1)
+
+    @staticmethod
+    def class_inclusion_score(g, sub, sup):
+        """The cost of ``sub ⊑ sup`` for class ids ``sub``, ``sup`` (tensors of equal
+        length), one value per pair, as :meth:`inclusion_score`."""
+        return g.measure.inside(g.classes(sub), g.classes(sup), 0.0).reshape(len(sub), -1) \
+            .sum(-1)
+
+    #: How the costs of the axiom patterns are combined into a loss
+    #: (:class:`AxiomKindWeighting`); ``None``: the model that trains the geometry gives one
+    #: (from its ``alpha`` and ``beta``).
+    weighting = None
+
 
 class Relaxation:
     """The temperature of the smooth relaxation of the operators of a geometry, a number that
@@ -114,61 +308,60 @@ class Relaxation:
         self.temperature = float(temperature)
 
 
-class TrainingSchedule:
-    """What a training loop of an ALC model does around the optimiser step, so that the
-    loop is a part (swappable) and not code of one method. The default does nothing.
-    The geometry carries it as ``geometry.schedule``; :class:`~mowl.models.ComposedALC`
-    calls the hooks."""
-
-    def on_train_start(self, module, epochs):
-        """Before the first epoch."""
-
-    def on_epoch_start(self, module, epoch, epochs):
-        """Before the loss of an epoch."""
-
-    def after_step(self, module, epoch, epochs):
-        """After the optimiser step of an epoch (inside the epoch, before validation)."""
-
-    def on_validation(self, module):
-        """Before a validation loss is computed (the exact operators are wanted)."""
-
-    def on_train_end(self, module):
-        """After the last epoch."""
+class TrainingSchedule(TrainingRegime):
+    """A :class:`~mowl.training.TrainingRegime` that belongs to a geometry: what the training
+    of a method does to the geometry around the optimiser steps (a temperature, noise), so
+    that it is a part (swappable) and not code of one model. The geometry carries it as
+    ``geometry.schedule`` and names it among its ``default_regimes``; the shared loop
+    (:mod:`mowl.training.loop`) of :class:`~mowl.models.ComposedALC` consults it like any
+    regime. ``self.model.module`` is the geometry. The default changes nothing."""
 
 
 class AnnealedRelaxation(TrainingSchedule):
-    """The training loop of Al-cone: the operators are smoothed with a temperature that
-    falls linearly from ``temperature`` to ``0`` over the epochs, and every parameter gets
-    Gaussian noise of scale ``noise * temperature`` after each step (it vanishes at the end,
-    and helps to leave local minima). Validation, and the geometry after training, use the
+    """The training schedule of Al-cone: the operators are smoothed with a temperature that
+    falls linearly from ``temperature`` to ``0`` over the epochs (``temperature * (1 -
+    epoch / epochs)``), and every parameter gets Gaussian noise of scale ``noise *
+    temperature`` after each step (it vanishes at the end, and helps to leave local minima).
+    At the end of every epoch, so for validation, and after training the geometry has the
     exact operators (temperature ``0``).
 
-    :param temperature: Initial temperature.
+    :param temperature: Initial temperature (read when training starts).
     :param noise: Scale of the noise.
     """
 
+    key = "annealed-relaxation"
+
     def __init__(self, temperature=0.3, noise=0.3):
+        super().__init__()
         self.temperature = temperature
         self.noise = noise
         self._tau0 = temperature
 
-    def on_train_start(self, module, epochs):
-        self._tau0 = self.temperature
+    def attach(self, model):
+        module = getattr(model, "module", None)
+        if not hasattr(module, "temperature") or (
+                isinstance(module, ExpressionGeometry) and module.relaxation is None):
+            raise TypeError(f"AnnealedRelaxation needs a geometry with a temperature (a "
+                            f"relaxation); the geometry of {type(model).__name__} has none.")
+        super().attach(model)
 
-    def on_epoch_start(self, module, epoch, epochs):
-        module.temperature = self._tau0 * (1.0 - epoch / max(epochs, 1))
+    def on_epoch_start(self, epoch, epochs):
+        if epoch == 0:
+            self._tau0 = self.temperature
+        self.model.module.temperature = self._tau0 * (1.0 - epoch / max(epochs, 1))
 
-    def after_step(self, module, epoch, epochs):
+    def after_step(self):
+        module = self.model.module
         if self.noise > 0 and module.temperature > 0:
             with th.no_grad():
                 for p in module.parameters():
                     p.add_(self.noise * module.temperature * th.randn_like(p))
 
-    def on_validation(self, module):
-        module.temperature = 0.0
+    def on_epoch_end(self, epoch, losses):
+        self.model.module.temperature = 0.0
 
-    def on_train_end(self, module):
-        module.temperature = 0.0
+    def on_train_end(self):
+        self.model.module.temperature = 0.0
 
 
 class ExpressionGeometry(ComposedGeometry, ALCModule):
@@ -207,6 +400,13 @@ class ExpressionGeometry(ComposedGeometry, ALCModule):
         self.relaxation = relaxation
         self.domain = domain
 
+    @property
+    def default_regimes(self):
+        """The regimes of the training of the geometry: its :attr:`schedule`, if it has one
+        (what :class:`~mowl.training.RegimeTrained` attaches)."""
+        schedule = self.schedule
+        return () if schedule is None else (lambda: schedule,)
+
     # -- ALC axioms -----------------------------------------------------------------------
     def _context(self, e_emb):
         domain = self.domain
@@ -226,6 +426,41 @@ class ExpressionGeometry(ComposedGeometry, ALCModule):
         finally:
             if domain is not None:
                 domain.context = None
+
+    def refuses(self):
+        """Why the parts of the geometry cannot be trained together (a sentence), or
+        ``None``: a geometry with an open domain (:attr:`domain`, FALCON's element vectors
+        completed by sampled anonymous elements) needs class and relation models that
+        evaluate on that domain; the objective may require more of the parts
+        (``objective.requirements``)."""
+        domain = self.domain
+        if domain is not None:
+            for kind, part in (("class model", self.class_model),
+                               ("relation model", self.relation_model)):
+                if part is not None and getattr(part, "domain", None) is not domain:
+                    return (f"the geometry evaluates class expressions on an open domain of "
+                            f"element vectors ({type(domain).__name__}, completed by sampled "
+                            f"anonymous elements in training), and the {kind} "
+                            f"{type(part).__name__} does not evaluate on that domain (it "
+                            f"has a domain of its own, or none)")
+        requirements = getattr(self.objective, "requirements", None)
+        return None if requirements is None else requirements(self)
+
+    def inclusion_costs(self, sub, sup, x, e_emb=None):
+        """The cost of the inclusion of the class expression patterns ``sub`` in ``sup`` for
+        the rows ``x`` on the context ``e_emb``, one value per row (the
+        :meth:`~ExpressionReading.inclusion_score` of the objective)."""
+        domain = self._context(e_emb)
+        try:
+            return self.objective.inclusion_score(self, sub, sup, x)
+        finally:
+            if domain is not None:
+                domain.context = None
+
+    def class_inclusion_costs(self, sub, sup):
+        """The cost of ``sub ⊑ sup`` for tensors of class ids (the
+        :meth:`~ExpressionReading.class_inclusion_score` of the objective)."""
+        return self.objective.class_inclusion_score(self, sub, sup)
 
     def forward_fs(self, cexpr, x, e_emb=None, cur_index=0):
         """The degrees of a class expression pattern on the elements of the domain, and the

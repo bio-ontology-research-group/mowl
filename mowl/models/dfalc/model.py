@@ -4,7 +4,7 @@ import torch as th
 
 from mowl.evaluation.fuzzy_violation import violated_axioms
 from mowl.models.composed.alc import ComposedALC
-from mowl.nn.alc.dfalc.module import DFALCModule, hierarchical_loss
+from mowl.nn.alc.dfalc.module import DFALCModule
 
 _THING = "http://www.w3.org/2002/07/owl#Thing"
 _NOTHING = "http://www.w3.org/2002/07/owl#Nothing"
@@ -162,18 +162,9 @@ class DFALCModel(ComposedALC):
         return violated_axioms(self, tolerance)
 
     # -- scores --------------------------------------------------------------------------
-    def _subsumption_costs(self, sub, sup, x, e_emb):
-        c, nxt = self.module.forward_fs(sub, x, e_emb)
-        d, _ = self.module.forward_fs(sup, x, e_emb, cur_index=nxt)
-        return hierarchical_loss(c, d)
-
-    def score_subsumption(self, sub, sup):
-        """Score of :math:`A \\sqsubseteq B` for class IRIs: minus the hierarchical loss."""
-        cid = self.class_index_dict
-        idx = th.tensor([cid[sub], cid[sup]], device=self.device)
-        with th.no_grad():
-            c = self.module.concept_truth(idx)
-            return -float(hierarchical_loss(c[0:1], c[1:2]))
+    # The cost of a subsumption (``axiom_costs``, ``score_subsumption``) is the one of
+    # ComposedALC: the ``inside`` of the measure, MeanViolation, which is the hierarchical
+    # loss (Eq. 8).
 
     def score_instance(self, individual, cls):
         """Truth value of ``cls(individual)`` in the grounding."""
