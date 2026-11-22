@@ -132,6 +132,11 @@ class CurvedBall(PoincareBall):
         """The hyperbolic norm :math:`d_c(x, 0)` (the depth of ``x``)."""
         return H.hyperbolic_norm(x, self.c)
 
+    def pairwise_distance(self, x, y, dtype=th.float64):
+        """The distances of every row of ``x`` ``(n, d)`` to every row of ``y`` ``(m, d)``,
+        ``(n, m)``, computed in ``dtype`` without forming the ``(n, m, d)`` tensor."""
+        return H.pairwise_distance(x, y, self.c, dtype=dtype)
+
 
 def depth(manifold, x):
     """The distance of ``x`` to the origin of ``manifold`` (its *depth*), ``(...,)``."""

@@ -7,6 +7,14 @@ from mowl.nn.order.module import ShadowConesModule
 class ShadowCones(OrderEmbeddingModel):
     r"""Shadow cones ([yu2023shadow]_) for the subclass order of an ontology.
 
+    The model is the combination of parts that the method ``shadow_cones`` defines
+    (:func:`mowl.representation.library.hierarchy_methods.shadow_cones`): the class model is a
+    point of the half-space or the ball, the measure is the signed distance to the shadow cone
+    of ``formulation``, the objective is the hierarchy objective; ``model.module`` is that
+    :class:`~mowl.representation.ComposedGeometry`. The softmax of Eq. 1 over the negatives of
+    a positive is the reduction of :meth:`compute_loss`. The direct implementation it is tested
+    against is ``mowl.baselines.models.shadow_cones``.
+
     Classes are points of the Poincare half-space or ball; :math:`C \sqsubseteq D` holds
     when the shadow that the object of :math:`C` casts lies inside the shadow cone of
     :math:`D` (a light source is at infinity or at the origin). ``formulation`` selects one

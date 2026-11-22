@@ -141,6 +141,14 @@ class TextGeometry(ComposedGeometry):
         self.clustering_weight = clustering_weight
         self.centripetal_weight = centripetal_weight
 
+    @property
+    def parts(self):
+        parts = super().parts
+        if self.relation_model is not None:
+            # OnT trains the embeddings of compound classes (Eq. 6 and 7); HiT has none
+            parts["conjunction"] = "own embedding"
+        return parts
+
     def compound(self, texts):
         """The regions of compound classes, from their verbalisations."""
         return self.class_model(list(texts))
@@ -159,3 +167,11 @@ class TextGeometry(ComposedGeometry):
         forward = self.hierarchy_loss(exists, image, negative_1)
         backward = self.hierarchy_loss(image, exists, negative_2)
         return 0.5 * (forward + backward)
+
+    def conjunction_loss(self, conjunction, conjuncts, negatives):
+        """:math:`L_\\sqcap` of OnT (Eq. 7) for the regions of :math:`C_1 \\sqcap \\dots \\sqcap
+        C_n` (from its verbalisation) and, one entry per conjunct position, the regions of the
+        conjuncts and of the negatives: the mean over :math:`i` of :math:`L_\\prec(x_{C_1 \\sqcap
+        \\dots \\sqcap C_n} \\prec x_{C_i})`, ``(B, 1)``. For :math:`n = 2` this is Eq. 7."""
+        return th.stack([self.hierarchy_loss(conjunction, x, n)
+                         for x, n in zip(conjuncts, negatives)]).mean(dim=0)

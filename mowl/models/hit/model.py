@@ -9,6 +9,7 @@ import torch as th
 
 from mowl.base_models.model import Model
 from mowl.owlapi.defaults import TOP, BOT
+from mowl.representation.library.hierarchy_regions import Point
 
 logger = logging.getLogger(__name__)
 
@@ -19,6 +20,16 @@ DEFAULT_CENTRI_GRID = tuple(i / 10 for i in range(11))
 
 class HiT(Model):
     """Hierarchy Transformer encoder (HiT) [he2024hit]_.
+
+    The model is the combination of parts that the method ``hit`` defines
+    (:func:`mowl.representation.library.hierarchy_methods.hit`): the class model is the text
+    encoder with the Poincare ball it is read in (the encoder is a part: any module that maps a
+    list of strings to vectors, see :mod:`mowl.nn.lm.encoders`), the measure is
+    ``distance and depth`` (:math:`d_c + \\lambda\\,\\Delta\\lVert\\cdot\\rVert`), the losses
+    are the triplet losses of its geometry
+    (:class:`~mowl.representation.library.hierarchy_geometry.TextGeometry`), and there is no
+    relation model. The reference implementation that the combination is tested against is
+    ``mowl.baselines.models.hit``.
 
     A text encoder (a sentence-transformers model with mean pooling and no normalisation
     layer) is re-trained so that the embeddings of class labels, read as points of the
@@ -168,6 +179,10 @@ class HiT(Model):
 
     # ------------------------------------------------------------------ set-up
     def init_module(self):
+        """The module is the combination of parts that the method ``hit`` defines
+        (:func:`mowl.representation.library.hierarchy_methods.hit`): a text encoder and a
+        Poincare ball as the class model, the distance-and-depth measure, the triplet
+        losses."""
         from mowl.nn.lm.hit import HiTModule
         return HiTModule(self.encoder, curvature=self.curvature,
                          clustering_margin=self.clustering_margin,
@@ -245,7 +260,7 @@ class HiT(Model):
         out = []
         with th.no_grad():
             for i in range(0, len(texts), batch_size):
-                out.append(self.module.embed(texts[i:i + batch_size]).float())
+                out.append(self.module.classes(texts[i:i + batch_size]).centre.float())
         if was_training:
             self.module.train()
         if not out:
@@ -354,9 +369,10 @@ class HiT(Model):
         :param negatives: Embeddings of the negatives of the batch.
         :return: ``(loss, parts)`` with ``parts`` a dict of floats for logging.
         """
-        child = self.module.embed([t[0] for t in batch])
-        parent = self.module.embed([t[1] for t in batch])
-        loss = self.module.hierarchy_loss(child, parent, negatives).mean()
+        g = self.module
+        child = g.classes([t[0] for t in batch])
+        parent = g.classes([t[1] for t in batch])
+        loss = g.hierarchy_loss(child, parent, Point(negatives, g.class_model.manifold)).mean()
         return loss, {"hierarchy": float(loss.detach())}
 
     def train(self, epochs=1, validate=True, verbose=False):
@@ -382,7 +398,7 @@ class HiT(Model):
             total = 0.0
             for step, start in enumerate(range(0, len(order), self.batch_size)):
                 batch = [triplets[i] for i in order[start:start + self.batch_size]]
-                negatives = self.module.embed([t[2] for t in batch])
+                negatives = self.module.classes([t[2] for t in batch]).centre
                 loss, parts = self.batch_loss(batch, negatives)
                 opt.zero_grad()
                 loss.backward()
@@ -496,7 +512,6 @@ class HiT(Model):
         are ``[C, D]``; ``gci2`` rows ``[C, r, D]`` have :math:`y = \\exists r.D` and
         ``gci3`` rows ``[r, C, D]`` have :math:`x = \\exists r.C` (models that verbalise
         existential restrictions, i.e. OnT)."""
-        from mowl.nn.lm import hyperbolic as hb
         if gci_name not in (self.scored_forms or ()):
             from mowl.evaluation.model_scoring import UnsupportedAxiomForm
             raise UnsupportedAxiomForm(
@@ -522,10 +537,10 @@ class HiT(Model):
         else:
             sub, sup = existential(cpu[:, 0], cpu[:, 1]), mat[cpu[:, 2].to(mat.device)]
         dtype = self.score_dtype
-        sub, sup = sub.to(dtype), sup.to(dtype)
-        c = self.c
-        cost = hb.distance(sub, sup, c) + lam * (hb.hyperbolic_norm(sup, c)
-                                                 - hb.hyperbolic_norm(sub, c))
+        manifold = self.module.class_model.manifold
+        cost = self.module.measure.inside(Point(sub.to(dtype), manifold),
+                                          Point(sup.to(dtype), manifold),
+                                          centri_weight=lam).squeeze(-1)
         return cost.to(rows.device)
 
     def score_candidates(self, gci_name, rows, target_col, candidates, centri_weight=None,
@@ -541,22 +556,16 @@ class HiT(Model):
         :param centri_weight: :math:`\\lambda` (default: :attr:`centri_weight`, or 0).
         :return: ``(len(rows), len(candidates))`` tensor (of :attr:`score_dtype`).
         """
-        from mowl.nn.lm import hyperbolic as hb
         lam = centri_weight if centri_weight is not None else (self.centri_weight or 0.0)
         query, candidates_are_children = self._query(gci_name, rows, target_col)
         cand = self._class_matrix()[candidates.to(self._class_matrix().device)]
-        c = self.c
-        dtype = self.score_dtype
-        q_norm = hb.hyperbolic_norm(query.to(dtype), c).unsqueeze(1)
+        manifold = self.module.class_model.manifold
+        query = Point(query, manifold)
         out = []
         for s in range(0, len(cand), chunk_size):
-            cc = cand[s:s + chunk_size]
-            dist = hb.pairwise_distance(query, cc, c, dtype=dtype)
-            c_norm = hb.hyperbolic_norm(cc.to(dtype), c).unsqueeze(0)
-            if candidates_are_children:
-                out.append(-(dist + lam * (q_norm - c_norm)))
-            else:
-                out.append(-(dist + lam * (c_norm - q_norm)))
+            out.append(self.module.measure.ranking_scores(
+                query, Point(cand[s:s + chunk_size], manifold), candidates_are_children,
+                lam, self.score_dtype))
         return th.cat(out, dim=1)
 
     def validate(self, rows=None, grid=None):
@@ -596,4 +605,7 @@ class HiT(Model):
             raise TypeError("Only SubClassOf axioms can be scored.")
         x = self.embed([axiom.getSubClass(), axiom.getSuperClass()])
         lam = self.centri_weight or 0.0
-        return float(self.module.score(x[0], x[1], lam))
+        manifold = self.module.class_model.manifold
+        cost = self.module.measure.inside(Point(x[:1], manifold), Point(x[1:], manifold),
+                                          centri_weight=lam)
+        return float(-cost.reshape(()))

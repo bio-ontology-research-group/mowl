@@ -503,12 +503,33 @@ class DistanceDepth(HierarchyMeasure):
     def __init__(self, centri_weight=1.0):
         self.centri_weight = float(centri_weight)
 
-    def inside(self, a, b, margin=0.0):
+    def inside(self, a, b, margin=0.0, centri_weight=None):
+        """The cost :math:`d(a, b) + \\lambda (\\lVert b \\rVert - \\lVert a \\rVert)`, ``(B, 1)``;
+        ``centri_weight`` replaces :math:`\\lambda` for this call (HiT selects it on validation
+        data after training)."""
         self.check(a, b)
         self._no_margin(margin, "The distance-and-depth score")
+        lam = self.centri_weight if centri_weight is None else centri_weight
         gap = depth(b.manifold, b.centre) - depth(a.manifold, a.centre)
-        return (a.manifold.distance(a.centre, b.centre) + self.centri_weight * gap) \
-            .unsqueeze(-1)
+        return (a.manifold.distance(a.centre, b.centre) + lam * gap).unsqueeze(-1)
+
+    def ranking_scores(self, query, candidates, candidates_are_children=False,
+                       centri_weight=None, dtype=th.float64):
+        """The scores (higher: more plausible) of every candidate against every query, the
+        negated costs of :meth:`inside`, ``(n, m)``: ``query`` ``(n, d)`` and ``candidates``
+        ``(m, d)`` are points of the ball of the class model (``Point`` centres); the
+        candidates are the subclasses of the queries when ``candidates_are_children``, their
+        superclasses otherwise. This is the evaluation of HiT/OnT on thousands of candidates:
+        the distance matrix is computed in ``dtype`` without an ``(n, m, d)`` tensor."""
+        lam = self.centri_weight if centri_weight is None else centri_weight
+        manifold = query.manifold
+        q = query.centre
+        q_norm = depth(manifold, q.to(dtype)).unsqueeze(1)
+        dist = manifold.pairwise_distance(q, candidates.centre, dtype=dtype)
+        c_norm = depth(manifold, candidates.centre.to(dtype)).unsqueeze(0)
+        if candidates_are_children:
+            return -(dist + lam * (q_norm - c_norm))
+        return -(dist + lam * (c_norm - q_norm))
 
     def negative(self, a, b, margin=0.0):
         return self.inside(a, b)

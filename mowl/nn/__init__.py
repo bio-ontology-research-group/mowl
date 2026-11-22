@@ -22,7 +22,7 @@ from .graph.cate import CatEModule
 from .el.eike.module import EIKEModule
 from .el.boxsel.module import BoxSELModule
 from .el.concept2box.module import Concept2BoxModule
-from .order.module import HyperbolicConesModule, ShadowConesModule, DiskEmbeddingsModule
+from . import order  # noqa: F401  (its modules are loaded on first use, see below)
 
 
 # Modules that are put together from parts (:mod:`mowl.representation`) are loaded when they
@@ -34,6 +34,9 @@ _PART_BUILT = {
     "ALConeModule": "mowl.nn.alc.alcone.module",
     "DFALCModule": "mowl.nn.alc.dfalc.module",
     "E2RModule": "mowl.nn.alc.e2r.module",
+    "HyperbolicConesModule": "mowl.nn.order.module",
+    "ShadowConesModule": "mowl.nn.order.module",
+    "DiskEmbeddingsModule": "mowl.nn.order.module",
 }
 
 

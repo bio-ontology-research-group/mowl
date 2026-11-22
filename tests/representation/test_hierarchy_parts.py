@@ -11,9 +11,11 @@ from mowl.baselines.nn.el.order_embeddings import OrderEmbeddingsModule
 from mowl.baselines.nn.graph.bcbox import BinaryCodeBoxModule
 from mowl.baselines.nn.graph.bcbox.losses import neg_log1mexp as bcbox_neg_loss
 from mowl.baselines.nn.graph.cate import CatEModule
-from mowl.nn.lm import BagOfWordsEncoder, HiTModule, OnTModule
-from mowl.nn.order import (DiskEmbeddingsModule, HyperbolicConesModule, RiemannianSGD,
-                           ShadowConesModule)
+from mowl.baselines.nn.lm import HiTModule, OnTModule
+from mowl.baselines.nn.order import (DiskEmbeddingsModule, HyperbolicConesModule,
+                                     ShadowConesModule)
+from mowl.nn.lm import BagOfWordsEncoder
+from mowl.nn.order import RiemannianSGD
 from mowl.nn.order.manifolds import Euclidean, PoincareBall, Sphere, UpperHalfSpace
 from mowl.representation import (BallClasses, BoxClasses, Bounds, CentreDistance,
                                  ClassModel, ComposedGeometry, ConstructorUnavailable,
