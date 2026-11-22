@@ -79,7 +79,7 @@ class Box2ELBaselineLosses(TrainingRegime):
       :math:`E` (it is commented out in the code);
     * BoxEL: the losses of a batch are *summed* (not averaged) and the regulariser is the
       code's ``l2_side_regularizer`` of every box of every batch
-      (:func:`mowl.nn.el.boxel.losses.box2el_code_side_regularizer`).
+      (:class:`~mowl.training.box_regularization.BoxBatchRegulariser`).
 
     Other modules (Box2EL, ELBE) are left unchanged.
 
@@ -98,6 +98,7 @@ class Box2ELBaselineLosses(TrainingRegime):
         self.radius_term = bool(radius_term)
         self.boxel = bool(boxel)
         self._sum = False
+        self._side = None
 
     def attach(self, model):
         super().attach(model)
@@ -111,9 +112,27 @@ class Box2ELBaselineLosses(TrainingRegime):
             if _is(module, "EmELPPModule"):
                 module.intersection_radius_term = self.radius_term
         elif _is(module, "BoxELModule") and self.boxel:
-            module.regulariser = "box2el_code"
             module.positive_scale = False  # the code's signed role scale
             self._sum = True
+            self._side = None
+            if hasattr(module, "relation_model"):
+                # a geometry: the regulariser of the batches is a regime of its own
+                from mowl.training.box_regularization import BoxBatchRegulariser
+                self._side = BoxBatchRegulariser()
+                self._side.attach(model)
+            else:
+                # the direct implementation records the batches itself
+                module.regulariser = "box2el_code"
+
+    def filter_negatives(self, gci_name, gci_dataset, negatives):
+        if self._side is not None:
+            return self._side.filter_negatives(gci_name, gci_dataset, negatives)
+        return negatives
+
+    def regularization(self, default):
+        if self._side is not None:
+            return self._side.regularization(default)
+        return NotImplemented
 
     def loss(self, gci_name, pos_scores, neg_scores):
         if not self._sum:
