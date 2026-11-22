@@ -315,15 +315,82 @@ class VolumeMultiBoxELModule(ELModule):
         :param gci_name: ``"gci0"``, ``"gci1"``, ``"gci2"`` or ``"gci3"``.
         """
         if gci_name in ("gci2", "gci3"):
-            outs = [self.get_loss_function(gci_name)(data[i:i + chunk])
-                    for i in range(0, len(data), chunk)]
-            return th.cat(outs)
+            return self._ranking_ratio(data, gci_name)
         if gci_name not in ("gci0", "gci1"):
             self._unsupported(gci_name)
         outs = []
         for i in range(0, len(data), chunk):
             outs.append(self._sample_distance(data[i:i + chunk], gci_name))
         return th.cat(outs)
+
+    def _ranking_ratio(self, data, gci_name):
+        """The training loss of ``gci2`` / ``gci3`` rows, computed for ranking.
+
+        The value is the one of :meth:`gci2_loss` / :meth:`gci3_loss` (the volume ratio on the
+        fixed point set), but the memberships are computed once per *distinct* operand and
+        not once per row: when the candidates of a query differ in one operand only (the
+        usual case: one source and many fillers), the membership of the query operand over
+        the ``num_points`` points is evaluated once, and so is that of every distinct
+        candidate. Points are processed in chunks of :attr:`point_chunk_size`, operands in
+        chunks of :meth:`rows_per_chunk`. The cost is that of the distinct operands, not of
+        the number of rows times the number of points."""
+        if gci_name == "gci2":
+            left_keys, right_keys = data[:, :1], data[:, 1:3]  # source C ; (r, D)
+        else:
+            left_keys, right_keys = data[:, :2], data[:, 2:3]  # (r, C) ; target D
+        left_u, left_inv = th.unique(left_keys, dim=0, return_inverse=True)
+        right_u, right_inv = th.unique(right_keys, dim=0, return_inverse=True)
+        step = self.rows_per_chunk("concept") or max(len(left_u), len(right_u), 1)
+
+        def concept(keys, col):
+            return self.concept_boxes(keys[:, col])
+
+        def operand_gci2_left(keys):
+            c, o = concept(keys, 0)
+            return lambda p: self._chi(p, c, o)
+
+        def projection(keys, role_col, filler_col):
+            # the membership in the domain boxes of a role depends on the role only: it is
+            # computed once per distinct role; the gate depends on (role, filler) but is small
+            roles, inv = th.unique(keys[:, role_col], return_inverse=True)
+            rc, ro = self.role_boxes(roles)
+            fc, fo = concept(keys, filler_col)
+            gate = self._gate(rc[inv], ro[inv], fc, fo)
+            d = self.embed_dim
+
+            def fn(p):
+                per_box = V.soft_box_membership(p, rc[..., :d], ro[..., :d],
+                                                self.temperature, self.aggregate)
+                return th.minimum(per_box[inv], gate.unsqueeze(1)).amax(dim=-1)
+            return fn
+
+        def operand_gci2_right(keys):
+            return projection(keys, 0, 1)
+
+        def operand_gci3_left(keys):
+            return projection(keys, 0, 1)
+
+        def operand_gci3_right(keys):
+            c, o = concept(keys, 0)
+            return lambda p: self._chi(p, c, o)
+
+        left_op, right_op = ((operand_gci2_left, operand_gci2_right) if gci_name == "gci2"
+                             else (operand_gci3_left, operand_gci3_right))
+        total = self.points.shape[0]
+        num = th.zeros(len(data), device=data.device)
+        den = th.zeros(len(data), device=data.device)
+        for start in range(0, total, self.point_chunk_size):
+            p = self.points[start:start + self.point_chunk_size]
+            left = th.cat([left_op(left_u[i:i + step])(p) for i in range(0, len(left_u), step)])
+            right = th.cat([right_op(right_u[i:i + step])(p)
+                            for i in range(0, len(right_u), step)])
+            for j in range(0, len(data), step):
+                a, b = left[left_inv[j:j + step]], right[right_inv[j:j + step]]
+                num[j:j + step] += th.minimum(a, b).sum(dim=-1)
+                den[j:j + step] += a.sum(dim=-1)
+        out = V.containment_loss(num / total, den / total)
+        # the shape the per-axiom loss had (a column unless ``per_axiom_column`` is off)
+        return out.unsqueeze(-1) if self.per_axiom_column else out
 
     def _sample_distance(self, data, gci_name):
         lc, lo = self.concept_boxes(data[:, 0])
