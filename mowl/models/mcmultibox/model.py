@@ -23,8 +23,11 @@ class VolumeMultiBoxEL(EmbeddingELModel):
     **Training.** As in the thesis, the training set of each normal form is split into
     ``num_batches`` batches per epoch (thesis: 5) and one optimiser step is taken per batch.
     The thesis gives no optimiser or learning rate; we use Adam with ``learning_rate``.
-    Per-batch memory is controlled by ``num_batches`` and by ``point_chunk_size`` (points are
-    processed in checkpointed chunks, so the point count does not limit memory).
+    Per-batch memory is bounded by ``max_chunk_elements``: the axioms of a batch are processed
+    in chunks and the points in checkpointed chunks of ``point_chunk_size``, so neither the
+    batch size nor the point count changes the peak memory (about 2 GiB with the defaults,
+    measured on the CPU; see
+    :class:`~mowl.nn.el.mcmultibox.module.VolumeMultiBoxELModule`).
 
     **What is trained.** ``gci0`` to ``gci3`` and, with ``load_role_axioms=True``, role inclusions
     and role chains. The thesis defines nothing for the bottom normal forms, assertions or
@@ -54,6 +57,9 @@ class VolumeMultiBoxEL(EmbeddingELModel):
     :param num_batches: Batches per epoch.
     :param seed: Seed for the point set, the initialisation and batch shuffling.
     :param point_chunk_size: Points processed at a time.
+    :param max_chunk_elements: Largest intermediate tensor of a loss (axioms x points x
+        boxes x coordinates); ``None`` processes a whole batch at once (memory then grows with
+        the number of axioms).
     :param eval_points_per_box: Points per box in the evaluation distance.
     :param load_role_axioms: Train on role inclusions and role chains.
     """
@@ -67,7 +73,8 @@ class VolumeMultiBoxEL(EmbeddingELModel):
     def __init__(self, dataset, embed_dim=5, num_boxes=5, bound=1.0, num_points=20000,
                  temperature=1.0, aggregate="min", learning_rate=0.01, num_batches=5,
                  seed=0, point_chunk_size=2048, eval_points_per_box=32,
-                 model_filepath=None, device="cpu", load_role_axioms=False):
+                 model_filepath=None, device="cpu", load_role_axioms=False,
+                 max_chunk_elements=2 ** 25):
         super().__init__(dataset, embed_dim, 4096, extended=True, model_filepath=model_filepath,
                          device=device, learning_rate=learning_rate,
                          load_role_axioms=load_role_axioms)
@@ -82,6 +89,7 @@ class VolumeMultiBoxEL(EmbeddingELModel):
         self.seed = seed
         self.point_chunk_size = point_chunk_size
         self.eval_points_per_box = eval_points_per_box
+        self.max_chunk_elements = max_chunk_elements
         #: Mean training loss of each epoch (sum over normal forms), filled by :meth:`train`.
         self.training_losses = []
         self.init_module()
@@ -100,6 +108,7 @@ class VolumeMultiBoxEL(EmbeddingELModel):
             seed=self.seed,
             point_chunk_size=self.point_chunk_size,
             eval_points_per_box=self.eval_points_per_box,
+            max_chunk_elements=self.max_chunk_elements,
         ).to(self.device)
 
     def _trainable_datasets(self):

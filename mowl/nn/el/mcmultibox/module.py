@@ -1,11 +1,30 @@
 r"""Neural module of the volume-based MultiBoxEL of Aharoni (2024)."""
 
+import functools
+
 import torch as th
 import torch.nn as nn
 from torch.quasirandom import SobolEngine
 
 import mowl.nn.el.mcmultibox.volume as V
 from mowl.nn.el.elmodule import ELModule
+
+
+def _in_row_chunks(space):
+    """Compute a per-axiom loss on at most :meth:`VolumeMultiBoxELModule.rows_per_chunk`
+    rows at a time. Every loss is computed row by row (one value per axiom), so the result
+    is the same; only the size of the largest intermediate tensor changes. ``space`` is
+    ``"concept"`` (points in :math:`\\mathbb{R}^d`) or ``"role"`` (:math:`\\mathbb{R}^{2d}`)."""
+    def decorate(method):
+        @functools.wraps(method)
+        def wrapper(self, data, neg=False):
+            step = self.rows_per_chunk(space)
+            if step is None or len(data) <= step:
+                return method(self, data, neg=neg)
+            return th.cat([method(self, data[i:i + step], neg=neg).reshape(-1)
+                           for i in range(0, len(data), step)])
+        return wrapper
+    return decorate
 
 
 class VolumeMultiBoxELModule(ELModule):
@@ -82,6 +101,14 @@ class VolumeMultiBoxELModule(ELModule):
     :param point_chunk_size: Number of points processed at once (memory/speed trade-off only).
     :param eval_points_per_box: Points sampled per box of the left-hand concept by the
         evaluation distance of Section 7.1.2.
+    :param max_chunk_elements: Largest number of elements of one intermediate tensor
+        (axioms x points x boxes x coordinates) of a loss: the axioms of a batch are
+        processed :meth:`rows_per_chunk` at a time. The numbers do not change; the memory
+        does. With the default (``2**25``, 128 MiB per tensor in float32) one loss evaluation
+        holds about 16 such tensors at its peak under gradients (about 2 GiB), whatever the
+        batch size. ``None``: the whole batch at once (memory grows with the batch: about
+        200 KiB per axiom and tensor with the thesis settings, so a batch of 24,000 axioms
+        needs tens of GiB).
     """
 
     #: The thesis defines no negative losses.
@@ -90,7 +117,8 @@ class VolumeMultiBoxELModule(ELModule):
 
     def __init__(self, nb_ont_classes, nb_rels, nb_inds=None, embed_dim=5, num_boxes=5,
                  bound=1.0, num_points=20000, temperature=1.0, aggregate="min", seed=0,
-                 point_chunk_size=2048, eval_points_per_box=32, init_seed=None):
+                 point_chunk_size=2048, eval_points_per_box=32, init_seed=None,
+                 max_chunk_elements=2 ** 25):
         super().__init__()
         if aggregate not in ("mean", "min"):
             raise ValueError("aggregate must be 'mean' or 'min'.")
@@ -106,6 +134,7 @@ class VolumeMultiBoxELModule(ELModule):
         self.seed = seed
         self.point_chunk_size = point_chunk_size
         self.eval_points_per_box = eval_points_per_box
+        self.max_chunk_elements = max_chunk_elements
 
         gen = th.Generator().manual_seed(seed if init_seed is None else init_seed)
         d, n, b = embed_dim, num_boxes, self.bound
@@ -128,6 +157,16 @@ class VolumeMultiBoxELModule(ELModule):
         engine = SobolEngine(dimension=d, scramble=True, seed=seed + 2)
         self.register_buffer("eval_unit_points",
                              engine.draw(eval_points_per_box).to(th.float32), persistent=False)
+
+    def rows_per_chunk(self, space="concept"):
+        """Axioms per chunk of a loss evaluation (``None``: no limit), from
+        :attr:`max_chunk_elements`: the largest tensor is ``rows x points x boxes x k`` with
+        ``k = d`` for concept points and ``2d`` for role points."""
+        if self.max_chunk_elements is None:
+            return None
+        k = self.embed_dim * (2 if space == "role" else 1)
+        points = min(self.point_chunk_size, self.num_points)
+        return max(1, int(self.max_chunk_elements) // (points * self.num_boxes * k))
 
     # ------------------------------------------------------------------ geometry accessors
     def _boxes(self, table, idx):
@@ -160,6 +199,7 @@ class VolumeMultiBoxELModule(ELModule):
         return V.containment_loss(num, den)
 
     # ---------------------------------------------------------------------------- losses
+    @_in_row_chunks("concept")
     def gci0_loss(self, data, neg=False):
         self._check_neg(neg)
         cc, co = self.concept_boxes(data[:, 0])
@@ -171,6 +211,7 @@ class VolumeMultiBoxELModule(ELModule):
 
         return self._ratio(fn, self.points)
 
+    @_in_row_chunks("concept")
     def gci1_loss(self, data, neg=False):
         self._check_neg(neg)
         c1, o1 = self.concept_boxes(data[:, 0])
@@ -183,6 +224,7 @@ class VolumeMultiBoxELModule(ELModule):
 
         return self._ratio(fn, self.points)
 
+    @_in_row_chunks("concept")
     def gci2_loss(self, data, neg=False):
         self._check_neg(neg)
         cc, co = self.concept_boxes(data[:, 0])
@@ -196,6 +238,7 @@ class VolumeMultiBoxELModule(ELModule):
 
         return self._ratio(fn, self.points)
 
+    @_in_row_chunks("concept")
     def gci3_loss(self, data, neg=False):
         self._check_neg(neg)
         rc, ro = self.role_boxes(data[:, 0])
@@ -209,6 +252,7 @@ class VolumeMultiBoxELModule(ELModule):
 
         return self._ratio(fn, self.points)
 
+    @_in_row_chunks("role")
     def role_inclusion_loss(self, data, neg=False):
         self._check_neg(neg)
         rc, ro = self.role_boxes(data[:, 0])
@@ -220,6 +264,7 @@ class VolumeMultiBoxELModule(ELModule):
 
         return self._ratio(fn, self.role_points)
 
+    @_in_row_chunks("role")
     def role_chain_loss(self, data, neg=False):
         """Simplified role chain loss of the thesis (not fully semantic, see class docstring)."""
         self._check_neg(neg)
