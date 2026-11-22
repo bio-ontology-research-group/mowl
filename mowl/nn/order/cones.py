@@ -83,10 +83,28 @@ def _push_down_half_space(u, gamma3):
     return th.cat([u[..., :-1], u[..., -1:] * math.exp(-gamma3)], dim=-1)
 
 
+def _unit_angle(a, b):
+    """The angle between two vectors, exactly 0 for equal directions (and zero gradient there).
+
+    ``2 atan2(|a/|a| - b/|b||, |a/|a| + b/|b||)`` is accurate for every angle, unlike
+    ``acos`` of the clamped cosine, whose clamp gave coincident points the angle 1.4e-3."""
+    a = a / a.norm(dim=-1, keepdim=True).clamp_min(1e-12)
+    b = b / b.norm(dim=-1, keepdim=True).clamp_min(1e-12)
+    dif = ((a - b) ** 2).sum(-1)
+    near = dif <= 1e-12
+    dif = th.where(near, th.ones_like(dif), dif)
+    angle = 2 * th.atan2(dif.sqrt(), ((a + b) ** 2).sum(-1).sqrt())
+    return th.where(near, th.zeros_like(angle), angle)
+
+
 def half_space_distance(x, y):
+    """The hyperbolic distance in the upper half-space; exactly 0 (zero gradient) for points
+    that coincide up to rounding, as in :mod:`mowl.nn.order.manifolds`."""
     diff = ((x - y) ** 2).sum(-1)
     arg = 1 + diff / (2 * x[..., -1] * y[..., -1])
-    return th.acosh(arg.clamp_min(1.0 + 1e-7))
+    near = arg <= 1.0 + 1e-7
+    safe = th.where(near, th.full_like(arg, 1.0 + 1e-6), arg)
+    return th.where(near, th.zeros_like(arg), th.acosh(safe))
 
 
 def penumbral_ball_half_aperture(u, r):
@@ -136,7 +154,17 @@ def shadow_cone_energy(u, v, formulation="umbral-half-space", radius=0.05,
         balls attached to the points (umbral cones).
     :param horosphere_height: :math:`e^{h}` of the horosphere of penumbral-half-space.
     :param gamma3: See above.
+
+    A point that coincides with the apex (up to rounding) is the apex itself and costs exactly
+    0: the formulations evaluate it on the boundary of a branch, where rounding decides which
+    branch applies (and the clamps below used to leave a small positive cost).
     """
+    energy = _shadow_cone_energy(u, v, formulation, radius, horosphere_height, gamma3)
+    coincident = ((u - v) ** 2).sum(-1) <= 1e-12
+    return th.where(coincident, th.zeros_like(energy), energy)
+
+
+def _shadow_cone_energy(u, v, formulation, radius, horosphere_height, gamma3):
     if formulation == "penumbral-ball":
         theta = penumbral_ball_half_aperture(u, radius)
         t = axis_angle(u, v) - theta
@@ -160,8 +188,9 @@ def shadow_cone_energy(u, v, formulation="umbral-half-space", radius=0.05,
         nv = (v * v).sum(-1)
         sinh_du = 2 * nu.clamp_min(1e-12).sqrt() / (1 - nu).clamp_min(1e-9)
         sinh_dv = 2 * nv.clamp_min(1e-12).sqrt() / (1 - nv).clamp_min(1e-9)
-        cos_alpha = (u * v).sum(-1) / (nu.clamp_min(1e-12).sqrt() * nv.clamp_min(1e-12).sqrt())
-        alpha = th.acos(cos_alpha.clamp(-1 + _ACOS_CLAMP, 1 - _ACOS_CLAMP))
+        # the antipodal end keeps the published clamp (alpha <= acos(-1 + 1e-6)); the coincident
+        # end is exact
+        alpha = _unit_angle(u, v).clamp(max=math.acos(-1 + _ACOS_CLAMP))
         beta = th.asin((math.sinh(radius) / sinh_du).clamp(max=1 - 1e-6))
         t = sinh_dv * th.sin(alpha - beta)
         signed = _asinh(t) + radius

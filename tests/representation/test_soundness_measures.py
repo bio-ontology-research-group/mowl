@@ -717,14 +717,12 @@ def test_binary_codes_that_differ_are_not_a_set_inclusion():
     assert float(LogVolumeRatio(intersection_temp=0.0).energy(child, parent)) < 1e-9
 
 
-def test_shadow_cones_are_reflexive_up_to_their_floor_and_nested():
+def test_shadow_cones_are_reflexive_and_nested():
     """A shadow cone is defined by an energy in hyperbolic space, not by a point-membership
     test that could be written independently of it, so the cone itself is not sampled.
-    What the construction promises is sampled: a point lies in its own cone (up to the
-    numerical floor of the formulation: ``FLOOR`` below, measured after the manifold fix:
-    1e-6 for the penumbral ball (measured 9e-8), 4e-3 for the umbral ball, whose floor is a
-    defect of ``mowl.nn.order.cones`` pinned by the next tests), and the cones are nested (a point ``y`` of the cone of ``x``, ``x`` in the
-    cone of ``b``: ``y`` is in the cone of ``b``)."""
+    What the construction promises is sampled: a point lies in its own cone (exactly: the next
+    test), and the cones are nested (a point ``y`` of the cone of ``x``,
+    ``x`` in the cone of ``b``: ``y`` is in the cone of ``b``)."""
     from mowl.nn.order import cones as C
     g = _gen(4)
     n = 300000
@@ -739,11 +737,10 @@ def test_shadow_cones_are_reflexive_up_to_their_floor_and_nested():
 
     x = child(b)
     y = child(x)
-    floor = {"penumbral-ball": 1e-6, "umbral-ball": 4e-3}
     for form in ("umbral-ball", "penumbral-ball"):
         def energy(p, c):
             return C.shadow_cone_energy(p, c, form, 0.05, 20.0, 1e-4)
-        assert float(energy(b, b).max()) < floor[form], form
+        assert float(energy(b, b).abs().max()) == 0.0, form
         chain = (energy(b, x) <= 0) & (energy(x, y) <= 0)
         assert int(chain.sum()) > 20, form
         assert bool((energy(b, y)[chain] <= 1e-6).all()), form
@@ -758,42 +755,19 @@ def _own_cone_points(form, n=100000, seed=4):
     return b / b.norm(dim=1, keepdim=True) * (0.2 + 0.5 * th.rand(n, 1, generator=g))
 
 
-_FLOOR_CAUSES = {
-    "umbral-ball": "mowl/nn/order/cones.py:163-164, the angle between the parent and the child "
-                   "is acos(cos.clamp(-1 + 1e-6, 1 - 1e-6)) (_ACOS_CLAMP, line 29): coincident "
-                   "points get the angle 1.4e-3 instead of 0, which enters t = sinh(d_v) "
-                   "sin(alpha - beta); 2 asin(|u/|u| - v/|v||/2) is exactly 0",
-    "penumbral-half-space": "mowl/nn/order/cones.py:86-89, half_space_distance clamps the "
-                            "acosh argument at 1 + 1e-7: the distance of a point to itself is "
-                            "acosh(1 + 1e-7) = 4.5e-4 (the manifolds of manifolds.py return 0)",
-}
-
-
-@pytest.mark.parametrize("form", ["penumbral-ball", "umbral-half-space",
-                                  pytest.param("umbral-ball", marks=pytest.mark.xfail(
-                                      strict=True, reason=_FLOOR_CAUSES["umbral-ball"])),
-                                  pytest.param("penumbral-half-space", marks=pytest.mark.xfail(
-                                      strict=True,
-                                      reason=_FLOOR_CAUSES["penumbral-half-space"]))])
+@pytest.mark.parametrize("form", ["penumbral-ball", "umbral-half-space", "umbral-ball",
+                                  "penumbral-half-space"])
 def test_shadow_cones_cost_nothing_inside_themselves(form):
-    """A class inside itself must cost 0 (not only below a tolerance). Holds for the
-    penumbral ball (9e-8) and the umbral half-space (2.5e-5, bounded here by 1e-4); fails by
-    the floors named in ``_FLOOR_CAUSES`` (strict xfail: the test starts failing when the
-    floors are removed in ``mowl.nn.order``). The measured maxima: umbral ball 3.9e-3,
-    penumbral half-space 4.9e-4."""
+    """A class inside itself costs exactly 0 on every formulation (a point that coincides with
+    the apex is the apex), with finite gradients."""
     from mowl.nn.order import cones as C
     p = _own_cone_points(form)
     energy = C.shadow_cone_energy(p, p.clone(), form, 0.05, 20.0, 1e-4)
-    assert float(energy.max()) < (1e-4 if form == "umbral-half-space" else 1e-6), form
-
-
-def test_shadow_cone_floors_are_the_measured_ones():
-    """The floors that remain are pinned to their measured value (so that they cannot grow
-    unnoticed): umbral ball below 4e-3, penumbral half-space below 5e-4."""
-    from mowl.nn.order import cones as C
-    for form, bound in (("umbral-ball", 4e-3), ("penumbral-half-space", 5e-4)):
-        p = _own_cone_points(form)
-        assert float(C.shadow_cone_energy(p, p.clone(), form, 0.05, 20.0, 1e-4).max()) < bound
+    assert float(energy.abs().max()) == 0.0, form
+    q = p[:2000].clone().requires_grad_(True)
+    w = p[:2000].clone().requires_grad_(True)
+    C.shadow_cone_energy(q, w, form, 0.05, 20.0, 1e-4).sum().backward()
+    assert bool(th.isfinite(q.grad).all()) and bool(th.isfinite(w.grad).all()), form
 
 
 def test_a_disk_inside_itself_costs_exactly_zero_on_every_manifold():
