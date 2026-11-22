@@ -36,6 +36,7 @@ for the logit family.
 
 from dataclasses import dataclass
 
+import numpy as np
 import torch as th
 import torch.nn as nn
 
@@ -59,7 +60,7 @@ __all__ = ["FuzzySet", "LogitSet", "Family", "Product", "Goedel", "Lukasiewicz",
            "HalfAxisClasses", "NetworkClasses", "DomainElements", "MembershipNetwork",
            "Domain", "TruthMatrix", "IncidenceMatrices", "PairNetworkRelations",
            "MeanViolation", "ConflictMeasure", "ConeMeasure", "FuzzyObjective",
-           "NonDegeneracy", "rule_based_loss", "rule_nf4", "rule_nf5", "rule_nf6", "rule_nf7",
+           "NonDegeneracy", "empty_cone_penalty", "rule_based_loss", "rule_nf4", "rule_nf5", "rule_nf6", "rule_nf7",
            "dfalc", "falcon", "alcone"]
 
 #: Logit of the constants owl:Thing and owl:Nothing of the Al-cone module.
@@ -379,6 +380,13 @@ def _constants(values, ids, top_index, bottom_index, top, bottom):
     return values
 
 
+def _logit_of_degrees(values, eps):
+    """``logit(clip(values, eps, 1 - eps))`` as a float tensor: the parameters that give the
+    truth values ``values``."""
+    degrees = th.as_tensor(np.asarray(values, dtype="float32")).clamp(eps, 1 - eps)
+    return th.log(degrees / (1 - degrees))
+
+
 class _FuzzyClasses:
     """Class models whose regions are fuzzy sets: the operators of the family do conjunction,
     disjunction and negation."""
@@ -432,6 +440,17 @@ class TruthTableClasses(_FuzzyClasses, Classes):
         values = th.sigmoid(self.centres(ids))
         values = _constants(values, ids, self.top_index, self.bottom_index, 1.0, 0.0)
         return FuzzySet(values, self.family)
+
+    def set_degrees(self, index, values, eps=1e-3, name=None):
+        """Start class ``index`` at the truth values ``values`` (array over the domain,
+        in ``[0, 1]``; for example a perceptual grounding): they are clipped to
+        ``[eps, 1 - eps]`` and stored as logits, without a gradient."""
+        logits = _logit_of_degrees(values, eps)
+        if logits.shape != (self.domain_size,):
+            raise ValueError(f"Grounding of {name or index} must have shape "
+                             f"({self.domain_size},).")
+        with th.no_grad():
+            self.centres.weight[index] = logits.to(self.centres.weight.device)
 
 
 class HalfAxisClasses(_FuzzyClasses, Classes):
@@ -638,6 +657,17 @@ class TruthMatrix(_FuzzyRelations):
     def matrix(self, ids):
         n = self.domain
         return th.sigmoid(self.vectors(ids)).view(*ids.shape, n, n)
+
+    def set_degrees(self, index, values, eps=1e-3, name=None):
+        """Start relation ``index`` at the truth values ``values`` (a ``(domain, domain)``
+        array, source first, in ``[0, 1]``): clipped to ``[eps, 1 - eps]`` and stored as
+        logits, without a gradient."""
+        n = self.domain
+        logits = _logit_of_degrees(values, eps)
+        if logits.shape != (n, n):
+            raise ValueError(f"Grounding of {name or index} must be {n} x {n}.")
+        with th.no_grad():
+            self.vectors.weight[index] = logits.reshape(-1).to(self.vectors.weight.device)
 
 
 class IncidenceMatrices(_FuzzyRelations):
@@ -1212,6 +1242,14 @@ class FuzzyObjective(ExpressionReading, Objective):
         return g.relation_model.degree_at(x[:, :, 1], x[:, :, 0], x[:, :, 2])
 
 
+def empty_cone_penalty(logits, margin, temperature=0.0):
+    """Mean over the rows of ``logits`` (``(n, half-axes)``) of
+    :math:`\\mathrm{relu}(\\gamma - \\max_h c_h)`: zero for a class that has a half-axis with
+    logit at least ``margin`` (so is not the empty cone). ``temperature`` is that of the smooth
+    maximum of the geometry (0: exact)."""
+    return th.relu(margin - CL.reduce_max(logits, -1, temperature)).mean()
+
+
 class NonDegeneracy(Regularizer):
     """Pushes every named class away from the empty cone :math:`\\{0\\}`: the mean over the
     classes (not ``owl:Thing`` and ``owl:Nothing``) of :math:`\\mathrm{relu}(\\gamma - \\max_h
@@ -1237,8 +1275,7 @@ class NonDegeneracy(Regularizer):
         ids = th.tensor(ids, dtype=th.long, device=g.device)
         margin = g.objective.margin if self.margin is None else self.margin
         tau = g.temperature
-        loss = th.relu(margin - CL.reduce_max(classes.centres(ids), -1, tau)).mean()
-        return self.weight * loss
+        return self.weight * empty_cone_penalty(classes.centres(ids), margin, tau)
 
 
 # =========================================================================================

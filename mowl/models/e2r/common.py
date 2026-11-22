@@ -8,10 +8,11 @@ import math
 import random
 from collections import defaultdict
 
-import numpy as np
 import torch as th
 
 from mowl.base_models.model import Model
+from mowl.evaluation.score_ranking import rank_by_score
+from mowl.evaluation.subspace_violation import discretised_violations
 from mowl.nn.alc.e2r.module import AXIOM_KINDS
 from mowl.owlapi import ClassExpressionType, Imports
 
@@ -26,7 +27,6 @@ def _iri(entity):
 class E2RBase(Model):
     """The data and the scoring of E2R models (see :class:`mowl.models.E2R`). A subclass sets
     ``_algebra``, makes ``init_module`` and trains."""
-
 
     axiom_scoring = "method"
     scored_forms = ("gci0", "class_assertion")
@@ -346,10 +346,10 @@ class E2RBase(Model):
             return self.concept_indicator(_iri(cexpr.asOWLClass()), binary)
         if ctype == ClassExpressionType.OBJECT_INTERSECTION_OF:
             return self._algebra.meet(*[self.concept_indicator(c, binary)
-                            for c in cexpr.getOperandsAsList()])
+                                        for c in cexpr.getOperandsAsList()])
         if ctype == ClassExpressionType.OBJECT_UNION_OF:
             return self._algebra.join(*[self.concept_indicator(c, binary)
-                            for c in cexpr.getOperandsAsList()])
+                                        for c in cexpr.getOperandsAsList()])
         if ctype == ClassExpressionType.OBJECT_COMPLEMENT_OF:
             y = self.concept_indicator(cexpr.getOperand(), binary)
             out = th.zeros_like(y)
@@ -376,8 +376,7 @@ class E2RBase(Model):
     def rank_members(self, cexpr, binary=False):
         """Individual IRIs sorted by increasing residual for ``cexpr``."""
         names = sorted(self._iid, key=self._iid.get)
-        scores = self.score_membership(cexpr, binary=binary)
-        return [names[i] for i in np.argsort(scores, kind="stable")]
+        return rank_by_score(names, self.score_membership(cexpr, binary=binary))
 
     def score_role_membership(self, prop, pairs):
         """Residual lengths of the pair vectors of ``pairs`` (list of ``(subject,
@@ -389,7 +388,8 @@ class E2RBase(Model):
             z = self.module.relation(th.tensor([self._rid[prop]], device=self.device))
             s = th.tensor([self._iid[a] for a, _ in pairs], device=self.device)
             o = th.tensor([self._iid[b] for _, b in pairs], device=self.device)
-            xpq = self._algebra.pair_vector(self.module.entity(s), self.module.entity(o), self.embed_dim)
+            xpq = self._algebra.pair_vector(self.module.entity(s), self.module.entity(o),
+                                            self.embed_dim)
             return self.module.membership_residual(z, xpq).cpu().numpy()
 
     @th.no_grad()
@@ -400,7 +400,7 @@ class E2RBase(Model):
         rows = rows.to(self.device)
         if gci_name == "gci0":
             return self._algebra.inclusion_loss(self.module.concept(rows[:, 0]),
-                                    self.module.concept(rows[:, 1]))
+                                                self.module.concept(rows[:, 1]))
         if gci_name == "class_assertion":
             return self.module.membership_residual(self.module.concept(rows[:, 1]),
                                                    self.module.entity(rows[:, 0]))
@@ -411,7 +411,7 @@ class E2RBase(Model):
         """Inclusion loss of eq. (5) for class expressions ``sub``, ``sup`` (``0`` iff
         the subspace of ``sub`` lies in that of ``sup`` for 0/1 indicators)."""
         return float(self._algebra.inclusion_loss(self.concept_indicator(sub, binary),
-                                      self.concept_indicator(sup, binary)))
+                                                  self.concept_indicator(sup, binary)))
 
     def discretise(self, threshold=0.5):
         """0/1 indicators of all concepts and relations and the entity vectors, as numpy
@@ -430,40 +430,5 @@ class E2RBase(Model):
         of the loss functions. Membership holds if the residual is at most ``tol``
         times the norm of the vector (and the vector is not ``0``)."""
         yc, zr, x = self.discretise(threshold)
-        d = self.embed_dim
-        supp = [frozenset(np.flatnonzero(v)) for v in yc]
-        rsupp = [frozenset(np.flatnonzero(v)) for v in zr]
-
-        def inside(s, v):
-            n = np.linalg.norm(v)
-            out = [t for t in range(len(v)) if t not in s]
-            return n > 0 and np.linalg.norm(v[out]) <= tol * n
-
-        bad = []
-        for key, rows in self.training_rows.items():
-            kind = self._kind(key)
-            for row in rows.tolist():
-                if kind == "class_assertion":
-                    ok = inside(supp[row[1]], x[row[0]])
-                elif kind == "role_assertion":
-                    v = np.concatenate([x[row[0]][:d], x[row[2]][:d]])
-                    ok = inside(rsupp[row[1]], v)
-                elif kind == "concept_inclusion":
-                    ok = supp[row[0]] <= supp[row[1]]
-                elif kind == "concept_conjunction":
-                    ok = supp[row[0]] == frozenset.intersection(*[supp[i] for i in row[1:]])
-                elif kind == "concept_disjunction":
-                    ok = supp[row[0]] == frozenset.union(*[supp[i] for i in row[1:]])
-                elif kind == "concept_negation":
-                    ok = supp[row[0]] == frozenset(range(d)) - supp[row[1]]
-                elif kind == "concept_disjointness":
-                    ok = not (supp[row[0]] & supp[row[1]])
-                elif kind == "role_inclusion":
-                    ok = rsupp[row[0]] <= rsupp[row[1]]
-                elif kind == "range":
-                    ok = not ({t - d for t in rsupp[row[0]] if t >= d} & supp[row[1]])
-                else:
-                    continue
-                if not ok:
-                    bad.append((kind, tuple(row)))
-        return bad
+        rows = [(self._kind(key), rows) for key, rows in self.training_rows.items()]
+        return discretised_violations(yc, zr, x, rows, self.embed_dim, tol)

@@ -2,6 +2,7 @@
 import numpy as np
 import torch as th
 
+from mowl.evaluation.fuzzy_violation import violated_axioms
 from mowl.models.composed.alc import ComposedALC
 from mowl.nn.alc.dfalc.module import DFALCModule, hierarchical_loss
 
@@ -111,23 +112,11 @@ class DFALCModel(ComposedALC):
         :param roles: Dict role IRI -> ``(len(domain), len(domain))`` array of truth values.
         :param eps: Truth values are clipped to ``[eps, 1 - eps]`` before the logit.
         """
-        def logit(a):
-            a = th.as_tensor(np.asarray(a, dtype="float32")).clamp(eps, 1 - eps)
-            return th.log(a / (1 - a))
-
-        with th.no_grad():
-            for iri, values in (concepts or {}).items():
-                v = logit(values)
-                if v.shape != (self.ndomain,):
-                    raise ValueError(f"Grounding of {iri} must have shape ({self.ndomain},).")
-                self.module.c_embedding.weight[self.class_index_dict[iri]] = v.to(self.device)
-            for iri, values in (roles or {}).items():
-                v = logit(values)
-                if v.shape != (self.ndomain, self.ndomain):
-                    raise ValueError(f"Grounding of {iri} must be {self.ndomain} x "
-                                     f"{self.ndomain}.")
-                self.module.r_embedding.weight[self.object_property_index_dict[iri]] = \
-                    v.reshape(-1).to(self.device)
+        for iri, values in (concepts or {}).items():
+            self.module.class_model.set_degrees(self.class_index_dict[iri], values, eps, iri)
+        for iri, values in (roles or {}).items():
+            self.module.relation_model.set_degrees(self.object_property_index_dict[iri],
+                                                   values, eps, iri)
 
     def concept_grounding(self):
         """Dict class IRI -> numpy truth-value vector over :attr:`domain`."""
@@ -170,38 +159,7 @@ class DFALCModel(ComposedALC):
         violated by more than ``tolerance`` for some domain element (Eq. 6); assertions are
         violated if their truth value is below ``1 - tolerance``. Axiom patterns are
         reported with the number of violating rows."""
-        out = []
-        with th.no_grad():
-            for axiom, loader in self.training_dataloaders.items():
-                if self.axiom_category(axiom) is None:
-                    continue
-                bad = 0
-                for batch in loader:
-                    x = batch[0].to(self.device)
-                    bad += int((self._row_violation(axiom, x) > tolerance).sum())
-                if bad:
-                    out.append((axiom, bad))
-        return out
-
-    def _row_violation(self, axiom, x):
-        from mowl.owlapi import (OWLSubClassOfAxiom, OWLEquivalentClassesAxiom,
-                                 OWLDisjointClassesAxiom)
-        m = self.module
-        if isinstance(axiom, OWLSubClassOfAxiom):
-            c, nxt = m.forward_fs(axiom.getSubClass(), x)
-            d, _ = m.forward_fs(axiom.getSuperClass(), x, None, nxt)
-            return th.relu(c - d).amax(-1)
-        if isinstance(axiom, OWLEquivalentClassesAxiom):
-            ces = axiom.getClassExpressionsAsList()
-            c, nxt = m.forward_fs(ces[0], x)
-            d, _ = m.forward_fs(ces[1], x, None, nxt)
-            return (c - d).abs().amax(-1)
-        if isinstance(axiom, OWLDisjointClassesAxiom):
-            ces = axiom.getClassExpressionsAsList()
-            c, nxt = m.forward_fs(ces[0], x)
-            d, _ = m.forward_fs(ces[1], x, None, nxt)
-            return th.minimum(c, d).amax(-1)
-        return m(axiom, x, None)
+        return violated_axioms(self, tolerance)
 
     # -- scores --------------------------------------------------------------------------
     def _subsumption_costs(self, sub, sup, x, e_emb):

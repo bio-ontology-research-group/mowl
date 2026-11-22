@@ -30,7 +30,7 @@ import torch as th
 import torch.nn as nn
 
 from mowl.representation.library.logic_alc import ExpressionGeometry, Relaxation
-from mowl.representation.library.logic_fuzzy import alcone_parts
+from mowl.representation.library.logic_fuzzy import alcone_parts, empty_cone_penalty
 
 __all__ = ["ALConeModule", "CONSTANT_LOGIT", "DEFAULT_CONSTANT_LOGIT"]
 
@@ -120,9 +120,7 @@ class ALConeModule(ExpressionGeometry):
     def nondegeneracy_loss(self, class_idx):
         """Mean over the given class indices of :math:`\\mathrm{relu}(\\gamma - \\max_h c_h)`
         on the (raw) half-axis logits."""
-        from mowl.representation.library.logic_fuzzy import CL
-        return th.relu(self.margin - CL.reduce_max(self.c_embedding(class_idx), -1,
-                                                   self.temperature)).mean()
+        return empty_cone_penalty(self.c_embedding(class_idx), self.margin, self.temperature)
 
     # -- discretisation -----------------------------------------------------
     def discretise(self, class_names=None, role_names=None, individual_names=None):
