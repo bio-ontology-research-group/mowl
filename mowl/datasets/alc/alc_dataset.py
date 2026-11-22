@@ -81,18 +81,30 @@ class ALCDataset():
 
     def get_grouped_axioms(self):
         res = dict()
+        #: Number of axioms left out because they use a class expression outside ALC.
+        self.skipped_axioms = 0
         for axiom in self._ontology.getAxioms(Imports.INCLUDED):
             axioms = [axiom, ]
             if isinstance(axiom, OWLNaryAxiom):
                 axioms = axiom.asPairwiseAxioms()
             for ax in axioms:
-                axiom_pattern = self.get_axiom_pattern(axiom)
+                try:
+                    # The pattern of the pairwise axiom, which is what is stored.
+                    axiom_pattern = self.get_axiom_pattern(ax)
+                except NotImplementedError:
+                    # A class expression outside ALC (a cardinality restriction, a
+                    # nominal, a data restriction, ...): the axiom is left out.
+                    self.skipped_axioms += 1
+                    continue
                 if axiom_pattern is None:
                     continue
                 if axiom_pattern not in res:
                     res[axiom_pattern] = [ax, ]
                 else:
                     res[axiom_pattern].append(ax)
+        if self.skipped_axioms:
+            logger.warning("%d axioms use class expressions outside ALC and were left out.",
+                           self.skipped_axioms)
         return res
 
     def get_axiom_pattern(self, axiom):

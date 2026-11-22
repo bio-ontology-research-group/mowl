@@ -96,3 +96,23 @@ org.semanticweb.owlapi.model.OWLOntology."):
             self.assertIsInstance(axiom, OWLAxiom)
             self.assertIsInstance(dataset, TensorDataset)
         self.assertEqual(len(grouped_datasets), 5)
+
+
+class TestALCDatasetOutsideALC(TestCase):
+    """Axioms with class expressions outside ALC are left out, not fatal."""
+
+    def test_axioms_outside_alc_are_skipped(self):
+        adapter = OWLAPIAdapter()
+        ontology = adapter.create_ontology("http://mowl/outside-alc")
+        a = adapter.create_class("http://A")
+        b = adapter.create_class("http://B")
+        r = adapter.create_object_property("http://r")
+        factory = adapter.data_factory
+        axioms = HashSet()
+        axioms.add(adapter.create_subclass_of(a, b))
+        axioms.add(adapter.create_subclass_of(a, factory.getOWLObjectMinCardinality(2, r, b)))
+        adapter.owl_manager.addAxioms(ontology, axioms)
+        dataset = ALCDataset(ontology, Dataset(ontology))
+        grouped = dataset.get_grouped_axioms()
+        self.assertEqual(dataset.skipped_axioms, 1)
+        self.assertEqual(sum(len(v) for v in grouped.values()), 1)
