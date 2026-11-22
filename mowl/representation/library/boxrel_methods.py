@@ -87,8 +87,8 @@ def transbox(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.
         regularizers = (NormPenalty("class_embed", target=1.0, weight=reg_factor),
                         ) + regularizers
     return ComposedGeometry(classes, relations, measure,
-                            TransBoxObjective(margin, enhanced, formulation, reference_bottom_losses,
-                                              strict_negatives),
+                            TransBoxObjective(margin, enhanced, formulation,
+                                              reference_bottom_losses, strict_negatives),
                             individuals=individuals, regularizers=regularizers)
 
 

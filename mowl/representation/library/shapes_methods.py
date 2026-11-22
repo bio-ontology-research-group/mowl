@@ -116,7 +116,8 @@ def _octagon(module):
 # -- prism ------------------------------------------------------------------------------------
 
 @register_method("prism")
-def prism(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1, tables=None):
+def prism(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
+          gci2_negative_triangle="overlap", tables=None):
     r"""The prism method (Federico, Leemhuis and Kutz 2026), default objective of the module
     (``objective="axiom"``): classes are triangle :math:`\times` box, relations translations,
     individuals points.
@@ -124,7 +125,11 @@ def prism(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1, 
     Published options set here: :math:`\exists r.C \sqsubseteq D` only has to overlap
     :math:`D` (``gci3="overlap"``), the loss of :math:`C \sqsubseteq \bot` is the support
     sum of the triangle plus ``margin`` and ignores the box (``PrismBounds(empty="triangle")``),
-    and the negative loss of :math:`C \sqsubseteq \exists r.D` is ``meets_shrunk``.
+    and the negative loss of :math:`C \sqsubseteq \exists r.D` is the exact overlap test of
+    the translated triangle and the triangle of :math:`D` (``gci2_negative_triangle="overlap"``,
+    the measure's ``meets``); ``"inradius"`` is the earlier test on the inscribed discs
+    (``meets_shrunk``), which is not an overlap test: a small triangle in a corner of a large
+    one overlaps it and still has a positive cost.
 
     The module's ``objective="structural"`` (definitions of conjunctions compiled into the
     class regions, a squared-hinge loss, an existence loss) is not built from parts: with
@@ -135,7 +140,11 @@ def prism(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1, 
     :param tables: A module with ``tri_center``, ``tri_inradius``, ``box_center``,
         ``box_offset``, ``rel_embed`` (and ``ind_embed``) to share parameters with.
     """
+    if gci2_negative_triangle not in ("overlap", "inradius"):
+        raise ValueError("gci2_negative_triangle must be 'overlap' or 'inradius'.")
     t = tables
+    if t is not None:
+        gci2_negative_triangle = getattr(t, "gci2_negative_triangle", gci2_negative_triangle)
     if t is None:
         classes = PrismClasses(nb_classes, embed_dim)
     else:
@@ -154,8 +163,10 @@ def prism(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1, 
         individuals = Points(nb_individuals, embed_dim, family="prism")
     elif t is not None and getattr(t, "ind_embed", None) is not None:
         individuals = Points(family="prism", centres=t.ind_embed)
-    objective = ShapeObjective(margin, gci3="overlap", gci2_negative="shrunk",
-                               negatives="gci2", empty_margin=True)
+    objective = ShapeObjective(
+        margin, gci3="overlap",
+        gci2_negative="overlap" if gci2_negative_triangle == "overlap" else "shrunk",
+        negatives="gci2", empty_margin=True)
     return ComposedGeometry(classes, relations, PrismBounds(empty="triangle"), objective,
                             individuals=individuals,
                             neg_capable_gcis={"gci2", "object_property_assertion"})

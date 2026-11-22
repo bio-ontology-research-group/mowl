@@ -176,10 +176,29 @@ class TestRegD(TestCase):
         _same(self, m, ("gci1", "gci0_bot", "gci1_bot", "gci3_bot"), negs=(True,))
 
     def test_ball_softplus(self):
+        # by default every form reads the softplus radius, the bottom forms, class assertions
+        # and the negatives of the conjunctions included
         m = self.make_ball(radius="softplus")
-        # the module reads |radius| in the host forms for bottoms and assertions
-        _same(self, m, ("gci0", "gci1", "gci2", "gci3", "gci1_bot"))
-        _same(self, m, ("gci0", "gci2"), negs=(True,))
+        self.assertTrue(geometry_of(m).objective.consistent_radius)
+        _same(self, m, ALL)
+        _same(self, m, ALL, negs=(True,))
+        m.enable_all_negative_losses()
+        _same(self, m, ("gci1", "gci0_bot", "gci1_bot", "gci3_bot"), negs=(True,))
+
+    def test_ball_softplus_with_the_earlier_mixed_radii(self):
+        # consistent_radius=False: those forms read |radius|; the adapter selects the option
+        m = self.make_ball(radius="softplus", consistent_radius=False)
+        g = geometry_of(m)
+        self.assertFalse(g.objective.consistent_radius)
+        _same(self, m, ALL)
+        _same(self, m, ("gci0", "gci2", "gci1", "gci1_bot"), negs=(True,))
+        m.enable_all_negative_losses()
+        _same(self, m, ("gci1", "gci0_bot", "gci1_bot", "gci3_bot"), negs=(True,))
+        # and the two readings differ
+        fixed = self.make_ball(radius="softplus")
+        rows = _rows("gci0_bot")
+        self.assertFalse(th.allclose(geometry_of(fixed)(rows, "gci0_bot"),
+                                     g(rows, "gci0_bot")))
 
     def test_energy_is_the_modules(self):
         m = self.make_box()

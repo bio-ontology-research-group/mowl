@@ -97,6 +97,23 @@ class TestPrism(TestCase):
             module = PrismModule(N, R, I, embed_dim=D, margin=margin)
             _same(self, module, geometry_of(module), ALL, (False, True))
 
+    def test_both_readings_of_the_negative_triangle(self):
+        # exact overlap test (default) and the earlier test on the inscribed discs, which the
+        # adapter selects from the module's attribute and the builder takes as an option
+        for reading, name in (("overlap", "overlap"), ("inradius", "shrunk")):
+            for margin in (0.0, 0.07):
+                th.manual_seed(5)
+                module = PrismModule(N, R, I, embed_dim=D + 1, margin=margin,
+                                     gci2_negative_triangle=reading)
+                geometry = geometry_of(module)
+                self.assertEqual(geometry.objective.gci2_negative, name)
+                _same(self, module, geometry, ALL, (False, True))
+        self.assertEqual(METHODS["prism"](N, R, I, embed_dim=D).objective.gci2_negative,
+                         "overlap")
+        self.assertEqual(METHODS["prism"](N, R, I, embed_dim=D,
+                                          gci2_negative_triangle="inradius"
+                                          ).objective.gci2_negative, "shrunk")
+
     def test_rebuilt_from_parts_with_copied_parameters(self):
         module = self.make()
         geometry = METHODS["prism"](N, R, I, embed_dim=D + 1, margin=0.07)

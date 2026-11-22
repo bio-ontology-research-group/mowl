@@ -225,10 +225,24 @@ class RegDObjective(Objective):
         ball, so ``gci1`` is only in the list for boxes.
     :param flip_gci2: Read :math:`C \\sqsubseteq \\exists r.D` as the reverse inclusion
         :math:`D \\sqsubseteq \\exists r.C` (the prediction-task code of the authors).
+    :param consistent_radius: ``True`` (default): every form reads the radius of a class
+        through the class model, so a class has one radius. ``False``: the host forms of
+        bottoms and class assertions, and the negatives of the conjunctions, read
+        :math:`|\\text{raw radius}|` of the same tables whatever the class model's radius is
+        (one class, two radii: the earlier :class:`~mowl.nn.RegDELEmModule` with
+        ``radius="softplus"``, ``consistent_radius=False``). It makes a difference only when
+        the class model's radius is not ``"abs"``.
     """
 
-    def __init__(self, host, regd_forms=("gci0", "gci1", "gci2", "gci3"), flip_gci2=False):
+    #: The host forms read with the absolute radius when ``consistent_radius`` is ``False``;
+    #: ``True``: always, ``"negative"``: only their negative loss.
+    MIXED_FORMS = {"gci0_bot": True, "gci3_bot": True, "class_assertion": True,
+                   "gci1": "negative", "gci1_bot": "negative"}
+
+    def __init__(self, host, regd_forms=("gci0", "gci1", "gci2", "gci3"), flip_gci2=False,
+                 consistent_radius=True):
         self.host = host
+        self.consistent_radius = bool(consistent_radius)
         super().__init__(host.margin, host.slack, host.epsilon, host.gci3_reading,
                          host.gci2_negative, host.negatives, host.empty, host.gci2_offset)
         self.neg_forms = host.neg_forms
@@ -249,8 +263,15 @@ class RegDObjective(Objective):
         return 0.0
 
     def _delegate(self, name, g, rows, neg):
-        view = _View(g, measure=g.measure.host_for(g.class_model.region))
-        return getattr(self.host, name)(view, rows, neg)
+        overrides = {"measure": g.measure.host_for(g.class_model.region)}
+        mixed = self.MIXED_FORMS.get(name)
+        if not self.consistent_radius and (mixed is True or (mixed and neg)) \
+                and getattr(g.class_model, "radius_form", "abs") != "abs":
+            cm = g.class_model
+            absolute = BallClasses(centres=cm.centres, radii=cm.radii, radius="abs")
+            overrides["class_model"] = absolute
+            overrides["classes"] = lambda ids, frozen=False: absolute(ids)
+        return getattr(self.host, name)(_View(g, **overrides), rows, neg)
 
     def gci0(self, g, rows, neg=False):
         if "gci0" not in self.regd_forms:
@@ -405,11 +426,15 @@ def regd(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
 def regd_elem(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
               reg_norm=1, all_negatives=False, epsilon=0.01, gci1_radius_term=True,
               lamda=1.0, p=2, gamma1=0.0, gamma2=0.0, eps=1e-4, depth_on_containment=True,
-              flip_gci2=False, radius="abs", tables=None):
+              flip_gci2=False, radius="abs", consistent_radius=True, tables=None):
     """RegD on ELEmbeddings: balls, translations, the RegD energy for ``gci0``, ``gci2`` and
     ``gci3``, ELEmbeddings' losses (slack ``margin``, unit-norm penalty) for the others.
 
     :param radius: ``"abs"`` or ``"softplus"`` (see :class:`~mowl.representation.BallClasses`).
+    :param consistent_radius: With ``radius="softplus"``: ``True`` (default) every form reads
+        the softplus radius of a class; ``False`` the bottom forms, class assertions and the
+        negatives of conjunctions read :math:`|r|`, see :class:`RegDObjective`. (The RegD code
+        uses softplus everywhere.)
     :param tables: A module with ``class_embed``, ``class_rad``, ``rel_embed`` (and
         ``ind_embed``, ``ind_rad``) to share parameters with.
     """
@@ -422,10 +447,15 @@ def regd_elem(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0
         classes, individuals = _ball_tables(t, radius)
         relations = Translation(vectors=t.rel_embed)
     host = Objective.elem(margin, all_negatives=all_negatives, epsilon=epsilon)
+    if radius != "abs" and consistent_radius:
+        # ELEmbeddings' code reads the signed radius parameter as the cost of C below
+        # bottom, which is the radius where the radius is |r|; with another radius form the
+        # cost is the radius of the class (as RegD-ELEm does with every form)
+        host.empty = "size"
     measure = _regd_measure(CentreDistance(gci1_radius_term), lamda, p, gamma1, gamma2, eps,
                             depth_on_containment)
     objective = RegDObjective(host, regd_forms=("gci0", "gci2", "gci3"),
-                              flip_gci2=flip_gci2)
+                              flip_gci2=flip_gci2, consistent_radius=consistent_radius)
     return ComposedGeometry(classes, relations, measure, objective, individuals=individuals,
                             regularizers=_norm_regularizers(reg_norm,
                                                             individuals is not None))
@@ -472,4 +502,4 @@ def _regd_adapter(module):
 def _regd_elem_adapter(module):
     return regd_elem(None, None, embed_dim=module.embed_dim, reg_norm=module.reg_norm,
                      gci1_radius_term=module.gci1_radius_term, radius=module.radius,
-                     **_regd_options(module))
+                     consistent_radius=module.consistent_radius, **_regd_options(module))
