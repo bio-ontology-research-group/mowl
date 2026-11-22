@@ -75,6 +75,15 @@ class TestParts(TestCase):
 #: Methods that cannot be built without a text encoder; their geometry is checked in the tests
 #: of the language-model methods.
 NEEDS_ENCODER = {"hit", "ont"}
+
+
+def _constructed():
+    """Methods built by a construction from data (a source and a reading), not from sizes;
+    their parts are checked against their cards in test_recomp_construct.py."""
+    from mowl.representation import METHOD_KINDS
+    return {k for k, kind in METHOD_KINDS.items() if kind == "construction"}
+
+
 #: Disagreements between the catalogue and the geometry that are known and not resolved,
 #: as ``(key, field): reason``. A listed pair is skipped; the list must not grow silently.
 KNOWN_DISAGREEMENTS = {}
@@ -101,7 +110,7 @@ class TestGeometryAgreesWithCatalogue(TestCase):
     def test_parts_agree(self):
         from mowl.representation import METHODS
         disagreements = []
-        for key in sorted(set(METHODS) - NEEDS_ENCODER):
+        for key in sorted(set(METHODS) - NEEDS_ENCODER - _constructed()):
             parts = _build(key).parts
             rep = REPRESENTATIONS[key]
             for field in ("classes", "relations", "measure"):
@@ -115,7 +124,7 @@ class TestGeometryAgreesWithCatalogue(TestCase):
     def test_individuals_and_conjunction_agree(self):
         from mowl.representation import METHODS
         problems = []
-        for key in sorted(set(METHODS) - NEEDS_ENCODER):
+        for key in sorted(set(METHODS) - NEEDS_ENCODER - _constructed()):
             parts = _build(key).parts
             rep = REPRESENTATIONS[key]
             if parts.get("individuals") == "none" and IndividualModel.NONE not in rep.individuals:
@@ -134,7 +143,7 @@ class TestGeometryAgreesWithCatalogue(TestCase):
 
     def test_fuzzy_methods_name_their_operator_family(self):
         from mowl.representation import METHODS
-        for key in sorted(set(METHODS) - NEEDS_ENCODER):
+        for key in sorted(set(METHODS) - NEEDS_ENCODER - _constructed()):
             if "family" in _build(key).parts:
                 self.assertTrue(REPRESENTATIONS[key].operators, key)
                 self.assertIs(REPRESENTATIONS[key].conjunction, Construction.FUZZY, key)
@@ -168,7 +177,7 @@ class TestConstructorsAgree(TestCase):
     def test_negation_and_disjunction(self):
         from mowl.representation import METHODS
         problems = []
-        for key in sorted(set(METHODS) - NEEDS_ENCODER):
+        for key in sorted(set(METHODS) - NEEDS_ENCODER - _constructed()):
             parts, rep = _build(key).parts, REPRESENTATIONS[key]
             for field in ("negation", "disjunction"):
                 if (key, field) in CONSTRUCTOR_NOT_IN_GEOMETRY:
@@ -185,7 +194,7 @@ class TestConstructorsAgree(TestCase):
         registered = {"goedel": "godel", "goedel on logits": "godel (logits)",
                       "product": "product", "lukasiewicz": "lukasiewicz"}
         problems = []
-        for key in sorted(set(METHODS) - NEEDS_ENCODER):
+        for key in sorted(set(METHODS) - NEEDS_ENCODER - _constructed()):
             parts = _build(key).parts
             operators = REPRESENTATIONS[key].operators
             if "family" not in parts:
