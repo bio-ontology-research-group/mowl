@@ -22,21 +22,28 @@ class ExpressivE(GraphKGEModel):
     the paper hold for the projected triples only; an ontology's role chains are not read.
     Scores exist for ``gci0``, ``gci2`` and the assertion forms.
 
-    :param min_denom: ``Dmin`` of the paper, lower bound of :math:`|1 - s^h s^t|`.
+    :param min_denom: ``Dmin`` of the paper, lower bound of :math:`|1 - s^h s^t|` (default 0.5;
+        with ``relations=`` another relation model only options that are given are passed on).
     :param p: Norm of the score.
     :param tanh_map: Map entities, centres and widths into ``[-1, 1]``.
     """
 
     METHOD = "expressive"
 
-    def __init__(self, dataset, embed_dim=50, min_denom=0.5, p=2, tanh_map=True,
+    def __init__(self, dataset, embed_dim=50, min_denom=None, p=None, tanh_map=None,
                  kge_kwargs=None, projector=None, learning_rate=1e-3, batch_size=1024,
                  num_negs_per_pos=None, seed=0, model_filepath=None, device="cpu", **parts):
         options = dict(kge_kwargs or {})
         unknown = set(options) - {"min_denom", "p", "tanh_map"}
         if unknown:
             raise TypeError(f"Unknown ExpressivE options {sorted(unknown)}.")
-        options.update(min_denom=min_denom, p=p, tanh_map=tanh_map)
+        given = dict(min_denom=min_denom, p=p, tanh_map=tanh_map)
+        if "relations" not in parts:        # the defaults are those of its own relation model
+            given = {k: v if v is not None else dict(min_denom=0.5, p=2, tanh_map=True)[k]
+                     for k, v in given.items()}
+        # with another relation model only the options that were given are passed on (and
+        # refused if that relation model does not take them)
+        options.update({k: v for k, v in given.items() if v is not None})
         options.update(parts)
         super().__init__(dataset, embed_dim=embed_dim, projector=projector,
                          learning_rate=learning_rate, batch_size=batch_size,
