@@ -9,7 +9,19 @@ from mowl.representation.vocabulary import (
     View, Space, ClassModel, RelationModel, IndividualModel, Construction, Measure,
     Parametrisation, Composable, Representation, CONSTRUCTORS)
 from mowl.representation.catalog import REPRESENTATIONS
+from mowl.representation.regions import Region, Ball, Box, ConstructorUnavailable
+from mowl.representation.measures import RegionMeasure, CentreDistance, Bounds
+from mowl.representation.class_models import Classes, BallClasses, BoxClasses
+from mowl.representation.relation_models import Relations, Translation
+from mowl.representation.objectives import Objective, FORMS
+from mowl.representation.geometry import Geometry, ComposedGeometry
+from mowl.representation.adapters import geometry_of, register_adapter, ADAPTERS
 
 __all__ = ["View", "Space", "ClassModel", "RelationModel", "IndividualModel",
            "Construction", "Measure", "Parametrisation", "Composable", "Representation",
-           "CONSTRUCTORS", "REPRESENTATIONS"]
+           "CONSTRUCTORS", "REPRESENTATIONS",
+           "Region", "Ball", "Box", "ConstructorUnavailable",
+           "RegionMeasure", "CentreDistance", "Bounds",
+           "Classes", "BallClasses", "BoxClasses", "Relations", "Translation",
+           "Objective", "FORMS", "Geometry", "ComposedGeometry",
+           "geometry_of", "register_adapter", "ADAPTERS"]

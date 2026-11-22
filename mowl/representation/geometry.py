@@ -1,0 +1,201 @@
+"""The common interface: what a trained model contains.
+
+Whatever a method looks like inside, it answers the same questions: what is the region of
+a class, of an individual, of :math:`\\exists r.C`, of :math:`C \\sqcap D`, and is one
+region inside another. :class:`Geometry` is that interface. Training and evaluation code,
+and people who use a trained model, go through it instead of reading a model's embedding
+tables by name.
+
+:class:`ComposedGeometry` is the geometry that is put together from independent parts: a
+class model, a relation model, a measure and an objective. It is also an
+:class:`~mowl.nn.ELModule`, so a composed geometry is trained like any other module.
+"""
+
+import torch as th
+
+from mowl.nn.el.elmodule import ELModule
+from mowl.representation.objectives import Objective, FORMS
+from mowl.representation.regions import ConstructorUnavailable
+
+__all__ = ["Geometry", "ComposedGeometry"]
+
+
+class Geometry:
+    """Interface of a geometry. Regions are whatever the geometry uses to represent a set
+    (a :class:`~mowl.representation.regions.Region`, a fuzzy membership vector, the state
+    of a query model); callers only pass them back to the geometry. All costs have shape
+    ``(B, 1)``, are lower for "more true" and are zero when the relation holds exactly
+    (for geometries whose measure is exact).
+    """
+
+    # -- regions ----------------------------------------------------------------------------
+    def classes(self, ids):
+        """Regions of the named classes ``ids`` (``LongTensor (B,)``)."""
+        raise NotImplementedError
+
+    def individuals(self, ids):
+        """Regions (or points) of the individuals ``ids``."""
+        raise ConstructorUnavailable(f"{type(self).__name__} has no individuals.")
+
+    def exists(self, relation_ids, region):
+        """Region of :math:`\\exists r.C` for the relations ``relation_ids`` and the
+        regions of the fillers."""
+        raise ConstructorUnavailable(f"{type(self).__name__} has no existential restriction.")
+
+    def conjunction(self, a, b):
+        """``(region, gap)`` of :math:`C \\sqcap D`; ``gap`` is zero iff the result is not
+        empty."""
+        raise ConstructorUnavailable(f"{type(self).__name__} has no conjunction.")
+
+    def negation(self, a):
+        """Region of :math:`\\neg C`."""
+        raise ConstructorUnavailable(f"{type(self).__name__} has no negation.")
+
+    def disjunction(self, a, b):
+        """Region of :math:`C \\sqcup D`."""
+        raise ConstructorUnavailable(f"{type(self).__name__} has no disjunction.")
+
+    # -- relations between regions ----------------------------------------------------------
+    def inside(self, a, b):
+        """Cost of :math:`A \\subseteq B`."""
+        raise NotImplementedError
+
+    def apart(self, a, b):
+        """Cost of :math:`A \\cap B = \\emptyset`."""
+        raise NotImplementedError
+
+    def member(self, individual_ids, region):
+        """Cost of the individuals being members of the regions."""
+        return self.inside(self.individuals(individual_ids), region)
+
+    # -- sizes ------------------------------------------------------------------------------
+    @property
+    def num_classes(self):
+        raise NotImplementedError
+
+    @property
+    def num_individuals(self):
+        return 0
+
+    @property
+    def parts(self):
+        """A dictionary naming the parts of this geometry (vocabulary values of
+        :mod:`mowl.representation`), for geometries that are put together from parts."""
+        return {}
+
+
+class ComposedGeometry(ELModule, Geometry):
+    """A geometry put together from parts.
+
+    :param classes: The class model (:class:`mowl.representation.class_models.Classes`).
+    :param relations: The relation model
+        (:class:`mowl.representation.relation_models.Relations`), or ``None`` for a
+        geometry of classes only.
+    :param measure: The measure (:class:`mowl.representation.measures.RegionMeasure`).
+    :param objective: The reading of the axiom forms
+        (:class:`mowl.representation.Objective`; default: the semantic one, strict, with
+        margin 0).
+    :param individuals: The individual model: a class model whose rows are individuals, or
+        ``None``.
+    :param regularizers: Penalties (:class:`mowl.training.Regularizer`) summed by
+        :meth:`regularization_loss`.
+    """
+
+    def __init__(self, classes, relations, measure, objective=None, individuals=None,
+                 regularizers=()):
+        ELModule.__init__(self)
+        self.class_model = classes
+        self.relation_model = relations
+        self.individual_model = individuals
+        self.measure = measure
+        self.objective = objective if objective is not None else Objective()
+        self.regularizers = tuple(regularizers)
+        if not issubclass(classes.region, measure.accepts):
+            raise TypeError(
+                f"{type(measure).__name__} compares "
+                f"{[c.__name__ for c in measure.accepts]} regions; "
+                f"{type(classes).__name__} gives {classes.region.__name__} regions.")
+        if individuals is not None and not issubclass(individuals.region, measure.accepts):
+            raise TypeError("The individual model must give regions the measure compares.")
+        # Names other code expects of an EL module.
+        self.class_embed = classes.centres
+        self.rel_embed = getattr(relations, "vectors", None)
+        self.ind_embed = individuals.centres if individuals is not None else None
+        self.neg_capable_gcis = frozenset(FORMS) if self.objective.negatives == "all" \
+            else frozenset({"gci2", "object_property_assertion"})
+        self.margin_semantics = "slack" if self.objective.slack else "strict"
+
+    # -- Geometry -----------------------------------------------------------------------
+    def classes(self, ids):
+        return self.class_model(ids)
+
+    def individuals(self, ids):
+        if self.individual_model is None:
+            raise ConstructorUnavailable("This geometry has no individual model.")
+        return self.individual_model(ids)
+
+    def exists(self, relation_ids, region):
+        if self.relation_model is None:
+            raise ConstructorUnavailable("This geometry has no relation model.")
+        return self.relation_model.preimage(relation_ids, region)
+
+    def conjunction(self, a, b):
+        return a.intersect(b)
+
+    def inside(self, a, b):
+        return self.measure.inside(a, b, self.objective.m)
+
+    def apart(self, a, b):
+        return self.measure.apart(a, b, self.objective.margin)
+
+    @property
+    def num_classes(self):
+        return len(self.class_model)
+
+    @property
+    def num_individuals(self):
+        return 0 if self.individual_model is None else len(self.individual_model)
+
+    @property
+    def parts(self):
+        return {"classes": self.class_model.part,
+                "relations": "none" if self.relation_model is None
+                else self.relation_model.part,
+                "individuals": "none" if self.individual_model is None else "region",
+                "measure": self.measure.part,
+                "conjunction": "exact" if self.measure.exact_intersection else "approximate"}
+
+    # -- ELModule -----------------------------------------------------------------------
+    @property
+    def margin(self):
+        return self.objective.margin
+
+    @margin.setter
+    def margin(self, value):
+        self.objective.margin = float(value)
+
+    def cost(self, form, rows, neg=False):
+        """Loss of the axioms ``rows`` of form ``form``."""
+        return self.objective.cost(self, form, rows, neg)
+
+    def get_loss_function(self, gci_name):
+        if gci_name in FORMS:
+            return lambda rows, neg=False: self.cost(gci_name, rows, neg)
+        return super().get_loss_function(gci_name)
+
+    def regularization_loss(self):
+        total = th.zeros((), device=self.class_embed.weight.device)
+        for regularizer in self.regularizers:
+            term = regularizer.penalty(self)
+            if term is not None:
+                total = total + term
+        return total
+
+
+for _form in FORMS:
+    def _loss(self, rows, neg=False, _form=_form):
+        return self.cost(_form, rows, neg)
+    _loss.__name__ = f"{_form}_loss"
+    _loss.__doc__ = f"Loss of the ``{_form}`` axioms ``rows`` (see the objective)."
+    setattr(ComposedGeometry, f"{_form}_loss", _loss)
+del _form, _loss
