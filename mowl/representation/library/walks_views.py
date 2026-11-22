@@ -25,99 +25,14 @@ The projectors, walkers and corpus extractors are used as they are; nothing of
 import os
 import shutil
 
+from mowl.representation.library.graph_projection import (  # noqa: F401
+    PROJECTIONS, ProjectionView, projection_view)
 from mowl.representation.sequence import (OntologyView, SequenceSource, scratch_file)
-from mowl.representation.vocabulary import Projection, Corpus, Walker
+from mowl.representation.vocabulary import Corpus, Walker
 
 __all__ = ["ProjectionView", "AxiomCorpus", "AnnotationCorpus", "Walks", "Sentences", "Mixed",
            "CorpusFile",
            "PROJECTIONS", "WALKERS", "projection_view", "make_walker"]
-
-
-def _taxonomy(bidirectional_taxonomy=False, **_):
-    from mowl.projection import TaxonomyProjector
-    return TaxonomyProjector(bidirectional_taxonomy)
-
-
-def _taxonomy_relations(bidirectional_taxonomy=False, relations=None, **_):
-    from mowl.projection import TaxonomyWithRelationsProjector
-    return TaxonomyWithRelationsProjector(taxonomy=True,
-                                          bidirectional_taxonomy=bidirectional_taxonomy,
-                                          relations=relations)
-
-
-def _dl2vec(bidirectional_taxonomy=False, **_):
-    from mowl.projection import DL2VecProjector
-    return DL2VecProjector(bidirectional_taxonomy)
-
-
-def _owl2vec_star(bidirectional_taxonomy=False, include_literals=False, only_taxonomy=False,
-                  **_):
-    from mowl.projection import OWL2VecStarProjector
-    return OWL2VecStarProjector(bidirectional_taxonomy=bidirectional_taxonomy,
-                                include_literals=include_literals,
-                                only_taxonomy=only_taxonomy)
-
-
-def _gda(bidirectional_taxonomy=False, include_literals=False, only_taxonomy=False, **_):
-    from mowl.projection import GDAProjector
-    return GDAProjector(bidirectional_taxonomy=bidirectional_taxonomy,
-                        include_literals=include_literals, only_taxonomy=only_taxonomy)
-
-
-#: Name of a projection (a value of :class:`~mowl.representation.vocabulary.Projection`)
-#: -> function ``(**options) -> projector``.
-PROJECTIONS = {Projection.TAXONOMY.value: _taxonomy,
-               Projection.TAXONOMY_WITH_RELATIONS.value: _taxonomy_relations,
-               Projection.DL2VEC.value: _dl2vec,
-               Projection.OWL2VEC_STAR.value: _owl2vec_star,
-               Projection.GDA.value: _gda}
-#: Short names accepted for the projections.
-_ALIASES = {"taxonomy": Projection.TAXONOMY.value,
-            "taxonomy_rels": Projection.TAXONOMY_WITH_RELATIONS.value,
-            "dl2vec": Projection.DL2VEC.value, "owl2vec_star": Projection.OWL2VEC_STAR.value,
-            "owl2vecstar": Projection.OWL2VEC_STAR.value, "gda": Projection.GDA.value}
-#: Projector class name -> vocabulary value.
-_PROJECTOR_PARTS = {"TaxonomyProjector": Projection.TAXONOMY,
-                    "TaxonomyWithRelationsProjector": Projection.TAXONOMY_WITH_RELATIONS,
-                    "DL2VecProjector": Projection.DL2VEC,
-                    "OWL2VecStarProjector": Projection.OWL2VEC_STAR,
-                    "CategoricalProjector": Projection.CATEGORICAL,
-                    "GDAProjector": Projection.GDA}
-
-
-class ProjectionView(OntologyView):
-    """A graph of the ontology, from a projector of :mod:`mowl.projection`.
-
-    :param projector: A :class:`mowl.projection.base.ProjectionModel`.
-    :param entailment: See :class:`~mowl.representation.sequence.OntologyView`.
-
-    Used by ``dl2vec``, ``owl2vec_star`` and ``taxonomy_walks``.
-    """
-
-    produces = "graph"
-
-    def __init__(self, projector, entailment=None):
-        super().__init__(entailment)
-        self.projector = projector
-
-    @property
-    def part(self):
-        part = _PROJECTOR_PARTS.get(type(self.projector).__name__)
-        return part.value if part is not None else type(self.projector).__name__
-
-    def read(self, dataset):
-        """The edges (:class:`mowl.projection.Edge`) of the projected ontology."""
-        return self.projector.project(self.ontology(dataset))
-
-
-def projection_view(name, entailment=None, **options):
-    """A :class:`ProjectionView` by name (a key of :data:`PROJECTIONS` or a short name:
-    ``"taxonomy"``, ``"taxonomy_rels"``, ``"dl2vec"``, ``"owl2vec_star"``, ``"gda"``) with
-    the options of the projector (``bidirectional_taxonomy``, ``include_literals``, ...)."""
-    key = _ALIASES.get(name, name)
-    if key not in PROJECTIONS:
-        raise ValueError(f"Unknown projection {name!r}; available: {sorted(PROJECTIONS)}.")
-    return ProjectionView(PROJECTIONS[key](**options), entailment=entailment)
 
 
 class AxiomCorpus(OntologyView):

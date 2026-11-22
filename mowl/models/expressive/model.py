@@ -10,7 +10,7 @@ class ExpressivE(GraphKGEModel):
     **relation** is a hyper-parallelogram in the space of entity pairs
     :math:`\mathbb{R}^{2d}` (slopes, centres and widths for the head and the tail position),
     the **interaction** is the distance of Equation 3 of the paper with the constraints of the
-    authors' code (:mod:`mowl.nn.graph.kge_interactions`), the **objective** the
+    authors' code (:mod:`mowl.representation.library.graph_interactions`), the **objective** the
     self-adversarial negative sampling loss (margin 3, temperature 2), the **sampler** the
     uniform corruption of heads and tails, the **projection** the
     :class:`~mowl.projection.OWL2VecStarProjector`. ``model.module.parts`` names them and

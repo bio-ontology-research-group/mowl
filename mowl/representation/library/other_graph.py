@@ -226,7 +226,7 @@ class ExpressivERelations(_PairRelations):
     """ExpressivE (Pavlovic and Sallinger 2023): a relation is a hyper-parallelogram in the
     space of pairs :math:`\\mathbb{R}^{2d}`, given by slopes, centres and widths for the
     head and the tail position (a raw vector of size ``6 d``). The score is that of
-    :class:`mowl.nn.graph.kge_interactions.ExpressivEInteraction`, so costs equal those of an
+    :class:`mowl.representation.library.graph_interactions.ExpressivEInteraction`, so costs equal those of an
     ExpressivE with the same table. Only centres of the classes are used.
 
     :param table: An existing table of raw relation vectors (``6 d`` wide).
@@ -240,7 +240,7 @@ class ExpressivERelations(_PairRelations):
     def __init__(self, size=None, embed_dim=None, table=None, p=2, tanh_map=True,
                  min_denom=0.5, subclass_id=None):
         super().__init__()
-        from mowl.nn.graph.kge_interactions import ExpressivEInteraction
+        from mowl.representation.library.graph_interactions import ExpressivEInteraction
         self._subclass_id = subclass_id
         if table is None:
             self.reserved = 1 if subclass_id is None else 0
@@ -625,7 +625,7 @@ class ReshuffleRelations(_PairRelations):
     parameter by a column-wise softmax whose last row is dropped. An entity is a
     :math:`k \times l` matrix and a triple is scored
     :math:`-\lVert \mathrm{ReLU}(x_h R_r - x_t) \rVert_2`
-    (:func:`mowl.nn.graph.kge_interactions.reshuffle_interaction`), which is zero exactly when
+    (:func:`mowl.representation.library.graph_interactions.reshuffle_interaction`), which is zero exactly when
     :math:`x_h R_r \le x_t` coordinate-wise.
 
     The entities that meet this relation model are encoded by a graph network that uses its
@@ -649,7 +649,7 @@ class ReshuffleRelations(_PairRelations):
     def __init__(self, size=None, l=25, inverse=True,  # noqa: E741
                  row_function="softmax", subclass_id=None):
         super().__init__()
-        from mowl.nn.graph.kge_interactions import relation_matrices
+        from mowl.representation.library.graph_interactions import relation_matrices
         self._matrices = relation_matrices
         self.l, self.inverse, self.row_function = l, bool(inverse), row_function
         self.reserved = 0
@@ -697,7 +697,7 @@ class ReshuffleRelations(_PairRelations):
         return ids if self.inverse else 2 * ids
 
     def cost(self, ids, head, tail):
-        from mowl.nn.graph.kge_interactions import reshuffle_interaction
+        from mowl.representation.library.graph_interactions import reshuffle_interaction
         matrix = self.matrices()[0][self.row(ids)]
         k = head.centre.shape[1] // self.l
         score = reshuffle_interaction(head.centre.view(-1, k, self.l), matrix,
@@ -715,7 +715,7 @@ class GraphEncodedPoints(Classes):
     a fixed random binary feature matrix :math:`k \times l` and the model is the features
     after ``num_layers`` rounds of message passing along the edges of the graph, each message
     the features of a neighbour multiplied by the matrix of the relation
-    (:func:`mowl.nn.graph.kge_interactions.propagate`). So an entity is not a row of a table:
+    (:func:`mowl.representation.library.graph_interactions.propagate`). So an entity is not a row of a table:
     an entity that is new to the graph gets an encoding as well
     (:meth:`encode_graph`).
 
@@ -744,7 +744,7 @@ class GraphEncodedPoints(Classes):
     def __init__(self, size=None, l=25, k=80, triples=None, num_layers=4,  # noqa: E741
                  aggregation="max_self_and_selfLoop", density=0.3085, feature_seed=0):
         super().__init__()
-        from mowl.nn.graph.kge_interactions import random_features
+        from mowl.representation.library.graph_interactions import random_features
         if aggregation not in ("max_self_and_selfLoop", "max_self_noLoop"):
             raise ValueError("aggregation must be 'max_self_and_selfLoop' or "
                              "'max_self_noLoop'.")
@@ -773,7 +773,7 @@ class GraphEncodedPoints(Classes):
         (``all_relations``: all rows, relation ``i`` at ``2i`` and its inverse at ``2i + 1``;
         otherwise the forward ones). Without arguments: the features and the graph of the
         model."""
-        from mowl.nn.graph.kge_interactions import propagate
+        from mowl.representation.library.graph_interactions import propagate
         if self._relations is None:
             raise TypeError("GraphEncodedPoints needs the relation model: bind it.")
         features = self.centres.weight.view(-1, self.k, self.l) if features is None \
@@ -789,7 +789,7 @@ class GraphEncodedPoints(Classes):
         """Entity matrices and relation matrices of another graph over the same relations,
         with fresh random features drawn with ``seed``: the inductive setting of the paper,
         where the entities of the test graph are not seen in training."""
-        from mowl.nn.graph.kge_interactions import random_features
+        from mowl.representation.library.graph_interactions import random_features
         generator = th.Generator().manual_seed(seed)
         features = random_features(num_entities, self.k, self.l, self.density, generator)
         device = self.edge_index.device
@@ -1148,7 +1148,7 @@ class PyKEENGeometry(Geometry):
     """
 
     def __init__(self, model):
-        self.model = model
+        super().__init__()
         self.kge = model.kge_method
         self.device = next(self.kge.parameters()).device
         factory = model.triples_factory
@@ -1160,6 +1160,8 @@ class PyKEENGeometry(Geometry):
         factor = 2 if self._inverse else 1   # PyKEEN: relation r is 2r, its inverse 2r + 1
         self._subclass = self._scale(relations.get(model.SUBCLASS_RELATION, -1), factor)
         self._type = self._scale(relations.get("http://type", -1), factor)
+        self.sampler = UniformCorruption(model.num_negs_per_pos)
+        self.projection = type(model.projector).__name__
 
     @staticmethod
     def _scale(relation, factor):
@@ -1199,16 +1201,6 @@ class PyKEENGeometry(Geometry):
     def loss(self):
         """The objective: the loss of the PyKEEN model (:class:`PyKEENLoss`)."""
         return PyKEENLoss(self.kge.loss, self.kge.num_entities)
-
-    @property
-    def sampler(self):
-        """The negative sampler: :class:`UniformCorruption` with the model's
-        ``num_negs_per_pos``."""
-        return UniformCorruption(self.model.num_negs_per_pos)
-
-    @property
-    def projection(self):
-        return type(self.model.projector).__name__
 
     def parameters(self):
         return self.kge.parameters()

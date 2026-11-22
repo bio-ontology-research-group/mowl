@@ -2,7 +2,6 @@ import copy
 import logging
 import os
 
-import numpy as np
 import torch as th
 from deprecated.sphinx import versionadded
 from pykeen.models import ERModel
@@ -11,6 +10,7 @@ from pykeen.nn.init import PretrainedInitializer
 import mowl.error.messages as msg
 from mowl.models.graph_kge.triple_model import EvaluationModel, TripleGraphModel  # noqa: F401
 from mowl.projection import Edge
+from mowl.training.triples import extend_embeddings
 
 logger = logging.getLogger(__name__)
 
@@ -103,30 +103,12 @@ class GraphPlusPyKEENModel(TripleGraphModel):
             relation_to_id=self.graph_relation_to_id,
             create_inverse_triples=self.create_inverse_triples)
 
-        new_class_embeds = []
-        for new_node, new_id in self.graph_node_to_id.items():
-            if new_node in prev_class_embeds:
-                new_class_embeds.append(prev_class_embeds[new_node])
-            elif new_node in prev_individual_embeds:
-                new_class_embeds.append(prev_individual_embeds[new_node])
-            else:
-                class_size = self._kge_method.entity_representations[0](indices=None).shape[1]
-                new_class_embeds.append(np.random.normal(size=class_size))
-
-        new_class_embeds = np.asarray(new_class_embeds)
-
-        new_object_property_embeds = []
-        for new_relation, new_id in self.graph_relation_to_id.items():
-            if new_relation in prev_object_property_embeds:
-                new_object_property_embeds.append(prev_object_property_embeds[new_relation])
-            else:
-                op_size = self._kge_method.relation_representations[0](indices=None).shape[1]
-                new_object_property_embeds.append(np.random.normal(size=op_size))
-
-        new_object_property_embeds = np.asarray(new_object_property_embeds)
-
-        pretrained_cls_embeddings = th.tensor(new_class_embeds)
-        pretrained_op_embeddings = th.tensor(new_object_property_embeds)
+        class_size = self._kge_method.entity_representations[0](indices=None).shape[1]
+        op_size = self._kge_method.relation_representations[0](indices=None).shape[1]
+        pretrained_cls_embeddings = extend_embeddings(
+            [prev_class_embeds, prev_individual_embeds], self.graph_node_to_id, class_size)
+        pretrained_op_embeddings = extend_embeddings(
+            prev_object_property_embeds, self.graph_relation_to_id, op_size)
 
         new_kge_method = self._kge_method_uninitialized(
             triples_factory=self.triples_factory,

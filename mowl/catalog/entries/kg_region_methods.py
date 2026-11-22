@@ -168,7 +168,7 @@ EXPRESSIVE = MethodCard(
     notes=(
         "A combination of parts (mowl.models.ExpressivE; the method 'expressive' of "
         "mowl.representation) after the authors' code (tanh maps, minimal denominator Dmin, "
-        "distance of Equation 3 in mowl.nn.graph.kge_interactions, self-adversarial loss with "
+        "distance of Equation 3 in mowl.representation.library.graph_interactions, self-adversarial loss with "
         "margin 3 and temperature 2), trained on the triples of a projection; only the base "
         "model, not the ablations. The direct implementation (a PyKEEN ERModel) is in "
         "mowl.baselines. Ontology link: the triples are the edges of a mowl.projection projector (default OWL2VecStarProjector: C subclassof D, C r D for C ⊑ ∃r.D, a type C for C(a), r(a, b)); axioms the projector does not read are ignored. Scores are available for C ⊑ D (gci0, the subclassof edge), C ⊑ ∃r.D (gci2), C(a) (class_assertion, the type edge) and r(a, b) (object_property_assertion, the role edge). Composition "

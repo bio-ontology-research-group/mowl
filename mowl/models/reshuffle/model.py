@@ -1,6 +1,5 @@
 r"""RESHUFFLE on a projected ontology."""
-import torch as th
-
+from mowl.evaluation.inductive_triples import InductiveTripleCosts
 from mowl.models.graph_kge.triple_model import GraphKGEModel, HitsEarlyStopping
 
 
@@ -35,7 +34,7 @@ class Reshuffle(GraphKGEModel):
     ``early_stopping={"frequency": 10, "patience": 10, "relative_delta": 0.01}`` is the
     authors' setting (every 10 epochs, stop when 10 evaluations did not improve Hits@10 by
     1%, then restore the best weights); it is the training regime
-    :class:`~mowl.models.graph_kge.triple_model.HitsEarlyStopping`.
+    :class:`~mowl.training.triples.HitsEarlyStopping`.
 
     :param l: Number of coordinates.
     :param k: Rows of an entity feature matrix.
@@ -62,7 +61,7 @@ class Reshuffle(GraphKGEModel):
                  early_stopping=None, inverse_triples=True, kge_kwargs=None, batch_size=1024,
                  projector=None, seed=0, model_filepath=None, device="cpu", **parts):
         self.create_inverse_triples = bool(inverse_triples)
-        self._inductive_cache = None
+        self._inductive = None
         options = dict(kge_kwargs or {})
         unknown = set(options) - {"aggregation", "row_function", "density", "feature_seed"}
         if unknown:
@@ -94,11 +93,10 @@ class Reshuffle(GraphKGEModel):
         return lambda idxs: self.module.relation_model.raw()[idxs]
 
     def train(self, epochs=0):
-        self._inductive_cache = None
+        self._inductive = None
         return super().train(epochs=epochs)
 
     # -- inductive link prediction ------------------------------------------------------
-    @th.no_grad()
     def inductive_costs(self, graph, rows, seed=0, target="tail"):
         """Cost of triples over a graph the model was not trained on (lower is more
         plausible): the norm :math:`\\lVert \\mathrm{ReLU}(x_h R_r - x_t)\\rVert_2` of the
@@ -119,34 +117,7 @@ class Reshuffle(GraphKGEModel):
         :param seed: Seed of the random features.
         :param target: ``"tail"`` or ``"head"``: which entity of the rows is the candidate.
         """
-        if target not in ("head", "tail"):
-            raise ValueError("target must be 'head' or 'tail'.")
-        from mowl.nn.graph.kge_interactions import reshuffle_interaction
-        module = self.module
-        classes = module.class_model
-        inverse = self.create_inverse_triples
-        known = self.triples_factory.relation_to_id
-        to_model = th.tensor([known.get(r, -1) for r in graph.relations], dtype=th.long)
-        key = (id(graph), int(seed), len(graph.triples))
-        if self._inductive_cache is None or self._inductive_cache[0] != key:
-            module.eval()
-            facts = graph.triples
-            keep = to_model[facts[:, 1]] >= 0
-            facts = th.stack([facts[keep, 0], to_model[facts[keep, 1]], facts[keep, 2]], dim=1)
-            x, rel = classes.encode_graph(facts, len(graph.entities), seed=seed,
-                                          all_relations=inverse)
-            self._inductive_cache = (key, x, rel)
-        _, x, rel = self._inductive_cache
-        rows = rows.cpu()
-        relation = to_model[rows[:, 1]]
-        out = th.full((len(rows),), float("inf"))
-        ok = relation >= 0
-        if ok.any():
-            device = x.device
-            h, r, t = rows[ok, 0].to(device), relation[ok].to(device), rows[ok, 2].to(device)
-            if inverse and target == "head":
-                score = reshuffle_interaction(x[t], rel[2 * r + 1], x[h])
-            else:
-                score = reshuffle_interaction(x[h], rel[2 * r if inverse else r], x[t])
-            out[ok] = -score.cpu()
-        return out
+        if self._inductive is None or self._inductive.module is not self.module:
+            self._inductive = InductiveTripleCosts(
+                self.module, self.triples_factory.relation_to_id, self.create_inverse_triples)
+        return self._inductive(graph, rows, seed, target)

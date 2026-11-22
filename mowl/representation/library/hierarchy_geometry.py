@@ -20,7 +20,7 @@ from mowl.representation.geometry import ComposedGeometry
 from mowl.representation.objectives import Objective
 from mowl.representation.regions import ConstructorUnavailable
 
-__all__ = ["hierarchy_geometry", "LatticeGeometry", "TextGeometry"]
+__all__ = ["hierarchy_geometry", "LatticeGeometry", "TextGeometry", "ExistentialElements"]
 
 
 def hierarchy_geometry(classes, relations, measure, objective=None, individuals=None,
@@ -38,6 +38,43 @@ def hierarchy_geometry(classes, relations, measure, objective=None, individuals=
     options.setdefault("neg_capable_gcis", {"gci0"})
     return ComposedGeometry(classes, relations, measure, objective, individuals=individuals,
                             regularizers=regularizers, **options)
+
+
+class ExistentialElements:
+    """Mixin (before the geometry class) for a lattice geometry whose elements include the
+    compound classes :math:`\\exists r.D`: a sorted table of the keys ``role * n + filler``
+    and the element each key stands for, kept as buffers (``existential_keys`` and
+    ``existential_nodes``, saved with the module). Call :meth:`_init_existentials` after the
+    module is initialised; :meth:`existential_ids` is what a
+    :class:`LatticeGeometry` takes as ``existentials``."""
+
+    def _init_existentials(self, num_nodes):
+        self.num_nodes = num_nodes
+        self.register_buffer("existential_keys", th.zeros(0, dtype=th.long))
+        self.register_buffer("existential_nodes", th.zeros(0, dtype=th.long))
+        self._existential_ids = self.existential_ids
+
+    def set_existentials(self, role_ids, filler_ids, node_ids):
+        """Register the elements :math:`\\exists r.D`: ``node_ids[i]`` is the element for
+        role ``role_ids[i]`` and filler element ``filler_ids[i]``."""
+        role_ids = th.as_tensor(role_ids, dtype=th.long).reshape(-1)
+        filler_ids = th.as_tensor(filler_ids, dtype=th.long).reshape(-1)
+        node_ids = th.as_tensor(node_ids, dtype=th.long).reshape(-1)
+        keys = role_ids * self.num_nodes + filler_ids
+        keys, order = th.sort(keys)
+        device = self.existential_keys.device
+        self.existential_keys = keys.to(device)
+        self.existential_nodes = node_ids[order].to(device)
+
+    def existential_ids(self, role_ids, filler_ids):
+        """Element ids of :math:`\\exists r.D`; ``-1`` where it is not an element."""
+        keys = role_ids.long() * self.num_nodes + filler_ids.long()
+        if len(self.existential_keys) == 0:
+            return th.full_like(keys, -1)
+        last = len(self.existential_keys) - 1
+        pos = th.searchsorted(self.existential_keys, keys).clamp(max=last)
+        found = self.existential_keys[pos] == keys
+        return th.where(found, self.existential_nodes[pos], th.full_like(keys, -1))
 
 
 class LatticeGeometry(ComposedGeometry):

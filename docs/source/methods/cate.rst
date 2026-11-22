@@ -184,3 +184,28 @@ selection by the validation MRR with early stopping
 Guarantees and limitations, including why Helly-type limits of convex regions do not apply
 to an order embedding, are listed on the card ``cate`` of the :doc:`method catalogue
 <catalogue>`.
+
+Parts
+-----
+
+:class:`~mowl.nn.graph.cate.CatEModule` only names its parts. The lookup of the elements
+:math:`\exists r.D` is the mixin
+:class:`~mowl.representation.library.hierarchy_geometry.ExistentialElements`, which any
+lattice geometry can use, and the validation score of the paper (the raw mean reciprocal rank of
+the order violation) and the scoring of rows from columns of ids are in
+:mod:`mowl.evaluation.lattice_ranking`.
+
+.. testcode::
+
+    import torch as th
+    from mowl.evaluation.lattice_ranking import order_mean_reciprocal_rank
+
+    class Order(th.nn.Module):
+        def order_violation(self, a, b):
+            return (b - a).abs().float()
+
+    print(order_mean_reciprocal_rank(Order(), [(0, 1, th.tensor([0, 1, 2, 3]))]))
+
+.. testoutput::
+
+    1.0

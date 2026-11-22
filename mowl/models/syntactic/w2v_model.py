@@ -3,12 +3,12 @@
 import logging
 import os
 
-import torch as th
 from deprecated.sphinx import versionadded
 
 import mowl.error.messages as msg
 from mowl.base_models import SyntacticModel
 from mowl.models.composed.sequence import ComposedSequenceModel
+from mowl.utils.device import default_device
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -44,8 +44,7 @@ class SyntacticPlusW2VModel(ComposedSequenceModel, SyntacticModel):
 
     def __init__(self, dataset, model_filepath=None, corpus_filepath=None):
         from mowl.representation.library.walks_views import CorpusFile
-        device = th.device("cuda" if th.cuda.is_available() else "cpu")
-        super().__init__(dataset, model_filepath=model_filepath, device=device,
+        super().__init__(dataset, model_filepath=model_filepath, device=default_device(),
                          source=CorpusFile(None),
                          _base_options={"corpus_filepath": corpus_filepath})
         self._is_pretrained = False

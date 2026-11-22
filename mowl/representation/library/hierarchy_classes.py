@@ -170,6 +170,21 @@ class CodedBoxes(HierarchyClasses):
         else:
             self.register_parameter("code_logits", None)
 
+    def trainable_codes(self):
+        """The trainable codes in :math:`[0, 1]` (``None`` for ``"gbox"``): shape
+        ``(code_dims, k)`` for ``"gbc"`` and ``(size, code_dims)`` for ``"vbc"``."""
+        if self.code_logits is None:
+            return None
+        return th.sigmoid(self.code_logits)
+
+    def vectors(self, ids):
+        """One vector per class of ``ids``: the two corners, and for ``"vbc"`` the code of the
+        class appended, ``concat(box_min, box_max[, code])``."""
+        parts = [self.box_min[ids], self.box_max[ids]]
+        if self.variant == "vbc":
+            parts.append(self.vertex_codes(ids))
+        return th.cat(parts, dim=-1)
+
     def global_codes(self):
         """:math:`B \\in [0, 1]^{d \\times k}` (``"gbc"``)."""
         fixed = th.ones(self._embed_dim - self.code_dims, self.num_codes,
