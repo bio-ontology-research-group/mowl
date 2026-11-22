@@ -73,6 +73,10 @@ def register_measure(name, default_for=()):
     return decorate
 
 
+#: What a registered method is fitted on.
+TRAINED_ON = ("axioms", "queries", "sequences", "construction")
+
+
 def register_method(key, trained_on="axioms"):
     """Decorator: register a function that builds the method with catalogue key ``key``
     from parts. Signature: ``(nb_classes, nb_relations, nb_individuals=0, embed_dim=50,
@@ -86,9 +90,11 @@ def register_method(key, trained_on="axioms"):
         ``"sequences"``: the method learns from walks or sentences; the function returns a
         :class:`~mowl.representation.sequence.SequenceGeometry` that
         :class:`~mowl.models.ComposedSequenceModel` trains.
+        ``"construction"``: nothing is trained; the function builds the model from the data
+        (:mod:`mowl.representation.construction`; signature ``(data, **options)``).
     """
-    if trained_on not in ("axioms", "queries", "sequences"):
-        raise ValueError("trained_on must be 'axioms', 'queries' or 'sequences'.")
+    if trained_on not in TRAINED_ON:
+        raise ValueError(f"trained_on must be one of {TRAINED_ON}.")
 
     def decorate(function):
         _unique(METHODS, key, function)

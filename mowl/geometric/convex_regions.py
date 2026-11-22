@@ -24,6 +24,11 @@ Guarantees:
   ``NF1`` to ``NF7``), so ``η`` is a model of every axiom set that ``M`` is a model of.
 - The construction does not need the ontology: it needs a finite model. The canonical
   model gives the strongly faithful case (see :mod:`mowl.geometric.faithfulness`).
+
+Parts (:mod:`mowl.representation.construction`): the source ``finite model`` and the reading
+``simplex`` (recipe ``convex_regions``); :attr:`ConvexRegionModel.module` is the geometry of
+the combination. :class:`FiniteInterpretation` is neutral (sources and baselines use it).
+The direct implementation is :mod:`mowl.baselines.geometric.convex_regions`.
 """
 from __future__ import annotations
 
@@ -45,7 +50,7 @@ from mowl.geometric.normal_forms import (
     TOP,
     Axiom,
 )
-from mowl.geometric.regions import Face, PairHull, simplex_points
+from mowl.geometric.regions import Face, PairHull
 
 if TYPE_CHECKING:  # pragma: no cover
     from mowl.geometric.completion import CanonicalModel
@@ -134,18 +139,25 @@ class ConvexRegionModel(DictInterpretation):
     """
 
     def __init__(self, model: FiniteInterpretation, axioms: Optional[Iterable[Axiom]] = None):
+        from mowl.representation.construction import construct
+
         m = model.size
         self.finite_model: FiniteInterpretation = model
         self.dimension: int = m - 1
-        self._points = simplex_points(m)
-        universe = Face.from_simplex(self._points, range(m))
-        classes = {
-            name: Face.from_simplex(self._points, sorted(ext))
-            for name, ext in model.concepts.items()
-        }
+        # the combination of parts: the finite model, read as faces of the simplex
+        geometry = construct(model, "finite model", "simplex", names=list(model.concepts),
+                             roles=list(model.roles), individuals=[])
+        self.module = geometry
+        regions = geometry.read.classes
+        self._points = regions.points.numpy()
+        universe = Face.from_simplex(self._points, geometry.read.universe.vertex_ids())
+        classes = {name: Face.from_simplex(self._points, sorted(regions.vertex_ids(row)))
+                   for row, name in enumerate(geometry.names)}
         roles = {}
-        for name, rel in model.roles.items():
-            rows = [np.concatenate([self._points[i], self._points[j]]) for i, j in sorted(rel)]
+        relations = geometry.relation_model
+        for r, name in enumerate(geometry.roles):
+            pairs = [] if relations is None else relations.pairs[r].nonzero().tolist()
+            rows = [np.concatenate([self._points[i], self._points[j]]) for i, j in pairs]
             roles[name] = PairHull(np.vstack(rows) if rows
                                    else np.zeros((0, 2 * self.dimension)))
         super().__init__("polyhedral", universe, classes, roles, names=list(classes))

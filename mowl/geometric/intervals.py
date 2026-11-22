@@ -18,6 +18,11 @@ Construction:
   :math:`\\eta(r) = \\bigcup_{(i, j) \\in r^{\\mathcal{I}}} I(i) \\times I(j)`
   (and unknown roles :math:`\\mapsto \\emptyset`).
 
+Parts (:mod:`mowl.representation.construction`): the source ``canonical model`` and the
+reading ``intervals`` (recipe ``interval_union``); :attr:`IntervalUnionModel.module` is the
+geometry of the combination. The direct implementation is
+:mod:`mowl.baselines.geometric.intervals`.
+
 Guarantees:
 
 - **Exact model of the normalised ontology**: satisfies every normalised axiom
@@ -63,8 +68,6 @@ if TYPE_CHECKING:  # pragma: no cover
     from mowl.datasets import Dataset
     from mowl.geometric.completion import CanonicalModel
 
-_HALF_WIDTH: float = 0.25
-
 
 class IntervalUnionModel(GeometricInterpretation):
     """Exact 1-D interval-union model of a normalised EL++ ontology.
@@ -83,45 +86,35 @@ class IntervalUnionModel(GeometricInterpretation):
     family: str = "interval"
 
     def __init__(self, cm: CanonicalModel) -> None:
+        from mowl.representation.construction import RECIPES
+
         self.canonical_model: CanonicalModel = cm
         self._names: List[str] = list(cm.names)
-        n_elems = len(cm.domain)
-
+        # the combination of parts: the canonical model, read as unions of intervals
+        known = sorted(set(cm.concept_names) | set(cm.names))
+        geometry = RECIPES["interval_union"].build(
+            cm, names=known, roles=sorted(cm.role_names), individuals=sorted(cm.individuals))
+        self.module = geometry
+        regions = geometry.read.classes
         self._element_intervals: List[Tuple[float, float]] = [
-            (float(i + 1) - _HALF_WIDTH, float(i + 1) + _HALF_WIDTH)
-            for i in range(n_elems)
+            (float(lo), float(hi)) for lo, hi in zip(regions.lower, regions.upper)
         ]
         self._universe: IntervalUnion = IntervalUnion(self._element_intervals)
 
         self._class_regions: Dict[str, IntervalUnion] = {}
-        for cname in set(cm.concept_names) | set(cm.names):
-            if cname == BOTTOM:
-                self._class_regions[cname] = EMPTY_1D
-            elif cname == TOP:
-                self._class_regions[cname] = self._universe
-            else:
-                positions = cm.extension(cname)
-                if not positions:
-                    self._class_regions[cname] = EMPTY_1D
-                else:
-                    self._class_regions[cname] = IntervalUnion(
-                        [self._element_intervals[i] for i in sorted(positions)]
-                    )
+        for row, cname in enumerate(known):
+            intervals = regions.intervals(row)
+            self._class_regions[cname] = IntervalUnion(intervals) if intervals else EMPTY_1D
         self._class_regions[BOTTOM] = EMPTY_1D
         self._class_regions[TOP] = self._universe
 
         self._role_regions: Dict[str, RectUnion] = {}
-        for rname in cm.role_names:
-            pairs = cm.role(rname)
-            if not pairs:
-                self._role_regions[rname] = RectUnion([])
-            else:
-                self._role_regions[rname] = RectUnion(
-                    [
-                        (self._element_intervals[i], self._element_intervals[j])
-                        for (i, j) in sorted(pairs)
-                    ]
-                )
+        relations = geometry.relation_model
+        for k, rname in enumerate(geometry.roles):
+            pairs = [] if relations is None else \
+                [tuple(p) for p in relations.pairs[k].nonzero().tolist()]
+            self._role_regions[rname] = RectUnion(
+                [(self._element_intervals[i], self._element_intervals[j]) for i, j in pairs])
 
         self._checker: Optional[ModelChecker] = None
         checker = self.check()

@@ -105,7 +105,7 @@ from typing import (TYPE_CHECKING, Dict, FrozenSet, Iterable, List, Mapping, Opt
 
 import numpy as np
 
-from mowl.geometric.errors import (InconsistentOntology, InternalConsistencyError,
+from mowl.geometric.errors import (InconsistentOntology, InternalConsistencyError,  # noqa: F401
                                    UnsupportedAxiom)
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -662,11 +662,16 @@ class ALConeInterpretation:
         half-axes of their extensions, roles the incidence matrices of their extensions,
         and individual ``a`` the unit vector on the half-axis of :math:`a^I`.
 
+        This is the combination of the source ``finite model`` and the reading
+        ``half-axes`` (:mod:`mowl.representation.construction`); the interpretation's
+        :attr:`module` is its geometry.
+
         :param model: A :class:`FiniteInterpretation`.
         :param axioms: If given, the classical model is first checked to satisfy them
             (:class:`ValueError` otherwise), and the result is verified with
             :class:`ALConeChecker` (:class:`InternalConsistencyError` otherwise).
         """
+        from mowl.representation.construction import RECIPES
         axioms = None if axioms is None else list(axioms)
         if axioms is not None:
             bad = model.violations(axioms)
@@ -674,29 +679,38 @@ class ALConeInterpretation:
                 listed = "; ".join(map(str, bad[:5]))
                 raise ValueError(
                     f"The finite interpretation is not a model of the axioms: {listed}")
-        size = model.domain_size
-        if size < 1:
+        if model.domain_size < 1:
             raise ValueError("The domain must not be empty.")
-        dim = (size + 1) // 2
-        f = list(range(size)) + [0] * (2 * dim - size)  # half-axis -> element
-        concepts = {}
-        for name, ext in model.concepts.items():
-            concepts[name] = ALCone(np.array([f[h] in ext for h in range(2 * dim)]))
-        roles = {}
-        for name, pairs in model.roles.items():
-            mat = np.zeros((2 * dim, 2 * dim), dtype=bool)
-            for i in range(2 * dim):
-                for j in range(2 * dim):
-                    if (f[i], f[j]) in pairs:
-                        mat[j, i] = True
-            roles[name] = mat
-        inds = {a: halfaxis_vector(dim, k) for a, k in model.individuals.items()}
-        interp = cls(dim, concepts, roles, inds, halfaxis_elements=f)
+        geometry = RECIPES["alcone-exact"].build(
+            model, source="finite model", names=list(model.concepts),
+            roles=list(model.roles), individuals=list(model.individuals))
+        interp = cls._from_geometry(geometry)
         if axioms is not None:
             bad = ALConeChecker(interp).violations(axioms)
             if bad:
                 raise InternalConsistencyError(
                     "al-cone construction violates: " + "; ".join(map(str, bad[:5])))
+        return interp
+
+    @classmethod
+    def _from_geometry(cls, geometry) -> "ALConeInterpretation":
+        """The interpretation of the al-cones read by the ``half-axes`` reading."""
+        regions = geometry.read.classes
+        cell = regions.halfaxis_cell
+        concepts = {name: ALCone(regions.bits[row, 0].numpy())
+                    for row, name in enumerate(geometry.names)}
+        roles = {}
+        if geometry.relation_model is not None:
+            for r, name in enumerate(geometry.roles):
+                pairs = geometry.relation_model.pairs[r]
+                # R[j, i]: half-axis i has half-axis j as successor (JAIR Def. 7)
+                roles[name] = pairs[cell][:, cell].T.numpy()
+        inds = {}
+        if geometry.read.individuals is not None:
+            inds = {a: geometry.read.individuals.centre[k].numpy()
+                    for k, a in enumerate(geometry.individual_names)}
+        interp = cls(regions.dim, concepts, roles, inds, halfaxis_elements=cell.tolist())
+        interp._geometry = geometry
         return interp
 
     @classmethod
@@ -741,6 +755,9 @@ class ALConeInterpretation:
         with its assertions; then :math:`a^I \\in C^I` iff :math:`\\mathcal{O} \\models
         C(a)` for every Boolean concept :math:`C` (strong concept-faithfulness).
 
+        This is the combination of the source ``boolean atoms`` and the reading
+        ``half-axes`` (doubled for ``faithful=True``).
+
         :param axioms: GCIs and concept assertions without roles.
         :param faithful: Use the doubled, strongly concept-faithful model of Prop. 8.
         :param names: Extra concept names to include in the signature.
@@ -749,60 +766,31 @@ class ALConeInterpretation:
         :raises InconsistentOntology: If the TBox or an individual's assertions are
             unsatisfiable.
         """
+        from mowl.representation.construction import RECIPES
         axioms = list(axioms)
-        tbox, abox = [], {}
-        for ax in axioms:
-            if isinstance(ax, RoleAssertion) or \
-                    (isinstance(ax, GCI) and (has_roles(ax.sub) or has_roles(ax.sup))) or \
-                    (isinstance(ax, ConceptAssertion) and has_roles(ax.concept)):
-                raise UnsupportedAxiom(f"Not a Boolean ALC axiom: {ax}")
-            if isinstance(ax, GCI):
-                tbox.append(ax)
-            else:
-                abox.setdefault(ax.individual, []).append(ax.concept)
-        sig, _, _ = signature(axioms)
-        sig = sorted(sig | set(names or ()))
-        if len(sig) > max_names:
-            raise ValueError(f"{len(sig)} concept names exceed max_names={max_names}.")
-
-        def holds(c, val):
-            return _eval_boolean(c, val)
-
-        types = []
-        for bits in itertools.product((False, True), repeat=len(sig)):
-            val = dict(zip(sig, bits))
-            if all((not holds(g.sub, val)) or holds(g.sup, val) for g in tbox):
-                types.append(val)
-        if not types:
-            raise InconsistentOntology("The Boolean TBox is unsatisfiable (no atom).")
-        m = len(types)
-        dim = max(1, (m + 1) // 2)
-        f = list(range(m)) + [0] * (2 * dim - m)  # half-axis -> atom
-        concepts = {a: ALCone(np.array([types[f[h]][a] for h in range(2 * dim)]))
-                    for a in sig}
-        compat = {}
-        for ind, cs in abox.items():
-            ok = [t for t in range(m) if all(holds(c, types[t]) for c in cs)]
-            if not ok:
-                raise InconsistentOntology(f"Assertions on {ind!r} are unsatisfiable.")
-            compat[ind] = ok
-        if not faithful:
-            inds = {a: halfaxis_vector(dim, ok[0]) for a, ok in compat.items()}
-            interp = cls(dim, concepts, {}, inds, halfaxis_elements=f)
-        else:
-            concepts = {a: _double(c) for a, c in concepts.items()}
-            inds = {}
-            for a, ok in compat.items():
-                sup = [h for h in range(2 * dim) if f[h] in ok]
-                inds[a] = _doubled_point(dim, sup)
-            interp = cls(2 * dim, concepts, {}, inds,
-                         halfaxis_elements=[f[2 * (h // 4) + h % 2]
-                                            for h in range(4 * dim)])
+        geometry = RECIPES["alcone-exact"].build(
+            axioms, source="boolean atoms",
+            source_options={"faithful": faithful, "names": tuple(names or ()),
+                            "max_names": max_names},
+            reading_options={"double": bool(faithful)})
+        interp = cls._from_geometry(geometry)
         bad = ALConeChecker(interp).violations(axioms)
         if bad:
             raise InternalConsistencyError(
                 "Boolean al-cone construction violates: " + "; ".join(map(str, bad[:5])))
         return interp
+
+    @property
+    def module(self):
+        """The geometry of this interpretation
+        (:class:`~mowl.representation.construction.ConstructionGeometry`): the combination
+        it was built from, or, for an interpretation given by its cones, the ``half-axes``
+        reading of its own half-axes (one cell per half-axis)."""
+        geometry = getattr(self, "_geometry", None)
+        if geometry is None:
+            from mowl.representation.library.construct_methods import cone_geometry
+            geometry = self._geometry = cone_geometry(self)
+        return geometry
 
     # -- convenience --------------------------------------------------------
     def checker(self) -> "ALConeChecker":

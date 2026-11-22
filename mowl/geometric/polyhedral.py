@@ -38,6 +38,11 @@ Construction:
   :math:`j \\notin S`, yielding full-dimensional regions with non-empty interior
   for satisfiable concepts.
 
+Parts (:mod:`mowl.representation.construction`): the source ``canonical model`` and the
+reading ``simplex`` (recipe ``convex_polyhedral``, ``thicken`` is the reading's option);
+:attr:`ConvexPolyhedralModel.module` is the geometry of the combination. The direct
+implementation is :mod:`mowl.baselines.geometric.polyhedral`.
+
 Guarantees:
 
 - **Exact model of the normalised ontology**: satisfies every normalised axiom
@@ -94,7 +99,7 @@ from mowl.geometric.normal_forms import (
     TOP,
     Axiom,
 )
-from mowl.geometric.regions import Face, PairHull, ThickFace, simplex_points
+from mowl.geometric.regions import Face, PairHull, ThickFace
 
 if TYPE_CHECKING:  # pragma: no cover
     from org.semanticweb.owlapi.model import OWLOntology
@@ -134,51 +139,51 @@ class ConvexPolyhedralModel(GeometricInterpretation):
                 "(no NF3, NF4, NF6, or NF7 role axioms)"
             )
 
+        from mowl.representation.construction import RECIPES
+
         self.canonical_model: CanonicalModel = cm
         self.thicken: bool = bool(thicken)
         self._names: List[str] = list(cm.names)
         n = len(self._names)
         k = n - 1
         self.dimension: int = k
-        self._points: np.ndarray = simplex_points(n)
-        eps = 1.0 / (2 * n)
+        # the combination of parts: the canonical model, read as faces of the simplex
+        known = sorted(set(cm.concept_names) | set(cm.names))
+        geometry = RECIPES["convex_polyhedral"].build(
+            cm, reading_options={"thicken": self.thicken}, names=known,
+            roles=sorted(cm.role_names), individuals=sorted(cm.individuals))
+        self.module = geometry
+        regions = geometry.read.classes
+        self._points: np.ndarray = regions.points.numpy()
+        eps = regions.eps
 
         def _make_face(vertex_ids: Iterable[int]) -> Face:
             if self.thicken:
                 return ThickFace.from_simplex(self._points, vertex_ids, eps=eps)
             return Face.from_simplex(self._points, vertex_ids)
 
-        self._universe: Face = _make_face(range(n))
+        self._universe: Face = _make_face(geometry.read.universe.vertex_ids())
         self._empty_face: Face = _make_face(frozenset())
         self._empty_role: PairHull = PairHull(np.zeros((0, 2 * k), dtype=float))
 
         self._class_regions: Dict[str, Face] = {}
-        for cname in set(cm.concept_names) | set(cm.names):
-            if cname == BOTTOM:
-                self._class_regions[cname] = self._empty_face
-            elif cname == TOP:
-                self._class_regions[cname] = self._universe
-            else:
-                positions = cm.extension(cname)
-                if not positions:
-                    self._class_regions[cname] = self._empty_face
-                else:
-                    self._class_regions[cname] = _make_face(positions)
+        for row, cname in enumerate(known):
+            vertices = regions.vertex_ids(row)
+            self._class_regions[cname] = _make_face(vertices) if vertices \
+                else self._empty_face
         self._class_regions[BOTTOM] = self._empty_face
         self._class_regions[TOP] = self._universe
 
         self._role_regions: Dict[str, PairHull] = {}
-        for rname in cm.role_names:
-            pairs = cm.role(rname)
+        relations = geometry.relation_model
+        for r, rname in enumerate(geometry.roles):
+            pairs = [] if relations is None else relations.pairs[r].nonzero().tolist()
             if not pairs:
                 self._role_regions[rname] = self._empty_role
             else:
-                sorted_pairs = sorted(pairs)
-                pair_rows = [
-                    np.concatenate([self._points[i], self._points[j]])
-                    for (i, j) in sorted_pairs
-                ]
-                pts_2k = np.vstack(pair_rows).reshape((len(sorted_pairs), 2 * k))
+                pair_rows = [np.concatenate([self._points[i], self._points[j]])
+                             for (i, j) in pairs]
+                pts_2k = np.vstack(pair_rows).reshape((len(pairs), 2 * k))
                 self._role_regions[rname] = PairHull(pts_2k)
 
         self._checker: Optional[ModelChecker] = None
