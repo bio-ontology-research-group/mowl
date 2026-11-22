@@ -1,7 +1,7 @@
 """Every per-axiom loss of every ELModule subclass is a column of shape (B, 1); the option
 ``per_axiom_column = False`` gives back the shape of the formula, and the values are the same.
 
-``data/el_module_losses_flat.json`` holds the values (flattened, 6 significant digits) that
+``golden/el_module_losses_flat.json`` holds the values (flattened, 6 significant digits) that
 every module returned before the change (with the shape it had), for seeded modules and batches of
 ``tests/nn/el_module_zoo.py``.
 """
@@ -13,7 +13,7 @@ import torch as th
 
 from tests.nn.el_module_zoo import B, FORMS, all_el_module_classes, batch, make
 
-GOLDEN = json.loads((Path(__file__).parent / "data" / "el_module_losses_flat.json").read_text())
+GOLDEN = json.loads((Path(__file__).parent / "golden" / "el_module_losses_flat.json").read_text())
 
 # These two were made columns by the previous change, so their golden shapes (taken from the
 # commit before this one) are columns; their option still gives the flat (B,) of the formula.
