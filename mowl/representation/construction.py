@@ -338,9 +338,13 @@ def _flag(value):
     return value.to(th.get_default_dtype()).reshape(-1, 1)
 
 
+@dataclass(init=False, eq=False)
 class Points(Region):
     """Points of the space of a reading (the individuals): ``centre`` ``(B, d)``, and the
     cells ``mask`` ``(B, T, n)`` the points belong to (for relation models over cells)."""
+
+    centre: th.Tensor
+    mask: Optional[th.Tensor] = None
 
     def __init__(self, centre, mask=None):
         self.centre, self.mask = centre, mask
@@ -355,15 +359,22 @@ class Points(Region):
         return {"points": self.centre}
 
 
+@dataclass(init=False, eq=False)
 class CellRegion(Region):
     """A region made of cells of a reading (see the module docstring).
 
-    :param mask: ``(B, T, n)`` boolean: the cells of every row at every time point.
-    :param successor: ``(T,)`` long: the time point after every time point.
+    :param mask: ``(B, T, n)`` boolean (or ``(B, n)`` for one time point): the cells of every
+        row at every time point.
+    :param geometry: The geometry of the cells, shared by all regions of one reading
+        (``successor``: ``(T,)`` long, the time point after every time point; the
+        family's own entries); further keyword arguments are added to it.
 
     Subclasses give the geometry of the cells (:meth:`contains`, :meth:`point`,
     :meth:`tensors`) and say under which operations the family is closed.
     """
+
+    mask: th.Tensor
+    geometry: dict
 
     #: Whether the union of two regions of the family is one (a set union, or the convex
     #: union where that is the family's disjunction).
@@ -373,19 +384,22 @@ class CellRegion(Region):
     #: Whether the preimage of a region under a relation of cells is the region of the
     #: preimage cells (exact :math:`\\exists r.C`).
     exists_exact = True
-    #: Vocabulary value of what a disjunction is (``"exact"``).
-    family = ""
 
-    def __init__(self, mask, successor=None, **geometry):
+    def __init__(self, mask, geometry=None, **extra):
         if mask.dim() == 2:
             mask = mask.unsqueeze(1)
         self.mask = mask.to(th.bool)
-        self.successor = successor if successor is not None else th.zeros(
-            self.mask.shape[1], dtype=th.long)
+        if geometry is None or extra:
+            geometry = dict(geometry or {}, **extra)
+        geometry.setdefault("successor", th.zeros(self.mask.shape[1], dtype=th.long))
         self.geometry = geometry
 
     def __len__(self):
         return self.mask.shape[0]
+
+    @property
+    def successor(self):
+        return self.geometry["successor"]
 
     @property
     def n_cells(self):
@@ -393,7 +407,7 @@ class CellRegion(Region):
 
     def with_mask(self, mask):
         """A region of the same family and geometry with other cells."""
-        return type(self)(mask, self.successor, **self.geometry)
+        return type(self)(mask, self.geometry)
 
     def take(self, ids):
         return self.with_mask(self.mask[ids])

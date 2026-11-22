@@ -129,7 +129,7 @@ class CellReading(Reading):
         T = len(self._steps(built))
 
         def region(mask):
-            return self.region(mask, successor, **geometry)
+            return self.region(mask, successor=successor, **geometry)
 
         classes = region(self.masks(built, names, source, cell, n))
         universe = region(th.ones(1, T, n, dtype=th.bool))
@@ -239,7 +239,7 @@ class HalfAxisReading(CellReading):
         zero = th.zeros(1, dtype=th.long)
 
         def region(mask):
-            return AxisCones(mask, zero, **geometry)
+            return AxisCones(mask, successor=zero, **geometry)
 
         bits = [interp.concepts[n].bits if n in interp.concepts else np.zeros(2 * dim, bool)
                 for n in names]

@@ -393,3 +393,32 @@ def test_finite_model_conversions(cm):
         for name in cm.concept_names:
             if name in fm.concepts:
                 assert fm.extension(name) == cm.extension(name)
+
+
+@pytest.mark.parametrize("reading", CELL_READINGS)
+def test_class_expressions_on_every_reading(ranked, reading):
+    """logic_expressions evaluates compound classes on the constructed regions."""
+    from mowl.models import ConstructedModel
+    from mowl.owlapi import OWLAPIAdapter
+    from mowl.representation.library.logic_expressions import (id_maps, rank_classes,
+                                                               rank_individuals,
+                                                               subsumption_cost)
+    adapter = OWLAPIAdapter()
+    cls = lambda n: adapter.create_class(NS + n)  # noqa: E731
+    some = adapter.create_object_some_values_from(adapter.create_object_property(NS + "r"),
+                                                  cls("D"))
+    expression = adapter.create_object_intersection_of(cls("B"), some)     # B ⊓ ∃r.D
+    model = ConstructedModel(ranked, method="canonical_model", reading=reading)
+    maps = id_maps(model)
+    assert subsumption_cost(model, NS + "A", expression, *maps) == 0.0
+    assert subsumption_cost(model, NS + "D", expression, *maps) == 1.0
+    best = dict(rank_classes(model, expression, *maps))
+    assert best[NS + "A"] == 0.0 and best[NS + "E"] == 1.0
+    members = dict(rank_individuals(model, expression, *maps))
+    assert members[NS + "a1"] == 0.0 and members[NS + "d1"] == 1.0
+    if reading == "simplex":       # faces of a simplex have no complement
+        with pytest.raises(ConstructorUnavailable):
+            subsumption_cost(model, NS + "A", adapter.create_complement_of(cls("E")), *maps)
+    else:
+        assert subsumption_cost(model, NS + "A", adapter.create_complement_of(cls("E")),
+                                *maps) == 0.0
