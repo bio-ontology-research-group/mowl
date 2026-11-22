@@ -103,9 +103,28 @@ def mixture(tmp_path_factory):
     return CanonicalMixture(dataset, rank=4, lr=0.01, batch_size=2, use_cache=False)
 
 
-def test_canonical_mixture_geometry_gives_the_modules_scores(mixture):
+@pytest.fixture(scope="module")
+def direct_mixture(tmp_path_factory):
+    from mowl.baselines.models.canonical_mixture.model import CanonicalMixture as Direct
+    dataset = _write_family_abox_dataset(tmp_path_factory.mktemp("cmd"))
+    th.manual_seed(0)
+    return Direct(dataset, rank=4, lr=0.01, batch_size=2, use_cache=False)
+
+
+@pytest.fixture(params=["parts", "direct"])
+def any_mixture(request, mixture, direct_mixture):
+    return mixture if request.param == "parts" else direct_mixture
+
+
+def test_canonical_mixture_geometry_gives_the_modules_scores(any_mixture):
+    mixture = any_mixture
     g = geometry_of(mixture)
-    assert isinstance(g, CanonicalMixtureGeometry)
+    if "baselines" in type(mixture).__module__:
+        # the adapter describes the direct implementation
+        assert isinstance(g, CanonicalMixtureGeometry)
+    else:
+        # the combination of parts is its own geometry
+        assert g is mixture.module
     c, i = mixture.class_index_dict, mixture.individual_index_dict
     rows = th.tensor([[i[IND + "bob"], c[NS + "Father"]], [i[IND + "bob"], c[NS + "Person"]],
                       [i[IND + "bob"], c[NS + "Female"]], [i[IND + "alice"], c[NS + "Parent"]]])
@@ -144,7 +163,8 @@ def test_canonical_mixture_geometry_gives_the_modules_scores(mixture):
         g.classes(th.tensor([father])))).item() == 0.0
 
 
-def test_canonical_mixture_parameters_are_shared(mixture):
+def test_canonical_mixture_parameters_are_shared(any_mixture):
+    mixture = any_mixture
     g = geometry_of(mixture)
     mixture.module.zero_grad()
     rows = th.tensor([[0, 0]])
