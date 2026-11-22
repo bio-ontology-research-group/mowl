@@ -82,7 +82,7 @@ BOXSEL = MethodCard(
     key="boxsel",
     assumption="closed world over stated axioms",
     evaluation=("common-filtered-ranking",),
-    expressivity="EL⊥ with ABox",
+    expressivity="ELH(∘)⊥ with ABox",
     tasks=("subsumption", "satisfiability", "disjointness", "instance-checking",
            "role-assertion"),
     name="BoxSEL (Statistical EL)",

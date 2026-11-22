@@ -5,7 +5,7 @@ from mowl.catalog.entries import _refs as R
 
 CARD = MethodCard(
     key="boxel",
-    expressivity="EL⊥ with ABox",
+    expressivity="ELH(∘)⊥ with ABox",
     tasks=("subsumption", "satisfiability", "disjointness",
            "instance-checking", "role-assertion",),
     name="BoxEL",
@@ -24,7 +24,7 @@ CARD = MethodCard(
     implementation="mowl.models.boxel.model.BoxEL",
     module="mowl.nn.el.boxel.module.BoxELModule",
     axioms=("gci0", "gci1", "gci2", "gci3", "gci0_bot", "gci1_bot", "gci3_bot",
-            "class_assertion", "object_property_assertion"),
+            "class_assertion", "object_property_assertion", "role_inclusion", "role_chain"),
     guarantees=(
         Guarantee(
             K.SOUNDNESS,
