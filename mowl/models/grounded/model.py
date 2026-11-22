@@ -227,6 +227,17 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
         The fuzzy logic in which the element constraints are read (a part,
         :data:`~mowl.representation.library.grounded_logic.RULES`): ``"lukasiewicz"`` (the
         published reading, linear inside the hinge), ``"godel"`` or ``"product"``.
+    class_model, relation_model, measure : optional
+        Replace a part of the geometry (:class:`~mowl.nn.GroundedELModule`): a name of
+        :data:`~mowl.representation.library.grounded_parts.GROUNDED_PARTS`, a factory or a
+        part. The relation model replaces ``role_mode``.
+    objective, element_sampler, region_sampler, crisp_regime : optional
+        Replace the objective (:class:`~mowl.representation.library.grounded_objective.GroundedObjective`),
+        the samplers (:class:`~mowl.representation.library.grounded_sampling.ElementSampler`,
+        :class:`~mowl.representation.library.grounded_sampling.RegionSampler`) or the
+        evaluation regime of :meth:`crisp_report`
+        (:class:`~mowl.representation.library.grounded_evaluation.CrispViolations`): a part
+        or a name. By default they are built from the options above at every step.
     """
 
     scored_forms = ("class_assertion",)
@@ -297,6 +308,13 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
         class_assertion: Optional[Any] = None,
         object_property_assertion: Optional[Any] = None,
         logic: str = "lukasiewicz",
+        class_model: Any = None,
+        relation_model: Any = None,
+        measure: Any = None,
+        objective: Any = None,
+        element_sampler: Any = None,
+        region_sampler: Any = None,
+        crisp_regime: Any = None,
     ) -> None:
         _validate_int_ge("embed_dim", embed_dim, 1)
         _validate_int_ge("n_components", n_components, 1)
@@ -553,6 +571,18 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
         self.generator: th.Generator = th.Generator(device="cpu")
         self.generator.manual_seed(self.seed + 1337)
 
+        # the parts given instead of the defaults
+        self._geometry_parts = {"class_model": class_model, "relation_model": relation_model,
+                                "measure": measure}
+        from mowl.representation.library.grounded_parts import GROUNDED_PARTS
+        for name, kind, part in (("objective", "objective", objective),
+                                 ("element_sampler", "element sampler", element_sampler),
+                                 ("region_sampler", "region sampler", region_sampler),
+                                 ("crisp_regime", "evaluation", crisp_regime)):
+            if isinstance(part, str):
+                part = GROUNDED_PARTS[kind][part]()
+            if part is not None:
+                setattr(self, name, part)
         self.init_module()
 
     @classmethod
@@ -746,7 +776,9 @@ class GroundedEL(GroundedConstraints, GroundedEvaluation, EmbeddingELModel):
             bot_id=self.bot_id,
             role_mode=self.role_mode,
             inverse_of=self.inverse_of,
+            **getattr(self, "_geometry_parts", {}),
         ).to(self.device)
+        self.role_mode = self.module.role_mode
 
         with th.no_grad():
             if self.bot_id is not None:

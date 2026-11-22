@@ -375,3 +375,179 @@ def test_the_program_is_the_element_constraints_of_the_model():
     slack = [s for name, s in alg.constraints if name == "gci0"][0]   # the first gci0 axiom
     a, b = model.training_datasets["gci0"][:][0].tolist()
     assert th.allclose(th.relu(-slack), C.gci0(m[:, a], m[:, b], dead=dead))
+
+
+# =========================================================================================
+# the parts of the objective and the evaluation, on their own
+# =========================================================================================
+def _union(cen, w, active=None):
+    from mowl.nn.el.structural import Regions
+    cen, w = th.tensor(cen, dtype=th.float32), th.tensor(w, dtype=th.float32)
+    if active is None:
+        active = th.ones(cen.shape[:2], dtype=th.bool)
+    return Regions(cen=cen, w=w, active=th.as_tensor(active))
+
+
+def test_region_sampler_draws_inside_a_box_of_the_union_with_its_corners():
+    from mowl.representation.library.grounded_sampling import RegionSampler
+    regions = _union([[[0.0, 0.0], [5.0, 5.0]], [[1.0, 1.0], [0.0, 0.0]]],
+                     [[[1.0, 0.5], [0.2, 0.2]], [[1.0, 1.0], [1.0, 1.0]]],
+                     [[True, True], [False, False]])
+    sample = RegionSampler(n_samples=6, n_adv=0)(regions, th.Generator().manual_seed(0))
+    assert sample.points.shape == (12, 2) and sample.valid.tolist() == [True, False] * 6
+    pts, lo, hi = sample.points[sample.valid], sample.lower[sample.valid], sample.upper[
+        sample.valid]
+    assert bool(((pts >= lo) & (pts <= hi)).all())
+    assert th.equal(sample.points[~sample.valid], th.zeros(6, 2))
+    # one box per row: every point of row 0 lies in the same box, 4 of them its corners
+    assert th.unique(lo, dim=0).shape[0] == 1
+    near_corner = ((pts - lo).abs() < 1e-4) | ((hi - pts).abs() < 1e-4)
+    assert int(near_corner.all(1).sum()) == 4
+    # the points are re-parametrised: the gradient reaches the box
+    cen = regions.cen.clone().requires_grad_(True)
+    moved = RegionSampler(1, 0).one(type(regions)(cen, regions.w, regions.active),
+                                    th.Generator().manual_seed(0))
+    moved.points[0].sum().backward()
+    assert th.allclose(cen.grad[0].sum(0), th.ones(2))
+    # the published reading (GroundedEL) counts the box twice for the first point of a row
+    cen.grad = None
+    RegionSampler(1, 0, doubled_gradient=True).one(
+        type(regions)(cen, regions.w, regions.active),
+        th.Generator().manual_seed(0)).points[0].sum().backward()
+    assert th.allclose(cen.grad[0].sum(0), 2 * th.ones(2))
+
+
+def test_box_corners_of_a_product_of_boxes_and_the_ascent_stays_in_the_box():
+    from mowl.representation.library.grounded_sampling import ascend, box_corners
+    lo, hi = th.tensor([[0.0, 0.0, 10.0, 10.0]]), th.tensor([[1.0, 1.0, 11.0, 11.0]])
+    corners = box_corners(lo, hi, blocks=2)[0]
+    assert corners.shape == (4, 4)
+    # the same sign in both blocks: the corner of the head is the corner of the tail - 10
+    assert th.allclose(corners[:, 2:] - 10.0, corners[:, :2], atol=1e-5)
+    start = th.tensor([[0.5, 0.5]])
+    up = ascend(start, lo[:, :2], hi[:, :2], lambda z: z.sum(1), steps=3)
+    assert bool((up >= lo[:, :2]).all() & (up <= hi[:, :2]).all())
+    assert float(up.sum()) > float(start.sum())
+
+
+def test_element_sampler_rows_candidates_fillers_probes_and_corruptions():
+    from mowl.representation.library.grounded_sampling import ElementSampler
+    gen = th.Generator().manual_seed(0)
+    es = ElementSampler(batch_size=3, n_random=2, n_inside=0, n_fillers=2)
+    table = th.arange(20).view(10, 2)
+    rows = es.rows(table, gen, "cpu")
+    assert rows.shape == (3, 2) and all(r.tolist() in table.tolist() for r in rows)
+    cand = es.candidates(rows[:, 0], 50, gen, (th.tensor([7, 8]),))
+    assert cand.shape == (3, 5) and th.equal(cand[:, 0], rows[:, 0])
+    assert th.equal(cand[:, 3:], th.tensor([[7, 8]] * 3))
+    # a domain of at most whole_domain elements is read whole
+    assert th.equal(es.batch(th.tensor([3]), 10, gen), th.arange(10))
+    # fillers: the row's own filler first when there are more than n_fillers
+    mask = th.zeros(1, 50, dtype=th.bool)
+    mask[0, [10, 11, 12, 13]] = True
+    fill = es.fillers(th.tensor([[0, 4, 1], [0, 5, 1]]), mask, gen)
+    assert fill.shape == (2, 1 + 1 + 2) and fill[:, 0].tolist() == [4, 5]
+    x, c = es.class_probes(4, th.tensor([1, 2]), gen)
+    assert sorted(zip(x.tolist(), c.tolist())) == [(i, k) for i in range(4) for k in (1, 2)]
+    opa = th.tensor([[0, 1, 2], [3, 0, 4]])
+    bad = es.corrupted(opa, 5, gen, per_row=4)
+    assert bad.shape == (8, 3)
+    for a, r, b in bad.tolist():
+        kept = [row for row in opa.tolist() if row[1] == r]
+        assert any(a == k[0] or b == k[2] for k in kept)
+
+
+def test_element_sampler_inside_reads_the_class_model():
+    from mowl.representation.library.grounded_sampling import ElementSampler
+    g = grounded_model(role_mode="product").module
+    with th.no_grad():
+        g.class_model.centers[0] = 0.0
+        g.class_model.raw_widths[0] = gp.inv_softplus(0.05)
+        pos = g.shared.elem_pos.weight
+        pos[:] = 3.0
+        pos[[2, 5, 7]] = 0.0          # inside class 0
+    inside = ElementSampler(n_inside=8, whole_domain=0).inside(
+        g.class_model, th.tensor([0, 0]), g.positions(), th.Generator().manual_seed(1))
+    assert sorted(set(inside.flatten().tolist())) == [2, 5, 7]
+
+
+def test_crisp_violations_reads_inclusion_and_disjointness_from_the_geometry():
+    from mowl.representation.library.grounded_evaluation import CrispViolations
+    model = grounded_model(role_mode="product")
+    g = model.module
+    with th.no_grad():
+        g.class_model.active[:] = False
+        g.class_model.active[:, 0] = True
+        g.class_model.centers[:, 0] = th.tensor([[0.0] * 4, [0.0] * 4, [5.0] * 4, [9.0] * 4])
+        g.class_model.raw_widths[:, 0] = th.tensor([gp.inv_softplus(w) for w in
+                                                    (0.5, 1.0, 0.5, 0.5)]).unsqueeze(1)
+    axioms = {"gci0": th.tensor([[0, 1], [1, 0], [0, 2]]), "gci1_bot": th.tensor([[0, 2, 0]])}
+    report = CrispViolations(n_eval=300).report(g, axioms, model.grounding(),
+                                                th.Generator().manual_seed(0))
+    worst = report["worst_depth"]["gci0"]
+    assert worst["0 <= 1"] > 0.0                       # A in B: every point of A deep in B
+    assert worst["1 <= 0"] < 0.0 and worst["0 <= 2"] < 0.0
+    assert report["worst_depth"]["gci1_bot"]["0 cap 2 <= bot"] < 0.0     # apart
+    assert report["region_viol"] == pytest.approx(2 / 4)
+
+
+def test_the_objective_is_an_assembly_of_forms_over_the_parts():
+    from mowl.representation.library.grounded_objective import FORMS, GroundedObjective
+    model = grounded_model()
+    assert isinstance(model.objective, GroundedObjective)
+    assert set(FORMS) >= {f for f in model.training_datasets}
+    gen = th.Generator().manual_seed(0)
+    direct = model.objective.losses(model.module, model.training_datasets, model.grounding(),
+                                    gen, model.element_sampler, model.region_sampler)
+    assert th.allclose(direct["total"], one_step(model)["total"])
+
+    class NoInclusion(GroundedObjective):
+        def gci0(self, s, rows):
+            return s.pos.new_zeros(())
+    swapped = grounded_model(objective=NoInclusion(model.constraint_set))
+    assert float(one_step(swapped)["axioms"]) < float(one_step(model)["axioms"])
+
+
+def test_grounded_parts_given_to_the_builder_take_effect():
+    from mowl.representation.library.grounded_sampling import ElementSampler, RegionSampler
+    base = one_step(grounded_model(role_mode="product"))
+    # the relation model by name replaces role_mode
+    model = grounded_model(role_mode="product", relation_model="box of translations")
+    assert type(model.module.relation_model) is gp.TranslationBoxRelations
+    assert model.role_mode == model.module.role_mode == "translation"
+    assert float(one_step(model)["axioms"]) != float(base["axioms"])
+    # samplers with other options
+    fewer = one_step(grounded_model(role_mode="product",
+                                    element_sampler=ElementSampler(4096, 0, 0, 1)))
+    assert float(fewer["axioms"]) != float(base["axioms"])
+    one_point = one_step(grounded_model(role_mode="product",
+                                        region_sampler=RegionSampler(1, 0)))
+    assert float(one_point["region"]) != float(base["region"])
+    # the measure
+    lse = grounded_model(role_mode="product", measure=gp.UnionDepth(agg="lse", agg_tau=0.5))
+    assert lse.module.measure.agg == "lse" and lse.module.class_model.measure is \
+        lse.module.measure
+    assert float(one_step(lse)["axioms"]) != float(base["axioms"])
+    # the builder of the method takes the parts too
+    from mowl.representation.library.solved_grounded import grounded
+    g = grounded(4, 2, 3, embed_dim=4, relation_model="translation")
+    assert type(g.relation_model) is gp.TranslationBoxRelations and g.role_mode == "translation"
+
+
+def test_assigning_a_part_of_the_module_replaces_it():
+    model = grounded_model(role_mode="product")
+    base = one_step(model)
+
+    class Doubting(gp.ProductBoxRelations):
+        def membership(self, x_points, y_points, rel_ids):
+            return 0.5 * super().membership(x_points, y_points, rel_ids)
+    g = model.module
+    old = g.relation_model
+    new = Doubting(2, 2, 4, g.measure, g.shared)
+    new.load_state_dict(old.state_dict())
+    g.relation_model = new
+    assert g.relation_model is new and g.roles is new and "relation_model" not in g._modules
+    assert {k.split(".")[0] for k in g.state_dict()} == {"elements", "boxes", "roles"}
+    assert float(one_step(model)["axioms"]) != float(base["axioms"])
+    g.measure = gp.UnionDepth(agg="lse", agg_tau=0.5)
+    assert g.class_model.measure is g.measure and g.relation_model.measure is g.measure
