@@ -24,10 +24,11 @@ from mowl.representation.adapters import register_adapter
 from mowl.representation.class_models import Classes
 from mowl.representation.geometry import Geometry
 from mowl.representation.library.query_parts import (
-    PointBoxes, BetaPoints, ConePoints, ShiftWiden, BetaNetwork, ConeNetwork, ConeRotation,
+    PointBoxes, BetaPoints, ConePoints, BetaNetwork, ConeNetwork, ConeRotation,
     BoxAttentionIntersection, BoxExactIntersection, BetaAttentionIntersection,
     ConeAttentionIntersection, BetaInversion, ConeComplement, BoxDistance, BetaDistance,
-    ConeDistance, _ACTIVATIONS)
+    ConeDistance)
+from mowl.representation.library.boxrel_relations import _ACTIVATIONS, TranslationBoxes
 from mowl.representation.library.query_regions import (
     BetaKL, ConeBounds, as_state, from_state, lift)
 from mowl.representation.measures import Bounds
@@ -214,17 +215,17 @@ def query2box(nb_classes=None, nb_relations=None, nb_individuals=0, embed_dim=32
                 activation = name
         center_weight, dim, gamma = tables.cen, tables.dim, float(tables.gamma)
         entities = PointBoxes(table=tables.entity_embedding)
-        relations = ShiftWiden(vectors=tables.relation_embedding,
-                               widths=tables.offset_embedding, activation=activation,
-                               inverse_of=role_inverse)
+        relations = TranslationBoxes(vectors=tables.relation_embedding,
+                                     offsets=tables.offset_embedding, activation=activation,
+                                     inverse_of=role_inverse)
         attention = BoxAttentionIntersection(tables=tables)
     else:
         dim = embed_dim
         n_entities, n_rows = _sizes(nb_classes, nb_relations, nb_individuals)
         r = (gamma + 2.0) / dim
         entities = PointBoxes(n_entities, dim, init_range=r)
-        relations = ShiftWiden(n_rows, dim, activation=activation, inverse_of=role_inverse,
-                               init_range=r)
+        relations = TranslationBoxes(n_rows, dim, activation=activation,
+                                     inverse_of=role_inverse, init_range=r)
         attention = BoxAttentionIntersection(dim)
     if intersection == "attention":
         operator = attention
@@ -286,7 +287,8 @@ def cone_qe(nb_classes=None, nb_relations=None, nb_individuals=0, embed_dim=32, 
         angle_range = tables.embedding_range
         entities = ConePoints(table=tables.entity_embedding, angle_range=angle_range)
         rel = (ConeNetwork(tables=tables, inverse_of=role_inverse) if relations == "network"
-               else ConeRotation(tables=tables, inverse_of=role_inverse))
+               else ConeRotation(tables=tables, inverse_of=role_inverse,
+                                 aperture="wrap"))
         operator = ConeAttentionIntersection(tables=tables)
         distance = ConeDistance(center_weight, modulus=tables.modulus)
     else:
@@ -297,11 +299,11 @@ def cone_qe(nb_classes=None, nb_relations=None, nb_individuals=0, embed_dim=32, 
         rel = (ConeNetwork(n_rows, dim, hidden, layers, angle_range=angle_range,
                            inverse_of=role_inverse) if relations == "network"
                else ConeRotation(n_rows, dim, angle_range=angle_range,
-                                 inverse_of=role_inverse))
+                                 inverse_of=role_inverse, aperture="wrap"))
         operator = ConeAttentionIntersection(dim, dropout)
         distance = ConeDistance(center_weight, angle_range=angle_range)
     return ComposedQueryGeometry(entities, rel, operator, distance, ConeBounds(),
-                                 negation=ConeComplement(), dim=dim, gamma=gamma,
+                                 negation=ConeComplement(signed=True), dim=dim, gamma=gamma,
                                  num_classes=num_classes, extension=extension)
 
 

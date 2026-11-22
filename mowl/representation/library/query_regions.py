@@ -67,8 +67,8 @@ class BetaRegion(Region):
 @dataclass(frozen=True)
 class SectorCone(Region):
     """Circular sectors per coordinate (ConE): ``axis`` in ``[-pi, pi]`` and ``aperture`` in
-    ``[0, pi]`` (after a rotation of AConE the aperture is wrapped to ``(-pi, pi]``; its
-    absolute value is what counts), both ``(B, d)``."""
+    ``[0, pi]``, both ``(B, d)``. AConE's published rotation wraps the aperture to
+    ``(-pi, pi]``, so that it can be negative (its absolute value is what counts)."""
 
     axis: th.Tensor
     aperture: th.Tensor
@@ -77,16 +77,22 @@ class SectorCone(Region):
     def centre(self):
         return self.axis
 
-    def rotate(self, d_axis, d_aperture):
-        """Rotation of AConE: both angles added and wrapped."""
-        return SectorCone(wrap_angle(self.axis + d_axis),
-                          wrap_angle(self.aperture + d_aperture))
+    def rotate(self, d_axis, d_aperture, aperture="clip"):
+        """Rotation: the angles are added; the axis is wrapped. ``aperture="clip"``
+        (default) keeps the aperture in ``[0, pi]``; ``"wrap"`` wraps it to ``(-pi, pi]`` as
+        the published AConE does (a negative aperture)."""
+        if aperture not in ("clip", "wrap"):
+            raise ValueError("aperture must be 'clip' or 'wrap'.")
+        new = self.aperture + d_aperture
+        new = th.clamp(new, 0.0, pi) if aperture == "clip" else wrap_angle(new)
+        return SectorCone(wrap_angle(self.axis + d_axis), new)
 
-    def complement(self):
-        """The closure of the complement (ConE): the axis turned by ``pi``, the aperture
-        ``pi - aperture``."""
+    def complement(self, signed=False):
+        """The closure of the complement: the axis turned by ``pi``, the aperture
+        ``pi - |aperture|`` (default, in ``[0, pi]``). ``signed=True``: ``pi - aperture`` as
+        published (ConE), which exceeds ``pi`` for a negative aperture."""
         axis = th.where(self.axis >= 0, self.axis - pi, self.axis + pi)
-        return SectorCone(axis, pi - self.aperture)
+        return SectorCone(axis, pi - (self.aperture if signed else th.abs(self.aperture)))
 
 
 def as_state(region):

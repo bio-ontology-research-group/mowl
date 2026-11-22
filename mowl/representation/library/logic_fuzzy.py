@@ -521,10 +521,10 @@ class PairNetworkRelations(Relations):
 
     :param exists: How :math:`\\exists r.C` is read. ``"pairwise"`` (default): the degree of
         element ``a`` is :math:`\\sup_b \\mathrm{net}(e_a + r, e_b) \\sqcap C(b)`.
-        ``"global"``: the reading of FALCON's ``forward_fs``,
-        :math:`\\sup_b \\mathrm{net}(e_b + r, e_b) \\sqcap C(b)`, the same for every element
-        of the domain; the published method uses it, it ignores which element is asked
-        about.
+        ``"global"``: :math:`\\sup_b \\mathrm{net}(e_b + r, e_b) \\sqcap C(b)`, the same for
+        every element of the domain, as the existing mOWL module ``forward_fs`` computes it
+        (a porting error: the published FALCON pairs every element with every other, the
+        pairwise reading). Kept only so that the adapter of that module has equal losses.
     """
 
     part = RelationModel.NETWORK.value
@@ -894,7 +894,7 @@ def dfalc(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0,
 
 @register_method("falcon")
 def falcon(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0,
-           t_norm="product", max_measure="max", stabiliser="add", exists="global",
+           t_norm="product", max_measure="max", stabiliser="add", exists="pairwise",
            anon_domain=0, tables=None):
     """FALCON (Tang et al. 2022): class vectors, a membership network over (vector, element
     vector) pairs, a network over pairs for roles, a t-norm, the conflict of the
@@ -903,9 +903,10 @@ def falcon(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.0,
 
     :param t_norm: The operator family (``"product"``, ``"minmax"``, ``"Łukasiewicz"`` or any
         name of :data:`FAMILIES`).
-    :param stabiliser, exists: The two published readings that are not the default of their
-        parts: ``-log(1 - m + 1e-10)`` and the domain-constant :math:`\\exists r.C` of
-        ``forward_fs``.
+    :param stabiliser: ``"add"``, the published reading that is not the default of its part
+        (``-log(1 - m + 1e-10)``).
+    :param exists: ``"pairwise"`` (default, as published); ``"global"`` is the domain-constant
+        :math:`\\exists r.C` of the existing module's ``forward_fs``, used by its adapter.
     :param tables: A :class:`~mowl.nn.alc.falcon.FALCONModule` to share parameters with.
     """
     if tables is not None:
@@ -983,7 +984,7 @@ def _dfalc_adapter(module):
 @register_adapter("FALCONModule")
 def _falcon_adapter(module):
     return falcon(None, None, t_norm=module.t_norm, max_measure=module.max_measure,
-                  tables=module)
+                  exists="global", tables=module)
 
 
 @register_adapter("ALConeModule")

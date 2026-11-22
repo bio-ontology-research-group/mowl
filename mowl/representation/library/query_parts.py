@@ -31,13 +31,11 @@ from mowl.representation.methods import register_relation_model
 from mowl.representation.regions import Ball, Box, ConstructorUnavailable
 from mowl.representation.relation_models import Relations
 
-__all__ = ["PointBoxes", "BetaPoints", "ConePoints", "ShiftWiden", "BetaNetwork",
+__all__ = ["PointBoxes", "BetaPoints", "ConePoints", "BetaNetwork",
            "ConeNetwork", "ConeRotation", "BoxAttentionIntersection",
            "BoxExactIntersection", "BetaAttentionIntersection", "ConeAttentionIntersection",
            "BetaInversion", "ConeComplement", "BoxDistance", "BetaDistance", "ConeDistance",
            "embedding"]
-
-_ACTIVATIONS = {"relu": F.relu, "softplus": F.softplus, "none": lambda x: x}
 
 
 def embedding(parameter):
@@ -164,62 +162,6 @@ class _QueryRelations(Relations):
         return self.vectors.weight.detach()
 
 
-class ShiftWiden(_QueryRelations):
-    """A relation shifts a region and makes it wider: :math:`(x, y) \\in r` iff
-    :math:`y - x` lies in the box :math:`[v_r - w_r, v_r + w_r]`, a *box of translations*
-    (Query2Box's projection; TransBox's relation model). The image of a box
-    :math:`[c - o, c + o]` is the box with centre :math:`c + v` and offset :math:`o + w`.
-    A region that is not a box is enlarged by the smallest enclosing growth (a ball: its
-    radius by :math:`\\lVert w \\rVert_2`).
-
-    :cvar part: ``"box of translations"``.
-    :param activation: Applied to the stored widths: ``"relu"`` (default), ``"softplus"``
-        or ``"none"``.
-    :param vectors, widths: Existing embeddings or parameters to share.
-    :param inverse_of: See the base class. Without it the inverse of a relation is the
-        box :math:`[-v - w, -v + w]` (so :math:`\\exists r.C` is the image under it).
-    """
-
-    part = "box of translations"
-
-    def __init__(self, size=None, embed_dim=None, vectors=None, widths=None,
-                 activation="relu", inverse_of=None, init_range=0.1):
-        super().__init__()
-        if activation not in _ACTIVATIONS:
-            raise ValueError("activation must be 'relu', 'softplus' or 'none'.")
-        self.activation_name = activation
-        self.activation = _ACTIVATIONS[activation]
-        if isinstance(vectors, nn.Parameter):
-            vectors = embedding(vectors)
-        if isinstance(widths, nn.Parameter):
-            widths = embedding(widths)
-        self.vectors = vectors if vectors is not None else _uniform(
-            size, embed_dim, -init_range, init_range)
-        self.widths = widths if widths is not None else _uniform(
-            len(self), self.vectors.embedding_dim, 0, init_range)
-        self.inverse_of = inverse_of
-
-    def _grow(self, region, width):
-        if isinstance(region, Box):
-            return region.grow(width)
-        if isinstance(region, Ball):
-            return Ball(region.centre, region.radius + th.linalg.norm(
-                width, dim=-1, keepdim=True))
-        raise ConstructorUnavailable(f"ShiftWiden grows boxes and balls, not "
-                                     f"{type(region).__name__}.")
-
-    def image(self, ids, region):
-        return self._grow(region.translate(self.vectors(ids)),
-                          self.activation(self.widths(ids)))
-
-    def _derived_preimage(self, ids, region):
-        return self._grow(region.translate(-self.vectors(ids)),
-                          self.activation(self.widths(ids)))
-
-    def flat(self):
-        return th.cat([self.vectors.weight, self.widths.weight], -1).detach()
-
-
 class BetaNetwork(_QueryRelations):
     """A relation is an embedding and a network: the projected Beta distribution is a
     function of the distribution and the relation embedding (BetaE)."""
@@ -318,27 +260,32 @@ class ConeRotation(_ConeRelations):
     """AConE: a relation rotates a cone and widens or narrows it, by adding its angles to
     the axis and the aperture (multiplication of unit complex numbers). Its inverse is the
     rotation by the negated angles, so :math:`\\exists r.C` needs no second relation.
+
+    :param aperture: ``"clip"`` (default): the aperture stays in ``[0, pi]``. ``"wrap"``: it
+        is wrapped to ``(-pi, pi]`` as in the published AConE (negative apertures).
     """
 
     part = "rotation"
 
     def __init__(self, size=None, embed_dim=None, tables=None, angle_range=0.1,
-                 inverse_of=None):
+                 inverse_of=None, aperture="clip"):
         if tables is not None:
             super().__init__(axes=tables.axis_embedding, apertures=tables.aperture_embedding,
                              angle_range=tables.embedding_range, inverse_of=inverse_of)
         else:
             super().__init__(size, embed_dim, angle_range=angle_range, inverse_of=inverse_of)
+        if aperture not in ("clip", "wrap"):
+            raise ValueError("aperture must be 'clip' or 'wrap'.")
+        self.aperture = aperture
 
     def image(self, ids, region):
-        return region.rotate(*self.angles(ids))
+        return region.rotate(*self.angles(ids), aperture=self.aperture)
 
     def _derived_preimage(self, ids, region):
         d_axis, d_aperture = self.angles(ids)
-        return region.rotate(-d_axis, -d_aperture)
+        return region.rotate(-d_axis, -d_aperture, aperture=self.aperture)
 
 
-register_relation_model("shift and widen")(ShiftWiden)
 register_relation_model("angle rotation")(ConeRotation)
 
 
@@ -463,10 +410,15 @@ class BetaInversion(nn.Module):
 
 
 class ConeComplement(nn.Module):
-    """ConE negation: the closure of the complement of every sector."""
+    """ConE negation: the closure of the complement of every sector, with the absolute
+    aperture; ``signed=True`` is the published ``pi - aperture``."""
+
+    def __init__(self, signed=False):
+        super().__init__()
+        self.signed = bool(signed)
 
     def forward(self, region):
-        return region.complement()
+        return region.complement(self.signed)
 
 
 # ---------------------------------------------------------------------------------------

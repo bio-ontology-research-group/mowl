@@ -58,15 +58,17 @@ def transbox(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.
         classes = BoxClasses(centres=t.class_center_embedding,
                              offsets=t.class_offset_embedding)
         relations = TranslationBoxes(vectors=t.relation_center_embedding,
-                                     offsets=t.relation_offset_embedding)
+                                     offsets=t.relation_offset_embedding,
+                                     convention="x-y")
         individuals = None if t.ind_embedding is None else Points(centres=t.ind_embedding)
     elif formulation == "reference":
         classes = BoxClasses(*(None, None), *_joint_tables(nb_classes, embed_dim))
-        relations = TranslationBoxes(None, None, *_joint_tables(nb_relations, embed_dim))
+        relations = TranslationBoxes(None, None, *_joint_tables(nb_relations, embed_dim),
+                                     convention="x-y")
         individuals = Points(nb_individuals, embed_dim) if nb_individuals else None
     else:
         classes = BoxClasses(nb_classes, embed_dim)
-        relations = TranslationBoxes(nb_relations, embed_dim)
+        relations = TranslationBoxes(nb_relations, embed_dim, convention="x-y")
         individuals = Points(nb_individuals, embed_dim) if nb_individuals else None
     reference = formulation == "reference"
     measure = MaskedBounds(separation="every", empty_weight=1.0 if reference else 0.5,

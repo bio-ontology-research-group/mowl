@@ -106,7 +106,7 @@ class TestRelations(TestCase):
 
     def test_box_of_translations_contains_the_pairs(self):
         th.manual_seed(0)
-        relations = TranslationBoxes(2, 3)
+        relations = TranslationBoxes(2, 3, convention="x-y")   # the TransBox convention
         ids = th.tensor([1])
         target = box([0, 0, 0], [1, 1, 1])
         target = Box(target.centre.expand(1, 3), target.offset.expand(1, 3))
@@ -194,9 +194,15 @@ class TestRelations(TestCase):
 
     def test_boxes_only(self):
         ball = BallClasses(3, 2)(th.tensor([0]))
-        for relations in (TranslationBoxes(1, 2), Affine(1, 2), AffineBoxes(1, 2)):
+        for relations in (Affine(1, 2), AffineBoxes(1, 2)):
             with self.assertRaises(ConstructorUnavailable):
                 relations.preimage(th.tensor([0]), ball)
+        # a box of translations widens a ball by the norm of its half-widths (enclosing)
+        relations = TranslationBoxes(1, 2)
+        grown = relations.preimage(th.tensor([0]), ball)
+        self.assertTrue(th.allclose(
+            grown.radius, ball.radius + th.linalg.norm(relations.box(th.tensor([0])).offset,
+                                                       dim=-1, keepdim=True)))
 
 
 class TestObjectives(TestCase):
@@ -292,9 +298,11 @@ class TestComposedELWithTheParts(TestCase):
         self.assertTrains(classes="box", relations="translation", measure="masked bounds",
                           objective=Objective(0.02))
 
-    def test_balls_do_not_take_the_box_relations(self):
+    def test_balls_take_the_box_of_translations_but_not_the_affine_maps(self):
         model = ComposedEL(self.dataset, classes="ball", relations="box of translations",
                            embed_dim=4)
+        model.train(epochs=1)
+        model = ComposedEL(self.dataset, classes="ball", relations="affine map", embed_dim=4)
         with self.assertRaises(ConstructorUnavailable):
             model.train(epochs=1)
 

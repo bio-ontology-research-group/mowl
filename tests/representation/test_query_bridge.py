@@ -9,7 +9,7 @@ from mowl.representation import (BoxClasses, ComposedGeometry, Bounds, Objective
                                  ConstructorUnavailable, geometry_of)
 from mowl.representation.library.query_methods import (
     ComposedQueryGeometry, QueryClasses, acone, cone_qe, query2box, query_geometry)
-from mowl.representation.library.query_parts import ShiftWiden
+from mowl.representation.library.boxrel_relations import TranslationBoxes
 from tests.datasetFactory import FamilyDataset
 
 
@@ -117,11 +117,11 @@ class TestPartsInComposedEL(TestCase):
             self.trains(model)
 
     def test_shift_and_widen_is_exists_as_image_under_the_inverse(self):
-        relation = ShiftWiden(2, 3)
+        relation = TranslationBoxes(2, 3, activation="relu", init_range=0.1)
         region = BoxClasses(4, 3)(th.tensor([0, 1]))
         ids = th.tensor([0, 1])
         image = relation.image(ids, region)
-        self.assertTrue(th.allclose(image.offset, region.offset + relation.widths(ids)
+        self.assertTrue(th.allclose(image.offset, region.offset + relation.offsets(ids)
                                     .relu()))
         back = relation.preimage(ids, image)
         # widening is not undone: the preimage of the image contains the region

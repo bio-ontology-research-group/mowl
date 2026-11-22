@@ -13,11 +13,12 @@ with relation indices as arguments and the measure that compares boxes, ``(B, 1)
 
 import torch as th
 import torch.nn as nn
+import torch.nn.functional as F
 
 from mowl.representation.class_models import _unit_rows
 from mowl.representation.library.boxrel_boxes import _uniform
 from mowl.representation.methods import register_relation_model
-from mowl.representation.regions import Box, ConstructorUnavailable
+from mowl.representation.regions import Ball, Box, ConstructorUnavailable
 from mowl.representation.relation_models import Relations
 
 __all__ = ["TranslationBoxes", "Affine", "AffineBoxes"]
@@ -30,50 +31,103 @@ def _boxes(region, relation):
     return region
 
 
+def _as_table(parameter):
+    """An :class:`~torch.nn.Embedding` whose weight *is* ``parameter`` (a parameter of
+    another module is shared, not copied); anything else is returned unchanged."""
+    if isinstance(parameter, nn.Parameter):
+        table = nn.Embedding(parameter.shape[0], parameter.shape[1])
+        table.weight = parameter
+        return table
+    return parameter
+
+
+_ACTIVATIONS = {"abs": th.abs, "relu": F.relu, "softplus": F.softplus,
+                "none": lambda x: x}
+
+
 @register_relation_model("box of translations")
 class TranslationBoxes(Relations):
-    """A relation is a box of shift vectors (TransBox, Yang et al. 2025):
-    :math:`(x, y) \\in r` iff :math:`x - y` lies in the box :math:`[c_r - o_r, c_r + o_r]`.
-    :math:`\\exists r.C` is the box of :math:`C` shifted by :math:`c_r` and widened by
-    :math:`o_r` (the Minkowski sum), and the images and preimages need regions that can be
-    shifted and widened (boxes). A role chain is the sum of the boxes, a role inclusion an
-    inclusion of boxes.
+    """A relation is a box of shift vectors (TransBox, Yang et al. 2025; Query2Box, Ren et
+    al. 2020): the pairs :math:`(x, y)` of the relation are those with :math:`y - x` in the
+    box :math:`[c_r - o_r, c_r + o_r]` (``convention="y-x"``, default: a plain translation
+    :math:`y = x + c_r` when :math:`o_r = 0`, as :class:`~mowl.representation.Translation`).
+    :math:`\\exists r.C` is the box of :math:`C` shifted by :math:`-c_r` and widened by
+    :math:`o_r` (the Minkowski sum); the image the box shifted by :math:`c_r` and widened. A
+    ball is widened by the norm of :math:`o_r`. A role chain is the sum of the boxes, a role
+    inclusion an inclusion of boxes.
 
-    :param vectors: Table of the centres :math:`c_r` (the shift vector of a plain
-        translation); ``offsets``: table of the half-widths (stored signed, used through
-        their absolute value).
+    :param vectors: Table of the centres :math:`c_r`; ``offsets``: table of the half-widths
+        (stored signed, passed through ``activation``).
+    :param activation: ``"abs"`` (default), ``"relu"`` (Query2Box), ``"softplus"`` or
+        ``"none"`` (the half-width can then be negative: an option of the published
+        Query2Box, not a default).
+    :param convention: ``"y-x"`` (default) or ``"x-y"``: the box holds :math:`x - y`, the
+        convention of the TransBox code (the sign of :math:`c_r` flips).
+    :param inverse_of: A function from relation ids to the ids of the inverse relations
+        (rows of the same table): the preimage is then the image under the inverse
+        (Query2Box). Without it the inverse is the box shifted the other way.
+    :param init_range: ``None`` (default): rows of norm one; a number: centres uniform in
+        ``[-r, r]`` and widths in ``[0, r]`` (Query2Box).
     """
 
     part = "box of translations"
 
-    def __init__(self, size=None, embed_dim=None, vectors=None, offsets=None):
+    def __init__(self, size=None, embed_dim=None, vectors=None, offsets=None,
+                 activation="abs", convention="y-x", inverse_of=None, init_range=None):
         super().__init__()
-        self.vectors = vectors if vectors is not None else _unit_rows(
-            nn.Embedding(size, embed_dim))
-        self.offsets = offsets if offsets is not None else _unit_rows(
-            nn.Embedding(len(self.vectors.weight), self.vectors.embedding_dim))
+        if activation not in _ACTIVATIONS:
+            raise ValueError(f"activation must be one of {sorted(_ACTIVATIONS)}.")
+        if convention not in ("y-x", "x-y"):
+            raise ValueError("convention must be 'y-x' or 'x-y'.")
+        self.activation_name = activation
+        self.activation = _ACTIVATIONS[activation]
+        self.sign = 1.0 if convention == "y-x" else -1.0
+        self.inverse_of = inverse_of
+        vectors, offsets = (_as_table(t) for t in (vectors, offsets))
+        if vectors is None:
+            vectors = _unit_rows(nn.Embedding(size, embed_dim)) if init_range is None \
+                else _uniform(size, embed_dim, -init_range, init_range)
+        self.vectors = vectors
+        if offsets is None:
+            n, d = len(self.vectors.weight), self.vectors.embedding_dim
+            offsets = _unit_rows(nn.Embedding(n, d)) if init_range is None \
+                else _uniform(n, d, 0, init_range)
+        self.offsets = offsets
 
     def box(self, ids):
         """The box of translations of the relations ``ids``."""
-        return Box(self.vectors(ids), th.abs(self.offsets(ids)))
+        return Box(self.vectors(ids), self.activation(self.offsets(ids)))
+
+    @staticmethod
+    def _grow(region, width):
+        if isinstance(region, Box):
+            return region.grow(width)
+        if isinstance(region, Ball):
+            return region.grow(th.linalg.norm(width, dim=-1, keepdim=True))
+        raise ConstructorUnavailable(
+            f"A box of translations maps boxes and balls, not {type(region).__name__}.")
 
     def image(self, ids, region):
         box = self.box(ids)
-        return _boxes(region, self).translate(-box.centre).grow(box.offset)
+        return self._grow(region.translate(self.sign * box.centre), box.offset)
 
     def preimage(self, ids, region):
+        if self.inverse_of is not None:
+            return self.image(self.inverse_of(ids), region)
         box = self.box(ids)
-        return _boxes(region, self).translate(box.centre).grow(box.offset)
+        return self._grow(region.translate(-self.sign * box.centre), box.offset)
 
     def preimage_all(self, ids, region, clamp=True):
         """The box of :math:`\\exists r^{all}.C` of the semantic enhancement of TransBox:
-        centre :math:`c_r + c_C`, half-width :math:`o_r - o_C`: the box of the
-        :math:`C`-boxes that the box of translations reaches all of. ``clamp``: cut the
-        half-width at zero (default); the authors' code does not, which gives an inverted
-        box where :math:`o_C > o_r`."""
+        centre of :math:`C` shifted by :math:`-c_r`, half-width :math:`o_r - o_C`: the box
+        of the :math:`C`-boxes that the box of translations reaches all of. ``clamp``: cut
+        the half-width at zero (default); the authors' code does not, which gives an
+        inverted box where :math:`o_C > o_r`."""
         box = self.box(ids)
-        offset = box.offset - _boxes(region, self).offset
-        return Box(region.centre + box.centre, th.relu(offset) if clamp else offset)
+        if not isinstance(region, Box):
+            raise ConstructorUnavailable("preimage_all needs boxes.")
+        offset = box.offset - region.offset
+        return Box(region.centre - self.sign * box.centre, th.relu(offset) if clamp else offset)
 
     def role_inclusion(self, sub, sup, measure, margin=0.0):
         return measure.inside(self.box(sub), self.box(sup), margin)
@@ -82,6 +136,15 @@ class TranslationBoxes(Relations):
         a, b = self.box(first), self.box(second)
         return measure.inside(Box(a.centre + b.centre, a.offset + b.offset), self.box(sup),
                               margin)
+
+    def flat(self):
+        """One flat vector per relation, for inspection."""
+        return th.cat([self.vectors.weight, self.offsets.weight], -1).detach()
+
+
+register_relation_model("shift and widen")(
+    lambda size, embed_dim: TranslationBoxes(size, embed_dim, activation="relu",
+                                             init_range=0.1))  # alias of the query group
 
 
 @register_relation_model("affine map")
