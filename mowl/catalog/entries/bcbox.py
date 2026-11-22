@@ -135,7 +135,8 @@ CARD = MethodCard(
     references=(ZHANG2022, BORATKO2021, DASGUPTA2020, R.FEDERICO2026_MULTIBOX),
     code_url="https://github.com/iesl/geometric_graph_embedding",
     notes=(
-        "Reimplements G-Box (Eq. 3), GBC-Box (Eq. 8), VBC-Box (Eq. 9), d_bin and the lasso "
+        "The log-softplus and -log(1 - e^-E) guards are shared with the Gumbel boxes "
+        "(mowl.nn.numerics). Reimplements G-Box (Eq. 3), GBC-Box (Eq. 8), VBC-Box (Eq. 9), d_bin and the lasso "
         "w_r ||1 - B||_1 (Section 4.5), trained with the BCE objective of Eq. (10), 32 "
         "corrupted negatives per positive and self-adversarial negative weights (Section "
         "4.4). Implemented as a GraphModel over projected edges (default: "

@@ -126,10 +126,23 @@ class ShadowConesModule(OrderModule):
     :param init_scale: Initial points are uniform in :math:`[-s, s]^n` around the origin
         :math:`(0, \ldots, 0, 1)` of the half-space (Nickel and Kiela initialisation, as in
         the paper); for the ball they are projected out of the hole of radius :math:`r`.
+    :param margin: :math:`\gamma_1`, the distance to which a negative is pushed out of the
+        cone.
+    :param negative: What ``neg=True`` returns. ``"hinge"`` (default): the negative loss
+        :math:`\max(0, \gamma_1 - E)`, which is small when the negative does not hold, like
+        the negative loss of every other module. ``"energy"``: the raw (signed) energy, as
+        earlier mOWL versions did; it is the *score* of the negative, not a loss (it is
+        unbounded below and smallest deep inside the cone), and is what Eq. 1 of the paper
+        is written on (:meth:`mowl.models.ShadowCones.compute_loss` applies the hinge to it).
     """
 
     def __init__(self, nb_classes, embed_dim, formulation="umbral-half-space", radius=0.05,
-                 horosphere_height=20.0, gamma3=1e-4, init_scale=0.01, seed=None):
+                 horosphere_height=20.0, gamma3=1e-4, init_scale=0.01, seed=None,
+                 margin=0.01, negative="hinge"):
+        if negative not in ("hinge", "energy"):
+            raise ValueError("negative must be 'hinge' or 'energy'.")
+        self.margin = margin
+        self.negative = negative
         if formulation not in C.FORMULATIONS:
             raise ValueError(f"formulation must be one of {C.FORMULATIONS}.")
         if embed_dim < 2:
@@ -160,7 +173,9 @@ class ShadowConesModule(OrderModule):
                                     self.gamma3)
 
     def negative_loss(self, energy):
-        return energy
+        if self.negative == "energy":
+            return energy
+        return th.relu(self.margin - energy)
 
 
 GEOMETRIES = ("hyperbolic", "spherical", "euclidean")

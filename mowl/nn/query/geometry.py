@@ -131,11 +131,18 @@ class Query2BoxGeometry(QueryGeometry):
     :param center_weight: ``cen``, the weight of the in-box distance (0.02 in the paper).
     :param activation: ``"relu"``, ``"softplus"`` or ``"none"``, applied to the relation
         offsets (the reference code offers all three).
+    :param clamp_extent: ``False`` (default, as in the reference code): the offset of a
+        projected box is the sum of the offsets, which with ``activation="none"`` can become
+        negative, a box with negative extent (the distances then still compute, but the
+        region is not a box). ``True``: offsets are clamped at 0 after each projection, so
+        every state is a box (a negative sum becomes a point). With ``"relu"`` and
+        ``"softplus"`` the offsets are never negative and the option changes nothing.
     """
 
     def __init__(self, num_entities, num_relations, dim, gamma=24.0, center_weight=0.02,
-                 activation="relu"):
+                 activation="relu", clamp_extent=False):
         super().__init__(num_entities, num_relations, dim, gamma)
+        self.clamp_extent = clamp_extent
         if activation not in ("relu", "softplus", "none"):
             raise ValueError("activation must be 'relu', 'softplus' or 'none'.")
         self.cen = center_weight
@@ -159,8 +166,10 @@ class Query2BoxGeometry(QueryGeometry):
 
     def project(self, state, relation_ids):
         c, o = state
-        return (c + self.relation_embedding[relation_ids],
-                o + self.activation(self.offset_embedding[relation_ids]))
+        o = o + self.activation(self.offset_embedding[relation_ids])
+        if self.clamp_extent:
+            o = F.relu(o)
+        return c + self.relation_embedding[relation_ids], o
 
     def intersect(self, states):
         centers = th.stack([s[0] for s in states])
@@ -291,13 +300,21 @@ class ConEGeometry(QueryGeometry):
     :param hidden: Width of the projection MLP (1600 in the code, 2 layers).
     :param layers: Number of layers of the projection MLP.
     :param dropout: Dropout on the apertures in the intersection (0.2 in the code).
+    :param signed_negation: ``False`` (default): the negation uses the absolute value of the
+        aperture, clipped to ``pi`` (the cone of aperture ``a`` is the cone of ``|a|``), so
+        the aperture of a complement is in ``[0, pi]`` also when a state has a negative
+        aperture (possible in :class:`AConEGeometry`). ``True``: ``pi - aperture``, the
+        behaviour of earlier mOWL versions (identical for apertures in ``[0, pi]``, as in
+        ConE's own code); for a negative aperture it exceeds ``pi`` and the complement has
+        the wrong boundaries.
     """
 
     supports_negation = True
 
     def __init__(self, num_entities, num_relations, dim, gamma=20.0, center_weight=0.02,
-                 hidden=128, layers=1, dropout=0.0):
+                 hidden=128, layers=1, dropout=0.0, signed_negation=False):
         super().__init__(num_entities, num_relations, dim, gamma)
+        self.signed_negation = signed_negation
         self.cen = center_weight
         r = self.embedding_range
         self.entity_embedding = nn.Parameter(th.empty(num_entities, dim).uniform_(-r, r))
@@ -358,7 +375,9 @@ class ConEGeometry(QueryGeometry):
     def negate(self, state):
         axis, aperture = state
         axis = th.where(axis >= 0, axis - pi, axis + pi)
-        return axis, pi - aperture
+        if self.signed_negation:
+            return axis, pi - aperture
+        return axis, pi - aperture.abs().clamp(max=pi)
 
     def distance(self, state, entity_ids):
         axis, aperture = state
@@ -391,7 +410,21 @@ class AConEGeometry(ConEGeometry):
     (composition, inversion, hierarchy: Propositions 2-5, Corollaries 6-7) readable from
     the angles. The other operators and the score are those of ConE (the reference code
     shares them).
+
+    :param aperture: How the sum of apertures is kept an angle. ``"wrap"`` (default): wrapped
+        to ``(-pi, pi]`` like the axis, so an aperture can be negative (a cone of aperture
+        ``a`` is the cone of ``|a|``) and a sum above ``pi`` comes back small; this is
+        mOWL's reading of the complex-number multiplication and could not be checked
+        against the authors' code (the public repository has the ConE projection network
+        only). ``"clip"``: clipped to ``[0, pi]``, the range of the aperture of every other
+        state: a negative sum is a point, a sum above ``pi`` the whole circle.
     """
+
+    def __init__(self, *args, aperture="wrap", **kwargs):
+        if aperture not in ("wrap", "clip"):
+            raise ValueError("aperture must be 'wrap' or 'clip'.")
+        super().__init__(*args, **kwargs)
+        self.aperture_mode = aperture
 
     def _make_projection(self, dim, hidden, layers):
         pass
@@ -399,6 +432,8 @@ class AConEGeometry(ConEGeometry):
     def project(self, state, relation_ids):
         axis, aperture = state
         r_axis, r_aperture = self._relation(relation_ids)
+        if self.aperture_mode == "clip":
+            return _wrap(axis + r_axis), (aperture + r_aperture).clamp(0.0, pi)
         return _wrap(axis + r_axis), _wrap(aperture + r_aperture)
 
 

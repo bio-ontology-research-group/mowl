@@ -13,8 +13,13 @@ from mowl.owlapi import (ClassExpressionType, OWLClassAssertionAxiom,
                          OWLDisjointClassesAxiom, OWLEquivalentClassesAxiom,
                          OWLObjectPropertyAssertionAxiom, OWLSubClassOfAxiom)
 
-#: Logit used for owl:Thing (all half-axes) and, negated, for owl:Nothing.
+#: Logit magnitude that earlier versions used for owl:Thing (all half-axes) and, negated,
+#: for owl:Nothing. It makes every loss through the constants about 1e4 times larger than a
+#: loss between learned classes; select it with ``constant_logit=CONSTANT_LOGIT``.
 CONSTANT_LOGIT = 1e4
+
+#: Default magnitude of the constant logits: the scale of learned logits (``init_std``).
+DEFAULT_CONSTANT_LOGIT = 1.0
 
 
 class ALConeModule(ALCModule):
@@ -40,11 +45,20 @@ class ALConeModule(ALCModule):
     :param top_index: Class index of ``owl:Thing`` (interpreted as the whole space).
     :param bottom_index: Class index of ``owl:Nothing`` (interpreted as :math:`\\{0\\}`).
     :param init_std: Standard deviation of the normal initialisation of the logits.
+    :param constant_logit: Magnitude of the logits of ``owl:Thing`` (``+``) and
+        ``owl:Nothing`` (``-``). It only has to be at least ``margin`` for the exactness of
+        the losses; a large value multiplies every loss that involves the constants.
+        Defaults to ``1.0`` (the scale of learned logits). The value of earlier versions,
+        ``1e4`` (:data:`CONSTANT_LOGIT`), reproduces their numbers.
     """
 
     def __init__(self, nclasses, nindividuals, nrelations, dim=8, margin=0.1,
-                 top_index=None, bottom_index=None, init_std=0.5):
+                 top_index=None, bottom_index=None, init_std=0.5,
+                 constant_logit=DEFAULT_CONSTANT_LOGIT):
         super().__init__()
+        if constant_logit < margin:
+            raise ValueError("constant_logit must be at least the margin.")
+        self.constant_logit = constant_logit
         if dim < 1:
             raise ValueError("dim must be positive.")
         if margin <= 0:
@@ -86,14 +100,14 @@ class ALConeModule(ALCModule):
     # -- parameters ---------------------------------------------------------
     def class_logits(self, idx):
         """Half-axis logits of class indices ``idx`` (any shape); ``owl:Thing`` and
-        ``owl:Nothing`` get constant logits :math:`\\pm` :data:`CONSTANT_LOGIT`."""
+        ``owl:Nothing`` get the constant logits :math:`\\pm` ``constant_logit``."""
         out = self.c_embedding(idx)
         if self.top_index is not None:
             out = th.where((idx == self.top_index).unsqueeze(-1),
-                           th.full_like(out, CONSTANT_LOGIT), out)
+                           th.full_like(out, self.constant_logit), out)
         if self.bottom_index is not None:
             out = th.where((idx == self.bottom_index).unsqueeze(-1),
-                           th.full_like(out, -CONSTANT_LOGIT), out)
+                           th.full_like(out, -self.constant_logit), out)
         return out
 
     def role_logits(self, idx):

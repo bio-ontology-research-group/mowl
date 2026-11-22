@@ -50,13 +50,18 @@ class ShadowCones(OrderEmbeddingModel):
     :param gamma1: Distance :math:`\gamma_1` to which negatives are pushed out of the cone.
     :param gamma2: Distance :math:`\gamma_2` at which a positive is satisfied (0 in the paper).
     :param gamma3: Push of the apex into its cone for points of positive altitude (1e-4).
+    :param negative: ``"hinge"`` (default): the module's negative loss is
+        :math:`\max(0, \gamma_1 - E^-)`, as for every other model, so regimes that sum
+        losses work; Eq. 1 is unchanged. ``"energy"``: the module returns the raw energy of
+        a negative (earlier versions; not a loss). See
+        :class:`~mowl.nn.order.module.ShadowConesModule`.
     :param num_neg: Negatives per positive (10 in the paper).
     """
 
     def __init__(self, dataset, embed_dim=10, formulation="umbral-half-space", radius=0.05,
                  horosphere_height=20.0, gamma1=0.01, gamma2=0.0, gamma3=1e-4, num_neg=10,
                  learning_rate=0.01, batch_size=4096, model_filepath=None, device="cpu",
-                 neg_sampling_gcis=None, seed=None, init_scale=0.01):
+                 neg_sampling_gcis=None, seed=None, init_scale=0.01, negative="hinge"):
         super().__init__(dataset, embed_dim, learning_rate, batch_size, num_neg, device,
                          model_filepath, neg_sampling_gcis, seed)
         self.formulation = formulation
@@ -64,20 +69,25 @@ class ShadowCones(OrderEmbeddingModel):
         self.horosphere_height = horosphere_height
         self.gamma1, self.gamma2, self.gamma3 = gamma1, gamma2, gamma3
         self.init_scale = init_scale
+        self.negative = negative
         self.init_module()
 
     def init_module(self):
         self.module = ShadowConesModule(
             len(self.class_index_dict), self.embed_dim, formulation=self.formulation,
             radius=self.radius, horosphere_height=self.horosphere_height,
-            gamma3=self.gamma3, init_scale=self.init_scale, seed=self.seed).to(self.device)
+            gamma3=self.gamma3, init_scale=self.init_scale, seed=self.seed,
+            margin=self.gamma1, negative=self.negative).to(self.device)
 
     def compute_loss(self, pos_scores, neg_scores=None):
         """Eq. 1 of the paper, averaged over the positives; ``neg_scores`` holds ``K``
-        blocks of one energy per positive."""
+        blocks of one value per positive: the hinge :math:`\\max(0, \\gamma_1 - E^-)`
+        (``negative="hinge"``) or the raw energy :math:`E^-` (``"energy"``)."""
         pos = th.clamp(pos_scores.reshape(-1), min=self.gamma2)
         if neg_scores is None:
             return pos.mean()
         n = pos.shape[0]
         neg = neg_scores.reshape(-1, n).t()
-        return (pos + th.logsumexp(th.relu(self.gamma1 - neg), dim=1)).mean()
+        if self.negative == "energy":
+            neg = th.relu(self.gamma1 - neg)
+        return (pos + th.logsumexp(neg, dim=1)).mean()

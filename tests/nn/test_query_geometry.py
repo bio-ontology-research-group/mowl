@@ -293,3 +293,63 @@ def test_acone_proposition_5_role_inclusion_and_proposition_3_union_distribution
     assert (g.distance(after_s, ids_)[0] <= g.distance(after_r, ids_)[0] + 1e-6).all()
     # a strictly larger aperture does include more entities for this seed
     assert int(in_s.sum()) >= int(in_r.sum())
+
+
+def test_cone_negation_of_a_negative_aperture_is_the_complement():
+    """A cone with aperture -a is the cone of aperture a: its complement has aperture
+    pi - a (not pi + a), and agrees with the complement of the cone of aperture a."""
+    th.manual_seed(0)
+    g = ConEGeometry(N, R, D, gamma=4.0)
+    axis = th.tensor([[0.5, -1.0, 2.0]])
+    ap = th.tensor([[0.4, 1.0, 3.0]])
+    n_axis, n_ap = g.negate((axis, -ap))
+    assert (n_ap >= 0).all() and (n_ap <= pi + 1e-6).all()
+    ref_axis, ref_ap = g.negate((axis, ap))
+    assert th.allclose(n_ap, ref_ap) and th.allclose(n_axis, ref_axis)
+    # the old behaviour is selectable
+    old = ConEGeometry(N, R, D, gamma=4.0, signed_negation=True)
+    _, o_ap = old.negate((axis, -ap))
+    assert th.allclose(o_ap, pi + ap) and (o_ap > pi).any()
+    _, o_ap = old.negate((axis, ap))
+    assert th.allclose(o_ap, pi - ap)
+
+
+def test_acone_aperture_modes():
+    th.manual_seed(0)
+    wrap = AConEGeometry(N, R, D, gamma=4.0)
+    clip = AConEGeometry(N, R, D, gamma=4.0, aperture="clip")
+    with th.no_grad():
+        wrap.aperture_embedding[2] = -5 * wrap.embedding_range      # relation aperture < 0
+        wrap.aperture_embedding[3] = 5 * wrap.embedding_range       # and > 0, near pi
+    clip.load_state_dict(wrap.state_dict())
+    s = wrap.anchor(th.tensor([0, 1]))
+    neg_w = wrap.project(s, th.tensor([2, 2]))[1]
+    neg_c = clip.project(s, th.tensor([2, 2]))[1]
+    assert (neg_w < 0).all()                      # old: negative aperture
+    assert (neg_c >= 0).all() and (neg_c <= pi).all()
+    twice = clip.project(clip.project(s, th.tensor([3, 3])), th.tensor([3, 3]))[1]
+    assert (twice == pi).all()
+    twice_w = wrap.project(wrap.project(s, th.tensor([3, 3])), th.tensor([3, 3]))[1]
+    assert (twice_w < pi).any()                   # old: a sum above pi comes back small
+    with pytest.raises(ValueError):
+        AConEGeometry(N, R, D, aperture="reflect")
+
+
+def test_query2box_negative_extent_option():
+    th.manual_seed(0)
+    free = Query2BoxGeometry(N, R, D, gamma=4.0, activation="none")
+    clamp = Query2BoxGeometry(N, R, D, gamma=4.0, activation="none", clamp_extent=True)
+    clamp.load_state_dict(free.state_dict())
+    with th.no_grad():
+        free.offset_embedding[1] = -1.0
+        clamp.offset_embedding[1] = -1.0
+    s = free.anchor(th.tensor([0]))
+    assert (free.project(s, th.tensor([1]))[1] < 0).all()          # reference behaviour
+    assert (clamp.project(s, th.tensor([1]))[1] == 0).all()
+    for act in ("relu", "softplus"):
+        a = Query2BoxGeometry(N, R, D, activation=act)
+        b = Query2BoxGeometry(N, R, D, activation=act, clamp_extent=True)
+        b.load_state_dict(a.state_dict())
+        sa = a.project(a.anchor(th.tensor([0])), th.tensor([1]))
+        sb = b.project(b.anchor(th.tensor([0])), th.tensor([1]))
+        assert th.equal(sa[1], sb[1])

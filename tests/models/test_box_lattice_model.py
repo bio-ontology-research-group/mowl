@@ -104,3 +104,29 @@ def test_unary_marginals_follow_descendant_counts():
     assert frac[idx["http://mowl.borg/bench#C"]] == pytest.approx(4 / n)   # C, B, A, D
     assert frac[idx["http://mowl.borg/bench#A"]] == pytest.approx(1 / n)
     assert model.additional_training_loss(0) is not None
+
+
+def _nested_module(**kw):
+    """Class 0 strictly inside class 1 (and 2 disjoint from both)."""
+    m = BoxLatticeModule(3, embed_dim=2, **kw)
+    with th.no_grad():
+        m.class_embed.weight.copy_(th.tensor([[0.2, 0.2, 0.3, 0.3],      # [min, delta]
+                                              [0.1, 0.1, 0.8, 0.8],
+                                              [0.9, 0.9, 0.05, 0.05]]))
+    return m
+
+
+def test_included_pair_has_exactly_zero_loss_and_the_old_form_is_selectable():
+    new = _nested_module()
+    old = _nested_module(zero_at_inclusion=False)
+    sub, sup = th.tensor([0]), th.tensor([1])
+    assert float(new.positive_loss(sub, sup).detach()) == 0.0
+    assert float(old.positive_loss(sub, sup).detach()) == pytest.approx(-1e-6, rel=1e-3)
+    assert float(old.positive_loss(sub, sup).detach()) < 0
+    # a violated pair has the same loss up to the constant log(1 + eps)
+    bad = th.tensor([2]), th.tensor([0])
+    diff = float(old.positive_loss(*bad).detach()) - float(new.positive_loss(*bad).detach())
+    assert abs(diff) < 1e-5            # float32 precision of a loss of about 14
+    for m in (new, old):
+        assert (m.positive_loss(th.tensor([0, 1, 2]), th.tensor([1, 0, 0])) >= -2e-6).all()
+    assert (new.positive_loss(th.tensor([0, 1, 2]), th.tensor([1, 0, 0])) >= 0).all()

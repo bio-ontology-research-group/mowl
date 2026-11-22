@@ -135,7 +135,10 @@ GRAPH_KGE = MethodCard(
     references=(R.ALI2021, R.CHEN2025),
     notes=(
         "Use GraphPlusPyKEENModel with any projector from mowl.projection and a PyKEEN "
-        "ERModel. OWL2Vec*-TransE in Chen et al. (2025) is an instance."),
+        "ERModel. OWL2Vec*-TransE in Chen et al. (2025) is an instance. Scores (axiom_costs) "
+        "exist for C ⊑ D, C ⊑ ∃r.D, C(a) (the type edge) and r(a, b) (the role edge), each "
+        "the score of the edge the axiom is projected to; infinite if the projector has no "
+        "such edge."),
 )
 
 GDA_PROJECTION = MethodCard(
