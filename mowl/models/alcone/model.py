@@ -43,11 +43,14 @@ class ALConeModel(EmbeddingALCModel):
     :param noise: Scale of Gaussian noise added to the parameters after each step,
         multiplied by the current temperature (so it vanishes at the end of training);
         it helps to leave local minima. Defaults to ``0.3``.
+    :param constant_logit: Magnitude of the logits of ``owl:Thing`` and ``owl:Nothing``
+        (see :class:`~mowl.nn.alc.alcone.module.ALConeModule`). Defaults to ``1.0``; the
+        value of earlier versions, ``1e4``, made every loss through them 1e4 times larger.
     """
 
     def __init__(self, dataset, dim=8, margin=0.1, nondegeneracy=0.1, alpha=0.4, beta=0.3,
                  learning_rate=0.05, batch_size=256, init_std=0.5, temperature=0.3,
-                 noise=0.3, model_filepath=None, device="cpu"):
+                 noise=0.3, constant_logit=1.0, model_filepath=None, device="cpu"):
         super().__init__(dataset, embed_dim=dim, batch_size=batch_size, alpha=alpha,
                          beta=beta, anon_e=0, learning_rate=learning_rate,
                          model_filepath=model_filepath, device=device)
@@ -57,6 +60,7 @@ class ALConeModel(EmbeddingALCModel):
         self.init_std = init_std
         self.temperature = temperature
         self.noise = noise
+        self.constant_logit = constant_logit
         self.init_module()
 
     def init_module(self):
@@ -65,7 +69,7 @@ class ALConeModel(EmbeddingALCModel):
             len(self.dataset.classes), len(self.dataset.individuals),
             len(self.dataset.object_properties), dim=self.dim, margin=self.margin,
             top_index=cid.get(_THING), bottom_index=cid.get(_NOTHING),
-            init_std=self.init_std).to(self.device)
+            init_std=self.init_std, constant_logit=self.constant_logit).to(self.device)
 
     # The al-cone module evaluates concepts on half-axes, not on sampled entities.
     def sample_anonymous_entities(self):

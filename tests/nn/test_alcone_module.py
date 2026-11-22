@@ -263,3 +263,35 @@ class TestModuleForward:
     def test_invalid_margin(self):
         with pytest.raises(ValueError):
             ALConeModule(2, 1, 1, dim=2, margin=0.0)
+
+
+class TestConstantLogit:
+    """The logits of owl:Thing / owl:Nothing are on the scale of learned logits by default;
+    ``constant_logit=1e4`` reproduces the numbers of earlier versions."""
+
+    def _setup(self, **kw):
+        th.manual_seed(0)
+        mod = ALConeModule(5, 2, 1, dim=2, margin=GAMMA, top_index=3, bottom_index=4, **kw)
+        return mod
+
+    def test_default_scale(self, patterns):
+        mod = self._setup()
+        assert th.all(mod.class_logits(th.tensor([3])) == 1.0)
+        assert th.all(mod.class_logits(th.tensor([4])) == -1.0)
+        # P0 ⊑ ⊥-like axiom: the loss stays on the scale of the learned logits
+        x = th.tensor([[0, 0, 4]])  # P0 ⊑ ∃r.⊥
+        assert float(mod(patterns["sub"], x).detach()) < 10.0
+
+    def test_old_value_reproduces_old_numbers(self, patterns):
+        mod = self._setup(constant_logit=1e4)
+        assert th.all(mod.class_logits(th.tensor([4])) == -1e4)
+        x = th.tensor([[0, 0, 4]])
+        c = mod.class_logits(x[:, 0])
+        d = mod.class_logits(x[:, 2])
+        expected = L.inclusion_loss(c, L.exists(mod.role_logits(x[:, 1]), d), GAMMA)
+        assert th.allclose(mod(patterns["sub"], x), expected)
+        assert float(mod(patterns["sub"], x).detach()) > 100.0
+
+    def test_must_cover_margin(self):
+        with pytest.raises(ValueError):
+            self._setup(constant_logit=0.01)
