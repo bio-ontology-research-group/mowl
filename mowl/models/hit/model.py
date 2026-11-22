@@ -20,7 +20,8 @@ class HiT(RegimeTrained, HiTBase):
     The model is the combination of parts that the method ``hit`` defines
     (:func:`mowl.representation.library.hierarchy_methods.hit`): the class model is the text
     encoder with the Poincare ball it is read in (the encoder is a part: any module that maps a
-    list of strings to vectors, see :mod:`mowl.nn.lm.encoders`), the measure is
+    list of strings to vectors, see :mod:`mowl.representation.library.text_encoders`), the
+    measure is
     ``distance and depth`` (:math:`d_c + \\lambda\\,\\Delta\\lVert\\cdot\\rVert`), the losses
     are the triplet losses of its geometry
     (:class:`~mowl.representation.library.hierarchy_geometry.TextGeometry`), and there is no
@@ -59,7 +60,7 @@ class HiT(RegimeTrained, HiTBase):
     :param encoder: Hugging Face model name (loaded with sentence-transformers, an optional
         dependency), a ``SentenceTransformer`` object, or any :class:`torch.nn.Module`
         mapping a list of strings to a ``(n, d)`` tensor (for example
-        :class:`mowl.nn.lm.encoders.BagOfWordsEncoder`).
+        :class:`mowl.representation.library.text_encoders.BagOfWordsEncoder`).
     :param verbaliser: A :class:`mowl.text.Verbaliser`; default: one built from
         ``dataset.ontology`` with ``labels``, ``verbalisation_style`` and
         ``label_fallback``.

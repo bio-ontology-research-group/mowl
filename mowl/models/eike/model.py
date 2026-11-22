@@ -3,7 +3,6 @@ import re
 from urllib.parse import unquote
 
 import numpy as np
-import torch as th
 
 from mowl.models.composed.model import ComposedEL
 
@@ -105,29 +104,21 @@ class EIKE(ComposedEL):
         projection, for language-model vectors that are larger than ``embed_dim``. The
         paper's code instead trains a linear map from the (frozen) language-model vectors to
         the embedding space; mOWL's intensional vectors are the embedding itself."""
-        iris = list(vectors)
-        x = np.asarray([vectors[i] for i in iris], dtype="float64")
-        x = x - x.mean(axis=0)
-        _, _, vt = np.linalg.svd(x, full_matrices=False)
-        k = min(dim, vt.shape[0])
-        y = x @ vt[:k].T
-        if k < dim:
-            y = np.pad(y, ((0, 0), (0, dim - k)))
-        return {i: v.astype("float32") for i, v in zip(iris, y)}
+        from mowl.representation.library.vector_tables import pca_reduce
+        return pca_reduce(vectors, dim)
 
     @staticmethod
     def save_intensional_vectors(path, vectors):
         """Write a dict class IRI -> vector to ``path`` (an ``.npz`` file with the arrays
         ``iris`` and ``vectors``), the form ``intensional_vectors=path`` reads."""
-        iris = list(vectors)
-        np.savez(path, iris=np.asarray(iris),
-                 vectors=np.asarray([vectors[i] for i in iris], dtype="float32"))
+        from mowl.representation.library.vector_tables import save_vector_table
+        save_vector_table(path, vectors)
 
     @staticmethod
     def load_intensional_vectors(path):
         """Read what :meth:`save_intensional_vectors` wrote."""
-        with np.load(path, allow_pickle=False) as data:
-            return {str(i): v for i, v in zip(data["iris"], data["vectors"])}
+        from mowl.representation.library.vector_tables import load_vector_table
+        return load_vector_table(path)
 
     def init_module(self):
         init = None
@@ -153,14 +144,3 @@ class EIKE(ComposedEL):
         if self.neg_sampling_gcis is not None:
             cfg = {k: v for k, v in cfg.items() if k in self.neg_sampling_gcis}
         return cfg
-
-    def compute_loss(self, pos_scores, neg_scores=None):
-        """The ranking loss :math:`[\\gamma + f(\\delta) - f(\\delta')]_+` of Section 4.3,
-        where :math:`\\delta'` is a corruption of :math:`\\delta`: each positive is paired
-        with its own negatives, the blocks of ``neg_scores`` follow the corrupted columns. The
-        module returns negative scores already reduced by the margin of their axiom type.
-        Averaged over pairs."""
-        if neg_scores is None:
-            return th.mean(pos_scores)
-        k = neg_scores.numel() // pos_scores.numel()
-        return th.relu(pos_scores.view(1, -1) - neg_scores.view(k, -1)).mean()

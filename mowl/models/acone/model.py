@@ -1,5 +1,5 @@
 """AConE (He et al., 2024) on ontologies."""
-from mowl.models.query.model import QueryEmbeddingModel
+from mowl.models.composed.query import QueryEmbeddingModel
 from mowl.representation.library.query_methods import AConEGeometry
 
 
@@ -15,7 +15,7 @@ class AConE(QueryEmbeddingModel):
     complement ``pi - |a|``), while the builder of the method has the authors' reading
     (``True``, ``pi - a``), which :mod:`mowl.benchmarks` selects for the published recipes.
 
-    See :class:`~mowl.models.query.model.QueryEmbeddingModel` for the graph, the training
+    See :class:`~mowl.models.composed.query.QueryEmbeddingModel` for the graph, the training
     and the class expression queries. The direct implementation of the paper is
     ``mowl.baselines.models.acone.AConE``.
     """

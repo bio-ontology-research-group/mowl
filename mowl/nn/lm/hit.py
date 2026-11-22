@@ -22,7 +22,7 @@ __all__ = ["HiTModule"]
 class HiTModule(TextGeometry):
     """A text encoder whose outputs are points of a Poincare ball, with the HiT losses.
 
-    :param encoder: An encoder module (see :mod:`mowl.nn.lm.encoders`).
+    :param encoder: An encoder module (see :mod:`mowl.representation.library.text_encoders`).
     :param curvature: Curvature parameter :math:`c`; default :math:`1/d` (HiT, Section 3).
     :param clustering_margin: :math:`\\alpha` (Eq. 3).
     :param centripetal_margin: :math:`\\beta` (Eq. 4).

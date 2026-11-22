@@ -295,28 +295,14 @@ class BoxLitE(Model):
         ``[a, A]`` (indices of ``individual_index_dict`` and ``class_index_dict``), lower
         is more plausible; infinite for a class or individual outside the training
         signature."""
-        import torch as th
         if gci_name != "class_assertion":
             from mowl.evaluation.model_scoring import UnsupportedAxiomForm
             raise UnsupportedAxiomForm(f"BoxLitE has no score for {gci_name!r} axioms.")
         self._require_embedding()
-        concept_of = {i: iri for iri, i in self.class_index_dict.items()}
-        individual_of = {i: iri for iri, i in self.individual_index_dict.items()}
-        concepts = {iri: k for k, iri in enumerate(self.kb.concepts)}
-        individuals = {iri: k for k, iri in enumerate(self.kb.individuals)}
-        cpu = rows.cpu().numpy()
-        out = np.full(len(cpu), np.inf)
-        for c in np.unique(cpu[:, 1]):
-            basic = concepts.get(concept_of.get(int(c)))
-            if basic is None:
-                continue
-            where = np.flatnonzero(cpu[:, 1] == c)
-            known = [(w, individuals.get(individual_of.get(int(cpu[w, 0])))) for w in where]
-            known = [(w, a) for w, a in known if a is not None]
-            if known:
-                index = np.array([w for w, _ in known])
-                out[index] = self.embedding.concept_loss(basic, [a for _, a in known])
-        return th.as_tensor(out, dtype=th.float32, device=rows.device)
+        from mowl.evaluation.signature_costs import class_assertion_costs
+        return class_assertion_costs(rows, self.class_index_dict, self.individual_index_dict,
+                                     self.kb.concepts, self.kb.individuals,
+                                     self.embedding.concept_loss)
 
     def score(self, axiom):
         """Score of an OWL ``ClassAssertion`` (basic concept) or ``ObjectPropertyAssertion``.

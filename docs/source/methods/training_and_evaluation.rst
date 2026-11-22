@@ -602,3 +602,42 @@ loss combination, per-epoch schedules and the optimiser. Some procedures above n
   regimes record the negatives in ``filter_negatives`` and score them again. A
   ``loss(gci_name, pos_scores, neg_scores, neg_data)`` signature, or a ``score`` hook,
   would avoid the second forward pass.
+
+
+General parts that named methods are made of
+--------------------------------------------
+
+The named classes (HiT, OnT, EIKE, BoxLitE, the query models, MultiBoxEL, PrismEL) name
+their parts and hand rows to them; the arithmetic lives in general modules that any other
+method can use:
+
+* :mod:`mowl.evaluation.text_ranking`: encoding texts in batches and with a cache, embedding
+  distinct pairs once, scoring candidates in chunks, choosing a score parameter on a grid by
+  mean reciprocal rank (the evaluation side of every text-encoder method).
+* :mod:`mowl.evaluation.query_scoring`: scoring queries (a union is the best branch of the
+  disjunctive normal form) and candidate axioms against a query geometry.
+* :mod:`mowl.evaluation.signature_costs`: costs of class-assertion rows for a model that has
+  its own vocabulary; rows outside its signature cost infinity.
+* :mod:`mowl.representation.library.text_encoders` and
+  :mod:`mowl.representation.library.poincare_ball`: text encoders and the Poincare-ball
+  operations.
+* :mod:`mowl.representation.library.vector_tables`: named vectors (PCA reduction, saving,
+  loading).
+* :mod:`mowl.representation.library.structural_tables`: definition tables and targets of the
+  structural reading.
+* :mod:`mowl.training.query_sampler`, :mod:`mowl.training.query_structures` and
+  :mod:`mowl.projection.query_graph`: the query sampler, the query structures and the ontology
+  as a graph of entities and relations.
+
+.. testcode::
+
+   import torch
+   from mowl.evaluation.text_ranking import best_on_grid, candidate_scores
+
+   # three queries, four candidates; the score has one parameter, tried on a grid
+   table = torch.tensor([[0.9, 0.1, 0.0, 0.0], [0.0, 0.8, 0.1, 0.0], [0.0, 0.0, 0.2, 0.7]])
+   targets = torch.tensor([0, 1, 3])
+   mrr, value = best_on_grid(lambda w, a, b: w * table[a:b], targets, (0.5, 1.0))
+   assert mrr == 1.0 and value == 0.5
+   both = candidate_scores(lambda q, c: q @ c.T, table, table[:3], chunk_size=2)
+   assert both.shape == (3, 3)

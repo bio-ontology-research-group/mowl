@@ -7,7 +7,7 @@ The catalogue key is ``hit``; its card in the :doc:`method catalogue <catalogue>
 ``hit`` in :mod:`mowl.representation.library.hierarchy_methods`): the encoder with the
 Poincaré ball it is read in is the class model, ``distance and depth`` is the measure, and the
 triplet losses are those of the geometry. The module is :class:`mowl.nn.lm.hit.HiTModule`
-and the Poincaré-ball operations are in :mod:`mowl.nn.lm.hyperbolic`; the earlier direct
+and the Poincaré-ball operations are in :mod:`mowl.representation.library.poincare_ball`; the earlier direct
 implementation is kept in :mod:`mowl.baselines.models.hit` as the reference the combination is
 tested against.
 HiT belongs to the ``language_model`` family: concepts are not regions but the encodings
@@ -54,7 +54,7 @@ threshold instead; see the card notes.
 The encoder is a ``sentence-transformers`` model (an optional dependency, ``pip install
 sentence-transformers``), loaded from its name with mean pooling and without the
 normalisation layer, or any :class:`torch.nn.Module` that maps a list of strings to a
-tensor. :class:`~mowl.nn.lm.encoders.BagOfWordsEncoder` is a small stand-in for tests and
+tensor. :class:`~mowl.representation.library.text_encoders.BagOfWordsEncoder` is a small stand-in for tests and
 examples; it has none of the knowledge of a pre-trained language model.
 
 Example
@@ -68,7 +68,7 @@ family ontology has no labels; ``label_fallback="camel_case"`` turns ``hasChild`
 
    from mowl.datasets.builtin import FamilyDataset
    from mowl.models.hit import HiT
-   from mowl.nn.lm.encoders import BagOfWordsEncoder
+   from mowl.representation.library.text_encoders import BagOfWordsEncoder
 
    dataset = FamilyDataset()
    model = HiT(dataset, encoder=BagOfWordsEncoder(dim=16), label_fallback="camel_case",

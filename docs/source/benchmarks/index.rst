@@ -650,7 +650,7 @@ an answer of :math:`\neg q`, and a hidden complete graph defines which answers a
 
 The recipes train on the **released training queries** (``queries="released"``), as the
 four papers do, not on queries that mOWL samples from the graph. Both are options of
-:class:`~mowl.models.query.model.QueryEmbeddingModel`; the sampler is the default because it works
+:class:`~mowl.models.composed.query.QueryEmbeddingModel`; the sampler is the default because it works
 on any ontology.
 
 .. code-block:: bash

@@ -178,13 +178,8 @@ class ConvexPolyhedralModel(GeometricInterpretation):
         relations = geometry.relation_model
         for r, rname in enumerate(geometry.roles):
             pairs = [] if relations is None else relations.pairs[r].nonzero().tolist()
-            if not pairs:
-                self._role_regions[rname] = self._empty_role
-            else:
-                pair_rows = [np.concatenate([self._points[i], self._points[j]])
-                             for (i, j) in pairs]
-                pts_2k = np.vstack(pair_rows).reshape((len(pairs), 2 * k))
-                self._role_regions[rname] = PairHull(pts_2k)
+            self._role_regions[rname] = PairHull.of_pairs(self._points, pairs) \
+                if pairs else self._empty_role
 
         self._checker: Optional[ModelChecker] = None
         checker = self.check()

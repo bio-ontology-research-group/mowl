@@ -4,10 +4,8 @@ triplets, the scoring and the ranking. :class:`mowl.models.HiT` trains with the 
 own loop for the comparison in ``tests/baselines``."""
 
 import logging
-import math
 import random
 
-import numpy as np
 import torch as th
 
 from mowl.base_models.model import Model
@@ -41,7 +39,7 @@ class HiTBase(Model):
                  model_filepath=None):
         super().__init__(dataset, model_filepath=model_filepath)
         from mowl.text.verbalise import Verbaliser
-        from mowl.nn.lm.encoders import as_encoder
+        from mowl.representation.library.text_encoders import as_encoder
         if taxonomy not in ("asserted", "direct"):
             raise ValueError("taxonomy must be 'asserted' or 'direct'.")
         self.device = device
@@ -141,18 +139,9 @@ class HiTBase(Model):
 
     def embed_texts(self, texts, batch_size=None):
         """Encode texts without gradients (evaluation mode), shape ``(n, d)``."""
-        batch_size = batch_size or self.encode_batch_size
-        was_training = self.module.training
-        self.module.eval()
-        out = []
-        with th.no_grad():
-            for i in range(0, len(texts), batch_size):
-                out.append(self._embed_points(texts[i:i + batch_size]).float())
-        if was_training:
-            self.module.train()
-        if not out:
-            return th.zeros((0, self.module.dim), device=self.device)
-        return th.cat(out)
+        from mowl.evaluation.text_ranking import encode_batched
+        return encode_batched(self._embed_points, texts, batch_size or self.encode_batch_size,
+                              self.module, lambda: self.module.dim, self.device)
 
     def embed(self, expressions):
         """Embeddings of class expressions (OWL objects or IRIs), encoded from their
@@ -292,14 +281,9 @@ class HiTBase(Model):
                                   f"supported.")
 
     def _embed_cached(self, exprs):
-        texts = [self.text(e) for e in exprs]
-        cache = self._cache.setdefault("texts", {})
-        missing = sorted({t for t in texts if t not in cache})
-        if missing:
-            emb = self.embed_texts(missing)
-            for t, e in zip(missing, emb):
-                cache[t] = e
-        return th.stack([cache[t] for t in texts])
+        from mowl.evaluation.text_ranking import encode_cached
+        return encode_cached(self.embed_texts, [self.text(e) for e in exprs],
+                             self._cache.setdefault("texts", {}))
 
     def _existential_embeddings(self, roles, fillers, inv_r, inv_c):
         from mowl.owlapi import OWLAPIAdapter
@@ -326,15 +310,15 @@ class HiTBase(Model):
         mat = self._class_matrix()
         cpu = rows.cpu()
 
+        from mowl.evaluation.text_ranking import embed_unique_pairs
+        inv_c = getattr(self, "_inv_classes", None)
+        if inv_c is None:
+            inv_c = self._inv_classes = {v: k for k, v in self.class_index_dict.items()}
+        inv_r = {v: k for k, v in self.object_property_index_dict.items()}
+
         def existential(roles, fillers):
-            inv_c = getattr(self, "_inv_classes", None)
-            if inv_c is None:
-                inv_c = self._inv_classes = {v: k for k, v in self.class_index_dict.items()}
-            inv_r = {v: k for k, v in self.object_property_index_dict.items()}
-            pairs, inverse = th.unique(th.stack([roles, fillers], dim=1), dim=0,
-                                       return_inverse=True)
-            unique = self._existential_embeddings(pairs[:, 0], pairs[:, 1], inv_r, inv_c)
-            return unique[inverse.to(unique.device)]
+            return embed_unique_pairs(
+                lambda r, d: self._existential_embeddings(r, d, inv_r, inv_c), roles, fillers)
 
         if gci_name == "gci0":
             sub, sup = mat[cpu[:, 0].to(mat.device)], mat[cpu[:, 1].to(mat.device)]
@@ -360,12 +344,11 @@ class HiTBase(Model):
         """
         lam = centri_weight if centri_weight is not None else (self.centri_weight or 0.0)
         query, candidates_are_children = self._query(gci_name, rows, target_col)
+        from mowl.evaluation.text_ranking import candidate_scores
         cand = self._class_matrix()[candidates.to(self._class_matrix().device)]
-        out = []
-        for s in range(0, len(cand), chunk_size):
-            out.append(self._ranking_scores(query, cand[s:s + chunk_size],
-                                            candidates_are_children, lam))
-        return th.cat(out, dim=1)
+        return candidate_scores(
+            lambda q, c: self._ranking_scores(q, c, candidates_are_children, lam),
+            query, cand, chunk_size)
 
     def validate(self, rows=None, grid=None):
         """Rank the superclass of every validation subsumption :math:`C \\sqsubseteq D`
@@ -374,7 +357,7 @@ class HiTBase(Model):
         :return: ``(best MRR, best lambda)``; with a fixed :attr:`centri_weight`, only
             that value is evaluated.
         """
-        from mowl.evaluation.ont_ranking import ordinal_ranks_by_counting
+        from mowl.evaluation.text_ranking import best_on_grid
         rows = self._validation_rows() if rows is None else rows
         if rows is None:
             return float("nan"), self.centri_weight
@@ -385,16 +368,9 @@ class HiTBase(Model):
         targets = th.tensor([pos[int(t)] for t in rows[:, 1].tolist()])
         grid = ((self.centri_weight,) if self._fixed_centri_weight
                 else tuple(grid or self.centri_weight_grid))
-        best = (-1.0, grid[0])
-        for lam in grid:
-            ranks = []
-            for s in range(0, len(rows), 256):
-                scores = self.score_candidates("gci0", rows[s:s + 256], 1, cands, lam)
-                ranks.append(ordinal_ranks_by_counting(-scores, targets[s:s + 256]).cpu())
-            mrr = float(np.mean(1.0 / th.cat(ranks).double().numpy()))
-            if mrr > best[0]:
-                best = (mrr, lam)
-        return best
+        return best_on_grid(
+            lambda lam, s, e: self.score_candidates("gci0", rows[s:e], 1, cands, lam),
+            targets, grid)
 
     def score(self, axiom):
         """Score (Eq. 6, higher is more likely) of a ``SubClassOf`` axiom with arbitrary

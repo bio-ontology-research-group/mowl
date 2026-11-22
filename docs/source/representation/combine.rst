@@ -129,7 +129,7 @@ method cannot take raises ``TypeError`` and lists the accepted ones.
 The other general models do the same with the parts of their kind of method:
 :class:`~mowl.models.ComposedSequenceModel` takes ``view``, ``walker``, ``source``,
 ``encoder``, ``reading``, ``measure`` and ``scorer``; the query model
-(:class:`~mowl.models.query.model.QueryEmbeddingModel`) takes ``intersection``,
+(:class:`~mowl.models.composed.query.QueryEmbeddingModel`) takes ``intersection``,
 ``distance``, ``negation`` and, for ConE, ``relations``;
 :class:`~mowl.models.constructed.ConstructedModel` takes ``source`` and ``reading``. A
 method that has no such part (a method that reads sentences has no walker) refuses the

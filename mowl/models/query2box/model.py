@@ -1,5 +1,5 @@
 """Query2Box on ontologies."""
-from mowl.models.query.model import QueryEmbeddingModel
+from mowl.models.composed.query import QueryEmbeddingModel
 from mowl.representation.library.query_methods import Query2BoxGeometry
 
 
@@ -12,7 +12,7 @@ class Query2Box(QueryEmbeddingModel):
     through the extra keyword arguments (``intersection="exact"``, ``distance="l2"``,
     ``activation``, ``clamp_extent``, ``center_weight``).
 
-    See :class:`~mowl.models.query.model.QueryEmbeddingModel` for the graph, the training
+    See :class:`~mowl.models.composed.query.QueryEmbeddingModel` for the graph, the training
     and the class expression queries. The direct implementation of the paper is
     ``mowl.baselines.models.query2box.Query2Box``.
     """

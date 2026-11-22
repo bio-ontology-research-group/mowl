@@ -392,7 +392,7 @@ class TextPoints(HierarchyClasses):
     There is no table: the parameters are those of the encoder.
 
     :param encoder: A module mapping a list of strings to a ``(n, d)`` tensor
-        (:mod:`mowl.nn.lm.encoders`).
+        (:mod:`mowl.representation.library.text_encoders`).
     :param texts: The verbalisation of every class id, to look classes up by id. Without it,
         the "ids" of :meth:`forward` are lists of strings, which also allows classes that were
         not seen in training (the point of a text model).

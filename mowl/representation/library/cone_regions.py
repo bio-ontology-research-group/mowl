@@ -3,7 +3,7 @@ r"""Cones with an apex and an aperture, on hyperbolic manifolds (entailment cone
 A cone is a *region*: its apex is a point of a manifold, and the light that casts it says
 where the cone opens. The classes here are written on the distance of the manifold
 (:mod:`mowl.nn.order.manifolds`) and on the Möbius addition of
-:mod:`mowl.nn.lm.hyperbolic`; they do not use the formulas of the direct modules in
+:mod:`mowl.representation.library.poincare_ball`; they do not use the formulas of the direct modules in
 :mod:`mowl.baselines`. The measures that compare a point with a cone are in
 :mod:`~mowl.representation.library.hierarchy_measures`.
 
@@ -34,7 +34,7 @@ from dataclasses import dataclass
 
 import torch as th
 
-from mowl.nn.lm import hyperbolic as H
+from mowl.representation.library import poincare_ball as H
 from mowl.nn.order.manifolds import PoincareBall, UpperHalfSpace
 from mowl.representation.library.hierarchy_regions import Point
 from mowl.representation.regions import ConstructorUnavailable

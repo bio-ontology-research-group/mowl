@@ -86,12 +86,14 @@ def test_negative_scores_carry_the_margin_and_the_ranking_loss_is_a_hinge():
     assert (m.class_assertion_loss(T([[0, 0]])) - m.class_assertion_loss(T([[0, 0]]), neg=True)
             ).item() == pytest.approx(2.0, abs=1e-6)               # gamma_ins
     model = EIKE(_dataset(), embed_dim=4)
+    # the hinge is the loss regime of the method (a general pairwise ranking loss)
+    ranking = lambda pos, neg: model.training_regime.loss("gci0", pos, neg)  # noqa: E731
     # [γ + f(pos) - f(neg)]_+ : f(pos) = 0.5, f(neg) = 2 with γ = 1  ->  0 ; f(neg) = 1 -> 0.5
-    loss = model.compute_loss(T([0.5]), T([2.0 - 1.0]))
+    loss = ranking(T([0.5]), T([2.0 - 1.0]))
     assert loss.item() == 0.0
-    assert model.compute_loss(T([0.5]), T([1.0 - 1.0])).item() == pytest.approx(0.5)
+    assert ranking(T([0.5]), T([1.0 - 1.0])).item() == pytest.approx(0.5)
     # two negatives per positive: blocks follow the corrupted columns
-    assert model.compute_loss(T([0.5, 0.5]), T([0.0, 0.0, 9.0, 9.0])).item() == \
+    assert ranking(T([0.5, 0.5]), T([0.0, 0.0, 9.0, 9.0])).item() == \
         pytest.approx(0.25)
 
 

@@ -51,7 +51,7 @@ class OnT(OnTBase, HiT):
     :param conjunction_weight: Weight of :math:`L_\\sqcap`.
     :param existential_weight: Weight of :math:`L_r`.
     :param role_pairing: ``"half"`` (reference code) or ``"adjacent"`` (paper's matrix),
-        see :func:`mowl.nn.lm.hyperbolic.rotate`.
+        see :func:`mowl.representation.library.poincare_ball.rotate`.
     :param role_scaling: Apply the scaling :math:`k_r` of Eq. 4 (the reference code does
         not).
     The model is the combination of parts that the method ``ont`` defines (see
