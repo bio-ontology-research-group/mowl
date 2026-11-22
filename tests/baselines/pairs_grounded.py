@@ -112,6 +112,17 @@ def _grounded_query_scores(model):
         for method in ("box", "beam"):
             out[f"query/{name}/{method}"] = model.score_query(structure, queries,
                                                               method=method).detach()
+    # the differentiable witness-chain scores, each side with its own query code
+    if type(model).__module__.startswith("mowl.baselines"):
+        from mowl.baselines.nn.el.grounded import queries as Q
+    else:
+        from mowl.nn.el.grounded import queries as Q
+    individuals = model.nb_classes + th.arange(model.nb_inds)
+    for name, (structure, queries) in _QUERIES.items():
+        targets = individuals.unsqueeze(0).expand(len(queries), -1)
+        out[f"query/{name}/witness"] = Q.score_query_witness(
+            model.module, structure, list(queries), targets, k=4,
+            entity_to_element=individuals).detach()
     return out
 
 
