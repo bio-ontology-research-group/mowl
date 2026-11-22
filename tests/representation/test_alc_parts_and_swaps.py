@@ -399,3 +399,28 @@ def test_domain_elements_follow_a_domain_with_a_context():
     domain.context = th.zeros(4, 3)
     assert individuals(th.tensor([1])).values.tolist() == [[0.0, 1.0, 0.0, 0.0]]
     domain.context = None
+
+
+def test_the_falcon_evaluator_scores_with_the_measure_of_the_geometry():
+    """The energy of the FALCON evaluator, ``-log(1 - max_e (C ⊓ ¬D)(e))`` on the named and
+    fresh anonymous entities, is the ``inside`` of the conflict measure of the geometry."""
+    from mowl.models.falcon.evaluate import FALCONSubsumptionEvaluator
+    model = FALCONModel(data(), embed_dim=D, anon_e=2)
+    evaluator = FALCONSubsumptionEvaluator.__new__(FALCONSubsumptionEvaluator)
+    evaluator.n_anon = 3
+    m = model.module
+    cid = model.class_index_dict
+    ns = "http://mowl.borg/logic#"
+    batch = th.tensor([[cid[ns + "A"], cid[ns + "B"]], [cid[ns + "C"], cid[ns + "D"]]])
+    th.manual_seed(0)
+    with th.no_grad():
+        scores = evaluator.get_scores(m, batch)
+    th.manual_seed(0)
+    anon = th.empty(3, D)
+    th.nn.init.xavier_uniform_(anon)
+    with th.no_grad():
+        e = th.cat([m.e_embedding.weight, anon])
+        c = m._get_c_fs_batch(m.c_embedding(batch[:, 0]), e)
+        d = m._get_c_fs_batch(m.c_embedding(batch[:, 1]), e)
+        expected = -th.log(1 - m._logical_and(c, m._logical_not(d)).max(dim=-1)[0] + 1e-10)
+    assert th.allclose(scores, expected, atol=1e-6)

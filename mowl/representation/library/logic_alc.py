@@ -167,15 +167,16 @@ class AnonymousElements:
 
     :param count: Number of anonymous elements per epoch (``0``: none).
     :param noise: Scale of the perturbation.
+    :param perturbed: ``False``: every element is drawn fresh (no perturbations).
     """
 
-    def __init__(self, count=4, noise=0.1):
-        self.count, self.noise = int(count), float(noise)
+    def __init__(self, count=4, noise=0.1, perturbed=True):
+        self.count, self.noise, self.perturbed = int(count), float(noise), bool(perturbed)
 
     def sample(self, named, dim, device="cpu"):
         """``count`` anonymous element vectors of dimension ``dim`` (``named``: the table of
         the named element vectors, detached)."""
-        n_perturbed = min(self.count // 2, named.shape[0])
+        n_perturbed = min(self.count // 2, named.shape[0]) if self.perturbed else 0
         n_fresh = self.count - n_perturbed
         parts = []
         if n_perturbed > 0:
@@ -457,10 +458,15 @@ class ExpressionGeometry(ComposedGeometry, ALCModule):
             if domain is not None:
                 domain.context = None
 
-    def class_inclusion_costs(self, sub, sup):
-        """The cost of ``sub ⊑ sup`` for tensors of class ids (the
+    def class_inclusion_costs(self, sub, sup, e_emb=None):
+        """The cost of ``sub ⊑ sup`` for tensors of class ids on the context ``e_emb`` (the
         :meth:`~ExpressionReading.class_inclusion_score` of the objective)."""
-        return self.objective.class_inclusion_score(self, sub, sup)
+        domain = self._context(e_emb)
+        try:
+            return self.objective.class_inclusion_score(self, sub, sup)
+        finally:
+            if domain is not None:
+                domain.context = None
 
     def forward_fs(self, cexpr, x, e_emb=None, cur_index=0):
         """The degrees of a class expression pattern on the elements of the domain, and the
