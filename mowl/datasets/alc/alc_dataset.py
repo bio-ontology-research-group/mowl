@@ -44,6 +44,12 @@ class ALCDataset():
     dictionary will be created from the ontology object \
     properties. Defaults to ``None``.
     :type object_property_index_dict: dict, optional
+
+    **Order.** The ontology yields its axioms in the order of a Java hash set, which differs \
+    from one load to the next in one process. The axiom patterns of :attr:`grouped_axioms` are \
+    therefore listed sorted by their string form, the axioms of a pattern sorted by theirs, and \
+    the rows of every dataset of :meth:`get_datasets` sorted lexicographically by the integer \
+    vector of the axiom: the same ontology gives the same datasets on every build.
     """
 
     def __init__(self, ontology, dataset, device="cpu"):
@@ -102,6 +108,11 @@ class ALCDataset():
                     res[axiom_pattern] = [ax, ]
                 else:
                     res[axiom_pattern].append(ax)
+        # The ontology yields its axioms in the order of a Java hash set, which differs from
+        # one load to the next; the patterns and the axioms of a pattern are put in a fixed
+        # order (by the string form of the pattern, then of the axiom).
+        res = {pattern: sorted(res[pattern], key=str)
+               for pattern in sorted(res, key=str)}
         if self.skipped_axioms:
             logger.warning("%d axioms use class expressions outside ALC and were left out.",
                            self.skipped_axioms)
@@ -236,6 +247,8 @@ class ALCDataset():
                 for axiom in axioms:
                     vector = self.get_axiom_vector(axiom)
                     axiom_vectors.append(vector)
+                # canonical row order: lexicographic by the integer vector of the axiom
+                axiom_vectors.sort()
                 axiom_tensor = torch.tensor(axiom_vectors, dtype=torch.int64)
                 datasets[ax_pattern] = TensorDataset(axiom_tensor)
 

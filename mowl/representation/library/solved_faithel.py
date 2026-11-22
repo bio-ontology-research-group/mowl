@@ -327,12 +327,37 @@ class AnchoredObjective(Objective):
     :param gamma: Weight of the moving-point-to-individual terms.
     :param psi: Weight of the negative term.
     :param neg_sampling: Use the negative term.
+    :param negative_term: ``"margin"`` (default): the negative term is the hinge
+        :math:`\\psi\\,\\max(0, m - \\mathrm{mse}(x_a, x_{neg}))` (``m`` is ``neg_margin``),
+        bounded below by 0: a negative pair that is further apart than ``m`` no longer
+        contributes. ``"unbounded"``: the authors' code,
+        :math:`-\\psi\\,\\mathrm{mse}(x_a, x_{neg})`, which has no lower bound (the loss goes
+        to :math:`-\\infty` as individuals drift apart; :class:`mowl.models.FaithEL` selects it
+        to reproduce the code). The paper text was not available, so the form of the hinge and
+        its margin are mOWL's choice, not the paper's.
+    :param neg_margin: The margin ``m`` of ``"margin"``, in units of the mean squared error
+        per coordinate (default 1.0: about the distance of two individuals that start from
+        the initialisation of the code, :math:`\\mathcal{N}(0.5, 0.7^2)`).
     """
 
-    def __init__(self, phi=1.0, gamma=1.0, psi=0.7, neg_sampling=True, **options):
+    NEGATIVE_TERMS = ("margin", "unbounded")
+
+    def __init__(self, phi=1.0, gamma=1.0, psi=0.7, neg_sampling=True, negative_term="margin",
+                 neg_margin=1.0, **options):
         options.setdefault("negatives", "none")
         super().__init__(**options)
+        if negative_term not in self.NEGATIVE_TERMS:
+            raise ValueError(f"negative_term must be one of {self.NEGATIVE_TERMS}, "
+                             f"got {negative_term!r}.")
         self.phi, self.gamma, self.psi, self.neg_sampling = phi, gamma, psi, neg_sampling
+        self.negative_term, self.neg_margin = negative_term, neg_margin
+
+    def _push_apart(self, near, far):
+        """The negative term for a pair whose distance should grow, ``(B, 1)``, to be *added*."""
+        distance = _mse(near, far)
+        if self.negative_term == "unbounded":
+            return -self.psi * distance
+        return self.psi * th.relu(self.neg_margin - distance)
 
     def _negative(self, g, n, device):
         ids = th.randint(0, len(g.individual_model), (n,), device=device)
@@ -344,7 +369,7 @@ class AnchoredObjective(Objective):
         p, c = region.moving, region.centroid
         loss = _mse(x, c) + self.gamma * _mse(p, x) + self.phi * _mse(p, c)
         if self.neg_sampling:
-            loss = loss - self.psi * _mse(x.detach(), self._negative(g, len(rows), rows.device))
+            loss = loss + self._push_apart(x.detach(), self._negative(g, len(rows), rows.device))
         return loss
 
     def object_property_assertion(self, g, rows, neg=False):
@@ -358,7 +383,7 @@ class AnchoredObjective(Objective):
         loss = loss + self.phi * _mse(th.cat([ph, pt], dim=1), c)
         if self.neg_sampling:
             neg_x = self._negative(g, len(rows), rows.device)
-            loss = loss - self.psi * _mse(pair.detach(), th.cat([xs.detach(), neg_x], dim=1))
+            loss = loss + self._push_apart(pair.detach(), th.cat([xs.detach(), neg_x], dim=1))
         return loss
 
     @staticmethod
@@ -522,7 +547,7 @@ class FullBatch:
 @register_method("faithel")
 def faithel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, radius=0.6, phi=1.0,
             gamma=1.0, psi=0.7, neg_sampling=True, centroid_score=True, tbox=None,
-            centroids=None, role_centroids=None, classes=None, relations=None,
+            negative_term="margin", neg_margin=1.0, centroids=None, role_centroids=None, classes=None, relations=None,
             individuals=None, measure=None, objective=None, regularizers=(), tables=None):
     """FaithEL from its parts: a constructed strongly faithful TBox (``tbox``), moving points
     anchored at the centroids of the fixed regions (:class:`AnchoredClasses`,
@@ -536,6 +561,9 @@ def faithel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, radius=0.6
         model: one less than the number of elements of the canonical model).
     :param centroids, role_centroids: ``(nb_classes, d)`` and ``(nb_relations, 2d)``.
     :param classes, relations, individuals, measure, objective: Replace a part (an instance).
+    :param negative_term, neg_margin: The form of the negative term (see
+        :class:`AnchoredObjective`): the bounded hinge by default, ``"unbounded"`` for the
+        authors' code.
     :param tables: Not used (FaithEL has no module of its own whose tables could be shared).
     """
     if tables is not None:
@@ -558,5 +586,6 @@ def faithel(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, radius=0.6
     return FaithELGeometry(
         classes, relations, individuals,
         measure if measure is not None else AnchorDistance(centroid_score),
-        objective if objective is not None else AnchoredObjective(phi, gamma, psi, neg_sampling),
+        objective if objective is not None else AnchoredObjective(phi, gamma, psi, neg_sampling, negative_term,
+                                                    neg_margin),
         tbox=tbox, regularizers=regularizers)

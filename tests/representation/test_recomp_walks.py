@@ -307,9 +307,11 @@ def test_training_goes_on_from_pretrained_vectors(family):
     third.set_w2v_model(vector_size=8, min_count=1, workers=1, seed=0, restart=True)
     third.generate_corpus()
     third.train(epochs=2)
-    before = third.class_embeddings["http://Male"].copy()
+    # all vectors, not one: Word2Vec's down-sampling of frequent words can leave a single
+    # word untouched by two epochs on a corpus of this size (it did with the sorted corpus)
+    before = third.w2v_model.wv.vectors.copy()
     third.train(epochs=0)
-    assert not (third.class_embeddings["http://Male"] == before).all()
+    assert not (third.w2v_model.wv.vectors == before).all()
 
 
 def test_annotation_sentences_name_the_entity_by_its_token(family):

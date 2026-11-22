@@ -96,6 +96,14 @@ class SyntacticPlusW2VModel(SyntacticModel):
         self.w2v_model = Word2Vec(*args, **kwargs)
         self.embed_dim = self.w2v_model.vector_size
         
+    def generate_corpus(self, save=True, with_annotations=False,
+                        annotation_entity_form="bracketed iri"):
+        """The published OPA2Vec reading: the annotation sentences name a class as ``<IRI>``,
+        a token the axiom sentences do not contain (``annotation_entity_form="bracketed
+        iri"``). The corpus functions of :mod:`mowl.corpus` write the plain IRI by default."""
+        return super().generate_corpus(save=save, with_annotations=with_annotations,
+                                       annotation_entity_form=annotation_entity_form)
+
     def train(self, epochs=None):
         """
         Triggers the Word2Vec training process.

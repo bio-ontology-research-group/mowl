@@ -57,6 +57,13 @@ class FaithEL(EmbeddingELModel):
     :param gamma: Weight of the parameter-to-individual terms.
     :param psi: Weight of the negative term.
     :param neg_sampling: Use the negative term (the code's default).
+    :param negative_term: ``"unbounded"`` (default of this named method): the code's
+        :math:`-\\psi\\,\\mathrm{mse}(x_a, x_{neg})`, which has no lower bound, so with
+        ``neg_sampling`` the loss can go to :math:`-\\infty` as individuals drift apart.
+        ``"margin"``: the bounded hinge of the part
+        (:class:`~mowl.representation.library.solved_faithel.AnchoredObjective`, the default of
+        the part).
+    :param neg_margin: The margin of ``"margin"``.
     :param centroid_score: Score an assertion by the distance to the parameter plus the
         distance to the centroid (the code's default) instead of the parameter only.
     :param batch_size: Assertions per step.
@@ -80,7 +87,7 @@ class FaithEL(EmbeddingELModel):
     def __init__(self, dataset, radius=0.6, phi=1.0, gamma=1.0, psi=0.7, neg_sampling=True,
                  centroid_score=True, batch_size=512, learning_rate=0.001,
                  model_filepath=None, device="cpu", seed=None, max_elements=3000,
-                 training=None):
+                 training=None, negative_term="unbounded", neg_margin=1.0):
         no = _tbox_only(normalise(dataset.ontology))
         n = len([c for c in no.concept_names if c not in (TOP, BOTTOM)])
         size = 1 + n + n * (n - 1) // 2 + len(no.role_names) * (n + 1)
@@ -97,6 +104,7 @@ class FaithEL(EmbeddingELModel):
                          learning_rate=learning_rate)
         self.radius, self.phi, self.gamma, self.psi = radius, phi, gamma, psi
         self.neg_sampling = neg_sampling
+        self.negative_term, self.neg_margin = negative_term, neg_margin
         self.centroid_score = centroid_score
         self.seed = seed
         #: The training regime of the parts (:class:`AlternatingMinibatches`: the authors'
@@ -124,7 +132,8 @@ class FaithEL(EmbeddingELModel):
             len(self.class_index_dict), len(self.object_property_index_dict),
             len(self.individual_index_dict), embed_dim=d, radius=self.radius, phi=self.phi,
             gamma=self.gamma, psi=self.psi, neg_sampling=self.neg_sampling,
-            centroid_score=self.centroid_score, tbox=tbox, centroids=cents,
+            centroid_score=self.centroid_score, tbox=tbox,
+            negative_term=self.negative_term, neg_margin=self.neg_margin, centroids=cents,
             role_centroids=rcents)
         self.module = module.to(self.device)
 

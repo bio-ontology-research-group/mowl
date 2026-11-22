@@ -39,6 +39,8 @@ class BoxSEL(EmbeddingELModel):
     :param volume_weight: Weight of :math:`L_{vol}` as printed (Eq. 10); off by default
         because it is zero only for boxes that fill the cube (see the catalogue card).
     :param conditional_weight: Weight of the mean conditional loss.
+    :param load_role_axioms: Also train on the role inclusions and role chains of the
+        ontology (the module implements their losses). Default ``False``.
     :param temperature: Softplus sharpness of the volumes (``beta`` of ``softplus``).
     :param temperature_final: If given, the sharpness grows geometrically from
         ``temperature`` to this value over the epochs (the paper's cooling schedule, which
@@ -53,7 +55,7 @@ class BoxSEL(EmbeddingELModel):
                  scaling_bounds=(0.9, 1.1), temperature=1.0, temperature_final=None,
                  learning_rate=0.001, batch_size=4096 * 8, model_filepath=None, device="cpu",
                  neg_sampling_gcis=None, positive_scale=True,
-                 role_chain_composition="in_order"):
+                 role_chain_composition="in_order", load_role_axioms=False):
         self.beta = beta
         self.location_weight = location_weight
         self.volume_weight = volume_weight
@@ -68,7 +70,8 @@ class BoxSEL(EmbeddingELModel):
         self.temperature_final = temperature_final
         super().__init__(dataset, embed_dim, batch_size, extended=True,
                          model_filepath=model_filepath, device=device,
-                         learning_rate=learning_rate, neg_sampling_gcis=neg_sampling_gcis)
+                         learning_rate=learning_rate, neg_sampling_gcis=neg_sampling_gcis,
+                         load_role_axioms=load_role_axioms)
         self.conditionals = [_as_conditional(c) for c in conditionals]
         self.init_module()
 

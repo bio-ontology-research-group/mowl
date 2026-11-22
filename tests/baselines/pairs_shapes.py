@@ -90,18 +90,12 @@ def _scores(model):
     return out
 
 
-def _in_order(model):
-    """The training axioms of two models built from the same ontology come in the order of a
-    Java hash set, which differs from one model to the next; the harness compares row by row
-    (and draws negatives per row), so both sides get the axioms sorted."""
+def _with_structural_tables(model):
+    """The direct implementation builds the structural tables when it is trained; the
+    combination builds them at once. Build them now for the direct one, so that the losses
+    are compared before training (this has nothing to do with the order of rows)."""
     model._load_datasets()
-    for data in model._training_datasets.values():
-        rows = sorted(map(tuple, data._data.tolist()))
-        if rows:
-            data._data = th.tensor(rows, dtype=data._data.dtype, device=data._data.device)
     if getattr(model, "objective", None) == "structural":
-        # the tables the model builds from its ordered axioms: the combination at once, the
-        # direct implementation when it is trained (here: as it does it)
         model._structural_tables = None
         if hasattr(model, "_attach_structural_tables"):
             model._attach_structural_tables()
@@ -124,11 +118,11 @@ def _pair(method, variant=None, dataset=None, **options):
     name, baseline = CLASSES[method]
 
     def new(dataset):
-        return _in_order(getattr(importlib.import_module("mowl.models"), name)(
-            dataset, embed_dim=EMBED, **options))
+        return getattr(importlib.import_module("mowl.models"), name)(
+            dataset, embed_dim=EMBED, **options)
 
     def old(dataset):
-        return _in_order(getattr(importlib.import_module(baseline), name)(
+        return _with_structural_tables(getattr(importlib.import_module(baseline), name)(
             dataset, embed_dim=EMBED, **options))
 
     network = method == "concept2box"

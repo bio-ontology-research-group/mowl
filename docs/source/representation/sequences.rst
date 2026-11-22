@@ -168,9 +168,9 @@ Defaults
 The parts default to the correct behaviour (see :doc:`defaults`). Four behaviours of the
 earlier direct implementation are options:
 
-* A new walk replaces the walks of an earlier one. The walkers of :mod:`mowl.walking` append
-  to their file, so a second walk used to train on the old and the new walks together
-  (``Walks(fresh=False)`` keeps that).
+* A new walk replaces the walks of an earlier one. The walker of DeepWalk appended to its
+  file, so a second walk used to train on the old and the new walks together; the walkers now
+  empty their file first (``DeepWalk(append=True)`` keeps the appending).
 * A Word2Vec model that has a vocabulary keeps its vectors when it is trained again, so
   ``from_pretrained`` followed by ``train`` goes on from the loaded vectors
   (``restart=True`` starts anew from the seed on every ``train``, as before).
@@ -180,7 +180,8 @@ earlier direct implementation are options:
 * An annotation sentence names its class by the IRI, the same token as in the axiom
   sentences and the walks (``AnnotationCorpus(entity_form="bracketed iri")`` writes
   ``<IRI>``, a token that no axiom sentence contains, as the saved corpus of
-  :mod:`mowl.corpus` does).
+  :mod:`mowl.corpus` did before it got the same ``entity_form`` option, with ``"iri"`` as its
+  default).
 
 The comparison with the direct implementation (``tests/baselines/pairs_walks.py``) selects
 these options and checks that both give the same sequences, vocabulary, vectors and scores.

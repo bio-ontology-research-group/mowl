@@ -129,6 +129,31 @@ earlier behaviour and are not listed. The changelog has every change.
   (``reference_bottom_losses="mowl"``).
 * **FALCON**: the quantifiers look at all pairs of entities (``role_pairs="self"``), and
   ``owl:Nothing`` is the empty set (``nothing="learned"``). ALC models now train on a GPU.
+* **Row order of the datasets** (``ELDataset``, ``ALCDataset``) and the edge order of the
+  ``DL2VecProjector``, ``OWL2VecStarProjector`` and ``GDAProjector``: the ontology reader and
+  the normaliser yield axioms in the order of a Java hash set, which differs between two builds
+  in one process, and negatives are drawn per row, so equal seeds gave unequal runs. The rows of
+  every form are now in a documented order: sorted by their integer indices and then permuted by
+  a generator seeded with ``shuffle_seed`` (default 0; ``shuffle=False`` keeps them sorted;
+  ``shuffle_seed=None`` uses the global :mod:`random` module as before). ALC patterns and rows,
+  the edges of the three projectors and the lines of the corpora are sorted. The index
+  dictionaries were already sorted.
+* **Corpora** (:mod:`mowl.corpus`): ``extract_and_save_annotation_corpus`` writes a class as
+  its IRI, like the axiom corpus and the list variant (it wrote ``<IRI>``, so annotation
+  sentences never reached the class vectors); ``entity_form="bracketed iri"`` gives the old
+  form. ``SyntacticPlusW2VModel.generate_corpus`` has the same option
+  (``annotation_entity_form``), and the baseline OPA2Vec selects the old form.
+* **Walkers** (:mod:`mowl.walking`): the output file is emptied before every walk
+  (``DeepWalk(append=True)`` keeps the old appending, e.g. to extend the walks of a graph that
+  grew). DeepWalk's Java code appends to its file, and Node2Vec has no seed in the Scala
+  source: both need a rebuild of the jar to be fixed there, so they are handled in Python
+  (``walker.seeded`` is ``False`` for node2vec).
+* **FaithEL**: the part ``AnchoredObjective`` has a bounded negative term by default
+  (``negative_term="margin"``); the class ``FaithEL`` keeps the unbounded term of the authors'
+  code (``negative_term="unbounded"`` is its default).
+* **FALCON**: the part ``FuzzyObjective`` reads a role assertion in the direction of
+  :math:`\exists r.C` by default (``abox_head="subject"``); the named method keeps the
+  direction of the code (``"object"``), see :doc:`known_deviations`.
 * **Graph and syntactic methods** (``GraphPlusPyKEENModel``, ``RandomWalkPlusW2VModel``,
   ``SyntacticPlusW2VModel``): ``RandomWalkPlusW2VModel`` and ``SyntacticPlusW2VModel`` are
   combinations of parts (:doc:`sequences`). A second walk replaces the first instead of being

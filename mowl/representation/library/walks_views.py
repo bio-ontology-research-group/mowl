@@ -140,7 +140,8 @@ class AnnotationCorpus(OntologyView):
         token as in the axiom sentences and the walks, so that the annotation is about the
         entity's vector. ``"bracketed iri"``: ``<IRI>`` for classes, a token of its own that
         no axiom sentence contains; this is what
-        :func:`mowl.corpus.extract_and_save_annotation_corpus` writes, and so what the earlier
+        :func:`mowl.corpus.extract_and_save_annotation_corpus` wrote before its own
+        ``entity_form`` option (default ``"iri"``, the same as this part), and so what the earlier
         ``SyntacticPlusW2VModel.generate_corpus(with_annotations=True)`` trained on (kept to
         reproduce it).
     """
@@ -162,7 +163,8 @@ class AnnotationCorpus(OntologyView):
         from mowl.corpus import extract_and_save_annotation_corpus
         path = scratch_file(".annotations")
         try:
-            extract_and_save_annotation_corpus(ontology, path, mode="w")
+            extract_and_save_annotation_corpus(ontology, path, mode="w",
+                                               entity_form="bracketed iri")
             with open(path) as f:
                 return [line.rstrip("\n") for line in f]
         finally:
@@ -187,8 +189,9 @@ def make_walker(name="deepwalk", num_walks=10, walk_length=20, alpha=0.1, p=1.0,
                 workers=1, seed=0, outfile=None):
     """A walker of :mod:`mowl.walking` by name (``"deepwalk"`` or ``"node2vec"``).
 
-    node2vec walks take no seed (:class:`mowl.walking.Node2Vec` has none), so they differ
-    from run to run; DeepWalk walks with one worker are the same for the same seed.
+    node2vec walks take no seed (:class:`mowl.walking.Node2Vec` has none: the Scala source
+    draws from an unseeded generator, ``walker.seeded`` is ``False``), so they differ from
+    run to run; DeepWalk walks with one worker are the same for the same seed.
     """
     from mowl.walking import DeepWalk, Node2Vec
     outfile = outfile or scratch_file(".walks")
@@ -212,10 +215,8 @@ class Walks(SequenceSource):
     :param walker: A :class:`mowl.walking.WalkingModel`, or ``None`` until one is set. The
         walks are written to its ``outfile``.
     :param fresh: ``True`` (default): :meth:`write` replaces the walks of an earlier
-        :meth:`write` or :meth:`extend`. The walkers of :mod:`mowl.walking` *append* to
-        their file, so without this a second walk (a retraining after ``add_axioms``, or a
-        file left from another run) trains on old and new walks together. ``False`` keeps
-        that behaviour.
+        :meth:`write` or :meth:`extend`. ``False``: :meth:`write` appends to the file, as the
+        walkers did before they emptied their file themselves. :meth:`extend` always appends.
 
     Used by ``dl2vec``, ``owl2vec_star`` and ``taxonomy_walks``.
     """
@@ -246,14 +247,27 @@ class Walks(SequenceSource):
         edges = self._edges(dataset)
         if self.fresh and os.path.exists(self.path):
             open(self.path, "w").close()
-        self.walker.walk(edges)
+        self._walk(edges, append=not self.fresh)
         return self.path
+
+    def _walk(self, edges, append, **kwargs):
+        """Walk; the walkers empty their file first unless they are told to append
+        (``DeepWalk.append``; node2vec's Java code never appends)."""
+        walker = self.walker
+        old = getattr(walker, "append", None)
+        if old is not None:
+            walker.append = append
+        try:
+            walker.walk(edges, **kwargs)
+        finally:
+            if old is not None:
+                walker.append = old
 
     def extend(self, dataset, entities):
         """Walks through the given entities on the graph of the dataset as it is now,
         appended to the walks there are."""
         edges = self._edges(dataset)
-        self.walker.walk(edges, nodes_of_interest=list(entities))
+        self._walk(edges, append=True, nodes_of_interest=list(entities))
         return self.path
 
     def reseed(self, seed):

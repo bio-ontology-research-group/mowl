@@ -54,13 +54,18 @@ class SyntacticModel(Model):
     
         return self._corpus
 
-    def generate_corpus(self, save = True, with_annotations=False):
+    def generate_corpus(self, save = True, with_annotations=False, annotation_entity_form="iri"):
         """Generates the corpus of the training ontology. It uses the Manchester OWL Syntax.
         
         :param save: if True, the corpus is saved into the model filepath, otherwise, the corpus is returned as a list of sentences. Default is True.
         :type save: bool, optional
         :param with_annotations: if True, the corpus is generated with the annotations, otherwise, the corpus is generated only with the axioms. Default is False.
         :type with_annotations: bool, optional
+        :param annotation_entity_form: How a class is written in the annotation sentences: \
+``"iri"`` (default, the token of the axiom corpus) or ``"bracketed iri"`` (``<IRI>``, the \
+form this method wrote before the option existed). See \
+:func:`mowl.corpus.extract_and_save_annotation_corpus`.
+        :type annotation_entity_form: str, optional
         """
         if save:
             extract_and_save_axiom_corpus(self.dataset.ontology,
@@ -69,11 +74,13 @@ class SyntacticModel(Model):
             if with_annotations:
                 extract_and_save_annotation_corpus(self.dataset.ontology,
                                                    self.corpus_filepath,
-                                                   mode="a")
+                                                   mode="a",
+                                                   entity_form=annotation_entity_form)
         else:
             corpus = extract_axiom_corpus(self.dataset.ontology)
             if with_annotations:
-                corpus += extract_annotation_corpus(self.dataset.ontology)
+                corpus += extract_annotation_corpus(self.dataset.ontology,
+                                                    entity_form=annotation_entity_form)
 
         if not save:
             return corpus

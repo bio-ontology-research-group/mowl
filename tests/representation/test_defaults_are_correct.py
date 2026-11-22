@@ -171,6 +171,10 @@ PUBLISHED = [
     # objectives of named methods that carry an option of a published reading
     (OBJECTIVE, "ELKEmObjective", "trivial_disjointness", True, False, "elkem",
      {"variant": "reference"}, "objective.trivial_disjointness"),
+    (OBJECTIVE, "FuzzyObjective", "abox_head", "subject", "object", "falcon", {},
+     "objective.abox_head"),
+    (OBJECTIVE, "AnchoredObjective", "negative_term", "margin", "unbounded", "faithel",
+     {"negative_term": "unbounded"}, "objective.negative_term"),
     (OBJECTIVE, "StructuralReading", "empty_regions", "keep", "abs", "prism",
      {"reading": "structural", "empty_box_reading": "absolute"}, "objective.empty_regions"),
     (OBJECTIVE, "StructuralGeometry", "size_reg_without_tables", False, True, "multiboxel",
@@ -409,7 +413,10 @@ class TestDefaultsAreCorrect(TestCase):
         from mowl.representation.library.boxrel_objectives import ELKEmObjective
         from mowl.representation.library.structural_methods import StructuralGeometry
         from mowl.representation.library.structural_reading import StructuralReading
-        extra = {"ELKEmObjective": ELKEmObjective, "StructuralReading": StructuralReading,
+        from mowl.representation.library.logic_fuzzy import FuzzyObjective
+        from mowl.representation.library.solved_faithel import AnchoredObjective
+        extra = {"FuzzyObjective": FuzzyObjective, "AnchoredObjective": AnchoredObjective,
+                 "ELKEmObjective": ELKEmObjective, "StructuralReading": StructuralReading,
                  "StructuralGeometry": StructuralGeometry}
         for name, factory in extra.items():
             cls.options[(OBJECTIVE, name)] = _signature_options(factory)
@@ -443,7 +450,8 @@ class TestDefaultsAreCorrect(TestCase):
         for kind, part, option, *_ in PUBLISHED:
             listed.setdefault((kind, part), set()).add(option)
         parts = {key: value for key, value in self.options.items()
-                 if key[1] not in ("ELKEmObjective", "StructuralReading", "StructuralGeometry")}
+                 if key[1] not in ("ELKEmObjective", "StructuralReading", "StructuralGeometry",
+                         "FuzzyObjective", "AnchoredObjective")}
         self.assertEqual(unlisted_options(parts, listed, NEUTRAL), [])
 
     def test_a_new_option_is_caught(self):
@@ -478,7 +486,8 @@ class TestDefaultsAreCorrect(TestCase):
         in_table = {(kind, part, option) for kind, part, option, *_ in PUBLISHED}
         missing = []
         for (kind, name), options in sorted(self.options.items()):
-            if name in ("ELKEmObjective", "StructuralReading", "StructuralGeometry"):
+            if name in ("ELKEmObjective", "StructuralReading", "StructuralGeometry",
+                         "FuzzyObjective", "AnchoredObjective"):
                 continue
             factory = dict(((k, n), f) for k, n, f in _registered())[(kind, name)]
             doc = (inspect.getdoc(factory) or "") + "\n" + \
