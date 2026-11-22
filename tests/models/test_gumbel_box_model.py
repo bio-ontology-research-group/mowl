@@ -89,3 +89,32 @@ def test_trains_on_the_taxonomy_and_declares_scoring():
     check_trained_taxonomy(model)
     first = train(GumbelBox, epochs=1, embed_dim=4, beta=0.02, learning_rate=0.02)
     assert total_loss(model) < total_loss(first)
+
+
+def test_log_guard_stable_matches_epsilon_where_both_are_exact_and_keeps_gradient():
+    from mowl.nn.el.gumbel_box import log_softplus_volume
+    x = th.tensor([0.5, 0.05, 0.0, -0.1], dtype=th.double)
+    old = log_softplus_volume(x, 0.01, guard="epsilon")
+    new = log_softplus_volume(x, 0.01)
+    # z = x / 0.01 - 2 gamma is above -15 for the first three: same values
+    assert th.allclose(old[:3], new[:3], atol=1e-12)
+    # very negative: the old guard returns a constant with no gradient, the new one does not
+    far = th.tensor([-2.0], dtype=th.double, requires_grad=True)
+    log_softplus_volume(far, 0.01, guard="epsilon").sum().backward()
+    assert abs(far.grad.item()) < 1e-20
+    far2 = th.tensor([-2.0], dtype=th.double, requires_grad=True)
+    val = log_softplus_volume(far2, 0.01)
+    val.sum().backward()
+    assert far2.grad.item() == pytest.approx(100.0, rel=1e-6)
+    assert val.item() < log_softplus_volume(far, 0.01, guard="epsilon").item()
+
+
+def test_negative_loss_guards_agree_away_from_certain_inclusion():
+    new = GumbelBoxModule(4, embed_dim=3, beta=0.01)
+    old = GumbelBoxModule(4, embed_dim=3, beta=0.01, log_guard="epsilon")
+    old.load_state_dict(new.state_dict())
+    sub, sup = th.tensor([0, 1, 2]), th.tensor([1, 2, 3])
+    assert th.allclose(new.negative_loss(sub, sup), old.negative_loss(sub, sup), rtol=1e-4)
+    assert th.allclose(new.positive_loss(sub, sup), old.positive_loss(sub, sup), atol=1e-6)
+    with pytest.raises(ValueError):
+        GumbelBoxModule(4, log_guard="x")

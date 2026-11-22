@@ -173,6 +173,8 @@ SHADOW_CONES = MethodCard(
                   "ICLR 2024.",
                   "https://arxiv.org/abs/2305.15215"),),
     notes=(
+        "neg=True of the module is the hinge max(0, gamma1 - E) (negative='energy' returns the raw "
+        "energy, the form Eq. 1 is written on; the loss of Eq. 1 is the same for both). "
         "All four formulations of the paper (umbral and penumbral, Poincaré half-space and "
         "ball), the two-case distance energy of Section 4 and the loss of Eq. 1. "
         "Adaptations: curvature is fixed at -1; Riemannian SGD only (the paper uses "
@@ -273,7 +275,8 @@ BOX_LATTICE = MethodCard(
         "The complement of a box is not a box (vilnis2018, Section 4.2).",
     ),
     notes=_TAXONOMY_NOTE + (
-        " Probabilities: stated pairs get the target P(D|C) = 1, corrupted pairs P(D|C) = 0 "
+        " The positive loss of an included pair is exactly 0 (zero_at_inclusion=True; False is "
+        "the earlier -log(1 + eps) < 0). Probabilities: stated pairs get the target P(D|C) = 1, corrupted pairs P(D|C) = 0 "
         "(the paper uses calibrated targets for Flickr and unary marginals for WordNet; the "
         "latter are optional via unary_weight). Ours: for disjoint boxes the positive loss "
         "is the linear form of the paper's lower bound of the joint; the paper's printed "
@@ -329,7 +332,9 @@ GUMBEL_BOX = MethodCard(
         "and 4.2); P(D|C) < 1 even for identical boxes at finite beta.",
     ),
     notes=_TAXONOMY_NOTE + (
-        " Locations are kept in the unit cube by projection. The signs of Algorithm 1's "
+        " The logarithms of side lengths and of 1 - P use the guard of the binary code boxes "
+        "(log_guard='stable'; 'epsilon' is the earlier 1e-30 / 1e-9 guard, which floored the "
+        "log volume of a collapsed side with zero gradient). Locations are kept in the unit cube by projection. The signs of Algorithm 1's "
         "log-sum-exp terms are swapped relative to Lemma 1; the implementation follows "
         "Lemma 1. The paper's code and hyperparameter search (Bayesian, Hyperband) were not "
         "reproduced."),

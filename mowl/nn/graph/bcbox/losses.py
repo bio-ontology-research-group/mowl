@@ -13,7 +13,9 @@ Edges therefore point from the larger (more general) box to the smaller one.
 import math
 
 import torch as th
-import torch.nn.functional as F
+
+from mowl.nn.numerics import log_scaled_softplus
+from mowl.nn.numerics import neg_log1mexp as _neg_log1mexp
 
 
 def lse(a, b, t):
@@ -54,9 +56,7 @@ def log_lse0(s, t):
     """
     if t == 0:
         return th.log(th.clamp(s, min=0.0))
-    z = s / t
-    safe = th.clamp(z, min=-15.0)
-    return math.log(t) + th.where(z > -15.0, th.log(F.softplus(safe)), z)
+    return log_scaled_softplus(s / t, t)
 
 
 def gumbel_box_log_score(x_min, x_max, y_min, y_max, intersection_temp, volume_temp):
@@ -139,7 +139,8 @@ def vbc_energy(neg_log_score, codes_u, codes_v):
 
 
 def neg_log1mexp(energy):
-    """:math:`-\\log(1 - e^{-E})` for :math:`E \\ge 0`, computed stably.
+    """:math:`-\\log(1 - e^{-E})` for :math:`E \\ge 0`, computed stably (see
+    :func:`mowl.nn.numerics.neg_log1mexp`).
 
     This is the negative log-probability that an edge with energy ``E`` is absent.
 
@@ -147,11 +148,7 @@ def neg_log1mexp(energy):
     :type energy: :class:`torch.Tensor`
     :rtype: :class:`torch.Tensor`
     """
-    e = th.clamp(energy, min=1e-12)
-    small = e < math.log(2.0)
-    out_small = th.log(-th.expm1(-th.where(small, e, th.ones_like(e))))
-    out_large = th.log1p(-th.exp(-th.where(small, th.ones_like(e), e)))
-    return -th.where(small, out_small, out_large)
+    return _neg_log1mexp(energy)
 
 
 def bce_negative_sampling_loss(pos_energy, neg_energy, neg_mask=None,

@@ -4,6 +4,7 @@ import math
 import torch as th
 
 from mowl.nn.el.box_lattice.module import UnitCubeBoxModule
+from mowl.nn.numerics import log_scaled_softplus, neg_log1mexp
 
 EULER_GAMMA = 0.5772156649015329
 
@@ -15,10 +16,22 @@ def softplus_volume(x, beta):
     return beta * th.nn.functional.softplus(x / beta - 2.0 * EULER_GAMMA)
 
 
-def log_softplus_volume(x, beta):
-    """``log`` of :func:`softplus_volume`."""
-    return math.log(beta) + th.log(th.nn.functional.softplus(x / beta - 2.0 * EULER_GAMMA)
-                                   + 1e-30)
+def log_softplus_volume(x, beta, guard="stable"):
+    """``log`` of :func:`softplus_volume`.
+
+    :param guard: ``"stable"`` (default): :func:`mowl.nn.numerics.log_scaled_softplus`, the
+        guard that the binary code boxes use, which keeps the exact value up to a relative
+        error below ``1.5e-7`` and a gradient for any ``x``. ``"epsilon"``: add ``1e-30``
+        inside the logarithm (earlier versions), which differs from the exact value for
+        ``x / beta - 2 * gamma < -15`` (by at most ``1.5e-7``) and returns the constant
+        ``log(beta) - 69`` with zero gradient below about ``-69``.
+    """
+    z = x / beta - 2.0 * EULER_GAMMA
+    if guard == "epsilon":
+        return math.log(beta) + th.log(th.nn.functional.softplus(z) + 1e-30)
+    if guard != "stable":
+        raise ValueError("guard must be 'stable' or 'epsilon'.")
+    return log_scaled_softplus(z, beta)
 
 
 class GumbelBoxModule(UnitCubeBoxModule):
@@ -48,18 +61,26 @@ class GumbelBoxModule(UnitCubeBoxModule):
 
     :param beta: Gumbel scale :math:`\beta` (paper: 0.01 to 1e-4 depending on the task).
     :param min_delta: Minimum side :math:`\Delta_{\min}` of the location boxes.
+    :param log_guard: Numerical guard of the logarithm of the side lengths, ``"stable"``
+        (default) or ``"epsilon"`` (earlier versions); see :func:`log_softplus_volume`. It
+        also selects the guard of the negative loss: ``"stable"`` is
+        :func:`mowl.nn.numerics.neg_log1mexp` (the one of the binary code boxes, energy
+        floor 1e-12), ``"epsilon"`` clamps :math:`\log P` at :math:`-10^{-9}`.
     """
 
     def __init__(self, nb_ont_classes, embed_dim=50, beta=0.01, min_delta=1e-6,
-                 init_side=(0.3, 0.9), max_regularization=0.0):
+                 init_side=(0.3, 0.9), max_regularization=0.0, log_guard="stable"):
         if beta <= 0:
             raise ValueError("beta must be positive")
+        if log_guard not in ("stable", "epsilon"):
+            raise ValueError("log_guard must be 'stable' or 'epsilon'.")
         super().__init__(nb_ont_classes, embed_dim, min_delta, init_side, max_regularization)
         self.beta = float(beta)
+        self.log_guard = log_guard
 
     def log_volume(self, mu_min, mu_max):
         """Log expected volume of the Gumbel box with the given location corners."""
-        return log_softplus_volume(mu_max - mu_min, self.beta).sum(dim=-1)
+        return log_softplus_volume(mu_max - mu_min, self.beta, self.log_guard).sum(dim=-1)
 
     def log_conditional(self, sub, sup, detach_delta=False):
         r""":math:`\log P(\text{sup} \mid \text{sub})` (always :math:`\le 0`)."""
@@ -74,6 +95,9 @@ class GumbelBoxModule(UnitCubeBoxModule):
         return (-self.log_conditional(sub, sup)).clamp(min=0.0).float()
 
     def negative_loss(self, sub, sup):
-        logp = self.log_conditional(sub, sup).clamp(max=-1e-9)
+        logp = self.log_conditional(sub, sup)
+        if self.log_guard == "stable":
+            return neg_log1mexp(-logp).float()
+        logp = logp.clamp(max=-1e-9)
         log1m = th.log(-th.expm1(logp))
         return (-log1m).float()
