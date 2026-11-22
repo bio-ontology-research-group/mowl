@@ -8,7 +8,6 @@ constructor, the attribute names and the hooks that the released class had.
 :class:`PartBuiltModule` is what these classes share.
 """
 
-import torch as th
 
 from mowl.nn.el.elmodule import ELModule
 from mowl.representation.geometry import ComposedGeometry
@@ -45,7 +44,7 @@ class PartBuiltModule(ComposedGeometry):
             regularizers=built.regularizers, supported_forms=built.supported_forms,
             neg_capable_gcis=built.neg_capable_gcis)
         self.strict_negatives = True
-        self._register_load_state_dict_pre_hook(_rename_earlier_parameters)
+        self._register_load_state_dict_pre_hook(_rename_earlier_parameters, with_module=True)
 
     def get_loss_function(self, gci_name):
         return ELModule.get_loss_function(self, gci_name)
