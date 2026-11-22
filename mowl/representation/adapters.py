@@ -57,7 +57,11 @@ def geometry_of(model):
 def _link(geometry, module):
     """Make the margin of a geometry that describes ``module`` the module's margin, so that
     the two cannot drift apart (when the adapter has given the geometry the margin of the
-    module: otherwise the margin of the geometry is a number of its own)."""
+    module: otherwise the margin of the geometry is a number of its own). A module that is
+    the geometry itself (ComposedEL, a constructed model) is not linked to itself: its
+    margin would be read through itself without end."""
+    if module is geometry:
+        return geometry
     attribute = getattr(module, "margin_attribute", "margin")
     value = getattr(module, attribute, None)
     link = getattr(geometry, "link_margin", None)

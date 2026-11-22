@@ -422,3 +422,19 @@ def test_class_expressions_on_every_reading(ranked, reading):
     else:
         assert subsumption_cost(model, NS + "A", adapter.create_complement_of(cls("E")),
                                 *maps) == 0.0
+
+
+def test_geometry_of_a_model_whose_module_is_its_geometry_keeps_its_margin():
+    """Defect: geometry_of linked the margin of a geometry to itself when the model's
+    module is the geometry (ComposedEL, constructed models), and reading the margin then
+    recursed without end."""
+    import logging
+    from mowl.datasets.builtin import FamilyDataset
+    from mowl.models import ComposedEL
+    logging.disable(logging.CRITICAL)
+    model = ComposedEL(FamilyDataset(), method="elbe", embed_dim=4, margin=0.1)
+    g = geometry_of(model)
+    assert g is model.module
+    assert g.margin == pytest.approx(0.1)
+    g.margin = 0.2
+    assert model.module.objective.margin == pytest.approx(0.2)

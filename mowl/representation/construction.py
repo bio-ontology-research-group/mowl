@@ -812,13 +812,6 @@ class ConstructionGeometry(ComposedGeometry):
     def _individuals(self):
         return self.individual_names
 
-    def link_margin(self, owner):
-        """A constructed geometry has no margin of its own to share (the measure is exact);
-        linking it to itself (a model whose ``module`` is this geometry) is a no-op."""
-        if owner is self:
-            return self
-        return super().link_margin(owner)
-
     @property
     def guarantees(self):
         """The guarantees of the source and of the reading (:class:`Guarantee`)."""
