@@ -1,6 +1,4 @@
 r"""Box lattice embeddings of the class taxonomy."""
-import torch as th
-
 from mowl.models.order_parts_a import TaxonomyEmbeddingModel
 from mowl.nn.el.box_lattice.module import BoxLatticeModule
 
@@ -60,7 +58,6 @@ class BoxLattice(TaxonomyEmbeddingModel):
         self.freeze_delta_negatives = freeze_delta_negatives
         self.disjoint_weight = disjoint_weight
         self.zero_at_inclusion = zero_at_inclusion
-        self._unary_target = None
         self.init_module()
 
     def init_module(self):
@@ -69,16 +66,5 @@ class BoxLattice(TaxonomyEmbeddingModel):
             max_regularization=self.max_regularization, eps=self.eps,
             freeze_delta_negatives=self.freeze_delta_negatives,
             disjoint_weight=self.disjoint_weight,
-            zero_at_inclusion=self.zero_at_inclusion).to(self.device)
-
-    def additional_training_loss(self, epoch):
-        if not self.unary_weight:
-            return None
-        if self._unary_target is None:
-            target = self.descendant_fractions()
-            self._unary_target = th.tensor(target, dtype=th.double, device=self.device)
-        n = len(self._unary_target)
-        p = self.module.marginal(th.arange(n, device=self.device)).clamp(1e-12, 1 - 1e-12)
-        t = self._unary_target
-        ce = -(t * th.log(p) + (1 - t) * th.log1p(-p))
-        return self.unary_weight * ce.mean().float()
+            zero_at_inclusion=self.zero_at_inclusion, unary_weight=self.unary_weight,
+            unary_targets=self.descendant_fractions).to(self.device)

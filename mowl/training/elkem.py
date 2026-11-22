@@ -160,6 +160,29 @@ def prepare_lexical(features, individual_index, device="cpu"):
     return (th.tensor(idx, dtype=th.long, device=device), th.tensor(feats, device=device))
 
 
+def zero_margin_loss(module, rows, form):
+    """The loss of ``rows`` without the margin of the objective, in any mode: the module's own
+    ``zero_margin_loss`` if it has one, else the cost of the geometry with the margin of its
+    objective set to zero for the call."""
+    if hasattr(module, "zero_margin_loss"):
+        return module.zero_margin_loss(rows, form)
+    objective = module.objective
+    margin = objective.margin
+    objective.margin = 0.0
+    try:
+        loss = module.cost(form, rows)
+    finally:
+        objective.margin = margin
+    return loss.reshape(len(rows), -1)[:, 0] if loss.dim() > 1 else loss
+
+
+def margin_free_score(module, rows, form):
+    """:math:`s(\\alpha) = \\exp(-\\ell^0(\\alpha))`, the score of ELK-Em (Eq. 4)."""
+    if hasattr(module, "score"):
+        return module.score(rows, form)
+    return th.exp(-zero_margin_loss(module, rows, form))
+
+
 def pearson_loss(pos_scores, neg_scores, eps=1e-8):
     """One minus the Pearson correlation of the scores with the labels (1 for positives, 0
     for corruptions); the two score vectors may differ in length."""
@@ -199,8 +222,8 @@ def _rank_subsumptions(model, pairs, chunk_budget=2_000_000):
             chunk = pairs[start:start + step].to(model.device)
             q = len(chunk)
             grid = th.stack([chunk[:, 0].repeat_interleave(n), candidates.repeat(q)], dim=1)
-            losses = model.module.zero_margin_loss(grid, "gci0").view(q, n)
-            target = model.module.zero_margin_loss(chunk, "gci0").unsqueeze(1)
+            losses = zero_margin_loss(model.module, grid, "gci0").view(q, n)
+            target = zero_margin_loss(model.module, chunk, "gci0").unsqueeze(1)
             others = (candidates.unsqueeze(0) != chunk[:, :1]) & \
                 (candidates.unsqueeze(0) != chunk[:, 1:2])
             below = ((losses < target) & others).sum(dim=1)
@@ -330,7 +353,8 @@ class PearsonContrastiveTerm(TrainingRegime):
             if pos is None or len(pos) == 0:
                 continue
             neg = self.corrupt(form, pos)
-            term = pearson_loss(module.score(pos, form), module.score(neg, form))
+            term = pearson_loss(margin_free_score(module, pos, form),
+                                margin_free_score(module, neg, form))
             loss = term if loss is None else loss + term
         return None if loss is None else self.weight * loss
 
