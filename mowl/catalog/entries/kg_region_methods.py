@@ -100,7 +100,7 @@ BOXE = MethodCard(
     notes=(
         "Not reimplemented: this is PyKEEN's BoxE (pykeen.models.BoxE) trained through "
         "GraphPlusPyKEENModel with PyKEEN's negative sampling and self-adversarial loss. "
-        "Ontology link: the triples are the edges of a mowl.projection projector (default OWL2VecStarProjector: C subclassof D, C r D for C ⊑ ∃r.D, a type C for C(a), r(a, b)); axioms the projector does not read are ignored. Scores are available for C ⊑ D (gci0, the subclassof edge) and C ⊑ ∃r.D (gci2) only; class and role assertions are trained on but not scored. The paper's unary relations (types as boxes) become binary "
+        "Ontology link: the triples are the edges of a mowl.projection projector (default OWL2VecStarProjector: C subclassof D, C r D for C ⊑ ∃r.D, a type C for C(a), r(a, b)); axioms the projector does not read are ignored. Scores are available for C ⊑ D (gci0, the subclassof edge), C ⊑ ∃r.D (gci2), C(a) (class_assertion, the type edge) and r(a, b) (object_property_assertion, the role edge). The paper's unary relations (types as boxes) become binary "
         "type edges and classes are entities, so every guarantee above refers to the "
         "projected triples, not to the description logic semantics. Higher-arity facts are "
         "not used."),
@@ -166,7 +166,7 @@ EXPRESSIVE = MethodCard(
         "Reimplemented as a PyKEEN ERModel (mowl.nn.graph.expressive) after the authors' "
         "code (tanh maps, minimal denominator Dmin, distance of Equation 3, self-adversarial "
         "loss with margin 3 and temperature 2) and trained through GraphPlusPyKEENModel; "
-        "only the base model, not the ablations. Ontology link: the triples are the edges of a mowl.projection projector (default OWL2VecStarProjector: C subclassof D, C r D for C ⊑ ∃r.D, a type C for C(a), r(a, b)); axioms the projector does not read are ignored. Scores are available for C ⊑ D (gci0, the subclassof edge) and C ⊑ ∃r.D (gci2) only; class and role assertions are trained on but not scored. Composition "
+        "only the base model, not the ablations. Ontology link: the triples are the edges of a mowl.projection projector (default OWL2VecStarProjector: C subclassof D, C r D for C ⊑ ∃r.D, a type C for C(a), r(a, b)); axioms the projector does not read are ignored. Scores are available for C ⊑ D (gci0, the subclassof edge), C ⊑ ∃r.D (gci2), C(a) (class_assertion, the type edge) and r(a, b) (object_property_assertion, the role edge). Composition "
         "patterns hold for the projected triples; role chains of the ontology are not "
         "read."),
 )
@@ -242,7 +242,7 @@ RESHUFFLE = MethodCard(
         "matrices and the message passing of Equation 6, not for learned matrices. The "
         "paper's text initialises features with probability 0.5 of a 1, the code (the "
         "default here) 0.3085 (argument density); RESHUFFLE_nL and RESHUFFLE2 of the paper "
-        "are aggregation='max_self_noLoop' and row_function='square'. Ontology link: the triples are the edges of a mowl.projection projector (default OWL2VecStarProjector: C subclassof D, C r D for C ⊑ ∃r.D, a type C for C(a), r(a, b)); axioms the projector does not read are ignored. Scores are available for C ⊑ D (gci0, the subclassof edge) and C ⊑ ∃r.D (gci2) only; class and role assertions are trained on but not scored. The GNN encodes the "
+        "are aggregation='max_self_noLoop' and row_function='square'. Ontology link: the triples are the edges of a mowl.projection projector (default OWL2VecStarProjector: C subclassof D, C r D for C ⊑ ∃r.D, a type C for C(a), r(a, b)); axioms the projector does not read are ignored. Scores are available for C ⊑ D (gci0, the subclassof edge), C ⊑ ∃r.D (gci2), C(a) (class_assertion, the type edge) and r(a, b) (object_property_assertion, the role edge). The GNN encodes the "
         "whole graph at every step, which suits small and medium graphs."),
 )
 
@@ -268,7 +268,8 @@ QUERY2BOX = MethodCard(
         "Query2Box has no negation: a class expression with ¬ or ∀ raises UnsupportedOperator. "
         "Geometry as in the reference code of the BetaE/Query2Box authors (KGReasoning, "
         "geo='box'): attention-averaged centers, min-offset with sigmoid gate, offsets activated "
-        "by relu (option softplus/none). Not recorded as a guarantee because mOWL has no "
+        "by relu (option softplus/none; with 'none' an offset can become negative, as in the "
+        "code: clamp_extent=True clamps it at 0). Not recorded as a guarantee because mOWL has no "
         "test for it: Theorem 1 of ren2020q2b (with M conjunctive queries with disjoint "
         "answers, answering every EPFO query by a distance threshold needs VC dimension "
         "at least M, so unions are answered by DNF with the best branch, which mOWL does). "
@@ -396,7 +397,10 @@ ACONE = MethodCard(
         "paper's SROI⁻ axiom extraction from a learned model is not implemented. Observed on a "
         "14-entity test ontology: with rotation-only projection, paths of several isa steps "
         "(2p, 3p) were fitted worse than single steps in a short run (not investigated "
-        "further). "),
+        "further). The aperture is wrapped to (-pi, pi] after each projection, as in the code, so it "
+        "can be negative (aperture='clip' keeps it in [0, pi]); the negation of such a cone uses "
+        "|aperture| by default, the code's pi - aperture is signed_negation=True (the published "
+        "recipes select it). "),
     **_QUERY_FIELDS,
     guarantees=(
         Guarantee(

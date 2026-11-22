@@ -24,9 +24,11 @@ class GraphPlusPyKEENModel(KGEModel):
     """
     
     axiom_scoring = "method"
-    scored_forms = ("gci0", "gci2")
+    scored_forms = ("gci0", "gci2", "class_assertion", "object_property_assertion")
     #: Label of the edges the projectors give to ``C ⊑ D``.
     SUBCLASS_RELATION = "http://subclassof"
+    #: Label of the edges the projectors give to class assertions ``C(a)``.
+    TYPE_RELATION = "http://type"
     #: Whether the PyKEEN triples factory creates inverse triples (relation ``r`` is then
     #: ``2r`` in the model, its inverse ``2r + 1``; PyKEEN trains the inverse triples and
     #: predicts heads through them). A subclass sets it before calling the constructor.
@@ -127,16 +129,22 @@ class GraphPlusPyKEENModel(KGEModel):
     
     @th.no_grad()
     def axiom_costs(self, gci_name, rows):
-        """Cost of every candidate axiom in ``rows`` (indices of the dataset's classes
-        and object properties), lower is more plausible: minus the score the knowledge
-        graph embedding gives to the edge the axiom is projected to. ``gci0`` rows
-        ``[C, D]`` are the edge ``C -subclassof-> D``; ``gci2`` rows ``[C, r, D]`` are
-        the edge ``C -r-> D``. An axiom whose role is not an edge label of the graph gets
-        an infinite cost. A class that occurs in no edge is a node with an untrained
-        vector, as everywhere in this model."""
+        """Cost of every candidate axiom in ``rows`` (indices of the dataset's classes,
+        object properties and individuals), lower is more plausible: minus the score the
+        knowledge graph embedding gives to the edge the axiom is projected to.
+
+        * ``gci0`` rows ``[C, D]``: the edge ``C -subclassof-> D``;
+        * ``gci2`` rows ``[C, r, D]``: the edge ``C -r-> D``;
+        * ``class_assertion`` rows ``[a, C]``: the edge ``a -type-> C``;
+        * ``object_property_assertion`` rows ``[a, r, b]``: the edge ``a -r-> b``.
+
+        An axiom whose role is not an edge label of the graph (and a class assertion when
+        the projection has no type edges) gets an infinite cost. A class or individual that
+        occurs in no edge is a node with an untrained vector, as everywhere in this
+        model."""
         if self._kge_method is None:
             raise AttributeError(msg.MODEL_NOT_TRAINED_OR_LOADED)
-        if gci_name not in ("gci0", "gci2"):
+        if gci_name not in self.scored_forms:
             from mowl.evaluation.model_scoring import UnsupportedAxiomForm
             raise UnsupportedAxiomForm(
                 f"{type(self).__name__} has no score for {gci_name!r} axioms.")
@@ -144,22 +152,34 @@ class GraphPlusPyKEENModel(KGEModel):
         if maps is None:
             nodes = self.triples_factory.entity_to_id
             relations = self.triples_factory.relation_to_id
-            class_map = th.full((len(self.dataset.classes),), -1, dtype=th.long)
+            class_map = th.full((max(1, len(self.dataset.classes)),), -1, dtype=th.long)
             for iri, i in self.class_index_dict.items():
                 class_map[i] = nodes.get(iri, -1)
+            individual_map = th.full((max(1, len(self.dataset.individuals)),), -1,
+                                     dtype=th.long)
+            for iri, i in self.individual_index_dict.items():
+                individual_map[i] = nodes.get(iri, -1)
             role_map = th.full((max(1, len(self.dataset.object_properties)),), -1,
                                dtype=th.long)
             for iri, i in self.object_property_index_dict.items():
                 role_map[i] = relations.get(iri, -1)
             maps = self._axiom_index_maps = (class_map, role_map,
-                                             relations.get(self.SUBCLASS_RELATION, -1))
-        class_map, role_map, subclass = maps
+                                             relations.get(self.SUBCLASS_RELATION, -1),
+                                             individual_map,
+                                             relations.get(self.TYPE_RELATION, -1))
+        class_map, role_map, subclass, individual_map, type_relation = maps
         cpu = rows.cpu()
-        head = class_map[cpu[:, 0]]
-        tail = class_map[cpu[:, -1]]
         if gci_name == "gci0":
+            head, tail = class_map[cpu[:, 0]], class_map[cpu[:, 1]]
             relation = th.full_like(head, subclass)
+        elif gci_name == "gci2":
+            head, tail = class_map[cpu[:, 0]], class_map[cpu[:, 2]]
+            relation = role_map[cpu[:, 1]]
+        elif gci_name == "class_assertion":
+            head, tail = individual_map[cpu[:, 0]], class_map[cpu[:, 1]]
+            relation = th.full_like(head, type_relation)
         else:
+            head, tail = individual_map[cpu[:, 0]], individual_map[cpu[:, 2]]
             relation = role_map[cpu[:, 1]]
         if self.create_inverse_triples:
             relation = th.where(relation >= 0, 2 * relation, relation)
