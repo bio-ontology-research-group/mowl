@@ -12,7 +12,7 @@ mowl.init_jvm("2g")
 import mowl.datasets  # noqa: E402,F401
 from mowl.models import DiskEmbeddings  # noqa: E402
 from mowl.nn.order import DiskEmbeddingsModule, RiemannianSGD  # noqa: E402
-from mowl.nn.order.disks import protrusion  # noqa: E402
+from mowl.baselines.nn.order.disks import protrusion  # noqa: E402
 from mowl.nn.order.manifolds import Euclidean, Hyperboloid, Sphere  # noqa: E402
 from tests.models.order_tree import (common_ranking_benchmark, train_and_separate,  # noqa: E402
                                      tree_dataset)

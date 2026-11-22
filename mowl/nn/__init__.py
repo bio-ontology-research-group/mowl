@@ -27,4 +27,12 @@ from .el.eike.module import EIKEModule
 from .el.boxsel.module import BoxSELModule
 from .alc.e2r.module import E2RModule
 from .el.concept2box.module import Concept2BoxModule
-from .order.module import HyperbolicConesModule, ShadowConesModule, DiskEmbeddingsModule
+
+
+def __getattr__(name):
+    # Modules that are combinations of parts (mowl.representation) are loaded on first use:
+    # the representation imports from mowl.nn, so mowl.nn cannot import it at start.
+    if name in ("HyperbolicConesModule", "ShadowConesModule", "DiskEmbeddingsModule"):
+        from .order import module
+        return getattr(module, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

@@ -218,15 +218,17 @@ def bcbox(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50, variant="v
 # -- points on manifolds ----------------------------------------------------------------
 @register_method("hyperbolic_cones")
 def hyperbolic_cones(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50, K=0.1,
-                     margin=0.01, init_max_norm=0.5, tables=None):
+                     margin=0.01, init_max_norm=0.5, tables=None, seed=None):
     """Hyperbolic entailment cones (Ganea et al. 2018): a point of the Poincare ball with the
     cone of half-aperture :math:`\\psi(x)` at it, the angle against the aperture as the cost,
     a hinge of margin ``margin`` for a pair that is not ordered.
 
-    :param tables: A :class:`~mowl.nn.order.HyperbolicConesModule` to share parameters with.
+    :param tables: A module with ``K``, ``margin`` and ``class_embed`` (the direct module of
+        :mod:`mowl.baselines.nn.order`) to share parameters with.
+    :param seed: Seed of the initialisation of the points (new tables only).
     """
     if tables is None:
-        classes = ConePoints(nb_classes, embed_dim, K, init_max_norm)
+        classes = ConePoints(nb_classes, embed_dim, K, init_max_norm, seed=seed)
     else:
         classes = ConePoints(K=tables.K, table=tables.class_embed)
         margin = tables.margin
@@ -238,7 +240,7 @@ def hyperbolic_cones(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50,
 def shadow_cones(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50,
                  formulation="umbral-half-space", radius=0.05, horosphere_height=20.0,
                  gamma3=1e-4, init_scale=0.01, margin=0.01, negative_form="hinge",
-                 tables=None):
+                 tables=None, seed=None):
     """Shadow cones (Yu et al. 2024): points of the Poincare half-space or ball, the signed
     distance to the shadow cone of the parent as the cost. As published the cost of a stated
     pair is signed (negative inside the cone, ``signed=True``). The cost of a corrupted pair is
@@ -247,8 +249,12 @@ def shadow_cones(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50,
     hold; ``"energy"`` is the raw energy, the quantity Eq. 1 of the paper is written on (the
     loss of :class:`~mowl.models.ShadowCones` applies the hinge to it).
 
-    :param tables: A :class:`~mowl.nn.order.ShadowConesModule` to share parameters with.
+    :param tables: A module with the options of shadow cones and ``class_embed`` (the direct
+        module of :mod:`mowl.baselines.nn.order`) to share parameters with.
+    :param seed: Seed of the initialisation of the points (new tables only).
     """
+    if tables is None and embed_dim < 2:
+        raise ValueError("Shadow cones need embed_dim >= 2.")
     if tables is not None:
         formulation, radius = tables.formulation, tables.radius
         horosphere_height, gamma3 = tables.horosphere_height, tables.gamma3
@@ -260,7 +266,8 @@ def shadow_cones(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50,
         manifold = PoincareBall(min_norm=C.shadow_min_norm(formulation, radius),
                                 max_norm=1 - 1e-5)
     if tables is None:
-        classes = PointClasses(nb_classes, embed_dim, manifold, init_scale)
+        classes = PointClasses(nb_classes, embed_dim, manifold, init_scale, seed=seed,
+                               init="uniform")
     else:
         classes = PointClasses(manifold=manifold, table=tables.class_embed)
     measure = ShadowCone(formulation, radius, horosphere_height, gamma3, signed=True,
@@ -273,15 +280,21 @@ _DISK_SPACES = {"hyperbolic": Hyperboloid, "spherical": Sphere, "euclidean": Euc
 
 @register_method("disk_embeddings")
 def disk_embeddings(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50,
-                    geometry="hyperbolic", margin=0.01, init_scale=0.1, tables=None):
+                    geometry="hyperbolic", margin=0.01, init_scale=0.1, tables=None,
+                    seed=None):
     """Disk embeddings (Suzuki et al. 2019): a point of a hyperbolic, spherical or Euclidean
     space with a real radius, the protrusion of the child out of the parent as the cost (signed,
     as published), a hinge of margin ``margin`` for a pair that is not ordered.
 
-    :param tables: A :class:`~mowl.nn.order.DiskEmbeddingsModule` to share parameters with.
+    :param tables: A module with ``manifold``, ``margin``, ``class_embed`` and ``radius_embed``
+        (the direct module of :mod:`mowl.baselines.nn.order`) to share parameters with.
+    :param seed: Seed of the initialisation of the points (new tables only).
     """
     if tables is None:
-        classes = DiskClasses(nb_classes, embed_dim, _DISK_SPACES[geometry](), init_scale)
+        if geometry not in _DISK_SPACES:
+            raise ValueError(f"geometry must be one of {tuple(_DISK_SPACES)}.")
+        classes = DiskClasses(nb_classes, embed_dim, _DISK_SPACES[geometry](), init_scale,
+                              seed=seed)
     else:
         classes = DiskClasses(manifold=tables.manifold, table=tables.class_embed,
                               radii=tables.radius_embed)

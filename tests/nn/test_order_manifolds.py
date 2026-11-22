@@ -5,7 +5,7 @@ import torch as th
 import mowl
 mowl.init_jvm("512m")
 
-from mowl.nn.order.disks import protrusion
+from mowl.baselines.nn.order.disks import protrusion
 from mowl.nn.order.manifolds import (Euclidean, Hyperboloid, PoincareBall, Sphere,
                                      UpperHalfSpace)
 

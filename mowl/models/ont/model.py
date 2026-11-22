@@ -5,6 +5,7 @@ import logging
 import torch as th
 
 from mowl.models.hit.model import HiT, DEFAULT_CENTRI_GRID
+from mowl.representation.library.hierarchy_regions import Point
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +54,13 @@ class OnT(HiT):
         see :func:`mowl.nn.lm.hyperbolic.rotate`.
     :param role_scaling: Apply the scaling :math:`k_r` of Eq. 4 (the reference code does
         not).
+    The model is the combination of parts that the method ``ont`` defines (see
+    :class:`~mowl.models.hit.HiT` for the parts of HiT): a relation model
+    (:class:`~mowl.representation.library.hierarchy_relations.TextRotation`) and the
+    existential and conjunction losses of its geometry
+    (:class:`~mowl.representation.library.hierarchy_geometry.TextGeometry`). The reference
+    implementation that the combination is tested against is ``mowl.baselines.models.ont``.
+
     :param existential_mode: How :math:`\\exists r.D` is embedded when scoring:
         ``"text"`` (the encoding of its verbalisation; the reference evaluation's default
         "sentence" mode) or ``"role"`` (:math:`f_r(x_D)`, the "constructed" mode).
@@ -100,6 +108,10 @@ class OnT(HiT):
         self.conjunctions = []
 
     def init_module(self):
+        """The module is the combination of parts that the method ``ont`` defines
+        (:func:`mowl.representation.library.hierarchy_methods.ont`): HiT's class model and
+        measure and, unless ``use_roles`` is ``False``, a relation model that rotates the point
+        of a filler by angles computed from the text of the role."""
         from mowl.nn.lm.ont import OnTModule
         return OnTModule(self.encoder, curvature=self.curvature,
                          clustering_margin=self.clustering_margin,
@@ -191,10 +203,11 @@ class OnT(HiT):
         """Mean of :math:`L_\\prec` over the batch plus, if roles are used,
         ``existential_weight`` times the mean :math:`L_r` and ``conjunction_weight``
         times the mean :math:`L_\\sqcap` of random samples of the size of the batch."""
-        m = self.module
-        child = m.embed([t[0] for t in batch])
-        parent = m.embed([t[1] for t in batch])
-        hier = m.hierarchy_loss(child, parent, negatives).mean()
+        g = self.module
+        ball = g.class_model.manifold
+        child = g.classes([t[0] for t in batch])
+        parent = g.classes([t[1] for t in batch])
+        hier = g.hierarchy_loss(child, parent, Point(negatives, ball)).mean()
         parts = {"hierarchy": float(hier.detach())}
         loss = hier
         n = len(batch)
@@ -203,8 +216,9 @@ class OnT(HiT):
             k = len(ex)
             neg1 = negatives[th.randperm(n, device=negatives.device)[:k]]
             neg2 = negatives[th.randperm(n, device=negatives.device)[:k]]
-            l_r = m.existential_loss([e[0] for e in ex], [e[1] for e in ex],
-                                     [e[2] for e in ex], neg1, neg2).mean()
+            l_r = g.existential_loss(g.compound([e[0] for e in ex]), [e[1] for e in ex],
+                                     g.classes([e[2] for e in ex]), Point(neg1, ball),
+                                     Point(neg2, ball)).mean()
             loss = loss + self.existential_weight * l_r
             parts["existential"] = float(l_r.detach())
         if self.use_roles and self.conjunctions:
@@ -216,7 +230,8 @@ class OnT(HiT):
                     part_texts.append(o)
                     weights.append(1.0 / len(ops))
             idx = th.randint(0, n, (len(conj_texts),), device=negatives.device)
-            rows = m.hierarchy_loss(m.embed(conj_texts), m.embed(part_texts), negatives[idx])
+            rows = g.hierarchy_loss(g.compound(conj_texts), g.classes(part_texts),
+                                    Point(negatives[idx], ball)).squeeze(-1)
             w = th.tensor(weights, device=rows.device, dtype=rows.dtype)
             l_c = (w * rows).sum() / len(cj)
             loss = loss + self.conjunction_weight * l_c

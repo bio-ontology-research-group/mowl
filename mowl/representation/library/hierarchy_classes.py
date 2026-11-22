@@ -197,12 +197,14 @@ class CodedBoxes(HierarchyClasses):
 
 
 # -- points ------------------------------------------------------------------------------
-def init_points(manifold, n, dim, scale=0.1, max_norm=0.5, generator=None):
+def init_points(manifold, n, dim, scale=0.1, max_norm=0.5, generator=None, init=None):
     """New points of ``manifold`` (``dim`` is the dimension of the space; points of the
     hyperboloid have ``dim + 1`` coordinates):
 
     * Poincare ball: a random direction, norm uniform between the smallest norm the ball
-      allows and ``max_norm`` (the initialisation of the entailment cones);
+      allows and ``max_norm`` (the initialisation of the entailment cones); with
+      ``init="uniform"``: uniform in :math:`[-s, s]^n`, projected into the ball (the
+      initialisation of the shadow cones of the ball);
     * half-space: uniform in :math:`[-s, s]^n` around :math:`(0, \\dots, 0, 1)` (Nickel and
       Kiela);
     * hyperboloid: uniform in :math:`[-s, s]^n`, lifted to the hyperboloid;
@@ -211,6 +213,8 @@ def init_points(manifold, n, dim, scale=0.1, max_norm=0.5, generator=None):
     """
     def uniform():
         return (th.rand(n, dim, generator=generator) * 2 - 1) * scale
+    if isinstance(manifold, PoincareBall) and init == "uniform":
+        return manifold.project(uniform())
     if isinstance(manifold, PoincareBall):
         d = th.randn(n, dim, generator=generator)
         d = d / d.norm(dim=-1, keepdim=True)
@@ -236,7 +240,7 @@ class PointClasses(HierarchyClasses):
 
     :param manifold: A manifold of :mod:`mowl.nn.order.manifolds` (default: the Poincare
         ball).
-    :param init_scale, init_max_norm: See :func:`init_points`.
+    :param init_scale, init_max_norm, init: See :func:`init_points`.
     :param table: An existing table to use instead of a new one.
     :param seed: Seed of the initialisation (new tables only).
 
@@ -247,7 +251,7 @@ class PointClasses(HierarchyClasses):
     part = "point"
 
     def __init__(self, size=None, embed_dim=None, manifold=None, init_scale=0.1,
-                 init_max_norm=0.5, table=None, seed=None):
+                 init_max_norm=0.5, table=None, seed=None, init=None):
         super().__init__()
         self.manifold = manifold if manifold is not None else PoincareBall()
         if table is None:
@@ -255,7 +259,7 @@ class PointClasses(HierarchyClasses):
             table = nn.Embedding(size, embed_dim + isinstance(self.manifold, Hyperboloid))
             with th.no_grad():
                 table.weight.copy_(init_points(self.manifold, size, embed_dim, init_scale,
-                                               init_max_norm, gen))
+                                               init_max_norm, gen, init))
         self.centres = table
         self.size = table.num_embeddings
         self._embed_dim = table.embedding_dim - isinstance(self.manifold, Hyperboloid)
