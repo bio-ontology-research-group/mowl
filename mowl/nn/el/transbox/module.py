@@ -44,6 +44,12 @@ class TransBoxModule(_PartBuiltModule):
 
     FORMULATIONS = ("mowl", "reference")
 
+    #: With ``per_axiom_column = False`` every loss is ``(B,)``, as the hand-written module
+    #: returned them.
+    flat_forms = frozenset({"gci0", "gci1", "gci2", "gci3", "gci0_bot", "gci1_bot", "gci3_bot",
+                            "class_assertion", "object_property_assertion", "role_inclusion",
+                            "role_chain"})
+
     state_dict_aliases = {
         "class_center_embedding.weight": "class_model.centres.weight",
         "class_offset_embedding.weight": "class_model.offsets.weight",

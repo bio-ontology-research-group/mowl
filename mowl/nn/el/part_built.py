@@ -37,6 +37,11 @@ class _PartBuiltModule(ComposedGeometry):
     #: "class_model.mins.weight"}``).
     state_dict_aliases = {}
 
+    #: The forms whose loss the hand-written module returned as a flat vector ``(B,)``: with
+    #: ``per_axiom_column = False`` they still do (see
+    #: :class:`~mowl.nn.el.per_axiom_column.PerAxiomColumn`); by default every loss is a column.
+    flat_forms = frozenset()
+
     def __init__(self, built, individuals=None):
         ComposedGeometry.__init__(
             self, built.class_model, built.relation_model, built.measure, built.objective,
@@ -48,6 +53,13 @@ class _PartBuiltModule(ComposedGeometry):
 
     def get_loss_function(self, gci_name):
         return ELModule.get_loss_function(self, gci_name)
+
+    def cost(self, form, rows, neg=False):
+        out = super().cost(form, rows, neg)
+        if not self.per_axiom_column and form in self.flat_forms and out.ndim == 2 \
+                and out.shape[1] == 1:
+            out = out.reshape(-1)
+        return out
 
 
 def _rename_earlier_parameters(module, state_dict, prefix, *args):

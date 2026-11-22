@@ -1,8 +1,6 @@
-import torch.nn as nn
-
 from mowl.nn.el.part_built import _PartBuiltModule
 from mowl.representation.class_models import BoxClasses
-from mowl.representation.objectives import Objective
+from mowl.representation.objectives import FORMS, Objective
 
 
 class ELBEModule(_PartBuiltModule):
@@ -41,11 +39,19 @@ centre and offset of a class form one row of :math:`U(-1, 1)^{2n}` scaled to uni
     DELE_NEG_GCIS = frozenset({"gci0", "gci1", "gci2", "gci3",
                                "gci0_bot", "gci1_bot", "gci3_bot"})
 
+    #: With ``per_axiom_column = False`` these two return ``(B,)`` as the hand-written module did.
+    flat_forms = frozenset({"gci0_bot", "gci3_bot"})
+
     state_dict_aliases = {"class_embed.weight": "class_model.centres.weight",
                           "class_offset.weight": "class_model.offsets.weight",
                           "rel_embed.weight": "relation_model.vectors.weight",
                           "ind_embed.weight": "individual_model.centres.weight",
                           "ind_offset.weight": "individual_model.offsets.weight"}
+
+    #: ELBE has no role axioms (a translation reads them, a combination such as
+    #: ``ComposedEL(dataset, classes="box", relations="translation")`` trains on them): the
+    #: module is the published method, as the released one was.
+    role_axiom_capable = False
 
     def __init__(self, nb_ont_classes, nb_rels, nb_inds=None, embed_dim=50, margin=0.1,
                  all_negative_losses=False, epsilon=0.01, gci3_form="overlap",
@@ -61,6 +67,7 @@ centre and offset of a class form one row of :math:`U(-1, 1)^{2n}` scaled to uni
         # told their number
         individuals = BoxClasses(nb_inds, embed_dim) if nb_inds == 0 else None
         super().__init__(built, individuals)
+        self.supported_forms = frozenset(FORMS)
         self.init = init
         self.nb_ont_classes = nb_ont_classes
         self.nb_rels = nb_rels
@@ -114,6 +121,12 @@ parameter ``all_negative_losses``) and extend :attr:`neg_capable_gcis` according
         forms = frozenset(Objective.elbe().neg_forms | self.DELE_NEG_GCIS)
         self.objective.neg_forms = forms
         self.neg_capable_gcis = forms
+
+    def role_inclusion_loss(self, gci, neg=False):
+        raise NotImplementedError(self._role_axiom_error("role_inclusion"))
+
+    def role_chain_loss(self, gci, neg=False):
+        raise NotImplementedError(self._role_axiom_error("role_chain"))
 
     def _dele_neg(self, neg):
         return neg and self.all_negative_losses

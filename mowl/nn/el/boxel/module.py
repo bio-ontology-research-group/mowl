@@ -35,6 +35,11 @@ class BoxELModule(_PartBuiltModule):
     #: :class:`~mowl.training.Box2ELBaselineLosses`.
     regulariser = "global"
 
+    #: With ``per_axiom_column = False`` every loss but the two role axioms is ``(B,)``, as the
+    #: hand-written module returned them.
+    flat_forms = frozenset({"gci0", "gci1", "gci2", "gci3", "gci0_bot", "gci1_bot", "gci3_bot",
+                            "class_assertion", "object_property_assertion"})
+
     state_dict_aliases = {"min_embedding.weight": "class_model.mins.weight",
                           "delta_embedding.weight": "class_model.deltas.weight",
                           "relation_embedding.weight": "relation_model.vectors.weight",

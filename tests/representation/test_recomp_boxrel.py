@@ -20,14 +20,13 @@ from mowl.representation import (METHODS, REPRESENTATIONS, Bounds, BoxClasses, C
 from mowl.representation.library.boxrel_boxes import FixableBoxes, MinDeltaBoxes
 from mowl.representation.library.boxrel_measures import (AveragedBounds, MaskedBounds,
                                                          VolumeShare)
-from mowl.representation.library.boxrel_methods import ConditionalGeometry
 from mowl.representation.library.boxrel_objectives import (BoxSELObjective, ELKEmObjective,
                                                            TransBoxObjective, boxel_objective)
 from mowl.representation.library.boxrel_regularizers import (LocationPenalty, SizeCapPenalty,
                                                              VolumePenalty)
 from mowl.representation.library.boxrel_relations import Affine, AffineBoxes, TranslationBoxes
 from mowl.representation.objectives import Objective
-from mowl.training import NormPenalty, Regularization, SumLoss
+from mowl.training import NormPenalty, SumLoss
 from tests.datasetFactory import FamilyDataset
 
 logging.disable(logging.CRITICAL)
@@ -64,22 +63,27 @@ def build(key, dataset, **options):
     return cls(dataset, **kwargs)
 
 
-def swapped(model, **parts):
-    """The module of ``model`` with some of its parts replaced (names of the arguments of
-    :class:`~mowl.representation.ComposedGeometry`)."""
+def swapped(model, classes=None, relations=None, measure=None, objective=None,
+            regularizers=None):
+    """The module of ``model`` with some of its parts replaced (the part objects are the
+    attributes of :class:`~mowl.representation.ComposedGeometry`), so that the model keeps its
+    class and whatever the model asks of its module."""
     m = model.module
-    kwargs = dict(classes=m.class_model, relations=m.relation_model, measure=m.measure,
-                  objective=m.objective, individuals=m.individual_model,
-                  regularizers=m.regularizers)
-    kwargs.update(parts)
-    model.module = _geometry_like(m, **kwargs)
+    if classes is not None:
+        m.class_model = classes
+        m.class_embed = classes.centres
+    if relations is not None:
+        m.relation_model = relations
+        m.rel_embed = relations.vectors
+    if measure is not None:
+        m.measure = measure
+    m.measure.bind(m.relation_model)
+    if objective is not None:
+        m.objective = objective
+        m.neg_capable_gcis = frozenset(objective.neg_forms)
+    if regularizers is not None:
+        m.regularizers = tuple(regularizers)
     return model
-
-
-def _geometry_like(module, **kwargs):
-    """A geometry of the same kind as ``module`` (a conditional geometry stays one)."""
-    cls = ConditionalGeometry if hasattr(module, "conditional_loss") else ComposedGeometry
-    return cls(**kwargs)
 
 
 def train_and_evaluate(model, dataset):
@@ -126,7 +130,9 @@ def test_the_builder_of_the_method_defines_the_same_combination(key, dataset):
     assert type(built.relation_model) is type(module.relation_model)
     assert type(built.measure) is type(module.measure)
     assert type(built.objective) is type(module.objective)
-    assert built.parts == module.parts
+    # (a module of a model that was told the number of individuals has a table for them)
+    assert {k: v for k, v in built.parts.items() if k != "individuals"} == {
+        k: v for k, v in module.parts.items() if k != "individuals"}
     if key != "elkem":      # the size penalty of ELK-Em is the model's own term (reg_factor)
         assert [type(x) for x in built.regularizers] == [type(x) for x in module.regularizers]
 
@@ -205,7 +211,10 @@ def test_boxel_with_another_relation_model(dataset):
 
 
 def test_boxel_with_another_measure(dataset):
-    model = swapped(build("boxel", dataset), measure=Bounds())
+    # the volume product of C and D (the reading of C and D being disjoint) is a volume
+    # measure's; bounds read disjointness as the two boxes being apart
+    model = swapped(build("boxel", dataset), measure=Bounds(),
+                    objective=boxel_objective(0.0, gci1_bot="apart"))
     assert model.module.parts["measure"] == "bounds per coordinate"
     train_and_evaluate(model, dataset)
 
@@ -247,11 +256,11 @@ def test_elkem_with_another_objective_option_and_a_regulariser(dataset):
     train_and_evaluate(model, dataset)
 
 
-def test_elkem_with_another_training_regime(dataset):
-    model = build("elkem", dataset)
-    model.training_regime = Regularization(NormPenalty("class_embed"))
-    model.train(epochs=1)
-    assert all(th.isfinite(p).all() for p in model.module.parameters())
+def test_elkem_with_the_training_regime_of_the_authors_code(dataset):
+    from mowl.training import ELKEmCodeTraining
+    model = build("elkem", dataset, variant="reference")
+    model.training_regime = ELKEmCodeTraining(batch_size=8, k_neg=2, select=False, seed=0)
+    train_and_evaluate(model, dataset)
 
 
 # ==========================================================================================
