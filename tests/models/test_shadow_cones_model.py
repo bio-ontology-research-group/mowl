@@ -127,8 +127,43 @@ def test_umbral_cone_is_inside_the_shadow_of_the_object():
     assert wide < narrow
 
 
+def test_negative_loss_is_a_hinge_and_the_energy_is_selectable():
+    """neg=True is max(0, gamma1 - E) (non-negative, zero once pushed out); the raw
+    energy of earlier versions is negative=\"energy\"."""
+    rows = th.tensor([[0, 1], [2, 1], [3, 4]])
+    hinge = ShadowConesModule(6, 3, margin=0.3, seed=0)
+    raw = ShadowConesModule(6, 3, margin=0.3, seed=0, negative="energy")
+    energy = hinge(rows, "gci0")
+    assert th.allclose(raw(rows, "gci0", neg=True), energy)
+    out = hinge(rows, "gci0", neg=True)
+    assert th.allclose(out, th.relu(0.3 - energy))
+    assert (out >= 0).all()
+    # a negative deep inside the cone has energy < 0: old "loss" negative, new loss positive
+    inside = energy.min().detach().item()
+    assert th.relu(th.tensor(0.3 - inside)) > 0
+
+
+def test_loss_of_eq_1_is_the_same_for_both_forms():
+    for form in ("hinge", "energy"):
+        model = ShadowCones(tree_dataset(), embed_dim=3, gamma1=0.5, gamma2=0.1, seed=0,
+                            negative=form)
+        pos = th.tensor([-1.0, 0.3])
+        energy = th.tensor([0.2, 1.0, 0.0, 0.1])      # K = 2 blocks of n = 2
+        neg = energy if form == "energy" else th.relu(0.5 - energy)
+        assert model.compute_loss(pos, neg).item() == pytest.approx(
+            _eq1(pos, energy).item())
+
+
+def _eq1(pos, neg):
+    n = neg.reshape(-1, 2).t()
+    return th.stack([
+        max(pos[i], th.tensor(0.1)) + th.logsumexp(th.relu(0.5 - n[i]), 0)
+        for i in range(2)]).mean()
+
+
 def test_loss_of_eq_1():
-    model = ShadowCones(tree_dataset(), embed_dim=3, gamma1=0.5, gamma2=0.1, seed=0)
+    model = ShadowCones(tree_dataset(), embed_dim=3, gamma1=0.5, gamma2=0.1, seed=0,
+                        negative="energy")
     pos = th.tensor([-1.0, 0.3])
     neg = th.tensor([0.2, 1.0, 0.0, 0.1])         # K = 2 blocks of n = 2
     n = neg.reshape(-1, 2).t()
