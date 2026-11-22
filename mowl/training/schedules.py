@@ -221,13 +221,20 @@ class CyclicLearningRate(_Schedule):
     :param max_lr: Upper bound (default: ten times ``base_lr``).
     :param step_size_up: Epochs from the lower to the upper bound.
     :param mode: ``"triangular"``, ``"triangular2"`` or ``"exp_range"``.
+    :param range_ratio: Instead of ``base_lr``: the lower bound is ``max_lr / range_ratio``
+        (``max_lr`` is then required).
     """
 
     key = "cyclic-lr"
 
     def __init__(self, base_lr=None, max_lr=None, step_size_up=10, mode="triangular",
-                 base_optimizer=None):
+                 base_optimizer=None, range_ratio=None):
         super().__init__(base_optimizer)
+        if range_ratio is not None:
+            if base_lr is not None or max_lr is None:
+                raise ValueError("range_ratio takes max_lr and no base_lr: the lower bound "
+                                 "is max_lr / range_ratio.")
+            base_lr = max_lr / range_ratio
         self.base_lr = base_lr
         self.max_lr = max_lr
         self.step_size_up = int(step_size_up)
@@ -244,6 +251,15 @@ class CyclicLearningRate(_Schedule):
     def update(self, epoch, epochs):
         if epoch > 0:
             self.scheduler.step()
+
+
+def linear_decay_interval(high, low, epoch, epochs):
+    """The learning rates at the start and at the end of ``epoch`` (0-based) of ``epochs`` when
+    the rate falls linearly from ``high`` (before the first epoch) to ``low`` (after the last):
+    the schedule of word2vec's ``alpha``, which is set per call and not through an optimiser."""
+    start = high - (high - low) * epoch / epochs
+    end = high - (high - low) * (epoch + 1) / epochs
+    return start, end
 
 
 def validation_loss(model, gci_name=None):

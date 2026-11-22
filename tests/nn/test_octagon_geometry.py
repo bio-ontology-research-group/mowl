@@ -7,7 +7,7 @@ import torch as th
 import mowl
 mowl.init_jvm("2g")
 import mowl.datasets  # noqa: F401,E402  (import order: avoids a circular import in mowl.nn)
-from mowl.nn.el.octagon import geometry as G  # noqa: E402
+from mowl.representation.library import octagon_geometry as G  # noqa: E402
 
 LIM = 3.0
 STEP = 0.01

@@ -349,8 +349,13 @@ class ComposedGeometry(ELModule, Geometry):
         return th.device("cpu")
 
     def regularization_loss(self):
+        return self.penalty_sum(self.regularizers)
+
+    def penalty_sum(self, regularizers):
+        """The sum of the penalties of ``regularizers`` (those that have one) on this geometry,
+        zero if none does."""
         total = th.zeros((), device=self.device)
-        for regularizer in self.regularizers:
+        for regularizer in regularizers:
             term = regularizer.penalty(self)
             if term is not None:
                 total = total + term

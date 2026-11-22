@@ -155,20 +155,21 @@ class MultiELBEModule(UnionModule, ComposedGeometry):
         if objective not in _VALID_OBJECTIVES:
             raise ValueError(f"objective must be one of {_VALID_OBJECTIVES}, got "
                              f"{objective!r}")
-        rng_state = self.rng_state()
-        multielbe(
-            nb_ont_classes, nb_rels, nb_inds or 0, embed_dim=embed_dim, margin=margin,
-            n_components=n_components, component_reg=component_reg,
-            component_aggregation=component_aggregation, tau=tau,
-            diversity_reg=float(diversity_reg), reading=objective, beta=beta_f,
-            neg_weight=float(neg_weight), ind_halfwidth=halfwidth,
-            volume_reg=float(volume_reg), into=self)
-        if nb_inds == 0:
-            # the earlier module has (empty) tables of individuals when it is told there are
-            # none; so has the module it extends (ELBE)
-            self.individual_model = UnionClasses(0, embed_dim, 1)
-            self.ind_embed = self.individual_model.centres
-        self.initialise_in_released_order(rng_state)
+        def build():
+            multielbe(
+                nb_ont_classes, nb_rels, nb_inds or 0, embed_dim=embed_dim, margin=margin,
+                n_components=n_components, component_reg=component_reg,
+                component_aggregation=component_aggregation, tau=tau,
+                diversity_reg=float(diversity_reg), reading=objective, beta=beta_f,
+                neg_weight=float(neg_weight), ind_halfwidth=halfwidth,
+                volume_reg=float(volume_reg), into=self)
+            if nb_inds == 0:
+                # the earlier module has (empty) tables of individuals when it is told there
+                # are none; so has the module it extends (ELBE)
+                self.individual_model = UnionClasses(0, embed_dim, 1)
+                self.ind_embed = self.individual_model.centres
+
+        self.initialise_in_released_order(build)
         self._install_tau(tau)
         self.strict_negatives = True
         self.reading = objective

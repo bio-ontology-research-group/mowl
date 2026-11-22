@@ -34,7 +34,7 @@ from mowl.representation.measures import Bounds, RegionMeasure
 from mowl.representation.methods import DEFAULT_MEASURE, register_measure
 from mowl.representation.regions import Ball, Box, ConstructorUnavailable, CornerBox
 from mowl.representation.library.hierarchy_regions import (
-    CodedBox, ConePoint, Disk, OrderCone, Point, depth)
+    CodedBox, ConePoint, Disk, OrderCone, Point, depth, join, meet, volume)
 from mowl.representation.library.cone_regions import (
     FORMULATIONS, OriginLight, Shadow, light_for)
 
@@ -291,10 +291,6 @@ class LogVolumeRatio(_LogProbability, Bounds):
         self.dtype = dtype
 
     # -- hard boxes -------------------------------------------------------------------------
-    @staticmethod
-    def _volume(low, high):
-        return th.relu(high - low).prod(dim=-1)
-
     def conditional(self, a, b):
         """Hard boxes: ``(p, gap)``, ``(B, 1)`` each: the estimate of :math:`P(b \\mid a)`
         (the exact value for intersecting boxes, the lower bound, which is :math:`\\le 0`, for
@@ -307,13 +303,13 @@ class LogVolumeRatio(_LogProbability, Bounds):
         lo_a, hi_a = a.lower.to(self.dtype), a.upper.to(self.dtype)
         lo_b, hi_b = b.lower.to(self.dtype), b.upper.to(self.dtype)
         tiny = th.finfo(self.dtype).tiny
-        vol_a, vol_b = self._volume(lo_a, hi_a), self._volume(lo_b, hi_b)
-        lo_m, hi_m = th.maximum(lo_a, lo_b), th.minimum(hi_a, hi_b)
-        lo_j, hi_j = th.minimum(lo_a, lo_b), th.maximum(hi_a, hi_b)
+        vol_a, vol_b = volume(lo_a, hi_a), volume(lo_b, hi_b)
+        lo_m, hi_m = meet(lo_a, hi_a, lo_b, hi_b)
+        lo_j, hi_j = join(lo_a, hi_a, lo_b, hi_b)
         intersect = (hi_m > lo_m).all(dim=-1)
-        vol_j = self._volume(lo_j, hi_j).clamp(min=tiny)
+        vol_j = volume(lo_j, hi_j).clamp(min=tiny)
         bound = vol_a + vol_b - vol_j
-        joint = th.where(intersect, self._volume(lo_m, hi_m), bound)
+        joint = th.where(intersect, volume(lo_m, hi_m), bound)
         gap = th.where(intersect, th.zeros_like(vol_j), -bound / vol_j)
         return (joint / vol_a.clamp(min=tiny)).unsqueeze(-1), gap.unsqueeze(-1)
 

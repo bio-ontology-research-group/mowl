@@ -1,4 +1,11 @@
-r"""The two dissimilarities of RegD ([yang2025regd]_) for boxes and balls.
+r"""Boundary and depth dissimilarity of two regions, for boxes and for balls: the formulas of
+the registered measure ``"boundary and depth"``
+(:class:`~mowl.representation.library.ballfam_parts.BoundaryDepth`), which every combination
+that names that measure uses, whatever its objective (RegD is the one that publishes it; the
+measure is a part of the region kinds box and ball, see ``tests/representation/
+test_region_kind_formulas.py`` for it in a combination of another method).
+
+The two dissimilarities of RegD ([yang2025regd]_) for boxes and balls.
 
 RegD replaces the inclusion energy between two regions by
 
@@ -178,7 +185,3 @@ def contrastive_loss(positive_energy, negative_scores, gamma1=0.0):
     negative = th.logsumexp(negative_scores, dim=1)
     return (positive + negative).mean()
 
-
-#: The boundary dissimilarity and the energy of each region shape, by shape name.
-BOUNDARY = {"ball": ball_boundary_dissimilarity, "box": box_boundary_dissimilarity}
-ENERGY = {"ball": ball_energy, "box": box_energy}

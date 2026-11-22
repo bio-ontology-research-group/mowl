@@ -23,13 +23,19 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 
-from mowl.nn.query.base import _clamp_positive
 from mowl.representation.library.query_regions import (
     BetaRegion, SectorCone, as_state, beta_kl, from_state, to_aperture, to_axis,
     wrap_angle)
 from mowl.representation.methods import register_relation_model
 from mowl.representation.regions import Box, ConstructorUnavailable
 from mowl.representation.relation_models import Relations
+
+def positive_beta_parameters(x):
+    """The parameters of a Beta distribution from unconstrained values: ``x + 1`` clamped to
+    ``[0.05, 1e9]`` (the regularizer of the BetaE reference code, which also keeps the
+    parameters of the neural projections positive)."""
+    return th.clamp(x + 1.0, 0.05, 1e9)
+
 
 __all__ = ["PointBoxes", "BetaPoints", "ConePoints", "BetaNetwork",
            "ConeNetwork", "ConeRotation", "BoxAttentionIntersection",
@@ -139,11 +145,11 @@ class BetaPoints(_Entities):
         self.dim = self.table.embedding_dim // 2
 
     def forward(self, ids):
-        e = _clamp_positive(self.table(ids))
+        e = positive_beta_parameters(self.table(ids))
         return BetaRegion(e[..., :self.dim], e[..., self.dim:])
 
     def flat(self):
-        return _clamp_positive(self.table.weight.detach())
+        return positive_beta_parameters(self.table.weight.detach())
 
 
 class ConePoints(_Entities):
@@ -225,7 +231,7 @@ class BetaNetwork(_QueryRelations):
         x = F.relu(self.proj_in(x))
         for layer in self.proj_hidden:
             x = F.relu(layer(x))
-        x = _clamp_positive(self.proj_out(x))
+        x = positive_beta_parameters(self.proj_out(x))
         return BetaRegion(x[..., :self.dim], x[..., self.dim:])
 
 

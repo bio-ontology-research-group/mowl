@@ -136,13 +136,13 @@ class TransBoxModule(_PartBuiltModule):
         return self.class_model.centres(idx)
 
     def class_offset(self, idx):
-        return self.class_model.offsets(idx).abs()
+        return self.class_model(idx).offset
 
     def relation_center(self, idx):
         return self.relation_model.vectors(idx)
 
     def relation_offset(self, idx):
-        return self.relation_model.offsets(idx).abs()
+        return self.relation_model.box(idx).offset
 
 
 __all__ = ["TransBoxModule"]

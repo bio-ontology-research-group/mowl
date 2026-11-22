@@ -129,16 +129,24 @@ class MultiELBE(MethodRegimes, MultiELBEOptions):
         super().init_module()
         self._attach_method_regimes()
 
+    def _annealing(self):
+        """The cooling schedule of ``tau_anneal=True``, as a regime."""
+        from mowl.training.schedules import TemperatureAnnealing
+        return [TemperatureAnnealing(self.tau_start, self.tau_end)] if self.tau_anneal else []
+
     def method_regimes(self):
         """The training regimes of the reading, which a regime assigned to
         :attr:`training_regime` is added to (one of the same class replaces one of them):
         under ``"point"``, ``"mixed"`` and ``"hybrid"``
         :class:`~mowl.training.structural.SampledPointLoss` (the point terms on a sample of
-        ``points_per_epoch`` pairs, seed ``points_seed + epoch``); none under ``"axiom"``."""
+        ``points_per_epoch`` pairs, seed ``points_seed + epoch``); none under ``"axiom"``; with
+        ``tau_anneal=True`` in every reading :class:`~mowl.training.TemperatureAnnealing` from
+        ``tau_start`` to ``tau_end``."""
         from mowl.training.structural import SampledPointLoss
+        regimes = self._annealing()
         if self.objective == "axiom":
-            return []
-        return [SampledPointLoss(self.points_per_epoch, self.points_seed)]
+            return regimes
+        return regimes + [SampledPointLoss(self.points_per_epoch, self.points_seed)]
 
     def compute_loss(self, pos_scores, neg_scores=None):
         """Compute MSE loss for MultiELBE (matching ELBE).

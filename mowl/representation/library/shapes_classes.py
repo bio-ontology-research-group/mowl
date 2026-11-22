@@ -14,7 +14,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 
-from mowl.nn.el.octagon import geometry as G
+from mowl.representation.library import octagon_geometry as G
 from mowl.representation.library.shapes_prism_math import supports
 from mowl.representation.class_models import Classes
 from mowl.representation.methods import register_class_model

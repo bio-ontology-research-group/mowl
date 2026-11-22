@@ -14,13 +14,35 @@ trains on two-column rows.
 :func:`pair_codes`                      one integer per pair; the set of told pairs
 :func:`redraw_known_pairs`              draw again the corruptions that are told pairs
                                         (or reflexive), without a Python loop
+:func:`descendant_fractions`            the share of the classes below each class (the
+                                        unary marginal of the box lattice)
 ======================================  ===============================================
 """
 
 import numpy as np
 import torch as th
 
-__all__ = ["named_pair_rows", "pair_codes", "redraw_known_pairs"]
+__all__ = ["named_pair_rows", "pair_codes", "redraw_known_pairs", "descendant_fractions"]
+
+
+def descendant_fractions(pairs, n):
+    """For each of the ``n`` classes the number of its descendants (itself included) in the
+    taxonomy given by the rows ``(sub, sup)`` of ``pairs``, divided by ``n``."""
+    children = [[] for _ in range(n)]
+    for sub, sup in pairs:
+        if sub != sup:
+            children[sup].append(sub)
+
+    def descendants(root):
+        seen, stack = {root}, [root]
+        while stack:
+            for c in children[stack.pop()]:
+                if c not in seen:
+                    seen.add(c)
+                    stack.append(c)
+        return seen
+    counts = np.array([len(descendants(i)) for i in range(n)])
+    return counts / n
 
 
 def named_pair_rows(rows, n_named, distinct=False, exclude_first=None, device=None):

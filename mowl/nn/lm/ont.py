@@ -69,9 +69,7 @@ class OnTModule(HiTModule):
         x_exists, x_filler = self.embed(exists), self.embed(filler)
         image = self.role_image(x_filler, roles)
         a, b, n1, n2 = self._regions(x_exists, image, negative_1, negative_2)
-        forward = self.hierarchy_loss(a, b, n1)
-        backward = self.hierarchy_loss(b, a, n2)
-        return (0.5 * (forward + backward)).squeeze(-1)
+        return self.mutual_hierarchy_loss(a, b, n1, n2).squeeze(-1)
 
     def conjunction_loss(self, conjunction, conjuncts, negatives):
         """:math:`L_\\sqcap` (Eq. 7). With regions it is

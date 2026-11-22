@@ -12,15 +12,15 @@ the models take the best branch of the disjunctive normal form
 import torch as th
 import torch.nn as nn
 
+from mowl.representation.library.query_parts import (  # noqa: F401
+    positive_beta_parameters as _clamp_positive)  # the name the baselines import
+from mowl.training.initialisation import margin_embedding_range
+
 __all__ = ["QueryGeometry", "UnsupportedOperator"]
 
 
 class UnsupportedOperator(ValueError):
     """The geometry has no such operator (Query2Box has no negation)."""
-
-
-def _clamp_positive(x):
-    return th.clamp(x + 1.0, 0.05, 1e9)
 
 
 class QueryGeometry(nn.Module):
@@ -43,7 +43,7 @@ class QueryGeometry(nn.Module):
         self.dim = dim
         self.register_buffer("gamma", th.tensor(float(gamma)))
         #: Range of the uniform initialisation (both reference codes).
-        self.embedding_range = (float(gamma) + 2.0) / dim
+        self.embedding_range = margin_embedding_range(gamma, dim)
 
     # -- to be provided -----------------------------------------------------------------
     def anchor(self, entity_ids):

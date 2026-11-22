@@ -16,7 +16,6 @@ through :meth:`QueryEmbeddingModel.score_query`, and the rank-based regimes thro
 :mod:`mowl.nn.query.expression`.
 """
 
-import math
 
 import numpy as np
 import torch as th
@@ -31,6 +30,7 @@ from mowl.representation.library.query_objective import QueryObjective
 from mowl.representation.methods import METHODS
 
 from mowl.training.loop import RegimeTrained
+from mowl.training.losses import collapsed_to_chance
 from mowl.training.query_sampler import UpdateStream
 from mowl.training.regime import SCHEDULE_HOOKS  # noqa: E402
 
@@ -293,7 +293,7 @@ class QueryEmbeddingModel(RegimeTrained, Model):
         self.loss_history.append(mean_loss)
 
     def finish_training(self):
-        if self.loss_history and abs(self.loss_history[-1] - math.log(2)) < 0.02:
+        if self.loss_history and collapsed_to_chance(self.loss_history[-1]):
             import warnings
             warnings.warn(
                 f"{type(self).__name__}: the loss is log 2, i.e. every score is 0 and the "

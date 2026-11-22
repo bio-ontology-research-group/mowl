@@ -258,35 +258,6 @@ class MultiELBEOptions(EmbeddingELModel):
             return {}
         return super().get_negative_sampling_config()
 
-    def on_epoch_start(self, epoch: int, epochs: int) -> None:
-        """Update ``self.module.tau`` according to the geometric annealing schedule when ``tau_anneal=True``.
-
-        Guarantees:
-
-        - When ``tau_anneal=True`` and ``epochs > 1``, sets
-          ``module.tau = tau_start * (tau_end / tau_start) ** (epoch / (epochs - 1))``
-          so epoch ``0`` uses ``tau_start`` and epoch ``epochs - 1`` uses ``tau_end``.
-        - ``module.tau`` is updated in-place as a registered buffer and saved in
-          ``module.state_dict()``.
-        - When ``tau_anneal=False``, leaves ``module.tau`` unchanged.
-
-        Non-guarantees:
-
-        - When ``epochs <= 1`` and ``tau_anneal=True``, ``module.tau`` remains ``tau_start``.
-        - The annealing schedule is indexed by the local ``epoch`` counter of each
-          :meth:`train` call and therefore restarts from ``tau_start`` at every
-          :meth:`train` invocation.
-        """
-        if self.tau_anneal:
-            if epochs > 1:
-                tau = self.tau_start * (
-                    (self.tau_end / self.tau_start) ** (epoch / (epochs - 1))
-                )
-            else:
-                tau = self.tau_start
-            self.tau = float(tau)
-            self.module.tau = float(tau)
-
     def get_regularization_loss(self):
         """Return module regularisation loss plus weighted anchor loss when active."""
         loss = super().get_regularization_loss()

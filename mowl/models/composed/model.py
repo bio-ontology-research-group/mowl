@@ -9,6 +9,7 @@ from mowl.nn.el.elmodule import ELModule
 from mowl.representation import methods as M
 from mowl.representation.objectives import Objective
 from mowl.representation.swap import NO_PART, build_method, swap
+from mowl.training.losses import ranking_hinge_loss
 
 
 #: Where the methods that are not trained on axioms are trained.
@@ -247,13 +248,7 @@ class ComposedEL(EmbeddingELModel):
         ranking = getattr(getattr(self.module, "objective", None), "ranking", None)
         form = getattr(self.module, "last_form", None)
         if ranking and neg_scores is not None and form in ranking:
-            pos = pos_scores.reshape(-1)
-            neg = neg_scores.reshape(-1)
-            if neg.numel() % pos.numel():
-                raise ValueError("The ranking loss needs a whole number of negatives per "
-                                 "positive.")
-            neg = neg.reshape(-1, pos.numel())
-            return th.relu(pos.unsqueeze(0) - neg).mean()
+            return ranking_hinge_loss(pos_scores, neg_scores)
         return super().compute_loss(pos_scores, neg_scores)
 
     def after_optimizer_step(self):

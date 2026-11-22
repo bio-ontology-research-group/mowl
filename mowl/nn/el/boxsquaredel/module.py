@@ -61,11 +61,10 @@ forms (minimal radius / offset norm of a satisfiable class). Defaults to ``0.01`
 
     def __init__(self, nb_ont_classes, nb_rels, nb_inds=None, embed_dim=50, gamma=0, delta=2,
                  reg_factor=0.05, all_negative_losses=False, epsilon=0.01):
-        rng_state = self.rng_state()
-        box2el(nb_ont_classes, nb_rels, nb_inds or 0, embed_dim=embed_dim, margin=gamma,
-               delta=delta, reg_factor=reg_factor, all_negatives=all_negative_losses,
-               epsilon=epsilon, into=self)
-        self.initialise_in_released_order(rng_state)
+        self.initialise_in_released_order(lambda: box2el(
+            nb_ont_classes, nb_rels, nb_inds or 0, embed_dim=embed_dim, margin=gamma,
+            delta=delta, reg_factor=reg_factor, all_negatives=all_negative_losses,
+            epsilon=epsilon, into=self))
         self.nb_ont_classes = nb_ont_classes
         self.nb_rels = nb_rels
         self.nb_inds = nb_inds

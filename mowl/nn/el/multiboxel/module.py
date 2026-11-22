@@ -260,8 +260,7 @@ class MultiBoxELModule(UnionModule, StructuralGeometry):
             raise ValueError(f"reseed_every must be an int >= 0, got {reseed_every!r}")
         _check_reseed(bot_agg, witness_weight, reseed_mode, reseed_size, reseed_batch)
         structural = objective == "structural"
-        rng_state = self.rng_state()
-        multiboxel(
+        self.initialise_in_released_order(lambda: multiboxel(
             nb_ont_classes, nb_rels, nb_inds or 0, embed_dim=embed_dim,
             margin=margin if structural else gamma, n_components=n_components, delta=delta,
             reg_factor=reg_factor, component_reg=component_reg,
@@ -272,8 +271,7 @@ class MultiBoxELModule(UnionModule, StructuralGeometry):
             existence_weight=existence_weight, size_reg=size_reg, bot_agg=bot_agg,
             witness_weight=float(witness_weight),
             size_reg_without_tables=size_reg_without_tables,
-            structural_definitions=structural_definitions, into=self)
-        self.initialise_in_released_order(rng_state)
+            structural_definitions=structural_definitions, into=self))
         self._install_tau(tau)
         self.strict_negatives = True
         self.reading = objective
@@ -433,12 +431,7 @@ class MultiBoxELModule(UnionModule, StructuralGeometry):
         counts in :meth:`~mowl.representation.ComposedGeometry.regularization_loss`; this
         module's :meth:`regularization_loss` is the sum of the other regularisers (the bump
         norm and the components), as it was, and the model adds the two."""
-        total = th.zeros((), device=self.device)
-        for penalty in self._structural_penalties():
-            term = penalty.penalty(self)
-            if term is not None:
-                total = total + term
-        return total
+        return self.penalty_sum(self._structural_penalties())
 
     def extra_penalties(self):
         """The penalties of the structural reading (existence, size, witness): the
@@ -451,12 +444,7 @@ class MultiBoxELModule(UnionModule, StructuralGeometry):
         return tuple(r for r in self.regularizers if r not in base)
 
     def regularization_loss(self):
-        total = th.zeros((), device=self.device)
-        for regularizer in self._regularizer_list():
-            term = regularizer.penalty(self)
-            if term is not None:
-                total = total + term
-        return total
+        return self.penalty_sum(self._regularizer_list())
 
     def reseed(self, rng):
         """Relocate dead or idle primitive components under ``no_grad``

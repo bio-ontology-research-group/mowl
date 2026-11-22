@@ -1,13 +1,17 @@
 r"""The octagon measure: inclusion, emptiness, disjointness and distance of octagon products.
 
-The formulas behind :class:`~mowl.representation.library.shapes_measures.OctagonBounds`
-(the baseline :mod:`mowl.baselines.nn.el.octagon.losses` has its own copy of them; the two are
-kept apart on purpose, so that the comparison of the baseline with the combination of parts
-proves something).
+The formulas of the registered measure ``"octagon bounds"`` of the region kind octagon product
+(:class:`~mowl.representation.library.shapes_measures.OctagonBounds`, the default measure of
+:class:`~mowl.representation.library.shapes_regions.OctagonProduct`), over the region operations
+of :mod:`mowl.representation.library.octagon_geometry`. Any combination with octagon classes
+uses them; on boxes written as octagons (:func:`~mowl.representation.library.octagon_geometry.from_box`)
+they give ELBE's inclusion loss on the axis-parallel facets, which
+``tests/representation/test_region_kind_formulas.py`` checks. (The baseline
+:mod:`mowl.baselines.nn.el.octagon.losses` has its own copy of the formulas.)
 
 Every concept is a product of 2-D octagons, given by a bound tensor ``h`` of shape
 ``(B, P, 8)`` (``P = d / 2`` coordinate pairs, eight bounds per pair, see
-:mod:`mowl.nn.el.octagon.geometry`). Roles are translations :math:`t_R \in \mathbb{R}^d`
+:mod:`mowl.representation.library.octagon_geometry`). Roles are translations :math:`t_R \in \mathbb{R}^d`
 and individuals are points.
 
 Every loss below is *exact*: at the stated margin, it is zero if and only if the stated
@@ -40,7 +44,7 @@ from __future__ import annotations
 
 import torch as th
 
-from mowl.nn.el.octagon import geometry as G
+from mowl.representation.library import octagon_geometry as G
 
 
 def _axis_max(v: th.Tensor) -> th.Tensor:
@@ -63,7 +67,7 @@ def inclusion_loss(h_sub: th.Tensor, h_sup: th.Tensor, margin: float = 0.0) -> t
     :math:`C` and :math:`m = 0` this is exactly :math:`C \subseteq D` (support-function
     criterion: :math:`T(h_C)_k = \max_{p \in C} n_k \cdot p`).
 
-    If both are boxes (:func:`~mowl.nn.el.octagon.geometry.from_box`), the four entries of a
+    If both are boxes (:func:`~mowl.representation.library.octagon_geometry.from_box`), the four entries of a
     factor are :math:`(a, b, \delta_1, \delta_3)` where :math:`a, b` are ELBE's
     per-coordinate terms :math:`\mathrm{relu}(|c_C - c_D| + o_C - o_D + m)` of the two
     coordinates and :math:`\delta_1, \delta_3 \le a + b` are the diagonal terms. Hence
@@ -93,7 +97,7 @@ def disjoint_loss(h1: th.Tensor, h2: th.Tensor, margin: float = 0.0) -> th.Tenso
     r"""Loss of :math:`C \cap D = \emptyset`: :math:`\mathrm{relu}(s + m)`.
 
     :math:`s` is the smallest width of :math:`C \cap D` over all factors and facet axes
-    (:func:`~mowl.nn.el.octagon.geometry.product_emptiness_slack` of
+    (:func:`~mowl.representation.library.octagon_geometry.product_emptiness_slack` of
     :math:`\min(h_C, h_D)`). A product is empty iff one of its factors is, and a factor is
     empty iff one of its widths is negative, so the loss is zero iff :math:`s \le -m`:
     for :math:`m > 0` this implies :math:`C \cap D = \emptyset` (with a gap); for

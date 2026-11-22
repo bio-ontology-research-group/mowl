@@ -1,26 +1,9 @@
 r"""Box lattice embeddings (Vilnis et al., ACL 2018) over the class taxonomy, built from
 parts."""
-import torch as th
-
 from mowl.representation.geometry import ComposedGeometry
 from mowl.representation.library.hierarchy_methods import box_lattice
+from mowl.representation.library.hierarchy_regions import join, meet, volume  # noqa: F401
 from mowl.representation.library.hierarchy_modules import FlatLossOption, adopt
-
-
-def meet(min_a, max_a, min_b, max_b):
-    """Meet of two boxes: the intersection box ``(min, max)``. Components with
-    ``max < min`` mean that the boxes are disjoint (the meet is the bottom element)."""
-    return th.maximum(min_a, min_b), th.minimum(max_a, max_b)
-
-
-def join(min_a, max_a, min_b, max_b):
-    """Join of two boxes: the smallest enclosing box."""
-    return th.minimum(min_a, min_b), th.maximum(max_a, max_b)
-
-
-def volume(mn, mx):
-    """Volume (product of side lengths) of a box, 0 if it is empty."""
-    return th.relu(mx - mn).prod(dim=-1)
 
 
 class BoxLatticeModule(FlatLossOption, ComposedGeometry):

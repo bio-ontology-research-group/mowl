@@ -9,8 +9,8 @@ hand-written modules are kept for comparison in :mod:`mowl.baselines.nn.el.regd`
 from contextlib import contextmanager
 
 from mowl.nn.el.elem.module import ELEmModule, _PartBuiltModule
-from mowl.representation.library import ballfam_energy as D
 from mowl.representation.methods import METHODS
+from mowl.representation.regions import Ball, Box
 
 __all__ = ["RegDELBEModule", "RegDELEmModule"]
 
@@ -125,17 +125,25 @@ class _RegDInterface:
             return region.centre, region.offset
         return region.centre, region.radius.squeeze(-1)
 
+    def _regions(self, parent_center, parent_size, child_center, child_size):
+        """The child and the parent as regions of the kind of this module."""
+        if self._region_class is Ball:
+            return (Ball(child_center, child_size.unsqueeze(-1)),
+                    Ball(parent_center, parent_size.unsqueeze(-1)))
+        return Box(child_center, child_size), Box(parent_center, parent_size)
+
     def energy(self, parent_center, parent_size, child_center, child_size):
-        """RegD energy of child regions inside parent regions, shape ``(n, 1)``."""
-        return D.ENERGY[self._shape](parent_center, parent_size, child_center, child_size,
-                                     lamda=self.lamda, p=self.p,
-                                     depth_on_containment=self.depth_on_containment
-                                     ).unsqueeze(-1)
+        """RegD energy of child regions inside parent regions, shape ``(n, 1)``: the
+        :meth:`~mowl.representation.library.ballfam_parts.BoundaryDepth.energy` of the measure."""
+        child, parent = self._regions(parent_center, parent_size, child_center, child_size)
+        return self.measure.energy(child, parent)
 
     def boundary(self, parent_center, parent_size, child_center, child_size):
-        """Boundary dissimilarity of child regions in parent regions, shape ``(n, 1)``."""
-        return D.BOUNDARY[self._shape](parent_center, parent_size, child_center,
-                                       child_size).unsqueeze(-1)
+        """Boundary dissimilarity of child regions in parent regions, shape ``(n, 1)``: the
+        :meth:`~mowl.representation.library.ballfam_parts.BoundaryDepth.boundary` of the
+        measure."""
+        child, parent = self._regions(parent_center, parent_size, child_center, child_size)
+        return self.measure.boundary(child, parent)
 
 
 class RegDELBEModule(_RegDInterface, _PartBuiltModule):
@@ -176,7 +184,7 @@ class RegDELBEModule(_RegDInterface, _PartBuiltModule):
 
     regd_gcis = frozenset({"gci0", "gci1", "gci2", "gci3"})
     margin_semantics = "strict"
-    _shape = "box"  # key into ``ballfam_energy.ENERGY`` / ``BOUNDARY``
+    _region_class = Box
 
     def __init__(self, nb_ont_classes, nb_rels, nb_inds=None, embed_dim=50, margin=0.1,
                  lamda=1.0, p=1, gamma1=0.0, gamma2=0.0, eps=1e-4,
@@ -239,7 +247,7 @@ class RegDELEmModule(_RegDInterface, ELEmModule):
     """
 
     regd_gcis = frozenset({"gci0", "gci2", "gci3"})
-    _shape = "ball"  # key into ``ballfam_energy.ENERGY`` / ``BOUNDARY``
+    _region_class = Ball
 
     def __init__(self, nb_ont_classes, nb_rels, nb_inds=None, embed_dim=50, margin=0.1,
                  reg_norm=1, lamda=1.0, p=2, gamma1=0.0, gamma2=0.0, eps=1e-4,
