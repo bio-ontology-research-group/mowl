@@ -110,8 +110,8 @@ def test_canonical_mixture_is_made_of_the_parts_the_card_names(dataset):
     assert type(model.training.role_negatives) is mtr.UniformTails
     assert g.parts == {"classes": "fixed by reasoning", "relations": "fixed by reasoning",
                        "individuals": "distribution", "measure": "exact",
-                       "conjunction": "exact", "existential": "exact", "negation": "exact",
-                       "disjunction": "exact", "source": "canonical completion",
+                       "conjunction": "exact", "existential": "exact",
+                       "source": "canonical completion",
                        "reading": "membership"}
     # only the individual model has parameters
     assert {n for n, _ in g.named_parameters()} == {"individual_model.U", "individual_model.V",

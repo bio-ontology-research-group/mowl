@@ -74,12 +74,24 @@ class MixtureGeometry(ComposedGeometry):
                  class_negatives=None, role_negatives=None):
         super().__init__(classes, relations, measure, objective, individuals=individuals,
                          regularizers=regularizers, supported_forms=FORMS)
+        self.margin_semantics = None
         self.structure = structure
         self.source, self.reading = source, reading
         from mowl.representation.library.mixture_training import (NonEntailedClasses,
                                                                    UniformTails)
         self.class_negatives = class_negatives or NonEntailedClasses()
         self.role_negatives = role_negatives or UniformTails()
+
+    # -- no margin ---------------------------------------------------------------------------
+    @property
+    def margin(self):
+        """``None``: the probability-mass measure has no margin."""
+        return None
+
+    @margin.setter
+    def margin(self, value):
+        if value:
+            raise ValueError("The canonical mixture has no margin.")
 
     # -- the tables of the method --------------------------------------------------------------
     @property

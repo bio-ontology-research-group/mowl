@@ -1,11 +1,12 @@
 """CanonicalMixtureModule: the canonical-element mixture, built from parts."""
+from mowl.representation.library.hierarchy_modules import FlatLossOption
 from mowl.representation.library.mixture_individuals import MAX_SUPPORT_ENTRIES
 from mowl.representation.library.mixture_methods import MixtureGeometry, canonical_mixture
 
 __all__ = ["CanonicalMixtureModule", "MAX_SUPPORT_ENTRIES"]
 
 
-class CanonicalMixtureModule(MixtureGeometry):
+class CanonicalMixtureModule(FlatLossOption, MixtureGeometry):
     """The canonical-element mixture: individuals as distributions over the elements of the
     canonical model, the combination that
     :func:`mowl.representation.library.mixture_methods.canonical_mixture` names (read
@@ -30,6 +31,10 @@ class CanonicalMixtureModule(MixtureGeometry):
         H(p_a)` (:meth:`regularization_loss` of a batch of individuals).
     :param init_self_mass: Initial mass :math:`\\alpha` of an individual's own element.
     :param training_class_assertions: ``(N, 2)`` rows, checked to be entailed by ``structure``.
+
+    As every :class:`~mowl.nn.ELModule`, a form it does not read (the role axioms) raises
+    :class:`NotImplementedError`, and ``per_axiom_column = False`` gives the flat ``(B,)``
+    losses of the earlier module.
     """
 
     def __init__(self, structure, rank=50, entropy_reg=0.0, init_self_mass=0.9,
@@ -46,6 +51,7 @@ class CanonicalMixtureModule(MixtureGeometry):
             structure=structure, entropy_reg=entropy_reg, init_self_mass=init_self_mass,
             training_class_assertions=training_class_assertions, geometry=_Parts)
         MixtureGeometry.__init__(self, *built.args, **built.kwargs)
+        self.margin_semantics = None
 
 
 class _Parts:

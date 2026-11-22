@@ -214,7 +214,9 @@ class MembershipClasses(Classes):
 
     @property
     def extra_parts(self):
-        return {"existential": "exact", "negation": "exact", "disjunction": "exact"}
+        # complement and union are set operations within the support, not the negation and
+        # disjunction of a logic the canonical model is a model of: they are not named
+        return {"existential": "exact"}
 
     def forward(self, ids, detach_size=False):
         return SparseElementSets(self.table, ids=ids.to(self.table.keys.device))
