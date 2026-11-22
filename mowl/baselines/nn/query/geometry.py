@@ -25,7 +25,7 @@ import torch as th
 import torch.nn as nn
 import torch.nn.functional as F
 
-from mowl.nn.query.base import QueryGeometry, UnsupportedOperator, _clamp_positive
+from mowl.baselines.nn.query.base import QueryGeometry, UnsupportedOperator, _clamp_positive
 
 pi = math.pi
 

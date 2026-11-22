@@ -1,13 +1,13 @@
 r"""The direct implementation of E2R: its own loss assembly and Adam loop in the model class.
 Kept for the comparison in ``tests/baselines``; the extraction of the axioms and the scoring are
-shared (:mod:`mowl.models.e2r.common`)."""
+in the frozen base class (:mod:`mowl.baselines.models.e2r.base`)."""
 import math
 
 import torch as th
 
 from mowl.baselines.nn.alc.e2r import losses as L
 from mowl.baselines.nn.alc.e2r.module import AXIOM_KINDS, E2RModule
-from mowl.models.e2r.common import E2RBase, _THING, _NOTHING  # noqa: F401
+from mowl.baselines.models.e2r.base import E2RBase, _THING, _NOTHING  # noqa: F401
 
 
 class E2R(E2RBase):

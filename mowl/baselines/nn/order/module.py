@@ -10,7 +10,7 @@ import torch.nn as nn
 
 from mowl.nn.el.elmodule import ELModule
 from mowl.baselines.nn.order import cones as C
-from mowl.nn.order.manifolds import (Euclidean, Hyperboloid, PoincareBall, Sphere,
+from mowl.baselines.nn.order.manifolds import (Euclidean, Hyperboloid, PoincareBall, Sphere,
                                      UpperHalfSpace)
 from mowl.baselines.nn.order.disks import protrusion
 

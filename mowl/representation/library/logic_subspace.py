@@ -162,6 +162,82 @@ class E2RGeometry(Geometry):
     def num_individuals(self):
         return self.module.e_embedding.num_embeddings
 
+    # -- reasoning and scoring on a trained embedding -------------------------------------
+    def _device(self):
+        return next(self.parameters()).device
+
+    def indicator(self, tree, binary=False):
+        """Indicator vector of a class expression given as a tree of class indices: ``("class",
+        index)``, ``("and", [trees])`` (product, :math:`\sqcap`), ``("or", [trees])`` (maximum,
+        :math:`\sqcup`) and ``("not", tree)`` (complement in the real half) -- Sec. 4,
+        "Membership" task.
+
+        :param binary: Round the indicators of the named classes at 0.5 first.
+        """
+        kind, arg = tree
+        if kind == "class":
+            y = self.concept(th.tensor([arg], device=self._device()))[0].detach()
+            return (y > 0.5).to(y) if binary else y
+        if kind == "and":
+            return _algebra.meet(*[self.indicator(t, binary) for t in arg])
+        if kind == "or":
+            return _algebra.join(*[self.indicator(t, binary) for t in arg])
+        if kind == "not":
+            y = self.indicator(arg, binary)
+            out = th.zeros_like(y)
+            out[:self.dim] = 1 - y[:self.dim]
+            return out
+        raise NotImplementedError(f"A subspace geometry has no indicator for {kind!r}.")
+
+    def membership_scores(self, y, individual_ids):
+        """Residual length :math:`\|\overline{y} \odot x_a\|` of the individuals
+        ``individual_ids`` (a list of indices) for the indicator ``y`` (lower is better;
+        Sec. 5), a numpy array."""
+        idx = th.as_tensor(individual_ids, dtype=th.long, device=self._device())
+        with th.no_grad():
+            x = self.entity(idx)
+            return self.membership_residual(y.unsqueeze(0), x).cpu().numpy()
+
+    def role_membership_scores(self, relation_id, subject_ids, object_ids):
+        """Residual lengths of the pair vectors of the individuals for the relation
+        ``relation_id`` (lower is better), a numpy array."""
+        dev = self._device()
+        with th.no_grad():
+            z = self.relation(th.tensor([relation_id], device=dev))
+            s = th.as_tensor(subject_ids, dtype=th.long, device=dev)
+            o = th.as_tensor(object_ids, dtype=th.long, device=dev)
+            xpq = _algebra.pair_vector(self.entity(s), self.entity(o), self.dim)
+            return self.membership_residual(z, xpq).cpu().numpy()
+
+    def inclusion_cost(self, y_sub, y_sup):
+        """Inclusion loss of eq. (5) of two indicators (``0`` iff the subspace of the first
+        lies in that of the second for 0/1 indicators)."""
+        return float(_algebra.inclusion_loss(y_sub, y_sup))
+
+    @th.no_grad()
+    def axiom_costs(self, kind, rows):
+        """Cost of every candidate axiom in ``rows`` (model indices), lower is more
+        plausible: the inclusion loss of eq. (5) for ``gci0`` rows ``[C, D]`` and the
+        residual length of Sec. 5 for ``class_assertion`` rows ``[a, C]``."""
+        rows = rows.to(self._device())
+        if kind == "gci0":
+            return _algebra.inclusion_loss(self.concept(rows[:, 0]), self.concept(rows[:, 1]))
+        if kind == "class_assertion":
+            return self.membership_residual(self.concept(rows[:, 1]), self.entity(rows[:, 0]))
+        from mowl.evaluation.model_scoring import UnsupportedAxiomForm
+        raise UnsupportedAxiomForm(f"A subspace geometry has no score for {kind!r} axioms.")
+
+    def discretise(self, threshold=0.5):
+        """0/1 indicators of all concepts and relations and the entity vectors, as numpy
+        arrays ``(concepts, relations, entities)`` in index order."""
+        with th.no_grad():
+            c = self.concept(th.arange(self.c_embedding.weight.shape[0],
+                                       device=self._device()))
+            r = self.r_embedding.weight
+            return ((c > threshold).cpu().numpy().astype(int),
+                    (r > threshold).cpu().numpy().astype(int),
+                    self.e_embedding.weight.detach().cpu().numpy())
+
     @property
     def parts(self):
         return {"classes": "subspace", "relations": "subspace", "individuals": "point",
@@ -613,6 +689,82 @@ class SubspaceGeometry(ComposedGeometry, ALCModule):
         """The residual length :math:`\\|\\overline{y} \\odot x\\|` (non-fitment score,
         Sec. 5; lower is better)."""
         return self.measure.residual(y, x)
+
+    # -- reasoning and scoring on a trained embedding -------------------------------------
+    def _device(self):
+        return next(self.parameters()).device
+
+    def indicator(self, tree, binary=False):
+        """Indicator vector of a class expression given as a tree of class indices: ``("class",
+        index)``, ``("and", [trees])`` (product, :math:`\sqcap`), ``("or", [trees])`` (maximum,
+        :math:`\sqcup`) and ``("not", tree)`` (complement in the real half) -- Sec. 4,
+        "Membership" task.
+
+        :param binary: Round the indicators of the named classes at 0.5 first.
+        """
+        kind, arg = tree
+        if kind == "class":
+            y = self.concept(th.tensor([arg], device=self._device()))[0].detach()
+            return (y > 0.5).to(y) if binary else y
+        if kind == "and":
+            return _algebra.meet(*[self.indicator(t, binary) for t in arg])
+        if kind == "or":
+            return _algebra.join(*[self.indicator(t, binary) for t in arg])
+        if kind == "not":
+            y = self.indicator(arg, binary)
+            out = th.zeros_like(y)
+            out[:self.dim] = 1 - y[:self.dim]
+            return out
+        raise NotImplementedError(f"A subspace geometry has no indicator for {kind!r}.")
+
+    def membership_scores(self, y, individual_ids):
+        """Residual length :math:`\|\overline{y} \odot x_a\|` of the individuals
+        ``individual_ids`` (a list of indices) for the indicator ``y`` (lower is better;
+        Sec. 5), a numpy array."""
+        idx = th.as_tensor(individual_ids, dtype=th.long, device=self._device())
+        with th.no_grad():
+            x = self.entity(idx)
+            return self.membership_residual(y.unsqueeze(0), x).cpu().numpy()
+
+    def role_membership_scores(self, relation_id, subject_ids, object_ids):
+        """Residual lengths of the pair vectors of the individuals for the relation
+        ``relation_id`` (lower is better), a numpy array."""
+        dev = self._device()
+        with th.no_grad():
+            z = self.relation(th.tensor([relation_id], device=dev))
+            s = th.as_tensor(subject_ids, dtype=th.long, device=dev)
+            o = th.as_tensor(object_ids, dtype=th.long, device=dev)
+            xpq = _algebra.pair_vector(self.entity(s), self.entity(o), self.dim)
+            return self.membership_residual(z, xpq).cpu().numpy()
+
+    def inclusion_cost(self, y_sub, y_sup):
+        """Inclusion loss of eq. (5) of two indicators (``0`` iff the subspace of the first
+        lies in that of the second for 0/1 indicators)."""
+        return float(_algebra.inclusion_loss(y_sub, y_sup))
+
+    @th.no_grad()
+    def axiom_costs(self, kind, rows):
+        """Cost of every candidate axiom in ``rows`` (model indices), lower is more
+        plausible: the inclusion loss of eq. (5) for ``gci0`` rows ``[C, D]`` and the
+        residual length of Sec. 5 for ``class_assertion`` rows ``[a, C]``."""
+        rows = rows.to(self._device())
+        if kind == "gci0":
+            return _algebra.inclusion_loss(self.concept(rows[:, 0]), self.concept(rows[:, 1]))
+        if kind == "class_assertion":
+            return self.membership_residual(self.concept(rows[:, 1]), self.entity(rows[:, 0]))
+        from mowl.evaluation.model_scoring import UnsupportedAxiomForm
+        raise UnsupportedAxiomForm(f"A subspace geometry has no score for {kind!r} axioms.")
+
+    def discretise(self, threshold=0.5):
+        """0/1 indicators of all concepts and relations and the entity vectors, as numpy
+        arrays ``(concepts, relations, entities)`` in index order."""
+        with th.no_grad():
+            c = self.concept(th.arange(self.c_embedding.weight.shape[0],
+                                       device=self._device()))
+            r = self.r_embedding.weight
+            return ((c > threshold).cpu().numpy().astype(int),
+                    (r > threshold).cpu().numpy().astype(int),
+                    self.e_embedding.weight.detach().cpu().numpy())
 
     @property
     def parts(self):

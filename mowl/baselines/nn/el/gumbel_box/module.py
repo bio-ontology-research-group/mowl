@@ -4,7 +4,7 @@ import math
 import torch as th
 
 from mowl.baselines.nn.el.box_lattice.module import UnitCubeBoxModule
-from mowl.nn.numerics import log_scaled_softplus, neg_log1mexp
+from mowl.baselines.nn.numerics import log_scaled_softplus, neg_log1mexp
 
 EULER_GAMMA = 0.5772156649015329
 
