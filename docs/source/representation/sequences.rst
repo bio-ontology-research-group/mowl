@@ -41,8 +41,11 @@ exchanged on its own (:mod:`mowl.representation.sequence`):
        on the two vectors, trained on the training axioms for each relation, or the
        similarity of the two entities.
 
-The parts are in :mod:`mowl.representation.library.walks_views` and
-:mod:`mowl.representation.library.walks_encoders`. The published methods are combinations
+The parts are in :mod:`mowl.representation.library.walks_views`,
+:mod:`mowl.representation.library.walks_encoders` and, for the projection, in
+:mod:`mowl.representation.library.graph_projection`: the projection view is the one part that
+the walk methods and the knowledge graph embeddings of a projection (:doc:`../methods/kg_region`)
+both read their graph through. The published methods are combinations
 of them (:mod:`mowl.representation.library.walks_methods`), and
 :class:`~mowl.models.ComposedSequenceModel` trains any combination.
 

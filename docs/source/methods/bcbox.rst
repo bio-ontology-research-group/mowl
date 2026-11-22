@@ -199,3 +199,12 @@ Example
 
 Guarantees and limitations are listed on the card ``bcbox`` of the :doc:`method catalogue
 <catalogue>`.
+
+Parts
+-----
+
+The class model :class:`~mowl.representation.library.hierarchy_classes.CodedBoxes` gives the
+trainable codes (``trainable_codes``) and the vector of a class (``vectors``: the two corners
+and, for ``vbc``, the code), and the measure
+:class:`~mowl.representation.library.hierarchy_measures.LogVolumeRatio` turns an energy into
+the probability of an edge (``probability``); the model classes only call them.

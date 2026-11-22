@@ -74,7 +74,7 @@ those of the library. An axiom :math:`C \sqsubseteq D` is scored by the score of
   (transductive), and :meth:`~mowl.models.Reshuffle.inductive_costs` encodes another graph with
   fresh features for the inductive setting. Early stopping on the Hits@10 of the validation
   triples is a training regime (``early_stopping=...``,
-  :class:`~mowl.models.graph_kge.triple_model.HitsEarlyStopping`).
+  :class:`~mowl.training.triples.HitsEarlyStopping`).
 
 A model trains from the parameters it has: calling ``train`` again goes on, and the ``seed``
 decides the initial values (PyKEEN's own loop draws every parameter again at each call; pass
@@ -84,6 +84,35 @@ ranking loss, ``gda_projection`` with :class:`~mowl.projection.GDAProjector`;
 :class:`~mowl.models.GraphPlusPyKEENModel` reads the parts from any PyKEEN model. The direct
 implementations (PyKEEN's models trained by PyKEEN's loop) are kept in
 :mod:`mowl.baselines` and compared with these combinations in ``tests/baselines``.
+
+The named classes only wire parts together; what they compute is in general parts that
+other methods use too:
+
+* the interactions (the ExpressivE distance, the RESHUFFLE score and message passing) are in
+  :mod:`mowl.representation.library.graph_interactions`;
+* the training on the triples of a graph (batches, corrupted triples, the objective and the
+  constraints after a step, the inverse triples) is
+  :func:`mowl.training.triples.train_on_triples`, and early stopping on validation Hits@k is
+  the regime :class:`~mowl.training.triples.HitsEarlyStopping`;
+* scoring an axiom as the edge it is projected to is the evaluation part
+  :class:`~mowl.evaluation.triple_axioms.AxiomTriples`, and scoring triples over a graph the
+  model has not seen is :class:`~mowl.evaluation.inductive_triples.InductiveTripleCosts`;
+* the graph is read through :class:`~mowl.representation.library.graph_projection.ProjectionView`,
+  the same part that gives the walk methods (``dl2vec``, ``owl2vec_star``, ``taxonomy_walks``)
+  their graph.
+
+.. testcode::
+
+    from mowl.representation.library.graph_projection import ProjectionView, projection_view
+
+    # the same projection, named as a graph model names it or as a walk method does
+    print(type(ProjectionView("dl2vec").projector).__name__)
+    print(type(projection_view("DL2Vec projection").projector).__name__)
+
+.. testoutput::
+
+    DL2VecProjector
+    DL2VecProjector
 
 In all three the guarantees of the papers (rule patterns, expressiveness, bounded inference)
 refer to the *projected triples*. They are not statements about the description logic
