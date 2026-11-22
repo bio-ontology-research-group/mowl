@@ -69,7 +69,11 @@ def test_joint_initialisation_rejects_unknown_module(dataset):
 def test_box2el_code_training_baseline_code_on_boxel(dataset):
     model = _model(BoxEL, dataset)
     model.training_regime = Box2ELCodeTraining(batch_size=4, baseline_code=True, seed=0)
-    assert model.module.regulariser == "box2el_code"
+    # the regulariser of the batches is a regime of its own, not a mode of the module
+    baseline = [r for r in model.training_regime.regimes
+                if isinstance(r, Box2ELBaselineLosses)][0]
+    assert type(baseline._side).__name__ == "BoxBatchRegulariser"
+    assert not hasattr(model.module, "regulariser")
 
 
 def test_unbounded_negative_loss(dataset):
@@ -122,13 +126,13 @@ def test_baseline_losses_boxel_sum_and_regulariser(dataset):
     model = _model(BoxEL, dataset)
     regime = Box2ELBaselineLosses()
     model.training_regime = regime
-    assert model.module.regulariser == "box2el_code"
+    assert type(regime._side).__name__ == "BoxBatchRegulariser"
     pos = th.ones(5, 1)
     assert float(regime.loss("gci0", pos, th.ones(4, 1))) == pytest.approx(9.0)
     model.module.train()
     rows = th.tensor([[0, 1], [1, 2]])
-    model.module(rows, "gci0")
-    reg = model.module.regularization_loss()
+    regime.filter_negatives("gci0", rows, None)         # the loop hands over the batch it scores
+    reg = regime.regularization(0)
     boxes = boxel_losses.axiom_boxes("gci0", rows, model.module.min_embedding,
                                      model.module.delta_embedding,
                                      model.module.relation_embedding,
@@ -136,7 +140,7 @@ def test_baseline_losses_boxel_sum_and_regulariser(dataset):
     expected = sum(boxel_losses.box2el_code_side_regularizer(b) for b in boxes)
     assert float(reg) == pytest.approx(float(expected))
     # Consumed: the next step starts from zero.
-    assert float(model.module.regularization_loss()) == 0.0
+    assert float(regime.regularization(0)) == 0.0
 
 
 def test_boxel_gci3_translated_box_uses_upper_corner(dataset):

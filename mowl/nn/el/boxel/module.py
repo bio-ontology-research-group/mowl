@@ -1,4 +1,3 @@
-import torch as th
 
 from mowl.nn.el.part_built import _PartBuiltModule
 
@@ -25,15 +24,6 @@ class BoxELModule(_PartBuiltModule):
     :param role_chain_composition: ``"in_order"`` (default) or ``"as_released"``, see
         :class:`~mowl.representation.library.boxrel_relations.Affine`.
     """
-
-    #: Which regulariser is used: ``"global"`` (default), the mean over all class boxes of
-    #: the excess of the upper corners over 1 and of negative lower corners, once per step
-    #: (the penalty part of the geometry); or ``"box2el_code"``, the regulariser of the BoxEL
-    #: baseline of the Box\ :sup:`2`\ EL code (the mean excess of the upper corners over 1 plus
-    #: the excess of the norm of the lower corners, of every box of every batch, including
-    #: negatives, intersections and translated boxes). Set by the training regime
-    #: :class:`~mowl.training.Box2ELBaselineLosses`.
-    regulariser = "global"
 
     neg_capable_gcis = frozenset({"gci2", "object_property_assertion"})
     role_axiom_capable = True
@@ -71,7 +61,6 @@ class BoxELModule(_PartBuiltModule):
         self.nb_rels = nb_rels
         self.nb_inds = nb_inds
         self.embed_dim = embed_dim
-        self._pending_regulariser = 0
 
     # -- the names of the earlier module -----------------------------------------------------
     @property
@@ -132,52 +121,6 @@ class BoxELModule(_PartBuiltModule):
             raise ValueError(f"role_chain_composition must be one of "
                              f"{self.relation_model.COMPOSITIONS}.")
         self.relation_model.role_chain_composition = value
-
-    # -- the regulariser of the Box2EL code ---------------------------------------------------
-    def _axiom_boxes(self, gci_name, data):
-        """The boxes that the Box2EL code regularises for a batch of one normal form: the
-        classes of the axiom, the intersection of :math:`C \\sqcap D` and the translated box
-        of :math:`C`."""
-        def box(col):
-            return self.classes(data[:, col])
-
-        if gci_name in ("gci0", "gci1_bot"):
-            return [box(0), box(1)]
-        if gci_name == "gci1":
-            c, d = box(0), box(1)
-            return [c.intersect(d)[0], c, d, box(2)]
-        if gci_name == "gci2":
-            c, d = box(0), box(2)
-            return [self.relation_model.image(data[:, 1], c), c, d]
-        if gci_name == "gci3":
-            c, d = box(1), box(2)
-            return [self.relation_model.preimage(data[:, 0], c), c, d]
-        return []
-
-    @staticmethod
-    def _side_regulariser(box):
-        """The regulariser of the BoxEL baseline of the Box2EL code for one batch of boxes:
-        the mean excess of the upper corners over 1 plus the excess of the Frobenius norm of
-        the batch's lower corners over 1 (one scalar per batch, not per box)."""
-        upper = th.mean(th.relu(box.upper - 1 + 1e-8))
-        return upper + th.relu(th.linalg.norm(box.lower) - 1)
-
-    def forward(self, gci, gci_name, neg=False):
-        if self.regulariser == "box2el_code" and self.training and th.is_grad_enabled():
-            for box in self._axiom_boxes(gci_name, gci):
-                term = self._side_regulariser(box)
-                self._pending_regulariser = self._pending_regulariser + term
-        return super().forward(gci, gci_name, neg=neg)
-
-    def regularization_loss(self):
-        if self.regulariser == "box2el_code":
-            # The terms recorded for the batches of this step (see forward).
-            out = self._pending_regulariser
-            self._pending_regulariser = 0
-            if isinstance(out, int):
-                return th.zeros((), device=self.device)
-            return out
-        return super().regularization_loss()
 
 
 __all__ = ["BoxELModule"]

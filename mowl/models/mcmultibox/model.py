@@ -1,11 +1,18 @@
 import logging
 
-import torch as th
-
 from mowl.base_models.elmodel import EmbeddingELModel
 from mowl.nn.el.mcmultibox.module import VolumeMultiBoxELModule
 
 logger = logging.getLogger(__name__)
+
+
+def _steps_per_epoch(regime):
+    """Steps per epoch of the regime (the ``steps_per_epoch`` of one of its parts)."""
+    for part in getattr(regime, "regimes", (regime,)):
+        steps = getattr(part, "steps_per_epoch", None)
+        if isinstance(steps, int) and steps >= 1:
+            return steps
+    return 1
 
 
 class VolumeMultiBoxEL(EmbeddingELModel):
@@ -21,7 +28,10 @@ class VolumeMultiBoxEL(EmbeddingELModel):
     Leemhuis and Kutz, 2026: unions of boxes with Box\ :sup:`2`\ EL-style distance losses).
 
     **Training.** As in the thesis, the training set of each normal form is split into
-    ``num_batches`` batches per epoch (thesis: 5) and one optimiser step is taken per batch.
+    ``num_batches`` batches per epoch (thesis: 5) and one optimiser step is taken per batch;
+    this is the regime :class:`~mowl.training.splits.ShuffledSplits`, with the checkpoint
+    selection :class:`~mowl.training.elkem.ValidationCheckpoint`, that the method names as its
+    defaults, and any regime can replace them.
     The thesis gives no optimiser or learning rate; we use Adam with ``learning_rate``.
     Per-batch memory is bounded by ``max_chunk_elements``: the axioms of a batch are processed
     in chunks and the points in checkpointed chunks of ``point_chunk_size``, so neither the
@@ -64,9 +74,6 @@ class VolumeMultiBoxEL(EmbeddingELModel):
     :param load_role_axioms: Train on role inclusions and role chains.
     """
 
-    #: :meth:`train` is a loop of its own with a fixed objective; it takes no training regime.
-    training_hooks = frozenset()
-
     #: Normal forms with a loss in the thesis.
     TRAINABLE_GCIS = ("gci0", "gci1", "gci2", "gci3", "role_inclusion", "role_chain")
 
@@ -94,7 +101,7 @@ class VolumeMultiBoxEL(EmbeddingELModel):
         self.training_losses = []
         self.init_module()
 
-    def init_module(self):
+    def _init_module_tables(self):
         self.module = VolumeMultiBoxELModule(
             len(self.class_index_dict),
             len(self.object_property_index_dict),
@@ -111,85 +118,50 @@ class VolumeMultiBoxEL(EmbeddingELModel):
             max_chunk_elements=self.max_chunk_elements,
         ).to(self.device)
 
-    def _trainable_datasets(self):
-        usable = {}
-        skipped = []
-        for name, ds in self.training_datasets.items():
-            if len(ds) == 0:
-                continue
-            if name in self.TRAINABLE_GCIS:
-                usable[name] = ds
-            else:
-                skipped.append(name)
-        if skipped:
-            logger.warning("VolumeMultiBoxEL: the thesis defines no loss for %s; these "
-                           "axioms are not used for training.", skipped)
-        return usable
+    def init_module(self):
+        super_init = self._init_module_tables
+        super_init()
+        # the training of the method: shuffled splits and checkpoint selection per epoch
+        self.module.default_regimes = (self._default_splits, self._default_checkpoint)
+        self._attach_default_regimes()
+
+    def _default_splits(self):
+        from mowl.training.splits import ShuffledSplits
+        return ShuffledSplits(self.num_batches, self.seed, forms=self.TRAINABLE_GCIS,
+                              what="the thesis")
+
+    def _default_checkpoint(self):
+        from mowl.training.elkem import ValidationCheckpoint
+        return ValidationCheckpoint("loss", steps_per_epoch=self.num_batches)
 
     @staticmethod
     def _canonical_order(data):
-        """Sort rows lexicographically: the axiom order produced by the normaliser is not
-        stable between runs, and sorting makes training reproducible for a fixed seed."""
-        for col in reversed(range(data.shape[1])):
-            data = data[th.sort(data[:, col], stable=True).indices]
-        return data
+        """Sort rows lexicographically (:func:`mowl.training.splits.canonical_order`)."""
+        from mowl.training.splits import canonical_order
+        return canonical_order(data)
 
     def train(self, epochs, validate_every=1, epoch_callback=None):
-        """Train with ``num_batches`` optimiser steps per epoch.
+        """Train with ``num_batches`` optimiser steps per epoch (the regime
+        :class:`~mowl.training.splits.ShuffledSplits`; a model whose regime was removed gets
+        it again). With another regime attached an epoch is one optimiser step, unless that
+        regime has a ``steps_per_epoch``.
 
         :param epochs: Number of epochs (thesis: 5).
         :param validate_every: Validate every this many epochs on ``eval_gci_name`` of the
             validation set if one exists; the best state is kept in ``model_filepath``.
         :param epoch_callback: Optional ``callable(epoch, model)`` called after each epoch.
         """
-        datasets = self._trainable_datasets()
-        if not datasets:
-            raise ValueError("No axioms with a loss defined by the thesis were found.")
-        optimizer = self.get_optimizer()
-        gen = th.Generator().manual_seed(self.seed)
-        best_valid = float("inf")
+        if self.training_regime is None:
+            self._attach_default_regimes()
+        steps = _steps_per_epoch(self.training_regime)
+        callback = epoch_callback
+        if epoch_callback is not None and steps > 1:
+            def callback(step, model):
+                if (step + 1) % steps == 0:
+                    epoch_callback(step // steps, model)
         self.training_losses = []
-
-        for epoch in range(epochs):
-            self.module.train()
-            full = {name: self._canonical_order(ds[:]) for name, ds in datasets.items()}
-            splits = {name: th.randperm(len(ds), generator=gen).chunk(self.num_batches)
-                      for name, ds in datasets.items()}
-            epoch_loss = 0.0
-            for b in range(self.num_batches):
-                loss = th.tensor(0.0, device=self.device)
-                for name in datasets:
-                    if b >= len(splits[name]):
-                        continue
-                    data = full[name][splits[name][b].to(full[name].device)]
-                    loss = loss + th.mean(self.module(data, name))
-                if not loss.requires_grad:
-                    # Fewer axioms than batches: this batch is empty for every axiom type.
-                    continue
-                optimizer.zero_grad()
-                loss.backward()
-                optimizer.step()
-                epoch_loss += loss.detach().item() / self.num_batches
-            self.training_losses.append(epoch_loss)
-            msg = f"Epoch {epoch + 1}: train loss {epoch_loss:.4f}"
-
-            valid_loss = None
-            if (epoch + 1) % validate_every == 0 and self.dataset.validation is not None \
-                    and self._eval_gci_name is not None:
-                with th.no_grad():
-                    self.module.eval()
-                    data = self.validation_datasets[self._eval_gci_name][:]
-                    if len(data) > 0:
-                        valid_loss = th.mean(self.module(data, self._eval_gci_name)).item()
-                        msg += f", valid loss {valid_loss:.4f}"
-            if valid_loss is None:
-                th.save(self.module.state_dict(), self.model_filepath)
-            elif valid_loss < best_valid:
-                best_valid = valid_loss
-                th.save(self.module.state_dict(), self.model_filepath)
-            logger.info(msg)
-            if epoch_callback is not None:
-                epoch_callback(epoch, self)
+        return super().train(epochs * steps, validate_every=validate_every,
+                             epoch_callback=callback)
 
     def eval_method(self, data):
         """Evaluation distance of thesis Section 7.1.2 for the GCI type ``eval_gci_name``."""

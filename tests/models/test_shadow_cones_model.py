@@ -150,7 +150,7 @@ def test_loss_of_eq_1_is_the_same_for_both_forms():
         pos = th.tensor([-1.0, 0.3])
         energy = th.tensor([0.2, 1.0, 0.0, 0.1])      # K = 2 blocks of n = 2
         neg = energy if form == "energy" else th.relu(0.5 - energy)
-        assert model.compute_loss(pos, neg).item() == pytest.approx(
+        assert model.training_regime.loss("gci0", pos, neg).item() == pytest.approx(
             _eq1(pos, energy).item())
 
 
@@ -170,7 +170,7 @@ def test_loss_of_eq_1():
     expect = th.stack([
         max(pos[i], th.tensor(0.1)) + th.logsumexp(th.relu(0.5 - n[i]), 0)
         for i in range(2)]).mean()
-    assert model.compute_loss(pos, neg).item() == pytest.approx(expect.item())
+    assert model.training_regime.loss("gci0", pos, neg).item() == pytest.approx(expect.item())
 
 
 def test_half_space_update_keeps_positive_height_and_ball_update_avoids_the_hole():

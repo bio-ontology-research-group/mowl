@@ -36,7 +36,7 @@ REGIME = RegimeCard(
     ),
     limitations=(
         ('The ABox losses and the lexical regulariser of the protein-function experiments '
-         '(Table 4) are not part of this regime; they stay with the model\'s own loop.'),
+         '(Table 4) are not part of this regime; they are the regimes assertion-corruption and lexical-regularisation of the default regime elkem-training.'),
         ("The code multiplies the total loss by 1,000; Adam is invariant to a constant "
          "loss factor up to its epsilon, so mOWL leaves the factor out."),
         ('A replacement equal to the corrupted column is redrawn, but C ⊑ C can still be '

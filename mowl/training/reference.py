@@ -269,7 +269,10 @@ class ELKEmCodeTraining(ComposedRegime):
     :class:`~mowl.models.elkem.model.ELKEm` with ``variant="reference"``.
 
     Only the TBox design of the ranking experiments; the ABox losses and the lexical
-    regulariser of the protein-function experiments stay with the model's own loop.
+    regulariser of the protein-function experiments are regimes of their own
+    (:class:`~mowl.training.elkem.AssertionCorruption`,
+    :class:`~mowl.training.elkem.LexicalRegularisation`) in the default regime of the method
+    (:class:`~mowl.training.elkem.ELKEmTraining`).
 
     Remaining differences from the authors' code (see the regime card
     'elkem-code-training'):

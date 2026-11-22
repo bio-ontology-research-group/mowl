@@ -19,7 +19,7 @@ from mowl.training.initialisation import JointNormalisedInitialisation
 from mowl.training.loss_forms import (UnboundedNegativeLoss, PerAxiomNormPenalty,
                                       Box2ELBaselineLosses, EmELppCodeObjective)
 from mowl.training.losses import (SumLoss, MSETargetLoss, PairwiseMarginRankingLoss,
-                                  LogSigmoidLoss, BPRLoss, LogSumExpContrastiveLoss,
+                                  LogSigmoidLoss, BPRLoss, LogSumExpContrastiveLoss, GroupedLogSumExpContrastiveLoss,
                                   SoftmaxEnergyContrastiveLoss, PearsonCorrelationLoss,
                                   ProbabilisticBCELoss, NormalFormFrequencyWeighting)
 from mowl.training.positives import (TransitiveReductionPositives,
@@ -37,6 +37,12 @@ from mowl.training.reference import (Box2ELCodeTraining, TransBoxCodeTraining,
                                      ELKEmCodeTraining, EmELppCodeTraining,
                                      RegDCodeTraining)
 from mowl.training.cate import CateCodeTraining
+from mowl.training.elkem import (ELKEmTraining, FixedConceptRouting, AssertionCorruption,
+                                 PearsonContrastiveTerm, LexicalRegularisation,
+                                 ValidationCheckpoint)
+from mowl.training.conditional import ConditionalStatements, Conditional
+from mowl.training.splits import ShuffledSplits
+from mowl.training.box_regularization import BoxBatchRegulariser
 from mowl.training.regularization import (Regularization, Regularizer, NormPenalty,
                                           MaxNormPenalty, PowerPenalty, SphereProjection,
                                           BallProjection, IntervalProjection,
@@ -61,7 +67,7 @@ __all__ = [
     "JointNormalisedInitialisation", "UnboundedNegativeLoss", "PerAxiomNormPenalty",
     "Box2ELBaselineLosses",
     "SumLoss", "MSETargetLoss", "PairwiseMarginRankingLoss", "LogSigmoidLoss", "BPRLoss",
-    "LogSumExpContrastiveLoss", "SoftmaxEnergyContrastiveLoss",
+    "LogSumExpContrastiveLoss", "GroupedLogSumExpContrastiveLoss", "SoftmaxEnergyContrastiveLoss",
     "PearsonCorrelationLoss", "ProbabilisticBCELoss",
     "NormalFormFrequencyWeighting",
     "TransitiveReductionPositives", "TransitiveClosurePositives",
@@ -72,4 +78,7 @@ __all__ = [
     "ValidationSelection", "ValidationRankSelection", "ValidationF1Selection",
     "validation_f1",
     "PerNormalFormMiniBatches",
+    "ELKEmTraining", "FixedConceptRouting", "AssertionCorruption", "PearsonContrastiveTerm",
+    "LexicalRegularisation", "ValidationCheckpoint", "ConditionalStatements", "Conditional",
+    "ShuffledSplits", "BoxBatchRegulariser",
 ]

@@ -179,10 +179,11 @@ class TemperatureAnnealing(TrainingRegime):
 
     def attach(self, model):
         module = getattr(model, "module", None)
-        if not (hasattr(module, "set_tau") or hasattr(module, "tau")):
+        if not (hasattr(module, "set_tau") or hasattr(module, "tau")
+                or hasattr(module, "temperature")):
             raise TypeError(
                 f"TemperatureAnnealing needs a model whose module has a temperature "
-                f"('set_tau' or 'tau'); {type(model).__name__} has none.")
+                f"('set_tau', 'tau' or 'temperature'); {type(model).__name__} has none.")
         super().attach(model)
 
     def value_at(self, epoch, epochs):
@@ -199,10 +200,12 @@ class TemperatureAnnealing(TrainingRegime):
         module = self.model.module
         if hasattr(module, "set_tau"):
             module.set_tau(tau)
-        else:
+        elif hasattr(module, "tau"):
             module.tau = tau
             if hasattr(self.model, "tau") and not callable(self.model.tau):
                 self.model.tau = tau
+        else:
+            module.temperature = tau
         self.history.append(tau)
 
 

@@ -67,6 +67,15 @@ class TrainingRegime:
     #: Key of the :class:`mowl.catalog.RegimeCard` describing this regime.
     key = ""
 
+    #: ``True`` for a regime that does the model selection itself: the generic loop then skips
+    #: its own validation (by the loss of ``eval_gci_name``, which saves a checkpoint).
+    replaces_validation = False
+
+    #: ``True`` for a regime whose batches can be empty for every normal form of a step (an
+    #: epoch of several steps over fewer axioms than steps): the generic loop then takes no
+    #: optimisation step instead of failing on a loss without gradient.
+    skips_empty_steps = False
+
     def __init__(self):
         self.model = None
 
@@ -207,6 +216,14 @@ class ComposedRegime(TrainingRegime):
 
     def overridden_hooks(self):
         return frozenset().union(*(r.overridden_hooks() for r in self.regimes))
+
+    @property
+    def replaces_validation(self):
+        return any(r.replaces_validation for r in self.regimes)
+
+    @property
+    def skips_empty_steps(self):
+        return any(r.skips_empty_steps for r in self.regimes)
 
     def attach(self, model):
         super().attach(model)

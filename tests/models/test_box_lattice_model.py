@@ -103,7 +103,8 @@ def test_unary_marginals_follow_descendant_counts():
     n = len(model.named_class_index_dict)
     assert frac[idx["http://mowl.borg/bench#C"]] == pytest.approx(4 / n)   # C, B, A, D
     assert frac[idx["http://mowl.borg/bench#A"]] == pytest.approx(1 / n)
-    assert model.additional_training_loss(0) is not None
+    assert any(type(r).__name__ == "UnaryMarginalPenalty" for r in model.module.regularizers)  # a part now
+    assert float(model.module.regularization_loss()) > 0
 
 
 def _nested_module(**kw):

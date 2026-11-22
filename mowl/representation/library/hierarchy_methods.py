@@ -62,6 +62,37 @@ class MaxCornerPenalty(Regularizer):
         return self.weight * (1.0 - high).mean()
 
 
+class UnaryMarginalPenalty(Regularizer):
+    r"""The unary marginal loss of the box lattice model (Vilnis et al. 2018, Section 5.2): the
+    cross entropy between the volume :math:`p_C` of the box of a class and a target marginal
+    :math:`t_C` (the fraction of the named classes that are its descendants), averaged over
+    the classes and weighted.
+
+    :param targets: The target marginals, a sequence or a function that returns one (read
+        when the penalty is first needed: a taxonomy is known once the data is).
+    """
+
+    kind = "penalty"
+
+    def __init__(self, targets, weight=1.0):
+        super().__init__(parameters="class_embed", weight=weight)
+        self.targets = targets
+        self._target = None
+
+    def penalty(self, model):
+        module = getattr(model, "module", model)
+        classes = module.class_model
+        if self._target is None:
+            values = self.targets() if callable(self.targets) else self.targets
+            self._target = th.as_tensor(values, dtype=th.double)
+        t = self._target.to(classes.device)
+        region = classes(th.arange(len(t), device=classes.device))
+        p = th.relu(region.upper.double() - region.lower.double()).prod(dim=-1)
+        p = p.clamp(1e-12, 1 - 1e-12)
+        ce = -(t * th.log(p) + (1 - t) * th.log1p(-p))
+        return self.weight * ce.mean().float()
+
+
 class CodePenalty(Regularizer):
     r"""The sparsity penalty of the binary codes of BCBox, :math:`w \lVert 1 - B
     \rVert_1` (Zhang et al. 2022, Section 4.5)."""
@@ -122,7 +153,7 @@ def cate(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50, margin=1.0,
 def box_lattice(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50, min_delta=0.01,
                 init_side=(0.3, 0.9), max_regularization=0.0, eps=1e-6,
                 freeze_delta_negatives=True, disjoint_weight=None, zero_at_inclusion=True,
-                tables=None):
+                unary_weight=0.0, unary_targets=None, tables=None):
     """Box lattice embeddings (Vilnis et al. 2018): boxes in the unit cube, the negative log
     of the conditional probability :math:`P(D \\mid C)` as the cost of a pair, the cross
     entropy with target 0 for a corrupted pair, and the cube as a constraint
@@ -133,6 +164,9 @@ def box_lattice(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50, min_
     guard of the earlier code, which gives :math:`-\\log(1 + \\varepsilon)`, a constant
     that does not change a gradient.
 
+    :param unary_weight, unary_targets: Weight of the unary marginal loss
+        (:class:`UnaryMarginalPenalty`; 0: not used) and its target marginals (a sequence or a
+        function that returns one).
     :param tables: A :class:`~mowl.nn.el.box_lattice.BoxLatticeModule` to share parameters
         with.
     """
@@ -145,6 +179,8 @@ def box_lattice(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50, min_
         max_regularization = tables.max_regularization
         zero_at_inclusion = tables.zero_at_inclusion
     regularizers = (MaxCornerPenalty(max_regularization),) if max_regularization else ()
+    if unary_weight:
+        regularizers += (UnaryMarginalPenalty(unary_targets, unary_weight),)
     return hierarchy_geometry(
         classes, None,
         LogVolumeRatio(eps=eps, disjoint_weight=disjoint_weight,
@@ -247,7 +283,8 @@ def hyperbolic_cones(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50,
 def shadow_cones(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50,
                  formulation="umbral-half-space", radius=0.05, horosphere_height=20.0,
                  gamma3=1e-4, init_scale=0.01, margin=0.01, negative_form="hinge",
-                 tables=None, seed=None, measure=None, objective=None, regularizers=()):
+                 tables=None, seed=None, measure=None, objective=None, regularizers=(),
+                 gamma2=0.0):
     """Shadow cones (Yu et al. 2024): points of the Poincare half-space or ball, the signed
     distance to the shadow cone of the parent as the cost. As published the cost of a stated
     pair is signed (negative inside the cone, ``signed=True``). The cost of a corrupted pair is
@@ -259,6 +296,9 @@ def shadow_cones(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50,
     :param tables: A module with the options of shadow cones and ``class_embed`` (the direct
         module of :mod:`mowl.baselines.nn.order`) to share parameters with.
     :param seed: Seed of the initialisation of the points (new tables only).
+    :param gamma2: The clamp of the positive energy in the loss of the method (Eq. 1), the
+        regime :class:`~mowl.training.GroupedLogSumExpContrastiveLoss` that the geometry names in
+        ``default_regimes``.
     :param measure, objective, regularizers: Swap a part: another measure of points of the
         manifold (default: the signed shadow-cone distance of ``formulation``), another
         objective (default: the hierarchy objective of margin ``margin``), penalties added
@@ -284,9 +324,16 @@ def shadow_cones(nb_classes, nb_relations=0, nb_individuals=0, embed_dim=50,
     if measure is None:
         measure = ShadowCone(formulation, radius, horosphere_height, gamma3, signed=True,
                              negative_form=negative_form)
-    return hierarchy_geometry(classes, None, measure,
-                              objective if objective is not None else Objective.hierarchy(margin),
-                              regularizers=regularizers)
+    geometry = hierarchy_geometry(
+        classes, None, measure,
+        objective if objective is not None else Objective.hierarchy(margin),
+        regularizers=regularizers)
+    from functools import partial
+    from mowl.training.losses import GroupedLogSumExpContrastiveLoss
+    geometry.default_regimes = (partial(
+        GroupedLogSumExpContrastiveLoss, gamma2,
+        "energy" if negative_form == "energy" else "module", margin),)
+    return geometry
 
 
 _DISK_SPACES = {"hyperbolic": Hyperboloid, "spherical": Sphere, "euclidean": Euclidean}

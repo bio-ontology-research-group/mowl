@@ -67,12 +67,14 @@ class BoxLatticeModule(FlatLossOption, ComposedGeometry):
 
     def __init__(self, nb_ont_classes, embed_dim=50, min_delta=0.01, init_side=(0.3, 0.9),
                  max_regularization=0.0, eps=1e-6, freeze_delta_negatives=True,
-                 disjoint_weight=None, zero_at_inclusion=True):
+                 disjoint_weight=None, zero_at_inclusion=True, unary_weight=0.0,
+                 unary_targets=None):
         adopt(self, box_lattice(
             nb_ont_classes, embed_dim=embed_dim, min_delta=min_delta, init_side=init_side,
             max_regularization=max_regularization, eps=eps,
             freeze_delta_negatives=freeze_delta_negatives, disjoint_weight=disjoint_weight,
-            zero_at_inclusion=zero_at_inclusion))
+            zero_at_inclusion=zero_at_inclusion, unary_weight=unary_weight,
+            unary_targets=unary_targets))
         self.nb_ont_classes = nb_ont_classes
         self.embed_dim = embed_dim
         self.min_delta = float(min_delta)

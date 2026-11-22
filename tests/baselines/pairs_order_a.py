@@ -57,11 +57,13 @@ def _taxonomy_losses(model):
         out["neg"] = model.module(neg, "gci0", neg=True).reshape(-1)
         regularization = getattr(model.module, "regularization_loss", None)
         # a module without regularisers has no such method (the direct ones), or returns 0
-        out["regularization"] = th.as_tensor(
-            0.0 if regularization is None else regularization()).reshape(-1)
+        total = th.as_tensor(0.0 if regularization is None else regularization())
+        # the unary marginal term: the direct model adds it as an extra loss, the combination
+        # has it as a regulariser (a part) of the module; both are added to the step's loss
         extra = model.additional_training_loss(0)
         if extra is not None:
-            out["unary"] = extra.reshape(-1)
+            total = total + extra
+        out["regularization"] = total.reshape(-1)
     return out
 
 

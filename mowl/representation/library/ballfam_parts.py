@@ -18,13 +18,15 @@ one reading that remains here: RegD for the inclusion forms, a host objective fo
 Methods: ``emelpp``, ``emelvar``, ``regd`` (boxes) and ``regd_elem`` (balls), registered with
 :func:`~mowl.representation.register_method` and, for the existing modules, as adapters.
 
-What is *not* a part: the contrastive training loss of RegD (it needs the sampled negatives
-of a positive pair together and lives in :class:`mowl.models.RegDELBE`), and the shift vector of
+The contrastive training loss of RegD (it needs the sampled negatives of a positive pair
+together) is the regime :class:`~mowl.training.GroupedLogSumExpContrastiveLoss`, which the
+methods name in ``default_regimes``. What is *not* a part:  the shift vector of
 the EmEL++ Keras code (an optional learned translation of ``C`` in ``C subClassOf D``, set
 on the module by a training regime) is only read, through ``gci0_shift``.
 """
 
 from dataclasses import replace
+from functools import partial
 
 import torch as th
 import torch.nn as nn
@@ -37,6 +39,7 @@ from mowl.representation.methods import (register_measure, register_method,
                                          register_relation_model, DEFAULT_MEASURE)
 from mowl.representation.adapters import register_adapter
 from mowl.representation.objectives import Objective
+from mowl.training.losses import GroupedLogSumExpContrastiveLoss, MSETargetLoss
 from mowl.representation.regions import Ball, Box, ConstructorUnavailable
 from mowl.representation.relation_models import Translation
 
@@ -483,8 +486,14 @@ def regd(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0.1,
     measure = _regd_measure(Bounds(separation="every", extent="norm",
                                    conjunction="nonempty"), lamda, p, gamma1, gamma2, eps,
                             depth_on_containment)
-    return ComposedGeometry(classes, relations, measure, RegDObjective(host, flip_gci2=flip_gci2),
-                            individuals=individuals)
+    geometry = ComposedGeometry(classes, relations, measure,
+                                RegDObjective(host, flip_gci2=flip_gci2),
+                                individuals=individuals)
+    # Eq. 10 for gci0 and gci2, ELBE's loss for the other forms
+    geometry.default_regimes = (partial(GroupedLogSumExpContrastiveLoss, gamma1,
+                                        normal_forms=("gci0", "gci2")),
+                                partial(MSETargetLoss, 0.0, 1.0, reduce="mean_first"))
+    return geometry
 
 
 @register_method("regd_elem")
@@ -522,9 +531,13 @@ def regd_elem(nb_classes, nb_relations, nb_individuals=0, embed_dim=50, margin=0
                             p, gamma1, gamma2, eps, depth_on_containment)
     objective = RegDObjective(host, regd_forms=("gci0", "gci2", "gci3"),
                               flip_gci2=flip_gci2, consistent_radius=consistent_radius)
-    return ComposedGeometry(classes, relations, measure, objective, individuals=individuals,
-                            regularizers=_norm_regularizers(reg_norm,
-                                                            individuals is not None))
+    geometry = ComposedGeometry(classes, relations, measure, objective,
+                                individuals=individuals,
+                                regularizers=_norm_regularizers(reg_norm,
+                                                                individuals is not None))
+    geometry.default_regimes = (partial(GroupedLogSumExpContrastiveLoss, gamma1,
+                                        normal_forms=("gci0", "gci2")),)
+    return geometry
 
 
 # -- adapters ---------------------------------------------------------------------------------

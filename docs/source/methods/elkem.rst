@@ -84,10 +84,15 @@ example protein language model embeddings) given as a matrix. Adam with a step d
 learning rate; with a validation ontology, the checkpoint with the best validation median
 rank of the ``gci0`` subsumptions is kept.
 
-With a :attr:`~mowl.base_models.elmodel.EmbeddingELModel.training_regime` attached, the
-generic regime-aware loop of
-:meth:`~mowl.base_models.elmodel.EmbeddingELModel.train` runs instead of the built-in one.
-The regime ``elkem-code-training``
+The model trains with the generic loop of
+:meth:`~mowl.base_models.elmodel.EmbeddingELModel.train` and the regime
+:class:`~mowl.training.elkem.ELKEmTraining` that the method names as its default; it is the
+combination of :class:`~mowl.training.elkem.FixedConceptRouting`,
+:class:`~mowl.training.elkem.AssertionCorruption`, mini-batches, the weighted assertion losses,
+:class:`~mowl.training.elkem.PearsonContrastiveTerm`,
+:class:`~mowl.training.elkem.LexicalRegularisation`, a step decay and
+:class:`~mowl.training.elkem.ValidationCheckpoint`, and any of them can be replaced by assigning
+another ``training_regime``. The regime ``elkem-code-training``
 (:class:`~mowl.training.reference.ELKEmCodeTraining`) is the design of the authors'
 ranking code, and the recipes of the ELK-Em paper
 (:mod:`mowl.benchmarks.recipe_sets.singh2026`) use it together with the evaluation regime
