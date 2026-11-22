@@ -113,7 +113,10 @@ CARD = MethodCard(
         "clips the parent offsets at exp(-1e-4) and uses softplus radii for the ball "
         "host, mOWL does neither; the paper's Section 5.2 swaps boxes and balls for "
         "ELBE/ELEM. Margins are 0 for ontologies (appendix C.1); the DAG experiments "
-        "(mammal, noun, MCG, Hearst) are not implemented."),
+        "(mammal, noun, MCG, Hearst) are not implemented. With radius='softplus' every "
+        "form uses the softplus radius (consistent_radius=False restores the old mix with "
+        "|radius|). Eq. 10's negative term pushes the negative out of the parent only "
+        "(non-inclusion, not disjointness): with gamma2 = 0 it is almost always zero."),
 )
 
 #: The same method with ELEm (balls) as the host model. A separate key, so the ball

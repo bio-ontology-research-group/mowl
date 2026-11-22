@@ -200,6 +200,8 @@ class RegDELEm(_RegDModel):
     :param flip_gci2: See :class:`RegDELBE`.
     :param radius: ``"abs"`` (default) or ``"softplus"`` (the RegD code's ``Elem``); see
         :class:`~mowl.nn.el.regd.RegDELEmModule`.
+    :param consistent_radius: See :class:`~mowl.nn.el.regd.RegDELEmModule`. Defaults to
+        ``True``.
     :param gci1_radius_term: See :class:`~mowl.models.ELEmbeddings`.
     """
 
@@ -218,6 +220,7 @@ class RegDELEm(_RegDModel):
                  flip_gci2=False,
                  radius="abs",
                  gci1_radius_term=True,
+                 consistent_radius=True,
                  learning_rate=0.005,
                  batch_size=4096 * 8,
                  model_filepath=None,
@@ -236,6 +239,7 @@ class RegDELEm(_RegDModel):
         self.flip_gci2 = bool(flip_gci2)
         self.radius = radius
         self.gci1_radius_term = gci1_radius_term
+        self.consistent_radius = consistent_radius
         self.init_module()
 
     def init_module(self):
@@ -250,5 +254,6 @@ class RegDELEm(_RegDModel):
             eps=self.eps, depth_on_containment=self.depth_on_containment,
             flip_gci2=self.flip_gci2, radius=self.radius,
             gci1_radius_term=self.gci1_radius_term,
+            consistent_radius=self.consistent_radius,
         ).to(self.device)
         self._after_init_module()
